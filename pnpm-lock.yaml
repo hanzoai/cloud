@@ -628,8 +628,8 @@ importers:
         specifier: ^5.2.1
         version: 5.5.0(react@18.2.0)
       react-markdown:
-        specifier: ^9.0.1
-        version: 9.1.0(@types/react@18.2.79)(react@18.2.0)
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@18.2.79)(react@18.2.0)
       react-resizable-panels:
         specifier: ^2.1.1
         version: 2.1.7(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
@@ -10173,8 +10173,8 @@ packages:
   react-is@19.0.0:
     resolution: {integrity: sha512-H91OHcwjZsbq3ClIDHMzBShc1rotbfACdWENsmEf0IFvZ3FgGPtdHMcsv45bQ1hAbgdfiA8SnxTKfDS+x/8m2g==}
 
-  react-markdown@9.1.0:
-    resolution: {integrity: sha512-xaijuJB0kzGiUdG7nc2MOMDUDBWPyGAjZtUrow9XxUeua8IqeP+VlIfAZ3bphpcLTnSZXz6z9jcVC/TCwbfgdw==}
+  react-markdown@10.1.0:
+    resolution: {integrity: sha512-qKxVopLT/TyA6BX3Ue5NwabOsAzm0Q7kAPwq6L+wWDwisYs7R8vZ0nRXqq6rkueboxpkjvLGU9fWifiX/ZZFxQ==}
     peerDependencies:
       '@types/react': '>=18'
       react: '>=18'
@@ -23332,7 +23332,7 @@ snapshots:
 
   react-is@19.0.0: {}
 
-  react-markdown@9.1.0(@types/react@18.2.79)(react@18.2.0):
+  react-markdown@10.1.0(@types/react@18.2.79)(react@18.2.0):
     dependencies:
       '@types/hast': 3.0.4
       '@types/mdast': 4.0.4
