@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetSessions
@@ -36,7 +36,10 @@ func (c *ApiController) GetSessions() {
 	value := c.Input().Get("value")
 	sortField := c.Input().Get("sortField")
 	sortOrder := c.Input().Get("sortOrder")
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 
 	if limit == "" || page == "" {
 		sessions, err := object.GetSessions(owner)
@@ -138,7 +141,7 @@ func (c *ApiController) DeleteSession() {
 	}
 
 	if len(session.SessionId) == 0 {
-		c.ResponseError("No sessions to delete")
+		c.ResponseError(c.T("controllers:No sessions to delete"))
 		return
 	}
 

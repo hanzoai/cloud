@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,22 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/casibase/casibase/carrier"
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/object"
+	"github.com/hanzoai/cloud/carrier"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/object"
 )
+
+func getCarrier(suggestionCount int, needTitle bool) (string, error) {
+	carriedQuestion, err := getQuestionWithCarriers("", suggestionCount, needTitle)
+	if err != nil {
+		return "", err
+	}
+
+	carrierInstructions := strings.Replace(carriedQuestion, "Here is the user's question: ", "", 1)
+	carrierInstructions = strings.TrimSpace(carrierInstructions)
+
+	return carrierInstructions, nil
+}
 
 func getQuestionWithCarriers(question string, suggestionCount int, needTitle bool) (string, error) {
 	carriedQuestion := question
@@ -33,6 +45,9 @@ func getQuestionWithCarriers(question string, suggestionCount int, needTitle boo
 	}
 
 	carriedQuestion, err = suggestionCarrier.GetQuestion(carriedQuestion)
+	if err != nil {
+		return "", err
+	}
 
 	titleCarrier, err := carrier.NewTitleCarrier(needTitle)
 	if err != nil {
@@ -44,7 +59,20 @@ func getQuestionWithCarriers(question string, suggestionCount int, needTitle boo
 		return "", err
 	}
 
-	return carriedQuestion, err
+	return carriedQuestion, nil
+}
+
+func getPromptWithCarrier(prompt string, suggestionCount int, needTitle bool) (string, error) {
+	if prompt == "" {
+		prompt = "You are an expert in your field and you specialize in using your knowledge to answer or solve people's problems."
+	}
+
+	carrierInstructions, err := getCarrier(suggestionCount, needTitle)
+	if err != nil {
+		return "", err
+	}
+	prompt = prompt + "\n\n" + carrierInstructions
+	return prompt, nil
 }
 
 func parseAnswerWithCarriers(answer string, suggestionCount int, needTitle bool) (string, []object.Suggestion, string, error) {
@@ -88,7 +116,7 @@ func isReasonModel(typ string) bool {
 	return false
 }
 
-func getResultWithSuggestionsAndTitle(writer *CarrierWriter, question string, modelProviderObj model.ModelProvider, needTitle bool, suggestionCount int) (*model.ModelResult, error) {
+func getResultWithSuggestionsAndTitle(writer *CarrierWriter, question string, modelProviderObj model.ModelProvider, needTitle bool, suggestionCount int, lang string) (*model.ModelResult, error) {
 	var fullPrompt strings.Builder
 
 	fullPrompt.WriteString(fmt.Sprintf("User question: %s\n\n", question))
@@ -109,13 +137,13 @@ They must:
 **Finally, generate a concise and meaningful title for the original question. No need to answer user question. 
 A meaningful topic title should be able to represent the user's purpose or the overall theme of this conversation.
 Examples of generated title:
-	query: what is casibase? title: introduction to casibase
+	query: what is hanzo cloud? title: introduction to hanzo cloud
 - The title must start with "=====" (five equals signs, no space).
 - Do not include the divider or title if a meaningful title cannot be generated.
 - Do NOT include any explanations or extra text—just output the title.`)
 	}
 
-	carrierResult, err := modelProviderObj.QueryText(fullPrompt.String(), writer, nil, "", nil, nil)
+	carrierResult, err := modelProviderObj.QueryText(fullPrompt.String(), writer, nil, "", nil, nil, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +151,7 @@ Examples of generated title:
 	return carrierResult, nil
 }
 
-func QueryCarrierText(question string, writer *RefinedWriter, history []*model.RawMessage, prompt string, knowledge []*model.RawMessage, modelProviderObj model.ModelProvider, needTitle bool, suggestionCount int) (*model.ModelResult, error) {
+func QueryCarrierText(question string, writer *RefinedWriter, history []*model.RawMessage, prompt string, knowledge []*model.RawMessage, modelProviderObj model.ModelProvider, needTitle bool, suggestionCount int, lang string) (*model.ModelResult, error) {
 	var (
 		wg         sync.WaitGroup
 		mainErr    error
@@ -136,7 +164,7 @@ func QueryCarrierText(question string, writer *RefinedWriter, history []*model.R
 	go func() {
 		defer wg.Done()
 		var err error
-		modelResult, err = modelProviderObj.QueryText(question, writer, history, prompt, knowledge, nil)
+		modelResult, err = modelProviderObj.QueryText(question, writer, history, prompt, knowledge, nil, lang)
 		if err != nil {
 			mainErr = err
 		}
@@ -149,7 +177,7 @@ func QueryCarrierText(question string, writer *RefinedWriter, history []*model.R
 	go func() {
 		defer wg.Done()
 		var err error
-		carrierResult, err = getResultWithSuggestionsAndTitle(CarrierWriter, question, modelProviderObj, needTitle, suggestionCount)
+		carrierResult, err = getResultWithSuggestionsAndTitle(CarrierWriter, question, modelProviderObj, needTitle, suggestionCount, lang)
 		if err != nil {
 			carrierErr = err
 		}

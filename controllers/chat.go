@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ import (
 	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalChats
@@ -72,6 +72,8 @@ func (c *ApiController) GetGlobalChats() {
 // @Param user query string true "The user of chat"
 // @Param field query string true "The field of chat"
 // @Param value query string true "The value of chat"
+// @Param startTime query string false "Filter by start time"
+// @Param endTime query string false "Filter by end time"
 // @Success 200 {array} object.Chat The Response object
 // @router /get-chats [get]
 func (c *ApiController) GetChats() {
@@ -80,6 +82,8 @@ func (c *ApiController) GetChats() {
 	value := c.Input().Get("value")
 	selectedUser := c.Input().Get("selectedUser")
 	storeName := c.Input().Get("store")
+	startTime := c.Input().Get("startTime")
+	endTime := c.Input().Get("endTime")
 
 	if c.IsAdmin() {
 		user = ""
@@ -90,7 +94,14 @@ func (c *ApiController) GetChats() {
 	}
 
 	if !c.IsAdmin() && user != selectedUser && selectedUser != "" {
-		c.ResponseError("You can only view your own chats")
+		c.ResponseError(c.T("controllers:You can only view your own chats"))
+		return
+	}
+
+	// Apply store isolation based on user's Homepage field
+	var ok bool
+	storeName, ok = c.EnforceStoreIsolation(storeName)
+	if !ok {
 		return
 	}
 
@@ -104,6 +115,11 @@ func (c *ApiController) GetChats() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+
+	// Filter by time range if specified
+	if startTime != "" || endTime != "" {
+		chats = object.FilterChatsByTimeRange(chats, startTime, endTime)
 	}
 
 	c.ResponseOk(chats)
@@ -123,6 +139,20 @@ func (c *ApiController) GetChat() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+
+	if chat == nil {
+		c.ResponseError("Chat not found")
+		return
+	}
+
+	// Check if user has permission to view this chat
+	if !c.IsAdmin() && !c.IsPreviewMode() {
+		username := c.GetSessionUsername()
+		if username != chat.User {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
 	}
 
 	c.ResponseOk(chat)
@@ -211,7 +241,7 @@ func (c *ApiController) AddChat() {
 			return
 		}
 		if store == nil {
-			c.ResponseError("The default store is not found")
+			c.ResponseError(c.T("account:The default store is not found"))
 			return
 		}
 

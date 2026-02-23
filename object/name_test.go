@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/controllers"
-	"github.com/casibase/casibase/object"
+	"github.com/hanzoai/cloud/controllers"
+	"github.com/hanzoai/cloud/object"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 )
 
 var userTag = "user"
@@ -32,12 +32,12 @@ func TestUpdateMessagesForName(t *testing.T) {
 	object.InitConfig()
 	controllers.InitAuthConfig()
 
-	users, err := casdoorsdk.GetUsers()
+	users, err := iamsdk.GetUsers()
 	if err != nil {
 		panic(err)
 	}
 
-	userMap := map[string]*casdoorsdk.User{}
+	userMap := map[string]*iamsdk.User{}
 	for _, user := range users {
 		if user.Tag != userTag {
 			continue
@@ -77,12 +77,12 @@ func TestUpdateChatsForName(t *testing.T) {
 	object.InitConfig()
 	controllers.InitAuthConfig()
 
-	users, err := casdoorsdk.GetUsers()
+	users, err := iamsdk.GetUsers()
 	if err != nil {
 		panic(err)
 	}
 
-	userMap := map[string]*casdoorsdk.User{}
+	userMap := map[string]*iamsdk.User{}
 	for _, user := range users {
 		if user.Tag != userTag {
 			continue

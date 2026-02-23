@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ import (
 	"strings"
 
 	"github.com/beego/beego"
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 )
 
 func init() {
@@ -31,26 +31,26 @@ func init() {
 }
 
 func InitAuthConfig() {
-	casdoorEndpoint := conf.GetConfigString("casdoorEndpoint")
+	iamEndpoint := conf.GetConfigString("iamEndpoint")
 	clientId := conf.GetConfigString("clientId")
 	clientSecret := conf.GetConfigString("clientSecret")
-	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
-	casdoorApplication := conf.GetConfigString("casdoorApplication")
+	iamOrganization := conf.GetConfigString("iamOrganization")
+	iamApplication := conf.GetConfigString("iamApplication")
 
-	if casdoorEndpoint == "" {
+	if iamEndpoint == "" {
 		return
 	}
 
-	casdoorsdk.InitConfig(casdoorEndpoint, clientId, clientSecret, "", casdoorOrganization, casdoorApplication)
-	application, err := casdoorsdk.GetApplication(casdoorApplication)
+	iamsdk.InitConfig(iamEndpoint, clientId, clientSecret, "", iamOrganization, iamApplication)
+	application, err := iamsdk.GetApplication(iamApplication)
 	if err != nil {
 		panic(err)
 	}
 	if application == nil {
-		panic(fmt.Errorf("The application: %s does not exist", casdoorApplication))
+		panic(fmt.Errorf("The application: %s does not exist", iamApplication))
 	}
 
-	cert, err := casdoorsdk.GetCert(application.Cert)
+	cert, err := iamsdk.GetCert(application.Cert)
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +58,7 @@ func InitAuthConfig() {
 		panic(fmt.Errorf("The cert: %s does not exist", application.Cert))
 	}
 
-	casdoorsdk.InitConfig(casdoorEndpoint, clientId, clientSecret, cert.Certificate, casdoorOrganization, casdoorApplication)
+	iamsdk.InitConfig(iamEndpoint, clientId, clientSecret, cert.Certificate, iamOrganization, iamApplication)
 }
 
 // Signin
@@ -67,26 +67,26 @@ func InitAuthConfig() {
 // @Description sign in
 // @Param code  query string true "code of account"
 // @Param state query string true "state of account"
-// @Success 200 {casdoorsdk} casdoorsdk.Claims The Response object
+// @Success 200 {iamsdk} iamsdk.Claims The Response object
 // @router /signin [post]
 func (c *ApiController) Signin() {
 	code := c.Input().Get("code")
 	state := c.Input().Get("state")
 
-	token, err := casdoorsdk.GetOAuthToken(code, state)
+	token, err := iamsdk.GetOAuthToken(code, state)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	claims, err := casdoorsdk.ParseJwtToken(token.AccessToken)
+	claims, err := iamsdk.ParseJwtToken(token.AccessToken)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
 	if strings.Count(claims.Type, "-") <= 1 {
-		if !claims.IsAdmin && claims.Type != "chat-admin" {
+		if !util.IsAdmin(&claims.User) {
 			claims.Type = "chat-user"
 		}
 	}
@@ -146,7 +146,7 @@ func (c *ApiController) addInitialChat(organization string, userName string, sto
 			return nil, err
 		}
 		if store == nil {
-			return nil, fmt.Errorf("The store: %s is not found", storeName)
+			return nil, fmt.Errorf(c.T("account:The store: %s is not found"), storeName)
 		}
 	} else {
 		store, err = object.GetDefaultStore("admin")
@@ -154,29 +154,30 @@ func (c *ApiController) addInitialChat(organization string, userName string, sto
 			return nil, err
 		}
 		if store == nil {
-			return nil, fmt.Errorf("The default store is not found")
+			return nil, fmt.Errorf(c.T("account:The default store is not found"))
 		}
 	}
 
 	currentTime := util.GetCurrentTime()
 	chat := &object.Chat{
-		Owner:        "admin",
-		Name:         fmt.Sprintf("chat_%s", util.GetRandomName()),
-		CreatedTime:  currentTime,
-		UpdatedTime:  currentTime,
-		Organization: organization,
-		DisplayName:  fmt.Sprintf("New Chat - %d", 1),
-		Store:        store.Name,
-		Category:     "Default Category",
-		Type:         "AI",
-		User:         userName,
-		User1:        "",
-		User2:        "",
-		Users:        []string{},
-		ClientIp:     c.getClientIp(),
-		UserAgent:    c.getUserAgent(),
-		MessageCount: 0,
-		NeedTitle:    true,
+		Owner:         "admin",
+		Name:          fmt.Sprintf("chat_%s", util.GetRandomName()),
+		CreatedTime:   currentTime,
+		UpdatedTime:   currentTime,
+		Organization:  organization,
+		DisplayName:   fmt.Sprintf("New Chat - %d", 1),
+		Store:         store.Name,
+		ModelProvider: store.ModelProvider,
+		Category:      "Default Category",
+		Type:          "AI",
+		User:          userName,
+		User1:         "",
+		User2:         "",
+		Users:         []string{},
+		ClientIp:      c.getClientIp(),
+		UserAgent:     c.getUserAgent(),
+		MessageCount:  0,
+		NeedTitle:     true,
 	}
 
 	if store.Welcome != "Hello" {
@@ -195,7 +196,7 @@ func (c *ApiController) addInitialChat(organization string, userName string, sto
 	return chat, nil
 }
 
-func (c *ApiController) addInitialChatAndMessage(user *casdoorsdk.User) error {
+func (c *ApiController) addInitialChatAndMessage(user *iamsdk.User) error {
 	chats, err := object.GetChats("admin", "", user.Name)
 	if err != nil {
 		return err
@@ -218,7 +219,7 @@ func (c *ApiController) addInitialChatAndMessage(user *casdoorsdk.User) error {
 		return err
 	}
 	if store == nil {
-		return fmt.Errorf("The store: %s is not found", chat.Store)
+		return fmt.Errorf(c.T("account:The store: %s is not found"), chat.Store)
 	}
 
 	userMessage := &object.Message{
@@ -260,15 +261,15 @@ func (c *ApiController) addInitialChatAndMessage(user *casdoorsdk.User) error {
 func (c *ApiController) anonymousSignin() {
 	username := c.getAnonymousUsername()
 
-	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
-	user := casdoorsdk.User{
-		Owner:           casdoorOrganization,
+	iamOrganization := conf.GetConfigString("iamOrganization")
+	user := iamsdk.User{
+		Owner:           iamOrganization,
 		Name:            username,
 		CreatedTime:     util.GetCurrentTime(),
 		Id:              username,
 		Type:            "anonymous-user",
 		DisplayName:     "User",
-		Avatar:          "https://cdn.casibase.org/img/casibase-user.png",
+		Avatar:          "https://cdn.hanzo.ai/img/hanzo-cloud-user.png",
 		AvatarType:      "",
 		PermanentAvatar: "",
 		Email:           "",
@@ -330,12 +331,8 @@ func (c *ApiController) isSafePassword() (bool, error) {
 		return true, nil
 	}
 
-	user, err := casdoorsdk.GetUser(claims.User.Name)
-	if err != nil {
-		return false, err
-	}
-
-	if user.Password == "#NeedToModify#" {
+	// Use the user data from claims which has been updated with fresh data from IAM in GetAccount()
+	if claims.User.Password == "#NeedToModify#" {
 		return false, nil
 	} else {
 		return true, nil
@@ -346,7 +343,7 @@ func (c *ApiController) isSafePassword() (bool, error) {
 // @Title GetAccount
 // @Tag Account API
 // @Description get account
-// @Success 200 {casdoorsdk} casdoorsdk.Claims The Response object
+// @Success 200 {iamsdk} iamsdk.Claims The Response object
 // @router /get-account [get]
 func (c *ApiController) GetAccount() {
 	disablePreviewMode, _ := beego.AppConfig.Bool("disablePreviewMode")
@@ -369,6 +366,22 @@ func (c *ApiController) GetAccount() {
 	}
 
 	claims := c.GetSessionClaims()
+
+	// Fetch fresh user data from IAM in real-time for non-anonymous users
+	if claims.User.Type != "anonymous-user" {
+		user, err := iamsdk.GetUser(claims.User.Name)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+
+		if user != nil {
+			// Update the session with fresh user data from IAM
+			// Only update the User field, preserving all other claims fields (AccessToken, Type, IsAdmin, etc.)
+			claims.User = *user
+			c.SetSessionClaims(claims)
+		}
+	}
 
 	isSafePassword, err := c.isSafePassword()
 	if err != nil {

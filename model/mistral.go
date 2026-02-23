@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/gage-technologies/mistral-go"
+	"github.com/hanzoai/cloud/i18n"
 )
 
 type MistralModelProvider struct {
@@ -60,7 +61,7 @@ pixtral-12b             | 0.00015                   | 0.00015
 pixtral-large-latest    | 0.002                     | 0.006`
 }
 
-func (c *MistralModelProvider) calculatePrice(modelResult *ModelResult) error {
+func (c *MistralModelProvider) calculatePrice(modelResult *ModelResult, lang string) error {
 	price := 0.0
 	priceTable := map[string][2]float64{
 		"codestral-latest":        {0.0003, 0.0009},
@@ -87,7 +88,7 @@ func (c *MistralModelProvider) calculatePrice(modelResult *ModelResult) error {
 		outputPrice := getPrice(modelResult.TotalTokenCount, priceItem[1])
 		price = inputPrice + outputPrice
 	} else {
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", c.modelName)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), c.modelName)
 	}
 
 	modelResult.TotalPrice = price
@@ -95,10 +96,10 @@ func (c *MistralModelProvider) calculatePrice(modelResult *ModelResult) error {
 	return nil
 }
 
-func (c *MistralModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (c *MistralModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	chatRes, err := c.client.Chat(c.modelName, []mistral.ChatMessage{{Content: question, Role: mistral.RoleUser}}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error getting chat completion: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:error getting chat completion: %v"), err)
 	}
 
 	respText := chatRes.Choices[0].Message.Content
@@ -106,7 +107,7 @@ func (c *MistralModelProvider) QueryText(question string, writer io.Writer, hist
 
 	_, err = fmt.Fprint(writer, respText)
 	if err != nil {
-		return nil, fmt.Errorf("failed to write response: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:failed to write response: %v"), err)
 	}
 
 	modelResult, err := getDefaultModelResult(c.modelName, question, respText)
@@ -114,9 +115,9 @@ func (c *MistralModelProvider) QueryText(question string, writer io.Writer, hist
 		return nil, err
 	}
 
-	err = c.calculatePrice(modelResult)
+	err = c.calculatePrice(modelResult, lang)
 	if err != nil {
-		return nil, fmt.Errorf("failed to calculate price: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "embedding:failed to calculate price: %v"), err)
 	}
 	modelResult.PromptTokenCount += len(question)
 

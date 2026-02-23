@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import {Tag, Tooltip, message, theme} from "antd";
 import {QuestionCircleTwoTone, SyncOutlined} from "@ant-design/icons";
 import {isMobile as isMobileDevice} from "react-device-detect";
 import i18next from "i18next";
-import Sdk from "casdoor-js-sdk";
+import Sdk from "@hanzo/iam-js-sdk";
 import xlsx from "xlsx";
 import FileSaver from "file-saver";
 import moment from "moment/moment";
@@ -30,7 +30,7 @@ import * as Conf from "./Conf";
 import * as Cookie from "cookie";
 
 export let ServerUrl = "";
-export let CasdoorSdk;
+export let IamSdk;
 
 export function initServerUrl() {
   const hostname = window.location.hostname;
@@ -44,8 +44,8 @@ export function isLocalhost() {
   return hostname === "localhost";
 }
 
-export function initCasdoorSdk(config) {
-  CasdoorSdk = new Sdk(config);
+export function initIamSdk(config) {
+  IamSdk = new Sdk(config);
 }
 
 export function initWebConfig() {
@@ -67,19 +67,26 @@ function getUrlWithLanguage(url) {
 }
 
 export function getSignupUrl() {
-  return getUrlWithLanguage(CasdoorSdk.getSignupUrl());
+  if (!Conf.AuthConfig || !Conf.AuthConfig.serverUrl) {
+    return "";
+  }
+  return getUrlWithLanguage(IamSdk.getSignupUrl());
 }
 
 export function getSigninUrl() {
-  return getUrlWithLanguage(CasdoorSdk.getSigninUrl());
+  if (!Conf.AuthConfig || !Conf.AuthConfig.serverUrl) {
+    return "";
+  }
+  return getUrlWithLanguage(IamSdk.getSigninUrl());
 }
 
 export function getUserProfileUrl(userName, account) {
-  return getUrlWithLanguage(CasdoorSdk.getUserProfileUrl(userName, account));
+  return getUrlWithLanguage(IamSdk.getUserProfileUrl(userName, account));
 }
 
 export function getMyProfileUrl(account) {
-  return getUrlWithLanguage(CasdoorSdk.getMyProfileUrl(account));
+  const returnUrl = window.location.href;
+  return getUrlWithLanguage(IamSdk.getMyProfileUrl(account, returnUrl));
 }
 
 export function getUserAvatar(message, account) {
@@ -109,7 +116,7 @@ export function getUserAvatar(message, account) {
 }
 
 export function signin() {
-  return CasdoorSdk.signin(ServerUrl);
+  return IamSdk.signin(ServerUrl);
 }
 
 export function parseJson(s) {
@@ -161,6 +168,20 @@ export function isAdminUser(account) {
   return account.owner === "built-in" || account.isAdmin === true;
 }
 
+export function isChatAdminUser(account) {
+  if (account === undefined || account === null) {
+    return false;
+  }
+  return account.type === "chat-admin" || account.tag === "教师";
+}
+
+export function canViewAllUsers(account) {
+  if (account === undefined || account === null) {
+    return false;
+  }
+  return account.name === "admin" || isChatAdminUser(account);
+}
+
 export function isLocalAdminUser(account) {
   if (account === undefined || account === null) {
     return false;
@@ -170,11 +191,31 @@ export function isLocalAdminUser(account) {
     return true;
   }
 
-  if (account.type === "chat-admin") {
+  if (isChatAdminUser(account)) {
     return true;
   }
 
-  return account.isAdmin === true || isAdminUser(account);
+  return isAdminUser(account);
+}
+
+export function isLocalAndStoreAdminUser(account) {
+  if (account === undefined || account === null) {
+    return false;
+  }
+
+  if (account.homepage === "non-store-admin") {
+    return false;
+  }
+
+  if (!DisablePreviewMode && isAnonymousUser(account)) {
+    return true;
+  }
+
+  if (isChatAdminUser(account)) {
+    return true;
+  }
+
+  return isAdminUser(account);
 }
 
 export function isAnonymousUser(account) {
@@ -189,6 +230,23 @@ export function isChatUser(account) {
     return false;
   }
   return account.type === "chat-user";
+}
+
+export function isTaskUser(account) {
+  if (account === undefined || account === null) {
+    return false;
+  }
+
+  return account.owner.endsWith("hjy");
+}
+
+export function isUserBoundToStore(account) {
+  if (account === undefined || account === null) {
+    return false;
+  }
+  // User is bound if homepage field is not empty
+  // The actual store name validation is done on the backend
+  return account.homepage !== undefined && account.homepage !== null && account.homepage !== "";
 }
 
 export function deepCopy(obj) {
@@ -331,7 +389,7 @@ export function getTag(text, type, state) {
 
   if (type === "Read") {
     return (
-      <Tooltip placement="top" title={"Read"}>
+      <Tooltip placement="top" title={i18next.t("store:Read")}>
         <Tag icon={icon} style={style} color={"success"}>
           {text}
         </Tag>
@@ -339,7 +397,7 @@ export function getTag(text, type, state) {
     );
   } else if (type === "Write") {
     return (
-      <Tooltip placement="top" title={"Write"}>
+      <Tooltip placement="top" title={i18next.t("store:Write")}>
         <Tag icon={icon} style={style} color={"processing"}>
           {text}
         </Tag>
@@ -347,7 +405,7 @@ export function getTag(text, type, state) {
     );
   } else if (type === "Admin") {
     return (
-      <Tooltip placement="top" title={"Admin"}>
+      <Tooltip placement="top" title={i18next.t("general:Admin")}>
         <Tag icon={icon} style={style} color={"error"}>
           {text}
         </Tag>
@@ -596,6 +654,34 @@ export function getExtFromPath(path) {
   }
 }
 
+export function getFileIconType(filename) {
+  if (!filename) {
+    return "icon-testdocument";
+  }
+  const ext = getExtFromPath(filename);
+  if (ext === "pdf") {
+    return "icon-testpdf";
+  } else if (ext === "doc" || ext === "docx") {
+    return "icon-testdocx";
+  } else if (ext === "ppt" || ext === "pptx") {
+    return "icon-testpptx";
+  } else if (ext === "xls" || ext === "xlsx") {
+    return "icon-testxlsx";
+  } else if (ext === "txt") {
+    return "icon-testdocument";
+  } else if (ext === "png" || ext === "bmp" || ext === "jpg" || ext === "jpeg" || ext === "svg") {
+    return "icon-testPicture";
+  } else if (ext === "html") {
+    return "icon-testhtml";
+  } else if (ext === "js") {
+    return "icon-testjs";
+  } else if (ext === "css") {
+    return "icon-testcss";
+  } else {
+    return "icon-testfile-unknown";
+  }
+}
+
 export function getExtFromFile(file) {
   const res = file.title.split(".")[1];
   if (res === undefined) {
@@ -669,7 +755,7 @@ export function submitStoreEdit(storeObj) {
 }
 
 export function getDefaultAiAvatar() {
-  return `${StaticBaseUrl}/img/casibase.png`;
+  return `${StaticBaseUrl}/img/hanzo-cloud.png`;
 }
 
 export const Countries = [{label: "English", key: "en", country: "US", alt: "English"},
@@ -677,10 +763,7 @@ export const Countries = [{label: "English", key: "en", country: "US", alt: "Eng
   {label: "Español", key: "es", country: "ES", alt: "Español"},
   {label: "Français", key: "fr", country: "FR", alt: "Français"},
   {label: "Deutsch", key: "de", country: "DE", alt: "Deutsch"},
-  {label: "Indonesia", key: "id", country: "ID", alt: "Indonesia"},
   {label: "日本語", key: "ja", country: "JP", alt: "日本語"},
-  {label: "한국어", key: "ko", country: "KR", alt: "한국어"},
-  {label: "Русский", key: "ru", country: "RU", alt: "Русский"},
 ];
 
 export function getOtherProviderInfo() {
@@ -890,9 +973,9 @@ export function getOtherProviderInfo() {
         logo: `${StaticBaseUrl}/img/social_synology.png`,
         url: "https://www.synology.com/en-global/dsm/feature/file_sharing",
       },
-      "Casdoor": {
-        logo: `${StaticBaseUrl}/img/casdoor.png`,
-        url: "https://casdoor.org/docs/provider/storage/overview",
+      "IAM": {
+        logo: `${StaticBaseUrl}/img/iam.png`,
+        url: "https://iam.hanzo.ai/docs/provider/storage/overview",
       },
       "CUCloud OSS": {
         logo: `${StaticBaseUrl}/img/social_cucloud.png`,
@@ -1009,9 +1092,56 @@ export function getOtherProviderInfo() {
         url: "https://www.alibabacloud.com/",
       },
     },
+    "Bot": {
+      "Tencent": {
+        logo: `${StaticBaseUrl}/img/social_tencent_cloud.jpg`,
+        url: "https://cloud.tencent.com/",
+      },
+    },
+    "Scan": {
+      "Nmap": {
+        logo: `${StaticBaseUrl}/img/social_nmap.png`,
+        url: "https://nmap.org/",
+      },
+      "OS Patch": {
+        // Note: social_windows.png should be added to the img/ directory
+        logo: `${StaticBaseUrl}/img/social_windows.png`,
+        url: "https://learn.microsoft.com/en-us/windows/deployment/update/",
+      },
+      "Nuclei": {
+        logo: `${StaticBaseUrl}/img/social_nuclei.png`,
+        url: "https://github.com/projectdiscovery/nuclei",
+      },
+      "ZAP": {
+        logo: `${StaticBaseUrl}/img/social_zap.png`,
+        url: "https://github.com/zaproxy/zaproxy",
+      },
+      "Subfinder": {
+        logo: `${StaticBaseUrl}/img/social_subfinder.png`,
+        url: "https://github.com/projectdiscovery/subfinder",
+      },
+      "httpx": {
+        logo: `${StaticBaseUrl}/img/social_httpx.png`,
+        url: "https://github.com/projectdiscovery/httpx",
+      },
+    },
   };
 
   return res;
+}
+
+export function getAssetTypeIcons() {
+  return {
+    "VPC": `${StaticBaseUrl}/img/cloud/vpc.png`,
+    "VSwitch": `${StaticBaseUrl}/img/cloud/vswitch.png`,
+    "Network Interface": `${StaticBaseUrl}/img/cloud/network.png`,
+    "Security Group": `${StaticBaseUrl}/img/cloud/securitygroup.png`,
+    "Virtual Machine": `${StaticBaseUrl}/img/cloud/vm.png`,
+    "Disk": `${StaticBaseUrl}/img/cloud/disk.png`,
+    "Snapshot": `${StaticBaseUrl}/img/cloud/snapshot.png`,
+    "Image": `${StaticBaseUrl}/img/cloud/image.png`,
+    "Snapshot Policy": `${StaticBaseUrl}/img/cloud/policy.png`,
+  };
 }
 
 export function getItem(label, key, icon, children, type) {
@@ -1093,6 +1223,29 @@ export function getProviderLogoURL(provider) {
   }
 
   return otherProviderInfo[provider.category][provider.type].logo;
+}
+
+export function isProviderSupportWebSearch(provider) {
+  if (!provider || provider.category !== "Model") {
+    return false;
+  }
+
+  if (provider.type === "OpenAI") {
+    return true;
+  }
+
+  if (provider.type === "Alibaba Cloud") {
+    // Not all Alibaba Cloud models support web search
+    const unsupportedModels = [""];
+
+    if (!provider.subType) {
+      return true; // Default to true for Alibaba Cloud if subType is not specified
+    }
+
+    return !unsupportedModels.includes(provider.subType);
+  }
+
+  return false;
 }
 
 export function getProviderTypeOptions(category) {
@@ -1200,6 +1353,19 @@ export function getProviderTypeOptions(category) {
     return [
       {id: "Alibaba Cloud", name: "Alibaba Cloud"},
     ];
+  } else if (category === "Bot") {
+    return [
+      {id: "Tencent", name: "Tencent"},
+    ];
+  } else if (category === "Scan") {
+    return [
+      {id: "Nmap", name: "Nmap"},
+      {id: "OS Patch", name: "OS Patch"},
+      {id: "Nuclei", name: "Nuclei"},
+      {id: "ZAP", name: "ZAP"},
+      {id: "Subfinder", name: "Subfinder"},
+      {id: "httpx", name: "httpx"},
+    ];
   } else {
     return [];
   }
@@ -1213,6 +1379,7 @@ export function redirectToLogin() {
 
 const openaiModels = [
   {id: "dall-e-3", name: "dall-e-3"},
+  {id: "gpt-image-1", name: "gpt-image-1"},
   {id: "gpt-3.5-turbo", name: "gpt-3.5-turbo"},
   {id: "gpt-4", name: "gpt-4"},
   {id: "gpt-4-turbo", name: "gpt-4-turbo"},
@@ -1223,6 +1390,9 @@ const openaiModels = [
   {id: "gpt-4.1", name: "gpt-4.1"},
   {id: "gpt-4.1-mini", name: "gpt-4.1-mini"},
   {id: "gpt-4.1-nano", name: "gpt-4.1-nano"},
+  {id: "gpt-4.5", name: "gpt-4.5"},
+  {id: "gpt-4.5-mini", name: "gpt-4.5-mini"},
+  {id: "gpt-4.5-nano", name: "gpt-4.5-nano"},
   {id: "o1", name: "o1"},
   {id: "o1-pro", name: "o1-pro"},
   {id: "o3", name: "o3"},
@@ -1231,7 +1401,15 @@ const openaiModels = [
   {id: "gpt-5", name: "gpt-5"},
   {id: "gpt-5-mini", name: "gpt-5-mini"},
   {id: "gpt-5-nano", name: "gpt-5-nano"},
+  {id: "gpt-5.1", name: "gpt-5.1"},
+  {id: "gpt-5.1-mini", name: "gpt-5.1-mini"},
+  {id: "gpt-5.1-nano", name: "gpt-5.1-nano"},
+  {id: "gpt-5.2", name: "gpt-5.2"},
+  {id: "gpt-5.2-mini", name: "gpt-5.2-mini"},
+  {id: "gpt-5.2-nano", name: "gpt-5.2-nano"},
+  {id: "gpt-5.2-chat", name: "gpt-5.2-chat"},
   {id: "gpt-5-chat-latest", name: "gpt-5-chat-latest"},
+  {id: "deep-research", name: "deep-research"},
 ];
 
 const openaiEmbeddings = [
@@ -1353,6 +1531,7 @@ export function getModelSubTypeOptions(type) {
     ];
   } else if (type === "Claude") {
     return [
+      {id: "claude-opus-4-5", name: "claude-opus-4-5"},
       {id: "claude-opus-4-1", name: "claude-opus-4-1"},
       {id: "claude-opus-4-0", name: "claude-opus-4-0"},
       {id: "claude-opus-4-20250514", name: "claude-opus-4-20250514"},
@@ -1495,7 +1674,12 @@ export function getModelSubTypeOptions(type) {
       {id: "moonshot-v1-32k", name: "moonshot-v1-32k"},
       {id: "moonshot-v1-32k-vision-preview", name: "moonshot-v1-32k-vision-preview"},
       {id: "moonshot-v1-128k", name: "moonshot-v1-128k"},
-      {id: "moonshot-v1-128k-vision-preview", name: "moonshot-v1-128k-vision-preview"},
+      {id: "kimi-k2-0905-preview", name: "kimi-k2-0905-preview"},
+      {id: "kimi-k2-0711-preview", name: "kimi-k2-0711-preview"},
+      {id: "kimi-k2-turbo-preview", name: "kimi-k2-turbo-preview"},
+      {id: "kimi-k2-thinking", name: "kimi-k2-thinking"},
+      {id: "kimi-k2-thinking-turbo", name: "kimi-k2-thinking-turbo"},
+      {id: "kimi-latest", name: "kimi-latest (Auto Tier)"},
     ];
   } else if (type === "Amazon Bedrock") {
     return [
@@ -1543,7 +1727,15 @@ export function getModelSubTypeOptions(type) {
       {id: "qwq-32b", name: "qwq-32b"},
       {id: "deepseek-v3.1", name: "deepseek-v3.1"},
       {id: "deepseek-r1", name: "deepseek-r1"},
-      {id: "Moonshot-Kimi-K2-Instruct", name: "Moonshot-Kimi-K2-Instruct"},
+      {id: "deepseek-v3", name: "deepseek-v3"},
+      {id: "deepseek-v3.1", name: "deepseek-v3.1"},
+      {id: "deepseek-v3.2", name: "deepseek-v3.2"},
+      {id: "deepseek-r1-distill-qwen-1.5b", name: "deepseek-r1-distill-qwen-1.5b"},
+      {id: "deepseek-r1-distill-qwen-7b", name: "deepseek-r1-distill-qwen-7b"},
+      {id: "deepseek-r1-distill-qwen-14b ", name: "deepseek-r1-distill-qwen-14b "},
+      {id: "deepseek-r1-distill-qwen-32b", name: "deepseek-r1-distill-qwen-32b"},
+      {id: "deepseek-r1-distill-llama-8b", name: "deepseek-r1-distill-llama-8b"},
+      {id: "deepseek-r1-distill-llama-70b", name: "deepseek-r1-distill-llama-70b"},
     ];
   } else if (type === "Baichuan") {
     return [
@@ -1564,6 +1756,7 @@ export function getModelSubTypeOptions(type) {
       {id: "doubao-1-5-thinking-pro", name: "doubao-1-5-thinking-pro"},
       {id: "doubao-1-5-thinking-vision-pro", name: "doubao-1-5-thinking-vision-pro"},
       {id: "deepseek-v3.1", name: "deepseek-v3.1"},
+      {id: "deepseek-v3.2", name: "deepseek-v3.2"},
       {id: "deepseek-r1", name: "deepseek-r1"},
       {id: "deepseek-r1-distill-qwen-32b", name: "deepseek-r1-distill-qwen-32b"},
       {id: "deepseek-r1-distill-qwen-7b", name: "deepseek-r1-distill-qwen-7b"},
@@ -1789,6 +1982,14 @@ export function getProviderSubTypeOptions(category, type) {
     if (type === "Alibaba Cloud") {
       return [
         {id: "paraformer-realtime-v1", name: "paraformer-realtime-v1"},
+      ];
+    } else {
+      return [];
+    }
+  } else if (category === "Bot") {
+    if (type === "Tencent") {
+      return [
+        {id: "WeCom Bot", name: "WeCom Bot"},
       ];
     } else {
       return [];
@@ -2156,17 +2357,17 @@ export function getAlgorithm(themeAlgorithmNames) {
 }
 
 export function getHtmlTitle(storeHtmlTitle) {
-  const defaultHtmlTitle = "Casibase";
+  const defaultHtmlTitle = "Hanzo Cloud Console";
   let htmlTitle = Conf.HtmlTitle;
   if (storeHtmlTitle && storeHtmlTitle !== defaultHtmlTitle) {
     htmlTitle = storeHtmlTitle;
   }
-  return htmlTitle;
+  return htmlTitle || defaultHtmlTitle;
 }
 
 export function getFaviconUrl(themes, storeFaviconUrl) {
-  const defaultFaviconUrl = "https://cdn.casibase.com/static/favicon.png";
-  let faviconUrl = Conf.FaviconUrl;
+  const defaultFaviconUrl = "https://cdn.hanzo.ai/img/favicon.png";
+  let faviconUrl = Conf.FaviconUrl || defaultFaviconUrl;
   if (storeFaviconUrl && storeFaviconUrl !== defaultFaviconUrl) {
     faviconUrl = storeFaviconUrl;
   }
@@ -2178,12 +2379,12 @@ export function getFaviconUrl(themes, storeFaviconUrl) {
 }
 
 export function getLogo(themes, storeLogoUrl) {
-  const defaultLogoUrl = "https://cdn.casibase.org/img/casibase-logo_1200x256.png";
-  let logoUrl = Conf.LogoUrl;
+  const defaultLogoUrl = "https://cdn.hanzo.ai/img/hanzo-cloud-logo_1200x256.png";
+  let logoUrl = Conf.LogoUrl || defaultLogoUrl;
   if (storeLogoUrl && storeLogoUrl !== defaultLogoUrl) {
     logoUrl = storeLogoUrl;
   }
-  logoUrl = logoUrl.replace("https://cdn.casibase.org", Conf.StaticBaseUrl);
+  logoUrl = logoUrl.replace("https://cdn.hanzo.ai", Conf.StaticBaseUrl).replace("https://cdn.hanzo.ai", Conf.StaticBaseUrl);
   if (themes.includes("dark")) {
     return logoUrl.replace(/\.png$/, "_white.png");
   } else {
@@ -2192,15 +2393,228 @@ export function getLogo(themes, storeLogoUrl) {
 }
 
 export function getFooterHtml(themes, storeFooterHtml) {
-  const defaultFooterHtml = "Powered by <a target=\"_blank\" href=\"https://github.com/casibase/casibase\" rel=\"noreferrer\"><img style=\"padding-bottom: 3px;\" height=\"20\" alt=\"Casibase\" src=\"https://cdn.casibase.org/img/casibase-logo_1200x256.png\" /></a>";
-  let footerHtml = Conf.FooterHtml;
+  const defaultFooterHtml = "Powered by <a target=\"_blank\" href=\"https://hanzo.ai\" rel=\"noreferrer\"><img style=\"padding-bottom: 3px;\" height=\"20\" alt=\"Hanzo Cloud\" src=\"https://cdn.hanzo.ai/img/hanzo-cloud-logo_1200x256.png\" /></a>";
+  let footerHtml = Conf.FooterHtml || defaultFooterHtml;
   if (storeFooterHtml && storeFooterHtml !== defaultFooterHtml) {
     footerHtml = storeFooterHtml;
   }
-  footerHtml = footerHtml.replace("https://cdn.casibase.org", Conf.StaticBaseUrl);
+  footerHtml = footerHtml.replace("https://cdn.hanzo.ai", Conf.StaticBaseUrl).replace("https://cdn.hanzo.ai", Conf.StaticBaseUrl);
   if (themes.includes("dark")) {
     return footerHtml.replace(/(\.png)/g, "_white$1");
   } else {
     return footerHtml;
   }
+}
+
+export function getDeduplicatedArray(array, filterArray, key) {
+  const res = array.filter(item => !filterArray.some(tableItem => tableItem[key] === item[key]));
+  return res;
+}
+
+export function getFormTypeOptions() {
+  return [
+    {id: "records", name: "general:Records"},
+    {id: "stores", name: "general:Stores"},
+    {id: "vectors", name: "general:Vectors"},
+    {id: "videos", name: "general:Videos"},
+    {id: "tasks", name: "general:Tasks"},
+    {id: "workflows", name: "general:Workflows"},
+    {id: "articles", name: "general:Articles"},
+    {id: "graphs", name: "general:Graphs"},
+  ];
+}
+
+export function getFormTypeItems(formType) {
+  if (formType === "records") {
+    return [
+      {name: "organization", label: "general:Organization", visible: true, width: "110"},
+      {name: "id", label: "general:ID", visible: true, width: "90"},
+      {name: "name", label: "general:Name", visible: true, width: "300"},
+      {name: "clientIp", label: "general:Client IP", visible: true, width: "150"},
+      {name: "createdTime", label: "general:Created time", visible: true, width: "150"},
+      {name: "provider", label: "general:Provider", visible: true, width: "150"},
+      {name: "provider2", label: "general:Provider 2", visible: true, width: "150"},
+      {name: "user", label: "general:User", visible: true, width: "120"},
+      {name: "method", label: "general:Method", visible: true, width: "110"},
+      {name: "requestUri", label: "general:Request URI", visible: true, width: "200"},
+      {name: "language", label: "general:Language", visible: true, width: "90"},
+      {name: "query", label: "general:Query", visible: true, width: "90"},
+      {name: "region", label: "general:Region", visible: true, width: "90"},
+      {name: "city", label: "general:City", visible: true, width: "90"},
+      {name: "unit", label: "general:Unit", visible: true, width: "90"},
+      {name: "section", label: "general:Section", visible: true, width: "90"},
+      {name: "response", label: "general:Response", visible: true, width: "90"},
+      {name: "object", label: "general:Object", visible: true, width: "200"},
+      {name: "errorText", label: "message:Error text", visible: true, width: "120"},
+      {name: "isTriggered", label: "general:Is triggered", visible: true, width: "140"},
+      {name: "action", label: "general:Action", visible: true, width: "150"},
+      {name: "block", label: "general:Block", visible: true, width: "110"},
+      {name: "block2", label: "general:Block 2", visible: true, width: "110"},
+    ];
+  } else if (formType === "stores") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "120"},
+      {name: "displayName", label: "general:Display name", visible: true},
+      {name: "isDefault", label: "store:Is default", visible: true, width: "120"},
+      {name: "chatCount", label: "store:Chat count", visible: true, width: "150"},
+      {name: "messageCount", label: "store:Message count", visible: true, width: "150"},
+      {name: "storageProvider", label: "store:Storage provider", visible: true, width: "250"},
+      // { name: "splitProvider", label: "store:Split provider", visible: false, width: "200" },
+      {name: "imageProvider", label: "store:Image provider", visible: true, width: "300"},
+      {name: "modelProvider", label: "provider:Model provider", visible: true, width: "330"},
+      {name: "embeddingProvider", label: "store:Embedding provider", visible: true, width: "300"},
+      {name: "textToSpeechProvider", label: "store:Text-to-Speech provider", visible: true, width: "300"},
+      {name: "speechToTextProvider", label: "store:Speech-to-Text provider", visible: true, width: "200"},
+      {name: "agentProvider", label: "store:Agent provider", visible: true, width: "250"},
+      {name: "memoryLimit", label: "store:Memory limit", visible: true, width: "120"},
+      {name: "state", label: "general:State", visible: true, width: "90"},
+    ];
+  } else if (formType === "vectors") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "140"},
+      // { name: "displayName", label: "general:Display name", visible: false, width: "200" },
+      {name: "store", label: "general:Store", visible: true, width: "130"},
+      {name: "provider", label: "general:Provider", visible: true, width: "200"},
+      {name: "file", label: "store:File", visible: true, width: "200"},
+      {name: "index", label: "vector:Index", visible: true, width: "80"},
+      {name: "text", label: "general:Text", visible: true, width: "200"},
+      {name: "size", label: "general:Size", visible: true, width: "80"},
+      {name: "data", label: "general:Data", visible: true, width: "200"},
+      {name: "dimension", label: "vector:Dimension", visible: true, width: "80"},
+    ];
+  } else if (formType === "videos") {
+    return [
+      {name: "owner", label: "general:User", visible: true, width: "90"},
+      {name: "name", label: "general:Name", visible: true, width: "180"},
+      {name: "displayName", label: "general:Display name", visible: true, width: "180"},
+      {name: "description", label: "general:Description", visible: true, width: "120"},
+      {name: "grade", label: "video:Grade", visible: true, width: "90"},
+      {name: "unit", label: "general:Unit", visible: true, width: "90"},
+      {name: "lesson", label: "video:Lesson", visible: true, width: "90"},
+      // { name: "videoId", label: "video:Video ID", visible: false, width: "250" },
+      {name: "coverUrl", label: "video:Cover", visible: true, width: "170"},
+      {name: "remarks", label: "video:Remarks", visible: true},
+      // { name: "labels", label: "task:Labels", visible: false, width: "120" },
+      {name: "state", label: "general:State", visible: true, width: "90"},
+      {name: "reviewState", label: "video:Review state", visible: true, width: "110"},
+      {name: "isPublic", label: "video:Is public", visible: true, width: "110"},
+      {name: "downloadUrl", label: "general:Download", visible: true, width: "110"},
+      // { name: "labelCount", label: "video:Label count", visible: false, width: "90" },
+      // { name: "segmentCount", label: "video:Segment count", visible: false, width: "110" },
+      {name: "excellentCount", label: "video:Excellent count", visible: true, width: "110"},
+    ];
+  } else if (formType === "tasks") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "160"},
+      {name: "displayName", label: "general:Display name", visible: true, width: "200"},
+      {name: "provider", label: "provider:Model provider", visible: true, width: "250"},
+      {name: "type", label: "general:Type", visible: true, width: "90"},
+      {name: "subject", label: "store:Subject", visible: true, width: "200"},
+      {name: "topic", label: "video:Topic", visible: true, width: "200"},
+      {name: "result", label: "general:Result", visible: true, width: "200"},
+      {name: "activity", label: "task:Activity", visible: true, width: "200"},
+      {name: "grade", label: "video:Grade", visible: true, width: "200"},
+      // { name: "application", label: "task:Application", visible: false, width: "180" },
+      // { name: "path", label: "provider:Path", visible: false },
+      {name: "text", label: "general:Text", visible: true},
+      {name: "labels", label: "task:Labels", visible: true, width: "250"},
+      {name: "example", label: "task:Example", visible: true},
+    ];
+  } else if (formType === "workflows") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "160"},
+      {name: "displayName", label: "general:Display name", visible: true, width: "200"},
+      {name: "text", label: "general:Text", visible: true},
+      {name: "text2", label: "general:Text2", visible: true},
+      {name: "message", label: "general:Message", visible: true},
+      {name: "questionTemplate", label: "task:Question", visible: true},
+    ];
+  } else if (formType === "articles") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "160"},
+      {name: "displayName", label: "general:Display name", visible: true, width: "200"},
+      {name: "workflow", label: "store:Workflow", visible: true, width: "250"},
+      // { name: "type", label: "general:Type", visible: false, width: "90" },
+      {name: "content", label: "article:Content", visible: true},
+    ];
+  } else if (formType === "graphs") {
+    return [
+      {name: "name", label: "general:Name", visible: true, width: "160"},
+      {name: "displayName", label: "general:Display name", visible: true, width: "200"},
+      {name: "createdTime", label: "general:Created time", visible: true, width: "200"},
+      {name: "text", label: "general:Text", visible: true, width: "200"},
+      {name: "graph", label: "general:Graphs", visible: true, width: "240"},
+    ];
+  } else {
+    return [];
+  }
+}
+
+export function filterTableColumns(columns, formItems, actionKey = "action") {
+  if (!formItems || formItems.length === 0) {
+    return columns;
+  }
+  const visibleColumns = formItems
+    .filter(item => item.visible !== false)
+    .map(item => {
+      const matchedColumn = columns.find(col => col.key === item.name);
+
+      if (matchedColumn) {
+        return {
+          ...matchedColumn,
+          width: item.width !== undefined ? `${item.width}px` : matchedColumn.width,
+          title: item.width !== undefined ? `${i18next.t(item.label)}` : matchedColumn.title,
+        };
+      }
+      return null;
+    })
+    .filter(col => col !== null);
+
+  const actionColumn = columns.find(col => col.key === actionKey);
+
+  return [
+    ...visibleColumns,
+    actionColumn,
+  ].filter(col => col);
+}
+
+export function getBuiltinTools() {
+  return [
+    {
+      category: "time",
+      name: "Time Tools",
+      icon: "🕐",
+      tools: [
+        {name: "current_time", description: "Get current time"},
+        {name: "localtime_to_timestamp", description: "Convert local time to timestamp"},
+        {name: "timestamp_to_localtime", description: "Convert timestamp to local time"},
+        {name: "timezone_conversion", description: "Convert timezone"},
+        {name: "weekday", description: "Calculate weekday"},
+      ],
+    },
+    {
+      category: "code",
+      name: "Code Tools",
+      icon: "💻",
+      tools: [
+        {name: "execute_code", description: "Execute code"},
+      ],
+    },
+    {
+      category: "json",
+      name: "JSON Tools",
+      icon: "📋",
+      tools: [
+        {name: "process_json", description: "Process JSON"},
+      ],
+    },
+  ];
+}
+
+export function getFormattedSize(bytes) {
+  if (bytes === 0) {return "0 Bytes";}
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
 }

@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
@@ -102,7 +102,10 @@ func getArticle(owner string, name string) (*Article, error) {
 }
 
 func GetArticle(id string) (*Article, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getArticle(owner, name)
 }
 
@@ -123,8 +126,11 @@ func GetPaginationArticles(owner string, offset, limit int, field, value, sortFi
 }
 
 func UpdateArticle(id string, article *Article) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
-	_, err := getArticle(owner, name)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
+	_, err = getArticle(owner, name)
 	if err != nil {
 		return false, err
 	}

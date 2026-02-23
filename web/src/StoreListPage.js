@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ class StoreListPage extends BaseListPage {
       ...this.state,
       generating: {},
       providers: {},
+      hideChat: this.getHideChatFromStorage(),
     };
   }
 
@@ -42,6 +43,22 @@ class StoreListPage extends BaseListPage {
     super.UNSAFE_componentWillMount();
     this.getAllProviders();
   }
+
+  getHideChatFromStorage() {
+    const saved = localStorage.getItem("hideChat");
+    if (saved === null || saved === undefined) {
+      return false;
+    }
+    return JSON.parse(saved) === true;
+  }
+
+  toggleHideChat = () => {
+    const newValue = !this.state.hideChat;
+    this.setState({
+      hideChat: newValue,
+    });
+    localStorage.setItem("hideChat", JSON.stringify(newValue));
+  };
 
   getAllProviders() {
     this.setState({loading: true});
@@ -135,7 +152,7 @@ class StoreListPage extends BaseListPage {
       frequency: 10000,
       limitMinutes: 10,
       welcome: "Hello",
-      welcomeTitle: i18next.t("chat:Hello, I'm Casibase AI Assistant"),
+      welcomeTitle: i18next.t("chat:Hello, I'm Hanzo AI Assistant"),
       welcomeText: i18next.t("chat:I'm here to help answer your questions"),
       prompt: defaultPrompt,
       themeColor: ThemeDefault.colorPrimary,
@@ -154,12 +171,9 @@ class StoreListPage extends BaseListPage {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
           window.dispatchEvent(new Event("storesChanged"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newStore),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/stores/${newStore.owner}/${newStore.name}`,
+            state: {isNewStore: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -236,6 +250,7 @@ class StoreListPage extends BaseListPage {
         key: "name",
         width: "120px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/stores/${record.owner}/${text}/view`}>
@@ -250,6 +265,7 @@ class StoreListPage extends BaseListPage {
         key: "displayName",
         // width: "600px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("store:Is default"),
@@ -257,10 +273,10 @@ class StoreListPage extends BaseListPage {
         key: "isDefault",
         width: "120px",
         sorter: (a, b) => a.isDefault - b.isDefault,
-        // ...this.getColumnSearchProps("isDefault"),
+        ...this.getColumnFilterProps("isDefault"),
         render: (text, record, index) => {
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },
@@ -298,6 +314,7 @@ class StoreListPage extends BaseListPage {
         key: "storageProvider",
         width: "250px",
         sorter: (a, b) => a.storageProvider.localeCompare(b.storageProvider),
+        ...this.getColumnSearchProps("storageProvider"),
         render: (text, record, index) => {
           if (text === "") {
             return null;
@@ -318,16 +335,18 @@ class StoreListPage extends BaseListPage {
         key: "imageProvider",
         width: "300px",
         sorter: (a, b) => a.imageProvider.localeCompare(b.imageProvider),
+        ...this.getColumnSearchProps("imageProvider"),
         render: (text, record, index) => {
           return this.renderProviderInfo(text);
         },
       },
       {
-        title: i18next.t("store:Model provider"),
+        title: i18next.t("provider:Model provider"),
         dataIndex: "modelProvider",
         key: "modelProvider",
         width: "330px",
         sorter: (a, b) => a.modelProvider.localeCompare(b.modelProvider),
+        ...this.getColumnSearchProps("modelProvider"),
         render: (text, record, index) => {
           return this.renderProviderInfo(text);
         },
@@ -338,6 +357,7 @@ class StoreListPage extends BaseListPage {
         key: "embeddingProvider",
         width: "300px",
         sorter: (a, b) => a.embeddingProvider.localeCompare(b.embeddingProvider),
+        ...this.getColumnSearchProps("embeddingProvider"),
         render: (text, record, index) => {
           return this.renderProviderInfo(text);
         },
@@ -348,6 +368,7 @@ class StoreListPage extends BaseListPage {
         key: "textToSpeechProvider",
         width: "300px",
         sorter: (a, b) => a.textToSpeechProvider.localeCompare(b.textToSpeechProvider),
+        ...this.getColumnSearchProps("textToSpeechProvider"),
         render: (text, record, index) => {
           return this.renderProviderInfo(text);
         },
@@ -358,6 +379,7 @@ class StoreListPage extends BaseListPage {
         key: "speechToTextProvider",
         width: "200px",
         sorter: (a, b) => a.speechToTextProvider.localeCompare(b.speechToTextProvider),
+        ...this.getColumnSearchProps("speechToTextProvider"),
         render: (text) => {
           return this.renderProviderInfo(text);
         },
@@ -368,6 +390,7 @@ class StoreListPage extends BaseListPage {
         key: "agentProvider",
         width: "250px",
         sorter: (a, b) => a.agentProvider.localeCompare(b.agentProvider),
+        ...this.getColumnSearchProps("agentProvider"),
         render: (text) => {
           return this.renderProviderInfo(text);
         },
@@ -385,6 +408,10 @@ class StoreListPage extends BaseListPage {
         key: "state",
         width: "90px",
         sorter: (a, b) => a.state.localeCompare(b.state),
+        ...this.getColumnSearchProps("state"),
+        render: (text) => {
+          return text === "Active" ? Setting.getDisplayTag(i18next.t("general:Active"), "green") : Setting.getDisplayTag(i18next.t("general:Inactive"), "red");
+        },
       },
       {
         title: i18next.t("general:Action"),
@@ -393,24 +420,51 @@ class StoreListPage extends BaseListPage {
         width: "350px",
         fixed: "right",
         render: (text, record, index) => {
+          if (this.state.hideChat) {
+            return (
+              <div>
+                <Button style={{marginTop: "10px", marginBottom: "10px", marginRight: "10px"}} onClick={() => this.props.history.push(`/stores/${record.owner}/${record.name}/view`)}>{i18next.t("general:View")}</Button>
+                {
+                  !Setting.isLocalAdminUser(this.props.account) ? null : (
+                    <React.Fragment>
+                      <Button style={{marginBottom: "10px", marginRight: "10px"}} type="primary" onClick={() => this.props.history.push(`/stores/${record.owner}/${record.name}`)}>{i18next.t("general:Edit")}</Button>
+                      <Popconfirm
+                        title={`${i18next.t("general:Sure to delete")}: ${record.name} ?`}
+                        onConfirm={() => this.deleteStore(record)}
+                        okText={i18next.t("general:OK")}
+                        cancelText={i18next.t("general:Cancel")}
+                        disabled={record.isDefault || Setting.isUserBoundToStore(this.props.account)}
+                      >
+                        <Button style={{marginBottom: "10px"}} type="primary" danger disabled={record.isDefault || Setting.isUserBoundToStore(this.props.account)}>{i18next.t("general:Delete")}</Button>
+                      </Popconfirm>
+                    </React.Fragment>
+                  )
+                }
+              </div>
+            );
+          }
+
           return (
             <div>
               <Button style={{marginTop: "10px", marginBottom: "10px", marginRight: "10px"}} onClick={() => this.props.history.push(`/stores/${record.owner}/${record.name}/view`)}>{i18next.t("general:View")}</Button>
               <Button style={{marginBottom: "10px", marginRight: "10px"}} icon={<CopyOutlined />} onClick={() => {copy(`${window.location.origin}/${record.owner}/${record.name}/chat`);Setting.showMessage("success", i18next.t("general:Successfully copied"));}}>{i18next.t("general:Copy Link")}</Button>
-              <Button style={{marginBottom: "10px", marginRight: "10px"}} onClick={() => window.open(`${window.location.origin}/${record.owner}/${record.name}/chat`, "_blank")}>{i18next.t("store:Open Chat")}</Button>
-
+              <Button style={{marginBottom: "10px", marginRight: "10px"}} onClick={() => {
+                Setting.setStore(record.name);
+                window.open(`${window.location.origin}/${record.owner}/${record.name}/chat`, "_blank");
+              }}>{i18next.t("store:Open Chat")}</Button>
               {
                 !Setting.isLocalAdminUser(this.props.account) ? null : (
                   <React.Fragment>
-                    <Button style={{marginBottom: "10px", marginRight: "10px"}} loading={this.state.generating[index]} onClick={() => this.refreshStoreVectors(index)}>{i18next.t("store:Refresh Vectors")}</Button>
+                    <Button style={{marginBottom: "10px", marginRight: "10px"}} loading={this.state.generating[index]} onClick={() => this.refreshStoreVectors(index)}>{i18next.t("general:Refresh Vectors")}</Button>
                     <Button style={{marginBottom: "10px", marginRight: "10px"}} type="primary" onClick={() => this.props.history.push(`/stores/${record.owner}/${record.name}`)}>{i18next.t("general:Edit")}</Button>
                     <Popconfirm
                       title={`${i18next.t("general:Sure to delete")}: ${record.name} ?`}
                       onConfirm={() => this.deleteStore(record)}
                       okText={i18next.t("general:OK")}
                       cancelText={i18next.t("general:Cancel")}
+                      disabled={record.isDefault || Setting.isUserBoundToStore(this.props.account)}
                     >
-                      <Button style={{marginBottom: "10px"}} type="primary" danger>{i18next.t("general:Delete")}</Button>
+                      <Button style={{marginBottom: "10px"}} type="primary" danger disabled={record.isDefault || Setting.isUserBoundToStore(this.props.account)}>{i18next.t("general:Delete")}</Button>
                     </Popconfirm>
                   </React.Fragment>
                 )
@@ -420,6 +474,14 @@ class StoreListPage extends BaseListPage {
         },
       },
     ];
+    let filteredColumns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems);
+
+    if (this.state.hideChat) {
+      filteredColumns = filteredColumns.filter(column =>
+        column.key !== "chatCount" && column.key !== "messageCount" && column.key !== "imageProvider" && column.key !== "modelProvider" && column.key !== "embeddingProvider" &&
+        column.key !== "textToSpeechProvider" && column.key !== "speechToTextProvider" && column.key !== "agentProvider" && column.key !== "memoryLimit"
+      );
+    }
 
     const paginationProps = {
       total: this.state.pagination.total,
@@ -431,14 +493,14 @@ class StoreListPage extends BaseListPage {
 
     return (
       <div>
-        <Table scroll={{x: "max-content"}} columns={columns} dataSource={stores} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
+        <Table scroll={{x: "max-content"}} columns={filteredColumns} dataSource={stores} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
           title={() => (
             <div>
               {i18next.t("general:Stores")}&nbsp;&nbsp;&nbsp;&nbsp;
               {
                 !Setting.isLocalAdminUser(this.props.account) ? null : (
                   <>
-                    <Button type="primary" size="small" onClick={this.addStore.bind(this)}>{i18next.t("general:Add")}</Button>
+                    <Button type="primary" size="small" onClick={this.addStore.bind(this)} disabled={Setting.isUserBoundToStore(this.props.account)}>{i18next.t("general:Add")}</Button>
                     {this.state.selectedRowKeys.length > 0 && (
                       <Popconfirm title={`${i18next.t("general:Sure to delete")}: ${this.state.selectedRowKeys.length} ${i18next.t("general:items")} ?`} onConfirm={() => this.performBulkDelete(this.state.selectedRows, this.state.selectedRowKeys)} okText={i18next.t("general:OK")} cancelText={i18next.t("general:Cancel")}>
                         <Button type="primary" danger size="small" icon={<DeleteOutlined />} style={{marginLeft: 8}}>
@@ -449,6 +511,10 @@ class StoreListPage extends BaseListPage {
                   </>
                 )
               }
+              <span style={{marginLeft: 32}}>
+                {i18next.t("store:Hide chat")}:
+                <Switch checked={this.state.hideChat} onChange={this.toggleHideChat} style={{marginLeft: 8}} />
+              </span>
             </div>
           )}
           loading={this.state.loading}

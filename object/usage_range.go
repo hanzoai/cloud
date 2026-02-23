@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casibase/casibase/model"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/model"
 )
 
-func GetRangeUsages(rangeType string, count int, user string, storeName string) ([]*Usage, error) {
+func GetRangeUsages(rangeType string, count int, user string, storeName string, lang string) ([]*Usage, error) {
 	messages, err := GetGlobalMessagesByStoreName(storeName)
 	if err != nil {
 		return nil, err
@@ -46,7 +47,7 @@ func GetRangeUsages(rangeType string, count int, user string, storeName string) 
 	case "Month":
 		startDateTime = now.Truncate(24*time.Hour).AddDate(0, -count+1, 0)
 	default:
-		return nil, fmt.Errorf("invalid range type: %s", rangeType)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:invalid range type: %s"), rangeType)
 	}
 
 	usages := make([]*Usage, count)

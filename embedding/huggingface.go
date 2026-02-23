@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ package embedding
 import (
 	"context"
 
-	"github.com/casibase/casibase/proxy"
-	"github.com/henomis/lingoose/embedder/huggingface"
+	"github.com/hanzoai/cloud/proxy"
+	huggingfaceembedder "github.com/henomis/lingoose/embedder/huggingface"
 )
 
 type HuggingFaceEmbeddingProvider struct {
@@ -42,7 +42,7 @@ func (p *HuggingFaceEmbeddingProvider) calculatePrice(res *EmbeddingResult) erro
 	return nil
 }
 
-func (p *HuggingFaceEmbeddingProvider) QueryVector(text string, ctx context.Context) ([]float32, *EmbeddingResult, error) {
+func (p *HuggingFaceEmbeddingProvider) QueryVector(text string, ctx context.Context, lang string) ([]float32, *EmbeddingResult, error) {
 	client := huggingfaceembedder.New().WithToken(p.secretKey).WithModel(p.subType).WithHTTPClient(proxy.ProxyHttpClient)
 	embed, err := client.Embed(ctx, []string{text})
 	if err != nil {

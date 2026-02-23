@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,11 +19,7 @@ import * as TemplateBackend from "./backend/TemplateBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import TemplateOptionTable from "./table/TemplateOptionTable";
-
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
-require("codemirror/theme/material-darker.css");
-require("codemirror/mode/yaml/yaml");
+import Editor from "./common/Editor";
 
 const {TextArea} = Input;
 
@@ -36,6 +32,7 @@ class ApplicationEditPage extends React.Component {
       application: null,
       templates: [],
       deploying: false,
+      isNewApplication: props.location?.state?.isNewApplication || false,
     };
   }
 
@@ -81,7 +78,9 @@ class ApplicationEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully deployed"));
-          this.getApplication();
+          this.setState({
+            application: res.data,
+          });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to deploy")}: ${res.msg}`);
         }
@@ -149,6 +148,7 @@ class ApplicationEditPage extends React.Component {
           {i18next.t("application:Edit Application")}&nbsp;&nbsp;&nbsp;&nbsp;
           <Button onClick={() => this.submitApplicationEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitApplicationEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewApplication && <Button style={{marginLeft: "20px"}} onClick={() => this.cancelApplicationEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       } style={(Setting.isMobile()) ? {margin: "5px"} : {}} type="inner">
         <Row style={{marginTop: "10px"}} >
@@ -254,10 +254,12 @@ class ApplicationEditPage extends React.Component {
           </Col>
           <Col span={22} >
             <div style={{height: "500px"}}>
-              <CodeMirror
+              <Editor
                 value={this.state.application.parameters}
-                options={{mode: "yaml", theme: "material-darker"}}
-                onBeforeChange={(editor, data, value) => {
+                lang="yaml"
+                fillHeight
+                dark
+                onChange={value => {
                   this.updateApplicationField("parameters", value);
                 }}
               />
@@ -271,9 +273,12 @@ class ApplicationEditPage extends React.Component {
           </Col>
           <Col span={22} >
             <div style={{height: "500px"}}>
-              <CodeMirror
+              <Editor
                 value={this.state.application.manifest}
-                options={{mode: "yaml", theme: "material-darker", readOnly: true}}
+                lang="yaml"
+                fillHeight
+                dark
+                readOnly
               />
             </div>
           </Col>
@@ -295,6 +300,7 @@ class ApplicationEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               applicationName: this.state.application.name,
+              isNewApplication: false,
             });
 
             if (exitAfterSave) {
@@ -316,6 +322,25 @@ class ApplicationEditPage extends React.Component {
       });
   }
 
+  cancelApplicationEdit() {
+    if (this.state.isNewApplication) {
+      ApplicationBackend.deleteApplication(this.state.application)
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/applications");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
+        })
+        .catch(error => {
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+        });
+    } else {
+      this.props.history.push("/applications");
+    }
+  }
+
   render() {
     return (
       <div>
@@ -325,6 +350,7 @@ class ApplicationEditPage extends React.Component {
         <div style={{marginTop: "20px", marginLeft: "40px"}}>
           <Button size="large" onClick={() => this.submitApplicationEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitApplicationEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewApplication && <Button style={{marginLeft: "20px"}} size="large" onClick={() => this.cancelApplicationEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       </div>
     );

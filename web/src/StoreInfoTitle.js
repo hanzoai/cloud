@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,8 +62,8 @@ const StoreInfoTitle = (props) => {
 
   // Check if user can manage panes: only admin and chat-admin
   const canManagePanes = useMemo(() => {
-    return account?.isAdmin || account?.type === "chat-admin";
-  }, [account?.isAdmin, account?.type]);
+    return Setting.isLocalAdminUser(account);
+  }, [account]);
 
   // Check if device is mobile
   useEffect(() => {
@@ -113,11 +113,17 @@ const StoreInfoTitle = (props) => {
             const providers = res.data.filter(provider =>
               provider.category === "Model" && defaultStore.childModelProviders.includes(provider.name)
             );
+            if (storeInfo?.modelProvider && !providers.some(p => p.name === storeInfo.modelProvider)) {
+              const missingProvider = res.data.find(p => p.name === storeInfo.modelProvider && p.category === "Model");
+              if (missingProvider) {
+                providers.unshift(missingProvider);
+              }
+            }
             setModelProviders(providers);
           }
         });
     }
-  }, [chat, defaultStore]);
+  }, [chat, defaultStore, storeInfo]);
 
   // Combined update function to handle both store and provider updates
   const updateStoreAndChat = async(newStore, newProvider) => {
@@ -226,7 +232,25 @@ const StoreInfoTitle = (props) => {
     }
   };
 
-  const shouldShowTitleBar = paneCount === 1 && (filteredStores.length > 0 || modelProviders.length > 0 || storeInfo?.showAutoRead || (showPaneControls && canManagePanes));
+  // Ensure the current store is always in the options list
+  const storeOptions = useMemo(() => {
+    if (filteredStores.length > 0) {
+      // Check if current store is in filtered stores
+      const currentStoreInFiltered = storeInfo && filteredStores.some(store => store.name === storeInfo.name);
+      if (!currentStoreInFiltered && storeInfo) {
+        // Add current store to the beginning of the list
+        return [storeInfo, ...filteredStores];
+      }
+      return filteredStores;
+    }
+    // If no filtered stores, show only the current store
+    return storeInfo ? [storeInfo] : [];
+  }, [filteredStores, storeInfo]);
+
+  // User can change stores if there are multiple options available
+  const canChangeStores = storeOptions.length > 1;
+
+  const shouldShowTitleBar = paneCount === 1 && (storeInfo || modelProviders.length > 0 || (showPaneControls && canManagePanes));
 
   if (!shouldShowTitleBar) {
     return null;
@@ -241,11 +265,11 @@ const StoreInfoTitle = (props) => {
       justifyContent: "space-between",
     }}>
       <div style={{display: "flex", alignItems: "center"}}>
-        {filteredStores.length > 0 && (
+        {storeInfo && (
           <div style={{marginRight: "20px"}}>
             {!isMobile && <span style={{marginRight: "10px"}}>{i18next.t("general:Store")}:</span>}
-            <Select value={selectedStore?.name || storeInfo?.name || (filteredStores[0]?.name)} style={{width: isMobile ? "35vw" : "12rem"}} onChange={handleStoreChange} disabled={isUpdating}>
-              {filteredStores.map(store => (
+            <Select value={selectedStore?.name || storeInfo.name} style={{width: isMobile ? "35vw" : "12rem"}} onChange={handleStoreChange} disabled={isUpdating || !canChangeStores}>
+              {storeOptions.map(store => (
                 <Select.Option key={store.name} value={store.name}>
                   {store.displayName || store.name}
                 </Select.Option>

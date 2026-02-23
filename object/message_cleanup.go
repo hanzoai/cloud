@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package object
 import (
 	"fmt"
 
+	"github.com/beego/beego/logs"
 	"github.com/robfig/cron/v3"
 )
 
@@ -100,7 +101,7 @@ func cleanupChats() error {
 				return err
 			}
 
-			fmt.Printf("[%d] Cleaned up empty chat: [%s], user = [%s], clientIp = [%s], userAgent = [%s]\n", i, chat.Name, chat.User, chat.ClientIp, chat.UserAgent)
+			logs.Info("[%d] Cleaned up empty chat: [%s], user = [%s], clientIp = [%s], userAgent = [%s]", i, chat.Name, chat.User, chat.ClientIp, chat.UserAgent)
 			i += 1
 		}
 	}
@@ -111,7 +112,7 @@ func cleanupChats() error {
 func cleanupChatsNoError() {
 	err := cleanupChats()
 	if err != nil {
-		fmt.Printf("cleanupChatsNoError() error: %s\n", err.Error())
+		logs.Error("cleanupChatsNoError() error: %s", err.Error())
 	}
 }
 

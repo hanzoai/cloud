@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ func TestProcessFiles(t *testing.T) {
 				outputFileName := strings.TrimSuffix(fileName, fileExt) + ".md"
 				outputFilePath := filepath.Join(outputDir, outputFileName)
 
-				parsedText, err := GetParsedTextFromUrl(inputFilePath, fileExt)
+				parsedText, err := GetParsedTextFromUrl(inputFilePath, fileExt, "en")
 				if err != nil {
 					mu.Lock()
 					t.Logf("Failed to process file %s: %v\n", inputFilePath, err)

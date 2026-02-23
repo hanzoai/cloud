@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute"
+	"github.com/hanzoai/cloud/i18n"
 )
 
 type MachineAzureClient struct {
@@ -73,7 +74,7 @@ func getMachineFromAzureInstance(vm armcompute.VirtualMachine) *Machine {
 	return machine
 }
 
-func (client MachineAzureClient) GetMachines() ([]*Machine, error) {
+func (client MachineAzureClient) GetMachines(lang string) ([]*Machine, error) {
 	pager := client.Client.NewListPager(client.resourceGroup, nil)
 	machines := []*Machine{}
 
@@ -92,7 +93,7 @@ func (client MachineAzureClient) GetMachines() ([]*Machine, error) {
 	return machines, nil
 }
 
-func (client MachineAzureClient) GetMachine(name string) (*Machine, error) {
+func (client MachineAzureClient) GetMachine(name string, lang string) (*Machine, error) {
 	vm, err := client.Client.Get(context.Background(), client.resourceGroup, name, nil)
 	if err != nil {
 		return nil, err
@@ -101,6 +102,6 @@ func (client MachineAzureClient) GetMachine(name string) (*Machine, error) {
 	return getMachineFromAzureInstance(vm.VirtualMachine), nil
 }
 
-func (client MachineAzureClient) UpdateMachineState(name string, state string) (bool, string, error) {
-	return false, "", fmt.Errorf("Not implemented")
+func (client MachineAzureClient) UpdateMachineState(name string, state string, lang string) (bool, string, error) {
+	return false, "", fmt.Errorf(i18n.Translate(lang, "pkgmachine:Not implemented"))
 }

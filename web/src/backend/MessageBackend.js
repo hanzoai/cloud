@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ export function getChatMessages(owner, chat) {
 
 const eventSourceMap = new Map();
 
-export function getMessageAnswer(owner, name, onMessage, onReason, onError, onEnd) {
+export function getMessageAnswer(owner, name, onMessage, onReason, onTool, onSearch, onVector, onError, onEnd) {
   if (eventSourceMap.has(`${owner}/${name}`)) {
     return;
   }
@@ -62,6 +62,20 @@ export function getMessageAnswer(owner, name, onMessage, onReason, onError, onEn
   eventSource.addEventListener("reason", (e) => {
     onReason(e.data);
   });
+
+  eventSource.addEventListener("tool", (e) => {
+    onTool(e.data);
+  });
+
+  eventSource.addEventListener("search", (e) => {
+    onSearch(e.data);
+  });
+
+  if (onVector) {
+    eventSource.addEventListener("vector", (e) => {
+      onVector(e.data);
+    });
+  }
 
   eventSource.addEventListener("myerror", (e) => {
     onError(e.data);

@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ class FormDataPage extends Component {
   }
 
   getForm() {
-    FormBackend.getForm(this.props.account.name, this.state.formName)
+    FormBackend.getForm(this.props.account.owner, this.state.formName)
       .then((res) => {
         if (res.status === "ok") {
           this.setState({
@@ -55,14 +55,14 @@ class FormDataPage extends Component {
       );
     }
 
-    if (this.state.form.type === "Table" || this.state.form.type === "") {
+    if (this.state.form.category === "Table" || this.state.form.category === "") {
       return <FormDataTablePage {...this.props} />;
-    } else if (this.state.form.type === "iFrame") {
+    } else if (this.state.form.category === "iFrame") {
       return (
         <iframe id="formData" title="formData" src={this.state.form.url} style={{width: "100%", height: "calc(100vh - 134px)"}} frameBorder="no" />
       );
     } else {
-      return `Unsupported form type: ${this.state.form.type}`;
+      return `Unsupported form category: ${this.state.form.category}`;
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +18,7 @@ import en from "./locales/en/data.json";
 import es from "./locales/es/data.json";
 import fr from "./locales/fr/data.json";
 import de from "./locales/de/data.json";
-import id from "./locales/id/data.json";
 import ja from "./locales/ja/data.json";
-import ko from "./locales/ko/data.json";
-import ru from "./locales/ru/data.json";
 import * as Conf from "./Conf";
 import {initReactI18next} from "react-i18next";
 
@@ -31,10 +28,7 @@ const resources = {
   es: es,
   fr: fr,
   de: de,
-  id: id,
   ja: ja,
-  ko: ko,
-  ru: ru,
 };
 
 function initLanguage() {
@@ -66,17 +60,8 @@ function initLanguage() {
       case "de":
         language = "de";
         break;
-      case "id":
-        language = "id";
-        break;
       case "ja":
         language = "ja";
-        break;
-      case "ko":
-        language = "ko";
-        break;
-      case "ru":
-        language = "ru";
         break;
       default:
         language = Conf.DefaultLanguage;

@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@
 package util
 
 import (
-	"fmt"
 	"net"
 	"path/filepath"
 
-	"github.com/casibase/casibase/conf"
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/conf"
 	"github.com/oschwald/geoip2-golang"
 )
 
@@ -41,7 +41,7 @@ func InitMaxmindDb() error {
 	if cityErr != nil {
 		maxmindCityDB, cityErr = geoip2.Open(filepath.Join(frontendBaseDir, "..", "data", "GeoLite2-City.mmdb"))
 		if cityErr != nil {
-			fmt.Printf("InitMaxmindDb() open \"GeoLite2-City.mmdb\" warning: %v\n", cityErr)
+			logs.Warn("InitMaxmindDb() open \"GeoLite2-City.mmdb\" warning: %v", cityErr)
 		}
 	}
 
@@ -50,7 +50,7 @@ func InitMaxmindDb() error {
 	if asnErr != nil {
 		maxmindASNDB, asnErr = geoip2.Open(filepath.Join(frontendBaseDir, "..", "data", "GeoLite2-ASN.mmdb"))
 		if asnErr != nil {
-			fmt.Printf("InitMaxmindDb() open \"GeoLite2-ASN.mmdb\" warning: %v\n", asnErr)
+			logs.Warn("InitMaxmindDb() open \"GeoLite2-ASN.mmdb\" warning: %v", asnErr)
 		}
 	}
 

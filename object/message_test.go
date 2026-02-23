@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casibase/casibase/embedding"
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/embedding"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/util"
 )
 
 func TestUpdateMessagePrices(t *testing.T) {
@@ -80,7 +80,7 @@ func TestUpdateMessagePrices(t *testing.T) {
 			prompt := store.Prompt
 			knowledge := []*model.RawMessage{}
 
-			rawMessages, err := model.OpenaiGenerateMessages(prompt, question, history, knowledge, modelSubType, maxTokens)
+			rawMessages, err := model.OpenaiGenerateMessages(prompt, question, history, knowledge, modelSubType, maxTokens, "en")
 			if err != nil {
 				panic(err)
 			}
@@ -107,7 +107,7 @@ func TestUpdateMessagePrices(t *testing.T) {
 			modelResult.TotalTokenCount = modelResult.PromptTokenCount + modelResult.ResponseTokenCount
 
 			p, err := model.NewLocalModelProvider("", modelSubType, "", 0, 0, 0, 0, "", "", 0, 0, "USD")
-			err = p.CalculatePrice(modelResult)
+			err = p.CalculatePrice(modelResult, "en")
 			if err != nil {
 				panic(err)
 			}
@@ -147,7 +147,7 @@ func TestUpdateMessagePricesFromTokens(t *testing.T) {
 		modelResult.TotalTokenCount = modelResult.PromptTokenCount + modelResult.ResponseTokenCount
 
 		p, err := model.NewLocalModelProvider("", modelSubType, "", 0, 0, 0, 0, "", "", 0, 0, "USD")
-		err = p.CalculatePrice(modelResult)
+		err = p.CalculatePrice(modelResult, "en")
 		if err != nil {
 			panic(err)
 		}

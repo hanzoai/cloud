@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,16 @@ export function getGlobalTasks() {
 
 export function getTasks(owner, page = "", pageSize = "", field = "", value = "", sortField = "", sortOrder = "") {
   return fetch(`${Setting.ServerUrl}/api/get-tasks?owner=${owner}&p=${page}&pageSize=${pageSize}&field=${field}&value=${value}&sortField=${sortField}&sortOrder=${sortOrder}`, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+  }).then(res => res.json());
+}
+
+export function getTaskTemplates() {
+  return fetch(`${Setting.ServerUrl}/api/get-task-templates`, {
     method: "GET",
     credentials: "include",
     headers: {
@@ -77,5 +87,30 @@ export function deleteTask(task) {
       "Accept-Language": Setting.getAcceptLanguage(),
     },
     body: JSON.stringify(newTask),
+  }).then(res => res.json());
+}
+
+export function uploadTaskDocument(taskId, base64, filename, filetype) {
+  const formData = new FormData();
+  formData.append("file", base64);
+  formData.append("name", filename);
+  formData.append("type", filetype);
+  return fetch(`${Setting.ServerUrl}/api/upload-task-document?id=${taskId}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
+    body: formData,
+  }).then((res) => res.json());
+}
+
+export function analyzeTask(owner, name) {
+  return fetch(`${Setting.ServerUrl}/api/analyze-task?id=${owner}/${encodeURIComponent(name)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Accept-Language": Setting.getAcceptLanguage(),
+    },
   }).then(res => res.json());
 }

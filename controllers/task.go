@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalTasks
@@ -29,7 +29,12 @@ import (
 // @Success 200 {array} object.Task The Response object
 // @router /get-global-tasks [get]
 func (c *ApiController) GetGlobalTasks() {
-	tasks, err := object.GetGlobalTasks()
+	owner := c.GetSessionUsername()
+	if c.IsAdmin() {
+		owner = ""
+	}
+
+	tasks, err := object.GetGlobalTasks(owner)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -46,13 +51,28 @@ func (c *ApiController) GetGlobalTasks() {
 // @Success 200 {array} object.Task The Response object
 // @router /get-tasks [get]
 func (c *ApiController) GetTasks() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
 	value := c.Input().Get("value")
 	sortField := c.Input().Get("sortField")
 	sortOrder := c.Input().Get("sortOrder")
+
+	if c.IsAdmin() {
+		owner = ""
+	}
+
+	// For non-admins, filter by their username
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		if username != "" {
+			owner = username
+		}
+	}
 
 	if limit == "" || page == "" {
 		tasks, err := object.GetTasks(owner)
@@ -96,7 +116,41 @@ func (c *ApiController) GetTask() {
 		return
 	}
 
-	c.ResponseOk(object.GetMaskedTask(task, true))
+	// Check if task exists
+	if task == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	// Check ownership for non-admins
+	if !c.IsAdmin() && !c.IsPreviewMode() {
+		username := c.GetSessionUsername()
+		if task.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
+	c.ResponseOk(task)
+}
+
+// GetTaskTemplates
+// @Title GetTaskTemplates
+// @Tag Task API
+// @Description get task templates (admin only). Returns tasks under owner "admin" for use as task templates.
+// @Success 200 {array} object.Task The Response object
+// @router /get-task-templates [get]
+func (c *ApiController) GetTaskTemplates() {
+	if !c.IsAdmin() {
+		c.ResponseError(c.T("auth:this operation requires admin privilege"))
+		return
+	}
+	tasks, err := object.GetTasks("admin")
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	c.ResponseOk(object.GetMaskedTasks(tasks, true))
 }
 
 // UpdateTask
@@ -115,6 +169,24 @@ func (c *ApiController) UpdateTask() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+
+	// Check ownership for non-admins
+	if !c.IsAdmin() && !c.IsPreviewMode() {
+		username := c.GetSessionUsername()
+		existingTask, err := object.GetTask(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		if existingTask == nil {
+			c.ResponseError(c.T("general:The task does not exist"))
+			return
+		}
+		if existingTask.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
 	}
 
 	success, err := object.UpdateTask(id, &task)
@@ -165,6 +237,26 @@ func (c *ApiController) DeleteTask() {
 		return
 	}
 
+	// Check ownership for non-admins
+	if !c.IsAdmin() {
+		username := c.GetSessionUsername()
+		// Fetch task from database to verify ownership
+		id := task.GetId()
+		existingTask, err := object.GetTask(id)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
+		if existingTask == nil {
+			c.ResponseError(c.T("general:The task does not exist"))
+			return
+		}
+		if existingTask.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
 	success, err := object.DeleteTask(&task)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -172,4 +264,54 @@ func (c *ApiController) DeleteTask() {
 	}
 
 	c.ResponseOk(success)
+}
+
+// AnalyzeTask
+// @Title AnalyzeTask
+// @Tag Task API
+// @Description analyze task document and generate structured report
+// @Param id query string true "The id (owner/name) of the task"
+// @Success 200 {object} object.TaskResult The Response object
+// @router /analyze-task [post]
+func (c *ApiController) AnalyzeTask() {
+	id := c.Input().Get("id")
+
+	task, err := object.GetTask(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if task == nil {
+		c.ResponseError(c.T("general:The task does not exist"))
+		return
+	}
+
+	if !c.IsAdmin() && !c.IsPreviewMode() {
+		username := c.GetSessionUsername()
+		if task.Owner != username {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
+	result, err := object.AnalyzeTask(task, c.GetAcceptLanguage())
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	task.Result = string(resultBytes)
+	task.Score = result.Score
+	_, err = object.UpdateTask(id, task)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(result)
 }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"sort"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalStores
@@ -87,13 +87,19 @@ func (c *ApiController) GetGlobalStores() {
 // @Success 200 {array} object.Store The Response object
 // @router /get-stores [get]
 func (c *ApiController) GetStores() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 
 	stores, err := object.GetStores(owner)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
+
+	// Apply store isolation based on user's Homepage field
+	stores = FilterStoresByHomepage(stores, c.GetSessionUser())
 
 	c.ResponseOk(stores)
 }
@@ -110,7 +116,7 @@ func (c *ApiController) GetStore() {
 
 	var store *object.Store
 	var err error
-	if id == "admin/_casibase_default_store_" {
+	if id == "admin/_cloud_default_store_" {
 		store, err = object.GetDefaultStore("admin")
 	} else {
 		store, err = object.GetStore(id)
@@ -123,7 +129,7 @@ func (c *ApiController) GetStore() {
 	if store != nil {
 		host := c.Ctx.Request.Host
 		origin := getOriginFromHost(host)
-		err = store.Populate(origin)
+		err = store.Populate(origin, c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseOk(store, err.Error())
 			return
@@ -158,7 +164,7 @@ func (c *ApiController) UpdateStore() {
 	}
 
 	if oldStore.IsDefault && !store.IsDefault {
-		c.ResponseError("given that there must be one default store in Casibase, you cannot set this store to non-default. You can directly set another store as default")
+		c.ResponseError(c.T("store:given that there must be one default store in Hanzo Cloud, you cannot set this store to non-default. You can directly set another store as default"))
 		return
 	}
 
@@ -200,6 +206,12 @@ func (c *ApiController) UpdateStore() {
 func (c *ApiController) AddStore() {
 	var store object.Store
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &store)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	err = object.SyncDefaultProvidersToStore(&store)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -255,6 +267,11 @@ func (c *ApiController) DeleteStore() {
 		return
 	}
 
+	if store.IsDefault {
+		c.ResponseError(c.T("store:Cannot delete the default store"))
+		return
+	}
+
 	success, err := object.DeleteStore(&store)
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -279,7 +296,7 @@ func (c *ApiController) RefreshStoreVectors() {
 		return
 	}
 
-	ok, err := object.RefreshStoreVectors(&store)
+	ok, err := object.RefreshStoreVectors(&store, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -296,12 +313,18 @@ func (c *ApiController) RefreshStoreVectors() {
 // @Success 200 {array} object.Store The Response object
 // @router /get-store-names [get]
 func (c *ApiController) GetStoreNames() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	storeNames, err := object.GetStoresByFields(owner, []string{"name", "display_name"}...)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
+
+	// Apply store isolation based on user's Homepage field
+	storeNames = FilterStoresByHomepage(storeNames, c.GetSessionUser())
 
 	c.ResponseOk(storeNames)
 }

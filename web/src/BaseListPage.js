@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import {ExclamationCircleOutlined, SearchOutlined} from "@ant-design/icons";
 import Highlighter from "react-highlight-words";
 import i18next from "i18next";
 import * as Setting from "./Setting";
+import * as FormBackend from "./backend/FormBackend";
 
 const {confirm} = Modal;
 
@@ -38,6 +39,7 @@ class BaseListPage extends React.Component {
       isAuthorized: true,
       selectedRowKeys: [],
       selectedRows: [],
+      formItems: [],
     };
   }
 
@@ -53,9 +55,9 @@ class BaseListPage extends React.Component {
 
   componentDidMount() {
     window.addEventListener("storeChanged", this.handleStoreChange);
-    if (!Setting.isLocalAdminUser(this.props.account)) {
-      Setting.setStore("All");
-    }
+    // if (!Setting.isLocalAdminUser(this.props.account)) {
+    //   Setting.setStore("All");
+    // }
   }
 
   componentWillUnmount() {
@@ -68,6 +70,36 @@ class BaseListPage extends React.Component {
   UNSAFE_componentWillMount() {
     const {pagination} = this.state;
     this.fetch({pagination});
+    this.getForm();
+  }
+  getForm() {
+    const tag = this.props.account.tag;
+    const formType = this.props.match?.path?.replace(/^\//, "");
+    let formName = formType;
+    if (tag !== "") {
+      formName = formType + "-tag-" + tag;
+      FormBackend.getForm(this.props.account.owner, formName)
+        .then(res => {
+          if (res.status === "ok" && res.data) {
+            this.setState({formItems: res.data.formItems});
+          } else {
+            this.fetchFormWithoutTag(formType);
+          }
+        });
+    } else {
+      this.fetchFormWithoutTag(formType);
+    }
+  }
+
+  fetchFormWithoutTag(formName) {
+    FormBackend.getForm(this.props.account.owner, formName)
+      .then(res => {
+        if (res.status === "ok" && res.data) {
+          this.setState({formItems: res.data.formItems});
+        } else {
+          this.setState({formItems: []});
+        }
+      });
   }
 
   getColumnSearchProps = dataIndex => ({
@@ -77,7 +109,7 @@ class BaseListPage extends React.Component {
           ref={node => {
             this.searchInput = node;
           }}
-          placeholder={`Search ${dataIndex}`}
+          placeholder={i18next.t("general:Please input your search")}
           value={selectedKeys[0]}
           onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
           onPressEnter={() => this.handleSearch(selectedKeys, confirm, dataIndex)}
@@ -92,10 +124,10 @@ class BaseListPage extends React.Component {
             size="small"
             style={{width: 90}}
           >
-              Search
+            {i18next.t("general:Search")}
           </Button>
           <Button onClick={() => this.handleReset(clearFilters)} size="small" style={{width: 90}}>
-              Reset
+            {i18next.t("general:Reset")}
           </Button>
           <Button
             type="link"
@@ -108,7 +140,7 @@ class BaseListPage extends React.Component {
               });
             }}
           >
-              Filter
+            {i18next.t("general:Filter")}
           </Button>
         </Space>
       </div>
@@ -134,6 +166,15 @@ class BaseListPage extends React.Component {
       ) : (
         text
       ),
+  });
+
+  getColumnFilterProps = dataIndex => ({
+    filterMultiple: false,
+    filters: [
+      {text: i18next.t("general:ON"), value: true},
+      {text: i18next.t("general:OFF"), value: false},
+    ],
+    onFilter: (value, record) => record[dataIndex] === value,
   });
 
   getRowSelection = () => ({

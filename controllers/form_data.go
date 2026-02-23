@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetFormData
@@ -33,7 +33,10 @@ import (
 // @Success 200 {array} object.Form The Response object
 // @router /get-form-data [get]
 func (c *ApiController) GetFormData() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	form := c.Input().Get("form")
 	limitStr := c.Input().Get("pageSize")
 	pageStr := c.Input().Get("p")
@@ -56,13 +59,13 @@ func (c *ApiController) GetFormData() {
 
 	blockchainProvider, err := object.GetActiveBlockchainProvider("admin")
 	if blockchainProvider == nil {
-		c.ResponseError("The default blockchain provider is not found")
+		c.ResponseError(c.T("blockchain:The default blockchain provider is not found"))
 		return
 	}
 
 	chainserverUrl := blockchainProvider.ProviderUrl
 	if chainserverUrl == "" {
-		c.ResponseError("The default blockchain providers' Provider URL cannot be empty. The default value is: 'http://localhost:13900'")
+		c.ResponseError(c.T("blockchain:The default blockchain providers' Provider URL cannot be empty. The default value is: 'http://localhost:13900'"))
 	}
 
 	url := fmt.Sprintf("%s/api/get-form-data?pageSize=%s&p=%s", chainserverUrl, limitStr, pageStr)

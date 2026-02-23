@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/pkgdocker"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/pkgdocker"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
@@ -88,7 +89,10 @@ func getContainer(owner string, name string) (*Container, error) {
 }
 
 func GetContainer(id string) (*Container, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getContainer(owner, name)
 }
 
@@ -120,8 +124,11 @@ func GetMaskedContainers(containers []*Container, errs ...error) ([]*Container, 
 	return containers, nil
 }
 
-func UpdateContainer(id string, container *Container) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+func UpdateContainer(id string, container *Container, lang string) (bool, error) {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
 	oldContainer, err := getContainer(owner, name)
 	if err != nil {
 		return false, err
@@ -129,7 +136,7 @@ func UpdateContainer(id string, container *Container) (bool, error) {
 		return false, nil
 	}
 
-	_, err = updateContainer(oldContainer, container)
+	_, err = updateContainer(oldContainer, container, lang)
 	if err != nil {
 		return false, err
 	}
@@ -211,13 +218,13 @@ func SyncDockerContainers(owner string) (bool, error) {
 	return affected, err
 }
 
-func updateContainer(oldContainer *Container, container *Container) (bool, error) {
+func updateContainer(oldContainer *Container, container *Container, lang string) (bool, error) {
 	provider, err := getProvider("admin", oldContainer.Provider)
 	if err != nil {
 		return false, err
 	}
 	if provider == nil {
-		return false, fmt.Errorf("The provider: %s does not exist", container.Provider)
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The provider: %s does not exist"), container.Provider)
 	}
 
 	client, err := pkgdocker.NewContainerClient(provider.ClientId, provider.ClientSecret, provider.Region)
@@ -226,7 +233,7 @@ func updateContainer(oldContainer *Container, container *Container) (bool, error
 	}
 
 	if oldContainer.State != container.State {
-		affected, _, err := client.UpdateContainerState(oldContainer.Name, container.State)
+		affected, _, err := client.UpdateContainerState(oldContainer.Name, container.State, lang)
 		if err != nil {
 			return false, err
 		}

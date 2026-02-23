@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ class ApplicationStorePage extends React.Component {
       displayName: `${template.displayName} - ${randomName}`,
       description: template.description,
       template: template.name,
-      namespace: `casibase-application-${randomName}`,
+      namespace: `hanzo-cloud-app-${randomName}`,
       parameters: "",
       status: "Not Deployed",
     };
@@ -117,7 +117,10 @@ class ApplicationStorePage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           message.success(i18next.t("general:Successfully added"));
-          this.props.history.push(`/applications/${newApplication.name}`);
+          this.props.history.push({
+            pathname: `/applications/${newApplication.name}`,
+            state: {isNewApplication: true},
+          });
         } else {
           message.error(`${i18next.t("general:Failed to add")}: ${res.msg}`);
         }

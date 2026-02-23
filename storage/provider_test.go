@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,17 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casibase/casibase/controllers"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/storage"
+	"github.com/hanzoai/cloud/controllers"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/storage"
 )
 
 func TestStorage(t *testing.T) {
 	object.InitConfig()
 	controllers.InitAuthConfig()
 
-	provider := "provider_storage_casibase"
-	providerObj, err := storage.NewCasdoorProvider(provider)
+	provider := "provider_storage_cloud"
+	providerObj, err := storage.NewIamProvider(provider, "en")
 	objects, err := providerObj.ListObjects("")
 	if err != nil {
 		panic(err)

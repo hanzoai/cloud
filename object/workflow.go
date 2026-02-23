@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/bpmn"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/bpmn"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
@@ -92,13 +92,19 @@ func getWorkflow(owner string, name string) (*Workflow, error) {
 }
 
 func GetWorkflow(id string) (*Workflow, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getWorkflow(owner, name)
 }
 
-func UpdateWorkflow(id string, workflow *Workflow) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
-	_, err := getWorkflow(owner, name)
+func UpdateWorkflow(id string, workflow *Workflow, lang string) (bool, error) {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
+	_, err = getWorkflow(owner, name)
 	if err != nil {
 		return false, err
 	}
@@ -107,7 +113,7 @@ func UpdateWorkflow(id string, workflow *Workflow) (bool, error) {
 	}
 
 	if workflow.Text != "" && workflow.Text2 != "" {
-		message := bpmn.ComparePath(workflow.Text, workflow.Text2)
+		message := bpmn.ComparePath(workflow.Text, workflow.Text2, lang)
 		workflow.Message = message
 	} else {
 		workflow.Message = ""
@@ -122,9 +128,9 @@ func UpdateWorkflow(id string, workflow *Workflow) (bool, error) {
 	return true, nil
 }
 
-func AddWorkflow(workflow *Workflow) (bool, error) {
+func AddWorkflow(workflow *Workflow, lang string) (bool, error) {
 	if workflow.Text != "" && workflow.Text2 != "" {
-		message := bpmn.ComparePath(workflow.Text, workflow.Text2)
+		message := bpmn.ComparePath(workflow.Text, workflow.Text2, lang)
 		workflow.Message = message
 	} else {
 		workflow.Message = ""

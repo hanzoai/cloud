@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
@@ -87,14 +88,20 @@ func getApplication(owner, name string) (*Application, error) {
 }
 
 func GetApplication(id string) (*Application, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getApplication(owner, name)
 }
 
-func UpdateApplication(id string, application *Application) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+func UpdateApplication(id string, application *Application, lang string) (bool, error) {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
 	application.UpdatedTime = util.GetCurrentTime()
-	_, err := getApplication(owner, name)
+	_, err = getApplication(owner, name)
 	if err != nil {
 		return false, err
 	}
@@ -119,9 +126,9 @@ func UpdateApplication(id string, application *Application) (bool, error) {
 	}
 
 	// Apply Kustomize overlays
-	application.Manifest, err = generateManifestWithKustomize(application.Manifest, application.Parameters)
+	application.Manifest, err = generateManifestWithKustomize(application.Manifest, application.Parameters, lang)
 	if err != nil {
-		return false, fmt.Errorf("failed to generate manifest: %v", err)
+		return false, fmt.Errorf(i18n.Translate(lang, "object:failed to generate manifest: %v"), err)
 	}
 
 	affected, err := adapter.engine.ID(core.PK{owner, name}).AllCols().Update(application)
@@ -156,11 +163,11 @@ func AddApplication(application *Application) (bool, error) {
 	return affected != 0, nil
 }
 
-func DeleteApplication(application *Application) (bool, error) {
+func DeleteApplication(application *Application, lang string) (bool, error) {
 	owner, name, namespace := application.Owner, application.Name, application.Namespace
 	// First, delete the deployment if it exists
 	go func() {
-		_, err := UndeployApplication(owner, name, namespace)
+		_, err := UndeployApplication(owner, name, namespace, lang)
 		if err != nil {
 			return
 		}

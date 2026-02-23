@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,8 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/casibase/casibase/proxy"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/proxy"
 )
 
 type ClaudeModelProvider struct {
@@ -43,6 +44,7 @@ https://docs.anthropic.com/en/docs/about-claude/pricing
 
 | Model family        | Context window | Input Pricing         | Output Pricing        |
 |---------------------|----------------|-----------------------|-----------------------|
+| Claude Opus 4.5     | 200,000 tokens | $5.00/million tokens  | $25.00/million tokens |
 | Claude Opus 4.1     | 200,000 tokens | $15.00/million tokens | $75.00/million tokens |
 | Claude Opus 4       | 200,000 tokens | $15.00/million tokens | $75.00/million tokens |
 | Claude Sonnet 4     | 200,000 tokens | $3.00/million tokens  | $15.00/million tokens |
@@ -54,9 +56,10 @@ https://docs.anthropic.com/en/docs/about-claude/pricing
 `
 }
 
-func (p *ClaudeModelProvider) calculatePrice(modelResult *ModelResult) error {
+func (p *ClaudeModelProvider) calculatePrice(modelResult *ModelResult, lang string) error {
 	var inputPricePerThousandTokens, outputPricePerThousandTokens float64
 	priceTable := map[string][]float64{
+		"claude-opus-4-5":            {0.005, 0.025},
 		"claude-opus-4-1":            {0.015, 0.075},
 		"claude-opus-4-0":            {0.015, 0.075},
 		"claude-opus-4-20250514":     {0.015, 0.075},
@@ -77,7 +80,7 @@ func (p *ClaudeModelProvider) calculatePrice(modelResult *ModelResult) error {
 		inputPricePerThousandTokens = priceItem[0]
 		outputPricePerThousandTokens = priceItem[1]
 	} else {
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", p.subType)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), p.subType)
 	}
 
 	inputPrice := getPrice(modelResult.PromptTokenCount, inputPricePerThousandTokens)
@@ -87,21 +90,21 @@ func (p *ClaudeModelProvider) calculatePrice(modelResult *ModelResult) error {
 	return nil
 }
 
-func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	client := anthropic.NewClient(
 		option.WithAPIKey(p.secretKey),
 		option.WithHTTPClient(proxy.ProxyHttpClient),
 	)
 
-	if strings.HasPrefix(question, "$CasibaseDryRun$") {
+	if strings.HasPrefix(question, "$CloudDryRun$") {
 		modelResult, err := getDefaultModelResult(p.subType, question, "")
 		if err != nil {
-			return nil, fmt.Errorf("cannot calculate tokens")
+			return nil, fmt.Errorf(i18n.Translate(lang, "model:cannot calculate tokens"))
 		}
 		if getContextLength(p.subType) > modelResult.TotalTokenCount {
 			return modelResult, nil
 		} else {
-			return nil, fmt.Errorf("exceed max tokens")
+			return nil, fmt.Errorf(i18n.Translate(lang, "model:exceed max tokens"))
 		}
 	}
 
@@ -141,7 +144,7 @@ func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, histo
 
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("writer does not implement http.Flusher")
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	flushData := func(event string, data string) error {
@@ -184,7 +187,7 @@ func (p *ClaudeModelProvider) QueryText(question string, writer io.Writer, histo
 	}
 	modelResult.TotalTokenCount = modelResult.PromptTokenCount + modelResult.ResponseTokenCount
 
-	err := p.calculatePrice(modelResult)
+	err := p.calculatePrice(modelResult, lang)
 	if err != nil {
 		return nil, err
 	}

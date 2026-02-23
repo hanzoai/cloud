@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,36 +19,82 @@ import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
 
 function StoreSelect(props) {
-  const {onChange, initValue, style, onSelect, withAll, className, disabled} = props;
+  const {style, onSelect, withAll, className, disabled, account} = props;
   const [stores, setStores] = React.useState([]);
-  const [value, setValue] = React.useState(initValue);
+  const [value, setValue] = React.useState(Setting.getStore());
+  const [initialized, setInitialized] = React.useState(false);
 
   React.useEffect(() => {
     if (props.stores === undefined) {
       getStores();
     }
+
     window.addEventListener("storesChanged", getStores);
+
+    const handleStorageChange = (e) => {
+      if (e.storageArea && "store" in e.storageArea) {
+        const currentStore = Setting.getStore();
+        if (currentStore && currentStore !== value) {
+          setValue(currentStore);
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
     return function() {
       window.removeEventListener("storesChanged", getStores);
+      window.removeEventListener("storage", handleStorageChange);
     };
-  }, [value]);
+  }, []);
 
   const getStores = () => {
+    const currentStore = Setting.getStore();
+    if (currentStore) {
+      setValue(currentStore);
+    }
+
     StoreBackend.getStoreNames("admin")
       .then((res) => {
         if (res.status === "ok") {
           setStores(res.data);
-          const selectedValueExist = res.data.filter(store => store.name === value).length > 0;
-          if (initValue === undefined || !selectedValueExist) {
-            handleOnChange(getStoreItems().length > 0 ? getStoreItems()[0].value : "");
+
+          // Check if user has Homepage binding to a store
+          const userBoundStore = getUserBoundStore(res.data);
+          if (userBoundStore) {
+            // User is bound to a specific store, force select it
+            handleOnChange(userBoundStore);
+          } else {
+            // User is not bound, use normal behavior
+            const selectedValueExist = res.data.filter(store => store.name === value).length > 0;
+            if (Setting.getStore() === undefined || !selectedValueExist) {
+              const storeItems = getStoreItems();
+              handleOnChange(storeItems.length > 0 ? storeItems[0].value : "");
+            }
           }
+          setInitialized(true);
         }
       });
   };
 
   const handleOnChange = (value) => {
     setValue(value);
-    onChange?.(value);
+    Setting.setStore(value);
+  };
+
+  const getUserBoundStore = (storeList) => {
+    // Check if user's Homepage field matches any store name
+    if (account && account.homepage && storeList) {
+      const matchingStore = storeList.find(store => store.name === account.homepage);
+      if (matchingStore) {
+        return matchingStore.name;
+      }
+    }
+    return null;
+  };
+
+  const isUserBoundToStore = () => {
+    // User is bound if Homepage matches a store in the list
+    return getUserBoundStore(stores) !== null;
   };
 
   const getStoreItems = () => {
@@ -66,6 +112,10 @@ function StoreSelect(props) {
     return items;
   };
 
+  if (!initialized) {
+    return <div style={{...style, width: "100%", height: "32px"}} className={className}></div>;
+  }
+
   return (
     <Select
       options={getStoreItems()}
@@ -77,7 +127,7 @@ function StoreSelect(props) {
       style={style}
       onSelect={onSelect}
       className={className}
-      disabled={disabled}
+      disabled={disabled || isUserBoundToStore()}
     >
     </Select>
   );

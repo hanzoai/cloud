@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/i18n"
 	"github.com/leverly/ChatGLM/client"
 )
 
@@ -55,7 +56,7 @@ Generate Model:
 `
 }
 
-func (p *ChatGLMModelProvider) calculatePrice(modelResult *ModelResult) error {
+func (p *ChatGLMModelProvider) calculatePrice(modelResult *ModelResult, lang string) error {
 	price := 0.0
 	inputPrice := 0.0
 	outputPrice := 0.0
@@ -114,7 +115,7 @@ func (p *ChatGLMModelProvider) calculatePrice(modelResult *ModelResult) error {
 			return fmt.Errorf("calculatePrice() error: unsupported context length for model %s", p.subType)
 		}
 	default:
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", p.subType)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), p.subType)
 	}
 
 	price = getPrice(modelResult.TotalTokenCount, inputPrice) + getPrice(modelResult.TotalTokenCount, outputPrice)
@@ -123,7 +124,7 @@ func (p *ChatGLMModelProvider) calculatePrice(modelResult *ModelResult) error {
 	return nil
 }
 
-func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	proxy := client.NewChatGLMClient(p.clientSecret, 30*time.Second)
 	messages := []client.Message{{Role: "user", Content: question}}
 	taskId, err := proxy.AsyncInvoke(p.subType, 0.2, messages)
@@ -133,7 +134,7 @@ func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, hist
 
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("writer does not implement http.Flusher")
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	flushData := func(data string) error {
@@ -144,15 +145,15 @@ func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, hist
 		return nil
 	}
 
-	if strings.HasPrefix(question, "$CasibaseDryRun$") {
+	if strings.HasPrefix(question, "$CloudDryRun$") {
 		modelResult, err := getDefaultModelResult(p.subType, question, "")
 		if err != nil {
-			return nil, fmt.Errorf("cannot calculate tokens")
+			return nil, fmt.Errorf(i18n.Translate(lang, "model:cannot calculate tokens"))
 		}
 		if getContextLength(p.subType) > modelResult.TotalTokenCount {
 			return modelResult, nil
 		} else {
-			return nil, fmt.Errorf("exceed max tokens")
+			return nil, fmt.Errorf(i18n.Translate(lang, "model:exceed max tokens"))
 		}
 	}
 
@@ -173,7 +174,7 @@ func (p *ChatGLMModelProvider) QueryText(question string, writer io.Writer, hist
 	modelResult.ResponseTokenCount = response.Usage.CompletionTokens
 	modelResult.TotalTokenCount = response.Usage.TotalTokens
 
-	err = p.calculatePrice(modelResult)
+	err = p.calculatePrice(modelResult, lang)
 	if err != nil {
 		return nil, err
 	}

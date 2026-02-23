@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,11 +60,15 @@ class FileTreePage extends React.Component {
       );
     }
 
+    const searchParams = new URLSearchParams(this.props.location?.search || "");
+    const rawFileKey = searchParams.get("fileKey");
+    const initialFileKey = rawFileKey ? decodeURIComponent(rawFileKey) : null;
+
     return (
       <div>
         <Row>
           <Col span={24}>
-            <FileTree account={this.props.account} store={this.state.store} onUpdateStore={(store) => {
+            <FileTree account={this.props.account} store={this.state.store} initialFileKey={initialFileKey} onUpdateStore={(store) => {
               this.setState({
                 store: store,
               });

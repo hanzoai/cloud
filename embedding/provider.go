@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package embedding
 import (
 	"context"
 
-	"github.com/casibase/casibase/model"
+	"github.com/hanzoai/cloud/model"
 )
 
 type EmbeddingResult struct {
@@ -28,10 +28,10 @@ type EmbeddingResult struct {
 
 type EmbeddingProvider interface {
 	GetPricing() string
-	QueryVector(text string, ctx context.Context) ([]float32, *EmbeddingResult, error)
+	QueryVector(text string, ctx context.Context, lang string) ([]float32, *EmbeddingResult, error)
 }
 
-func GetEmbeddingProvider(typ string, subType string, clientId string, clientSecret string, providerUrl string, apiVersion string, pricePerThousandTokens float64, currency string) (EmbeddingProvider, error) {
+func GetEmbeddingProvider(typ string, subType string, clientId string, clientSecret string, providerUrl string, apiVersion string, pricePerThousandTokens float64, currency string, lang string) (EmbeddingProvider, error) {
 	var p EmbeddingProvider
 	var err error
 	if typ == "OpenAI" {
@@ -55,11 +55,11 @@ func GetEmbeddingProvider(typ string, subType string, clientId string, clientSec
 	} else if typ == "Alibaba Cloud" {
 		p, err = NewAlibabacloudEmbeddingProvider(typ, subType, clientSecret, providerUrl)
 	} else if typ == "Tencent Cloud" {
-		p, err = NewTencentCloudEmbeddingProvider(clientId, clientSecret)
+		p, err = NewTencentCloudEmbeddingProvider(clientId, clientSecret, lang)
 	} else if typ == "Jina" {
 		p, err = NewJinaEmbeddingProvider(subType, clientSecret)
 	} else if typ == "Word2Vec" {
-		p, err = NewWord2VecEmbeddingProvider(typ, subType)
+		p, err = NewWord2VecEmbeddingProvider(typ, subType, lang)
 	} else if typ == "Dummy" {
 		p, err = NewDummyEmbeddingProvider(subType)
 	}

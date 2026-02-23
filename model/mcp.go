@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
-	"github.com/ThinkInAIXYZ/go-mcp/client"
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
-	"github.com/casibase/casibase/agent"
+	"github.com/hanzoai/cloud/agent"
+	"github.com/hanzoai/cloud/i18n"
 	"github.com/openai/openai-go/v2/responses"
 	"github.com/sashabaranov/go-openai"
 )
@@ -42,6 +43,12 @@ type ToolCallResponse struct {
 	Data     interface{} `json:"data"`
 	Error    string      `json:"error,omitempty"`
 	ToolName string      `json:"toolName"`
+}
+
+type ToolCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+	Content   string `json:"content"`
 }
 
 func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
@@ -68,22 +75,6 @@ func reverseToolsToOpenAi(tools []*protocol.Tool) ([]openai.Tool, error) {
 	return openaiTools, nil
 }
 
-func handleToolCalls(toolCalls []openai.ToolCall, flushData interface{}, writer io.Writer) error {
-	if toolCalls == nil {
-		return nil
-	}
-
-	if flushThink, ok := flushData.(func(string, string, io.Writer) error); ok {
-		for _, toolCall := range toolCalls {
-			err := flushThink("\n"+"Call result from "+toolCall.Function.Name+"\n", "reason", writer)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func handleToolCallsParameters(toolCall openai.ToolCall, toolCalls []openai.ToolCall, toolCallsMap map[int]int) ([]openai.ToolCall, map[int]int) {
 	if toolCallsMap == nil {
 		toolCallsMap = make(map[int]int)
@@ -105,9 +96,9 @@ func handleToolCallsParameters(toolCall openai.ToolCall, toolCalls []openai.Tool
 	return toolCalls, toolCallsMap
 }
 
-func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	var messages []*RawMessage
-	modelResult, err := p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo)
+	modelResult, err := p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -132,24 +123,19 @@ func QueryTextWithTools(p ModelProvider, question string, writer io.Writer, hist
 		for _, toolCall := range toolCalls {
 			serverName, toolName := agent.GetServerNameAndToolNameFromId(toolCall.Function.Name)
 
-			mcpClient, ok := agentInfo.AgentClients.Clients[serverName]
-			if !ok {
-				continue
-			}
-
 			messages = append(messages, &RawMessage{
 				Text:     "Call result from " + toolCall.Function.Name,
 				Author:   "AI",
 				ToolCall: toolCall,
 			})
 
-			messages, err = callTools(toolCall, toolName, mcpClient, messages)
+			messages, err = callTools(toolCall, serverName, toolName, agentInfo.AgentClients, messages, writer, lang)
 			if err != nil {
 				return nil, err
 			}
 		}
 		agentInfo.AgentMessages.Messages = messages
-		modelResult, err = p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo)
+		modelResult, err = p.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -181,20 +167,36 @@ func createToolMessage(toolCall openai.ToolCall, text string) *RawMessage {
 	}
 }
 
-func callTools(toolCall openai.ToolCall, functionName string, mcpClient *client.Client, messages []*RawMessage) ([]*RawMessage, error) {
+func callTools(toolCall openai.ToolCall, serverName, toolName string, agentClients *agent.AgentClients, messages []*RawMessage, writer io.Writer, lang string) ([]*RawMessage, error) {
 	var arguments map[string]interface{}
 	ctx := context.Background()
 
 	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &arguments); err != nil {
-		return nil, fmt.Errorf("failed to parse tool arguments: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:failed to parse tool arguments: %v"), err)
 	}
 
-	req := &protocol.CallToolRequest{
-		Name:      functionName,
-		Arguments: arguments,
+	var result *protocol.CallToolResult
+	var err error
+
+	if serverName == "" {
+		// builtin tools
+		if agentClients.BuiltinToolReg == nil {
+			return messages, nil
+		}
+		result, err = agentClients.BuiltinToolReg.ExecuteTool(ctx, toolName, arguments)
+	} else {
+		// MCP tools
+		mcpClient, ok := agentClients.Clients[serverName]
+		if !ok {
+			return messages, nil
+		}
+		req := &protocol.CallToolRequest{
+			Name:      toolName,
+			Arguments: arguments,
+		}
+		result, err = mcpClient.CallTool(ctx, req)
 	}
 
-	result, err := mcpClient.CallTool(ctx, req)
 	response := &ToolCallResponse{
 		ToolName: toolCall.Function.Name,
 	}
@@ -204,17 +206,63 @@ func callTools(toolCall openai.ToolCall, functionName string, mcpClient *client.
 		response.Error = err.Error()
 	} else if result.IsError {
 		response.Success = false
-		response.Error = fmt.Sprintf("%v", result.Content)
+		contentBytes, err := json.Marshal(result.Content)
+		if err != nil {
+			response.Error = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal error content: %v"), err)
+		} else {
+			response.Error = string(contentBytes)
+		}
 	} else {
 		response.Success = true
-		response.Data = result.Content
+		contentBytes, err := json.Marshal(result.Content)
+		if err != nil {
+			response.Data = fmt.Sprintf(i18n.Translate(lang, "model:failed to marshal content: %v"), err)
+		} else {
+			response.Data = string(contentBytes)
+		}
 	}
 
 	responseJson, err := json.Marshal(response)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tool response: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:failed to marshal tool response: %v"), err)
+	}
+
+	var contentStr string
+	if !response.Success {
+		contentStr = response.Error
+	} else {
+		contentStr = response.Data.(string)
+	}
+
+	toolData := ToolCall{
+		Name:      toolCall.Function.Name,
+		Arguments: toolCall.Function.Arguments,
+		Content:   contentStr,
+	}
+	toolJSON, err := json.Marshal(toolData)
+	if err == nil {
+		if err := flushDataThink(string(toolJSON), "tool", writer, lang); err == nil {
+		}
 	}
 
 	messages = append(messages, createToolMessage(toolCall, string(responseJson)))
 	return messages, nil
+}
+
+func GetToolCallsFromWriter(toolMessage string) []ToolCall {
+	if toolMessage == "" {
+		return nil
+	}
+	var toolCalls []ToolCall
+	toolCallLines := strings.Split(toolMessage, "\n")
+	for _, line := range toolCallLines {
+		if line == "" {
+			continue
+		}
+		var toolCall ToolCall
+		if err := json.Unmarshal([]byte(line), &toolCall); err == nil {
+			toolCalls = append(toolCalls, toolCall)
+		}
+	}
+	return toolCalls
 }

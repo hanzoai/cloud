@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -219,7 +219,7 @@ class LabelTable extends React.Component {
         },
       },
       {
-        title: i18next.t("video:Comment"),
+        title: i18next.t("message:Comment"),
         dataIndex: "text",
         key: "text",
         // width: '200px',

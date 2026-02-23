@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,13 +19,9 @@ import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
 import StoreAvatarUploader from "./AvatarUpload";
-
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
+import Editor from "./common/Editor";
 import TextArea from "antd/es/input/TextArea";
 import TemplateOptionTable from "./table/TemplateOptionTable";
-require("codemirror/theme/material-darker.css");
-require("codemirror/mode/javascript/javascript");
 
 class TemplateEditPage extends React.Component {
   constructor(props) {
@@ -33,6 +29,7 @@ class TemplateEditPage extends React.Component {
     this.state = {
       classes: props,
       templateName: props.match.params.templateName,
+      isNewTemplate: props.location?.state?.isNewTemplate || false,
       template: null,
       defaultStore: null,
     };
@@ -96,6 +93,7 @@ class TemplateEditPage extends React.Component {
           {i18next.t("template:Edit Template")}&nbsp;&nbsp;&nbsp;&nbsp;
           <Button onClick={() => this.submitTemplateEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitTemplateEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewTemplate && <Button style={{marginLeft: "20px"}} onClick={() => this.cancelTemplateEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       } style={{marginLeft: "5px"}} type="inner">
         <Row style={{marginTop: "10px"}} >
@@ -197,10 +195,12 @@ class TemplateEditPage extends React.Component {
           </Col>
           <Col span={22} >
             <div style={{height: "500px"}}>
-              <CodeMirror
+              <Editor
                 value={this.state.template.manifest}
-                options={{mode: "yaml", theme: "material-darker"}}
-                onBeforeChange={(editor, data, value) => {
+                lang="yaml"
+                fillHeight
+                dark
+                onChange={value => {
                   this.updateTemplateField("manifest", value);
                 }}
               />
@@ -220,6 +220,7 @@ class TemplateEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               templateName: this.state.template.name,
+              isNewTemplate: false,
             });
 
             if (exitAfterSave) {
@@ -249,10 +250,30 @@ class TemplateEditPage extends React.Component {
         <div style={{marginTop: "20px", marginLeft: "40px"}}>
           <Button size="large" onClick={() => this.submitTemplateEdit(false)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitTemplateEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewTemplate && <Button style={{marginLeft: "20px"}} size="large" onClick={() => this.cancelTemplateEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       </div>
     );
   }
+  cancelTemplateEdit() {
+    if (this.state.isNewTemplate) {
+      TemplateBackend.deleteTemplate(this.state.template)
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/templates");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
+        })
+        .catch(error => {
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+        });
+    } else {
+      this.props.history.push("/templates");
+    }
+  }
+
 }
 
 export default TemplateEditPage;

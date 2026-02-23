@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,24 +18,39 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/i18n"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsclientset "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 type ApplicationView struct {
 	Services    []ServiceDetail    `json:"services"`
 	Credentials []EnvVariable      `json:"credentials"`
 	Deployments []DeploymentDetail `json:"deployments"`
+	Events      []ApplicationEvent `json:"events"`
 	Status      string             `json:"status"`
 	CreatedTime string             `json:"createdTime"`
 	Namespace   string             `json:"namespace"`
+	Metrics     *ResourceMetrics   `json:"metrics,omitempty"`
+}
+
+// ResourceMetrics represents resource usage metrics
+type ResourceMetrics struct {
+	CPUUsage         string  `json:"cpuUsage"`         // CPU usage (e.g., "120m" for 120 millicores)
+	CPUPercentage    float64 `json:"cpuPercentage"`    // CPU usage percentage (0-100)
+	MemoryUsage      string  `json:"memoryUsage"`      // Memory usage (e.g., "256Mi" for 256 mebibyte)
+	MemoryPercentage float64 `json:"memoryPercentage"` // Memory usage percentage (0-100)
+	PodCount         int     `json:"podCount"`         // Number of active pods
 }
 
 type ServiceDetail struct {
@@ -82,6 +97,89 @@ type EnvVariable struct {
 	Value string `json:"value"`
 }
 
+type ApplicationEvent struct {
+	Name           string `json:"name"`           // Event name
+	Type           string `json:"type"`           // Event type: Normal, Warning
+	Reason         string `json:"reason"`         // Event reason
+	Message        string `json:"message"`        // Event message
+	InvolvedObject string `json:"involvedObject"` // Related object
+	Source         string `json:"source"`         // Event source
+	Count          int    `json:"count"`          // Event occurrence count
+	FirstTime      string `json:"firstTime"`      // First occurrence time
+	LastTime       string `json:"lastTime"`       // Last occurrence time
+}
+
+var (
+	metricsClient *metricsclientset.Clientset
+	metricsOnce   sync.Once
+)
+
+// initMetricsClient init metrics client
+func initMetricsClient(lang string) error {
+	if k8sClient == nil || k8sClient.config == nil {
+		return fmt.Errorf(i18n.Translate(lang, "object:k8s client not initialized"))
+	}
+
+	var err error
+	metricsOnce.Do(func() {
+		metricsClient, err = metricsclientset.NewForConfig(k8sClient.config)
+	})
+
+	return err
+}
+
+// getNamespaceMetrics retrieves namespace metrics from cache with API fallback
+func getNamespaceMetrics(namespace string, lang string) (*ResourceMetrics, error) {
+	if cacheManager != nil && cacheManager.started {
+		if cachedMetrics, found := cacheManager.getNamespaceMetricsFromCache(namespace); found {
+			if time.Since(cachedMetrics.LastUpdated) < 5*time.Minute {
+				return &ResourceMetrics{
+					CPUUsage:         formatCPUUsage(cachedMetrics.TotalCPU),
+					CPUPercentage:    cachedMetrics.CPUPercentage,
+					MemoryUsage:      formatMemoryUsage(cachedMetrics.TotalMemory),
+					MemoryPercentage: cachedMetrics.MemoryPercentage,
+					PodCount:         cachedMetrics.PodCount,
+				}, nil
+			}
+		}
+	}
+
+	if err := initMetricsClient(lang); err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancel()
+
+	var metrics *CachedMetrics
+	var err error
+
+	if cacheManager != nil && cacheManager.started {
+		metrics, err = calculateNamespaceMetrics(ctx, metricsClient, namespace, cacheManager.deployCache, &cacheManager.mu, lang)
+	} else {
+		metrics, err = calculateNamespaceMetrics(ctx, metricsClient, namespace, nil, nil, lang)
+	}
+
+	if err != nil {
+		if errors.IsNotFound(err) || strings.Contains(err.Error(), "metrics.k8s.io") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:failed to get pod metrics: %v"), err)
+	}
+
+	if metrics == nil {
+		return nil, nil
+	}
+
+	return &ResourceMetrics{
+		CPUUsage:         formatCPUUsage(metrics.TotalCPU),
+		CPUPercentage:    metrics.CPUPercentage,
+		MemoryUsage:      formatMemoryUsage(metrics.TotalMemory),
+		MemoryPercentage: metrics.MemoryPercentage,
+		PodCount:         metrics.PodCount,
+	}, nil
+}
+
 // getExternalHost attempts to get k8s server IP first, then falls back to provided host
 func getExternalHost(fallbackHost string) string {
 	if cachedK8sHost != "" {
@@ -92,41 +190,41 @@ func getExternalHost(fallbackHost string) string {
 }
 
 // parseK8sHost extracts server host from kubeconfig content
-func parseK8sHost(configText string) (string, error) {
+func parseK8sHost(configText string, lang string) (string, error) {
 	if strings.TrimSpace(configText) == "" {
-		return "", fmt.Errorf("kubeconfig content is empty")
+		return "", fmt.Errorf(i18n.Translate(lang, "object:kubeconfig content is empty"))
 	}
 
 	config, err := clientcmd.RESTConfigFromKubeConfig([]byte(configText))
 	if err != nil {
-		return "", fmt.Errorf("failed to parse kubeconfig: %v", err)
+		return "", fmt.Errorf(i18n.Translate(lang, "object:failed to parse kubeconfig: %v"), err)
 	}
 
 	if config.Host == "" {
-		return "", fmt.Errorf("server address not found")
+		return "", fmt.Errorf(i18n.Translate(lang, "object:server address not found"))
 	}
 
 	serverURL, err := url.Parse(config.Host)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse server URL: %v", err)
+		return "", fmt.Errorf(i18n.Translate(lang, "object:failed to parse server URL: %v"), err)
 	}
 
 	host := serverURL.Hostname()
 	if host == "" {
-		return "", fmt.Errorf("unable to extract host")
+		return "", fmt.Errorf(i18n.Translate(lang, "object:unable to extract host"))
 	}
 
 	return host, nil
 }
 
 // GetApplicationView retrieves application view from cache with fallback
-func GetApplicationView(namespace string) (*ApplicationView, error) {
-	if err := ensureK8sClient(); err != nil {
-		return nil, fmt.Errorf("failed to initialize k8s client: %v", err)
+func GetApplicationView(namespace string, lang string) (*ApplicationView, error) {
+	if err := ensureK8sClient(lang); err != nil {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:failed to initialize k8s client: %v"), err)
 	}
 
 	if !k8sClient.connected {
-		return nil, fmt.Errorf("k8s client not connected")
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:k8s client not connected"))
 	}
 
 	// Try to get namespace from cache first
@@ -150,11 +248,12 @@ func GetApplicationView(namespace string) (*ApplicationView, error) {
 					Services:    []ServiceDetail{},
 					Credentials: []EnvVariable{},
 					Deployments: []DeploymentDetail{},
+					Events:      []ApplicationEvent{},
 					Status:      StatusNotDeployed,
 					Namespace:   namespace,
 				}, nil
 			}
-			return nil, fmt.Errorf("failed to get namespace: %v", err)
+			return nil, fmt.Errorf(i18n.Translate(lang, "object:failed to get namespace: %v"), err)
 		}
 		ns = apiNs
 	}
@@ -163,6 +262,7 @@ func GetApplicationView(namespace string) (*ApplicationView, error) {
 		Services:    []ServiceDetail{},
 		Credentials: []EnvVariable{},
 		Deployments: []DeploymentDetail{},
+		Events:      []ApplicationEvent{},
 		Status:      StatusRunning,
 		CreatedTime: ns.CreationTimestamp.Format("2006-01-02 15:04:05"),
 		Namespace:   namespace,
@@ -174,6 +274,11 @@ func GetApplicationView(namespace string) (*ApplicationView, error) {
 	details.Services = getServicesFromCache(namespace, nodeIPs)
 	details.Deployments = getDeploymentsFromCache(namespace)
 	details.Credentials = getCredentialsFromCache(namespace)
+	details.Events = getEventsFromCache(namespace) // Added event retrieval
+
+	if metrics, err := getNamespaceMetrics(namespace, lang); err == nil && metrics != nil {
+		details.Metrics = metrics
+	}
 
 	return details, nil
 }
@@ -407,4 +512,71 @@ func getCredentialsFromCache(namespace string) []EnvVariable {
 	}
 
 	return credentials
+}
+
+// getEventsFromCache retrieves namespace-related events from cache or API
+func getEventsFromCache(namespace string) []ApplicationEvent {
+	var events []*v1.Event
+
+	// Try cache first
+	if cacheManager != nil && cacheManager.started {
+		events = cacheManager.getEvents(namespace)
+	}
+
+	// If cache is empty, get from API
+	if len(events) == 0 {
+		ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+		defer cancel()
+
+		eventList, err := k8sClient.clientSet.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for i := range eventList.Items {
+				events = append(events, &eventList.Items[i])
+			}
+		}
+	}
+
+	return convertEventsToApplicationEvents(events)
+}
+
+// convertEventsToDetails converts Kubernetes Events to EventDetail
+func convertEventsToApplicationEvents(events []*v1.Event) []ApplicationEvent {
+	eventDetails := make([]ApplicationEvent, 0)
+
+	for _, event := range events {
+		// Format involved object information
+		involvedObj := fmt.Sprintf("%s/%s",
+			strings.ToLower(event.InvolvedObject.Kind),
+			event.InvolvedObject.Name)
+
+		// Format event source information
+		source := event.Source.Component
+		if event.Source.Host != "" {
+			source = fmt.Sprintf("%s@%s", source, event.Source.Host)
+		}
+
+		detail := ApplicationEvent{
+			Name:           event.Name,
+			Type:           event.Type,
+			Reason:         event.Reason,
+			Message:        event.Message,
+			InvolvedObject: involvedObj,
+			Source:         source,
+			Count:          int(event.Count), // Convert int32 to int
+			FirstTime:      event.FirstTimestamp.Format("2006-01-02 15:04:05"),
+			LastTime:       event.LastTimestamp.Format("2006-01-02 15:04:05"),
+		}
+
+		eventDetails = append(eventDetails, detail)
+	}
+
+	sort.Slice(eventDetails, func(i, j int) bool {
+		return eventDetails[i].LastTime > eventDetails[j].LastTime
+	})
+
+	if len(eventDetails) > 50 {
+		eventDetails = eventDetails[:50]
+	}
+
+	return eventDetails
 }

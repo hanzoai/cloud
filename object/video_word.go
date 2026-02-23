@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/util"
 	"github.com/wangbin/jiebago"
 )
 
@@ -37,14 +38,14 @@ func isNumber(s string) bool {
 	return true
 }
 
-func (v *Video) PopulateWordCountMap() error {
+func (v *Video) PopulateWordCountMap(lang string) error {
 	if len(v.Segments) == 0 {
 		return nil
 	}
 
 	dictPath := "data/dict.txt"
 	if !util.FileExist(dictPath) {
-		return fmt.Errorf("Cannot generate word cloud, the dict file: [%s] does not exist", dictPath)
+		return fmt.Errorf(i18n.Translate(lang, "object:Cannot generate word cloud, the dict file: [%s] does not exist"), dictPath)
 	}
 
 	if seg == nil {

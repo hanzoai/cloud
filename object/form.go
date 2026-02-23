@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,15 +17,17 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
 type FormItem struct {
-	Name  string `json:"name"`
-	Label string `json:"label"`
-	Type  string `json:"type"`
-	Width string `json:"width"`
+	Name    string `json:"name"`
+	Label   string `json:"label"`
+	Type    string `json:"type"`
+	Visible bool   `json:"visible"`
+	Width   string `json:"width"`
 }
 
 type Form struct {
@@ -35,7 +37,9 @@ type Form struct {
 
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 	Position    string `xorm:"varchar(100)" json:"position"`
+	Category    string `xorm:"varchar(100)" json:"category"`
 	Type        string `xorm:"varchar(100)" json:"type"`
+	Tag         string `xorm:"varchar(100)" json:"tag"`
 	Url         string `xorm:"varchar(100)" json:"url"`
 
 	FormItems []*FormItem `xorm:"varchar(5000)" json:"formItems"`
@@ -99,13 +103,22 @@ func getForm(owner string, name string) (*Form, error) {
 }
 
 func GetForm(id string) (*Form, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getForm(owner, name)
 }
 
-func UpdateForm(id string, form *Form) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
-	_, err := getForm(owner, name)
+func UpdateForm(id string, form *Form, lang string) (bool, error) {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
+	existingForm, err := getForm(owner, name)
+	if existingForm == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:the form: %s is not found"), id)
+	}
 	if err != nil {
 		return false, err
 	}

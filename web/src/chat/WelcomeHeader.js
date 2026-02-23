@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ const WelcomeHeader = ({store}) => {
     <Welcome
       variant="borderless"
       icon={avatar}
-      title={(store === undefined) ? null : store.welcomeTitle || i18next.t("chat:Hello, I'm Casibase AI Assistant")}
+      title={(store === undefined) ? null : store.welcomeTitle || i18next.t("chat:Hello, I'm Hanzo AI Assistant")}
       description={(store === undefined) ? null : store.welcomeText || i18next.t("chat:I'm here to help answer your questions")}
     />
   );

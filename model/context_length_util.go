@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -176,8 +176,13 @@ func getContextLength(typ string) int {
 		} else {
 			return 4096
 		}
-	} else if strings.Contains(typ, "gpt") || strings.HasPrefix(typ, "o") {
+	} else if strings.Contains(typ, "gpt") || strings.HasPrefix(typ, "o") || strings.Contains(typ, "deep-research") {
 		if strings.Contains(typ, "curie") {
+			return 2048
+		} else if strings.Contains(typ, "3.5") {
+			if strings.Contains(typ, "turbo") {
+				return 16385
+			}
 			return 2048
 		} else if strings.Contains(typ, "o4") {
 			return 100000
@@ -185,16 +190,16 @@ func getContextLength(typ string) int {
 			return 100000
 		} else if strings.Contains(typ, "o1") {
 			return 128000
+		} else if strings.Contains(typ, "deep-research") {
+			return 200000
+		} else if strings.Contains(typ, "5.2") || strings.Contains(typ, "5.1") || strings.Contains(typ, "5") {
+			return 400000
 		} else if strings.Contains(typ, "4.5") || strings.Contains(typ, "4o") {
 			return 128000
 		} else if strings.Contains(typ, "4.1") {
 			return 100000
 		} else if strings.Contains(typ, "4") {
 			return 8192
-		} else if strings.Contains(typ, "3.5") {
-			if strings.Contains(typ, "turbo") {
-				return 16385
-			}
 		} else {
 			return 2048
 		}

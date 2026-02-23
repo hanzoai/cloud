@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,9 +19,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 func deleteExistingStore(name string) error {
@@ -78,21 +78,21 @@ func cleanAnswer(answer string) string {
 	return answer
 }
 
-func sendMessage(store *object.Store, question string, modelProviderName string, embeddingProviderName string) (string, *model.ModelResult, error) {
-	modelProvider, _, err := object.GetModelProviderFromContext("admin", modelProviderName)
+func sendMessage(store *object.Store, question string, modelProviderName string, embeddingProviderName string, lang string) (string, *model.ModelResult, error) {
+	modelProvider, _, err := object.GetModelProviderFromContext("admin", modelProviderName, lang)
 	if err != nil {
 		return "", nil, err
 	}
 
-	embeddingProvider, embeddingProviderObj, err := object.GetEmbeddingProviderFromContext("admin", embeddingProviderName)
+	embeddingProvider, embeddingProviderObj, err := object.GetEmbeddingProviderFromContext("admin", embeddingProviderName, lang)
 	if err != nil {
 		return "", nil, err
 	}
 
-	knowledge, _, _, err := object.GetNearestKnowledge(store.Name, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, "admin", question, store.KnowledgeCount)
+	knowledge, _, _, err := object.GetNearestKnowledge(store.Name, store.VectorStores, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, "admin", question, store.KnowledgeCount, lang)
 	if err != nil {
 		return "", nil, err
 	}
 	history := []*model.RawMessage{}
-	return object.GetAnswerWithContext(modelProviderName, question, history, knowledge, store.Prompt)
+	return object.GetAnswerWithContext(modelProviderName, question, history, knowledge, store.Prompt, lang)
 }

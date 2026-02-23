@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,9 @@ import (
 
 	"github.com/beego/beego"
 	"github.com/beego/beego/context"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/controllers"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/controllers"
+	"github.com/hanzoai/cloud/util"
 )
 
 func AuthzFilter(ctx *context.Context) {
@@ -77,6 +78,8 @@ func permissionFilter(ctx *context.Context) {
 		"delete-welcome-message", "get-message-answer", "get-answer",
 		"get-storage-providers", "get-store", "get-providers", "get-global-stores",
 		"update-chat", "add-chat", "delete-chat", "update-message", "add-message",
+		"get-chat", "get-message",
+		"get-tasks", "get-task", "update-task", "add-task", "delete-task", "upload-task-document",
 	}
 
 	for _, exemptPath := range exemptedPaths {
@@ -87,9 +90,8 @@ func permissionFilter(ctx *context.Context) {
 
 	user := GetSessionUser(ctx)
 
-	isAdmin := user != nil && (user.IsAdmin || user.Type == "chat-admin")
-	if !isAdmin {
-		responseError(ctx, "this operation requires admin privilege")
+	if !util.IsAdmin(user) {
+		responseError(ctx, "auth:this operation requires admin privilege")
 		return
 	}
 }

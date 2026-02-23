@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,25 +16,27 @@ package video
 
 import (
 	"bytes"
+	"context"
 
-	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
+	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
 )
 
 func getOssClient(endpoint string, accessKeyId string, accessKeySecret string, securityToken string) (*oss.Client, error) {
-	client, err := oss.New(endpoint, accessKeyId, accessKeySecret, oss.SecurityToken(securityToken))
-	if err != nil {
-		return nil, err
-	}
+	cfg := oss.LoadDefaultConfig().
+		WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, securityToken)).
+		WithRegion("").
+		WithEndpoint(endpoint)
 
+	client := oss.NewClient(cfg)
 	return client, nil
 }
 
 func uploadLocalFile(ossClient *oss.Client, bucketName string, objectKey string, fileBuffer *bytes.Buffer) error {
-	bucket, err := ossClient.Bucket(bucketName)
-	if err != nil {
-		return err
-	}
-
-	err = bucket.PutObject(objectKey, fileBuffer)
+	_, err := ossClient.PutObject(context.TODO(), &oss.PutObjectRequest{
+		Bucket: &bucketName,
+		Key:    &objectKey,
+		Body:   fileBuffer,
+	})
 	return err
 }

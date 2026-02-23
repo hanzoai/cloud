@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 )
 
-var organization = "casibase"
+var organization = "hanzo"
 
 func TestUpdateMessagesForOrg(t *testing.T) {
 	InitConfig()
@@ -43,7 +43,10 @@ func TestUpdateMessagesForOrg(t *testing.T) {
 		message.ReplyTo = strings.TrimPrefix(message.ReplyTo, "admin/")
 
 		if strings.Contains(message.Author, "/") {
-			_, author := util.GetOwnerAndNameFromId(message.Author)
+			_, author, err := util.GetOwnerAndNameFromIdWithError(message.Author)
+			if err != nil {
+				panic(err)
+			}
 			message.Author = author
 		}
 

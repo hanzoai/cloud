@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/casibase/casibase/proxy"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/proxy"
+	"github.com/hanzoai/cloud/util"
 )
 
 func TestTranslateArticle(t *testing.T) {
@@ -42,7 +42,7 @@ func TestTranslateArticle(t *testing.T) {
 
 		question := fmt.Sprintf("Translate the following text to Chinese, the words related to this glossary: %s should not be translated. Only respond with the translated text:\n%s", glossary, block.TextEn)
 		var answer string
-		answer, _, err = GetAnswer(article.Provider, question)
+		answer, _, err = GetAnswer("", question, "en")
 		if err != nil {
 			panic(err)
 		}

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import moment from "moment";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as ChatBackend from "./backend/ChatBackend";
+import * as ProviderBackend from "./backend/ProviderBackend";
 import i18next from "i18next";
 import * as Conf from "./Conf";
 import * as MessageBackend from "./backend/MessageBackend";
@@ -32,9 +33,49 @@ class ChatListPage extends BaseListPage {
     this.state = {
       ...this.state,
       messagesMap: {},
+      providers: [],
+      providerMap: {},
       filterSingleChat: Setting.getBoolValue("filterSingleChat", false),
+      maximizeMessages: this.getMaximizeMessagesFromStorage(),
     };
   }
+
+  componentDidMount() {
+    super.componentDidMount();
+    this.getProviders();
+  }
+
+  getProviders() {
+    ProviderBackend.getProviders("admin")
+      .then((res) => {
+        if (res.status === "ok") {
+          const providerMap = {};
+          res.data.forEach(provider => {
+            providerMap[provider.name] = provider;
+          });
+          this.setState({
+            providers: res.data,
+            providerMap: providerMap,
+          });
+        }
+      });
+  }
+
+  getMaximizeMessagesFromStorage() {
+    const saved = localStorage.getItem("maximizeMessages");
+    if (saved === null || saved === undefined) {
+      return false;
+    }
+    return JSON.parse(saved) === true;
+  }
+
+  toggleMaximizeMessages = () => {
+    const newValue = !this.state.maximizeMessages;
+    this.setState({
+      maximizeMessages: newValue,
+    });
+    localStorage.setItem("maximizeMessages", JSON.stringify(newValue));
+  };
 
   getMessages(chatName) {
     MessageBackend.getChatMessages("admin", chatName)
@@ -80,12 +121,9 @@ class ChatListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newChat),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/chats/${newChat.name}`,
+            state: {isNewChat: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -137,6 +175,20 @@ class ChatListPage extends BaseListPage {
     }
   }
 
+  getMessagesColumnSearchProps = () => ({
+    ...this.getColumnSearchProps("messages"),
+    onFilter: (value, record) => {
+      const messages = this.state.messagesMap[record.name];
+      if (!messages || messages.length === 0) {
+        return false;
+      }
+      // Search through all messages' text content
+      return messages.some(message =>
+        message.text && message.text.toLowerCase().includes(value.toLowerCase())
+      );
+    },
+  });
+
   renderTable(chats) {
     let columns = [
       // {
@@ -152,6 +204,7 @@ class ChatListPage extends BaseListPage {
         key: "name",
         width: "100px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`chats/${text}`}>
@@ -205,7 +258,7 @@ class ChatListPage extends BaseListPage {
       //   },
       // },
       // {
-      //   title: i18next.t("provider:Category"),
+      //   title: i18next.t("general:Category"),
       //   dataIndex: "category",
       //   key: "category",
       //   width: "100px",
@@ -218,7 +271,7 @@ class ChatListPage extends BaseListPage {
         key: "user",
         width: "90px",
         sorter: (a, b) => a.user.localeCompare(b.user),
-        // ...this.getColumnSearchProps("user"),
+        ...this.getColumnSearchProps("user"),
         render: (text, record, index) => {
           if (text.startsWith("u-")) {
             return text;
@@ -227,6 +280,37 @@ class ChatListPage extends BaseListPage {
           return (
             <a target="_blank" rel="noreferrer" href={Setting.getMyProfileUrl(this.props.account).replace("/account", `/users/${Conf.AuthConfig.organizationName}/${text}`)}>
               {text}
+            </a>
+          );
+        },
+      },
+      {
+        title: i18next.t("general:Model"),
+        dataIndex: "modelProvider",
+        key: "modelProvider",
+        width: "150px",
+        align: "center",
+        sorter: (a, b) => {
+          if (!a.modelProvider) {
+            return -1;
+          }
+          if (!b.modelProvider) {
+            return 1;
+          }
+          return a.modelProvider.localeCompare(b.modelProvider);
+        },
+        ...this.getColumnSearchProps("modelProvider"),
+        render: (text, record, index) => {
+          if (!text) {
+            return null;
+          }
+          const provider = this.state.providerMap[text];
+          if (!provider) {
+            return text;
+          }
+          return (
+            <a target="_blank" rel="noreferrer" href={`/providers/${text}`}>
+              <img width={36} height={36} src={Setting.getProviderLogoURL({category: provider.category, type: provider.type})} alt={provider.type} title={provider.type} />
             </a>
           );
         },
@@ -282,6 +366,7 @@ class ChatListPage extends BaseListPage {
         key: "clientIp",
         width: "120px",
         sorter: (a, b) => a.clientIp.localeCompare(b.clientIp),
+        ...this.getColumnSearchProps("clientIp"),
         render: (text, record, index) => {
           if (text === "") {
             return null;
@@ -318,7 +403,7 @@ class ChatListPage extends BaseListPage {
       //   },
       // },
       {
-        title: i18next.t("chat:Count"),
+        title: i18next.t("general:Count"),
         dataIndex: "messageCount",
         key: "messageCount",
         width: "80px",
@@ -348,12 +433,15 @@ class ChatListPage extends BaseListPage {
         title: i18next.t("general:Messages"),
         dataIndex: "messages",
         key: "messages",
-        width: "800px",
+        width: this.state.maximizeMessages ? "70vw" : "800px",
+        ...this.getMessagesColumnSearchProps(),
         render: (text, record, index) => {
           const messages = this.state.messagesMap[record.name];
           if (messages === undefined || messages.length === 0) {
             return null;
           }
+
+          const messagesWidth = this.state.maximizeMessages ? "70vw" : "800px";
 
           return (
             <div style={{
@@ -361,7 +449,7 @@ class ChatListPage extends BaseListPage {
               margin: "5px",
               background: "rgb(191,191,191)",
               borderRadius: "10px",
-              width: "800px",
+              width: messagesWidth,
               // boxSizing: "border-box",
               // boxShadow: "0 0 0 1px inset",
             }}>
@@ -383,10 +471,10 @@ class ChatListPage extends BaseListPage {
         key: "isDeleted",
         width: "120px",
         sorter: (a, b) => a.isDeleted - b.isDeleted,
-        // ...this.getColumnSearchProps("isDeleted"),
+        ...this.getColumnFilterProps("isDeleted"),
         render: (text, record, index) => {
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },
@@ -444,7 +532,7 @@ class ChatListPage extends BaseListPage {
         <Table scroll={{x: "max-content"}} columns={columns} dataSource={chats} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
           title={() => (
             <div>
-              {i18next.t("chat:Chats")}&nbsp;&nbsp;&nbsp;&nbsp;
+              {i18next.t("general:Chats")}&nbsp;&nbsp;&nbsp;&nbsp;
               <Button disabled={!Setting.isLocalAdminUser(this.props.account)} type="primary" size="small" onClick={this.addChat.bind(this)}>{i18next.t("general:Add")}</Button>
               {this.state.selectedRowKeys.length > 0 && (
                 <Popconfirm title={`${i18next.t("general:Sure to delete")}: ${this.state.selectedRowKeys.length} ${i18next.t("general:items")} ?`} onConfirm={() => this.performBulkDelete(this.state.selectedRows, this.state.selectedRowKeys)} okText={i18next.t("general:OK")} cancelText={i18next.t("general:Cancel")}>
@@ -453,6 +541,10 @@ class ChatListPage extends BaseListPage {
                   </Button>
                 </Popconfirm>
               )}
+              <span style={{marginLeft: 32}}>
+                {i18next.t("chat:Maximize messages")}:
+                <Switch checked={this.state.maximizeMessages} onChange={this.toggleMaximizeMessages} style={{marginLeft: 8}} />
+              </span>
               &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               &nbsp;&nbsp;&nbsp;&nbsp;
               {i18next.t("general:Users")}:

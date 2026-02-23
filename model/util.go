@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/hanzoai/cloud/i18n"
 	"github.com/pkoukk/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 )
@@ -31,6 +32,14 @@ type RawMessage struct {
 	TextTokenCount int
 	ToolCall       openai.ToolCall
 	ToolCallID     string
+}
+
+type SearchResult struct {
+	Icon     string `json:"icon,omitempty"`
+	SiteName string `json:"site_name,omitempty"`
+	Index    int    `json:"index"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
 }
 
 func reverseMessages(arr []*RawMessage) []*RawMessage {
@@ -92,7 +101,7 @@ func getCompatibleModel(model string) string {
 	// Handle generic model families
 	if strings.Contains(model, "gpt-3.5-turbo") {
 		return openai.GPT3Dot5Turbo
-	} else if strings.Contains(model, "gpt-4") {
+	} else if strings.Contains(model, "gpt-5") || strings.Contains(model, "gpt-4") || strings.Contains(model, "deep-research") || strings.Contains(model, "o1") || strings.Contains(model, "o3") || strings.Contains(model, "o4") {
 		return openai.GPT4
 	}
 
@@ -182,7 +191,7 @@ func getHistoryMessages(recentMessages []*RawMessage, model string, leftTokens i
 	return res, nil
 }
 
-func OpenaiGenerateMessages(prompt string, question string, recentMessages []*RawMessage, knowledgeMessages []*RawMessage, model string, maxTokens int) ([]*RawMessage, error) {
+func OpenaiGenerateMessages(prompt string, question string, recentMessages []*RawMessage, knowledgeMessages []*RawMessage, model string, maxTokens int, lang string) ([]*RawMessage, error) {
 	queryMessage := &RawMessage{
 		Text:   question,
 		Author: openai.ChatMessageRoleUser,
@@ -194,7 +203,7 @@ func OpenaiGenerateMessages(prompt string, question string, recentMessages []*Ra
 
 	leftTokens := maxTokens - queryMessageSize
 	if leftTokens <= 0 {
-		return nil, fmt.Errorf("the token count: [%d] exceeds the model: [%s]'s maximum token count: [%d]", queryMessageSize, model, maxTokens)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:the token count: [%d] exceeds the model: [%s]'s maximum token count: [%d]"), queryMessageSize, model, maxTokens)
 	}
 
 	for i, message := range knowledgeMessages {

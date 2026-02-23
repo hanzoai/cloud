@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloud-api-config
+  namespace: hanzo
+type: Opaque
+stringData:
+  app.conf: |
+    appname = hanzo-cloud
+    httpport = 8000
+    runmode = prod
+    SessionOn = true
+    copyrequestbody = true
+    driverName = postgres
+    # Runtime secrets are injected from cloud-runtime-secrets (KMS-managed).
+    dataSourceName = ""
+    dbName = hanzo_cloud
+    redisEndpoint =
+    isDemoMode = false
+    disablePreviewMode = false
+    logPostOnly = true
+    iamEndpoint = ""
+    clientId = ""
+    clientSecret = ""
+    iamOrganization = "hanzo"
+    iamApplication = "app-cloud"
+    redirectPath = /callback
+    cacheDir = "/tmp/hanzo_cloud_cache"
+    isLocalIpDb = false
+    publicDomain = ""
+    adminDomain = ""
+    enableExtraPages = false
+    defaultLanguage = "en"
+    staticBaseUrl = "https://cdn.hanzo.ai"
+    htmlTitle = "Hanzo Cloud"
+    faviconUrl = "https://cdn.hanzo.ai/static/favicon.png"
+    logoUrl = "https://cdn.hanzo.ai/img/hanzo-cloud-logo.png"
+    showGithubCorner = false
+    defaultColorPrimary = "#fd4444"
+    logConfig = {"adapter":"console"}

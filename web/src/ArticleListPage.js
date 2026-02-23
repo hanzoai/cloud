@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2024 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,12 +47,9 @@ class ArticleListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newArticle),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/articles/${newArticle.owner}/${newArticle.name}`,
+            state: {isNewArticle: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -96,6 +93,7 @@ class ArticleListPage extends BaseListPage {
         key: "name",
         width: "160px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/articles/${text}`}>
@@ -110,6 +108,7 @@ class ArticleListPage extends BaseListPage {
         key: "displayName",
         width: "200px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("store:Workflow"),
@@ -117,6 +116,7 @@ class ArticleListPage extends BaseListPage {
         key: "workflow",
         width: "250px",
         sorter: (a, b) => a.workflow.localeCompare(b.workflow),
+        ...this.getColumnSearchProps("workflow"),
         render: (text, record, index) => {
           return (
             <Link to={`/workflows/${text}`}>
@@ -176,7 +176,7 @@ class ArticleListPage extends BaseListPage {
         },
       },
     ];
-
+    columns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems);
     if (!this.props.account || this.props.account.name !== "admin") {
       columns = columns.filter(column => column.key !== "provider");
     }

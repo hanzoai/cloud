@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import BaseListPage from "./BaseListPage";
 import {ThemeDefault} from "./Conf";
 import * as Setting from "./Setting";
 import * as MessageBackend from "./backend/MessageBackend";
+import * as ProviderBackend from "./backend/ProviderBackend";
 import moment from "moment";
 import i18next from "i18next";
 import * as Conf from "./Conf";
@@ -28,6 +29,32 @@ import VectorTooltip from "./VectorTooltip";
 class MessageListPage extends BaseListPage {
   constructor(props) {
     super(props);
+    this.state = {
+      ...this.state,
+      providers: [],
+      providerMap: {},
+    };
+  }
+
+  componentDidMount() {
+    super.componentDidMount();
+    this.getProviders();
+  }
+
+  getProviders() {
+    ProviderBackend.getProviders("admin")
+      .then((res) => {
+        if (res.status === "ok") {
+          const providerMap = {};
+          res.data.forEach(provider => {
+            providerMap[provider.name] = provider;
+          });
+          this.setState({
+            providers: res.data,
+            providerMap: providerMap,
+          });
+        }
+      });
   }
 
   newMessage() {
@@ -55,12 +82,9 @@ class MessageListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newMessage),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/messages/${newMessage.name}`,
+            state: {isNewMessage: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -102,7 +126,7 @@ class MessageListPage extends BaseListPage {
         const data = [];
         this.state.data.filter(item => item.author !== "AI").forEach((item, i) => {
           const row = {};
-          row[i18next.t("message:Chat")] = item.chat;
+          row[i18next.t("general:Chat")] = item.chat;
           row[i18next.t("general:Message")] = item.name;
           row[i18next.t("general:Created time")] = Setting.getFormattedDate(item.createdTime);
           row[i18next.t("general:User")] = item.user;
@@ -141,6 +165,7 @@ class MessageListPage extends BaseListPage {
         key: "name",
         width: "100px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/messages/${text}`}>
@@ -165,6 +190,7 @@ class MessageListPage extends BaseListPage {
         key: "user",
         width: "90px",
         sorter: (a, b) => a.user.localeCompare(b.user),
+        ...this.getColumnSearchProps("user"),
         render: (text, record, index) => {
           if (text.startsWith("u-")) {
             return text;
@@ -178,11 +204,12 @@ class MessageListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("message:Chat"),
+        title: i18next.t("general:Chat"),
         dataIndex: "chat",
         key: "chat",
         width: "90px",
         sorter: (a, b) => a.chat.localeCompare(b.chat),
+        ...this.getColumnSearchProps("chat"),
         render: (text, record, index) => {
           return (
             <Link to={`/chats/${text}`}>
@@ -197,6 +224,7 @@ class MessageListPage extends BaseListPage {
         key: "replyTo",
         width: "90px",
         sorter: (a, b) => a.replyTo.localeCompare(b.replyTo),
+        ...this.getColumnSearchProps("replyTo"),
         render: (text, record, index) => {
           return (
             <Link to={`/messages/${text}`}>
@@ -211,6 +239,7 @@ class MessageListPage extends BaseListPage {
         key: "author",
         width: "90px",
         sorter: (a, b) => a.author.localeCompare(b.author),
+        ...this.getColumnSearchProps("author"),
         render: (text, record, index) => {
           if (text === "AI") {
             return text;
@@ -228,6 +257,37 @@ class MessageListPage extends BaseListPage {
           return (
             <a target="_blank" rel="noreferrer" href={Setting.getMyProfileUrl(this.props.account).replace("/account", `/users/${userId}`)}>
               {text}
+            </a>
+          );
+        },
+      },
+      {
+        title: i18next.t("general:Model"),
+        dataIndex: "modelProvider",
+        key: "modelProvider",
+        width: "150px",
+        align: "center",
+        sorter: (a, b) => {
+          if (!a.modelProvider) {
+            return -1;
+          }
+          if (!b.modelProvider) {
+            return 1;
+          }
+          return a.modelProvider.localeCompare(b.modelProvider);
+        },
+        ...this.getColumnSearchProps("modelProvider"),
+        render: (text, record, index) => {
+          if (!text) {
+            return null;
+          }
+          const provider = this.state.providerMap[text];
+          if (!provider) {
+            return text;
+          }
+          return (
+            <a target="_blank" rel="noreferrer" href={`/providers/${text}`}>
+              <img width={36} height={36} src={Setting.getProviderLogoURL({category: provider.category, type: provider.type})} alt={provider.type} title={provider.type} />
             </a>
           );
         },
@@ -265,6 +325,7 @@ class MessageListPage extends BaseListPage {
         key: "reasonText",
         width: "300px",
         sorter: (a, b) => a.reasonText.localeCompare(b.reasonText),
+        ...this.getColumnSearchProps("reasonText"),
         render: (text, record, index) => {
           return (
             <div dangerouslySetInnerHTML={{__html: text}} />
@@ -277,6 +338,7 @@ class MessageListPage extends BaseListPage {
         key: "text",
         width: "300px",
         sorter: (a, b) => a.text.localeCompare(b.text),
+        ...this.getColumnSearchProps("text"),
         render: (text, record, index) => {
           return (
             <div dangerouslySetInnerHTML={{__html: text}} />
@@ -324,6 +386,7 @@ class MessageListPage extends BaseListPage {
         key: "errorText",
         width: "200px",
         sorter: (a, b) => a.errorText.localeCompare(b.errorText),
+        ...this.getColumnSearchProps("errorText"),
         render: (text, record, index) => {
           return (
             <div dangerouslySetInnerHTML={{__html: text}} />
@@ -336,6 +399,7 @@ class MessageListPage extends BaseListPage {
         key: "comment",
         width: "200px",
         sorter: (a, b) => a.comment.localeCompare(b.comment),
+        ...this.getColumnSearchProps("comment"),
         render: (text, record, index) => {
           return (
             <div dangerouslySetInnerHTML={{__html: text}} />
@@ -348,10 +412,10 @@ class MessageListPage extends BaseListPage {
         key: "isDeleted",
         width: "120px",
         sorter: (a, b) => a.isDeleted - b.isDeleted,
-        // ...this.getColumnSearchProps("isDeleted"),
+        ...this.getColumnFilterProps("isDeleted"),
         render: (text, record, index) => {
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },
@@ -361,10 +425,10 @@ class MessageListPage extends BaseListPage {
         key: "isAlerted",
         width: "120px",
         sorter: (a, b) => a.isAlerted - b.isAlerted,
-        // ...this.getColumnSearchProps("isAlerted"),
+        ...this.getColumnFilterProps("isAlerted"),
         render: (text, record, index) => {
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },

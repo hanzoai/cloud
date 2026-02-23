@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,11 @@ import (
 	"strconv"
 
 	"github.com/beego/beego/logs"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
-	"github.com/casibase/casibase/util/guacamole"
 	"github.com/gorilla/websocket"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
+	"github.com/hanzoai/cloud/util/guacamole"
 )
 
 const (
@@ -61,7 +61,7 @@ func (c *ApiController) AddNodeTunnel() {
 
 	user := c.GetSessionUser()
 	if user == nil {
-		c.ResponseError("please sign in first")
+		c.ResponseError(c.T("auth:Please sign in first"))
 		return
 	}
 
@@ -100,7 +100,7 @@ func (c *ApiController) GetNodeTunnel() {
 	ctx := c.Ctx
 	ws, err := UpGrader.Upgrade(ctx.ResponseWriter, ctx.Request, nil)
 	if err != nil {
-		c.ResponseError("WebSocket upgrade failed:", err)
+		c.ResponseError(err.Error())
 		return
 	}
 
@@ -225,7 +225,7 @@ func (c *ApiController) TunnelMonitor() {
 	ctx := c.Ctx
 	ws, err := UpGrader.Upgrade(ctx.ResponseWriter, ctx.Request, nil)
 	if err != nil {
-		c.ResponseError("WebSocket upgrade failed:", err)
+		c.ResponseError(err.Error())
 		return
 	}
 	connectionId := c.Input().Get("connectionId")

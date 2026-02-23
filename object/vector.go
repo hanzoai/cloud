@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
@@ -29,7 +29,7 @@ type Vector struct {
 	DisplayName string  `xorm:"varchar(100)" json:"displayName"`
 	Store       string  `xorm:"varchar(100)" json:"store"`
 	Provider    string  `xorm:"varchar(100) index" json:"provider"`
-	File        string  `xorm:"varchar(100)" json:"file"`
+	File        string  `xorm:"varchar(500)" json:"file"`
 	Index       int     `json:"index"`
 	Text        string  `xorm:"mediumtext" json:"text"`
 	TokenCount  int     `json:"tokenCount"`
@@ -61,9 +61,9 @@ func GetVectors(owner string) ([]*Vector, error) {
 	return vectors, nil
 }
 
-func getVectorsByProvider(storeName string, provider string) ([]*Vector, error) {
+func getVectorsByProvider(relatedStores []string, provider string) ([]*Vector, error) {
 	vectors := []*Vector{}
-	err := adapter.engine.Find(&vectors, &Vector{Store: storeName, Provider: provider})
+	err := adapter.engine.In("store", relatedStores).Find(&vectors, &Vector{Provider: provider})
 	if err != nil {
 		return vectors, err
 	}
@@ -100,12 +100,18 @@ func getVectorByIndex(owner string, store string, file string, index int) (*Vect
 }
 
 func GetVector(id string) (*Vector, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getVector(owner, name)
 }
 
-func UpdateVector(id string, vector *Vector) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+func UpdateVector(id string, vector *Vector, lang string) (bool, error) {
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
 	oldVector, err := getVector(owner, name)
 	if err != nil {
 		return false, err
@@ -118,7 +124,7 @@ func UpdateVector(id string, vector *Vector) (bool, error) {
 		if vector.Text == "" {
 			vector.Data = []float32{}
 		} else {
-			_, err = refreshVector(vector)
+			_, err = refreshVector(vector, lang)
 			if err != nil {
 				return false, err
 			}
@@ -150,6 +156,24 @@ func AddVector(vector *Vector) (bool, error) {
 
 func DeleteVector(vector *Vector) (bool, error) {
 	affected, err := adapter.engine.ID(core.PK{vector.Owner, vector.Name}).Delete(&Vector{})
+	if err != nil {
+		return false, err
+	}
+
+	return affected != 0, nil
+}
+
+func DeleteVectorsByStore(owner string, storeName string) (bool, error) {
+	affected, err := adapter.engine.Where("owner = ? AND store = ?", owner, storeName).Delete(&Vector{})
+	if err != nil {
+		return false, err
+	}
+
+	return affected != 0, nil
+}
+
+func DeleteVectorsByFile(owner string, storeName string, fileKey string) (bool, error) {
+	affected, err := adapter.engine.Where("owner = ? AND store = ? AND file = ?", owner, storeName, fileKey).Delete(&Vector{})
 	if err != nil {
 		return false, err
 	}

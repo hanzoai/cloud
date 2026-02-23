@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casibase/casibase/object"
+	"github.com/hanzoai/cloud/object"
 )
 
 // UploadFile
 // @Title UploadFile
 // @Tag File API
-// @Description upload file to casdoor storage
+// @Description upload file to IAM storage
 // @Param file formData string true "The base64 encoded file data"
 // @Param type formData string true "The file type/extension"
 // @Param name formData string true "The file name"
@@ -42,13 +42,13 @@ func (c *ApiController) UploadFile() {
 	fileName := c.Input().Get("name")
 
 	if fileBase64 == "" || fileType == "" || fileName == "" {
-		c.ResponseError("Missing required parameters")
+		c.ResponseError(c.T("application:Missing required parameters"))
 		return
 	}
 
 	index := strings.Index(fileBase64, ",")
 	if index == -1 {
-		c.ResponseError("Invalid file data format")
+		c.ResponseError(c.T("resource:Invalid file data format"))
 		return
 	}
 
@@ -58,7 +58,7 @@ func (c *ApiController) UploadFile() {
 		return
 	}
 
-	filePath := fmt.Sprintf("casibase/avatars/%s/%s", userName, fileName)
+	filePath := fmt.Sprintf("cloud/avatars/%s/%s", userName, fileName)
 
 	fileUrl, err := object.UploadFileToStorageSafe(userName, "file", "UploadStoreAvatar", filePath, fileBytes)
 	if err != nil {

@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import {CheckOutlined, ShrinkOutlined} from "@ant-design/icons";
 import {MoonOutlined, SunOutlined} from "@ant-design/icons";
 
 export const Themes = [
-  {label: "Default", key: "default", icon: <SunOutlined style={{fontSize: "24px"}} />},        // i18next.t("theme:Default")
+  {label: "Default", key: "default", icon: <SunOutlined style={{fontSize: "24px"}} />},        // i18next.t("general:Default")
   {label: "Dark", key: "dark", icon: <MoonOutlined style={{fontSize: "24px"}} />},          // i18next.t("theme:Dark")
   {label: "Compact", key: "compact", icon: <ShrinkOutlined style={{fontSize: "24px"}} />}, // i18next.t("theme:Compact")
 ];

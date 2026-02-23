@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2024 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ class UsagePage extends BaseListPage {
     UsageBackend.getUsers(serverUrl, this.props.account.name, Setting.getRequestStore(this.props.account))
       .then((res) => {
         if (res.status === "ok") {
-          const selectedUser = !(this.props.account.name === "admin" || this.props.account.type === "chat-admin") ? res.data[0] : "All";
+          const selectedUser = !Setting.canViewAllUsers(this.props.account) ? res.data[0] : "All";
           this.setState({
             users: res.data,
             selectedUser: selectedUser,
@@ -413,7 +413,7 @@ class UsagePage extends BaseListPage {
           }
           );
         }}>
-          <Radio.Button value={"All"}>{i18next.t("usage:All")}</Radio.Button>
+          <Radio.Button value={"All"}>{i18next.t("store:All")}</Radio.Button>
           <Radio.Button value={"Hour"}>{i18next.t("usage:Hour")}</Radio.Button>
           <Radio.Button value={"Day"}>{i18next.t("usage:Day")}</Radio.Button>
           <Radio.Button value={"Week"}>{i18next.t("usage:Week")}</Radio.Button>
@@ -453,7 +453,7 @@ class UsagePage extends BaseListPage {
 
   renderDropdown() {
     const users_options = [
-      <option key="all" value="All" disabled={!(this.props.account.name === "admin" || this.props.account.type === "chat-admin")}>
+      <option key="all" value="All" disabled={!Setting.canViewAllUsers(this.props.account)}>
         All
       </option>,
       ...this.state.users.map((user, index) => (

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,19 +14,18 @@
 
 // Package routers
 // @APIVersion 1.70.0
-// @Title Casibase RESTful API
-// @Description Swagger Docs of Casibase Backend API
-// @Contact admin@casibase.org
+// @Title Hanzo Cloud RESTful API
+// @Description Swagger Docs of Hanzo Cloud Backend API
+// @Contact cloud@hanzo.ai
 // @SecurityDefinition AccessToken apiKey Authorization header
 // @Schemes https,http
-// @ExternalDocs Find out more about Casibase
-// @ExternalDocsUrl https://casibase.org/
+// @ExternalDocs Find out more about Hanzo Cloud
+// @ExternalDocsUrl https://hanzo.ai/cloud
 package routers
 
 import (
 	"github.com/beego/beego"
-	"github.com/casibase/casibase/controllers"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/hanzoai/cloud/controllers"
 )
 
 func init() {
@@ -70,6 +69,14 @@ func initAPI() {
 	beego.Router("/api/add-provider", &controllers.ApiController{}, "POST:AddProvider")
 	beego.Router("/api/delete-provider", &controllers.ApiController{}, "POST:DeleteProvider")
 	beego.Router("/api/refresh-mcp-tools", &controllers.ApiController{}, "POST:RefreshMcpTools")
+
+	beego.Router("/api/get-global-files", &controllers.ApiController{}, "GET:GetGlobalFiles")
+	beego.Router("/api/get-files", &controllers.ApiController{}, "GET:GetFiles")
+	beego.Router("/api/get-file", &controllers.ApiController{}, "GET:GetFileMy")
+	beego.Router("/api/update-file", &controllers.ApiController{}, "POST:UpdateFile")
+	beego.Router("/api/add-file", &controllers.ApiController{}, "POST:AddFile")
+	beego.Router("/api/delete-file", &controllers.ApiController{}, "POST:DeleteFile")
+	beego.Router("/api/refresh-file-vectors", &controllers.ApiController{}, "POST:RefreshFileVectors")
 
 	beego.Router("/api/get-global-vectors", &controllers.ApiController{}, "GET:GetGlobalVectors")
 	beego.Router("/api/get-vectors", &controllers.ApiController{}, "GET:GetVectors")
@@ -141,9 +148,12 @@ func initAPI() {
 	beego.Router("/api/get-global-tasks", &controllers.ApiController{}, "GET:GetGlobalTasks")
 	beego.Router("/api/get-tasks", &controllers.ApiController{}, "GET:GetTasks")
 	beego.Router("/api/get-task", &controllers.ApiController{}, "GET:GetTask")
+	beego.Router("/api/get-task-templates", &controllers.ApiController{}, "GET:GetTaskTemplates")
 	beego.Router("/api/update-task", &controllers.ApiController{}, "POST:UpdateTask")
 	beego.Router("/api/add-task", &controllers.ApiController{}, "POST:AddTask")
 	beego.Router("/api/delete-task", &controllers.ApiController{}, "POST:DeleteTask")
+	beego.Router("/api/upload-task-document", &controllers.ApiController{}, "POST:UploadTaskDocument")
+	beego.Router("/api/analyze-task", &controllers.ApiController{}, "POST:AnalyzeTask")
 
 	beego.Router("/api/get-global-forms", &controllers.ApiController{}, "GET:GetGlobalForms")
 	beego.Router("/api/get-forms", &controllers.ApiController{}, "GET:GetForms")
@@ -161,9 +171,9 @@ func initAPI() {
 	beego.Router("/api/add-article", &controllers.ApiController{}, "POST:AddArticle")
 	beego.Router("/api/delete-article", &controllers.ApiController{}, "POST:DeleteArticle")
 
-	beego.Router("/api/update-file", &controllers.ApiController{}, "POST:UpdateFile")
-	beego.Router("/api/add-file", &controllers.ApiController{}, "POST:AddFile")
-	beego.Router("/api/delete-file", &controllers.ApiController{}, "POST:DeleteFile")
+	beego.Router("/api/update-tree-file", &controllers.ApiController{}, "POST:UpdateTreeFile")
+	beego.Router("/api/add-tree-file", &controllers.ApiController{}, "POST:AddTreeFile")
+	beego.Router("/api/delete-tree-file", &controllers.ApiController{}, "POST:DeleteTreeFile")
 	beego.Router("/api/activate-file", &controllers.ApiController{}, "POST:ActivateFile")
 	beego.Router("/api/get-active-file", &controllers.ApiController{}, "GET:GetActiveFile")
 
@@ -186,6 +196,22 @@ func initAPI() {
 	beego.Router("/api/update-machine", &controllers.ApiController{}, "POST:UpdateMachine")
 	beego.Router("/api/add-machine", &controllers.ApiController{}, "POST:AddMachine")
 	beego.Router("/api/delete-machine", &controllers.ApiController{}, "POST:DeleteMachine")
+
+	beego.Router("/api/get-assets", &controllers.ApiController{}, "GET:GetAssets")
+	beego.Router("/api/get-asset", &controllers.ApiController{}, "GET:GetAsset")
+	beego.Router("/api/update-asset", &controllers.ApiController{}, "POST:UpdateAsset")
+	beego.Router("/api/add-asset", &controllers.ApiController{}, "POST:AddAsset")
+	beego.Router("/api/delete-asset", &controllers.ApiController{}, "POST:DeleteAsset")
+	beego.Router("/api/scan-asset", &controllers.ApiController{}, "POST:ScanAsset")
+	beego.Router("/api/scan-assets", &controllers.ApiController{}, "POST:ScanAssets")
+
+	beego.Router("/api/get-scans", &controllers.ApiController{}, "GET:GetScans")
+	beego.Router("/api/get-scan", &controllers.ApiController{}, "GET:GetScan")
+	beego.Router("/api/update-scan", &controllers.ApiController{}, "POST:UpdateScan")
+	beego.Router("/api/add-scan", &controllers.ApiController{}, "POST:AddScan")
+	beego.Router("/api/delete-scan", &controllers.ApiController{}, "POST:DeleteScan")
+
+	beego.Router("/api/install-patch", &controllers.ApiController{}, "POST:InstallPatch")
 
 	beego.Router("/api/get-images", &controllers.ApiController{}, "GET:GetImages")
 	beego.Router("/api/get-image", &controllers.ApiController{}, "GET:GetImage")
@@ -235,11 +261,54 @@ func initAPI() {
 	beego.Router("/api/query-record", &controllers.ApiController{}, "GET:QueryRecord")
 	beego.Router("/api/query-record-second", &controllers.ApiController{}, "GET:QueryRecordSecond")
 
+	beego.Router("/api/get-hospitals", &controllers.ApiController{}, "GET:GetHospitals")
+	beego.Router("/api/get-hospital", &controllers.ApiController{}, "GET:GetHospital")
+	beego.Router("/api/update-hospital", &controllers.ApiController{}, "POST:UpdateHospital")
+	beego.Router("/api/add-hospital", &controllers.ApiController{}, "POST:AddHospital")
+	beego.Router("/api/delete-hospital", &controllers.ApiController{}, "POST:DeleteHospital")
+
+	beego.Router("/api/get-doctors", &controllers.ApiController{}, "GET:GetDoctors")
+	beego.Router("/api/get-doctor", &controllers.ApiController{}, "GET:GetDoctor")
+	beego.Router("/api/update-doctor", &controllers.ApiController{}, "POST:UpdateDoctor")
+	beego.Router("/api/add-doctor", &controllers.ApiController{}, "POST:AddDoctor")
+	beego.Router("/api/delete-doctor", &controllers.ApiController{}, "POST:DeleteDoctor")
+
+	beego.Router("/api/get-patients", &controllers.ApiController{}, "GET:GetPatients")
+	beego.Router("/api/get-patient", &controllers.ApiController{}, "GET:GetPatient")
+	beego.Router("/api/update-patient", &controllers.ApiController{}, "POST:UpdatePatient")
+	beego.Router("/api/add-patient", &controllers.ApiController{}, "POST:AddPatient")
+	beego.Router("/api/delete-patient", &controllers.ApiController{}, "POST:DeletePatient")
+
+	beego.Router("/api/get-caases", &controllers.ApiController{}, "GET:GetCaases")
+	beego.Router("/api/get-caase", &controllers.ApiController{}, "GET:GetCaase")
+	beego.Router("/api/update-caase", &controllers.ApiController{}, "POST:UpdateCaase")
+	beego.Router("/api/add-caase", &controllers.ApiController{}, "POST:AddCaase")
+	beego.Router("/api/delete-caase", &controllers.ApiController{}, "POST:DeleteCaase")
+
+	beego.Router("/api/get-consultations", &controllers.ApiController{}, "GET:GetConsultations")
+	beego.Router("/api/get-consultation", &controllers.ApiController{}, "GET:GetConsultation")
+	beego.Router("/api/update-consultation", &controllers.ApiController{}, "POST:UpdateConsultation")
+	beego.Router("/api/add-consultation", &controllers.ApiController{}, "POST:AddConsultation")
+	beego.Router("/api/delete-consultation", &controllers.ApiController{}, "POST:DeleteConsultation")
+
 	beego.Router("/api/get-system-info", &controllers.ApiController{}, "GET:GetSystemInfo")
 	beego.Router("/api/get-version-info", &controllers.ApiController{}, "GET:GetVersionInfo")
 	beego.Router("/api/health", &controllers.ApiController{}, "GET:Health")
 	beego.Router("/api/get-prometheus-info", &controllers.ApiController{}, "GET:GetPrometheusInfo")
-	beego.Handler("/api/metrics", promhttp.Handler())
+	beego.Router("/api/metrics", &controllers.ApiController{}, "GET:GetMetrics")
 
 	beego.Router("/api/chat/completions", &controllers.ApiController{}, "POST:ChatCompletions")
+	beego.Router("/api/models", &controllers.ApiController{}, "GET:ListModels")
+
+	// Anthropic Messages API compatible endpoints
+	beego.Router("/api/messages", &controllers.ApiController{}, "POST:AnthropicMessages")
+	beego.Router("/v1/messages", &controllers.ApiController{}, "POST:AnthropicMessages")
+
+	// ZAP protocol endpoint (default for all Hanzo clients)
+	beego.Router("/zap", &controllers.ApiController{}, "POST:ZapDispatch")
+
+	beego.Router("/api/wecom-bot/callback/:botId", &controllers.ApiController{}, "GET:WecomBotVerifyUrl;POST:WecomBotHandleMessage")
+
+	beego.Router("/api/get-agents-dashboard-url", &controllers.ApiController{}, "GET:GetAgentsDashboardUrl")
+	beego.Router("/api/get-vm-dashboard-url", &controllers.ApiController{}, "GET:GetVmDashboardUrl")
 }

@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -191,7 +191,7 @@ class RemarkTable extends React.Component {
         },
       },
       {
-        title: i18next.t("video:Comment"),
+        title: i18next.t("message:Comment"),
         dataIndex: "text",
         key: "text",
         // width: '300px',

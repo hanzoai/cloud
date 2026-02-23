@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,12 +20,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/util"
 )
 
 func InitDb() {
 	modelProviderName, embeddingProviderName, ttsProviderName, sttProviderName := initBuiltInProviders()
+	initLLMProviders()
 	initBuiltInStore(modelProviderName, embeddingProviderName, ttsProviderName, sttProviderName)
 	initTemplates()
 }
@@ -43,7 +44,7 @@ func initBuiltInStore(modelProviderName string, embeddingProviderName string, tt
 	imageProviderName := ""
 	providerDbName := conf.GetConfigString("providerDbName")
 	if providerDbName != "" {
-		imageProviderName = "provider_storage_casibase_default"
+		imageProviderName = "provider_storage_hanzo_default"
 	}
 
 	store := &Store{
@@ -52,7 +53,7 @@ func initBuiltInStore(modelProviderName string, embeddingProviderName string, tt
 		CreatedTime:          util.GetCurrentTime(),
 		DisplayName:          "Built-in Store",
 		Title:                "AI Assistant",
-		Avatar:               "https://cdn.casibase.com/static/favicon.png",
+		Avatar:               "https://cdn.hanzo.ai/static/favicon.png",
 		StorageProvider:      "provider-storage-built-in",
 		StorageSubpath:       "store-built-in",
 		ImageProvider:        imageProviderName,
@@ -66,10 +67,10 @@ func initBuiltInStore(modelProviderName string, embeddingProviderName string, tt
 		MemoryLimit:          10,
 		LimitMinutes:         15,
 		Welcome:              "Hello",
-		WelcomeTitle:         "Hello, this is the Casibase AI Assistant",
+		WelcomeTitle:         "Hello, this is the Hanzo AI Assistant",
 		WelcomeText:          "I'm here to help answer your questions",
 		Prompt:               "You are an expert in your field and you specialize in using your knowledge to answer or solve people's problems.",
-		Prompts:              []Prompt{},
+		ExampleQuestions:     []ExampleQuestion{},
 		KnowledgeCount:       5,
 		SuggestionCount:      3,
 		ThemeColor:           "#5734d3",
@@ -105,7 +106,7 @@ func getDefaultStoragePath() (string, error) {
 	providerDbName := conf.GetConfigString("providerDbName")
 	if providerDbName != "" {
 		dbName := conf.GetConfigString("dbName")
-		return fmt.Sprintf("C:/casibase_data/%s", dbName), nil
+		return fmt.Sprintf("C:/hanzo_cloud_data/%s", dbName), nil
 	}
 
 	cwd, err := os.Getwd()
@@ -205,4 +206,78 @@ func initBuiltInProviders() (string, string, string, string) {
 	sttProviderName := "Browser Built-In"
 
 	return modelProvider.Name, embeddingProvider.Name, ttsProviderName, sttProviderName
+}
+
+// initLLMProviders bootstraps the LLM provider records needed by the
+// model routing table (see controllers/model_routes.go). Each provider
+// maps to an upstream service with its own API key and base URL.
+//
+// Provider secrets can use KMS references ("kms://SECRET_NAME") which
+// are resolved at runtime via ResolveProviderSecret().
+func initLLMProviders() {
+	providers := []Provider{
+		{
+			Owner:        "admin",
+			Name:         "do-ai",
+			DisplayName:  "DigitalOcean AI (GenAI)",
+			Category:     "Model",
+			Type:         "OpenAI",
+			SubType:      "gpt-4o",
+			ProviderUrl:  "https://inference.do-ai.run/v1",
+			ClientSecret: conf.GetConfigString("doAiApiKey"),
+			State:        "Active",
+		},
+		{
+			Owner:        "admin",
+			Name:         "fireworks",
+			DisplayName:  "Fireworks AI",
+			Category:     "Model",
+			Type:         "OpenAI",
+			SubType:      "qwen3-235b-a22b",
+			ProviderUrl:  "https://api.fireworks.ai/inference/v1",
+			ClientSecret: "kms://FIREWORKS_API_KEY",
+			State:        "Active",
+		},
+		{
+			Owner:        "admin",
+			Name:         "openai-direct",
+			DisplayName:  "OpenAI Direct",
+			Category:     "Model",
+			Type:         "OpenAI",
+			SubType:      "gpt-5",
+			ProviderUrl:  "https://api.openai.com/v1",
+			ClientSecret: "kms://OPENAI_API_KEY",
+			State:        "Active",
+		},
+		{
+			Owner:        "admin",
+			Name:         "zen",
+			DisplayName:  "Zen LM Gateway",
+			Category:     "Model",
+			Type:         "OpenAI",
+			SubType:      "zen4",
+			ProviderUrl:  "http://zen-gateway.zen.svc.cluster.local:4100",
+			ClientSecret: "kms://ZEN_GATEWAY_KEY",
+			State:        "Active",
+		},
+	}
+
+	for _, p := range providers {
+		existing, err := getProvider("admin", p.Name)
+		if err != nil {
+			fmt.Printf("[init] WARNING: failed to check provider %q: %v\n", p.Name, err)
+			continue
+		}
+		if existing != nil {
+			continue // Already exists, don't overwrite
+		}
+
+		p.CreatedTime = util.GetCurrentTime()
+		_, err = AddProvider(&p)
+		if err != nil && !strings.Contains(err.Error(), "Duplicate entry") {
+			fmt.Printf("[init] WARNING: failed to create provider %q: %v\n", p.Name, err)
+		} else {
+			fmt.Printf("[init] Created LLM provider: %s (%s)\n", p.Name, p.DisplayName)
+		}
+	}
 }

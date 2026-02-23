@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,15 @@
 
 import React from "react";
 import {Link} from "react-router-dom";
-import {Button, Col, List, Popconfirm, Row, Table, Tooltip} from "antd";
-import {DeleteOutlined, EditOutlined} from "@ant-design/icons";
+import {Button, Col, List, Popconfirm, Row, Table} from "antd";
+import {DeleteOutlined} from "@ant-design/icons";
 import moment from "moment";
 import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as FormBackend from "./backend/FormBackend";
 import i18next from "i18next";
+
+const formTypeOptions = Setting.getFormTypeOptions();
 
 class FormListPage extends BaseListPage {
   constructor(props) {
@@ -30,12 +32,12 @@ class FormListPage extends BaseListPage {
   newForm() {
     const randomName = Setting.getRandomName();
     return {
-      owner: this.props.account.name,
+      owner: this.props.account.owner,
       name: `form_${randomName}`,
       createdTime: moment().format(),
       displayName: `New Form - ${randomName}`,
       position: "1",
-      type: "Table",
+      category: "Table",
       url: "",
       formItems: [],
     };
@@ -47,12 +49,9 @@ class FormListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newForm),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/forms/${newForm.name}`,
+            state: {isNewForm: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -96,6 +95,7 @@ class FormListPage extends BaseListPage {
         key: "name",
         width: "160px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/forms/${text}`}>
@@ -110,6 +110,7 @@ class FormListPage extends BaseListPage {
         key: "displayName",
         width: "200px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("form:Position"),
@@ -119,11 +120,24 @@ class FormListPage extends BaseListPage {
         sorter: (a, b) => a.position.localeCompare(b.position),
       },
       {
+        title: i18next.t("general:Category"),
+        dataIndex: "category",
+        key: "category",
+        width: "90px",
+        sorter: (a, b) => a.category.localeCompare(b.category),
+        ...this.getColumnSearchProps("category"),
+      },
+      {
         title: i18next.t("general:Type"),
         dataIndex: "type",
         key: "type",
-        width: "90px",
+        width: "120px",
         sorter: (a, b) => a.type.localeCompare(b.type),
+        ...this.getColumnSearchProps("type"),
+        render: (text, record, index) => {
+          const typeOption = formTypeOptions.find(option => option.id === text);
+          return typeOption ? i18next.t(typeOption.name) : text;
+        },
       },
       {
         title: i18next.t("general:URL"),
@@ -131,6 +145,7 @@ class FormListPage extends BaseListPage {
         key: "url",
         width: "220px",
         sorter: (a, b) => a.url.localeCompare(b.url),
+        ...this.getColumnSearchProps("url"),
         render: (text, record, index) => {
           return (
             <a target="_blank" rel="noreferrer" href={text}>
@@ -144,52 +159,41 @@ class FormListPage extends BaseListPage {
         dataIndex: "formItems",
         key: "formItems",
         ...this.getColumnSearchProps("formItems"),
-        // width: '600px',
         render: (text, record, index) => {
           const providers = text;
-          if (providers === null || providers.length === 0) {
+          if (!providers || providers.length === 0) {
             return `(${i18next.t("general:empty")})`;
           }
 
-          const half = Math.floor((providers.length + 1) / 2);
+          const visibleProviders = providers.filter(item => item.visible !== false);
+          const leftItems = [];
+          const rightItems = [];
+          visibleProviders.forEach((item, idx) => {
+            if (idx % 2 === 0) {
+              leftItems.push(item);
+            } else {
+              rightItems.push(item);
+            }
+          });
 
-          const getList = (providers) => {
-            return (
-              <List
-                size="small"
-                locale={{emptyText: " "}}
-                dataSource={providers}
-                renderItem={(providerItem, i) => {
-                  return (
-                    <List.Item>
-                      <div style={{display: "inline"}}>
-                        <Tooltip placement="topLeft" title="Edit">
-                          <Button style={{marginRight: "5px"}} icon={<EditOutlined />} size="small" onClick={() => Setting.goToLinkSoft(this, `/providers/${record.organization}/${providerItem.name}`)} />
-                        </Tooltip>
-                        <Link to={`/providers/${record.organization}/${providerItem.name}`}>
-                          {providerItem.name}
-                        </Link>
-                      </div>
-                    </List.Item>
-                  );
-                }}
-              />
-            );
-          };
+          const getList = (items) => (
+            <List
+              size="small"
+              locale={{emptyText: " "}}
+              dataSource={items}
+              renderItem={providerItem => (
+                <List.Item>
+                  <div style={{display: "inline"}}>{i18next.t(providerItem.label)}</div>
+                </List.Item>
+              )}
+            />
+          );
 
           return (
             <div>
               <Row>
-                <Col span={12}>
-                  {
-                    getList(providers.slice(0, half))
-                  }
-                </Col>
-                <Col span={12}>
-                  {
-                    getList(providers.slice(half))
-                  }
-                </Col>
+                <Col span={12}>{getList(leftItems)}</Col>
+                <Col span={12}>{getList(rightItems)}</Col>
               </Row>
             </div>
           );
@@ -254,7 +258,7 @@ class FormListPage extends BaseListPage {
     const field = params.searchedColumn, value = params.searchText;
     const sortField = params.sortField, sortOrder = params.sortOrder;
     this.setState({loading: true});
-    FormBackend.getForms(this.props.account.name, params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder)
+    FormBackend.getForms(this.props.account.owner, params.pagination.current, params.pagination.pageSize, field, value, sortField, sortOrder)
       .then((res) => {
         this.setState({
           loading: false,

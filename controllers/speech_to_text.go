@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/casibase/casibase/object"
+	"github.com/hanzoai/cloud/object"
 )
 
 // ProcessSpeechToText
@@ -33,7 +33,7 @@ func (c *ApiController) ProcessSpeechToText() {
 	// Get parameters from form data
 	storeId := c.GetString("storeId")
 	if storeId == "" {
-		c.ResponseError("Missing required parameter: storeId")
+		c.ResponseError(c.T("stt:Missing required parameter: storeId"))
 		return
 	}
 
@@ -67,14 +67,14 @@ func (c *ApiController) ProcessSpeechToText() {
 	}
 
 	// Get provider implementation
-	providerObj, err := provider.GetSpeechToTextProvider()
+	providerObj, err := provider.GetSpeechToTextProvider(c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 	// Process the audio data and get the transcription
 	ctx := context.Background()
-	text, _, err := providerObj.ProcessAudio(audioFile, ctx)
+	text, _, err := providerObj.ProcessAudio(audioFile, ctx, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ func TestGetRangeUsages(t *testing.T) {
 	InitConfig()
 
 	// usages, err := GetRangeUsages("Month", 6)
-	usages, err := GetRangeUsages("Week", 12, "admin", "")
+	usages, err := GetRangeUsages("Week", 12, "admin", "", "en")
 	// usages, err := GetRangeUsages("Day", 30)
 	// usages, err := GetRangeUsages("Hour", 168)
 	if err != nil {

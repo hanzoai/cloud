@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,18 +16,21 @@ package object
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/casibase/casibase/embedding"
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/split"
-	"github.com/casibase/casibase/storage"
-	"github.com/casibase/casibase/txt"
-	"github.com/casibase/casibase/util"
+	"github.com/beego/beego/logs"
 	"github.com/cenkalti/backoff/v4"
+	"github.com/hanzoai/cloud/embedding"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/split"
+	"github.com/hanzoai/cloud/storage"
+	"github.com/hanzoai/cloud/txt"
+	"github.com/hanzoai/cloud/util"
 )
 
 func filterTextFiles(files []*storage.Object) []*storage.Object {
@@ -47,10 +50,10 @@ func filterTextFiles(files []*storage.Object) []*storage.Object {
 	return res
 }
 
-func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text string, storeName string, fileName string, index int, embeddingProviderName string, modelSubType string) (bool, error) {
-	data, embeddingResult, err := queryVectorSafe(embeddingProviderObj, text)
+func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text string, storeName string, fileName string, index int, embeddingProviderName string, modelSubType string, lang string) (bool, int, error) {
+	data, embeddingResult, err := queryVectorSafe(embeddingProviderObj, text, lang)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
 	displayName := text
@@ -69,7 +72,7 @@ func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text st
 
 	defaultEmbeddingResult, err := embedding.GetDefaultEmbeddingResult(modelSubType, text)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 
 	if tokenCount == 0 {
@@ -98,11 +101,106 @@ func addEmbeddedVector(embeddingProviderObj embedding.EmbeddingProvider, text st
 		Data:        data,
 		Dimension:   len(data),
 	}
-	return AddVector(vector)
+	affected, err := AddVector(vector)
+	return affected, tokenCount, err
 }
 
-func addVectorsForStore(storageProviderObj storage.StorageProvider, embeddingProviderObj embedding.EmbeddingProvider, prefix string, storeName string, splitProviderName string, embeddingProviderName string, modelSubType string) (bool, error) {
-	var affected bool
+func addVectorsForFile(embeddingProviderObj embedding.EmbeddingProvider, storeName string, fileKey string, fileUrl string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, int, error) {
+	var (
+		affected        bool
+		totalTokenCount int
+	)
+
+	fileExt := filepath.Ext(fileKey)
+	text, err := txt.GetParsedTextFromUrl(fileUrl, fileExt, lang)
+	if err != nil {
+		return false, 0, err
+	}
+
+	splitProviderType := splitProviderName
+	if splitProviderType == "" {
+		splitProviderType = "Default"
+	}
+
+	if strings.HasPrefix(fileKey, "QA") && fileExt == ".docx" {
+		splitProviderType = "QA"
+	}
+
+	if fileExt == ".md" {
+		splitProviderType = "Markdown"
+	}
+
+	splitProvider, err := split.GetSplitProvider(splitProviderType)
+	if err != nil {
+		return false, 0, err
+	}
+
+	textSections, err := splitProvider.SplitText(text)
+	if err != nil {
+		return false, 0, err
+	}
+
+	for i, textSection := range textSections {
+		logs.Info("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s", i+1, len(textSections), storeName, fileKey, i, textSection)
+
+		var (
+			sectionAffected   bool
+			sectionTokenCount int
+		)
+		operation := func() error {
+			var opErr error
+			sectionAffected, sectionTokenCount, opErr = addEmbeddedVector(embeddingProviderObj, textSection, storeName, fileKey, i, embeddingProviderName, modelSubType, lang)
+			if opErr != nil {
+				if isRetryableError(opErr) {
+					return opErr
+				}
+				return backoff.Permanent(opErr)
+			}
+			return nil
+		}
+		err = backoff.Retry(operation, backoff.NewExponentialBackOff())
+		if err != nil {
+			logs.Error("Failed to generate embedding after retries: %v", err)
+			return affected, totalTokenCount, err
+		}
+
+		affected = affected || sectionAffected
+		totalTokenCount += sectionTokenCount
+	}
+
+	return affected, totalTokenCount, nil
+}
+
+func withFileStatus(owner string, storeName string, fileKey string, op func() (bool, int, error)) (bool, error) {
+	err := updateFileStatus(owner, storeName, fileKey, FileStatusProcessing, "", 0)
+	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		return false, err
+	}
+
+	affected, tokenCount, opErr := op()
+
+	fileStatus := FileStatusFinished
+	errorText := ""
+	if opErr != nil {
+		fileStatus = FileStatusError
+		errorText = opErr.Error()
+	}
+
+	err = updateFileStatus(owner, storeName, fileKey, fileStatus, errorText, tokenCount)
+	if err != nil {
+		logs.Error("Failed to update file status for store: [%s], file: [%s]: %v", storeName, fileKey, err)
+		return affected, errors.Join(opErr, err)
+	}
+
+	return affected, opErr
+}
+
+func addVectorsForStore(storageProviderObj storage.StorageProvider, embeddingProviderObj embedding.EmbeddingProvider, prefix string, owner string, storeName string, splitProviderName string, embeddingProviderName string, modelSubType string, lang string) (bool, error) {
+	var (
+		affected bool
+		fileErr  error
+	)
 
 	files, err := storageProviderObj.ListObjects(prefix)
 	if err != nil {
@@ -112,74 +210,23 @@ func addVectorsForStore(storageProviderObj storage.StorageProvider, embeddingPro
 	files = filterTextFiles(files)
 
 	for _, file := range files {
-		var text string
-		fileExt := filepath.Ext(file.Key)
-		text, err = txt.GetParsedTextFromUrl(file.Url, fileExt)
+		fileAffected, err := withFileStatus(owner, storeName, file.Key, func() (bool, int, error) {
+			return addVectorsForFile(embeddingProviderObj, storeName, file.Key, file.Url, splitProviderName, embeddingProviderName, modelSubType, lang)
+		})
 		if err != nil {
-			return false, err
+			logs.Error("Failed to add vectors for store: [%s], file: [%s]: %v", storeName, file.Key, err)
+			fileErr = errors.Join(fileErr, err)
+			continue
 		}
 
-		splitProviderType := splitProviderName
-		if splitProviderType == "" {
-			splitProviderType = "Default"
-		}
-
-		if strings.HasPrefix(file.Key, "QA") && fileExt == ".docx" {
-			splitProviderType = "QA"
-		}
-
-		if fileExt == ".md" {
-			splitProviderType = "Markdown"
-		}
-		var splitProvider split.SplitProvider
-		splitProvider, err = split.GetSplitProvider(splitProviderType)
-		if err != nil {
-			return false, err
-		}
-
-		var textSections []string
-		textSections, err = splitProvider.SplitText(text)
-		if err != nil {
-			return false, err
-		}
-
-		for i, textSection := range textSections {
-			var vector *Vector
-			vector, err = getVectorByIndex("admin", storeName, file.Key, i)
-			if err != nil {
-				return false, err
-			}
-
-			if vector != nil {
-				fmt.Printf("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s\n", i+1, len(textSections), storeName, file.Key, i, "Skipped due to already exists")
-				continue
-			}
-
-			fmt.Printf("[%d/%d] Generating embedding for store: [%s], file: [%s], index: [%d]: %s\n", i+1, len(textSections), storeName, file.Key, i, textSection)
-
-			operation := func() error {
-				affected, err = addEmbeddedVector(embeddingProviderObj, textSection, storeName, file.Key, i, embeddingProviderName, modelSubType)
-				if err != nil {
-					if isRetryableError(err) {
-						return err
-					}
-					return backoff.Permanent(err)
-				}
-				return nil
-			}
-			err = backoff.Retry(operation, backoff.NewExponentialBackOff())
-			if err != nil {
-				fmt.Printf("Failed to generate embedding after retries: %v\n", err)
-				return false, err
-			}
-		}
+		affected = affected || fileAffected
 	}
 
-	return affected, err
+	return affected, fileErr
 }
 
-func getRelatedVectors(storeName string, provider string) ([]*Vector, error) {
-	vectors, err := getVectorsByProvider(storeName, provider)
+func getRelatedVectors(relatedStores []string, provider string) ([]*Vector, error) {
+	vectors, err := getVectorsByProvider(relatedStores, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -190,23 +237,23 @@ func getRelatedVectors(storeName string, provider string) ([]*Vector, error) {
 	return vectors, nil
 }
 
-func queryVectorWithContext(embeddingProvider embedding.EmbeddingProvider, text string, timeout int) ([]float32, *embedding.EmbeddingResult, error) {
+func queryVectorWithContext(embeddingProvider embedding.EmbeddingProvider, text string, timeout int, lang string) ([]float32, *embedding.EmbeddingResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30+timeout*2)*time.Second)
 	defer cancel()
-	vector, embeddingResult, err := embeddingProvider.QueryVector(text, ctx)
+	vector, embeddingResult, err := embeddingProvider.QueryVector(text, ctx, lang)
 	return vector, embeddingResult, err
 }
 
-func queryVectorSafe(embeddingProvider embedding.EmbeddingProvider, text string) ([]float32, *embedding.EmbeddingResult, error) {
+func queryVectorSafe(embeddingProvider embedding.EmbeddingProvider, text string, lang string) ([]float32, *embedding.EmbeddingResult, error) {
 	var res []float32
 	var embeddingResult *embedding.EmbeddingResult
 	var err error
 	for i := 0; i < 10; i++ {
-		res, embeddingResult, err = queryVectorWithContext(embeddingProvider, text, i)
+		res, embeddingResult, err = queryVectorWithContext(embeddingProvider, text, i, lang)
 		if err != nil {
-			err = fmt.Errorf("queryVectorSafe() error, %s", err.Error())
+			err = fmt.Errorf(i18n.Translate(lang, "object:queryVectorSafe() error, %s"), err.Error())
 			if i > 0 {
-				fmt.Printf("\tFailed (%d): %s\n", i+1, err.Error())
+				logs.Error("\tFailed (%d): %s", i+1, err.Error())
 			}
 		} else {
 			break
@@ -220,13 +267,14 @@ func queryVectorSafe(embeddingProvider embedding.EmbeddingProvider, text string)
 	}
 }
 
-func GetNearestKnowledge(storeName string, searchProviderType string, embeddingProvider *Provider, embeddingProviderObj embedding.EmbeddingProvider, modelProvider *Provider, owner string, text string, knowledgeCount int) ([]*model.RawMessage, []VectorScore, *embedding.EmbeddingResult, error) {
+func GetNearestKnowledge(storeName string, vectorStores []string, searchProviderType string, embeddingProvider *Provider, embeddingProviderObj embedding.EmbeddingProvider, modelProvider *Provider, owner string, text string, knowledgeCount int, lang string) ([]*model.RawMessage, []VectorScore, *embedding.EmbeddingResult, error) {
 	searchProvider, err := GetSearchProvider(searchProviderType, owner)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	vectors, embeddingResult, err := searchProvider.Search(storeName, embeddingProvider.Name, embeddingProviderObj, modelProvider.Name, text, knowledgeCount)
+	relatedStores := append(vectorStores, storeName)
+	vectors, embeddingResult, err := searchProvider.Search(relatedStores, embeddingProvider.Name, embeddingProviderObj, modelProvider.Name, text, knowledgeCount, lang)
 	if err != nil {
 		if err.Error() == "no knowledge vectors found" {
 			return nil, nil, embeddingResult, err
@@ -239,7 +287,7 @@ func GetNearestKnowledge(storeName string, searchProviderType string, embeddingP
 	knowledge := []*model.RawMessage{}
 	for _, vector := range vectors {
 		// if embeddingProvider.Name != vector.Provider {
-		//	return "", nil, fmt.Errorf("The store's embedding provider: [%s] should equal to vector's embedding provider: [%s], vector = %v", embeddingProvider.Name, vector.Provider, vector)
+		//	return "", nil, fmt.Errorf(i18n.Translate(lang, "object:The store's embedding provider: [%s] should equal to vector's embedding provider: [%s], vector = %v"), embeddingProvider.Name, vector.Provider, vector)
 		// }
 
 		vectorScores = append(vectorScores, VectorScore{

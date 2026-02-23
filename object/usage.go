@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/model"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/model"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 )
 
 type Usage struct {
@@ -189,23 +190,23 @@ func GetUsage(date string) (*Usage, error) {
 	return usage, nil
 }
 
-func GetUsageMetadata() (*UsageMetadata, error) {
-	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
-	organization, err := casdoorsdk.GetOrganization(casdoorOrganization)
+func GetUsageMetadata(lang string) (*UsageMetadata, error) {
+	iamOrganization := conf.GetConfigString("iamOrganization")
+	organization, err := iamsdk.GetOrganization(iamOrganization)
 	if err != nil {
 		return nil, err
 	}
 	if organization == nil {
-		return nil, fmt.Errorf("Casdoor organization: [%s] doesn't exist", casdoorOrganization)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:IAM organization: [%s] doesn't exist"), iamOrganization)
 	}
 
-	casdoorApplication := conf.GetConfigString("casdoorApplication")
-	application, err := casdoorsdk.GetApplication(casdoorApplication)
+	iamApplication := conf.GetConfigString("iamApplication")
+	application, err := iamsdk.GetApplication(iamApplication)
 	if err != nil {
 		return nil, err
 	}
 	if application == nil {
-		return nil, fmt.Errorf("Casdoor application: [%s] doesn't exist", casdoorApplication)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:IAM application: [%s] doesn't exist"), iamApplication)
 	}
 
 	res := &UsageMetadata{

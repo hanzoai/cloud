@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@ package object
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/pkgmachine"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/pkgmachine"
 )
 
 func getMachineFromService(owner string, provider string, clientMachine *pkgmachine.Machine) *Machine {
@@ -46,7 +47,7 @@ func getMachineFromService(owner string, provider string, clientMachine *pkgmach
 	}
 }
 
-func getMachinesCloud(owner string) ([]*Machine, error) {
+func getMachinesCloud(owner string, lang string) ([]*Machine, error) {
 	machines := []*Machine{}
 	providers, err := getActiveCloudProviders(owner)
 	if err != nil {
@@ -54,12 +55,12 @@ func getMachinesCloud(owner string) ([]*Machine, error) {
 	}
 
 	for _, provider := range providers {
-		client, err2 := pkgmachine.NewMachineClient(provider.Type, provider.ClientId, provider.ClientSecret, provider.Region)
+		client, err2 := pkgmachine.NewMachineClient(provider.Type, provider.ClientId, provider.ClientSecret, provider.Region, lang)
 		if err2 != nil {
 			return nil, err2
 		}
 
-		clientMachines, err2 := client.GetMachines()
+		clientMachines, err2 := client.GetMachines(lang)
 		if err2 != nil {
 			if provider.Type != "VMware" {
 				return nil, err2
@@ -75,8 +76,8 @@ func getMachinesCloud(owner string) ([]*Machine, error) {
 	return machines, nil
 }
 
-func SyncMachinesCloud(owner string) (bool, error) {
-	machines, err := getMachinesCloud(owner)
+func SyncMachinesCloud(owner string, lang string) (bool, error) {
+	machines, err := getMachinesCloud(owner, lang)
 	if err != nil {
 		return false, err
 	}
@@ -113,22 +114,22 @@ func SyncMachinesCloud(owner string) (bool, error) {
 	return affected, err
 }
 
-func updateMachineCloud(oldMachine *Machine, machine *Machine) (bool, error) {
+func updateMachineCloud(oldMachine *Machine, machine *Machine, lang string) (bool, error) {
 	provider, err := getProvider("admin", oldMachine.Provider)
 	if err != nil {
 		return false, err
 	}
 	if provider == nil {
-		return false, fmt.Errorf("The provider: %s does not exist", machine.Provider)
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The provider: %s does not exist"), machine.Provider)
 	}
 
-	client, err := pkgmachine.NewMachineClient(provider.Type, provider.ClientId, provider.ClientSecret, provider.Region)
+	client, err := pkgmachine.NewMachineClient(provider.Type, provider.ClientId, provider.ClientSecret, provider.Region, lang)
 	if err != nil {
 		return false, err
 	}
 
 	if oldMachine.State != machine.State {
-		affected, _, err := client.UpdateMachineState(oldMachine.Name, machine.State)
+		affected, _, err := client.UpdateMachineState(oldMachine.Name, machine.State, lang)
 		if err != nil {
 			return false, err
 		}

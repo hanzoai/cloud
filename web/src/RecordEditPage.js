@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors.. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc.. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,11 +18,7 @@ import * as RecordBackend from "./backend/RecordBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
 import * as Setting from "./Setting";
 import i18next from "i18next";
-
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
-require("codemirror/theme/material-darker.css");
-require("codemirror/mode/javascript/javascript");
+import Editor from "./common/Editor";
 
 const {Option} = Select;
 
@@ -71,7 +67,7 @@ class RecordEditPage extends React.Component {
   }
 
   parseRecordField(key, value) {
-    if ([""].includes(key)) {
+    if (["count"].includes(key)) {
       value = Setting.myParseInt(value);
     }
     return value;
@@ -152,7 +148,7 @@ class RecordEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}}>
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-            {Setting.getLabel(i18next.t("general:Provider") + " 2", i18next.t("general:Provider - Tooltip"))} :
+            {Setting.getLabel(i18next.t("general:Provider 2"), i18next.t("general:Provider - Tooltip"))} :
           </Col>
           <Col span={22}>
             <Select disabled={false} virtual={false} style={{width: "100%"}} value={this.state.record.provider2} onChange={(value => {
@@ -168,7 +164,7 @@ class RecordEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}}>
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-            {Setting.getLabel(i18next.t("general:Block") + " 2", i18next.t("general:Block - Tooltip"))} :
+            {Setting.getLabel(i18next.t("general:Block 2"), i18next.t("general:Block - Tooltip"))} :
           </Col>
           <Col span={22}>
             <Input disabled={false} value={this.state.record.block2} onChange={e => {
@@ -284,15 +280,25 @@ class RecordEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}} >
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("general:Count"), i18next.t("general:Count - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            <Input disabled={false} value={this.state.record.count === 0 ? 1 : this.state.record.count} onChange={e => {
+              this.updateRecordField("count", e.target.value);
+            }} />
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
             {Setting.getLabel(i18next.t("general:Object"), i18next.t("general:Object - Tooltip"))} :
           </Col>
           <Col span={22} >
             <div style={{width: "900px", height: "300px"}}>
-              <CodeMirror
+              <Editor
                 value={Setting.formatJsonString(this.state.record.object)}
-                options={{mode: "javascript", theme: "material-darker"}}
-                onBeforeChange={(editor, data, value) => {
-                }}
+                lang="js"
+                fillHeight
+                dark
               />
             </div>
           </Col>
@@ -303,11 +309,11 @@ class RecordEditPage extends React.Component {
           </Col>
           <Col span={22}>
             <div style={{width: "900px", height: "300px"}}>
-              <CodeMirror
+              <Editor
                 value={Setting.formatJsonString(this.state.record.response)}
-                options={{mode: "javascript", theme: "material-darker"}}
-                onBeforeChange={(editor, data, value) => {
-                }}
+                lang="js"
+                fillHeight
+                dark
               />
             </div>
           </Col>

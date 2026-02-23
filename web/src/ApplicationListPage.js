@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ class ApplicationListPage extends BaseListPage {
           Setting.showMessage("success", i18next.t("general:Successfully deployed"));
           this.setState({
             data: this.state.data.map((item) =>
-              item.name === record.name ? {...item, status: "Running"} : item
+              item.name === record.name ? {...item, ...res.data} : item
             ),
           });
         } else {
@@ -161,7 +161,7 @@ class ApplicationListPage extends BaseListPage {
       displayName: `${i18next.t("application:New Application")} - ${randomName}`,
       description: "",
       template: this.state.templates[0]?.name || "",
-      namespace: `casibase-application-${randomName}`,
+      namespace: `hanzo-cloud-app-${randomName}`,
       parameters: defaultParameters,
       status: "Not Deployed",
     };
@@ -173,12 +173,9 @@ class ApplicationListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newApplication),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/applications/${newApplication.name}`,
+            state: {isNewApplication: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -222,6 +219,7 @@ class ApplicationListPage extends BaseListPage {
         key: "name",
         width: "160px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/applications/${text}`}>
@@ -236,6 +234,7 @@ class ApplicationListPage extends BaseListPage {
         key: "displayName",
         width: "200px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("general:Created time"),
@@ -253,6 +252,7 @@ class ApplicationListPage extends BaseListPage {
         key: "description",
         width: "250px",
         sorter: (a, b) => a.description.localeCompare(b.description),
+        ...this.getColumnSearchProps("description"),
         render: (text, record, index) => {
           return (
             <Tooltip placement="left" title={Setting.getShortText(text, 1000)}>
@@ -269,6 +269,7 @@ class ApplicationListPage extends BaseListPage {
         key: "template",
         width: "150px",
         sorter: (a, b) => a.template.localeCompare(b.template),
+        ...this.getColumnSearchProps("template"),
         render: (text, record, index) => {
           if (text === "") {
             return null;
@@ -303,6 +304,7 @@ class ApplicationListPage extends BaseListPage {
         key: "status",
         width: "120px",
         sorter: (a, b) => a.status.localeCompare(b.status),
+        ...this.getColumnSearchProps("status"),
         render: (text, record, index) => {
           return Setting.getApplicationStatusTag(text);
         },
@@ -317,7 +319,7 @@ class ApplicationListPage extends BaseListPage {
             return null;
           }
           return (
-            <a target="_blank" rel="noreferrer" href={`http://${text}`} style={{display: "flex", alignItems: "center"}}>
+            <a target="_blank" rel="noreferrer" href={text} style={{display: "flex", alignItems: "center"}}>
               <LinkOutlined style={{marginRight: 4}} />
               <Tooltip title={text}>
                 {text}
@@ -332,6 +334,7 @@ class ApplicationListPage extends BaseListPage {
         key: "namespace",
         width: "150px",
         sorter: (a, b) => a.namespace.localeCompare(b.namespace),
+        ...this.getColumnSearchProps("namespace"),
       },
       {
         title: i18next.t("general:Action"),

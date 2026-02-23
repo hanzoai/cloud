@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2024 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ class ServiceTable extends React.Component {
   }
 
   addRow(table) {
-    const row = {no: table.length, name: `New Service - ${table.length}`, path: "C:/github_repos/casibase", port: 10000, processId: -1, expectedStatus: "Stopped", status: "", subStatus: "", message: ""};
+    const row = {no: table.length, name: `New Service - ${table.length}`, path: "C:/github_repos/cloud", port: 10000, processId: -1, expectedStatus: "Stopped", status: "", subStatus: "", message: ""};
     if (table === undefined) {
       table = [];
     }

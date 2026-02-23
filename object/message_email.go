@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,35 +18,36 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/util"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 )
 
-func (message *Message) SendEmail() error {
-	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
-	organization, err := casdoorsdk.GetOrganization(casdoorOrganization)
+func (message *Message) SendEmail(lang string) error {
+	iamOrganization := conf.GetConfigString("iamOrganization")
+	organization, err := iamsdk.GetOrganization(iamOrganization)
 	if err != nil {
 		return err
 	}
 	if organization == nil {
-		return fmt.Errorf("Casdoor organization: [%s] doesn't exist", casdoorOrganization)
+		return fmt.Errorf(i18n.Translate(lang, "object:IAM organization: [%s] doesn't exist"), iamOrganization)
 	}
 	sender := organization.DisplayName
 
-	casdoorApplication := conf.GetConfigString("casdoorApplication")
-	application, err := casdoorsdk.GetApplication(casdoorApplication)
+	iamApplication := conf.GetConfigString("iamApplication")
+	application, err := iamsdk.GetApplication(iamApplication)
 	if err != nil {
 		return err
 	}
 	if application == nil {
-		return fmt.Errorf("Casdoor application: [%s] doesn't exist", casdoorApplication)
+		return fmt.Errorf(i18n.Translate(lang, "object:IAM application: [%s] doesn't exist"), iamApplication)
 	}
 	title := application.DisplayName
 
 	logoUrl := conf.GetConfigString("logoUrl")
 
-	user, err := casdoorsdk.GetUser(message.User)
+	user, err := iamsdk.GetUser(message.User)
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,7 @@ func (message *Message) SendEmail() error {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Casibase Message Update</title>
+<title>Hanzo Cloud Message Update</title>
 <style>
     body { font-family: Arial, sans-serif; }
     .email-container { width: 600px; margin: 0 auto; }
@@ -78,7 +79,7 @@ func (message *Message) SendEmail() error {
 <div class="email-container">
   <div class="header">
         <h3>%s</h3>
-        <img src="%s" alt="Casibase Logo" width="300">
+        <img src="%s" alt="Hanzo Cloud Logo" width="300">
     </div>
     <p>Hi <strong>%s</strong>, your AI reply has been updated by the administrator! </p>
     <p>Question:</p>
@@ -97,14 +98,14 @@ func (message *Message) SendEmail() error {
     <p>%s</p>
     <hr>
     <div class="footer">
-        <p>Copyright © 2025 Casibase Organization</p>
+        <p>Copyright &copy; 2025 Hanzo AI Inc.</p>
     </div>
 </div>
 </body>
 </html>
 `, title, logoUrl, username, question, message.Text, message.Comment, title)
 
-	err = casdoorsdk.SendEmail(title, content, sender, receiverEmail)
+	err = iamsdk.SendEmail(title, content, sender, receiverEmail)
 	if err != nil {
 		return err
 	}
@@ -112,13 +113,13 @@ func (message *Message) SendEmail() error {
 	return nil
 }
 
-func (message *Message) SendErrorEmail(errorText string) error {
-	adminUser, err := casdoorsdk.GetUser("admin")
+func (message *Message) SendErrorEmail(errorText string, lang string) error {
+	adminUser, err := iamsdk.GetUser("admin")
 	if err != nil {
 		return err
 	}
 	if adminUser == nil {
-		return fmt.Errorf("SendErrorEmail() error, the receiver user: \"admin\" doesn't exist")
+		return fmt.Errorf(i18n.Translate(lang, "object:SendErrorEmail() error, the receiver user: \")admin\" doesn't exist"))
 	}
 
 	receiverEmail := adminUser.Email
@@ -126,17 +127,17 @@ func (message *Message) SendErrorEmail(errorText string) error {
 		return nil
 	}
 
-	casdoorOrganization := conf.GetConfigString("casdoorOrganization")
-	organization, err := casdoorsdk.GetOrganization(casdoorOrganization)
+	iamOrganization := conf.GetConfigString("iamOrganization")
+	organization, err := iamsdk.GetOrganization(iamOrganization)
 	if err != nil {
 		return err
 	}
 	if organization == nil {
-		return fmt.Errorf("Casdoor organization: [%s] doesn't exist", casdoorOrganization)
+		return fmt.Errorf(i18n.Translate(lang, "object:IAM organization: [%s] doesn't exist"), iamOrganization)
 	}
 	sender := organization.DisplayName
 
-	user, err := casdoorsdk.GetUser(message.User)
+	user, err := iamsdk.GetUser(message.User)
 	if err != nil {
 		return err
 	}
@@ -151,7 +152,7 @@ func (message *Message) SendErrorEmail(errorText string) error {
 		return err
 	}
 	if questionMessage == nil {
-		return fmt.Errorf("Question message: [%s] doesn't exist", message.ReplyTo)
+		return fmt.Errorf(i18n.Translate(lang, "object:Question message: [%s] doesn't exist"), message.ReplyTo)
 	}
 
 	question := questionMessage.Text
@@ -161,7 +162,7 @@ func (message *Message) SendErrorEmail(errorText string) error {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Casibase Message Error</title>
+<title>Hanzo Cloud Message Error</title>
 <style>
     body { font-family: Arial, sans-serif; }
     .email-container { width: 600px; margin: 0 auto; }
@@ -175,7 +176,7 @@ func (message *Message) SendErrorEmail(errorText string) error {
 <div class="email-container">
   <div class="header">
         <h3>%s</h3>
-        <img src="%s" alt="Casibase Logo" width="300">
+        <img src="%s" alt="Hanzo Cloud Logo" width="300">
     </div>
     <p>The message for user: <strong>%s</strong> has encountered error! </p>
     <p>Question:</p>
@@ -190,14 +191,14 @@ func (message *Message) SendErrorEmail(errorText string) error {
     <p>%s</p>
     <hr>
     <div class="footer">
-        <p>Copyright © 2025 Casibase Organization</p>
+        <p>Copyright &copy; 2025 Hanzo AI Inc.</p>
     </div>
 </div>
 </body>
 </html>
 `, title, logoUrl, username, question, errorText, sender)
 
-	err = casdoorsdk.SendEmail(title, content, sender, receiverEmail)
+	err = iamsdk.SendEmail(title, content, sender, receiverEmail)
 	if err != nil {
 		return err
 	}

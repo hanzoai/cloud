@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
 
 package controllers
 
-import "github.com/casdoor/casdoor-go-sdk/casdoorsdk"
+import iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 
-func getStorageProviders() ([]*casdoorsdk.Provider, error) {
-	providers, err := casdoorsdk.GetProviders()
+func getStorageProviders() ([]*iamsdk.Provider, error) {
+	providers, err := iamsdk.GetProviders()
 	if err != nil {
 		return providers, err
 	}
 
-	res := []*casdoorsdk.Provider{}
+	res := []*iamsdk.Provider{}
 	for _, provider := range providers {
 		if provider.Category == "Storage" {
 			res = append(res, provider)
@@ -38,7 +38,9 @@ func getStorageProviders() ([]*casdoorsdk.Provider, error) {
 // @Success 200 {array} object.Provider The Response object
 // @router /get-storage-providers [get]
 func (c *ApiController) GetStorageProviders() {
-	// owner := c.Input().Get("owner")
+	if _, ok := c.RequireSignedInUser(); !ok {
+		return
+	}
 
 	providers, err := getStorageProviders()
 	if err != nil {

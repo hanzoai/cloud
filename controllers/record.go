@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"strings"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetRecords
@@ -32,7 +32,10 @@ import (
 // @Success 200 {object} object.Record The Response object
 // @router /get-records [get]
 func (c *ApiController) GetRecords() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -82,7 +85,7 @@ func (c *ApiController) GetRecords() {
 func (c *ApiController) GetRecord() {
 	id := c.Input().Get("id")
 
-	record, err := object.GetRecord(id)
+	record, err := object.GetRecord(id, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -109,7 +112,7 @@ func (c *ApiController) UpdateRecord() {
 		return
 	}
 
-	c.Data["json"] = wrapActionResponse(object.UpdateRecord(id, &record))
+	c.Data["json"] = wrapActionResponse(object.UpdateRecord(id, &record, c.GetAcceptLanguage()))
 	c.ServeJSON()
 }
 
@@ -134,8 +137,11 @@ func (c *ApiController) AddRecord() {
 	if record.UserAgent == "" {
 		record.UserAgent = c.getUserAgent()
 	}
+	if record.Count == 0 {
+		record.Count = 1
+	}
 
-	c.Data["json"] = wrapActionResponse2(object.AddRecord(&record))
+	c.Data["json"] = wrapActionResponse2(object.AddRecord(&record, c.GetAcceptLanguage()))
 	c.ServeJSON()
 }
 
@@ -164,7 +170,7 @@ func (c *ApiController) AddRecords() {
 	}
 
 	if len(records) == 0 {
-		c.ResponseError("No records to add")
+		c.ResponseError(c.T("controllers:No records to add"))
 		return
 	}
 
@@ -178,9 +184,12 @@ func (c *ApiController) AddRecords() {
 		if records[i].UserAgent == "" {
 			records[i].UserAgent = userAgent
 		}
+		if records[i].Count == 0 {
+			records[i].Count = 1
+		}
 	}
 
-	c.Data["json"] = wrapActionResponse2(object.AddRecords(records, syncEnabled))
+	c.Data["json"] = wrapActionResponse2(object.AddRecords(records, syncEnabled, c.GetAcceptLanguage()))
 	c.ServeJSON()
 }
 

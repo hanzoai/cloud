@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,11 +22,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/beego/beego/context"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/util"
 )
 
 var frontendBaseDir = conf.GetConfigString("frontendBaseDir")
@@ -66,11 +67,24 @@ func StaticFilter(ctx *context.Context) {
 	}
 
 	if strings.HasPrefix(urlPath, "/storage") {
-		ctx.Output.Header("Access-Control-Allow-Origin", "*")
-		ctx.Output.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE")
-		ctx.Output.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		// Check if user is authenticated
+		user := GetSessionUser(ctx)
+		if user == nil {
+			responseError(ctx, "auth:Unauthorized operation")
+			return
+		}
 
-		urlPath = strings.TrimPrefix(urlPath, "/storage/")
+		ctx.Output.Header(headerAllowOrigin, "*")
+		ctx.Output.Header(headerAllowMethods, "POST, GET, OPTIONS, DELETE")
+		ctx.Output.Header(headerAllowHeaders, "Content-Type, Authorization")
+		ctx.Output.Header(headerAllowCredentials, "true")
+
+		if runtime.GOOS == "windows" {
+			urlPath = strings.TrimPrefix(urlPath, "/storage/")
+		} else {
+			urlPath = strings.TrimPrefix(urlPath, "/storage")
+		}
+
 		urlPath = strings.Replace(urlPath, "|", ":", 1)
 		makeGzipResponse(ctx.ResponseWriter, ctx.Request, urlPath)
 		return
@@ -139,10 +153,10 @@ func serveFileWithReplace(w http.ResponseWriter, r *http.Request, path string) {
 	oldContent := util.ReadStringFromPath(path)
 	newContent := oldContent
 
-	serverUrl := conf.GetConfigString("casdoorEndpoint")
+	serverUrl := conf.GetConfigString("iamEndpoint")
 	clientId := conf.GetConfigString("clientId")
-	appName := conf.GetConfigString("casdoorApplication")
-	organizationName := conf.GetConfigString("casdoorOrganization")
+	appName := conf.GetConfigString("iamApplication")
+	organizationName := conf.GetConfigString("iamOrganization")
 
 	newContent = regexp.MustCompile(`serverUrl:"[^"]*"`).ReplaceAllString(newContent, fmt.Sprintf(`serverUrl:"%s"`, serverUrl))
 	newContent = regexp.MustCompile(`clientId:"[^"]*"`).ReplaceAllString(newContent, fmt.Sprintf(`clientId:"%s"`, clientId))

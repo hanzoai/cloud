@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import React from "react";
-import FileTreePage from "./FileTreePage";
 import {Redirect} from "react-router-dom";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as Setting from "./Setting";
@@ -35,7 +34,7 @@ class HomePage extends React.Component {
   }
 
   getStore() {
-    StoreBackend.getStore("admin", "_casibase_default_store_")
+    StoreBackend.getStore("admin", "_cloud_default_store_")
       .then((res) => {
         if (res.status === "ok") {
           if (res.data && typeof res.data2 === "string" && res.data2 !== "") {
@@ -68,11 +67,11 @@ class HomePage extends React.Component {
       if (this.state.store === null) {
         return null;
       } else {
-        if (this.props.account.name === "admin" || this.props.account.type === "chat-admin") {
+        if (Setting.canViewAllUsers(this.props.account)) {
           return <UsagePage account={this.props.account} />;
         }
 
-        return <FileTreePage account={this.props.account} storeName={this.state.store.name} />;
+        return <ChatPage account={this.props.account} />;
       }
     }
   }

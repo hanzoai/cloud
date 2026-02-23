@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 )
 
-// //go:embed locales/*/data.json
+//go:embed locales/*/data.json
 var f embed.FS
 
 var langMap = make(map[string]map[string]map[string]string) // for example : langMap[en][account][Invalid information] = Invalid information
@@ -84,7 +84,8 @@ func Translate(language string, errorText string) string {
 	if langMap[language] == nil {
 		file, err := f.ReadFile(fmt.Sprintf("locales/%s/data.json", language))
 		if err != nil {
-			return fmt.Sprintf("Translate error: the language \"%s\" is not supported, err = %s", language, err.Error())
+			return Translate("en", errorText)
+			// return fmt.Sprintf("Translate error: the language \"%s\" is not supported, err = %s", language, err.Error())
 		}
 
 		data := I18nData{}

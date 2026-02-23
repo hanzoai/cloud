@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package model
 import (
 	"fmt"
 	"io"
+
+	"github.com/hanzoai/cloud/i18n"
 )
 
 type DeepSeekProvider struct {
@@ -39,18 +41,18 @@ func (p *DeepSeekProvider) GetPricing() string {
 	return `URL:
 https://api-docs.deepseek.com/zh-cn/quick_start/pricing
 
-| Model    | sub-type          | Input Price per 1M tokens | Output Price per 1M tokens |
-| -------- | ----------------- | ------------------------- | -------------------------- |
-| deepseek | deepseek-chat     | 0.5 yuan                  | 12 yuan                    |
-| deepseek | deepseek-reasoner | 0.5 yuan                  | 12 yuan                    |
+| Model            | sub-type           | Input Price per 1K characters    | Output Price per 1K characters |
+|------------------|--------------------|----------------------------------|--------------------------------|
+| deepseek-V3.2    | deepseek-chat      | 0.002 yuan/1,000 tokens          | 0.003 yuan/1,000 tokens        |
+| deepseek-V3.2    | deepseek-reasoner  | 0.002 yuan/1,000 tokens          | 0.003 yuan/1,000 tokens        |
 `
 }
 
-func (p *DeepSeekProvider) calculatePrice(modelResult *ModelResult) error {
+func (p *DeepSeekProvider) calculatePrice(modelResult *ModelResult, lang string) error {
 	price := 0.0
 	priceTable := map[string][2]float64{
-		"deepseek-chat":     {0.005, 0.012},
-		"deepseek-reasoner": {0.005, 0.012},
+		"deepseek-chat":     {0.002, 0.003},
+		"deepseek-reasoner": {0.002, 0.003},
 	}
 
 	if priceItem, ok := priceTable[p.subType]; ok {
@@ -58,7 +60,7 @@ func (p *DeepSeekProvider) calculatePrice(modelResult *ModelResult) error {
 		outputPrice := getPrice(modelResult.TotalTokenCount, priceItem[1])
 		price = inputPrice + outputPrice
 	} else {
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", p.subType)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), p.subType)
 	}
 
 	modelResult.TotalPrice = price
@@ -66,7 +68,7 @@ func (p *DeepSeekProvider) calculatePrice(modelResult *ModelResult) error {
 	return nil
 }
 
-func (p *DeepSeekProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *DeepSeekProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	const BaseUrl = "https://api.deepseek.com/v1"
 
 	var localType string
@@ -80,12 +82,12 @@ func (p *DeepSeekProvider) QueryText(question string, writer io.Writer, history 
 		return nil, err
 	}
 
-	modelResult, err := localProvider.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo)
+	modelResult, err := localProvider.QueryText(question, writer, history, prompt, knowledgeMessages, agentInfo, lang)
 	if err != nil {
 		return nil, err
 	}
 
-	err = p.calculatePrice(modelResult)
+	err = p.calculatePrice(modelResult, lang)
 	if err != nil {
 		return nil, err
 	}

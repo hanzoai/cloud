@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 package object
 
 import (
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -23,8 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/casibase/casibase/txt"
-	"github.com/casibase/casibase/util"
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/txt"
+	"github.com/hanzoai/cloud/util"
 )
 
 type TxtLabel struct {
@@ -35,7 +35,7 @@ type TxtLabel struct {
 	Text      string  `xorm:"varchar(100)" json:"text"`
 }
 
-func getImportedVideos2(path string) ([]*Video, error) {
+func getImportedVideos2(path string, lang string) ([]*Video, error) {
 	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func getImportedVideos2(path string) ([]*Video, error) {
 		}
 
 		filePath := filepath.Join(path, file.Name())
-		video, err := parseVideoFile2(filePath)
+		video, err := parseVideoFile2(filePath, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -132,8 +132,8 @@ func timeInSeconds(parts []string) (float64, error) {
 	return totalSeconds, nil
 }
 
-func parseVideoFile2(filePath string) (*Video, error) {
-	content, err := txt.GetTextFromDocx(filePath)
+func parseVideoFile2(filePath string, lang string) (*Video, error) {
+	content, err := txt.GetTextFromDocx(filePath, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func parseVideoFile2(filePath string) (*Video, error) {
 	}
 
 	for _, label := range labels {
-		fmt.Printf("%v\n", label)
+		logs.Info("%v", label)
 	}
 
 	video.CreatedTime = util.GetCurrentTime()
@@ -181,14 +181,14 @@ func parseVideoFile2(filePath string) (*Video, error) {
 	return video, nil
 }
 
-func importVideos2(path string) error {
-	videos, err := getImportedVideos2(path)
+func importVideos2(path string, lang string) error {
+	videos, err := getImportedVideos2(path, lang)
 	if err != nil {
 		return err
 	}
 
 	for i, video := range videos {
-		fmt.Printf("[%d] Add video: %v\n", i, video)
+		logs.Info("[%d] Add video: %v", i, video)
 		_, err = AddVideo(video)
 		if err != nil {
 			return err

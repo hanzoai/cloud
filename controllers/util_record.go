@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,15 +17,16 @@ package controllers
 import (
 	"fmt"
 
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
-func addRecord(c *ApiController, userName string, requestUri string) error {
+func addRecord(c *ApiController, userName string, requestUri string, lang string) error {
 	record, err := object.NewRecord(c.Ctx)
 	if err != nil {
-		return fmt.Errorf("NewRecord() error: %s\n", err.Error())
+		return fmt.Errorf(i18n.Translate(lang, "NewRecord() error: %s\n"), err.Error())
 	}
 
 	record.User = userName
@@ -33,19 +34,22 @@ func addRecord(c *ApiController, userName string, requestUri string) error {
 		record.RequestUri = requestUri
 	}
 
-	record.Organization = conf.GetConfigString("casdoorOrganization")
+	record.Organization = conf.GetConfigString("iamOrganization")
 
-	_, _, err = object.AddRecord(record)
+	_, _, err = object.AddRecord(record, c.GetAcceptLanguage())
 	return err
 }
 
-func addRecordForFile(c *ApiController, userName string, action string, sessionId string, key string, filename string, isLeaf bool) error {
+func addRecordForFile(c *ApiController, userName string, action string, sessionId string, key string, filename string, isLeaf bool, lang string) error {
 	typ := "Folder"
 	if isLeaf {
 		typ = "File"
 	}
 
-	_, storeName := util.GetOwnerAndNameFromId(sessionId)
+	_, storeName, err := util.GetOwnerAndNameFromIdWithError(sessionId)
+	if err != nil {
+		return err
+	}
 
 	path := fmt.Sprintf("/%s/%s", key, filename)
 	if filename == "" {
@@ -53,6 +57,6 @@ func addRecordForFile(c *ApiController, userName string, action string, sessionI
 	}
 
 	text := fmt.Sprintf("%s%s, Session: %s, Path: %s", action, typ, storeName, path)
-	err := addRecord(c, userName, text)
+	err = addRecord(c, userName, text, lang)
 	return err
 }

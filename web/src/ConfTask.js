@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2024 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export const TaskMode = "Labeling";
-
-export const SubjectOptions = [];
-
-export const TopicOptions = [];
-
-export const GradeOptions = [];
-
-export const ResultOptions = [];
-
-export const ActivityOptions = [];
-
+export const TaskMode = "PBL";
 export const TaskText = "";

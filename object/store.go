@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,23 +16,25 @@ package object
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/casibase/casibase/storage"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/storage"
+	"github.com/hanzoai/cloud/util"
 	"xorm.io/core"
 )
 
-type File struct {
-	Key         string  `xorm:"varchar(100)" json:"key"`
-	Title       string  `xorm:"varchar(100)" json:"title"`
-	Size        int64   `json:"size"`
-	CreatedTime string  `xorm:"varchar(100)" json:"createdTime"`
-	IsLeaf      bool    `json:"isLeaf"`
-	Url         string  `xorm:"varchar(255)" json:"url"`
-	Children    []*File `xorm:"varchar(1000)" json:"children"`
+type TreeFile struct {
+	Key         string      `xorm:"varchar(100)" json:"key"`
+	Title       string      `xorm:"varchar(100)" json:"title"`
+	Size        int64       `json:"size"`
+	CreatedTime string      `xorm:"varchar(100)" json:"createdTime"`
+	IsLeaf      bool        `json:"isLeaf"`
+	Url         string      `xorm:"varchar(255)" json:"url"`
+	Children    []*TreeFile `xorm:"varchar(1000)" json:"children"`
 
-	ChildrenMap map[string]*File `xorm:"-" json:"-"`
+	ChildrenMap map[string]*TreeFile `xorm:"-" json:"-"`
 }
 
 type Properties struct {
@@ -46,7 +48,7 @@ type UsageInfo struct {
 	StartTime  time.Time `xorm:"created" json:"startTime"`
 }
 
-type Prompt struct {
+type ExampleQuestion struct {
 	Title string `json:"title"`
 	Text  string `json:"text"`
 	Image string `json:"image"`
@@ -58,47 +60,52 @@ type Store struct {
 	CreatedTime string `xorm:"varchar(100)" json:"createdTime"`
 	DisplayName string `xorm:"varchar(100)" json:"displayName"`
 
-	StorageProvider      string `xorm:"varchar(100)" json:"storageProvider"`
-	StorageSubpath       string `xorm:"varchar(100)" json:"storageSubpath"`
-	ImageProvider        string `xorm:"varchar(100)" json:"imageProvider"`
-	SplitProvider        string `xorm:"varchar(100)" json:"splitProvider"`
-	SearchProvider       string `xorm:"varchar(100)" json:"searchProvider"`
-	ModelProvider        string `xorm:"varchar(100)" json:"modelProvider"`
-	EmbeddingProvider    string `xorm:"varchar(100)" json:"embeddingProvider"`
-	TextToSpeechProvider string `xorm:"varchar(100)" json:"textToSpeechProvider"`
-	EnableTtsStreaming   bool   `xorm:"bool" json:"enableTtsStreaming"`
-	SpeechToTextProvider string `xorm:"varchar(100)" json:"speechToTextProvider"`
-	AgentProvider        string `xorm:"varchar(100)" json:"agentProvider"`
-	VectorStoreId        string `xorm:"varchar(100)" json:"vectorStoreId"`
+	StorageProvider      string   `xorm:"varchar(100)" json:"storageProvider"`
+	StorageSubpath       string   `xorm:"varchar(100)" json:"storageSubpath"`
+	ImageProvider        string   `xorm:"varchar(100)" json:"imageProvider"`
+	SplitProvider        string   `xorm:"varchar(100)" json:"splitProvider"`
+	SearchProvider       string   `xorm:"varchar(100)" json:"searchProvider"`
+	ModelProvider        string   `xorm:"varchar(100)" json:"modelProvider"`
+	EmbeddingProvider    string   `xorm:"varchar(100)" json:"embeddingProvider"`
+	TextToSpeechProvider string   `xorm:"varchar(100)" json:"textToSpeechProvider"`
+	EnableTtsStreaming   bool     `xorm:"bool" json:"enableTtsStreaming"`
+	SpeechToTextProvider string   `xorm:"varchar(100)" json:"speechToTextProvider"`
+	AgentProvider        string   `xorm:"varchar(100)" json:"agentProvider"`
+	VectorStoreId        string   `xorm:"varchar(100)" json:"vectorStoreId"`
+	BuiltinTools         []string `xorm:"varchar(500)" json:"builtinTools"`
 
-	MemoryLimit         int      `json:"memoryLimit"`
-	Frequency           int      `json:"frequency"`
-	LimitMinutes        int      `json:"limitMinutes"`
-	KnowledgeCount      int      `json:"knowledgeCount"`
-	SuggestionCount     int      `json:"suggestionCount"`
-	Welcome             string   `xorm:"varchar(100)" json:"welcome"`
-	WelcomeTitle        string   `xorm:"varchar(100)" json:"welcomeTitle"`
-	WelcomeText         string   `xorm:"varchar(100)" json:"welcomeText"`
-	Prompt              string   `xorm:"mediumtext" json:"prompt"`
-	Prompts             []Prompt `xorm:"mediumtext" json:"prompts"`
-	ThemeColor          string   `xorm:"varchar(100)" json:"themeColor"`
-	Avatar              string   `xorm:"varchar(200)" json:"avatar"`
-	Title               string   `xorm:"varchar(100)" json:"title"`
-	HtmlTitle           string   `xorm:"varchar(100)" json:"htmlTitle"`
-	FaviconUrl          string   `xorm:"varchar(200)" json:"faviconUrl"`
-	LogoUrl             string   `xorm:"varchar(200)" json:"logoUrl"`
-	FooterHtml          string   `xorm:"mediumtext" json:"footerHtml"`
-	ChildStores         []string `xorm:"varchar(500)" json:"childStores"`
-	ChildModelProviders []string `xorm:"varchar(500)" json:"childModelProviders"`
-	ShowAutoRead        bool     `json:"showAutoRead"`
-	DisableFileUpload   bool     `json:"disableFileUpload"`
-	IsDefault           bool     `json:"isDefault"`
-	State               string   `xorm:"varchar(100)" json:"state"`
+	MemoryLimit         int               `json:"memoryLimit"`
+	Frequency           int               `json:"frequency"`
+	LimitMinutes        int               `json:"limitMinutes"`
+	KnowledgeCount      int               `json:"knowledgeCount"`
+	SuggestionCount     int               `json:"suggestionCount"`
+	Welcome             string            `xorm:"varchar(100)" json:"welcome"`
+	WelcomeTitle        string            `xorm:"varchar(100)" json:"welcomeTitle"`
+	WelcomeText         string            `xorm:"varchar(100)" json:"welcomeText"`
+	Prompt              string            `xorm:"mediumtext" json:"prompt"`
+	ExampleQuestions    []ExampleQuestion `xorm:"mediumtext" json:"exampleQuestions"`
+	ThemeColor          string            `xorm:"varchar(100)" json:"themeColor"`
+	Avatar              string            `xorm:"varchar(200)" json:"avatar"`
+	Title               string            `xorm:"varchar(100)" json:"title"`
+	HtmlTitle           string            `xorm:"varchar(100)" json:"htmlTitle"`
+	FaviconUrl          string            `xorm:"varchar(200)" json:"faviconUrl"`
+	LogoUrl             string            `xorm:"varchar(200)" json:"logoUrl"`
+	FooterHtml          string            `xorm:"mediumtext" json:"footerHtml"`
+	NavItems            []string          `xorm:"text" json:"navItems"`
+	VectorStores        []string          `xorm:"mediumtext" json:"vectorStores"`
+	ChildStores         []string          `xorm:"mediumtext" json:"childStores"`
+	ChildModelProviders []string          `xorm:"mediumtext" json:"childModelProviders"`
+	ForbiddenWords      []string          `xorm:"text" json:"forbiddenWords"`
+	ShowAutoRead        bool              `json:"showAutoRead"`
+	DisableFileUpload   bool              `json:"disableFileUpload"`
+	HideThinking        bool              `json:"hideThinking"`
+	IsDefault           bool              `json:"isDefault"`
+	State               string            `xorm:"varchar(100)" json:"state"`
 
 	ChatCount    int `xorm:"-" json:"chatCount"`
 	MessageCount int `xorm:"-" json:"messageCount"`
 
-	FileTree      *File                  `xorm:"mediumtext" json:"fileTree"`
+	FileTree      *TreeFile              `xorm:"mediumtext" json:"fileTree"`
 	PropertiesMap map[string]*Properties `xorm:"mediumtext" json:"propertiesMap"`
 }
 
@@ -156,19 +163,25 @@ func getStore(owner string, name string) (*Store, error) {
 
 	if existed {
 		return &store, nil
-	} else {
-		return nil, nil
 	}
+
+	return nil, nil
 }
 
 func GetStore(id string) (*Store, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getStore(owner, name)
 }
 
 func UpdateStore(id string, store *Store) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
-	_, err := getStore(owner, name)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
+	_, err = getStore(owner, name)
 	if err != nil {
 		return false, err
 	}
@@ -207,7 +220,7 @@ func (store *Store) GetId() string {
 	return fmt.Sprintf("%s/%s", store.Owner, store.Name)
 }
 
-func (store *Store) GetStorageProviderObj() (storage.StorageProvider, error) {
+func (store *Store) GetStorageProviderObj(lang string) (storage.StorageProvider, error) {
 	var provider *Provider
 	var err error
 	if store.StorageProvider == "" {
@@ -222,12 +235,12 @@ func (store *Store) GetStorageProviderObj() (storage.StorageProvider, error) {
 
 	var storageProvider storage.StorageProvider
 	if provider != nil {
-		storageProvider, err = provider.GetStorageProviderObj(store.VectorStoreId)
+		storageProvider, err = provider.GetStorageProviderObj(store.VectorStoreId, lang)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		storageProvider, err = storage.NewCasdoorProvider(store.StorageProvider)
+		storageProvider, err = storage.NewIamProvider(store.StorageProvider, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -236,12 +249,12 @@ func (store *Store) GetStorageProviderObj() (storage.StorageProvider, error) {
 	return NewSubpathStorageProvider(storageProvider, store.StorageSubpath), nil
 }
 
-func (store *Store) GetImageProviderObj() (storage.StorageProvider, error) {
+func (store *Store) GetImageProviderObj(lang string) (storage.StorageProvider, error) {
 	if store.ImageProvider == "" {
-		return nil, fmt.Errorf("The image provider for store: %s should not be empty", store.GetId())
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:The image provider for store: %s should not be empty"), store.GetId())
 	}
 
-	return storage.NewCasdoorProvider(store.ImageProvider)
+	return storage.NewIamProvider(store.ImageProvider, lang)
 }
 
 func (store *Store) GetModelProvider() (*Provider, error) {
@@ -280,8 +293,8 @@ func (store *Store) GetEmbeddingProvider() (*Provider, error) {
 	return GetProvider(providerId)
 }
 
-func RefreshStoreVectors(store *Store) (bool, error) {
-	storageProviderObj, err := store.GetStorageProviderObj()
+func RefreshStoreVectors(store *Store, lang string) (bool, error) {
+	storageProviderObj, err := store.GetStorageProviderObj(lang)
 	if err != nil {
 		return false, err
 	}
@@ -291,7 +304,7 @@ func RefreshStoreVectors(store *Store) (bool, error) {
 		return false, err
 	}
 	if modelProvider == nil {
-		return false, fmt.Errorf("The model provider for store: %s is not found", store.GetId())
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
 	}
 
 	embeddingProvider, err := store.GetEmbeddingProvider()
@@ -299,25 +312,96 @@ func RefreshStoreVectors(store *Store) (bool, error) {
 		return false, err
 	}
 	if embeddingProvider == nil {
-		return false, fmt.Errorf("The embedding provider for store: %s is not found", store.GetId())
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The embedding provider for store: %s is not found"), store.GetId())
 	}
 
-	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider()
+	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider(lang)
 	if err != nil {
 		return false, err
 	}
 
-	ok, err := addVectorsForStore(storageProviderObj, embeddingProviderObj, "", store.Name, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType)
+	err = UpdateFilesStatusByStore(store.Owner, store.Name, FileStatusPending)
+	if err != nil {
+		return false, err
+	}
+
+	_, err = DeleteVectorsByStore(store.Owner, store.Name)
+	if err != nil {
+		return false, err
+	}
+
+	ok, err := addVectorsForStore(storageProviderObj, embeddingProviderObj, "", store.Owner, store.Name, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
 	return ok, err
 }
 
-func refreshVector(vector *Vector) (bool, error) {
-	_, embeddingProviderObj, err := getEmbeddingProviderFromName("admin", vector.Provider)
+func AddVectorsForFile(store *Store, fileName string, fileUrl string, lang string) (bool, error) {
+	modelProvider, err := store.GetModelProvider()
+	if err != nil {
+		return false, err
+	}
+	if modelProvider == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The model provider for store: %s is not found"), store.GetId())
+	}
+
+	embeddingProvider, err := store.GetEmbeddingProvider()
+	if err != nil {
+		return false, err
+	}
+	if embeddingProvider == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The embedding provider for store: %s is not found"), store.GetId())
+	}
+
+	embeddingProviderObj, err := embeddingProvider.GetEmbeddingProvider(lang)
 	if err != nil {
 		return false, err
 	}
 
-	data, _, err := queryVectorSafe(embeddingProviderObj, vector.Text)
+	ok, err := withFileStatus(store.Owner, store.Name, fileName, func() (bool, int, error) {
+		return addVectorsForFile(embeddingProviderObj, store.Name, fileName, fileUrl, store.SplitProvider, embeddingProvider.Name, modelProvider.SubType, lang)
+	})
+
+	return ok, err
+}
+
+func RefreshFileVectors(file *File, lang string) (bool, error) {
+	store, err := getStore(file.Owner, file.Store)
+	if err != nil {
+		return false, err
+	}
+	if store == nil {
+		return false, fmt.Errorf(i18n.Translate(lang, "account:The store: %s is not found"), file.Store)
+	}
+
+	var objectKey string
+	prefix := fmt.Sprintf("%s_", file.Store)
+	if strings.HasPrefix(file.Name, prefix) {
+		objectKey = strings.TrimPrefix(file.Name, prefix)
+	} else {
+		objectKey = file.Name
+	}
+	if objectKey == "" {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The file: %s is not found"), file.Name)
+	}
+
+	if file.Url == "" {
+		return false, fmt.Errorf(i18n.Translate(lang, "object:The file URL for: %s is empty"), file.Name)
+	}
+
+	_, err = DeleteVectorsByFile(store.Owner, store.Name, objectKey)
+	if err != nil {
+		return false, err
+	}
+
+	return AddVectorsForFile(store, objectKey, file.Url, lang)
+}
+
+func refreshVector(vector *Vector, lang string) (bool, error) {
+	_, embeddingProviderObj, err := getEmbeddingProviderFromName("admin", vector.Provider, lang)
+	if err != nil {
+		return false, err
+	}
+
+	data, _, err := queryVectorSafe(embeddingProviderObj, vector.Text, lang)
 	if err != nil {
 		return false, err
 	}
@@ -356,4 +440,22 @@ func GetPaginationStores(offset, limit int, name, field, value, sortField, sortO
 	}
 
 	return stores, nil
+}
+
+func (store *Store) ContainsForbiddenWords(text string) (bool, string) {
+	if store.ForbiddenWords == nil || len(store.ForbiddenWords) == 0 {
+		return false, ""
+	}
+
+	lowerText := strings.ToLower(text)
+	for _, forbiddenWord := range store.ForbiddenWords {
+		if forbiddenWord == "" {
+			continue
+		}
+		lowerForbiddenWord := strings.ToLower(forbiddenWord)
+		if strings.Contains(lowerText, lowerForbiddenWord) {
+			return true, forbiddenWord
+		}
+	}
+	return false, ""
 }

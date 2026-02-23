@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,10 @@ import (
 	"sync"
 	"time"
 
-	dashscopego "github.com/casibase/dashscope-go-sdk"
+	dashscopego "github.com/hanzoai/dashscope-go-sdk"
 
-	"github.com/casibase/dashscope-go-sdk/paraformer"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/dashscope-go-sdk/paraformer"
 )
 
 type AlibabacloudSpeechToTextProvider struct {
@@ -88,7 +89,7 @@ func getFullTranscript(completedSegments []*SpeechSegment, currentSegment *Speec
 }
 
 // ProcessAudio processes an audio stream and returns the transcribed text
-func (p *AlibabacloudSpeechToTextProvider) ProcessAudio(audioReader io.Reader, ctx context.Context) (string, *SpeechToTextResult, error) {
+func (p *AlibabacloudSpeechToTextProvider) ProcessAudio(audioReader io.Reader, ctx context.Context, lang string) (string, *SpeechToTextResult, error) {
 	res := &SpeechToTextResult{
 		AudioDurationSeconds: 0,
 		Price:                0.0,
@@ -231,7 +232,7 @@ func (p *AlibabacloudSpeechToTextProvider) ProcessAudio(audioReader io.Reader, c
 			}
 
 			mutex.Lock()
-			recognitionError = fmt.Errorf("API error: %s", message)
+			recognitionError = fmt.Errorf(i18n.Translate(lang, "stt:API error: %s"), message)
 			recognitionDone = true
 			mutex.Unlock()
 
@@ -324,7 +325,7 @@ func (p *AlibabacloudSpeechToTextProvider) ProcessAudio(audioReader io.Reader, c
 
 		case err := <-apiCallDone:
 			if err != nil {
-				return "", res, fmt.Errorf("speech recognition API error: %v", err)
+				return "", res, fmt.Errorf(i18n.Translate(lang, "stt:speech recognition API error: %v"), err)
 			}
 			apiCallCompleted = true
 			timeoutTimer.Reset(waitAfterAPICallTime)
@@ -366,7 +367,7 @@ func (p *AlibabacloudSpeechToTextProvider) ProcessAudio(audioReader io.Reader, c
 				return fullTranscript, res, nil
 			}
 
-			return "", res, fmt.Errorf("speech recognition timed out after %v seconds", timeout.Seconds())
+			return "", res, fmt.Errorf(i18n.Translate(lang, "stt:speech recognition timed out after %v seconds"), timeout.Seconds())
 		}
 	}
 }

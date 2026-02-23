@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ const demoModeCallback = (res) => {
         okText: i18next.t("general:OK"),
         cancelText: i18next.t("general:Cancel"),
         onOk() {
-          Setting.openLink(`https://demo.casibase.com${location.pathname}${location.search}?username=built-in/admin&password=123`);
+          Setting.openLink(`https://demo.cloud.hanzo.ai${location.pathname}${location.search}?username=built-in/admin&password=123`);
         },
         onCancel() {},
       });

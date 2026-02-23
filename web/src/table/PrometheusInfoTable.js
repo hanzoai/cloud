@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,12 +36,12 @@ class PrometheusInfoTable extends React.Component {
         key: "method",
       },
       {
-        title: i18next.t("system:Count"),
+        title: i18next.t("general:Count"),
         dataIndex: "count",
         key: "count",
       },
       {
-        title: i18next.t("system:Latency") + "(ms)",
+        title: i18next.t("scan:Latency") + "(ms)",
         dataIndex: "latency",
         key: "latency",
       },

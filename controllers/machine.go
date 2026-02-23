@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetMachines
@@ -31,7 +31,10 @@ import (
 // @Success 200 {object} object.Machine The Response object
 // @router /get-machines [get]
 func (c *ApiController) GetMachines() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -39,7 +42,7 @@ func (c *ApiController) GetMachines() {
 	sortField := c.Input().Get("sortField")
 	sortOrder := c.Input().Get("sortOrder")
 
-	_, err := object.SyncMachinesCloud(owner)
+	_, err := object.SyncMachinesCloud(owner, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -82,8 +85,12 @@ func (c *ApiController) GetMachines() {
 func (c *ApiController) GetMachine() {
 	id := c.Input().Get("id")
 
-	owner, _ := util.GetOwnerAndNameFromId(id)
-	_, err := object.SyncMachinesCloud(owner)
+	owner, _, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	_, err = object.SyncMachinesCloud(owner, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

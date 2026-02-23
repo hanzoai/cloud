@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzoai/cloud/i18n"
 )
 
 type Activity struct {
@@ -57,7 +59,7 @@ func getTargetfieldValue(record *Record, fieldName string) (string, error) {
 	return "", errors.New("no matched field")
 }
 
-func GetActivities(days int, user string, fieldNames []string) (map[string][]*Activity, error) {
+func GetActivities(days int, user string, fieldNames []string, lang string) (map[string][]*Activity, error) {
 	records, err := getAllRecords()
 	if err != nil {
 		return nil, err
@@ -98,7 +100,7 @@ func GetActivities(days int, user string, fieldNames []string) (map[string][]*Ac
 		for _, fieldName := range fieldNames {
 			value, err := getTargetfieldValue(record, fieldName)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse record: name %s, field %s, error: %v", record.Name, fieldName, err)
+				return nil, fmt.Errorf(i18n.Translate(lang, "object:failed to parse record: name %s, field %s, error: %v"), record.Name, fieldName, err)
 			}
 
 			if value != "" {

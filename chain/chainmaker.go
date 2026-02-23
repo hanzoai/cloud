@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,9 +58,9 @@ func newChainChainmakerClient(nodeAddr, authType, orgId, chainId, chainmakerEndp
 	}, nil
 }
 
-func (client *ChainChainmakerClient) Commit(data string) (string, string, string, error) {
+func (client *ChainChainmakerClient) Commit(data string, lang string) (string, string, string, error) {
 	client.Data = data
-	response, err := SendChainmakerRequest(client, "invoke-contract")
+	response, err := SendChainmakerRequest(client, "invoke-contract", lang)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -68,9 +68,9 @@ func (client *ChainChainmakerClient) Commit(data string) (string, string, string
 	return response.Block, response.TxId, response.BlockHash, nil
 }
 
-func (client *ChainChainmakerClient) Query(txId string, data string) (string, error) {
+func (client *ChainChainmakerClient) Query(txId string, data string, lang string) (string, error) {
 	client.TxId = txId
-	queryResult, err := SendChainmakerRequest(client, "query-contract")
+	queryResult, err := SendChainmakerRequest(client, "query-contract", lang)
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +78,7 @@ func (client *ChainChainmakerClient) Query(txId string, data string) (string, er
 	blockId := queryResult.Block
 	chainData := queryResult.Result
 
-	data, err = normalizeChainData(data)
+	data, err = normalizeChainData(data, lang)
 	if err != nil {
 		return "", err
 	}

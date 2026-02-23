@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2024 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ class TagTable extends React.Component {
   }
 
   getQuestion(task, example) {
-    return `${task.text.replace("{example}", example).replace("{labels}", task.labels.map(label => `"${label}"`).join(", "))}`;
+    return `${task.scale.replace("{example}", example).replace("{labels}", task.labels.map(label => `"${label}"`).join(", "))}`;
   }
 
   trimAnswer(s) {

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ func ReadGlobalConfigTokens() []string {
 		return nil
 	}
 
-	path := "C:/casibase_data/config.txt"
+	path := "C:/cloud_data/config.txt"
 	if !FileExist(path) {
 		return nil
 	}
@@ -98,17 +98,17 @@ func GetConfigString(key string) string {
 	res := beego.AppConfig.String(key)
 	if res == "" {
 		if key == "staticBaseUrl" {
-			res = "https://cdn.casibase.org"
+			res = "https://cdn.hanzo.ai"
 		} else if key == "logConfig" {
-			res = "{\"filename\": \"logs/casibase.log\", \"maxdays\":99999, \"perm\":\"0770\"}"
+			res = "{\"filename\": \"logs/cloud.log\", \"maxdays\":99999, \"perm\":\"0770\"}"
 		} else if key == "avatarErrorUrl" {
-			res = "https://cdn.casibase.org/gravatar/error.png"
+			res = "https://cdn.hanzo.ai/gravatar/error.png"
 		}
 	}
 
 	if key == "staticBaseUrl" {
-		if strings.HasSuffix(beego.AppConfig.String("casdoorEndpoint"), ".casdoor.net") && res == "https://cdn.casibase.org" {
-			res = "https://cdn.casibase.com"
+		if strings.HasSuffix(beego.AppConfig.String("iamEndpoint"), ".hanzo.ai") && res == "https://cdn.hanzo.ai" {
+			res = "https://cdn.hanzo.ai"
 		}
 	}
 
@@ -194,10 +194,10 @@ func GetStringArray(key string) []string {
 func GetWebConfig() *WebConfig {
 	config := &WebConfig{}
 
-	config.AuthConfig.ServerUrl = GetConfigString("casdoorEndpoint")
+	config.AuthConfig.ServerUrl = GetConfigString("iamEndpoint")
 	config.AuthConfig.ClientId = GetConfigString("clientId")
-	config.AuthConfig.AppName = GetConfigString("casdoorApplication")
-	config.AuthConfig.OrganizationName = GetConfigString("casdoorOrganization")
+	config.AuthConfig.AppName = GetConfigString("iamApplication")
+	config.AuthConfig.OrganizationName = GetConfigString("iamOrganization")
 	config.AuthConfig.RedirectPath = GetConfigString("redirectPath")
 
 	config.EnableExtraPages = GetConfigBool("enableExtraPages")

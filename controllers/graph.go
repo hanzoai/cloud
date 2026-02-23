@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalGraphs
@@ -46,7 +46,10 @@ func (c *ApiController) GetGlobalGraphs() {
 // @Success 200 {array} object.Graph The Response object
 // @router /get-graphs [get]
 func (c *ApiController) GetGraphs() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -94,6 +97,15 @@ func (c *ApiController) GetGraph() {
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
+	}
+
+	// Auto-generate data for Chats category if Text is empty
+	if Graph != nil && Graph.Category == "Chats" && Graph.Text == "" {
+		err = c.generateChatGraphData(id, Graph)
+		if err != nil {
+			c.ResponseError(err.Error())
+			return
+		}
 	}
 
 	c.ResponseOk(object.GetMaskedGraph(Graph, true))

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import {DeleteOutlined, DownloadOutlined, FileDoneOutlined} from "@ant-design/ic
 import * as Setting from "../Setting";
 import i18next from "i18next";
 import * as PermissionUtil from "../PermissionUtil";
-import * as FileBackend from "../backend/FileBackend";
+import * as TreeFileBackend from "../backend/TreeFileBackend";
 
 class FileTable extends React.Component {
   constructor(props) {
@@ -77,7 +77,7 @@ class FileTable extends React.Component {
 
   deleteFile(file, isLeaf) {
     const storeId = `${this.props.store.owner}/${this.props.store.name}`;
-    FileBackend.deleteFile(storeId, file.key, isLeaf)
+    TreeFileBackend.deleteFile(storeId, file.key, isLeaf)
       .then((res) => {
         if (res.status === "ok") {
           if (res.data === true) {
@@ -108,7 +108,7 @@ class FileTable extends React.Component {
         },
       },
       {
-        title: i18next.t("provider:Category"),
+        title: i18next.t("general:Category"),
         dataIndex: "isLeaf",
         key: "isLeaf",
         width: "110px",
@@ -227,7 +227,7 @@ class FileTable extends React.Component {
                 files.forEach((file, index) => {
                   fileKeys.push(file.key);
                 });
-                PermissionUtil.addPermission(this.props.account, this.props.store, null, fileKeys);
+                PermissionUtil.addPermission(this.props.account, this.props.store, true, null, fileKeys);
               }}>{i18next.t("store:Add Permission")}</Button>
             </div>
           );

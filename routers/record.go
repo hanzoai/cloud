@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors.. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc.. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
 package routers
 
 import (
-	"fmt"
-
 	"github.com/beego/beego/context"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 func RecordMessage(ctx *context.Context) {
@@ -34,14 +33,18 @@ func RecordMessage(ctx *context.Context) {
 func AfterRecordMessage(ctx *context.Context) {
 	record, err := object.NewRecord(ctx)
 	if err != nil {
-		fmt.Printf("AfterRecordMessage() error: %s\n", err.Error())
+		logs.Error("AfterRecordMessage() error: %s", err.Error())
 		return
 	}
 
 	userId := ctx.Input.Params()["recordUserId"]
 	if userId != "" {
-		record.Organization, record.User = util.GetOwnerAndNameFromId(userId)
+		organization, user, err := util.GetOwnerAndNameFromIdWithError(userId)
+		if err != nil {
+			panic(err)
+		}
+		record.Organization, record.User = organization, user
 	}
 
-	object.AddRecord(record)
+	object.AddRecord(record, "en")
 }

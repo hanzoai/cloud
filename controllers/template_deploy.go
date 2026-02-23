@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 package controllers
 
 import (
-	"github.com/casibase/casibase/object"
+	"github.com/hanzoai/cloud/object"
 )
 
 // GetK8sStatus
@@ -25,7 +25,7 @@ import (
 // @Success 200 {object} object.K8sStatus The Response object
 // @router /get-k8s-status [get]
 func (c *ApiController) GetK8sStatus() {
-	status, err := object.GetK8sStatus()
+	status, err := object.GetK8sStatus(c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

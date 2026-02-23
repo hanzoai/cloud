@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 )
 
 type I18nData map[string]map[string]string
@@ -52,9 +52,17 @@ func getAllI18nStringsFrontend(fileContent string) []string {
 	return res
 }
 
-func getAllI18nStringsBackend(fileContent string, isObjectPackage bool) []string {
+func getAllI18nStringsBackend(fileContent string, isControllerPackage bool) []string {
 	res := []string{}
-	if isObjectPackage {
+	if isControllerPackage {
+		matches := reI18nBackendController.FindAllStringSubmatch(fileContent, -1)
+		if matches == nil {
+			return res
+		}
+		for _, match := range matches {
+			res = append(res, match[1][1:])
+		}
+	} else {
 		matches := reI18nBackendObject.FindAllStringSubmatch(fileContent, -1)
 		if matches == nil {
 			return res
@@ -62,14 +70,6 @@ func getAllI18nStringsBackend(fileContent string, isObjectPackage bool) []string
 		for _, match := range matches {
 			match := strings.SplitN(match[1], ",", 2)
 			res = append(res, match[1][2:])
-		}
-	} else {
-		matches := reI18nBackendController.FindAllStringSubmatch(fileContent, -1)
-		if matches == nil {
-			return res
-		}
-		for _, match := range matches {
-			res = append(res, match[1][1:])
 		}
 	}
 
@@ -117,8 +117,8 @@ func parseAllWords(category string) *I18nData {
 
 		var words []string
 		if category == "backend" {
-			isObjectPackage := strings.Contains(path, "object")
-			words = getAllI18nStringsBackend(fileContent, isObjectPackage)
+			isControllerPackage := strings.Contains(path, "controller")
+			words = getAllI18nStringsBackend(fileContent, isControllerPackage)
 		} else {
 			words = getAllI18nStringsFrontend(fileContent)
 		}
@@ -141,10 +141,26 @@ func parseAllWords(category string) *I18nData {
 	return &data
 }
 
+// copyI18nData creates a deep copy of an I18nData structure to prevent shared reference issues
+// between language translations. This ensures each language starts with fresh English defaults
+// rather than inheriting values from previously processed languages.
+func copyI18nData(src *I18nData) *I18nData {
+	dst := I18nData{}
+	for namespace, pairs := range *src {
+		dst[namespace] = make(map[string]string)
+		for key, value := range pairs {
+			dst[namespace][key] = value
+		}
+	}
+	return &dst
+}
+
 func applyToOtherLanguage(category string, language string, newData *I18nData) {
 	oldData := readI18nFile(category, language)
 	println(oldData)
 
-	applyData(newData, oldData)
-	writeI18nFile(category, language, newData)
+	// Create a copy of newData to avoid modifying the shared data across languages
+	dataCopy := copyI18nData(newData)
+	applyData(dataCopy, oldData)
+	writeI18nFile(category, language, dataCopy)
 }

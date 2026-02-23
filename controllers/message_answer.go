@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,16 @@
 package controllers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/embedding"
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/agent"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/embedding"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetMessageAnswer
@@ -111,7 +113,7 @@ func (c *ApiController) GetMessageAnswer() {
 
 		question = questionMessage.Text
 
-		question, err = refineQuestionTextViaParsingUrlContent(question)
+		question, err = refineQuestionTextViaParsingUrlContent(question, c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseErrorStream(message, err.Error())
 			return
@@ -142,19 +144,25 @@ func (c *ApiController) GetMessageAnswer() {
 		modelProviderName = chat.ModelProvider
 	}
 
-	modelProvider, modelProviderObj, err := object.GetModelProviderFromContext("admin", modelProviderName)
+	modelProvider, modelProviderObj, err := object.GetModelProviderFromContext("admin", modelProviderName, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
 	}
 
-	embeddingProvider, embeddingProviderObj, err := object.GetEmbeddingProviderFromContext("admin", chat.User2)
+	// Perform dry run to validate user has sufficient balance before expensive operations
+	err = validateTransactionBeforeAIGeneration(message, chat, store, question, modelProvider, modelProviderObj, c.GetAcceptLanguage(), c.ResponseErrorStream)
+	if err != nil {
+		return
+	}
+
+	embeddingProvider, embeddingProviderObj, err := object.GetEmbeddingProviderFromContext("admin", chat.User2, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
 	}
 
-	_, agentProviderObj, err := object.GetAgentProviderFromContext("admin", store.AgentProvider)
+	_, agentProviderObj, err := object.GetAgentProviderFromContext("admin", store.AgentProvider, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
@@ -166,14 +174,20 @@ func (c *ApiController) GetMessageAnswer() {
 		return
 	}
 
+	webSearchEnabled := false
+	if questionMessage != nil {
+		webSearchEnabled = questionMessage.WebSearchEnabled
+	}
+	agentClients = agent.MergeBuiltinAndWebSearchTools(agentClients, store.BuiltinTools, webSearchEnabled)
+
 	knowledgeCount := store.KnowledgeCount
 	if knowledgeCount <= 0 {
 		knowledgeCount = 10
 	}
 
-	knowledge, vectorScores, embeddingResult, err := object.GetNearestKnowledge(store.Name, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, "admin", question, knowledgeCount)
+	knowledge, vectorScores, embeddingResult, err := object.GetNearestKnowledge(store.Name, store.VectorStores, store.SearchProvider, embeddingProvider, embeddingProviderObj, modelProvider, "admin", question, knowledgeCount, c.GetAcceptLanguage())
 	if err != nil && err.Error() != "no knowledge vectors found" {
-		err = fmt.Errorf("object.GetNearestKnowledge() error, %s", err.Error())
+		err = fmt.Errorf(c.T("message_answer:object.GetNearestKnowledge() error, %s"), err.Error())
 		c.ResponseErrorStream(message, err.Error())
 		return
 	}
@@ -181,7 +195,7 @@ func (c *ApiController) GetMessageAnswer() {
 		embeddingResult = &embedding.EmbeddingResult{}
 	}
 
-	writer := &RefinedWriter{*c.Ctx.ResponseWriter, *NewCleaner(6), []byte{}, []byte{}, []byte{}}
+	writer := &RefinedWriter{*c.Ctx.ResponseWriter, *NewCleaner(6), []byte{}, []byte{}, []byte{}, []byte{}, []byte{}}
 
 	if questionMessage != nil {
 		questionMessage.TokenCount = embeddingResult.TokenCount
@@ -210,13 +224,19 @@ func (c *ApiController) GetMessageAnswer() {
 	// fmt.Printf("Refined Question: [%s]\n", realQuestion)
 	fmt.Printf("Answer: [")
 
+	prompt := store.Prompt
 	if modelProvider.Type != "Dummy" && !isReasonModel(modelProvider.SubType) {
-		question, err = getQuestionWithCarriers(question, store.SuggestionCount, chat.NeedTitle)
+		if modelProvider.Type == "Alibaba Cloud" && webSearchEnabled {
+			prompt, err = getPromptWithCarrier(prompt, store.SuggestionCount, chat.NeedTitle)
+		} else {
+			question, err = getQuestionWithCarriers(question, store.SuggestionCount, chat.NeedTitle)
+		}
+		if err != nil {
+			c.ResponseErrorStream(message, err.Error())
+			return
+		}
 	}
-	if err != nil {
-		c.ResponseErrorStream(message, err.Error())
-		return
-	}
+
 	var modelResult *model.ModelResult
 	if agentClients != nil {
 		messages := &model.AgentMessages{
@@ -227,12 +247,12 @@ func (c *ApiController) GetMessageAnswer() {
 			AgentClients:  agentClients,
 			AgentMessages: messages,
 		}
-		modelResult, err = model.QueryTextWithTools(modelProviderObj, question, writer, history, store.Prompt, knowledge, agentInfo)
+		modelResult, err = model.QueryTextWithTools(modelProviderObj, question, writer, history, prompt, knowledge, agentInfo, c.GetAcceptLanguage())
 	} else {
 		if isReasonModel(modelProvider.SubType) {
-			modelResult, err = QueryCarrierText(question, writer, history, store.Prompt, knowledge, modelProviderObj, chat.NeedTitle, store.SuggestionCount)
+			modelResult, err = QueryCarrierText(question, writer, history, prompt, knowledge, modelProviderObj, chat.NeedTitle, store.SuggestionCount, c.GetAcceptLanguage())
 		} else {
-			modelResult, err = modelProviderObj.QueryText(question, writer, history, store.Prompt, knowledge, nil)
+			modelResult, err = modelProviderObj.QueryText(question, writer, history, prompt, knowledge, nil, c.GetAcceptLanguage())
 		}
 	}
 	if err != nil {
@@ -242,6 +262,13 @@ func (c *ApiController) GetMessageAnswer() {
 		}
 		c.ResponseErrorStream(message, err.Error())
 		return
+	}
+
+	if len(vectorScores) > 0 {
+		bytes, err := json.Marshal(vectorScores)
+		if err == nil {
+			_, _ = c.Ctx.ResponseWriter.Write([]byte(fmt.Sprintf("event: vector\ndata: %s\n\n", string(bytes))))
+		}
 	}
 
 	if writer.writerCleaner.cleaned == false {
@@ -274,6 +301,16 @@ func (c *ApiController) GetMessageAnswer() {
 
 	answer := writer.MessageString()
 	message.ReasonText = writer.ReasonString()
+	message.ToolCalls = model.GetToolCallsFromWriter(writer.ToolString())
+	searchString := writer.SearchString()
+	if searchString != "" {
+		var searchResults []model.SearchResult
+		err := json.Unmarshal([]byte(searchString), &searchResults)
+		if err == nil {
+			message.SearchResults = searchResults
+		}
+	}
+
 	message.TokenCount = modelResult.TotalTokenCount
 	message.Price = modelResult.TotalPrice
 	message.Currency = modelResult.Currency
@@ -296,6 +333,17 @@ func (c *ApiController) GetMessageAnswer() {
 	message.Suggestions = textSuggestions
 
 	message.VectorScores = vectorScores
+
+	// Normalize price precision before persisting or creating transactions
+	message.Price = model.AddPrices(message.Price, 0)
+
+	// Add transaction for message with price
+	err = object.AddTransactionForMessage(message)
+	if err != nil {
+		c.ResponseErrorStream(message, err.Error())
+		return
+	}
+
 	_, err = object.UpdateMessage(message.GetId(), message, false)
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
@@ -306,6 +354,11 @@ func (c *ApiController) GetMessageAnswer() {
 	chat.Price += message.Price
 	if chat.Currency == "" {
 		chat.Currency = message.Currency
+	}
+
+	// Update chat's ModelProvider if not set
+	if chat.ModelProvider == "" {
+		chat.ModelProvider = modelProvider.Name
 	}
 
 	if chat.NeedTitle && textTitle != "" {
@@ -365,7 +418,7 @@ func (c *ApiController) GetAnswer() {
 		}
 	}
 
-	answer, modelResult, err := object.GetAnswer(provider, question)
+	answer, modelResult, err := object.GetAnswer(provider, question, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -377,26 +430,27 @@ func (c *ApiController) GetAnswer() {
 		return
 	}
 	if chat == nil {
-		casdoorOrganization := conf.GetConfigString("casdoorOrganization")
+		iamOrganization := conf.GetConfigString("iamOrganization")
 		currentTime := util.GetCurrentTime()
 		chat = &object.Chat{
-			Owner:        "admin",
-			Name:         chatName,
-			CreatedTime:  currentTime,
-			UpdatedTime:  currentTime,
-			Organization: casdoorOrganization,
-			DisplayName:  chatName,
-			Store:        "",
-			Category:     category,
-			Type:         "AI",
-			User:         userName,
-			User1:        "",
-			User2:        "",
-			Users:        []string{},
-			ClientIp:     c.getClientIp(),
-			UserAgent:    c.getUserAgent(),
-			MessageCount: 0,
-			IsHidden:     strings.HasPrefix(chatName, "chat_provider_"),
+			Owner:         "admin",
+			Name:          chatName,
+			CreatedTime:   currentTime,
+			UpdatedTime:   currentTime,
+			Organization:  iamOrganization,
+			DisplayName:   chatName,
+			Store:         "",
+			ModelProvider: provider,
+			Category:      category,
+			Type:          "AI",
+			User:          userName,
+			User1:         "",
+			User2:         "",
+			Users:         []string{},
+			ClientIp:      c.getClientIp(),
+			UserAgent:     c.getUserAgent(),
+			MessageCount:  0,
+			IsHidden:      strings.HasPrefix(chatName, "chat_provider_"),
 		}
 
 		chat.ClientIpDesc = util.GetDescFromIP(chat.ClientIp)
@@ -409,7 +463,7 @@ func (c *ApiController) GetAnswer() {
 		}
 	}
 
-	answer, modelResult, err = object.GetAnswer(provider, question)
+	answer, modelResult, err = object.GetAnswer(provider, question, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -437,16 +491,17 @@ func (c *ApiController) GetAnswer() {
 	}
 
 	answerMessage := &object.Message{
-		Owner:        "admin",
-		Name:         fmt.Sprintf("message_%s", util.GetRandomName()),
-		CreatedTime:  util.GetCurrentTimeEx(chat.CreatedTime),
-		Organization: chat.Organization,
-		Store:        chat.Store,
-		User:         userName,
-		Chat:         chat.Name,
-		ReplyTo:      questionMessage.Name,
-		Author:       "AI",
-		Text:         answer,
+		Owner:         "admin",
+		Name:          fmt.Sprintf("message_%s", util.GetRandomName()),
+		CreatedTime:   util.GetCurrentTimeEx(chat.CreatedTime),
+		Organization:  chat.Organization,
+		Store:         chat.Store,
+		User:          userName,
+		Chat:          chat.Name,
+		ReplyTo:       questionMessage.Name,
+		Author:        "AI",
+		Text:          answer,
+		ModelProvider: provider,
 	}
 
 	answerMessage.TokenCount = modelResult.TotalTokenCount

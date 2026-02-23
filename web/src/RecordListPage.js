@@ -23,9 +23,7 @@ import i18next from "i18next";
 import BaseListPage from "./BaseListPage";
 import PopconfirmModal from "./modal/PopconfirmModal";
 import {CloseCircleFilled, DeleteOutlined} from "@ant-design/icons";
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
-import "codemirror/theme/material-darker.css";
+import Editor from "./common/Editor";
 import CommitResultWidget from "./component/record/CommitResultWidget";
 
 class RecordListPage extends BaseListPage {
@@ -35,6 +33,7 @@ class RecordListPage extends BaseListPage {
       ...this.state,
       providerMap: {},
       enableCrossChain: this.getEnableCrossChainFromStorage(),
+      enableDecoding: this.getEnableDecodingFromStorage(),
       queryResult: "",
       isComparing: false,
     };
@@ -52,12 +51,28 @@ class RecordListPage extends BaseListPage {
     return JSON.parse(saved) === true;
   }
 
+  getEnableDecodingFromStorage() {
+    const saved = localStorage.getItem("enableDecoding");
+    if (saved === null || saved === undefined) {
+      return false;
+    }
+    return JSON.parse(saved) === true;
+  }
+
   toggleEnableCrossChain = () => {
     const newValue = !this.state.enableCrossChain;
     this.setState({
       enableCrossChain: newValue,
     });
     localStorage.setItem("enableCrossChain", JSON.stringify(newValue));
+  };
+
+  toggleEnableDecoding = () => {
+    const newValue = !this.state.enableDecoding;
+    this.setState({
+      enableDecoding: newValue,
+    });
+    localStorage.setItem("enableDecoding", JSON.stringify(newValue));
   };
 
   getProviders() {
@@ -89,6 +104,7 @@ class RecordListPage extends BaseListPage {
       method: "POST",
       requestUri: "/api/get-account",
       action: "login",
+      count: 1,
       isTriggered: false,
     };
   }
@@ -254,7 +270,7 @@ class RecordListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("vector:Provider"),
+        title: i18next.t("general:Provider"),
         dataIndex: "provider",
         key: "provider",
         width: "150px",
@@ -271,7 +287,7 @@ class RecordListPage extends BaseListPage {
         },
       },
       (this.state.enableCrossChain ? {
-        title: i18next.t("vector:Provider") + " 2",
+        title: i18next.t("general:Provider 2"),
         dataIndex: "provider2",
         key: "provider2",
         width: "150px",
@@ -287,7 +303,7 @@ class RecordListPage extends BaseListPage {
           );
         },
       } : {
-        title: i18next.t("vector:Provider") + " 2",
+        title: i18next.t("general:Provider 2"),
         hidden: true,
       }),
       {
@@ -382,6 +398,18 @@ class RecordListPage extends BaseListPage {
         ...this.getColumnSearchProps("section"),
       },
       {
+        title: i18next.t("general:Count"),
+        dataIndex: "count",
+        key: "count",
+        width: "110px",
+        sorter: true,
+        ...this.getColumnSearchProps("count"),
+        render: (text, record, index) => {
+          // Show 1 for zero values (backward compatibility)
+          return text === 0 || !text ? 1 : text;
+        },
+      },
+      {
         title: i18next.t("general:Response"),
         dataIndex: "response",
         key: "response",
@@ -390,7 +418,7 @@ class RecordListPage extends BaseListPage {
         ...this.getColumnSearchProps("response"),
       },
       {
-        title: i18next.t("record:Object"),
+        title: i18next.t("general:Object"),
         dataIndex: "object",
         key: "object",
         width: "200px",
@@ -401,6 +429,14 @@ class RecordListPage extends BaseListPage {
             return (
               <div style={{maxWidth: "200px"}}>
                 {Setting.getShortText(text, 50)}
+              </div>
+            );
+          }
+
+          if (!this.state.enableDecoding) {
+            return (
+              <div style={{maxWidth: "200px"}}>
+                ***
               </div>
             );
           }
@@ -430,22 +466,12 @@ class RecordListPage extends BaseListPage {
                     <Alert type="error" showIcon message={
                       <Typography.Paragraph ellipsis={{expandable: "collapsible"}} style={{margin: 0}}>{errorMessage}</Typography.Paragraph>}
                     />)}
-                  <CodeMirror
+                  <Editor
                     value={formattedText}
-                    options={{
-                      mode: isValidJson ? "application/json" : "text/plain",
-                      theme: "material-darker",
-                      readOnly: true,
-                      lineNumbers: true,
-                    }}
-                    editorDidMount={(editor) => {
-                      if (window.ResizeObserver) {
-                        const resizeObserver = new ResizeObserver(() => {
-                          editor.refresh();
-                        });
-                        resizeObserver.observe(editor.getWrapperElement().parentNode);
-                      }
-                    }}
+                    lang={isValidJson ? "json" : "text"}
+                    fillHeight
+                    dark
+                    readOnly
                   />
                 </div>
               }
@@ -481,7 +507,7 @@ class RecordListPage extends BaseListPage {
           }
 
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },
@@ -510,7 +536,7 @@ class RecordListPage extends BaseListPage {
         },
       },
       (this.state.enableCrossChain ? {
-        title: i18next.t("general:Block") + " 2",
+        title: i18next.t("general:Block 2"),
         dataIndex: "block2",
         key: "block2",
         width: "110px",
@@ -521,13 +547,13 @@ class RecordListPage extends BaseListPage {
           return Setting.getBlockBrowserUrl(this.state.providerMap, record, text, false);
         },
       } : {
-        title: i18next.t("general:Block") + " 2",
+        title: i18next.t("general:Block 2"),
         hidden: true,
       }),
       {
         title: i18next.t("general:Action"),
-        dataIndex: "action",
-        key: "action",
+        dataIndex: "recordAction",
+        key: "recordAction",
         width: this.state.enableCrossChain ? "370px" : "270px",
         fixed: (Setting.isMobile()) ? "false" : "right",
         render: (text, record, index) => {
@@ -575,7 +601,7 @@ class RecordListPage extends BaseListPage {
                         onClick={() => {
                           this.queryRecord(record, true);
                         }}
-                      >{i18next.t("record:Query")}
+                      >{i18next.t("general:Query")}
                       </Button>
                     </Popover>
                   )}
@@ -615,7 +641,7 @@ class RecordListPage extends BaseListPage {
                           onClick={() => {
                             this.queryRecord(record, false);
                           }}
-                        >{i18next.t("record:Query") + " 2"}
+                        >{i18next.t("general:Query") + " 2"}
                         </Button>
                       </Popover>
                     )
@@ -639,7 +665,7 @@ class RecordListPage extends BaseListPage {
         },
       },
     ];
-
+    const filteredColumns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems, "recordAction");
     const paginationProps = {
       pageSize: this.state.pagination.pageSize,
       total: this.state.pagination.total,
@@ -651,15 +677,21 @@ class RecordListPage extends BaseListPage {
 
     return (
       <div>
-        <Table scroll={{x: "max-content"}} columns={columns} dataSource={records} rowKey={(record) => `${record.owner}/${record.name}`} rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
+        <Table scroll={{x: "max-content"}} columns={filteredColumns} dataSource={records} rowKey={(record) => `${record.owner}/${record.name}`} rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
           title={() => (
             <div>
               {i18next.t("general:Records")}
               {Setting.isAdminUser(this.props.account) && (
-                <span style={{marginLeft: 32}}>
-                  {i18next.t("record:Enable cross-chain")}:
-                  <Switch checked={this.state.enableCrossChain} onChange={this.toggleEnableCrossChain} style={{marginLeft: 8}} />
-                </span>
+                <>
+                  <span style={{marginLeft: 32}}>
+                    {i18next.t("record:Enable cross-chain")}:
+                    <Switch checked={this.state.enableCrossChain} onChange={this.toggleEnableCrossChain} style={{marginLeft: 8}} />
+                  </span>
+                  <span style={{marginLeft: 32}}>
+                    {i18next.t("record:Enable decoding")}:
+                    <Switch checked={this.state.enableDecoding} onChange={this.toggleEnableDecoding} style={{marginLeft: 8}} />
+                  </span>
+                </>
               )}
               {this.state.selectedRowKeys.length > 0 && (
                 <Popconfirm title={`${i18next.t("general:Sure to delete")}: ${this.state.selectedRowKeys.length} ${i18next.t("general:items")} ?`} onConfirm={() => this.performBulkDelete(this.state.selectedRows, this.state.selectedRowKeys)} okText={i18next.t("general:OK")} cancelText={i18next.t("general:Cancel")}>

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ type StorageProvider interface {
 	DeleteObject(key string) error
 }
 
-func GetStorageProvider(typ string, clientId string, clientSecret string, providerName string, vectorStoreId string) (StorageProvider, error) {
+func GetStorageProvider(typ string, clientId string, clientSecret string, providerName string, vectorStoreId string, lang string) (StorageProvider, error) {
 	var p StorageProvider
 	var err error
 	if typ == "Local File System" {
@@ -37,7 +37,7 @@ func GetStorageProvider(typ string, clientId string, clientSecret string, provid
 	} else if typ == "OpenAI File System" {
 		p, err = NewOpenAIFileSystemStorageProvider(vectorStoreId, clientSecret)
 	} else {
-		p, err = NewCasdoorProvider(providerName)
+		p, err = NewIamProvider(providerName, lang)
 	}
 
 	if err != nil {

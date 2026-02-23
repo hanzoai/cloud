@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 package model
 
 import (
+	"strings"
+
 	"github.com/pkoukk/tiktoken-go"
 	"github.com/sashabaranov/go-openai"
 )
@@ -59,10 +61,17 @@ func GetOpenAiMaxTokens(model string) int {
 }
 
 func getOpenAiModelType(model string) string {
-	chatModels := []string{
+	// Chat model patterns (matched via contains for provider-prefixed names like "openai-gpt-5-nano")
+	chatPatterns := []string{
 		"gpt-3.5-turbo", "gpt-4-turbo", "gpt-4", "gpt-4o",
 		"gpt-4o-2024-08-06", "gpt-4o-mini", "gpt-4o-mini-2024-07-18", "gpt-4.1",
-		"gpt-4.1-mini", "gpt-4.1-nano", "o1", "o1-pro", "o3", "o3-mini", "o4-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-chat-latest", "custom-model",
+		"gpt-4.1-mini", "gpt-4.1-nano", "gpt-4.5", "gpt-4.5-mini", "gpt-4.5-nano",
+		"o1", "o1-pro", "o3", "o3-mini", "o4-mini",
+		"gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.1", "gpt-5.1-mini", "gpt-5.1-nano",
+		"gpt-5.2", "gpt-5.2-mini", "gpt-5.2-nano", "gpt-5.2-chat", "gpt-5-chat-latest",
+		"gpt-oss", "deep-research",
+		"claude", "llama", "qwen", "deepseek", "mistral",
+		"custom-model",
 	}
 
 	completionModels := []string{
@@ -75,8 +84,8 @@ func getOpenAiModelType(model string) string {
 		"dall-e-3", "dall-e-2", "gpt-image-1",
 	}
 
-	for _, chatModel := range chatModels {
-		if model == chatModel {
+	for _, pattern := range chatPatterns {
+		if strings.Contains(model, pattern) {
 			return "Chat"
 		}
 	}
@@ -88,12 +97,13 @@ func getOpenAiModelType(model string) string {
 	}
 
 	for _, imageModel := range imageModels {
-		if model == imageModel {
+		if strings.Contains(model, imageModel) {
 			return "imagesGenerations"
 		}
 	}
 
-	return "Unknown"
+	// Default to Chat for unknown models (most modern models are chat-based)
+	return "Chat"
 }
 
 func OpenaiRawMessagesToMessages(messages []*RawMessage) []openai.ChatCompletionMessage {
@@ -151,6 +161,13 @@ func ChatCompletionRequest(model string, messages []openai.ChatCompletionMessage
 
 	if model == "gpt-4-vision-preview" || model == "gpt-4-1106-vision-preview" {
 		res.MaxTokens = 4096
+	}
+
+	// Anthropic and other models routed through OpenAI-compatible APIs require max_tokens
+	if strings.Contains(model, "claude") || strings.Contains(model, "llama") || strings.Contains(model, "mistral") || strings.Contains(model, "qwen") || strings.Contains(model, "deepseek") {
+		if res.MaxTokens == 0 {
+			res.MaxTokens = 4096
+		}
 	}
 
 	return res

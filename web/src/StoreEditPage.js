@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import React from "react";
-import {Button, Card, Col, Input, InputNumber, Popover, Row, Select, Switch} from "antd";
+import {Button, Card, Cascader, Col, Input, InputNumber, Popover, Row, Select, Switch} from "antd";
 import * as StoreBackend from "./backend/StoreBackend";
 import * as StorageProviderBackend from "./backend/StorageProviderBackend";
 import * as ProviderBackend from "./backend/ProviderBackend";
@@ -21,10 +21,11 @@ import * as Setting from "./Setting";
 import i18next from "i18next";
 import FileTree from "./FileTree";
 import {ThemeDefault} from "./Conf";
-import PromptTable from "./table/PromptTable";
+import ExampleQuestionTable from "./table/ExampleQuestionTable";
 import StoreAvatarUploader from "./AvatarUpload";
 import {LinkOutlined} from "@ant-design/icons";
-import {Controlled as CodeMirror} from "react-codemirror2";
+import Editor from "./common/Editor";
+import {NavItemTree} from "./component/nav-item-tree/NavItemTree";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -37,7 +38,7 @@ class StoreEditPage extends React.Component {
       owner: props.match.params.owner,
       storeName: props.match.params.storeName,
       stores: [],
-      casdoorStorageProviders: [],
+      iamStorageProviders: [],
       storageProviders: [],
       vectorStoreId: "",
       storageSubpath: "",
@@ -46,9 +47,11 @@ class StoreEditPage extends React.Component {
       textToSpeechProviders: [],
       speechToTextProviders: [],
       agentProviders: [],
+      builtinTools: [],
       enableTtsStreaming: false,
       store: null,
       themeColor: ThemeDefault.colorPrimary,
+      isNewStore: props.location?.state?.isNewStore || false,
     };
   }
 
@@ -105,7 +108,7 @@ class StoreEditPage extends React.Component {
       .then((res) => {
         if (res.status === "ok") {
           this.setState({
-            casdoorStorageProviders: res.data,
+            iamStorageProviders: res.data,
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to get")}: ${res.msg}`);
@@ -138,6 +141,48 @@ class StoreEditPage extends React.Component {
     return value;
   }
 
+  renderBuiltinTools() {
+    const builtinToolsConfig = Setting.getBuiltinTools();
+    const selectedTools = this.state.store.builtinTools || [];
+
+    const options = builtinToolsConfig.map(category => ({
+      value: category.category,
+      label: `${category.icon} ${category.name}`,
+      children: category.tools.map(tool => ({
+        value: tool.name,
+        label: (
+          <div>
+            <div style={{fontWeight: 500, color: "#1890ff"}}>{tool.name}</div>
+            <div style={{fontSize: "12px", color: "#8c8c8c"}}>{tool.description}</div>
+          </div>
+        ),
+      })),
+    }));
+
+    const value = selectedTools.map(tool => {
+      const category = builtinToolsConfig.find(cat =>
+        cat.tools.some(t => t.name === tool)
+      );
+      return category ? [category.category, tool] : null;
+    }).filter(v => v);
+
+    return (
+      <Cascader
+        multiple
+        maxTagCount="responsive"
+        style={{width: "100%"}}
+        placeholder={i18next.t("store:Select builtin tools")}
+        options={options}
+        value={value}
+        onChange={(values) => {
+          this.updateStoreField("builtinTools", values.map(v => v[1]));
+        }}
+        showCheckedStrategy="SHOW_CHILD"
+        popupClassName="builtin-tools-cascader"
+      />
+    );
+  }
+
   updateStoreField(key, value) {
     value = this.parseStoreField(key, value);
 
@@ -149,7 +194,7 @@ class StoreEditPage extends React.Component {
   }
 
   isAIStorageProvider(storageProvider) {
-    const providerSelected = this.state.storageProviders.concat(this.state.casdoorStorageProviders).find(v => v.name === storageProvider);
+    const providerSelected = this.state.storageProviders.concat(this.state.iamStorageProviders).find(v => v.name === storageProvider);
     if (providerSelected && providerSelected.type === "OpenAI File System") {
       return true;
     }
@@ -163,6 +208,7 @@ class StoreEditPage extends React.Component {
           {i18next.t("store:Edit Store")}&nbsp;&nbsp;&nbsp;&nbsp;
           <Button onClick={() => this.submitStoreEdit(false, undefined)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitStoreEdit(true, undefined)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewStore && <Button style={{marginLeft: "20px"}} onClick={() => this.cancelStoreEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       } style={{marginLeft: "5px"}} type="inner">
         <Row style={{marginTop: "10px"}} >
@@ -172,7 +218,7 @@ class StoreEditPage extends React.Component {
           <Col span={22} >
             <Input value={this.state.store.name} onChange={e => {
               this.updateStoreField("name", e.target.value);
-            }} />
+            }} disabled={Setting.isUserBoundToStore(this.props.account)} />
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}} >
@@ -243,7 +289,7 @@ class StoreEditPage extends React.Component {
             <Select virtual={false} style={{width: "100%"}} value={this.state.store.storageProvider} onChange={(value => {this.updateStoreField("storageProvider", value);})}
             >
               {
-                this.state.storageProviders.concat(this.state.casdoorStorageProviders).map((provider, index) =>
+                this.state.storageProviders.concat(this.state.iamStorageProviders).map((provider, index) =>
                   this.renderProviderOption(provider, index)
                 )
               }
@@ -285,7 +331,7 @@ class StoreEditPage extends React.Component {
                 {i18next.t("general:empty")}
               </Option>
               {
-                this.state.casdoorStorageProviders.map((provider, index) =>
+                this.state.iamStorageProviders.map((provider, index) =>
                   this.renderProviderOption(provider, index)
                 )
               }
@@ -314,7 +360,7 @@ class StoreEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}} >
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-            {Setting.getLabel(i18next.t("store:Model provider"), i18next.t("store:Model provider - Tooltip"))} :
+            {Setting.getLabel(i18next.t("provider:Model provider"), i18next.t("provider:Model provider - Tooltip"))} :
           </Col>
           <Col span={22} >
             <Select virtual={false} style={{width: "100%"}} value={this.state.store.modelProvider} onChange={(value => {this.updateStoreField("modelProvider", value);})}
@@ -356,6 +402,14 @@ class StoreEditPage extends React.Component {
                 this.state.agentProviders.map((provider, index) => this.renderProviderOption(provider, index))
               }
             </Select>
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("store:Builtin tools"), i18next.t("store:Builtin tools - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            {this.renderBuiltinTools()}
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}} >
@@ -473,11 +527,11 @@ class StoreEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}} >
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-            {Setting.getLabel(i18next.t("store:Prompts"), i18next.t("store:Prompts - Tooltip"))} :
+            {Setting.getLabel(i18next.t("store:Example questions"), i18next.t("store:Example questions - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <PromptTable prompts={this.state.store.prompts} onUpdatePrompts={(prompts) => {
-              this.updateStoreField("prompts", prompts);
+            <ExampleQuestionTable table={this.state.store.exampleQuestions} onUpdateTable={(exampleQuestions) => {
+              this.updateStoreField("exampleQuestions", exampleQuestions);
             }} />
           </Col>
         </Row>
@@ -514,6 +568,21 @@ class StoreEditPage extends React.Component {
                 <input type="color" value={this.state.store.themeColor} onChange={(e) => {
                   this.updateStoreField("themeColor", e.target.value);
                 }} />
+              </Col>
+            </Row>
+            <Row style={{marginTop: "20px"}} >
+              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                {Setting.getLabel(i18next.t("store:Navbar items"), i18next.t("store:Navbar items - Tooltip"))} :
+              </Col>
+              <Col span={22} >
+                <NavItemTree
+                  disabled={!Setting.isAdminUser(this.props.account)}
+                  checkedKeys={this.state.store.navItems ?? ["all"]}
+                  defaultExpandedKeys={["all"]}
+                  onCheck={(checked) => {
+                    this.updateStoreField("navItems", checked);
+                  }}
+                />
               </Col>
             </Row>
             <Row style={{marginTop: "20px"}} >
@@ -574,10 +643,12 @@ class StoreEditPage extends React.Component {
                 <Col span={22} >
                   <Popover placement="right" content={
                     <div style={{width: "900px", height: "300px"}} >
-                      <CodeMirror
+                      <Editor
                         value={this.state.store.footerHtml}
-                        options={{mode: "htmlmixed", theme: "material-darker"}}
-                        onBeforeChange={(editor, data, value) => {
+                        lang="html"
+                        fillHeight
+                        dark
+                        onChange={value => {
                           this.updateStoreField("footerHtml", value);
                         }}
                       />
@@ -590,6 +661,18 @@ class StoreEditPage extends React.Component {
                 </Col>
               </Row>
             </Col>
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("store:Vector stores"), i18next.t("store:Vector stores - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            <Select virtual={false} mode="tags" style={{width: "100%"}} value={this.state.store.vectorStores} onChange={(value => {this.updateStoreField("vectorStores", value);})}>
+              {
+                this.state.stores?.filter(item => item.name !== this.state.store.name).map((item, index) => <Option key={item.name} value={item.name}>{`${item.displayName} (${item.name})`}</Option>)
+              }
+            </Select>
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}} >
@@ -620,6 +703,15 @@ class StoreEditPage extends React.Component {
         </Row>
         <Row style={{marginTop: "20px"}} >
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("store:Forbidden words"), i18next.t("store:Forbidden words - Tooltip"))} :
+          </Col>
+          <Col span={22} >
+            <Select virtual={false} mode="tags" style={{width: "100%"}} value={this.state.store.forbiddenWords} onChange={(value => {this.updateStoreField("forbiddenWords", value);})}>
+            </Select>
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
             {Setting.getLabel(i18next.t("store:Show auto read"), i18next.t("store:Show auto read - Tooltip"))} :
           </Col>
           <Col span={1}>
@@ -635,6 +727,16 @@ class StoreEditPage extends React.Component {
           <Col span={1}>
             <Switch checked={this.state.store.disableFileUpload} onChange={checked => {
               this.updateStoreField("disableFileUpload", checked);
+            }} />
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("store:Hide thinking"), i18next.t("store:Hide thinking - Tooltip"))} :
+          </Col>
+          <Col span={1}>
+            <Switch checked={this.state.store.hideThinking} onChange={checked => {
+              this.updateStoreField("hideThinking", checked);
             }} />
           </Col>
         </Row>
@@ -670,6 +772,7 @@ class StoreEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               storeName: this.state.store.name,
+              isNewStore: false,
             });
             window.dispatchEvent(new Event("storesChanged"));
             if (exitAfterSave) {
@@ -690,6 +793,26 @@ class StoreEditPage extends React.Component {
       });
   }
 
+  cancelStoreEdit() {
+    if (this.state.isNewStore) {
+      StoreBackend.deleteStore(this.state.store)
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            window.dispatchEvent(new Event("storesChanged"));
+            this.props.history.push("/stores");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
+        })
+        .catch(error => {
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+        });
+    } else {
+      this.props.history.push("/stores");
+    }
+  }
+
   render() {
     return (
       <div>
@@ -699,6 +822,7 @@ class StoreEditPage extends React.Component {
         <div style={{marginTop: "20px", marginLeft: "40px"}}>
           <Button size="large" onClick={() => this.submitStoreEdit(false, undefined)}>{i18next.t("general:Save")}</Button>
           <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitStoreEdit(true, undefined)}>{i18next.t("general:Save & Exit")}</Button>
+          {this.state.isNewStore && <Button style={{marginLeft: "20px"}} size="large" onClick={() => this.cancelStoreEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       </div>
     );

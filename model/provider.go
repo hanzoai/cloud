@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,10 @@ package model
 import (
 	"io"
 )
+
+// DryRunPrefix is a special prefix that triggers model providers to estimate
+// token count and price without actually calling the AI model APIs.
+const DryRunPrefix = "$CloudDryRun$"
 
 type ModelResult struct {
 	PromptTokenCount   int
@@ -37,7 +41,7 @@ func newModelResult(promptTokenCount int, responseTokenCount int, totalTokenCoun
 
 type ModelProvider interface {
 	GetPricing() string
-	QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error)
+	QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error)
 }
 
 func GetModelProvider(typ string, subType string, clientId string, clientSecret string, userKey string, temperature float32, topP float32, topK int, frequencyPenalty float32, presencePenalty float32, providerUrl string, apiVersion string, compatibleProvider string, inputPricePerThousandTokens float64, outputPricePerThousandTokens float64, Currency string, enableThinking bool) (ModelProvider, error) {
@@ -48,7 +52,11 @@ func GetModelProvider(typ string, subType string, clientId string, clientSecret 
 	} else if typ == "Local" {
 		p, err = NewLocalModelProvider(typ, subType, clientSecret, temperature, topP, frequencyPenalty, presencePenalty, providerUrl, compatibleProvider, inputPricePerThousandTokens, outputPricePerThousandTokens, Currency)
 	} else if typ == "OpenAI" {
-		p, err = NewOpenAiModelProvider(subType, clientSecret, temperature, topP, frequencyPenalty, presencePenalty)
+		p, err = NewOpenAiModelProvider(subType, clientSecret, providerUrl, temperature, topP, frequencyPenalty, presencePenalty)
+	} else if typ == "DigitalOcean" {
+		p, err = NewLocalModelProvider(typ, subType, clientSecret, temperature, topP, frequencyPenalty, presencePenalty, providerUrl, "", inputPricePerThousandTokens, outputPricePerThousandTokens, Currency)
+	} else if typ == "Fireworks" {
+		p, err = NewFireworksProvider(subType, clientSecret, temperature, topP, frequencyPenalty, presencePenalty)
 	} else if typ == "Gemini" {
 		p, err = NewGeminiModelProvider(subType, clientSecret, temperature, topP, topK)
 	} else if typ == "Azure" {
@@ -64,7 +72,7 @@ func GetModelProvider(typ string, subType string, clientId string, clientSecret 
 	} else if typ == "Baidu Cloud" {
 		p, err = NewBaiduCloudModelProvider(subType, clientSecret, temperature, topP)
 	} else if typ == "iFlytek" {
-		p, err = NewiFlytekModelProvider(subType, clientSecret, clientId, userKey, temperature, topK)
+		p, err = NewiFlytekModelProvider(subType, clientSecret, temperature)
 	} else if typ == "ChatGLM" {
 		p, err = NewChatGLMModelProvider(subType, clientSecret)
 	} else if typ == "MiniMax" {
@@ -72,7 +80,7 @@ func GetModelProvider(typ string, subType string, clientId string, clientSecret 
 	} else if typ == "Cohere" {
 		p, err = NewCohereModelProvider(subType, clientSecret)
 	} else if typ == "Moonshot" {
-		p, err = NewMoonshotModelProvider(subType, clientSecret, float64(temperature))
+		p, err = NewMoonshotModelProvider(subType, clientSecret, temperature, topP)
 	} else if typ == "Amazon Bedrock" {
 		p, err = NewAmazonBedrockModelProvider(subType, clientSecret, float64(temperature))
 	} else if typ == "Alibaba Cloud" {
@@ -93,6 +101,9 @@ func GetModelProvider(typ string, subType string, clientId string, clientSecret 
 		p, err = NewYiProvider(subType, clientSecret, temperature, topP)
 	} else if typ == "Silicon Flow" {
 		p, err = NewSiliconFlowProvider(subType, clientSecret, temperature, topP)
+	} else if typ == "Hanzo" || typ == "Zen" {
+		// Zen model family routes through Hanzo LLM Gateway (OpenAI-compatible)
+		p, err = NewLocalModelProvider(typ, subType, clientSecret, temperature, topP, frequencyPenalty, presencePenalty, providerUrl, "openai", inputPricePerThousandTokens, outputPricePerThousandTokens, Currency)
 	} else if typ == "Dummy" {
 		p, err = NewDummyModelProvider(subType)
 	} else if typ == "GitHub" {

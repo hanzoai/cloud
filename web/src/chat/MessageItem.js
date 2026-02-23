@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
 
 import React, {useEffect, useState} from "react";
 import {Bubble} from "@ant-design/x";
-import {Alert, Button, Col, Row} from "antd";
+import {Alert, Button, Col, Collapse, Row} from "antd";
+import {FileTextOutlined, GlobalOutlined} from "@ant-design/icons";
 import moment from "moment";
 import * as Setting from "../Setting";
 import i18next from "i18next";
@@ -24,6 +25,10 @@ import MessageActions from "./MessageActions";
 import MessageSuggestions from "./MessageSuggestions";
 import MessageEdit from "./MessageEdit";
 import {MessageCarrier} from "./MessageCarrier";
+import SearchSourcesDrawer from "./SearchSourcesDrawer";
+import KnowledgeSourcesDrawer from "./KnowledgeSourcesDrawer";
+
+const {Panel} = Collapse;
 
 const MessageItem = ({
   message,
@@ -41,9 +46,59 @@ const MessageItem = ({
   isLoadingTTS, // Added new prop for TTS loading state
   readingMessage,
   sendMessage,
+  hideThinking,
 }) => {
   const [avatarSrc, setAvatarSrc] = useState(null);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [reasonExpanded, setReasonExpanded] = useState(["reason"]);
+  const [searchDrawerVisible, setSearchDrawerVisible] = useState(false);
+  const [knowledgeDrawerVisible, setKnowledgeDrawerVisible] = useState(false);
+  const themeColor = Setting.getThemeColor();
+  const toolColor = (message.reasonText && message.toolCalls) ? "#1890ff" : themeColor;
+
+  const renderThinkingAnimation = () => {
+    return (
+      <div className="message-thinking" style={{
+        padding: "10px",
+        borderRadius: "5px",
+        display: "flex",
+        alignItems: "center",
+      }}>
+        <div style={{
+          fontWeight: "bold",
+          color: "#1890ff",
+        }}>
+          {i18next.t("chat:Thinking")}
+        </div>
+        <div className="thinking-animation" style={{
+          marginLeft: "8px",
+          display: "flex",
+        }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{
+              width: "6px",
+              height: "6px",
+              backgroundColor: "#1890ff",
+              borderRadius: "50%",
+              margin: "0 2px",
+              animation: "thinkingDot 1.4s infinite ease-in-out both",
+              animationDelay: i * 0.16 + "s",
+            }} />
+          ))}
+        </div>
+        <style>{`
+          @keyframes thinkingDot {
+            0%, 80%, 100% {
+              transform: scale(0);
+            }
+            40% {
+              transform: scale(1.0);
+            }
+          }
+        `}</style>
+      </div>
+    );
+  };
 
   const {isEditing,
     setIsHovering,
@@ -118,30 +173,102 @@ const MessageItem = ({
       return null;
     }
 
-    if (message.isReasoningPhase && message.author === "AI") {
+    if (message.isReasoningPhase && message.author === "AI" && !message.toolCalls && !message.text) {
       return null;
     }
 
-    if (!message.isReasoningPhase && message.reasonText && message.author === "AI") {
+    if ((message.reasonText || message.toolCalls) && message.author === "AI") {
       return (
         <div className="message-content">
-          <div className="message-reason" style={{
-            marginBottom: "15px",
-            padding: "10px",
-            borderRadius: "5px",
-            borderLeft: "3px solid #1890ff",
-          }}>
-            <div className="reason-label" style={{
-              fontWeight: "bold",
-              marginBottom: "5px",
-              color: "#1890ff",
-            }}>
-              {i18next.t("chat:Reasoning process")}:
+          {!hideThinking && message.reasonText && (
+            <div className="message-reason" style={{marginBottom: "15px"}}>
+              <Collapse
+                ghost
+                activeKey={reasonExpanded}
+                onChange={setReasonExpanded}
+                style={{
+                  borderLeft: `3px solid ${themeColor}`,
+                  borderRadius: "5px",
+                  padding: "10px",
+                }}
+              >
+                <Panel
+                  header={
+                    <span style={{fontWeight: "bold", color: themeColor}}>
+                      {i18next.t("chat:Reasoning process")}
+                    </span>
+                  }
+                  key="reason"
+                  className="chat-message-collapse-panel"
+                >
+                  <div className="reason-content">
+                    {renderText(message.reasonText)}
+                  </div>
+                </Panel>
+              </Collapse>
             </div>
-            <div className="reason-content">
-              {renderText(message.reasonText)}
+          )}
+          {message.toolCalls && message.toolCalls.length > 0 && (
+            <div className="message-tools" style={{marginBottom: "15px"}}>
+              <Collapse
+                ghost
+                style={{
+                  borderLeft: `3px solid ${toolColor}`,
+                  borderRadius: "5px",
+                  padding: "10px",
+                }}
+              >
+                <Panel
+                  header={
+                    <span style={{fontWeight: "bold", color: toolColor}}>
+                      {i18next.t("chat:Tool calls")} ({message.toolCalls.length})
+                    </span>
+                  }
+                  key="tools"
+                  className="chat-message-collapse-panel"
+                >
+                  <div>
+                    {message.toolCalls.map((toolCall, idx) => (
+                      <div key={idx} className="tool-call-item" style={{
+                        marginBottom: idx < message.toolCalls.length - 1 ? "10px" : "0",
+                        paddingBottom: "8px",
+                      }}>
+                        <div style={{
+                          fontWeight: "600",
+                          color: "#096dd9",
+                          marginBottom: "4px",
+                        }}>
+                          {toolCall.name}
+                        </div>
+                        {toolCall.arguments && (
+                          <div style={{
+                            fontSize: "12px",
+                            fontFamily: "monospace",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            marginBottom: toolCall.content ? "8px" : "0",
+                          }}>
+                            <strong>Arguments:</strong> {toolCall.arguments}
+                          </div>
+                        )}
+                        {toolCall.content && (
+                          <div style={{
+                            fontSize: "12px",
+                            padding: "6px",
+                            borderRadius: "3px",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}>
+                            <strong>Result:</strong> {toolCall.content}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              </Collapse>
             </div>
-          </div>
+          )}
 
           <div className="message-answer">
             {message.html || renderText(message.text)}
@@ -165,27 +292,39 @@ const MessageItem = ({
           <Bubble
             placement="start"
             content={
-              <div className="message-reason" style={{
-                padding: "10px",
-                borderRadius: "5px",
-                borderLeft: "3px solid #1890ff",
-              }}>
-                <div className="reason-label" style={{
-                  fontWeight: "bold",
-                  marginBottom: "5px",
-                  color: "#1890ff",
-                }}>
-                  {i18next.t("chat:Reasoning process")}:
+              hideThinking ? renderThinkingAnimation() : (
+                <div className="message-reason">
+                  <Collapse
+                    ghost
+                    activeKey={reasonExpanded}
+                    onChange={setReasonExpanded}
+                    style={{
+                      borderLeft: `3px solid ${themeColor}`,
+                      borderRadius: "5px",
+                      padding: "10px",
+                    }}
+                  >
+                    <Panel
+                      header={
+                        <span style={{fontWeight: "bold", color: themeColor}}>
+                          {i18next.t("chat:Reasoning process")}
+                        </span>
+                      }
+                      key="reason"
+                      className="chat-message-collapse-panel"
+                    >
+                      <div className="reason-content">
+                        {renderText(message.reasonText)}
+                      </div>
+                    </Panel>
+                  </Collapse>
                 </div>
-                <div className="reason-content">
-                  {renderText(message.reasonText)}
-                </div>
-              </div>
+              )
             }
-            typing={{
+            typing={!hideThinking ? {
               step: 2,
               interval: 50,
-            }}
+            } : undefined}
             avatar={{
               src: avatarSrc,
               onError: handleAvatarError,
@@ -229,22 +368,56 @@ const MessageItem = ({
           footer={
             <div style={{display: "flex", flexDirection: "column", gap: "12px"}}>
               {!isEditing && message.author === "AI" && (disableInput === false || index !== isLastMessage) && (
-                <MessageActions
-                  message={message}
-                  isLastMessage={isLastMessage}
-                  index={index}
-                  onCopy={onCopy}
-                  onRegenerate={onRegenerate}
-                  onLike={onLike}
-                  onToggleRead={onToggleRead}
-                  onEdit={() => setIsHovering(true)}
-                  isReading={isReading}
-                  isLoadingTTS={isLoadingTTS} // Pass loading state to MessageActions
-                  readingMessage={readingMessage}
-                  account={account}
-                  setIsRegenerating={setIsRegenerating}
-                  isRegenerating={isRegenerating}
-                />
+                <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                  <MessageActions
+                    message={message}
+                    isLastMessage={isLastMessage}
+                    index={index}
+                    onCopy={onCopy}
+                    onRegenerate={onRegenerate}
+                    onLike={onLike}
+                    onToggleRead={onToggleRead}
+                    onEdit={() => setIsHovering(true)}
+                    isReading={isReading}
+                    isLoadingTTS={isLoadingTTS} // Pass loading state to MessageActions
+                    readingMessage={readingMessage}
+                    account={account}
+                    setIsRegenerating={setIsRegenerating}
+                    isRegenerating={isRegenerating}
+                  />
+                  {message.searchResults?.length > 0 && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<GlobalOutlined />}
+                      onClick={() => setSearchDrawerVisible(true)}
+                      style={{
+                        fontSize: "12px",
+                        color: themeColor,
+                        padding: "0 8px",
+                        height: "24px",
+                      }}
+                    >
+                      {message.searchResults.length} {i18next.t("chat:Web sources")}
+                    </Button>
+                  )}
+                  {message.vectorScores?.length > 0 && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<FileTextOutlined />}
+                      onClick={() => setKnowledgeDrawerVisible(true)}
+                      style={{
+                        fontSize: "12px",
+                        color: themeColor,
+                        padding: "0 8px",
+                        height: "24px",
+                      }}
+                    >
+                      {message.vectorScores.length} {i18next.t("chat:Knowledge sources")}
+                    </Button>
+                  )}
+                </div>
               )}
               {message.author === "AI" && isLastMessage && (
                 <MessageSuggestions message={message} sendMessage={sendMessage} />
@@ -273,29 +446,44 @@ const MessageItem = ({
   };
 
   return (
-    <div
-      style={{
-        maxWidth: "90%",
-        margin: message.author === "AI" ? "0 auto 0 0" : "0 0 0 auto",
-        position: "relative",
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <div style={{
-        textAlign: message.author === "AI" ? "left" : "right",
-        color: "#999",
-        fontSize: "12px",
-        marginBottom: "8px",
-        padding: "0 12px",
-      }}>
-        {moment(message.createdTime).format("YYYY/M/D HH:mm:ss")}
+    <>
+      <div
+        style={{
+          maxWidth: "90%",
+          margin: message.author === "AI" ? "0 auto 0 0" : "0 0 0 auto",
+          position: "relative",
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <div style={{
+          textAlign: message.author === "AI" ? "left" : "right",
+          color: "#999",
+          fontSize: "12px",
+          marginBottom: "8px",
+          padding: "0 12px",
+        }}>
+          {moment(message.createdTime).format("YYYY/M/D HH:mm:ss")}
+        </div>
+
+        {renderReasoningBubble()}
+
+        {renderMessageBubble()}
       </div>
 
-      {renderReasoningBubble()}
+      <SearchSourcesDrawer
+        visible={searchDrawerVisible}
+        onClose={() => setSearchDrawerVisible(false)}
+        searchResults={message.searchResults}
+      />
 
-      {renderMessageBubble()}
-    </div>
+      <KnowledgeSourcesDrawer
+        visible={knowledgeDrawerVisible}
+        onClose={() => setKnowledgeDrawerVisible(false)}
+        vectorScores={message.vectorScores}
+        account={account}
+      />
+    </>
   );
 };
 

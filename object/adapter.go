@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,11 @@ import (
 	"runtime"
 
 	"github.com/beego/beego"
-	"github.com/casibase/casibase/conf"
 	_ "github.com/denisenkom/go-mssqldb" // mssql
 	_ "github.com/go-sql-driver/mysql"   // mysql
-	_ "github.com/lib/pq"                // postgres
-	_ "modernc.org/sqlite"               // sqlite
+	"github.com/hanzoai/cloud/conf"
+	_ "github.com/lib/pq"  // postgres
+	_ "modernc.org/sqlite" // sqlite
 	"xorm.io/xorm"
 )
 
@@ -62,6 +62,11 @@ func InitAdapter() {
 	adapter = NewAdapter(conf.GetConfigString("driverName"), conf.GetConfigDataSourceName())
 
 	providerDbName := conf.GetConfigString("providerDbName")
+
+	if adapter.DbName == providerDbName {
+		providerDbName = ""
+	}
+
 	if providerDbName != "" {
 		providerAdapter = NewAdapterWithDbName(conf.GetConfigString("driverName"), conf.GetConfigDataSourceName(), providerDbName)
 	}
@@ -190,6 +195,11 @@ func (a *Adapter) createTable() {
 		panic(err)
 	}
 
+	err = a.engine.Sync2(new(File))
+	if err != nil {
+		panic(err)
+	}
+
 	err = a.engine.Sync2(new(Vector))
 	if err != nil {
 		panic(err)
@@ -276,6 +286,41 @@ func (a *Adapter) createTable() {
 	}
 
 	err = a.engine.Sync2(new(Graph))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Hospital))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Doctor))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Patient))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Caase))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Consultation))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Asset))
+	if err != nil {
+		panic(err)
+	}
+
+	err = a.engine.Sync2(new(Scan))
 	if err != nil {
 		panic(err)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@ package controllers
 
 import (
 	"encoding/json"
-	"fmt"
 
-	"github.com/casibase/casibase/object"
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/object"
 )
 
 type TextToSpeechRequest struct {
@@ -42,19 +42,19 @@ func (c *ApiController) GenerateTextToSpeechAudio() {
 		c.ResponseError(err.Error())
 		return
 	}
-	message, chat, providerObj, ctx, err := object.PrepareTextToSpeech(req.StoreId, req.ProviderId, req.MessageId, req.Text)
+	message, chat, providerObj, ctx, err := object.PrepareTextToSpeech(req.StoreId, req.ProviderId, req.MessageId, req.Text, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	audioData, ttsResult, err := providerObj.QueryAudio(message.Text, ctx)
+	audioData, ttsResult, err := providerObj.QueryAudio(message.Text, ctx, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 	if audioData == nil {
-		c.ResponseError("The audio data is nil")
+		c.ResponseError(c.T("tts:The audio data is nil"))
 		return
 	}
 
@@ -83,13 +83,13 @@ func (c *ApiController) GenerateTextToSpeechAudioStream() {
 	c.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-cache")
 	c.Ctx.ResponseWriter.Header().Set("Connection", "keep-alive")
 
-	message, chat, providerObj, ctx, err := object.PrepareTextToSpeech(storeId, "", messageId, "")
+	message, chat, providerObj, ctx, err := object.PrepareTextToSpeech(storeId, "", messageId, "", c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
 	}
 
-	ttsResult, err := providerObj.QueryAudioStream(message.Text, ctx, c.Ctx.ResponseWriter)
+	ttsResult, err := providerObj.QueryAudioStream(message.Text, ctx, c.Ctx.ResponseWriter, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseErrorStream(message, err.Error())
 		return
@@ -97,6 +97,6 @@ func (c *ApiController) GenerateTextToSpeechAudioStream() {
 
 	err = object.UpdateChatStats(chat, ttsResult)
 	if err != nil {
-		fmt.Printf("Error updating chat: %s\n", err.Error())
+		logs.Error("Error updating chat: %s", err.Error())
 	}
 }

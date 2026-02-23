@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
 package controllers
 
 import (
-	"github.com/casibase/casibase/object"
+	metric "github.com/luxfi/metric"
+
+	"github.com/hanzoai/cloud/object"
 )
 
 // GetPrometheusInfo
@@ -25,6 +27,10 @@ import (
 // @Success 200 {object} object.PrometheusInfo The Response object
 // @router /get-prometheus-info [get]
 func (c *ApiController) GetPrometheusInfo() {
+	if !c.RequireAdmin() {
+		return
+	}
+
 	prometheusInfo, err := object.GetPrometheusInfo()
 	if err != nil {
 		c.ResponseError(err.Error())
@@ -32,4 +38,18 @@ func (c *ApiController) GetPrometheusInfo() {
 	}
 
 	c.ResponseOk(prometheusInfo)
+}
+
+// GetMetrics
+// @Title GetMetrics
+// @Tag System API
+// @Description get Prometheus metrics
+// @Success 200 {string} string The Response metrics in Prometheus format
+// @router /metrics [get]
+func (c *ApiController) GetMetrics() {
+	if !c.RequireAdmin() {
+		return
+	}
+
+	metric.Handler().ServeHTTP(c.Ctx.ResponseWriter, c.Ctx.Request)
 }

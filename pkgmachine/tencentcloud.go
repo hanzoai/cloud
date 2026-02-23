@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/i18n"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
@@ -85,18 +87,18 @@ func getMachineFromTencentInstance(instance *cvm.Instance) *Machine {
 	return machine
 }
 
-func (client MachineTencentClient) GetMachines() ([]*Machine, error) {
+func (client MachineTencentClient) GetMachines(lang string) ([]*Machine, error) {
 	request := cvm.NewDescribeInstancesRequest()
 
 	response, err := client.Client.DescribeInstances(request)
 	if err != nil {
 		if _, ok := err.(*errors.TencentCloudSDKError); ok {
-			return nil, fmt.Errorf("Tencent Cloud API error: %s", err)
+			return nil, fmt.Errorf(i18n.Translate(lang, "pkgmachine:Tencent Cloud API error: %s"), err)
 		}
 		return nil, err
 	}
 
-	fmt.Printf("DescribeInstances response: %s\n", response.ToJsonString())
+	logs.Info("DescribeInstances response: %s", response.ToJsonString())
 
 	machines := []*Machine{}
 	for _, reservation := range response.Response.InstanceSet {
@@ -107,7 +109,7 @@ func (client MachineTencentClient) GetMachines() ([]*Machine, error) {
 	return machines, nil
 }
 
-func (client MachineTencentClient) GetMachine(name string) (*Machine, error) {
+func (client MachineTencentClient) GetMachine(name string, lang string) (*Machine, error) {
 	request := cvm.NewDescribeInstancesRequest()
 
 	request.Filters = []*cvm.Filter{
@@ -120,7 +122,7 @@ func (client MachineTencentClient) GetMachine(name string) (*Machine, error) {
 	response, err := client.Client.DescribeInstances(request)
 	if err != nil {
 		if _, ok := err.(*errors.TencentCloudSDKError); ok {
-			return nil, fmt.Errorf("Tencent Cloud API error: %s", err)
+			return nil, fmt.Errorf(i18n.Translate(lang, "pkgmachine:Tencent Cloud API error: %s"), err)
 		}
 		return nil, err
 	}
@@ -134,8 +136,8 @@ func (client MachineTencentClient) GetMachine(name string) (*Machine, error) {
 	return machine, nil
 }
 
-func (client MachineTencentClient) UpdateMachineState(name string, state string) (bool, string, error) {
-	machine, err := client.GetMachine(name)
+func (client MachineTencentClient) UpdateMachineState(name string, state string, lang string) (bool, string, error) {
+	machine, err := client.GetMachine(name, lang)
 	if err != nil {
 		return false, "", err
 	}
@@ -153,7 +155,7 @@ func (client MachineTencentClient) UpdateMachineState(name string, state string)
 
 		_, err = client.Client.StartInstances(startReq)
 		if err != nil {
-			fmt.Printf("Error starting instance: %v\n", err)
+			logs.Error("Error starting instance: %v", err)
 			return false, "", err
 		}
 
@@ -163,7 +165,7 @@ func (client MachineTencentClient) UpdateMachineState(name string, state string)
 
 		_, err = client.Client.StopInstances(stopReq)
 		if err != nil {
-			fmt.Printf("Error stopping instance: %v\n", err)
+			logs.Error("Error stopping instance: %v", err)
 			return false, "", err
 		}
 	default:

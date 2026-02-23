@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalVectors
@@ -45,7 +45,10 @@ func (c *ApiController) GetGlobalVectors() {
 // @Success 200 {array} object.Vector The Response object
 // @router /get-vectors [get]
 func (c *ApiController) GetVectors() {
-	owner := "admin"
+	owner, ok := c.RequireSessionOwner()
+	if !ok {
+		return
+	}
 	storeName := c.Input().Get("store")
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
@@ -53,6 +56,12 @@ func (c *ApiController) GetVectors() {
 	value := c.Input().Get("value")
 	sortField := c.Input().Get("sortField")
 	sortOrder := c.Input().Get("sortOrder")
+
+	// Apply store isolation based on user's Homepage field
+	storeName, ok = c.EnforceStoreIsolation(storeName)
+	if !ok {
+		return
+	}
 
 	if limit == "" || page == "" {
 		vectors, err := object.GetVectors(owner)
@@ -111,7 +120,7 @@ func (c *ApiController) UpdateVector() {
 		return
 	}
 
-	success, err := object.UpdateVector(id, &vector)
+	success, err := object.UpdateVector(id, &vector, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -188,7 +197,10 @@ func (c *ApiController) DeleteVector() {
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-all-vectors [post]
 func (c *ApiController) DeleteAllVectors() {
-	owner := "admin"
+	owner, ok := c.RequireSessionOwner()
+	if !ok {
+		return
+	}
 
 	vectors, err := object.GetVectors(owner)
 	if err != nil {

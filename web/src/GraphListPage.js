@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import BaseListPage from "./BaseListPage";
 import * as Setting from "./Setting";
 import * as GraphBackend from "./backend/GraphBackend";
 import i18next from "i18next";
-import {Controlled as CodeMirror} from "react-codemirror2";
+import Editor from "./common/Editor";
 import GraphDataPage from "./GraphDataPage";
+import GraphChatDataPage from "./GraphChatDataPage";
 
 class GraphListPage extends BaseListPage {
   constructor(props) {
@@ -36,6 +37,8 @@ class GraphListPage extends BaseListPage {
       name: `graph_${randomName}`,
       createdTime: moment().format(),
       displayName: `New Graph - ${randomName}`,
+      category: "Default",
+      layout: "force",
       text: "",
     };
   }
@@ -46,12 +49,9 @@ class GraphListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newGraph),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/graphs/${newGraph.name}`,
+            state: {isNewGraph: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -95,6 +95,7 @@ class GraphListPage extends BaseListPage {
         key: "name",
         width: "160px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/graphs/${text}`}>
@@ -109,6 +110,7 @@ class GraphListPage extends BaseListPage {
         key: "displayName",
         width: "200px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("general:Created time"),
@@ -116,6 +118,57 @@ class GraphListPage extends BaseListPage {
         key: "createdTime",
         width: "200px",
         sorter: (a, b) => a.createdTime.localeCompare(b.createdTime),
+        render: (text, record, index) => {
+          return Setting.getFormattedDate(text);
+        },
+      },
+      {
+        title: i18next.t("general:Category"),
+        dataIndex: "category",
+        key: "category",
+        width: "140px",
+        sorter: (a, b) => a.category.localeCompare(b.category),
+      },
+      {
+        title: i18next.t("graph:Layout"),
+        dataIndex: "layout",
+        key: "layout",
+        width: "120px",
+        sorter: (a, b) => a.layout.localeCompare(b.layout),
+      },
+      {
+        title: i18next.t("graph:Threshold"),
+        dataIndex: "density",
+        key: "density",
+        width: "130px",
+        sorter: (a, b) => a.density - b.density,
+      },
+      {
+        title: i18next.t("general:Store"),
+        dataIndex: "store",
+        key: "store",
+        width: "120px",
+        sorter: (a, b) => a.store.localeCompare(b.store),
+      },
+      {
+        title: i18next.t("video:Start time (s)"),
+        dataIndex: "startTime",
+        key: "startTime",
+        width: "180px",
+        sorter: (a, b) => a.startTime.localeCompare(b.startTime),
+        render: (text, record, index) => {
+          return Setting.getFormattedDate(text);
+        },
+      },
+      {
+        title: i18next.t("video:End time (s)"),
+        dataIndex: "endTime",
+        key: "endTime",
+        width: "180px",
+        sorter: (a, b) => a.endTime.localeCompare(b.endTime),
+        render: (text, record, index) => {
+          return Setting.getFormattedDate(text);
+        },
       },
       {
         title: i18next.t("general:Text"),
@@ -130,22 +183,13 @@ class GraphListPage extends BaseListPage {
               title={i18next.t("general:Text")}
               content={
                 <div style={{width: "800px", height: "400px", display: "flex"}}>
-                  <CodeMirror
+                  <Editor
                     value={text}
-                    options={{
-                      mode: "application/json",
-                      theme: "material-darker",
-                      lineNumbers: true,
-                      readOnly: true,
-                    }}
-                    editorDidMount={(editor) => {
-                      if (window.ResizeObserver) {
-                        const resizeObserver = new ResizeObserver(() => {
-                          editor.refresh();
-                        });
-                        resizeObserver.observe(editor.getWrapperElement().parentNode);
-                      }
-                    }}
+                    lang="json"
+                    dark
+                    fillWidth
+                    fillHeight
+                    readOnly
                   />
                 </div>
               }>
@@ -157,20 +201,27 @@ class GraphListPage extends BaseListPage {
         },
       },
       {
-        title: i18next.t("general:Graphs"),
+        title: i18next.t("general:Preview"),
         dataIndex: "text",
-        key: "graph",
+        key: "preview",
         width: "240px",
+        fixed: (Setting.isMobile()) ? "false" : "right",
         render: (text, record, index) => {
           return (
             <div style={{height: "240px", width: "100%"}}>
-              <GraphDataPage
-                account={this.props.account}
-                owner={record.owner}
-                graphName={record.name}
-                graphText={text}
-                showLegend={false}
-              />
+              {record.category === "Chats" ? (
+                <GraphChatDataPage graphText={text} showBorder={false} />
+              ) : (
+                <GraphDataPage
+                  account={this.props.account}
+                  owner={record.owner}
+                  graphName={record.name}
+                  graphText={text}
+                  category={record.category}
+                  layout={record.layout}
+                  showLegend={false}
+                />
+              )}
             </div>
           );
         },
@@ -198,7 +249,7 @@ class GraphListPage extends BaseListPage {
         },
       },
     ];
-
+    const filteredColumns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems);
     const paginationProps = {
       total: this.state.pagination.total,
       showQuickJumper: true,
@@ -209,7 +260,7 @@ class GraphListPage extends BaseListPage {
 
     return (
       <div>
-        <Table scroll={{x: 1600}} tableLayout="fixed" columns={columns} dataSource={graphs} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
+        <Table scroll={{x: 1600}} tableLayout="fixed" columns={filteredColumns} dataSource={graphs} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
           title={() => (
             <div>
               {i18next.t("general:Graphs")}&nbsp;&nbsp;&nbsp;&nbsp;

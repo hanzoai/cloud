@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package embedding
 import (
 	"context"
 
-	"github.com/casibase/casibase/proxy"
+	"github.com/hanzoai/cloud/proxy"
 	"google.golang.org/genai"
 )
 
@@ -53,7 +53,7 @@ func (p *GeminiEmbeddingProvider) calculatePrice(res *EmbeddingResult) error {
 	return nil
 }
 
-func (p *GeminiEmbeddingProvider) QueryVector(text string, ctx context.Context) ([]float32, *EmbeddingResult, error) {
+func (p *GeminiEmbeddingProvider) QueryVector(text string, ctx context.Context, lang string) ([]float32, *EmbeddingResult, error) {
 	// Access your API key as an environment variable (see "Set up your API key" above)
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:     p.secretKey,

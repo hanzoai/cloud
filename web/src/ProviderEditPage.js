@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,11 +24,8 @@ import McpToolsTable from "./table/McpToolsTable";
 import ModelTestWidget from "./common/TestModelWidget";
 import TtsTestWidget from "./common/TestTtsWidget";
 import EmbedTestWidget from "./common/TestEmbedWidget";
-
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
-require("codemirror/theme/material-darker.css");
-require("codemirror/mode/javascript/javascript");
+import TestScanWidget from "./common/TestScanWidget";
+import Editor from "./common/Editor";
 
 const {Option} = Select;
 const {TextArea} = Input;
@@ -42,7 +39,7 @@ class ProviderEditPage extends React.Component {
       provider: null,
       originalProvider: null,
       refreshButtonLoading: false,
-      isAdmin: props.account?.isAdmin || props.account?.owner === "admin",
+      isNewProvider: props.location?.state?.isNewProvider || false,
     };
   }
 
@@ -79,6 +76,11 @@ class ProviderEditPage extends React.Component {
     if (provider.category === "Storage") {
       return Setting.getLabel(i18next.t("store:Storage subpath"), i18next.t("store:Storage subpath - Tooltip"));
     }
+    if (provider.category === "Bot") {
+      if (provider.type === "Tencent") {
+        return Setting.getLabel(i18next.t("provider:Bot ID"), i18next.t("provider:Bot ID - Tooltip"));
+      }
+    }
     return Setting.getLabel(i18next.t("provider:Client ID"), i18next.t("provider:Client ID - Tooltip"));
   }
 
@@ -107,6 +109,10 @@ class ProviderEditPage extends React.Component {
       if (provider.type === "ChainMaker") {
         return Setting.getLabel(i18next.t("general:Org ID"), i18next.t("general:Org ID - Tooltip"));
       }
+    } else if (provider.category === "Bot") {
+      if (provider.type === "Tencent") {
+        return Setting.getLabel(i18next.t("provider:AES key"), i18next.t("provider:AES key - Tooltip"));
+      }
     }
     return Setting.getLabel(i18next.t("general:Region"), i18next.t("general:Region - Tooltip"));
   }
@@ -118,12 +124,14 @@ class ProviderEditPage extends React.Component {
       }
       return Setting.getLabel(i18next.t("general:Secret key"), i18next.t("general:Secret key - Tooltip"));
     } else if (provider.category === "Model") {
-      if (provider.type === "Baidu Cloud" || provider.type === "Tencent Cloud") {
-        return Setting.getLabel(i18next.t("provider:API key"), i18next.t("provider:API key - Tooltip"));
-      }
+      return Setting.getLabel(i18next.t("provider:API key"), i18next.t("provider:API key - Tooltip"));
     } else if (provider.category === "Blockchain") {
       if (provider.type === "Ethereum") {
         return Setting.getLabel(i18next.t("provider:Private key"), i18next.t("provider:Private key - Tooltip"));
+      }
+    } else if (provider.category === "Bot") {
+      if (provider.type === "Tencent") {
+        return Setting.getLabel(i18next.t("provider:Token"), i18next.t("provider:Token - Tooltip"));
       }
     }
     return Setting.getLabel(i18next.t("provider:Client secret"), i18next.t("provider:Client secret - Tooltip"));
@@ -210,6 +218,7 @@ class ProviderEditPage extends React.Component {
       step,
       value,
       onChange,
+      disabled,
     } = props;
 
     return (
@@ -222,6 +231,7 @@ class ProviderEditPage extends React.Component {
             style={{width: "100%"}}
             value={value}
             onChange={onChange}
+            disabled={disabled}
           />
         </Col>
         <Col span={20}>
@@ -235,6 +245,7 @@ class ProviderEditPage extends React.Component {
             }}
             value={value}
             onChange={onChange}
+            disabled={disabled}
           />
         </Col>
       </>
@@ -243,12 +254,14 @@ class ProviderEditPage extends React.Component {
 
   renderProvider() {
     const editorWidth = Setting.isMobile() ? 22 : 9;
+    const isRemote = this.state.provider.isRemote;
     return (
       <Card size="small" title={
         <div>
-          {i18next.t("provider:Edit Provider")}&nbsp;&nbsp;&nbsp;&nbsp;
-          <Button onClick={() => this.submitProviderEdit(false)}>{i18next.t("general:Save")}</Button>
-          <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitProviderEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+          {isRemote ? i18next.t("general:View") : i18next.t("provider:Edit Provider")}&nbsp;&nbsp;&nbsp;&nbsp;
+          {!isRemote && <Button onClick={() => this.submitProviderEdit(false)}>{i18next.t("general:Save")}</Button>}
+          {!isRemote && <Button style={{marginLeft: "20px"}} type="primary" onClick={() => this.submitProviderEdit(true)}>{i18next.t("general:Save & Exit")}</Button>}
+          {!isRemote && this.state.isNewProvider && <Button style={{marginLeft: "20px"}} onClick={() => this.cancelProviderEdit()}>{i18next.t("general:Cancel")}</Button>}
         </div>
       } style={{marginLeft: "5px"}} type="inner">
         <Row style={{marginTop: "10px"}} >
@@ -256,7 +269,7 @@ class ProviderEditPage extends React.Component {
             {Setting.getLabel(i18next.t("general:Name"), i18next.t("general:Name - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <Input value={this.state.provider.name} onChange={e => {
+            <Input disabled={isRemote} value={this.state.provider.name} onChange={e => {
               this.updateProviderField("name", e.target.value);
             }} />
           </Col>
@@ -266,17 +279,17 @@ class ProviderEditPage extends React.Component {
             {Setting.getLabel(i18next.t("general:Display name"), i18next.t("general:Display name - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <Input value={this.state.provider.displayName} onChange={e => {
+            <Input disabled={isRemote} value={this.state.provider.displayName} onChange={e => {
               this.updateProviderField("displayName", e.target.value);
             }} />
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}} >
           <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-            {Setting.getLabel(i18next.t("provider:Category"), i18next.t("provider:Category - Tooltip"))} :
+            {Setting.getLabel(i18next.t("general:Category"), i18next.t("provider:Category - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <Select virtual={false} style={{width: "100%"}} value={this.state.provider.category} onChange={(value => {
+            <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.category} onChange={(value => {
               this.updateProviderField("category", value);
               if (value === "Storage") {
                 this.updateProviderField("type", "Local File System");
@@ -299,6 +312,12 @@ class ProviderEditPage extends React.Component {
                 this.updateProviderField("subType", "paraformer-realtime-v1");
               } else if (value === "Private Cloud") {
                 this.updateProviderField("type", "Kubernetes");
+              } else if (value === "Bot") {
+                this.updateProviderField("type", "Tencent");
+                this.updateProviderField("subType", "WeCom Bot");
+              } else if (value === "Scan") {
+                this.updateProviderField("type", "Nmap");
+                this.updateProviderField("subType", "Default");
               }
             })}>
               {
@@ -313,6 +332,8 @@ class ProviderEditPage extends React.Component {
                   {id: "Video", name: "Video"},
                   {id: "Text-to-Speech", name: "Text-to-Speech"},
                   {id: "Speech-to-Text", name: "Speech-to-Text"},
+                  {id: "Bot", name: "Bot"},
+                  {id: "Scan", name: "Scan"},
                 ].map((item, index) => <Option key={index} value={item.id}>{item.name}</Option>)
               }
             </Select>
@@ -323,7 +344,7 @@ class ProviderEditPage extends React.Component {
             {Setting.getLabel(i18next.t("general:Type"), i18next.t("general:Type - Tooltip"))} :
           </Col>
           <Col span={22} >
-            <Select virtual={false} style={{width: "100%"}} value={this.state.provider.type} onChange={(value => {
+            <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.type} onChange={(value => {
               this.updateProviderField("type", value);
               if (this.state.provider.category === "Model") {
                 if (value === "OpenAI") {
@@ -411,6 +432,10 @@ class ProviderEditPage extends React.Component {
                 if (value === "Alibaba Cloud") {
                   this.updateProviderField("subType", "paraformer-realtime-v1");
                 }
+              } else if (this.state.provider.category === "Bot") {
+                if (value === "Tencent") {
+                  this.updateProviderField("subType", "WeCom Bot");
+                }
               }
             })}
             showSearch
@@ -430,7 +455,7 @@ class ProviderEditPage extends React.Component {
           </Col>
         </Row>
         {
-          !["Model", "Embedding", "Agent", "Text-to-Speech", "Speech-to-Text"].includes(this.state.provider.category) ? null : (
+          !["Model", "Embedding", "Agent", "Text-to-Speech", "Speech-to-Text", "Bot"].includes(this.state.provider.category) ? null : (
             <Row style={{marginTop: "20px"}} >
               <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
                 {Setting.getLabel(i18next.t("provider:Sub type"), i18next.t("provider:Sub type - Tooltip"))} :
@@ -440,6 +465,7 @@ class ProviderEditPage extends React.Component {
                   <AutoComplete
                     style={{width: "100%"}}
                     value={this.state.provider.subType}
+                    disabled={isRemote}
                     onChange={(value) => {
                       this.updateProviderField("subType", value);
                     }}
@@ -451,6 +477,7 @@ class ProviderEditPage extends React.Component {
                     virtual={false}
                     style={{width: "100%"}}
                     value={this.state.provider.subType}
+                    disabled={isRemote}
                     onChange={(value) => {
                       this.updateProviderField("subType", value);
                     }}
@@ -477,7 +504,7 @@ class ProviderEditPage extends React.Component {
                 {Setting.getLabel(i18next.t("provider:Input type"), i18next.t("provider:Input type - Tooltip"))} :
               </Col>
               <Col span={22} >
-                <Select virtual={false} style={{width: "100%"}} value={this.state.provider.clientId} onChange={(value => {this.updateProviderField("clientId", value);})}>
+                <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.clientId} onChange={(value => {this.updateProviderField("clientId", value);})}>
                   {
                     ["search_document", "search_query"]
                       .map((item, index) => <Option key={index} value={item}>{item}</Option>)
@@ -489,12 +516,12 @@ class ProviderEditPage extends React.Component {
         }
         {
           !(this.state.provider.category === "Private Cloud" && this.state.provider.type === "Kubernetes") &&
+          this.state.provider.category !== "Scan" &&
           (
             ((this.state.provider.category === "Embedding" && this.state.provider.type === "Baidu Cloud") ||
               (this.state.provider.category === "Embedding" && this.state.provider.type === "Tencent Cloud") ||
               (this.state.provider.category === "Storage" && this.state.provider.type !== "OpenAI File System")) ||
             (this.state.provider.category === "Model" && this.state.provider.type === "MiniMax") ||
-            (this.state.provider.category === "Model" && this.state.provider.type === "iFlytek") ||
             (this.state.provider.category === "Blockchain" && !["ChainMaker", "Ethereum"].includes(this.state.provider.type)) ||
             ((this.state.provider.category === "Model" || this.state.provider.category === "Embedding") && this.state.provider.type === "Azure") ||
             (!(["Storage", "Model", "Embedding", "Text-to-Speech", "Speech-to-Text", "Agent", "Blockchain"].includes(this.state.provider.category)))
@@ -504,7 +531,7 @@ class ProviderEditPage extends React.Component {
                   {this.getClientIdLabel(this.state.provider)} :
                 </Col>
                 <Col span={22} >
-                  <Input value={this.state.provider.clientId} onChange={e => {
+                  <Input disabled={isRemote} value={this.state.provider.clientId} onChange={e => {
                     this.updateProviderField("clientId", e.target.value);
                   }} />
                 </Col>
@@ -519,15 +546,16 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:Compatible provider"), i18next.t("provider:Compatible provider - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <Select virtual={false} style={{width: "100%"}} value={this.state.provider.compatibleProvider} onChange={(value => {
-                    this.updateProviderField("compatibleProvider", value);
-                  })}>
-                    {
-                      Setting.getCompatibleProviderOptions(this.state.provider.category)
-                      // .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((item, index) => <Option key={index} value={item.id}>{item.name}</Option>)
-                    }
-                  </Select>
+                  <AutoComplete
+                    style={{width: "100%"}}
+                    value={this.state.provider.compatibleProvider}
+                    disabled={isRemote}
+                    onChange={(value) => {
+                      this.updateProviderField("compatibleProvider", value);
+                    }}
+                    options={Setting.getCompatibleProviderOptions(this.state.provider.category).map((item) => Setting.getOption(item.name, item.id))}
+                    placeholder="Please select or enter the compatible provider"
+                  />
                 </Col>
               </Row>
             </>
@@ -583,7 +611,7 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:Currency"), i18next.t("provider:Currency - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <Select virtual={false} style={{width: "100%"}} value={this.state.provider.currency} onChange={(value => {
+                  <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.currency} onChange={(value => {
                     this.updateProviderField("currency", value);
                   })}>
                     {
@@ -614,7 +642,7 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:Flavor"), i18next.t("provider:Flavor - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <Select virtual={false} style={{width: "100%"}} value={this.state.provider.flavor} onChange={(value => {
+                  <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.flavor} onChange={(value => {
                     this.updateProviderField("flavor", value);
                   })}>
                     {
@@ -632,33 +660,21 @@ class ProviderEditPage extends React.Component {
             (this.state.provider.category === "Storage" && this.state.provider.type !== "OpenAI File System") ||
             (this.state.provider.category === "Agent" && this.state.provider.type === "MCP") ||
             (this.state.provider.category === "Blockchain" && this.state.provider.type === "ChainMaker") ||
-            this.state.provider.type === "Dummy"
+            this.state.provider.category === "Scan" ||
+            this.state.provider.type === "Dummy" ||
+            this.state.provider.type === "Ollama"
           ) ? null : (
               <Row style={{marginTop: "20px"}} >
                 <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
                   {this.getClientSecretLabel(this.state.provider)} :
                 </Col>
                 <Col span={22} >
-                  <Input value={this.state.provider.clientSecret} onChange={e => {
+                  <Input.Password disabled={isRemote} value={this.state.provider.clientSecret} onChange={e => {
                     this.updateProviderField("clientSecret", e.target.value);
                   }} />
                 </Col>
               </Row>
             )
-        }
-        {
-          (this.state.provider.type === "iFlytek" && this.state.provider.category === "Model") && (
-            <Row style={{marginTop: "20px"}} >
-              <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
-                {Setting.getLabel(i18next.t("cert:User key"), i18next.t("cert:User key - Tooltip"))} :
-              </Col>
-              <Col span={22} >
-                <Input value={this.state.provider.userKey} onChange={e => {
-                  this.updateProviderField("userKey", e.target.value);
-                }} />
-              </Col>
-            </Row>
-          )
         }
         {
           (this.state.provider.category === "Model" && this.state.provider.type === "Claude" && Setting.getThinkingModelMaxTokens(this.state.provider.subType) !== 0) ? (
@@ -668,7 +684,7 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:Enable thinking"), i18next.t("provider:Enable thinking - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <Switch checked={this.state.provider.enableThinking} onChange={checked => {
+                  <Switch disabled={isRemote} checked={this.state.provider.enableThinking} onChange={checked => {
                     this.updateProviderField("enableThinking", checked);
                   }} />
                 </Col>
@@ -699,16 +715,19 @@ class ProviderEditPage extends React.Component {
                 </Col>
                 <Col span={10} >
                   <div style={{height: "500px"}}>
-                    <CodeMirror
+                    <Editor
+                      editable={!isRemote}
                       value={this.state.provider.text}
-                      options={{mode: "application/json", theme: "material-darker"}}
-                      onBeforeChange={(editor, data, value) => {
+                      lang="json"
+                      fillHeight
+                      dark
+                      onChange={value => {
                         this.updateProviderField("text", value);
                       }}
                     />
                   </div>
                   <br />
-                  <Button loading={this.state.refreshButtonLoading} style={{marginBottom: "10px"}} type="primary" onClick={() => {
+                  <Button disabled={isRemote} loading={this.state.refreshButtonLoading} style={{marginBottom: "10px"}} type="primary" onClick={() => {
                     this.refreshMcpTools();
                   }}
                   >
@@ -734,13 +753,13 @@ class ProviderEditPage extends React.Component {
           )
         }
         {
-          ["Storage", "Model", "Embedding", "Agent", "Text-to-Speech", "Speech-to-Text"].includes(this.state.provider.category) || (this.state.provider.category === "Blockchain" && this.state.provider.type === "Ethereum") || (this.state.provider.category === "Private Cloud" && this.state.provider.type === "Kubernetes") ? null : (
+          ["Storage", "Model", "Embedding", "Agent", "Text-to-Speech", "Speech-to-Text", "Scan"].includes(this.state.provider.category) || (this.state.provider.category === "Blockchain" && this.state.provider.type === "Ethereum") || (this.state.provider.category === "Private Cloud" && this.state.provider.type === "Kubernetes") ? null : (
             <Row style={{marginTop: "20px"}} >
               <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
                 {this.getRegionLabel(this.state.provider)} :
               </Col>
               <Col span={22} >
-                <Input value={this.state.provider.region} onChange={e => {
+                <Input disabled={isRemote} value={this.state.provider.region} onChange={e => {
                   this.updateProviderField("region", e.target.value);
                 }} />
               </Col>
@@ -757,7 +776,7 @@ class ProviderEditPage extends React.Component {
                       {Setting.getLabel(i18next.t("provider:Chain"), i18next.t("provider:Chain - Tooltip"))} :
                     </Col>
                     <Col span={22}>
-                      <Input value={this.state.provider.chain} onChange={e => {
+                      <Input disabled={isRemote} value={this.state.provider.chain} onChange={e => {
                         this.updateProviderField("chain", e.target.value);
                       }} />
                     </Col>
@@ -767,7 +786,7 @@ class ProviderEditPage extends React.Component {
                       {this.getNetworkLabel(this.state.provider)} :
                     </Col>
                     <Col span={22}>
-                      <Input value={this.state.provider.network} onChange={e => {
+                      <Input disabled={isRemote} value={this.state.provider.network} onChange={e => {
                         this.updateProviderField("network", e.target.value);
                       }} />
                     </Col>
@@ -898,7 +917,7 @@ class ProviderEditPage extends React.Component {
                       {this.getContractNameLabel(this.state.provider)} :
                     </Col>
                     <Col span={22}>
-                      <Input value={this.state.provider.contractName} onChange={e => {
+                      <Input disabled={isRemote} value={this.state.provider.contractName} onChange={e => {
                         this.updateProviderField("contractName", e.target.value);
                       }} />
                     </Col>
@@ -908,7 +927,7 @@ class ProviderEditPage extends React.Component {
                       {Setting.getLabel(i18next.t("provider:Invoke method"), i18next.t("provider:Invoke method - Tooltip"))} :
                     </Col>
                     <Col span={22}>
-                      <Input value={this.state.provider.contractMethod} onChange={e => {
+                      <Input disabled={isRemote} value={this.state.provider.contractMethod} onChange={e => {
                         this.updateProviderField("contractMethod", e.target.value);
                       }} />
                     </Col>
@@ -942,6 +961,7 @@ class ProviderEditPage extends React.Component {
                   max={["Alibaba Cloud", "Gemini", "OpenAI", "OpenRouter", "Baichuan", "DeepSeek", "StepFun", "Tencent Cloud", "Mistral", "Yi", "Ollama", "Writer"].includes(this.state.provider.type) ? 2 : 1}
                   step={0.01}
                   value={this.state.provider.temperature}
+                  disabled={isRemote}
                   onChange={(value) => {
                     this.updateProviderField("temperature", value);
                   }}
@@ -963,6 +983,7 @@ class ProviderEditPage extends React.Component {
                   max={1.0}
                   step={0.01}
                   value={this.state.provider.topP}
+                  disabled={isRemote}
                   onChange={(value) => {
                     this.updateProviderField("topP", value);
                   }}
@@ -973,7 +994,7 @@ class ProviderEditPage extends React.Component {
           ) : null
         }
         {
-          (this.state.provider.category === "Model" && ["iFlytek", "Gemini"].includes(this.state.provider.type)) ? (
+          (this.state.provider.category === "Model" && this.state.provider.type === "Gemini") ? (
             <>
               <Row style={{marginTop: "20px"}}>
                 <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
@@ -984,6 +1005,7 @@ class ProviderEditPage extends React.Component {
                   max={6}
                   step={1}
                   value={this.state.provider.topK}
+                  disabled={isRemote}
                   onChange={(value) => {
                     this.updateProviderField("topK", value);
                   }}
@@ -1006,6 +1028,7 @@ class ProviderEditPage extends React.Component {
                   max={2}
                   step={0.01}
                   value={this.state.provider.presencePenalty}
+                  disabled={isRemote}
                   onChange={(value) => {
                     this.updateProviderField("presencePenalty", value);
                   }}
@@ -1028,6 +1051,7 @@ class ProviderEditPage extends React.Component {
                   max={2}
                   step={0.01}
                   value={this.state.provider.frequencyPenalty}
+                  disabled={isRemote}
                   onChange={(value) => {
                     this.updateProviderField("frequencyPenalty", value);
                   }}
@@ -1045,7 +1069,7 @@ class ProviderEditPage extends React.Component {
                   {Setting.getLabel(i18next.t("provider:API version"), i18next.t("provider:API version - Tooltip"))} :
                 </Col>
                 <Col span={22} >
-                  <AutoComplete style={{width: "100%"}} value={this.state.provider.apiVersion}
+                  <AutoComplete disabled={isRemote} style={{width: "100%"}} value={this.state.provider.apiVersion}
                     options={Setting.getProviderAzureApiVersionOptions().map((item) => Setting.getOption(item.name, item.id))}
                     onChange={(value) => {this.updateProviderField("apiVersion", value);}}
                   />
@@ -1071,6 +1095,12 @@ class ProviderEditPage extends React.Component {
           account={this.props.account}
           onUpdateProvider={this.updateProviderField.bind(this)}
         />
+        <TestScanWidget
+          provider={this.state.provider}
+          originalProvider={this.state.originalProvider}
+          account={this.props.account}
+          onUpdateProvider={this.updateProviderField.bind(this)}
+        />
         {
           this.state.provider.category === "Model" ? (
             <Row style={{marginTop: "20px"}} >
@@ -1080,7 +1110,7 @@ class ProviderEditPage extends React.Component {
               <Col span={22} >
                 <Input.Password
                   value={this.state.provider.providerKey}
-                  disabled={!this.state.isAdmin}
+                  disabled={!Setting.isAdminUser(this.props.account)}
                   onChange={e => {
                     this.updateProviderField("providerKey", e.target.value);
                   }}
@@ -1096,16 +1126,48 @@ class ProviderEditPage extends React.Component {
                 {Setting.getLabel(i18next.t("provider:Config text"), i18next.t("provider:Config text - Tooltip"))} :
               </Col>
               <Col span={22} >
-                <CodeMirror
+                <Editor
                   value={this.state.provider.configText}
-                  disabled={!this.state.isAdmin}
-                  options={{mode: "yaml", theme: "material-darker"}}
-                  onBeforeChange={(editor, data, value) => {
+                  lang="yaml"
+                  fillHeight
+                  dark
+                  readOnly={isRemote || !Setting.isAdminUser(this.props.account)}
+                  onChange={value => {
                     this.updateProviderField("configText", value);
                   }}
                 />
               </Col>
             </Row>
+          ) : null
+        }
+        {
+          this.state.provider.category === "Scan" ? (
+            <>
+              <Row style={{marginTop: "20px"}} >
+                <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                  {Setting.getLabel(i18next.t("scan:Result summary"), i18next.t("scan:Result summary - Tooltip"))} :
+                </Col>
+                <Col span={22} >
+                  <Input value={this.state.provider.resultSummary} disabled />
+                </Col>
+              </Row>
+              <Row style={{marginTop: "20px"}} >
+                <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                  {Setting.getLabel(i18next.t("scan:Runner"), i18next.t("scan:Runner - Tooltip"))} :
+                </Col>
+                <Col span={22} >
+                  <Input value={this.state.provider.runner} disabled />
+                </Col>
+              </Row>
+              <Row style={{marginTop: "20px"}} >
+                <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+                  {Setting.getLabel(i18next.t("general:Error"), i18next.t("scan:Error - Tooltip"))} :
+                </Col>
+                <Col span={22} >
+                  <Input.TextArea value={this.state.provider.errorText} disabled rows={4} />
+                </Col>
+              </Row>
+            </>
           ) : null
         }
         <Row style={{marginTop: "20px"}} >
@@ -1123,9 +1185,17 @@ class ProviderEditPage extends React.Component {
             {Setting.getLabel(i18next.t("store:Is default"), i18next.t("store:Is default - Tooltip"))} :
           </Col>
           <Col span={1}>
-            <Switch checked={this.state.provider.isDefault} onChange={checked => {
+            <Switch disabled={isRemote} checked={this.state.provider.isDefault} onChange={checked => {
               this.updateProviderField("isDefault", checked);
             }} />
+          </Col>
+        </Row>
+        <Row style={{marginTop: "20px"}} >
+          <Col style={{marginTop: "5px"}} span={(Setting.isMobile()) ? 22 : 2}>
+            {Setting.getLabel(i18next.t("provider:Is remote"), i18next.t("provider:Is remote - Tooltip"))} :
+          </Col>
+          <Col span={1}>
+            <Switch disabled checked={this.state.provider.isRemote} />
           </Col>
         </Row>
         <Row style={{marginTop: "20px"}}>
@@ -1133,7 +1203,7 @@ class ProviderEditPage extends React.Component {
             {Setting.getLabel(i18next.t("general:State"), i18next.t("general:State - Tooltip"))} :
           </Col>
           <Col span={22}>
-            <Select virtual={false} style={{width: "100%"}} value={this.state.provider.state} onChange={value => {
+            <Select virtual={false} disabled={isRemote} style={{width: "100%"}} value={this.state.provider.state} onChange={value => {
               this.updateProviderField("state", value);
             }}
             options={[
@@ -1188,6 +1258,7 @@ class ProviderEditPage extends React.Component {
             Setting.showMessage("success", i18next.t("general:Successfully saved"));
             this.setState({
               providerName: this.state.provider.name,
+              isNewProvider: false,
             });
 
             if (exitAfterSave) {
@@ -1208,16 +1279,39 @@ class ProviderEditPage extends React.Component {
       });
   }
 
+  cancelProviderEdit() {
+    if (this.state.isNewProvider) {
+      ProviderBackend.deleteProvider(this.state.provider)
+        .then((res) => {
+          if (res.status === "ok") {
+            Setting.showMessage("success", i18next.t("general:Cancelled successfully"));
+            this.props.history.push("/providers");
+          } else {
+            Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${res.msg}`);
+          }
+        })
+        .catch(error => {
+          Setting.showMessage("error", `${i18next.t("general:Failed to cancel")}: ${error}`);
+        });
+    } else {
+      this.props.history.push("/providers");
+    }
+  }
+
   render() {
+    const isRemote = this.state.provider?.isRemote;
     return (
       <div>
         {
           this.state.provider !== null ? this.renderProvider() : null
         }
-        <div style={{marginTop: "20px", marginLeft: "40px"}}>
-          <Button size="large" onClick={() => this.submitProviderEdit(false)}>{i18next.t("general:Save")}</Button>
-          <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitProviderEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
-        </div>
+        {!isRemote && (
+          <div style={{marginTop: "20px", marginLeft: "40px"}}>
+            <Button size="large" onClick={() => this.submitProviderEdit(false)}>{i18next.t("general:Save")}</Button>
+            <Button style={{marginLeft: "20px"}} type="primary" size="large" onClick={() => this.submitProviderEdit(true)}>{i18next.t("general:Save & Exit")}</Button>
+            {this.state.isNewProvider && <Button style={{marginLeft: "20px"}} size="large" onClick={() => this.cancelProviderEdit()}>{i18next.t("general:Cancel")}</Button>}
+          </div>
+        )}
       </div>
     );
   }

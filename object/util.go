@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
 	"github.com/sashabaranov/go-openai"
 	"xorm.io/xorm"
 )
@@ -58,15 +57,6 @@ func GetDbSession(owner string, offset, limit int, field, value, sortField, sort
 		session = session.Desc(util.SnakeString(sortField))
 	}
 	return session
-}
-
-func isAdmin(user *casdoorsdk.User) bool {
-	if user == nil {
-		return false
-	}
-
-	res := user.IsAdmin || user.Type == "chat-admin"
-	return res
 }
 
 func isRetryableError(err error) bool {

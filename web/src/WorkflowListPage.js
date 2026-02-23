@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,11 +22,7 @@ import * as WorkflowBackend from "./backend/WorkflowBackend";
 import i18next from "i18next";
 import BpmnComponent from "./BpmnComponent";
 import {DeleteOutlined} from "@ant-design/icons";
-import {Controlled as CodeMirror} from "react-codemirror2";
-import "codemirror/lib/codemirror.css";
-require("codemirror/theme/material-darker.css");
-require("codemirror/mode/xml/xml");
-require("codemirror/mode/htmlmixed/htmlmixed");
+import Editor from "./common/Editor";
 
 const {TextArea} = Input;
 class WorkflowListPage extends BaseListPage {
@@ -70,12 +66,9 @@ class WorkflowListPage extends BaseListPage {
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newWorkflow),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/workflows/${newWorkflow.name}`,
+            state: {isNewWorkflow: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -119,6 +112,7 @@ class WorkflowListPage extends BaseListPage {
         key: "name",
         width: "160px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/workflows/${text}`}>
@@ -133,6 +127,7 @@ class WorkflowListPage extends BaseListPage {
         key: "displayName",
         width: "200px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
         title: i18next.t("general:Text"),
@@ -196,6 +191,7 @@ class WorkflowListPage extends BaseListPage {
         key: "message",
         // width: "160px",
         sorter: (a, b) => a.text.localeCompare(b.text),
+        ...this.getColumnSearchProps("message"),
         render: (text, record, index) => {
           return (
             <Tooltip placement="left" styles={{body: {width: "815px", maxHeight: "355px"}}} title={
@@ -214,6 +210,7 @@ class WorkflowListPage extends BaseListPage {
         key: "questionTemplate",
         // width: "160px",
         sorter: (a, b) => a.questionTemplate.localeCompare(b.questionTemplate),
+        ...this.getColumnSearchProps("questionTemplate"),
         render: (text, record, index) => {
           return (
             <Popover
@@ -228,22 +225,12 @@ class WorkflowListPage extends BaseListPage {
                     readOnly
                   />
                   <div style={{width: "400px", height: "400px"}}>
-                    <CodeMirror
+                    <Editor
                       value={this.renderQuestionTemplate(record)}
-                      options={{
-                        mode: "xml",
-                        theme: "material-darker",
-                        lineNumbers: true,
-                        readOnly: true,
-                      }}
-                      editorDidMount={(editor) => {
-                        if (window.ResizeObserver) {
-                          const resizeObserver = new ResizeObserver(() => {
-                            editor.refresh();
-                          });
-                          resizeObserver.observe(editor.getWrapperElement().parentNode);
-                        }
-                      }}
+                      lang="xml"
+                      fillHeight
+                      dark
+                      readOnly
                     />
                   </div>
                 </div>
@@ -279,7 +266,7 @@ class WorkflowListPage extends BaseListPage {
         },
       },
     ];
-
+    const filteredColumns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems);
     const paginationProps = {
       total: this.state.pagination.total,
       showQuickJumper: true,
@@ -290,7 +277,7 @@ class WorkflowListPage extends BaseListPage {
 
     return (
       <div>
-        <Table scroll={{x: "max-content"}} columns={columns} dataSource={workflows} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
+        <Table scroll={{x: "max-content"}} columns={filteredColumns} dataSource={workflows} rowKey="name" rowSelection={this.getRowSelection()} size="middle" bordered pagination={paginationProps}
           title={() => (
             <div>
               {i18next.t("general:Workflows")}&nbsp;&nbsp;&nbsp;&nbsp;

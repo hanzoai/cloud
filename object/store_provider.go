@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,17 +18,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casibase/casibase/storage"
+	"github.com/hanzoai/cloud/storage"
 )
 
 func (store *Store) createPathIfNotExisted(tokens []string, size int64, url string, lastModifiedTime string, isLeaf bool) {
 	currentFile := store.FileTree
 	for i, token := range tokens {
 		if currentFile.Children == nil {
-			currentFile.Children = []*File{}
+			currentFile.Children = []*TreeFile{}
 		}
 		if currentFile.ChildrenMap == nil {
-			currentFile.ChildrenMap = map[string]*File{}
+			currentFile.ChildrenMap = map[string]*TreeFile{}
 		}
 
 		tmpFile, ok := currentFile.ChildrenMap[token]
@@ -43,13 +43,13 @@ func (store *Store) createPathIfNotExisted(tokens []string, size int64, url stri
 		}
 
 		key := strings.Join(tokens[:i+1], "/")
-		newFile := &File{
+		newFile := &TreeFile{
 			Key:         key,
 			Title:       token,
 			IsLeaf:      isLeafTmp,
 			Url:         url,
-			Children:    []*File{},
-			ChildrenMap: map[string]*File{},
+			Children:    []*TreeFile{},
+			ChildrenMap: map[string]*TreeFile{},
 		}
 
 		if i == len(tokens)-1 {
@@ -79,8 +79,8 @@ func isObjectLeaf(object *storage.Object) bool {
 	return isLeaf
 }
 
-func (store *Store) Populate(origin string) error {
-	storageProviderObj, err := store.GetStorageProviderObj()
+func (store *Store) Populate(origin string, lang string) error {
+	storageProviderObj, err := store.GetStorageProviderObj(lang)
 	if err != nil {
 		return err
 	}
@@ -91,14 +91,14 @@ func (store *Store) Populate(origin string) error {
 	}
 
 	if store.FileTree == nil {
-		store.FileTree = &File{
+		store.FileTree = &TreeFile{
 			Key:         "/",
 			Title:       store.DisplayName,
 			CreatedTime: store.CreatedTime,
 			IsLeaf:      false,
 			Url:         "",
-			Children:    []*File{},
-			ChildrenMap: map[string]*File{},
+			Children:    []*TreeFile{},
+			ChildrenMap: map[string]*TreeFile{},
 		}
 	}
 
@@ -134,8 +134,8 @@ func (store *Store) Populate(origin string) error {
 	return nil
 }
 
-func (store *Store) GetVideoData() ([]string, error) {
-	storageProviderObj, err := store.GetStorageProviderObj()
+func (store *Store) GetVideoData(lang string) ([]string, error) {
+	storageProviderObj, err := store.GetStorageProviderObj(lang)
 	if err != nil {
 		return nil, err
 	}
@@ -156,4 +156,29 @@ func (store *Store) GetVideoData() ([]string, error) {
 	}
 
 	return res, nil
+}
+
+func SyncDefaultProvidersToStore(store *Store) error {
+	defaultStore, err := GetDefaultStore("admin")
+	if err != nil {
+		return err
+	}
+	if defaultStore == nil {
+		return nil
+	}
+
+	if store.ImageProvider == "" && defaultStore.ImageProvider != "" {
+		store.ImageProvider = defaultStore.ImageProvider
+	}
+	if store.TextToSpeechProvider == "Browser Built-In" && defaultStore.TextToSpeechProvider != "" {
+		store.TextToSpeechProvider = defaultStore.TextToSpeechProvider
+	}
+	if store.SpeechToTextProvider == "Browser Built-In" && defaultStore.SpeechToTextProvider != "" {
+		store.SpeechToTextProvider = defaultStore.SpeechToTextProvider
+	}
+	if store.AgentProvider == "" && defaultStore.AgentProvider != "" {
+		store.AgentProvider = defaultStore.AgentProvider
+	}
+
+	return nil
 }

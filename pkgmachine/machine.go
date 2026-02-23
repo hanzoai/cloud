@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,19 @@
 
 package pkgmachine
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/hanzoai/cloud/i18n"
+)
 
 type MachineClientInterface interface {
-	GetMachines() ([]*Machine, error)
-	GetMachine(name string) (*Machine, error)
-	UpdateMachineState(name string, state string) (bool, string, error)
+	GetMachines(lang string) ([]*Machine, error)
+	GetMachine(name string, lang string) (*Machine, error)
+	UpdateMachineState(name string, state string, lang string) (bool, string, error)
 }
 
-func NewMachineClient(providerType string, accessKeyId string, accessKeySecret string, region string) (MachineClientInterface, error) {
+func NewMachineClient(providerType string, accessKeyId string, accessKeySecret string, region string, lang string) (MachineClientInterface, error) {
 	var res MachineClientInterface
 	var err error
 	switch providerType {
@@ -41,7 +45,7 @@ func NewMachineClient(providerType string, accessKeyId string, accessKeySecret s
 	case "Tencent Cloud":
 		res, err = newMachineTencentClient(accessKeyId, accessKeySecret, region)
 	default:
-		return nil, fmt.Errorf("unsupported provider type: %s", providerType)
+		return nil, fmt.Errorf(i18n.Translate(lang, "pkgimage:unsupported provider type: %s"), providerType)
 	}
 
 	if err != nil {

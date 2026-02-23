@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,19 @@ import (
 )
 
 func AutoSigninFilter(ctx *context.Context) {
-	if strings.HasSuffix(ctx.Request.URL.Path, "/chat/completions") {
+	urlPath := ctx.Request.URL.Path
+
+	// Only run for API requests and /storage paths
+	// Skip for /chat/completions, /api/models, and other public API paths
+	if strings.HasSuffix(urlPath, "/chat/completions") || urlPath == "/api/models" {
 		return
 	}
+
+	// Run for API paths and /storage paths only
+	if !strings.HasPrefix(urlPath, "/api/") && !strings.HasPrefix(urlPath, "/storage") {
+		return
+	}
+
 	// HTTP Bearer token like "Authorization: Bearer 123"
 	accessToken := ctx.Input.Query("accessToken")
 	if accessToken == "" {

@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,12 +39,12 @@ This is a dummy module provider.
 `
 }
 
-func (p *DummyModelProvider) QueryText(message string, writer io.Writer, chat_history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *DummyModelProvider) QueryText(message string, writer io.Writer, chat_history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	answer := "this is the answer for \"" + message + "\""
-	if strings.HasPrefix(message, "$CasibaseDryRun$") {
+	if strings.HasPrefix(message, "$CloudDryRun$") {
 		return &ModelResult{}, nil
 	}
-	err := flushDataAzure(answer, writer)
+	err := flushDataAzure(answer, writer, lang)
 	if err != nil {
 		return nil, err
 	}

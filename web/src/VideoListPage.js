@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -246,7 +246,7 @@ class VideoListPage extends BaseListPage {
         ...this.getColumnSearchProps("grade"),
       },
       {
-        title: i18next.t("video:Unit"),
+        title: i18next.t("general:Unit"),
         dataIndex: "unit",
         key: "unit",
         width: "90px",
@@ -370,7 +370,7 @@ class VideoListPage extends BaseListPage {
         },
       },
       // {
-      //   title: i18next.t("video:Labels"),
+      //   title: i18next.t("task:Labels"),
       //   dataIndex: "labels",
       //   key: "labels",
       //   width: "120px",
@@ -510,7 +510,7 @@ class VideoListPage extends BaseListPage {
         },
       },
     ];
-
+    columns = Setting.filterTableColumns(columns, this.props.formItems ?? this.state.formItems);
     const paginationProps = {
       total: this.state.pagination.total,
       showQuickJumper: true,

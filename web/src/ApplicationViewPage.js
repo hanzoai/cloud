@@ -1,10 +1,27 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 
 import React from "react";
-import {Button, Card, Descriptions, Table, Tag, Typography} from "antd";
+import {Button, Card, Col, Descriptions, Progress, Row, Statistic, Tag, Typography} from "antd";
 import {CopyOutlined} from "@ant-design/icons";
 import * as ApplicationBackend from "./backend/ApplicationBackend";
 import * as Setting from "./Setting";
+import EventTable from "./table/EventTable";
+import DeploymentTable from "./table/DeploymentTable";
+import CredentialsTable from "./table/CredentialTable";
 import i18next from "i18next";
 import copy from "copy-to-clipboard";
 
@@ -83,71 +100,52 @@ class ApplicationViewPage extends React.Component {
     );
   }
 
-  renderDeployments() {
+  renderMetrics() {
     const details = this.state.application?.details;
-    if (!details || !details.deployments || details.deployments.length === 0) {
+    if (!details || !details.metrics) {
       return null;
     }
 
-    const columns = [
-      {
-        title: i18next.t("general:Name"),
-        dataIndex: "name",
-        key: "name",
-        width: "150px",
-        render: (text) => <Text>{text}</Text>,
-      },
-      {
-        title: i18next.t("application:Replicas"),
-        dataIndex: "replicas",
-        key: "replicas",
-        width: "80px",
-        render: (text, record) => <Text>{record.readyReplicas}/{text}</Text>,
-      },
-      {
-        title: i18next.t("general:Status"),
-        dataIndex: "status",
-        key: "status",
-        width: "120px",
-        render: (text) => {
-          let color = "default";
-          if (text === "Running") {
-            color = "green";
-          } else if (text === "Partially Ready") {
-            color = "orange";
-          } else if (text === "Not Ready") {
-            color = "red";
-          }
-          return <Tag color={color}>{text}</Tag>;
-        },
-      },
-      {
-        title: i18next.t("general:Containers"),
-        dataIndex: "containers",
-        key: "containers",
-        width: "280px",
-        render: (containers) => (
-          <div>
-            {containers.map((container, index) => (
-              <div key={index} style={{marginBottom: 4}}>
-                <Text style={{fontSize: "12px"}}>{container.image}</Text>
-              </div>
-            ))}
-          </div>
-        ),
-      },
-      {
-        title: i18next.t("general:Created time"),
-        dataIndex: "createdTime",
-        key: "createdTime",
-        width: "160px",
-        render: (text) => <Text style={{fontSize: "12px"}}>{text}</Text>,
-      },
-    ];
+    const metrics = details.metrics;
+
+    const getProgressColor = (percentage) => {
+      if (percentage < 50) {return "#52c41a";}
+      if (percentage < 80) {return "#faad14";}
+      return "#f5222d";
+    };
 
     return (
-      <Card size="small" title={i18next.t("application:Deploy")} style={{marginBottom: 16}}>
-        <Table dataSource={details.deployments} columns={columns} pagination={false} size="small" rowKey="name" />
+      <Card size="small" title={i18next.t("general:Usages")} style={{marginBottom: 16}}>
+        <Row gutter={16}>
+          <Col span={8}>
+            <Card size="small" type="inner" style={{minHeight: 120}}>
+              <Statistic title={i18next.t("system:CPU Usage")} value={metrics.cpuUsage} suffix={metrics.cpuPercentage > 0 ? `(${metrics.cpuPercentage.toFixed(1)}%)` : ""} />
+              {metrics.cpuPercentage > 0 ? (
+                <Progress percent={metrics.cpuPercentage} size="small" strokeColor={getProgressColor(metrics.cpuPercentage)} showInfo={false} style={{marginTop: 8}} />
+              ) : (
+                <div style={{height: 14, marginTop: 8}}></div>
+              )}
+            </Card>
+          </Col>
+
+          <Col span={8}>
+            <Card size="small" type="inner" style={{minHeight: 120}}>
+              <Statistic title={i18next.t("system:Memory Usage")} value={metrics.memoryUsage} suffix={metrics.memoryPercentage > 0 ? `(${metrics.memoryPercentage.toFixed(1)}%)` : ""} />
+              {metrics.memoryPercentage > 0 ? (
+                <Progress percent={metrics.memoryPercentage} size="small" strokeColor={getProgressColor(metrics.memoryPercentage)} showInfo={false} style={{marginTop: 8}} />
+              ) : (
+                <div style={{height: 14, marginTop: 8}}></div>
+              )}
+            </Card>
+          </Col>
+
+          <Col span={8}>
+            <Card size="small" type="inner" style={{minHeight: 120}}>
+              <Statistic title={i18next.t("general:Pods")} value={metrics.podCount} />
+              <div style={{height: 14, marginTop: 8}}></div>
+            </Card>
+          </Col>
+        </Row>
       </Card>
     );
   }
@@ -215,7 +213,7 @@ class ApplicationViewPage extends React.Component {
                     {port.url && (
                       <div style={{marginTop: 4}}>
                         <Text type="secondary" style={{fontSize: "12px"}}>
-                          <a target="_blank" rel="noreferrer" href={`http://${port.url}`}>
+                          <a target="_blank" rel="noreferrer" href={port.url}>
                             {port.url}
                           </a>
                         </Text>
@@ -227,52 +225,6 @@ class ApplicationViewPage extends React.Component {
             )}
           </Card>
         ))}
-      </Card>
-    );
-  }
-
-  renderCredentials() {
-    const details = this.state.application?.details;
-    if (!details || !details.credentials || details.credentials.length === 0) {
-      return null;
-    }
-
-    const columns = [
-      {
-        title: i18next.t("general:Name"),
-        dataIndex: "name",
-        key: "name",
-        width: "200px",
-        sorter: (a, b) => a.name.localeCompare(b.name),
-        render: (text) => <Text>{text}</Text>,
-      },
-      {
-        title: i18next.t("general:Data"),
-        dataIndex: "value",
-        key: "value",
-        width: "300px",
-        render: (text) => (
-          <Text style={{wordBreak: "break-all"}}>{text}</Text>
-        ),
-      },
-      {
-        title: i18next.t("general:Action"),
-        key: "action",
-        width: "80px",
-        render: (text, record) => (
-          <Button icon={<CopyOutlined />} size="small"
-            disabled={!record.value}
-            onClick={() => this.copyToClipboard(record.value)}>
-            {i18next.t("general:Copy")}
-          </Button>
-        ),
-      },
-    ];
-
-    return (
-      <Card size="small" title={i18next.t("general:Resources")} style={{marginBottom: 16}}>
-        <Table dataSource={details.credentials} columns={columns}
-          pagination={false} size="small" rowKey="name" />
       </Card>
     );
   }
@@ -302,12 +254,16 @@ class ApplicationViewPage extends React.Component {
       );
     }
 
+    const details = this.state.application?.details;
+
     return (
       <div style={{margin: "32px"}}>
         {this.renderBasic()}
-        {this.renderDeployments()}
+        {this.renderMetrics()}
+        <DeploymentTable deployments={details?.deployments} />
         {this.renderConnections()}
-        {this.renderCredentials()}
+        <EventTable events={details?.events} />
+        <CredentialsTable credentials={details?.credentials} />
       </div>
     );
   }

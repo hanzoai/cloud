@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,15 +18,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/agent"
-	"github.com/casibase/casibase/embedding"
-	"github.com/casibase/casibase/model"
-	"github.com/casibase/casibase/storage"
-	"github.com/casibase/casibase/stt"
-	"github.com/casibase/casibase/tts"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/agent"
+	"github.com/hanzoai/cloud/embedding"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/model"
+	"github.com/hanzoai/cloud/scan"
+	"github.com/hanzoai/cloud/storage"
+	"github.com/hanzoai/cloud/stt"
+	"github.com/hanzoai/cloud/tts"
+	"github.com/hanzoai/cloud/util"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 	"xorm.io/core"
+	"xorm.io/xorm"
 )
 
 type Provider struct {
@@ -49,6 +52,7 @@ type Provider struct {
 	McpTools           []*agent.McpTools `xorm:"text" json:"mcpTools"`
 	Text               string            `xorm:"mediumtext" json:"text"`
 	ConfigText         string            `xorm:"mediumtext" json:"configText"`
+	RawText            string            `xorm:"mediumtext" json:"rawText"` // Raw result from scan (for Scan category providers)
 
 	EnableThinking   bool    `json:"enableThinking"`
 	Temperature      float32 `xorm:"float" json:"temperature"`
@@ -71,12 +75,21 @@ type Provider struct {
 	Chain          string `xorm:"varchar(100)" json:"chain"`
 	TestContent    string `xorm:"varchar(100)" json:"testContent"`
 
+	// New fields for unified scan widget (for Scan category providers)
+	TargetMode    string `xorm:"varchar(100)" json:"targetMode"`    // "Manual Input" or "Asset"
+	Target        string `xorm:"varchar(500)" json:"target"`        // Manual input target (IP address or network range)
+	Asset         string `xorm:"varchar(200)" json:"asset"`         // Selected asset for scan
+	Runner        string `xorm:"varchar(100)" json:"runner"`        // Hostname about who runs the scan job
+	ErrorText     string `xorm:"mediumtext" json:"errorText"`       // Error message for the job execution
+	ResultSummary string `xorm:"varchar(500)" json:"resultSummary"` // Short summary of scan results
+
 	IsDefault  bool   `json:"isDefault"`
+	IsRemote   bool   `json:"isRemote"`
 	State      string `xorm:"varchar(100)" json:"state"`
 	BrowserUrl string `xorm:"varchar(200)" json:"browserUrl"`
 }
 
-func GetMaskedProvider(provider *Provider, isMaskEnabled bool, user *casdoorsdk.User) *Provider {
+func GetMaskedProvider(provider *Provider, isMaskEnabled bool, user *iamsdk.User) *Provider {
 	if !isMaskEnabled {
 		return provider
 	}
@@ -89,7 +102,7 @@ func GetMaskedProvider(provider *Provider, isMaskEnabled bool, user *casdoorsdk.
 		provider.ClientSecret = "***"
 	}
 
-	if !isAdmin(user) {
+	if !util.IsAdmin(user) {
 		if provider.ProviderKey != "" {
 			provider.ProviderKey = "***"
 		}
@@ -107,7 +120,7 @@ func GetMaskedProvider(provider *Provider, isMaskEnabled bool, user *casdoorsdk.
 	return provider
 }
 
-func GetMaskedProviders(providers []*Provider, isMaskEnabled bool, user *casdoorsdk.User) []*Provider {
+func GetMaskedProviders(providers []*Provider, isMaskEnabled bool, user *iamsdk.User) []*Provider {
 	if !isMaskEnabled {
 		return providers
 	}
@@ -126,12 +139,15 @@ func GetGlobalProviders() ([]*Provider, error) {
 	}
 
 	if providerAdapter != nil {
-		providers = getFilteredProviders(providers, true)
-
 		providers2 := []*Provider{}
 		err = providerAdapter.engine.Asc("owner").Desc("created_time").Find(&providers2)
 		if err != nil {
 			return providers2, err
+		}
+
+		// Mark remote providers
+		for _, provider := range providers2 {
+			provider.IsRemote = true
 		}
 
 		providers = append(providers, providers2...)
@@ -154,8 +170,11 @@ func GetProviders(owner string) ([]*Provider, error) {
 			return providers2, err
 		}
 
-		providers = getFilteredProviders(providers, true)
-		providers2 = getFilteredProviders(providers2, false)
+		// Mark remote providers
+		for _, provider := range providers2 {
+			provider.IsRemote = true
+		}
+
 		providers = append(providers, providers2...)
 	}
 
@@ -174,8 +193,8 @@ func getProvider(owner string, name string) (*Provider, error) {
 		if err != nil {
 			return &provider, err
 		}
-		if provider.Category == "Storage" {
-			return nil, nil
+		if existed {
+			provider.IsRemote = true
 		}
 	}
 
@@ -187,12 +206,18 @@ func getProvider(owner string, name string) (*Provider, error) {
 }
 
 func GetProvider(id string) (*Provider, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return nil, err
+	}
 	return getProvider(owner, name)
 }
 
 func UpdateProvider(id string, provider *Provider) (bool, error) {
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		return false, err
+	}
 	providerDb, err := getProvider(owner, name)
 	if err != nil {
 		return false, err
@@ -203,7 +228,7 @@ func UpdateProvider(id string, provider *Provider) (bool, error) {
 
 	provider.processProviderParams(providerDb)
 
-	if providerAdapter != nil && provider.Category != "Storage" {
+	if providerAdapter != nil && provider.IsRemote {
 		_, err = providerAdapter.engine.ID(core.PK{owner, name}).AllCols().Update(provider)
 		if err != nil {
 			return false, err
@@ -227,7 +252,7 @@ func AddProvider(provider *Provider) (bool, error) {
 		provider.ProviderKey = generateProviderKey()
 	}
 
-	if providerAdapter != nil && provider.Category != "Storage" {
+	if providerAdapter != nil && provider.IsRemote {
 		affected, err := providerAdapter.engine.Insert(provider)
 		if err != nil {
 			return false, err
@@ -245,7 +270,7 @@ func AddProvider(provider *Provider) (bool, error) {
 }
 
 func DeleteProvider(provider *Provider) (bool, error) {
-	if providerAdapter != nil && provider.Category != "Storage" {
+	if providerAdapter != nil && provider.IsRemote {
 		affected, err := providerAdapter.engine.ID(core.PK{provider.Owner, provider.Name}).Delete(&Provider{})
 		if err != nil {
 			return false, err
@@ -266,10 +291,10 @@ func (provider *Provider) GetId() string {
 	return fmt.Sprintf("%s/%s", provider.Owner, provider.Name)
 }
 
-func GetDefaultKubernetesProvider() (*Provider, error) {
+func GetDefaultKubernetesProvider(lang string) (*Provider, error) {
 	providers, err := GetProviders("admin")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get providers: %v", err)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:failed to get providers: %v"), err)
 	}
 
 	for _, provider := range providers {
@@ -277,88 +302,101 @@ func GetDefaultKubernetesProvider() (*Provider, error) {
 			return provider, nil
 		}
 	}
-	return nil, fmt.Errorf("no Kubernetes provider found")
+	return nil, fmt.Errorf(i18n.Translate(lang, "object:no Kubernetes provider found"))
 }
 
-func (p *Provider) GetStorageProviderObj(vectorStoreId string) (storage.StorageProvider, error) {
-	pProvider, err := storage.GetStorageProvider(p.Type, p.ClientId, p.ClientSecret, p.Name, vectorStoreId)
+func (p *Provider) GetStorageProviderObj(vectorStoreId string, lang string) (storage.StorageProvider, error) {
+	pProvider, err := storage.GetStorageProvider(p.Type, p.ClientId, p.ClientSecret, p.Name, vectorStoreId, lang)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the storage provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the storage provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func (p *Provider) GetModelProvider() (model.ModelProvider, error) {
+func (p *Provider) GetModelProvider(lang string) (model.ModelProvider, error) {
 	pProvider, err := model.GetModelProvider(p.Type, p.SubType, p.ClientId, p.ClientSecret, p.UserKey, p.Temperature, p.TopP, p.TopK, p.FrequencyPenalty, p.PresencePenalty, p.ProviderUrl, p.ApiVersion, p.CompatibleProvider, p.InputPricePerThousandTokens, p.OutputPricePerThousandTokens, p.Currency, p.EnableThinking)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the model provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the model provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func (p *Provider) GetEmbeddingProvider() (embedding.EmbeddingProvider, error) {
-	pProvider, err := embedding.GetEmbeddingProvider(p.Type, p.SubType, p.ClientId, p.ClientSecret, p.ProviderUrl, p.ApiVersion, p.InputPricePerThousandTokens, p.Currency)
+func (p *Provider) GetEmbeddingProvider(lang string) (embedding.EmbeddingProvider, error) {
+	pProvider, err := embedding.GetEmbeddingProvider(p.Type, p.SubType, p.ClientId, p.ClientSecret, p.ProviderUrl, p.ApiVersion, p.InputPricePerThousandTokens, p.Currency, lang)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the embedding provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the embedding provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func (p *Provider) GetAgentProvider() (agent.AgentProvider, error) {
-	pProvider, err := agent.GetAgentProvider(p.Type, p.SubType, p.Text, p.McpTools)
+func (p *Provider) GetAgentProvider(lang string) (agent.AgentProvider, error) {
+	pProvider, err := agent.GetAgentProvider(p.Type, p.SubType, p.Text, p.McpTools, lang)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the agent provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "agent:the agent provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func (p *Provider) GetTextToSpeechProvider() (tts.TextToSpeechProvider, error) {
-	pProvider, err := tts.GetTextToSpeechProvider(p.Type, p.SubType, p.ClientId, p.ClientSecret, p.ProviderUrl, p.ApiVersion, p.InputPricePerThousandTokens, p.Currency, p.Flavor)
+func (p *Provider) GetTextToSpeechProvider(lang string) (tts.TextToSpeechProvider, error) {
+	pProvider, err := tts.GetTextToSpeechProvider(p.Type, p.SubType, p.ClientId, p.ClientSecret, p.ProviderUrl, p.ApiVersion, p.InputPricePerThousandTokens, p.Currency, p.Flavor, lang)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the TTS provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the TTS provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func (p *Provider) GetSpeechToTextProvider() (stt.SpeechToTextProvider, error) {
+func (p *Provider) GetSpeechToTextProvider(lang string) (stt.SpeechToTextProvider, error) {
 	pProvider, err := stt.GetSpeechToTextProvider(p.Type, p.SubType, p.ClientSecret, p.ProviderUrl)
 	if err != nil {
 		return nil, err
 	}
 
 	if pProvider == nil {
-		return nil, fmt.Errorf("the STT provider type: %s is not supported", p.Type)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the STT provider type: %s is not supported"), p.Type)
 	}
 
 	return pProvider, nil
 }
 
-func GetModelProviderFromContext(owner string, name string) (*Provider, model.ModelProvider, error) {
+func (p *Provider) GetScanProvider(lang string) (scan.ScanProvider, error) {
+	pProvider, err := scan.GetScanProvider(p.Type, p.ClientId, lang)
+	if err != nil {
+		return nil, err
+	}
+
+	if pProvider == nil {
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:the scan provider type: %s is not supported"), p.Type)
+	}
+
+	return pProvider, nil
+}
+
+func GetModelProviderFromContext(owner string, name string, lang string) (*Provider, model.ModelProvider, error) {
 	var providerName string
 	if name != "" {
 		providerName = name
@@ -373,10 +411,10 @@ func GetModelProviderFromContext(owner string, name string) (*Provider, model.Mo
 		}
 	}
 
-	return getModelProviderFromName(owner, providerName)
+	return getModelProviderFromName(owner, providerName, lang)
 }
 
-func GetEmbeddingProviderFromContext(owner string, name string) (*Provider, embedding.EmbeddingProvider, error) {
+func GetEmbeddingProviderFromContext(owner string, name string, lang string) (*Provider, embedding.EmbeddingProvider, error) {
 	var providerName string
 	if name != "" {
 		providerName = name
@@ -391,10 +429,10 @@ func GetEmbeddingProviderFromContext(owner string, name string) (*Provider, embe
 		}
 	}
 
-	return getEmbeddingProviderFromName(owner, providerName)
+	return getEmbeddingProviderFromName(owner, providerName, lang)
 }
 
-func GetAgentProviderFromContext(owner string, name string) (*Provider, agent.AgentProvider, error) {
+func GetAgentProviderFromContext(owner string, name string, lang string) (*Provider, agent.AgentProvider, error) {
 	var providerName string
 	if name != "" {
 		providerName = name
@@ -409,7 +447,7 @@ func GetAgentProviderFromContext(owner string, name string) (*Provider, agent.Ag
 		}
 	}
 
-	return getAgentProviderFromName(owner, providerName)
+	return getAgentProviderFromName(owner, providerName, lang)
 }
 
 func GetAgentClients(agentProviderObj agent.AgentProvider) (*agent.AgentClients, error) {
@@ -431,7 +469,25 @@ func GetProviderCount(owner, storeName, field, value string) (int64, error) {
 			session = session.In("name", providerNames)
 		}
 	}
-	return session.Count(&Provider{})
+	count, err := session.Count(&Provider{})
+	if err != nil {
+		return 0, err
+	}
+
+	// Add count from remote adapter if available
+	if providerAdapter != nil {
+		session2, err := buildRemoteProviderSession(owner, field, value, storeName)
+		if err != nil {
+			return count, err
+		}
+		count2, err := session2.Count(&Provider{})
+		if err != nil {
+			return count, err
+		}
+		count += count2
+	}
+
+	return count, nil
 }
 
 func collectProviderNames(store *Store) []string {
@@ -471,9 +527,36 @@ func collectProviderNames(store *Store) []string {
 	return providerNames
 }
 
+func buildRemoteProviderSession(owner, field, value, storeName string) (*xorm.Session, error) {
+	if providerAdapter == nil {
+		return nil, fmt.Errorf("providerAdapter is nil")
+	}
+	session := providerAdapter.engine.NewSession()
+	if owner != "" {
+		session = session.And("owner=?", owner)
+	}
+	if field != "" && value != "" {
+		if util.FilterField(field) {
+			session = session.And(fmt.Sprintf("%s like ?", util.SnakeString(field)), fmt.Sprintf("%%%s%%", value))
+		}
+	}
+	if storeName != "" {
+		store, err := GetStore(util.GetIdFromOwnerAndName(owner, storeName))
+		if err != nil {
+			return nil, err
+		}
+		providerNames := collectProviderNames(store)
+		if len(providerNames) > 0 {
+			session = session.In("name", providerNames)
+		}
+	}
+	return session, nil
+}
+
 func GetPaginationProviders(owner, storeName string, offset, limit int, field, value, sortField, sortOrder string) ([]*Provider, error) {
 	providers := []*Provider{}
-	session := GetDbSession(owner, offset, limit, field, value, sortField, sortOrder)
+	// Fetch from local adapter without pagination to properly merge with remote providers
+	session := GetDbSession(owner, -1, -1, field, value, sortField, sortOrder)
 	if storeName != "" {
 		store, err := GetStore(util.GetIdFromOwnerAndName(owner, storeName))
 		if err != nil {
@@ -488,6 +571,51 @@ func GetPaginationProviders(owner, storeName string, offset, limit int, field, v
 	err := session.Find(&providers)
 	if err != nil {
 		return providers, err
+	}
+
+	// Fetch from remote adapter if available
+	if providerAdapter != nil {
+		providers2 := []*Provider{}
+		session2, err := buildRemoteProviderSession(owner, field, value, storeName)
+		if err != nil {
+			return providers, err
+		}
+		// Apply same sort order to remote providers
+		sortFieldToUse := sortField
+		if sortFieldToUse == "" {
+			sortFieldToUse = "created_time"
+		}
+		if sortOrder == "ascend" {
+			session2 = session2.Asc(util.SnakeString(sortFieldToUse))
+		} else {
+			session2 = session2.Desc(util.SnakeString(sortFieldToUse))
+		}
+
+		err = session2.Find(&providers2)
+		if err != nil {
+			return providers, err
+		}
+
+		// Mark remote providers
+		for _, provider := range providers2 {
+			provider.IsRemote = true
+		}
+
+		// Append remote providers after local providers
+		providers = append(providers, providers2...)
+	}
+
+	// Apply pagination on merged results
+	if offset != -1 && limit != -1 {
+		start := offset
+		end := offset + limit
+		if start >= len(providers) {
+			return []*Provider{}, nil
+		}
+		if end > len(providers) {
+			end = len(providers)
+		}
+		providers = providers[start:end]
 	}
 
 	return providers, nil

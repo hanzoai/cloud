@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,14 +16,17 @@ package object
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
-	"github.com/casibase/casibase/model"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/model"
 )
 
 // GetProviderByProviderKey retrieves a provider using the Provider key
-func GetProviderByProviderKey(providerKey string) (*Provider, error) {
+func GetProviderByProviderKey(providerKey string, lang string) (*Provider, error) {
 	if providerKey == "" {
-		return nil, fmt.Errorf("empty provider key")
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:empty provider key"))
 	}
 
 	provider := &Provider{}
@@ -50,27 +53,27 @@ func GetProviderByProviderKey(providerKey string) (*Provider, error) {
 }
 
 // GetModelProviderByProviderKey retrieves both the provider and its model provider by API key
-func GetModelProviderByProviderKey(providerKey string) (model.ModelProvider, error) {
-	provider, err := GetProviderByProviderKey(providerKey)
+func GetModelProviderByProviderKey(providerKey string, lang string) (model.ModelProvider, error) {
+	provider, err := GetProviderByProviderKey(providerKey, lang)
 	if err != nil {
 		return nil, err
 	}
 
 	if provider == nil {
-		return nil, fmt.Errorf("The provider is not found")
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:The provider is not found"))
 	}
 
 	// Ensure it's a model provider
 	if provider.Category != "Model" {
-		return nil, fmt.Errorf("The model provider: %s is not found", provider.Name)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:The model provider: %s is not found"), provider.Name)
 	}
 
-	modelProvider, err := provider.GetModelProvider()
+	modelProvider, err := provider.GetModelProvider(lang)
 	if err != nil {
 		return nil, err
 	}
 	if modelProvider == nil {
-		return nil, fmt.Errorf("The model provider: %s is not found", provider.Name)
+		return nil, fmt.Errorf(i18n.Translate(lang, "object:The model provider: %s is not found"), provider.Name)
 	}
 
 	return modelProvider, nil
@@ -116,13 +119,13 @@ func GetDefaultVideoProvider() (*Provider, error) {
 
 func GetDefaultModelProvider() (*Provider, error) {
 	provider := Provider{Owner: "admin", Category: "Model", IsDefault: true}
-	existed, err := adapter.engine.UseBool().Get(&provider)
+	existed, err := adapter.engine.UseBool("is_default").Get(&provider)
 	if err != nil {
 		return &provider, err
 	}
 
 	if providerAdapter != nil && !existed {
-		existed, err = providerAdapter.engine.UseBool().Get(&provider)
+		existed, err = providerAdapter.engine.UseBool("is_default").Get(&provider)
 		if err != nil {
 			return &provider, err
 		}
@@ -137,13 +140,13 @@ func GetDefaultModelProvider() (*Provider, error) {
 
 func GetDefaultEmbeddingProvider() (*Provider, error) {
 	provider := Provider{Owner: "admin", Category: "Embedding", IsDefault: true}
-	existed, err := adapter.engine.UseBool().Get(&provider)
+	existed, err := adapter.engine.UseBool("is_default").Get(&provider)
 	if err != nil {
 		return &provider, err
 	}
 
 	if providerAdapter != nil && !existed {
-		existed, err = providerAdapter.engine.UseBool().Get(&provider)
+		existed, err = providerAdapter.engine.UseBool("is_default").Get(&provider)
 		if err != nil {
 			return &provider, err
 		}
@@ -158,13 +161,13 @@ func GetDefaultEmbeddingProvider() (*Provider, error) {
 
 func GetDefaultBlockchainProvider() (*Provider, error) {
 	provider := Provider{Owner: "admin", Category: "Blockchain", IsDefault: true}
-	existed, err := adapter.engine.UseBool().Get(&provider)
+	existed, err := adapter.engine.UseBool("is_default").Get(&provider)
 	if err != nil {
 		return &provider, err
 	}
 
 	if providerAdapter != nil && !existed {
-		existed, err = providerAdapter.engine.UseBool().Get(&provider)
+		existed, err = providerAdapter.engine.UseBool("is_default").Get(&provider)
 		if err != nil {
 			return &provider, err
 		}
@@ -179,13 +182,13 @@ func GetDefaultBlockchainProvider() (*Provider, error) {
 
 func GetDefaultAgentProvider() (*Provider, error) {
 	provider := Provider{Owner: "admin", Category: "Agent", IsDefault: true}
-	existed, err := adapter.engine.UseBool().Get(&provider)
+	existed, err := adapter.engine.UseBool("is_default").Get(&provider)
 	if err != nil {
 		return &provider, err
 	}
 
 	if providerAdapter != nil && !existed {
-		existed, err = providerAdapter.engine.UseBool().Get(&provider)
+		existed, err = providerAdapter.engine.UseBool("is_default").Get(&provider)
 		if err != nil {
 			return &provider, err
 		}
@@ -200,13 +203,13 @@ func GetDefaultAgentProvider() (*Provider, error) {
 
 func GetDefaultTextToSpeechProvider() (*Provider, error) {
 	provider := Provider{Owner: "admin", Category: "Text-to-Speech", IsDefault: true}
-	existed, err := adapter.engine.UseBool().Get(&provider)
+	existed, err := adapter.engine.UseBool("is_default").Get(&provider)
 	if err != nil {
 		return &provider, err
 	}
 
 	if providerAdapter != nil && !existed {
-		existed, err = providerAdapter.engine.UseBool().Get(&provider)
+		existed, err = providerAdapter.engine.UseBool("is_default").Get(&provider)
 		if err != nil {
 			return &provider, err
 		}
@@ -238,4 +241,79 @@ func GetDefaultSpeechToTextProvider() (*Provider, error) {
 	}
 
 	return &provider, nil
+}
+
+// providerByNameEntry caches a provider lookup by name to avoid per-request DB queries.
+type providerByNameEntry struct {
+	provider  *Provider
+	fetchedAt time.Time
+}
+
+var (
+	providerByNameCache    = make(map[string]*providerByNameEntry)
+	providerByNameCacheMu  sync.RWMutex
+	providerByNameCacheTTL = 60 * time.Second
+)
+
+// GetModelProviderByName retrieves a Model-category provider by its Name field
+// (e.g. "do-ai", "fireworks", "openai-direct"). Results are cached for 60 seconds.
+func GetModelProviderByName(name string) (*Provider, error) {
+	providerByNameCacheMu.RLock()
+	entry, ok := providerByNameCache[name]
+	providerByNameCacheMu.RUnlock()
+
+	if ok && time.Since(entry.fetchedAt) < providerByNameCacheTTL {
+		if entry.provider == nil {
+			return nil, nil
+		}
+		// Return a shallow copy so callers can mutate fields (e.g. SubType)
+		// without corrupting the cached value.
+		cp := *entry.provider
+		return &cp, nil
+	}
+
+	provider, err := getProvider("admin", name)
+	if err != nil {
+		return nil, err
+	}
+
+	if provider != nil {
+		// Resolve KMS-backed secrets (e.g. "kms://DO_AI_API_KEY" → actual key).
+		if err := ResolveProviderSecret(provider); err != nil {
+			return nil, err
+		}
+	}
+
+	providerByNameCacheMu.Lock()
+	providerByNameCache[name] = &providerByNameEntry{provider: provider, fetchedAt: time.Now()}
+	providerByNameCacheMu.Unlock()
+
+	if provider == nil {
+		return nil, nil
+	}
+
+	cp := *provider
+	return &cp, nil
+}
+
+// GetModelProviderByType retrieves a model provider by its type (e.g. "OpenAI", "Claude", "Fireworks").
+func GetModelProviderByType(providerType string) (*Provider, error) {
+	provider := &Provider{}
+	existed, err := adapter.engine.Where("category = ? AND type = ?", "Model", providerType).Get(provider)
+	if err != nil {
+		return nil, err
+	}
+
+	if providerAdapter != nil && !existed {
+		existed, err = providerAdapter.engine.Where("category = ? AND type = ?", "Model", providerType).Get(provider)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !existed {
+		return nil, nil
+	}
+
+	return provider, nil
 }

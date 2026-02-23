@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,12 +26,12 @@ import (
 	"time"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/audio"
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/storage"
-	"github.com/casibase/casibase/util"
-	"github.com/casibase/casibase/video"
+	"github.com/hanzoai/cloud/audio"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/storage"
+	"github.com/hanzoai/cloud/util"
+	"github.com/hanzoai/cloud/video"
 )
 
 // GetGlobalVideos
@@ -58,7 +58,10 @@ func (c *ApiController) GetGlobalVideos() {
 // @Success 200 {array} object.Video The Response object
 // @router /get-videos [get]
 func (c *ApiController) GetVideos() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -69,7 +72,7 @@ func (c *ApiController) GetVideos() {
 	owner = ""
 
 	if limit == "" || page == "" {
-		videos, err := object.GetVideos(owner)
+		videos, err := object.GetVideos(owner, c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseError(err.Error())
 			return
@@ -85,7 +88,7 @@ func (c *ApiController) GetVideos() {
 		}
 
 		paginator := pagination.SetPaginator(c.Ctx, limit, count)
-		videos, err := object.GetPaginationVideos(owner, paginator.Offset(), limit, field, value, sortField, sortOrder)
+		videos, err := object.GetPaginationVideos(owner, paginator.Offset(), limit, field, value, sortField, sortOrder, c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseError(err.Error())
 			return
@@ -105,14 +108,14 @@ func (c *ApiController) GetVideos() {
 func (c *ApiController) GetVideo() {
 	id := c.Input().Get("id")
 
-	video, err := object.GetVideo(id)
+	video, err := object.GetVideo(id, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
 	if video != nil {
-		err = video.Populate()
+		err = video.Populate(c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseError(err.Error())
 			return
@@ -145,9 +148,9 @@ func (c *ApiController) UpdateVideo() {
 		return
 	}
 
-	if user.Type == "video-normal-user" {
+	if util.IsVideoNormalUser(user) {
 		if len(video.Remarks) > 0 || len(video.Remarks2) > 0 || video.State != "Draft" {
-			c.ResponseError("The video can only be updated when there are no remarks and the state is \"Draft\"")
+			c.ResponseError(c.T("video:The video can only be updated when there are no remarks and the state is \"Draft\""))
 			return
 		}
 	}
@@ -209,11 +212,11 @@ func (c *ApiController) DeleteVideo() {
 	c.ResponseOk(success)
 }
 
-func updateVideoCoverUrl(id string, videoId string) error {
+func updateVideoCoverUrl(id string, videoId string, lang string) error {
 	for i := 0; i < 30; i++ {
 		coverUrl := video.GetVideoCoverUrl(videoId)
 		if coverUrl != "" {
-			v, err := object.GetVideo(id)
+			v, err := object.GetVideo(id, lang)
 			if err != nil {
 				return err
 			}
@@ -236,14 +239,14 @@ func updateVideoCoverUrl(id string, videoId string) error {
 	return nil
 }
 
-func startCoverUrlJob(id string, videoId string) {
-	err := object.SetDefaultVodClient()
+func startCoverUrlJob(id string, videoId string, lang string) {
+	err := object.SetDefaultVodClient(lang)
 	if err != nil {
 		panic(err)
 	}
 
 	go func(id string, videoId string) {
-		err = updateVideoCoverUrl(id, videoId)
+		err = updateVideoCoverUrl(id, videoId, lang)
 		if err != nil {
 			panic(err)
 		}
@@ -266,7 +269,7 @@ func getSpeaker(s string) string {
 	}
 }
 
-func getAudioSegments(userName string, filename string, fileBuffer *bytes.Buffer) (string, []*object.Label, error) {
+func getAudioSegments(userName string, filename string, fileBuffer *bytes.Buffer, lang string) (string, []*object.Label, error) {
 	audioStorageProviderName := conf.GetConfigString("audioStorageProvider")
 	if audioStorageProviderName == "" {
 		return "", []*object.Label{}, nil
@@ -279,7 +282,7 @@ func getAudioSegments(userName string, filename string, fileBuffer *bytes.Buffer
 		return "", nil, err
 	}
 
-	audioStorageProvider, err := storage.NewCasdoorProvider(audioStorageProviderName)
+	audioStorageProvider, err := storage.NewIamProvider(audioStorageProviderName, lang)
 	if err != nil {
 		return "", nil, err
 	}
@@ -290,7 +293,7 @@ func getAudioSegments(userName string, filename string, fileBuffer *bytes.Buffer
 		return "", nil, err
 	}
 
-	tmpInputFile, err := os.CreateTemp("", "casibase-audio-*.mp3")
+	tmpInputFile, err := os.CreateTemp("", "cloud-audio-*.mp3")
 	if err != nil {
 		return "", nil, err
 	}
@@ -303,7 +306,7 @@ func getAudioSegments(userName string, filename string, fileBuffer *bytes.Buffer
 	tmpInputFile.Close()
 
 	segments := []*object.Label{}
-	oSegments, err := audio.GetSegmentsFromAudio(tmpInputFile.Name())
+	oSegments, err := audio.GetSegmentsFromAudio(tmpInputFile.Name(), lang)
 	if err != nil {
 		return "", nil, err
 	}
@@ -355,13 +358,17 @@ func (c *ApiController) UploadVideo() {
 
 	fileType := "unknown"
 	contentType := header.Header.Get("Content-Type")
-	fileType, _ = util.GetOwnerAndNameFromId(contentType)
+	// Parse MIME type to extract the media type (e.g., "video" from "video/mp4")
+	parts := strings.Split(contentType, "/")
+	if len(parts) > 0 {
+		fileType = parts[0]
+	}
 	if fileType != "video" {
 		c.ResponseError(fmt.Sprintf("contentType: %s is not video", contentType))
 		return
 	}
 
-	err = object.SetDefaultVodClient()
+	err = object.SetDefaultVodClient(c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -373,11 +380,11 @@ func (c *ApiController) UploadVideo() {
 		return
 	}
 	if videoId == "" {
-		c.ResponseError("UploadVideo() error, videoId should not be empty")
+		c.ResponseError(c.T("video:UploadVideo() error, videoId should not be empty"))
 		return
 	}
 
-	audioUrl, segments, err := getAudioSegments(userName, filename, fileBuffer)
+	audioUrl, segments, err := getAudioSegments(userName, filename, fileBuffer, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -411,7 +418,7 @@ func (c *ApiController) UploadVideo() {
 
 	id := util.GetIdFromOwnerAndName(userName, fileId)
 
-	err = updateVideoCoverUrl(id, videoId)
+	err = updateVideoCoverUrl(id, videoId, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

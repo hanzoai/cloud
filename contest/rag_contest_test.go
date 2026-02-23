@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !skipCi
+// +build !skipCi
+
 package contest
 
 import (
@@ -20,9 +23,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/proxy"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/proxy"
+	"github.com/hanzoai/cloud/util"
 )
 
 const (
@@ -72,7 +75,7 @@ func TestProcessPapers(t *testing.T) {
 		fmt.Printf("created store for paper %s: %s\n", paperId, store.Name)
 
 		// refresh vectors
-		_, err = object.RefreshStoreVectors(store)
+		_, err = object.RefreshStoreVectors(store, "en")
 		if err != nil {
 			panic(err)
 		}
@@ -86,7 +89,7 @@ func TestProcessPapers(t *testing.T) {
 					"2. If this is a multiple-choice question, reply with only the letters of all correct options (e.g., ABC), and do not include any other words, explanations, or punctuation." +
 					"Question:\n" + questionText
 				fmt.Printf("sending question: %s\n", questionText)
-				answer, _, err := sendMessage(store, text, modelProviderName, embeddingProviderName)
+				answer, _, err := sendMessage(store, text, modelProviderName, embeddingProviderName, "en")
 				if err != nil {
 					fmt.Printf("failed to send message: %v\n", err)
 					break
@@ -128,7 +131,7 @@ func createStore(paperId string) (*object.Store, error) {
 		CreatedTime:          currentTime,
 		DisplayName:          fmt.Sprintf("Paper Store - %s", paperId),
 		Title:                fmt.Sprintf("Paper %s Assistant", paperId),
-		Avatar:               "https://cdn.casibase.com/static/favicon.png",
+		Avatar:               "https://cdn.hanzo.ai/static/favicon.png",
 		StorageProvider:      StorageProviderName,
 		StorageSubpath:       paperId,
 		SplitProvider:        "Default",

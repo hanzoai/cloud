@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/beego/beego/logs"
 )
 
 func getImportedVideos(path string) ([]*Video, error) {
@@ -195,7 +197,7 @@ func importVideos(path string) error {
 	}
 
 	for i, video := range videos {
-		fmt.Printf("[%d] Add video: %v\n", i, video)
+		logs.Info("[%d] Add video: %v", i, video)
 		_, err = AddVideo(video)
 		if err != nil {
 			return err

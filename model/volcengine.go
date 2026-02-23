@@ -1,4 +1,4 @@
-// Copyright 2024 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/i18n"
 	"github.com/volcengine/volcengine-go-sdk/service/arkruntime"
 	"github.com/volcengine/volcengine-go-sdk/service/arkruntime/model"
 	"github.com/volcengine/volcengine-go-sdk/volcengine"
@@ -43,6 +46,12 @@ func NewVolcengineModelProvider(subType string, endpointID string, apiKey string
 	}, nil
 }
 
+func trimModelDate(subType string) string {
+	// change "doubao-seed-1-6-250615" to "doubao-seed-1-6"
+	re := regexp.MustCompile(`-\d{6}$`)
+	return re.ReplaceAllString(subType, "")
+}
+
 func (p *VolcengineModelProvider) GetPricing() string {
 	return `URL:
 https://www.volcengine.com/docs/82379/1099320
@@ -56,6 +65,7 @@ https://www.volcengine.com/docs/82379/1099320
 | doubao-1-5-thinking-pro        | 0.0040                          | 0.0160                           |
 | doubao-1-5-thinking-vision-pro | 0.0030                          | 0.0090                           |
 | deepseek-v3.1                  | 0.0040                          | 0.0120                           |
+| deepseek-v3.2                  | 0.0040                          | 0.0120                           |
 | deepseek-r1                    | 0.0040                          | 0.0160                           |
 | deepseek-r1-distill-qwen-32b   | 0.0015                          | 0.0060                           |
 | deepseek-r1-distill-qwen-7b    | 0.0006                          | 0.0024                           |
@@ -89,7 +99,7 @@ https://www.volcengine.com/docs/82379/1099320
 `
 }
 
-func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult) error {
+func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult, lang string) error {
 	price := 0.0
 	priceTable := map[string][2]float64{
 		// Deep thinking models
@@ -100,6 +110,7 @@ func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult) error
 		"doubao-1-5-thinking-pro":        {0.0040, 0.0160},
 		"doubao-1-5-thinking-vision-pro": {0.0030, 0.0090},
 		"deepseek-v3.1":                  {0.0040, 0.0120},
+		"deepseek-v3.2":                  {0.0040, 0.0120},
 		"deepseek-r1":                    {0.0040, 0.0160},
 		"deepseek-r1-distill-qwen-32b":   {0.0015, 0.0060},
 		"deepseek-r1-distill-qwen-7b":    {0.0006, 0.0024},
@@ -135,8 +146,10 @@ func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult) error
 		"doubao-realtime": {0.0300, 0.0300},
 	}
 
+	subType := trimModelDate(p.subType)
+
 	// Special handling for image generation models
-	switch p.subType {
+	switch subType {
 	case "doubao-seedream-4.0":
 		modelResult.TotalPrice = float64(modelResult.ImageCount) * 0.2
 		modelResult.Currency = "CNY"
@@ -151,12 +164,12 @@ func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult) error
 		return nil
 	}
 
-	if priceItem, ok := priceTable[p.subType]; ok {
+	if priceItem, ok := priceTable[subType]; ok {
 		inputPrice := getPrice(modelResult.PromptTokenCount, priceItem[0])
 		outputPrice := getPrice(modelResult.ResponseTokenCount, priceItem[1])
 		price = inputPrice + outputPrice
 	} else {
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", p.subType)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), subType)
 	}
 
 	modelResult.TotalPrice = price
@@ -164,11 +177,11 @@ func (p *VolcengineModelProvider) calculatePrice(modelResult *ModelResult) error
 	return nil
 }
 
-func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	ctx := context.Background()
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("writer does not implement http.Flusher")
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 	client := arkruntime.NewClientWithApiKey(p.apiKey)
 
@@ -182,7 +195,7 @@ func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, h
 		},
 	}
 	request := model.ChatCompletionRequest{
-		Model:         p.endpointID,
+		Model:         p.subType,
 		Messages:      messages,
 		Temperature:   p.temperature,
 		TopP:          p.topP,
@@ -200,7 +213,7 @@ func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, h
 
 	stream, err := client.CreateChatCompletionStream(ctx, request)
 	if err != nil {
-		fmt.Printf("stream chat error: %v\n", err)
+		logs.Error("stream chat error: %v", err)
 		return nil, err
 	}
 	defer stream.Close()
@@ -233,7 +246,7 @@ func (p *VolcengineModelProvider) QueryText(question string, writer io.Writer, h
 		}
 	}
 
-	err = p.calculatePrice(modelResult)
+	err = p.calculatePrice(modelResult, lang)
 	if err != nil {
 		return nil, err
 	}

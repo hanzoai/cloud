@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,27 +23,31 @@ import (
 	"strings"
 
 	"github.com/ThinkInAIXYZ/go-mcp/protocol"
-	"github.com/casibase/casibase/proxy"
+	"github.com/hanzoai/cloud/i18n"
+	"github.com/hanzoai/cloud/proxy"
 	"github.com/openai/openai-go/v2"
 	"github.com/openai/openai-go/v2/option"
 	"github.com/openai/openai-go/v2/packages/param"
 	"github.com/openai/openai-go/v2/responses"
+	"github.com/openai/openai-go/v2/shared"
 	"github.com/pkoukk/tiktoken-go"
 )
 
 type OpenAiModelProvider struct {
 	subType          string
 	secretKey        string
+	providerUrl      string
 	temperature      float32
 	topP             float32
 	frequencyPenalty float32
 	presencePenalty  float32
 }
 
-func NewOpenAiModelProvider(subType string, secretKey string, temperature float32, topP float32, frequencyPenalty float32, presencePenalty float32) (*OpenAiModelProvider, error) {
+func NewOpenAiModelProvider(subType string, secretKey string, providerUrl string, temperature float32, topP float32, frequencyPenalty float32, presencePenalty float32) (*OpenAiModelProvider, error) {
 	p := &OpenAiModelProvider{
 		subType:          subType,
 		secretKey:        secretKey,
+		providerUrl:      providerUrl,
 		temperature:      temperature,
 		topP:             topP,
 		frequencyPenalty: frequencyPenalty,
@@ -52,7 +56,7 @@ func NewOpenAiModelProvider(subType string, secretKey string, temperature float3
 	return p, nil
 }
 
-func CalculateOpenAIModelPrice(model string, modelResult *ModelResult) error {
+func CalculateOpenAIModelPrice(model string, modelResult *ModelResult, lang string) error {
 	var inputPricePerThousandTokens, outputPricePerThousandTokens float64
 	switch {
 	// gpt 3.5 turbo model Support:
@@ -125,6 +129,34 @@ func CalculateOpenAIModelPrice(model string, modelResult *ModelResult) error {
 		}
 		modelResult.Currency = "USD"
 
+	// gpt 5.2 model (includes gpt-5.2-chat which uses same pricing)
+	case strings.Contains(model, "gpt-5.2"):
+		if strings.Contains(model, "5.2-mini") {
+			inputPricePerThousandTokens = 0.00025
+			outputPricePerThousandTokens = 0.002
+		} else if strings.Contains(model, "5.2-nano") {
+			inputPricePerThousandTokens = 0.00005
+			outputPricePerThousandTokens = 0.0004
+		} else {
+			inputPricePerThousandTokens = 0.00125
+			outputPricePerThousandTokens = 0.01
+		}
+		modelResult.Currency = "USD"
+
+	// gpt 5.1 model
+	case strings.Contains(model, "gpt-5.1"):
+		if strings.Contains(model, "5.1-mini") {
+			inputPricePerThousandTokens = 0.00025
+			outputPricePerThousandTokens = 0.002
+		} else if strings.Contains(model, "5.1-nano") {
+			inputPricePerThousandTokens = 0.00005
+			outputPricePerThousandTokens = 0.0004
+		} else {
+			inputPricePerThousandTokens = 0.00125
+			outputPricePerThousandTokens = 0.01
+		}
+		modelResult.Currency = "USD"
+
 	// gpt 5.0 model
 	case strings.Contains(model, "gpt-5"):
 		if strings.Contains(model, "5-mini") {
@@ -139,6 +171,32 @@ func CalculateOpenAIModelPrice(model string, modelResult *ModelResult) error {
 		}
 		modelResult.Currency = "USD"
 
+	// gpt 4.5 model
+	case strings.Contains(model, "gpt-4.5"):
+		if strings.Contains(model, "4.5-mini") {
+			inputPricePerThousandTokens = 0.0004
+			outputPricePerThousandTokens = 0.0016
+		} else if strings.Contains(model, "4.5-nano") {
+			inputPricePerThousandTokens = 0.0001
+			outputPricePerThousandTokens = 0.0004
+		} else {
+			inputPricePerThousandTokens = 0.002
+			outputPricePerThousandTokens = 0.008
+		}
+		modelResult.Currency = "USD"
+
+	// deep-research model
+	case strings.Contains(model, "deep-research"):
+		inputPricePerThousandTokens = 0.002
+		outputPricePerThousandTokens = 0.008
+		modelResult.Currency = "USD"
+
+	// gpt-image-1 model
+	case strings.Contains(model, "gpt-image-1"):
+		modelResult.TotalPrice = float64(modelResult.ImageCount) * 0.08
+		modelResult.Currency = "USD"
+		return nil
+
 	// dall-e model
 	case strings.Contains(model, "dall-e-3"):
 		modelResult.TotalPrice = float64(modelResult.ImageCount) * 0.08
@@ -147,7 +205,7 @@ func CalculateOpenAIModelPrice(model string, modelResult *ModelResult) error {
 	default:
 		// inputPricePerThousandTokens = 0
 		// outputPricePerThousandTokens = 0
-		return fmt.Errorf("calculatePrice() error: unknown model type: %s", model)
+		return fmt.Errorf(i18n.Translate(lang, "embedding:calculatePrice() error: unknown model type: %s"), model)
 	}
 
 	inputPrice := getPrice(modelResult.PromptTokenCount, inputPricePerThousandTokens)
@@ -173,6 +231,9 @@ Language models:
 | GPT-4.1               | 100K    | $0.002                   | $0.008                   |
 | GPT-4.1-mini          | 100K    | $0.0004	                 | $0.0016                  |
 | GPT-4.1-nano          | 100K    | $0.0001                  | $0.0004                  |
+| GPT-4.5               | 100K    | $0.002                   | $0.008                   |
+| GPT-4.5-mini          | 100K    | $0.0004                  | $0.0016                  |
+| GPT-4.5-nano          | 100K    | $0.0001                  | $0.0004                  |
 | o1                    | 200K    | $0.015                   | $0.060                   |
 | o1-pro                | 200K    | $0.15                    | $0.6                     |
 | o3                    | 200K    | $0.002                   | $0.008                   |
@@ -181,16 +242,25 @@ Language models:
 | GPT-5                 | 400K    | $0.00125                 | $0.01                    |
 | GPT-5-mini            | 400K    | $0.00025                 | $0.002                   |
 | GPT-5-nano            | 400K    | $0.00005                 | $0.0004                  |
+| GPT-5.1               | 400K    | $0.00125                 | $0.01                    |
+| GPT-5.1-mini          | 400K    | $0.00025                 | $0.002                   |
+| GPT-5.1-nano          | 400K    | $0.00005                 | $0.0004                  |
+| GPT-5.2               | 400K    | $0.00125                 | $0.01                    |
+| GPT-5.2-mini          | 400K    | $0.00025                 | $0.002                   |
+| GPT-5.2-nano          | 400K    | $0.00005                 | $0.0004                  |
+| GPT-5.2-chat          | 400K    | $0.00125                 | $0.01                    |
 | GPT-5-chat-latest     | 400K    | $0.00125                 | $0.01                    |
+| Deep-Research         | 200K    | $0.002                   | $0.008                   |
 Image models:
 
-| Models   | Quality | Resolution               | Price (per image) |
-|----------|---------|--------------------------|------------------|
-| Dall-E-3 | Standard| 1024 * 1024              | N/A              |
-|          | Standard| 1024 * 1792, 1792 * 1024 | $0.08            |
-| Dall-E-3 | HD      | 1024 * 1024              | N/A              |
-|          | HD      | 1024 * 1792, 1792 * 1024 | N/A              |
-| Dall-E-2 | Standard| 1024 * 1024              | N/A              |
+| Models       | Quality | Resolution               | Price (per image) |
+|--------------|---------|--------------------------|------------------|
+| Dall-E-3     | Standard| 1024 * 1024              | N/A              |
+|              | Standard| 1024 * 1792, 1792 * 1024 | $0.08            |
+| Dall-E-3     | HD      | 1024 * 1024              | N/A              |
+|              | HD      | 1024 * 1792, 1792 * 1024 | N/A              |
+| Dall-E-2     | Standard| 1024 * 1024              | N/A              |
+| GPT-Image-1  | Standard| 1024 * 1024              | $0.08            |
 `
 }
 
@@ -198,23 +268,27 @@ func (p *OpenAiModelProvider) GetPricing() string {
 	return getOpenAIModelPrice()
 }
 
-func GetOpenAiClientFromToken(authToken string) openai.Client {
+func GetOpenAiClientFromToken(authToken string, providerUrl string) openai.Client {
 	httpClient := proxy.ProxyHttpClient
-	c := openai.NewClient(option.WithHTTPClient(httpClient), option.WithAPIKey(authToken))
+	opts := []option.RequestOption{option.WithHTTPClient(httpClient), option.WithAPIKey(authToken)}
+	if providerUrl != "" {
+		opts = append(opts, option.WithBaseURL(providerUrl))
+	}
+	c := openai.NewClient(opts...)
 	return c
 }
 
-func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo) (*ModelResult, error) {
+func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, history []*RawMessage, prompt string, knowledgeMessages []*RawMessage, agentInfo *AgentInfo, lang string) (*ModelResult, error) {
 	var client openai.Client
 	var flushData interface{}
 
-	client = GetOpenAiClientFromToken(p.secretKey)
-	flushData = flushDataOpenai
+	client = GetOpenAiClientFromToken(p.secretKey, p.providerUrl)
+	flushData = flushDataThink
 
 	ctx := context.Background()
 	flusher, ok := writer.(http.Flusher)
 	if !ok {
-		return nil, fmt.Errorf("writer does not implement http.Flusher")
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:writer does not implement http.Flusher"))
 	}
 
 	model := p.subType
@@ -227,7 +301,7 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 
 	modelResult := &ModelResult{}
 	if getOpenAiModelType(model) == "Chat" {
-		rawMessages, err := OpenaiGenerateMessages(prompt, question, history, knowledgeMessages, model, maxTokens)
+		rawMessages, err := OpenaiGenerateMessages(prompt, question, history, knowledgeMessages, model, maxTokens, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +321,7 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 			messages = openaiRawMessagesToMessages(rawMessages)
 		}
 
-		if strings.HasPrefix(question, "$CasibaseDryRun$") {
+		if strings.HasPrefix(question, "$CloudDryRun$") {
 			promptTokenCount, err := openaiNumTokensFromMessages(messages, model)
 			if err != nil {
 				return nil, err
@@ -255,15 +329,15 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 
 			modelResult.PromptTokenCount = promptTokenCount
 			modelResult.TotalTokenCount = modelResult.PromptTokenCount + modelResult.ResponseTokenCount
-			err = CalculateOpenAIModelPrice(model, modelResult)
+			err = CalculateOpenAIModelPrice(model, modelResult, lang)
 			if err != nil {
 				return nil, err
 			}
 
-			if GetOpenAiMaxTokens(model) > modelResult.TotalTokenCount {
+			if getContextLength(model) > modelResult.TotalTokenCount {
 				return modelResult, nil
 			} else {
-				return nil, fmt.Errorf("exceed max tokens")
+				return nil, fmt.Errorf(i18n.Translate(lang, "model:exceed max tokens"))
 			}
 		}
 
@@ -273,13 +347,18 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 			Model:        model,
 			Temperature:  param.NewOpt[float64](float64(temperature)),
 			TopP:         param.NewOpt[float64](float64(topP)),
+			Reasoning:    shared.ReasoningParam{Summary: "auto"},
 		}
 		if agentInfo != nil && agentInfo.AgentClients != nil {
-			tools, err := reverseMcpToolsToOpenAi(agentInfo.AgentClients.Tools)
+			agentTools, err := reverseMcpToolsToOpenAi(agentInfo.AgentClients.Tools)
 			if err != nil {
 				return nil, err
 			}
-			req.Tools = tools
+			if agentInfo.AgentClients.WebSearchEnabled {
+				agentTools = append(agentTools, responses.ToolParamOfWebSearchPreview(responses.WebSearchToolTypeWebSearchPreview))
+			}
+
+			req.Tools = agentTools
 			req.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
 				OfToolChoiceMode: param.NewOpt(responses.ToolChoiceOptionsAuto),
 			}
@@ -290,9 +369,15 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 
 		isLeadingReturn := true
 		for respStream.Next() {
-			flushStandard := flushData.(func(string, io.Writer) error)
+			flushThink := flushData.(func(string, string, io.Writer, string) error)
 			response := respStream.Current()
 			switch variant := response.AsAny().(type) {
+			case responses.ResponseReasoningSummaryTextDeltaEvent:
+				data := variant.Delta
+				err = flushThink(data, "reason", writer, lang)
+				if err != nil {
+					return nil, err
+				}
 			case responses.ResponseTextDeltaEvent:
 				data := variant.Delta
 				if isLeadingReturn && len(data) != 0 {
@@ -303,7 +388,7 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 					}
 				}
 
-				err = flushStandard(data, writer)
+				err = flushThink(data, "message", writer, lang)
 				if err != nil {
 					return nil, err
 				}
@@ -311,6 +396,24 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 				switch v := variant.Item.AsAny().(type) {
 				case responses.ResponseFunctionToolCall:
 					toolCalls = append(toolCalls, v)
+				case responses.ResponseOutputMessage:
+					if v.Status == "completed" {
+						for _, contentItem := range v.Content {
+							if contentItem.Type != "output_text" || len(contentItem.Annotations) == 0 {
+								continue
+							}
+							var searchResults []SearchResult
+							for idx, annotation := range contentItem.Annotations {
+								searchResults = append(searchResults, SearchResult{
+									Index: idx + 1,
+									URL:   annotation.URL,
+									Title: annotation.Title,
+								})
+							}
+							searchResultsJSON, _ := json.Marshal(searchResults)
+							flushDataThink(string(searchResultsJSON), "search", writer, lang)
+						}
+					}
 				}
 			case responses.ResponseCompletedEvent:
 				modelResult.ResponseTokenCount = int(variant.Response.Usage.OutputTokens)
@@ -323,22 +426,17 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 			return nil, respStream.Err()
 		}
 
-		err = handleMcpToolCalls(toolCalls, flushData, writer)
-		if err != nil {
-			return nil, err
-		}
-
 		if agentInfo != nil && agentInfo.AgentMessages != nil {
 			agentInfo.AgentMessages.ToolCalls = toolCalls
 		}
 
-		err = CalculateOpenAIModelPrice(model, modelResult)
+		err = CalculateOpenAIModelPrice(model, modelResult, lang)
 		if err != nil {
 			return nil, err
 		}
 		return modelResult, nil
 	} else if getOpenAiModelType(model) == "imagesGenerations" {
-		if strings.HasPrefix(question, "$CasibaseDryRun$") {
+		if strings.HasPrefix(question, "$CloudDryRun$") {
 			return modelResult, nil
 		}
 		quality := getGenerateImageQuality(model)
@@ -362,7 +460,7 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 
 		modelResult.ImageCount = 1
 		modelResult.TotalTokenCount = modelResult.ImageCount
-		err = CalculateOpenAIModelPrice(model, modelResult)
+		err = CalculateOpenAIModelPrice(model, modelResult, lang)
 		if err != nil {
 			return nil, err
 		}
@@ -396,8 +494,8 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 				}
 			}
 
-			flushStandard := flushData.(func(string, io.Writer) error)
-			err := flushStandard(data, writer)
+			flushStandard := flushData.(func(string, io.Writer, string) error)
+			err := flushStandard(data, writer, lang)
 			if err != nil {
 				return nil, err
 			}
@@ -429,7 +527,7 @@ func (p *OpenAiModelProvider) QueryText(question string, writer io.Writer, histo
 
 		return modelResult, nil
 	} else {
-		return nil, fmt.Errorf("QueryText() error: unknown model type: %s", model)
+		return nil, fmt.Errorf(i18n.Translate(lang, "model:QueryText() error: unknown model type: %s"), model)
 	}
 }
 
@@ -654,20 +752,4 @@ func reverseMcpToolsToOpenAi(tools []*protocol.Tool) ([]responses.ToolUnionParam
 		})
 	}
 	return openaiTools, nil
-}
-
-func handleMcpToolCalls(toolCalls []responses.ResponseFunctionToolCall, flushData interface{}, writer io.Writer) error {
-	if toolCalls == nil {
-		return nil
-	}
-
-	if flushThink, ok := flushData.(func(string, string, io.Writer) error); ok {
-		for _, toolCall := range toolCalls {
-			err := flushThink("\n"+"Call result from "+toolCall.Name+"\n", "reason", writer)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

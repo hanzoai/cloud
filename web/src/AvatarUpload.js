@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ import React, {useState} from "react";
 import {Button, Col, Image, Input, Row, Space, Upload} from "antd";
 import * as Setting from "./Setting";
 import i18next from "i18next";
-import * as FileBackend from "./backend/FileBackend";
+import * as TreeFileBackend from "./backend/TreeFileBackend";
 
 const StoreAvatarUploader = (props) => {
   const {store, onUpdate, onUploadComplete, imageUrl} = props;
@@ -42,7 +42,7 @@ const StoreAvatarUploader = (props) => {
     const filename = `${store.owner}_${store.name}_${Date.now()}.${fileExt}`;
 
     const base64Data = await fileToBase64(file);
-    FileBackend.uploadFile(base64Data, filename, file.type)
+    TreeFileBackend.uploadFile(base64Data, filename, file.type)
       .then((res) => {
         if (res.status === "ok") {
           // Backend now returns URL directly for avatar uploads

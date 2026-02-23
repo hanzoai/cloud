@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetApplications
@@ -31,7 +31,10 @@ import (
 // @Success 200 {array} object.Application The Response object
 // @router /get-applications [get]
 func (c *ApiController) GetApplications() {
-	owner := c.Input().Get("owner")
+	owner, allowed := c.GetScopedOwner()
+	if !allowed {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -45,7 +48,7 @@ func (c *ApiController) GetApplications() {
 			c.ResponseError(err.Error())
 			return
 		}
-		object.AddDetails(applications)
+		object.AddDetails(applications, c.GetAcceptLanguage())
 		c.ResponseOk(applications)
 	} else {
 		limit := util.ParseInt(limit)
@@ -62,7 +65,7 @@ func (c *ApiController) GetApplications() {
 			return
 		}
 
-		object.AddDetails(applications)
+		object.AddDetails(applications, c.GetAcceptLanguage())
 		c.ResponseOk(applications, paginator.Nums())
 	}
 }
@@ -84,7 +87,7 @@ func (c *ApiController) GetApplication() {
 	}
 
 	if res != nil {
-		object.AddDetails([]*object.Application{res})
+		object.AddDetails([]*object.Application{res}, c.GetAcceptLanguage())
 	}
 
 	c.ResponseOk(res)
@@ -108,7 +111,7 @@ func (c *ApiController) UpdateApplication() {
 		return
 	}
 
-	success, err := object.UpdateApplication(id, &application)
+	success, err := object.UpdateApplication(id, &application, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -133,7 +136,7 @@ func (c *ApiController) AddApplication() {
 	}
 
 	if application.Template == "" {
-		c.ResponseError("Missing required parameters")
+		c.ResponseError(c.T("application:Missing required parameters"))
 		return
 	}
 
@@ -145,7 +148,7 @@ func (c *ApiController) AddApplication() {
 	}
 
 	if template == nil {
-		c.ResponseError("The Template not found")
+		c.ResponseError(c.T("application:The Template not found"))
 		return
 	}
 
@@ -173,7 +176,7 @@ func (c *ApiController) DeleteApplication() {
 		return
 	}
 
-	success, err := object.DeleteApplication(&application)
+	success, err := object.DeleteApplication(&application, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -210,24 +213,30 @@ func (c *ApiController) DeployApplication() {
 		return
 	}
 
-	success, err := object.UpdateApplication(id, &application)
+	success, err := object.UpdateApplication(id, &application, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 	if !success {
-		c.ResponseError("Failed to update application")
+		c.ResponseError(c.T("application:Failed to update application"))
 		return
 	}
 
 	// Deploy the application synchronously and wait for completion
-	success, err = object.DeployApplicationSync(&application)
+	success, err = object.DeployApplicationSync(&application, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	c.ResponseOk(success)
+	updatedApplication, err := object.GetApplication(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+
+	c.ResponseOk(updatedApplication)
 }
 
 // UndeployApplication
@@ -251,10 +260,14 @@ func (c *ApiController) UndeployApplication() {
 		return
 	}
 
-	owner, name := util.GetOwnerAndNameFromId(id)
+	owner, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
 
 	// Undeploy the application synchronously and wait for completion
-	success, err := object.UndeployApplicationSync(owner, name, application.Namespace)
+	success, err := object.UndeployApplicationSync(owner, name, application.Namespace, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

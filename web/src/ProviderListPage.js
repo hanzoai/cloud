@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,6 +62,7 @@ class ProviderListPage extends BaseListPage {
       contractName: "",
       contractMethod: "",
       state: "Active",
+      isRemote: false,
     };
   }
 
@@ -75,27 +76,22 @@ class ProviderListPage extends BaseListPage {
       category: "Storage",
       type: "Local File System",
       subType: "",
-      clientId: "C:/storage_casibase",
+      clientId: "C:/storage_cloud",
       providerUrl: "",
       state: "Active",
+      isRemote: false,
     };
   }
 
-  addProvider(needStorage = false) {
-    let newProvider = this.newProvider();
-    if (needStorage) {
-      newProvider = this.newStorageProvider();
-    }
+  addProvider() {
+    const newProvider = this.newProvider();
     ProviderBackend.addProvider(newProvider)
       .then((res) => {
         if (res.status === "ok") {
           Setting.showMessage("success", i18next.t("general:Successfully added"));
-          this.setState({
-            data: Setting.prependRow(this.state.data, newProvider),
-            pagination: {
-              ...this.state.pagination,
-              total: this.state.pagination.total + 1,
-            },
+          this.props.history.push({
+            pathname: `/providers/${newProvider.name}`,
+            state: {isNewProvider: true},
           });
         } else {
           Setting.showMessage("error", `${i18next.t("general:Failed to add")}: ${res.msg}`);
@@ -139,6 +135,7 @@ class ProviderListPage extends BaseListPage {
         key: "name",
         width: "180px",
         sorter: (a, b) => a.name.localeCompare(b.name),
+        ...this.getColumnSearchProps("name"),
         render: (text, record, index) => {
           return (
             <Link to={`/providers/${text}`}>
@@ -153,12 +150,28 @@ class ProviderListPage extends BaseListPage {
         key: "displayName",
         width: "220px",
         sorter: (a, b) => a.displayName.localeCompare(b.displayName),
+        ...this.getColumnSearchProps("displayName"),
       },
       {
-        title: i18next.t("provider:Category"),
+        title: i18next.t("general:Category"),
         dataIndex: "category",
         key: "category",
         width: "110px",
+        filterMultiple: false,
+        filters: [
+          {text: "Model", value: "Model"},
+          {text: "Embedding", value: "Embedding"},
+          {text: "Storage", value: "Storage"},
+          {text: "Agent", value: "Agent"},
+          {text: "Public Cloud", value: "Public Cloud"},
+          {text: "Private Cloud", value: "Private Cloud"},
+          {text: "Blockchain", value: "Blockchain"},
+          {text: "Video", value: "Video"},
+          {text: "Text-to-Speech", value: "Text-to-Speech"},
+          {text: "Speech-to-Text", value: "Speech-to-Text"},
+          {text: "Bot", value: "Bot"},
+          {text: "Scan", value: "Scan"},
+        ],
         sorter: (a, b) => a.category.localeCompare(b.category),
       },
       {
@@ -168,6 +181,20 @@ class ProviderListPage extends BaseListPage {
         width: "150px",
         align: "center",
         filterMultiple: false,
+        filters: [
+          {text: "Model", value: "Model", children: Setting.getProviderTypeOptions("Model").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Embedding", value: "Embedding", children: Setting.getProviderTypeOptions("Embedding").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Storage", value: "Storage", children: Setting.getProviderTypeOptions("Storage").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Agent", value: "Agent", children: Setting.getProviderTypeOptions("Agent").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Public Cloud", value: "Public Cloud", children: Setting.getProviderTypeOptions("Public Cloud").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Private Cloud", value: "Private Cloud", children: Setting.getProviderTypeOptions("Private Cloud").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Blockchain", value: "Blockchain", children: Setting.getProviderTypeOptions("Blockchain").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Video", value: "Video", children: Setting.getProviderTypeOptions("Video").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Text-to-Speech", value: "Text-to-Speech", children: Setting.getProviderTypeOptions("Text-to-Speech").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Speech-to-Text", value: "Speech-to-Text", children: Setting.getProviderTypeOptions("Speech-to-Text").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Bot", value: "Bot", children: Setting.getProviderTypeOptions("Bot").map((o) => {return {text: o.id, value: o.name};})},
+          {text: "Scan", value: "Scan", children: Setting.getProviderTypeOptions("Scan").map((o) => {return {text: o.id, value: o.name};})},
+        ],
         sorter: (a, b) => a.type.localeCompare(b.type),
         render: (text, record, index) => {
           return Provider.getProviderLogoWidget(record);
@@ -179,6 +206,7 @@ class ProviderListPage extends BaseListPage {
         key: "subType",
         width: "180px",
         sorter: (a, b) => a.subType.localeCompare(b.subType),
+        ...this.getColumnSearchProps("subType"),
       },
       {
         title: i18next.t("provider:Client ID"),
@@ -186,9 +214,10 @@ class ProviderListPage extends BaseListPage {
         key: "clientId",
         width: "240px",
         sorter: (a, b) => a.clientId.localeCompare(b.clientId),
+        ...this.getColumnSearchProps("clientId"),
       },
       {
-        title: i18next.t("provider:Secret key"),
+        title: i18next.t("general:Secret key"),
         dataIndex: "clientSecret",
         key: "clientSecret",
         width: "120px",
@@ -200,6 +229,7 @@ class ProviderListPage extends BaseListPage {
         key: "region",
         width: "120px",
         sorter: (a, b) => a.region.localeCompare(b.region),
+        ...this.getColumnSearchProps("region"),
       },
       {
         title: i18next.t("provider:API key"),
@@ -209,11 +239,12 @@ class ProviderListPage extends BaseListPage {
         sorter: (a, b) => a.apiKey.localeCompare(b.apiKey),
       },
       {
-        title: i18next.t("provider:Provider URL"),
+        title: i18next.t("general:Provider URL"),
         dataIndex: "providerUrl",
         key: "providerUrl",
         // width: "250px",
         sorter: (a, b) => a.providerUrl.localeCompare(b.providerUrl),
+        ...this.getColumnSearchProps("providerUrl"),
         render: (text, record, index) => {
           return (
             <a target="_blank" rel="noreferrer" href={text}>
@@ -233,7 +264,19 @@ class ProviderListPage extends BaseListPage {
         // ...this.getColumnSearchProps("isDefault"),
         render: (text, record, index) => {
           return (
-            <Switch disabled checkedChildren="ON" unCheckedChildren="OFF" checked={text} />
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
+          );
+        },
+      },
+      {
+        title: i18next.t("provider:Is remote"),
+        dataIndex: "isRemote",
+        key: "isRemote",
+        width: "120px",
+        sorter: (a, b) => a.isRemote - b.isRemote,
+        render: (text, record, index) => {
+          return (
+            <Switch disabled checkedChildren={i18next.t("general:ON")} unCheckedChildren={i18next.t("general:OFF")} checked={text} />
           );
         },
       },
@@ -253,14 +296,28 @@ class ProviderListPage extends BaseListPage {
         render: (text, record, index) => {
           return (
             <div>
-              <Button style={{marginTop: "10px", marginBottom: "10px", marginRight: "10px"}} type="primary" onClick={() => this.props.history.push(`/providers/${record.name}`)}>{i18next.t("general:Edit")}</Button>
+              <Button
+                style={{marginTop: "10px", marginBottom: "10px", marginRight: "10px"}}
+                type={record.isRemote ? "default" : "primary"}
+                onClick={() => this.props.history.push(`/providers/${record.name}`)}
+              >
+                {record.isRemote ? i18next.t("general:View") : i18next.t("general:Edit")}
+              </Button>
               <Popconfirm
                 title={`${i18next.t("general:Sure to delete")}: ${record.name} ?`}
                 onConfirm={() => this.deleteProvider(record)}
                 okText={i18next.t("general:OK")}
                 cancelText={i18next.t("general:Cancel")}
+                disabled={record.isRemote}
               >
-                <Button style={{marginBottom: "10px"}} type="primary" danger>{i18next.t("general:Delete")}</Button>
+                <Button
+                  style={{marginBottom: "10px"}}
+                  type="primary"
+                  danger
+                  disabled={record.isRemote}
+                >
+                  {i18next.t("general:Delete")}
+                </Button>
               </Popconfirm>
             </div>
           );
@@ -290,8 +347,6 @@ class ProviderListPage extends BaseListPage {
                   </Button>
                 </Popconfirm>
               )}
-              &nbsp;&nbsp;&nbsp;&nbsp;
-              <Button size="small" onClick={() => this.addProvider(true)}>{i18next.t("provider:Add Storage Provider")}</Button>
             </div>
           )}
           loading={this.state.loading}
@@ -304,7 +359,10 @@ class ProviderListPage extends BaseListPage {
   fetch = (params = {}) => {
     let field = params.searchedColumn, value = params.searchText;
     const sortField = params.sortField, sortOrder = params.sortOrder;
-    if (params.type !== undefined && params.type !== null) {
+    if (params.category !== undefined && params.category !== null) {
+      field = "category";
+      value = params.category;
+    } else if (params.type !== undefined && params.type !== null) {
       field = "type";
       value = params.type;
     }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ class SingleCard extends React.Component {
           style={{justifyContent: "center"}}
         />
         <br />
-        {i18next.t("video:Comment")}
+        {i18next.t("message:Comment")}
         <br />
         {time}
       </Card.Grid>
@@ -75,7 +75,7 @@ class SingleCard extends React.Component {
         >
           <Meta title={title} description={desc} />
           <br />
-          {i18next.t("video:Comment")}
+          {i18next.t("message:Comment")}
           <br />
           {time}
         </Card>

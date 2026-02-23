@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-casibase
+cloud
 
 # Test binary, built with `go test -c`
 *.test
@@ -23,6 +23,8 @@ files/
 .idea/
 *.iml
 
+.claude
+
 tmp/
 tmpFiles/
 *.tmp
@@ -31,3 +33,6 @@ lastupdate.tmp
 commentsRouter*.go
 
 dist/
+conf/app.local.conf
+casibase
+web/.yarn/

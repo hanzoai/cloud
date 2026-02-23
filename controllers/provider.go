@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalProviders
@@ -46,7 +46,10 @@ func (c *ApiController) GetGlobalProviders() {
 // @Success 200 {array} object.Provider The Response object
 // @router /get-providers [get]
 func (c *ApiController) GetProviders() {
-	owner := "admin"
+	owner, ok := c.RequireSessionOwner()
+	if !ok {
+		return
+	}
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -55,6 +58,12 @@ func (c *ApiController) GetProviders() {
 	sortOrder := c.Input().Get("sortOrder")
 	user := c.GetSessionUser()
 	storeName := c.Input().Get("store")
+
+	// Apply store isolation based on user's Homepage field
+	storeName, ok = c.EnforceStoreIsolation(storeName)
+	if !ok {
+		return
+	}
 
 	if limit == "" || page == "" {
 		providers, err := object.GetProviders(owner)
@@ -150,7 +159,11 @@ func (c *ApiController) AddProvider() {
 		return
 	}
 
-	provider.Owner = "admin"
+	owner, ok := c.RequireSessionOwner()
+	if !ok {
+		return
+	}
+	provider.Owner = owner
 	success, err := object.AddProvider(&provider)
 	if err != nil {
 		c.ResponseError(err.Error())

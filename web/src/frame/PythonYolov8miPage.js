@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ class PythonYolov8miPage extends React.Component {
 
   render() {
     return (
-      <iframe id="PythonYolov8miPage" title={"iframe"} src={"https://yolov8mi.casibase.com"} width="100%" height={window.innerHeight - 195} frameBorder="no" />
+      <iframe id="PythonYolov8miPage" title={"iframe"} src={"https://yolov8mi.hanzo.ai"} width="100%" height={window.innerHeight - 195} frameBorder="no" />
     );
   }
 }

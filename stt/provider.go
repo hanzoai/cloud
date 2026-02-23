@@ -1,4 +1,4 @@
-// Copyright 2025 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ type SpeechToTextResult struct {
 
 type SpeechToTextProvider interface {
 	GetPricing() string
-	ProcessAudio(audioData io.Reader, ctx context.Context) (string, *SpeechToTextResult, error)
+	ProcessAudio(audioData io.Reader, ctx context.Context, lang string) (string, *SpeechToTextResult, error)
 }
 
 // GetSpeechToTextProvider creates a new provider instance based on the provider type

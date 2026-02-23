@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,8 +23,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/casibase/casibase/conf"
-	"github.com/casibase/casibase/proxy"
+	"github.com/beego/beego/logs"
+	"github.com/hanzoai/cloud/conf"
+	"github.com/hanzoai/cloud/proxy"
 )
 
 func parseJsonToFloats(s string) []float64 {
@@ -157,7 +158,7 @@ func downloadMaxmindFiles(cityExists, asnExists bool) {
 	frontendBaseDir := conf.GetConfigString("frontendBaseDir")
 
 	// GitHub repo for the data files
-	repoURL := "https://github.com/casibase/data"
+	repoURL := "https://github.com/hanzoai/cloud-data"
 
 	// Helper function to download and save a file
 	downloadAndSave := func(filename string) error {
@@ -166,7 +167,7 @@ func downloadMaxmindFiles(cityExists, asnExists bool) {
 
 		EnsureFileFolderExists(filePath)
 
-		fmt.Printf("Downloading %s database from %s\n", filename, fileUrl)
+		logs.Info("Downloading %s database from %s", filename, fileUrl)
 		buffer, err := DownloadFile(fileUrl)
 		if err != nil {
 			return err

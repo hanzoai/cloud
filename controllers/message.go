@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"fmt"
 
 	"github.com/beego/beego/utils/pagination"
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/util"
 )
 
 // GetGlobalMessages
@@ -30,7 +30,15 @@ import (
 // @Success 200 {array} object.Message The Response object
 // @router /get-global-messages [get]
 func (c *ApiController) GetGlobalMessages() {
-	owner := "admin"
+	_, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+	if !c.IsAdmin() {
+		c.ResponseError(c.T("auth:this operation requires admin privilege"))
+		return
+	}
+	owner := c.GetSessionOwner()
 	limit := c.Input().Get("pageSize")
 	page := c.Input().Get("p")
 	field := c.Input().Get("field")
@@ -73,6 +81,11 @@ func (c *ApiController) GetGlobalMessages() {
 // @Success 200 {array} object.Message The Response object
 // @router /get-Messages [get]
 func (c *ApiController) GetMessages() {
+	_, ok := c.RequireSignedIn()
+	if !ok {
+		return
+	}
+
 	user := c.Input().Get("user")
 	chat := c.Input().Get("chat")
 	selectedUser := c.Input().Get("selectedUser")
@@ -86,12 +99,13 @@ func (c *ApiController) GetMessages() {
 	}
 
 	if !c.IsAdmin() && user != selectedUser && selectedUser != "" {
-		c.ResponseError("You can only view your own messages")
+		c.ResponseError(c.T("controllers:You can only view your own messages"))
 		return
 	}
 
 	if chat == "" {
-		messages, err := object.GetMessages("admin", user, "")
+		owner := c.GetSessionOwner()
+		messages, err := object.GetMessages(owner, user, "")
 		if err != nil {
 			c.ResponseError(err.Error())
 			return
@@ -125,6 +139,20 @@ func (c *ApiController) GetMessage() {
 		return
 	}
 
+	if message == nil {
+		c.ResponseError("Message not found")
+		return
+	}
+
+	// Check if user has permission to view this message
+	if !c.IsAdmin() && !c.IsPreviewMode() {
+		username := c.GetSessionUsername()
+		if username != message.User {
+			c.ResponseError(c.T("auth:Unauthorized operation"))
+			return
+		}
+	}
+
 	c.ResponseOk(message)
 }
 
@@ -153,7 +181,7 @@ func (c *ApiController) UpdateMessage() {
 	}
 
 	if message.NeedNotify {
-		err = message.SendEmail()
+		err = message.SendEmail(c.GetAcceptLanguage())
 		if err != nil {
 			c.ResponseError(err.Error())
 			return
@@ -281,7 +309,7 @@ func (c *ApiController) AddMessage() {
 
 	host := c.Ctx.Request.Host
 	origin := getOriginFromHost(host)
-	err = object.RefineMessageFiles(&message, origin)
+	err = object.RefineMessageFiles(&message, origin, c.GetAcceptLanguage())
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -292,6 +320,21 @@ func (c *ApiController) AddMessage() {
 	if message.Text == "" {
 		c.ResponseError(fmt.Sprintf("The question should not be empty for message: %v", message))
 		return
+	}
+
+	// Check for forbidden words
+	storeId := util.GetId(message.Owner, message.Store)
+	store, err := object.GetStore(storeId)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
+	if store != nil {
+		contains, forbiddenWord := store.ContainsForbiddenWords(message.Text)
+		if contains {
+			c.ResponseError(fmt.Sprintf("Your message contains a forbidden word: \"%s\"", forbiddenWord))
+			return
+		}
 	}
 
 	success, err := object.AddMessage(&message)
@@ -308,6 +351,15 @@ func (c *ApiController) AddMessage() {
 			return
 		}
 		if chat != nil && chat.Type == "AI" {
+			modelProvider := chat.ModelProvider
+			if modelProvider == "" {
+				// Fallback to store's model provider if chat doesn't have one
+				storeId := util.GetId(chat.Owner, chat.Store)
+				store, storeErr := object.GetStore(storeId)
+				if storeErr == nil && store != nil {
+					modelProvider = store.ModelProvider
+				}
+			}
 			answerMessage := &object.Message{
 				Owner:         message.Owner,
 				Name:          fmt.Sprintf("message_%s", util.GetRandomName()),
@@ -321,7 +373,7 @@ func (c *ApiController) AddMessage() {
 				Text:          "",
 				FileName:      message.FileName,
 				VectorScores:  []object.VectorScore{},
-				ModelProvider: message.ModelProvider,
+				ModelProvider: modelProvider,
 			}
 			_, err = object.AddMessage(answerMessage)
 			if err != nil {
@@ -375,7 +427,7 @@ func (c *ApiController) DeleteWelcomeMessage() {
 
 	user := c.GetSessionUsername()
 	if user != "" && user != message.User {
-		c.ResponseError("No permission")
+		c.ResponseError(c.T("controllers:No permission"))
 		return
 	}
 
@@ -385,13 +437,13 @@ func (c *ApiController) DeleteWelcomeMessage() {
 		hash := getContentHash(fmt.Sprintf("%s|%s", clientIp, userAgent))
 		username := fmt.Sprintf("u-%s", hash)
 		if username != message.User {
-			c.ResponseError("No permission")
+			c.ResponseError(c.T("controllers:No permission"))
 			return
 		}
 	}
 
 	if message.Author != "AI" || message.ReplyTo != "Welcome" {
-		c.ResponseError("No permission")
+		c.ResponseError(c.T("controllers:No permission"))
 		return
 	}
 

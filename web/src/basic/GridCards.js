@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ const GridCards = (props) => {
   if (items === null || items === undefined) {
     return (
       <div style={{display: "flex", justifyContent: "center", alignItems: "center", marginTop: "10%"}}>
-        <Spin size="large" tip={i18next.t("login:Loading")} style={{paddingTop: "10%"}} />
+        <Spin size="large" tip={i18next.t("general:Loading")} style={{paddingTop: "10%"}} />
       </div>
     );
   }

@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,18 +17,18 @@ package controllers
 import (
 	"encoding/json"
 
-	"github.com/casdoor/casdoor-go-sdk/casdoorsdk"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/util"
+	iamsdk "github.com/hanzoid/go-sdk/casdoorsdk"
 )
 
 // GetPermissions
 // @Title GetPermissions
 // @Tag Permission API
 // @Description get permissions
-// @Success 200 {array} casdoorsdk.Permission The Response object
+// @Success 200 {array} iamsdk.Permission The Response object
 // @router /get-permissions [get]
 func (c *ApiController) GetPermissions() {
-	permissions, err := casdoorsdk.GetPermissions()
+	permissions, err := iamsdk.GetPermissions()
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -42,13 +42,17 @@ func (c *ApiController) GetPermissions() {
 // @Tag Permission API
 // @Description get permission
 // @Param id query string true "The id(owner/name) of permission"
-// @Success 200 {object} casdoorsdk.Permission The Response object
+// @Success 200 {object} iamsdk.Permission The Response object
 // @router /get-permission [get]
 func (c *ApiController) GetPermission() {
 	id := c.Input().Get("id")
-	_, name := util.GetOwnerAndNameFromId(id)
+	_, name, err := util.GetOwnerAndNameFromIdWithError(id)
+	if err != nil {
+		c.ResponseError(err.Error())
+		return
+	}
 
-	permission, err := casdoorsdk.GetPermission(name)
+	permission, err := iamsdk.GetPermission(name)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -61,17 +65,17 @@ func (c *ApiController) GetPermission() {
 // @Title UpdatePermission
 // @Tag Permission API
 // @Description update permission
-// @Param body body casdoorsdk.Permission true "The details of the permission"
+// @Param body body iamsdk.Permission true "The details of the permission"
 // @Success 200 {object} controllers.Response The Response object
 // @router /update-permission [post]
 func (c *ApiController) UpdatePermission() {
-	var permission casdoorsdk.Permission
+	var permission iamsdk.Permission
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &permission)
 	if err != nil {
 		panic(err)
 	}
 
-	success, err := casdoorsdk.UpdatePermission(&permission)
+	success, err := iamsdk.UpdatePermission(&permission)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -84,18 +88,18 @@ func (c *ApiController) UpdatePermission() {
 // @Title AddPermission
 // @Tag Permission API
 // @Description add permission
-// @Param body body casdoorsdk.Permission true "The details of the permission"
+// @Param body body iamsdk.Permission true "The details of the permission"
 // @Success 200 {object} controllers.Response The Response object
 // @router /add-permission [post]
 func (c *ApiController) AddPermission() {
-	var permission casdoorsdk.Permission
+	var permission iamsdk.Permission
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &permission)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	success, err := casdoorsdk.AddPermission(&permission)
+	success, err := iamsdk.AddPermission(&permission)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
@@ -108,18 +112,18 @@ func (c *ApiController) AddPermission() {
 // @Title DeletePermission
 // @Tag Permission API
 // @Description delete permission
-// @Param body body casdoorsdk.Permission true "The details of the permission"
+// @Param body body iamsdk.Permission true "The details of the permission"
 // @Success 200 {object} controllers.Response The Response object
 // @router /delete-permission [post]
 func (c *ApiController) DeletePermission() {
-	var permission casdoorsdk.Permission
+	var permission iamsdk.Permission
 	err := json.Unmarshal(c.Ctx.Input.RequestBody, &permission)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return
 	}
 
-	success, err := casdoorsdk.DeletePermission(&permission)
+	success, err := iamsdk.DeletePermission(&permission)
 	if err != nil {
 		c.ResponseError(err.Error())
 		return

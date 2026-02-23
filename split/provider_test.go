@@ -1,4 +1,4 @@
-// Copyright 2023 The Casibase Authors. All Rights Reserved.
+// Copyright 2023-2025 Hanzo AI Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/casibase/casibase/object"
-	"github.com/casibase/casibase/split"
-	"github.com/casibase/casibase/txt"
-	"github.com/casibase/casibase/util"
+	"github.com/hanzoai/cloud/object"
+	"github.com/hanzoai/cloud/split"
+	"github.com/hanzoai/cloud/txt"
+	"github.com/hanzoai/cloud/util"
 )
 
 func TestSplit(t *testing.T) {
@@ -68,7 +68,7 @@ func TestSplit2(t *testing.T) {
 
 	path := filepath.Join(storageProvider.ClientId, "QAText.docx")
 
-	text, err := txt.GetParsedTextFromUrl(path, ".docx")
+	text, err := txt.GetParsedTextFromUrl(path, ".docx", "en")
 	if err != nil {
 		panic(err)
 	}
@@ -98,7 +98,7 @@ func TestSplit3(t *testing.T) {
 
 	path := filepath.Join(storageProvider.ClientId, "myfile.docx")
 
-	text, err := txt.GetParsedTextFromUrl(path, ".docx")
+	text, err := txt.GetParsedTextFromUrl(path, ".docx", "en")
 	if err != nil {
 		panic(err)
 	}
