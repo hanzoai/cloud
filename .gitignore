@@ -34,5 +34,5 @@ commentsRouter*.go
 
 dist/
 conf/app.local.conf
-casibase
+cloud
 web/.yarn/

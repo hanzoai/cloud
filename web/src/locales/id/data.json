@@ -67,7 +67,7 @@
     "Edit Chat": "Sunting percakapan",
     "Failed to recognize speech": "Gagal mengenali suara",
     "Group": "Percakapan grup",
-    "Hello, I'm Casibase AI Assistant": "Halo, saya Asisten AI Casibase",
+    "Hello, I'm Hanzo AI Assistant": "Halo, saya Asisten AI Hanzo",
     "I'm here to help answer your questions": "Saya di sini untuk membantu menjawab pertanyaan Anda",
     "I'm listening...": "Saya mendengarkan...",
     "New Chat": "Percakapan baru",
@@ -662,7 +662,7 @@
   "system": {
     "API Latency": "Latensi API",
     "API Throughput": "Throughput API",
-    "About Casibase": "Tentang Casibase",
+    "About Hanzo Cloud": "Tentang Hanzo Cloud",
     "CPU Usage": "Penggunaan CPU",
     "Community": "Komunitas",
     "Count": "Kali",

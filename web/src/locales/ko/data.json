@@ -67,7 +67,7 @@
     "Edit Chat": "대화 편집",
     "Failed to recognize speech": "음성 인식에 실패했습니다",
     "Group": "그룹 채팅",
-    "Hello, I'm Casibase AI Assistant": "안녕하세요, 저는 Casibase AI 어시스턴트입니다",
+    "Hello, I'm Hanzo AI Assistant": "안녕하세요, 저는 Hanzo AI 어시스턴트입니다",
     "I'm here to help answer your questions": "질문에 대답하는 데 도와드리겠습니다",
     "I'm listening...": "듣고 있습니다...",
     "New Chat": "새로운 대화",
@@ -662,7 +662,7 @@
   "system": {
     "API Latency": "API 지연",
     "API Throughput": "API 처리량",
-    "About Casibase": "Casibase에 대해",
+    "About Hanzo Cloud": "Hanzo Cloud에 대해",
     "CPU Usage": "CPU 사용률",
     "Community": "커뮤니티",
     "Count": "회수",

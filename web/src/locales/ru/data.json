@@ -67,7 +67,7 @@
     "Edit Chat": "Редактировать чат",
     "Failed to recognize speech": "Не удалось распознать речь",
     "Group": "Групповой чат",
-    "Hello, I'm Casibase AI Assistant": "Привет, я ассистент ИИ Casibase",
+    "Hello, I'm Hanzo AI Assistant": "Привет, я ассистент ИИ Hanzo",
     "I'm here to help answer your questions": "Я здесь, чтобы помочь ответить на ваши вопросы",
     "I'm listening...": "Слушаю...",
     "New Chat": "Новый чат",
@@ -662,7 +662,7 @@
   "system": {
     "API Latency": "Задержка API",
     "API Throughput": "Пропускная способность API",
-    "About Casibase": "О Casibase",
+    "About Hanzo Cloud": "О Hanzo Cloud",
     "CPU Usage": "Использование CPU",
     "Community": "Сообщество",
     "Count": "Количество",
