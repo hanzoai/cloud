@@ -162,7 +162,7 @@ func (c *kmsClient) getAuthToken() (string, error) {
 		return "", fmt.Errorf("kms: failed to marshal login request: %w", err)
 	}
 
-	url := c.endpoint + "/api/v1/identities/universal-auth/login"
+	url := c.endpoint + "/api/v1/auth/universal-auth/login"
 	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("kms: universal auth login failed: %w", err)
