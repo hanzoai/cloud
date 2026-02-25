@@ -15,8 +15,13 @@
 package controllers
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -184,11 +189,22 @@ func zenIdentityPrompt(model string) string {
 }
 
 // resolveModelRoute looks up a user-facing model name and returns its route.
-// Lookup is case-insensitive. Returns nil if the model is not in the routing table.
+// Lookup is case-insensitive. If the model is not in the static routing table
+// but contains a "/" (provider/model format), it falls back to OpenRouter.
 func resolveModelRoute(model string) *modelRoute {
 	m := strings.ToLower(model)
 	if route, ok := modelRoutes[m]; ok {
 		return &route
+	}
+	// Fallback: route provider/model format through OpenRouter.
+	// OpenRouter accepts model IDs like "anthropic/claude-sonnet-4.5",
+	// "openai/gpt-4o", "google/gemini-2.0-flash", etc.
+	if strings.Contains(m, "/") {
+		return &modelRoute{
+			providerName:  "openrouter",
+			upstreamModel: m,
+			premium:       true,
+		}
 	}
 	return nil
 }
@@ -202,12 +218,16 @@ type modelInfo struct {
 	Premium bool   `json:"premium"`
 }
 
-// listAvailableModels returns all models from the routing table, sorted by name.
+// listAvailableModels returns all models from the static routing table plus
+// third-party models from the pricing service, sorted by name.
 func listAvailableModels() []modelInfo {
 	now := time.Now().Unix()
-	models := make([]modelInfo, 0, len(modelRoutes))
+	seen := make(map[string]bool, len(modelRoutes))
+	models := make([]modelInfo, 0, len(modelRoutes)+200)
 
+	// Static routes first (these take priority).
 	for name, route := range modelRoutes {
+		seen[name] = true
 		models = append(models, modelInfo{
 			ID:      name,
 			Object:  "model",
@@ -217,9 +237,100 @@ func listAvailableModels() []modelInfo {
 		})
 	}
 
+	// Merge cached third-party models from pricing service.
+	for _, m := range getCachedThirdPartyModels() {
+		id := strings.ToLower(m.ID)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		models = append(models, modelInfo{
+			ID:      m.ID,
+			Object:  "model",
+			Created: now,
+			OwnedBy: "openrouter",
+			Premium: true,
+		})
+	}
+
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].ID < models[j].ID
 	})
 
 	return models
+}
+
+// thirdPartyModel is the JSON shape of a model from the pricing service.
+type thirdPartyModel struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+}
+
+// pricingResponse is the JSON shape returned by the pricing service.
+type pricingResponse struct {
+	ThirdPartyModels []thirdPartyModel `json:"thirdPartyModels"`
+}
+
+var (
+	cachedModels    []thirdPartyModel
+	cachedModelsAt  time.Time
+	cachedModelsMu  sync.RWMutex
+	modelsCacheTTL  = 30 * time.Minute
+	pricingEndpoint = "http://pricing.hanzo.svc.cluster.local:8080/v1/pricing"
+)
+
+// getCachedThirdPartyModels returns the cached third-party model list,
+// refreshing from the pricing service if the cache is stale.
+func getCachedThirdPartyModels() []thirdPartyModel {
+	cachedModelsMu.RLock()
+	if time.Since(cachedModelsAt) < modelsCacheTTL && cachedModels != nil {
+		result := cachedModels
+		cachedModelsMu.RUnlock()
+		return result
+	}
+	cachedModelsMu.RUnlock()
+
+	// Fetch fresh data.
+	models, err := fetchThirdPartyModels()
+	if err != nil {
+		fmt.Printf("[model-routes] failed to fetch pricing models: %v\n", err)
+		// Return stale cache if available.
+		cachedModelsMu.RLock()
+		defer cachedModelsMu.RUnlock()
+		return cachedModels
+	}
+
+	cachedModelsMu.Lock()
+	cachedModels = models
+	cachedModelsAt = time.Now()
+	cachedModelsMu.Unlock()
+
+	return models
+}
+
+// fetchThirdPartyModels retrieves the third-party model list from the pricing service.
+func fetchThirdPartyModels() ([]thirdPartyModel, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(pricingEndpoint)
+	if err != nil {
+		return nil, fmt.Errorf("GET %s: %w", pricingEndpoint, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pricing service returned %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	var pricing pricingResponse
+	if err := json.Unmarshal(body, &pricing); err != nil {
+		return nil, fmt.Errorf("parsing JSON: %w", err)
+	}
+
+	return pricing.ThirdPartyModels, nil
 }

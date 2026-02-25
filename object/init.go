@@ -260,6 +260,17 @@ func initLLMProviders() {
 			ClientSecret: "kms://ZEN_GATEWAY_KEY",
 			State:        "Active",
 		},
+		{
+			Owner:        "admin",
+			Name:         "openrouter",
+			DisplayName:  "OpenRouter",
+			Category:     "Model",
+			Type:         "OpenAI",
+			SubType:      "anthropic/claude-sonnet-4.5",
+			ProviderUrl:  "https://openrouter.ai/api/v1",
+			ClientSecret: "kms://OPENROUTER_API_KEY",
+			State:        "Active",
+		},
 	}
 
 	for _, p := range providers {
