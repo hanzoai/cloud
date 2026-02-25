@@ -101,7 +101,7 @@ jobs:
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_PROJECT_ID: ${{ secrets.KMS_PROJECT_ID || vars.KMS_PROJECT_ID || 'cloud' }}
           KMS_ENDPOINT: https://kms.hanzo.ai
-          KMS_ENVIRONMENT: production
+          KMS_ENVIRONMENT: prod
         run: |
           set -euo pipefail
 
