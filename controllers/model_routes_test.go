@@ -99,16 +99,39 @@ func TestResolveModelRoute_CaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestResolveModelRoute_UnknownReturnsNil(t *testing.T) {
+func TestResolveModelRoute_UnknownWithoutSlashReturnsNil(t *testing.T) {
 	unknowns := []string{
 		"nonexistent-model",
 		"",
 		"gpt-99",
-		"fireworks/nonexistent",
 	}
 	for _, name := range unknowns {
 		if route := resolveModelRoute(name); route != nil {
 			t.Errorf("resolveModelRoute(%q) = %+v, want nil", name, route)
+		}
+	}
+}
+
+func TestResolveModelRoute_UnknownWithSlashFallsBackToOpenRouter(t *testing.T) {
+	cases := []string{
+		"somevendor/unknown-model",
+		"google/gemini-2.0-flash",
+		"meta-llama/llama-3.3-70b-instruct",
+	}
+	for _, name := range cases {
+		route := resolveModelRoute(name)
+		if route == nil {
+			t.Errorf("resolveModelRoute(%q) = nil, want OpenRouter fallback", name)
+			continue
+		}
+		if route.providerName != "openrouter" {
+			t.Errorf("resolveModelRoute(%q).providerName = %q, want %q", name, route.providerName, "openrouter")
+		}
+		if route.upstreamModel != strings.ToLower(name) {
+			t.Errorf("resolveModelRoute(%q).upstreamModel = %q, want %q", name, route.upstreamModel, strings.ToLower(name))
+		}
+		if !route.premium {
+			t.Errorf("resolveModelRoute(%q).premium = false, want true", name)
 		}
 	}
 }
@@ -180,8 +203,8 @@ func TestListAvailableModels_ReturnsSortedList(t *testing.T) {
 		t.Fatal("listAvailableModels() returned empty slice")
 	}
 
-	if len(models) != len(modelRoutes) {
-		t.Errorf("listAvailableModels() returned %d models, want %d",
+	if len(models) < len(modelRoutes) {
+		t.Errorf("listAvailableModels() returned %d models, want at least %d",
 			len(models), len(modelRoutes))
 	}
 
