@@ -46,6 +46,23 @@ type Config struct {
 	// service-discovery resolution.
 	PaymentsZAPAddr string
 	VaultZAPAddr    string
+
+	// ZAP RPC endpoints for subsystems that are NOT enabled in this
+	// process but are still needed by an enabled subsystem. Empty
+	// means "no remote endpoint" — the client falls back to the
+	// disabled stub which fails closed with a clear error.
+	//
+	// Convention: <subsystem>.<env>.<deployment>.svc:9653 — the same
+	// inter-subsystem listener port the unified binary exposes. The
+	// transport is hanzoai/zap, never JSON.
+	IAMZAPAddr      string
+	KMSZAPAddr      string
+	BaseZAPAddr     string
+	CommerceZAPAddr string
+	AIZAPAddr       string
+	O11yZAPAddr     string
+	VFSZAPAddr      string
+	MQZAPAddr       string
 }
 
 // LoadConfig reads flags + env into a Config. Flags override env.
@@ -62,6 +79,14 @@ func LoadConfig() *Config {
 		DataDir:          getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		PaymentsZAPAddr:  getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:     getenv("CLOUD_VAULT_ZAP_ADDR", ""),
+		IAMZAPAddr:       getenv("CLOUD_IAM_ZAP_ADDR", ""),
+		KMSZAPAddr:       getenv("CLOUD_KMS_ZAP_ADDR", ""),
+		BaseZAPAddr:      getenv("CLOUD_BASE_ZAP_ADDR", ""),
+		CommerceZAPAddr:  getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
+		AIZAPAddr:        getenv("CLOUD_AI_ZAP_ADDR", ""),
+		O11yZAPAddr:      getenv("CLOUD_O11Y_ZAP_ADDR", ""),
+		VFSZAPAddr:       getenv("CLOUD_VFS_ZAP_ADDR", ""),
+		MQZAPAddr:        getenv("CLOUD_MQ_ZAP_ADDR", ""),
 	}
 
 	var enableCSV string
