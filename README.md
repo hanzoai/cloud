@@ -1,3 +1,51 @@
+# cloud
+
+Unified Go control plane and binary for the Hanzo platform (HIP-0106).
+
+[![Status](https://img.shields.io/badge/status-beta-blue)]()
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)]()
+
+## Quick start
+
+```bash
+docker run -p 8080:8080 ghcr.io/hanzoai/cloud:latest
+```
+
+## What this is
+
+`hanzoai/cloud` is one Go binary that mounts every Hanzo subsystem (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, ...) into a single multi-tenant process. Same artifact serves `api.hanzo.ai`, `api.osage.cloud`, `api.lux.cloud`, `api.zoo.cloud`, and every white-label reseller. Brand, enabled subsystems, and tenant scope are deployment configuration.
+
+## Specs
+
+Implements:
+- HIP-0014 Application Deployment
+- HIP-0026 IAM
+- HIP-0027 KMS
+- HIP-0037 AI Cloud Platform
+- HIP-0105 In-Process Extension Runtime
+- HIP-0106 Unified Cloud Binary
+- HIP-0302 Encrypted SQLite + ZapDB Durability
+
+## Architecture
+
+```
+                 api.{tenant}.{brand}
+                          |
+                   hanzoai/cloud (one Go binary)
+                          |
+   +----------+----------+----------+----------+----------+
+   |    iam   |   base   |   kms    |    ai    | gateway  | ...
+   |  Mount() |  Mount() |  Mount() |  Mount() |  Mount() |
+   +----------+----------+----------+----------+----------+
+   per-tenant SQLite (HIP-0302)   |   Hanzo IAM JWKS (HIP-0026)
+   replicate -> S3 (HIP-0107)     |   ZAP inter-subsystem RPC
+```
+
+Every subsystem exposes `func Mount(app *zip.App, deps cloud.Deps) error`. White-label fork pattern: customers fork this repo to launch their own ecosystem.
+
+
+---
+
 # Hanzo Cloud
 
 The unified Go binary that imports every Hanzo-native subsystem and dispatches
