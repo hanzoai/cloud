@@ -690,18 +690,18 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.784.6-0.20260519070756-cc9de676a794
-	github.com/hanzoai/amqp v0.0.0-20260519063635-f1e6dddceabf
-	github.com/hanzoai/authz v1.10.1-0.20260519063807-aaf9ada8f4ac
-	github.com/hanzoai/base v1.2.3-0.20260519065313-88801f0a961b
-	github.com/hanzoai/commerce v1.42.5-0.20260519071034-dad3a0040537
-	github.com/hanzoai/gateway v1.1.4-0.20260519065324-526e56523337
-	github.com/hanzoai/iam/pkg/iam v0.0.0-20260519065317-bdfc4c6f0bad
-	github.com/hanzoai/ingress v1.7.42-0.20260519071101-f1d0e5466536
-	github.com/hanzoai/kms v1.0.8-0.20260519065320-67957b4a79cd
+	github.com/hanzoai/ai v1.785.0
+	github.com/hanzoai/amqp v0.1.0
+	github.com/hanzoai/authz v1.10.0
+	github.com/hanzoai/base v1.1.0
+	github.com/hanzoai/commerce v1.37.0
+	github.com/hanzoai/gateway v0.2.0
+	github.com/hanzoai/iam/pkg/iam v1.18.0
+	github.com/hanzoai/ingress v1.8.0
+	github.com/hanzoai/kms v0.159.0
 	github.com/hanzoai/mcp/go v0.1.0
-	github.com/hanzoai/o11y v1.0.2-0.20260519065336-72a705a2917a
-	github.com/hanzoai/vfs v0.3.2-0.20260519065328-c67215937fc2
+	github.com/hanzoai/o11y v0.1.0
+	github.com/hanzoai/vfs v0.1.0
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
@@ -727,3 +727,29 @@ replace github.com/gorilla/mux => github.com/containous/mux v0.0.0-2025052312054
 replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190809180810-6e71eb837595
 
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
+
+replace github.com/hanzoai/ai => ../ai
+
+replace github.com/hanzoai/amqp => ../amqp
+
+replace github.com/hanzoai/authz => ../authz
+
+replace github.com/hanzoai/base => ../base
+
+replace github.com/hanzoai/commerce => ../commerce
+
+replace github.com/hanzoai/gateway => ../gateway
+
+replace github.com/hanzoai/iam => ../iam
+
+replace github.com/hanzoai/ingress => ../ingress
+
+replace github.com/hanzoai/kms => ../kms
+
+replace github.com/hanzoai/o11y => ../o11y
+
+replace github.com/hanzoai/vfs => ../vfs
+
+replace github.com/hanzoai/iam/pkg/iam => ../iam/pkg/iam
+
+replace github.com/hanzoai/mcp/go => ../mcp/go

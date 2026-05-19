@@ -1094,8 +1094,6 @@ github.com/hanzoai/go-sms-sender v0.25.2 h1:6LfBdHInC+Wj2poXi3nZZnxtCGmiKPVy3XRi
 github.com/hanzoai/go-sms-sender v0.25.2/go.mod h1:uudrECC0t9Qnx7odPTO602eE+xTiwBm3eF/ueJzeau0=
 github.com/hanzoai/gomail/v2 v2.3.2 h1:qQY5O5d9OJKf137OpDPJWNebqcSZhixK0jg3iEMKkxE=
 github.com/hanzoai/gomail/v2 v2.3.2/go.mod h1:5iSiOcaBeJW0m4mp8j8jzby6zeVq31+ogMewkn4xxMw=
-github.com/hanzoai/iam v1.18.0 h1:jxDKSmchNxJNyFeEcx7m/EeVgE5W+7KMsg2M68CZsu4=
-github.com/hanzoai/iam v1.18.0/go.mod h1:IP9KCffnb30D5ulFgUdHMKPNZVJ1SXfU0nOoWkg4iD0=
 github.com/hanzoai/iamsdk/v2 v2.1.0 h1:BuU3323zi6Jx7mgNo/wao4iuYoQsfviVgzRUNjmFduk=
 github.com/hanzoai/iamsdk/v2 v2.1.0/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.0 h1:z+z5KS3cZnM7ndtlLB2mmuh7hc+p78hJNa+zVSD8pIE=
@@ -1106,8 +1104,6 @@ github.com/hanzoai/kv-go/v9 v9.18.0 h1:vO2SD8dV0+H9WWCVKV9KHaWZq4yeMsZruohrsZN94
 github.com/hanzoai/kv-go/v9 v9.18.0/go.mod h1:S+Li20E6Bskpw6r+c8WWhfi4hCr8SVV32qPXO0wdl+E=
 github.com/hanzoai/ldapserver v1.2.1 h1:H+AFuntREWo1n96cCUBnrzNeb07npTEUyvqXZRH4x20=
 github.com/hanzoai/ldapserver v1.2.1/go.mod h1:mPwAbPBw9YeXfC2hfg1QSAw6CiGt6o2oF2pi9VR+j3U=
-github.com/hanzoai/mcp/go v0.1.0 h1:JMKcksR48LxLCm6NLJBaKPKZctzbgrJ8CnPvSxYiMVY=
-github.com/hanzoai/mcp/go v0.1.0/go.mod h1:qfoEdhu/QtJr6e2l9gBAZwVa4vMmPcFF6HqKWQPSkkc=
 github.com/hanzoai/notify2 v1.6.3 h1:E0yE3mhwpCPLYAY7AAKJIzf+XL2yXcyxXD7/tK9giLs=
 github.com/hanzoai/notify2 v1.6.3/go.mod h1:tF4lEPIr2J42/gpHjyWnpJey5545bLfRei6pxbVuFzc=
 github.com/hanzoai/orm v0.5.1 h1:jBery6NrhShoYwiRlPo8DRdASsKTJljnQAV2/8kY0hw=
