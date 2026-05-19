@@ -14,22 +14,21 @@ import (
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
 
-	// Subsystems — each ships func Mount(*zip.App, cloud.Deps) error.
-	// Imports register themselves in cloud.Registry via init().
-	//
-	// Uncomment + add each as the per-subsystem port lands:
-	//
-	// _ "github.com/hanzoai/kms/pkg/kms"        // PR pending
-	// _ "github.com/hanzoai/amqp/pkg/amqp"      // PR pending
-	// _ "github.com/hanzoai/vfs/pkg/vfs"        // already has Mount
-	// _ "github.com/hanzoai/mq/pkg/mq"          // PR pending
-	// _ "github.com/hanzoai/iam/pkg/iam"        // PR pending
-	// _ "github.com/hanzoai/base/pkg/base"      // PR pending
-	// _ "github.com/hanzoai/commerce/pkg/commerce" // already has Mount (gin) — adapt to zip
-	// _ "github.com/hanzoai/gateway/pkg/gateway"   // already has Mount
-	// _ "github.com/hanzoai/o11y/pkg/o11y"       // PR pending
-	// _ "github.com/hanzoai/ai/pkg/ai"           // PR pending (was hanzoai/cloud LLM subsystem)
-	// _ "github.com/hanzoai/mcp/pkg/mcp"         // PR pending
+	// Subsystems — each ships func Mount(*zip.App, cloud.Deps) error and
+	// registers itself via init() in cloud.Registry. Import paths reflect
+	// where each subsystem's Mount lives.
+	_ "github.com/hanzoai/ai"          // order 150
+	_ "github.com/hanzoai/amqp"        // order 30
+	_ "github.com/hanzoai/authz"       // order 70
+	_ "github.com/hanzoai/base"        // order 60
+	_ "github.com/hanzoai/commerce"    // order 100
+	_ "github.com/hanzoai/gateway"     // order 80
+	_ "github.com/hanzoai/iam/pkg/iam" // order 50 (Mount lives in pkg/iam submodule)
+	_ "github.com/hanzoai/ingress"     // order 90
+	_ "github.com/hanzoai/kms"         // order 10
+	_ "github.com/hanzoai/mcp/go"      // order 160 (Mount lives in go submodule)
+	_ "github.com/hanzoai/o11y"        // order 70 (mounts alongside authz)
+	_ "github.com/hanzoai/vfs"         // order 20
 )
 
 func main() {
