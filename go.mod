@@ -727,25 +727,3 @@ replace github.com/gorilla/mux => github.com/containous/mux v0.0.0-2025052312054
 replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190809180810-6e71eb837595
 
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
-
-replace github.com/hanzoai/ai => ../ai
-
-replace github.com/hanzoai/amqp => ../amqp
-
-replace github.com/hanzoai/authz => ../authz
-
-replace github.com/hanzoai/base => ../base
-
-replace github.com/hanzoai/commerce => ../commerce
-
-replace github.com/hanzoai/gateway => ../gateway
-
-replace github.com/hanzoai/ingress => ../ingress
-
-replace github.com/hanzoai/kms => ../kms
-
-replace github.com/hanzoai/o11y => ../o11y
-
-replace github.com/hanzoai/vfs => ../vfs
-
-replace github.com/hanzoai/iam/pkg/iam => ../iam/pkg/iam
