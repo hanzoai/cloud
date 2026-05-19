@@ -10,9 +10,9 @@
 package cloud
 
 import (
-	"context"
-
 	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/types"
 )
 
 // Deps is the shared dependency surface passed to every subsystem's
@@ -57,101 +57,42 @@ type Deps struct {
 	Vault    VaultClient
 }
 
-// IAMClient is the inter-subsystem interface to IAM (auth, OIDC, JWKS,
-// user/org management). When iam is co-resident, this is a direct
-// Go call; when split, it's ZAP-RPC.
-type IAMClient interface {
-	VerifyJWT(ctx context.Context, bearer string) (Claims, error)
-	GetUser(ctx context.Context, userID string) (*User, error)
-	GetOrg(ctx context.Context, orgID string) (*Org, error)
-}
+// Per-subsystem client interfaces live in cloud/types so the
+// cloud/clients package can implement them without an import cycle.
+// We re-export them as aliases at the cloud root so subsystem code
+// keeps writing cloud.IAMClient, cloud.KMSClient, etc.
 
-// KMSClient is the inter-subsystem interface to KMS (secrets, keys).
-type KMSClient interface {
-	GetSecret(ctx context.Context, ref string) ([]byte, error)
-	PutSecret(ctx context.Context, ref string, value []byte) error
-	Sign(ctx context.Context, keyRef string, payload []byte) ([]byte, error)
-}
-
-// BaseClient is the inter-subsystem interface to Base (per-tenant
-// SQLite / ZapDB, extension runtimes, hooks).
-type BaseClient interface {
-	// Open returns the per-tenant database handle for the given org.
-	// Each org gets its own SQLite file with a per-org HKDF-derived DEK
-	// from a master key in KMS, per HIP-0302.
-	Open(ctx context.Context, orgID, serviceName string) (DBHandle, error)
-}
-
-// CommerceClient is the inter-subsystem interface to Commerce (checkout,
-// billing, pricing). Commerce is a light router — it never sees PAN,
-// only tokens + intent IDs.
-type CommerceClient interface {
-	GetTenantConfig(ctx context.Context, orgID string) (*TenantConfig, error)
-}
-
-// AIClient is the inter-subsystem interface to AI (LLM control plane,
-// RAG, model hub). This is the renamed former hanzoai/cloud subsystem.
-type AIClient interface {
-	ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
-}
-
-// O11yClient is the inter-subsystem interface to o11y (metrics, traces,
-// logs). All subsystems emit telemetry through this.
-type O11yClient interface {
-	Counter(name string, tags ...string) Counter
-	Timing(name string, tags ...string) Timing
-	Span(ctx context.Context, name string) (context.Context, Span)
-}
-
-// VFSClient is the inter-subsystem interface to vfs (the canonical
-// object-store abstraction per HIP-0107).
-type VFSClient interface {
-	Put(ctx context.Context, key string, payload []byte) error
-	Get(ctx context.Context, key string) ([]byte, error)
-}
-
-// MQClient is the inter-subsystem interface to mq (durable message queue).
-type MQClient interface {
-	Publish(ctx context.Context, subject string, payload []byte) error
-	Subscribe(ctx context.Context, subject string, handler func([]byte) error) error
-}
-
-// PaymentsClient is the inter-subsystem interface to payments (HyperSwitch
-// fork, in tokens-only mode). NEVER receives PAN — per HIP-0106 solo-vault
-// CDE architecture. Always ZAP-RPC (out-of-process for PCI scope isolation).
-type PaymentsClient interface {
-	CreateIntent(ctx context.Context, req *IntentRequest) (*IntentResponse, error)
-	ConfirmIntent(ctx context.Context, intentID string) (*IntentResponse, error)
-	GetIntentStatus(ctx context.Context, intentID string) (*IntentStatus, error)
-}
-
-// VaultClient is the inter-subsystem interface to vault (PCI-CDE — the
-// ONLY system that touches PAN). Always ZAP-RPC. Commerce never calls
-// vault directly; payments calls vault for the actual processor charge.
-type VaultClient interface {
-	Charge(ctx context.Context, req *VaultChargeRequest) (*VaultChargeResponse, error)
-}
+type IAMClient = types.IAMClient
+type KMSClient = types.KMSClient
+type BaseClient = types.BaseClient
+type CommerceClient = types.CommerceClient
+type AIClient = types.AIClient
+type O11yClient = types.O11yClient
+type VFSClient = types.VFSClient
+type MQClient = types.MQClient
+type PaymentsClient = types.PaymentsClient
+type VaultClient = types.VaultClient
 
 // --- placeholder types (replaced by ZAP-generated types per subsystem) ---
+//
+// These re-export the canonical transport shapes from cloud/types so
+// subsystems and the clients package can both use them without
+// pulling cloud as a dependency. As zapc generates typed bindings per
+// subsystem, each alias here becomes an alias to the generated type
+// in <subsystem>/zap/gen/*.go.
 
-type Claims struct {
-	Sub     string
-	Org     string
-	Email   string
-	IsAdmin bool
-}
-
-type User struct{ ID, Email, Name string }
-type Org struct{ ID, Slug, Name string }
-type DBHandle interface{ Close() error }
-type TenantConfig struct{ OrgID, Brand string }
-type ChatRequest struct{ Model, Prompt string }
-type ChatResponse struct{ Content string }
-type Counter interface{ Inc(n int64) }
-type Timing interface{ Observe(seconds float64) }
-type Span interface{ End() }
-type IntentRequest struct{ Token, Currency string; AmountCents int64 }
-type IntentResponse struct{ ID, Status string }
-type IntentStatus struct{ Status string }
-type VaultChargeRequest struct{ Token, ProcessorID, Currency string; AmountCents int64 }
-type VaultChargeResponse struct{ ProcessorRef, Status string }
+type Claims = types.Claims
+type User = types.User
+type Org = types.Org
+type DBHandle = types.DBHandle
+type TenantConfig = types.TenantConfig
+type ChatRequest = types.ChatRequest
+type ChatResponse = types.ChatResponse
+type Counter = types.Counter
+type Timing = types.Timing
+type Span = types.Span
+type IntentRequest = types.IntentRequest
+type IntentResponse = types.IntentResponse
+type IntentStatus = types.IntentStatus
+type VaultChargeRequest = types.VaultChargeRequest
+type VaultChargeResponse = types.VaultChargeResponse
