@@ -691,9 +691,9 @@ require (
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hanzoai/ai v1.785.0
-	github.com/hanzoai/amqp v0.1.0
+	github.com/hanzoai/amqp v0.2.0
 	github.com/hanzoai/authz v1.10.0
-	github.com/hanzoai/base v1.1.0
+	github.com/hanzoai/base v1.3.1
 	github.com/hanzoai/commerce v1.37.0
 	github.com/hanzoai/gateway v0.2.0
 	github.com/hanzoai/iam/pkg/iam v1.18.0
