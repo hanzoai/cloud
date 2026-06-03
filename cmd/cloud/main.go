@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/zip"
@@ -39,6 +40,24 @@ func main() {
 	}
 
 	deps := cloud.BuildDeps(cfg)
+
+	// Bring up the ZAP listener first — subsystems' Mount(...) call
+	// deps.ZAP.RegisterHandler(...) to expose their per-msgType
+	// surface, so the server must exist before MountAll runs.
+	// Without this the cfg.ZAPListenAddr was just logged, never bound;
+	// gateway plugins targeting cloud-api got "no available server"
+	// (see memory:gateway_zap_cloud_api).
+	zapsrv, err := cloud.NewServer(cfg, deps.Logger)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "zap server: %v\n", err)
+		os.Exit(1)
+	}
+	if err := zapsrv.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "zap start: %v\n", err)
+		os.Exit(1)
+	}
+	defer zapsrv.Shutdown(5 * time.Second)
+	deps.ZAP = zapsrv
 
 	app := zip.New(zip.Config{Logger: deps.Logger})
 

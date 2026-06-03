@@ -410,7 +410,6 @@ require (
 	github.com/luxfi/metric v1.5.1 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
 	github.com/luxfi/ringtail v0.2.0 // indirect
-	github.com/luxfi/zap v0.3.1 // indirect
 	github.com/luxfi/zapdb v1.9.0 // indirect
 	github.com/magefile/mage v1.15.1-0.20241126214340-bdc92f694516 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -703,6 +702,7 @@ require (
 	github.com/hanzoai/o11y v0.1.0
 	github.com/hanzoai/vfs v0.1.0
 	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/luxfi/zap v0.3.1
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
