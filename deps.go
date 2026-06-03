@@ -55,6 +55,16 @@ type Deps struct {
 	// never in-process.
 	Payments PaymentsClient
 	Vault    VaultClient
+
+	// ZAP is the ZAP server this process is bound to. Subsystems that
+	// want to expose themselves over the wire (so out-of-process peers
+	// can call them) register a handler in their Mount(...) via
+	// deps.ZAP.RegisterHandler(MsgTypeXxx, fn). Nil during BuildDeps;
+	// set by main() between server-up and MountAll(). Subsystems must
+	// guard with `if deps.ZAP != nil` to allow embedded use without a
+	// listener (e.g. inside tests). The interface lives in server.go to
+	// keep the luxfi/zap import scoped to one place.
+	ZAP ZAPServer
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
