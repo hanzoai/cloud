@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
 
@@ -33,6 +34,16 @@ import (
 )
 
 func main() {
+	// Storage lockdown: cloud is an HIP-0106 orchestrator with no PG
+	// of its own — every subsystem owns its per-(org, user) SQLite via
+	// hanzoai/base. Reject env-var overrides leaking from the legacy
+	// cloud-api Python manifest. See
+	// ~/work/hanzo/CLAUDE_PG_TO_SQLITE_MIGRATION.md (#4 — cloud).
+	if err := storagelock.CheckEnv(os.Getenv); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	cfg := cloud.LoadConfig()
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "config: %v\n", err)
