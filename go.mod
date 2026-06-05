@@ -6,7 +6,9 @@ go 1.26.3
 
 require (
 	github.com/hanzoai/zip v0.1.0
+	github.com/lib/pq v1.12.1
 	github.com/luxfi/log v1.4.3
+	modernc.org/sqlite v1.50.0
 )
 
 require (
@@ -382,7 +384,6 @@ require (
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/jwx v1.2.29 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
-	github.com/lib/pq v1.12.1 // indirect
 	github.com/likexian/gokit v0.25.13 // indirect
 	github.com/likexian/whois v1.15.1 // indirect
 	github.com/likexian/whois-parser v1.24.9 // indirect
@@ -679,7 +680,6 @@ require (
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.50.0 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect
 )
 
