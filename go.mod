@@ -109,7 +109,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.10 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
 	github.com/aymerick/raymond v2.0.2+incompatible // indirect
-	github.com/beego/beego/v2 v2.3.8 // indirect
 	github.com/beevik/etree v1.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
@@ -665,7 +664,7 @@ require (
 	github.com/hanzoai/base v1.3.1
 	github.com/hanzoai/commerce v1.39.1
 	github.com/hanzoai/gateway v0.3.1
-	github.com/hanzoai/iam/pkg/iam v1.18.0
+	github.com/hanzoai/iam/pkg/iam v1.18.1
 	github.com/hanzoai/ingress v1.8.0
 	github.com/hanzoai/kms v0.159.1
 	github.com/hanzoai/mcp/go v0.1.0
