@@ -1005,6 +1005,8 @@ github.com/gtank/ristretto255 v0.2.0 h1:LeOuWr6giplWkkMizx2emfG03SRPJqKt1nfIHLVH
 github.com/gtank/ristretto255 v0.2.0/go.mod h1:OJ1ox/dWcp7sJ5grYDcZ+kkHYuj5nelW5aaL7ESVXBw=
 github.com/hanzoai/ai v1.785.0 h1:Hi5j1TbnPBIyNEIEAQHbACFMGaQNJBp/jCUhV24+dO8=
 github.com/hanzoai/ai v1.785.0/go.mod h1:5bGB4eYd4Ynb5bcCmqGJRK4fGy58ch6m+9dZzK+aM94=
+github.com/hanzoai/alertmanager v0.28.2 h1:40fm5ZDq4MZ7CJwPb7AHVa1DU9kHK5lgMuJUJK7frT4=
+github.com/hanzoai/alertmanager v0.28.2/go.mod h1:SOwWSWO7p9CaBKr+bp1IrPfTPjftxp+cnyBK9GhgJFs=
 github.com/hanzoai/amqp v0.2.0 h1:zv8/QQoV0QIqsTDAboBPOyaFPEULncIw4Byvx261IN8=
 github.com/hanzoai/amqp v0.2.0/go.mod h1:eauLzYCcXeccALrznAoVNrtIVs8AECo942Ov+58C+Rk=
 github.com/hanzoai/authz v1.10.1 h1:BXKRUS6vkW57zbzX04gBMGLFW+wdHG5qHKb3OcLHuCo=
@@ -1025,6 +1027,8 @@ github.com/hanzoai/datastore-go/v2 v2.45.0 h1:73RSPKFV/Bm75VUlwFwx1namCS2bnEYEVH
 github.com/hanzoai/datastore-go/v2 v2.45.0/go.mod h1:6mGC9Y5mMVVwZ8HB/peBpfVI87dDqdkCQYhtGI57wyA=
 github.com/hanzoai/dbx v1.16.0 h1:C8wsb9BIiit4nYnXizpcB4SyzVaepPkQFwq5i9fxAV0=
 github.com/hanzoai/dbx v1.16.0/go.mod h1:ynP6HSiDDoFZ8M3DC+XvSglBPFRygfTd/gjTWabh4yA=
+github.com/hanzoai/exporter-toolkit v0.15.2 h1:RdnKP6wAgvC1aiQUU7Q6zOD11B7eNjsI2Y7TyGYMeCw=
+github.com/hanzoai/exporter-toolkit v0.15.2/go.mod h1:oBqGFmpt+4OMz6/vYcjAvQuip44gAKtjsiD+cMdXdew=
 github.com/hanzoai/gateway v0.3.1 h1:FX7NSh1u0cSpBnBfLm/W/X51/fQQMDNaUUHbV2u2jOk=
 github.com/hanzoai/gateway v0.3.1/go.mod h1:v8a2KlxYdxLkH2itactiHukg20G7FgYPYcCVKpQLDFg=
 github.com/hanzoai/iam v1.19.1 h1:uYT5TfR1ftqZpzTQWqsFEK+Ienk1RlNhi9cD3jjmSSg=
@@ -1049,8 +1053,8 @@ github.com/hanzoai/mcp/go v0.1.0 h1:JMKcksR48LxLCm6NLJBaKPKZctzbgrJ8CnPvSxYiMVY=
 github.com/hanzoai/mcp/go v0.1.0/go.mod h1:qfoEdhu/QtJr6e2l9gBAZwVa4vMmPcFF6HqKWQPSkkc=
 github.com/hanzoai/notify2 v1.6.3 h1:E0yE3mhwpCPLYAY7AAKJIzf+XL2yXcyxXD7/tK9giLs=
 github.com/hanzoai/notify2 v1.6.3/go.mod h1:tF4lEPIr2J42/gpHjyWnpJey5545bLfRei6pxbVuFzc=
-github.com/hanzoai/o11y v1.3.6 h1:QElBnEc7nzrxIf6Z6XUZ+T7/MZ3U5TU2nKTbEG7nqNM=
-github.com/hanzoai/o11y v1.3.6/go.mod h1:LYvPZutoSKVTM/Zu0XZeoSsj6mr5GHSIlOjNQUaLFtA=
+github.com/hanzoai/o11y v1.3.7 h1:D1Y5iv3j/ua7gUzOtA0uiIoDNG5nAuCvIS+uAu6We50=
+github.com/hanzoai/o11y v1.3.7/go.mod h1:MdnXACvI3Vdg3OL9gnVWiaTDWAXz0u4m2cDpEsyPbcI=
 github.com/hanzoai/orm v0.5.1 h1:jBery6NrhShoYwiRlPo8DRdASsKTJljnQAV2/8kY0hw=
 github.com/hanzoai/orm v0.5.1/go.mod h1:ks/a76Vuf6E4CLmFToiPPnafYjdxfMuFrOunnrIyBhQ=
 github.com/hanzoai/oss v1.8.5 h1:ukFSUKDuZV9bxorOeT3kliJ2EXi/4nHLEV//ZinqDxI=
@@ -1059,6 +1063,8 @@ github.com/hanzoai/pubsub-go v1.0.0 h1:nUZ4jK+MFlFQ5qTMri/Yffnqs/R5avI99SfZ9e3t6
 github.com/hanzoai/pubsub-go v1.0.0/go.mod h1:ZHWDgSLsYHK4TiitzNwGc7Cn+oApKyMp0uK8cU7jwpg=
 github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2AQc=
 github.com/hanzoai/search-go v0.36.0/go.mod h1:jdcYUdG6exMfRfJvilWhaNdAR8XWQRPvZtuRxQBzn34=
+github.com/hanzoai/sigv4 v0.4.2 h1:54Rf9+beoz8qbsEPHRV12t6nRsdQVl5MeC5rM/CTPCA=
+github.com/hanzoai/sigv4 v0.4.2/go.mod h1:XK0PvD8QWO8ivnSftKRCvjk8M5jjhOMUeyF4Wm+ZFYY=
 github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5VDk=
 github.com/hanzoai/storage-go v1.0.0/go.mod h1:IPXouQWTki5LKa9Y3qfOr6o8Qwlmc4sGObJnGMNKCOM=
 github.com/hanzoai/tasks v1.40.0 h1:1Y0uXHmdGsU3QSv5So7NH55DhWqw/UPV3kgFeBaaWls=
@@ -1216,7 +1222,6 @@ github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible/go.mod h1:1c7szIrayyPPB/987hsnvNzLushdWf4o/79s3P08L8A=
 github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
-github.com/jpillora/backoff v1.0.0 h1:uvFg412JmmHBHw7iwprIxkPMI+sGQ4kzOWsMeHnm2EA=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
 github.com/jrick/logrotate v1.0.0/go.mod h1:LNinyqDIJnpAur+b8yyulnQw/wDuN1+BYKlTRt3OuAQ=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
@@ -1553,7 +1558,6 @@ github.com/mrjones/oauth v0.0.0-20180629183705-f4e24b6d100c/go.mod h1:skjdDftzkF
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
-github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f h1:KUppIJq7/+SVif2QVs3tOP0zanoHgBEVAwHxUSIzRqU=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/nats-io/jwt/v2 v2.8.0 h1:K7uzyz50+yGZDO5o772eRE7atlcSEENpL7P+b74JV1g=
 github.com/nats-io/jwt/v2 v2.8.0/go.mod h1:me11pOkwObtcBNR8AiMrUbtVOUGkqYjMQZ6jnSdVUIA=
@@ -1655,8 +1659,6 @@ github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55/go.mod h1:OmDBASR4679mdNQnz2pUhc2G8CO2JrUAVFDRBDP/hJE=
 github.com/pquerna/otp v1.5.0 h1:NMMR+WrmaqXU4EzdGJEE1aUUI0AMRzsp96fFFWNPwxs=
 github.com/pquerna/otp v1.5.0/go.mod h1:dkJfzwRKNiegxyNb54X/3fLwhCynbMspSyWKnvi1AEg=
-github.com/prometheus/alertmanager v0.31.0 h1:DQW02uIUNNiAa9AD9VA5xaFw5D+xrV+bocJc4gN9bEU=
-github.com/prometheus/alertmanager v0.31.0/go.mod h1:zWPQwhbLt2ybee8rL921UONeQ59Oncash+m/hGP17tU=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=
 github.com/prometheus/client_golang v1.4.0/go.mod h1:e9GMxYsXl05ICDXkRhurwBS4Q3OK1iX/F2sw+iXX5zU=
@@ -1683,8 +1685,6 @@ github.com/prometheus/common v0.35.0/go.mod h1:phzohg0JFMnBEFGxTDbfu3QyL5GI8gTQJ
 github.com/prometheus/common v0.37.0/go.mod h1:phzohg0JFMnBEFGxTDbfu3QyL5GI8gTQJFhYO5B3mfA=
 github.com/prometheus/common v0.67.5 h1:pIgK94WWlQt1WLwAC5j2ynLaBRDiinoAb86HZHTUGI4=
 github.com/prometheus/common v0.67.5/go.mod h1:SjE/0MzDEEAyrdr5Gqc6G+sXI67maCxzaT3A2+HqjUw=
-github.com/prometheus/exporter-toolkit v0.15.1 h1:XrGGr/qWl8Gd+pqJqTkNLww9eG8vR/CoRk0FubOKfLE=
-github.com/prometheus/exporter-toolkit v0.15.1/go.mod h1:P/NR9qFRGbCFgpklyhix9F6v6fFr/VQB/CVsrMDGKo4=
 github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEoIwkU+A6qos=
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.0.0-20181005140218-185b4288413d/go.mod h1:c3At6R/oaqEKCNdg8wHV1ftS6bRYblBhIjjI8uT2IGk=
@@ -1698,8 +1698,6 @@ github.com/prometheus/procfs v0.20.1 h1:XwbrGOIplXW/AU3YhIhLODXMJYyC1isLFfYCsTEy
 github.com/prometheus/procfs v0.20.1/go.mod h1:o9EMBZGRyvDrSPH1RqdxhojkuXstoe4UlK79eF5TGGo=
 github.com/prometheus/prometheus v0.310.0 h1:iS0Uul/dHjy8ifBnqo3YEOhRxlTOWantRoDWwmIowwA=
 github.com/prometheus/prometheus v0.310.0/go.mod h1:rs6XoWKvgAStqxHxb2Twh1BR6rp7qw7fmUgW+gaXjbw=
-github.com/prometheus/sigv4 v0.4.1 h1:EIc3j+8NBea9u1iV6O5ZAN8uvPq2xOIUPcqCTivHuXs=
-github.com/prometheus/sigv4 v0.4.1/go.mod h1:eu+ZbRvsc5TPiHwqh77OWuCnWK73IdkETYY46P4dXOU=
 github.com/prometheus/statsd_exporter v0.22.7/go.mod h1:N/TevpjkIh9ccs6nuzY3jQn9dFqnUakOjnEuMPJJJnI=
 github.com/prometheus/statsd_exporter v0.26.1 h1:ucbIAdPmwAUcA+dU+Opok8Qt81Aw8HanlO+2N/Wjv7w=
 github.com/prometheus/statsd_exporter v0.26.1/go.mod h1:XlDdjAmRmx3JVvPPYuFNUg+Ynyb5kR69iPPkQjxXFMk=
@@ -2029,8 +2027,6 @@ go.opentelemetry.io/contrib/detectors/gcp v1.39.0 h1:kWRNZMsfBHZ+uHjiH4y7Etn2FK2
 go.opentelemetry.io/contrib/detectors/gcp v1.39.0/go.mod h1:t/OGqzHBa5v6RHZwrDBJ2OirWc+4q/w2fTbLZwAKjTk=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 h1:yI1/OhfEPy7J9eoa6Sj051C7n5dvpj0QX8g4sRchg04=
 go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0/go.mod h1:NoUCKYWK+3ecatC4HjkRktREheMeEtrXoQxrqYFeHSc=
-go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.65.0 h1:ab5U7DpTjjN8pNgwqlA/s0Csb+N2Raqo9eTSDhfg4Z8=
-go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.65.0/go.mod h1:nwFJC46Dxhqz5R9k7IV8To/Z46JPvW+GNKhTxQQlUzg=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0/go.mod h1:C2NGBr+kAB4bk3xtMXfZ94gqFDtg/GkI7e9zqGh5Beg=
 go.opentelemetry.io/contrib/propagators/autoprop v0.63.0 h1:S3+4UwR3Y1tUKklruMwOacAFInNvtuOexz4ZTmJNAyw=
