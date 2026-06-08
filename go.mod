@@ -273,6 +273,7 @@ require (
 	github.com/hanzoai/common v0.67.7 // indirect
 	github.com/hanzoai/datastore-go/v2 v2.45.0 // indirect
 	github.com/hanzoai/dbx v1.16.0 // indirect
+	github.com/hanzoai/exporter-toolkit v0.15.2 // indirect
 	github.com/hanzoai/iam v1.19.1 // indirect
 	github.com/hanzoai/iamsdk/v2 v2.1.0 // indirect
 	github.com/hanzoai/idv v1.0.0 // indirect
@@ -284,6 +285,7 @@ require (
 	github.com/hanzoai/oss v1.8.5 // indirect
 	github.com/hanzoai/pubsub-go v1.0.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
+	github.com/hanzoai/sigv4 v0.4.2 // indirect
 	github.com/hanzoai/storage-go v1.0.0 // indirect
 	github.com/hanzoai/tasks v1.40.0 // indirect
 	github.com/hanzoai/xorm v1.1.6 // indirect
@@ -328,7 +330,6 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
-	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.13-0.20220915233716-71ac16282d12 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -452,7 +453,6 @@ require (
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mrjones/oauth v0.0.0-20180629183705-f4e24b6d100c // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/nats-io/nats.go v1.50.0 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
@@ -481,11 +481,9 @@ require (
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
-	github.com/prometheus/exporter-toolkit v0.15.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/prometheus v0.310.0 // indirect
-	github.com/prometheus/sigv4 v0.4.1 // indirect
 	github.com/prometheus/statsd_exporter v0.26.1 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/qiniu/go-sdk/v7 v7.12.1 // indirect
@@ -589,7 +587,6 @@ require (
 	go.opentelemetry.io/collector/semconv v0.128.1-0.20250610090210-188191247685 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.39.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.65.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/contrib/propagators/autoprop v0.63.0 // indirect
 	go.opentelemetry.io/contrib/propagators/aws v1.38.0 // indirect
@@ -672,7 +669,7 @@ require (
 	github.com/hanzoai/ingress v1.8.0
 	github.com/hanzoai/kms v0.159.1
 	github.com/hanzoai/mcp/go v0.1.0
-	github.com/hanzoai/o11y v1.3.6
+	github.com/hanzoai/o11y v1.3.7
 	github.com/hanzoai/vfs v0.4.0
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -702,3 +699,5 @@ replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-2026012609
 
 // Pin to last real go-sqlite3 release; v2.0.3+incompatible is a phantom (no module).
 replace github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.16
+
+replace github.com/prometheus/alertmanager => github.com/hanzoai/alertmanager v0.28.2
