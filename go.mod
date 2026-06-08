@@ -109,7 +109,6 @@ require (
 	github.com/aws/smithy-go v1.24.2 // indirect
 	github.com/aymerick/raymond v2.0.2+incompatible // indirect
 	github.com/beevik/etree v1.6.0 // indirect
-	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
 	github.com/blinkbean/dingtalk v1.1.3 // indirect
 	github.com/boombuler/barcode v1.0.1 // indirect
@@ -449,7 +448,6 @@ require (
 	github.com/montanaflynn/stats v0.9.0 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/mrjones/oauth v0.0.0-20180629183705-f4e24b6d100c // indirect
-	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nats.go v1.50.0 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
@@ -475,10 +473,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/prometheus/alertmanager v0.31.0 // indirect
-	github.com/prometheus/client_golang v1.23.2 // indirect
-	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
-	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/prometheus v0.310.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/qiniu/go-sdk/v7 v7.12.1 // indirect
@@ -656,7 +650,7 @@ require (
 	github.com/hanzoai/ai v1.785.0
 	github.com/hanzoai/amqp v0.2.0
 	github.com/hanzoai/authz v1.10.1
-	github.com/hanzoai/base v1.3.1
+	github.com/hanzoai/base v1.3.2
 	github.com/hanzoai/commerce v1.39.1
 	github.com/hanzoai/gateway v2.9.5+incompatible
 	github.com/hanzoai/iam/pkg/iam v1.18.1
