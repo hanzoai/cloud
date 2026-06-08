@@ -386,8 +386,6 @@ github.com/aymerick/raymond v2.0.2+incompatible h1:VEp3GpgdAnv9B2GFyTvqgcKvY+mfK
 github.com/aymerick/raymond v2.0.2+incompatible/go.mod h1:osfaiScAUVup+UC9Nfq76eWqDhXlp+4UYaA8uhTBO6g=
 github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f h1:ZNv7On9kyUzm7fvRZumSyy/IUiSC7AzL0I1jKKtwooA=
 github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f/go.mod h1:AuiFmCCPBSrqvVMvuqFuk0qogytodnVFVSN5CeJB8Gc=
-github.com/beego/beego/v2 v2.3.8 h1:wplhB1pF4TxR+2SS4PUej8eDoH4xGfxuHfS7wAk9VBc=
-github.com/beego/beego/v2 v2.3.8/go.mod h1:8vl9+RrXqvodrl9C8yivX1e6le6deCK6RWeq8R7gTTg=
 github.com/beevik/etree v1.6.0 h1:u8Kwy8pp9D9XeITj2Z0XtA5qqZEmtJtuXZRQi+j03eE=
 github.com/beevik/etree v1.6.0/go.mod h1:bh4zJxiIr62SOf9pRzN7UUYaEDa9HEKafK25+sLc0Gc=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
@@ -1033,8 +1031,8 @@ github.com/hanzoai/gateway v0.3.1 h1:FX7NSh1u0cSpBnBfLm/W/X51/fQQMDNaUUHbV2u2jOk
 github.com/hanzoai/gateway v0.3.1/go.mod h1:v8a2KlxYdxLkH2itactiHukg20G7FgYPYcCVKpQLDFg=
 github.com/hanzoai/iam v1.19.1 h1:uYT5TfR1ftqZpzTQWqsFEK+Ienk1RlNhi9cD3jjmSSg=
 github.com/hanzoai/iam v1.19.1/go.mod h1:MReCr0GXbZZkIr9wmh/96zyo0RG5VG+2uzvpwSuHW8A=
-github.com/hanzoai/iam/pkg/iam v1.18.0 h1:DjnoOdJtYXHKpCBklIzB6VOjmqgNzLqCPttMvjganMU=
-github.com/hanzoai/iam/pkg/iam v1.18.0/go.mod h1:t3POxo8z2MZ6lHrZIwFq+/QZyecUnTQLIiGxpbOIzAA=
+github.com/hanzoai/iam/pkg/iam v1.18.1 h1:g9NFSVZ0UZu1mvi88oEc/EpmO+pCCBorBV/agYMi0/Q=
+github.com/hanzoai/iam/pkg/iam v1.18.1/go.mod h1:Vei1WDRGqVXJgoz2R88mIxl+L4ZJdICK0m1Wyq7NZ0s=
 github.com/hanzoai/iamsdk/v2 v2.1.0 h1:BuU3323zi6Jx7mgNo/wao4iuYoQsfviVgzRUNjmFduk=
 github.com/hanzoai/iamsdk/v2 v2.1.0/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.0 h1:z+z5KS3cZnM7ndtlLB2mmuh7hc+p78hJNa+zVSD8pIE=
@@ -2817,6 +2815,7 @@ modernc.org/strutil v1.2.1/go.mod h1:EHkiggD70koQxjVdSBM3JKM7k6L0FbGE5eymy9i3B9A
 modernc.org/token v1.1.0 h1:Xl7Ap9dKaEs5kLoOQeQmPWevfnk/DM5qcLcYlA8ys6Y=
 modernc.org/token v1.1.0/go.mod h1:UGzOrNV1mAFSEB63lOFHIpNRUVMvYTc6yu1SMY/XTDM=
 nhooyr.io/websocket v1.8.11 h1:f/qXNc2/3DpoSZkHt1DQu6rj4zGC8JmkkLkWss0MgN0=
+nhooyr.io/websocket v1.8.11/go.mod h1:rN9OFWIUwuxg4fR5tELlYC04bXYowCP9GX47ivo2l+c=
 rsc.io/binaryregexp v0.2.0 h1:HfqmD5MEmC0zvwBuF187nq9mdnXjXsSivRiXN7SmRkE=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
