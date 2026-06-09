@@ -29,6 +29,13 @@ import (
 	_ "github.com/hanzoai/mcp/go"      // order 160 (Mount lives in go submodule)
 	_ "github.com/hanzoai/o11y"        // order 70 (mounts alongside authz)
 	_ "github.com/hanzoai/vfs"         // order 20
+
+	// Node-service subsystems hosted in-process via base+goja (HIP-0106).
+	// Each loads its service repo's goja/bundle.js into a goja runtime and
+	// registers /v1/* routes. The JS + catalog data live in the service repos
+	// (hanzoai/plans, hanzoai/pricing); these wrappers are glue in cloud.
+	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
+	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
 )
 
 func main() {
