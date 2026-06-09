@@ -26,6 +26,7 @@ import (
 	_ "github.com/hanzoai/iam/pkg/iam" // order 50 (Mount lives in pkg/iam submodule)
 	_ "github.com/hanzoai/ingress"     // order 90
 	_ "github.com/hanzoai/kms"         // order 10
+	_ "github.com/hanzoai/licensing"   // order 110 (after iam + commerce)
 	_ "github.com/hanzoai/mcp/go"      // order 160 (Mount lives in go submodule)
 	_ "github.com/hanzoai/o11y"        // order 70 (mounts alongside authz)
 	_ "github.com/hanzoai/vfs"         // order 20
