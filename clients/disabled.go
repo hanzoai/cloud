@@ -63,6 +63,9 @@ type disabledCommerce struct{}
 func (disabledCommerce) GetTenantConfig(_ context.Context, _ string) (*types.TenantConfig, error) {
 	return nil, &disabledErr{"commerce"}
 }
+func (disabledCommerce) CheckEntitlement(_ context.Context, _, _ string) (*types.LicenseEntitlement, error) {
+	return nil, &disabledErr{"commerce"}
+}
 
 type disabledAI struct{}
 
