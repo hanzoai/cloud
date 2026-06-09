@@ -64,6 +64,9 @@ type rpcCommerce struct{ rpcEndpoint }
 func (c *rpcCommerce) GetTenantConfig(_ context.Context, _ string) (*types.TenantConfig, error) {
 	return nil, c.errf("GetTenantConfig")
 }
+func (c *rpcCommerce) CheckEntitlement(_ context.Context, _, _ string) (*types.LicenseEntitlement, error) {
+	return nil, c.errf("CheckEntitlement")
+}
 
 type rpcAI struct{ rpcEndpoint }
 

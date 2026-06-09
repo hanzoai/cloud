@@ -644,6 +644,7 @@ require (
 	github.com/hanzoai/iam/pkg/iam v1.18.1
 	github.com/hanzoai/ingress v1.8.0
 	github.com/hanzoai/kms v0.159.1
+	github.com/hanzoai/licensing v0.0.0-00010101000000-000000000000
 	github.com/hanzoai/mcp/go v0.1.0
 	github.com/hanzoai/o11y v1.3.7
 	github.com/hanzoai/vfs v0.4.0
@@ -679,3 +680,5 @@ replace github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.16
 replace github.com/prometheus/alertmanager => github.com/hanzoai/alertmanager v0.28.2
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
+
+replace github.com/hanzoai/licensing => ../licensing
