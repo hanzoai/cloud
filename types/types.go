@@ -46,6 +46,42 @@ type TenantConfig struct {
 	Brand string
 }
 
+// LicenseEntitlement is commerce's answer to "does this org/user hold an
+// active entitlement for licensed product X, and what does its plan grant?".
+//
+// It is the inter-subsystem transport for the entitlement-flow that gates
+// licensing token issuance (commerce → licensing → engine). The licensing
+// subsystem copies Features verbatim into the signed token's `features`
+// list so the proprietary engine's offline release gate (hasFeatures)
+// enforces exactly the plan the buyer paid for.
+//
+// Features is the FLAT capability list produced from the canonical
+// entitlement vocabulary by the data plane's toLicenseFeatures contract
+// (@hanzo/plans entitlements.mjs): licensing.engine_features verbatim,
+// plus derived capability tokens (e.g. "ai.premium", "training",
+// "tools.<name>"), plus scoping tokens ("licensing.app:<id>",
+// "licensing.product:<id>"). Numeric quotas (tokens_per_min, seats,
+// max_vms, …) ride out of band and are NOT encoded here.
+type LicenseEntitlement struct {
+	// ProductID is the licensed product the entitlement was checked for
+	// (e.g. "engine", "engine-rocm", a plugin id).
+	ProductID string
+	// Active reports whether the entitlement is currently valid (paid,
+	// not lapsed/cancelled). Licensing refuses to mint when false.
+	Active bool
+	// Plan is the resolved plan/tier id (e.g. "developer", "pro", "max",
+	// "enterprise"). Surfaced for logging/audit; not load-bearing for the
+	// release gate.
+	Plan string
+	// Features is the flat license-feature list per the toLicenseFeatures
+	// vocab contract — copied verbatim into License.Features at issue.
+	Features []string
+	// ExpiresUnix bounds the entitlement (unix seconds, 0 = no bound). The
+	// issued token's exp is clamped to it so a token never outlives the
+	// entitlement.
+	ExpiresUnix int64
+}
+
 // ChatRequest mirrors the AI subsystem's chat-completion request.
 type ChatRequest struct {
 	Model  string
@@ -116,6 +152,14 @@ type BaseClient interface {
 // CommerceClient is the inter-subsystem interface to Commerce.
 type CommerceClient interface {
 	GetTenantConfig(ctx context.Context, orgID string) (*TenantConfig, error)
+	// CheckEntitlement reports whether org `orgID` holds an active
+	// entitlement for licensed product `productID`, and returns the plan's
+	// flat license-features per the toLicenseFeatures vocab contract. Used
+	// by the licensing subsystem to gate + scope token issuance. orgID is
+	// the tenant the buyer acts as (X-Org-Id); when callers only have a
+	// user subject they pass it through here and commerce resolves the
+	// owning org.
+	CheckEntitlement(ctx context.Context, orgID, productID string) (*LicenseEntitlement, error)
 }
 
 // AIClient is the inter-subsystem interface to AI.

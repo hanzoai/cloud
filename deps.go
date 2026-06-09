@@ -86,6 +86,7 @@ type User = types.User
 type Org = types.Org
 type DBHandle = types.DBHandle
 type TenantConfig = types.TenantConfig
+type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse
 type Counter = types.Counter
