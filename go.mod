@@ -5,7 +5,7 @@ go 1.26.4
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
-	github.com/hanzoai/gateway v2.9.6+incompatible
+	github.com/hanzoai/gateway v2.9.7+incompatible
 	github.com/hanzoai/zip v0.2.0
 	github.com/luxfi/log v1.4.3
 )
