@@ -5,7 +5,10 @@ go 1.26.4
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/hanzoai/gateway v2.9.7+incompatible
+	github.com/hanzoai/plans v1.1.1-0.20260609013912-147eced7d6fe
+	github.com/hanzoai/pricing v1.2.1-0.20260609013912-0c4b4c12c34f
 	github.com/hanzoai/zip v0.2.0
 	github.com/luxfi/log v1.4.3
 )
@@ -214,6 +217,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.2 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -240,6 +244,7 @@ require (
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/martian v2.1.1-0.20190517191504-25dcb96d9e51+incompatible // indirect
+	github.com/google/pprof v0.0.0-20260302011040-a15ffb7f9dcc // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/wire v0.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
