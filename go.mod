@@ -651,7 +651,7 @@ require (
 	github.com/hanzoai/kms v0.159.1
 	github.com/hanzoai/licensing v0.1.0
 	github.com/hanzoai/mcp/go v0.1.0
-	github.com/hanzoai/metrics v0.1.0
+	github.com/hanzoai/metrics v0.2.0
 	github.com/hanzoai/o11y v1.3.7
 	github.com/hanzoai/vfs v0.4.0
 	github.com/klauspost/compress v1.18.5 // indirect
