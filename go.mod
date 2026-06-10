@@ -404,7 +404,7 @@ require (
 	github.com/luxfi/math v1.4.1 // indirect
 	github.com/luxfi/math/big v0.1.0 // indirect
 	github.com/luxfi/mdns v0.1.1 // indirect
-	github.com/luxfi/metric v1.5.7 // indirect
+	github.com/luxfi/metric v1.5.8 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
 	github.com/luxfi/pq v1.0.3 // indirect
 	github.com/luxfi/proto v1.0.0 // indirect
@@ -651,6 +651,7 @@ require (
 	github.com/hanzoai/kms v0.159.1
 	github.com/hanzoai/licensing v0.1.0
 	github.com/hanzoai/mcp/go v0.1.0
+	github.com/hanzoai/metrics v0.1.0
 	github.com/hanzoai/o11y v1.3.7
 	github.com/hanzoai/vfs v0.4.0
 	github.com/klauspost/compress v1.18.5 // indirect
