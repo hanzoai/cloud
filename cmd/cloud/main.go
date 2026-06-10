@@ -28,6 +28,7 @@ import (
 	_ "github.com/hanzoai/kms"         // order 10
 	_ "github.com/hanzoai/licensing"   // order 110 (after iam + commerce)
 	_ "github.com/hanzoai/mcp/go"      // order 160 (Mount lives in go submodule)
+	_ "github.com/hanzoai/metrics"     // order 40 (native ZAP-native metrics store)
 	_ "github.com/hanzoai/o11y"        // order 70 (mounts alongside authz)
 	_ "github.com/hanzoai/vfs"         // order 20
 
