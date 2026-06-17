@@ -1,0 +1,18 @@
+apiVersion: v2
+name: cloud
+description: Hanzo Cloud — unified Go binary mounting iam/base/kms/gateway/o11y/commerce/ai (HIP-0106).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://hanzo.ai
+sources:
+  - https://github.com/hanzoai/cloud
+maintainers:
+  - name: Hanzo
+    url: https://hanzo.ai
+keywords:
+  - hanzo
+  - ai
+  - cloud
+  - unified-binary
+  - hip-0106
