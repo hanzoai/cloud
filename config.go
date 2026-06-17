@@ -20,7 +20,7 @@ type Config struct {
 	// Domain is the deployment's primary public domain.
 	Domain string
 
-	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.id).
+	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.ai).
 	IAMIssuer string
 
 	// KMSMasterKeyRef points at the KMS master key for per-tenant DEK derivation.
@@ -74,7 +74,7 @@ func LoadConfig() *Config {
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
 		Brand:            getenv("CLOUD_BRAND", "hanzo"),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
-		IAMIssuer:        getenv("CLOUD_IAM_ISSUER", "https://iam.hanzo.id"),
+		IAMIssuer:        getenv("CLOUD_IAM_ISSUER", "https://iam.hanzo.ai"),
 		KMSMasterKeyRef:  getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
 		DataDir:          getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		PaymentsZAPAddr:  getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
