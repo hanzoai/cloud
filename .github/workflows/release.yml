@@ -1,0 +1,87 @@
+name: release
+
+# Builds and pushes ghcr.io/hanzoai/cloud:<tag> when a git tag matching v*
+# is pushed. Also publishes :sha-<short> and :latest for the default branch.
+#
+# Notes for maintainers:
+# - The cloud binary depends on private upstream modules
+#   (hanzoai/iam, hanzoai/commerce, hanzoai/gateway, etc). The default
+#   GITHUB_TOKEN issued by Actions does NOT have read access across
+#   private repos in other orgs. If that's the case here, configure an
+#   org-level secret HANZO_GH_RO_TOKEN with read:packages + repo scope
+#   covering hanzoai/* and luxfi/*, and replace the GOPRIVATE step's
+#   token reference.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure private module access for Go (build args)
+        id: gomod-token
+        run: |
+          # Prefer an org-level token if configured (covers cross-org
+          # private deps); fall back to the default workflow token.
+          if [ -n "${{ secrets.HANZO_GH_RO_TOKEN }}" ]; then
+            echo "token=${{ secrets.HANZO_GH_RO_TOKEN }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          secrets: |
+            "gh_token=${{ steps.gomod-token.outputs.token }}"
+          # If the Dockerfile needs the token at build-time for `go mod
+          # download` of private modules, set the BuildKit secret above
+          # and reference it in the Dockerfile with:
+          #   RUN --mount=type=secret,id=gh_token \
+          #       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/" && \
+          #       GOPRIVATE='github.com/hanzoai/*,github.com/luxfi/*' go mod download
