@@ -1,0 +1,41 @@
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# CI / repo metadata not needed inside the build
+.github/
+
+# Docs (image runs the binary; readers visit GitHub)
+*.md
+LICENSE
+SECURITY.md
+
+# Already-built binary at repo root (matches .gitignore)
+/cloud
+
+# Environment files (never bake secrets into images)
+.env
+.env.*
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Tests stay out of the runtime image
+*_test.go
+
+# Local build outputs
+/dist/
+/build/
+/bin/
+
+# The Dockerfile itself doesn't need to be in the context it builds
+Dockerfile
+.dockerignore
