@@ -268,7 +268,7 @@ require (
 	github.com/hanzoai/datastore-go/v2 v2.45.0 // indirect
 	github.com/hanzoai/dbx v1.16.0 // indirect
 	github.com/hanzoai/exporter-toolkit v0.15.2 // indirect
-	github.com/hanzoai/iam v1.19.1 // indirect
+	github.com/hanzoai/iam v1.19.4 // indirect
 	github.com/hanzoai/iamsdk/v2 v2.1.0 // indirect
 	github.com/hanzoai/idv v1.0.0 // indirect
 	github.com/hanzoai/kms/sdk/go v1.0.0 // indirect
@@ -558,7 +558,7 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zap-proto/go v0.3.0 // indirect
+	github.com/zap-proto/go v1.1.0 // indirect
 	github.com/zap-proto/http v0.0.0-20260506200741-fd6047874433 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.mau.fi/util v0.8.3 // indirect
@@ -646,7 +646,7 @@ require (
 	github.com/hanzoai/authz v1.10.1
 	github.com/hanzoai/base v1.3.2
 	github.com/hanzoai/commerce v1.39.1
-	github.com/hanzoai/iam/pkg/iam v1.18.1
+	github.com/hanzoai/iam/pkg/iam v1.18.4
 	github.com/hanzoai/ingress v1.8.0
 	github.com/hanzoai/kms v0.159.1
 	github.com/hanzoai/licensing v0.1.0
