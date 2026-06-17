@@ -1,0 +1,48 @@
+# Single-node VPS deployment of the unified hanzoai/cloud binary (HIP-0106).
+#
+# Mounts the iam + base + kms + gateway + o11y subsystems in-process.
+# Payments / Vault stay out-of-process per HIP-0106 PCI scope; configure
+# their ZAP endpoints via env if you need them.
+#
+# Usage:
+#   cp deploy/compose.env.example deploy/compose.env
+#   # edit HANZO_BRAND, HANZO_DOMAIN, HANZO_IAM_ISSUER
+#   docker compose -f deploy/compose.yml --env-file deploy/compose.env up -d
+#
+# Health check:
+#   curl http://localhost:8080/health
+
+services:
+  cloud:
+    image: ghcr.io/hanzoai/cloud:${HANZO_CLOUD_TAG:-latest}
+    container_name: hanzo-cloud
+    restart: unless-stopped
+    ports:
+      - "${HANZO_HTTP_PORT:-8080}:8080"
+      - "${HANZO_METRICS_PORT:-9090}:9090"
+      - "${HANZO_ZAP_PORT:-9653}:9653"
+    environment:
+      HANZO_BRAND: ${HANZO_BRAND:-hanzo}
+      HANZO_DOMAIN: ${HANZO_DOMAIN:-api.hanzo.local}
+      HANZO_DATA_DIR: /var/lib/cloud
+      HANZO_IAM_ISSUER: ${HANZO_IAM_ISSUER:-https://iam.hanzo.id}
+      # Subsystem enable list (empty = all). Match what your tenant needs.
+      HANZO_ENABLE: ${HANZO_ENABLE:-iam,base,kms,gateway,o11y}
+    command:
+      - "--brand=${HANZO_BRAND:-hanzo}"
+      - "--domain=${HANZO_DOMAIN:-api.hanzo.local}"
+      - "--data-dir=/var/lib/cloud"
+      - "--iam-issuer=${HANZO_IAM_ISSUER:-https://iam.hanzo.id}"
+      - "--enable=${HANZO_ENABLE:-iam,base,kms,gateway,o11y}"
+    volumes:
+      - cloud-data:/var/lib/cloud
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  cloud-data:
+    driver: local
