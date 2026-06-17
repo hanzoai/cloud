@@ -4,6 +4,9 @@
 // which subsystems mount at startup. Same artifact powers
 // api.hanzo.ai, api.osage.cloud, api.lux.cloud, api.zoo.cloud, and
 // every other white-label resold cloud surface.
+//
+// The serve body lives in cloud.Serve (one place, shared with the `hanzo`
+// subcommand dispatcher); main() is just its full-surface entrypoint.
 package main
 
 import (
@@ -11,12 +14,11 @@ import (
 	"os"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/middleware"
 
 	// Subsystems — each ships func Mount(*zip.App, cloud.Deps) error and
 	// registers itself via init() in cloud.Registry. Import paths reflect
-	// where each subsystem's Mount lives.
+	// where each subsystem's Mount lives. Blank-importing them here populates
+	// the registry that cloud.Serve mounts over.
 	_ "github.com/hanzoai/ai"          // order 150
 	_ "github.com/hanzoai/amqp"        // order 30
 	_ "github.com/hanzoai/authz"       // order 70
@@ -41,42 +43,9 @@ import (
 )
 
 func main() {
-	cfg := cloud.LoadConfig()
-	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
-		os.Exit(1)
-	}
-
-	deps := cloud.BuildDeps(cfg)
-
-	app := zip.New(zip.Config{Logger: deps.Logger})
-
-	// Canonical middleware pipeline. Order matters:
-	//  1. Recover   — panic → JSON 500
-	//  2. RequestID — generate / propagate X-Request-Id
-	//  3. Logger    — request-line log via luxfi/log
-	//  4. Telemetry — OTel span; depends on deps.O11y if enabled
-	//  5. Auth      — JWT validation; strips client identity, mints from JWT
-	app.Use(middleware.Recover())
-	app.Use(middleware.RequestID())
-	app.Use(middleware.Logger(deps.Logger))
-	// app.Use(middleware.Telemetry(deps.O11y))  // enable once o11y mounted
-	// app.Use(middleware.Auth(deps.IAM))         // enable once iam mounted
-
-	// Per-deployment subsystem mount.
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
-		fmt.Fprintf(os.Stderr, "mount: %v\n", err)
-		os.Exit(1)
-	}
-
-	deps.Logger.Info("listening",
-		"http", cfg.ListenAddr,
-		"zap", cfg.ZAPListenAddr,
-		"brand", cfg.Brand,
-		"domain", cfg.Domain,
-	)
-	if err := app.Listen(cfg.ListenAddr); err != nil {
-		fmt.Fprintf(os.Stderr, "listen: %v\n", err)
+	// nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
+	if err := cloud.Serve(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
 		os.Exit(1)
 	}
 }
