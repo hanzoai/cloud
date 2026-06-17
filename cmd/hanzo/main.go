@@ -65,27 +65,11 @@ import (
 	// server (login UI, all routes, LDAP/RADIUS). `hanzo iam` calls Run().
 	"github.com/hanzoai/iam/iamserver"
 
-	// Subsystems — identical set to cmd/cloud. Each ships
-	// func Mount(*zip.App, cloud.Deps) error and registers itself into
-	// cloud.Registry via init(). Importing them here populates the registry
-	// the dispatcher selects over. (Inert at load — see THE BEEGO CRUX.)
-	_ "github.com/hanzoai/ai"          // order 150
-	_ "github.com/hanzoai/amqp"        // order 30
-	_ "github.com/hanzoai/authz"       // order 70
-	_ "github.com/hanzoai/base"        // order 60
-	_ "github.com/hanzoai/commerce"    // order 100
-	_ "github.com/hanzoai/gateway"     // order 80
-	_ "github.com/hanzoai/iam/pkg/iam" // order 50 (Mount lives in pkg/iam submodule)
-	_ "github.com/hanzoai/ingress"     // order 90
-	_ "github.com/hanzoai/kms"         // order 10
-	_ "github.com/hanzoai/licensing"   // order 110 (after iam + commerce)
-	_ "github.com/hanzoai/mcp/go"      // order 160 (Mount lives in go submodule)
-	_ "github.com/hanzoai/metrics"     // order 40
-	_ "github.com/hanzoai/o11y"        // order 70
-	_ "github.com/hanzoai/vfs"         // order 20
-
-	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
+	// Every subsystem registers into cloud.Registry via init(); the set is
+	// defined ONCE in the subsystems bundle (shared with cmd/cloud), so the
+	// dispatcher and the full-surface binary mount an identical set. Inert at
+	// load — see THE BEEGO CRUX.
+	_ "github.com/hanzoai/cloud/subsystems"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
