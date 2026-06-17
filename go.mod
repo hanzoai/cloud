@@ -7,6 +7,7 @@ go 1.26.4
 require (
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/hanzoai/gateway v2.9.7+incompatible
+	github.com/hanzoai/iam v1.19.4
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/zip v0.2.0
@@ -268,7 +269,6 @@ require (
 	github.com/hanzoai/datastore-go/v2 v2.45.0 // indirect
 	github.com/hanzoai/dbx v1.16.0 // indirect
 	github.com/hanzoai/exporter-toolkit v0.15.2 // indirect
-	github.com/hanzoai/iam v1.19.4 // indirect
 	github.com/hanzoai/iamsdk/v2 v2.1.0 // indirect
 	github.com/hanzoai/idv v1.0.0 // indirect
 	github.com/hanzoai/kms/sdk/go v1.0.0 // indirect
