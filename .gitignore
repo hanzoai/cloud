@@ -1,0 +1,32 @@
+# Built binary (matches Dockerfile output path)
+/cloud
+
+# Local build directories
+/dist/
+/build/
+/bin/
+
+# Go test + coverage artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
