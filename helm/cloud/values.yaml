@@ -1,0 +1,75 @@
+# hanzoai/cloud — Helm values
+#
+# Minimal chart: Deployment + Service + ConfigMap.
+# Reference shape only — for richer ops use luxfi/operator and the
+# Service CRD (operator wraps this shape with reconciliation).
+
+image:
+  repository: ghcr.io/hanzoai/cloud
+  tag: ""          # defaults to .Chart.AppVersion when empty
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+# Brand / domain / enabled subsystems mirror the binary's CLI flags
+# (cmd/cloud/main.go).
+hanzo:
+  brand: hanzo
+  domain: api.hanzo.ai
+  dataDir: /var/lib/cloud
+  # OIDC issuer — REQUIRED. Without this the IAM mount refuses and the
+  # process exits at start.
+  iamIssuer: https://iam.hanzo.id
+  # Comma-separated subsystem list (empty = all imported in cmd/cloud).
+  # Payments + Vault are NEVER co-resident per HIP-0106 PCI isolation;
+  # leave them off unless you fully understand the implications.
+  enable: "iam,base,kms,gateway,o11y"
+
+service:
+  type: ClusterIP
+  httpPort: 8080
+  metricsPort: 9090
+  zapPort: 9653
+
+persistence:
+  # Per-tenant SQLite (HIP-0302) lives under dataDir. Set to an
+  # appropriate PVC for production; emptyDir is fine for dev.
+  enabled: false
+  size: 20Gi
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  readiness:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
