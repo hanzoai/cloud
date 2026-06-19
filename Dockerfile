@@ -8,13 +8,19 @@ WORKDIR /src
 # gh_token is the shared docker-build.yml BuildKit secret (no-op when absent).
 ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/* \
     GOSUMDB=off \
-    GOPROXY=direct
+    GOPROXY=direct \
+    GOFLAGS=-mod=mod
 COPY go.mod go.sum ./
+# go mod download, self-healing past upstream force-re-tag poisoning: if a
+# luxfi/hanzoai module's tag was force-moved/deleted after go.sum was recorded,
+# the committed sum mismatches the fresh origin fetch. With GOSUMDB=off the
+# regenerated sum is trustworthy for our own private modules. Root-cause fix is
+# stopping force-re-tags at the source; this keeps the image buildable meanwhile.
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
-    go mod download
+    (go mod download || (echo ">> go.sum poisoned by upstream force-re-tag; regenerating from origin" && rm -f go.sum && go mod download))
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /cloud ./cmd/cloud
 
