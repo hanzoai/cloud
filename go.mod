@@ -6,7 +6,7 @@ go 1.26.4
 
 require (
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
-	github.com/hanzoai/commerce/metering v0.0.0-00010101000000-000000000000
+	github.com/hanzoai/commerce/metering v0.1.0
 	github.com/hanzoai/gateway v2.9.7+incompatible
 	github.com/hanzoai/iam v1.19.6
 	github.com/hanzoai/plans v1.2.0
@@ -267,7 +267,6 @@ require (
 	github.com/hanzoai/exporter-toolkit v0.15.2 // indirect
 	github.com/hanzoai/iamsdk/v2 v2.1.0 // indirect
 	github.com/hanzoai/idv v1.0.0 // indirect
-	github.com/hanzoai/kms/sdk/go v1.0.0 // indirect
 	github.com/hanzoai/kv-go/v9 v9.18.0 // indirect
 	github.com/hanzoai/ldapserver v1.2.1 // indirect
 	github.com/hanzoai/notify2 v1.6.3 // indirect
@@ -678,9 +677,3 @@ replace github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.16
 replace github.com/prometheus/alertmanager => github.com/hanzoai/alertmanager v0.28.2
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
-
-// commerce/metering is a standalone stdlib-only module nested in the commerce
-// repo (the billing source of truth). Its module-creating commits are not yet
-// on origin, so no proxy version resolves reliably; pin it to the local working
-// copy for a reproducible build. Swap to a tagged version once published.
-replace github.com/hanzoai/commerce/metering => /Users/a/work/hanzo/hanzoai/commerce/metering
