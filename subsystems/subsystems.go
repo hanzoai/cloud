@@ -22,7 +22,7 @@ import (
 	_ "github.com/hanzoai/authz"       // order 70
 	_ "github.com/hanzoai/base"        // order 60
 	_ "github.com/hanzoai/commerce"    // order 100
-	_ "github.com/hanzoai/gateway"     // order 80
+	_ "github.com/hanzoai/gateway/v2"  // order 80
 	_ "github.com/hanzoai/iam/pkg/iam" // order 50 (Mount lives in the pkg/iam submodule)
 	_ "github.com/hanzoai/ingress"     // order 90
 	_ "github.com/hanzoai/kms"         // order 10 (thin wrapper over the canonical luxfi/kms)
