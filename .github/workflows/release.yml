@@ -1,16 +1,19 @@
 name: release
 
-# Builds and pushes ghcr.io/hanzoai/cloud:<tag> when a git tag matching v*
-# is pushed. Also publishes :sha-<short> and :latest for the default branch.
+# Builds and pushes ghcr.io/hanzoai/cloud:<tag> on tag (v*) / main / dispatch.
 #
-# Notes for maintainers:
-# - The cloud binary depends on private upstream modules
-#   (hanzoai/iam, hanzoai/commerce, hanzoai/gateway, etc). The default
-#   GITHUB_TOKEN issued by Actions does NOT have read access across
-#   private repos in other orgs. If that's the case here, configure an
-#   org-level secret HANZO_GH_RO_TOKEN with read:packages + repo scope
-#   covering hanzoai/* and luxfi/*, and replace the GOPRIVATE step's
-#   token reference.
+# Delegates to the canonical shared reusable workflow
+# (hanzoai/.github docker-build.yml), which runs on the self-hosted arcd
+# pools — NEVER GitHub-hosted runners. This is deliberate: GitHub-hosted
+# Actions for this org are subject to a billing freeze (jobs fail in ~5s with
+# "recent account payments have failed"), so the bespoke ubuntu-latest build
+# could never start. The shared workflow also injects the org GH_PAT as the
+# BuildKit `gh_token` secret, which the Dockerfile consumes to fetch private
+# cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
+#
+# amd64-only: the cloud-api cluster (do-sfo3-hanzo-k8s) is amd64, and pinning a
+# single platform guarantees the build completes on an available evo runner
+# without blocking on the (often scaled-to-zero) arm64 spark pool.
 
 on:
   push:
@@ -18,76 +21,10 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: write
-  id-token: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to ghcr.io
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure private module access for Go (build args)
-        id: gomod-token
-        env:
-          # GH_PAT is the org-level cross-org PAT (reads hanzoai/* AND luxfi/*);
-          # the default GITHUB_TOKEN only reads this repo, so private cross-org
-          # `go mod download` (luxfi/log, hanzoai/ai, hanzoai/beego, ...) fails
-          # without it. Fall back to GITHUB_TOKEN for forks without the secret.
-          GH_PAT: ${{ secrets.GH_PAT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -n "$GH_PAT" ]; then
-            echo "::add-mask::$GH_PAT"
-            echo "token=$GH_PAT" >> "$GITHUB_OUTPUT"
-          else
-            echo "token=$GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          secrets: |
-            "gh_token=${{ steps.gomod-token.outputs.token }}"
-          # If the Dockerfile needs the token at build-time for `go mod
-          # download` of private modules, set the BuildKit secret above
-          # and reference it in the Dockerfile with:
-          #   RUN --mount=type=secret,id=gh_token \
-          #       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/" && \
-          #       GOPRIVATE='github.com/hanzoai/*,github.com/luxfi/*' go mod download
+  docker:
+    uses: hanzoai/.github/.github/workflows/docker-build.yml@main
+    with:
+      image: ghcr.io/hanzoai/cloud
+      platforms: linux/amd64
+    secrets: inherit
