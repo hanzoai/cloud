@@ -6,7 +6,7 @@ go 1.26.4
 
 require (
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
-	github.com/hanzoai/gateway v2.9.7+incompatible
+	github.com/hanzoai/gateway v2.9.6+incompatible
 	github.com/hanzoai/iam v1.19.6
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
