@@ -124,11 +124,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	})
 
 	// Convenience aliases (the cleaner top-level surface from server.mjs).
-	app.Get("/v1/models", func(c *zip.Ctx) error { return dispatch(c, "__models_alias", nil) })
+	// NOTE: the bare /v1/models alias is DELIBERATELY NOT mounted here. In the
+	// unified binary the AI subsystem owns the OpenAI-compatible /v1/models
+	// (the {data:[{id,…}]} model list the api.hanzo.ai gateway forwards and
+	// clients like cowork's model picker consume). Pricing's annotated catalog
+	// already lives at /v1/pricing/models, so the bare alias would only shadow
+	// AI's contract route with a different shape — a regression. Keep pricing
+	// strictly under /v1/pricing/*. (Same reasoning the note below records for
+	// /v1/plans, /v1/tools, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam —
+	// all owned by other subsystems at the top level to avoid collisions.)
 	app.Get("/v1/pricing-policy", func(c *zip.Ctx) error { return dispatch(c, "policy", nil) })
-	// NOTE: /v1/plans, /v1/tools, /v1/gpu, /v1/cloud, /v1/subscriptions, /v1/iam
-	// are owned by plansvc / other subsystems at the top level to avoid route
-	// collisions; pricing serves them under its /v1/pricing/* prefix.
 
 	// Live sync trigger — admin only. Network fetch in Go, markup in goja.
 	app.Post("/v1/pricing/sync", func(c *zip.Ctx) error {
