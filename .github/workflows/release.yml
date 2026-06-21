@@ -27,4 +27,10 @@ jobs:
     with:
       image: ghcr.io/hanzoai/cloud
       platforms: linux/amd64
+      # Route to the ARC scale set by its NAME. ARC ephemeral runners only
+      # match jobs that target the scale-set name as a label; the generic
+      # [self-hosted,linux,amd64] default matches only classic static runners
+      # (the evo pool, currently offline) and leaves the job queued forever.
+      # hanzo-build-linux-amd64 is the live amd64 scale set (arc-system).
+      runner-amd64: '["hanzo-build-linux-amd64"]'
     secrets: inherit
