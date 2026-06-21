@@ -44,13 +44,19 @@ jobs:
 
       - name: Configure private module access for Go (build args)
         id: gomod-token
+        env:
+          # GH_PAT is the org-level cross-org PAT (reads hanzoai/* AND luxfi/*);
+          # the default GITHUB_TOKEN only reads this repo, so private cross-org
+          # `go mod download` (luxfi/log, hanzoai/ai, hanzoai/beego, ...) fails
+          # without it. Fall back to GITHUB_TOKEN for forks without the secret.
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Prefer an org-level token if configured (covers cross-org
-          # private deps); fall back to the default workflow token.
-          if [ -n "${{ secrets.HANZO_GH_RO_TOKEN }}" ]; then
-            echo "token=${{ secrets.HANZO_GH_RO_TOKEN }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$GH_PAT" ]; then
+            echo "::add-mask::$GH_PAT"
+            echo "token=$GH_PAT" >> "$GITHUB_OUTPUT"
           else
-            echo "token=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_OUTPUT"
+            echo "token=$GITHUB_TOKEN" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Docker Buildx
