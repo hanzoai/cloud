@@ -319,7 +319,7 @@ require (
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
 	github.com/hanzoai/datastore-go/v2 v2.45.0 // indirect
-	github.com/hanzoai/dbx v1.16.0 // indirect
+	github.com/hanzoai/dbx v1.16.1-0.20260622034226-6b6ceb740f3e // indirect
 	github.com/hanzoai/exporter-toolkit v0.15.2 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/iamsdk/v2 v2.1.0 // indirect
