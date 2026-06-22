@@ -1192,6 +1192,8 @@ github.com/hanzoai/ai v1.785.9-0.20260622021256-a98523d4ce60 h1:FADGoJGc2qT6c7gw
 github.com/hanzoai/ai v1.785.9-0.20260622021256-a98523d4ce60/go.mod h1:lGrh2YvN/i39q98gbmb1aZkFH0Fwyu1O5uHOpI361Wk=
 github.com/hanzoai/ai v1.785.9-0.20260622023310-152107f4fd8a h1:mQtn+xCRw1CbV8obcHuXAeq5h6NfkNvzziVkkwNZZHI=
 github.com/hanzoai/ai v1.785.9-0.20260622023310-152107f4fd8a/go.mod h1:lGrh2YvN/i39q98gbmb1aZkFH0Fwyu1O5uHOpI361Wk=
+github.com/hanzoai/ai v1.785.9-0.20260622080001-f3a36aa22ff6 h1:mBx7+ckhYpCqvjteTrxBUPceubEUwLfMXtD7n8cRE1Y=
+github.com/hanzoai/ai v1.785.9-0.20260622080001-f3a36aa22ff6/go.mod h1:Fn2rApIIv1pN989HBihBay0oM51An1FuFl919eyWQLc=
 github.com/hanzoai/alertmanager v0.28.2 h1:40fm5ZDq4MZ7CJwPb7AHVa1DU9kHK5lgMuJUJK7frT4=
 github.com/hanzoai/alertmanager v0.28.2/go.mod h1:SOwWSWO7p9CaBKr+bp1IrPfTPjftxp+cnyBK9GhgJFs=
 github.com/hanzoai/amqp v0.2.0 h1:zv8/QQoV0QIqsTDAboBPOyaFPEULncIw4Byvx261IN8=
@@ -1230,6 +1232,8 @@ github.com/hanzoai/go-openrouter v1.0.0 h1:oQTSk4mjBhdgbUMdVm6XxPQy4u0QNhQrEBuuE
 github.com/hanzoai/go-openrouter v1.0.0/go.mod h1:wC86avp4HRT7ZrvdwOIs3ZmnwUSkSeX2+HfLAAEYHVo=
 github.com/hanzoai/iam v1.19.6 h1:jzgXLprluItq4bn3gXH0xe64rXVXgt3MSU2ZXq1fnZo=
 github.com/hanzoai/iam v1.19.6/go.mod h1:E+6iYJ9CDmzkiIBvzOQ3eAoPmDH9Uo7DQssWJuY2Bqs=
+github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b h1:2Tuic7uTicqqC+HF4KQHpWS6jge1lrQTFSEwtjtS+28=
+github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b/go.mod h1:1ys7zYd+J8rsjqM5RXAr4L6zJOeSXPLvTESBQyGhyUU=
 github.com/hanzoai/iam/pkg/iam v1.18.5 h1:cDAMtdZqLh4sugXVNXiikoFbb6F9IxmVZhwjWDy4iUo=
 github.com/hanzoai/iam/pkg/iam v1.18.5/go.mod h1:D/E/rIdq1++zNiEV1PFiKKclnvcO6WtEDMMfnW1eEio=
 github.com/hanzoai/iamsdk/v2 v2.1.0 h1:BuU3323zi6Jx7mgNo/wao4iuYoQsfviVgzRUNjmFduk=
@@ -1703,6 +1707,8 @@ github.com/luxfi/runtime v1.1.0 h1:6TrvzAmZVCTVbR1ebntHTO3/kVBaogPUSkxdDMnrTiw=
 github.com/luxfi/runtime v1.1.0/go.mod h1:Mfv2zlXqvfRFMS+/zXgG1TieyP9VnvtVzOGB437+o4Y=
 github.com/luxfi/sampler v1.1.0 h1:u3iRDl7V06ARh0e85h3HT+aZ1saCFo2yMMsh+dCJbqk=
 github.com/luxfi/sampler v1.1.0/go.mod h1:kJa53S3tC9+VSbuV3RFu68MmbCCBlr2UM39LOClQ/Hs=
+github.com/luxfi/threshold v1.9.4 h1:/TsgIzo/e/DIx++J0+9eNuS7HkpSaXbVk+HvhlUOsmE=
+github.com/luxfi/threshold v1.9.4/go.mod h1:yFEqzc07h+olG8CpJ+i2FjSLxCznk/GcISRfxMuDBvE=
 github.com/luxfi/tls v1.0.3 h1:rK3nxSAxrUOOSHOZnKChwV4f6UJ+cfOl8KWJXAQx/SI=
 github.com/luxfi/tls v1.0.3/go.mod h1:dQqSiGE7YxXUxOwICoReUuIitBms9DYOaCeteBwmIWw=
 github.com/luxfi/utils v1.1.5 h1:6q85557b7djbZ/OF6S1k5wyGddozWnsoUuhokPHQRvo=
