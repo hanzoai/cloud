@@ -9,6 +9,10 @@ WORKDIR /src
 # gh_token is the BuildKit secret the release workflow injects from GH_PAT;
 # no-op when absent (local/dev builds with a warm module cache).
 ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/*
+# -mod=mod lets `go` re-record go.sum entries at build time for private modules
+# whose tags are re-pushed upstream (e.g. luxfi/threshold), instead of failing
+# on a stale checksum. GOPRIVATE already keeps these off the public sumdb.
+ENV GOFLAGS=-mod=mod
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=secret,id=gh_token \
