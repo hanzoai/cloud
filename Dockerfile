@@ -10,18 +10,21 @@ WORKDIR /src
 #   GONOPROXY = hanzoai/* + zap-proto/* ONLY. These pseudo-versions are pinned
 #     to just-pushed commits the public proxy can't serve (404), so they must be
 #     fetched via authenticated git (gh_token rewrite below). luxfi/* is NOT
-#     here: every luxfi module we use IS on the public proxy, so it resolves
+#     here: most luxfi modules we use ARE on the public proxy, so they resolve
 #     through proxy.golang.org — the immutable, checksum-DB-verified artifact.
-#     That neutralises force-rewritten upstream tags: e.g. luxfi/age v1.5.0 was
-#     re-pushed on GitHub with content differing from what sum.golang.org
-#     recorded (h1:G69H... original vs h1:KEjq... rewritten), which made the old
-#     direct fetch fail go.sum verification. Proxy fetch returns the original
-#     go.sum-matching bits, so the build is deterministic again.
-#   GONOSUMDB = all three orgs: skip the public sumdb lookup for cross-org repos
-#     (private ones 404 the sumdb; luxfi is already in go.sum so this is a no-op
-#     safety net for any future re-tag).
+#     That neutralises force-rewritten upstream tags: e.g. luxfi/age v1.5.0 and
+#     luxfi/threshold v1.9.4 were re-pushed on GitHub with content differing
+#     from what sum.golang.org recorded, which made the old direct fetch fail
+#     go.sum verification. Proxy fetch returns the original go.sum-matching bits,
+#     so the build is deterministic again. (go.sum is pinned to the proxy /
+#     checksum-DB hashes for these, NOT the rewritten GitHub bits.)
+#   GONOSUMDB = all three orgs: skip the public sumdb lookup for cross-org repos.
+#     This is REQUIRED for luxfi too — a few luxfi module versions are NOT on the
+#     proxy/sumdb (e.g. luxfi/constants@v1.5.8 → 404); GONOSUMDB lets those fall
+#     through to direct without a sumdb-lookup error, while go.sum still pins them.
 #   GOPROXY = proxy first, direct fallback. GONOPROXY still forces hanzoai/*
-#     and zap-proto/* to direct; everything else (incl. luxfi/*) hits the proxy.
+#     and zap-proto/* to direct; everything else (incl. luxfi/*) tries the proxy
+#     first and only falls to direct when the proxy 404s.
 #
 # gh_token is the BuildKit secret the release workflow injects from GH_PAT;
 # no-op when absent (local/dev builds with a warm module cache).
