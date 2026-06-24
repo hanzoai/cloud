@@ -1192,6 +1192,8 @@ github.com/hanzoai/ai v1.785.9-0.20260624041310-ee4236898a3e h1:3urZKrQCSab+A+xr
 github.com/hanzoai/ai v1.785.9-0.20260624041310-ee4236898a3e/go.mod h1:Fn2rApIIv1pN989HBihBay0oM51An1FuFl919eyWQLc=
 github.com/hanzoai/ai v1.785.9-0.20260624042528-e6402611fb4e h1:lTZofml+PeASCx+MI8mJqA6ineBbEDl4xfIfnMbOV0I=
 github.com/hanzoai/ai v1.785.9-0.20260624042528-e6402611fb4e/go.mod h1:Fn2rApIIv1pN989HBihBay0oM51An1FuFl919eyWQLc=
+github.com/hanzoai/ai v1.785.9-0.20260624043121-916595739e84 h1:QB90HVcqQhBx/wt11ekL1oLjm1aTcmgpJlAEdf63MzE=
+github.com/hanzoai/ai v1.785.9-0.20260624043121-916595739e84/go.mod h1:Fn2rApIIv1pN989HBihBay0oM51An1FuFl919eyWQLc=
 github.com/hanzoai/alertmanager v0.28.2 h1:40fm5ZDq4MZ7CJwPb7AHVa1DU9kHK5lgMuJUJK7frT4=
 github.com/hanzoai/alertmanager v0.28.2/go.mod h1:SOwWSWO7p9CaBKr+bp1IrPfTPjftxp+cnyBK9GhgJFs=
 github.com/hanzoai/amqp v0.2.0 h1:zv8/QQoV0QIqsTDAboBPOyaFPEULncIw4Byvx261IN8=
