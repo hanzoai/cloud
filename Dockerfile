@@ -9,6 +9,14 @@ WORKDIR /src
 # gh_token is the BuildKit secret the release workflow injects from GH_PAT;
 # no-op when absent (local/dev builds with a warm module cache).
 ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/*
+# Resolve through the public proxy FIRST, falling back to direct (authenticated
+# git) only when the proxy 404s — i.e. for genuinely private repos. This pins
+# PUBLIC modules to the immutable, checksum-DB-verified bits the proxy serves,
+# so a force-rewritten upstream tag (e.g. luxfi/age v1.5.0 re-pushed on GitHub
+# with different content than sum.golang.org recorded) can never poison the
+# build: the proxy still serves the original go.sum-matching artifact. GOPRIVATE
+# keeps private paths off the sumdb; the proxy never sees them (it 404s → direct).
+ENV GOPROXY=https://proxy.golang.org,direct
 # -mod=mod lets `go` re-record go.sum entries at build time for private modules
 # whose tags are re-pushed upstream (e.g. luxfi/threshold), instead of failing
 # on a stale checksum. GOPRIVATE already keeps these off the public sumdb.
