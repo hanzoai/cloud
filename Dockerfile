@@ -4,22 +4,33 @@ RUN apk add --no-cache ca-certificates tzdata git
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 WORKDIR /src
 
-# Private cross-org modules (hanzoai/*, luxfi/*, zap-proto/*) are fetched via
-# authenticated git, bypassing the public proxy (which 404s on private repos).
+# Module resolution is split by trust/availability, NOT lumped into one
+# GOPRIVATE (which forces BOTH direct-fetch and sumdb-bypass for every match):
+#
+#   GONOPROXY = hanzoai/* + zap-proto/* ONLY. These pseudo-versions are pinned
+#     to just-pushed commits the public proxy can't serve (404), so they must be
+#     fetched via authenticated git (gh_token rewrite below). luxfi/* is NOT
+#     here: every luxfi module we use IS on the public proxy, so it resolves
+#     through proxy.golang.org — the immutable, checksum-DB-verified artifact.
+#     That neutralises force-rewritten upstream tags: e.g. luxfi/age v1.5.0 was
+#     re-pushed on GitHub with content differing from what sum.golang.org
+#     recorded (h1:G69H... original vs h1:KEjq... rewritten), which made the old
+#     direct fetch fail go.sum verification. Proxy fetch returns the original
+#     go.sum-matching bits, so the build is deterministic again.
+#   GONOSUMDB = all three orgs: skip the public sumdb lookup for cross-org repos
+#     (private ones 404 the sumdb; luxfi is already in go.sum so this is a no-op
+#     safety net for any future re-tag).
+#   GOPROXY = proxy first, direct fallback. GONOPROXY still forces hanzoai/*
+#     and zap-proto/* to direct; everything else (incl. luxfi/*) hits the proxy.
+#
 # gh_token is the BuildKit secret the release workflow injects from GH_PAT;
 # no-op when absent (local/dev builds with a warm module cache).
-ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/*
-# Resolve through the public proxy FIRST, falling back to direct (authenticated
-# git) only when the proxy 404s — i.e. for genuinely private repos. This pins
-# PUBLIC modules to the immutable, checksum-DB-verified bits the proxy serves,
-# so a force-rewritten upstream tag (e.g. luxfi/age v1.5.0 re-pushed on GitHub
-# with different content than sum.golang.org recorded) can never poison the
-# build: the proxy still serves the original go.sum-matching artifact. GOPRIVATE
-# keeps private paths off the sumdb; the proxy never sees them (it 404s → direct).
+ENV GONOPROXY=github.com/hanzoai/*,github.com/zap-proto/*
+ENV GONOSUMDB=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/*
 ENV GOPROXY=https://proxy.golang.org,direct
 # -mod=mod lets `go` re-record go.sum entries at build time for private modules
 # whose tags are re-pushed upstream (e.g. luxfi/threshold), instead of failing
-# on a stale checksum. GOPRIVATE already keeps these off the public sumdb.
+# on a stale checksum. GONOSUMDB already keeps these off the public sumdb.
 ENV GOFLAGS=-mod=mod
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
