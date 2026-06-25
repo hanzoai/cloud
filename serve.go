@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/zapface"
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
 )
@@ -64,6 +65,16 @@ func Serve(enable []string) error {
 	if err := MountAll(app, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
+
+	// Browser-facing ZAP RPC plane. console2 (@hanzo/gui + @zap-proto/web)
+	// reaches the SAME /v1 handlers over a WebSocket carrying binary ZAP frames
+	// — no second copy of any business logic: each call is replayed in-process
+	// through this Fiber app (see zapface). Mounted AFTER MountAll so every /v1
+	// route exists before the dispatcher captures the app.
+	app.All("/zap", zip.AdaptNetHTTPFunc(zapface.Handler(app.Fiber(), zapface.Options{
+		OriginPatterns: cfg.ZAPWebOrigins,
+		Logger:         deps.Logger,
+	})))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
