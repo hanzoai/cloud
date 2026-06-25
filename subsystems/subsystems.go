@@ -36,4 +36,5 @@ import (
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
 	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /api/search-docs/*, /api/vector/*
 )
