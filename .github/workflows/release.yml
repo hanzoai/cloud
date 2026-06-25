@@ -72,3 +72,24 @@ jobs:
           # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
           secrets: |
             gh_token=${{ secrets.GH_PAT }}
+
+  # Notify universe so the GitOps pipeline rolls the new image to prod —
+  # same image-update contract every service uses (gateway, iam, …).
+  notify-universe:
+    needs: build-amd64
+    runs-on: [hanzo-build-linux-amd64]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Repository dispatch (image-update)
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.UNIVERSE_DISPATCH_TOKEN }}
+          repository: hanzoai/universe
+          event-type: image-update
+          client-payload: |
+            {
+              "service": "cloud",
+              "image":   "ghcr.io/hanzoai/cloud:${{ github.ref_name }}",
+              "sha":     "${{ github.sha }}",
+              "env":     "all"
+            }
