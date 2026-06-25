@@ -35,6 +35,12 @@ type Deps struct {
 	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
 	Domain string
 
+	// IAMIssuer is the canonical OIDC issuer (JWKS source) for this brand,
+	// resolved from Brand via the white-label registry unless pinned by the
+	// operator. Subsystems validate JWT `iss` + signatures against
+	// {IAMIssuer}/v1/iam/.well-known/jwks (HIP-0111). One issuer per deployment.
+	IAMIssuer string
+
 	// DataDir is the per-deployment data root. Per-tenant SQLite files
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
