@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -79,7 +80,26 @@ func Serve(enable []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
+	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
+	// on a port SEPARATE from the public API, so a saturated/again-starting API
+	// surface never flaps liveness. Previously HealthListenAddr was declared but
+	// never bound; the operator's probes target :9090, so without this the pod
+	// fails liveness and CrashLoops. Runs in its own goroutine; a bind failure
+	// is fatal (propagated via listenErr) so a misconfigured port fails loud.
+	healthSrv := &http.Server{
+		Addr:              cfg.HealthListenAddr,
+		Handler:           healthMux(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
 	listenErr := make(chan error, 1)
+	go func() {
+		deps.Logger.Info("health listening", "addr", cfg.HealthListenAddr)
+		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			listenErr <- fmt.Errorf("health listen: %w", err)
+		}
+	}()
 	go func() {
 		deps.Logger.Info("listening",
 			"http", cfg.ListenAddr,
@@ -100,5 +120,23 @@ func Serve(enable []string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	_ = healthSrv.Shutdown(shutdownCtx)
 	return app.ShutdownWithContext(shutdownCtx)
+}
+
+// healthMux is the liveness/readiness contract on the health port. Both return
+// 200 once the process is up; readiness can grow a real dependency check later.
+// Kept dependency-free (stdlib only) so the health surface never shares failure
+// modes with the API stack.
+func healthMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	ok := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}
+	mux.HandleFunc("/healthz", ok)
+	mux.HandleFunc("/readyz", ok)
+	mux.HandleFunc("/health", ok)
+	return mux
 }
