@@ -72,21 +72,22 @@ func LoadConfig() *Config {
 		ZAPListenAddr:    getenv("CLOUD_ZAP_LISTEN", ":9653"),
 		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
-		Brand:            getenv("CLOUD_BRAND", "hanzo"),
+		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
-		IAMIssuer:        getenv("CLOUD_IAM_ISSUER", "https://iam.hanzo.ai"),
-		KMSMasterKeyRef:  getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
-		DataDir:          getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
-		PaymentsZAPAddr:  getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
-		VaultZAPAddr:     getenv("CLOUD_VAULT_ZAP_ADDR", ""),
-		IAMZAPAddr:       getenv("CLOUD_IAM_ZAP_ADDR", ""),
-		KMSZAPAddr:       getenv("CLOUD_KMS_ZAP_ADDR", ""),
-		BaseZAPAddr:      getenv("CLOUD_BASE_ZAP_ADDR", ""),
-		CommerceZAPAddr:  getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
-		AIZAPAddr:        getenv("CLOUD_AI_ZAP_ADDR", ""),
-		O11yZAPAddr:      getenv("CLOUD_O11Y_ZAP_ADDR", ""),
-		VFSZAPAddr:       getenv("CLOUD_VFS_ZAP_ADDR", ""),
-		MQZAPAddr:        getenv("CLOUD_MQ_ZAP_ADDR", ""),
+		// IAMIssuer left empty here; resolved from Brand below unless pinned.
+		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
+		KMSMasterKeyRef: getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
+		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
+		PaymentsZAPAddr: getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
+		VaultZAPAddr:    getenv("CLOUD_VAULT_ZAP_ADDR", ""),
+		IAMZAPAddr:      getenv("CLOUD_IAM_ZAP_ADDR", ""),
+		KMSZAPAddr:      getenv("CLOUD_KMS_ZAP_ADDR", ""),
+		BaseZAPAddr:     getenv("CLOUD_BASE_ZAP_ADDR", ""),
+		CommerceZAPAddr: getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
+		AIZAPAddr:       getenv("CLOUD_AI_ZAP_ADDR", ""),
+		O11yZAPAddr:     getenv("CLOUD_O11Y_ZAP_ADDR", ""),
+		VFSZAPAddr:      getenv("CLOUD_VFS_ZAP_ADDR", ""),
+		MQZAPAddr:       getenv("CLOUD_MQ_ZAP_ADDR", ""),
 	}
 
 	var enableCSV string
@@ -105,6 +106,14 @@ func LoadConfig() *Config {
 				cfg.Enable = append(cfg.Enable, s)
 			}
 		}
+	}
+
+	// White-label by brand (HIP-0111): when the operator does not pin
+	// CLOUD_IAM_ISSUER / --iam-issuer, derive the canonical OIDC issuer from the
+	// brand so a lux deployment validates against lux.id, zoo against zoo.id,
+	// etc. — never silently defaulting every brand to iam.hanzo.ai.
+	if cfg.IAMIssuer == "" {
+		cfg.IAMIssuer = IssuerForBrand(cfg.Brand)
 	}
 	return cfg
 }
