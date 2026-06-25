@@ -3,24 +3,28 @@ RUN apk add --no-cache ca-certificates tzdata git
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 WORKDIR /src
 # Private cross-org subsystem modules (hanzoai/*, luxfi/*, zap-proto/*) are
-# fetched via authenticated git. GOSUMDB=off + GOPROXY=direct tolerate
-# force-re-tagged luxfi/hanzoai modules (committed go.sum is source of truth);
-# gh_token is the shared docker-build.yml BuildKit secret (no-op when absent).
+# FIRST-PARTY (we own them; now public on GitHub) and fetched directly via
+# authenticated git. GOPRIVATE marks them; GOPROXY=direct routes them straight to
+# git (never the public proxy, which serves a tag's FIRST-seen content that
+# sum.golang.org pins immutably — stale after any tag re-point); GONOSUMDB skips
+# the public sumdb for them ONLY. First-party-scoped, NEVER global GONOSUMDB=* /
+# GOINSECURE. The committed go.sum (re-recorded to live content) is the single
+# source of truth. gh_token is the shared docker-build.yml BuildKit secret.
 ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/* \
+    GONOSUMDB=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/* \
     GOSUMDB=off \
     GOPROXY=direct \
     GOFLAGS=-mod=mod
 COPY go.mod go.sum ./
-# go mod download, self-healing past upstream force-re-tag poisoning: if a
-# luxfi/hanzoai module's tag was force-moved/deleted after go.sum was recorded,
-# the committed sum mismatches the fresh origin fetch. With GOSUMDB=off the
-# regenerated sum is trustworthy for our own private modules. Root-cause fix is
-# stopping force-re-tags at the source; this keeps the image buildable meanwhile.
+# With go.sum recorded against live tag content and our orgs routed direct, this
+# verifies cleanly — no runtime go.sum regeneration. (The old `rm -f go.sum`
+# self-heal masked a stale go.sum and silently re-recorded unverified hashes on
+# ANY transient error; removed in favor of a correct, committed go.sum.)
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
-    (go mod download || (echo ">> go.sum poisoned by upstream force-re-tag; regenerating from origin" && rm -f go.sum && go mod download))
+    go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /cloud ./cmd/cloud
 
