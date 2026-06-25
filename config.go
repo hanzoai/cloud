@@ -35,6 +35,11 @@ type Config struct {
 	// ZAPListenAddr is the ZAP-RPC listener (default :9653).
 	ZAPListenAddr string
 
+	// ZAPWebOrigins is the WebSocket Origin allowlist for the browser-facing
+	// /zap ZAP plane (the SPA hosts that may open a ZAP-over-WS connection).
+	// Empty == same-origin only. Set via CLOUD_ZAP_WEB_ORIGINS (comma-sep).
+	ZAPWebOrigins []string
+
 	// HealthListenAddr is the health/metrics listener (default :9090).
 	HealthListenAddr string
 
@@ -104,6 +109,16 @@ func LoadConfig() *Config {
 			if s := strings.TrimSpace(name); s != "" {
 				cfg.Enable = append(cfg.Enable, s)
 			}
+		}
+	}
+
+	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
+	// console2 can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
+	zapOrigins := getenv("CLOUD_ZAP_WEB_ORIGINS",
+		"console2.hanzo.ai,console.hanzo.ai,cloud.hanzo.ai,localhost:4000")
+	for _, o := range strings.Split(zapOrigins, ",") {
+		if s := strings.TrimSpace(o); s != "" {
+			cfg.ZAPWebOrigins = append(cfg.ZAPWebOrigins, s)
 		}
 	}
 	return cfg
