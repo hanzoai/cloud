@@ -3,8 +3,9 @@ package zapface
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -14,55 +15,78 @@ import (
 	zaprpc "github.com/zap-proto/go/rpc"
 
 	fiber "github.com/gofiber/fiber/v3"
+	"github.com/hanzoai/zip"
 )
 
-// TestEndToEndOverWebSocket drives a real ZAP frame through the full server
-// path: WS upgrade -> mintCap -> rpc.ParseRequest -> dispatch -> a Fiber app
-// that mounts a casibase-shaped /v1 handler (exactly how cloud's `ai` subsystem
-// mounts the beego handler at bare /v1/*) -> rpc.BuildResponse -> WS reply.
-//
-// This proves the Go side end-to-end in-process: the same wire console2 emits,
-// the same dispatch-into-/v1 reuse, the casibase {status,msg,data} envelope
-// translated to a ZapReply the browser decodes.
-func TestEndToEndOverWebSocket(t *testing.T) {
-	// A Fiber app standing in for cloud's app, with the casibase /v1 surface
-	// mounted at bare /v1/* (mirrors ai/mount.go: app.All("/v1/*", ...)).
-	app := fiber.New()
-	app.All("/v1/*", func(c fiber.Ctx) error {
+// startZapApp boots a zip app that mounts a casibase-shaped /v1 surface (exactly
+// how cloud's `ai` subsystem mounts the beego handler at bare /v1/*) and the
+// /zap ZAP-over-WebSocket face, listening on an ephemeral port. Returns the base
+// host:port and a stop func.
+func startZapApp(t *testing.T) (string, func()) {
+	t.Helper()
+	app := zip.New(zip.Config{})
+
+	// casibase-shaped /v1 handlers (mirror ai/mount.go: app.All("/v1/*", ...)).
+	app.All("/v1/*", func(c *zip.Ctx) error {
+		path := c.Path()
 		switch {
-		case strings.HasSuffix(c.Path(), "/get-global-providers"):
-			// Echo the cookie back so the test can assert auth replay works.
-			return c.Status(200).JSON(fiber.Map{
-				"status": "ok",
-				"msg":    "",
+		case strings.HasSuffix(path, "/get-global-providers"):
+			return c.JSON(200, fiber.Map{
+				"status": "ok", "msg": "",
 				"data": []fiber.Map{
-					{"owner": "admin", "name": "openai", "category": "Model", "_cookie": c.Get("Cookie")},
+					{"owner": "admin", "name": "openai", "category": "Model", "_cookie": c.Header("Cookie")},
 				},
 			})
-		case strings.HasSuffix(c.Path(), "/get-providers"):
-			return c.Status(200).JSON(fiber.Map{
+		case strings.HasSuffix(path, "/get-providers"):
+			return c.JSON(200, fiber.Map{
 				"status": "ok", "msg": "",
 				"data":  []fiber.Map{{"owner": c.Query("owner"), "name": "p1"}},
 				"data2": 1,
 			})
-		case strings.HasSuffix(c.Path(), "/add-provider"):
+		case strings.HasSuffix(path, "/add-provider"):
 			body := map[string]any{}
 			_ = json.Unmarshal(c.Body(), &body)
-			return c.Status(200).JSON(fiber.Map{"status": "ok", "msg": "added " + asString(body["name"])})
+			return c.JSON(200, fiber.Map{"status": "ok", "msg": "added " + asString(body["name"])})
 		default:
-			return c.Status(404).JSON(fiber.Map{"status": "error", "msg": "not found"})
+			return c.JSON(404, fiber.Map{"status": "error", "msg": "not found"})
 		}
 	})
 
-	// Stand up the zapface WS handler against this Fiber app.
-	srv := httptest.NewServer(Handler(app, Options{OriginPatterns: []string{"*"}}))
-	defer srv.Close()
-	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/zap"
+	// The /zap face under test, dispatching into THIS app's /v1 surface.
+	app.Get("/zap", Handler(app.Fiber(), Options{}))
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	go func() { _ = app.Fiber().Listener(ln) }()
+
+	// Wait until the listener answers.
+	addr := ln.Addr().String()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, derr := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if derr == nil {
+			_ = conn.Close()
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return addr, func() { _ = app.Fiber().Shutdown() }
+}
+
+// TestEndToEndOverWebSocket drives a real ZAP frame through the full server
+// path: native Fiber WS upgrade (zip/wsx) -> mintCap -> rpc.ParseRequest ->
+// dispatch -> the app's /v1/* casibase mount -> casibase envelope ->
+// rpc.BuildResponse -> WS reply.
+func TestEndToEndOverWebSocket(t *testing.T) {
+	addr, stop := startZapApp(t)
+	defer stop()
+	wsURL := fmt.Sprintf("ws://%s/zap", addr)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Connect WITH a cookie header (the auth slot mintCap requires).
 	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Cookie": []string{"casdoor_session_id=abc123"}},
 	})
@@ -71,7 +95,6 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 	}
 	defer c.CloseNow()
 
-	// Helper: send one ZAP call (method+input), get the decoded ZapReply.
 	call := func(method string, input any, promiseID uint32) zapReply {
 		var payload string
 		if input != nil {
@@ -107,7 +130,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		}
 	}
 
-	// 1) get-global-providers -> ok, real data, and cookie was replayed.
+	// 1) get-global-providers -> ok, real data, cookie replayed to /v1 handler.
 	rep := call("get-global-providers", nil, 1)
 	if !rep.ok || rep.status != 200 {
 		t.Fatalf("get-global-providers: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
@@ -123,7 +146,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		t.Fatalf("cookie not replayed to /v1 handler: %v", providers[0]["_cookie"])
 	}
 
-	// 2) get-providers with a query param -> ok.
+	// 2) get-providers with a query param.
 	rep = call("get-providers", map[string]any{"owner": "admin"}, 2)
 	if !rep.ok {
 		t.Fatalf("get-providers !ok: %s", rep.errorJSON)
@@ -133,7 +156,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		t.Fatalf("get-providers owner query not forwarded: %v", providers)
 	}
 
-	// 3) add-provider (POST body) -> ok, msg echoes the resource name.
+	// 3) add-provider (POST body).
 	rep = call("add-provider", map[string]any{"owner": "admin", "name": "claude"}, 3)
 	if !rep.ok {
 		t.Fatalf("add-provider !ok: %s", rep.errorJSON)
@@ -149,10 +172,9 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 // TestUpgradeRejectedWithoutAuth proves mintCap fails closed: no cookie and no
 // bearer on the upgrade -> HTTP 401, no WebSocket.
 func TestUpgradeRejectedWithoutAuth(t *testing.T) {
-	app := fiber.New()
-	srv := httptest.NewServer(Handler(app, Options{OriginPatterns: []string{"*"}}))
-	defer srv.Close()
-	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/zap"
+	addr, stop := startZapApp(t)
+	defer stop()
+	wsURL := fmt.Sprintf("ws://%s/zap", addr)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -169,7 +191,6 @@ func TestUpgradeRejectedWithoutAuth(t *testing.T) {
 	}
 }
 
-// buildInnerZapRequest builds console2's inner {method@0,payload@8} struct.
 func buildInnerZapRequest(method, payload string) []byte {
 	b := zap.NewBuilder(len(method) + len(payload) + reqFixedSize + 64)
 	ob := b.StartObject(reqFixedSize)
