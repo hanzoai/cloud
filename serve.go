@@ -3,6 +3,8 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -64,6 +66,34 @@ func Serve(enable []string) error {
 	if err := MountAll(app, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
+
+	// HIP-0113 ops listener — health, readiness, and metrics on
+	// cfg.HealthListenAddr (:9090), decomplected from the product API on
+	// cfg.ListenAddr. Kubernetes probes and Prometheus scrapes target THIS
+	// listener; it is unauthenticated, cluster-internal, never serves /v1/*, and
+	// is unversioned. Liveness ("am I up?") and readiness ("can I serve?") are
+	// distinct paths. stdlib only — no product framework, no new deps.
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "ok\n")
+		})
+		mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+			// Readiness: the compose root mounted and is serving. Subsystem
+			// dependency gates attach here as they gain readiness semantics.
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "ready\n")
+		})
+		mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+			_, _ = io.WriteString(w, "# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n")
+		})
+		deps.Logger.Info("ops listening", "addr", cfg.HealthListenAddr)
+		if err := http.ListenAndServe(cfg.HealthListenAddr, mux); err != nil {
+			deps.Logger.Error("ops listener failed", "err", err)
+		}
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
