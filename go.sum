@@ -1179,7 +1179,7 @@ github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 h1:PwQumkgq4/acIi
 github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3/go.mod h1:autxFIvghDt3jPTLoqZ9OZ7s9qTGNAWmYCjVFWPX/zg=
 github.com/luxfi/accel v1.1.9 h1:Tsk6gXj2uKE19501bD0ajRYdeCHIlTGb6jYyLc+F8hc=
 github.com/luxfi/accel v1.1.9/go.mod h1:K00BcnLzEYMPHwCFq8Tf/450ApmTs9xBVvYOnofJCkc=
-github.com/luxfi/age v1.5.0 h1:G69HbSV4R3vKEH9B0CulnRaMdSdf4RalMgP8xKmxHeI=
+github.com/luxfi/age v1.5.0 h1:zC/Fw/ptZwAXr9nqrxmrcf8752EIl1Lq9RECp9OmCO0=
 github.com/luxfi/age v1.5.0/go.mod h1:iAYAxgvrXxcy746+Ovh/eWWDuF9teJLNcCSSOX9RYW0=
 github.com/luxfi/atomic v1.0.0 h1:xUV60MuzRvXngaQ1sM0yVC2v4TRoLlUGkkH7M9PS4yw=
 github.com/luxfi/atomic v1.0.0/go.mod h1:0G2mTlQ6TXWHICUHrUUPu1/qAiIyR4gSZ2tva9ci/bI=
