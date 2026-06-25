@@ -5,6 +5,7 @@ go 1.26.4
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
+	github.com/coder/websocket v1.8.12
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/hanzoai/gateway/v2 v2.14.8
 	github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b
@@ -12,6 +13,7 @@ require (
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/zip v0.2.1
 	github.com/luxfi/log v1.4.3
+	github.com/zap-proto/go v1.3.0
 )
 
 require (
@@ -166,7 +168,6 @@ require (
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/coder/quartz v0.3.0 // indirect
-	github.com/coder/websocket v1.8.12 // indirect
 	github.com/cohere-ai/cohere-go/v2 v2.5.2 // indirect
 	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381 // indirect
 	github.com/consensys/gnark-crypto v0.20.1 // indirect
@@ -658,7 +659,6 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	github.com/zap-proto/go v1.1.0 // indirect
 	github.com/zap-proto/http v0.0.0-20260506200741-fd6047874433 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.mau.fi/util v0.8.3 // indirect
@@ -751,7 +751,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/gofiber/fiber/v3 v3.2.0 // indirect
+	github.com/gofiber/fiber/v3 v3.2.0
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect

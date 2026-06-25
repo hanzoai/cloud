@@ -2400,6 +2400,8 @@ github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 github.com/zap-proto/go v1.1.0 h1:DDGhuTBNqkmNax7QV/VvkInJR7hiOcybwUjN3YBt8fg=
 github.com/zap-proto/go v1.1.0/go.mod h1:914SNGTH6Rv3Yu1MweWJBPEN8FZlo5C39QyhaB0C7Q0=
+github.com/zap-proto/go v1.3.0 h1:S3rMoawwhH/BbSZ4G8zG05hJoQnMSMDPzIq75diCTqE=
+github.com/zap-proto/go v1.3.0/go.mod h1:914SNGTH6Rv3Yu1MweWJBPEN8FZlo5C39QyhaB0C7Q0=
 github.com/zap-proto/http v0.0.0-20260506200741-fd6047874433 h1:7WsCr/pZvWozimdYNffL3B9K6gLr8w0Z7WAi1+eZWtc=
 github.com/zap-proto/http v0.0.0-20260506200741-fd6047874433/go.mod h1:xySyVTIwjknmVE+p+6rukkX86rFZtXeAu/QY7KXMYqw=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
