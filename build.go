@@ -44,15 +44,17 @@ func BuildDeps(cfg *Config) Deps {
 	logger.Info("building deps",
 		"brand", cfg.Brand,
 		"domain", cfg.Domain,
+		"iam_issuer", cfg.IAMIssuer,
 		"data_dir", cfg.DataDir,
 		"enabled", cfg.Enable,
 	)
 
 	deps := Deps{
-		Logger:  logger,
-		Brand:   cfg.Brand,
-		Domain:  cfg.Domain,
-		DataDir: cfg.DataDir,
+		Logger:    logger,
+		Brand:     cfg.Brand,
+		Domain:    cfg.Domain,
+		IAMIssuer: cfg.IAMIssuer,
+		DataDir:   cfg.DataDir,
 	}
 
 	// For each subsystem: enabled → leave nil (Mount fills it); not
