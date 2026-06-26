@@ -59,6 +59,14 @@ import (
 	"os"
 	"sort"
 
+	// cli is the cloud-control CLI (client mode). `hanzo <verb>` — login, apps,
+	// deploy, clusters, build, k8s, config — is a thin client over IAM +
+	// platform + cloud; `hanzo <subsystem>` (below) is server mode. The two
+	// worlds share one binary and are selected by the first token. Imported
+	// FIRST so its init() captures the real stdout before the server-graph
+	// dependencies' init() functions emit startup chatter to it.
+	"github.com/hanzoai/cloud/cli"
+
 	"github.com/hanzoai/cloud"
 
 	// iamserver is the body of the standalone iamd main() — full Beego
@@ -87,6 +95,13 @@ var nonRegistrySubcommands = map[string]string{
 }
 
 func main() {
+	// Restore the real stdout (cli.init redirected it to stderr so dependency
+	// startup chatter cannot corrupt machine-readable output).
+	cli.RestoreStdout()
+
+	// Share the build version with the CLI (User-Agent, `hanzo version`).
+	cli.Version = version
+
 	if len(os.Args) < 2 {
 		usage(os.Stdout)
 		return
@@ -101,9 +116,20 @@ func main() {
 		return
 	}
 
-	// Reset os.Args so the delegated service / cloud.LoadConfig sees its own
-	// flags at argv[1:], not the subcommand token. e.g. `hanzo kms --listen=:9000`
-	// → the kms serve path parses `--listen=:9000`.
+	// CLIENT MODE. A control-plane verb (login, apps, deploy, clusters, build,
+	// k8s, config) routes to the cobra cloud-control CLI with the full args
+	// (including the verb) so cobra can parse subcommands + flags. cobra prints
+	// its own errors, so just translate to a non-zero exit.
+	if cli.IsControlVerb(sub) {
+		if err := cli.Execute(os.Args[1:]); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
+	// SERVER MODE. Reset os.Args so the delegated service / cloud.LoadConfig
+	// sees its own flags at argv[1:], not the subcommand token. e.g.
+	// `hanzo kms --listen=:9000` → the kms serve path parses `--listen=:9000`.
 	os.Args = append(os.Args[:1], os.Args[2:]...)
 
 	if err := dispatch(sub); err != nil {
@@ -173,8 +199,21 @@ func registryHas(name string) bool {
 // datastore) plus every subsystem registered into cloud.Registry, sorted.
 func usage(w *os.File) {
 	fmt.Fprintf(w, "hanzo %s — the unified Hanzo Go binary\n\n", version)
-	fmt.Fprintf(w, "Usage:\n  hanzo <subcommand> [flags]\n\n")
-	fmt.Fprintf(w, "Service subcommands:\n")
+	fmt.Fprintf(w, "Usage:\n  hanzo <command> [flags]\n\n")
+
+	// Control commands (client mode) — manage the live estate. Defined once in
+	// the cli package so this list cannot drift from the router.
+	fmt.Fprintf(w, "Control commands (gcloud/doctl-style):\n")
+	ctrl := cli.ControlCommands()
+	ctrlNames := make([]string, 0, len(ctrl))
+	for name := range ctrl {
+		ctrlNames = append(ctrlNames, name)
+	}
+	sort.Strings(ctrlNames)
+	for _, name := range ctrlNames {
+		fmt.Fprintf(w, "  %-12s %s\n", name, ctrl[name])
+	}
+	fmt.Fprintf(w, "\nService subcommands (server mode):\n")
 
 	// Collect: registry names ∪ non-registry names, dedup, sort.
 	seen := map[string]string{}
