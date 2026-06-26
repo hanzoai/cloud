@@ -316,7 +316,7 @@ require (
 	github.com/luxfi/corona v0.7.6 // indirect
 	github.com/luxfi/crypto v1.19.17 // indirect
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
-	github.com/luxfi/database v1.18.3 // indirect
+	github.com/luxfi/database v1.19.3 // indirect
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/ids v1.2.15 // indirect
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
@@ -521,8 +521,8 @@ require (
 	github.com/hanzoai/licensing v0.1.0
 	github.com/hanzoai/metrics v0.4.0
 	github.com/hanzoai/o11y v1.3.7
-	github.com/hanzoai/vfs v0.4.0
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/hanzoai/vfs v0.4.1
+	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
