@@ -1,5 +1,6 @@
-# Built binary (matches Dockerfile output path)
+# Built binaries (Dockerfile output + `go build ./cmd/hanzo`)
 /cloud
+/hanzo
 
 # Local build directories
 /dist/
