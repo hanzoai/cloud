@@ -40,7 +40,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
 
-	// Provisioning control plane: creates logical resources (databases, vector,
-	// datastore, kv, search, storage, docdb) inside the live shared backends.
-	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/databases,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/storage,/v1/docdb
+	// Provisioning control plane: creates logical resources (sql, vector,
+	// datastore, kv, search, s3, docdb) inside the live shared backends.
+	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
 )

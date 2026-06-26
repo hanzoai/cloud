@@ -93,6 +93,14 @@ CREATE TABLE IF NOT EXISTS provisioned_resources (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_provisioned_org_kind_name
   ON provisioned_resources(org, kind, name);
+-- Global (cross-org) physical-name uniqueness: the authoritative guard that
+-- two distinct logical resources can NEVER map onto one physical backend
+-- resource. physical_name embeds a fixed-width org hash, so this also pins
+-- cross-tenant isolation at the physical layer (not just UNIQUE(org,kind,name),
+-- which two distinct rows could satisfy while colliding physically). The row
+-- itself maps physical_name -> (org,kind,name) so names stay traceable.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_provisioned_physical
+  ON provisioned_resources(physical_name);
 CREATE INDEX IF NOT EXISTS ix_provisioned_org_kind_rank
   ON provisioned_resources(org, kind, created_at);
 `
@@ -115,8 +123,8 @@ func scanResource(sc interface{ Scan(...any) error }) (Resource, error) {
 }
 
 // Insert writes one resource row inside a transaction. A UNIQUE(org,kind,name)
-// violation surfaces as errConflict so the caller can roll back the backend
-// side-effects it already performed.
+// OR UNIQUE(physical_name) violation surfaces as errConflict so the caller can
+// roll back the backend side-effects it already performed.
 func (s *Store) Insert(ctx context.Context, r Resource) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -150,6 +158,24 @@ func (s *Store) Get(ctx context.Context, org, kind, name string) (Resource, erro
 		return Resource{}, fmt.Errorf("get: %w", err)
 	}
 	return r, nil
+}
+
+// PhysicalExists reports whether ANY org already owns the given physical
+// backend name. This is the global (cross-org) uniqueness pre-check: paired
+// with the UNIQUE(physical_name) index it lets the handler fail closed with 409
+// BEFORE it touches a backend, so a residual name-fold (or hash collision) can
+// never silently provision over another tenant's physical resource.
+func (s *Store) PhysicalExists(ctx context.Context, physical string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM provisioned_resources WHERE physical_name=? LIMIT 1`, physical).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("physical exists: %w", err)
+	}
+	return true, nil
 }
 
 // List returns every resource of kind for org, oldest first.
