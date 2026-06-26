@@ -48,12 +48,12 @@ type Provisioner interface {
 // a single down backend cannot block startup.
 func newRegistry() map[string]Provisioner {
 	return map[string]Provisioner{
-		"databases": newPostgres(),
+		"sql":       newPostgres(),
 		"vector":    newQdrant(),
 		"datastore": newClickhouse(),
 		"kv":        newRedis(),
 		"search":    newMeili(),
-		"storage":   newS3(),
+		"s3":        newS3(),
 		"docdb":     newMongo(),
 	}
 }
@@ -435,12 +435,12 @@ func (p *meiliProvisioner) Drop(ctx context.Context, physical, _ string) error {
 	return nil
 }
 
-// ----- S3 / MinIO (storage) -------------------------------------------------
-// env: CLOUD_STORAGE_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
-//      CLOUD_STORAGE_ADMIN_ACCESS_KEY, CLOUD_STORAGE_ADMIN_SECRET_KEY,
-//      CLOUD_STORAGE_SECURE (false), CLOUD_STORAGE_REGION (us-east-1)
+// ----- S3 / MinIO (s3) ------------------------------------------------------
+// env: CLOUD_S3_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
+//      CLOUD_S3_ADMIN_ACCESS_KEY, CLOUD_S3_ADMIN_SECRET_KEY,
+//      CLOUD_S3_SECURE (false), CLOUD_S3_REGION (us-east-1)
 //
-// MinIO access uses the shared admin credentials scoped by bucket policy out of
+// S3 access uses the shared admin credentials scoped by bucket policy out of
 // band; there is no per-bucket password. The logical resource is the bucket.
 
 type s3Provisioner struct {
@@ -454,14 +454,14 @@ type s3Provisioner struct {
 }
 
 func newS3() *s3Provisioner {
-	endpoint := env("CLOUD_STORAGE_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
+	endpoint := env("CLOUD_S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
 	host, port := splitAddr(endpoint, 9000)
 	return &s3Provisioner{
 		endpoint: endpoint,
-		ak:       os.Getenv("CLOUD_STORAGE_ADMIN_ACCESS_KEY"),
-		sk:       os.Getenv("CLOUD_STORAGE_ADMIN_SECRET_KEY"),
-		secure:   boolEnv("CLOUD_STORAGE_SECURE", false),
-		region:   env("CLOUD_STORAGE_REGION", "us-east-1"),
+		ak:       os.Getenv("CLOUD_S3_ADMIN_ACCESS_KEY"),
+		sk:       os.Getenv("CLOUD_S3_ADMIN_SECRET_KEY"),
+		secure:   boolEnv("CLOUD_S3_SECURE", false),
+		region:   env("CLOUD_S3_REGION", "us-east-1"),
 		host:     host,
 		port:     port,
 	}
@@ -507,10 +507,19 @@ func (p *s3Provisioner) Drop(ctx context.Context, physical, _ string) error {
 	return nil
 }
 
-// bucketName converts the underscore physical name to a DNS-safe S3 bucket
-// name (lowercase, hyphens). Deterministic, so Drop recomputes the same value.
+// bucketName converts a physical identifier ("o"<orgHash>_<ident>) into a
+// DNS-safe S3 bucket name: lowercase [a-z0-9-], 3–63 chars, no leading or
+// trailing hyphen. Folding '_'→'-' is a bijection on physical names (which
+// contain no '-'), so the fixed-width org-hash prefix that makes physicalName
+// injective makes the bucket injective too — distinct tenants get distinct
+// buckets, and the single UNIQUE(physical_name) control-plane guard therefore
+// also guarantees bucket uniqueness. Deterministic, so Drop recomputes it.
 func bucketName(physical string) string {
-	return strings.ToLower(strings.ReplaceAll(physical, "_", "-"))
+	b := strings.Trim(strings.ToLower(strings.ReplaceAll(physical, "_", "-")), "-")
+	if len(b) > 63 { // unreachable for nameRE-bounded input (physical ≤ 58); defensive.
+		b = strings.Trim(b[:63], "-")
+	}
+	return b
 }
 
 // ----- shared helpers -------------------------------------------------------
