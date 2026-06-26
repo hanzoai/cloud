@@ -757,7 +757,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.785.9-0.20260624113457-d9c02ecaa466
+	github.com/hanzoai/ai v1.785.9-0.20260626181225-41869ad8a634
 	github.com/hanzoai/amqp v0.2.0
 	github.com/hanzoai/authz v1.10.1
 	github.com/hanzoai/base v1.3.2
