@@ -3,13 +3,13 @@ package cloud
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/zapface"
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
 )
@@ -67,38 +67,39 @@ func Serve(enable []string) error {
 		return fmt.Errorf("mount: %w", err)
 	}
 
-	// HIP-0113 ops listener — health, readiness, and metrics on
-	// cfg.HealthListenAddr (:9090), decomplected from the product API on
-	// cfg.ListenAddr. Kubernetes probes and Prometheus scrapes target THIS
-	// listener; it is unauthenticated, cluster-internal, never serves /v1/*, and
-	// is unversioned. Liveness ("am I up?") and readiness ("can I serve?") are
-	// distinct paths. stdlib only — no product framework, no new deps.
-	go func() {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = io.WriteString(w, "ok\n")
-		})
-		mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
-			// Readiness: the compose root mounted and is serving. Subsystem
-			// dependency gates attach here as they gain readiness semantics.
-			w.WriteHeader(http.StatusOK)
-			_, _ = io.WriteString(w, "ready\n")
-		})
-		mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-			_, _ = io.WriteString(w, "# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n")
-		})
-		deps.Logger.Info("ops listening", "addr", cfg.HealthListenAddr)
-		if err := http.ListenAndServe(cfg.HealthListenAddr, mux); err != nil {
-			deps.Logger.Error("ops listener failed", "err", err)
-		}
-	}()
+	// Browser-facing ZAP RPC plane. console2 (@hanzo/gui + @zap-proto/web)
+	// reaches the SAME /v1 handlers over a WebSocket carrying binary ZAP frames
+	// — no second copy of any business logic: each call is replayed in-process
+	// through this Fiber app (see zapface). Mounted AFTER MountAll so every /v1
+	// route exists before the dispatcher captures the app.
+	app.Get("/zap", zapface.Handler(app.Fiber(), zapface.Options{
+		OriginPatterns: cfg.ZAPWebOrigins,
+		Logger:         deps.Logger,
+	}))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
+	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
+	// on a port SEPARATE from the public API, so a saturated/again-starting API
+	// surface never flaps liveness. Previously HealthListenAddr was declared but
+	// never bound; the operator's probes target :9090, so without this the pod
+	// fails liveness and CrashLoops. Runs in its own goroutine; a bind failure
+	// is fatal (propagated via listenErr) so a misconfigured port fails loud.
+	healthSrv := &http.Server{
+		Addr:              cfg.HealthListenAddr,
+		Handler:           healthMux(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
 	listenErr := make(chan error, 1)
+	go func() {
+		deps.Logger.Info("health listening", "addr", cfg.HealthListenAddr)
+		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			listenErr <- fmt.Errorf("health listen: %w", err)
+		}
+	}()
 	go func() {
 		deps.Logger.Info("listening",
 			"http", cfg.ListenAddr,
@@ -119,5 +120,29 @@ func Serve(enable []string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	_ = healthSrv.Shutdown(shutdownCtx)
 	return app.ShutdownWithContext(shutdownCtx)
+}
+
+// healthMux is the liveness/readiness + metrics contract on the ops port
+// (HIP-0113). /healthz, /readyz, /health return 200 once the process is up
+// (readiness can grow a real dependency check later); /metrics exposes a
+// minimal Prometheus surface so scrapes target THIS listener, not the product
+// API. Kept dependency-free (stdlib only) so the ops surface never shares
+// failure modes with the API stack.
+func healthMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	ok := func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}
+	mux.HandleFunc("/healthz", ok)
+	mux.HandleFunc("/readyz", ok)
+	mux.HandleFunc("/health", ok)
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))
+	})
+	return mux
 }
