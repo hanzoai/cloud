@@ -37,10 +37,14 @@ import (
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
+	_ "github.com/hanzoai/cloud/clients/evalsvc"    // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
 
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
 	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
+
+	// Console Search/Vector product panels (browser-facing read surface).
+	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /api/search-docs/*, /api/vector/*
 )
