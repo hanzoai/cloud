@@ -45,6 +45,10 @@ import (
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
 	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
 
+	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
+	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
+	_ "github.com/hanzoai/cloud/clients/mlsvc" // order 130 — /v1/ml/*,/v1/train/*
+
 	// Console Search/Vector product panels (browser-facing read surface).
 	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /api/search-docs/*, /api/vector/*
 )
