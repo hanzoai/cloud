@@ -21,6 +21,8 @@ require (
 	github.com/zap-proto/go v1.3.0
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/term v0.44.0
+	k8s.io/apimachinery v0.35.0
+	k8s.io/client-go v0.35.0
 	modernc.org/sqlite v1.51.0
 )
 
@@ -605,8 +607,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.35.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
-	k8s.io/client-go v0.35.0 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/metrics v0.30.0 // indirect
