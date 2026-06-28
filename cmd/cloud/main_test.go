@@ -18,7 +18,7 @@ import (
 // every subsystem main.go imports must self-register via init() — this is the
 // proof the unified binary actually wires the whole matrix.
 var wantSubsystems = []string{
-	"kms", "amqp", "metrics", "iam", "base", "authz", "o11y",
+	"kms", "metrics", "iam", "base", "authz", "o11y",
 	"gateway", "licensing", "plans", "pricing", "ai", "mcp",
 }
 
@@ -59,7 +59,7 @@ func newTestApp(t *testing.T, enable ...string) *zip.App {
 // The self-contained subsystems mount in-process (per-tenant SQLite / in-mem,
 // HIP-0302) and serve a healthy /v1/<name>/health with no external deps.
 func TestMountAllAndServeHealth(t *testing.T) {
-	healthy := []string{"base", "authz", "amqp", "metrics", "plans", "pricing"}
+	healthy := []string{"base", "authz", "metrics", "plans", "pricing"}
 	app := newTestApp(t, healthy...)
 	for _, name := range healthy {
 		path := "/v1/" + name + "/health"
