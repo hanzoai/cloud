@@ -1145,8 +1145,8 @@ github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1 h1:uQGUlQsmBvZmfU
 github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1/go.mod h1:zJr4NZygb2gyqkQpZ2Yf/UzbOhIhVfLCj8ST925KPrI=
 github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b h1:2Tuic7uTicqqC+HF4KQHpWS6jge1lrQTFSEwtjtS+28=
 github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b/go.mod h1:1ys7zYd+J8rsjqM5RXAr4L6zJOeSXPLvTESBQyGhyUU=
-github.com/hanzoai/iamsdk/v2 v2.1.0 h1:BuU3323zi6Jx7mgNo/wao4iuYoQsfviVgzRUNjmFduk=
-github.com/hanzoai/iamsdk/v2 v2.1.0/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
+github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
+github.com/hanzoai/iamsdk/v2 v2.1.2/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.0 h1:z+z5KS3cZnM7ndtlLB2mmuh7hc+p78hJNa+zVSD8pIE=
 github.com/hanzoai/idv v1.0.0/go.mod h1:vujJF4DQmwRrdh2UxnpCjWLkYKJ1bbgp10thlo4xZYQ=
 github.com/hanzoai/kms/sdk/go v1.1.1 h1:9elbRriuO7GYa90MHpTNnuoFhxgW5nhkZyXog5xc8hU=
