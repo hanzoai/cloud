@@ -8,6 +8,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/coder/websocket v1.8.12
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
+	github.com/hanzoai/commerce/metering v0.1.0
 	github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b
 	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/plans v1.2.0
@@ -573,6 +574,7 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
