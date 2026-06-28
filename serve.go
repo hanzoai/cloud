@@ -50,6 +50,14 @@ func Serve(enable []string) error {
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
 
+	// Billing gate. Sits at the (future) Auth position — after identity is
+	// established by Recover/RequestID/Logger and before any subsystem mounts —
+	// so every priced route is balance-gated once, at the edge, fail-closed.
+	// No-op when metering is unconfigured (deps.Metering not Enabled()), so
+	// it is always wired unconditionally. DefaultPrice keeps self-metering
+	// subsystems (notably /v1/ai/*) at 0 to avoid double-billing.
+	app.Use(BillingGate(deps.Metering, DefaultPrice))
+
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
 	// MountAll so it precedes subsystem /v1/<n>/* wildcards.
