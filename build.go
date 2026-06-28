@@ -92,7 +92,7 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 	m, err := metering.New(metering.Config{
 		BaseURL:  cfg.CommerceHTTPURL,
 		Token:    cfg.CommerceServiceToken,
-		Org:      cfg.Brand, // X-IAM-Org-Id default for S2S; per-request org overrides.
+		Org:      cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
 		FailOpen: cfg.BillingFailOpen,
 	})
 	if err != nil {
