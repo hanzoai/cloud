@@ -9,7 +9,7 @@ require (
 	github.com/coder/websocket v1.8.12
 	github.com/dop251/goja v0.0.0-20260311135729-065cd970411c
 	github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b
-	github.com/hanzoai/kms/sdk/go v1.0.0
+	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/zip v0.2.0
