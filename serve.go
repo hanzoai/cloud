@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
@@ -35,6 +36,12 @@ func Serve(enable []string) error {
 	}
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+
+	// Storage lockdown: reject leaked legacy cloud-api Postgres env so the
+	// SQLite-only orchestrator never adopts a stale DATABASE_URL. One store.
+	if err := storagelock.CheckEnv(os.Getenv); err != nil {
+		return fmt.Errorf("storage lockdown: %w", err)
 	}
 
 	deps := BuildDeps(cfg)
