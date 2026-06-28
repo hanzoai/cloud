@@ -3,6 +3,7 @@ package cloud
 import (
 	"fmt"
 
+	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/clients"
@@ -74,7 +75,38 @@ func BuildDeps(cfg *Config) Deps {
 	deps.Payments = pickPaymentsClient(cfg, logger)
 	deps.Vault = pickVaultClient(cfg, logger)
 
+	// Billing metering client for the request-edge gate. nil-safe: when no
+	// commerce URL is configured the resulting client is !Enabled() and the
+	// gate is a no-op.
+	deps.Metering = buildMeteringClient(cfg, logger)
+
 	return deps
+}
+
+// buildMeteringClient constructs the commerce metering client for BillingGate.
+// An empty CommerceHTTPURL yields a not-Enabled() client (allow + no-op),
+// matching the metering package's "not configured" mode, so an unconfigured
+// deployment is never blocked. The token is a KMS-sourced secret supplied via
+// config; it is never logged.
+func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
+	m, err := metering.New(metering.Config{
+		BaseURL:  cfg.CommerceHTTPURL,
+		Token:    cfg.CommerceServiceToken,
+		Org:      cfg.Brand, // X-IAM-Org-Id default for S2S; per-request org overrides.
+		FailOpen: cfg.BillingFailOpen,
+	})
+	if err != nil {
+		// Only an unparseable URL reaches here. Fall back to a not-configured
+		// client (no-op gate) rather than failing boot over billing wiring.
+		log.Error("billing: invalid commerce URL, gate disabled", "err", err)
+		m, _ = metering.New(metering.Config{})
+	}
+	if m.Enabled() {
+		log.Info("billing gate enabled", "commerce_url", cfg.CommerceHTTPURL, "fail_open", cfg.BillingFailOpen)
+	} else {
+		log.Info("billing gate disabled (no commerce URL)")
+	}
+	return m
 }
 
 // pickIAMClient returns the canonical IAMClient for this process.
