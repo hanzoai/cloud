@@ -1111,6 +1111,8 @@ github.com/hanzoai/ai v1.785.10-0.20260627004308-703fe6b5aac9 h1:m1a98rXS6mvo+nC
 github.com/hanzoai/ai v1.785.10-0.20260627004308-703fe6b5aac9/go.mod h1:55Qo7Y5NyzGOpoWRW2MIJ7IfWSvYEK0mI0PgQ437yOU=
 github.com/hanzoai/ai v1.785.10-0.20260628081641-c08be563fea6 h1:sFdIZ8dDT1CNPDsHnpHsm5duonWk1C35NgiBPmSLiOk=
 github.com/hanzoai/ai v1.785.10-0.20260628081641-c08be563fea6/go.mod h1:55Qo7Y5NyzGOpoWRW2MIJ7IfWSvYEK0mI0PgQ437yOU=
+github.com/hanzoai/ai v1.785.10-0.20260628102531-069b83ceb9a0 h1:X5zSQuFm7GctZAke0ZN/jwToqAgBYRgHpnsOD6n5tkQ=
+github.com/hanzoai/ai v1.785.10-0.20260628102531-069b83ceb9a0/go.mod h1:55Qo7Y5NyzGOpoWRW2MIJ7IfWSvYEK0mI0PgQ437yOU=
 github.com/hanzoai/alertmanager v0.28.2 h1:40fm5ZDq4MZ7CJwPb7AHVa1DU9kHK5lgMuJUJK7frT4=
 github.com/hanzoai/alertmanager v0.28.2/go.mod h1:SOwWSWO7p9CaBKr+bp1IrPfTPjftxp+cnyBK9GhgJFs=
 github.com/hanzoai/authz v1.10.1 h1:BXKRUS6vkW57zbzX04gBMGLFW+wdHG5qHKb3OcLHuCo=
