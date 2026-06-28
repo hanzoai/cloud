@@ -512,7 +512,7 @@ func tenant(c *zip.Ctx) string {
 	if v := c.Header("X-IAM-Project-Id"); v != "" {
 		return v
 	}
-	if v := c.Header("X-Hanzo-Org"); v != "" {
+	if v := c.Header("X-Org-Id"); v != "" {
 		return v
 	}
 	return c.Org() // X-Org-Id
