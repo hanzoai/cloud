@@ -15,6 +15,7 @@ require (
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/zip v0.2.0
 	github.com/jackc/pgx/v5 v5.9.1
+	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/redis/go-redis/v9 v9.17.2
@@ -367,7 +368,6 @@ require (
 	github.com/lestrrat-go/jwx v1.2.29 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/leverly/ChatGLM v1.2.0 // indirect
-	github.com/lib/pq v1.12.3 // indirect
 	github.com/likexian/gokit v0.25.13 // indirect
 	github.com/likexian/whois v1.15.1 // indirect
 	github.com/likexian/whois-parser v1.24.9 // indirect
