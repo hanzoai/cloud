@@ -3074,3 +3074,5 @@ sigs.k8s.io/structured-merge-diff/v6 v6.3.0/go.mod h1:M3W8sfWvn2HhQDIbGWj3S099Yo
 sigs.k8s.io/yaml v1.2.0/go.mod h1:yfXDCHCao9+ENCvLSE62v9VSji2MKu5jeNfTrofGhJc=
 sigs.k8s.io/yaml v1.6.0 h1:G8fkbMSAFqgEFgh4b1wmtzDnioxFCUgTZhlbj5P9QYs=
 sigs.k8s.io/yaml v1.6.0/go.mod h1:796bPqUfzR/0jLAl6XjHl3Ck7MiyVv8dbTdyT3/pMf4=
+github.com/hanzoai/ai v1.785.10-0.20260628112905-2e8fc6f15947 h1:sxKaVvQ2Q7ArlJYIYLhJG+tjAl7DpEHMwvsUxb3LO40=
+github.com/hanzoai/ai v1.785.10-0.20260628112905-2e8fc6f15947/go.mod h1:55Qo7Y5NyzGOpoWRW2MIJ7IfWSvYEK0mI0PgQ437yOU=
