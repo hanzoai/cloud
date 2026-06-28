@@ -51,4 +51,9 @@ import (
 
 	// Console Search/Vector product panels (browser-facing read surface).
 	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /api/search-docs/*, /api/vector/*
+
+	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
+	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
+	// instead of the "runtime not initialized" 503.
+	_ "github.com/hanzoai/cloud/clients/o11ysvc" // order 71 — installs o11y.SetHandler
 )
