@@ -26,18 +26,14 @@ package subsystems
 // Keeping them separate preserves blast-radius isolation and independent
 // scaling for the security/edge tier.
 import (
-	_ "github.com/hanzoai/ai"          // order 150
-	_ "github.com/hanzoai/authz"       // order 70
-	_ "github.com/hanzoai/base"        // order 60
-	_ "github.com/hanzoai/commerce"    // order 100
-	_ "github.com/hanzoai/gateway/v2"  // order 80
-	_ "github.com/hanzoai/iam/pkg/iam" // order 50
-	_ "github.com/hanzoai/kms"         // order 10  (registers kms; thin wrapper over luxfi/kms)
-	_ "github.com/hanzoai/licensing"   // order 110
-	_ "github.com/hanzoai/mcp/go"      // order 160
-	_ "github.com/hanzoai/metrics"     // order 40
-	_ "github.com/hanzoai/o11y"        // order 70
-	_ "github.com/hanzoai/vfs"         // order 20
+	_ "github.com/hanzoai/ai"        // order 150
+	_ "github.com/hanzoai/authz"     // order 70
+	_ "github.com/hanzoai/base"      // order 60
+	_ "github.com/hanzoai/commerce"  // order 100
+	_ "github.com/hanzoai/licensing" // order 110
+	_ "github.com/hanzoai/metrics"   // order 40
+	_ "github.com/hanzoai/o11y"      // order 70
+	_ "github.com/hanzoai/vfs"       // order 20
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
