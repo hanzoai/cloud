@@ -643,6 +643,8 @@ github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5Qvfr
 github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
 github.com/dlclark/regexp2 v1.11.5 h1:Q/sSnsKerHeCkc/jSTNq1oCm7KiVgUMZRDUoRu0JQZQ=
 github.com/dlclark/regexp2 v1.11.5/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
+github.com/dlclark/regexp2/v2 v2.2.1 h1:mf4KkFUj0gJuarK8P+LgiS+Lit7m9N1yAwEfPbee7R0=
+github.com/dlclark/regexp2/v2 v2.2.1/go.mod h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=
 github.com/docker/docker v28.5.2+incompatible h1:DBX0Y0zAjZbSrm1uzOkdr1onVghKaftjlSWt4AFexzM=
 github.com/docker/docker v28.5.2+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/docker/go-connections v0.6.0 h1:LlMG9azAe1TqfR7sO+NJttz1gy6KO7VJBh+pMmjSD94=
@@ -651,8 +653,8 @@ github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/domodwyer/mailyak/v3 v3.6.2 h1:x3tGMsyFhTCaxp6ycgR0FE/bu5QiNp+hetUuCOBXMn8=
 github.com/domodwyer/mailyak/v3 v3.6.2/go.mod h1:lOm/u9CyCVWHeaAmHIdF4RiKVxKUT/H5XX10lIKAL6c=
-github.com/dop251/goja v0.0.0-20260311135729-065cd970411c h1:OcLmPfx1T1RmZVHHFwWMPaZDdRf0DBMZOFMVWJa7Pdk=
-github.com/dop251/goja v0.0.0-20260311135729-065cd970411c/go.mod h1:MxLav0peU43GgvwVgNbLAj1s/bSGboKkhuULvq/7hx4=
+github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb h1:qxbH9q0zvt7Fwy9UJrHdd9grPTlO07G/vUUE3eqfZ4w=
+github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb/go.mod h1:Sc+QOu1WruvaaeT/cxFez/pXHpI9ZDjg/E8QNfSVveI=
 github.com/drswork/go-twitter v0.0.0-20221107160839-dea1b6ed53d7 h1:uh1GSejOhVPRQmoXZxY82TiewZB8QXiaP1skL7Nun3Y=
 github.com/drswork/go-twitter v0.0.0-20221107160839-dea1b6ed53d7/go.mod h1:ncTaGuXc5v7AuiVekeJ0Nwh8Bf4cudukoj0qM/15UZE=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
@@ -706,6 +708,8 @@ github.com/ethereum/c-kzg-4844/v2 v2.1.7 h1:aat3CuITdDbPC6pmEGRT0zJ5eOxzrZj8TJT5
 github.com/ethereum/c-kzg-4844/v2 v2.1.7/go.mod h1:8HMkUZ5JRv4hpw/XUrYWSQNAUzhHMg2UDb/U+5m+XNw=
 github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab h1:rvv6MJhy07IMfEKuARQ9TKojGqLVNxQajaXEp/BoqSk=
 github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab/go.mod h1:IuLm4IsPipXKF7CW5Lzf68PIbZ5yl7FFd74l/E0o9A8=
+github.com/evanw/esbuild v0.28.1 h1:ds+yuRyUaZGx++GR56CrCeuXh8PVhVM4xq8v7PNELFc=
+github.com/evanw/esbuild v0.28.1/go.mod h1:D2vIQZqV/vIf/VRHtViaUtViZmG7o+kKmlBfVQuRi48=
 github.com/expr-lang/expr v1.17.7 h1:Q0xY/e/2aCIp8g9s/LGvMDCC5PxYlvHgDZRQ4y16JX8=
 github.com/expr-lang/expr v1.17.7/go.mod h1:8/vRC7+7HBzESEqt5kKpYXxrxkr31SaO8r40VO/1IT4=
 github.com/fasthttp/websocket v1.5.12 h1:e4RGPpWW2HTbL3zV0Y/t7g0ub294LkiuXXUuTOUInlE=
@@ -876,6 +880,8 @@ github.com/go-playground/validator/v10 v10.4.1/go.mod h1:nlOn6nFhuKACm19sB/8EGNn
 github.com/go-playground/validator/v10 v10.8.0/go.mod h1:9JhgTzTaE31GZDpH/HSvHiRJrJ3iKAgqqH0Bl/Ocjdk=
 github.com/go-playground/validator/v10 v10.30.2 h1:JiFIMtSSHb2/XBUbWM4i/MpeQm9ZK2xqPNk8vgvu5JQ=
 github.com/go-playground/validator/v10 v10.30.2/go.mod h1:mAf2pIOVXjTEBrwUMGKkCWKKPs9NheYGabeB04txQSc=
+github.com/go-python/gpython v0.2.0 h1:MW7m7pFnbpzHL88vhAdIhT1pgG1QUZ0Q5jcF94z5MBI=
+github.com/go-python/gpython v0.2.0/go.mod h1:fUN4z1X+GFaOwPOoHOAM8MOPnh1NJatWo/cDqGlZDEI=
 github.com/go-redis/redis v6.14.2+incompatible/go.mod h1:NAIEuMOZ/fxfXJIrKDQDz8wamY7mA7PouImQ2Jvg6kA=
 github.com/go-redis/redismock/v9 v9.2.0 h1:ZrMYQeKPECZPjOj5u9eyOjg8Nnb0BS9lkVIZ6IpsKLw=
 github.com/go-redis/redismock/v9 v9.2.0/go.mod h1:18KHfGDK4Y6c2R0H38EUGWAdc7ZQS9gfYxc94k7rWT0=
@@ -1141,6 +1147,8 @@ github.com/hanzoai/go-openai v1.40.0 h1:8KHDSUaJCNHlueMp76ZyJuJGc5wrz/ANMGvkfKBB
 github.com/hanzoai/go-openai v1.40.0/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
 github.com/hanzoai/go-openrouter v1.0.0 h1:oQTSk4mjBhdgbUMdVm6XxPQy4u0QNhQrEBuuEn/ETAo=
 github.com/hanzoai/go-openrouter v1.0.0/go.mod h1:wC86avp4HRT7ZrvdwOIs3ZmnwUSkSeX2+HfLAAEYHVo=
+github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340 h1:ramrOcMgTI8zQyjT0ZSbTrsnTuNb71RIDxuEDhaS4Y8=
+github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340/go.mod h1:75U5+F/jqRpd/xbHlDSQBM4ZnlPA88YFkgVADBZfi24=
 github.com/hanzoai/goauthorizenet v0.0.0-20180920213706-626992b83568 h1:b9VAc4r4DtL8KmwnNS22o80ZP+YDuRkP//CtqeDX2OM=
 github.com/hanzoai/goauthorizenet v0.0.0-20180920213706-626992b83568/go.mod h1:og+Sdlmdd7/78F6twMd6wIofJkIREs6x1EbiEBBrlE0=
 github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1 h1:uQGUlQsmBvZmfUeRgZS8BkUdlPbF2VA0GqKMnUop+Fc=
@@ -2062,6 +2070,8 @@ github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/hunyuan v1.3.48 h1:nIPF
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/hunyuan v1.3.48/go.mod h1:GxB5jWCEzZUz47Hj+E9UGEPoASy7yW6euSU0W3na+TM=
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tbaas v1.0.1115 h1:tG8pHXfS+/QVxcMfXW5ROvachiMm+v8WV5AvJyb4RBQ=
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tbaas v1.0.1115/go.mod h1:on3m9ALT6gDYRCLZLUK5OEraAmes/o04tJr0wFrZKow=
+github.com/tetratelabs/wazero v1.12.0 h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=
+github.com/tetratelabs/wazero v1.12.0/go.mod h1:LvKtzl2RqO4gyF27BiXU+nKAjcV8f38U+kP/q2vgxh0=
 github.com/thanhpk/randstr v1.0.4 h1:IN78qu/bR+My+gHCvMEXhR/i5oriVHcTB/BJJIRTsNo=
 github.com/thanhpk/randstr v1.0.4/go.mod h1:M/H2P1eNLZzlDwAzpkkkUvoyNNMbzRGhESZuEQk3r0U=
 github.com/tidwall/gjson v1.14.2/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
