@@ -1123,6 +1123,10 @@ github.com/hanzoai/authzstore v0.1.1 h1:4GsvB+bKs+gFtfKDMoYq/C7KxJAHrXLwtwdSutTa
 github.com/hanzoai/authzstore v0.1.1/go.mod h1:ZpiA4r7yoCC/4WO9CcsDezcYVVv40AmH8qoQSrBNtLo=
 github.com/hanzoai/base v1.3.2 h1:7GcHpg+0IoFDoWnOSMPfjpcBED1bhibCmWMJ3Yry0gE=
 github.com/hanzoai/base v1.3.2/go.mod h1:x1T+jDEOPCR78o8J1xJoKU7i9KDXz6MbiL9dLLFwnzg=
+github.com/hanzoai/base v1.4.1 h1:d3/0nSSAlMhBDesGz8HTZ3dYVc6btYjkD39zMrMatk0=
+github.com/hanzoai/base v1.4.1/go.mod h1:l+8byuizKirHJRJRhvV/j5wVke34c5KIdY0zf4W4jFg=
+github.com/hanzoai/base v1.4.4 h1:hvUqsU/+JvgFjkDsRZ7/TT6F/ZEZEWdoT/40patbGiE=
+github.com/hanzoai/base v1.4.4/go.mod h1:x+sFc/CMyBBhBgR3fVosUolw/v/MUooSiz3xGZSnBoI=
 github.com/hanzoai/beego/v2 v2.3.10 h1:WtLq1e/YD2SsFmlVds8JLyD/SQHJMqRXKixn1Xumz+0=
 github.com/hanzoai/beego/v2 v2.3.10/go.mod h1:eDGRL/NJSqjoYHtWa5eMb2ze0gnlEabs1UO/naIfuX0=
 github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo8=
@@ -1483,6 +1487,8 @@ github.com/luxfi/concurrent v0.0.3 h1:eJyv1fhaC0jMLMw6+QS774cUmp7GK+ouMgvLCqnC7c
 github.com/luxfi/concurrent v0.0.3/go.mod h1:Aj/FR5NpM0cB2P4Nt3+tz9+dV6V+LUW4HuMgSjwq5hw=
 github.com/luxfi/consensus v1.25.0 h1:ak82ufqeklLJGQMCizxx5agiwLkjbrnrk7kFezvEtZo=
 github.com/luxfi/consensus v1.25.0/go.mod h1:jkKzKyIgg/JqaEumxZOJd9ofWM3pXnVVLlQp+3qo9SM=
+github.com/luxfi/consensus v1.25.15 h1:7Bm/dm8pWhVM6j6gVQTIfVyVda/9oNOAiSohT0hok7s=
+github.com/luxfi/consensus v1.25.15/go.mod h1:cBj4bELXj1hfB+cHHlAdAQ7oDtS1RzNPgftniakrF9Q=
 github.com/luxfi/constants v1.5.8 h1:iNP9AWNUcM4Tps7jYnx49CwtCWAC9mYRxJfGou2za0g=
 github.com/luxfi/constants v1.5.8/go.mod h1:Pu5jWHdnUtQRbWC43yTUjU/pbIIKMDOd2a2yroSfo48=
 github.com/luxfi/container v0.0.4 h1:BXhF82WyfqVP5mjlNcr7tP0Fcnvl0Ap1rkiu+rq5XuM=
@@ -1517,6 +1523,8 @@ github.com/luxfi/lens v0.1.4 h1:goGjGDXx2BNdjzXDunL5QT8elK2ZyCcc0z8TAbtWYrg=
 github.com/luxfi/lens v0.1.4/go.mod h1:mL+G8IK+9L41d78/2FYRgfhEzAjcr5+VEXB8SGuHbus=
 github.com/luxfi/log v1.4.3 h1:xkUKRWvQ4ZwvlUC2e0/RTtHYZOYSMvSQ9W9lbjwBmiI=
 github.com/luxfi/log v1.4.3/go.mod h1:myIkufyiQomSQH34K981kbz6cG4WUoerRUh7F4XhlQI=
+github.com/luxfi/magnetar v1.2.0 h1:bsxHmBnJiswc/A6ElQ0pWz5g6ogqewIEKKqR26VgizA=
+github.com/luxfi/magnetar v1.2.0/go.mod h1:7J9YP9jByWbwCjssMFJNUkTU8tcPlSUoVSSiYShtvFs=
 github.com/luxfi/math v1.4.1 h1:1t9bCCsEqnl9yIKrShlbs80DBKyYTWdnzkVfBqEeO7Q=
 github.com/luxfi/math v1.4.1/go.mod h1:QvbRxauQyE1w4lvbcLSe6c8yeJz2Zj1Bq1rayGgs2tA=
 github.com/luxfi/math/big v0.1.0 h1:Vz4c0RsZVPdIKPsHPgAJChH/R3p15WHRUz7LkLf+NIQ=
@@ -1535,6 +1543,7 @@ github.com/luxfi/precompile v0.5.37 h1:2v0zTZtU3cP/hlCA1602Bz//mK+9jjUkYCBsc3KU6
 github.com/luxfi/precompile v0.5.37/go.mod h1:z1ZLWPKPdZXqIQZOSdVObM8nTIxrblP6a+fqf3O7OHs=
 github.com/luxfi/proto v1.0.0 h1:nlxv4lt/i75XDB2Q3nTqC1o0RDPmJ9K9CJ8UyYvceak=
 github.com/luxfi/proto v1.0.0/go.mod h1:pZLKsCmhiPtmm3z7ezBbnsYT2m79q+cFSmzxvuBeANE=
+github.com/luxfi/proto v1.3.5 h1:AW11rnu5xyvB7beyowoiY9uIffLOF3+eMR/a3EkK2c8=
 github.com/luxfi/pulsar v1.1.1 h1:jo1jEgUsGiVxpT17Eg7Gw4Ax+07pbKFzq4NhHMLmDpI=
 github.com/luxfi/pulsar v1.1.1/go.mod h1:U7tPleeAHJ9dZ61ymtstzLKKoZjxM2zFeGZ+RSjHyRw=
 github.com/luxfi/runtime v1.1.0 h1:6TrvzAmZVCTVbR1ebntHTO3/kVBaogPUSkxdDMnrTiw=
