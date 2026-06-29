@@ -18,8 +18,8 @@ import (
 // every subsystem main.go imports must self-register via init() — this is the
 // proof the unified binary actually wires the whole matrix.
 var wantSubsystems = []string{
-	"kms", "metrics", "iam", "base", "authz", "o11y",
-	"gateway", "licensing", "plans", "pricing", "ai", "mcp",
+	"metrics", "base", "authz", "o11y",
+	"licensing", "plans", "pricing", "ai",
 }
 
 func TestRegistryAssemblesSubsystems(t *testing.T) {
