@@ -45,6 +45,11 @@ import (
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
 	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
 
+	// Projects control plane: the ONE org-scoped store of buildable/deployable
+	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
+	// the deploy pipeline (artifact/git → OUR S3 → live URL).
+	_ "github.com/hanzoai/cloud/clients/projectsvc" // order 125 — /v1/projects/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/mlsvc" // order 130 — /v1/ml/*,/v1/train/*
