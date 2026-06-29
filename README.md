@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/hero.svg" alt="cloud" width="880"></p>
+
 # cloud
 
 Unified Go control plane and binary for the Hanzo platform (HIP-0106).
