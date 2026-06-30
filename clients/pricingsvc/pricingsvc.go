@@ -95,18 +95,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	host = h
 
-	// Catalog enablement overlay. Persistent at {DataDir}/catalog.db; falls back
-	// to an in-memory (non-persistent) overlay only when no DataDir is configured
-	// — the gate still works, defaulting to all-enabled.
-	dbPath := ":memory:"
-	if deps.DataDir != "" {
-		if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-			return fmt.Errorf("pricingsvc.Mount: data dir: %w", err)
-		}
-		dbPath = filepath.Join(deps.DataDir, "catalog.db")
-	} else {
-		logger.Warn("pricing: empty DataDir — catalog overlay is in-memory (non-persistent)")
+	// Catalog enablement overlay. It is a SECURITY CONTROL: an admin-hidden model
+	// must stay hidden across restarts. A non-persistent (in-memory) overlay would
+	// silently re-expose hidden models on the next pod start — a fail-OPEN
+	// degradation of a security control. So an empty DataDir is a hard boot error
+	// (prod sets CLOUD_DATA_DIR), never a silent downgrade. provisioningsvc already
+	// requires DataDir, so the unified binary always provides one.
+	if deps.DataDir == "" {
+		return fmt.Errorf("pricingsvc.Mount: empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")
 	}
+	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+		return fmt.Errorf("pricingsvc.Mount: data dir: %w", err)
+	}
+	dbPath := filepath.Join(deps.DataDir, "catalog.db")
 	cstore, err := openCatalog(dbPath)
 	if err != nil {
 		return fmt.Errorf("pricingsvc.Mount: open catalog overlay: %w", err)
@@ -118,12 +119,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	})
 
 	// /v1/pricing/* read surface (mirrors server.mjs handler-for-handler). The
-	// catalog routes (models/free/featured/providers/summary + the single model
-	// lookup) are gated below by the enablement overlay; everything else is a
-	// straight pass-through of the bundle's output.
+	// catalog routes (the root blob + models/free/featured/providers/summary +
+	// the single model lookup) are gated below by the enablement overlay;
+	// everything else is a straight pass-through of the bundle's output. The
+	// `fixed` list is audited to carry NO model/provider identities (plans/infra/
+	// tools/gpu/policy only) — confirmed against the plans catalog.
 	type binding struct{ path, route string }
 	fixed := []binding{
-		{"/v1/pricing", "pricing"},
 		{"/v1/pricing/compute", "compute"},
 		{"/v1/pricing/compute/presets", "compute/presets"},
 		{"/v1/pricing/cloud", "cloud"},
@@ -146,6 +148,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Gated catalog read path: the overlay filters disabled/beta entries and
 	// merges overrides for the calling org (admins see everything, flagged).
+	// The root /v1/pricing returns the WHOLE blob (hanzoModels, thirdPartyModels,
+	// providers, freeModels, families) so it MUST be gated too — else it is an
+	// un-gated second source for everything the leaves hide.
+	app.Get("/v1/pricing", gatedRoot)
 	app.Get("/v1/pricing/models", gatedModelList("models"))
 	app.Get("/v1/pricing/free", gatedModelList("free"))
 	app.Get("/v1/pricing/featured", gatedModelList("featured"))
@@ -339,6 +345,29 @@ func gatedSummary(c *zip.Ctx) error {
 		payload["providers"] = VisibleProviders(provs, snap, strings.TrimSpace(c.Org()), c.IsAdmin())
 	}
 	return c.JSON(http.StatusOK, payload)
+}
+
+// gatedRoot gates the kitchen-sink root payload (GET /v1/pricing returns the
+// whole blob) so it never leaks a model/provider that the leaf routes hide.
+func gatedRoot(c *zip.Ctx) error {
+	status, body, err := rawDispatch(c, "pricing", nil)
+	if err != nil {
+		c.Log().Error("pricing dispatch failed", "route", "pricing", "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
+	}
+	if status != http.StatusOK || cat == nil {
+		return passthrough(c, status, body)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(body, &data); err != nil {
+		return passthrough(c, status, body)
+	}
+	snap, err := cat.Snapshot(c.Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
+	}
+	GateRootData(data, snap, strings.TrimSpace(c.Org()), c.IsAdmin())
+	return c.JSON(http.StatusOK, data)
 }
 
 // RunSync performs the live third-party model sync: fetch upstream listings

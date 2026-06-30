@@ -95,6 +95,28 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 		t.Errorf("non-beta org must not see the beta model")
 	}
 
+	// --- FIX #2: the root /v1/pricing blob is gated like the leaves ---------
+	// slashID is disabled with beta=[acme] at this point.
+	_, rOther := do("GET", "/v1/pricing", "", other)
+	if rootContainsModel(rOther, slashID) {
+		t.Errorf("FIX#2: disabled model leaked into the root /v1/pricing for a non-beta org")
+	}
+	if rootFreeContains(rOther, slashID) {
+		t.Errorf("FIX#2: disabled model id leaked into root freeModels for a non-beta org")
+	}
+	if _, rAcme := do("GET", "/v1/pricing", "", acme); !rootContainsModel(rAcme, slashID) {
+		t.Errorf("FIX#2: beta org acme must see the beta model in the root blob")
+	}
+	if _, rAdmin := do("GET", "/v1/pricing", "", admin); !rootContainsModel(rAdmin, slashID) {
+		t.Errorf("FIX#2: admin must see the disabled model in the root blob")
+	}
+
+	// --- FIX #5: oversized / over-deep overrides are rejected at the boundary
+	deep := `{"betaOrgs":[],"overrides":` + strings.Repeat(`{"a":`, 40) + "1" + strings.Repeat("}", 40) + `}`
+	if resp, _ := do("PATCH", "/v1/admin/catalog/models/zen5", deep, admin); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("FIX#5: over-deep override must be 400, got %d", resp.StatusCode)
+	}
+
 	// --- single-model gate (single-segment id) 404s without an oracle ------
 	if resp, _ := do("PATCH", "/v1/admin/catalog/models/zen4", `{"enabled":false}`, admin); resp.StatusCode != http.StatusOK {
 		t.Fatalf("admin PATCH zen4 must be 200, got %d", resp.StatusCode)
@@ -134,4 +156,43 @@ func modelsContain(body []byte, id string) bool {
 		return false
 	}
 	return catHasID(p.Models, id)
+}
+
+// rootContainsModel reports whether the root /v1/pricing blob exposes a model id
+// in either of its raw arrays.
+func rootContainsModel(body []byte, id string) bool {
+	var p struct {
+		HanzoModels      []Model `json:"hanzoModels"`
+		ThirdPartyModels []Model `json:"thirdPartyModels"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return false
+	}
+	return catHasID(p.HanzoModels, id) || catHasID(p.ThirdPartyModels, id)
+}
+
+func rootFreeContains(body []byte, id string) bool {
+	var p struct {
+		FreeModels []string `json:"freeModels"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return false
+	}
+	for _, s := range p.FreeModels {
+		if s == id {
+			return true
+		}
+	}
+	return false
+}
+
+// TestMount_EmptyDataDir_FailsClosed proves FIX #3: the overlay is a security
+// control, so an empty DataDir is a hard boot error — never a silent in-memory
+// (fail-open) downgrade that would re-expose admin-hidden models on restart.
+func TestMount_EmptyDataDir_FailsClosed(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	defer func() { _ = Shutdown(context.Background()) }()
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo", DataDir: ""}); err == nil {
+		t.Fatal("Mount with empty DataDir must fail closed (got nil error)")
+	}
 }

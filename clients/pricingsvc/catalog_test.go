@@ -3,6 +3,7 @@ package pricingsvc
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -274,5 +275,157 @@ func TestCatalogStore_RoundTrip(t *testing.T) {
 	}
 	if got, _ := c.Models(ctx, full, "", true); !catHasID(got, "zen4") {
 		t.Errorf("Models: admin must see disabled zen4")
+	}
+}
+
+func containsStr(list []any, s string) bool {
+	for _, e := range list {
+		if e == s {
+			return true
+		}
+	}
+	return false
+}
+
+// asModels reads a model array that may be []Model (after GateRootData) or []any
+// (raw decoded JSON).
+func asModels(v any) []Model {
+	switch t := v.(type) {
+	case []Model:
+		return t
+	case []any:
+		m, _ := modelArray(t)
+		return m
+	}
+	return nil
+}
+
+// The root /v1/pricing blob (raw arrays + id-reference lists + providers dict +
+// families) must be gated identically to the leaves — no un-gated second source.
+func TestGateRootData(t *testing.T) {
+	root := func() map[string]any {
+		return map[string]any{
+			"updated": "x",
+			"hanzoModels": []any{
+				map[string]any{"name": "zen4", "tier": "ultra"},
+				map[string]any{"name": "zen5"},
+			},
+			"thirdPartyModels": []any{
+				map[string]any{"id": "anthropic/claude-opus-4.6", "name": "Opus", "provider": "Anthropic"},
+				map[string]any{"id": "openrouter/free-thing", "name": "Free", "provider": "OpenRouter"},
+			},
+			"freeModels": []any{"openrouter/free-thing", "anthropic/claude-opus-4.6"},
+			"providers": map[string]any{
+				"Anthropic":  map[string]any{"total": float64(1)},
+				"OpenRouter": map[string]any{"total": float64(1)},
+			},
+			"families": []any{
+				map[string]any{"id": "zen", "models": []any{"zen4", "zen5"}},
+			},
+			"summary": map[string]any{"totalModels": float64(4)},
+		}
+	}
+	// zen4 disabled (model); Anthropic disabled (provider) with beta acme.
+	snap := map[string]Overlay{
+		overlayKey(kindModel, "zen4"):         {Kind: kindModel, ID: "zen4", Enabled: false},
+		overlayKey(kindProvider, "Anthropic"): {Kind: kindProvider, ID: "Anthropic", Enabled: false, BetaOrgs: []string{"acme"}},
+	}
+
+	// Non-beta customer: zen4 and the Anthropic model gone from EVERY field.
+	d := root()
+	GateRootData(d, snap, "other", false)
+	hz := asModels(d["hanzoModels"])
+	if catHasID(hz, "zen4") {
+		t.Errorf("root.hanzoModels leaked disabled zen4")
+	}
+	if !catHasID(hz, "zen5") {
+		t.Errorf("root.hanzoModels dropped enabled zen5")
+	}
+	tp := asModels(d["thirdPartyModels"])
+	if catHasID(tp, "anthropic/claude-opus-4.6") {
+		t.Errorf("root.thirdPartyModels leaked provider-disabled model")
+	}
+	if fm := d["freeModels"].([]any); containsStr(fm, "anthropic/claude-opus-4.6") {
+		t.Errorf("root.freeModels leaked provider-disabled id")
+	} else if !containsStr(fm, "openrouter/free-thing") {
+		t.Errorf("root.freeModels dropped a visible id")
+	}
+	famModels := d["families"].([]any)[0].(map[string]any)["models"].([]any)
+	if containsStr(famModels, "zen4") {
+		t.Errorf("root.families leaked disabled zen4 ref")
+	}
+	if !containsStr(famModels, "zen5") {
+		t.Errorf("root.families dropped enabled zen5 ref")
+	}
+	provs := d["providers"].(map[string]any)
+	if _, ok := provs["Anthropic"]; ok {
+		t.Errorf("root.providers leaked disabled Anthropic")
+	}
+	if _, ok := provs["OpenRouter"]; !ok {
+		t.Errorf("root.providers dropped OpenRouter")
+	}
+	if d["summary"].(map[string]any)["totalModels"] != float64(4) {
+		t.Errorf("summary aggregate counts must be untouched")
+	}
+
+	// Provider beta org sees the Anthropic model again; zen4 still hidden (no beta).
+	d2 := root()
+	GateRootData(d2, snap, "acme", false)
+	if tp2 := asModels(d2["thirdPartyModels"]); !catHasID(tp2, "anthropic/claude-opus-4.6") {
+		t.Errorf("provider beta org must see the model in root")
+	}
+	if hz2 := asModels(d2["hanzoModels"]); catHasID(hz2, "zen4") {
+		t.Errorf("zen4 must stay hidden for acme (no model beta)")
+	}
+
+	// Admin sees everything; id-reference lists untouched.
+	d3 := root()
+	GateRootData(d3, snap, "", true)
+	if hz3 := asModels(d3["hanzoModels"]); !catHasID(hz3, "zen4") {
+		t.Errorf("admin must see disabled zen4 in root")
+	}
+	if len(d3["freeModels"].([]any)) != 2 {
+		t.Errorf("admin freeModels must be untouched")
+	}
+	if _, ok := d3["providers"].(map[string]any)["Anthropic"]; !ok {
+		t.Errorf("admin must see disabled provider in root")
+	}
+}
+
+func TestCheckOverride(t *testing.T) {
+	ok := []json.RawMessage{
+		json.RawMessage(`{"a":1}`),
+		json.RawMessage(`null`),
+		json.RawMessage(``),
+		json.RawMessage(`{"pricing":{"input":5}}`),
+	}
+	for _, r := range ok {
+		if err := checkOverride(r); err != nil {
+			t.Errorf("checkOverride(%s) must pass: %v", r, err)
+		}
+	}
+	bad := []json.RawMessage{
+		json.RawMessage(`[1,2]`), // array
+		json.RawMessage(`"x"`),   // scalar
+		json.RawMessage(`123`),   // number
+	}
+	for _, r := range bad {
+		if checkOverride(r) == nil {
+			t.Errorf("checkOverride(%s) must be rejected", r)
+		}
+	}
+	// Size cap.
+	big := json.RawMessage(`{"a":"` + strings.Repeat("x", maxOverrideBytes) + `"}`)
+	if checkOverride(big) == nil {
+		t.Errorf("oversize override must be rejected")
+	}
+	// Depth cap: N nested objects => jsonDepth N.
+	tooDeep := json.RawMessage(strings.Repeat(`{"a":`, maxOverrideDepth+2) + "1" + strings.Repeat("}", maxOverrideDepth+2))
+	if checkOverride(tooDeep) == nil {
+		t.Errorf("over-deep override must be rejected")
+	}
+	atLimit := json.RawMessage(strings.Repeat(`{"a":`, maxOverrideDepth-1) + "1" + strings.Repeat("}", maxOverrideDepth-1))
+	if err := checkOverride(atLimit); err != nil {
+		t.Errorf("at-limit depth override must pass: %v", err)
 	}
 }
