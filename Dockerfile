@@ -1,21 +1,21 @@
-FROM golang:1.26-alpine AS build
+# ECR Public mirror of the Docker library image — Docker Hub's unauthenticated
+# pull rate-limit (429 toomanyrequests) fails the build on shared CI runners.
+# Same fix already shipped in hanzoai/console2.
+FROM public.ecr.aws/docker/library/golang:1.26-alpine AS build
 RUN apk add --no-cache ca-certificates tzdata git
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 WORKDIR /src
-# Private cross-org subsystem modules (hanzoai/*, luxfi/*, zap-proto/*) are
-# FIRST-PARTY (we own them; now public on GitHub) and fetched directly via
-# authenticated git: GOPRIVATE marks them so go fetches them DIRECT (never the
-# public proxy, which serves a tag's FIRST-seen content that sum.golang.org pins
-# immutably — stale after any tag re-point) and skips the sumdb for them ONLY.
-# GOPROXY routes everything ELSE (public deps) through the module proxy — REQUIRED
-# for monorepo modules whose tags are nested paths (e.g. tencentcloud-sdk-go's
-# `tencentcloud/hunyuan/vX.Y.Z`), which `direct` VCS resolution CANNOT find
-# ("unknown revision"). First-party still bypasses the proxy via GOPRIVATE, so no
-# private path leaks and re-pointed first-party tags still resolve direct.
-# First-party-scoped, NEVER global GONOSUMDB=* / GOINSECURE. The committed go.sum
-# is the single source of truth. gh_token is the shared BuildKit secret.
-ENV GOPRIVATE=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/* \
-    GONOSUMDB=github.com/hanzoai/*,github.com/luxfi/*,github.com/zap-proto/* \
+# hanzoai/* and luxfi/* are PUBLIC and resolve via the IMMUTABLE public proxy +
+# sumdb — go.sum pins those canonical hashes, so a force-re-pointed tag can never
+# break the build. Routing them DIRECT (the old GOPRIVATE approach) re-fetches a
+# re-tagged tree (e.g. luxfi/age@v1.5.0) whose hash differs from go.sum's proxy
+# hash → "checksum mismatch / SECURITY ERROR". This matches the drop-GOPRIVATE
+# fix already shipped in hanzoai/iam + luxfi/kms. Only zap-proto/* stays first-
+# party-direct (kept in GOPRIVATE) — authenticated git via gh_token. GOPROXY
+# still routes nested-path monorepo tags (e.g. tencentcloud-sdk-go) through the
+# proxy. The committed go.sum is the single source of truth.
+ENV GOPRIVATE=github.com/zap-proto/* \
+    GONOSUMDB=github.com/zap-proto/* \
     GOSUMDB=off \
     GOPROXY=https://proxy.golang.org,direct \
     GOFLAGS=-mod=mod
