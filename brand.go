@@ -29,10 +29,19 @@ type BrandInfo struct {
 }
 
 // brands is the brand→IAM registry. Keys are the canonical brand IDs accepted
-// by CLOUD_BRAND. Per HIP-0111 §Brands: hanzo→iam.hanzo.ai, lux→lux.id,
+// by CLOUD_BRAND. Per HIP-0111 §Brands: hanzo→hanzo.id, lux→lux.id,
 // zoo→zoo.id, pars→pars.id, bootnode→id.bootno.de.
+//
+// IAMIssuer MUST equal the `iss` IAM actually stamps AND host the signing JWKS.
+// For hanzo the live .well-known/openid-configuration on BOTH hanzo.id and
+// iam.hanzo.ai reports issuer=https://hanzo.id + jwks_uri=
+// https://hanzo.id/v1/iam/.well-known/jwks (iam.hanzo.ai is a routing alias, not
+// the issuer), and the cloud CLI already defaults to hanzo.id. Pinning
+// iam.hanzo.ai here would fail the issuer check on every real token, anonymizing
+// every principal — global admin would 403 platform-wide (fail-secure, but
+// broken). lux/zoo/pars already correctly point at their own .id issuers.
 var brands = map[string]BrandInfo{
-	"hanzo":    {ID: "hanzo", IAMIssuer: "https://iam.hanzo.ai", Domain: "hanzo.ai"},
+	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai"},
 	"lux":      {ID: "lux", IAMIssuer: "https://lux.id", Domain: "lux.network"},
 	"zoo":      {ID: "zoo", IAMIssuer: "https://zoo.id", Domain: "zoo.ngo"},
 	"pars":     {ID: "pars", IAMIssuer: "https://pars.id", Domain: "pars.network"},
