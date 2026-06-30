@@ -306,6 +306,15 @@ func TestIdentityValidator(t *testing.T) {
 			t.Fatal("expired token must be rejected")
 		}
 	})
+	t.Run("missing expiry rejected", func(t *testing.T) {
+		// go-jose only enforces exp when present; a token with NO exp would never
+		// expire. We reject it explicitly.
+		c := tokenClaims("hanzo-console", "admin", "", true, future)
+		c.Expiry = nil
+		if _, err := v.validate(signWith(t, key, c)); err == nil {
+			t.Fatal("token without exp must be rejected")
+		}
+	})
 	t.Run("bad signature rejected", func(t *testing.T) {
 		if _, err := v.validate(signWith(t, other, tokenClaims("hanzo-console", "admin", "", true, future))); err == nil {
 			t.Fatal("token signed by an unknown key must be rejected")
