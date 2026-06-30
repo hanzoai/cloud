@@ -26,6 +26,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -34,7 +37,14 @@ import (
 	"github.com/hanzoai/zip"
 )
 
-var host *gojahost.Host
+var (
+	host *gojahost.Host
+	// cat is the catalog enablement overlay (SQLite/Base). It lays mutable
+	// {enabled,betaOrgs,overrides} state over the static bundle and gates the
+	// catalog read path. nil only before Mount; the read handlers fall back to
+	// the raw bundle output when it is nil.
+	cat *catalog
+)
 
 // Mount registers the pricing surface on app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -85,25 +95,41 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	host = h
 
+	// Catalog enablement overlay. Persistent at {DataDir}/catalog.db; falls back
+	// to an in-memory (non-persistent) overlay only when no DataDir is configured
+	// — the gate still works, defaulting to all-enabled.
+	dbPath := ":memory:"
+	if deps.DataDir != "" {
+		if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+			return fmt.Errorf("pricingsvc.Mount: data dir: %w", err)
+		}
+		dbPath = filepath.Join(deps.DataDir, "catalog.db")
+	} else {
+		logger.Warn("pricing: empty DataDir — catalog overlay is in-memory (non-persistent)")
+	}
+	cstore, err := openCatalog(dbPath)
+	if err != nil {
+		return fmt.Errorf("pricingsvc.Mount: open catalog overlay: %w", err)
+	}
+	cat = cstore
+
 	app.Get("/v1/pricing/health", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "pricing"})
 	})
 
-	// /v1/pricing/* read surface (mirrors server.mjs handler-for-handler).
+	// /v1/pricing/* read surface (mirrors server.mjs handler-for-handler). The
+	// catalog routes (models/free/featured/providers/summary + the single model
+	// lookup) are gated below by the enablement overlay; everything else is a
+	// straight pass-through of the bundle's output.
 	type binding struct{ path, route string }
 	fixed := []binding{
 		{"/v1/pricing", "pricing"},
-		{"/v1/pricing/models", "models"},
-		{"/v1/pricing/summary", "summary"},
-		{"/v1/pricing/free", "free"},
-		{"/v1/pricing/featured", "featured"},
 		{"/v1/pricing/compute", "compute"},
 		{"/v1/pricing/compute/presets", "compute/presets"},
 		{"/v1/pricing/cloud", "cloud"},
 		{"/v1/pricing/cloud/plans", "cloud/plans"},
 		{"/v1/pricing/cloud/regions", "cloud/regions"},
 		{"/v1/pricing/cloud/storage", "cloud/storage"},
-		{"/v1/pricing/providers", "providers"},
 		{"/v1/pricing/subscriptions", "subscriptions"},
 		{"/v1/pricing/blockchain", "blockchain"},
 		{"/v1/pricing/iam", "iam"},
@@ -118,10 +144,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		app.Get(b.path, func(c *zip.Ctx) error { return dispatch(c, route, nil) })
 	}
 
-	// Single model lookup.
-	app.Get("/v1/pricing/model/:name", func(c *zip.Ctx) error {
-		return dispatch(c, "model", map[string]string{"name": c.Param("name")})
-	})
+	// Gated catalog read path: the overlay filters disabled/beta entries and
+	// merges overrides for the calling org (admins see everything, flagged).
+	app.Get("/v1/pricing/models", gatedModelList("models"))
+	app.Get("/v1/pricing/free", gatedModelList("free"))
+	app.Get("/v1/pricing/featured", gatedModelList("featured"))
+	app.Get("/v1/pricing/providers", gatedProviders)
+	app.Get("/v1/pricing/summary", gatedSummary)
+	app.Get("/v1/pricing/model/:name", gatedModel)
+
+	// Admin write surface for the overlay (global-admin only; see admin.go).
+	app.Get("/v1/admin/catalog", adminCatalog)
+	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
+	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
 
 	// Convenience aliases (the cleaner top-level surface from server.mjs).
 	// NOTE: the bare /v1/models alias is DELIBERATELY NOT mounted here. In the
@@ -150,7 +185,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	logger.Info("pricing mounted",
 		"prefix", "/v1/pricing",
-		"routes", len(fixed)+4,
+		"fixed_routes", len(fixed),
+		"gated_routes", 6, // models, free, featured, providers, summary, model/:name
+		"admin_routes", 3, // GET /v1/admin/catalog + PATCH models/* + PATCH providers/:name
+		"overlay_db", dbPath,
 		"express", false,
 		"goja", true,
 		"brand", deps.Brand,
@@ -158,9 +196,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func dispatch(c *zip.Ctx, route string, params map[string]string) error {
+// rawDispatch runs a goja route and returns its status + JSON body — the single
+// point that touches the goja host on the read path. The gated handlers
+// post-filter this body through the overlay; dispatch writes it verbatim.
+func rawDispatch(c *zip.Ctx, route string, params map[string]string) (int, json.RawMessage, error) {
 	if host == nil {
-		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "pricing not initialised"})
+		return 0, nil, fmt.Errorf("pricing not initialised")
 	}
 	tenant := c.Org()
 	if tenant == "" {
@@ -168,11 +209,136 @@ func dispatch(c *zip.Ctx, route string, params map[string]string) error {
 	}
 	resp, err := host.Dispatch(c.Context(), gojahost.Request{Route: route, Params: params, Tenant: tenant})
 	if err != nil {
+		return 0, nil, err
+	}
+	return resp.Status, resp.Body, nil
+}
+
+// dispatch writes a goja route's output verbatim — the ungated pass-through for
+// the non-catalog read routes.
+func dispatch(c *zip.Ctx, route string, params map[string]string) error {
+	status, body, err := rawDispatch(c, route, params)
+	if err != nil {
 		c.Log().Error("pricing dispatch failed", "route", route, "err", err)
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
 	}
+	return passthrough(c, status, body)
+}
+
+func passthrough(c *zip.Ctx, status int, body json.RawMessage) error {
 	c.SetHeader("Content-Type", "application/json")
-	return c.Bytes(resp.Status, resp.Body)
+	return c.Bytes(status, body)
+}
+
+// gatedModelList gates a {updated,total,models[]} route (models/free/featured)
+// through the overlay for the calling org, re-counting `total` over the gated set.
+func gatedModelList(route string) zip.Handler {
+	return func(c *zip.Ctx) error {
+		status, body, err := rawDispatch(c, route, nil)
+		if err != nil {
+			c.Log().Error("pricing dispatch failed", "route", route, "err", err)
+			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
+		}
+		if status != http.StatusOK || cat == nil {
+			return passthrough(c, status, body) // upstream error or no overlay: verbatim.
+		}
+		var payload struct {
+			Updated any     `json:"updated"`
+			Models  []Model `json:"models"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return passthrough(c, status, body) // unrecognised shape: never corrupt it.
+		}
+		gated, err := cat.Models(c.Context(), payload.Models, strings.TrimSpace(c.Org()), c.IsAdmin())
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"updated": payload.Updated,
+			"total":   len(gated),
+			"models":  gated,
+		})
+	}
+}
+
+// gatedModel gates the single-model lookup: a model hidden for the caller's org
+// 404s — indistinguishable from absent, so disabled models get no existence
+// oracle on the direct path.
+func gatedModel(c *zip.Ctx) error {
+	name := c.Param("name")
+	status, body, err := rawDispatch(c, "model", map[string]string{"name": name})
+	if err != nil {
+		c.Log().Error("pricing dispatch failed", "route", "model", "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
+	}
+	if status != http.StatusOK || cat == nil {
+		return passthrough(c, status, body)
+	}
+	var m Model
+	if err := json.Unmarshal(body, &m); err != nil {
+		return passthrough(c, status, body)
+	}
+	gated, err := cat.Models(c.Context(), []Model{m}, strings.TrimSpace(c.Org()), c.IsAdmin())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
+	}
+	if len(gated) == 0 {
+		return c.JSON(http.StatusNotFound, map[string]any{"error": "Model not found: " + name})
+	}
+	return c.JSON(http.StatusOK, gated[0])
+}
+
+// gatedProviders gates the {updated,providers{}} dict route.
+func gatedProviders(c *zip.Ctx) error {
+	status, body, err := rawDispatch(c, "providers", nil)
+	if err != nil {
+		c.Log().Error("pricing dispatch failed", "route", "providers", "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
+	}
+	if status != http.StatusOK || cat == nil {
+		return passthrough(c, status, body)
+	}
+	var payload struct {
+		Updated   any            `json:"updated"`
+		Providers map[string]any `json:"providers"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return passthrough(c, status, body)
+	}
+	snap, err := cat.Snapshot(c.Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"updated":   payload.Updated,
+		"providers": VisibleProviders(payload.Providers, snap, strings.TrimSpace(c.Org()), c.IsAdmin()),
+	})
+}
+
+// gatedSummary passes the stats summary through but filters its providers
+// sub-dict so a disabled provider's name never leaks. Aggregate counts are the
+// bundle's catalog-wide stats, intentionally left untouched.
+func gatedSummary(c *zip.Ctx) error {
+	status, body, err := rawDispatch(c, "summary", nil)
+	if err != nil {
+		c.Log().Error("pricing dispatch failed", "route", "summary", "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "pricing dispatch failed"})
+	}
+	if status != http.StatusOK || cat == nil {
+		return passthrough(c, status, body)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return passthrough(c, status, body)
+	}
+	if provs, ok := payload["providers"].(map[string]any); ok {
+		snap, err := cat.Snapshot(c.Context())
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
+		}
+		payload["providers"] = VisibleProviders(provs, snap, strings.TrimSpace(c.Org()), c.IsAdmin())
+	}
+	return c.JSON(http.StatusOK, payload)
 }
 
 // RunSync performs the live third-party model sync: fetch upstream listings
@@ -266,12 +432,16 @@ func init() {
 	})
 }
 
-// Shutdown drops the goja host. Idempotent.
+// Shutdown drops the goja host and closes the catalog overlay store. Idempotent.
 func Shutdown(context.Context) error {
-	if host == nil {
-		return nil
+	var herr error
+	if host != nil {
+		herr = host.Close()
+		host = nil
 	}
-	err := host.Close()
-	host = nil
-	return err
+	if cat != nil {
+		_ = cat.Close()
+		cat = nil
+	}
+	return herr
 }
