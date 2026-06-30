@@ -40,6 +40,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/evalsvc"    // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/pluginsvc"  // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
