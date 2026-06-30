@@ -49,13 +49,24 @@ func Serve(enable []string) error {
 	app := zip.New(zip.Config{Logger: deps.Logger})
 
 	// Canonical middleware pipeline. Order matters:
-	//  1. Recover   — panic → JSON 500
-	//  2. RequestID — generate / propagate X-Request-Id
-	//  3. Logger    — request-line log
-	// Telemetry/Auth stay gateway-owned in Phase 1 (enable once mounted).
+	//  1. Recover         — panic → JSON 500
+	//  2. RequestID       — generate / propagate X-Request-Id
+	//  3. Logger          — request-line log
+	//  4. SanitizeIdentity — establish a VALIDATED principal (see below)
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
+
+	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
+	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
+	// reflects a VALIDATED IAM principal — never a raw client header. This makes
+	// the gateway's "X-User-IsAdmin is never client-supplied" contract hold even
+	// when cloud-api is reached directly (in-cluster) instead of through the
+	// gateway, closing the forgeable-admin trust boundary. The admin claim is
+	// granted ONLY to a validated GLOBAL admin (owner == AdminOrg). See
+	// middleware_identity.go / auth_identity.go.
+	identity := newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0)
+	app.Use(SanitizeIdentity(identity, cfg.AdminOrg))
 
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —
