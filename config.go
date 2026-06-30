@@ -52,6 +52,22 @@ type Config struct {
 	PaymentsZAPAddr string
 	VaultZAPAddr    string
 
+	// Billing gate (commerce metering) — the request-edge balance gate.
+	//
+	// CommerceHTTPURL is the commerce service base over HTTP (the metering
+	// client speaks net/http, not ZAP). Empty disables the gate entirely.
+	//
+	// CommerceServiceToken is the admin-scoped commerce S2S token. It is a
+	// SECRET sourced from a KMS-backed secret the operator injects as
+	// COMMERCE_SERVICE_TOKEN — never hard-coded or read from disk here.
+	//
+	// BillingFailOpen flips the gate to allow-on-error. Default is
+	// fail-closed (deny when balance can't be determined), matching the
+	// gateway. Set only where availability outranks billing.
+	CommerceHTTPURL      string
+	CommerceServiceToken string
+	BillingFailOpen      bool
+
 	// ZAP RPC endpoints for subsystems that are NOT enabled in this
 	// process but are still needed by an enabled subsystem. Empty
 	// means "no remote endpoint" — the client falls back to the
@@ -85,14 +101,18 @@ func LoadConfig() *Config {
 		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		PaymentsZAPAddr: getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:    getenv("CLOUD_VAULT_ZAP_ADDR", ""),
-		IAMZAPAddr:      getenv("CLOUD_IAM_ZAP_ADDR", ""),
-		KMSZAPAddr:      getenv("CLOUD_KMS_ZAP_ADDR", ""),
-		BaseZAPAddr:     getenv("CLOUD_BASE_ZAP_ADDR", ""),
-		CommerceZAPAddr: getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
-		AIZAPAddr:       getenv("CLOUD_AI_ZAP_ADDR", ""),
-		O11yZAPAddr:     getenv("CLOUD_O11Y_ZAP_ADDR", ""),
-		VFSZAPAddr:      getenv("CLOUD_VFS_ZAP_ADDR", ""),
-		MQZAPAddr:       getenv("CLOUD_MQ_ZAP_ADDR", ""),
+		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
+		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
+		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
+		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
+		IAMZAPAddr:           getenv("CLOUD_IAM_ZAP_ADDR", ""),
+		KMSZAPAddr:           getenv("CLOUD_KMS_ZAP_ADDR", ""),
+		BaseZAPAddr:          getenv("CLOUD_BASE_ZAP_ADDR", ""),
+		CommerceZAPAddr:      getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
+		AIZAPAddr:            getenv("CLOUD_AI_ZAP_ADDR", ""),
+		O11yZAPAddr:          getenv("CLOUD_O11Y_ZAP_ADDR", ""),
+		VFSZAPAddr:           getenv("CLOUD_VFS_ZAP_ADDR", ""),
+		MQZAPAddr:            getenv("CLOUD_MQ_ZAP_ADDR", ""),
 	}
 
 	var enableCSV string
@@ -152,6 +172,18 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
+}
+
+// getenvBool reports whether an env var is set to a truthy value
+// (true/1/yes, case-insensitive). Matches metering's envTrue semantics so the
+// billing flags read consistently across products.
+func getenvBool(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // Validate returns an error if the config is missing required values.
