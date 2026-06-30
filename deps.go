@@ -32,6 +32,11 @@ type Deps struct {
 	// Values: "hanzo", "lux", "zoo", "osage", "pars", or any customer brand.
 	Brand string
 
+	// Env is the deployment environment (mainnet|testnet|devnet). Subsystems
+	// that meter usage stamp it for per-env attribution; it never gates or
+	// bypasses billing (every env bills against its own commerce ledger).
+	Env string
+
 	// Domain is the deployment's primary domain (e.g. "api.hanzo.ai",
 	// "api.osage.cloud"). Subsystems use this to scope URLs in responses.
 	Domain string
