@@ -64,11 +64,27 @@ var secretfulKinds = map[string]bool{
 // derive from it, so this is the injection guard.
 var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
+// provisionFeeEnvPrefix is the operator knob for the per-provision fee. The
+// effective fee is cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind): a
+// per-kind override (CLOUD_PROVISION_FEE_CENTS_SQL=…) wins over the global
+// CLOUD_PROVISION_FEE_CENTS, else the $1.00 default. Set a kind to 0 to make it
+// free (and therefore un-gated).
+//
+// Ongoing storage footprint (GB-month) is billed by REUSING s.bill.Meter with a
+// usage-derived amount; its unit price lives in hanzoai/pricing
+// (infrastructure.blockStorage.pricePerGBMonthly = $0.08/GB-month) and is
+// applied by the recurring caller, not at provision time — there is no live-size
+// source here and a size is never fabricated.
+const provisionFeeEnvPrefix = "CLOUD_PROVISION_FEE_CENTS"
+
 type svc struct {
 	store *Store
 	sec   *secrets
 	reg   map[string]Provisioner
 	log   luxlog.Logger
+	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
+	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
+	bill *cloud.ResourceMeter
 }
 
 type createResp struct {
@@ -132,6 +148,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		sec:   openSecrets(deps.Brand, log),
 		reg:   newRegistry(),
 		log:   log,
+		bill:  cloud.NewResourceMeter(deps, "provisioning"),
 	}
 	mounted = s
 
@@ -147,6 +164,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		"kinds", len(kinds),
 		"kms", s.sec.Enabled(),
 		"brand", deps.Brand,
+		"env", deps.Env,
+		"billing", s.bill.Enabled(),
 	)
 	return nil
 }
@@ -185,6 +204,20 @@ func (s *svc) create(kind string) zip.Handler {
 		}
 
 		ctx := c.Context()
+
+		// Pre-provision balance gate (fail-closed, per-org). Refuse BEFORE any
+		// backend resource is created: an unfunded org — or, in the default
+		// fail-closed posture, an unreachable commerce — gets 402/503 and nothing
+		// is provisioned (no free provisioning). Scoped to THIS caller's org (the
+		// same slug that namespaces the resource below and that #66's identity
+		// sanitizer derives from a validated JWT, not a spoofable header), so the
+		// charge can never target another tenant. fee is computed once and reused
+		// by the post-success debit; fee==0 (a free kind) or unconfigured billing
+		// makes this a no-op.
+		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
+		if err := s.bill.Gate(ctx, org, kind, fee); err != nil {
+			return cloud.DenyResource(c, err)
+		}
 
 		// Fast duplicate check (the UNIQUE index is the authoritative guard).
 		if _, err := s.store.Get(ctx, org, kind, name); err == nil {
@@ -268,6 +301,13 @@ func (s *svc) create(kind string) zip.Handler {
 			}
 			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 		}
+
+		// Resource is live + persisted — debit the caller's org ledger for the
+		// provision (per-org, env-attributed, async best-effort so the debit never
+		// blocks or corrupts this 201; a debit failure is logged for
+		// reconciliation). Recurring storage footprint reuses s.bill.Meter with a
+		// GB-month amount once a live-size source exists.
+		s.bill.Meter(org, kind, fee, c.RequestID(), cloud.ClientIP(c))
 
 		return c.JSON(http.StatusCreated, createResp{
 			ID: id, Kind: kind, Name: name, Status: "ready",
