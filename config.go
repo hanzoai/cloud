@@ -17,6 +17,12 @@ type Config struct {
 	// Brand is the white-label brand identifier.
 	Brand string
 
+	// Env is the deployment environment (mainnet|testnet|devnet) per the 3-env
+	// split. Billing fires in EVERY env — test/dev meter against their own
+	// sandbox commerce/Square, never free — so Env is an attribution label, not
+	// a gate. Empty when the operator has not set CLOUD_ENV.
+	Env string
+
 	// Domain is the deployment's primary public domain.
 	Domain string
 
@@ -112,6 +118,7 @@ func LoadConfig() *Config {
 		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
+		Env:              getenv("CLOUD_ENV", ""),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
