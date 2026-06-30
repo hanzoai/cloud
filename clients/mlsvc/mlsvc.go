@@ -91,13 +91,13 @@ var (
 )
 
 const (
-	managedByLabel  = "app.kubernetes.io/managed-by"
-	managedByValue  = "hanzo-cloud"
-	orgLabel        = "hanzo.ai/org"
-	katibExpLabel   = "katib.kubeflow.org/experiment"
-	nsPrefix        = "ml-"
-	predictBodyCap  = 32 << 20 // 32 MiB ceiling on a predictor response read
-	predictTimeout  = 5 * time.Minute
+	managedByLabel = "app.kubernetes.io/managed-by"
+	managedByValue = "hanzo-cloud"
+	orgLabel       = "hanzo.ai/org"
+	katibExpLabel  = "katib.kubeflow.org/experiment"
+	nsPrefix       = "ml-"
+	predictBodyCap = 32 << 20 // 32 MiB ceiling on a predictor response read
+	predictTimeout = 5 * time.Minute
 )
 
 // nameRE constrains a user-supplied resource name to a DNS-1123 label (the
@@ -110,11 +110,26 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // label (<=63 chars: "ml-" + <=42).
 var orgRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$`)
 
+// computeFeeEnvPrefix is the operator knob for the per-create compute fee. The
+// effective fee is cloud.ResourceFeeCents(computeFeeEnvPrefix, kind): a per-kind
+// override (e.g. CLOUD_COMPUTE_FEE_CENTS_TRAINJOB=…) wins over the global
+// CLOUD_COMPUTE_FEE_CENTS, else the $1.00 default. Set a kind to 0 to make it
+// free (and therefore un-gated).
+//
+// This is the create/submission fee. A TrainJob's ongoing GPU-hour cost
+// (hanzoai/pricing infrastructure.compute centsPerHour) is billed by REUSING
+// s.bill.Meter with a runtime-derived amount from a future usage watcher — never
+// fabricated here.
+const computeFeeEnvPrefix = "CLOUD_COMPUTE_FEE_CENTS"
+
 type svc struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health
 	hc      *http.Client      // predictor data-plane client (inference latency)
 	log     luxlog.Logger
+	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
+	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
+	bill *cloud.ResourceMeter
 }
 
 // Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106.
@@ -127,7 +142,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "ml")
 
-	s := &svc{log: log, hc: &http.Client{Timeout: predictTimeout}}
+	s := &svc{log: log, hc: &http.Client{Timeout: predictTimeout}, bill: cloud.NewResourceMeter(deps, "compute")}
 	if dyn, err := newDynamic(); err != nil {
 		s.initErr = err.Error()
 		log.Warn("kubernetes client unavailable; ml/train endpoints will fail closed", "err", err)
@@ -162,7 +177,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/ml/health", s.health("ml", isvcGVR))
 	app.Get("/v1/train/health", s.health("train", trainjobGVR, experimentGVR))
 
-	log.Info("ml/train surface mounted", "k8s", s.dyn != nil, "brand", deps.Brand)
+	log.Info("ml/train surface mounted", "k8s", s.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.bill.Enabled())
 	return nil
 }
 
@@ -232,6 +247,19 @@ func (s *svc) create(k resourceKind) zip.Handler {
 		if err := json.Unmarshal(req.Spec, &spec); err != nil {
 			return zip.Errorf(http.StatusBadRequest, "invalid 'spec': %v", err)
 		}
+
+		// Pre-create balance gate (fail-closed, per-org). Refuse BEFORE the tenant
+		// namespace or CR is created so an unfunded org cannot run free GPU
+		// compute; an unreachable commerce refuses 503 (default fail-closed).
+		// Scoped to THIS caller's org (the same slug that maps to the tenant
+		// namespace, derived by #66's identity sanitizer from a validated JWT),
+		// so billing can never target another tenant. fee is reused by the
+		// post-success debit; fee==0 or unconfigured billing makes this a no-op.
+		fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
+		if err := s.bill.Gate(c.Context(), org, k.kind, fee); err != nil {
+			return cloud.DenyResource(c, err)
+		}
+
 		if err := s.ensureNamespace(c.Context(), ns, org); err != nil {
 			return zip.Errorf(http.StatusBadGateway, "ensure tenant namespace: %v", err)
 		}
@@ -256,6 +284,10 @@ func (s *svc) create(k resourceKind) zip.Handler {
 				return s.k8sErr(c, k, "create", err)
 			}
 		}
+		// Resource created — debit the caller's org ledger for the compute
+		// submission (per-org, env-attributed, async best-effort). Ongoing
+		// GPU-hour cost reuses s.bill.Meter from a future runtime usage watcher.
+		s.bill.Meter(org, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
 		return c.JSON(http.StatusCreated, view(out, true))
 	}
 }
