@@ -134,17 +134,9 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 }
 
 // clientIP extracts the originating IP from X-Forwarded-For (the gateway sets
-// it); the left-most entry is the real client.
-func clientIP(c *zip.Ctx) string {
-	xff := c.Header("X-Forwarded-For")
-	if xff == "" {
-		return ""
-	}
-	if i := strings.IndexByte(xff, ','); i > 0 {
-		return strings.TrimSpace(xff[:i])
-	}
-	return strings.TrimSpace(xff)
-}
+// it); the left-most entry is the real client. Delegates to the exported
+// ClientIP so the edge gate and the resource meter share ONE implementation.
+func clientIP(c *zip.Ctx) string { return ClientIP(c) }
 
 // billingEnabled reports whether the gate should enforce. False when the client
 // is nil or has no commerce URL (Enabled()==false), making the gate a no-op.
