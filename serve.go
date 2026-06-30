@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
 	"github.com/hanzoai/zip"
 	"github.com/hanzoai/zip/middleware"
@@ -37,6 +38,12 @@ func Serve(enable []string) error {
 		return fmt.Errorf("config: %w", err)
 	}
 
+	// Storage lockdown: reject leaked legacy cloud-api Postgres env so the
+	// SQLite-only orchestrator never adopts a stale DATABASE_URL. One store.
+	if err := storagelock.CheckEnv(os.Getenv); err != nil {
+		return fmt.Errorf("storage lockdown: %w", err)
+	}
+
 	deps := BuildDeps(cfg)
 
 	app := zip.New(zip.Config{Logger: deps.Logger})
@@ -49,6 +56,14 @@ func Serve(enable []string) error {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
+
+	// Billing gate. Sits at the (future) Auth position — after identity is
+	// established by Recover/RequestID/Logger and before any subsystem mounts —
+	// so every priced route is balance-gated once, at the edge, fail-closed.
+	// No-op when metering is unconfigured (deps.Metering not Enabled()), so
+	// it is always wired unconditionally. DefaultPrice keeps self-metering
+	// subsystems (notably /v1/ai/*) at 0 to avoid double-billing.
+	app.Use(BillingGate(deps.Metering, DefaultPrice))
 
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
