@@ -104,6 +104,12 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	if claims.Issuer == "" {
 		return nil, fmt.Errorf("missing issuer")
 	}
+	// Reject a missing expiry: ValidateWithLeeway only enforces exp when present
+	// (it checks `if c.Expiry != nil`), so a token with NO exp would never expire.
+	// An IAM access token always carries exp; require it.
+	if claims.Expiry == nil {
+		return nil, fmt.Errorf("missing expiry")
+	}
 	expected := jwt.Expected{Issuer: v.issuer}
 	if len(v.audiences) > 0 {
 		expected.AnyAudience = jwt.Audience(v.audiences)
