@@ -1,4 +1,7 @@
-FROM golang:1.26-alpine AS build
+# ECR Public mirror of the Docker library image — Docker Hub's unauthenticated
+# pull rate-limit (429 toomanyrequests) fails the build on shared CI runners.
+# Same fix already shipped in hanzoai/console2.
+FROM public.ecr.aws/docker/library/golang:1.26-alpine AS build
 RUN apk add --no-cache ca-certificates tzdata git
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 WORKDIR /src
