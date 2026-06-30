@@ -14,11 +14,20 @@ package pricingsvc
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/zip"
+)
+
+// Bounds on the admin-supplied overrides patch. Overrides are small metadata/
+// pricing patches; these caps are cheap guards that bound the blast radius of a
+// forged-admin write (the recursive merge is depth-sensitive). See FIX #5.
+const (
+	maxOverrideBytes = 64 << 10 // 64 KiB
+	maxOverrideDepth = 32
 )
 
 // patchBody is the PATCH payload. Every field is optional (a pointer): only
@@ -111,8 +120,10 @@ func adminPatch(c *zip.Ctx, kind, id string) error {
 			return zip.ErrBadRequest("invalid JSON body: " + err.Error())
 		}
 	}
-	if body.Overrides != nil && !validOverride(*body.Overrides) {
-		return zip.ErrBadRequest("overrides must be a JSON object or null")
+	if body.Overrides != nil {
+		if err := checkOverride(*body.Overrides); err != nil {
+			return zip.ErrBadRequest(err.Error())
+		}
 	}
 
 	ctx := c.Context()
@@ -156,15 +167,50 @@ func normalizeOrgs(in []string) []string {
 	return out
 }
 
-// validOverride accepts only a JSON object or null (RFC 7386 patch); an array or
-// scalar is rejected at the boundary so a malformed patch never reaches the gate.
-func validOverride(raw json.RawMessage) bool {
+// checkOverride validates an overrides patch at the boundary: a JSON object or
+// null (RFC 7386 — an array or scalar is rejected), within a byte budget, and
+// not pathologically deep (the merge is recursive). Cheap guards that bound a
+// forged-admin's blast radius.
+func checkOverride(raw json.RawMessage) error {
+	if len(raw) > maxOverrideBytes {
+		return fmt.Errorf("overrides too large (max %d bytes)", maxOverrideBytes)
+	}
 	t := strings.TrimSpace(string(raw))
 	if t == "" || t == "null" {
-		return true
+		return nil
 	}
 	var m map[string]any
-	return json.Unmarshal(raw, &m) == nil // only a JSON object unmarshals into a map.
+	if json.Unmarshal(raw, &m) != nil {
+		return fmt.Errorf("overrides must be a JSON object or null")
+	}
+	if jsonDepth(m) > maxOverrideDepth {
+		return fmt.Errorf("overrides nested too deep (max %d)", maxOverrideDepth)
+	}
+	return nil
+}
+
+// jsonDepth returns the maximum object/array nesting depth of a decoded value.
+func jsonDepth(v any) int {
+	switch t := v.(type) {
+	case map[string]any:
+		max := 0
+		for _, e := range t {
+			if d := jsonDepth(e); d > max {
+				max = d
+			}
+		}
+		return max + 1
+	case []any:
+		max := 0
+		for _, e := range t {
+			if d := jsonDepth(e); d > max {
+				max = d
+			}
+		}
+		return max + 1
+	default:
+		return 0
+	}
 }
 
 // normalizeOverride stores the patch verbatim, or clears it (empty/null/{}).

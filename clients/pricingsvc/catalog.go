@@ -140,6 +140,109 @@ func VisibleProviders(providers map[string]any, snap map[string]Overlay, org str
 	return out
 }
 
+// GateRootData gates the kitchen-sink root payload (GET /v1/pricing returns the
+// whole pricing blob) IN PLACE, so the root shows the exact same gated catalog
+// as the leaf routes — never an un-gated second source. It filters every field
+// that carries a model or provider identity:
+//   - hanzoModels + thirdPartyModels via VisibleCatalog,
+//   - providers via VisibleProviders,
+//   - the id-reference lists freeModels and families[].models, kept only if the
+//     referenced model survived the gate (customers); admins keep every ref.
+//
+// Aggregate summary counts and non-catalog sections (tools/infrastructure/cloud)
+// carry no catalog identity and are left untouched.
+func GateRootData(data map[string]any, snap map[string]Overlay, org string, isAdmin bool) {
+	visible := map[string]bool{}
+
+	if arr, ok := modelArray(data["thirdPartyModels"]); ok {
+		g := VisibleCatalog(arr, snap, org, isAdmin)
+		data["thirdPartyModels"] = g
+		for _, m := range g {
+			visible[modelID(m)] = true
+		}
+	}
+	// hanzoModels carry no provider field in raw data; tag "Hanzo" for the gate
+	// exactly as the bundle's models route does, so disabling the "Hanzo"
+	// provider cascades to hide them here too.
+	if arr, ok := modelArray(data["hanzoModels"]); ok {
+		tagged := make([]Model, len(arr))
+		for i, m := range arr {
+			tagged[i] = withProvider(m, "Hanzo")
+		}
+		g := VisibleCatalog(tagged, snap, org, isAdmin)
+		data["hanzoModels"] = g
+		for _, m := range g {
+			visible[modelID(m)] = true
+		}
+	}
+	if pm, ok := data["providers"].(map[string]any); ok {
+		data["providers"] = VisibleProviders(pm, snap, org, isAdmin)
+	}
+
+	// Admins see every id reference; customers see only references to models that
+	// survived the gate above.
+	if isAdmin {
+		return
+	}
+	if fm, ok := data["freeModels"].([]any); ok {
+		data["freeModels"] = filterIDList(fm, visible)
+	}
+	if fams, ok := data["families"].([]any); ok {
+		for _, f := range fams {
+			fmap, ok := f.(map[string]any)
+			if !ok {
+				continue
+			}
+			if ms, ok := fmap["models"].([]any); ok {
+				fmap["models"] = filterIDList(ms, visible)
+			}
+		}
+	}
+}
+
+// modelArray coerces a decoded JSON array of objects into []Model.
+func modelArray(v any) ([]Model, bool) {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]Model, 0, len(arr))
+	for _, e := range arr {
+		if m, ok := e.(map[string]any); ok {
+			out = append(out, Model(m))
+		}
+	}
+	return out, true
+}
+
+// withProvider returns a copy of m with provider set when absent/empty.
+func withProvider(m Model, provider string) Model {
+	t := make(Model, len(m)+1)
+	for k, v := range m {
+		t[k] = v
+	}
+	if p, _ := t["provider"].(string); p == "" {
+		t["provider"] = provider
+	}
+	return t
+}
+
+// filterIDList keeps only the string entries present in visible; non-string
+// entries pass through untouched.
+func filterIDList(list []any, visible map[string]bool) []any {
+	out := make([]any, 0, len(list))
+	for _, e := range list {
+		if s, ok := e.(string); ok {
+			if visible[s] {
+				out = append(out, e)
+			}
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 func modelAdminState(mo Overlay, mok bool, po Overlay, pok bool) map[string]any {
 	st := map[string]any{
 		"modelEnabled":    !mok || mo.Enabled,
