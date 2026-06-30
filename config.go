@@ -23,6 +23,24 @@ type Config struct {
 	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.ai).
 	IAMIssuer string
 
+	// AdminOrg is the IAM org slug whose members are GLOBAL admins (IAM's
+	// IsGlobalAdmin: owner == AdminOrg). The in-binary identity sanitizer grants
+	// admin authority — the c.IsAdmin() that gates /v1/admin/* writes, the
+	// /v1/pricing/sync trigger, and the literal "admin" tenant bucket — ONLY to a
+	// validated principal from this org, never to a raw header. Env IAM_ADMIN_ORG
+	// (default "admin"), matching the gateway's admin-guard.
+	AdminOrg string
+
+	// JWKSURL is the JSON Web Key Set endpoint the identity sanitizer fetches IAM
+	// signing keys from. Defaults to {IAMIssuer}/v1/iam/.well-known/jwks
+	// (HIP-0111); override with CLOUD_JWKS_URL.
+	JWKSURL string
+
+	// JWTAudiences is the audience allowlist the sanitizer accepts (OR semantics).
+	// Defaults to the known Hanzo IAM client_ids; override with CLOUD_JWT_AUDIENCES
+	// (comma-separated) or GATEWAY_ALLOWED_AUDIENCES.
+	JWTAudiences []string
+
 	// KMSMasterKeyRef points at the KMS master key for per-tenant DEK derivation.
 	KMSMasterKeyRef string
 
@@ -97,6 +115,8 @@ func LoadConfig() *Config {
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
+		AdminOrg:        getenv("IAM_ADMIN_ORG", "admin"),
+		JWKSURL:         getenv("CLOUD_JWKS_URL", ""),
 		KMSMasterKeyRef: getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
 		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		PaymentsZAPAddr: getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
@@ -141,6 +161,14 @@ func LoadConfig() *Config {
 		cfg.IAMIssuer = IssuerForBrand(cfg.Brand)
 	}
 
+	// JWKS endpoint for the in-binary identity sanitizer. Default follows the
+	// HIP-0111 convention {IAMIssuer}/v1/iam/.well-known/jwks so a brand
+	// deployment validates against its own IAM; override with CLOUD_JWKS_URL.
+	if cfg.JWKSURL == "" {
+		cfg.JWKSURL = strings.TrimRight(cfg.IAMIssuer, "/") + "/v1/iam/.well-known/jwks"
+	}
+	cfg.JWTAudiences = jwtAudiencesFromEnv()
+
 	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
 	// console2 can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
 	zapOrigins := getenv("CLOUD_ZAP_WEB_ORIGINS",
@@ -172,6 +200,48 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
+}
+
+// defaultJWTAudiences mirrors github.com/hanzoai/gateway/v2/iamauth.DefaultAudiences
+// (the known Hanzo IAM client_ids — each app's `aud` is its client_id) plus
+// hanzo-cloud, cloud's own session client. Forwards-only: append new client_ids,
+// never remove. Non-hanzo brands set CLOUD_JWT_AUDIENCES to their own client_ids.
+var defaultJWTAudiences = []string{
+	"hanzo-app",
+	"hanzo-console",
+	"hanzo-chat",
+	"hanzo-id",
+	"hanzo-cloud",
+	"cowork",
+	"https://api.hanzo.ai",
+}
+
+// jwtAudiencesFromEnv resolves the JWT audience allowlist for the identity
+// sanitizer. CLOUD_JWT_AUDIENCES wins; GATEWAY_ALLOWED_AUDIENCES (the gateway's
+// own override, shared so both agree) is honored next; otherwise the baked
+// default. Never empty, so the audience check is always enforced.
+func jwtAudiencesFromEnv() []string {
+	for _, key := range []string{"CLOUD_JWT_AUDIENCES", "GATEWAY_ALLOWED_AUDIENCES"} {
+		if list := splitTrim(os.Getenv(key)); len(list) > 0 {
+			return list
+		}
+	}
+	return append([]string(nil), defaultJWTAudiences...)
+}
+
+// splitTrim splits a comma-separated list, trimming and dropping empties.
+func splitTrim(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // getenvBool reports whether an env var is set to a truthy value
