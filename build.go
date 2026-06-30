@@ -53,6 +53,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps := Deps{
 		Logger:    logger,
 		Brand:     cfg.Brand,
+		Env:       cfg.Env,
 		Domain:    cfg.Domain,
 		IAMIssuer: cfg.IAMIssuer,
 		DataDir:   cfg.DataDir,
