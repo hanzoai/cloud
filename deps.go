@@ -10,6 +10,7 @@
 package cloud
 
 import (
+	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/types"
@@ -61,6 +62,12 @@ type Deps struct {
 	// never in-process.
 	Payments PaymentsClient
 	Vault    VaultClient
+
+	// Metering is the canonical commerce billing client used by the
+	// request-edge BillingGate. It speaks net/http to commerce's billing API
+	// (separate from the ZAP Commerce client above, which is for typed
+	// inter-subsystem calls). Nil or not-Enabled() makes the gate a no-op.
+	Metering *metering.Client
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
