@@ -31,28 +31,16 @@ func TestNewHandlerProxiesPathVerbatim(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if gotPath != "/api/v3/query_range" {
-		t.Fatalf("upstream path = %q, want /api/v3/query_range (/v1/o11y/* -> /api/*)", gotPath)
+	// Path forwarded VERBATIM — the o11y runtime registers routes at their exact
+	// public path (/v1/o11y/*). No /api/, no rewrite.
+	if gotPath != "/v1/o11y/v3/query_range" {
+		t.Fatalf("upstream path = %q, want /v1/o11y/v3/query_range (verbatim, no rewrite)", gotPath)
 	}
 	if gotHost == "api.hanzo.ai" {
 		t.Fatalf("upstream Host = %q, want the upstream vhost (not the edge host)", gotHost)
 	}
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 		t.Fatalf("content-type = %q, want application/json", ct)
-	}
-}
-
-func TestRewritePath(t *testing.T) {
-	cases := map[string]string{
-		"/v1/o11y/v3/query_range": "/api/v3/query_range",
-		"/v1/o11y/v1/version":     "/api/v1/version",
-		"/v1/o11y/":               "/api/",
-		"/v1/o11y":                "/api",
-	}
-	for in, want := range cases {
-		if got := rewritePath(in); got != want {
-			t.Errorf("rewritePath(%q) = %q, want %q", in, got, want)
-		}
 	}
 }
 
