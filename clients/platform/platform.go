@@ -154,13 +154,29 @@ func init() {
 
 // ── tenancy ──────────────────────────────────────────────────────────────────
 
-// tenant resolves the org for a request from the VALIDATED identity. Empty org
-// is allowed only for a global admin (bucketed under "admin"), matching every
-// other per-org subsystem. The gateway strips client-supplied identity headers
-// and sets X-Org-Id / X-User-IsAdmin only on the JWT-validated path (HIP-0026),
-// so neither is spoofable from the edge. This is the ONLY source of the tenant;
-// no handler reads an org from the body or path.
+// tenant resolves the org for a request from the VALIDATED identity.
+//
+// REQUIRES A VALIDATED PRINCIPAL (RED HIGH), mirroring clients/s3.tenant.
+// SanitizeIdentity sets X-User-Id ONLY when it validated a bearer/cookie; on the
+// no-principal "Phase-1 data" residual path it RESTORES the client's raw
+// X-Org-Id but leaves X-User-Id empty (middleware_identity.go). /v1/platform is
+// a control plane that MUTATES cluster state (creates operator Service CRs +
+// BuildKit Jobs in tenant-<org>) — strictly more consequential than a data read
+// — so trusting X-Org-Id alone would let a direct-to-pod caller forge
+// `X-Org-Id: victim` with NO bearer and deploy/read into another tenant. We gate
+// on c.User() being present: every legitimate caller reaches this through the
+// gateway or the console BFF, which mint a user-bound bearer (→ X-User-Id set),
+// so this refuses ONLY the anonymous-forge path and breaks no real client.
+//
+// Empty org is allowed only for a validated global admin (bucketed under
+// "admin"): a forged X-User-IsAdmin cannot exist without a validated principal
+// (SanitizeIdentity sets it only for a JWT-verified global admin, HIP-0026), and
+// even then reaches only the admin bucket, never a real tenant's namespace. This
+// is the ONLY source of the tenant; no handler reads an org from body or path.
 func (s *svc) tenant(c *zip.Ctx) (string, bool) {
+	if c.User() == "" {
+		return "", false // no validated principal — refuse the forgeable Phase-1 data path
+	}
 	if org := sanitizeOrg(c.Org()); org != "" {
 		return org, true
 	}
