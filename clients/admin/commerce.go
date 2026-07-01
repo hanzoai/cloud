@@ -1,4 +1,4 @@
-package adminsvc
+package admin
 
 import (
 	"context"
