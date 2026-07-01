@@ -41,6 +41,15 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 // reserved names would collide with static sub-routes under /v1/prompts.
 var reserved = map[string]bool{"metrics": true, "new": true}
 
+const (
+	// maxContent caps a single prompt version's body (Red MED-1). Templates are
+	// small; this bounds both storage and the detail-response size.
+	maxContent = 64 * 1024
+	// versionHistoryLimit bounds how many historical versions a detail response
+	// returns (metadata only) so an unbounded append can't amplify one response.
+	versionHistoryLimit = 100
+)
+
 type svc struct {
 	store *Store
 	log   luxlog.Logger
@@ -75,10 +84,11 @@ type promptDetail struct {
 	UpdatedAt string        `json:"lastUpdatedAt"`
 }
 
+// versionView is history METADATA only — no per-version content (Red MED-1), so
+// the detail response stays small regardless of the append history.
 type versionView struct {
 	Version   int    `json:"version"`
 	Type      string `json:"type"`
-	Prompt    string `json:"prompt"`
 	CreatedAt string `json:"createdAt"`
 }
 
@@ -107,7 +117,7 @@ func toMeta(p Prompt, versions []int) promptMeta {
 func toDetail(p Prompt, vs []Version) promptDetail {
 	hist := make([]versionView, 0, len(vs))
 	for _, v := range vs {
-		hist = append(hist, versionView{Version: v.Version, Type: v.Type, Prompt: v.Content, CreatedAt: rfc3339(v.CreatedAt)})
+		hist = append(hist, versionView{Version: v.Version, Type: v.Type, CreatedAt: rfc3339(v.CreatedAt)})
 	}
 	return promptDetail{
 		Name: p.Name, Type: p.Type, Prompt: p.Content, Version: p.Version,
@@ -200,6 +210,11 @@ func (s *svc) create(c *zip.Ctx) error {
 	typ := strings.TrimSpace(body.Type)
 	if typ == "" {
 		typ = "text"
+	}
+	// Cap content (Red MED-1): unbounded prompt bodies amplify the shared DB and
+	// blow up the detail response. A prompt is a template, not a blob.
+	if len(body.Prompt) > maxContent {
+		return zip.ErrBadRequest("prompt content too large (max 64KiB)")
 	}
 	id, err := genID("prompt")
 	if err != nil {
@@ -298,12 +313,12 @@ func (s *svc) metrics(c *zip.Ctx) error {
 	}
 	out := make([]metricRow, 0, len(rows))
 	for _, p := range rows {
-		vs, err := s.store.Versions(c.Context(), org, p.Name)
+		n, err := s.store.CountVersions(c.Context(), org, p.Name)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 		}
 		out = append(out, metricRow{
-			Name: p.Name, Type: p.Type, Versions: len(vs), CurrentVer: p.Version,
+			Name: p.Name, Type: p.Type, Versions: n, CurrentVer: p.Version,
 			CreatedAt: rfc3339(p.CreatedAt), LastUpdatedAt: rfc3339(p.UpdatedAt),
 		})
 	}
@@ -314,37 +329,21 @@ func (s *svc) metrics(c *zip.Ctx) error {
 
 func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 
-// tenant resolves the org for a request. Empty org is allowed only for admins
-// (bucketed under "admin"), matching every other native subsystem. The gateway
-// strips client-supplied identity headers and sets X-Org-Id only on the
-// JWT-validated path (HIP-0026), so it is not spoofable from the edge.
+// tenant resolves the org — the tenant isolation KEY — for a request. It uses
+// c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
+// claim (HIP-0026): never lowercased, stripped, or truncated. Normalizing the
+// key would collapse DISTINCT owners into one storage bucket — a cross-tenant
+// break (Red HIGH-1: "acme"/"ACME"/"acme!"/32-char-prefix all shared data).
+// Reject only empty or pathologically long; never transform. There is NO magic
+// "admin" bucket: a global admin operating on per-org data carries an explicit
+// org (SanitizeIdentity sets X-Org-Id on the admin path), so an empty org is a
+// true 403, never a bucket a real org named "admin"/"Admin" could land in.
 func tenant(c *zip.Ctx) (string, bool) {
-	org := sanitizeOrg(c.Org())
-	if org != "" {
-		return org, true
+	org := strings.TrimSpace(c.Org())
+	if org == "" || len(org) > 128 {
+		return "", false
 	}
-	if c.IsAdmin() {
-		return "admin", true
-	}
-	return "", false
-}
-
-func sanitizeOrg(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 32 {
-		out = strings.Trim(out[:32], "-")
-	}
-	return out
+	return org, true
 }
 
 // cleanList trims, drops empties, caps each element, and de-dups a taxonomy
