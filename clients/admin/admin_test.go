@@ -33,6 +33,7 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 	app.Get("/v1/admin/roles", s.guard(s.roles))
 	app.Get("/v1/admin/applications", s.guard(s.applications))
 	app.Get("/v1/admin/audit", s.guard(s.audit))
+	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
 	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
@@ -63,6 +64,7 @@ var adminRoutes = []struct{ method, path string }{
 	{"GET", "/v1/admin/roles"},
 	{"GET", "/v1/admin/applications"},
 	{"GET", "/v1/admin/audit"},
+	{"GET", "/v1/admin/audit/verify"},
 	{"GET", "/v1/admin/usage"},
 	{"GET", "/v1/admin/products"},
 	{"POST", "/v1/admin/sync"},
