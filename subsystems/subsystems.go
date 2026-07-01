@@ -56,7 +56,6 @@ import (
 	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
-	_ "github.com/hanzoai/cloud/clients/prompt"    // order 144 — /v1/prompts/* (console Langfuse prompts API)
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 
 	// Provisioning control plane: creates logical resources (sql, vector,
@@ -74,6 +73,15 @@ import (
 	// `.spec.image` (the operator reconciles the rollout) — the ONE deploy path.
 	// Global-admin only; the user-facing view lives in console2.
 	_ "github.com/hanzoai/cloud/clients/paassvc" // order 128 — /v1/paas/*
+
+	// Product control planes: per-org, Base/SQLite-backed application surfaces
+	// mounted natively in the cloud binary (the "all products in the cloud
+	// binary" thesis). Each is org-scoped by the gateway-minted X-Org-Id.
+	// clients/prompts is the red-approved, versioned prompt library and the ONE
+	// owner of /v1/prompts/* (it supersedes the earlier clients/prompt facade).
+	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
+	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
+	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
