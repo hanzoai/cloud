@@ -53,6 +53,11 @@ import (
 	// Console Search/Vector product panels (browser-facing read surface).
 	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /v1/search-docs/*, /v1/vector/*
 
+	// God-mode admin surface for the Hanzo Admin Console (admin.hanzo.ai). Fans
+	// out to IAM (identity), commerce (billing) and o11y (health); global-admin
+	// only, fail-closed.
+	_ "github.com/hanzoai/cloud/clients/adminsvc" // order 146 — /v1/admin/*
+
 	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
 	// instead of the "runtime not initialized" 503.
