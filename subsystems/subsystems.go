@@ -37,21 +37,21 @@ import (
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
-	_ "github.com/hanzoai/cloud/clients/evalsvc"    // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/plansvc"    // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/pricingsvc" // order 112 — /v1/pricing/*
-	_ "github.com/hanzoai/cloud/clients/pluginsvc"  // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
+	_ "github.com/hanzoai/cloud/clients/eval"    // order 145 — /v1/evals/*
+	_ "github.com/hanzoai/cloud/clients/plan"    // order 111 — /v1/plans/*
+	_ "github.com/hanzoai/cloud/clients/pricing" // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/plugin"  // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
-	_ "github.com/hanzoai/cloud/clients/provisioningsvc" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
+	_ "github.com/hanzoai/cloud/clients/provisioning" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
 
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
-	_ "github.com/hanzoai/cloud/clients/mlsvc" // order 130 — /v1/ml/*,/v1/train/*
+	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
 
 	// Console Search/Vector product panels (browser-facing read surface).
-	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /v1/search-docs/*, /v1/vector/*
+	_ "github.com/hanzoai/cloud/clients/product" // order 145 — /v1/search-docs/*, /v1/vector/*
 
 	// God-mode admin surface for the Hanzo Admin Console (admin.hanzo.ai). Fans
 	// out to IAM (identity), commerce (billing) and o11y (health); global-admin
@@ -61,5 +61,5 @@ import (
 	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
 	// instead of the "runtime not initialized" 503.
-	_ "github.com/hanzoai/cloud/clients/o11ysvc" // order 71 — installs o11y.SetHandler
+	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
 )
