@@ -50,11 +50,11 @@ func newRegistry() map[string]Provisioner {
 	return map[string]Provisioner{
 		"sql":       newPostgres(),
 		"vector":    newQdrant(),
-		"datastore": newClickhouse(),
+		"datastore": newDatastore(),
 		"kv":        newRedis(),
 		"search":    newMeili(),
 		"s3":        newS3(),
-		"docdb":     newMongo(),
+		"docdb":     newDocdb(),
 	}
 }
 
@@ -120,11 +120,11 @@ func isPGDuplicate(err error) bool {
 	return strings.Contains(s, "already exists") || strings.Contains(s, "duplicate")
 }
 
-// ----- ClickHouse (datastore) ----------------------------------------------
+// ----- datastore (ClickHouse HTTP wire protocol) -----------------------------
 // env: CLOUD_DATASTORE_ADMIN_ADDR (default datastore.hanzo.svc:8123),
 //      CLOUD_DATASTORE_ADMIN_USER (default), CLOUD_DATASTORE_ADMIN_PASSWORD
 
-type clickhouseProvisioner struct {
+type datastoreProvisioner struct {
 	addr string
 	user string
 	pass string
@@ -132,10 +132,10 @@ type clickhouseProvisioner struct {
 	port int
 }
 
-func newClickhouse() *clickhouseProvisioner {
+func newDatastore() *datastoreProvisioner {
 	addr := env("CLOUD_DATASTORE_ADMIN_ADDR", "datastore.hanzo.svc:8123")
 	host, port := splitAddr(addr, 8123)
-	return &clickhouseProvisioner{
+	return &datastoreProvisioner{
 		addr: addr,
 		user: env("CLOUD_DATASTORE_ADMIN_USER", "default"),
 		pass: os.Getenv("CLOUD_DATASTORE_ADMIN_PASSWORD"),
@@ -144,7 +144,7 @@ func newClickhouse() *clickhouseProvisioner {
 	}
 }
 
-func (p *clickhouseProvisioner) open() (interface {
+func (p *datastoreProvisioner) open() (interface {
 	Exec(ctx context.Context, query string, args ...any) error
 	Close() error
 }, error) {
@@ -155,7 +155,7 @@ func (p *clickhouseProvisioner) open() (interface {
 	})
 }
 
-func (p *clickhouseProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
+func (p *datastoreProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
 	conn, err := p.open()
 	if err != nil {
 		return "", "", 0, "", fmt.Errorf("connect: %w", err)
@@ -181,7 +181,7 @@ func (p *clickhouseProvisioner) Create(ctx context.Context, physical, user, pw s
 	return cs, p.host, p.port, physical, nil
 }
 
-func (p *clickhouseProvisioner) Drop(ctx context.Context, physical, user string) error {
+func (p *datastoreProvisioner) Drop(ctx context.Context, physical, user string) error {
 	conn, err := p.open()
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -255,22 +255,22 @@ func (p *redisProvisioner) Drop(ctx context.Context, physical, user string) erro
 	return nil
 }
 
-// ----- MongoDB (docdb) ------------------------------------------------------
+// ----- docdb (MongoDB wire protocol) ---------------------------------------
 // env: CLOUD_DOCDB_ADMIN_URI (default mongodb://docdb.hanzo.svc:27017/admin)
 
-type mongoProvisioner struct {
+type docdbProvisioner struct {
 	uri  string
 	host string
 	port int
 }
 
-func newMongo() *mongoProvisioner {
+func newDocdb() *docdbProvisioner {
 	uri := env("CLOUD_DOCDB_ADMIN_URI", "mongodb://docdb.hanzo.svc:27017/admin")
 	host, port := hostPortFromURL(uri, 27017)
-	return &mongoProvisioner{uri: uri, host: host, port: port}
+	return &docdbProvisioner{uri: uri, host: host, port: port}
 }
 
-func (p *mongoProvisioner) connect(ctx context.Context) (*mongo.Client, error) {
+func (p *docdbProvisioner) connect(ctx context.Context) (*mongo.Client, error) {
 	cli, err := mongo.Connect(options.Client().ApplyURI(p.uri))
 	if err != nil {
 		return nil, err
@@ -282,7 +282,7 @@ func (p *mongoProvisioner) connect(ctx context.Context) (*mongo.Client, error) {
 	return cli, nil
 }
 
-func (p *mongoProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
+func (p *docdbProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
 	cli, err := p.connect(ctx)
 	if err != nil {
 		return "", "", 0, "", fmt.Errorf("connect: %w", err)
@@ -310,7 +310,7 @@ func (p *mongoProvisioner) Create(ctx context.Context, physical, user, pw string
 	return cs, p.host, p.port, physical, nil
 }
 
-func (p *mongoProvisioner) Drop(ctx context.Context, physical, user string) error {
+func (p *docdbProvisioner) Drop(ctx context.Context, physical, user string) error {
 	cli, err := p.connect(ctx)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
