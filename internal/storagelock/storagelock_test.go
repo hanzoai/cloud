@@ -53,8 +53,8 @@ func TestCheckEnvLegacyDriverNamePostgresRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "driverName") {
 		t.Errorf("expected driverName in error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "legacy Python driver pin") {
-		t.Errorf("expected legacy Python driver classification, got %v", err)
+	if !strings.Contains(err.Error(), "casibase driverName=postgres") {
+		t.Errorf("expected casibase driverName classification, got %v", err)
 	}
 }
 
@@ -67,21 +67,14 @@ func TestCheckEnvDriverNameSqliteIgnored(t *testing.T) {
 	}
 }
 
-func TestCheckEnvLegacyDBNameHanzoCloudRejected(t *testing.T) {
-	env := map[string]string{"dbName": "hanzo_cloud"}
-	err := CheckEnv(mapLookup(env))
-	if err == nil {
-		t.Fatal("expected error for dbName=hanzo_cloud")
-	}
-	if !strings.Contains(err.Error(), "legacy Python db pin") {
-		t.Errorf("expected legacy Python db pin classification, got %v", err)
-	}
-}
-
-func TestCheckEnvDBNameOtherIgnored(t *testing.T) {
-	env := map[string]string{"dbName": "something_else"}
-	if err := CheckEnv(mapLookup(env)); err != nil {
-		t.Errorf("expected nil for dbName=something_else, got %v", err)
+func TestCheckEnvDBNameNeverAViolation(t *testing.T) {
+	// A database NAME does not select a backend. `dbName=hanzo_cloud`
+	// alongside sqlite is benign (this was the crash cause) and must be
+	// ignored; only driverName=postgres / a Postgres DSN is a violation.
+	for _, v := range []string{"hanzo_cloud", "something_else"} {
+		if err := CheckEnv(mapLookup(map[string]string{"dbName": v})); err != nil {
+			t.Errorf("dbName=%s must be ignored, got %v", v, err)
+		}
 	}
 }
 
@@ -99,16 +92,19 @@ func TestCheckEnvMultipleViolationsAllReported(t *testing.T) {
 	env := map[string]string{
 		"DATABASE_URL": "postgresql://u:p@h:5432/d",
 		"driverName":   "postgres",
-		"dbName":       "hanzo_cloud",
+		"dbName":       "hanzo_cloud", // benign: NOT a violation, must not appear
 	}
 	err := CheckEnv(mapLookup(env))
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, k := range []string{"DATABASE_URL", "driverName", "dbName"} {
+	for _, k := range []string{"DATABASE_URL", "driverName"} {
 		if !strings.Contains(err.Error(), k) {
 			t.Errorf("expected %s in error, got %v", k, err)
 		}
+	}
+	if strings.Contains(err.Error(), "dbName") {
+		t.Errorf("dbName is a name, not a backend — must not be reported, got %v", err)
 	}
 }
 
