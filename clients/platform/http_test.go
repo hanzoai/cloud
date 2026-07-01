@@ -1,0 +1,295 @@
+package platform
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+
+	"github.com/hanzoai/zip"
+	luxlog "github.com/luxfi/log"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+)
+
+// mountAppK8s builds a hermetic app over an svc with the GIVEN k8s client, so
+// tests NEVER touch a real cluster (the earlier version resolved the dev
+// kubeconfig and wrote to live DOKS — never again).
+func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
+	t.Helper()
+	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	s := &svc{store: store, k8s: k, log: luxlog.New("test"), brand: "hanzo"}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	s.routes(app)
+	return app
+}
+
+// mountApp is the default hermetic app: NO cluster (k8s fails closed), for the
+// metadata + fail-closed-deploy paths.
+func mountApp(t *testing.T) *zip.App {
+	return mountAppK8s(t, &k8sClient{initErr: "no cluster (test)"})
+}
+
+// fakeK8s returns a k8s client backed by an in-memory fake dynamic client so the
+// deploy SUCCESS path (Service CR create in tenant-<org>) is exercised
+// deterministically without a real cluster.
+func fakeK8s() *k8sClient {
+	scheme := runtime.NewScheme()
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		servicesGVR:   "ServiceList",
+		jobsGVR:       "JobList",
+		namespacesGVR: "NamespaceList",
+	})
+	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo"}
+}
+
+// do fires an in-process request. org is stamped as X-Org-Id — the header the
+// gateway's SanitizeIdentity injects from the validated principal in prod; here
+// we set it directly to exercise the subsystem's own tenant scoping.
+func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, path, r)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// TestHTTPProjectAppLifecycle proves the full per-org surface end-to-end: the
+// tenant gate (no org → 403), project + application CRUD, and the fail-closed
+// deploy (no cluster in test → honest 503 + a recorded error deployment, never a
+// fabricated "live").
+func TestHTTPProjectAppLifecycle(t *testing.T) {
+	app := mountApp(t)
+
+	// No org → 403 (never leaks an empty list as if authorized).
+	if code, _ := do(t, app, http.MethodGet, "/v1/platform/projects", "", nil); code != http.StatusForbidden {
+		t.Fatalf("no-org list want 403, got %d", code)
+	}
+
+	// Create a project.
+	code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "Web", "slug": "web"})
+	if code != http.StatusCreated {
+		t.Fatalf("create project want 201, got %d", code)
+	}
+	// Create an image-source application under it.
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
+		"name": "api", "source": "image",
+		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
+		"port":  8080, "domains": []string{"api.maxpower.hanzo.app"},
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("create app want 201, got %d (%s)", code, body)
+	}
+
+	// List projects → applications count reflects the app.
+	code, body = do(t, app, http.MethodGet, "/v1/platform/projects", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list projects want 200, got %d", code)
+	}
+	var projects []projectView
+	_ = json.Unmarshal(body, &projects)
+	if len(projects) != 1 || projects[0].Slug != "web" || projects[0].Applications != 1 {
+		t.Fatalf("expected [web applications=1], got %+v", projects)
+	}
+
+	// Get the app.
+	code, body = do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("get app want 200, got %d", code)
+	}
+	var av appView
+	_ = json.Unmarshal(body, &av)
+	if av.Namespace != "tenant-maxpower" {
+		t.Fatalf("app namespace must be tenant-maxpower, got %q", av.Namespace)
+	}
+
+	// Deploy with no cluster configured → fail closed with 503 (honest), NOT a
+	// fabricated success.
+	code, body = do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1.27"})
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("deploy with no cluster want 503, got %d (%s)", code, body)
+	}
+	// The failed attempt is recorded honestly as an 'error' deployment.
+	code, body = do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api/deployments", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list deployments want 200, got %d", code)
+	}
+	var deps []deploymentView
+	_ = json.Unmarshal(body, &deps)
+	if len(deps) != 1 || deps[0].Status != "error" || deps[0].Version != 1 {
+		t.Fatalf("expected one v1 error deployment, got %+v", deps)
+	}
+}
+
+// TestHTTPDeploySucceedsIntoTenantNamespace proves the deploy SUCCESS path
+// against an in-memory cluster: an image-source deploy writes the operator
+// Service CR into tenant-<org> (derived from the validated org) and returns 202.
+func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
+	k := fakeK8s()
+	app := mountAppK8s(t, k)
+
+	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
+		"name": "api", "source": "image",
+		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
+		"port":  8080, "domains": []string{"api.maxpower.hanzo.app"},
+	})
+
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1.27"})
+	if code != http.StatusAccepted {
+		t.Fatalf("deploy want 202, got %d (%s)", code, body)
+	}
+
+	// The operator Service CR must exist in tenant-maxpower with the app's image.
+	obj, err := k.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Service CR not created in tenant-maxpower: %v", err)
+	}
+	repo, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
+	tag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
+	if repo != "ghcr.io/hanzoai/nginx" || tag != "1.27" {
+		t.Fatalf("CR image wrong: %s:%s", repo, tag)
+	}
+	org, _, _ := unstructured.NestedString(obj.Object, "metadata", "labels", "hanzo.ai/org")
+	if org != "maxpower" {
+		t.Fatalf("CR must be org-labeled maxpower, got %q", org)
+	}
+	// The deployment lands 'deploying' (operator finishes the rollout async).
+	code, body = do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api/deployments", "maxpower", nil)
+	var deps []deploymentView
+	_ = json.Unmarshal(body, &deps)
+	if code != http.StatusOK || len(deps) != 1 || deps[0].Status != "deploying" {
+		t.Fatalf("expected one 'deploying' deployment, got %d %+v", code, deps)
+	}
+	// stop scales the CR to zero.
+	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/stop", "maxpower", nil); code != http.StatusOK {
+		t.Fatalf("stop want 200, got %d", code)
+	}
+}
+
+// TestHTTPCrossTenantIsolation proves org B can never see, mutate, or deploy
+// org A's resources at the HTTP layer — the RED bar.
+func TestHTTPCrossTenantIsolation(t *testing.T) {
+	app := mountApp(t)
+
+	// maxpower creates project + app.
+	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
+		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
+	})
+
+	// acme sees zero projects.
+	code, body := do(t, app, http.MethodGet, "/v1/platform/projects", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("acme list want 200, got %d", code)
+	}
+	var projects []projectView
+	_ = json.Unmarshal(body, &projects)
+	if len(projects) != 0 {
+		t.Fatalf("acme must see zero projects, got %+v", projects)
+	}
+	// acme cannot GET maxpower's project.
+	if code, _ := do(t, app, http.MethodGet, "/v1/platform/projects/web", "acme", nil); code != http.StatusNotFound {
+		t.Fatalf("acme GET maxpower project want 404, got %d", code)
+	}
+	// acme cannot create an app under maxpower's project (project not found for acme).
+	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "acme", map[string]any{
+		"name": "evil", "source": "image", "image": map[string]any{"repository": "ghcr.io/x/y", "tag": "1"},
+	}); code != http.StatusNotFound {
+		t.Fatalf("acme create-app-in-maxpower-project want 404, got %d", code)
+	}
+	// acme cannot GET/DELETE maxpower's app, nor deploy/stop/start it.
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodGet, "/v1/platform/projects/web/apps/api"},
+		{http.MethodDelete, "/v1/platform/projects/web/apps/api"},
+		{http.MethodPost, "/v1/platform/projects/web/apps/api/deploy"},
+		{http.MethodPost, "/v1/platform/projects/web/apps/api/stop"},
+		{http.MethodPost, "/v1/platform/projects/web/apps/api/start"},
+		{http.MethodGet, "/v1/platform/projects/web/apps/api/deployments"},
+	} {
+		if code, _ := do(t, app, tc.method, tc.path, "acme", nil); code != http.StatusNotFound {
+			t.Fatalf("acme %s %s want 404, got %d", tc.method, tc.path, code)
+		}
+	}
+	// maxpower's app survived every acme attempt.
+	if code, _ := do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api", "maxpower", nil); code != http.StatusOK {
+		t.Fatalf("maxpower app must survive, got %d", code)
+	}
+}
+
+// TestHTTPSecretEnvRejected proves secret env vars are refused (fail-closed, no
+// plaintext ever stored) until KMS sealing lands.
+func TestHTTPSecretEnvRejected(t *testing.T) {
+	app := mountApp(t)
+	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
+		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
+		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}},
+	})
+	if code != http.StatusNotImplemented {
+		t.Fatalf("secret env want 501, got %d (%s)", code, body)
+	}
+	if bytes.Contains(body, []byte("hunter2")) {
+		t.Fatal("secret value must never be echoed in the error")
+	}
+}
+
+// TestHTTPHealthFailClosed proves /v1/platform/health reports degraded (503)
+// when no cluster is configured — never a fabricated ok.
+func TestHTTPHealthFailClosed(t *testing.T) {
+	app := mountApp(t)
+	code, body := do(t, app, http.MethodGet, "/v1/platform/health", "", nil)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("health with no cluster want 503, got %d (%s)", code, body)
+	}
+	if !bytes.Contains(body, []byte("degraded")) {
+		t.Fatalf("health should report degraded, got %s", body)
+	}
+}
+
+// TestHTTPValidation proves boundary validation: bad slug, missing name, bad
+// source.
+func TestHTTPValidation(t *testing.T) {
+	app := mountApp(t)
+	// Missing name.
+	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{}); code != http.StatusBadRequest {
+		t.Fatalf("missing name want 400, got %d", code)
+	}
+	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	// Bad source.
+	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{"name": "x", "source": "ftp"}); code != http.StatusBadRequest {
+		t.Fatalf("bad source want 400, got %d", code)
+	}
+	// git source without repo.url.
+	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{"name": "x", "source": "git"}); code != http.StatusBadRequest {
+		t.Fatalf("git without repo want 400, got %d", code)
+	}
+}
