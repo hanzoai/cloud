@@ -54,10 +54,18 @@ func fakeK8s() *k8sClient {
 	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo"}
 }
 
-// do fires an in-process request. org is stamped as X-Org-Id — the header the
-// gateway's SanitizeIdentity injects from the validated principal in prod; here
-// we set it directly to exercise the subsystem's own tenant scoping.
+// do fires an in-process request simulating a VALIDATED principal: the gateway's
+// SanitizeIdentity mints BOTH X-Org-Id AND X-User-Id from the validated JWT, so a
+// legitimate caller always carries both. tenant() requires X-User-Id (the
+// validated-principal gate), so the harness sets a stable per-org test user
+// alongside the org. doForge (below) omits X-User-Id to exercise the refusal.
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
+	return doAs(t, app, method, path, org, "u-"+org, body)
+}
+
+// doAs sets X-Org-Id + X-User-Id explicitly so tests can exercise both the
+// validated path (user set) and the forgeable path (user empty).
+func doAs(t *testing.T, app *zip.App, method, path, org, user string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader
 	if body != nil {
@@ -70,6 +78,9 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+	}
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
@@ -190,6 +201,30 @@ func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
 	// stop scales the CR to zero.
 	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/stop", "maxpower", nil); code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d", code)
+	}
+}
+
+// TestHTTPForgeableOrgRefused proves the validated-principal gate (RED HIGH): a
+// request carrying a client X-Org-Id but NO validated principal (X-User-Id empty
+// — the Phase-1 residual a direct-to-pod caller could forge) is refused 403 on
+// every route, including the cluster-mutating deploy. This closes the
+// cross-tenant deploy/read path that trusting X-Org-Id alone would open.
+func TestHTTPForgeableOrgRefused(t *testing.T) {
+	app := mountApp(t)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/platform/projects"},
+		{http.MethodPost, "/v1/platform/projects"},
+		{http.MethodGet, "/v1/platform/projects/x/apps"},
+		{http.MethodPost, "/v1/platform/projects/x/apps/y/deploy"},
+		{http.MethodPost, "/v1/platform/projects/x/apps/y/stop"},
+	} {
+		if code, _ := doAs(t, app, tc.method, tc.path, "victim", "", nil); code != http.StatusForbidden {
+			t.Fatalf("forged org (no principal) %s %s want 403, got %d", tc.method, tc.path, code)
+		}
+	}
+	// With a validated principal (X-User-Id set), the same org is accepted.
+	if code, _ := doAs(t, app, http.MethodGet, "/v1/platform/projects", "victim", "u-victim", nil); code != http.StatusOK {
+		t.Fatalf("validated principal want 200, got %d", code)
 	}
 }
 
