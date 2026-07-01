@@ -239,6 +239,46 @@ func TestGateRequiresOrg(t *testing.T) {
 	}
 }
 
+// TestForgedOrgWithoutPrincipalRefused (RED HIGH): a request that carries a
+// forged X-Org-Id but NO validated principal (no X-User-Id) — exactly the
+// SanitizeIdentity "Phase-1 data path" residual an in-cluster caller could send
+// with no bearer — must be refused 403, NOT granted cross-tenant access. The
+// guard requires ctx.User() (X-User-Id), which SanitizeIdentity sets only for a
+// validated bearer/cookie; the anonymous forge path leaves it empty. Every
+// legitimate caller reaches s3 through the console BFF (which mints a user
+// bearer), so this breaks no real client while closing the forge path.
+func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
+	app := newApp(t, true)
+	cases := []struct{ method, path, body string }{
+		{"GET", "/v1/s3/buckets", ""},
+		{"POST", "/v1/s3/buckets", `{"name":"photos"}`},
+		{"DELETE", "/v1/s3/buckets/victim-bucket", ""},
+		{"GET", "/v1/s3/buckets/victim-bucket/objects", ""},
+		{"POST", "/v1/s3/buckets/victim-bucket/objects", `{"key":"a.txt"}`},
+		{"DELETE", "/v1/s3/buckets/victim-bucket/objects/secret.pdf", ""},
+	}
+	for _, c := range cases {
+		var rdr io.Reader
+		if c.body != "" {
+			rdr = strings.NewReader(c.body)
+		}
+		req := httptest.NewRequest(c.method, c.path, rdr)
+		if c.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		// Forge the victim's org WITHOUT any validated principal (no X-User-Id) —
+		// the exact anonymous in-cluster attack.
+		req.Header.Set("X-Org-Id", "victim-org")
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", c.method, c.path, err)
+		}
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s (forged org, no principal) = %d, want 403 — cross-tenant forge NOT closed!", c.method, c.path, resp.StatusCode)
+		}
+	}
+}
+
 // TestFailClosedWhenUnconfigured: with no creds, every op (not just health) is a
 // fail-closed 503 — the subsystem never fabricates a result.
 func TestFailClosedWhenUnconfigured(t *testing.T) {
