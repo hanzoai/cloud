@@ -96,6 +96,7 @@ func postCreate(t *testing.T, s *svc, kind, org, name string) *http.Response {
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u-"+org) // validated principal (tenant() gates on X-User-Id)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
