@@ -36,6 +36,21 @@
 // GET /v1/s3/health must register BEFORE provisioning's GET /v1/s3/:name (order
 // 120) to win — hence order 118. The internal name "s3svc" is independent of the
 // /v1/s3 API prefix (like provisioning "provisioning" → /v1/<kind>).
+//
+// RESIDUAL RISKS THIS SUBSYSTEM RIDES (documented after adversarial review; not
+// fixable inside the subsystem, escalated to the platform):
+//   - Single S3 identity: the SeaweedFS gateway uses ONE admin identity
+//     (universe infra/k8s/storage/s3.yaml) for the whole binary. So the S3 LAYER
+//     enforces no tenant boundary — isolation is 100% this subsystem's
+//     org-prefixed naming + the guard. The correct hardening is per-request
+//     STS/session-policy or per-identity bucket-prefix restriction so the store
+//     independently enforces the org boundary (defense in depth). Until then,
+//     tenant() requiring a validated principal + the by-construction naming is
+//     the sole boundary — kept minimal and auditable for that reason.
+//   - Presign has no rate limit: minting is unthrottled (zip/middleware/ratelimit
+//     is unwired in serve.go, platform-wide). The 5-minute TTL bounds a minted
+//     capability's post-revocation lifetime; a per-route limiter is the platform
+//     follow-up.
 package s3
 
 import (
@@ -57,9 +72,15 @@ import (
 	"github.com/hanzoai/zip"
 )
 
-// presignTTL bounds every presigned upload/download URL. Short enough that a
-// leaked URL is stale fast; long enough for a browser to complete a large PUT/GET.
-const presignTTL = 15 * time.Minute
+// presignTTL bounds every presigned upload/download URL. 5 minutes: short enough
+// that a minted capability barely outlives a revoked session/role (RED MED —
+// presigned URLs have no server-side revocation, so the TTL IS the revocation
+// window), long enough for a browser to complete a normal PUT/GET. A caller who
+// needs a fresh window simply re-mints (the console does so per action). NOTE:
+// presign minting is not yet rate-limited — that is a platform-wide gap
+// (zip/middleware/ratelimit exists but is unwired in serve.go); flagged to the
+// platform, not fixable inside this subsystem.
+const presignTTL = 5 * time.Minute
 
 // maxListKeys caps one object-listing page so a bucket with millions of keys
 // cannot exhaust memory or the response. Folder-style navigation only needs one
@@ -164,11 +185,35 @@ func reqOrg(ctx *zip.Ctx) string {
 
 // tenant resolves the caller's org exactly as clients/provisioning does — the
 // SAME sanitized slug the control plane keys on, so buckets allocated there and
-// operated on here share one org tag. Empty org is allowed only for admins,
-// bucketed under the literal "admin" org (a forged X-User-IsAdmin can only reach
-// the admin bucket, never a real tenant's — the gateway strips client identity
-// headers and sets this claim only on the JWT-validated path, HIP-0026).
+// operated on here share one org tag.
+//
+// REQUIRES A VALIDATED PRINCIPAL (RED HIGH). SanitizeIdentity sets X-User-Id ONLY
+// when it validated a bearer/cookie; on the no-principal "Phase-1 data" path it
+// RESTORES the client's raw X-Org-Id but leaves X-User-Id empty. A pure data
+// plane that trusted X-Org-Id alone would let an in-cluster caller (a co-namespace
+// pod within the cloud-api NetworkPolicy) forge `X-Org-Id: victim` with NO bearer
+// and get cross-tenant object CRUD. So we gate on ctx.User() (X-User-Id) being
+// present: every legitimate caller reaches this through the console BFF /cloud
+// proxy, which mints a user-bound bearer (→ X-User-Id is set), so this refuses
+// ONLY the anonymous-forge path and breaks no real client. Object storage is a
+// data plane; it never serves an unauthenticated principal.
+//
+// Empty org is allowed only for a validated admin, bucketed under the literal
+// "admin" org (a forged X-User-IsAdmin cannot exist without a validated principal
+// either — SanitizeIdentity sets it only for a JWT-verified global admin, HIP-0026
+// — and even then reaches only the admin bucket, never a real tenant's).
+//
+// NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),
+// NOT KMS's exact-match, ON PURPOSE: the S3 bucket name is derived through
+// provisioning's SAME sanitized slug (BucketName), so a bucket provisioned via
+// POST /v1/s3 is findable here — exact-match would break that lockstep. A real
+// IAM owner claim is already a lowercase DNS label, so the fold is a no-op on
+// validated input (and, post the principal gate above, only a validated principal
+// reaches it). The divergence from KMS is intentional per-subsystem, not drift.
 func tenant(ctx *zip.Ctx) (string, bool) {
+	if ctx.User() == "" {
+		return "", false // no validated principal — refuse the forgeable data path
+	}
 	if org := provisioning.SanitizeOrg(ctx.Org()); org != "" {
 		return org, true
 	}
@@ -194,14 +239,23 @@ func physicalBucket(org, friendly string) string { return provisioning.BucketNam
 func orgPrefix(org string) string { return provisioning.BucketPrefix(org) }
 
 // friendlyBucket recovers the friendly name from a physical bucket owned by org,
-// or ("",false) when the bucket is NOT in the caller's namespace (so listing can
-// skip other tenants' buckets — an existence-oracle guard).
+// or ("",false) when the bucket is NOT in the caller's namespace (so listing
+// skips other tenants' buckets — an existence-oracle guard). The recovered name
+// is RE-VALIDATED against the friendly-name shape (RED LOW defense-in-depth): a
+// bucket that carries the org prefix but a non-conforming name — one that could
+// only exist via an out-of-band route (a manual `mc mb`, a future admin tool),
+// never through createBucket — is treated as not-owned rather than echoed raw to
+// the UI. So listBuckets always returns names a subsequent request can address.
 func friendlyBucket(org, physical string) (string, bool) {
 	pfx := orgPrefix(org)
 	if !strings.HasPrefix(physical, pfx) {
 		return "", false
 	}
-	return strings.TrimPrefix(physical, pfx), true
+	name := strings.TrimPrefix(physical, pfx)
+	if !bucketNameRE.MatchString(name) {
+		return "", false
+	}
+	return name, true
 }
 
 // ── health ──────────────────────────────────────────────────────────────────
@@ -506,14 +560,23 @@ func reqWildcard(ctx *zip.Ctx) string {
 	return strings.TrimPrefix(strings.TrimSpace(ctx.Param("*")), "/")
 }
 
-// cleanKey normalizes an object key and rejects any traversal. An object key may
-// contain "/" (nested paths) but must not be absolute, empty, a directory
-// marker, or escape via "..". path.Clean collapses "a/../b"; we then reject any
-// residual "../" or leading "/".
+// cleanKey normalizes an object key and rejects any traversal or unsafe byte. An
+// object key may contain "/" (nested paths) but must not be absolute, empty, a
+// directory marker, or escape via "..". It must also contain no control byte
+// (\x00–\x1f) or backslash: those never appear in a legitimate key from the
+// console and are a smell (a null byte serializes as %00 in the presigned URL
+// and could C-string-truncate a downstream consumer; '\' is a Windows-style
+// separator a non-Go backend might treat as a path split). RED LOW hardening.
+// path.Clean collapses "a/../b"; we then reject any residual "../" or leading "/".
 func cleanKey(raw string) (string, bool) {
 	k := strings.TrimSpace(raw)
 	if k == "" || strings.HasPrefix(k, "/") || strings.HasSuffix(k, "/") {
 		return "", false
+	}
+	for _, r := range k {
+		if r < 0x20 || r == '\\' {
+			return "", false
+		}
 	}
 	clean := path.Clean(k)
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(clean, "/../") {
