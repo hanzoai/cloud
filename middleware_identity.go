@@ -41,12 +41,13 @@ var cookieTokenNames = []string{"iam_access_token", "access_token", "hanzo_token
 // so nothing a client sent survives as identity, then re-injects from a
 // validated principal.
 //
-// Deliberately NOT in this list: org/project SUB-SCOPES (X-IAM-Project-Id,
-// X-Project-Id, X-Environment). Those are sub-scopes WITHIN an org that legit
-// callers pass through verbatim (evalsvc reads X-IAM-Project-Id; provisioning
-// reads project/env) — they are not identity authority. (Whether evalsvc should
-// trust a client X-IAM-Project-Id for tenant scope is a separate Phase-2
-// question, out of scope for the admin boundary this fix closes.)
+// Deliberately NOT in this list: org/project SUB-SCOPES (X-Project-Id,
+// X-Environment). Those are sub-scopes WITHIN an org that legit callers pass
+// through verbatim (evalsvc reads the canonical X-Project-Id; provisioning
+// reads project/env) — they are not identity authority. (Whether a service
+// should trust a client X-Project-Id for tenant scope, versus minting it from a
+// project-membership check, is a separate Phase-2 question — out of scope for
+// the admin boundary this fix closes.)
 var authorityHeaders = []string{
 	"X-User-Id",
 	"X-Org-Id",
