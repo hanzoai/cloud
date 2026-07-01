@@ -1,4 +1,4 @@
-package adminsvc
+package admin
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// mount builds a zip app with adminsvc mounted against the given upstream bases,
+// mount builds a zip app with admin mounted against the given upstream bases,
 // and returns a `do` helper that issues test requests through the whole app.
 func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, path string, hdr map[string]string) (*http.Response, []byte) {
 	t.Helper()
@@ -71,7 +71,7 @@ var adminRoutes = []struct{ method, path string }{
 // TestGate_DeniesEveryRoute proves the non-negotiable: EVERY /v1/admin/* route is
 // global-admin only, fail-closed. An anonymous caller and a tenant-admin (whose
 // identity carries an org but NOT the sanitizer-minted X-User-IsAdmin) are BOTH
-// denied 403 on every route — no upstream is even reached. adminsvc mirrors the
+// denied 403 on every route — no upstream is even reached. admin mirrors the
 // gateway's admin-guard: SanitizeIdentity sets X-User-IsAdmin only for a
 // validated principal whose owner == AdminOrg, so a forged header never survives
 // ingress and the c.IsAdmin() read here is authoritative.
@@ -180,7 +180,7 @@ func newFakeCommerce() *httptest.Server {
 // TestOrgs_RealAggregation drives /v1/admin/orgs against fake IAM + commerce and
 // verifies the envelope, the field mapping, the per-org user count (from IAM
 // data2), the money (from commerce), and that the caller's credential is
-// replayed to IAM (adminsvc never forges a service credential for the fan-out).
+// replayed to IAM (admin never forges a service credential for the fan-out).
 func TestOrgs_RealAggregation(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
@@ -373,7 +373,7 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 
 // TestUsage_RealTotalsHonestEmptySeries proves the usage roll-up returns the REAL
 // fleet spend from commerce but an HONEST empty series/byProduct — the timeseries
-// feed lives in insights/datastore, and adminsvc must never fabricate a trend.
+// feed lives in insights/datastore, and admin must never fabricate a trend.
 func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
