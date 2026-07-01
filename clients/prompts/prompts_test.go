@@ -2,11 +2,58 @@ package prompts
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TestMigrateSelfHealsFromLegacyPromptSchema reproduces the removed
+// clients/prompt facade's schema — a `prompts` table in the SAME prompts.db
+// with NO `id` column — and proves openStore drops it and rebuilds forward so
+// List/Upsert work instead of 500'ing "no such column: id" (the live 1.786.5
+// regression on the persisted PVC).
+func TestMigrateSelfHealsFromLegacyPromptSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "prompts.db")
+
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE prompts (
+	  org TEXT NOT NULL, name TEXT NOT NULL, version INTEGER NOT NULL,
+	  type TEXT, labels TEXT, tags TEXT, prompt TEXT, config TEXT,
+	  commit_message TEXT, created_at INTEGER, updated_at INTEGER);`); err != nil {
+		t.Fatalf("seed legacy schema: %v", err)
+	}
+	if _, err := legacy.Exec(`INSERT INTO prompts(org,name,version,created_at,updated_at)
+	  VALUES('maxpower','old',1,0,0)`); err != nil {
+		t.Fatalf("seed legacy row: %v", err)
+	}
+	_ = legacy.Close()
+
+	s, err := openStore(path) // opens the SAME file — must self-heal, not error
+	if err != nil {
+		t.Fatalf("openStore over legacy file: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	ctx := context.Background()
+	if _, err := s.List(ctx, "maxpower"); err != nil {
+		t.Fatalf("List after self-heal: %v", err)
+	}
+	if _, err := s.Upsert(ctx, mk("maxpower", "greeting", "hello")); err != nil {
+		t.Fatalf("Upsert after self-heal: %v", err)
+	}
+	got, err := s.List(ctx, "maxpower")
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "greeting" {
+		t.Fatalf("want exactly [greeting] post-heal, got %+v", got)
+	}
+}
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
