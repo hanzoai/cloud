@@ -13,6 +13,7 @@ import (
 	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -73,6 +74,14 @@ type Deps struct {
 	// (separate from the ZAP Commerce client above, which is for typed
 	// inter-subsystem calls). Nil or not-Enabled() makes the gate a no-op.
 	Metering *metering.Client
+
+	// Audit is the tamper-evident, append-only audit trail Recorder (FedRAMP AU-*
+	// / SOC 2 CC-*). Serve constructs it once, wires the AuditTrail middleware to
+	// it, and hands it here so the /v1/admin/audit query + /v1/admin/audit/verify
+	// endpoints read the SAME store the middleware writes. Nil makes the audit
+	// middleware a no-op and the query endpoint fall back to the IAM proxy (an
+	// unconfigured deployment is never blocked). See audit/ and audit_middleware.go.
+	Audit *audit.Recorder
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
