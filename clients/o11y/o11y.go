@@ -39,17 +39,12 @@ func upstream() string {
 	return defaultUpstream
 }
 
-// prefix is the public route surface hanzoai/o11y mounts; the o11y runtime's
-// own controllers live under /api. This is the registered handler, so it owns
-// the documented /v1/o11y/* -> /api/* rewrite (see o11y mount.go).
-const prefix = "/v1/o11y"
-
-// rewritePath maps a public /v1/o11y/* path to the runtime's /api/* path.
-// /v1/o11y/v3/query_range -> /api/v3/query_range ; /v1/o11y -> /api.
-func rewritePath(p string) string { return "/api" + strings.TrimPrefix(p, prefix) }
-
 // newHandler builds the reverse-proxy handler targeting the o11y runtime. Pure
 // (URL in, handler out) so it is unit-testable without a live upstream.
+//
+// The path is forwarded UNCHANGED: the o11y runtime registers its routes at
+// their exact public path (/v1/o11y/<version>/<path>) — no /api/, no rewrite.
+// One and one way: the route IS the path, on both sides of this proxy.
 func newHandler(rawURL string) (http.Handler, error) {
 	target, err := url.Parse(rawURL)
 	if err != nil {
@@ -58,10 +53,8 @@ func newHandler(rawURL string) (http.Handler, error) {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	base := proxy.Director
 	proxy.Director = func(r *http.Request) {
-		base(r)                            // sets scheme/host to target
-		r.URL.Path = rewritePath(r.URL.Path) // /v1/o11y/* -> /api/*
-		r.URL.RawPath = ""                 // force re-encode from Path
-		r.Host = target.Host               // upstream vhost, not api.hanzo.ai
+		base(r)              // sets scheme/host to target; path unchanged
+		r.Host = target.Host // upstream vhost, not api.hanzo.ai
 	}
 	return proxy, nil
 }
