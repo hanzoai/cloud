@@ -42,12 +42,14 @@ var cookieTokenNames = []string{"iam_access_token", "access_token", "hanzo_token
 // validated principal.
 //
 // Deliberately NOT in this list: org/project SUB-SCOPES (X-Project-Id,
-// X-Environment). Those are sub-scopes WITHIN an org that legit callers pass
-// through verbatim (evalsvc reads the canonical X-Project-Id; provisioning
-// reads project/env) — they are not identity authority. (Whether a service
-// should trust a client X-Project-Id for tenant scope, versus minting it from a
-// project-membership check, is a separate Phase-2 question — out of scope for
-// the admin boundary this fix closes.)
+// X-Environment). Those are sub-scopes WITHIN an org that some callers pass
+// through verbatim (provisioning reads project/env) — they are NOT identity
+// authority. A service must NEVER derive TENANT scope from a client X-Project-Id:
+// the native evals subsystem, for one, scopes exclusively by c.Org() (the
+// validated bearer owner) and ignores X-Project-Id entirely — trusting it for
+// tenancy was the cross-tenant break the native rewrite closed. Per-PROJECT
+// scoping, if ever needed, must come from a project-membership check UNDER the
+// validated org, never a raw sub-scope header.
 var authorityHeaders = []string{
 	"X-User-Id",
 	"X-Org-Id",
