@@ -53,6 +53,13 @@ import (
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
 	_ "github.com/hanzoai/cloud/clients/projectsvc" // order 125 — /v1/projects/*
 
+	// PaaS control plane: the native, in-process port of the standalone Dokploy
+	// platform's deploy lifecycle. Reads the operator `Service` CR fleet as the
+	// declared/running/drift board and deploys by merge-patching a CR's
+	// `.spec.image` (the operator reconciles the rollout) — the ONE deploy path.
+	// Global-admin only; the user-facing view lives in console2.
+	_ "github.com/hanzoai/cloud/clients/paassvc" // order 128 — /v1/paas/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
