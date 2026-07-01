@@ -1,6 +1,58 @@
+# hanzoai/cloud — the ONE unified Hanzo Cloud binary (HIP-0106).
+#
+# This image is a SINGLE artifact that serves BOTH the /v1 API AND the console
+# UI from one process: the console is compiled into the Go binary via
+# //go:embed (see webui.go). The pipeline is:
+#
+#   1. console  stage → build the hanzoai/console2 static bundle
+#   2. (copied) → into  webui/dist/  of the Go build context
+#   3. build    stage → `go build` bakes webui/dist into the binary (go:embed)
+#
+# so the final `/cloud` binary already carries the UI. No separate console
+# Service, no second origin — the embedded console calls /v1 on its own host.
+#
+# ── console UI stage ─────────────────────────────────────────────────────────
+# Builds the console2 SPA and emits a STATIC bundle at /out. console2 is fetched
+# at a pinned ref (CONSOLE2_REF) using the same gh_token BuildKit secret the Go
+# build uses for private modules.
+#
+# NOTE ON THE HONEST CURRENT STATE: console2 today ships 15 Next server route
+# handlers (app/**/route.ts) that hold KMS-sourced service tokens and mint
+# short-lived user tokens — so `next build` emits a Node server bundle, not a
+# static export, and `output: export` would fail. Until console2 exposes a
+# static-export target (npm run build:embed → out/) — or those server routes
+# land in cloud as native /v1 endpoints — this stage produces no /out and the Go
+# build embeds the committed fallback shell (webui/dist/index.html), which is a
+# real, same-origin /v1 bootstrap. The moment console2 emits out/, this stage
+# copies it and the SAME image serves the full @hanzo/gui console with zero Go
+# changes. The stage never fails the image: a missing static target degrades to
+# the shell, it does not error.
+FROM public.ecr.aws/docker/library/node:24-alpine AS console
+ARG CONSOLE2_REPO=https://github.com/hanzoai/console2.git
+ARG CONSOLE2_REF=main
+RUN apk add --no-cache git
+WORKDIR /console
+ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=6144
+RUN --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    git clone --depth 1 --branch "${CONSOLE2_REF}" "${CONSOLE2_REPO}" . && \
+    npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
+# Always emit /out. When console2 exposes a static-embed target it holds the real
+# bundle; otherwise /out stays EMPTY so the Go build keeps the committed fallback
+# shell. Never fail the image (a missing static target is a degrade, not an error).
+RUN mkdir -p /out && \
+    if npm run 2>/dev/null | grep -q ' build:embed'; then \
+      echo ">> console2 build:embed → static bundle"; \
+      npm run build:embed && cp -r out/. /out/; \
+    else \
+      echo ">> console2 has no static-embed target yet; cloud embeds the fallback shell"; \
+    fi
+
+# ── Go build stage ───────────────────────────────────────────────────────────
 # ECR Public mirror of the Docker library image — Docker Hub's unauthenticated
 # pull rate-limit (429 toomanyrequests) fails the build on shared CI runners.
-# Same fix already shipped in hanzoai/console2.
 FROM public.ecr.aws/docker/library/golang:1.26-alpine AS build
 RUN apk add --no-cache ca-certificates tzdata git
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
@@ -30,8 +82,15 @@ RUN --mount=type=secret,id=gh_token \
     fi && \
     go mod download
 COPY . .
+# Drop the console static bundle into the embed path BEFORE `go build`, so
+# //go:embed all:webui/dist bakes it into the binary. /out from the console stage
+# is either the real static build (then it overlays the committed fallback shell)
+# or empty (then webui/dist keeps the shell that `COPY . .` already brought). The
+# committed assets/.gitkeep keeps the embed's assets/ dir present either way.
+COPY --from=console /out/ /src/webui/dist/
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /cloud ./cmd/cloud
 
+# ── final image ──────────────────────────────────────────────────────────────
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
