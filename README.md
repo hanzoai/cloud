@@ -120,6 +120,48 @@ deployment configuration.
 [hanzoai/zip](https://github.com/hanzoai/zip) — Sinatra-style Go web framework
 built on Fiber v3. The ONE Go web framework. No `.Fast` escape hatch.
 
+## Console UI — embedded in the ONE binary
+
+The same `hanzoai/cloud` binary serves the [console](https://github.com/hanzoai/console2)
+(`@hanzo/gui`) UI at the web root AND the `/v1` API from one process — one
+artifact, one origin, no separate console Service. The UI is compiled in via
+`//go:embed` (see `webui.go`).
+
+Pipeline (in the `Dockerfile`, before `go build`):
+
+```
+console stage  →  build console2 static bundle  →  /out
+      COPY --from=console /out/ → src/webui/dist/     (overlays the fallback shell)
+build stage    →  go build   →  //go:embed all:webui/dist bakes it into /cloud
+```
+
+Serving (`webui.go`, registered LAST in `Serve` so it never shadows the API):
+
+- `GET /` and any client-side route (`/orgs`, `/models`, …) → the SPA shell
+  (`index.html`) with `Cache-Control: no-cache`; fingerprinted assets under
+  `assets/`/`_next/` are served `immutable` for a year, with brotli/gzip
+  precompressed negotiation when the build emits `.br`/`.gz` siblings.
+- `GET /v1/*` (and `/zap`, `/healthz`, …) → the API. Real subsystem routes are
+  registered before the console catch-all, so they always win; an **unmatched**
+  path under an API prefix returns a real 404 (JSON namespace), never HTML.
+- Same-origin: the embedded console calls `/v1` on its own host, so the session
+  cookie is first-party — no second origin, no CORS.
+
+`webui/dist/index.html` is a committed **fallback shell** (a real same-origin
+`/v1` bootstrap) so `go build` always compiles and the binary always serves a UI
+even without the Node toolchain. The image build overwrites `webui/dist` with the
+real console bundle. See `webui_test.go` for the boot-and-assert tests
+(`/` → shell, deep link → shell 200, `/v1/*` → API, unmatched `/v1` → 404).
+
+> Honest current state: console2 ships 15 Next server route handlers
+> (`app/**/route.ts`) that hold KMS-sourced service tokens and mint short-lived
+> user tokens, so it emits a Node server bundle, not a static export
+> (`output: export` would fail). Until console2 exposes a `build:embed` static
+> target — or those handlers land here as native `/v1` endpoints — the image
+> embeds the fallback shell, and the separate console2 Service stays up. The Go
+> embed/serve plumbing is complete and needs no further change to light up the
+> full console the moment the static bundle exists.
+
 ## Status
 
 Scaffold. The Mount(app, deps) integration for each subsystem lands per
