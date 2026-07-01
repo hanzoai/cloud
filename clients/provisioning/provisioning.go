@@ -513,6 +513,32 @@ func physicalName(org, name string) string {
 	return "o" + orgHash(org) + "_" + sanitizeIdent(name)
 }
 
+// BucketName + BucketPrefix export the tenant→S3-bucket naming so the ONE
+// convention is shared, not re-implemented. clients/s3 (the /v1/s3 file manager)
+// operates on the SAME buckets this control plane allocates for kind "s3", so a
+// bucket provisioned via POST /v1/s3 {name:x} is browsable there as bucket "x".
+// The two subsystems MUST derive the S3 bucket name identically or the tenant
+// boundary drifts between "allocate" and "operate" — and worse, a file manager
+// using the raw physical name would try to create an underscore-containing bucket
+// that S3 rejects. The full derivation is bucketName(physicalName(org,name)): the
+// fixed-width org-hash prefix makes it injective in (org,name); the '_'→'-' fold
+// makes it a DNS-safe S3 name. clients/s3 imports provisioning for exactly these;
+// the dependency is one-directional (provisioning never imports s3), so no cycle.
+func BucketName(org, name string) string { return bucketName(physicalName(org, name)) }
+
+// BucketPrefix is the S3-bucket-name prefix ALL of an org's buckets share
+// (== bucketName("o"+orgHash(org))+"-"). clients/s3 lists all buckets and filters
+// to this prefix (the caller only ever sees its own), then strips it to recover
+// friendly names. Derived through bucketName so it matches the real bucket names
+// exactly, INCLUDING the '_'→'-' fold of the org-hash separator.
+func BucketPrefix(org string) string { return bucketName("o"+orgHash(org)) + "-" }
+
+// SanitizeOrg exports the org-slug normalizer so clients/s3 derives the caller's
+// org tag from the SAME reduced slug this control plane keys on — otherwise a
+// bucket created here (keyed on the sanitized org) would be invisible to a file
+// manager that hashed the raw org, and vice-versa.
+func SanitizeOrg(org string) string { return sanitizeOrg(org) }
+
 func genID() (string, error) {
 	tok, err := genToken(12)
 	if err != nil {
