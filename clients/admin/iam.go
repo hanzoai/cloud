@@ -1,4 +1,4 @@
-package adminsvc
+package admin
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 // this binary — see subsystems.go), so these are HTTP calls, not Go method
 // dispatch. Every call REPLAYS THE CALLER'S OWN credential (session cookie +
 // Authorization), so IAM authorizes the read as the same principal the gateway
-// already validated as a global admin. adminsvc adds NO service credential of
+// already validated as a global admin. admin adds NO service credential of
 // its own here: it never widens what the caller could read directly, and IAM's
 // own IsGlobalAdmin gate stays the second line of defense.
 type iamClient struct {
