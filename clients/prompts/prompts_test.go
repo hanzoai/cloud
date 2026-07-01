@@ -57,6 +57,7 @@ func TestUpsertCreatesV1ThenVersions(t *testing.T) {
 	if got.Content != "hello v2" || got.Version != 2 {
 		t.Fatalf("current should be v2 content, got %q v%d", got.Content, got.Version)
 	}
+	// Version history is metadata-only now (Red MED-1) — bounded, newest-first.
 	vs, err := s.Versions(ctx, "maxpower", "greeting")
 	if err != nil {
 		t.Fatalf("versions: %v", err)
@@ -64,8 +65,8 @@ func TestUpsertCreatesV1ThenVersions(t *testing.T) {
 	if len(vs) != 2 || vs[0].Version != 2 || vs[1].Version != 1 {
 		t.Fatalf("want 2 versions newest-first, got %+v", vs)
 	}
-	if vs[1].Content != "hello v1" {
-		t.Fatalf("v1 history content should be preserved, got %q", vs[1].Content)
+	if n, _ := s.CountVersions(ctx, "maxpower", "greeting"); n != 2 {
+		t.Fatalf("CountVersions should be 2, got %d", n)
 	}
 }
 
@@ -125,13 +126,11 @@ func TestGetMissReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestSanitizeOrgAndName(t *testing.T) {
-	if got := sanitizeOrg("  MaxPower "); got != "maxpower" {
-		t.Fatalf("sanitizeOrg lower/trim failed: %q", got)
-	}
-	if got := sanitizeOrg("a/../b"); strings.ContainsAny(got, "/.") || got == "" {
-		t.Fatalf("sanitizeOrg must neutralize traversal (no / or .): %q", got)
-	}
+// TestNameValidation guards the prompt-name boundary. (There is intentionally
+// no org normalization anymore — the org isolation key is used EXACTLY as the
+// trust boundary mints it; see tenant(). Cross-tenant isolation on distinct-but-
+// similar orgs is proven at the HTTP layer in http_test.go / red_*_test.go.)
+func TestNameValidation(t *testing.T) {
 	for _, bad := range []string{"", "../etc", "a b", "name!", strings.Repeat("x", 65)} {
 		if nameRE.MatchString(bad) {
 			t.Fatalf("nameRE should reject %q", bad)

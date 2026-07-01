@@ -69,8 +69,10 @@ func (e *execClient) run(ctx context.Context, f Function, input string, timeoutS
 	if !e.configured() {
 		return execResult{}, errExecUnconfigured
 	}
-	if timeoutSec <= 0 || timeoutSec > 900 {
+	if timeoutSec <= 0 {
 		timeoutSec = 30
+	} else if timeoutSec > 900 {
+		timeoutSec = 900
 	}
 	rctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
