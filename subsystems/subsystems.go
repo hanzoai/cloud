@@ -70,8 +70,13 @@ import (
 	// instead of the "runtime not initialized" 503.
 	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
 
-	// The console2 SPA, go:embed'd and served at "/" (order 990 — the last-resort
-	// catch-all after every /v1/* route). This is the "one binary" endgame: the
-	// unified cloud binary IS the frontend too. Hanzo V8: Open Edition.
-	_ "github.com/hanzoai/cloud/clients/console" // order 990 — SPA at /
+	// The console2 SPA is go:embed'd and served at "/" by webui.go's
+	// mountConsole (called from Serve after every /v1/* route mounts) — the
+	// "one binary" endgame where the unified cloud binary IS the frontend too
+	// (Hanzo V8: Open Edition). The `clients/console` subsystem was a second,
+	// //go:build cloud-gated take on the same thing; importing it broke the
+	// default build (its files are tag-excluded) AND would double-mount "/".
+	// mountConsole is the wired, working path, so the console needs no import
+	// here. Consolidating onto ONE approach (drop webui.go for the subsystem,
+	// or vice-versa) is a clean follow-up — but main must build to ship.
 )
