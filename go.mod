@@ -406,7 +406,7 @@ require (
 	github.com/luxfi/pq v1.0.3 // indirect
 	github.com/luxfi/pulsar v1.1.1 // indirect
 	github.com/luxfi/threshold v1.9.9 // indirect
-	github.com/luxfi/zap v0.8.11 // indirect
+	github.com/luxfi/zap v1.2.0 // indirect
 	github.com/magefile/mage v1.15.1-0.20241126214340-bdc92f694516 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -640,7 +640,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.788.1-0.20260701171537-56a55d1c50c5
+	github.com/hanzoai/ai v1.789.0
 	github.com/hanzoai/authz v1.10.1
 	github.com/hanzoai/base v1.4.1
 	github.com/hanzoai/commerce v1.42.27
