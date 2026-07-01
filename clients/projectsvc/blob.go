@@ -11,11 +11,11 @@ import (
 	"mime"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 
 	minio "github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/hanzoai/cloud/clients/s3admin"
 )
 
 // Deploy artifact guards. A builder one-click deploy ships a small tar(.gz) of
@@ -23,21 +23,18 @@ import (
 // sites use the git/CI path that syncs to S3 directly and never streams bytes
 // through this handler.
 const (
-	maxFiles      = 5000       // total entries in one deploy artifact
-	maxFileBytes  = 64 << 20   // per-file cap (64 MiB)
-	maxTotalBytes = 512 << 20  // total uncompressed cap (512 MiB)
+	maxFiles      = 5000      // total entries in one deploy artifact
+	maxFileBytes  = 64 << 20  // per-file cap (64 MiB)
+	maxTotalBytes = 512 << 20 // total uncompressed cap (512 MiB)
 )
 
 // blobStore writes a project's built static files into S3 under a deterministic
-// prefix and serves them publicly. It reuses the SAME shared admin credentials
-// the provisioning control plane uses (CLOUD_S3_ADMIN_*), so there is one S3
-// access path for the whole cloud binary.
+// prefix and serves them publicly. The S3 connection itself comes from the ONE
+// shared access path (clients/s3admin, the SAME CLOUD_S3_ADMIN_* credentials the
+// /v1/s3 file-manager and the whole cloud binary use); blobStore adds only the
+// projectsvc-specific bucket + public URL bases on top.
 type blobStore struct {
-	endpoint  string
-	ak        string
-	sk        string
-	secure    bool
-	region    string
+	admin     s3admin.Admin
 	bucket    string
 	publicURL string // public base for built sites, e.g. https://s3.hanzo.ai
 	sitesURL  string // optional pretty base served by the static container, e.g. https://sites.hanzo.app
@@ -45,26 +42,16 @@ type blobStore struct {
 
 func openBlobStore() *blobStore {
 	return &blobStore{
-		endpoint:  env("CLOUD_S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
-		ak:        os.Getenv("CLOUD_S3_ADMIN_ACCESS_KEY"),
-		sk:        os.Getenv("CLOUD_S3_ADMIN_SECRET_KEY"),
-		secure:    boolEnv("CLOUD_S3_SECURE", false),
-		region:    env("CLOUD_S3_REGION", "us-east-1"),
+		admin:     s3admin.New(),
 		bucket:    env("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
 		publicURL: strings.TrimRight(env("CLOUD_PROJECTS_PUBLIC_URL", "https://s3.hanzo.ai"), "/"),
 		sitesURL:  strings.TrimRight(os.Getenv("CLOUD_PROJECTS_SITES_URL"), "/"),
 	}
 }
 
-func (b *blobStore) configured() bool { return b.ak != "" && b.sk != "" }
+func (b *blobStore) configured() bool { return b.admin.Configured() }
 
-func (b *blobStore) client() (*minio.Client, error) {
-	return minio.New(b.endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(b.ak, b.sk, ""),
-		Secure: b.secure,
-		Region: b.region,
-	})
-}
+func (b *blobStore) client() (*minio.Client, error) { return b.admin.Client() }
 
 // prefix is the deterministic S3 key prefix for a project's current live site:
 // "<org>/<slug>". org and slug are both validated slugs, so the join is
@@ -197,7 +184,7 @@ func (b *blobStore) ensureBucket(ctx context.Context, cli *minio.Client) error {
 		return fmt.Errorf("bucket exists: %w", err)
 	}
 	if !exists {
-		if err := cli.MakeBucket(ctx, b.bucket, minio.MakeBucketOptions{Region: b.region}); err != nil {
+		if err := cli.MakeBucket(ctx, b.bucket, minio.MakeBucketOptions{Region: b.admin.Region()}); err != nil {
 			if ex, _ := cli.BucketExists(ctx, b.bucket); !ex {
 				return fmt.Errorf("make bucket: %w", err)
 			}
@@ -298,20 +285,11 @@ func (p *peekReader) Read(b []byte) (int, error) {
 
 func isGzip(head []byte) bool { return len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b }
 
-// ---- env helpers (local to projectsvc; mirror provisioningsvc conventions) ----
+// ---- env helper (local to projectsvc; mirror provisioningsvc conventions) ----
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
-	}
-	return def
-}
-
-func boolEnv(key string, def bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
 	}
 	return def
 }
