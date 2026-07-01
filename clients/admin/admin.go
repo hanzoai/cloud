@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/zip"
 )
 
@@ -45,6 +46,10 @@ type svc struct {
 	commerce *commerceClient
 	health   *healthClient
 	adminOrg string
+	// auditStore is cloud's OWN tamper-evident audit store (nil when unconfigured,
+	// in which case /v1/admin/audit falls back to the IAM get-records proxy). Serve
+	// builds it and hands it over via deps.Audit. See audit.go.
+	auditStore *audit.Recorder
 }
 
 // Mount registers the /v1/admin/* surface on app. Every handler gates on
@@ -60,10 +65,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	logger = logger.New("subsystem", "admin")
 
 	s := &svc{
-		iam:      newIAMClient(iamBase(deps)),
-		commerce: newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		health:   newHealthClient(o11yHealthURL()),
-		adminOrg: adminOrgOf(deps),
+		iam:        newIAMClient(iamBase(deps)),
+		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		health:     newHealthClient(o11yHealthURL()),
+		adminOrg:   adminOrgOf(deps),
+		auditStore: deps.Audit,
 	}
 
 	app.Get("/v1/admin/me", s.guard(s.me))
@@ -73,6 +79,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/roles", s.guard(s.roles))
 	app.Get("/v1/admin/applications", s.guard(s.applications))
 	app.Get("/v1/admin/audit", s.guard(s.audit))
+	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
 	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
@@ -270,8 +277,12 @@ func (s *svc) iamPassthrough(c *zip.Ctx, path string) error {
 }
 
 // ── /v1/admin/audit — records directory (AuditRow[]) ─────────────────────────
+//
+// The handler lives in audit.go (it reads cloud's OWN tamper-evident store).
+// iamAuditQuery builds the IAM get-records query for the federated fallback
+// auditFromIAM uses when no local store is configured.
 
-func (s *svc) audit(c *zip.Ctx) error {
+func iamAuditQuery(c *zip.Ctx) url.Values {
 	q := url.Values{}
 	if org := strings.TrimSpace(c.Query("org")); org != "" {
 		q.Set("organizationName", org)
@@ -284,11 +295,7 @@ func (s *svc) audit(c *zip.Ctx) error {
 	q.Set("pageSize", ps)
 	q.Set("sortField", "createdTime")
 	q.Set("sortOrder", "descend")
-	res, err := s.iam.getList(c.Context(), callerCreds(c), "/v1/iam/get-records", q)
-	if err != nil {
-		return fail(c, err.Error())
-	}
-	return okRaw(c, res.rows, res.total)
+	return q
 }
 
 // ── /v1/admin/usage — fleet usage roll-up (UsageData) ────────────────────────
