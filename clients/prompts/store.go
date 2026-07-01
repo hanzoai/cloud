@@ -79,6 +79,24 @@ func openStore(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	// Self-heal from the superseded clients/prompt facade. That earlier owner of
+	// /v1/prompts (removed when clients/prompts became the ONE owner) created a
+	// `prompts` table in the SAME {DataDir}/prompts.db with a versioned-rows
+	// layout that has NO `id` column. Plain CREATE TABLE IF NOT EXISTS no-ops on
+	// it, leaving our `SELECT id,... FROM prompts` to fail 500 "no such column:
+	// id". The legacy rows hold no durable product data (the facade shipped one
+	// release; the console Compute pages never wrote through it), so on that
+	// incompatible schema we drop the legacy pair and rebuild forward — no
+	// backwards compat, only forwards. Idempotent: once `id` exists it never fires.
+	legacy, err := s.hasLegacyPromptsSchema()
+	if err != nil {
+		return fmt.Errorf("migrate: inspect schema: %w", err)
+	}
+	if legacy {
+		if _, err := s.db.Exec(`DROP TABLE IF EXISTS prompt_versions; DROP TABLE IF EXISTS prompts;`); err != nil {
+			return fmt.Errorf("migrate: drop legacy schema: %w", err)
+		}
+	}
 	const ddl = `
 CREATE TABLE IF NOT EXISTS prompts (
   id          TEXT PRIMARY KEY,
@@ -110,6 +128,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_pv_org_name_version ON prompt_versions(org,
 		return fmt.Errorf("migrate: %w", err)
 	}
 	return nil
+}
+
+// hasLegacyPromptsSchema reports whether a `prompts` table exists but lacks the
+// `id` column — the signature of the removed clients/prompt facade's schema.
+// A fresh DB (no table) returns false; our own schema (with `id`) returns false.
+func (s *Store) hasLegacyPromptsSchema() (bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(prompts)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	var existed, hasID bool
+	for rows.Next() {
+		existed = true
+		var (
+			cid, notnull, pk int
+			name, ctype      string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == "id" {
+			hasID = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return existed && !hasID, nil
 }
 
 // Close closes the underlying database.
