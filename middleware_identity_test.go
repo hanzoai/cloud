@@ -264,6 +264,29 @@ func TestSanitizeIdentity_NilValidatorStillStripsAdmin(t *testing.T) {
 	}
 }
 
+// TestSanitizeIdentity_AnonPathHasNoUserId locks the invariant the s3 + provisioning
+// data-plane fixes depend on (RED): on the no-principal path, SanitizeIdentity
+// RESTORES a forged X-Org-Id (Phase-1 passthrough) but a forged X-User-Id does
+// NOT survive — X-User-Id is in authorityHeaders and only re-set for a validated
+// principal. So ctx.User()=="" is the reliable "no validated principal" signal
+// those subsystems gate on. If a refactor ever restored X-User-Id here, the
+// gate would silently reopen — this test fails first.
+func TestSanitizeIdentity_AnonPathHasNoUserId(t *testing.T) {
+	// nil validator = the no-principal path for ANY request (no JWKS wired), which
+	// is the same header-restore branch a bad/absent bearer takes.
+	app, got := newIdentityApp(t, nil)
+	probe(t, app, func(r *http.Request) {
+		r.Header.Set("X-Org-Id", "victim")
+		r.Header.Set("X-User-Id", "forged-user") // client-supplied — must be stripped
+	})
+	if got.user != "" {
+		t.Fatalf("User() = %q on the anon path, want \"\" — a client-forged X-User-Id survived, reopening the data-plane forge!", got.user)
+	}
+	if got.org != "victim" {
+		t.Errorf("Org() = %q, want %q (Phase-1 org passthrough is intentional; the fix is that User() is empty)", got.org, "victim")
+	}
+}
+
 // Focused validator unit tests: issuer, audience, expiry, signature, and a
 // missing issuer are all enforced.
 func TestIdentityValidator(t *testing.T) {
