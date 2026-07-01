@@ -1,4 +1,4 @@
-// Package adminsvc mounts the god-mode admin surface (/v1/admin/*) the Hanzo
+// Package admin mounts the god-mode admin surface (/v1/admin/*) the Hanzo
 // Admin Console (admin.hanzo.ai, apps/operator) calls, per the api.ts contract.
 //
 // It is an AGGREGATOR, not a new store: identity (orgs/users/roles/applications/
@@ -14,7 +14,7 @@
 // (serve.go) is true ONLY for a JWT-validated principal whose org is the admin org
 // (owner == AdminOrg — IAM's IsGlobalAdmin), matching the gateway's admin-guard.
 // No principal → 403; a tenant-admin (owner != AdminOrg) → 403; a forged
-// X-User-IsAdmin never survives ingress. adminsvc adds no service credential to
+// X-User-IsAdmin never survives ingress. admin adds no service credential to
 // the IAM fan-out — it replays the caller's own cookie/bearer, so it can never
 // read more than the caller already could, and IAM re-checks IsGlobalAdmin too.
 //
@@ -23,7 +23,7 @@
 // tiles live in platform.hanzo.ai / the operator inventory) return the real,
 // honest empty state — never a fabricated number. The operator UI renders those
 // as an em-dash / empty table by design.
-package adminsvc
+package admin
 
 import (
 	"context"
@@ -51,11 +51,11 @@ type svc struct {
 // c.IsAdmin() first (global-admin only), then aggregates real upstream data.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("adminsvc.Mount: nil zip.App")
+		return fmt.Errorf("admin.Mount: nil zip.App")
 	}
 	logger := deps.Logger
 	if logger == nil {
-		return fmt.Errorf("adminsvc.Mount: nil deps.Logger")
+		return fmt.Errorf("admin.Mount: nil deps.Logger")
 	}
 	logger = logger.New("subsystem", "admin")
 
@@ -295,7 +295,7 @@ func (s *svc) audit(c *zip.Ctx) error {
 
 // usage returns the real fleet money totals from commerce. The daily series and
 // the per-product breakdown are NOT derivable from the commerce billing API
-// (they live in insights/datastore, owned separately); adminsvc returns the
+// (they live in insights/datastore, owned separately); admin returns the
 // honest empty series/byProduct rather than fabricating a trend — the operator
 // renders that as an empty chart, never a fake line.
 func (s *svc) usage(c *zip.Ctx) error {
@@ -332,7 +332,7 @@ func (s *svc) usage(c *zip.Ctx) error {
 
 // products is the workload/drift registry (declared vs running tag, health).
 // That inventory is the platform.hanzo.ai apps table / operator reconcile state,
-// NOT an in-binary source. adminsvc exposes the gated endpoint and returns the
+// NOT an in-binary source. admin exposes the gated endpoint and returns the
 // real empty registry until that feed is wired — it never fabricates workload
 // rows. The operator renders an empty table, not fake products.
 func (s *svc) products(c *zip.Ctx) error {
@@ -403,7 +403,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 
 // ── /v1/admin/sync — refresh trigger ─────────────────────────────────────────
 
-// sync answers the operator's "Sync now" button. adminsvc aggregates LIVE on
+// sync answers the operator's "Sync now" button. admin aggregates LIVE on
 // every read (there is no cached fleet snapshot in-binary), so there is no batch
 // job to kick — the button simply re-reads. We acknowledge honestly with
 // { started: true } so the UI re-fetches the (freshly-computed) overview.
@@ -518,7 +518,7 @@ func init() {
 	cloud.Register("admin", 146, func(app any, deps cloud.Deps) error {
 		a, ok := app.(*zip.App)
 		if !ok {
-			return fmt.Errorf("adminsvc.Mount: app is %T, want *zip.App", app)
+			return fmt.Errorf("admin.Mount: app is %T, want *zip.App", app)
 		}
 		return Mount(a, deps)
 	})
