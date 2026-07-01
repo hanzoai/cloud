@@ -51,7 +51,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/mlsvc" // order 130 — /v1/ml/*,/v1/train/*
 
 	// Console Search/Vector product panels (browser-facing read surface).
-	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /api/search-docs/*, /api/vector/*
+	_ "github.com/hanzoai/cloud/clients/productsvc" // order 145 — /v1/search-docs/*, /v1/vector/*
 
 	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
