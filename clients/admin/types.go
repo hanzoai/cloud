@@ -1,4 +1,4 @@
-package adminsvc
+package admin
 
 // Response shapes for /v1/admin/*. Each mirrors the operator's api.ts contract
 // (admin/apps/operator/src/lib/api.ts) field-for-field — the JSON tags ARE the
@@ -103,7 +103,7 @@ type productRow struct {
 	Updated     string `json:"updated"`
 }
 
-// ── IAM wire shapes (the subset adminsvc decodes from get-* payloads) ─────────
+// ── IAM wire shapes (the subset admin decodes from get-* payloads) ─────────
 
 // iamOrg is the IAM Organization subset the aggregators fold over.
 type iamOrg struct {
