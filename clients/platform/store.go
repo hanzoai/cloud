@@ -1,0 +1,600 @@
+package platform
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"strings"
+
+	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
+	// graph (projectsvc/provisioning use it). Blank import registers "sqlite".
+	_ "modernc.org/sqlite"
+)
+
+// errConflict is returned when a UNIQUE (org,slug) collides; errNotFound when a
+// lookup misses. Handlers map these to HTTP 409 / 404. Tenancy is the `org`
+// column on every table, enforced in every WHERE clause — the ONLY isolation
+// boundary. A query that forgets `org=?` is a cross-tenant leak, so the store
+// exposes NO method that reads a row without the org.
+var (
+	errConflict = errors.New("platform: already exists")
+	errNotFound = errors.New("platform: not found")
+)
+
+// Project is the org-scoped root of the deploy tree (Dokploy: project).
+type Project struct {
+	ID          string
+	Org         string
+	Slug        string
+	Name        string
+	Description string
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+// Application is a deployable unit under a project (Dokploy: application). It
+// deploys as an operator hanzo.ai/v1 Service CR in the tenant-<org> namespace.
+// EnvJSON/DomainsJSON hold JSON-encoded []EnvVar / []string; secrets are never
+// stored here (secret env is rejected at the boundary until KMS sealing lands).
+type Application struct {
+	ID            string
+	Org           string
+	ProjectID     string
+	Slug          string
+	Name          string
+	Description   string
+	Environment   string
+	Source        string // git | image
+	RepoURL       string
+	RepoBranch    string
+	RepoProvider  string
+	ImageRepo     string
+	ImageTag      string
+	BuildType     string
+	Dockerfile    string
+	Port          int
+	Replicas      int
+	EnvJSON       string
+	DomainsJSON   string
+	Status        string
+	Namespace     string
+	CurrentDeploy string
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+// Deployment is one immutable build+deploy attempt for an application, versioned
+// monotonically per app (Dokploy: deployment).
+type Deployment struct {
+	ID            string
+	Org           string
+	ApplicationID string
+	Version       int
+	Status        string
+	Source        string
+	Commit        string
+	Image         string
+	BuildID       string
+	Message       string
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+// Build is one arcd (in-cluster BuildKit) build record (Dokploy fork: build_job).
+type Build struct {
+	ID            string
+	Org           string
+	ApplicationID string
+	DeploymentID  string
+	Status        string
+	Image         string
+	JobName       string
+	LogsRef       string
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+// Store is the platform metadata database. ONE SQLite file
+// ({DataDir}/platform.db) holds every org's records; tenancy is the org column.
+// MaxOpenConns(1) serializes writes against the file lock without busy retries,
+// matching projectsvc/provisioning.
+type Store struct {
+	db *sql.DB
+}
+
+func openStore(path string) (*Store, error) {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
+	}
+	db.SetMaxOpenConns(1)
+	for _, pragma := range []string{
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA foreign_keys=ON",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
+		}
+	}
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) migrate() error {
+	const ddl = `
+CREATE TABLE IF NOT EXISTS platform_projects (
+  id           TEXT PRIMARY KEY,
+  org          TEXT NOT NULL,
+  slug         TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pf_projects_org_slug ON platform_projects(org, slug);
+CREATE INDEX IF NOT EXISTS ix_pf_projects_org_updated ON platform_projects(org, updated_at);
+
+CREATE TABLE IF NOT EXISTS platform_apps (
+  id             TEXT PRIMARY KEY,
+  org            TEXT NOT NULL,
+  project_id     TEXT NOT NULL,
+  slug           TEXT NOT NULL,
+  name           TEXT NOT NULL,
+  description    TEXT NOT NULL DEFAULT '',
+  environment    TEXT NOT NULL DEFAULT 'production',
+  source         TEXT NOT NULL,
+  repo_url       TEXT NOT NULL DEFAULT '',
+  repo_branch    TEXT NOT NULL DEFAULT '',
+  repo_provider  TEXT NOT NULL DEFAULT '',
+  image_repo     TEXT NOT NULL DEFAULT '',
+  image_tag      TEXT NOT NULL DEFAULT '',
+  build_type     TEXT NOT NULL DEFAULT '',
+  dockerfile     TEXT NOT NULL DEFAULT '',
+  port           INTEGER NOT NULL DEFAULT 8080,
+  replicas       INTEGER NOT NULL DEFAULT 1,
+  env_json       TEXT NOT NULL DEFAULT '[]',
+  domains_json   TEXT NOT NULL DEFAULT '[]',
+  status         TEXT NOT NULL DEFAULT 'draft',
+  namespace      TEXT NOT NULL DEFAULT '',
+  current_deploy TEXT NOT NULL DEFAULT '',
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pf_apps_org_project_slug ON platform_apps(org, project_id, slug);
+CREATE INDEX IF NOT EXISTS ix_pf_apps_org_project ON platform_apps(org, project_id);
+
+CREATE TABLE IF NOT EXISTS platform_deployments (
+  id             TEXT PRIMARY KEY,
+  org            TEXT NOT NULL,
+  application_id TEXT NOT NULL,
+  version        INTEGER NOT NULL,
+  status         TEXT NOT NULL,
+  source         TEXT NOT NULL DEFAULT 'manual',
+  commit_sha     TEXT NOT NULL DEFAULT '',
+  image          TEXT NOT NULL DEFAULT '',
+  build_id       TEXT NOT NULL DEFAULT '',
+  message        TEXT NOT NULL DEFAULT '',
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pf_deploy_app_version ON platform_deployments(application_id, version);
+CREATE INDEX IF NOT EXISTS ix_pf_deploy_app_created ON platform_deployments(application_id, created_at);
+
+CREATE TABLE IF NOT EXISTS platform_builds (
+  id             TEXT PRIMARY KEY,
+  org            TEXT NOT NULL,
+  application_id TEXT NOT NULL,
+  deployment_id  TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL,
+  image          TEXT NOT NULL DEFAULT '',
+  job_name       TEXT NOT NULL DEFAULT '',
+  logs_ref       TEXT NOT NULL DEFAULT '',
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_pf_builds_app ON platform_builds(application_id, created_at);
+`
+	if _, err := s.db.Exec(ddl); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	return nil
+}
+
+// Close closes the underlying database. Idempotent-safe via the caller.
+func (s *Store) Close() error { return s.db.Close() }
+
+// ── projects ─────────────────────────────────────────────────────────────────
+
+const projectCols = `id,org,slug,name,description,created_at,updated_at`
+
+func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
+	var p Project
+	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt)
+	return p, err
+}
+
+func (s *Store) CreateProject(ctx context.Context, p Project) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?)`,
+		p.ID, p.Org, p.Slug, p.Name, p.Description, p.CreatedAt, p.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return errConflict
+		}
+		return fmt.Errorf("insert project: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetProject(ctx context.Context, org, slug string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM platform_projects WHERE org=? AND slug=?`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("get project: %w", err)
+	}
+	return p, nil
+}
+
+// GetProjectByID resolves a project by (org,id) — used to re-verify tenancy when
+// an application row references its project.
+func (s *Store) GetProjectByID(ctx context.Context, org, id string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM platform_projects WHERE org=? AND id=?`, org, id)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("get project by id: %w", err)
+	}
+	return p, nil
+}
+
+func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+projectCols+` FROM platform_projects WHERE org=? ORDER BY updated_at DESC, id ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list projects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Project
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan project: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) UpdateProject(ctx context.Context, p Project) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_projects SET name=?,description=?,updated_at=? WHERE org=? AND slug=?`,
+		p.Name, p.Description, p.UpdatedAt, p.Org, p.Slug)
+	if err != nil {
+		return fmt.Errorf("update project: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// DeleteProject removes a project plus every application/deployment/build under
+// it, in one transaction, all scoped to org. Reports whether a project was
+// deleted and returns the removed apps so the caller can tear down their CRs.
+func (s *Store) DeleteProject(ctx context.Context, org, slug string) (Project, []Application, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Project{}, nil, false, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	row := tx.QueryRowContext(ctx, `SELECT `+projectCols+` FROM platform_projects WHERE org=? AND slug=?`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, nil, false, nil
+	}
+	if err != nil {
+		return Project{}, nil, false, fmt.Errorf("get for delete: %w", err)
+	}
+
+	apps, err := listAppsTx(ctx, tx, org, p.ID)
+	if err != nil {
+		return Project{}, nil, false, err
+	}
+	for _, a := range apps {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_builds WHERE org=? AND application_id=?`, org, a.ID); err != nil {
+			return Project{}, nil, false, fmt.Errorf("delete builds: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_deployments WHERE org=? AND application_id=?`, org, a.ID); err != nil {
+			return Project{}, nil, false, fmt.Errorf("delete deployments: %w", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND project_id=?`, org, p.ID); err != nil {
+		return Project{}, nil, false, fmt.Errorf("delete apps: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_projects WHERE org=? AND id=?`, org, p.ID); err != nil {
+		return Project{}, nil, false, fmt.Errorf("delete project: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Project{}, nil, false, fmt.Errorf("commit: %w", err)
+	}
+	return p, apps, true, nil
+}
+
+// ── applications ─────────────────────────────────────────────────────────────
+
+const appCols = `id,org,project_id,slug,name,description,environment,source,repo_url,repo_branch,repo_provider,image_repo,image_tag,build_type,dockerfile,port,replicas,env_json,domains_json,status,namespace,current_deploy,created_at,updated_at`
+
+func scanApp(sc interface{ Scan(...any) error }) (Application, error) {
+	var a Application
+	err := sc.Scan(&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
+		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
+		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
+		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt)
+	return a, err
+}
+
+func (s *Store) CreateApplication(ctx context.Context, a Application) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_apps (`+appCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.Org, a.ProjectID, a.Slug, a.Name, a.Description, a.Environment,
+		a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider, a.ImageRepo, a.ImageTag,
+		a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.EnvJSON, a.DomainsJSON,
+		a.Status, a.Namespace, a.CurrentDeploy, a.CreatedAt, a.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return errConflict
+		}
+		return fmt.Errorf("insert app: %w", err)
+	}
+	return nil
+}
+
+// GetApplication resolves an app by (org, project_id, slug) — the org is ALWAYS
+// in the predicate so a caller can never read another tenant's app.
+func (s *Store) GetApplication(ctx context.Context, org, projectID, slug string) (Application, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+appCols+` FROM platform_apps WHERE org=? AND project_id=? AND slug=?`, org, projectID, slug)
+	a, err := scanApp(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Application{}, errNotFound
+	}
+	if err != nil {
+		return Application{}, fmt.Errorf("get app: %w", err)
+	}
+	return a, nil
+}
+
+// GetApplicationByID resolves an app by (org,id) for deployment/build lookups.
+func (s *Store) GetApplicationByID(ctx context.Context, org, id string) (Application, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+appCols+` FROM platform_apps WHERE org=? AND id=?`, org, id)
+	a, err := scanApp(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Application{}, errNotFound
+	}
+	if err != nil {
+		return Application{}, fmt.Errorf("get app by id: %w", err)
+	}
+	return a, nil
+}
+
+func (s *Store) ListApplications(ctx context.Context, org, projectID string) ([]Application, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+appCols+` FROM platform_apps WHERE org=? AND project_id=? ORDER BY updated_at DESC, id ASC`, org, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list apps: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Application
+	for rows.Next() {
+		a, err := scanApp(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan app: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func listAppsTx(ctx context.Context, tx *sql.Tx, org, projectID string) ([]Application, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+appCols+` FROM platform_apps WHERE org=? AND project_id=?`, org, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list apps (tx): %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Application
+	for rows.Next() {
+		a, err := scanApp(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan app (tx): %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// UpdateApplication overwrites the mutable fields of an app; org+project+slug+id
+// are immutable and form the tenancy/identity key.
+func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_apps SET name=?,description=?,environment=?,source=?,repo_url=?,repo_branch=?,repo_provider=?,image_repo=?,image_tag=?,build_type=?,dockerfile=?,port=?,replicas=?,env_json=?,domains_json=?,status=?,namespace=?,current_deploy=?,updated_at=?
+		 WHERE org=? AND id=?`,
+		a.Name, a.Description, a.Environment, a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider,
+		a.ImageRepo, a.ImageTag, a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.EnvJSON, a.DomainsJSON,
+		a.Status, a.Namespace, a.CurrentDeploy, a.UpdatedAt, a.Org, a.ID)
+	if err != nil {
+		return fmt.Errorf("update app: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// DeleteApplication removes an app plus its deployments/builds, scoped to org.
+func (s *Store) DeleteApplication(ctx context.Context, org, projectID, slug string) (Application, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Application{}, false, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	row := tx.QueryRowContext(ctx, `SELECT `+appCols+` FROM platform_apps WHERE org=? AND project_id=? AND slug=?`, org, projectID, slug)
+	a, err := scanApp(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Application{}, false, nil
+	}
+	if err != nil {
+		return Application{}, false, fmt.Errorf("get for delete: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_builds WHERE org=? AND application_id=?`, org, a.ID); err != nil {
+		return Application{}, false, fmt.Errorf("delete builds: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_deployments WHERE org=? AND application_id=?`, org, a.ID); err != nil {
+		return Application{}, false, fmt.Errorf("delete deployments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND id=?`, org, a.ID); err != nil {
+		return Application{}, false, fmt.Errorf("delete app: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Application{}, false, fmt.Errorf("commit: %w", err)
+	}
+	return a, true, nil
+}
+
+// ── deployments ──────────────────────────────────────────────────────────────
+
+const deploymentCols = `id,org,application_id,version,status,source,commit_sha,image,build_id,message,created_at,updated_at`
+
+func scanDeployment(sc interface{ Scan(...any) error }) (Deployment, error) {
+	var d Deployment
+	err := sc.Scan(&d.ID, &d.Org, &d.ApplicationID, &d.Version, &d.Status, &d.Source,
+		&d.Commit, &d.Image, &d.BuildID, &d.Message, &d.CreatedAt, &d.UpdatedAt)
+	return d, err
+}
+
+func (s *Store) NextVersion(ctx context.Context, appID string) (int, error) {
+	var v sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(version) FROM platform_deployments WHERE application_id=?`, appID).Scan(&v); err != nil {
+		return 0, fmt.Errorf("max version: %w", err)
+	}
+	return int(v.Int64) + 1, nil
+}
+
+func (s *Store) InsertDeployment(ctx context.Context, d Deployment) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_deployments (`+deploymentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		d.ID, d.Org, d.ApplicationID, d.Version, d.Status, d.Source, d.Commit, d.Image, d.BuildID, d.Message, d.CreatedAt, d.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return errConflict
+		}
+		return fmt.Errorf("insert deployment: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) UpdateDeployment(ctx context.Context, d Deployment) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_deployments SET status=?,commit_sha=?,image=?,build_id=?,message=?,updated_at=? WHERE org=? AND id=?`,
+		d.Status, d.Commit, d.Image, d.BuildID, d.Message, d.UpdatedAt, d.Org, d.ID)
+	if err != nil {
+		return fmt.Errorf("update deployment: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetDeployment(ctx context.Context, org, appID, id string) (Deployment, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+deploymentCols+` FROM platform_deployments WHERE org=? AND application_id=? AND id=?`, org, appID, id)
+	d, err := scanDeployment(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Deployment{}, errNotFound
+	}
+	if err != nil {
+		return Deployment{}, fmt.Errorf("get deployment: %w", err)
+	}
+	return d, nil
+}
+
+func (s *Store) ListDeployments(ctx context.Context, org, appID string) ([]Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentCols+` FROM platform_deployments WHERE org=? AND application_id=? ORDER BY version DESC`, org, appID)
+	if err != nil {
+		return nil, fmt.Errorf("list deployments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan deployment: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ── builds ───────────────────────────────────────────────────────────────────
+
+const buildCols = `id,org,application_id,deployment_id,status,image,job_name,logs_ref,created_at,updated_at`
+
+func scanBuild(sc interface{ Scan(...any) error }) (Build, error) {
+	var b Build
+	err := sc.Scan(&b.ID, &b.Org, &b.ApplicationID, &b.DeploymentID, &b.Status, &b.Image, &b.JobName, &b.LogsRef, &b.CreatedAt, &b.UpdatedAt)
+	return b, err
+}
+
+func (s *Store) InsertBuild(ctx context.Context, b Build) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_builds (`+buildCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		b.ID, b.Org, b.ApplicationID, b.DeploymentID, b.Status, b.Image, b.JobName, b.LogsRef, b.CreatedAt, b.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("insert build: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) UpdateBuild(ctx context.Context, b Build) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_builds SET status=?,image=?,job_name=?,logs_ref=?,updated_at=? WHERE org=? AND id=?`,
+		b.Status, b.Image, b.JobName, b.LogsRef, b.UpdatedAt, b.Org, b.ID)
+	if err != nil {
+		return fmt.Errorf("update build: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+func (s *Store) GetBuild(ctx context.Context, org, id string) (Build, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+buildCols+` FROM platform_builds WHERE org=? AND id=?`, org, id)
+	b, err := scanBuild(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Build{}, errNotFound
+	}
+	if err != nil {
+		return Build{}, fmt.Errorf("get build: %w", err)
+	}
+	return b, nil
+}
