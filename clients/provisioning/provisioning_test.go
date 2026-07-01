@@ -148,7 +148,7 @@ func TestStore_PhysicalNameConflict(t *testing.T) {
 	// Distinct identity (different name + id), but force a physical collision.
 	b := sampleResource("orders")
 	b.ID, b.Name = "rs_other", "events" // satisfies UNIQUE(org,kind,name)
-	b.PhysicalName = a.PhysicalName      // but collides on physical_name
+	b.PhysicalName = a.PhysicalName     // but collides on physical_name
 	if exists, err := s.PhysicalExists(ctx, b.PhysicalName); err != nil || !exists {
 		t.Fatalf("PhysicalExists = (%v,%v), want (true,nil)", exists, err)
 	}
@@ -172,19 +172,84 @@ func TestNameValidation(t *testing.T) {
 	}
 }
 
+// TestSanitizeOrg: a clean DNS-1123-label owner maps to itself (identity, no
+// suffix); a non-slug owner folds to [a-z0-9-] AND carries a 16-hex SHA-256
+// disambiguation suffix. The exported IAM owner claim is already a clean slug,
+// so the common path is the identity — the suffix exists only to keep distinct
+// non-slug owners distinct.
 func TestSanitizeOrg(t *testing.T) {
-	cases := map[string]string{
-		"acme":                  "acme",
-		"Acme Corp":             "acme-corp",
-		" hanzo ":               "hanzo",
-		"a@b.c":                 "a-b-c",
-		"--weird--":             "weird",
-		strings.Repeat("z", 50): strings.Repeat("z", 32),
+	// Clean slugs (already [a-z0-9-] after trim): identity, no suffix. Trimming
+	// surrounding whitespace is not a meaningful distinction, so " hanzo " and
+	// "hanzo" intentionally coincide (both trim to the same clean slug).
+	identity := map[string]string{
+		"acme": "acme", "hanzo": "hanzo", "my-org": "my-org", "org123": "org123",
+		"a-b-c-d": "a-b-c-d", " hanzo ": "hanzo", "--weird--": "--weird--",
 	}
-	for in, want := range cases {
+	for in, want := range identity {
 		if got := sanitizeOrg(in); got != want {
-			t.Errorf("sanitizeOrg(%q) = %q, want %q", in, got, want)
+			t.Errorf("sanitizeOrg(%q) = %q, want identity %q", in, got, want)
 		}
+	}
+	// Owners with chars OUTSIDE [a-z0-9-] (uppercase, '.', '@', space) fold + get a
+	// "-"+16hex suffix, so the result is NOT the bare fold (that bare fold is the
+	// collision target) and stays a DNS-safe slug.
+	for _, in := range []string{"Acme Corp", "a@b.c", "team.a", "Widgets"} {
+		got := sanitizeOrg(in)
+		if len(got) < 17 || got[len(got)-17] != '-' {
+			t.Errorf("sanitizeOrg(%q) = %q, want a folded slug + '-'+16hex suffix", in, got)
+		}
+		for _, r := range got {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				t.Errorf("sanitizeOrg(%q) = %q has unsafe char %q", in, got, r)
+			}
+		}
+	}
+}
+
+// TestSanitizeOrgInjective is the RED cross-tenant regression: distinct raw
+// owners that USED to fold to the same slug (and thus shared one physical
+// bucket/DB namespace) must now map to DIFFERENT slugs. Proven for the exact
+// collisions RED found: Acme/acme (case) and team.a/team-a (separator).
+func TestSanitizeOrgInjective(t *testing.T) {
+	collisionPairs := [][2]string{
+		{"Acme", "acme"},
+		{"team.a", "team-a"},
+		{"a.b", "a-b"},
+		{"Foo_Bar", "foo-bar"},
+		{"WIDGETS", "widgets"},
+	}
+	for _, p := range collisionPairs {
+		x, y := sanitizeOrg(p[0]), sanitizeOrg(p[1])
+		if x == y {
+			t.Errorf("sanitizeOrg fold collision: %q and %q both → %q (cross-tenant namespace share!)", p[0], p[1], x)
+		}
+		// And the derived physical namespace (what actually keys buckets/DBs) is
+		// distinct too — the property that matters for isolation.
+		if orgHash(x) == orgHash(y) {
+			t.Errorf("orgHash collision after sanitize: %q/%q share a physical namespace", p[0], p[1])
+		}
+	}
+	// A clean lowercase slug is unaffected (no false-splitting of legit owners).
+	if sanitizeOrg("acme") != "acme" {
+		t.Error("a clean slug must remain identity")
+	}
+
+	// ALIAS class: a clean slug that LOOKS like a suffixed output
+	// ("foo-<16hex>") must NOT alias the sanitized output of a non-slug owner that
+	// folds to "foo" and hashes to that suffix. The suffixed-looking slug is denied
+	// identity and re-suffixed, so a squatted "foo-<sha256(Foo)[:8]>" can never
+	// collide with "Foo".
+	nonSlug := "Foo"
+	foldedOut := sanitizeOrg(nonSlug) // "foo-<hash(Foo)[:8]>"
+	if sanitizeOrg(foldedOut) == foldedOut {
+		t.Errorf("suffix-looking slug %q kept identity — aliases the non-slug output of %q", foldedOut, nonSlug)
+	}
+	if sanitizeOrg(foldedOut) == sanitizeOrg(nonSlug) {
+		t.Errorf("alias collision: squatted %q and non-slug %q map to the same slug", foldedOut, nonSlug)
+	}
+	// A normal slug that does NOT look suffixed keeps identity.
+	if sanitizeOrg("my-team-42") != "my-team-42" {
+		t.Error("a normal slug must keep identity (not over-suffixed)")
 	}
 }
 
@@ -265,6 +330,48 @@ func TestCreateOrgGate(t *testing.T) {
 	}
 }
 
+// TestForgedOrgWithoutPrincipalRefused (RED HIGH): a caller that forges
+// X-Org-Id but presents NO validated principal (no X-User-Id) — exactly the
+// SanitizeIdentity "Phase-1 data path" residual an in-cluster pod could send with
+// no bearer — must be refused 403 and provision NOTHING. Without the ctx.User()
+// gate this forged request would allocate a DB in the victim's namespace and
+// return its connection string + generated password, or (on DELETE) destroy it.
+func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
+	s, mp := newTestSvc(t, "sql")
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Post("/v1/sql", s.create("sql"))
+	app.Delete("/v1/sql/:name", s.drop("sql"))
+	app.Get("/v1/sql", s.list("sql"))
+
+	for _, tc := range []struct{ method, path, body string }{
+		{"POST", "/v1/sql", `{"name":"orders"}`},
+		{"DELETE", "/v1/sql/orders", ""},
+		{"GET", "/v1/sql", ""},
+	} {
+		var rdr io.Reader
+		if tc.body != "" {
+			rdr = strings.NewReader(tc.body)
+		}
+		req, _ := http.NewRequest(tc.method, tc.path, rdr)
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		// Forge the victim's org WITHOUT any validated principal (no X-User-Id).
+		req.Header.Set("X-Org-Id", "victim-org")
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
+		}
+		if resp.StatusCode != http.StatusForbidden {
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("%s %s (forged org, no principal) = %d body=%s, want 403 — control-plane forge NOT closed!", tc.method, tc.path, resp.StatusCode, body)
+		}
+	}
+	if mp.created != 0 || mp.dropped != 0 {
+		t.Fatalf("provisioner ran (created=%d dropped=%d) for forged requests, want 0/0 — resources touched in victim's namespace!", mp.created, mp.dropped)
+	}
+}
+
 // TestCreateKMSDegradePersistsNoPlaintext: with KMS unconfigured, create returns
 // the generated password ONCE and persists NO plaintext (stored row carries an
 // empty secret_ref and the password appears in no stored column).
@@ -279,6 +386,7 @@ func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/v1/kv", strings.NewReader(`{"name":"cache"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u-acme") // validated principal (tenant() gates on X-User-Id)
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
