@@ -8,23 +8,50 @@ import (
 	"github.com/hanzoai/cloud/clients"
 )
 
-// TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an
-// enabled subsystem's Client field nil — the subsystem Mount() is
-// responsible for filling it in.
+// TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an enabled
+// Mount-fills-it subsystem's Client field nil — the subsystem Mount() installs
+// it. KMS is the exception (see TestBuildDeps_KMSEnabledIsInProcess): it is
+// constructed eagerly in BuildDeps because its store must exist before any
+// dependent subsystem mounts.
 func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
-		DataDir: "/tmp",
-		Enable:  []string{"iam", "kms", "base", "commerce", "ai", "o11y", "vfs", "mq"},
+		DataDir: t.TempDir(),
+		Enable:  []string{"iam", "base", "commerce", "ai", "o11y", "vfs", "mq"},
 	}
 	deps := cloud.BuildDeps(cfg)
 
 	if deps.IAM != nil {
 		t.Errorf("deps.IAM: enabled subsystem must leave Client nil, got %T", deps.IAM)
 	}
-	if deps.KMS != nil {
-		t.Errorf("deps.KMS: enabled subsystem must leave Client nil, got %T", deps.KMS)
+}
+
+// TestBuildDeps_KMSEnabledIsInProcess verifies the HIP-0106 "embed KMS in cloud"
+// contract: when the kms subsystem (kmssvc) is enabled, deps.KMS is a live
+// in-process client (never nil, never a disabled stub) so other subsystems get a
+// working KMS via direct Go dispatch with no RPC. Absent a master key it still
+// resolves (health-only, fail-closed) — the point is that deps.KMS is populated.
+func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
+	cfg := &cloud.Config{
+		Brand:   "hanzo",
+		Domain:  "api.hanzo.ai",
+		DataDir: t.TempDir(),
+		Enable:  []string{"kmssvc"},
+	}
+	deps := cloud.BuildDeps(cfg)
+
+	if deps.KMS == nil {
+		t.Fatal("deps.KMS: enabled kmssvc must give an in-process client, got nil")
+	}
+	// It must NOT be the fail-closed disabled stub — that stub returns IsDisabled
+	// errors; an in-process client (no master key) returns a master-key error.
+	_, err := deps.KMS.GetSecret(context.Background(), "any")
+	if err == nil {
+		t.Fatal("GetSecret with no master key must fail closed")
+	}
+	if clients.IsDisabled(err) {
+		t.Errorf("deps.KMS resolved to the DISABLED stub, want the in-process client: %v", err)
 	}
 }
 
