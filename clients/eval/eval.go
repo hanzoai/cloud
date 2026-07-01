@@ -506,10 +506,11 @@ func (s *service) doJSON(ctx context.Context, client *http.Client, method, targe
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
 
-// tenant resolves the org slug used to scope console keys, accepting the
-// IAM/Hanzo project headers and falling back to the gateway-minted X-Org-Id.
+// tenant resolves the org slug used to scope console keys, preferring the
+// canonical X-Project-Id sub-scope (what console2 stamps) and falling back to
+// the gateway-minted X-Org-Id.
 func tenant(c *zip.Ctx) string {
-	if v := c.Header("X-IAM-Project-Id"); v != "" {
+	if v := c.Header("X-Project-Id"); v != "" {
 		return v
 	}
 	if v := c.Header("X-Org-Id"); v != "" {
