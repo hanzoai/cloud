@@ -245,8 +245,10 @@ func (s *svc) create(c *zip.Ctx) error {
 		return zip.ErrBadRequest("code too large")
 	}
 	timeout := body.TimeoutSec
-	if timeout <= 0 || timeout > 900 {
+	if timeout <= 0 {
 		timeout = 30
+	} else if timeout > 900 {
+		timeout = 900 // clamp to the ceiling, don't silently reset to the default
 	}
 	mem := strings.TrimSpace(body.MemoryLimit)
 	if mem == "" {
@@ -452,19 +454,28 @@ func toInvViews(invs []Invocation) []invocationView {
 
 func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 
+// tenant resolves the org — the tenant isolation KEY. It uses c.Org() EXACTLY
+// as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
+// never lowercased/stripped/truncated. Normalizing would collapse distinct
+// owners into one bucket — a cross-tenant break (Red HIGH-1). Reject only empty
+// or pathologically long. No magic "admin" bucket.
 func tenant(c *zip.Ctx) (string, bool) {
-	org := sanitizeOrg(c.Org())
-	if org != "" {
-		return org, true
+	org := strings.TrimSpace(c.Org())
+	if org == "" || len(org) > 128 {
+		return "", false
 	}
-	if c.IsAdmin() {
-		return "admin", true
-	}
-	return "", false
+	return org, true
 }
 
-func sanitizeOrg(s string) string {
+// sanitizeNs normalizes the function NAMESPACE — a cosmetic grouping/display
+// field the caller supplies, NOT the tenant isolation key (that is the org).
+// Lossy normalization here is safe: the namespace never gates cross-tenant
+// access (every query is already scoped by the exact org column).
+func sanitizeNs(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "default"
+	}
 	var b strings.Builder
 	for _, r := range s {
 		switch {
@@ -475,18 +486,9 @@ func sanitizeOrg(s string) string {
 		}
 	}
 	out := strings.Trim(b.String(), "-")
-	if len(out) > 32 {
-		out = strings.Trim(out[:32], "-")
+	if len(out) > 63 {
+		out = strings.Trim(out[:63], "-")
 	}
-	return out
-}
-
-func sanitizeNs(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return "default"
-	}
-	out := sanitizeOrg(s)
 	if out == "" {
 		return "default"
 	}

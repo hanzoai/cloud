@@ -37,13 +37,13 @@ type Prompt struct {
 	UpdatedAt int64
 }
 
-// Version is one immutable historical revision of a prompt's content. Creating
-// a prompt whose (org,name) already exists appends a new Version and advances
-// the prompt's current Version — real, inspectable history, never fabricated.
+// Version is the METADATA of one historical revision (its content lives in the
+// prompt_versions row but is not returned in bulk — Red MED-1). Creating a
+// prompt whose (org,name) already exists appends a new Version and advances the
+// prompt's current Version — real, inspectable history, never fabricated.
 type Version struct {
 	Version   int
 	Type      string
-	Content   string
 	CreatedAt int64
 }
 
@@ -233,10 +233,13 @@ func (s *Store) List(ctx context.Context, org string) ([]Prompt, error) {
 	return out, rows.Err()
 }
 
-// Versions returns the version history for (org,name), newest first.
+// Versions returns bounded version-history METADATA for (org,name), newest
+// first (content is NOT selected — Red MED-1). The cap means a prompt with an
+// unbounded append history still yields a small, constant-size response.
 func (s *Store) Versions(ctx context.Context, org, name string) ([]Version, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT version,type,content,created_at FROM prompt_versions WHERE org=? AND prompt_name=? ORDER BY version DESC`, org, name)
+		`SELECT version,type,created_at FROM prompt_versions WHERE org=? AND prompt_name=? ORDER BY version DESC LIMIT ?`,
+		org, name, versionHistoryLimit)
 	if err != nil {
 		return nil, fmt.Errorf("list versions: %w", err)
 	}
@@ -244,12 +247,24 @@ func (s *Store) Versions(ctx context.Context, org, name string) ([]Version, erro
 	var out []Version
 	for rows.Next() {
 		var v Version
-		if err := rows.Scan(&v.Version, &v.Type, &v.Content, &v.CreatedAt); err != nil {
+		if err := rows.Scan(&v.Version, &v.Type, &v.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan version: %w", err)
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+// CountVersions returns the TRUE number of versions for (org,name) — the metrics
+// count, unaffected by the history-response cap.
+func (s *Store) CountVersions(ctx context.Context, org, name string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM prompt_versions WHERE org=? AND prompt_name=?`, org, name).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count versions: %w", err)
+	}
+	return n, nil
 }
 
 // Delete removes a prompt and its version history. Reports whether a row went.

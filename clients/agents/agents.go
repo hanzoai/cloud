@@ -433,33 +433,18 @@ func (s *svc) runs(c *zip.Ctx) error {
 
 func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 
+// tenant resolves the org — the tenant isolation KEY. It uses c.Org() EXACTLY
+// as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
+// never lowercased/stripped/truncated. Normalizing would collapse distinct
+// owners into one bucket (Red HIGH-1). Reject only empty or pathologically
+// long. No magic "admin" bucket — a global admin operating on per-org data
+// carries an explicit org, so an empty org is a true 403.
 func tenant(c *zip.Ctx) (string, bool) {
-	org := sanitizeOrg(c.Org())
-	if org != "" {
-		return org, true
+	org := strings.TrimSpace(c.Org())
+	if org == "" || len(org) > 128 {
+		return "", false
 	}
-	if c.IsAdmin() {
-		return "admin", true
-	}
-	return "", false
-}
-
-func sanitizeOrg(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 32 {
-		out = strings.Trim(out[:32], "-")
-	}
-	return out
+	return org, true
 }
 
 func cleanList(xs []string) []string {
