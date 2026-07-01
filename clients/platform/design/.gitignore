@@ -1,0 +1,10 @@
+# Regenerable Goa transport codegen (produced by `goa gen`). Only the design
+# (design/design.go) and the OpenAPI 3 contract (gen/http/openapi3.*) are the
+# committed source of truth; everything else is regenerated on demand and never
+# compiled into the cloud binary.
+/gen/http/cli/
+/gen/http/platform/
+/gen/platform/
+/gen/goa.json
+/gen/http/openapi.json
+/gen/http/openapi.yaml
