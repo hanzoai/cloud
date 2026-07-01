@@ -6,15 +6,12 @@
 // It has no storage of its own — every subsystem owns its own
 // per-(org, user) SQLite via hanzoai/base (HIP-0302).
 //
-// The legacy deployed image (cloud-api Python/TS) used a shared
-// PostgreSQL database `hanzo_cloud` on `postgres.hanzo.svc`. That
-// service is being retired in favour of the Go orchestrator. The
-// lockdown ensures the new binary never picks up a leaked
-// `DATABASE_URL` env from a manifest that still carries the legacy
-// driverName=postgres / dbName=hanzo_cloud knobs.
-//
-// Per the Hanzo PG → SQLite migration plan
-// (~/work/hanzo/CLAUDE_PG_TO_SQLITE_MIGRATION.md, service #4 — cloud).
+// The casibase-derived cloud-api (Go — it lives on as hanzoai/ai, which
+// mounts INTO this orchestrator) used a shared PostgreSQL database
+// `hanzo_cloud` on `postgres.hanzo.svc`. Postgres is being retired for
+// per-tenant SQLite. The lockdown ensures this binary never picks up a
+// leaked Postgres pin (a `DATABASE_URL` / `driverName=postgres` knob) from
+// a manifest carried over from that deployment.
 package storagelock
 
 import (
@@ -23,10 +20,15 @@ import (
 	"strings"
 )
 
-// forbiddenEnvs is the closed set of env vars that the legacy cloud-api
-// Python deployment used to pin its Postgres backend. They are
-// dispositive — non-empty at boot for the Go orchestrator means a
-// regression copying from the legacy manifest.
+// forbiddenEnvs is the closed set of env vars that pin a Postgres
+// backend. Non-empty at boot for the Go orchestrator means a manifest
+// leaked a Postgres pin. driverName is casibase's XORM knob (== "postgres"
+// is the smoking gun); the rest are DSN/host envs.
+//
+// A database NAME is deliberately NOT here: `dbName` names a database, it
+// does not select a backend, so `dbName=hanzo_cloud` alongside sqlite is
+// benign and must never crash the pod. The backend is decided by driverName
+// + the DSN, and those are what we guard.
 var forbiddenEnvs = []string{
 	"DATABASE_URL",
 	"DATABASE_HOST",
@@ -36,10 +38,7 @@ var forbiddenEnvs = []string{
 	"CLOUD_DATABASE_URL",
 	"CLOUD_POSTGRES_URL",
 	"HANZO_CLOUD_DB",
-	// Legacy cloud-api Python/TS driverName/dbName pair. driverName ==
-	// "postgres" is the smoking-gun configuration.
 	"driverName",
-	"dbName",
 }
 
 // pgSchemes is the prefix set that marks a DSN as a Postgres URL.
@@ -75,23 +74,12 @@ func Violations(lookup func(string) string) []Violation {
 		if v == "" {
 			continue
 		}
-		// driverName is the legacy cloud-api Python knob; we only
-		// reject "postgres" / "postgresql". Other values (e.g.
-		// "sqlite") are intentional transition signals from the
-		// operator and must not crash the pod.
+		// driverName is casibase's XORM knob; only "postgres" /
+		// "postgresql" is a violation. Any other value (e.g. "sqlite")
+		// is the intended backend and must not crash the pod.
 		if k == "driverName" {
 			low := strings.ToLower(v)
 			if low != "postgres" && low != "postgresql" {
-				continue
-			}
-		}
-		// dbName by itself is not a violation unless paired with a
-		// postgres driver; but since "hanzo_cloud" is the exact legacy
-		// name and the Go binary never reads dbName, we report it as
-		// an informational violation only when it has the legacy
-		// value. Other values pass through.
-		if k == "dbName" {
-			if v != "hanzo_cloud" {
 				continue
 			}
 		}
@@ -133,9 +121,7 @@ func classify(k, v string) string {
 	case IsPostgres(v):
 		return "Postgres DSN"
 	case k == "driverName":
-		return "legacy Python driver pin"
-	case k == "dbName":
-		return "legacy Python db pin"
+		return "casibase driverName=postgres"
 	default:
 		return "set"
 	}
