@@ -1,8 +1,8 @@
 // Package productsvc exposes the read-only Search and Vector product surfaces
 // the Hanzo console panels call at api.cloud.hanzo.ai, per HIP-0106.
 //
-// The console's Search/Indexes and Vector panels are hardcoded to call
-// https://api.cloud.hanzo.ai/api/search-docs/* and /api/vector/* with a
+// The console's Search/Indexes and Vector panels call
+// https://api.hanzo.ai/v1/search-docs/* and /v1/vector/* with a
 // bearer key (HANZO_SEARCH_API_KEY / HANZO_VECTOR_API_KEY). cloud-api is the
 // single edge that owns those paths: this subsystem proxies them to the
 // in-cluster Meilisearch (search.hanzo.svc) and Qdrant (vector.hanzo.svc)
@@ -77,7 +77,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	cfg := loadConfig()
 
 	// ── Search (Meilisearch-backed) ───────────────────────────────────
-	app.Get("/api/search-docs/indexes", func(c *zip.Ctx) error {
+	app.Get("/v1/search-docs/indexes", func(c *zip.Ctx) error {
 		if err := authorize(c, cfg.searchKey); err != nil {
 			return err
 		}
@@ -101,7 +101,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]any{"indexes": out})
 	})
 
-	app.Get("/api/search-docs/stats", func(c *zip.Ctx) error {
+	app.Get("/v1/search-docs/stats", func(c *zip.Ctx) error {
 		if err := authorize(c, cfg.searchKey); err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	})
 
 	// ── Vector (Qdrant-backed) ────────────────────────────────────────
-	app.Get("/api/vector/collections", func(c *zip.Ctx) error {
+	app.Get("/v1/vector/collections", func(c *zip.Ctx) error {
 		if err := authorize(c, cfg.vectorKey); err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]any{"collections": cols})
 	})
 
-	app.Get("/api/vector/stats", func(c *zip.Ctx) error {
+	app.Get("/v1/vector/stats", func(c *zip.Ctx) error {
 		if err := authorize(c, cfg.vectorKey); err != nil {
 			return err
 		}
