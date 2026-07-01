@@ -58,6 +58,17 @@ import (
 	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 
+	// S3 object-storage DATA plane: the org-scoped /v1/s3 file manager (buckets +
+	// objects) over the shared SeaweedFS S3 gateway. Order 118 (< provisioning's
+	// 120) so its static /v1/s3/buckets + /v1/s3/health register BEFORE
+	// provisioning's /v1/s3/:name and win Fiber's first-match scan; registered as
+	// "s3svc" so the generic health route does not shadow the real fail-closed
+	// /v1/s3/health. It COMPLEMENTS provisioning (which owns the s3 RESOURCE
+	// lifecycle at /v1/s3 + /v1/s3/:name) — both derive a tenant's physical bucket
+	// name identically (provisioning.PhysicalName) so a provisioned bucket is
+	// browsable here.
+	_ "github.com/hanzoai/cloud/clients/s3" // order 118 — /v1/s3/buckets/*,/v1/s3/health
+
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
 	_ "github.com/hanzoai/cloud/clients/provisioning" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
