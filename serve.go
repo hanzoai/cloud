@@ -68,6 +68,22 @@ func Serve(enable []string) error {
 	identity := newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0)
 	app.Use(SanitizeIdentity(identity, cfg.AdminOrg))
 
+	// Audit trail (FedRAMP AU-* / SOC 2 CC-*). Runs AFTER SanitizeIdentity so the
+	// actor/isAdmin it records come from a VALIDATED principal (never a raw
+	// header), and BEFORE BillingGate + every subsystem so it wraps the whole
+	// chain and observes the final outcome — including a billing 402/503 and an
+	// admin 403 denial. It is the ONE place every security-relevant request is
+	// recorded to the tamper-evident, append-only store (see audit_middleware.go /
+	// audit/). A write failure fails the request CLOSED (AU-5). Constructed here
+	// so the Recorder lives for the process and the /v1/admin/audit query + verify
+	// endpoints (clients/admin) read the SAME store via deps.Audit.
+	auditRec, err := buildAuditRecorder(cfg, deps.Logger)
+	if err != nil {
+		return fmt.Errorf("audit: %w", err)
+	}
+	deps.Audit = auditRec
+	app.Use(AuditTrail(auditRec))
+
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —
 	// so every priced route is balance-gated once, at the edge, fail-closed.
@@ -160,6 +176,11 @@ func Serve(enable []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = healthSrv.Shutdown(shutdownCtx)
+	// Close the audit store last so any in-flight append has drained through the
+	// serialized writer and the SQLite file is flushed cleanly.
+	if auditRec != nil {
+		_ = auditRec.Close()
+	}
 	return app.ShutdownWithContext(shutdownCtx)
 }
 
