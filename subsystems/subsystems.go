@@ -17,15 +17,20 @@
 // import cycle. As a sibling subpackage it composes them without one.)
 package subsystems
 
-// The unified `cloud` binary is the APPLICATION layer only. Infrastructure and
-// edge subsystems run as their own deployments, NOT fused in:
+// The unified `cloud` binary is the APPLICATION layer plus the embedded KMS
+// secrets plane (HIP-0106 "all Go embeds in cloud"). The remaining
+// infrastructure/edge subsystems run as their own deployments, NOT fused in:
 //   - iam   → iam.hanzo.ai (Casdoor)        — identity, isolated control plane
-//   - kms   → kms.hanzo.ai (luxfi/kms)       — secrets, isolated control plane
 //   - mcp   → its own deployment             — tool surface
 //   - gateway, ingress → the edge            — they route *to* this binary
 //   - amqp  → removed (unused)
-// Keeping them separate preserves blast-radius isolation and independent
+// Keeping those separate preserves blast-radius isolation and independent
 // scaling for the security/edge tier.
+//
+// KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by
+// clients/kmsembed, replacing the legacy Infisical fork). Its master key is
+// injected by the operator via a K8s Secret env; absent it the subsystem serves
+// fail-closed health-only.
 import (
 	_ "github.com/hanzoai/ai"        // order 150
 	_ "github.com/hanzoai/authz"     // order 70
@@ -36,16 +41,23 @@ import (
 	_ "github.com/hanzoai/o11y"      // order 70
 	_ "github.com/hanzoai/vfs"       // order 20
 
+	// Embedded KMS secrets plane (HIP-0106): mounts /v1/kms/* backed by the
+	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as
+	// "kmssvc" (order 10) so the real /v1/kms/health probe is not shadowed by the
+	// generic liveness route; secret ops fail closed until the operator injects
+	// CLOUD_KMS_MASTER_KEY_REF.
+	_ "github.com/hanzoai/cloud/clients/kms" // order 10 — /v1/kms/*
+
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
-	_ "github.com/hanzoai/cloud/clients/eval"    // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/prompt"  // order 144 — /v1/prompts/* (console Langfuse prompts API)
-	_ "github.com/hanzoai/cloud/clients/bot"     // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
+	_ "github.com/hanzoai/cloud/clients/bot"       // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
+	_ "github.com/hanzoai/cloud/clients/eval"      // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/exec"      // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
-	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/pricing" // order 112 — /v1/pricing/*
-	_ "github.com/hanzoai/cloud/clients/plugin"  // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
+	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
+	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/prompt"    // order 144 — /v1/prompts/* (console Langfuse prompts API)
+	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
@@ -79,7 +91,6 @@ import (
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
 	// instead of the "runtime not initialized" 503.
 	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
-
 	// The console2 SPA is go:embed'd and served at "/" by webui.go's
 	// mountConsole, called directly from Serve AFTER every /v1/* route mounts
 	// (so real API routes always win; unmatched paths fall back to the SPA).
