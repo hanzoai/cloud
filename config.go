@@ -47,8 +47,18 @@ type Config struct {
 	// (comma-separated) or GATEWAY_ALLOWED_AUDIENCES.
 	JWTAudiences []string
 
-	// KMSMasterKeyRef points at the KMS master key for per-tenant DEK derivation.
+	// KMSMasterKeyRef is the base64-encoded 32-byte KMS master key (KEK) the
+	// embedded luxfi/kms store seals every secret's DEK under. The operator
+	// injects it from a K8s Secret as CLOUD_KMS_MASTER_KEY_REF; cloud reads it
+	// ONLY from env (never from the store it hosts — the bootstrap chicken-and-egg)
+	// and never logs it. Empty ⇒ the KMS subsystem runs fail-closed (health-only).
 	KMSMasterKeyRef string
+
+	// KMSMPCAddr / KMSMPCVaultID configure the MPC threshold-signing backend for
+	// KMS Sign. Both empty (the default) ⇒ Sign fails closed with a clear error;
+	// signing is never fabricated. Set via CLOUD_KMS_MPC_ADDR / CLOUD_KMS_MPC_VAULT_ID.
+	KMSMPCAddr    string
+	KMSMPCVaultID string
 
 	// DataDir is the on-disk data root.
 	DataDir string
@@ -125,6 +135,8 @@ func LoadConfig() *Config {
 		AdminOrg:        getenv("IAM_ADMIN_ORG", "admin"),
 		JWKSURL:         getenv("CLOUD_JWKS_URL", ""),
 		KMSMasterKeyRef: getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
+		KMSMPCAddr:      getenv("CLOUD_KMS_MPC_ADDR", ""),
+		KMSMPCVaultID:   getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
 		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
 		PaymentsZAPAddr: getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:    getenv("CLOUD_VAULT_ZAP_ADDR", ""),
