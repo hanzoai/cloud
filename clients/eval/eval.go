@@ -506,17 +506,25 @@ func (s *service) doJSON(ctx context.Context, client *http.Client, method, targe
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
 
-// tenant resolves the org slug used to scope console keys, preferring the
-// canonical X-Project-Id sub-scope (what console2 stamps) and falling back to
-// the gateway-minted X-Org-Id.
+// tenant resolves the org slug that scopes the console API key pair
+// (console-pk-{org}/console-sk-{org} in KMS). It uses ONLY c.Org() — the org
+// SanitizeIdentity pinned from the VALIDATED bearer owner (HIP-0026) — and NEVER
+// a raw request header.
+//
+// SECURITY (cross-tenant key selection): the KMS key namespace is ORG-keyed, so
+// the selector MUST be the authoritative org. X-Project-Id is a project sub-scope
+// WITHIN an org that is deliberately EXCLUDED from SanitizeIdentity.authorityHeaders
+// (it is client-controllable — see middleware_identity.go). The previous version
+// preferred X-Project-Id over c.Org(), so a caller who set `X-Project-Id: victim-org`
+// would make resolveKeys fetch ANOTHER org's console-pk/console-sk from KMS and read
+// that org's eval scores/datasets — a cross-tenant break. Reading a raw X-Org-Id
+// header was equally unsafe (SanitizeIdentity already strips a client copy and re-mints
+// it into c.Org() from the token). c.Org() alone is the one authoritative selector, the
+// same rule agents/prompts/provisioning use. If per-PROJECT key scoping is ever needed,
+// it must derive the project from a membership check UNDER c.Org(), never from a raw
+// sub-scope header (a Phase-2 concern; keys stay org-scoped today).
 func tenant(c *zip.Ctx) string {
-	if v := c.Header("X-Project-Id"); v != "" {
-		return v
-	}
-	if v := c.Header("X-Org-Id"); v != "" {
-		return v
-	}
-	return c.Org() // X-Org-Id
+	return c.Org() // authoritative org (validated bearer owner); never a raw header
 }
 
 // loopbackBase turns a listen address (":8080", "0.0.0.0:8080") into a loopback
