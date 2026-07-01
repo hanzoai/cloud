@@ -35,6 +35,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +48,38 @@ import (
 // These strings are the Hanzo product names — never the upstream OSS name of
 // the backend (so "sql"/"s3", not "postgres"/"minio").
 var kinds = []string{"sql", "vector", "datastore", "kv", "search", "s3", "docdb"}
+
+// publicEndpoint returns the CUSTOMER-FACING host+port for a provisioned
+// resource. The internal admin address (e.g. vector.hanzo.svc:6333) is a
+// server-side detail and must NEVER leak to a tenant or into an app config.
+// HTTP resources are reachable through the unified api.hanzo.ai gateway
+// (path /v1/<kind>/*); native-wire databases have their own public ingress at
+// <kind>.hanzo.ai on the native port — so a customer can connect from their app
+// (and from hanzo.app) with a real, routable endpoint. Overridable per kind via
+// PUBLIC_<KIND>_HOST / PUBLIC_<KIND>_PORT.
+func publicEndpoint(kind string) (host string, port int) {
+	switch kind {
+	case "vector", "search", "docdb", "s3":
+		host, port = "api.hanzo.ai", 443 // https://api.hanzo.ai/v1/<kind>/*
+	case "sql":
+		host, port = "sql.hanzo.ai", 5432
+	case "kv":
+		host, port = "kv.hanzo.ai", 6379
+	case "datastore":
+		host, port = "datastore.hanzo.ai", 8123
+	default:
+		host, port = "api.hanzo.ai", 443
+	}
+	if h := os.Getenv("PUBLIC_" + strings.ToUpper(kind) + "_HOST"); h != "" {
+		host = h
+	}
+	if p := os.Getenv("PUBLIC_" + strings.ToUpper(kind) + "_PORT"); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			port = n
+		}
+	}
+	return host, port
+}
 
 // secretfulKinds are the kinds whose backend wires a real per-resource
 // credential (so the generated password is meaningful and gets sealed in KMS /
@@ -309,10 +342,17 @@ func (s *svc) create(kind string) zip.Handler {
 		// GB-month amount once a live-size source exists.
 		s.bill.Meter(org, kind, fee, c.RequestID(), cloud.ClientIP(c))
 
+		// Return the PUBLIC endpoint, never the internal admin host. Remap the
+		// connection string's host:port too so a copy-pasted DSN is routable.
+		ph, pp := publicEndpoint(kind)
+		pubCS := cs
+		if cs != "" {
+			pubCS = strings.ReplaceAll(cs, fmt.Sprintf("%s:%d", host, port), fmt.Sprintf("%s:%d", ph, pp))
+		}
 		return c.JSON(http.StatusCreated, createResp{
 			ID: id, Kind: kind, Name: name, Status: "ready",
-			Host: host, Port: port, Username: username, Database: db,
-			ConnectionString: cs, Password: returnPw,
+			Host: ph, Port: pp, Username: username, Database: db,
+			ConnectionString: pubCS, Password: returnPw,
 		})
 	}
 }
@@ -330,9 +370,10 @@ func (s *svc) list(kind string) zip.Handler {
 		}
 		out := make([]listItem, 0, len(rows))
 		for _, r := range rows {
+			ph, pp := publicEndpoint(r.Kind)
 			out = append(out, listItem{
 				ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-				Host: r.Host, Port: r.Port, CreatedAt: r.CreatedAt,
+				Host: ph, Port: pp, CreatedAt: r.CreatedAt,
 			})
 		}
 		return c.JSON(http.StatusOK, out)
@@ -354,9 +395,10 @@ func (s *svc) get(kind string) zip.Handler {
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 		}
+		ph, pp := publicEndpoint(r.Kind)
 		return c.JSON(http.StatusOK, getResp{
 			ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-			Host: r.Host, Port: r.Port, Username: r.Username, Database: r.DBName,
+			Host: ph, Port: pp, Username: r.Username, Database: r.DBName,
 		})
 	}
 }
