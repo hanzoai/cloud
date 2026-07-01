@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Hanzo Cloud Console</title>
+    <!--
+      FALLBACK SHELL — not the built console.
+
+      This file exists so `//go:embed all:webui/dist` compiles and the ONE
+      `hanzoai/cloud` binary always serves a same-origin console entry, even in
+      a plain `go build` (no Node toolchain). The cloud image's build pipeline
+      (Dockerfile) runs `npm run build` on hanzoai/console2 and OVERWRITES this
+      directory with the real static bundle before `go build`, so the shipped
+      image serves the full @hanzo/gui console. See webui.go + Dockerfile.
+
+      It is deliberately dependency-free and calls /v1 on its OWN origin — the
+      same host that serves this HTML also serves the API, so the session cookie
+      is first-party and no CORS/second-origin token dance is needed.
+    -->
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0a0a0a; color: #ededed;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      #root { min-height: 100%; display: grid; place-items: center; padding: 2rem; }
+      .card { max-width: 34rem; width: 100%; }
+      h1 { font-size: 1.35rem; margin: 0 0 .5rem; letter-spacing: -.01em; }
+      p { margin: .35rem 0; color: #a1a1a1; }
+      code { color: #ededed; background: #171717; padding: .1rem .35rem; border-radius: 4px; }
+      .status { margin-top: 1rem; padding: .75rem 1rem; border: 1px solid #262626;
+        border-radius: 8px; background: #111; }
+      .ok { color: #4ade80; } .warn { color: #fbbf24; } .err { color: #f87171; }
+      a { color: #60a5fa; text-decoration: none; } a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="card">
+        <h1>Hanzo Cloud Console</h1>
+        <p>Served by the unified <code>hanzoai/cloud</code> binary — one artifact
+          serves this UI and the <code>/v1</code> API on the same origin.</p>
+        <p>This is the fallback shell. The shipped image embeds the full
+          <code>@hanzo/gui</code> console built from <code>hanzoai/console2</code>.</p>
+        <div class="status" id="status">Checking <code>/v1</code> on this origin…</div>
+      </div>
+    </div>
+    <script>
+      // Prove the co-located API is reachable from the SAME origin that served
+      // this shell. 401/403 is a SUCCESSFUL reach (the API answered, auth is
+      // simply required) — the console proper signs in via IAM.
+      (function () {
+        var el = document.getElementById("status");
+        fetch("/v1/models", { credentials: "include" })
+          .then(function (r) {
+            if (r.status === 401 || r.status === 403) {
+              el.innerHTML = '<span class="ok">/v1 reachable</span> — API answered ' +
+                r.status + ' (sign-in required). Same-origin API + UI confirmed.';
+            } else if (r.ok) {
+              el.innerHTML = '<span class="ok">/v1 reachable</span> — models endpoint OK.';
+            } else {
+              el.innerHTML = '<span class="warn">/v1 answered ' + r.status +
+                '</span> on this origin.';
+            }
+          })
+          .catch(function () {
+            el.innerHTML = '<span class="err">/v1 not reachable</span> from this origin.';
+          });
+      })();
+    </script>
+  </body>
+</html>
