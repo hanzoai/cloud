@@ -65,12 +65,13 @@ type EnvVarJSON struct {
 }
 
 type svc struct {
-	store  *Store
-	k8s    *k8sClient
-	log    luxlog.Logger
-	brand  string
-	env    string
-	domain string
+	store     *Store
+	k8s       *k8sClient
+	log       luxlog.Logger
+	brand     string
+	env       string
+	domain    string
+	sitesHost string // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -101,7 +102,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
-	s := &svc{store: store, k8s: k, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain}
+	s := &svc{store: store, k8s: k, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
+		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}
 	mounted = s
 	s.routes(app)
 
@@ -471,7 +473,11 @@ func (s *svc) createApp(c *zip.Ctx) error {
 		}
 	}
 	envJSON, _ := json.Marshal(body.Env)
-	domainsJSON, _ := json.Marshal(sanitizeDomains(body.Domains))
+	domains := sanitizeDomains(body.Domains)
+	if err := s.validateOrgDomains(org, domains); err != nil {
+		return err
+	}
+	domainsJSON, _ := json.Marshal(domains)
 
 	now := time.Now().Unix()
 	id, err := genID("app")
@@ -659,6 +665,29 @@ func branchDefault(repoURL string) string {
 		return ""
 	}
 	return "main"
+}
+
+// validateOrgDomains binds every requested ingress host to the CALLER's own org
+// (RED — cross-tenant/apex domain hijack). Without this, a tenant could set
+// domains:["api.hanzo.ai"] or another org's host and the operator would render
+// an Ingress claiming it. In the first slice a custom domain MUST be under the
+// tenant's own subtree "<org>.<sitesHost>" (e.g. maxpower may only claim
+// "*.maxpower.hanzo.app"), so a domain can never target another org's space or a
+// Hanzo apex. Verified custom domains (arbitrary hosts + DNS/ACME proof) are a
+// phase-2 capability (domain CRUD, [DESIGN]); until then unverified hosts are
+// refused rather than blindly trusted.
+func (s *svc) validateOrgDomains(org string, domains []string) error {
+	if len(domains) == 0 {
+		return nil
+	}
+	suffix := "." + org + "." + s.sitesHost // e.g. ".maxpower.hanzo.app"
+	for _, d := range domains {
+		if !strings.HasSuffix(d, suffix) || len(d) <= len(suffix) {
+			return zip.Errorf(http.StatusNotImplemented,
+				"custom domain %q is not verified for this org; the first slice allows only hosts under %q (verified custom domains are phase 2)", d, org+"."+s.sitesHost)
+		}
+	}
+	return nil
 }
 
 // sanitizeDomains lowercases, trims, and drops empties/dupes from ingress hosts.
