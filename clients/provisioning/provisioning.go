@@ -445,13 +445,27 @@ func (s *svc) drop(kind string) zip.Handler {
 // tenant resolves the org for a request. Empty org is allowed only for admins,
 // who are bucketed under the literal "admin" org.
 //
-// Trusting the gateway-minted X-User-IsAdmin claim (c.IsAdmin()) is acceptable
-// here: the blast radius of a forged claim is bounded to the single literal
-// "admin" org bucket. An admin still gets a distinct physical namespace
-// ("o"<hash("admin")>_…) and cannot name into any real tenant's resources. The
-// gateway strips client-supplied identity headers and only sets this claim on
-// the JWT-validated path (HIP-0026), so it cannot be spoofed from the edge.
+// REQUIRES A VALIDATED PRINCIPAL (RED HIGH). SanitizeIdentity strips X-User-Id on
+// ingress and re-sets it ONLY for a validated bearer/cookie; on the no-principal
+// "Phase-1 data path" it RESTORES the client's raw X-Org-Id but leaves X-User-Id
+// empty. This control plane ALLOCATES and DESTROYS real backend resources and
+// returns generated credentials, so trusting X-Org-Id alone let an in-cluster
+// caller (a co-namespace pod within the cloud-api NetworkPolicy) forge
+// `X-Org-Id: victim` with NO bearer and provision a DB in the victim's namespace
+// (receiving its connection string + password), destroy the victim's database, or
+// enumerate its resources — strictly worse than a data read. Gating on c.User()
+// (X-User-Id) refuses ONLY that anonymous-forge path: every legitimate caller
+// arrives through the console/gateway with a validated principal, so no real
+// client breaks.
+//
+// The X-User-IsAdmin claim is likewise only trustworthy under a validated
+// principal — SanitizeIdentity sets it only for a JWT-verified global admin
+// (HIP-0026) — and even then reaches only the literal "admin" org's own physical
+// namespace, never a real tenant's.
 func tenant(c *zip.Ctx) (string, bool) {
+	if c.User() == "" {
+		return "", false // no validated principal — refuse the forgeable data path
+	}
 	org := sanitizeOrg(c.Org())
 	if org != "" {
 		return org, true
@@ -462,13 +476,39 @@ func tenant(c *zip.Ctx) (string, bool) {
 	return "", false
 }
 
-// sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug, capped at
-// 32 chars. Defense in depth: org comes from the JWT via the gateway, but it
-// still flows into physical identifiers.
+// sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
+// INJECTIVE in the raw owner: it is the identity on an owner already shaped like
+// a DNS-1123 label, otherwise the folded slug is disambiguated with "-" + the
+// first 16 hex of SHA-256(raw owner). Without the suffix the fold was lossy —
+// ToLower + every non-[a-z0-9-]→"-" + a 32-char truncation collapse distinct
+// owners (`Acme`/`acme`, `team.a`/`team-a`) onto one slug, and since the whole
+// tenant→bucket/DB namespace hashes THIS slug (orgHash, physicalName), that was a
+// cross-tenant collision: two orgs sharing one physical namespace (RED MED, proven
+// reachable because the IAM org name is a varchar with no shape validator, so a
+// fold-sibling of a target org is registerable and mints a valid token). Uses the
+// SAME disambiguation STRATEGY as iam/object/orgdb.go:orgSlug (fold + SHA-256
+// suffix) — not byte-identical (this caps the identity branch at 32 chars and
+// truncates the fold, since the slug keys cloud's own bucket/DB names, which stay
+// consistent across allocate + operate; IAM's orgSlug keys only its per-org
+// SQLite files). The org still flows into physical identifiers, so this is the
+// isolation boundary.
+//
+// The identity fast-path is withheld from a clean slug that ITSELF looks like a
+// suffixed output (`<label>-<16 lowercase hex>`): such a slug is ambiguous with a
+// folded owner's disambiguation, so it too is re-suffixed — otherwise a squatted
+// org literally named "foo-<sha256(Foo)[:8]>" would alias non-slug owner "Foo".
+// Real org names essentially never end in "-"+16-hex, so this shifts nothing real
+// while closing the alias class completely (every non-identity output carries a
+// hash of its OWN raw bytes, so two distinct raws collide only on a full 64-bit
+// SHA-256 prefix collision).
 func sanitizeOrg(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
+	raw := strings.TrimSpace(s)
+	lower := strings.ToLower(raw)
+	if isDNSLabel(lower) && lower == raw && len(lower) <= 32 && !looksSuffixed(lower) {
+		return lower // already a clean, unambiguous slug: identity, no suffix needed
+	}
 	var b strings.Builder
-	for _, r := range s {
+	for _, r := range lower {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
 			b.WriteRune(r)
@@ -476,11 +516,53 @@ func sanitizeOrg(s string) string {
 			b.WriteRune('-')
 		}
 	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 32 {
-		out = strings.Trim(out[:32], "-")
+	folded := strings.Trim(b.String(), "-")
+	if len(folded) > 32 {
+		folded = strings.Trim(folded[:32], "-")
 	}
-	return out
+	// Disambiguate with a 64-bit hash of the RAW owner so distinct owners that
+	// fold together stay distinct. Empty raw → "" (an unresolvable org; the caller
+	// gates on non-empty). The suffix is derived from raw, not the fold, so
+	// collision would need a SHA-256 collision on the exact owner bytes.
+	if raw == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(raw))
+	return folded + "-" + hex.EncodeToString(sum[:8])
+}
+
+// isDNSLabel reports whether s is a non-empty [a-z0-9-] string that is not "."
+// or "..". Such an owner needs no disambiguation (sanitizeOrg is the identity on
+// it), matching iam/object/orgdb.go's validateOrgSlug.
+func isDNSLabel(s string) bool {
+	if s == "" || s == "." || s == ".." {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// looksSuffixed reports whether s ends in "-" + exactly 16 lowercase-hex chars —
+// the shape of sanitizeOrg's own disambiguation suffix. A clean slug of this
+// shape is denied the identity fast-path (and re-suffixed) so it can never alias
+// a folded non-slug owner's output. This is the ONLY collision class the identity
+// fast-path could otherwise admit.
+func looksSuffixed(s string) bool {
+	if len(s) < 17 || s[len(s)-17] != '-' {
+		return false
+	}
+	for _, r := range s[len(s)-16:] {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 // orgHash returns a fixed-width, collision-resistant tag for an org slug: the
