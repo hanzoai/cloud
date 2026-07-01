@@ -3,8 +3,9 @@
 //
 // Blank-importing this package pulls every subsystem into the build graph;
 // each one registers a cloud.MountSpec into cloud.Registry from its own
-// init() (gated by //go:build cloud in the subsystem package, so the
-// registrations fire only when built with -tags cloud).
+// init(). Registration is unconditional — a plain `go build ./cmd/cloud`
+// (no build tags) links and mounts the full set. There is no //go:build
+// gate on any subsystem.
 //
 // Both entrypoints — cmd/cloud (the full fused surface) and cmd/hanzo (the
 // subcommand dispatcher) — blank-import THIS package and nothing else. The
@@ -78,12 +79,9 @@ import (
 	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
 
 	// The console2 SPA is go:embed'd and served at "/" by webui.go's
-	// mountConsole (called from Serve after every /v1/* route mounts) — the
-	// "one binary" endgame where the unified cloud binary IS the frontend too
-	// (Hanzo V8: Open Edition). The `clients/console` subsystem was a second,
-	// //go:build cloud-gated take on the same thing; importing it broke the
-	// default build (its files are tag-excluded) AND would double-mount "/".
-	// mountConsole is the wired, working path, so the console needs no import
-	// here. Consolidating onto ONE approach (drop webui.go for the subsystem,
-	// or vice-versa) is a clean follow-up — but main must build to ship.
+	// mountConsole, called directly from Serve AFTER every /v1/* route mounts
+	// (so real API routes always win; unmatched paths fall back to the SPA).
+	// That is the "one binary" endgame — the unified cloud binary IS the
+	// frontend too (Hanzo V8: Open Edition). It needs no import here; it is
+	// wired in Serve, not registered as a subsystem.
 )
