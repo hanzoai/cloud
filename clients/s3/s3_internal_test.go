@@ -44,10 +44,17 @@ func TestCleanKeyRejectsTraversal(t *testing.T) {
 		"a/../../etc/passwd", // escape via interior ..
 		"a/../../../root",    // multi-escape
 		"../../..",           // all parents
+		// RED LOW hardening: control bytes + backslash are rejected.
+		"a\x00b",        // null byte (would serialize as %00, C-string truncation risk)
+		"a\tb",          // tab (control)
+		"a\nb",          // newline (control)
+		"a\x1fb",        // unit separator (control)
+		`..\..\windows`, // Windows-style backslash traversal
+		`a\b`,           // bare backslash
 	}
 	for _, in := range bad {
 		if got, valid := cleanKey(in); valid {
-			t.Errorf("cleanKey(%q) = %q ACCEPTED, want rejected (traversal/invalid)", in, got)
+			t.Errorf("cleanKey(%q) = %q ACCEPTED, want rejected (traversal/control/backslash)", in, got)
 		}
 	}
 }
@@ -132,6 +139,14 @@ func TestFriendlyBucketRoundTrips(t *testing.T) {
 	// Another org must NOT be able to claim acme's bucket.
 	if _, ok := friendlyBucket("globex", physical); ok {
 		t.Error("friendlyBucket(globex, acme's bucket) = owned — cross-tenant leak!")
+	}
+
+	// RED LOW: a bucket carrying the org prefix but a NON-conforming name (could
+	// only exist via an out-of-band route, never createBucket) is treated as
+	// not-owned, so listBuckets never echoes an unaddressable name to the UI.
+	prefixed := orgPrefix("acme") + "Not_A_Valid_Name" // uppercase + underscore
+	if _, ok := friendlyBucket("acme", prefixed); ok {
+		t.Errorf("friendlyBucket recovered a non-conforming name %q — should be skipped", prefixed)
 	}
 }
 
