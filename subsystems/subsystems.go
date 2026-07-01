@@ -53,6 +53,13 @@ import (
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
 	_ "github.com/hanzoai/cloud/clients/projectsvc" // order 125 — /v1/projects/*
 
+	// Product control planes: per-org, Base/SQLite-backed application surfaces
+	// mounted natively in the cloud binary (the "all products in the cloud
+	// binary" thesis). Each is org-scoped by the gateway-minted X-Org-Id.
+	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
+	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
+	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
