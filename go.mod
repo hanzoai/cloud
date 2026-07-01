@@ -18,6 +18,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
+	github.com/luxfi/zapdb v1.10.0
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/spf13/cobra v1.10.2
@@ -28,6 +29,8 @@ require (
 	k8s.io/client-go v0.35.0
 	modernc.org/sqlite v1.51.0
 )
+
+require github.com/google/flatbuffers v25.12.19+incompatible // indirect
 
 require (
 	cel.dev/expr v0.25.1 // indirect
@@ -394,7 +397,7 @@ require (
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/geth v1.17.5 // indirect
 	github.com/luxfi/ids v1.2.15 // indirect
-	github.com/luxfi/kms v1.11.6 // indirect
+	github.com/luxfi/kms v1.11.6
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.1.4 // indirect
 	github.com/luxfi/magnetar v1.2.0 // indirect
