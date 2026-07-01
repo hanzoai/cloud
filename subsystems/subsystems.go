@@ -40,6 +40,7 @@ import (
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
 	_ "github.com/hanzoai/cloud/clients/eval"    // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/prompt"  // order 144 — /v1/prompts/* (console Langfuse prompts API)
+	_ "github.com/hanzoai/cloud/clients/bot"     // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
 	_ "github.com/hanzoai/cloud/clients/exec"      // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
