@@ -56,7 +56,7 @@ import (
 	// God-mode admin surface for the Hanzo Admin Console (admin.hanzo.ai). Fans
 	// out to IAM (identity), commerce (billing) and o11y (health); global-admin
 	// only, fail-closed.
-	_ "github.com/hanzoai/cloud/clients/adminsvc" // order 146 — /v1/admin/*
+	_ "github.com/hanzoai/cloud/clients/admin" // order 146 — /v1/admin/*
 
 	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
