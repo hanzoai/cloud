@@ -29,7 +29,7 @@ func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &svc{store: store, k8s: k, log: luxlog.New("test"), brand: "hanzo"}
+	s := &svc{store: store, k8s: k, log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s.routes(app)
 	return app
