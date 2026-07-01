@@ -2,7 +2,7 @@
 // ESM-free JS file exposing globalThis.handle(req)) inside the unified cloud
 // binary, per HIP-0106.
 //
-// It is the SHARED glue used by clients/plansvc and clients/pricingsvc to host
+// It is the SHARED glue used by clients/plan and clients/pricing to host
 // @hanzo/plans and @hanzo/pricing in-process via dop251/goja — the same engine
 // base/plugins/gojavm uses. We do not import base's gojavm Runtime directly
 // because that loader is manifest-driven (extension.json + a single exported
