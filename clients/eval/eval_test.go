@@ -3,9 +3,56 @@ package eval
 import (
 	"context"
 	"encoding/base64"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/hanzoai/zip"
+	luxlog "github.com/luxfi/log"
 )
+
+// TestTenantIgnoresClientProjectID pins the cross-tenant isolation invariant
+// (RED MED-1): tenant() scopes the console API key pair (console-pk-{org}) and
+// MUST use ONLY the sanitized org (c.Org(), set by SanitizeIdentity from the
+// validated bearer owner), NEVER the client-controllable X-Project-Id. A forged
+// `X-Project-Id: victim-org` must not change the resolved tenant — otherwise a
+// caller reads another org's eval data via that org's KMS keys.
+func TestTenantIgnoresClientProjectID(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Get("/echo-tenant", func(c *zip.Ctx) error { return c.String(http.StatusOK, tenant(c)) })
+
+	call := func(orgHeader, projectHeader string) string {
+		req := httptest.NewRequest(http.MethodGet, "/echo-tenant", nil)
+		if orgHeader != "" {
+			req.Header.Set("X-Org-Id", orgHeader) // in prod: minted by SanitizeIdentity
+		}
+		if projectHeader != "" {
+			req.Header.Set("X-Project-Id", projectHeader) // client-controllable sub-scope
+		}
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("Test: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+
+	// A forged project id must be ignored — the tenant is the authoritative org.
+	if got := call("maxpower", "victim-org"); got != "maxpower" {
+		t.Fatalf("forged X-Project-Id leaked into tenant: got %q, want %q", got, "maxpower")
+	}
+	// No project header: still the org.
+	if got := call("maxpower", ""); got != "maxpower" {
+		t.Fatalf("tenant without project: got %q, want %q", got, "maxpower")
+	}
+	// A project id alone (no org) must NOT become the tenant (no cross-tenant via project).
+	if got := call("", "victim-org"); got != "" {
+		t.Fatalf("X-Project-Id alone became the tenant: got %q, want empty", got)
+	}
+}
 
 func TestLoopbackBase(t *testing.T) {
 	cases := map[string]string{
