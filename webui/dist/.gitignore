@@ -1,0 +1,12 @@
+# The real console bundle is generated at image-build time (Dockerfile runs the
+# console2 `next build` and copies it here before `go build`). Never commit those
+# generated assets as source — only the hand-written fallback shell is tracked.
+#
+# Track: index.html (fallback shell), .gitignore, assets/.gitkeep.
+# Ignore: everything else the build drops in here.
+*
+!.gitignore
+!index.html
+!assets/
+assets/*
+!assets/.gitkeep

@@ -103,6 +103,19 @@ func Serve(enable []string) error {
 		Logger:         deps.Logger,
 	}))
 
+	// Unified console UI — the SAME binary serves the @hanzo/gui console (built
+	// from hanzoai/console2 and embedded via //go:embed) at the web root. Mounted
+	// LAST, after every /v1 route + the /zap plane + the health contract, so
+	// Fiber's in-order matching gives the API precedence: real API routes win,
+	// and only paths that match nothing else fall through to the SPA (index.html
+	// for client-side deep links). The API namespace (/v1, /zap, /healthz…) never
+	// renders as HTML — an unmatched path there is a real 404. Same-origin: the
+	// embedded console calls /v1 on its own host, so the session cookie is
+	// first-party and no second origin / CORS is involved. See webui.go.
+	if err := mountConsole(app); err != nil {
+		return fmt.Errorf("console: %w", err)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
