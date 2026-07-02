@@ -37,7 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // svc holds the resolved upstream clients + the admin org for this deployment.

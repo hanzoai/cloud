@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/middleware"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 
 	// Pull in the full subsystem bundle so BOTH kmssvc (order 10) and admin
 	// (order 146) init()-register — the real production topology.

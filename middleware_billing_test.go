@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/commerce/metering"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // fakeCommerce answers the metering client's balance + usage calls. The balance

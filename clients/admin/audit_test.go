@@ -17,7 +17,7 @@ import (
 
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
 

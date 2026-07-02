@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // Bounds on the admin-supplied overrides patch. Overrides are small metadata/
