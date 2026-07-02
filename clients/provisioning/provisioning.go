@@ -40,8 +40,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // kinds is the closed set of resource kinds this control plane provisions.
@@ -477,9 +477,12 @@ func tenant(c *zip.Ctx) (string, bool) {
 }
 
 // sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
-// INJECTIVE in the raw owner: it is the identity on an owner already shaped like
-// a DNS-1123 label, otherwise the folded slug is disambiguated with "-" + the
-// first 16 hex of SHA-256(raw owner). Without the suffix the fold was lossy —
+// INJECTIVE in the raw owner: an org bearing any whitespace/control/format rune
+// is REFUSED (→ "") at the boundary — folding it would not survive TrimSpace /
+// transport OWS-trim and would collapse "acme " onto "acme" (RED CRIT-2
+// residual) — and every accepted owner then maps to the identity on a DNS-1123
+// label, else a folded slug disambiguated with "-" + the first 16 hex of
+// SHA-256(raw owner). Without the suffix the fold was lossy —
 // ToLower + every non-[a-z0-9-]→"-" + a 32-char truncation collapse distinct
 // owners (`Acme`/`acme`, `team.a`/`team-a`) onto one slug, and since the whole
 // tenant→bucket/DB namespace hashes THIS slug (orgHash, physicalName), that was a
@@ -502,9 +505,20 @@ func tenant(c *zip.Ctx) (string, bool) {
 // hash of its OWN raw bytes, so two distinct raws collide only on a full 64-bit
 // SHA-256 prefix collision).
 func sanitizeOrg(s string) string {
-	raw := strings.TrimSpace(s)
-	lower := strings.ToLower(raw)
-	if isDNSLabel(lower) && lower == raw && len(lower) <= 32 && !looksSuffixed(lower) {
+	// Reject at the boundary — an empty org, or one carrying any whitespace /
+	// control / zero-width-format rune, is a NON-INJECTIVE tenant identifier:
+	// strings.TrimSpace (here or upstream) and fasthttp's header-value OWS trim
+	// silently collapse "acme " onto "acme", so distinct IAM orgs would fold onto
+	// one physical namespace/bucket/DB. Refusing (→ "", which every caller gates
+	// on) is fail-secure and, with the raw-byte hash below, makes the map
+	// injective end-to-end (RED CRIT-2 residual). This mirrors cloud.OrgHasUnsafeRune
+	// at the identity middleware; enforcing it HERE too covers non-header callers
+	// (clients/s3 derives its org tag through SanitizeOrg, not the request org).
+	if s == "" || cloud.OrgHasUnsafeRune(s) {
+		return ""
+	}
+	lower := strings.ToLower(s)
+	if isDNSLabel(lower) && lower == s && len(lower) <= 32 && !looksSuffixed(lower) {
 		return lower // already a clean, unambiguous slug: identity, no suffix needed
 	}
 	var b strings.Builder
@@ -520,14 +534,11 @@ func sanitizeOrg(s string) string {
 	if len(folded) > 32 {
 		folded = strings.Trim(folded[:32], "-")
 	}
-	// Disambiguate with a 64-bit hash of the RAW owner so distinct owners that
-	// fold together stay distinct. Empty raw → "" (an unresolvable org; the caller
-	// gates on non-empty). The suffix is derived from raw, not the fold, so
-	// collision would need a SHA-256 collision on the exact owner bytes.
-	if raw == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(raw))
+	// Disambiguate with a 64-bit hash of the RAW (unsafe-rune-free, untrimmed)
+	// owner so distinct owners that fold together stay distinct. The suffix is
+	// derived from the exact input bytes — NEVER a trimmed copy — so a collision
+	// would need a SHA-256 collision on the owner bytes themselves.
+	sum := sha256.Sum256([]byte(s))
 	return folded + "-" + hex.EncodeToString(sum[:8])
 }
 
