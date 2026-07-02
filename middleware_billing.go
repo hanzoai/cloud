@@ -187,10 +187,15 @@ func DefaultPrice(c *zip.Ctx) int64 {
 const cloudEdgePriceCents int64 = 1
 
 // selfMeteredPrefixes are path prefixes whose subsystem records its own usage to
-// commerce. The edge gate must return 0 for these to avoid double-billing.
+// commerce via the shared cloud.ResourceMeter (in-handler Gate+Meter). The edge
+// gate must return 0 for these to avoid double-billing — the subsystem owns the
+// per-org charge (fail-closed pre-auth + debit-on-success), attributed to its own
+// product label, so an additional flat edge charge would double-bill.
 var selfMeteredPrefixes = []string{
-	"/v1/ai/",       // LLM token costs metered by the ai subsystem.
-	"/v1/commerce/", // billing itself; not metered as usage.
-	"/v1/o11y/",     // telemetry ingest; not user-billable here.
-	"/v1/mcp/",      // tool dispatch meters per-tool downstream.
+	"/v1/ai/",        // LLM token costs metered by the ai subsystem.
+	"/v1/commerce/",  // billing itself; not metered as usage.
+	"/v1/o11y/",      // telemetry ingest; not user-billable here.
+	"/v1/mcp/",       // tool dispatch meters per-tool downstream.
+	"/v1/functions/", // serverless invoke self-meters (product "functions").
+	"/v1/s3/",        // object-storage data plane self-meters per-op (product "s3").
 }
