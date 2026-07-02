@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/templates"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // forkReq is the body of POST /v1/projects/fork: which template to fork and,
