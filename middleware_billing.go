@@ -119,16 +119,24 @@ func denyBilling(c *zip.Ctx, err error) error {
 }
 
 // identityFromCtx builds the commerce billing identity from the gateway-minted
-// headers zip exposes. The user is "{org}/{sub}" (commerce's iam-user form) when
-// both are present, else the bare sub — identical to metering's
-// IdentityFromGatewayHeaders so cloud and every other product key the same
-// ledger entry.
+// headers zip exposes. It mirrors metering.IdentityFromGatewayHeaders exactly so
+// cloud and every other product key the SAME ledger entry:
+//
+//   - User is the per-org billing key — the org slug alone (e.g. "maxpower"),
+//     falling back to the bare sub only when org is absent. Prepaid balance is
+//     per-org (one credit covers the whole org); keying it on "{org}/{sub}"
+//     would query an empty per-user ledger and 402 a fully funded org.
+//   - Org is the tenant namespace (X-Org-Id) commerce resolves the ledger in.
+//
+// The full "{org}/{sub}" actor identity belongs on the usage audit trail, not
+// the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it
+// is omitted here until the metering module ships the User/Actor split.
 func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	org := strings.TrimSpace(c.Org())
 	sub := strings.TrimSpace(c.User())
-	user := sub
-	if org != "" && sub != "" {
-		user = org + "/" + sub
+	user := org // per-org billing key
+	if user == "" {
+		user = sub // org-less fallback
 	}
 	return metering.AuthInput{User: user, Org: org}
 }
