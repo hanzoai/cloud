@@ -83,6 +83,28 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
+// List returns the validated starter-kit catalog (the SAME slice the HTTP GET
+// serves). Exported so other subsystems — e.g. projectsvc's fork flow — read the
+// ONE embedded catalog instead of vendoring a second copy. Read-only reference
+// content; callers must not mutate the returned slice.
+func List() ([]Template, error) { return catalog() }
+
+// Get returns the template with the given slug, or (Template{}, false) if none.
+// This is the single accessor projectsvc uses to seed a Project from a template,
+// so the template→project mapping reads the catalog through one door.
+func Get(slug string) (Template, bool) {
+	cat, err := catalog()
+	if err != nil {
+		return Template{}, false
+	}
+	for _, t := range cat {
+		if t.Slug == slug {
+			return t, true
+		}
+	}
+	return Template{}, false
+}
+
 func (s *svc) list(c *zip.Ctx) error {
 	cat, err := catalog()
 	if err != nil {
@@ -92,17 +114,14 @@ func (s *svc) list(c *zip.Ctx) error {
 }
 
 func (s *svc) get(c *zip.Ctx) error {
-	slug := c.Param("slug")
-	cat, err := catalog()
-	if err != nil {
+	if _, err := catalog(); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "templates: %v", err)
 	}
-	for _, t := range cat {
-		if t.Slug == slug {
-			return c.JSON(http.StatusOK, t)
-		}
+	t, ok := Get(c.Param("slug"))
+	if !ok {
+		return zip.ErrNotFound("template not found")
 	}
-	return zip.ErrNotFound("template not found")
+	return c.JSON(http.StatusOK, t)
 }
 
 func init() {
