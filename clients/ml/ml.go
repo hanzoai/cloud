@@ -46,6 +46,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -547,8 +548,18 @@ func (s *svc) k8sErr(c *zip.Ctx, k resourceKind, op string, err error) error {
 	return zip.Errorf(http.StatusBadGateway, "%s %s failed: %v", op, k.kind, err)
 }
 
-// newDynamic builds the dynamic client from the in-cluster service account,
-// falling back to KUBECONFIG / ~/.kube/config for local/dev.
+// mlTokenFileEnv names a mounted `cloud-ml` ServiceAccount token. When it is set
+// (and readable) the ML control plane authenticates to the API server as the
+// dedicated cloud-ml identity — decomplected from the pod's own cloud-api SA — so
+// ML's KServe/Kubeflow cluster reach is never inherited by the product-API path
+// (least privilege; blast-radius separation). See universe
+// infra/k8s/cloud/ml-rbac.yaml (ClusterRoleBinding cloud-mlsvc -> cloud-ml).
+const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
+
+// newDynamic builds the dynamic client. In-cluster it authenticates as the
+// dedicated cloud-ml identity when HANZO_ML_TOKEN_FILE points at a mounted
+// cloud-ml token, otherwise as the pod's own in-cluster SA. Falls back to
+// KUBECONFIG / ~/.kube/config for local/dev.
 func newDynamic() (dynamic.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
@@ -558,6 +569,16 @@ func newDynamic() (dynamic.Interface, error) {
 		if err != nil {
 			return nil, fmt.Errorf("no in-cluster config and no kubeconfig: %w", err)
 		}
+	} else if tokenFile := strings.TrimSpace(os.Getenv(mlTokenFileEnv)); tokenFile != "" {
+		// Re-scope the in-cluster client to the mounted cloud-ml token: keep the
+		// API server host + CA discovered in-cluster, swap ONLY the identity.
+		// Fail closed if the configured token is missing — never silently fall
+		// back to the broader cloud-api SA.
+		if _, statErr := os.Stat(tokenFile); statErr != nil {
+			return nil, fmt.Errorf("%s=%q not readable: %w", mlTokenFileEnv, tokenFile, statErr)
+		}
+		cfg.BearerToken = ""
+		cfg.BearerTokenFile = tokenFile
 	}
 	cfg.UserAgent = "hanzo-cloud-mlsvc"
 	return dynamic.NewForConfig(cfg)
