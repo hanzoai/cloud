@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -208,8 +209,10 @@ func TestSchedulerBillsScheduledRun(t *testing.T) {
 	if u.User != "acme" || u.Provider != meterKind {
 		t.Fatalf("scheduled debit user/provider = %q/%q, want acme/%s", u.User, u.Provider, meterKind)
 	}
-	if u.Actor == "" {
-		t.Fatalf("scheduled debit must carry a (scheduler-namespaced) actor")
+	// The actor MUST be the "scheduler:" namespace, never a bare "org/sub" that
+	// could be mistaken for a validated interactive principal (Red LOW-2).
+	if !strings.HasPrefix(u.Actor, schedulerActor+":") {
+		t.Fatalf("scheduled actor = %q, want a %q-prefixed (non-principal) actor", u.Actor, schedulerActor)
 	}
 }
 
