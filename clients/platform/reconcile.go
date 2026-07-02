@@ -62,7 +62,13 @@ func (s *svc) reconcileBuilds(ctx context.Context) {
 }
 
 // reconcileBuild advances one "building" deployment: waits for its Job, then on
-// success applies the Service CR, on failure/deadline records the honest error.
+// success (once the tenant's operator RBAC is ready) applies the Service CR. Every
+// TRANSIENT condition — cluster briefly unreachable, Job not yet finished, or the
+// tenant's RoleBinding still provisioning (errTenantProvisioning) — leaves the
+// deployment "building" and re-drives on the next tick; only a genuine build failure
+// or the elapsed deadline records an honest terminal error. Crucially, a slow tenant
+// onboarding is NOT failed permanently (there is no client to retry a git build) and
+// is NOT waited on in-line (which would head-of-line-block other orgs' go-lives).
 func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	if d.Source != "git" || d.BuildID == "" {
 		return // only git builds pass through "building"
@@ -109,6 +115,30 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 		s.log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
+
+	// The tenant namespace must exist and its operator RBAC must have landed before
+	// the Service CR can be written. Unlike the synchronous image path (which BLOCKS
+	// up to ~45s so a single client deploy succeeds), the reconciler does ONE
+	// non-blocking readiness probe (creating the namespace if absent, which is what
+	// triggers the operator to project cloud-api's RoleBinding). If RBAC has not yet
+	// landed, leave the deployment "building" and re-drive next tick — a slow/wedged
+	// tenant onboarding then never HEAD-OF-LINE-BLOCKS other orgs' go-lives and never
+	// permanently fails the git build. Give up only once the build deadline elapses.
+	ns := tenantNamespace(d.Org)
+	ready, provErr := s.k8s.ensureTenantReady(ctx, ns, d.Org)
+	if provErr != nil {
+		if overdue {
+			s.failBuild(ctx, d, b, "prepare tenant namespace past deadline: "+provErr.Error())
+		}
+		return // transient cluster error — retry next tick
+	}
+	if !ready {
+		if overdue {
+			s.failBuild(ctx, d, b, "tenant RBAC still provisioning past deadline")
+		}
+		return // stay "building"; the operator's RoleBinding lands before the next tick
+	}
+
 	// Build succeeded — write the operator Service CR and advance the app to live
 	// as ONE per-app-serialized, version-monotonic step (shared with deployImage).
 	// Under a per-app lock, applyLive re-checks supersession against the current
@@ -126,6 +156,13 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 		return
 	}
 	if err != nil {
+		// Defense in depth: the pre-check above confirmed RBAC was ready, but if the
+		// apply still surfaced a provisioning error (a readiness flap between probe and
+		// write), treat it as TRANSIENT — leave the deployment "building" and re-drive
+		// next tick, never a permanent fail — unless the deadline has already elapsed.
+		if errors.Is(err, errTenantProvisioning) && !overdue {
+			return
+		}
 		s.failBuild(ctx, d, b, "apply Service CR: "+err.Error())
 		return
 	}

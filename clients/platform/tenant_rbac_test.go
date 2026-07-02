@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sync/atomic"
@@ -141,5 +142,52 @@ func TestExistingTenantDeployHasNoWait(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("ready-tenant probe must not sleep, took %s", elapsed)
+	}
+}
+
+// TestFreshOrgDeployFailsClosedOn503NotCreate502 confirms the I2 fresh-org path at
+// the HTTP layer: a deploy into a genuinely fresh org (whose namespace does NOT
+// exist yet) CREATES the namespace — the trigger for the operator's async RoleBinding
+// — and then, when RBAC has not yet landed, fails closed with a graceful, RETRYABLE
+// 503, NOT a raw 502 at namespace-Create. The presence of the created namespace
+// proves the 503 means "RBAC pending", never "could not create the namespace".
+func TestFreshOrgDeployFailsClosedOn503NotCreate502(t *testing.T) {
+	k := fakeK8s()
+	k.rbacReadyTimeout = 30 * time.Millisecond
+	k.rbacPollInitial = 5 * time.Millisecond
+	fake := k.dyn.(*dynamicfake.FakeDynamicClient)
+	allowSSAR(fake, func() bool { return false }) // RBAC never lands
+	app := mountAppK8s(t, k)
+
+	do(t, app, http.MethodPost, "/v1/platform/projects", "freshco", map[string]any{"name": "web"})
+	do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "freshco", map[string]any{
+		"name": "api", "source": "image",
+		"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
+	})
+
+	// Precondition: the tenant namespace does NOT exist (genuinely fresh org).
+	ns := tenantNamespace("freshco")
+	if _, err := k.dyn.Resource(namespacesGVR).Get(context.Background(), ns, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("precondition: fresh org namespace must not exist yet, get err=%v", err)
+	}
+
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "freshco", map[string]any{"tag": "1.27"})
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("fresh-org deploy (RBAC pending) want 503, got %d (%s)", code, body)
+	}
+	// The namespace WAS created — so the 503 is RBAC-pending, not a Create failure (502).
+	if _, err := k.dyn.Resource(namespacesGVR).Get(context.Background(), ns, metav1.GetOptions{}); err != nil {
+		t.Fatalf("fresh-org deploy must CREATE the namespace (503 = RBAC pending, not create-502): %v", err)
+	}
+	// No Service CR was written past the readiness gate (fail-closed).
+	if _, err := k.dyn.Resource(servicesGVR).Namespace(ns).Get(context.Background(), "api", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+		t.Fatalf("no Service CR may exist when RBAC never lands, get err=%v", err)
+	}
+	// The failed attempt is recorded honestly as an 'error' deployment (not fabricated).
+	code, listBody := do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api/deployments", "freshco", nil)
+	var deps []deploymentView
+	_ = json.Unmarshal(listBody, &deps)
+	if code != http.StatusOK || len(deps) != 1 || deps[0].Status != "error" {
+		t.Fatalf("fresh-org 503 must record one honest 'error' deployment, got code=%d deps=%+v", code, deps)
 	}
 }
