@@ -2,7 +2,7 @@ package cloud
 
 // Tests for the shared per-org resource gate+meter (ResourceMeter). They drive
 // the real metering client against a fake commerce server that RECORDS the
-// X-IAM-Org-Id tenant header and request bodies, so the multitenancy contract is
+// X-Org-Id tenant header and request bodies, so the multitenancy contract is
 // proven end-to-end over HTTP — no mock of the metering client itself. The fake
 // is built with a metering DEFAULT org of "hanzo"; every assertion that the
 // caller "acme" is billed (not "hanzo") proves the per-call org override is what
@@ -25,16 +25,16 @@ import (
 )
 
 // recCommerce answers the metering client's balance + usage calls and records,
-// per endpoint, the X-IAM-Org-Id tenant header it saw plus the usage body — the
+// per endpoint, the X-Org-Id tenant header it saw plus the usage body — the
 // evidence for the per-org / cross-tenant assertions.
 type recCommerce struct {
 	balanceAvailable int64 // returned as {"available":N} on GET /v1/billing/balance
 	balanceStatus    int   // 0 => 200
 
 	mu           sync.Mutex
-	balanceOrg   string // last X-IAM-Org-Id on a balance call
+	balanceOrg   string // last X-Org-Id on a balance call
 	balanceCalls int32
-	usageOrg     string // last X-IAM-Org-Id on a usage call
+	usageOrg     string // last X-Org-Id on a usage call
 	usageCount   int32
 	usageBody    []byte
 }
@@ -45,7 +45,7 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&f.balanceCalls, 1)
 		f.mu.Lock()
-		f.balanceOrg = r.Header.Get("X-IAM-Org-Id")
+		f.balanceOrg = r.Header.Get("X-Org-Id")
 		f.mu.Unlock()
 		status := f.balanceStatus
 		if status == 0 {
@@ -58,7 +58,7 @@ func (f *recCommerce) server(t *testing.T) *httptest.Server {
 		atomic.AddInt32(&f.usageCount, 1)
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
-		f.usageOrg = r.Header.Get("X-IAM-Org-Id")
+		f.usageOrg = r.Header.Get("X-Org-Id")
 		f.usageBody = body
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
@@ -157,7 +157,7 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 	}
 }
 
-// Meter debits the CALLER org: usage POST fires once, carries X-IAM-Org-Id:acme
+// Meter debits the CALLER org: usage POST fires once, carries X-Org-Id:acme
 // (not the default 'hanzo'), body user=="acme", amount==cost. This is the
 // per-org / anti-cross-tenant debit proof.
 func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
