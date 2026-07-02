@@ -196,21 +196,43 @@ func Shutdown() error {
 
 // ── tenant ───────────────────────────────────────────────────────────────────
 
-// tenant resolves the org — the tenant isolation KEY — for a request. It uses
-// c.Org() EXACTLY as SanitizeIdentity minted it from the VALIDATED bearer owner
-// (HIP-0026): never a client X-Org-Id/X-Project-Id header (both are
-// client-controllable and deliberately excluded from SanitizeIdentity's
-// authority headers — the previous proxy preferred them, which let a caller set
-// `X-Project-Id: victim-org` and read another org's datasets/scores; that is the
-// cross-tenant break this rewrite closes). The org is used verbatim — never
-// lowercased/trimmed/truncated — because normalizing collapses DISTINCT owners
-// into one storage bucket (Red HIGH-1). Reject only empty or pathologically long.
+// tenant resolves the org — the tenant isolation KEY — for a request, but ONLY
+// for a VALIDATED principal. Two gates, both mandatory:
+//
+//  1. A validated principal MUST be present: c.User() (X-User-Id) is non-empty.
+//     SanitizeIdentity sets X-User-Id ONLY from a token/session it verified, and
+//     strips any client copy on ingress — so c.User() is the one unforgeable
+//     "this request carried a validated identity" signal. Its Phase-1 residual
+//     RESTORES a client-supplied X-Org-Id on the NO-principal path (bearer-less,
+//     opaque hk-/sk- API key, or invalid bearer). Without this gate, a
+//     direct-to-pod / in-cluster caller could send `X-Org-Id: victim` with no
+//     bearer and read/write/DELETE the victim org's datasets (golden outputs +
+//     PII), scores and runs — a cross-tenant break (Red HIGH). This is the SAME
+//     trust signal the audit layer uses (audit_middleware.go actorFromCtx): no
+//     validated sub ⇒ untrusted org, treated as anonymous.
+//  2. The org (c.Org()) MUST be present and sane. It is used verbatim — never
+//     lowercased/trimmed/truncated — because normalizing collapses DISTINCT
+//     owners into one storage bucket (Red HIGH-1). X-Org-Id is minted by
+//     SanitizeIdentity from the validated owner claim; a client X-Org-Id/
+//     X-Project-Id is stripped, so it is never a cross-tenant selector.
+//
+// Fails closed: an unvalidated or org-less request gets no tenant, so the caller
+// returns 403 — never a fake success, never another org's data.
 func tenant(c *zip.Ctx) (string, bool) {
+	if strings.TrimSpace(c.User()) == "" {
+		return "", false // no validated principal — the restored X-Org-Id is untrusted
+	}
 	org := strings.TrimSpace(c.Org())
 	if org == "" || len(org) > 128 {
 		return "", false
 	}
-	return org, true
+	// CLONE the org before returning it. c.Org() is a zero-copy view into the
+	// fasthttp request buffer (fiber's Get semantics); that buffer is REUSED once
+	// the request ends, so any retained view mutates to unrelated bytes. The org
+	// is our tenant-isolation KEY — it is stored (telemetry events, run records)
+	// and MUST be a stable, owned copy, never an alias that can silently become
+	// another value (manifested as run scores landing under a corrupted org).
+	return strings.Clone(org), true
 }
 
 // ── HTTP shapes (the contract the FE port consumes) ──────────────────────────
