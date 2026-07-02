@@ -1191,6 +1191,8 @@ github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible/go.mod h1:HTKx0R5LWWt7H1eG4pCpNS4PVO6tZIUVVZN/80sHz9o=
 github.com/hanzoai/sigv4 v0.4.2 h1:54Rf9+beoz8qbsEPHRV12t6nRsdQVl5MeC5rM/CTPCA=
 github.com/hanzoai/sigv4 v0.4.2/go.mod h1:XK0PvD8QWO8ivnSftKRCvjk8M5jjhOMUeyF4Wm+ZFYY=
+github.com/hanzoai/sqlite v0.1.4 h1:W68oGuUy2wzp4MHXpyQZznflinorPGefMaQzY1pcmlY=
+github.com/hanzoai/sqlite v0.1.4/go.mod h1:SVhzKrbEovivr/sEaL/Wgw81a7Xfy6gSoOMzuRCvt7s=
 github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5VDk=
 github.com/hanzoai/storage-go v1.0.0/go.mod h1:IPXouQWTki5LKa9Y3qfOr6o8Qwlmc4sGObJnGMNKCOM=
 github.com/hanzoai/tasks v1.40.0 h1:1Y0uXHmdGsU3QSv5So7NH55DhWqw/UPV3kgFeBaaWls=
