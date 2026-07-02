@@ -125,7 +125,7 @@ func TestGate_AllowsGlobalAdmin(t *testing.T) {
 }
 
 // fakeIAM stands in for the IAM management surface. It records whether the
-// caller's credential was replayed and returns casibase envelopes.
+// caller's credential was replayed and returns /v1 envelopes.
 type fakeIAM struct {
 	server  *httptest.Server
 	gotAuth string

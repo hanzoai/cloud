@@ -6,7 +6,7 @@
 // commerce, and System Health from o11y — every one a real upstream, none fused
 // into this binary (see subsystems.go). The facade fans out over HTTP exactly
 // like o11ysvc / productsvc: it holds no business logic, it shapes the reads into
-// the casibase envelope { status, msg, data, data2 } the operator's transport
+// the /v1 envelope { status, msg, data, data2 } the operator's transport
 // decodes (get<T> reads data; getList<T> reads data + data2 total).
 //
 // SECURITY — every route is GLOBAL-ADMIN ONLY, fail-closed. The gate is the
@@ -115,7 +115,7 @@ func callerCreds(c *zip.Ctx) creds {
 	}
 }
 
-// ── casibase envelope writers ────────────────────────────────────────────────
+// ── /v1 envelope writers ────────────────────────────────────────────────
 
 // ok writes a { status:"ok", data } envelope (the get<T> shape).
 func ok(c *zip.Ctx, data any) error {
