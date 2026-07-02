@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
+	aiobject "github.com/hanzoai/ai/object"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -20,6 +18,16 @@ import (
 // for all AI observability, so this is the same MergeTree, insert-only discipline
 // the audit OLAP mirror uses (audit_mirror.go) and it reuses the Langfuse v3
 // ClickHouse shapes (traces/observations/scores) since datastore IS ClickHouse.
+//
+// ONE DATASTORE CLIENT (CTO consolidation). This store does NOT open a second
+// ClickHouse connection with a parallel CLOUD_EVALS_CLICKHOUSE_* cred namespace.
+// It routes every write and read over the SHARED datastore peer that ai/object
+// owns (aiobject.InitDatastore → DatastoreExec / DatastoreQuery), the same client
+// clients/analytics and the ai o11y ledger use. The connection, retry/backoff,
+// pooling and KMS-injected DATASTORE_* creds live in exactly one place; eval only
+// owns its two eval-specific tables (hanzo.eval_traces, hanzo.eval_scores) — the
+// ai/object client owns hanzo.cloud_usage / hanzo.observations. Clean ownership,
+// one transport, one cred namespace.
 //
 // SECURITY (tenant isolation on OLAP):
 //   - Every table carries `org` LowCardinality(String), NOT a nullable, and it is
@@ -101,68 +109,65 @@ type Telemetry interface {
 	Close() error
 }
 
-// ── ClickHouse implementation ────────────────────────────────────────────────
+// ── datastore (shared ClickHouse client) implementation ──────────────────────
 
-// chTelemetry writes eval telemetry to datastore (ClickHouse) MergeTree tables.
-type chTelemetry struct {
-	conn clickhouse.Conn
-	db   string
-	log  luxlog.Logger
+// dsTelemetry writes eval telemetry to the datastore over the SHARED ai/object
+// ClickHouse client. It holds no connection of its own — aiobject owns the peer,
+// its retry/backoff, its pool and its DATASTORE_* creds. dsTelemetry owns only
+// its two tables and the SQL for its rows.
+type dsTelemetry struct {
+	db  string
+	log luxlog.Logger
+
+	mu          sync.Mutex
+	tablesReady bool
 }
 
-// newCHTelemetry builds the datastore-backed telemetry store from operator
-// config, or returns (nil, nil) when no datastore is configured — the caller
-// then runs with telemetry disabled (traces/scores are not persisted, and it
-// says so; never a fake success). Config mirrors the audit mirror's env keys
-// under the EVALS namespace; the password is a KMS-injected secret, never
-// hard-coded.
+// newDatastoreTelemetry builds the datastore-backed telemetry store, or returns
+// (nil, nil) when no datastore is configured (DATASTORE_ADDR unset) — the caller
+// then runs with telemetry disabled (traces/scores are not persisted, and it says
+// so; never a fake success). The connection is opened asynchronously by
+// aiobject.InitDatastore (run from the shared ai Bootstrap), so this constructor
+// does NOT dial: it defers readiness to request time, where every op gates on
+// aiobject.DatastoreEnabled() for an honest "unavailable" during the boot window.
 //
-//	CLOUD_EVALS_CLICKHOUSE_ADDR      host:9000 of the datastore native port
-//	CLOUD_EVALS_CLICKHOUSE_DB        database (default "hanzo")
-//	CLOUD_EVALS_CLICKHOUSE_USER      user
-//	CLOUD_EVALS_CLICKHOUSE_PASSWORD  password (KMS-backed secret)
-func newCHTelemetry(log luxlog.Logger) (Telemetry, error) {
-	addr := strings.TrimSpace(os.Getenv("CLOUD_EVALS_CLICKHOUSE_ADDR"))
-	if addr == "" {
+// Creds are the ONE shared namespace (KMS-injected, never hard-coded), resolved
+// by aiobject: DATASTORE_ADDR / DATASTORE_DB / DATASTORE_USER / DATASTORE_PASSWORD.
+func newDatastoreTelemetry(log luxlog.Logger) (Telemetry, error) {
+	if getenv("DATASTORE_ADDR") == "" {
 		return nil, nil // no datastore configured — telemetry disabled.
 	}
-	db := getenvDefault("CLOUD_EVALS_CLICKHOUSE_DB", "hanzo")
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{addr},
-		Auth: clickhouse.Auth{
-			Database: db,
-			Username: os.Getenv("CLOUD_EVALS_CLICKHOUSE_USER"),
-			Password: os.Getenv("CLOUD_EVALS_CLICKHOUSE_PASSWORD"),
-		},
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("evals telemetry: open: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := conn.Ping(ctx); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("evals telemetry: ping %s: %w", addr, err)
-	}
-	t := &chTelemetry{conn: conn, db: db, log: log}
-	if err := t.ensureTables(ctx); err != nil {
-		_ = conn.Close()
-		return nil, err
-	}
-	if log != nil {
-		log.Info("evals telemetry connected", "addr", addr, "db", db)
-	}
-	return t, nil
+	return &dsTelemetry{db: getenvDefault("DATASTORE_DB", "hanzo"), log: log}, nil
 }
 
-func (t *chTelemetry) table(name string) string { return t.db + "." + name }
+func (t *dsTelemetry) table(name string) string { return t.db + "." + name }
+
+// ready gates an op on the shared connection being live and the eval tables
+// existing. It returns an honest error while the async datastore connect is still
+// in flight (the boot window) rather than fabricating success, and it creates the
+// eval-owned tables idempotently, latching only on first success so a transient
+// DDL failure is retried on the next call.
+func (t *dsTelemetry) ready(ctx context.Context) error {
+	if !aiobject.DatastoreEnabled() {
+		return fmt.Errorf("evals telemetry: datastore not connected")
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.tablesReady {
+		return nil
+	}
+	if err := t.ensureTables(ctx); err != nil {
+		return err
+	}
+	t.tablesReady = true
+	return nil
+}
 
 // ensureTables creates the append-only telemetry tables idempotently. These are
 // the datastore projections of the Langfuse v3 traces/observations/scores model:
 // MergeTree (insert-only), partitioned by month, ordered org-first so a tenant's
 // reads are a contiguous prefix.
-func (t *chTelemetry) ensureTables(ctx context.Context) error {
+func (t *dsTelemetry) ensureTables(ctx context.Context) error {
 	stmts := []string{
 		fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
@@ -198,34 +203,31 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY (org, name, run_name, ts, id)`, t.table("eval_scores")),
 	}
 	for _, ddl := range stmts {
-		if err := t.conn.Exec(ctx, ddl); err != nil {
+		if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
 			return fmt.Errorf("evals telemetry: ensure table: %w", err)
 		}
 	}
 	return nil
 }
 
-func (t *chTelemetry) RecordTrace(ctx context.Context, tr Trace) error {
+func (t *dsTelemetry) RecordTrace(ctx context.Context, tr Trace) error {
 	if tr.Org == "" {
 		return fmt.Errorf("evals telemetry: trace missing org")
 	}
 	if tr.Timestamp.IsZero() {
 		tr.Timestamp = time.Now().UTC()
 	}
-	batch, err := t.conn.PrepareBatch(ctx, "INSERT INTO "+t.table("eval_traces")+
-		` (id, org, name, dataset, item_id, run_name, model, input, output, ts)`)
-	if err != nil {
-		return fmt.Errorf("evals telemetry: prepare trace: %w", err)
+	if err := t.ready(ctx); err != nil {
+		return err
 	}
-	if err := batch.Append(tr.ID, tr.Org, tr.Name, tr.Dataset, tr.ItemID, tr.RunName,
-		tr.Model, tr.Input, tr.Output, tr.Timestamp.UTC()); err != nil {
-		_ = batch.Abort()
-		return fmt.Errorf("evals telemetry: append trace: %w", err)
-	}
-	return batch.Send()
+	return aiobject.DatastoreExec(ctx, "INSERT INTO "+t.table("eval_traces")+
+		` (id, org, name, dataset, item_id, run_name, model, input, output, ts)`+
+		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		tr.ID, tr.Org, tr.Name, tr.Dataset, tr.ItemID, tr.RunName,
+		tr.Model, tr.Input, tr.Output, tr.Timestamp.UTC())
 }
 
-func (t *chTelemetry) RecordScore(ctx context.Context, sc ScoreEvent) error {
+func (t *dsTelemetry) RecordScore(ctx context.Context, sc ScoreEvent) error {
 	if sc.Org == "" {
 		return fmt.Errorf("evals telemetry: score missing org")
 	}
@@ -235,101 +237,113 @@ func (t *chTelemetry) RecordScore(ctx context.Context, sc ScoreEvent) error {
 	if sc.Timestamp.IsZero() {
 		sc.Timestamp = time.Now().UTC()
 	}
-	batch, err := t.conn.PrepareBatch(ctx, "INSERT INTO "+t.table("eval_scores")+
-		` (id, org, name, trace_id, run_name, dataset, item_id, data_type, value, string_value, comment, ts)`)
-	if err != nil {
-		return fmt.Errorf("evals telemetry: prepare score: %w", err)
+	if err := t.ready(ctx); err != nil {
+		return err
 	}
-	if err := batch.Append(sc.ID, sc.Org, sc.Name, sc.TraceID, sc.RunName, sc.Dataset,
-		sc.ItemID, sc.DataType, sc.Value, sc.StringValue, sc.Comment, sc.Timestamp.UTC()); err != nil {
-		_ = batch.Abort()
-		return fmt.Errorf("evals telemetry: append score: %w", err)
-	}
-	return batch.Send()
+	return aiobject.DatastoreExec(ctx, "INSERT INTO "+t.table("eval_scores")+
+		` (id, org, name, trace_id, run_name, dataset, item_id, data_type, value, string_value, comment, ts)`+
+		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sc.ID, sc.Org, sc.Name, sc.TraceID, sc.RunName, sc.Dataset,
+		sc.ItemID, sc.DataType, sc.Value, sc.StringValue, sc.Comment, sc.Timestamp.UTC())
 }
 
-func (t *chTelemetry) ListScores(ctx context.Context, f ScoreFilter) ([]ScoreEvent, error) {
+func (t *dsTelemetry) ListScores(ctx context.Context, f ScoreFilter) ([]ScoreEvent, error) {
 	if f.Org == "" {
 		return nil, fmt.Errorf("evals telemetry: scores read missing org")
 	}
-	// Org bound as a NAMED PARAMETER — never interpolated. Optional narrowers are
-	// likewise bound. A LIMIT is always applied.
+	if err := t.ready(ctx); err != nil {
+		return nil, err
+	}
+	// Org bound as a positional parameter (?) — never interpolated. Optional
+	// narrowers are likewise bound. A LIMIT is always applied.
 	q := "SELECT id, org, name, trace_id, run_name, dataset, item_id, data_type, value, string_value, comment, ts FROM " +
-		t.table("eval_scores") + " WHERE org = {org:String}"
-	args := []any{clickhouse.Named("org", f.Org)}
+		t.table("eval_scores") + " WHERE org = ?"
+	args := []any{f.Org}
 	if f.Name != "" {
-		q += " AND name = {name:String}"
-		args = append(args, clickhouse.Named("name", f.Name))
+		q += " AND name = ?"
+		args = append(args, f.Name)
 	}
 	if f.RunName != "" {
-		q += " AND run_name = {run:String}"
-		args = append(args, clickhouse.Named("run", f.RunName))
+		q += " AND run_name = ?"
+		args = append(args, f.RunName)
 	}
 	if f.TraceID != "" {
-		q += " AND trace_id = {trace:String}"
-		args = append(args, clickhouse.Named("trace", f.TraceID))
+		q += " AND trace_id = ?"
+		args = append(args, f.TraceID)
 	}
-	q += " ORDER BY ts DESC LIMIT {lim:UInt32}"
-	args = append(args, clickhouse.Named("lim", uint32(boundedLimit(f.Limit))))
+	q += " ORDER BY ts DESC LIMIT ?"
+	args = append(args, uint64(boundedLimit(f.Limit)))
 
-	rows, err := t.conn.Query(ctx, q, args...)
+	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("evals telemetry: query scores: %w", err)
 	}
-	defer rows.Close()
-	var out []ScoreEvent
-	for rows.Next() {
-		var sc ScoreEvent
-		if err := rows.Scan(&sc.ID, &sc.Org, &sc.Name, &sc.TraceID, &sc.RunName, &sc.Dataset,
-			&sc.ItemID, &sc.DataType, &sc.Value, &sc.StringValue, &sc.Comment, &sc.Timestamp); err != nil {
-			return nil, fmt.Errorf("evals telemetry: scan score: %w", err)
-		}
-		out = append(out, sc)
+	out := make([]ScoreEvent, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, ScoreEvent{
+			ID:          asString(r["id"]),
+			Org:         asString(r["org"]),
+			Name:        asString(r["name"]),
+			TraceID:     asString(r["trace_id"]),
+			RunName:     asString(r["run_name"]),
+			Dataset:     asString(r["dataset"]),
+			ItemID:      asString(r["item_id"]),
+			DataType:    asString(r["data_type"]),
+			Value:       asFloat(r["value"]),
+			StringValue: asString(r["string_value"]),
+			Comment:     asString(r["comment"]),
+			Timestamp:   asTime(r["ts"]),
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (t *chTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, error) {
+func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, error) {
 	if f.Org == "" {
 		return nil, fmt.Errorf("evals telemetry: traces read missing org")
 	}
+	if err := t.ready(ctx); err != nil {
+		return nil, err
+	}
 	q := "SELECT id, org, name, dataset, item_id, run_name, model, input, output, ts FROM " +
-		t.table("eval_traces") + " WHERE org = {org:String}"
-	args := []any{clickhouse.Named("org", f.Org)}
+		t.table("eval_traces") + " WHERE org = ?"
+	args := []any{f.Org}
 	if f.RunName != "" {
-		q += " AND run_name = {run:String}"
-		args = append(args, clickhouse.Named("run", f.RunName))
+		q += " AND run_name = ?"
+		args = append(args, f.RunName)
 	}
 	if f.Dataset != "" {
-		q += " AND dataset = {ds:String}"
-		args = append(args, clickhouse.Named("ds", f.Dataset))
+		q += " AND dataset = ?"
+		args = append(args, f.Dataset)
 	}
-	q += " ORDER BY ts DESC LIMIT {lim:UInt32}"
-	args = append(args, clickhouse.Named("lim", uint32(boundedLimit(f.Limit))))
+	q += " ORDER BY ts DESC LIMIT ?"
+	args = append(args, uint64(boundedLimit(f.Limit)))
 
-	rows, err := t.conn.Query(ctx, q, args...)
+	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("evals telemetry: query traces: %w", err)
 	}
-	defer rows.Close()
-	var out []Trace
-	for rows.Next() {
-		var tr Trace
-		if err := rows.Scan(&tr.ID, &tr.Org, &tr.Name, &tr.Dataset, &tr.ItemID, &tr.RunName,
-			&tr.Model, &tr.Input, &tr.Output, &tr.Timestamp); err != nil {
-			return nil, fmt.Errorf("evals telemetry: scan trace: %w", err)
-		}
-		out = append(out, tr)
+	out := make([]Trace, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Trace{
+			ID:        asString(r["id"]),
+			Org:       asString(r["org"]),
+			Name:      asString(r["name"]),
+			Dataset:   asString(r["dataset"]),
+			ItemID:    asString(r["item_id"]),
+			RunName:   asString(r["run_name"]),
+			Model:     asString(r["model"]),
+			Input:     asString(r["input"]),
+			Output:    asString(r["output"]),
+			Timestamp: asTime(r["ts"]),
+		})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (t *chTelemetry) Close() error {
-	if t.conn == nil {
-		return nil
-	}
-	return t.conn.Close()
-}
+// Close is a no-op: dsTelemetry does not own the shared datastore connection
+// (aiobject does), so it has nothing to release.
+func (t *dsTelemetry) Close() error { return nil }
 
 // ── in-memory implementation (tests + telemetry-disabled fallback is nil) ─────
 
@@ -449,6 +463,51 @@ func capSlice[T any](xs []T, n int) []T {
 }
 
 func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
+
+// ── datastore row coercion ────────────────────────────────────────────────────
+//
+// aiobject.DatastoreQuery returns each column already decoded into its native
+// ClickHouse scan type (String→string, Float64→float64, DateTime64→time.Time).
+// These coercers accept the native value (and defensively its pointer form) so a
+// nil/absent column degrades to a zero value rather than panicking.
+
+func asString(v any) string {
+	switch s := v.(type) {
+	case string:
+		return s
+	case *string:
+		if s != nil {
+			return *s
+		}
+	}
+	return ""
+}
+
+func asFloat(v any) float64 {
+	switch f := v.(type) {
+	case float64:
+		return f
+	case *float64:
+		if f != nil {
+			return *f
+		}
+	case float32:
+		return float64(f)
+	}
+	return 0
+}
+
+func asTime(v any) time.Time {
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case *time.Time:
+		if t != nil {
+			return *t
+		}
+	}
+	return time.Time{}
+}
 
 func getenvDefault(key, def string) string {
 	if v := getenv(key); v != "" {
