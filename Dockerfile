@@ -16,17 +16,16 @@
 # at a pinned ref (CONSOLE2_REF) using the same gh_token BuildKit secret the Go
 # build uses for private modules.
 #
-# NOTE ON THE HONEST CURRENT STATE: console2 today ships 15 Next server route
-# handlers (app/**/route.ts) that hold KMS-sourced service tokens and mint
-# short-lived user tokens — so `next build` emits a Node server bundle, not a
-# static export, and `output: export` would fail. Until console2 exposes a
-# static-export target (npm run build:embed → out/) — or those server routes
-# land in cloud as native /v1 endpoints — this stage produces no /out and the Go
-# build embeds the committed fallback shell (webui/dist/index.html), which is a
-# real, same-origin /v1 bootstrap. The moment console2 emits out/, this stage
-# copies it and the SAME image serves the full @hanzo/gui console with zero Go
-# changes. The stage never fails the image: a missing static target degrades to
-# the shell, it does not error.
+# STATE: console2 is a STATIC EXPORT (v8.4.9+). Its 18 Next BFF server routes were
+# collapsed to same-origin /v1 — the browser calls its OWN origin /v1/<head> and the
+# cloud binary serves it directly, validating the first-party IAM session cookie
+# (middleware_identity.go) — so `output: 'export'` emits a pure SPA at out/ and
+# `npm run build:embed` produces it. This stage runs build:embed and copies out/ into
+# the Go embed path; the SAME image then serves the full @hanzo/gui console + /v1 from
+# one binary. The build:embed detection is retained so the stage NEVER fails the image:
+# an older console2 ref without build:embed degrades to the committed fallback shell
+# (webui/dist/index.html) rather than erroring. Source maps are stripped from the
+# embed (not needed to serve; keeps the binary lean).
 FROM public.ecr.aws/docker/library/node:24-alpine AS console
 ARG CONSOLE2_REPO=https://github.com/hanzoai/console2.git
 ARG CONSOLE2_REF=main
@@ -45,7 +44,9 @@ RUN --mount=type=secret,id=gh_token \
 RUN mkdir -p /out && \
     if npm run 2>/dev/null | grep -q ' build:embed'; then \
       echo ">> console2 build:embed → static bundle"; \
-      npm run build:embed && cp -r out/. /out/; \
+      npm run build:embed && \
+      find out -name '*.map' -delete && \
+      cp -r out/. /out/; \
     else \
       echo ">> console2 has no static-embed target yet; cloud embeds the fallback shell"; \
     fi
