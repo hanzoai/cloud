@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -166,6 +167,17 @@ func (s *svc) invoke(c *zip.Ctx) error {
 		return err
 	}
 
+	// Pre-invoke balance gate (fail-closed, per-org). Refuse BEFORE any sandbox
+	// compute runs: an unfunded org — or, in the default fail-closed posture, an
+	// unreachable commerce — gets 402/503 and nothing executes (no free compute).
+	// Scoped to THIS caller's org (the same slug that owns the function), so the
+	// charge can never target another tenant. fee is computed once and reused by
+	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
+	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
+	if err := s.bill.Gate(c.Context(), org, "invoke", fee); err != nil {
+		return cloud.DenyResource(c, err)
+	}
+
 	start := time.Now()
 	res, runErr := s.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
 	dur := time.Since(start).Milliseconds()
@@ -191,6 +203,16 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	}
 	if err := s.store.InsertInvocation(c.Context(), iv); err != nil {
 		s.log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
+	}
+	// Debit the caller's org ledger when the sandbox ACTUALLY executed — real
+	// compute was consumed even if the tenant's own code exited non-zero (that
+	// is a successful invocation of a failing program, not a billing failure).
+	// A transport failure (runErr != nil: sandbox unreachable/timeout) ran no
+	// billable compute, so it is NOT charged. Per-org, env-attributed, async
+	// best-effort so the debit never blocks or corrupts this response; a debit
+	// failure is logged for reconciliation.
+	if runErr == nil {
+		s.bill.Meter(org, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
 	}
 	code := http.StatusOK
 	if iv.Status != "ok" {
