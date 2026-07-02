@@ -67,15 +67,16 @@ type EnvVarJSON struct {
 }
 
 type svc struct {
-	store     *Store
-	k8s       *k8sClient
-	cancel    context.CancelFunc // stops the build reconciler on Shutdown
-	log       luxlog.Logger
-	brand     string
-	env       string
-	domain    string
-	sitesHost string   // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
-	appLock   appMutex // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
+	store      *Store
+	k8s        *k8sClient
+	cancel     context.CancelFunc // stops the build reconciler on Shutdown
+	log        luxlog.Logger
+	brand      string
+	env        string
+	domain     string
+	sitesHost  string       // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
+	appLock    appMutex     // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
+	deployGate inflightGate // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 }
 
 // mounted is the active service so Shutdown can release the store.
