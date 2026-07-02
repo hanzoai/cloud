@@ -31,7 +31,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/goa"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // Plugin is one manifest entry. Kind selects which fields apply.

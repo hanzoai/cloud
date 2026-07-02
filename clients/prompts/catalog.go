@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // catalog.json is the Hanzo starter prompt library (source of truth:
