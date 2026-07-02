@@ -148,6 +148,9 @@ func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 //   - health/liveness probes (every /v1/<svc>/health and bare /health),
 //   - /v1/ai/* : the ai subsystem self-meters its own LLM token costs to
 //     commerce; charging again here would DOUBLE-BILL,
+//   - /v1/agents/* : the canonical agents subsystem now gates + meters its OWN
+//     per-run fee to commerce (clients/agents runAgent); the edge must stay 0 or
+//     every agent run is billed twice,
 //   - other subsystems that already self-meter their units (commerce billing
 //     itself, o11y telemetry, mcp tool dispatch),
 //
@@ -172,8 +175,10 @@ func DefaultPrice(c *zip.Ctx) int64 {
 		}
 	}
 
-	// Generic agent/compute edge with no finer meter: a flat per-request charge.
-	if strings.HasPrefix(path, "/v1/agent/") || strings.HasPrefix(path, "/v1/agents/") {
+	// Legacy singular /v1/agent/* edge (the bot reverse-proxy) has no finer
+	// meter of its own: a flat per-request charge. The canonical plural
+	// /v1/agents/* is self-metered (above) and never reaches here.
+	if strings.HasPrefix(path, "/v1/agent/") {
 		return cloudEdgePriceCents
 	}
 
@@ -190,6 +195,7 @@ const cloudEdgePriceCents int64 = 1
 // commerce. The edge gate must return 0 for these to avoid double-billing.
 var selfMeteredPrefixes = []string{
 	"/v1/ai/",       // LLM token costs metered by the ai subsystem.
+	"/v1/agents/",   // per-run agent fee metered by the agents subsystem.
 	"/v1/commerce/", // billing itself; not metered as usage.
 	"/v1/o11y/",     // telemetry ingest; not user-billable here.
 	"/v1/mcp/",      // tool dispatch meters per-tool downstream.
