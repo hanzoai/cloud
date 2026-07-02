@@ -23,30 +23,42 @@ func TestNamespaceIsDerivedFromOrgNotInput(t *testing.T) {
 	}
 }
 
-// TestSanitizeOrgNeutralizesInjection proves org values that try path traversal,
-// namespace escapes, or label injection collapse to a safe DNS-1123 segment, so
-// a hostile owner claim cannot forge "tenant-hanzo/../kube-system" style targets.
-func TestSanitizeOrgNeutralizesInjection(t *testing.T) {
-	cases := map[string]string{
-		"MaxPower":            "maxpower",
-		"acme/../hanzo":       "acme----hanzo", // each of / . . / → '-', no collapse (matches projectsvc)
-		"kube-system":         "kube-system",
-		"a b c":               "a-b-c",
-		"../../etc":           "etc",
-		"org:with:colons":     "org-with-colons",
-		"UPPER_SNAKE":         "upper-snake",
-		"trailing-dashes---":  "trailing-dashes",
-		"  spaced  ":          "spaced",
-		"emoji😀here":          "emoji-here",
+// TestSanitizeOrgIsInjective is the CRIT-2 regression guard: the org normalizer
+// (the ONE, shared provisioning.SanitizeOrg, reached through tenantNamespace)
+// must be INJECTIVE — distinct raw owners can NEVER collapse onto the same
+// tenant namespace. The prior lossy fold mapped "Acme"→"acme" and
+// "acme/../hanzo"→"acme----hanzo", so a fold-sibling of a target org (registrable
+// because IAM has no org-name shape validator) minted a valid token into the
+// victim's namespace. Each pair below folds together under the OLD rule; here
+// they MUST stay distinct.
+func TestSanitizeOrgIsInjective(t *testing.T) {
+	collidingPairs := [][2]string{
+		{"Acme", "acme"},             // case fold
+		{"team.a", "team-a"},         // '.'→'-' fold
+		{"a b c", "a-b-c"},           // space→'-' fold
+		{"org:x", "org-x"},           // ':'→'-' fold
+		{"acme.hanzo", "acme-hanzo"}, // '.'→'-' fold
+		{"UPPER_SNAKE", "upper-snake"},
 	}
-	for in, want := range cases {
-		if got := sanitizeOrg(in); got != want {
-			t.Errorf("sanitizeOrg(%q)=%q want %q", in, got, want)
+	for _, p := range collidingPairs {
+		nsA, nsB := tenantNamespace(p[0]), tenantNamespace(p[1])
+		if nsA == nsB {
+			t.Errorf("INJECTIVITY BROKEN: distinct owners %q and %q both map to %q", p[0], p[1], nsA)
 		}
-		// The derived namespace must always be a clean tenant-<label>.
-		ns := tenantNamespace(in)
+	}
+	// A clean, already-canonical DNS label is the identity (no gratuitous suffix)
+	// so the common case stays human-readable.
+	for _, clean := range []string{"maxpower", "acme", "kube-system", "team-a", "org-x"} {
+		if got := tenantNamespace(clean); got != "tenant-"+clean {
+			t.Errorf("clean label %q must be identity, got %q", clean, got)
+		}
+	}
+	// Every derived namespace is always a clean, injection-free DNS label — a
+	// hostile owner can never forge "tenant-hanzo/../kube-system"-style targets.
+	for _, hostile := range []string{"acme/../hanzo", "org:with:colons", "../../etc", "emoji😀here", "  spaced  ", "trailing---"} {
+		ns := tenantNamespace(hostile)
 		if !strings.HasPrefix(ns, "tenant-") || strings.ContainsAny(ns, "/:. ") {
-			t.Errorf("tenantNamespace(%q)=%q not a clean label", in, ns)
+			t.Errorf("tenantNamespace(%q)=%q not a clean label", hostile, ns)
 		}
 	}
 }
@@ -81,8 +93,30 @@ func TestBuildImageRefBindsToOrg(t *testing.T) {
 	if a == b {
 		t.Fatalf("distinct orgs must map to distinct image refs: %q == %q", a, b)
 	}
-	if !strings.Contains(a, "tenant-maxpower-api") {
-		t.Fatalf("image ref must bind org+app: %q", a)
+	// org + app are SEPARATE '/'-joined path components (injective), e.g.
+	// ghcr.io/hanzoai/tenant-maxpower/api:main.
+	if !strings.Contains(a, "tenant-maxpower/api") {
+		t.Fatalf("image ref must bind org+app in separate path components: %q", a)
+	}
+}
+
+// TestBuildImageRefIsInjective is the CRIT-2 image-ref regression guard: the
+// (org,app)→image mapping must be injective. The prior single-component join
+// "tenant-<org>-<app>" was AMBIGUOUS — (org="a-b",app="c") and (org="a",
+// app="b-c") both rendered "tenant-a-b-c", letting one tenant push to another's
+// image. With org+app in separate '/'-components (neither slug can contain '/'),
+// the ambiguous pair MUST now map to distinct refs.
+func TestBuildImageRefIsInjective(t *testing.T) {
+	k := &k8sClient{imagePrefix: defaultBuildImagePrefix}
+	x := k.buildImageRef("a-b", "c", "main")
+	y := k.buildImageRef("a", "b-c", "main")
+	if x == y {
+		t.Fatalf("AMBIGUOUS image ref: (a-b,c) and (a,b-c) both map to %q", x)
+	}
+	// A case/shape fold-sibling of an org (registrable, no IAM shape check) must
+	// not steer a build to the victim's repository.
+	if k.buildImageRef("Acme", "api", "main") == k.buildImageRef("acme", "api", "main") {
+		t.Fatal("fold-sibling orgs must map to distinct image refs")
 	}
 }
 
