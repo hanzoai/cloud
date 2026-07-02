@@ -93,6 +93,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
+	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
 
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
