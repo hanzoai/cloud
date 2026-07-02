@@ -55,7 +55,7 @@ type auditRow struct {
 // audit answers GET /v1/admin/audit from cloud's local tamper-evident store when
 // configured, else falls back to the IAM get-records proxy (federated view).
 // Filters: org, sub, action, resource, result, since, until, pageSize, p (page).
-// The response is the casibase list envelope { data:[rows], data2:total } the
+// The response is the /v1 list envelope { data:[rows], data2:total } the
 // operator decodes, with the current chain integrity summary attached.
 func (s *svc) audit(c *zip.Ctx) error {
 	// No local store configured → preserve the legacy federated IAM view so the

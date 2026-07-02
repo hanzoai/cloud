@@ -6,7 +6,7 @@
 // frames. There is no second copy of any business logic here: every call is
 // replayed as an in-process *http.Request through the existing Fiber app
 // (adaptor.FiberApp), so the same controllers, middleware, auth filters, and
-// casibase {status,msg,data} envelope back both transports.
+// /v1 {status,msg,data} envelope back both transports.
 //
 // Wire contract (matches @zap-proto/web + github.com/zap-proto/go/rpc exactly):
 //
@@ -21,11 +21,11 @@
 //     reply is decoded there.
 //   - The INNER request payload (rpc.Call.Payload) is console2's ZapRequest
 //     struct: { method @0 :Text, payload @8 :Text } (fixed size 16). `method`
-//     is the casibase /v1 endpoint name (e.g. "get-providers"); `payload` is a
+//     is the /v1 endpoint name (e.g. "get-providers"); `payload` is a
 //     SuperJSON string of the call arguments (” for none).
 //   - The INNER reply body is console2's ZapReply struct:
 //     { ok @0 :Bool, status @4 :UInt32, result @8 :Text, errorJson @16 :Text }
-//     (fixed size 24). `result` is a SuperJSON string of the casibase `data`;
+//     (fixed size 24). `result` is a SuperJSON string of the /v1 `data`;
 //     `errorJson` is a JSON error envelope when ok == false.
 //
 // The inner struct offsets/sizes live ONLY here — the single source of truth
@@ -80,7 +80,7 @@ func parseZapRequest(b []byte) (zapRequest, error) {
 type zapReply struct {
 	ok        bool
 	status    uint32
-	result    string // SuperJSON string of casibase `data`
+	result    string // SuperJSON string of /v1 `data`
 	errorJSON string // JSON error envelope ('' when ok)
 }
 
@@ -100,7 +100,7 @@ func encodeZapReply(rep zapReply) []byte {
 // superJSONWrap wraps a raw JSON value as the SuperJSON wire shape that
 // console2's `SuperJSON.parse(reply.result)` expects: a plain value V is
 // transported as {"json": V}. (SuperJSON adds a "meta" key only for
-// non-JSON-native types — Dates/Maps/BigInt — which casibase responses do not
+// non-JSON-native types — Dates/Maps/BigInt — which /v1 responses do not
 // emit, so the bare {"json":...} envelope round-trips losslessly.)
 func superJSONWrap(rawJSON []byte) string {
 	if len(rawJSON) == 0 {
