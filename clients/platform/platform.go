@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -179,7 +180,10 @@ func (s *svc) tenant(c *zip.Ctx) (string, bool) {
 	if c.User() == "" {
 		return "", false // no validated principal — refuse the forgeable Phase-1 data path
 	}
-	if org := sanitizeOrg(c.Org()); org != "" {
+	// ONE org normalizer, cloud-wide: the injective provisioning.SanitizeOrg, so a
+	// tenant resolved here keys the SAME namespace/image boundary as everywhere
+	// else and two distinct owners never collapse onto one tenant (CRIT-2).
+	if org := provisioning.SanitizeOrg(c.Org()); org != "" {
 		return org, true
 	}
 	if c.IsAdmin() {
@@ -263,8 +267,8 @@ func toAppView(a Application) appView {
 	return appView{
 		ID: a.ID, Org: a.Org, ProjectID: a.ProjectID, Slug: a.Slug, Name: a.Name,
 		Description: a.Description, Environment: a.Environment, Source: a.Source,
-		Repo:  repoView{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
-		Image: imageView{Repository: a.ImageRepo, Tag: a.ImageTag},
+		Repo:      repoView{URL: a.RepoURL, Branch: a.RepoBranch, Provider: a.RepoProvider},
+		Image:     imageView{Repository: a.ImageRepo, Tag: a.ImageTag},
 		BuildType: a.BuildType, Dockerfile: a.Dockerfile, Env: env, Port: a.Port,
 		Replicas: a.Replicas, Domains: domains, Status: a.Status, Namespace: a.Namespace,
 		CurrentDeploymentID: a.CurrentDeploy, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt,
@@ -405,12 +409,12 @@ type createAppReq struct {
 		Repository string `json:"repository"`
 		Tag        string `json:"tag"`
 	} `json:"image"`
-	BuildType string       `json:"buildType"`
-	Dockerfile string      `json:"dockerfile"`
-	Port      int          `json:"port"`
-	Replicas  int          `json:"replicas"`
-	Env       []EnvVarJSON `json:"env"`
-	Domains   []string     `json:"domains"`
+	BuildType  string       `json:"buildType"`
+	Dockerfile string       `json:"dockerfile"`
+	Port       int          `json:"port"`
+	Replicas   int          `json:"replicas"`
+	Env        []EnvVarJSON `json:"env"`
+	Domains    []string     `json:"domains"`
 }
 
 func (s *svc) createApp(c *zip.Ctx) error {
@@ -442,6 +446,18 @@ func (s *svc) createApp(c *zip.Ctx) error {
 	case "git":
 		if strings.TrimSpace(body.Repo.URL) == "" {
 			return zip.ErrBadRequest("source 'git' requires repo.url")
+		}
+		// (CRIT-1) Reject an unsafe repo.url / dockerfile at the boundary (400)
+		// before it is ever persisted or reaches the privileged build. This is the
+		// SAME validator the build path enforces (validate.go) — refusing early is
+		// defense in depth + a clear client error, not a new rule.
+		if _, err := validateRepoURL(body.Repo.URL); err != nil {
+			return zip.ErrBadRequest(err.Error())
+		}
+		if strings.TrimSpace(body.Dockerfile) != "" {
+			if _, err := validateDockerfile(body.Dockerfile); err != nil {
+				return zip.ErrBadRequest(err.Error())
+			}
 		}
 	case "image":
 		if strings.TrimSpace(body.Image.Repository) == "" {
@@ -489,7 +505,7 @@ func (s *svc) createApp(c *zip.Ctx) error {
 		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
-		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: max1(body.Replicas),
+		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.k8s.limits.clampReplicas(body.Replicas),
 		EnvJSON: string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}

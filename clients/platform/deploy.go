@@ -172,13 +172,22 @@ func (s *svc) failDeployment(c *zip.Ctx, d *Deployment, a Application, status in
 	return zip.Errorf(status, "deploy failed: %s", msg)
 }
 
-// deployErrStatus maps a cluster error to an honest HTTP status. RBAC/forbidden
-// surfaces as 502 (the cloud SA needs a grant), other cluster errors as 502.
+// deployErrStatus maps a cluster/build error to an honest HTTP status. A tenant
+// at its concurrent-build ceiling is 429 (retryable client condition, MED-3); an
+// invalid build input is 400 (client must fix repo.url/dockerfile/ref, CRIT-1);
+// RBAC/forbidden and other cluster errors surface as 502 (the cloud SA needs a
+// grant or the cluster is unhappy).
 func deployErrStatus(err error) int {
-	if err == nil {
+	switch {
+	case err == nil:
 		return http.StatusOK
+	case errors.Is(err, errTooManyBuilds):
+		return http.StatusTooManyRequests
+	case strings.Contains(err.Error(), "invalid build input"):
+		return http.StatusBadRequest
+	default:
+		return http.StatusBadGateway
 	}
-	return http.StatusBadGateway
 }
 
 // ── start / stop ─────────────────────────────────────────────────────────────
