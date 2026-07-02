@@ -91,6 +91,7 @@ import (
 	// clients/prompts is the red-approved, versioned prompt library and the ONE
 	// owner of /v1/prompts/* (it supersedes the earlier clients/prompt facade).
 	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
+	_ "github.com/hanzoai/cloud/clients/analytics" // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
 	_ "github.com/hanzoai/cloud/clients/crm"       // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
