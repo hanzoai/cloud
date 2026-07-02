@@ -427,6 +427,20 @@ func (s *Store) ListItems(ctx context.Context, org, dataset string, activeOnly b
 	return out, rows.Err()
 }
 
+// CountItems returns the number of items in (org,dataset) via a COUNT(*), so the
+// dataset-detail view never has to load item bodies just to size the collection
+// (Red LOW: loading up to maxListLimit full rows to len() them was a ~96MB
+// amplification on a large dataset).
+func (s *Store) CountItems(ctx context.Context, org, dataset string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM dataset_items WHERE org=? AND dataset=?`, org, dataset).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count items: %w", err)
+	}
+	return n, nil
+}
+
 func (s *Store) GetItem(ctx context.Context, org, id string) (DatasetItem, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+itemCols+` FROM dataset_items WHERE org=? AND id=?`, org, id)
 	it, err := scanItem(row)
