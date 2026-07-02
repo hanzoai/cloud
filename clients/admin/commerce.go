@@ -11,11 +11,15 @@ import (
 	"time"
 )
 
-// commerceClient reads the commerce billing S2S surface (/v1/billing/*) for the
-// money panels (spend, tokens, credits). Commerce runs as its own deployment;
-// these are HTTP calls authenticated with the admin-scoped COMMERCE_SERVICE_TOKEN
-// (a KMS-sourced secret already on the cloud env — never hard-coded here) and the
-// per-org X-IAM-Org-Id header commerce resolves its namespace from.
+// commerceClient reads the commerce billing S2S surface (/v1/billing/*, /v1/costs)
+// for the money panels (spend, tokens, credits, COGS). Commerce runs as its own
+// deployment; these are HTTP calls authenticated with the admin-scoped
+// COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the cloud env — never
+// hard-coded here). Commerce resolves the billing namespace from its OWN
+// service-token config (COMMERCE_SERVICE_ORG), NOT from a request header; the
+// per-org money reads distinguish orgs by the `user` query param within that
+// namespace. (The X-IAM-Org-Id header get() sends is advisory — commerce does not
+// consult it — so it is omitted for the fleet-wide /v1/costs god-view.)
 type commerceClient struct {
 	base  string // e.g. http://commerce.hanzo.svc.cluster.local:8001
 	token string // admin S2S bearer (secret; never logged)
@@ -176,9 +180,15 @@ type costReport struct {
 // SINGLE source of truth for what we pay every vendor. It authenticates with the
 // admin S2S service token (COMMERCE_SERVICE_TOKEN, no IAM user identity), which
 // commerce's requireCostsAdmin admits on its M2M path (Admin bit + empty Subject).
-// Returns a zero report (not an error) when commerce is unconfigured so a partial
-// deploy degrades to honest zeros rather than a 5xx.
-func (c *commerceClient) costs(ctx context.Context, org, period string) (costReport, error) {
+//
+// This is a PLATFORM god-view, deliberately NOT per-org, so NO org selector is
+// sent: the DigitalOcean compute and OpenAI COGS lines are read from the vendor
+// billing APIs (global, org-independent) and the metered LLM estimates come from
+// commerce's own service namespace (COMMERCE_SERVICE_ORG) — which commerce resolves
+// from its service-token config, never from a request header. Returns a zero report
+// (not an error) when commerce is unconfigured so a partial deploy degrades to
+// honest zeros rather than a 5xx.
+func (c *commerceClient) costs(ctx context.Context, period string) (costReport, error) {
 	var out costReport
 	if !c.configured() {
 		return out, nil
@@ -187,7 +197,8 @@ func (c *commerceClient) costs(ctx context.Context, org, period string) (costRep
 	if period != "" {
 		q.Set("period", period)
 	}
-	body, err := c.get(ctx, "/v1/costs", q, org)
+	// Empty org: /v1/costs is fleet-wide; commerce uses COMMERCE_SERVICE_ORG.
+	body, err := c.get(ctx, "/v1/costs", q, "")
 	if err != nil {
 		return out, err
 	}
