@@ -20,10 +20,11 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 )
 
-// mountAppK8s builds a hermetic app over an svc with the GIVEN k8s client, so
-// tests NEVER touch a real cluster (the earlier version resolved the dev
-// kubeconfig and wrote to live DOKS — never again).
-func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
+// mountSvcK8s builds a hermetic app AND returns the backing svc, so tests that need
+// to inspect/prime process-local state (e.g. the per-org deploy gate) can reach it.
+// It NEVER touches a real cluster (the earlier version resolved the dev kubeconfig
+// and wrote to live DOKS — never again).
+func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *svc) {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
 	if err != nil {
@@ -33,6 +34,12 @@ func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
 	s := &svc{store: store, k8s: k, log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s.routes(app)
+	return app, s
+}
+
+// mountAppK8s builds a hermetic app over an svc with the GIVEN k8s client.
+func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
+	app, _ := mountSvcK8s(t, k)
 	return app
 }
 
@@ -82,6 +89,7 @@ func testLimits() resourceLimits {
 	return resourceLimits{
 		maxReplicas:     20,
 		maxBuilds:       3,
+		maxDeploys:      8,
 		quotaCPU:        "20",
 		quotaMemory:     "40Gi",
 		quotaPods:       "50",
@@ -242,6 +250,66 @@ func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/stop", "maxpower", nil); code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d", code)
 	}
+}
+
+// TestImageDeployOverCapReturns429 proves the L1 per-org in-flight deploy cap: once
+// an org has maxConcurrentDeploys deploys in flight, its next deploy is refused with
+// a RETRYABLE 429 (never a fabricated success, never unbounded goroutine pile-up),
+// the cap is PER-ORG (a saturated org never throttles another), and releasing a slot
+// re-admits the org. The gate is primed directly (deterministic) rather than by
+// racing real ~45s waits.
+func TestImageDeployOverCapReturns429(t *testing.T) {
+	k := fakeK8s()
+	k.limits.maxDeploys = 2 // small cap for a deterministic test
+	app, s := mountSvcK8s(t, k)
+
+	seedApp := func(org string) {
+		do(t, app, http.MethodPost, "/v1/platform/projects", org, map[string]any{"name": "web"})
+		do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", org, map[string]any{
+			"name": "api", "source": "image",
+			"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"},
+		})
+	}
+	seedApp("maxpower")
+	seedApp("acme")
+
+	// Saturate maxpower's in-flight deploy gate (simulate 2 deploys already parked in
+	// applyLive's RBAC wait).
+	for i := 0; i < 2; i++ {
+		if !s.deployGate.acquire("maxpower", s.k8s.limits.maxConcurrentDeploys()) {
+			t.Fatalf("precondition: acquire maxpower slot %d must succeed", i)
+		}
+	}
+
+	// maxpower's next deploy is over-cap → 429 (retryable), and records NO deployment
+	// (a throttle is not an attempt).
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1.27"})
+	if code != http.StatusTooManyRequests {
+		t.Fatalf("over-cap deploy want 429, got %d (%s)", code, body)
+	}
+	if _, deps := listDeps(t, app, "maxpower"); len(deps) != 0 {
+		t.Fatalf("a throttled (429) deploy must record NO deployment, got %d", len(deps))
+	}
+
+	// PER-ORG isolation: acme is unaffected while maxpower is saturated → 202.
+	if code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "acme", map[string]any{"tag": "1.27"}); code != http.StatusAccepted {
+		t.Fatalf("acme deploy must be unaffected by maxpower's cap, want 202, got %d (%s)", code, body)
+	}
+
+	// Releasing one maxpower slot re-admits maxpower → 202.
+	s.deployGate.release("maxpower")
+	if code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1.27"}); code != http.StatusAccepted {
+		t.Fatalf("after releasing a slot maxpower deploy want 202, got %d (%s)", code, body)
+	}
+}
+
+// listDeps GETs an org's api deployments (helper for the cap test).
+func listDeps(t *testing.T, app *zip.App, org string) (int, []deploymentView) {
+	t.Helper()
+	code, body := do(t, app, http.MethodGet, "/v1/platform/projects/web/apps/api/deployments", org, nil)
+	var deps []deploymentView
+	_ = json.Unmarshal(body, &deps)
+	return code, deps
 }
 
 // TestHTTPForgeableOrgRefused proves the validated-principal gate (RED HIGH): a

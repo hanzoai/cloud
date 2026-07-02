@@ -206,6 +206,7 @@ const (
 type resourceLimits struct {
 	maxReplicas     int    // per-app replica ceiling
 	maxBuilds       int    // concurrent build Jobs per org (shared build ns)
+	maxDeploys      int    // concurrent in-flight SYNCHRONOUS image deploys per org (L1)
 	quotaCPU        string // ResourceQuota: total requests.cpu / limits.cpu
 	quotaMemory     string // ResourceQuota: total requests.memory / limits.memory
 	quotaPods       string // ResourceQuota: total pods
@@ -225,6 +226,7 @@ func newResourceLimits() resourceLimits {
 	return resourceLimits{
 		maxReplicas:     atoiDefault(getenv("CLOUD_PLATFORM_MAX_REPLICAS", ""), defaultMaxReplicas),
 		maxBuilds:       atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_BUILDS", ""), defaultMaxBuilds),
+		maxDeploys:      atoiDefault(getenv("CLOUD_PLATFORM_MAX_CONCURRENT_DEPLOYS", ""), defaultMaxDeploys),
 		quotaCPU:        getenv("CLOUD_PLATFORM_QUOTA_CPU", "20"),
 		quotaMemory:     getenv("CLOUD_PLATFORM_QUOTA_MEMORY", "40Gi"),
 		quotaPods:       getenv("CLOUD_PLATFORM_QUOTA_PODS", "50"),
@@ -244,6 +246,12 @@ func newResourceLimits() resourceLimits {
 const (
 	defaultMaxReplicas = 20
 	defaultMaxBuilds   = 3
+	// defaultMaxDeploys bounds concurrent SYNCHRONOUS image deploys per org (L1).
+	// Generous enough never to bite a legitimate bursty redeploy, yet bounds the
+	// request goroutines that a wedged operator (tenant RBAC never landing) could
+	// otherwise let one org pile up in waitForTenantRBAC's ~45s wait. Fail-secure:
+	// an unset ceiling falls back here, never to zero or unlimited.
+	defaultMaxDeploys = 8
 )
 
 // clampReplicas bounds a requested replica count to [1, maxReplicas]. A request
@@ -272,6 +280,16 @@ func (r resourceLimits) maxConcurrentBuilds() int {
 		return defaultMaxBuilds
 	}
 	return r.maxBuilds
+}
+
+// maxConcurrentDeploys is the per-org in-flight SYNCHRONOUS image-deploy ceiling
+// (L1), falling back to the safe default when unset (fail-secure). It mirrors
+// maxConcurrentBuilds for the image path, which has no build Job to count.
+func (r resourceLimits) maxConcurrentDeploys() int {
+	if r.maxDeploys <= 0 {
+		return defaultMaxDeploys
+	}
+	return r.maxDeploys
 }
 
 // resourceQuota renders the namespaced ResourceQuota that caps a tenant's TOTAL
