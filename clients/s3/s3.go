@@ -67,6 +67,7 @@ import (
 	minio "github.com/minio/minio-go/v7"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/zap-proto/zip"
@@ -243,7 +244,7 @@ func reqOrg(ctx *zip.Ctx) string {
 // validated input (and, post the principal gate above, only a validated principal
 // reaches it). The divergence from KMS is intentional per-subsystem, not drift.
 func tenant(ctx *zip.Ctx) (string, bool) {
-	if ctx.User() == "" {
+	if !principal.Validated(ctx) {
 		return "", false // no validated principal — refuse the forgeable data path
 	}
 	if org := provisioning.SanitizeOrg(ctx.Org()); org != "" {
