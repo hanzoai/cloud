@@ -42,7 +42,7 @@ type creds struct {
 	auth   string
 }
 
-// envelope is the uniform casibase response shape every /v1/iam handler returns.
+// envelope is the uniform /v1 response shape every /v1/iam handler returns.
 // data is the payload; data2 the list total (paginated reads).
 type envelope struct {
 	Status string          `json:"status"`
@@ -68,7 +68,7 @@ func (c *iamClient) getList(ctx context.Context, cr creds, path string, q url.Va
 	return listResult{rows: env.Data, total: total}, nil
 }
 
-// get performs one authenticated GET and decodes the casibase envelope.
+// get performs one authenticated GET and decodes the /v1 envelope.
 func (c *iamClient) get(ctx context.Context, cr creds, path string, q url.Values) (envelope, error) {
 	if !c.configured() {
 		return envelope{}, fmt.Errorf("iam endpoint not configured")
@@ -126,7 +126,7 @@ func envTotal(data2, data json.RawMessage) int {
 	return 0
 }
 
-// asInt decodes a JSON number (casibase data2 may arrive as a bare int).
+// asInt decodes a JSON number (data2 may arrive as a bare int).
 func asInt(raw json.RawMessage) (int, bool) {
 	t := strings.TrimSpace(string(raw))
 	if t == "" || t == "null" {
