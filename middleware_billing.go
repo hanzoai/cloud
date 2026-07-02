@@ -20,6 +20,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce/metering"
 	"github.com/zap-proto/zip"
 )
@@ -132,6 +133,13 @@ func denyBilling(c *zip.Ctx, err error) error {
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it
 // is omitted here until the metering module ships the User/Actor split.
 func identityFromCtx(c *zip.Ctx) metering.AuthInput {
+	if !principal.Validated(c) {
+		// No validated principal — never key billing on a restored, client-forged
+		// X-Org-Id. Anonymous requests to priced paths are refused by each
+		// subsystem's own principal gate; here they simply carry no billing org,
+		// so an attacker cannot probe or drain a victim org's ledger.
+		return metering.AuthInput{}
+	}
 	org := strings.TrimSpace(c.Org())
 	sub := strings.TrimSpace(c.User())
 	user := org // per-org billing key

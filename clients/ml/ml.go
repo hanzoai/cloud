@@ -51,6 +51,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 
@@ -478,6 +479,11 @@ func (s *svc) health(name string, gvrs ...schema.GroupVersionResource) zip.Handl
 // tenant resolves the per-org namespace for a request from the gateway-minted
 // identity. Pure mapping lives in tenantNS for testability.
 func (s *svc) tenant(c *zip.Ctx) (ns, org string, err error) {
+	if !principal.Validated(c) {
+		// No validated principal — the restored X-Org-Id is a forge. Refuse before
+		// mapping to a per-org k8s namespace (provisions/reads ML resources).
+		return "", "", zip.ErrForbidden("no validated principal")
+	}
 	return tenantNS(c.Org(), c.IsAdmin())
 }
 

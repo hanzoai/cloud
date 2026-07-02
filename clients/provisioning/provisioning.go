@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -463,7 +464,7 @@ func (s *svc) drop(kind string) zip.Handler {
 // (HIP-0026) — and even then reaches only the literal "admin" org's own physical
 // namespace, never a real tenant's.
 func tenant(c *zip.Ctx) (string, bool) {
-	if c.User() == "" {
+	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable data path
 	}
 	org := sanitizeOrg(c.Org())
