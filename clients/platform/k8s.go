@@ -18,9 +18,11 @@ package platform
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/provisioning"
@@ -48,6 +50,20 @@ var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namesp
 // footprint (MED-3). Both are core/v1 namespaced objects.
 var resourceQuotasGVR = schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}
 var limitRangesGVR = schema.GroupVersionResource{Version: "v1", Resource: "limitranges"}
+
+// secretsGVR lets ensureNamespace provision the tenant's GHCR image-pull secret.
+var secretsGVR = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+
+// tenantPullSecretName is the GHCR pull secret every tenant namespace carries so
+// the operator's pod can pull the PRIVATE per-tenant build image
+// (ghcr.io/hanzoai/tenant-<org>/*). serviceCR references it; ensurePullSecret
+// provisions it from pullDockerConfigEnv when that is set (else it is assumed
+// bootstrapped out-of-band and the reference degrades to the namespace default).
+const tenantPullSecretName = "ghcr-pull"
+
+// pullDockerConfigEnv holds a base64 .dockerconfigjson (KMS-synced) with pull
+// access to ghcr.io/hanzoai/tenant-*. Unset ⇒ ensurePullSecret is a no-op.
+const pullDockerConfigEnv = "CLOUD_PLATFORM_PULL_DOCKERCONFIG"
 
 // errTooManyBuilds is returned by launchBuildJob when the caller's org already
 // has the maximum number of concurrent build Jobs in flight (MED-3, shared-build
@@ -181,7 +197,53 @@ func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 	if err := k.ensureBoundObject(ctx, limitRangesGVR, ns, tenantLimitRangeName, k.limits.limitRange(ns)); err != nil {
 		return fmt.Errorf("ensure limitrange: %w", err)
 	}
+	// Provision the GHCR pull secret so the pod can pull the private tenant image
+	// (no-op when pullDockerConfigEnv is unset — then it is bootstrapped elsewhere).
+	if err := k.ensurePullSecret(ctx, ns); err != nil {
+		return fmt.Errorf("ensure pull secret: %w", err)
+	}
 	return nil
+}
+
+// ensurePullSecret provisions the tenant namespace's GHCR image-pull secret from
+// pullDockerConfigEnv (a base64 .dockerconfigjson, KMS-synced) so the operator's
+// pod can pull the PRIVATE per-tenant build image. Idempotent create-or-update.
+// When the env is unset this is a no-op: the secret is assumed bootstrapped
+// out-of-band, and serviceCR's reference degrades to the namespace default
+// rather than hard-failing. The value never appears in a manifest or a log.
+func (k *k8sClient) ensurePullSecret(ctx context.Context, ns string) error {
+	b64 := strings.TrimSpace(os.Getenv(pullDockerConfigEnv))
+	if b64 == "" {
+		return nil
+	}
+	if _, err := base64.StdEncoding.DecodeString(b64); err != nil {
+		return fmt.Errorf("%s is not valid base64: %w", pullDockerConfigEnv, err)
+	}
+	desired := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"type":       "kubernetes.io/dockerconfigjson",
+		"metadata": map[string]any{
+			"name":      tenantPullSecretName,
+			"namespace": ns,
+			"labels":    map[string]any{"hanzo.ai/managed-by": "platform"},
+		},
+		"data": map[string]any{".dockerconfigjson": b64},
+	}}
+	_, err := k.dyn.Resource(secretsGVR).Namespace(ns).Get(ctx, tenantPullSecretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, cErr := k.dyn.Resource(secretsGVR).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
+		if cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+			return cErr
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	patch, _ := json.Marshal(map[string]any{"data": map[string]any{".dockerconfigjson": b64}})
+	_, err = k.dyn.Resource(secretsGVR).Namespace(ns).Patch(ctx, tenantPullSecretName, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
+	return err
 }
 
 // ensureBoundObject create-or-updates one namespaced policy object (ResourceQuota
@@ -223,6 +285,12 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 		"replicas": int64(max1(a.Replicas)),
 		"ports": []any{
 			map[string]any{"name": "http", "containerPort": int64(portOr(a.Port))},
+		},
+		// The build output is a PRIVATE image under ghcr.io/hanzoai/tenant-<org>/*;
+		// the operator propagates imagePullSecrets to the pod so it can pull it.
+		// ensureNamespace provisions this secret (or it is bootstrapped out-of-band).
+		"imagePullSecrets": []any{
+			map[string]any{"name": tenantPullSecretName},
 		},
 	}
 	if env := envList(a.EnvJSON); len(env) > 0 {
@@ -484,14 +552,16 @@ func (k *k8sClient) countActiveBuilds(ctx context.Context, org string) (int, err
 	return n, nil
 }
 
-// jobFinished reports whether a batch/v1 Job has completed (succeeded or failed),
-// so it no longer counts toward the per-org concurrent-build cap.
-func jobFinished(job *unstructured.Unstructured) bool {
-	if succeeded, ok := nestedInt(mustStatus(job), "succeeded"); ok && succeeded > 0 {
-		return true
+// jobOutcome classifies a fetched batch/v1 Job: done reports completion
+// (succeeded OR failed); succeeded distinguishes which. It is the ONE place that
+// reads Job terminal state, shared by jobFinished (the concurrent-build cap) and
+// jobResult (the build reconciler) so both agree on when a build is over.
+func jobOutcome(job *unstructured.Unstructured) (done, succeeded bool) {
+	if n, ok := nestedInt(mustStatus(job), "succeeded"); ok && n > 0 {
+		return true, true
 	}
-	if failed, ok := nestedInt(mustStatus(job), "failed"); ok && failed > 0 {
-		return true
+	if n, ok := nestedInt(mustStatus(job), "failed"); ok && n > 0 {
+		return true, false
 	}
 	conds, _, _ := unstructured.NestedSlice(job.Object, "status", "conditions")
 	for _, c := range conds {
@@ -501,11 +571,39 @@ func jobFinished(job *unstructured.Unstructured) bool {
 		}
 		t, _ := cm["type"].(string)
 		st, _ := cm["status"].(string)
-		if (t == "Complete" || t == "Failed") && st == "True" {
-			return true
+		if st != "True" {
+			continue
+		}
+		if t == "Complete" {
+			return true, true
+		}
+		if t == "Failed" {
+			return true, false
 		}
 	}
-	return false
+	return false, false
+}
+
+// jobFinished reports whether a batch/v1 Job has completed (succeeded or failed),
+// so it no longer counts toward the per-org concurrent-build cap.
+func jobFinished(job *unstructured.Unstructured) bool {
+	done, _ := jobOutcome(job)
+	return done
+}
+
+// jobResult fetches a build Job and classifies it for the reconciler. A NotFound
+// (e.g. the Job's TTL elapsed) propagates as an error so the caller can decide
+// whether the deployment is merely old or truly orphaned.
+func (k *k8sClient) jobResult(ctx context.Context, jobName string) (done, succeeded bool, err error) {
+	if rErr := k.ready(); rErr != nil {
+		return false, false, rErr
+	}
+	obj, gErr := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Get(ctx, jobName, metav1.GetOptions{})
+	if gErr != nil {
+		return false, false, gErr
+	}
+	done, succeeded = jobOutcome(obj)
+	return done, succeeded, nil
 }
 
 // mustStatus returns the Job's status map (or nil), a small helper for jobFinished.
