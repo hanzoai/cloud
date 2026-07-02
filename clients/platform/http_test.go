@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 // mountAppK8s builds a hermetic app over an svc with the GIVEN k8s client, so
@@ -53,7 +54,26 @@ func fakeK8s() *k8sClient {
 		resourceQuotasGVR: "ResourceQuotaList",
 		limitRangesGVR:    "LimitRangeList",
 	})
+	// Model a cluster where cloud-api's per-tenant RBAC is already present: the
+	// SelfSubjectAccessReview readiness probe (waitForTenantRBAC) resolves
+	// allowed=true on the first call, so the deploy fast path is exercised with no
+	// wait. Tests of the async-RBAC race prepend their own SSAR reactor to override
+	// this default (see tenant_rbac_test.go).
+	allowSSAR(dyn, func() bool { return true })
 	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo", limits: testLimits()}
+}
+
+// allowSSAR installs a reactor that answers every SelfSubjectAccessReview with
+// status.allowed = allow(). It is the ONE place tests model whether cloud-api's
+// tenant RBAC is ready, so the readiness gate is exercised deterministically
+// without a real apiserver. `allow` is a func so a stateful caller can flip a
+// namespace from not-ready to ready mid-poll.
+func allowSSAR(dyn *dynamicfake.FakeDynamicClient, allow func() bool) {
+	dyn.PrependReactor("create", "selfsubjectaccessreviews", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		obj := a.(clienttesting.CreateAction).GetObject().(*unstructured.Unstructured).DeepCopy()
+		_ = unstructured.SetNestedField(obj.Object, allow(), "status", "allowed")
+		return true, obj, nil
+	})
 }
 
 // testLimits is a small, deterministic per-tenant policy for hermetic tests —
