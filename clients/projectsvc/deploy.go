@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // deploy ships a project live. Two modes, one endpoint:

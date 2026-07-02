@@ -29,7 +29,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kmsembed"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // svc holds the embedded KMS client the routes serve from. A nil client means

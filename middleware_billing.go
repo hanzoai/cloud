@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/commerce/metering"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // meteringProvider labels usage this binary records so spend is attributable to

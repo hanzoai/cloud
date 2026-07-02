@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // newConsoleApp mirrors the relevant slice of Serve: a representative /v1 API
