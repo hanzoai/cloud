@@ -2,6 +2,7 @@ package agents
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -23,6 +24,10 @@ func mountApp(t *testing.T, ai types.AIClient) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
+	// Mount starts the scheduler goroutine when AI is non-nil and sets the global
+	// `mounted` singleton; tear both down at test end so the loop goroutine can't
+	// leak and clobber a later test's singleton (Red re-review LOW).
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
 }
 
