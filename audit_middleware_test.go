@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // newAuditApp wires a zip app with the audit middleware in front of a small set
