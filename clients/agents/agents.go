@@ -70,6 +70,13 @@ const (
 	// service account bound. Real service-account identity (the keystone) rides
 	// in Agent.ServiceAccountID when present.
 	schedulerActor = "scheduler"
+	// maxLongRunningPerOrg caps an org's scheduler footprint: how many scheduled
+	// long-running agents it may create. Each scheduled agent adds recurring
+	// gate+run+debit load to the shared store, so a per-org bound stops one
+	// tenant from self-amplifying the once-a-minute scan. Overridable by ops via
+	// CLOUD_AGENT_MAX_LONG_RUNNING.
+	maxLongRunningPerOrg = 100
+	longRunningCapEnv    = "CLOUD_AGENT_MAX_LONG_RUNNING"
 )
 
 type svc struct {
@@ -207,12 +214,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("agents", 127, func(app any, deps cloud.Deps) error {
+	cloud.RegisterWithShutdown("agents", 127, func(app any, deps cloud.Deps) error {
 		a, ok := app.(*zip.App)
 		if !ok {
 			return fmt.Errorf("agents.Mount: app is %T, want *zip.App", app)
 		}
 		return Mount(a, deps)
+	}, func(ctx context.Context) error {
+		// Graceful teardown: stop the scheduler (drain in-flight runs) and close
+		// the store. Bounded by the caller's shutdown deadline so a stuck run
+		// can't hang SIGTERM.
+		return Shutdown(ctx)
 	})
 }
 
@@ -264,6 +276,19 @@ func (s *svc) create(c *zip.Ctx) error {
 	serviceAccountID, err := validateRef("serviceAccountId", body.ServiceAccountID)
 	if err != nil {
 		return err
+	}
+	// Cap the org's scheduler footprint (Red LOW-1): a tenant cannot create an
+	// unbounded number of scheduled agents that each add recurring load to the
+	// shared store. Only counts when this create is itself long-running.
+	if mode == ModeLongRunning {
+		n, err := s.store.CountLongRunning(c.Context(), org)
+		if err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "count: %v", err)
+		}
+		if n >= longRunningCap() {
+			return zip.Errorf(http.StatusConflict,
+				"long-running agent limit reached for this org (max %d)", longRunningCap())
+		}
 	}
 	id, err := genID("agent")
 	if err != nil {
@@ -442,6 +467,18 @@ func (s *svc) run(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	// A run MOVES MONEY (it debits org's commerce ledger), so it requires a
+	// VALIDATED principal — not merely a client-supplied X-Org-Id. SanitizeIdentity
+	// sets X-User-Id (c.User()) ONLY from a JWT it verified, and on the no-bearer
+	// direct-to-pod path it restores the client's raw X-Org-Id but leaves X-User-Id
+	// EMPTY. Gating the run on c.User() refuses exactly that anonymous-forge path:
+	// without it, a direct caller could set X-Org-Id to any tenant and charge a run
+	// against that victim's balance (Red MEDIUM-2). Read/list/create are the softer
+	// Phase-1 data path; the money action is held to the higher bar. Same guard the
+	// s3 / provisioning subsystems use.
+	if strings.TrimSpace(c.User()) == "" {
+		return zip.ErrForbidden("a validated principal is required to run an agent")
+	}
 	name := nameParam(c)
 	a, err := s.store.Get(c.Context(), org, name)
 	if err == errNotFound {
@@ -613,6 +650,18 @@ func validateLifecycle(mode, schedule string) (string, string, error) {
 	}
 }
 
+// longRunningCap resolves the per-org scheduled-agent limit from the operator
+// env override, falling back to the default. A non-positive/invalid override is
+// ignored so a typo can never remove the cap.
+func longRunningCap() int {
+	if v := strings.TrimSpace(os.Getenv(longRunningCapEnv)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return maxLongRunningPerOrg
+}
+
 // validateRef bounds an opaque lifecycle reference (compute id / service-account
 // id). Returns the trimmed value or a 400 when it exceeds maxRef.
 func validateRef(field, v string) (string, error) {
@@ -663,13 +712,14 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown stops the scheduler and closes the agents store. Idempotent.
-func Shutdown() error {
+// Shutdown stops the scheduler (draining in-flight runs, bounded by ctx) and
+// closes the agents store. Idempotent — safe to call when nothing is mounted.
+func Shutdown(ctx context.Context) error {
 	if mounted == nil {
 		return nil
 	}
 	if mounted.sched != nil {
-		mounted.sched.stop()
+		mounted.sched.stop(ctx)
 	}
 	var err error
 	if mounted.store != nil {

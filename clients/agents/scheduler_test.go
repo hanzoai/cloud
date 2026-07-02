@@ -2,12 +2,15 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -165,6 +168,130 @@ func TestSchedulerConcurrencyCap(t *testing.T) {
 	}) {
 		t.Fatal("in-flight count should drain to 0 after completion")
 	}
+}
+
+// TestSchedulerBillsScheduledRun: a scheduled tick goes through the SAME gate +
+// meter as an HTTP run — a funded agent's scheduled run debits its OWN org via
+// commerce (product=agent), proving the billing path is live on the cron path,
+// not just the HTTP handler (Red INFO-2).
+func TestSchedulerBillsScheduledRun(t *testing.T) {
+	bs := &billServer{available: 100000}
+	m, err := metering.New(metering.Config{BaseURL: bs.start(t), Token: "svc-tok", Org: "hanzo"})
+	if err != nil {
+		t.Fatalf("metering.New: %v", err)
+	}
+	s := &svc{
+		store: testStore(t),
+		ai:    &countingAI{},
+		log:   luxlog.New("test"),
+		bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+	}
+	if err := s.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	sc := newScheduler(s, luxlog.New("test"))
+
+	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
+	if !waitForDebit(func() bool { return bs.debits() == 1 }) {
+		t.Fatalf("a scheduled run on a funded org must debit once, got %d", bs.debits())
+	}
+	org, ubody := bs.lastDebit()
+	if org != "acme" {
+		t.Fatalf("scheduled debit org = %q, want the agent's own org acme", org)
+	}
+	var u struct {
+		User     string `json:"user"`
+		Provider string `json:"provider"`
+		Actor    string `json:"actor"`
+	}
+	_ = json.Unmarshal(ubody, &u)
+	if u.User != "acme" || u.Provider != meterKind {
+		t.Fatalf("scheduled debit user/provider = %q/%q, want acme/%s", u.User, u.Provider, meterKind)
+	}
+	if u.Actor == "" {
+		t.Fatalf("scheduled debit must carry a (scheduler-namespaced) actor")
+	}
+}
+
+// TestSchedulerGatesUnfundedRun: a scheduled run on an unfunded org is gated
+// (fail-closed) so the model NEVER runs and nothing is debited — an unfunded
+// long-running agent can't burn free inference every minute.
+func TestSchedulerGatesUnfundedRun(t *testing.T) {
+	bs := &billServer{available: 0}
+	m, _ := metering.New(metering.Config{BaseURL: bs.start(t), Token: "t", Org: "hanzo"})
+	ai := &countingAI{}
+	s := &svc{
+		store: testStore(t),
+		ai:    ai,
+		log:   luxlog.New("test"),
+		bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+	}
+	if err := s.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	sc := newScheduler(s, luxlog.New("test"))
+
+	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
+	time.Sleep(40 * time.Millisecond)
+	if ai.count() != 0 {
+		t.Fatalf("unfunded scheduled run must NOT invoke the model, got %d", ai.count())
+	}
+	if bs.debits() != 0 {
+		t.Fatalf("unfunded scheduled run must not debit, got %d", bs.debits())
+	}
+}
+
+// TestSchedulerStopDrainsCleanly: stop() with an un-expired ctx cancels the loop
+// and waits for the (fast) in-flight run to finish before returning — the drain
+// path that lets Shutdown close the store safely.
+func TestSchedulerStopDrainsCleanly(t *testing.T) {
+	ai := &countingAI{}
+	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc.start()
+	// Fire one run via a direct tick, then stop — stop must return after drain.
+	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
+	done := make(chan struct{})
+	go func() { sc.stop(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop() did not return — drain hung")
+	}
+	// After a clean stop, no run goroutine is left holding a slot.
+	sc.mu.Lock()
+	st := sc.states[stateKey("acme", "cron")]
+	inFlight := 0
+	if st != nil {
+		inFlight = st.inFlight
+	}
+	sc.mu.Unlock()
+	if inFlight != 0 {
+		t.Fatalf("after drain inFlight=%d, want 0", inFlight)
+	}
+}
+
+// TestSchedulerStopHonorsDeadline: a run that IGNORES cancellation (blocks) must
+// not hang stop() past the caller's deadline — stop returns at the ctx deadline
+// rather than waiting the full runTimeout.
+func TestSchedulerStopHonorsDeadline(t *testing.T) {
+	ai := &countingAI{block: make(chan struct{})}
+	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc.start()
+	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
+	if !waitFor(func() bool { return ai.count() == 1 }) {
+		t.Fatal("run should have started")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	sc.stop(ctx) // the run is blocked and ignores ctx; stop must return at deadline
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("stop() waited %v — did not honor the 100ms deadline", elapsed)
+	}
+	// Release the stuck run and let it fully drain BEFORE the test's store
+	// cleanup, so the late InsertRun can't race a closed DB.
+	close(ai.block)
+	sc.wg.Wait()
 }
 
 // TestSchedulerOnlyLongRunning: a one-shot agent is never fired by the

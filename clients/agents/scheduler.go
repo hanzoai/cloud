@@ -24,6 +24,7 @@ package agents
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,9 +58,9 @@ type agentState struct {
 }
 
 type scheduler struct {
-	svc  *svc
-	log  luxlog.Logger
-	stop func()
+	svc    *svc
+	log    luxlog.Logger
+	cancel context.CancelFunc // cancels the loop + all in-flight run contexts.
 
 	mu     sync.Mutex
 	states map[string]*agentState // key: org + "\x00" + name
@@ -83,12 +84,34 @@ func newScheduler(s *svc, log luxlog.Logger) *scheduler {
 // start launches the scheduler loop in its own goroutine. Cancelled by stop().
 func (sc *scheduler) start() {
 	ctx, cancel := context.WithCancel(context.Background())
-	sc.stop = func() {
-		cancel()
-		sc.wg.Wait() // let in-flight runs drain so the store isn't closed under them.
-	}
+	sc.cancel = cancel
 	sc.wg.Add(1)
 	go sc.loop(ctx)
+}
+
+// stop halts the scheduler and waits for in-flight runs to drain BEFORE the
+// caller closes the store — otherwise a run could InsertRun into a closed DB.
+//
+// Cancelling the loop context also cancels every in-flight run's derived
+// context, so a run whose AIClient honors ctx returns promptly. The drain wait
+// is bounded by the caller's shutdown ctx: if a run ignores cancellation and
+// runs long (up to runTimeout), stop returns at the deadline rather than hanging
+// SIGTERM. Idempotent.
+func (sc *scheduler) stop(ctx context.Context) {
+	if sc.cancel == nil {
+		return
+	}
+	sc.cancel()
+	sc.cancel = nil
+
+	done := make(chan struct{})
+	go func() { sc.wg.Wait(); close(done) }()
+	select {
+	case <-done: // clean drain
+	case <-ctx.Done():
+		sc.log.Warn("scheduler drain timed out; in-flight runs may not have recorded",
+			"err", ctx.Err())
+	}
 }
 
 // loop is the cadence driver. It uses the injected tick channel in tests, else a
@@ -179,12 +202,8 @@ func (sc *scheduler) launch(ctx context.Context, a Agent, key string) {
 		runCtx, cancel := context.WithTimeout(ctx, runTimeout)
 		defer cancel()
 
-		actor := a.ServiceAccountID
-		if actor == "" {
-			actor = schedulerActor
-		}
 		// Scheduled runs carry no HTTP request/IP; requestID/clientIP are empty.
-		r, gateErr := sc.svc.runAgent(runCtx, a, "", actor, "", "")
+		r, gateErr := sc.svc.runAgent(runCtx, a, "", scheduledActor(a), "", "")
 
 		ok := gateErr == nil && r.Status == "ok"
 		sc.mu.Lock()
@@ -255,3 +274,17 @@ func (st *agentState) failstreakBump() {
 // stateKey namespaces runtime state by org+name. The NUL separator can never
 // appear in either (nameRE + org validation forbid it), so keys are injective.
 func stateKey(org, name string) string { return org + "\x00" + name }
+
+// scheduledActor is the audit-trail Actor for a scheduled run. It is ALWAYS
+// prefixed "scheduler" so a scheduled run can never masquerade as a validated
+// interactive principal (org/sub). When the agent carries a service-account id
+// it is appended as an UNVERIFIED hint (Red LOW-2): the id is client-supplied on
+// create and not yet checked against IAM (that is the service-account keystone),
+// so it must be clearly non-authoritative, not the bare "principal". Once IAM
+// agent service accounts land, this becomes a verified identity.
+func scheduledActor(a Agent) string {
+	if sa := strings.TrimSpace(a.ServiceAccountID); sa != "" {
+		return schedulerActor + ":" + a.Org + "/" + a.Name + " (sa:" + sa + " unverified)"
+	}
+	return schedulerActor + ":" + a.Org + "/" + a.Name
+}
