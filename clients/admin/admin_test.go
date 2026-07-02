@@ -18,12 +18,21 @@ import (
 // mount builds a zip app with admin mounted against the given upstream bases,
 // and returns a `do` helper that issues test requests through the whole app.
 func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, path string, hdr map[string]string) (*http.Response, []byte) {
+	do, _ := mountSvc(t, iamURL, commerceURL, healthURL)
+	return do
+}
+
+// mountSvc is mount but also returns the underlying svc so finance tests can
+// swap in a fake DigitalOcean client (s.do) before issuing a request. The
+// handlers read s.do live at request time, so an override here takes effect.
+func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *svc) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &svc{
 		iam:      newIAMClient(iamURL),
 		commerce: newCommerceClient(commerceURL, "test-token"),
 		health:   newHealthClient(healthURL),
+		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.do
 		adminOrg: "admin",
 	}
 	app.Get("/v1/admin/me", s.guard(s.me))
@@ -36,6 +45,7 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
 	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
+	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
 	fa := app.Fiber()
 
@@ -51,7 +61,7 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 		}
 		b, _ := io.ReadAll(resp.Body)
 		return resp, b
-	}
+	}, s
 }
 
 // adminRoutes is every mounted /v1/admin route + its method — the full god-mode
@@ -67,6 +77,7 @@ var adminRoutes = []struct{ method, path string }{
 	{"GET", "/v1/admin/audit/verify"},
 	{"GET", "/v1/admin/usage"},
 	{"GET", "/v1/admin/products"},
+	{"GET", "/v1/admin/finance"},
 	{"POST", "/v1/admin/sync"},
 }
 
