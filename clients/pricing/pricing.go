@@ -34,7 +34,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gojahost"
 	hpricing "github.com/hanzoai/pricing"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 var (
