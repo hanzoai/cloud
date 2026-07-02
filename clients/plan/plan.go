@@ -32,6 +32,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/principal"
 	hplans "github.com/hanzoai/plans"
 	"github.com/zap-proto/zip"
 )
@@ -123,9 +124,12 @@ func dispatch(c *zip.Ctx, route string, params map[string]string) error {
 			"error": "plans not initialised",
 		})
 	}
-	tenant := c.Org()
-	if tenant == "" {
-		tenant = "hanzo"
+	// Public catalog: only a VALIDATED principal selects a reseller's overlay; an
+	// anonymous or client-forged X-Org-Id falls back to the public "hanzo" default
+	// (never another reseller's catalog).
+	tenant := "hanzo"
+	if org, ok := principal.Tenant(c); ok {
+		tenant = org
 	}
 	resp, err := host.Dispatch(c.Context(), gojahost.Request{
 		Route:  route,
