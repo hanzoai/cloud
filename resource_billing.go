@@ -116,7 +116,8 @@ func (rm *ResourceMeter) Meter(org, kind string, amountCents int64, requestID, c
 		Org:         org, // X-IAM-Org-Id -> caller's namespace (overrides client default).
 		Currency:    "usd",
 		AmountCents: amountCents,
-		Provider:    rm.provider,
+		Provider:    rm.provider, // the product/surface that metered (e.g. "functions", "s3", "provisioning").
+		Model:       kind,        // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item attribution.
 		RequestID:   requestID,
 		Status:      "success",
 		ClientIP:    clientIP,
