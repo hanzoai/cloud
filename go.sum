@@ -1129,8 +1129,8 @@ github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo
 github.com/hanzoai/builder v0.3.13/go.mod h1:TWZaiP0Y9tCMwtLH2EvQqBAeT1f3aJI5Y0XPM8S0wcE=
 github.com/hanzoai/commerce v1.42.27 h1:2fdo1WdfM+Dl4O28p0DQVQ39vsBAFvvKJ1quH3XLXjY=
 github.com/hanzoai/commerce v1.42.27/go.mod h1:wFhWJJu79pKWblX0dS3W+p1Vb019cZ4D6tN0j4FetEU=
-github.com/hanzoai/commerce/metering v0.1.0 h1:qKK5eqHbZwiWVZLzxvQh+rWI/h+yIt6BJlCWTEE7feI=
-github.com/hanzoai/commerce/metering v0.1.0/go.mod h1:LLFOtgJM5OczHb0D/4GRntL0a/jl80VkmyvTYCZN3yE=
+github.com/hanzoai/commerce/metering v0.1.2 h1:r0PnKVeseb7J/TAiL1RUEWD91oBHP3yOeC7JiJkylR4=
+github.com/hanzoai/commerce/metering v0.1.2/go.mod h1:LLFOtgJM5OczHb0D/4GRntL0a/jl80VkmyvTYCZN3yE=
 github.com/hanzoai/common v0.67.7 h1:6LAzDF4MOPVE6TvtA7gtYRvWESCTI5g0Hsqhe00XTd4=
 github.com/hanzoai/common v0.67.7/go.mod h1:5bHRjMM3zyieuv0xi4S4HRlC2drcyfPGVJRQUT8moQo=
 github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyfjmLYmY344=

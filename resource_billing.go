@@ -38,8 +38,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/commerce/metering"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // DefaultResourceFeeCents is the fallback flat provision/create fee (in cents)
@@ -108,25 +108,49 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, kind string, costCents i
 // received, and a request-context cancellation must not cancel the debit (mirror
 // of BillingGate). A debit failure is logged for reconciliation, not swallowed.
 func (rm *ResourceMeter) Meter(org, kind string, amountCents int64, requestID, clientIP string) {
-	if !rm.Enabled() || amountCents <= 0 {
+	rm.MeterUsage(org, kind, metering.Usage{
+		AmountCents: amountCents,
+		RequestID:   requestID,
+		ClientIP:    clientIP,
+	})
+}
+
+// MeterUsage is the general-purpose per-org debit: it records the caller-built
+// usage event after forcing the per-org billing invariants that make the debit
+// land on the CALLER's ledger and never another tenant's:
+//
+//   - u.User and u.Org are OVERWRITTEN to the caller's org slug (the per-org
+//     prepaid billing key + the X-Org-Id namespace) — a caller can never bill
+//     someone else, and a surface can't accidentally leave them unset (which
+//     would debit the client-default org).
+//   - Provider defaults to the meter's provider; Status defaults to "success";
+//     Currency defaults to "usd".
+//
+// Everything else the caller supplies (AmountCents, Model, Actor, RequestID,
+// token counts, ClientIP) flows through so a metered surface can attribute spend
+// richly. Like Meter it is fire-and-forget on a background context and a no-op
+// when billing is unconfigured or AmountCents<=0. kind is for the failure log.
+func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
+	if !rm.Enabled() || u.AmountCents <= 0 {
 		return
 	}
-	usage := metering.Usage{
-		User:        org, // per-ORG billing: ledger keyed on the org slug.
-		Org:         org, // X-IAM-Org-Id -> caller's namespace (overrides client default).
-		Currency:    "usd",
-		AmountCents: amountCents,
-		Provider:    rm.provider,
-		RequestID:   requestID,
-		Status:      "success",
-		ClientIP:    clientIP,
+	u.User = org // per-ORG billing: ledger keyed on the org slug.
+	u.Org = org  // X-Org-Id -> caller's namespace (overrides client default).
+	if u.Provider == "" {
+		u.Provider = rm.provider
+	}
+	if u.Status == "" {
+		u.Status = "success"
+	}
+	if u.Currency == "" {
+		u.Currency = "usd"
 	}
 	m, log, env := rm.m, rm.log, rm.env
 	go func() {
-		if _, err := m.Record(context.Background(), usage); err != nil && log != nil {
+		if _, err := m.Record(context.Background(), u); err != nil && log != nil {
 			log.Error("resource debit failed (resource created, not billed)",
-				"org", org, "kind", kind, "provider", usage.Provider,
-				"cents", amountCents, "env", env, "err", err)
+				"org", org, "kind", kind, "provider", u.Provider,
+				"cents", u.AmountCents, "env", env, "err", err)
 		}
 	}()
 }
