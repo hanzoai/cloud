@@ -471,8 +471,9 @@ func (s *svc) orgMoney(ctx context.Context, org string) (int64, int64) {
 }
 
 // orgSubject is the billing subject commerce keys an org's aggregate on. Commerce
-// meters per "org/user"; the org-level roll-up uses the org's own slug as the
-// subject namespace (X-IAM-Org-Id) with the org name as the user key.
+// meters per "org/user" and the org-level roll-up passes the org's own slug as the
+// user key ("org/org") via the `user` query param — commerce filters by that within
+// its service namespace, NOT by any request org header (X-IAM-Org-Id is not read).
 func orgSubject(org string) string { return org + "/" + org }
 
 // srcOf builds a SourceStatus freshness row for the overview.
