@@ -436,9 +436,9 @@ func (p *meiliProvisioner) Drop(ctx context.Context, physical, _ string) error {
 }
 
 // ----- S3 / MinIO (s3) ------------------------------------------------------
-// env: CLOUD_S3_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
-//      CLOUD_S3_ADMIN_ACCESS_KEY, CLOUD_S3_ADMIN_SECRET_KEY,
-//      CLOUD_S3_SECURE (false), CLOUD_S3_REGION (us-east-1)
+// env: S3_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
+//      S3_ADMIN_ACCESS_KEY, S3_ADMIN_SECRET_KEY,
+//      S3_SECURE (false), S3_REGION (us-east-1)
 //
 // S3 access uses the shared admin credentials scoped by bucket policy out of
 // band; there is no per-bucket password. The logical resource is the bucket.
@@ -454,14 +454,14 @@ type s3Provisioner struct {
 }
 
 func newS3() *s3Provisioner {
-	endpoint := env("CLOUD_S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
+	endpoint := env("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000")
 	host, port := splitAddr(endpoint, 9000)
 	return &s3Provisioner{
 		endpoint: endpoint,
-		ak:       os.Getenv("CLOUD_S3_ADMIN_ACCESS_KEY"),
-		sk:       os.Getenv("CLOUD_S3_ADMIN_SECRET_KEY"),
-		secure:   boolEnv("CLOUD_S3_SECURE", false),
-		region:   env("CLOUD_S3_REGION", "us-east-1"),
+		ak:       os.Getenv("S3_ADMIN_ACCESS_KEY"),
+		sk:       os.Getenv("S3_ADMIN_SECRET_KEY"),
+		secure:   boolEnv("S3_SECURE", false),
+		region:   env("S3_REGION", "us-east-1"),
 		host:     host,
 		port:     port,
 	}
