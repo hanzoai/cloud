@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hanzoai/commerce/metering"
@@ -248,13 +249,20 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 // calls it.
 type MountFunc func(app any, deps Deps) error // app is *zip.App; using any here to avoid an import cycle in pkg/cloud
 
+// ShutdownFunc releases a subsystem's process-lifetime resources (background
+// goroutines, open DB handles) on graceful shutdown. It must be idempotent and
+// bounded — Serve calls it within the shutdown deadline. ctx carries that
+// deadline so a slow teardown is cut off rather than hanging SIGTERM.
+type ShutdownFunc func(ctx context.Context) error
+
 // MountSpec describes one subsystem registered for mounting. The Order
 // is used when ordering matters for inter-subsystem deps (e.g. iam
 // before authz before commerce).
 type MountSpec struct {
-	Name  string
-	Order int
-	Mount MountFunc
+	Name     string
+	Order    int
+	Mount    MountFunc
+	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
 }
 
 // Registry is the in-process subsystem registry. Subsystems register via
@@ -265,6 +273,32 @@ var Registry []MountSpec
 // Register adds a subsystem to the in-process registry.
 func Register(name string, order int, mount MountFunc) {
 	Registry = append(Registry, MountSpec{Name: name, Order: order, Mount: mount})
+}
+
+// RegisterWithShutdown adds a subsystem that owns process-lifetime resources: a
+// background worker (e.g. the agents scheduler) or a DB handle that must be
+// flushed. shutdown is invoked by ShutdownAll on graceful stop. This is the ONE
+// way a subsystem gets a teardown — Register stays the zero-teardown default.
+func RegisterWithShutdown(name string, order int, mount MountFunc, shutdown ShutdownFunc) {
+	Registry = append(Registry, MountSpec{Name: name, Order: order, Mount: mount, Shutdown: shutdown})
+}
+
+// ShutdownAll tears down every ENABLED subsystem that registered a ShutdownFunc,
+// in REVERSE mount order (a dependency is torn down after its dependents), best
+// effort: a failure is collected and the rest still run, so one stuck subsystem
+// can't strand another's flush. Serve calls this inside the shutdown deadline.
+func ShutdownAll(ctx context.Context, cfg *Config) error {
+	var firstErr error
+	for i := len(Registry) - 1; i >= 0; i-- {
+		spec := Registry[i]
+		if spec.Shutdown == nil || !cfg.Enabled(spec.Name) {
+			continue
+		}
+		if err := spec.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("shutdown %s: %w", spec.Name, err)
+		}
+	}
+	return firstErr
 }
 
 // MountAll iterates the registry in order and calls Mount() on each
