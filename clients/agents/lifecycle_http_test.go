@@ -103,6 +103,31 @@ func TestLongRunningPerOrgCap(t *testing.T) {
 	}
 }
 
+// TestLongRunningCapNotBypassedByPatch: the cap can't be dodged by creating
+// one-shot agents (uncapped) then PATCHing them to long-running. Transition into
+// long-running is capped too; re-saving an already-long-running agent is not.
+func TestLongRunningCapNotBypassedByPatch(t *testing.T) {
+	t.Setenv(longRunningCapEnv, "1")
+	app := mountApp(t, &fakeAI{content: "x"})
+
+	// Fill the cap with one long-running agent.
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "lr", "model": "m", "executionMode": "long-running", "schedule": "* * * * *"}); code != http.StatusCreated {
+		t.Fatalf("seed long-running want 201, got %d", code)
+	}
+	// Create a one-shot agent (uncapped), then try to PATCH it to long-running.
+	do(t, app, http.MethodPost, "/v1/agents", "acme", map[string]any{"name": "sneaky", "model": "m"})
+	if code, _ := do(t, app, http.MethodPatch, "/v1/agents/sneaky", "acme",
+		map[string]any{"executionMode": "long-running", "schedule": "* * * * *"}); code != http.StatusConflict {
+		t.Fatalf("PATCH one-shot->long-running over cap want 409, got %d", code)
+	}
+	// Re-saving the EXISTING long-running agent (no transition) must NOT 409.
+	if code, _ := do(t, app, http.MethodPatch, "/v1/agents/lr", "acme",
+		map[string]any{"schedule": "*/2 * * * *"}); code != http.StatusOK {
+		t.Fatalf("no-op re-save of own long-running agent want 200, got %d", code)
+	}
+}
+
 // TestPatchToLongRunningValidates: PATCHing an agent to long-running without a
 // schedule is rejected; supplying a valid schedule in the same PATCH succeeds.
 func TestPatchToLongRunningValidates(t *testing.T) {

@@ -417,6 +417,7 @@ func (s *svc) update(c *zip.Ctx) error {
 	// Re-validate the lifecycle from the RESULTING mode+schedule so a partial
 	// update can't leave a long-running agent without a valid cron (which the
 	// scheduler would then skip forever). Absent fields keep the stored value.
+	wasLongRunning := a.ExecutionMode == ModeLongRunning
 	mode, schedule := a.ExecutionMode, a.Schedule
 	if body.ExecutionMode != nil {
 		mode = *body.ExecutionMode
@@ -426,6 +427,21 @@ func (s *svc) update(c *zip.Ctx) error {
 	}
 	if a.ExecutionMode, a.Schedule, err = validateLifecycle(mode, schedule); err != nil {
 		return err
+	}
+	// Enforce the per-org scheduler cap on a TRANSITION into long-running, so a
+	// tenant can't sidestep the create-time cap by making N one-shot agents and
+	// PATCHing them to long-running (Red LOW-1 follow-up). Only counts when the
+	// agent was NOT already long-running (a no-op re-save of an existing
+	// long-running agent must not 409 against its own row).
+	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
+		n, cerr := s.store.CountLongRunning(c.Context(), org)
+		if cerr != nil {
+			return zip.Errorf(http.StatusInternalServerError, "count: %v", cerr)
+		}
+		if n >= longRunningCap() {
+			return zip.Errorf(http.StatusConflict,
+				"long-running agent limit reached for this org (max %d)", longRunningCap())
+		}
 	}
 	a.UpdatedAt = time.Now().Unix()
 	if err := s.store.Update(c.Context(), a); err != nil {
