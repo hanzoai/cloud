@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 func mountApp(t *testing.T) *zip.App {
@@ -177,5 +177,35 @@ func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
 			t.Fatalf("forged GET %s want 403 (no validated principal), got %d", p, resp.StatusCode)
 		}
 		_ = resp.Body.Close()
+	}
+
+	// Belt-and-suspenders: WRITE + DELETE verbs route through the SAME principal
+	// gate. A no-principal forge must never create, mutate, or delete another
+	// tenant's data — assert 403 before any store access on every mutating verb.
+	forged := func(method, path string, body io.Reader) int {
+		req := httptest.NewRequest(method, path, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", "victim") // forged; deliberately NO X-User-Id
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("forged %s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+	writes := []struct {
+		method, path string
+		body         io.Reader
+	}{
+		{http.MethodPost, "/v1/crm/companies", bytes.NewReader([]byte(`{"name":"Pwned Inc"}`))},
+		{http.MethodPost, "/v1/crm/contacts", bytes.NewReader([]byte(`{"email":"x@evil.example"}`))},
+		{http.MethodPost, "/v1/crm/opportunities", bytes.NewReader([]byte(`{"name":"Steal"}`))},
+		{http.MethodDelete, "/v1/crm/companies/comp_whatever", nil},
+		{http.MethodDelete, "/v1/crm/contacts/cont_whatever", nil},
+	}
+	for _, w := range writes {
+		if code := forged(w.method, w.path, w.body); code != http.StatusForbidden {
+			t.Fatalf("forged %s %s want 403 (no validated principal), got %d", w.method, w.path, code)
+		}
 	}
 }
