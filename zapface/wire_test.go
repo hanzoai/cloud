@@ -85,7 +85,7 @@ func TestParseClientRequest(t *testing.T) {
 // SAME envelope+struct decode the client uses (rpc.ParseResponse +
 // ZapReply.wrap), with the promiseID echoed and SuperJSON result recoverable.
 func TestEncodeReplyRoundTrip(t *testing.T) {
-	// Simulate a successful casibase data payload (an array of providers).
+	// Simulate a successful /v1 data payload (an array of providers).
 	data := json.RawMessage(`[{"owner":"admin","name":"openai","category":"Model"}]`)
 	rep := zapReply{ok: true, status: 200, result: superJSONWrap(data)}
 
@@ -164,7 +164,7 @@ func TestErrorReply(t *testing.T) {
 }
 
 // TestBuildHTTPRequest proves the (method,input) -> /v1 HTTP mapping matches the
-// casibase REST convention the console2 ProviderApi uses.
+// the /v1 REST convention the console2 ProviderApi uses.
 func TestBuildHTTPRequest(t *testing.T) {
 	cases := []struct {
 		name       string

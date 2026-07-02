@@ -19,7 +19,7 @@ import (
 
 // dispatcher replays a decoded ZAP call as an in-process HTTP request against
 // the cloud Fiber app's existing /v1 routes. It owns NO business logic; it is a
-// pure transport bridge ZAP <-> the casibase /v1 surface.
+// pure transport bridge ZAP <-> the /v1 surface.
 type dispatcher struct {
 	// fiberHandler runs a synthesized *http.Request through the WHOLE Fiber app
 	// (all routes + middleware + auth filters). It is adaptor.FiberApp(rawFiber).
@@ -30,9 +30,9 @@ func newDispatcher(rawFiber *fiber.App) *dispatcher {
 	return &dispatcher{fiberHandler: adaptor.FiberApp(rawFiber)}
 }
 
-// casibaseEnvelope is the uniform response shape every casibase /v1 handler
+// envelope is the uniform response shape every /v1 handler
 // returns. We translate it into a ZapReply.
-type casibaseEnvelope struct {
+type envelope struct {
 	Status string          `json:"status"` // "ok" | "error"
 	Msg    string          `json:"msg"`
 	Data   json.RawMessage `json:"data"`
@@ -41,7 +41,7 @@ type casibaseEnvelope struct {
 
 // dispatch maps an rpc.Call to a ZapReply by replaying it as a /v1 HTTP request.
 // cookieHeader is the raw Cookie header captured from the WS upgrade, replayed
-// on every call so the casibase session filter authenticates exactly as it does
+// on every call so the /v1 session filter authenticates exactly as it does
 // for the REST client (credentials: 'include').
 func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, acceptLang string) zapReply {
 	req, err := parseZapRequest(call.Payload)
@@ -79,14 +79,14 @@ func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, accept
 		return errReply(uint32(res.StatusCode), "UNAUTHORIZED", "Not authorized")
 	}
 
-	var env casibaseEnvelope
+	var env envelope
 	if err := json.Unmarshal(bodyBytes, &env); err != nil {
 		return errReply(uint32(orStatus(res.StatusCode, http.StatusBadGateway)),
 			"INVALID_RESPONSE", fmt.Sprintf("non-envelope response (HTTP %d)", res.StatusCode))
 	}
 
 	if env.Status != "ok" {
-		// casibase reports the failure in `msg`; preserve it for the client.
+		// the /v1 handler reports the failure in `msg`; preserve it for the client.
 		ej, _ := json.Marshal(map[string]string{"code": "ERROR", "msg": env.Msg, "message": env.Msg})
 		return zapReply{ok: false, status: uint32(orStatus(res.StatusCode, http.StatusBadRequest)), errorJSON: string(ej)}
 	}
@@ -97,9 +97,9 @@ func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, accept
 	return zapReply{ok: true, status: http.StatusOK, result: superJSONWrap(env.Data)}
 }
 
-// buildHTTPRequest maps (method, SuperJSON input) onto a casibase /v1 request.
+// buildHTTPRequest maps (method, SuperJSON input) onto a /v1 request.
 //
-// casibase convention (mirrored from console2/src/lib/api/providers.ts):
+// the /v1 convention (mirrored from console2/src/lib/api/providers.ts):
 //   - "get-*"  -> GET  /v1/<method> with scalar input fields as the query.
 //   - others   -> POST /v1/<method> with scalar input fields lifted to the
 //     query (identity hints like id/owner) and the single nested
