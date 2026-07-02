@@ -93,6 +93,63 @@ func (c *commerceClient) creditsCents(ctx context.Context, org, user string) (in
 	return b.Available, nil
 }
 
+// subscriptionsWire is the /v1/billing/subscriptions list shape the MRR reader
+// folds over. Only the fields MRR needs are decoded (status + plan price/interval);
+// commerce emits plan.price in the currency's minor unit (cents) per its wire.
+type subscriptionsWire struct {
+	Subscriptions []struct {
+		Status string `json:"status"`
+		Plan   struct {
+			Price    int64  `json:"price"`
+			Currency string `json:"currency"`
+			Interval string `json:"interval"`
+		} `json:"plan"`
+	} `json:"subscriptions"`
+}
+
+// mrrCents returns the monthly-recurring-revenue contribution of org `org`'s
+// ACTIVE subscriptions, normalized to a monthly figure (a yearly plan counts as
+// price/12). Only "active"/"trialing" subscriptions count toward MRR; canceled or
+// past-due do not. Zero (not an error) when commerce is unconfigured, so a partial
+// deploy degrades to honest zero rather than a fabricated recurring number.
+func (c *commerceClient) mrrCents(ctx context.Context, org, user string) (int64, error) {
+	if !c.configured() {
+		return 0, nil
+	}
+	q := url.Values{"user": {user}}
+	body, err := c.get(ctx, "/v1/billing/subscriptions", q, org)
+	if err != nil {
+		return 0, err
+	}
+	var w subscriptionsWire
+	if err := json.Unmarshal(body, &w); err != nil {
+		return 0, fmt.Errorf("commerce subscriptions decode: %w", err)
+	}
+	var mrr int64
+	for _, s := range w.Subscriptions {
+		switch strings.ToLower(strings.TrimSpace(s.Status)) {
+		case "active", "trialing":
+			mrr += monthlyNormalizedCents(s.Plan.Price, s.Plan.Interval)
+		}
+	}
+	return mrr, nil
+}
+
+// monthlyNormalizedCents normalizes a plan price to a monthly figure by its
+// billing interval so annual and monthly plans are comparable in one MRR sum.
+func monthlyNormalizedCents(priceCents int64, interval string) int64 {
+	switch strings.ToLower(strings.TrimSpace(interval)) {
+	case "year", "yearly", "annual", "annually":
+		return priceCents / 12
+	case "week", "weekly":
+		return priceCents * 52 / 12
+	case "day", "daily":
+		return priceCents * 365 / 12
+	default: // month/monthly and anything unrecognized → treat as monthly
+		return priceCents
+	}
+}
+
 // get performs one admin-authenticated commerce GET and returns the raw body.
 func (c *commerceClient) get(ctx context.Context, path string, q url.Values, org string) ([]byte, error) {
 	u := c.base + path
