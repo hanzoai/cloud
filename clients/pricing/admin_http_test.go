@@ -52,8 +52,8 @@ func TestAdminCatalog_HTTP(t *testing.T) {
 
 	const slashID = "anthropic/claude-opus-4.6"
 	admin := map[string]string{"X-User-IsAdmin": "true"}
-	acme := map[string]string{"X-Org-Id": "acme"}
-	other := map[string]string{"X-Org-Id": "other"}
+	acme := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}
+	other := map[string]string{"X-Org-Id": "other", "X-User-Id": "u_other"}
 
 	// --- gating of the admin surface itself ---------------------------------
 	if resp, _ := do("PATCH", "/v1/admin/catalog/models/"+slashID, `{"enabled":false}`, nil); resp.StatusCode != http.StatusForbidden {

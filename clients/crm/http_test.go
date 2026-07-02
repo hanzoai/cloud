@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 func mountApp(t *testing.T) *zip.App {
@@ -35,6 +35,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
@@ -144,5 +145,67 @@ func TestHTTPValidation(t *testing.T) {
 	// opportunity referencing a missing company → 422.
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/opportunities", "o", map[string]any{"name": "D", "companyId": "comp_ghost"}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("opp bad ref want 422, got %d", code)
+	}
+}
+
+// TestRed_NoPrincipalForgedOrgRefused is the F4 guard for the cross-tenant break
+// RED found live: an off-gateway caller forges X-Org-Id with NO validated
+// principal (no X-User-Id — the state the identity middleware leaves on the
+// bearer-less path) and MUST be refused 403 on every CRM data route, never served
+// another tenant's PII. This asserts ORG AUTHENTICITY, not WHERE org=? column
+// scoping: the forged org is well-formed and matches a REAL seeded tenant, yet the
+// request is refused before any store access.
+func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
+	app := mountApp(t)
+
+	// Seed a real tenant's PII through the legitimate (validated) path.
+	if code, _ := do(t, app, http.MethodPost, "/v1/crm/companies", "victim",
+		map[string]any{"name": "VictimCo", "domainName": "victim.example"}); code != http.StatusCreated {
+		t.Fatalf("seed create want 201, got %d", code)
+	}
+
+	// Every CRM collection, forged as "victim" with NO X-User-Id → 403.
+	for _, p := range []string{"/v1/crm/companies", "/v1/crm/contacts", "/v1/crm/opportunities", "/v1/crm/summary"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		req.Header.Set("X-Org-Id", "victim") // forged; equals the seeded tenant's org
+		// deliberately NO X-User-Id — the anonymous-forge signature.
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("forged GET %s: %v", p, err)
+		}
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("forged GET %s want 403 (no validated principal), got %d", p, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+
+	// Belt-and-suspenders: WRITE + DELETE verbs route through the SAME principal
+	// gate. A no-principal forge must never create, mutate, or delete another
+	// tenant's data — assert 403 before any store access on every mutating verb.
+	forged := func(method, path string, body io.Reader) int {
+		req := httptest.NewRequest(method, path, body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-Id", "victim") // forged; deliberately NO X-User-Id
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("forged %s %s: %v", method, path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+	writes := []struct {
+		method, path string
+		body         io.Reader
+	}{
+		{http.MethodPost, "/v1/crm/companies", bytes.NewReader([]byte(`{"name":"Pwned Inc"}`))},
+		{http.MethodPost, "/v1/crm/contacts", bytes.NewReader([]byte(`{"email":"x@evil.example"}`))},
+		{http.MethodPost, "/v1/crm/opportunities", bytes.NewReader([]byte(`{"name":"Steal"}`))},
+		{http.MethodDelete, "/v1/crm/companies/comp_whatever", nil},
+		{http.MethodDelete, "/v1/crm/contacts/cont_whatever", nil},
+	}
+	for _, w := range writes {
+		if code := forged(w.method, w.path, w.body); code != http.StatusForbidden {
+			t.Fatalf("forged %s %s want 403 (no validated principal), got %d", w.method, w.path, code)
+		}
 	}
 }
