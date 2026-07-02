@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud/clients/provisioning"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -49,6 +50,16 @@ var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namesp
 var resourceQuotasGVR = schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}
 var limitRangesGVR = schema.GroupVersionResource{Version: "v1", Resource: "limitranges"}
 
+// selfSubjectAccessReviewsGVR is the authorization.k8s.io/v1 SelfSubjectAccessReview
+// virtual resource. cloud-api POSTs one to ask the apiserver, as its OWN identity,
+// "can I act in this namespace yet?" — the readiness probe that closes the
+// first-deploy race with the operator's async per-tenant RoleBinding
+// (waitForTenantRBAC). Creating a SSAR is granted to every authenticated identity by
+// the built-in system:basic-user ClusterRole, so this probe succeeds even BEFORE the
+// operator's RoleBinding lands: it is the one signal immune to the very window it
+// detects.
+var selfSubjectAccessReviewsGVR = schema.GroupVersionResource{Group: "authorization.k8s.io", Version: "v1", Resource: "selfsubjectaccessreviews"}
+
 // tenantPullSecretName is the GHCR image-pull Secret every tenant namespace
 // carries so the pod can pull the PRIVATE per-tenant build image
 // (ghcr.io/hanzoai/tenant-<org>/*). serviceCR REFERENCES it by name only; the
@@ -63,6 +74,28 @@ const tenantPullSecretName = "ghcr-pull"
 // has the maximum number of concurrent build Jobs in flight (MED-3, shared-build
 // DoS). The deploy path maps it to HTTP 429.
 var errTooManyBuilds = errors.New("platform: too many concurrent builds for this org")
+
+// errTenantProvisioning is returned by waitForTenantRBAC when the operator has not
+// projected cloud-api's per-tenant RoleBinding (cloud-api-platform) into a
+// freshly-created namespace within the bounded wait. It is a RETRYABLE condition
+// (deployErrStatus → HTTP 503): the operator finishes onboarding a moment later, so
+// the client's next deploy finds the RoleBinding present. It is an HONEST
+// "provisioning, retry" — never a fabricated success.
+var errTenantProvisioning = errors.New("platform: tenant RBAC still provisioning")
+
+const (
+	// tenantRBACReadyTimeout bounds how long a FIRST deploy into a brand-new tenant
+	// waits for the operator's tenant-RBAC controller to grant cloud-api access in
+	// the new namespace. The operator reconciles the RoleBinding within ~1-3s of the
+	// namespace appearing; this ceiling is only the safety net for a slow reconcile,
+	// never the common case. An already-onboarded tenant returns on the first probe
+	// (no wait), so the auto-glue fast path is unchanged.
+	tenantRBACReadyTimeout = 45 * time.Second
+	// tenantRBACPollInitial / tenantRBACPollMax bound the exponential back-off
+	// between readiness probes while RBAC is not yet ready.
+	tenantRBACPollInitial = 250 * time.Millisecond
+	tenantRBACPollMax     = 2 * time.Second
+)
 
 const platformUserAgent = "hanzo-cloud-platform"
 
@@ -82,6 +115,12 @@ type k8sClient struct {
 	imagePrefix string
 	buildNS     string         // namespace CI Jobs run in (default "hanzo")
 	limits      resourceLimits // per-tenant replica/quota/build bounds (MED-3)
+	// First-deploy tenant-RBAC readiness wait (waitForTenantRBAC). Zero ⇒ the
+	// production constants (tenantRBACReadyTimeout / tenantRBACPollInitial); tests
+	// shrink them for fast, deterministic coverage. Not env-configurable: these do
+	// not vary between environments.
+	rbacReadyTimeout time.Duration
+	rbacPollInitial  time.Duration
 }
 
 // newK8sClient builds the dynamic client from the in-cluster service account,
@@ -184,6 +223,16 @@ func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 	} else if err != nil {
 		return err
 	}
+	// A BRAND-NEW tenant namespace is created above, but the operator's tenant-RBAC
+	// controller projects cloud-api's `cloud-api-platform` RoleBinding (the grant to
+	// get/create resourcequotas/limitranges/services here) into it ASYNCHRONOUSLY, a
+	// moment later. Wait for that grant to land before touching the quota objects, so
+	// the first-ever deploy no longer races the RoleBinding and 403s. An already-
+	// onboarded tenant is confirmed by a single fast probe (no sleep), so existing
+	// deploys are not slowed.
+	if err := k.waitForTenantRBAC(ctx, ns); err != nil {
+		return err
+	}
 	// Bound the tenant's total footprint (idempotent create-or-update).
 	if err := k.ensureBoundObject(ctx, resourceQuotasGVR, ns, tenantQuotaName, k.limits.resourceQuota(ns)); err != nil {
 		return fmt.Errorf("ensure resourcequota: %w", err)
@@ -217,6 +266,96 @@ func (k *k8sClient) ensureBoundObject(ctx context.Context, gvr schema.GroupVersi
 	patch, _ := json.Marshal(map[string]any{"spec": desired.Object["spec"]})
 	_, err = k.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
 	return err
+}
+
+// waitForTenantRBAC blocks until cloud-api can act in ns, or the bounded window
+// elapses. It closes the first-deploy cold-start race: a brand-new tenant's
+// namespace is created by ensureNamespace, but the operator's tenant-RBAC
+// controller projects cloud-api's `cloud-api-platform` RoleBinding (ClusterRole
+// hanzo-cloud-platform-tenant: get/create/patch on resourcequotas + limitranges +
+// services.hanzo.ai) into it ASYNCHRONOUSLY. Without this gate the first deploy ran
+// ahead of the RoleBinding and failed with `resourcequotas ... is forbidden`,
+// self-healing only on a manual retry.
+//
+// The gate is a SelfSubjectAccessReview poll — "can I get resourcequotas in ns?":
+//   - allowed  → the RoleBinding has landed; proceed. The already-onboarded tenant
+//     returns on the FIRST probe with no sleep, so the auto-glue fast path is
+//     unchanged (one lightweight, non-persisted apiserver call).
+//   - denied   → poll again with bounded exponential back-off until allowed or the
+//     window elapses.
+//   - window elapsed → fail CLOSED with errTenantProvisioning (→ HTTP 503, honest
+//     "provisioning, retry"); never a fabricated success.
+//
+// The probe's verb/resource/namespace mirror ensureNamespace's first privileged op
+// (Get resourcequotas in ns) exactly, so "allowed" is a true precondition for the
+// work that follows. A SSAR needs no tenant RBAC (system:basic-user), so the probe
+// never itself hits the window it is closing. ctx cancellation (client disconnect /
+// shutdown) aborts the wait promptly. Idempotent and restart-safe: it holds no
+// state and re-derives readiness from the live cluster on every call.
+func (k *k8sClient) waitForTenantRBAC(ctx context.Context, ns string) error {
+	timeout := k.rbacReadyTimeout
+	if timeout <= 0 {
+		timeout = tenantRBACReadyTimeout
+	}
+	backoff := k.rbacPollInitial
+	if backoff <= 0 {
+		backoff = tenantRBACPollInitial
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		allowed, probeErr := k.canGetResourceQuotas(ctx, ns)
+		if allowed {
+			return nil
+		}
+		// A SSAR create error (rare apiserver blip) is treated as not-yet-ready and
+		// retried within the window rather than failing the deploy on a flake; a
+		// persistent error simply exhausts the window into an honest timeout below.
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			if probeErr != nil {
+				return fmt.Errorf("%w: tenant %s not ready after %s (last probe error: %v)", errTenantProvisioning, ns, timeout, probeErr)
+			}
+			return fmt.Errorf("%w: tenant %s not ready after %s (retry deploy)", errTenantProvisioning, ns, timeout)
+		}
+		sleep := backoff
+		if sleep > tenantRBACPollMax {
+			sleep = tenantRBACPollMax
+		}
+		if sleep > remaining {
+			sleep = remaining
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(sleep):
+		}
+		backoff *= 2
+	}
+}
+
+// canGetResourceQuotas asks the apiserver, as cloud-api's OWN identity, whether it
+// may `get` resourcequotas in ns — the exact op ensureNamespace performs next. It
+// POSTs a SelfSubjectAccessReview and reads .status.allowed. A create error (rare)
+// is returned so the poller can retry-within-window rather than fail on a flake.
+func (k *k8sClient) canGetResourceQuotas(ctx context.Context, ns string) (bool, error) {
+	ssar := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "authorization.k8s.io/v1",
+		"kind":       "SelfSubjectAccessReview",
+		"spec": map[string]any{
+			"resourceAttributes": map[string]any{
+				"namespace": ns,
+				"verb":      "get",
+				"group":     "", // core API group
+				"resource":  "resourcequotas",
+			},
+		},
+	}}
+	out, err := k.dyn.Resource(selfSubjectAccessReviewsGVR).Create(ctx, ssar, metav1.CreateOptions{})
+	if err != nil {
+		return false, err
+	}
+	allowed, _, _ := unstructured.NestedBool(out.Object, "status", "allowed")
+	return allowed, nil
 }
 
 // serviceCR renders the operator hanzo.ai/v1 Service CR for an application. The
