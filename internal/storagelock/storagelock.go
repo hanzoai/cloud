@@ -6,12 +6,10 @@
 // It has no storage of its own — every subsystem owns its own
 // per-(org, user) SQLite via hanzoai/base (HIP-0302).
 //
-// The casibase-derived cloud-api (Go — it lives on as hanzoai/ai, which
-// mounts INTO this orchestrator) used a shared PostgreSQL database
-// `hanzo_cloud` on `postgres.hanzo.svc`. Postgres is being retired for
-// per-tenant SQLite. The lockdown ensures this binary never picks up a
-// leaked Postgres pin (a `DATABASE_URL` / `driverName=postgres` knob) from
-// a manifest carried over from that deployment.
+// Storage is per-(org, user) SQLite, always — there is no Postgres mode to
+// fall back to. The lockdown makes that non-negotiable: if a manifest ever
+// carries a Postgres pin (a `DATABASE_URL` / `driverName=postgres` knob),
+// the binary refuses to boot rather than silently run on the wrong backend.
 package storagelock
 
 import (
@@ -22,7 +20,7 @@ import (
 
 // forbiddenEnvs is the closed set of env vars that pin a Postgres
 // backend. Non-empty at boot for the Go orchestrator means a manifest
-// leaked a Postgres pin. driverName is casibase's XORM knob (== "postgres"
+// leaked a Postgres pin. driverName is the storage driver knob (== "postgres"
 // is the smoking gun); the rest are DSN/host envs.
 //
 // A database NAME is deliberately NOT here: `dbName` names a database, it
@@ -62,8 +60,8 @@ type Violation struct {
 // without mutating os.Environ.
 //
 // For driverName specifically, only "postgres" / "postgresql" values
-// are violations; any other value (e.g. "sqlite") is benign and would
-// be intentionally set by an operator running a transitional config.
+// are violations; any other value (e.g. "sqlite") names the intended
+// backend and is benign.
 func Violations(lookup func(string) string) []Violation {
 	if lookup == nil {
 		return nil
@@ -74,7 +72,7 @@ func Violations(lookup func(string) string) []Violation {
 		if v == "" {
 			continue
 		}
-		// driverName is casibase's XORM knob; only "postgres" /
+		// driverName is the storage driver knob; only "postgres" /
 		// "postgresql" is a violation. Any other value (e.g. "sqlite")
 		// is the intended backend and must not crash the pod.
 		if k == "driverName" {
@@ -121,7 +119,7 @@ func classify(k, v string) string {
 	case IsPostgres(v):
 		return "Postgres DSN"
 	case k == "driverName":
-		return "casibase driverName=postgres"
+		return "driverName=postgres"
 	default:
 		return "set"
 	}
