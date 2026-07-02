@@ -29,6 +29,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -131,6 +132,49 @@ type runView struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
+// ---- overview shapes (console2 Agents dashboard: metrics + activity) ----
+//
+// These mirror the console's normalizers EXACTLY (console2 src/lib/api/agents.ts:
+// normalizeMetrics reads {series:[{key,points:[{t,v}]}], resource:{...}};
+// normalizeActivity reads {activity:[{id,kind,agent,message,at}]}). Every number
+// is derived from real agent_runs rows — never a fabricated trend. A metric this
+// store cannot source (CPU/mem/storage/cost metering) is emitted as JSON null so
+// the shape is honest and the UI renders "—".
+
+type seriesPoint struct {
+	T string `json:"t"` // bucket start, RFC3339 UTC
+	V int    `json:"v"` // real invocation count in the bucket
+}
+
+type seriesLine struct {
+	Key    string        `json:"key"` // agent name
+	Points []seriesPoint `json:"points"`
+}
+
+// resourceUsage is the Resource Usage panel rollup. This store holds agent
+// definitions and run I/O only — it does NOT meter CPU/memory/storage/cost — so
+// every field is nil, marshalling to explicit JSON null (honest "no data", not 0).
+type resourceUsage struct {
+	CPUVcpuHours   *float64 `json:"cpuVcpuHours"`
+	MemGbHours     *float64 `json:"memGbHours"`
+	StorageIoBytes *float64 `json:"storageIoBytes"`
+	CostCents      *float64 `json:"costCents"`
+}
+
+type metricsView struct {
+	Range    string        `json:"range"`  // echoes the requested window (24H|7D|30D)
+	Series   []seriesLine  `json:"series"` // per-agent invocation histogram (real)
+	Resource resourceUsage `json:"resource"`
+}
+
+type activityView struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`  // invoked|failed|created|updated (from real events)
+	Agent   string `json:"agent"` // agent name
+	Message string `json:"message,omitempty"`
+	At      string `json:"at"` // RFC3339 UTC
+}
+
 func rfc3339(unix int64) string {
 	if unix == 0 {
 		return ""
@@ -194,6 +238,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get("/v1/agents", s.list)
 	app.Post("/v1/agents", s.create)
+	// Static org-wide surfaces MUST register before the :name wildcard: Fiber
+	// matches routes in registration order, so a bare `/v1/agents/:name` would
+	// otherwise capture "metrics"/"activity" as a name and 404 them (Red route
+	// audit). Registering the literals first makes them win.
+	app.Get("/v1/agents/metrics", s.metrics)
+	app.Get("/v1/agents/activity", s.activity)
 	app.Get("/v1/agents/:name", s.get)
 	app.Patch("/v1/agents/:name", s.update)
 	app.Delete("/v1/agents/:name", s.del)
@@ -620,6 +670,122 @@ func (s *svc) runs(c *zip.Ctx) error {
 		out = append(out, toRunView(r))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"runs": out})
+}
+
+// metrics serves the invocations-over-time histogram for the org's Agents
+// dashboard. Every point is a REAL count of recorded runs in that time bucket —
+// one series line per agent that ran in the window. The Resource Usage rollup is
+// all-null because this store meters no CPU/memory/storage/cost; the console
+// renders those as "—" rather than a fabricated figure. No runs => empty series
+// (an honest "not connected / no activity yet"), never a synthesized trend.
+func (s *svc) metrics(c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	rng, buckets, step := metricsWindow(c.Query("range"))
+	now := time.Now()
+	start := now.Add(-time.Duration(buckets) * step) // last bucket ends at now
+	runs, err := s.store.RunsSince(c.Context(), org, start.Unix(), 10000)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
+	}
+	// Bucket real runs per agent. counts[agent][i] = invocations in bucket i.
+	counts := map[string][]int{}
+	var order []string
+	for _, r := range runs {
+		idx := int(time.Unix(r.CreatedAt, 0).Sub(start) / step)
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= buckets {
+			idx = buckets - 1
+		}
+		if _, seen := counts[r.AgentName]; !seen {
+			counts[r.AgentName] = make([]int, buckets)
+			order = append(order, r.AgentName)
+		}
+		counts[r.AgentName][idx]++
+	}
+	sort.Strings(order) // deterministic series order
+	series := make([]seriesLine, 0, len(order))
+	for _, name := range order {
+		pts := make([]seriesPoint, buckets)
+		for i := 0; i < buckets; i++ {
+			pts[i] = seriesPoint{
+				T: start.Add(time.Duration(i) * step).UTC().Format(time.RFC3339),
+				V: counts[name][i],
+			}
+		}
+		series = append(series, seriesLine{Key: name, Points: pts})
+	}
+	return c.JSON(http.StatusOK, metricsView{Range: rng, Series: series, Resource: resourceUsage{}})
+}
+
+// metricsWindow maps a console range token to (canonical token, bucket count,
+// bucket width). Unknown/empty defaults to 30D. Each range yields >=4 buckets so
+// the console's trendPct has real halves to compare.
+func metricsWindow(raw string) (rng string, buckets int, step time.Duration) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "24H":
+		return "24H", 24, time.Hour
+	case "7D":
+		return "7D", 7, 24 * time.Hour
+	default:
+		return "30D", 30, 24 * time.Hour
+	}
+}
+
+// activity serves the org-wide recent-activity feed. Events are REAL: each
+// recorded run is an invoked (ok) or failed (error) event; each agent's own
+// create/update timestamps are created/updated events. Merged, newest first,
+// capped. Nothing is invented — an org with no agents and no runs gets [].
+func (s *svc) activity(c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	const limit = 50
+	runs, err := s.store.RunsSince(c.Context(), org, 0, 200)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "activity runs: %v", err)
+	}
+	rows, err := s.store.List(c.Context(), org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "activity agents: %v", err)
+	}
+	evs := make([]activityView, 0, len(runs)+2*len(rows))
+	for _, r := range runs {
+		kind, msg := "invoked", "Invoked "+r.Model
+		if r.Status == "error" {
+			kind, msg = "failed", trimMsg(r.Error)
+		}
+		evs = append(evs, activityView{ID: r.ID, Kind: kind, Agent: r.AgentName, Message: msg, At: rfc3339(r.CreatedAt)})
+	}
+	for _, a := range rows {
+		evs = append(evs, activityView{ID: a.ID + ":created", Kind: "created", Agent: a.Name, Message: "Agent created", At: rfc3339(a.CreatedAt)})
+		if a.UpdatedAt > a.CreatedAt {
+			evs = append(evs, activityView{ID: a.ID + ":updated", Kind: "updated", Agent: a.Name, Message: "Configuration updated", At: rfc3339(a.UpdatedAt)})
+		}
+	}
+	// Newest first. rfc3339 is UTC ("Z"), so lexical order == chronological.
+	sort.SliceStable(evs, func(i, j int) bool { return evs[i].At > evs[j].At })
+	if len(evs) > limit {
+		evs = evs[:limit]
+	}
+	return c.JSON(http.StatusOK, map[string]any{"activity": evs})
+}
+
+// trimMsg bounds an error string for the activity feed without hiding it.
+func trimMsg(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "Run failed"
+	}
+	if len(s) > 200 {
+		return s[:200]
+	}
+	return s
 }
 
 // ---- helpers ----
