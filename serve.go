@@ -163,7 +163,11 @@ func Serve(enable []string) error {
 			"brand", cfg.Brand,
 			"domain", cfg.Domain,
 		)
-		listenErr <- app.Listen(cfg.ListenAddr)
+		// ONE app, TWO transports: ZAP is the primary machine transport
+		// (TLS 1.3 + PQ), plain HTTP the edge/browser extra. Both serve the
+		// identical route surface, so /v1/* answers over either. Serve returns
+		// the first listener error.
+		listenErr <- app.Serve(cfg.ZAPListenAddr, cfg.ListenAddr)
 	}()
 
 	select {
