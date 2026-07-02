@@ -57,13 +57,31 @@ type Replicator struct {
 	store Store
 	db    DB
 
+	cipher *Cipher // nil = no at-rest encryption (dev); set via WithEncryption
+	org    string  // org id — the AAD / key-derivation input for the cipher
+
 	mu      sync.Mutex
 	lastVer string // last object version we pushed or pulled — skip redundant pulls
 }
 
+// Option configures a Replicator.
+type Option func(*Replicator)
+
+// WithEncryption seals every pushed snapshot with the org's per-org key (envelope
+// encryption via the KMS master) so the SeaweedFS object is ciphertext. orgID is
+// bound as GCM AAD, so a blob cannot be replayed under another org. Omit it and
+// the DB is stored in the clear (local dev only).
+func WithEncryption(c *Cipher, orgID string) Option {
+	return func(r *Replicator) { r.cipher, r.org = c, orgID }
+}
+
 // NewReplicator binds the DB at key (from DBPath) to its store slot.
-func NewReplicator(key string, store Store, db DB) *Replicator {
-	return &Replicator{key: key, store: store, db: db}
+func NewReplicator(key string, store Store, db DB, opts ...Option) *Replicator {
+	r := &Replicator{key: key, store: store, db: db}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 // Key is this replicator's object-store location.
@@ -77,11 +95,16 @@ func (r *Replicator) Push(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("org: snapshot %s: %w", r.key, err)
 	}
+	if r.cipher != nil {
+		if data, err = r.cipher.Seal(r.org, data); err != nil {
+			return fmt.Errorf("org: seal %s: %w", r.key, err)
+		}
+	}
 	if err := r.store.Put(ctx, r.key, data); err != nil {
 		return fmt.Errorf("org: put %s: %w", r.key, err)
 	}
 	r.mu.Lock()
-	r.lastVer = version(data)
+	r.lastVer = version(data) // version over the STORED (sealed) bytes
 	r.mu.Unlock()
 	return nil
 }
@@ -104,6 +127,11 @@ func (r *Replicator) Pull(ctx context.Context) (changed bool, err error) {
 	data, ver, err := r.store.Get(ctx, r.key)
 	if err != nil {
 		return false, fmt.Errorf("org: get %s: %w", r.key, err)
+	}
+	if r.cipher != nil {
+		if data, err = r.cipher.Open(r.org, data); err != nil {
+			return false, fmt.Errorf("org: open %s: %w", r.key, err)
+		}
 	}
 	if err := r.db.Restore(ctx, data); err != nil {
 		return false, fmt.Errorf("org: restore %s: %w", r.key, err)
