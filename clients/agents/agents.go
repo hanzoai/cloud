@@ -35,8 +35,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	"github.com/zap-proto/zip"
+	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // nameRE is the org-unique handle AND the URL path segment — the traversal
@@ -46,12 +47,43 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 const (
 	maxInstructions = 32 * 1024 // system prompt cap
 	maxInput        = 128 * 1024
+	// maxRef bounds the free-text bot-lifecycle references (compute machine id,
+	// service-account id). They are opaque identifiers, not documents — a
+	// generous 256 keeps a client from bloating the per-org SQLite with a
+	// multi-megabyte "id".
+	maxRef = 256
+
+	// agentFeeEnvPrefix is the operator knob for the flat per-run fee. The
+	// effective fee is cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind): a
+	// global CLOUD_AGENT_FEE_CENTS override wins over the $1.00 default; set it
+	// to 0 to make agent runs free (and therefore un-gated). This is a per-RUN
+	// fee — the honest, policy-set unit an agent run bills. Token-based pricing
+	// is intentionally NOT used here: the in-process AIClient returns only the
+	// completion content (types.ChatResponse{Content}), no token counts, so
+	// charging per-token would be fabricated. Duration is recorded on the run.
+	agentFeeEnvPrefix = "CLOUD_AGENT_FEE_CENTS"
+	// meterKind is the commerce "provider"/attribution label for agent spend —
+	// the task's product:"agent". One value so every agent run (HTTP or
+	// scheduled) is attributed identically.
+	meterKind = "agent"
+	// schedulerActor is the Actor recorded on a scheduled run that has no IAM
+	// service account bound. Real service-account identity (the keystone) rides
+	// in Agent.ServiceAccountID when present.
+	schedulerActor = "scheduler"
 )
 
 type svc struct {
 	store *Store
 	ai    types.AIClient
 	log   luxlog.Logger
+	// bill is the shared per-org gate+meter (reuses deps.Metering, the ONE
+	// commerce client — the same object ml/provisioning use). Nil/!Enabled()
+	// makes Gate allow and Meter a no-op, so an unconfigured deployment runs
+	// agents without billing rather than failing closed on a missing ledger.
+	bill *cloud.ResourceMeter
+	// sched is the long-running-agent scheduler; nil until started, stopped on
+	// Shutdown. It shares svc so it runs agents through the SAME runAgent path.
+	sched *scheduler
 }
 
 var mounted *svc
@@ -59,15 +91,19 @@ var mounted *svc
 // ---- HTTP response shapes (the published contract) ----
 
 type agentView struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Model       string   `json:"model"`
-	Description string   `json:"description,omitempty"`
-	Tools       []string `json:"tools"`
-	Status      string   `json:"status"`
-	Runs        int      `json:"runs"`
-	CreatedAt   string   `json:"createdAt"`
-	UpdatedAt   string   `json:"updatedAt"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Model            string   `json:"model"`
+	Description      string   `json:"description,omitempty"`
+	Tools            []string `json:"tools"`
+	Status           string   `json:"status"`
+	ExecutionMode    string   `json:"executionMode"`
+	Schedule         string   `json:"schedule,omitempty"`
+	ComputeRef       string   `json:"computeRef,omitempty"`
+	ServiceAccountID string   `json:"serviceAccountId,omitempty"`
+	Runs             int      `json:"runs"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
 }
 
 type agentDetail struct {
@@ -97,7 +133,10 @@ func rfc3339(unix int64) string {
 func toView(a Agent, runs int) agentView {
 	return agentView{
 		ID: a.ID, Name: a.Name, Model: a.Model, Description: a.Description,
-		Tools: nonNil(a.Tools), Status: a.Status, Runs: runs,
+		Tools: nonNil(a.Tools), Status: a.Status,
+		ExecutionMode: a.ExecutionMode, Schedule: a.Schedule,
+		ComputeRef: a.ComputeRef, ServiceAccountID: a.ServiceAccountID,
+		Runs:      runs,
 		CreatedAt: rfc3339(a.CreatedAt), UpdatedAt: rfc3339(a.UpdatedAt),
 	}
 }
@@ -137,7 +176,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("agents.Mount: open store: %w", err)
 	}
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
-	s := &svc{store: store, ai: deps.AI, log: log}
+	s := &svc{
+		store: store,
+		ai:    deps.AI,
+		log:   log,
+		bill:  cloud.NewResourceMeter(deps, meterKind),
+	}
 	mounted = s
 
 	app.Get("/v1/agents", s.list)
@@ -148,7 +192,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/agents/:name/run", s.run)
 	app.Get("/v1/agents/:name/runs", s.runs)
 
-	log.Info("agents mounted", "ai", s.ai != nil, "brand", deps.Brand)
+	// Long-running scheduler: invokes each long-running agent's run on its cron
+	// cadence through the SAME runAgent path as the HTTP handler (one run path,
+	// one gate, one meter). Only started when inference is wired — with no AI a
+	// scheduled run could never execute, so there is nothing to schedule.
+	if s.ai != nil {
+		s.sched = newScheduler(s, log)
+		s.sched.start()
+	}
+
+	log.Info("agents mounted", "ai", s.ai != nil, "billing", s.bill.Enabled(),
+		"scheduler", s.sched != nil, "brand", deps.Brand)
 	return nil
 }
 
@@ -165,11 +219,15 @@ func init() {
 // ---- handlers ----
 
 type createReq struct {
-	Name         string   `json:"name"`
-	Model        string   `json:"model"`
-	Instructions string   `json:"instructions"`
-	Description  string   `json:"description"`
-	Tools        []string `json:"tools"`
+	Name             string   `json:"name"`
+	Model            string   `json:"model"`
+	Instructions     string   `json:"instructions"`
+	Description      string   `json:"description"`
+	Tools            []string `json:"tools"`
+	ExecutionMode    string   `json:"executionMode"`
+	Schedule         string   `json:"schedule"`
+	ComputeRef       string   `json:"computeRef"`
+	ServiceAccountID string   `json:"serviceAccountId"`
 }
 
 func (s *svc) create(c *zip.Ctx) error {
@@ -195,6 +253,18 @@ func (s *svc) create(c *zip.Ctx) error {
 	if len(body.Instructions) > maxInstructions {
 		return zip.ErrBadRequest("instructions too large")
 	}
+	mode, schedule, err := validateLifecycle(body.ExecutionMode, body.Schedule)
+	if err != nil {
+		return err
+	}
+	computeRef, err := validateRef("computeRef", body.ComputeRef)
+	if err != nil {
+		return err
+	}
+	serviceAccountID, err := validateRef("serviceAccountId", body.ServiceAccountID)
+	if err != nil {
+		return err
+	}
 	id, err := genID("agent")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
@@ -203,7 +273,9 @@ func (s *svc) create(c *zip.Ctx) error {
 	a := Agent{
 		ID: id, Org: org, Name: name, Model: model, Instructions: body.Instructions,
 		Description: strings.TrimSpace(body.Description), Tools: cleanList(body.Tools),
-		Status: "ready", CreatedAt: now, UpdatedAt: now,
+		Status: "ready", ExecutionMode: mode, Schedule: schedule,
+		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.store.Create(c.Context(), a); err != nil {
 		if err == errConflict {
@@ -261,10 +333,14 @@ func (s *svc) get(c *zip.Ctx) error {
 }
 
 type updateReq struct {
-	Model        *string   `json:"model"`
-	Instructions *string   `json:"instructions"`
-	Description  *string   `json:"description"`
-	Tools        *[]string `json:"tools"`
+	Model            *string   `json:"model"`
+	Instructions     *string   `json:"instructions"`
+	Description      *string   `json:"description"`
+	Tools            *[]string `json:"tools"`
+	ExecutionMode    *string   `json:"executionMode"`
+	Schedule         *string   `json:"schedule"`
+	ComputeRef       *string   `json:"computeRef"`
+	ServiceAccountID *string   `json:"serviceAccountId"`
 }
 
 func (s *svc) update(c *zip.Ctx) error {
@@ -302,6 +378,29 @@ func (s *svc) update(c *zip.Ctx) error {
 	}
 	if body.Tools != nil {
 		a.Tools = cleanList(*body.Tools)
+	}
+	if body.ComputeRef != nil {
+		if a.ComputeRef, err = validateRef("computeRef", *body.ComputeRef); err != nil {
+			return err
+		}
+	}
+	if body.ServiceAccountID != nil {
+		if a.ServiceAccountID, err = validateRef("serviceAccountId", *body.ServiceAccountID); err != nil {
+			return err
+		}
+	}
+	// Re-validate the lifecycle from the RESULTING mode+schedule so a partial
+	// update can't leave a long-running agent without a valid cron (which the
+	// scheduler would then skip forever). Absent fields keep the stored value.
+	mode, schedule := a.ExecutionMode, a.Schedule
+	if body.ExecutionMode != nil {
+		mode = *body.ExecutionMode
+	}
+	if body.Schedule != nil {
+		schedule = *body.Schedule
+	}
+	if a.ExecutionMode, a.Schedule, err = validateLifecycle(mode, schedule); err != nil {
+		return err
 	}
 	a.UpdatedAt = time.Now().Unix()
 	if err := s.store.Update(c.Context(), a); err != nil {
@@ -362,16 +461,56 @@ func (s *svc) run(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "inference is not configured on this deployment")
 	}
 
-	r := executeRun(c.Context(), s.ai, org, a, body.Input)
-	// Record the run regardless of inference outcome — the history is real.
-	if err := s.store.InsertRun(c.Context(), r); err != nil {
-		s.log.Warn("record run failed", "org", org, "agent", name, "err", err)
+	// Pre-authorize the caller's org balance BEFORE any inference (fail-closed).
+	// The actor is the validated principal (org/sub) when present, else the bare
+	// org — recorded on the debit for attribution. Gating here means an unfunded
+	// org gets 402 and NO free inference; an unreachable commerce gets 503.
+	actor := billingActor(org, c.User())
+	r, gateErr := s.runAgent(c.Context(), a, body.Input, actor, c.RequestID(), cloud.ClientIP(c))
+	if gateErr != nil {
+		return cloud.DenyResource(c, gateErr)
 	}
 	if r.Status != "ok" {
 		// The run is recorded; surface the upstream failure honestly.
 		return c.JSON(http.StatusBadGateway, toRunView(r))
 	}
 	return c.JSON(http.StatusOK, toRunView(r))
+}
+
+// runAgent is the ONE run path — shared by the HTTP handler and the scheduler.
+// It (1) pre-authorizes the AGENT's OWN org balance (fail-closed) so no unfunded
+// tenant ever gets free inference, (2) executes one real completion, (3) records
+// the run regardless of outcome (the history is real), and (4) debits the run
+// fee to the agent's org ONLY on success. A non-nil error is a BALANCE-GATE
+// denial (out-of-funds / commerce-unknown) that the caller renders (402/503) —
+// it means no run happened. A run that executed but the model failed returns a
+// recorded error-status Run and a nil error.
+func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
+	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
+	// Gate the AGENT's own org — never a caller default, never another tenant.
+	// fee<=0 or unconfigured billing makes this a no-op (allows).
+	if err := s.bill.Gate(ctx, a.Org, meterKind, fee); err != nil {
+		return Run{}, err
+	}
+
+	r := executeRun(ctx, s.ai, a.Org, a, input)
+	if err := s.store.InsertRun(ctx, r); err != nil {
+		s.log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
+	}
+
+	// Bill only a successful run (mirrors the edge gate: failed work is not
+	// charged). Rich attribution: product=agent (Provider), the agent's model,
+	// and the actor for the audit trail. Fire-and-forget on a background context.
+	if r.Status == "ok" {
+		s.bill.MeterUsage(a.Org, meterKind, metering.Usage{
+			AmountCents: fee,
+			Model:       a.Model,
+			Actor:       actor,
+			RequestID:   requestID,
+			ClientIP:    clientIP,
+		})
+	}
+	return r, nil
 }
 
 // executeRun composes the agent's instructions with the caller input, runs one
@@ -447,6 +586,58 @@ func tenant(c *zip.Ctx) (string, bool) {
 	return org, true
 }
 
+// validateLifecycle normalizes and validates the execution mode + schedule.
+// Empty mode defaults to one-shot. A long-running agent MUST carry a schedule
+// that parses as a 5-field cron (else the scheduler would silently never fire
+// it); a one-shot agent's schedule is cleared (it is meaningless without the
+// scheduler). Returns the normalized (mode, schedule) or a 400.
+func validateLifecycle(mode, schedule string) (string, string, error) {
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		mode = ModeOneShot
+	}
+	schedule = strings.TrimSpace(schedule)
+	switch mode {
+	case ModeOneShot:
+		return ModeOneShot, "", nil // schedule is meaningless one-shot; drop it.
+	case ModeLongRunning:
+		if schedule == "" {
+			return "", "", zip.ErrBadRequest("a long-running agent requires a 'schedule' (5-field cron)")
+		}
+		if _, err := parseCron(schedule); err != nil {
+			return "", "", zip.ErrBadRequest("invalid 'schedule': " + err.Error())
+		}
+		return ModeLongRunning, schedule, nil
+	default:
+		return "", "", zip.ErrBadRequest("executionMode must be 'one-shot' or 'long-running'")
+	}
+}
+
+// validateRef bounds an opaque lifecycle reference (compute id / service-account
+// id). Returns the trimmed value or a 400 when it exceeds maxRef.
+func validateRef(field, v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if len(v) > maxRef {
+		return "", zip.ErrBadRequest(field + " too long")
+	}
+	return v, nil
+}
+
+// billingActor is the "org/sub" identity recorded on a debit for the audit
+// trail. It never selects which balance is gated — that is always the org — but
+// attributes the spend to a principal. Falls back to the bare org when no
+// validated user subject is present (e.g. a service-token caller).
+func billingActor(org, sub string) string {
+	sub = strings.TrimSpace(sub)
+	if org != "" && sub != "" {
+		return org + "/" + sub
+	}
+	if sub != "" {
+		return sub
+	}
+	return org
+}
+
 func cleanList(xs []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -472,12 +663,18 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown closes the agents store. Idempotent.
+// Shutdown stops the scheduler and closes the agents store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	if mounted.sched != nil {
+		mounted.sched.stop()
+	}
+	var err error
+	if mounted.store != nil {
+		err = mounted.store.Close()
+	}
 	mounted = nil
 	return err
 }

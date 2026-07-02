@@ -22,18 +22,43 @@ var (
 // prompt (instructions), and a set of tool names it may call. Tenant isolation
 // is the org column, enforced on every query. It never stores a secret — tool
 // credentials live in KMS and are referenced by name at run time.
+//
+// The bot-lifecycle fields promote an agent from a one-shot callable into a
+// long-running bot (per hanzo-agent-bot-architecture: "Bot = Agent + compute +
+// long-running"):
+//
+//   - ExecutionMode: "one-shot" (default; runs only when POSTed) or
+//     "long-running" (the scheduler invokes it on Schedule).
+//   - Schedule: a 5-field cron expression; required when long-running, ignored
+//     otherwise. The scheduler evaluates it once a minute.
+//   - ComputeRef: an optional visor machine id the bot is bound to. It is an
+//     opaque reference here; binding/lifecycle is owned elsewhere.
+//   - ServiceAccountID: an optional IAM agent service-account (<org>-<agent>).
+//     When set it is the Actor recorded on scheduled-run billing so an
+//     autonomous run is attributable to a principal, not just the org.
 type Agent struct {
-	ID           string
-	Org          string
-	Name         string
-	Model        string
-	Instructions string
-	Description  string
-	Tools        []string
-	Status       string
-	CreatedAt    int64
-	UpdatedAt    int64
+	ID               string
+	Org              string
+	Name             string
+	Model            string
+	Instructions     string
+	Description      string
+	Tools            []string
+	Status           string
+	ExecutionMode    string
+	Schedule         string
+	ComputeRef       string
+	ServiceAccountID string
+	CreatedAt        int64
+	UpdatedAt        int64
 }
+
+// Execution modes. One-shot agents run only on an explicit POST; long-running
+// agents are additionally invoked by the scheduler on their Schedule.
+const (
+	ModeOneShot     = "one-shot"
+	ModeLongRunning = "long-running"
+)
 
 // Run is one execution of an agent: the input, the produced output (or error),
 // which model served it, and how long it took. Real history — every row is a
@@ -84,16 +109,20 @@ func openStore(path string) (*Store, error) {
 func (s *Store) migrate() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS agents (
-  id           TEXT PRIMARY KEY,
-  org          TEXT NOT NULL,
-  name         TEXT NOT NULL,
-  model        TEXT NOT NULL DEFAULT '',
-  instructions TEXT NOT NULL DEFAULT '',
-  description  TEXT NOT NULL DEFAULT '',
-  tools        TEXT NOT NULL DEFAULT '[]',
-  status       TEXT NOT NULL DEFAULT 'ready',
-  created_at   INTEGER NOT NULL,
-  updated_at   INTEGER NOT NULL
+  id                 TEXT PRIMARY KEY,
+  org                TEXT NOT NULL,
+  name               TEXT NOT NULL,
+  model              TEXT NOT NULL DEFAULT '',
+  instructions       TEXT NOT NULL DEFAULT '',
+  description        TEXT NOT NULL DEFAULT '',
+  tools              TEXT NOT NULL DEFAULT '[]',
+  status             TEXT NOT NULL DEFAULT 'ready',
+  execution_mode     TEXT NOT NULL DEFAULT 'one-shot',
+  schedule           TEXT NOT NULL DEFAULT '',
+  compute_ref        TEXT NOT NULL DEFAULT '',
+  service_account_id TEXT NOT NULL DEFAULT '',
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_agents_org_name ON agents(org, name);
 CREATE INDEX IF NOT EXISTS ix_agents_org_updated ON agents(org, updated_at);
@@ -115,7 +144,60 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// Forward, idempotent migration for databases created before the
+	// bot-lifecycle columns existed. Each ADD COLUMN is guarded by a live
+	// column-existence check (PRAGMA table_info), so re-running migrate() on an
+	// already-upgraded DB is a no-op and never errors — the DDL above handles
+	// fresh DBs, this handles pre-existing ones. It touches no storage-backend
+	// knob (driverName/DSN), so the SQLite-only storage lockdown is unaffected.
+	return s.addColumns("agents", map[string]string{
+		"execution_mode":     "TEXT NOT NULL DEFAULT 'one-shot'",
+		"schedule":           "TEXT NOT NULL DEFAULT ''",
+		"compute_ref":        "TEXT NOT NULL DEFAULT ''",
+		"service_account_id": "TEXT NOT NULL DEFAULT ''",
+	})
+}
+
+// addColumns adds each missing column to table, idempotently. A column already
+// present is skipped; a fresh install (all present from the CREATE) is a no-op.
+func (s *Store) addColumns(table string, cols map[string]string) error {
+	have, err := s.columns(table)
+	if err != nil {
+		return err
+	}
+	for name, def := range cols {
+		if have[name] {
+			continue
+		}
+		// name/def are package-internal literals, never user input — no
+		// injection surface. SQLite forbids parameterizing DDL identifiers.
+		if _, err := s.db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + name + ` ` + def); err != nil {
+			return fmt.Errorf("migrate: add %s.%s: %w", table, name, err)
+		}
+	}
 	return nil
+}
+
+// columns returns the set of column names on table via PRAGMA table_info.
+func (s *Store) columns(table string) (map[string]bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, fmt.Errorf("migrate: table_info %s: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	have := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, ctype      string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return nil, fmt.Errorf("migrate: scan table_info: %w", err)
+		}
+		have[name] = true
+	}
+	return have, rows.Err()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -142,23 +224,37 @@ func decodeList(s string) []string {
 	return xs
 }
 
-const agentCols = `id,org,name,model,instructions,description,tools,status,created_at,updated_at`
+const agentCols = `id,org,name,model,instructions,description,tools,status,execution_mode,schedule,compute_ref,service_account_id,created_at,updated_at`
 
 func scanAgent(sc interface{ Scan(...any) error }) (Agent, error) {
 	var a Agent
 	var tools string
 	err := sc.Scan(&a.ID, &a.Org, &a.Name, &a.Model, &a.Instructions, &a.Description,
-		&tools, &a.Status, &a.CreatedAt, &a.UpdatedAt)
+		&tools, &a.Status, &a.ExecutionMode, &a.Schedule, &a.ComputeRef, &a.ServiceAccountID,
+		&a.CreatedAt, &a.UpdatedAt)
 	a.Tools = decodeList(tools)
 	return a, err
 }
 
+// normalizeMode is the lowest-layer fail-safe default: an empty execution_mode
+// is stored as one-shot so NO path (handler, scheduler, or a direct store call)
+// can persist an agent the scheduler would treat ambiguously. The HTTP handler
+// also defaults+validates, but this makes the invariant hold at the store.
+func normalizeMode(m string) string {
+	if strings.TrimSpace(m) == "" {
+		return ModeOneShot
+	}
+	return m
+}
+
 // Create inserts one agent. A UNIQUE(org,name) violation surfaces as errConflict.
 func (s *Store) Create(ctx context.Context, a Agent) error {
+	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agents (`+agentCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.Name, a.Model, a.Instructions, a.Description,
-		encodeList(a.Tools), a.Status, a.CreatedAt, a.UpdatedAt)
+		encodeList(a.Tools), a.Status, a.ExecutionMode, a.Schedule, a.ComputeRef,
+		a.ServiceAccountID, a.CreatedAt, a.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -202,9 +298,13 @@ func (s *Store) List(ctx context.Context, org string) ([]Agent, error) {
 
 // Update overwrites the mutable fields of an existing agent.
 func (s *Store) Update(ctx context.Context, a Agent) error {
+	a.ExecutionMode = normalizeMode(a.ExecutionMode)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agents SET model=?,instructions=?,description=?,tools=?,status=?,updated_at=? WHERE org=? AND name=?`,
-		a.Model, a.Instructions, a.Description, encodeList(a.Tools), a.Status, a.UpdatedAt, a.Org, a.Name)
+		`UPDATE agents SET model=?,instructions=?,description=?,tools=?,status=?,
+		 execution_mode=?,schedule=?,compute_ref=?,service_account_id=?,updated_at=?
+		 WHERE org=? AND name=?`,
+		a.Model, a.Instructions, a.Description, encodeList(a.Tools), a.Status,
+		a.ExecutionMode, a.Schedule, a.ComputeRef, a.ServiceAccountID, a.UpdatedAt, a.Org, a.Name)
 	if err != nil {
 		return fmt.Errorf("update agent: %w", err)
 	}
@@ -213,6 +313,31 @@ func (s *Store) Update(ctx context.Context, a Agent) error {
 		return errNotFound
 	}
 	return nil
+}
+
+// ListLongRunning returns every agent across ALL orgs whose execution_mode is
+// long-running and that carries a non-empty schedule — the scheduler's work
+// set. It is the ONE cross-org query in this store; the scheduler is a trusted
+// in-process subsystem (not a tenant request), and each returned agent carries
+// its own Org so every downstream action (run, gate, meter) stays scoped to the
+// agent's own tenant.
+func (s *Store) ListLongRunning(ctx context.Context) ([]Agent, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+agentCols+` FROM agents
+		 WHERE execution_mode=? AND schedule<>'' ORDER BY org, name`, ModeLongRunning)
+	if err != nil {
+		return nil, fmt.Errorf("list long-running: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Agent
+	for rows.Next() {
+		a, err := scanAgent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan agent: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 // Delete removes an agent and its run history. Reports whether a row went.
