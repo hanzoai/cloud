@@ -61,6 +61,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -267,22 +268,7 @@ func Shutdown() error {
 //
 // Fails closed: an unvalidated or org-less request gets no tenant, so the caller
 // returns 403 — never a fake success, never another org's data.
-func tenant(c *zip.Ctx) (string, bool) {
-	if strings.TrimSpace(c.User()) == "" {
-		return "", false // no validated principal — the restored X-Org-Id is untrusted
-	}
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	// CLONE the org before returning it. c.Org() is a zero-copy view into the
-	// fasthttp request buffer (fiber's Get semantics); that buffer is REUSED once
-	// the request ends, so any retained view mutates to unrelated bytes. The org
-	// is our tenant-isolation KEY — it is stored (telemetry events, run records)
-	// and MUST be a stable, owned copy, never an alias that can silently become
-	// another value (manifested as run scores landing under a corrupted org).
-	return strings.Clone(org), true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 // ── HTTP shapes (the contract the FE port consumes) ──────────────────────────
 

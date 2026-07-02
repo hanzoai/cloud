@@ -29,6 +29,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kmsembed"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -114,6 +115,13 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 		org := reqOrg(ctx)
 		if !validOrg(org) {
 			return zip.ErrBadRequest("org must be a DNS-1123 label")
+		}
+		if !principal.Validated(ctx) {
+			// No validated principal. The identity middleware RESTORES a client
+			// X-Org-Id on the bearer-less path, so ctx.Org() could equal a forged
+			// :org and defeat the equality check below — an off-gateway caller
+			// could read another org's secrets with no credential. Refuse here.
+			return zip.ErrForbidden("no validated principal")
 		}
 		if !ctx.IsAdmin() && ctx.Org() != org {
 			return zip.ErrForbidden("caller may only access its own org's secrets")
