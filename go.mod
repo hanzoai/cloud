@@ -22,7 +22,7 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
-	github.com/zap-proto/zip v1.1.0
+	github.com/zap-proto/zip v1.2.0
 	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/term v0.44.0
 	k8s.io/apimachinery v0.35.0
@@ -33,7 +33,7 @@ require (
 require (
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/hanzoai/zip v0.2.0 // indirect
-	github.com/zap-proto/http v0.1.0 // indirect
+	github.com/zap-proto/http v0.2.0 // indirect
 )
 
 require (
