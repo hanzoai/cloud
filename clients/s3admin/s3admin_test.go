@@ -9,8 +9,8 @@ import (
 func clearS3Env(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
-		"CLOUD_S3_ADMIN_ENDPOINT", "CLOUD_S3_ADMIN_ACCESS_KEY", "CLOUD_S3_ADMIN_SECRET_KEY",
-		"CLOUD_S3_SECURE", "CLOUD_S3_REGION", "CLOUD_S3_PUBLIC_ENDPOINT", "CLOUD_S3_PUBLIC_SECURE",
+		"S3_ADMIN_ENDPOINT", "S3_ADMIN_ACCESS_KEY", "S3_ADMIN_SECRET_KEY",
+		"S3_SECURE", "S3_REGION", "S3_PUBLIC_ENDPOINT", "S3_PUBLIC_SECURE",
 	} {
 		t.Setenv(k, "")
 	}
@@ -40,8 +40,8 @@ func TestNotConfiguredWithoutCreds(t *testing.T) {
 // client is built against the default internal endpoint.
 func TestConfiguredWithCreds(t *testing.T) {
 	clearS3Env(t)
-	t.Setenv("CLOUD_S3_ADMIN_ACCESS_KEY", "AKIA")
-	t.Setenv("CLOUD_S3_ADMIN_SECRET_KEY", "secret")
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
 	a := New()
 	if !a.Configured() {
 		t.Fatal("Configured() = false with creds, want true")
@@ -66,8 +66,8 @@ func TestConfiguredWithCreds(t *testing.T) {
 // s3.hanzo.ai (NOT the internal admin host).
 func TestPresignConfiguredDefaultsToPublicHost(t *testing.T) {
 	clearS3Env(t)
-	t.Setenv("CLOUD_S3_ADMIN_ACCESS_KEY", "AKIA")
-	t.Setenv("CLOUD_S3_ADMIN_SECRET_KEY", "secret")
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
 	a := New()
 	if !a.PresignConfigured() {
 		t.Fatal("PresignConfigured() = false, want true (default public endpoint)")
@@ -92,11 +92,11 @@ func TestPresignConfiguredDefaultsToPublicHost(t *testing.T) {
 // even though the admin client itself is configured.
 func TestPresignDisabledWhenPublicEndpointBlank(t *testing.T) {
 	clearS3Env(t)
-	t.Setenv("CLOUD_S3_ADMIN_ACCESS_KEY", "AKIA")
-	t.Setenv("CLOUD_S3_ADMIN_SECRET_KEY", "secret")
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
 	// A single space is trimmed to "", which env() treats as unset → falls back to
 	// the default. To truly blank it we set a sentinel the loader strips to "".
-	t.Setenv("CLOUD_S3_PUBLIC_ENDPOINT", "   ")
+	t.Setenv("S3_PUBLIC_ENDPOINT", "   ")
 	a := New()
 	// "   " → env() sees non-empty (has spaces) → hostOnly trims to "".
 	if a.publicEndpoint != "" {
@@ -127,8 +127,8 @@ func TestHostOnlyStripsScheme(t *testing.T) {
 // TestSecureFlags: TLS defaults — internal off, public on — and both overridable.
 func TestSecureFlags(t *testing.T) {
 	clearS3Env(t)
-	t.Setenv("CLOUD_S3_ADMIN_ACCESS_KEY", "AKIA")
-	t.Setenv("CLOUD_S3_ADMIN_SECRET_KEY", "secret")
+	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIA")
+	t.Setenv("S3_ADMIN_SECRET_KEY", "secret")
 	a := New()
 	if a.secure {
 		t.Error("default internal secure = true, want false (in-cluster plaintext)")
@@ -136,13 +136,13 @@ func TestSecureFlags(t *testing.T) {
 	if !a.publicSecure {
 		t.Error("default public secure = false, want true (https public host)")
 	}
-	t.Setenv("CLOUD_S3_SECURE", "true")
-	t.Setenv("CLOUD_S3_PUBLIC_SECURE", "false")
+	t.Setenv("S3_SECURE", "true")
+	t.Setenv("S3_PUBLIC_SECURE", "false")
 	a = New()
 	if !a.secure {
-		t.Error("CLOUD_S3_SECURE=true not honored")
+		t.Error("S3_SECURE=true not honored")
 	}
 	if a.publicSecure {
-		t.Error("CLOUD_S3_PUBLIC_SECURE=false not honored")
+		t.Error("S3_PUBLIC_SECURE=false not honored")
 	}
 }

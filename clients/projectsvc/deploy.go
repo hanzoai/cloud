@@ -85,7 +85,7 @@ func (s *svc) deployGit(c *zip.Ctx, org string, p Project) error {
 
 func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 	if !s.blob.configured() {
-		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set CLOUD_S3_ADMIN_*)")
+		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
 	raw := c.Body()
 	if len(raw) == 0 {

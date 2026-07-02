@@ -30,7 +30,7 @@ const (
 
 // blobStore writes a project's built static files into S3 under a deterministic
 // prefix and serves them publicly. The S3 connection itself comes from the ONE
-// shared access path (clients/s3admin, the SAME CLOUD_S3_ADMIN_* credentials the
+// shared access path (clients/s3admin, the SAME S3_ADMIN_* credentials the
 // /v1/s3 file-manager and the whole cloud binary use); blobStore adds only the
 // projectsvc-specific bucket + public URL bases on top.
 type blobStore struct {
