@@ -18,7 +18,7 @@ import (
 	"github.com/hanzoai/zip"
 )
 
-// startZapApp boots a zip app that mounts a casibase-shaped /v1 surface (exactly
+// startZapApp boots a zip app that mounts a /v1 surface (exactly
 // how cloud's `ai` subsystem mounts the beego handler at bare /v1/*) and the
 // /zap ZAP-over-WebSocket face, listening on an ephemeral port. Returns the base
 // host:port and a stop func.
@@ -26,7 +26,7 @@ func startZapApp(t *testing.T) (string, func()) {
 	t.Helper()
 	app := zip.New(zip.Config{})
 
-	// casibase-shaped /v1 handlers (mirror ai/mount.go: app.All("/v1/*", ...)).
+	// /v1 handlers (mirror ai/mount.go: app.All("/v1/*", ...)).
 	app.All("/v1/*", func(c *zip.Ctx) error {
 		path := c.Path()
 		switch {
@@ -77,7 +77,7 @@ func startZapApp(t *testing.T) (string, func()) {
 
 // TestEndToEndOverWebSocket drives a real ZAP frame through the full server
 // path: native Fiber WS upgrade (zip/wsx) -> mintCap -> rpc.ParseRequest ->
-// dispatch -> the app's /v1/* casibase mount -> casibase envelope ->
+// dispatch -> the app's /v1/* mount -> /v1 envelope ->
 // rpc.BuildResponse -> WS reply.
 func TestEndToEndOverWebSocket(t *testing.T) {
 	addr, stop := startZapApp(t)
@@ -88,7 +88,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 	defer cancel()
 
 	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
-		HTTPHeader: http.Header{"Cookie": []string{"casdoor_session_id=abc123"}},
+		HTTPHeader: http.Header{"Cookie": []string{"iam_access_token=abc123"}},
 	})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
@@ -142,7 +142,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 	if len(providers) != 1 || providers[0]["name"] != "openai" {
 		t.Fatalf("providers = %v", providers)
 	}
-	if providers[0]["_cookie"] != "casdoor_session_id=abc123" {
+	if providers[0]["_cookie"] != "iam_access_token=abc123" {
 		t.Fatalf("cookie not replayed to /v1 handler: %v", providers[0]["_cookie"])
 	}
 
@@ -162,7 +162,7 @@ func TestEndToEndOverWebSocket(t *testing.T) {
 		t.Fatalf("add-provider !ok: %s", rep.errorJSON)
 	}
 
-	// 4) unknown method -> casibase 404 envelope -> !ok.
+	// 4) unknown method -> /v1 404 envelope -> !ok.
 	rep = call("get-nonexistent", nil, 4)
 	if rep.ok {
 		t.Fatalf("unknown method should not be ok")

@@ -20,7 +20,7 @@ package subsystems
 // The unified `cloud` binary is the APPLICATION layer plus the embedded KMS
 // secrets plane (HIP-0106 "all Go embeds in cloud"). The remaining
 // infrastructure/edge subsystems run as their own deployments, NOT fused in:
-//   - iam   → iam.hanzo.ai (Casdoor)        — identity, isolated control plane
+//   - iam   → iam.hanzo.ai (Hanzo IAM)        — identity, isolated control plane
 //   - mcp   → its own deployment             — tool surface
 //   - gateway, ingress → the edge            — they route *to* this binary
 //   - amqp  → removed (unused)
