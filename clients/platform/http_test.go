@@ -38,7 +38,7 @@ func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
 // mountApp is the default hermetic app: NO cluster (k8s fails closed), for the
 // metadata + fail-closed-deploy paths.
 func mountApp(t *testing.T) *zip.App {
-	return mountAppK8s(t, &k8sClient{initErr: "no cluster (test)"})
+	return mountAppK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
 }
 
 // fakeK8s returns a k8s client backed by an in-memory fake dynamic client so the
@@ -47,11 +47,31 @@ func mountApp(t *testing.T) *zip.App {
 func fakeK8s() *k8sClient {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		servicesGVR:   "ServiceList",
-		jobsGVR:       "JobList",
-		namespacesGVR: "NamespaceList",
+		servicesGVR:       "ServiceList",
+		jobsGVR:           "JobList",
+		namespacesGVR:     "NamespaceList",
+		resourceQuotasGVR: "ResourceQuotaList",
+		limitRangesGVR:    "LimitRangeList",
 	})
-	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo"}
+	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo", limits: testLimits()}
+}
+
+// testLimits is a small, deterministic per-tenant policy for hermetic tests —
+// explicit values (not env-derived) so bound assertions are stable.
+func testLimits() resourceLimits {
+	return resourceLimits{
+		maxReplicas:     20,
+		maxBuilds:       3,
+		quotaCPU:        "20",
+		quotaMemory:     "40Gi",
+		quotaPods:       "50",
+		limitDefaultCPU: "500m",
+		limitDefaultMem: "512Mi",
+		limitReqCPU:     "100m",
+		limitReqMem:     "128Mi",
+		limitMaxCPU:     "4",
+		limitMaxMem:     "8Gi",
+	}
 }
 
 // do fires an in-process request simulating a VALIDATED principal: the gateway's
