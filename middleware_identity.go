@@ -29,7 +29,7 @@ package cloud
 import (
 	"strings"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access

@@ -38,7 +38,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/commerce/metering"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
 
