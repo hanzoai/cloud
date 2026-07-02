@@ -14,7 +14,7 @@ require (
 	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
-	github.com/hanzoai/zip v0.2.1
+	github.com/hanzoai/zip v0.5.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
@@ -30,7 +30,10 @@ require (
 	modernc.org/sqlite v1.51.0
 )
 
-require github.com/google/flatbuffers v25.12.19+incompatible // indirect
+require (
+	github.com/google/flatbuffers v25.12.19+incompatible // indirect
+	github.com/zap-proto/http v0.1.0 // indirect
+)
 
 require (
 	cel.dev/expr v0.25.1 // indirect
