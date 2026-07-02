@@ -53,6 +53,7 @@ func (h *headerRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	asOrg.Unlock()
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
 	return h.base.RoundTrip(req)
 }
@@ -85,6 +86,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
@@ -195,6 +197,7 @@ func TestInfoRefsAdvertisement(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/git/acme/adv.git/info/refs?service=git-upload-pack", nil)
 	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u_acme")
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("info/refs: %v", err)
@@ -213,6 +216,7 @@ func TestInfoRefsAdvertisement(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/git/acme/adv.git/info/refs?service=bogus", nil)
 	req.Header.Set("X-Org-Id", "acme")
+	req.Header.Set("X-User-Id", "u_acme")
 	resp, _ = app.Fiber().Test(req, testCfg)
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bogus service want 400, got %d", resp.StatusCode)

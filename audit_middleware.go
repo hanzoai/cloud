@@ -63,6 +63,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -194,14 +195,13 @@ func isMutation(method string) bool {
 // With a validated sub, org/sub/email all reflect the verified principal and are
 // recorded authoritatively.
 func actorFromCtx(c *zip.Ctx) audit.Actor {
-	sub := strings.TrimSpace(c.User())
-	if sub == "" {
+	if !principal.Validated(c) {
 		// No validated principal — do not trust the client-asserted org.
 		return audit.Actor{}
 	}
 	return audit.Actor{
 		Org:   strings.TrimSpace(c.Org()),
-		Sub:   sub,
+		Sub:   strings.TrimSpace(c.User()),
 		Email: strings.TrimSpace(c.UserEmail()),
 	}
 }

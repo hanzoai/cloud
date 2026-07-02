@@ -21,8 +21,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
+	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // identityHeaders are forwarded so bot-gateway sees the gateway-minted tenant
@@ -60,6 +61,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func (s *service) proxy(c *zip.Ctx) error {
+	// Gate on a validated principal before forwarding X-Org-Id to bot-gateway,
+	// which trusts these headers as the gateway-minted tenant context. Off-gateway,
+	// the identity middleware restores a forged X-Org-Id but leaves X-User-Id empty;
+	// a no-principal request must be refused before it hands bot-gateway a victim
+	// tenant — the same gate every data-plane resolver (crm/kms/ml/…) already ships.
+	if !principal.Validated(c) {
+		return zip.ErrForbidden("no validated principal")
+	}
 	// Strip the /v1/bot prefix — bot-gateway serves bare paths.
 	rest := strings.TrimPrefix(c.Fiber().Params("*"), "/")
 	target := s.target + "/" + rest

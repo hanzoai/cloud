@@ -59,6 +59,26 @@ func newHandler(rawURL string) (http.Handler, error) {
 	return proxy, nil
 }
 
+// gate refuses any request that carries no validated principal before it reaches
+// the o11y runtime. The bare reverse proxy forwards ALL inbound headers upstream,
+// including a client-forged X-Org-Id restored on the bearer-less path; without
+// this an off-gateway caller reads another tenant's telemetry/logs. X-User-Id is
+// set ONLY by the identity middleware from a verified credential (the same signal
+// principal.Validated uses), so its presence is the authoritative principal gate.
+// Every legitimate /v1/o11y/* caller arrives through the console BFF with a
+// user-bound bearer, so this refuses only the anonymous-forge path.
+func gate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"status":"error","msg":"no validated principal"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func init() {
 	// Order 71: after o11y.Mount (70) installs the route surface. Ordering is not
 	// strictly required (the handler is resolved per-request) but keeps the
@@ -68,7 +88,7 @@ func init() {
 		if err != nil {
 			return err
 		}
-		o11y.SetHandler(h)
+		o11y.SetHandler(gate(h))
 		if deps.Logger != nil {
 			deps.Logger.New("subsystem", "o11y-runtime").
 				Info("o11y runtime handler installed (reverse proxy)", "upstream", upstream())

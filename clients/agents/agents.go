@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
@@ -439,13 +440,7 @@ func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 // owners into one bucket (Red HIGH-1). Reject only empty or pathologically
 // long. No magic "admin" bucket — a global admin operating on per-org data
 // carries an explicit org, so an empty org is a true 403.
-func tenant(c *zip.Ctx) (string, bool) {
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 func cleanList(xs []string) []string {
 	seen := map[string]bool{}
