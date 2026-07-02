@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/zip"
 	luxlog "github.com/luxfi/log"
@@ -55,6 +57,21 @@ func (stubRunner) Complete(_ context.Context, authz, model string, input any) (s
 
 func (stubRunner) Judge(_ context.Context, authz string, judge judgeSpec, input, expected any, output string) (float64, string, error) {
 	return 0.5, "stub reasoning", nil
+}
+
+// blockingRunner respects the run's deadline: Complete blocks until the context
+// is cancelled, so a run wrapped in a short maxRunDuration cancels it instead of
+// hanging. Used to prove the total-deadline bound (Red MED).
+type blockingRunner struct{}
+
+func (blockingRunner) Complete(ctx context.Context, authz, model string, input any) (string, error) {
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+func (blockingRunner) Judge(ctx context.Context, authz string, judge judgeSpec, input, expected any, output string) (float64, string, error) {
+	<-ctx.Done()
+	return 0, "", ctx.Err()
 }
 
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
@@ -293,5 +310,55 @@ func TestHTTPRunRequiresAuthAndOwnDataset(t *testing.T) {
 	_ = json.Unmarshal(body, &scores)
 	if code != http.StatusOK || len(scores.Data) != 2 {
 		t.Fatalf("run should have written 2 score events, got %d %+v", code, scores.Data)
+	}
+}
+
+// TestRunDeadlineBounded proves the total wall-clock bound (Red MED): with a tiny
+// maxRunDuration and a runner that blocks, the run is CANCELLED (never hangs),
+// scores nothing, returns 502, and each item carries an honest deadline error.
+func TestRunDeadlineBounded(t *testing.T) {
+	old := maxRunDuration
+	maxRunDuration = 50 * time.Millisecond
+	defer func() { maxRunDuration = old }()
+
+	app, s := mountApp(t)
+	s.runner = blockingRunner{} // handlers read s.runner per call, so this takes effect
+
+	if code, _ := do(t, app, http.MethodPost, "/v1/evals/datasets", "o", map[string]any{"name": "qa"}); code != http.StatusCreated {
+		t.Fatalf("seed dataset: %d", code)
+	}
+	for _, in := range []string{"a", "b"} {
+		if code, _ := do(t, app, http.MethodPost, "/v1/evals/dataset-items", "o",
+			map[string]any{"datasetName": "qa", "input": in, "expectedOutput": in}); code != http.StatusCreated {
+			t.Fatalf("seed item %q: %d", in, code)
+		}
+	}
+
+	done := make(chan struct{})
+	var code int
+	var body []byte
+	go func() {
+		code, body = doAuth(t, app, http.MethodPost, "/v1/evals/runs", "o", "Bearer hk-test",
+			map[string]any{"dataset": "qa", "model": "m"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run did NOT respect the deadline — it hung past 5s (bound failed)")
+	}
+
+	if code != http.StatusBadGateway {
+		t.Fatalf("deadline-cancelled run scores nothing → want 502, got %d (%s)", code, body)
+	}
+	var sum runSummary
+	if err := json.Unmarshal(body, &sum); err != nil {
+		t.Fatalf("summary json: %v", err)
+	}
+	if sum.Scored != 0 {
+		t.Fatalf("a cancelled run must score 0, got %d", sum.Scored)
+	}
+	if len(sum.Results) == 0 || !strings.Contains(sum.Results[0].Error, "context") {
+		t.Fatalf("item error should reflect the cancelled context, got %+v", sum.Results)
 	}
 }
