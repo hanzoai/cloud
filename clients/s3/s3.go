@@ -69,7 +69,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/clients/s3admin"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // presignTTL bounds every presigned upload/download URL. 5 minutes: short enough

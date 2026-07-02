@@ -63,7 +63,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // AuditTrail returns the audit middleware bound to rec. A nil rec makes it a
