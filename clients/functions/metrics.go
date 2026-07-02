@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // metricsRange defines a chart window: its total duration and how many buckets

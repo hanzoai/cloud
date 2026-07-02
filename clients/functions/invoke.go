@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // execClient delegates function execution to the sandboxed code executor. This

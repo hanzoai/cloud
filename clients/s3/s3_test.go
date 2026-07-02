@@ -30,8 +30,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/middleware"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 
 	// Register BOTH subsystems (init) — s3svc (118) AND provisioning (120) — so the
 	// route-ordering guarantee is exercised against the REAL registry, not a

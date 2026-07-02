@@ -18,7 +18,7 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 const testIssuer = "https://test.iam"

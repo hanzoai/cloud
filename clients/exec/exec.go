@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // defaultUpstream is the in-cluster address of the sandboxed code executor.
