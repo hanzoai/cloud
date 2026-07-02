@@ -15,7 +15,7 @@ import (
 	zaprpc "github.com/zap-proto/go/rpc"
 
 	fiber "github.com/gofiber/fiber/v3"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // startZapApp boots a zip app that mounts a /v1 surface (exactly

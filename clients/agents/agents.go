@@ -35,7 +35,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
 
