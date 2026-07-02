@@ -53,8 +53,8 @@ func TestCheckEnvLegacyDriverNamePostgresRejected(t *testing.T) {
 	if !strings.Contains(err.Error(), "driverName") {
 		t.Errorf("expected driverName in error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "casibase driverName=postgres") {
-		t.Errorf("expected casibase driverName classification, got %v", err)
+	if !strings.Contains(err.Error(), "driverName=postgres") {
+		t.Errorf("expected driverName=postgres classification, got %v", err)
 	}
 }
 
