@@ -1,0 +1,1247 @@
+[
+ {
+  "slug": "brainwave",
+  "title": "Brainwave",
+  "category": "AI/SaaS",
+  "description": "Modern AI SaaS platform with chat, audio/video processing, and photo editing capabilities.",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "AI Chat",
+   "Audio/Video",
+   "Photo Edit",
+   "Pricing",
+   "Responsive"
+  ],
+  "useCase": "AI SaaS platforms",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/brainwave",
+  "preview": "https://gallery.hanzo.ai/screenshots/brainwave-update-May2024.png"
+ },
+ {
+  "slug": "zuzu-app",
+  "title": "Zuzu App",
+  "category": "App",
+  "description": "",
+  "framework": "Next.js 14 + TS",
+  "features": [
+   "App",
+   "Modern",
+   "Full Stack",
+   "Responsive"
+  ],
+  "useCase": "Full-stack applications",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/zuzu-app",
+  "preview": "https://gallery.hanzo.ai/screenshots/zuzu-next-app.png"
+ },
+ {
+  "slug": "bento-cards-v1-multipurpose-next-js",
+  "title": "Bento Cards v1 Multipurpose (Next.js)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "Bento Layout",
+   "Multipurpose",
+   "Next.js",
+   "Responsive"
+  ],
+  "useCase": "General purpose bento card layouts",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v1-multipurpose-next-js",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v1-multipurpose-react.png"
+ },
+ {
+  "slug": "bento-cards-v1-multipurpose-react",
+  "title": "Bento Cards v1 Multipurpose (React)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "React 18 + CRA",
+  "features": [
+   "Bento Layout",
+   "Multipurpose",
+   "React",
+   "Responsive"
+  ],
+  "useCase": "General purpose bento card layouts",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v1-multipurpose-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v1-multipurpose.png"
+ },
+ {
+  "slug": "bento-cards-v2-ai-next-js",
+  "title": "Bento Cards v2 AI (Next.js)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "Bento Layout",
+   "AI Theme",
+   "Next.js",
+   "Responsive"
+  ],
+  "useCase": "AI-focused bento card layouts",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v2-ai-next-js",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v2-ai-react.png"
+ },
+ {
+  "slug": "bento-cards-v2-ai-react",
+  "title": "Bento Cards v2 AI (React)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "React 18",
+  "features": [
+   "Bento Layout",
+   "AI Theme",
+   "React",
+   "Responsive"
+  ],
+  "useCase": "AI-focused bento card layouts",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v2-ai-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v2-ai.png"
+ },
+ {
+  "slug": "bento-cards-v3",
+  "title": "Bento Cards v3",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "React 18",
+  "features": [
+   "Bento Layout",
+   "v3",
+   "React",
+   "Responsive"
+  ],
+  "useCase": "Bento card layouts v3",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v3",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-3.png"
+ },
+ {
+  "slug": "bento-cards-v3-alt",
+  "title": "Bento Cards v3 (Alt)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "React 18",
+  "features": [
+   "Bento Layout",
+   "v3",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Bento card layouts v3 alternative",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v3-alt",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-3-2.png"
+ },
+ {
+  "slug": "bento-cards-v3-html",
+  "title": "Bento Cards v3 (HTML)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Bento Layout",
+   "v3",
+   "HTML",
+   "Responsive"
+  ],
+  "useCase": "Bento card layouts v3 HTML",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v3-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v3-html-final.png"
+ },
+ {
+  "slug": "bento-cards-v4-html",
+  "title": "Bento Cards v4 (HTML)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "HTML/CSS",
+  "features": [
+   "Bento Layout",
+   "Crypto",
+   "HTML",
+   "Responsive"
+  ],
+  "useCase": "Crypto bento card layouts",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v4-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v4-html.png"
+ },
+ {
+  "slug": "bento-cards-v4-react",
+  "title": "Bento Cards v4 (React)",
+  "category": "Bento Cards",
+  "description": "",
+  "framework": "React 18",
+  "features": [
+   "Bento Layout",
+   "Crypto",
+   "React",
+   "Responsive"
+  ],
+  "useCase": "Crypto bento card layouts",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bento-cards-v4-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-v4-react.png"
+ },
+ {
+  "slug": "carsova",
+  "title": "Carsova",
+  "category": "Business",
+  "description": "",
+  "framework": "HTML/CSS",
+  "features": [
+   "Automotive",
+   "Business",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Automotive websites",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/carsova",
+  "preview": "https://gallery.hanzo.ai/screenshots/carsova.png"
+ },
+ {
+  "slug": "carsova-html",
+  "title": "Carsova HTML",
+  "category": "Business",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Automotive",
+   "Business",
+   "HTML",
+   "Responsive"
+  ],
+  "useCase": "Automotive websites",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/carsova-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/carsova-html-final.png"
+ },
+ {
+  "slug": "innovise",
+  "title": "Innovise",
+  "category": "Business",
+  "description": "",
+  "framework": "HTML/CSS",
+  "features": [
+   "Agency",
+   "Business",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Agency websites",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/innovise",
+  "preview": "https://gallery.hanzo.ai/screenshots/innovise.png"
+ },
+ {
+  "slug": "streamline-shadcn",
+  "title": "Streamline shadcn",
+  "category": "Component Library",
+  "description": "",
+  "framework": "Next.js 14 + shadcn",
+  "features": [
+   "shadcn/ui",
+   "Blocks",
+   "Components",
+   "Responsive"
+  ],
+  "useCase": "shadcn component library",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/streamline-shadcn",
+  "preview": "https://gallery.hanzo.ai/screenshots/streamline-shadcn.png"
+ },
+ {
+  "slug": "beta-crm",
+  "title": "Beta CRM",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "CRM",
+   "Dashboard",
+   "Business",
+   "Responsive"
+  ],
+  "useCase": "CRM dashboards",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/beta-crm",
+  "preview": "https://gallery.hanzo.ai/screenshots/betacrm-html.png"
+ },
+ {
+  "slug": "beta-crm-duplicate",
+  "title": "Beta CRM (Duplicate)",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "CRM",
+   "Dashboard",
+   "Business",
+   "Responsive"
+  ],
+  "useCase": "CRM dashboards",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/beta-crm-duplicate",
+  "preview": "https://gallery.hanzo.ai/screenshots/betacrm-duplicate.png"
+ },
+ {
+  "slug": "bitcloud-html",
+  "title": "Bitcloud (HTML)",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Crypto",
+   "Trading",
+   "Dashboard",
+   "Charts"
+  ],
+  "useCase": "Crypto exchanges",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/bitcloud-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/bitcloud-main.png"
+ },
+ {
+  "slug": "bitcloud-react",
+  "title": "Bitcloud (React)",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "React 17",
+  "features": [
+   "Crypto",
+   "Trading",
+   "Dashboard",
+   "Charts"
+  ],
+  "useCase": "Crypto exchanges",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/bitcloud-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/bitcloud-react.png"
+ },
+ {
+  "slug": "bruddle-dashboard",
+  "title": "Bruddle Dashboard",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "Next.js 13.3 + TS",
+  "features": [
+   "Analytics",
+   "CRM",
+   "Finance",
+   "Projects",
+   "Responsive"
+  ],
+  "useCase": "Admin dashboards",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/bruddle-dashboard",
+  "preview": "https://gallery.hanzo.ai/screenshots/bruddle.png"
+ },
+ {
+  "slug": "square-dashboard",
+  "title": "Square Dashboard",
+  "category": "Dashboard",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Dashboard",
+   "Admin",
+   "Analytics",
+   "Responsive"
+  ],
+  "useCase": "Admin dashboards",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/square-dashboard",
+  "preview": "https://gallery.hanzo.ai/screenshots/square-dashboard.png"
+ },
+ {
+  "slug": "fofood-store",
+  "title": "FoFood Store",
+  "category": "E-commerce",
+  "description": "",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "Food",
+   "Delivery",
+   "Orders",
+   "Responsive"
+  ],
+  "useCase": "Food delivery apps",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/fofood-store",
+  "preview": "https://gallery.hanzo.ai/screenshots/fofood-store.png"
+ },
+ {
+  "slug": "hygge-e-commerce-bootstrap",
+  "title": "Hygge E-commerce (Bootstrap)",
+  "category": "E-commerce",
+  "description": "",
+  "framework": "HTML/Gulp + Bootstrap 5",
+  "features": [
+   "E-commerce",
+   "Shop",
+   "Bootstrap",
+   "Responsive"
+  ],
+  "useCase": "E-commerce stores",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/hygge-e-commerce-bootstrap",
+  "preview": "https://gallery.hanzo.ai/screenshots/hygge-bootstrap.png"
+ },
+ {
+  "slug": "hygge-e-commerce-html",
+  "title": "Hygge E-commerce (HTML)",
+  "category": "E-commerce",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "E-commerce",
+   "Shop",
+   "Clean",
+   "Responsive"
+  ],
+  "useCase": "E-commerce stores",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/hygge-e-commerce-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/hygge-html.png"
+ },
+ {
+  "slug": "fitnesspro-html",
+  "title": "FitnessPro (HTML)",
+  "category": "Fitness",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Fitness",
+   "Booking",
+   "Classes",
+   "Responsive"
+  ],
+  "useCase": "Fitness/wellness apps",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/fitnesspro-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/fitnesspro.png"
+ },
+ {
+  "slug": "fitnesspro-react",
+  "title": "FitnessPro (React)",
+  "category": "Fitness",
+  "description": "",
+  "framework": "React 18 + CRA",
+  "features": [
+   "Fitness",
+   "Booking",
+   "Classes",
+   "Responsive"
+  ],
+  "useCase": "Fitness/wellness apps",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/fitnesspro-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/fitnesspro-react.png"
+ },
+ {
+  "slug": "folio-about",
+  "title": "Folio About",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "About",
+   "Bio",
+   "Profile",
+   "Responsive"
+  ],
+  "useCase": "About pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-about",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-about.png"
+ },
+ {
+  "slug": "folio-contact",
+  "title": "Folio Contact",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Contact",
+   "Form",
+   "Communication",
+   "Responsive"
+  ],
+  "useCase": "Contact pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-contact",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-contact.png"
+ },
+ {
+  "slug": "folio-creative-agency-1",
+  "title": "Folio Creative Agency 1",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Agency",
+   "Creative",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Creative agency portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-1",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-agency-1.png"
+ },
+ {
+  "slug": "folio-creative-agency-2",
+  "title": "Folio Creative Agency 2",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Agency",
+   "Creative",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Creative agency portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-agency-2",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-agency-2.png"
+ },
+ {
+  "slug": "folio-creative-designer-1",
+  "title": "Folio Creative Designer 1",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Designer",
+   "Portfolio",
+   "Creative",
+   "Responsive"
+  ],
+  "useCase": "Designer portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-1",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-designer-1.png"
+ },
+ {
+  "slug": "folio-creative-designer-2",
+  "title": "Folio Creative Designer 2",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Designer",
+   "Portfolio",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Designer portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-designer-2",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-designer-2.png"
+ },
+ {
+  "slug": "folio-creative-developer-1",
+  "title": "Folio Creative Developer 1",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Developer",
+   "Portfolio",
+   "Tech",
+   "Responsive"
+  ],
+  "useCase": "Developer portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-1",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-developer-1.png"
+ },
+ {
+  "slug": "folio-creative-developer-2",
+  "title": "Folio Creative Developer 2",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Developer",
+   "Portfolio",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Developer portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-creative-developer-2",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-developer-2.png"
+ },
+ {
+  "slug": "folio-details-1",
+  "title": "Folio Details 1",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Details",
+   "Project",
+   "Showcase",
+   "Responsive"
+  ],
+  "useCase": "Portfolio detail pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-details-1",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-portfolio-details.png"
+ },
+ {
+  "slug": "folio-details-2",
+  "title": "Folio Details 2",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Details",
+   "Project",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Portfolio detail pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-details-2",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-portfolio-details-2.png"
+ },
+ {
+  "slug": "folio-details-3",
+  "title": "Folio Details 3",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Details",
+   "Project",
+   "Alt Variant",
+   "Responsive"
+  ],
+  "useCase": "Portfolio detail pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-details-3",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-portfolio-details-3.png"
+ },
+ {
+  "slug": "folio-full",
+  "title": "Folio Full",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Portfolio",
+   "Full-width",
+   "Creative",
+   "Responsive"
+  ],
+  "useCase": "Creative portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-full",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-full.png"
+ },
+ {
+  "slug": "folio-grid-2-columns",
+  "title": "Folio Grid 2 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Grid",
+   "2 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "2-column portfolio grids",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-grid-2-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-grid-2.png"
+ },
+ {
+  "slug": "folio-grid-3-columns",
+  "title": "Folio Grid 3 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Grid",
+   "3 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "3-column portfolio grids",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-grid-3-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-grid-3.png"
+ },
+ {
+  "slug": "folio-grid-3-fluid",
+  "title": "Folio Grid 3 Fluid",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Grid",
+   "Fluid",
+   "Responsive",
+   "Responsive"
+  ],
+  "useCase": "Fluid 3-column grids",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-grid-3-fluid",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-grid-3-fluid.png"
+ },
+ {
+  "slug": "folio-grid-4-columns",
+  "title": "Folio Grid 4 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Grid",
+   "4 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "4-column portfolio grids",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-grid-4-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-grid-4.png"
+ },
+ {
+  "slug": "folio-grid-4-fluid",
+  "title": "Folio Grid 4 Fluid",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Grid",
+   "Fluid",
+   "Responsive",
+   "Responsive"
+  ],
+  "useCase": "Fluid 4-column grids",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-grid-4-fluid",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-grid-4-fluid.png"
+ },
+ {
+  "slug": "folio-index",
+  "title": "Folio Index",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Portfolio",
+   "Index",
+   "Hub",
+   "Responsive"
+  ],
+  "useCase": "Portfolio hub page",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-index",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-main.png"
+ },
+ {
+  "slug": "folio-main",
+  "title": "Folio Main",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Portfolio",
+   "Multi-layout",
+   "Creative",
+   "Responsive"
+  ],
+  "useCase": "Creative portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-main",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-html.png"
+ },
+ {
+  "slug": "folio-masonry-2-columns",
+  "title": "Folio Masonry 2 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Masonry",
+   "2 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "2-column masonry layouts",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-masonry-2-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-masonry-2.png"
+ },
+ {
+  "slug": "folio-masonry-3-columns",
+  "title": "Folio Masonry 3 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Masonry",
+   "3 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "3-column masonry layouts",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-masonry-3.png"
+ },
+ {
+  "slug": "folio-masonry-3-fluid",
+  "title": "Folio Masonry 3 Fluid",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Masonry",
+   "Fluid",
+   "Responsive",
+   "Responsive"
+  ],
+  "useCase": "Fluid 3-column masonry",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-masonry-3-fluid",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-masonry-3-fluid.png"
+ },
+ {
+  "slug": "folio-masonry-4-columns",
+  "title": "Folio Masonry 4 Columns",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Masonry",
+   "4 Columns",
+   "Layout",
+   "Responsive"
+  ],
+  "useCase": "4-column masonry layouts",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-columns",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-masonry-4.png"
+ },
+ {
+  "slug": "folio-masonry-4-fluid",
+  "title": "Folio Masonry 4 Fluid",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Masonry",
+   "Fluid",
+   "Responsive",
+   "Responsive"
+  ],
+  "useCase": "Fluid 4-column masonry",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-masonry-4-fluid",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-masonry-4-fluid.png"
+ },
+ {
+  "slug": "folio-photography-1",
+  "title": "Folio Photography 1",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Photography",
+   "Gallery",
+   "Creative",
+   "Responsive"
+  ],
+  "useCase": "Photography portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-photography-1",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-photography-1.png"
+ },
+ {
+  "slug": "folio-photography-2",
+  "title": "Folio Photography 2",
+  "category": "Folio Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Photography",
+   "Gallery",
+   "Variant",
+   "Responsive"
+  ],
+  "useCase": "Photography portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/folio-photography-2",
+  "preview": "https://gallery.hanzo.ai/screenshots/folio-creative-photography-2.png"
+ },
+ {
+  "slug": "hidden-oasis",
+  "title": "Hidden Oasis",
+  "category": "Hospitality",
+  "description": "",
+  "framework": "HTML/CSS",
+  "features": [
+   "Hospitality",
+   "Resort",
+   "Luxury",
+   "Responsive"
+  ],
+  "useCase": "Resort/hospitality sites",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/hidden-oasis",
+  "preview": "https://gallery.hanzo.ai/screenshots/hidden-oasis-html-final.png"
+ },
+ {
+  "slug": "code-app-landing",
+  "title": "Code App Landing",
+  "category": "Landing",
+  "description": "",
+  "framework": "Next.js 14",
+  "features": [
+   "App",
+   "Landing",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "App landing pages",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/code-app-landing",
+  "preview": "https://gallery.hanzo.ai/screenshots/code-app.png"
+ },
+ {
+  "slug": "code-marketing-landing",
+  "title": "Code Marketing Landing",
+  "category": "Landing",
+  "description": "",
+  "framework": "Next.js 14",
+  "features": [
+   "Landing",
+   "Marketing",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Marketing landing pages",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/code-marketing-landing",
+  "preview": "https://gallery.hanzo.ai/screenshots/code-landing.png"
+ },
+ {
+  "slug": "arch",
+  "title": "Arch",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "HTML/CSS/JS",
+  "features": [
+   "Architecture",
+   "Portfolio",
+   "Clean",
+   "Responsive"
+  ],
+  "useCase": "Architecture portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/arch",
+  "preview": "https://gallery.hanzo.ai/screenshots/arch.png"
+ },
+ {
+  "slug": "digiverse-studio",
+  "title": "Digiverse Studio",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "HTML/CSS/JS",
+  "features": [
+   "Agency",
+   "Portfolio",
+   "Digital",
+   "Responsive"
+  ],
+  "useCase": "Digital agencies",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/digiverse-studio",
+  "preview": "https://gallery.hanzo.ai/screenshots/digiversestudio.png"
+ },
+ {
+  "slug": "flowmint-portfolio",
+  "title": "Flowmint Portfolio",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "Next.js 14 + TS",
+  "features": [
+   "Portfolio",
+   "Creative",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Creative portfolios",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/flowmint-portfolio",
+  "preview": "https://gallery.hanzo.ai/screenshots/flowmint-portfolio.png"
+ },
+ {
+  "slug": "kael-donovan",
+  "title": "Kael Donovan",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "GSAP",
+   "Smooth Scroll",
+   "Portfolio",
+   "Modern"
+  ],
+  "useCase": "Creative portfolios",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/kael-donovan",
+  "preview": "https://gallery.hanzo.ai/screenshots/kael-donovan.png"
+ },
+ {
+  "slug": "kalli",
+  "title": "Kalli",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Portfolio",
+   "Creative",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "Creative portfolios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/kalli",
+  "preview": "https://gallery.hanzo.ai/screenshots/kalli-html.png"
+ },
+ {
+  "slug": "rebel",
+  "title": "Rebel",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "HTML/SCSS + GSAP",
+  "features": [
+   "GSAP",
+   "Portfolio",
+   "Agency",
+   "Responsive"
+  ],
+  "useCase": "Creative agencies",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/rebel",
+  "preview": "https://gallery.hanzo.ai/screenshots/rebel-main.png"
+ },
+ {
+  "slug": "webcanvas",
+  "title": "WebCanvas",
+  "category": "Portfolio",
+  "description": "",
+  "framework": "HTML/SCSS + GSAP",
+  "features": [
+   "Portfolio",
+   "GSAP",
+   "Studio",
+   "Responsive"
+  ],
+  "useCase": "Design studios",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/webcanvas",
+  "preview": "https://gallery.hanzo.ai/screenshots/webCanvas.png"
+ },
+ {
+  "slug": "fusion-saas-nft",
+  "title": "Fusion SaaS/NFT",
+  "category": "SaaS",
+  "description": "",
+  "framework": "Next.js 14.1",
+  "features": [
+   "Framer Motion",
+   "Landing",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "SaaS landing pages",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/fusion-saas-nft",
+  "preview": "https://gallery.hanzo.ai/screenshots/fusion-v2-saas-nft.png"
+ },
+ {
+  "slug": "garuda",
+  "title": "Garuda",
+  "category": "SaaS",
+  "description": "",
+  "framework": "Next.js 13",
+  "features": [
+   "SaaS",
+   "Landing",
+   "Clean",
+   "Responsive"
+  ],
+  "useCase": "SaaS landing pages",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/garuda",
+  "preview": "https://gallery.hanzo.ai/screenshots/garuda.png"
+ },
+ {
+  "slug": "solo-saas",
+  "title": "Solo SaaS",
+  "category": "SaaS",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "SaaS",
+   "Landing",
+   "Simple",
+   "Responsive"
+  ],
+  "useCase": "SaaS landing pages",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/solo-saas",
+  "preview": "https://gallery.hanzo.ai/screenshots/solo-saas.png"
+ },
+ {
+  "slug": "teaser-saas-landing",
+  "title": "Teaser SaaS Landing",
+  "category": "SaaS",
+  "description": "",
+  "framework": "Next.js 13",
+  "features": [
+   "Landing",
+   "SaaS",
+   "Modern",
+   "Responsive"
+  ],
+  "useCase": "SaaS landing pages",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/teaser-saas-landing",
+  "preview": "https://gallery.hanzo.ai/screenshots/teaser-saas-landing.png"
+ },
+ {
+  "slug": "xora-html",
+  "title": "Xora (HTML)",
+  "category": "SaaS",
+  "description": "",
+  "framework": "HTML/Gulp",
+  "features": [
+   "Modern UI",
+   "Animations",
+   "Landing",
+   "Responsive"
+  ],
+  "useCase": "Modern SaaS landing",
+  "tier": 3,
+  "rating": 3,
+  "source": "https://gallery.hanzo.ai/templates/xora-html",
+  "preview": "https://gallery.hanzo.ai/screenshots/xora-html.png"
+ },
+ {
+  "slug": "xora-react",
+  "title": "Xora (React)",
+  "category": "SaaS",
+  "description": "",
+  "framework": "React 18 + Vite",
+  "features": [
+   "Modern UI",
+   "Animations",
+   "Landing",
+   "Responsive"
+  ],
+  "useCase": "Modern SaaS landing",
+  "tier": 2,
+  "rating": 4,
+  "source": "https://gallery.hanzo.ai/templates/xora-react",
+  "preview": "https://gallery.hanzo.ai/screenshots/xora-react.png"
+ },
+ {
+  "slug": "simple-social",
+  "title": "Simple Social",
+  "category": "Social Media",
+  "description": "",
+  "framework": "Next.js 14.2 + TS",
+  "features": [
+   "Posts",
+   "Messages",
+   "Profiles",
+   "Notifications",
+   "Responsive"
+  ],
+  "useCase": "Social media platforms",
+  "tier": 1,
+  "rating": 5,
+  "source": "https://gallery.hanzo.ai/templates/simple-social",
+  "preview": "https://gallery.hanzo.ai/screenshots/simple-social-code.png"
+ }
+]
