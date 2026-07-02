@@ -25,7 +25,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/o11y"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // defaultUpstream is the in-cluster address of the o11y runtime Deployment's
