@@ -23,7 +23,7 @@
 // caller's org, so one tenant can never address another's bucket — the isolation
 // boundary is by construction, not by a checked flag.
 //
-// FAIL-CLOSED — absent CLOUD_S3_ADMIN_* credentials the subsystem mounts
+// FAIL-CLOSED — absent S3_ADMIN_* credentials the subsystem mounts
 // health-only: /v1/s3/health is an honest 503 and every op returns 503. It never
 // fabricates a bucket or object list.
 //
@@ -129,7 +129,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Delete("/v1/s3/buckets/:bucket/objects/*", s.guard(s.deleteObject))
 
 	if !s.admin.Configured() {
-		log.Warn("s3 subsystem mounted fail-closed: CLOUD_S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
+		log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
 		return nil
 	}
 	log.Info("s3 subsystem mounted",
@@ -267,7 +267,7 @@ func (s *svc) health(ctx *zip.Ctx) error {
 	res := map[string]any{"service": "s3", "status": "ok"}
 	if !s.admin.Configured() {
 		res["status"], res["ready"] = "degraded", false
-		res["error"] = "CLOUD_S3_ADMIN credentials not configured"
+		res["error"] = "S3_ADMIN credentials not configured"
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["ready"] = true
