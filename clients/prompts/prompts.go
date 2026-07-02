@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -339,13 +340,7 @@ func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 // "admin" bucket: a global admin operating on per-org data carries an explicit
 // org (SanitizeIdentity sets X-Org-Id on the admin path), so an empty org is a
 // true 403, never a bucket a real org named "admin"/"Admin" could land in.
-func tenant(c *zip.Ctx) (string, bool) {
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 // cleanList trims, drops empties, caps each element, and de-dups a taxonomy
 // slice so labels/tags stay tidy identifiers.
