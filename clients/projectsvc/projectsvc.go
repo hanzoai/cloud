@@ -151,6 +151,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 
 	app.Post("/v1/projects", s.create)
+	app.Post("/v1/projects/fork", s.fork)
 	app.Get("/v1/projects", s.list)
 	app.Get("/v1/projects/:slug", s.get)
 	app.Patch("/v1/projects/:slug", s.update)
@@ -197,6 +198,14 @@ func (s *svc) create(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
+	return s.createProject(c, org, body)
+}
+
+// createProject is the ONE path that validates a createReq and persists a
+// Project. Both POST /v1/projects and POST /v1/projects/fork funnel through here,
+// so slug/framework validation, ID minting, and conflict mapping live in exactly
+// one place. It returns 201 with the project view on success.
+func (s *svc) createProject(c *zip.Ctx, org string, body createReq) error {
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		return zip.ErrBadRequest("name is required")
