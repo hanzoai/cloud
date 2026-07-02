@@ -93,11 +93,16 @@ func (s *svc) deployImage(c *zip.Ctx, org, project string, a Application, depID 
 		return s.failDeployment(c, &d, a, deployErrStatus(err), "apply Service CR: "+err.Error())
 	}
 
-	// Success: the CR is written; the operator reconciles the rollout. Persist
-	// the app's new state (image tag, current deployment, live).
-	a.ImageTag, a.Status, a.CurrentDeploy, a.Namespace, a.UpdatedAt = tag, "live", d.ID, tenantNamespace(org), time.Now().Unix()
-	if err := s.store.UpdateApplication(c.Context(), a); err != nil {
+	// Success: the CR is written; the operator reconciles the rollout. Advance the
+	// app to live via the ONE monotonic finalize (shared with the git build
+	// reconciler) so two concurrent deploys can never regress the live version.
+	advanced, err := s.store.FinalizeLive(c.Context(), d, tag, tenantNamespace(org), time.Now().Unix())
+	switch {
+	case err != nil:
 		s.log.Warn("finalize app failed (continuing)", "app", a.Slug, "err", err)
+	case !advanced:
+		s.log.Info("deploy superseded by a newer concurrent deploy (app already at a newer version)",
+			"org", org, "app", a.Slug, "version", version)
 	}
 	s.log.Info("deployed (image)", "org", org, "app", a.Slug, "ns", tenantNamespace(org), "image", image,
 		"actor", c.User(), "requestID", c.RequestID())
