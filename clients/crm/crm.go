@@ -48,6 +48,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -139,13 +140,7 @@ func init() {
 // claim (HIP-0026): never lowercased, stripped, or truncated (normalizing would
 // collapse DISTINCT owners into one bucket — a cross-tenant break). Reject only
 // empty or pathologically long; never transform. Mirrors clients/prompts.
-func tenant(c *zip.Ctx) (string, bool) {
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 
