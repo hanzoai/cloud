@@ -105,6 +105,19 @@ func Serve(enable []string) error {
 		})
 	}
 
+	// Identity plane — same-origin /v1/iam/* reverse proxy to the brand IAM.
+	// IAM is a separate control plane (not fused), but the embedded console reaches
+	// its auth + identity endpoints (get-account, signin, oauth, get-users…) at
+	// /v1/iam/* on its OWN origin. In production an edge routes that to IAM; the
+	// single binary has no edge, so it routes /v1/iam itself — making `./cloud` a
+	// COMPLETE local cloud. Registered HERE — with the health contract, BEFORE
+	// MountAll — so the specific /v1/iam/* route precedes any subsystem's broad /v1
+	// wildcard (e.g. the ai runtime's fallthrough) and the console catch-all.
+	// Config-gated (no-op without CLOUD_IAM_URL / IAM issuer). See iam_proxy.go.
+	if err := mountIAMProxy(app, cfg, deps.Logger); err != nil {
+		return fmt.Errorf("iam proxy: %w", err)
+	}
+
 	if err := MountAll(app, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}

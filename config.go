@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -164,6 +165,14 @@ func LoadConfig() *Config {
 	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
 	flag.Parse()
 
+	// Ensure the data root is WRITABLE. In production the operator mounts a
+	// writable volume at /var/lib/cloud (the default) and this is a no-op. For a
+	// local `./cloud` dev run — no write access to /var/lib — it degrades to a
+	// per-user dir so the single binary works out of the box with ZERO config
+	// (Base/SQLite for every subsystem lands under it). BuildDeps logs the resolved
+	// data_dir, so the fallback is visible.
+	cfg.DataDir = resolveDataDir(cfg.DataDir)
+
 	if enableCSV != "" {
 		for _, name := range strings.Split(enableCSV, ",") {
 			if s := strings.TrimSpace(name); s != "" {
@@ -219,6 +228,49 @@ func getenv(key, dflt string) string {
 		return v
 	}
 	return dflt
+}
+
+// resolveDataDir returns a WRITABLE data root. It honors the requested dir (env
+// CLOUD_DATA_DIR / --data-dir / the /var/lib/cloud prod default) when that dir can
+// be created and written. When it cannot — a local `./cloud` run with no access to
+// /var/lib — it degrades to a per-user dir (os.UserConfigDir/hanzo/cloud, else a
+// temp dir) so the single binary works out of the box with zero config. Prod is
+// unaffected: /var/lib/cloud is writable in the container, so the requested dir is
+// returned unchanged. The last-resort return is the original dir (subsystems that
+// need it then fail closed with a clear error, never silently mis-store).
+func resolveDataDir(dir string) string {
+	if writableDir(dir) {
+		return dir
+	}
+	if home, err := os.UserConfigDir(); err == nil {
+		if alt := filepath.Join(home, "hanzo", "cloud"); writableDir(alt) {
+			return alt
+		}
+	}
+	if alt := filepath.Join(os.TempDir(), "hanzo-cloud"); writableDir(alt) {
+		return alt
+	}
+	return dir
+}
+
+// writableDir reports whether dir exists (creating it with mkdir -p) and accepts a
+// write. It probes with a temp file it immediately removes, so a read-only or
+// permission-denied path is detected precisely (not merely "exists").
+func writableDir(dir string) bool {
+	if strings.TrimSpace(dir) == "" {
+		return false
+	}
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return false
+	}
+	f, err := os.CreateTemp(dir, ".probe-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
 }
 
 // defaultJWTAudiences mirrors github.com/hanzoai/gateway/v2/iamauth.DefaultAudiences

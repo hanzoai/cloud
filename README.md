@@ -9,9 +9,20 @@ Unified Go control plane and binary for the Hanzo platform (HIP-0106).
 
 ## Quick start
 
+One binary is the WHOLE Hanzo cloud + console, locally, for testing:
+
 ```bash
 docker run -p 8080:8080 ghcr.io/hanzoai/cloud:latest
+# or from source (Go 1.26):  go build -o cloud ./cmd/cloud && ./cloud
+open http://localhost:8080          # the console UI (embedded)
+curl http://localhost:8080/v1/ai/health   # the /v1 API — SAME process
 ```
+
+No external infra required. With no config, every subsystem uses embedded
+Base/SQLite under a writable data dir (falls back to `~/.config/hanzo/cloud` when
+`/var/lib/cloud` isn't writable) — no Postgres/DO/ClickHouse. Point login at a real
+IAM with `CLOUD_IAM_URL=https://hanzo.id` (default is the brand issuer); the binary
+proxies `/v1/iam/*` to it same-origin. Override the port with `CLOUD_LISTEN=:9000`.
 
 ## What this is
 
@@ -146,6 +157,12 @@ Serving (`webui.go`, registered LAST in `Serve` so it never shadows the API):
   path under an API prefix returns a real 404 (JSON namespace), never HTML.
 - Same-origin: the embedded console calls `/v1` on its own host, so the session
   cookie is first-party — no second origin, no CORS.
+- `GET /v1/iam/*` → reverse-proxied to the brand IAM (`CLOUD_IAM_URL`, else the
+  brand OIDC issuer). IAM is a separate control plane (not fused), but the console's
+  auth + identity calls (get-account, signin, oauth, get-users) resolve same-origin,
+  and the IAM session cookie is rewritten host-only so it is first-party to this
+  binary. Registered with the health contract, before subsystems, so it wins. See
+  `iam_proxy.go`.
 
 `webui/dist/index.html` is a committed **fallback shell** (a real same-origin
 `/v1` bootstrap) so `go build` always compiles and the binary always serves a UI
@@ -153,14 +170,16 @@ even without the Node toolchain. The image build overwrites `webui/dist` with th
 real console bundle. See `webui_test.go` for the boot-and-assert tests
 (`/` → shell, deep link → shell 200, `/v1/*` → API, unmatched `/v1` → 404).
 
-> Honest current state: console2 ships 15 Next server route handlers
-> (`app/**/route.ts`) that hold KMS-sourced service tokens and mint short-lived
-> user tokens, so it emits a Node server bundle, not a static export
-> (`output: export` would fail). Until console2 exposes a `build:embed` static
-> target — or those handlers land here as native `/v1` endpoints — the image
-> embeds the fallback shell, and the separate console2 Service stays up. The Go
-> embed/serve plumbing is complete and needs no further change to light up the
-> full console the moment the static bundle exists.
+> State: console2 (v8.4.9+) is a **static export** (`output: 'export'` → `out/`).
+> Its 18 Next BFF server routes were collapsed to same-origin `/v1` — the browser
+> calls its OWN origin `/v1/<head>` and this binary serves it directly, validating
+> the first-party IAM session cookie (`middleware_identity.go`) and deriving the org
+> from the token `owner` claim, so the cross-origin bearer-mint BFF is unnecessary by
+> construction. The GUI SPA renders client-only via `dynamic(ssr:false)` (the ~100
+> react-native-web product modules can't be server-evaluated), so the export emits
+> the shell + fingerprinted assets and the console mounts on the client. `build:embed`
+> produces `out/`; the Dockerfile copies it into `webui/dist` before `go build`. The
+> separate console2 Service is retired the moment this image rolls out.
 
 ## Status
 
