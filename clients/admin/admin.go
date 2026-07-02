@@ -85,6 +85,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Get("/v1/admin/finance", s.guard(s.finance))
+	app.Get("/v1/admin/compute", s.guard(s.compute))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
 
 	logger.Info("admin surface mounted",
