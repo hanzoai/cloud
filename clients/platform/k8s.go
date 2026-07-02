@@ -18,11 +18,9 @@ package platform
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/provisioning"
@@ -51,19 +49,15 @@ var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namesp
 var resourceQuotasGVR = schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}
 var limitRangesGVR = schema.GroupVersionResource{Version: "v1", Resource: "limitranges"}
 
-// secretsGVR lets ensureNamespace provision the tenant's GHCR image-pull secret.
-var secretsGVR = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
-
-// tenantPullSecretName is the GHCR pull secret every tenant namespace carries so
-// the operator's pod can pull the PRIVATE per-tenant build image
-// (ghcr.io/hanzoai/tenant-<org>/*). serviceCR references it; ensurePullSecret
-// provisions it from pullDockerConfigEnv when that is set (else it is assumed
-// bootstrapped out-of-band and the reference degrades to the namespace default).
+// tenantPullSecretName is the GHCR image-pull Secret every tenant namespace
+// carries so the pod can pull the PRIVATE per-tenant build image
+// (ghcr.io/hanzoai/tenant-<org>/*). serviceCR REFERENCES it by name only; the
+// Secret itself is provisioned by the OPERATOR's tenant-RBAC controller (from a
+// KMS-synced source), NEVER by cloud-api. The cloud-api ServiceAccount holds no
+// `secrets` grant and issues no Secrets API call — secret provisioning is the
+// operator's job, exclusively. Until the operator has projected it the reference
+// degrades to the namespace default rather than hard-failing the deploy.
 const tenantPullSecretName = "ghcr-pull"
-
-// pullDockerConfigEnv holds a base64 .dockerconfigjson (KMS-synced) with pull
-// access to ghcr.io/hanzoai/tenant-*. Unset ⇒ ensurePullSecret is a no-op.
-const pullDockerConfigEnv = "CLOUD_PLATFORM_PULL_DOCKERCONFIG"
 
 // errTooManyBuilds is returned by launchBuildJob when the caller's org already
 // has the maximum number of concurrent build Jobs in flight (MED-3, shared-build
@@ -197,53 +191,10 @@ func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 	if err := k.ensureBoundObject(ctx, limitRangesGVR, ns, tenantLimitRangeName, k.limits.limitRange(ns)); err != nil {
 		return fmt.Errorf("ensure limitrange: %w", err)
 	}
-	// Provision the GHCR pull secret so the pod can pull the private tenant image
-	// (no-op when pullDockerConfigEnv is unset — then it is bootstrapped elsewhere).
-	if err := k.ensurePullSecret(ctx, ns); err != nil {
-		return fmt.Errorf("ensure pull secret: %w", err)
-	}
+	// The tenant's GHCR image-pull Secret (tenantPullSecretName) is provisioned by
+	// the OPERATOR's tenant-RBAC controller — cloud-api touches NO K8s Secret and
+	// holds no `secrets` grant. serviceCR references it by name only.
 	return nil
-}
-
-// ensurePullSecret provisions the tenant namespace's GHCR image-pull secret from
-// pullDockerConfigEnv (a base64 .dockerconfigjson, KMS-synced) so the operator's
-// pod can pull the PRIVATE per-tenant build image. Idempotent create-or-update.
-// When the env is unset this is a no-op: the secret is assumed bootstrapped
-// out-of-band, and serviceCR's reference degrades to the namespace default
-// rather than hard-failing. The value never appears in a manifest or a log.
-func (k *k8sClient) ensurePullSecret(ctx context.Context, ns string) error {
-	b64 := strings.TrimSpace(os.Getenv(pullDockerConfigEnv))
-	if b64 == "" {
-		return nil
-	}
-	if _, err := base64.StdEncoding.DecodeString(b64); err != nil {
-		return fmt.Errorf("%s is not valid base64: %w", pullDockerConfigEnv, err)
-	}
-	desired := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Secret",
-		"type":       "kubernetes.io/dockerconfigjson",
-		"metadata": map[string]any{
-			"name":      tenantPullSecretName,
-			"namespace": ns,
-			"labels":    map[string]any{"hanzo.ai/managed-by": "platform"},
-		},
-		"data": map[string]any{".dockerconfigjson": b64},
-	}}
-	_, err := k.dyn.Resource(secretsGVR).Namespace(ns).Get(ctx, tenantPullSecretName, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		_, cErr := k.dyn.Resource(secretsGVR).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
-		if cErr != nil && !apierrors.IsAlreadyExists(cErr) {
-			return cErr
-		}
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	patch, _ := json.Marshal(map[string]any{"data": map[string]any{".dockerconfigjson": b64}})
-	_, err = k.dyn.Resource(secretsGVR).Namespace(ns).Patch(ctx, tenantPullSecretName, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
-	return err
 }
 
 // ensureBoundObject create-or-updates one namespaced policy object (ResourceQuota
@@ -287,8 +238,9 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 			map[string]any{"name": "http", "containerPort": int64(portOr(a.Port))},
 		},
 		// The build output is a PRIVATE image under ghcr.io/hanzoai/tenant-<org>/*;
-		// the operator propagates imagePullSecrets to the pod so it can pull it.
-		// ensureNamespace provisions this secret (or it is bootstrapped out-of-band).
+		// the operator propagates imagePullSecrets to the pod so it can pull it. The
+		// referenced Secret is provisioned by the operator's tenant-RBAC controller
+		// (from a KMS-synced source); cloud-api only names it here, never creates it.
 		"imagePullSecrets": []any{
 			map[string]any{"name": tenantPullSecretName},
 		},
