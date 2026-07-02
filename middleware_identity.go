@@ -28,9 +28,34 @@ package cloud
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/zap-proto/zip"
 )
+
+// OrgHasUnsafeRune reports whether s carries any whitespace, control, or
+// zero-width/format rune — the class that defeats the injectivity of the
+// org→tenant map. strings.TrimSpace (and fasthttp's own header-value OWS
+// trimming) silently drop such runes at the edges, so two DISTINCT IAM org
+// names ("acme" vs "acme ", or an NBSP/ZWSP variant) would collapse onto ONE
+// tenant-<slug> namespace / image ref — a cross-tenant fold. The identity trust
+// boundary REFUSES to grant tenancy from an org bearing one of these (fail
+// secure) instead of folding it, so distinct raw names never collide and no
+// namespace is ever derived from an invisible-character identifier.
+//
+// Case / '-' / '.' / other visible punctuation are deliberately NOT unsafe:
+// those fold INJECTIVELY through the org-slug hash (provisioning.SanitizeOrg).
+// Only the invisible / edge-trimmable class — which no injective fold can
+// survive once transport strips it — is rejected here. A legitimate IAM org
+// slug never contains such a rune, so no real caller is affected.
+func OrgHasUnsafeRune(s string) bool {
+	for _, r := range s {
+		if unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return true
+		}
+	}
+	return false
+}
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
 // token (mirrors iamauth.CookieToken).
@@ -104,14 +129,29 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		req := c.Fiber().Request()
 
 		// Capture the requested org before stripping (admin org-switch input +
-		// Phase-1 data passthrough), then delete every authority header.
-		cliOrg := strings.TrimSpace(string(req.Header.Peek("X-Org-Id")))
+		// Phase-1 data passthrough), then delete every authority header. A client
+		// org bearing a whitespace/control/format rune is refused here (not
+		// trimmed): trimming would collapse "acme " onto "acme", and the injective
+		// tenant boundary must never fold two distinct org identifiers into one.
+		cliOrg := string(req.Header.Peek("X-Org-Id"))
+		if OrgHasUnsafeRune(cliOrg) {
+			cliOrg = ""
+		}
 		for _, h := range authorityHeaders {
 			req.Header.Del(h)
 		}
 
 		if claims := validatedPrincipal(c, v); claims != nil {
-			owner := strings.TrimSpace(claims.Owner)
+			// The org is taken verbatim from the validated principal and validated,
+			// never trimmed: a whitespace/control/format-bearing owner is a
+			// non-injective tenant identifier (TrimSpace / transport OWS-trim would
+			// collapse "acme " onto "acme"), so it grants NO tenancy — the request
+			// resolves org-less and every tenant() gate fails closed with 403,
+			// rather than folding two IAM orgs onto one namespace.
+			owner := claims.Owner
+			if OrgHasUnsafeRune(owner) {
+				owner = ""
+			}
 			if id := claims.userID(); id != "" {
 				req.Header.Set("X-User-Id", id)
 			}
