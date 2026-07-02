@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -375,6 +376,9 @@ func slugParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.P
 // / X-User-IsAdmin only on the JWT-validated path (HIP-0026), so neither is
 // spoofable from the edge.
 func tenant(c *zip.Ctx) (string, bool) {
+	if !principal.Validated(c) {
+		return "", false // no validated principal — refuse the forgeable data path
+	}
 	org := sanitizeOrg(c.Org())
 	if org != "" {
 		return org, true

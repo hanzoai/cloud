@@ -48,6 +48,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -396,13 +397,7 @@ func repoNameParam(c *zip.Ctx) (string, error) {
 // X-Org-Id (HIP-0026), never lowercased or transformed (normalizing would
 // collapse distinct owners into one bucket). Empty org is a true 403; there is
 // no magic bucket. Mirrors clients/prompts.tenant.
-func tenant(c *zip.Ctx) (string, bool) {
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 // projectScope resolves the optional X-Project-Id sub-scope. Empty is valid
 // (an org-level repo). Validated to a safe identifier; an invalid header is
