@@ -11,8 +11,8 @@ import (
 
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/middleware"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 )
 
 // Serve boots the canonical compose root and mounts the selected subsystems.
@@ -167,7 +167,7 @@ func Serve(enable []string) error {
 		// (TLS 1.3 + PQ), plain HTTP the edge/browser extra. Both serve the
 		// identical route surface, so /v1/* answers over either. Serve returns
 		// the first listener error.
-		listenErr <- app.Serve(cfg.ZAPListenAddr, cfg.ListenAddr)
+		listenErr <- app.Listen(cfg.ZAPListenAddr, "http://"+cfg.ListenAddr)
 	}()
 
 	select {

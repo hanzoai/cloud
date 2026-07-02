@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
 
