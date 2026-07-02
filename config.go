@@ -102,6 +102,37 @@ type Config struct {
 	CommerceServiceToken string
 	BillingFailOpen      bool
 
+	// AI inference gateway — the /v1/agents run path. Agent runs execute a real
+	// chat completion through an OpenAI-compatible endpoint (the Hanzo LLM
+	// gateway). This is the ONE real inference wiring: with AIAPIKey set,
+	// pickAIClient returns the HTTP gateway client; without it deps.AI is the
+	// fail-closed stub and a run never fabricates output.
+	//
+	// AIBaseURL is the gateway /v1 root (CLOUD_AI_BASE_URL, default
+	// https://api.hanzo.ai/v1); the client appends /chat/completions.
+	//
+	// AIAPIKey is a KMS-injected virtual key (CLOUD_AI_API_KEY). It is a SECRET —
+	// never logged, never printed, never read from disk here.
+	//
+	// AIDefaultModel is the served model an agent with no explicit model falls
+	// back to (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). Model routing
+	// is the gateway's job; this is the ONLY cloud-side model default.
+	AIBaseURL      string
+	AIAPIKey       string
+	AIDefaultModel string
+
+	// AIAuthClientID / AIAuthClientSecret are the binary's OWN IAM service
+	// identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET). When no static AIAPIKey is
+	// set, the AI client authenticates to the gateway with a client-credentials
+	// (M2M) token minted from this identity and auto-refreshed — the durable
+	// no-static-key path. On the Hanzo deployment the identity resolves to
+	// admin/hanzo-cloud (gateway-balance-exempt), so cloud's per-org
+	// ResourceMeter remains the single debit. The token endpoint is derived from
+	// IAMIssuer ({issuer}/v1/iam/oauth/token). The secret is KMS-injected and
+	// never logged.
+	AIAuthClientID     string
+	AIAuthClientSecret string
+
 	// ZAP RPC endpoints for subsystems that are NOT enabled in this
 	// process but are still needed by an enabled subsystem. Empty
 	// means "no remote endpoint" — the client falls back to the
@@ -144,14 +175,23 @@ func LoadConfig() *Config {
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
 		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
 		BillingFailOpen:      getenvBool("BILLING_FAIL_OPEN"),
-		IAMZAPAddr:           getenv("CLOUD_IAM_ZAP_ADDR", ""),
-		KMSZAPAddr:           getenv("CLOUD_KMS_ZAP_ADDR", ""),
-		BaseZAPAddr:          getenv("CLOUD_BASE_ZAP_ADDR", ""),
-		CommerceZAPAddr:      getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
-		AIZAPAddr:            getenv("CLOUD_AI_ZAP_ADDR", ""),
-		O11yZAPAddr:          getenv("CLOUD_O11Y_ZAP_ADDR", ""),
-		VFSZAPAddr:           getenv("CLOUD_VFS_ZAP_ADDR", ""),
-		MQZAPAddr:            getenv("CLOUD_MQ_ZAP_ADDR", ""),
+		// AI inference gateway. CLOUD_AI_API_KEY (KMS-backed) is an optional static
+		// override; absent it, the AI client authenticates via M2M using the
+		// binary's own IAM identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET) — no static
+		// key, no expiry cliff. Never plaintext.
+		AIBaseURL:          getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
+		AIAPIKey:           getenv("CLOUD_AI_API_KEY", ""),
+		AIDefaultModel:     getenv("CLOUD_AI_DEFAULT_MODEL", "deepseek-v4-flash"),
+		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
+		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
+		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
+		KMSZAPAddr:         getenv("CLOUD_KMS_ZAP_ADDR", ""),
+		BaseZAPAddr:        getenv("CLOUD_BASE_ZAP_ADDR", ""),
+		CommerceZAPAddr:    getenv("CLOUD_COMMERCE_ZAP_ADDR", ""),
+		AIZAPAddr:          getenv("CLOUD_AI_ZAP_ADDR", ""),
+		O11yZAPAddr:        getenv("CLOUD_O11Y_ZAP_ADDR", ""),
+		VFSZAPAddr:         getenv("CLOUD_VFS_ZAP_ADDR", ""),
+		MQZAPAddr:          getenv("CLOUD_MQ_ZAP_ADDR", ""),
 	}
 
 	var enableCSV string
