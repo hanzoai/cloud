@@ -74,6 +74,35 @@ func TestCreateOneShotDropsSchedule(t *testing.T) {
 	}
 }
 
+// TestLongRunningPerOrgCap: an org cannot create more than the configured number
+// of scheduled long-running agents (Red LOW-1). One-shot agents don't count.
+func TestLongRunningPerOrgCap(t *testing.T) {
+	t.Setenv(longRunningCapEnv, "2")
+	app := mountApp(t, &fakeAI{content: "x"})
+	mk := func(name string) map[string]any {
+		return map[string]any{"name": name, "model": "m", "executionMode": "long-running", "schedule": "* * * * *"}
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme", mk("a")); code != http.StatusCreated {
+		t.Fatalf("1st long-running want 201, got %d", code)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme", mk("b")); code != http.StatusCreated {
+		t.Fatalf("2nd long-running want 201, got %d", code)
+	}
+	// 3rd exceeds the cap of 2 -> 409.
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme", mk("c")); code != http.StatusConflict {
+		t.Fatalf("3rd long-running want 409 (cap), got %d", code)
+	}
+	// A one-shot agent is unaffected by the cap.
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "one", "model": "m"}); code != http.StatusCreated {
+		t.Fatalf("one-shot must not be capped, got %d", code)
+	}
+	// A DIFFERENT org has its own budget.
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "beta", mk("a")); code != http.StatusCreated {
+		t.Fatalf("other org's 1st long-running want 201, got %d", code)
+	}
+}
+
 // TestPatchToLongRunningValidates: PATCHing an agent to long-running without a
 // schedule is rejected; supplying a valid schedule in the same PATCH succeeds.
 func TestPatchToLongRunningValidates(t *testing.T) {
