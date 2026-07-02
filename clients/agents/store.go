@@ -150,12 +150,23 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 	// already-upgraded DB is a no-op and never errors — the DDL above handles
 	// fresh DBs, this handles pre-existing ones. It touches no storage-backend
 	// knob (driverName/DSN), so the SQLite-only storage lockdown is unaffected.
-	return s.addColumns("agents", map[string]string{
+	if err := s.addColumns("agents", map[string]string{
 		"execution_mode":     "TEXT NOT NULL DEFAULT 'one-shot'",
 		"schedule":           "TEXT NOT NULL DEFAULT ''",
 		"compute_ref":        "TEXT NOT NULL DEFAULT ''",
 		"service_account_id": "TEXT NOT NULL DEFAULT ''",
-	})
+	}); err != nil {
+		return err
+	}
+	// Partial index for the once-a-minute scheduler scan — created AFTER the
+	// lifecycle columns exist (a legacy DB gains them just above), so it selects
+	// only the (typically few) scheduled long-running agents instead of
+	// full-scanning every org's agents on the single shared SQLite connection.
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS ix_agents_scheduled
+		ON agents(org, name) WHERE execution_mode='long-running' AND schedule<>''`); err != nil {
+		return fmt.Errorf("migrate: scheduled index: %w", err)
+	}
+	return nil
 }
 
 // addColumns adds each missing column to table, idempotently. A column already
@@ -338,6 +349,19 @@ func (s *Store) ListLongRunning(ctx context.Context) ([]Agent, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// CountLongRunning returns how many scheduled long-running agents an org has —
+// used to cap an org's scheduler footprint at create time.
+func (s *Store) CountLongRunning(ctx context.Context, org string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM agents WHERE org=? AND execution_mode=? AND schedule<>''`,
+		org, ModeLongRunning).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count long-running: %w", err)
+	}
+	return n, nil
 }
 
 // Delete removes an agent and its run history. Reports whether a row went.

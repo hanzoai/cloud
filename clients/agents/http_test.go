@@ -10,8 +10,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountApp mounts the agents surface with a deterministic fake AI so run() is
@@ -39,6 +39,11 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		// A validated principal: the run path (money-moving) requires a non-empty
+		// c.User() (X-User-Id). SanitizeIdentity sets this only from a verified
+		// JWT; the test app has no sanitizer, so we inject it directly, exactly as
+		// the gateway would. Empty org => no user (the anonymous 403 path).
+		req.Header.Set("X-User-Id", "u-"+org)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {

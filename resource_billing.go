@@ -87,14 +87,20 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 //
 // costCents<=0 means the kind is free → no gate (mirrors BillingGate's price==0
 // short-circuit). org MUST be the caller's resolved slug; it is sent as the
-// commerce user AND X-IAM-Org-Id so the CALLER's ledger is checked, overriding
+// commerce user AND X-Org-Id so the CALLER's ledger is checked, overriding
 // the client default org — the anti-cross-tenant property. The balance check
 // honors ctx (a client disconnect/timeout cancels it).
+//
+// costCents is forwarded as AuthInput.AmountCents so the gate enforces
+// available >= costCents, not merely available > 0 — otherwise a 1-cent balance
+// would authorize an arbitrarily expensive charge (the debit still lands, taking
+// the ledger negative). This mirrors what a prepaid gate must do: refuse a
+// request the balance cannot cover BEFORE the work runs.
 func (rm *ResourceMeter) Gate(ctx context.Context, org, kind string, costCents int64) error {
 	if !rm.Enabled() || costCents <= 0 {
 		return nil
 	}
-	return rm.m.Authorize(ctx, metering.AuthInput{User: org, Org: org})
+	return rm.m.Authorize(ctx, metering.AuthInput{User: org, Org: org, AmountCents: costCents})
 }
 
 // Meter records a successful charge to the caller's org ledger. It is the ONE

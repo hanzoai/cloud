@@ -92,7 +92,7 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	t.Cleanup(func() { _ = Shutdown() })
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
 }
 
@@ -113,6 +113,25 @@ func TestRunGatesUnfundedOrg(t *testing.T) {
 	}
 	if bs.debits() != 0 {
 		t.Fatalf("a refused run must not debit, got %d", bs.debits())
+	}
+}
+
+// TestRunGatesUnderfundedOrg: an org with a POSITIVE balance that is still less
+// than the run fee is refused 402 — the gate enforces available >= fee, not
+// merely available > 0, so a 1-cent balance can't authorize a $1 run and take
+// the ledger negative (Red MEDIUM-1). Default fee is $1.00 (100c).
+func TestRunGatesUnderfundedOrg(t *testing.T) {
+	bs := &billServer{available: 1} // 1 cent, fee is 100 cents
+	app := mountBilled(t, bs.start(t), &fakeAI{content: "should not run"})
+
+	do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "a", "model": "m", "instructions": "x"})
+	code, body := do(t, app, http.MethodPost, "/v1/agents/a/run", "acme", map[string]any{"input": "hi"})
+	if code != http.StatusPaymentRequired {
+		t.Fatalf("underfunded (1c < 100c fee) run want 402, got %d (%s)", code, body)
+	}
+	if bs.debits() != 0 {
+		t.Fatalf("a gate-refused run must not debit, got %d", bs.debits())
 	}
 }
 
@@ -176,6 +195,35 @@ func TestFailedRunNotBilled(t *testing.T) {
 	// Give any (erroneous) async debit a chance to land, then assert none did.
 	if waitForDebit(func() bool { return bs.debits() > 0 }) {
 		t.Fatalf("a failed run must NOT be billed, got %d debits", bs.debits())
+	}
+}
+
+// TestRunRequiresValidatedPrincipal: a run with only a client X-Org-Id (no
+// validated X-User-Id — the direct-to-pod no-bearer path) is refused 403 and
+// NEVER debits. A money-moving action can't ride an unauthenticated, forgeable
+// org header (Red MEDIUM-2). Read/create still work on the org header alone.
+func TestRunRequiresValidatedPrincipal(t *testing.T) {
+	bs := &billServer{available: 100000}
+	app := mountBilled(t, bs.start(t), &fakeAI{content: "must not run"})
+
+	// create is allowed with X-User-Id (via do()).
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "a", "model": "m", "instructions": "x"}); code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d", code)
+	}
+	// A raw run request carrying ONLY X-Org-Id (no X-User-Id) must be 403.
+	req := httptest.NewRequest(http.MethodPost, "/v1/agents/a/run", nil)
+	req.Header.Set("X-Org-Id", "acme") // forged/unvalidated org, no principal
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("run without a validated principal want 403, got %d", resp.StatusCode)
+	}
+	if waitForDebit(func() bool { return bs.debits() > 0 }) {
+		t.Fatalf("an unauthenticated run must never debit, got %d", bs.debits())
 	}
 }
 
