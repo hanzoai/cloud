@@ -33,7 +33,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gojahost"
 	hplans "github.com/hanzoai/plans"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // host is the process-global goja host for the plans bundle. nil before Mount.

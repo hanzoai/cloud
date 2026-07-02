@@ -43,7 +43,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // defaults are in-cluster service DNS; overridable via env.

@@ -40,7 +40,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
 

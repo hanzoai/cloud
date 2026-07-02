@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // doAdmin fires a request as a validated GLOBAL ADMIN: empty X-Org-Id but
