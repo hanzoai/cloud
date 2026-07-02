@@ -17,17 +17,23 @@ var errUnconfigured = errors.New("not configured")
 
 // ── /v1/admin/finance — SaaS business/finance dashboard (FinanceData) ─────────
 //
-// The profitability panel the Hanzo Admin Console renders on admin.hanzo.ai: how
-// fast we're burning the DigitalOcean promo credit (our primary venue), what we
-// spend, what we earn, the resulting gross margin, and the runway that credit +
-// burn imply. It is GLOBAL-ADMIN ONLY (s.guard) — financial data is Hanzo-internal
-// and must never reach a customer or tenant-admin.
+// The profitability panel the Hanzo Admin Console renders on admin.hanzo.ai: what
+// we pay every vendor (COGS), what we earn, the resulting gross margin, how fast
+// we're burning the DigitalOcean promo credit, and the runway that credit + burn
+// imply. It is GLOBAL-ADMIN ONLY (s.guard) — financial data is Hanzo-internal and
+// must never reach a customer or tenant-admin.
 //
-// Like the rest of admin it FABRICATES NOTHING. Cost comes from DigitalOcean's
-// billing API (honest {configured:false} when DO_API_TOKEN is unset); revenue and
-// MRR come from commerce (honest zeros when commerce is unreachable). The derived
-// margin/runway math is a pure function (computeFinance) with a unit test proving
-// the numbers and the unconfigured path.
+// Like the rest of admin it FABRICATES NOTHING and it OWNS NO cost logic. COGS is
+// the SINGLE source of truth in commerce (GET /v1/costs: DigitalOcean compute +
+// the LLM providers we resell) — cloud CONSUMES it, never re-reads a vendor's
+// billing API to derive a cost, so the margin uses the whole multi-vendor COGS.
+// Revenue + MRR come from commerce billing (honest zeros when unreachable). The
+// one direct vendor read that remains is the DigitalOcean promo-CREDIT balance +
+// burn-down history — an ORTHOGONAL treasury view (how long the credit lasts), NOT
+// a COGS: commerce tracks what we SPEND with DO (the compute line), not our prepaid
+// credit balance, so it can't provide it. The derived margin/runway math is a pure
+// function (computeFinance) with a unit test proving the numbers and every
+// unconfigured path.
 
 // financeData is the full /v1/admin/finance aggregate (FinanceData).
 type financeData struct {
@@ -38,8 +44,25 @@ type financeData struct {
 	Sources     []sourceStatus `json:"sources"`
 }
 
-// financeCost.digitalocean is the DO billing view (all money in USD cents).
+// financeCost is the platform COGS view — what WE pay our vendors. Its authority
+// is commerce GET /v1/costs (the SINGLE vendor-COGS source of truth): TotalCents is
+// the whole-platform COGS the margin math folds, and Vendors is the per-vendor
+// breakdown (DigitalOcean compute + each LLM provider we resell) the console
+// renders as a donut. Configured is false (and every number 0) when commerce
+// /v1/costs is unreachable — the console then shows the honest not-configured state.
+//
+// DigitalOcean here is an ORTHOGONAL treasury view (promo-credit remaining + the
+// burn-down series), NOT part of COGS: its month-to-date spend is NO LONGER the
+// margin cost (TotalCents is) — it feeds only the runway projection. Commerce owns
+// the DO compute COGS line; this is our prepaid-credit balance, which commerce
+// does not track, so it stays a direct DO account read.
 type financeCost struct {
+	Configured bool         `json:"configured"`
+	Error      string       `json:"error,omitempty"`
+	Period     string       `json:"period"`
+	TotalCents int64        `json:"totalCents"`
+	Vendors    []vendorCost `json:"vendors"`
+
 	DigitalOcean doCost `json:"digitalocean"`
 }
 
@@ -82,26 +105,28 @@ type financeDerived struct {
 }
 
 // financeInput is the raw material computeFinance folds into financeData. The
-// handler fills it from the DO + commerce reads; the pure function does the math
-// so the derivation is unit-testable in isolation.
+// handler fills cost from the commerce COGS read (+ the DO-credit treasury view)
+// and revenue from commerce billing; the pure function does the math so the
+// derivation is unit-testable in isolation.
 type financeInput struct {
-	do          doCost
+	cost        financeCost
 	revenue     financeRevenue
 	generatedAt string
 	sources     []sourceStatus
 }
 
-// computeFinance is the PURE derivation: given the DO cost view and the commerce
-// revenue view, it computes gross margin, margin %, runway, and profitability.
-// No I/O, no clock, no globals — everything it needs is in financeInput, which is
-// exactly why the finance math can be tested without any network.
+// computeFinance is the PURE derivation: given the multi-vendor COGS view and the
+// commerce revenue view, it computes gross margin, margin %, runway, and
+// profitability. No I/O, no clock, no globals — everything it needs is in
+// financeInput, which is exactly why the finance math can be tested without any
+// network.
 //
-//	grossMarginCents = revenue - cost(month-to-date spend)
-//	grossMarginPct   = grossMargin / revenue * 100   (0 when revenue is 0)
-//	runwayDays       = creditRemaining / avgDailyBurn (nil when burn 0 or DO off)
-//	profitable       = revenue > cost
+//	grossMarginCents = revenue - COGS(total, all vendors)
+//	grossMarginPct   = grossMargin / revenue * 100          (0 when revenue is 0)
+//	runwayDays       = DO creditRemaining / DO avgDailyBurn  (nil when burn 0 or DO off)
+//	profitable       = revenue > COGS
 func computeFinance(in financeInput) financeData {
-	cost := in.do.MonthToDateSpendCents
+	cost := in.cost.TotalCents
 	rev := in.revenue.TotalRevenueCents
 
 	margin := rev - cost
@@ -110,14 +135,18 @@ func computeFinance(in financeInput) financeData {
 		marginPct = (float64(margin) / float64(rev)) * 100
 	}
 
+	// Runway is the DO promo-credit treasury projection (orthogonal to COGS): how
+	// many days the remaining credit lasts at the current DO burn. Nil when DO is
+	// off or burn is 0 — never a fabricated infinity.
+	do := in.cost.DigitalOcean
 	var runway *float64
-	if in.do.Configured && in.do.AvgDailyBurnCents > 0 {
-		d := float64(in.do.CreditRemainingCents) / float64(in.do.AvgDailyBurnCents)
+	if do.Configured && do.AvgDailyBurnCents > 0 {
+		d := float64(do.CreditRemainingCents) / float64(do.AvgDailyBurnCents)
 		runway = &d
 	}
 
 	return financeData{
-		Cost:    financeCost{DigitalOcean: in.do},
+		Cost:    in.cost,
 		Revenue: in.revenue,
 		Derived: financeDerived{
 			GrossMarginCents: margin,
@@ -130,18 +159,50 @@ func computeFinance(in financeInput) financeData {
 	}
 }
 
-// finance answers GET /v1/admin/finance. It reads the DO balance/history and the
-// fleet commerce revenue, then hands both to computeFinance. Global-admin only
-// (mounted under s.guard); no principal / tenant-admin / forged header → 403
-// before this handler ever runs.
+// finance answers GET /v1/admin/finance. It reads the multi-vendor COGS from
+// commerce /v1/costs, the DO promo-credit/burn-down treasury view, and the fleet
+// commerce revenue, then hands them to computeFinance. Global-admin only (mounted
+// under s.guard); no principal / tenant-admin / forged header → 403 before this
+// handler ever runs.
 func (s *svc) finance(c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	now := time.Now().UTC().Format(time.RFC3339)
+	period := time.Now().UTC().Format("2006-01")
 
 	var sources []sourceStatus
 
-	// ── Cost: DigitalOcean ────────────────────────────────────────────────
+	// ── COGS: commerce /v1/costs (the single vendor-COGS source of truth) ──
+	// cloud CONSUMES the multi-vendor breakdown (DigitalOcean compute + the LLM
+	// providers we resell) — it does NOT re-derive any vendor cost. TotalCents is
+	// the margin cost. Honest not-configured when commerce is unreachable.
+	cost := financeCost{Period: period}
+	if s.commerce.configured() {
+		report, err := s.commerce.costs(ctx, s.adminOrg, period)
+		if err != nil {
+			cost.Error = err.Error()
+			sources = append(sources, srcOf("commerce-costs", err, 0, now))
+		} else {
+			cost.Configured = true
+			cost.TotalCents = report.TotalCents
+			cost.Vendors = report.Vendors
+			if report.Period != "" {
+				cost.Period = report.Period
+			}
+			sources = append(sources, srcOf("commerce-costs", nil, len(report.Vendors), now))
+		}
+	} else {
+		cost.Error = "commerce /v1/costs not configured"
+		sources = append(sources, srcOf("commerce-costs", errUnconfigured, 0, now))
+	}
+	if cost.Vendors == nil {
+		cost.Vendors = []vendorCost{}
+	}
+
+	// ── DigitalOcean promo-credit / runway (orthogonal treasury view) ──
+	// The one direct vendor read that remains: our DO prepaid-credit balance +
+	// burn-down history, which commerce does not track. Its MTD spend feeds ONLY
+	// the runway projection — it is NOT the margin cost (that is cost.TotalCents).
 	do := doCost{Configured: s.do.configured()}
 	if !s.do.configured() {
 		do.Error = "DO_API_TOKEN not configured"
@@ -170,6 +231,7 @@ func (s *svc) finance(c *zip.Ctx) error {
 	if do.History == nil {
 		do.History = []doHistoryPoint{}
 	}
+	cost.DigitalOcean = do
 
 	// ── Revenue: commerce (fleet-wide) ────────────────────────────────────
 	rev := financeRevenue{Configured: s.commerce.configured()}
@@ -200,7 +262,7 @@ func (s *svc) finance(c *zip.Ctx) error {
 	}
 
 	return ok(c, computeFinance(financeInput{
-		do:          do,
+		cost:        cost,
 		revenue:     rev,
 		generatedAt: now,
 		sources:     sources,
