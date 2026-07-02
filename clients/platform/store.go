@@ -554,6 +554,30 @@ func (s *Store) ListDeployments(ctx context.Context, org, appID string) ([]Deplo
 	return out, rows.Err()
 }
 
+// ListBuildingDeployments returns every deployment still in the "building" state
+// across ALL orgs, oldest first. It is the input to the build reconciler
+// (reconcile.go), which owns the git build→deploy handoff. Because the query is
+// keyed on status (not org), the reconciler resumes in-flight builds after a
+// cloud restart — the goroutine is stateless; the store IS the state. Every
+// write the reconciler then makes is still org-scoped (tenant-<row.Org>).
+func (s *Store) ListBuildingDeployments(ctx context.Context) ([]Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentCols+` FROM platform_deployments WHERE status='building' ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list building deployments: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan deployment: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 // ── builds ───────────────────────────────────────────────────────────────────
 
 const buildCols = `id,org,application_id,deployment_id,status,image,job_name,logs_ref,created_at,updated_at`
