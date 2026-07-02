@@ -103,6 +103,11 @@ func doAuth(t *testing.T, app *zip.App, method, path, org, authz string, body an
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		// Simulate a VALIDATED principal: in prod SanitizeIdentity sets X-User-Id
+		// only from a verified token. Every helper request carries one so the
+		// principal gate (Red HIGH) is satisfied; the forged-header red test builds
+		// its request by hand WITHOUT X-User-Id to prove the gate blocks it.
+		req.Header.Set("X-User-Id", "u_"+org)
 	}
 	if authz != "" {
 		req.Header.Set("Authorization", authz)
