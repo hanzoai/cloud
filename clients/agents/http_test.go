@@ -115,6 +115,116 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	}
 }
 
+// TestHTTPMetricsAndActivityNotShadowed proves /v1/agents/metrics and
+// /v1/agents/activity resolve to their own handlers (not captured by the :name
+// wildcard) and that every number is derived from REAL recorded runs.
+func TestHTTPMetricsAndActivityNotShadowed(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "ok"})
+
+	// Both org-wide surfaces require a tenant, like every other route.
+	if code, _ := do(t, app, http.MethodGet, "/v1/agents/metrics", "", nil); code != http.StatusForbidden {
+		t.Fatalf("no-org metrics want 403, got %d", code)
+	}
+	if code, _ := do(t, app, http.MethodGet, "/v1/agents/activity", "", nil); code != http.StatusForbidden {
+		t.Fatalf("no-org activity want 403, got %d", code)
+	}
+
+	// Empty org: honest empty shapes, NOT a 404 (proves no wildcard shadowing)
+	// and NOT a fabricated trend.
+	code, body := do(t, app, http.MethodGet, "/v1/agents/metrics?range=7D", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("metrics want 200 (not shadowed 404), got %d (%s)", code, body)
+	}
+	var m struct {
+		Range    string       `json:"range"`
+		Series   []seriesLine `json:"series"`
+		Resource struct {
+			CPUVcpuHours   *float64 `json:"cpuVcpuHours"`
+			MemGbHours     *float64 `json:"memGbHours"`
+			StorageIoBytes *float64 `json:"storageIoBytes"`
+			CostCents      *float64 `json:"costCents"`
+		} `json:"resource"`
+	}
+	if err := json.Unmarshal(body, &m); err != nil {
+		t.Fatalf("metrics shape: %v (%s)", err, body)
+	}
+	if m.Range != "7D" || len(m.Series) != 0 {
+		t.Fatalf("empty-org metrics want range=7D, no series, got %+v", m)
+	}
+	if m.Resource.CPUVcpuHours != nil || m.Resource.CostCents != nil {
+		t.Fatalf("resource metering is unsourced — must be null, got %+v", m.Resource)
+	}
+
+	code, body = do(t, app, http.MethodGet, "/v1/agents/activity", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("activity want 200 (not shadowed 404), got %d (%s)", code, body)
+	}
+	var empty struct {
+		Activity []activityView `json:"activity"`
+	}
+	_ = json.Unmarshal(body, &empty)
+	if len(empty.Activity) != 0 {
+		t.Fatalf("empty-org activity want [], got %+v", empty.Activity)
+	}
+
+	// Seed a real agent + a real run, then the surfaces must reflect exactly it.
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+		map[string]any{"name": "helper", "model": "gpt-4o-mini"}); code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d", code)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/agents/helper/run", "maxpower", map[string]any{"input": "hi"}); code != http.StatusOK {
+		t.Fatalf("run want 200, got %d", code)
+	}
+
+	// Metrics now carry a real invocation series for "helper" summing to 1.
+	_, body = do(t, app, http.MethodGet, "/v1/agents/metrics?range=24H", "maxpower", nil)
+	_ = json.Unmarshal(body, &m)
+	if len(m.Series) != 1 || m.Series[0].Key != "helper" {
+		t.Fatalf("metrics want one series for helper, got %+v", m.Series)
+	}
+	total := 0
+	for _, p := range m.Series[0].Points {
+		total += p.V
+	}
+	if total != 1 {
+		t.Fatalf("real invocation total want 1, got %d", total)
+	}
+
+	// Activity now carries the real invoked event + the created event, newest first.
+	_, body = do(t, app, http.MethodGet, "/v1/agents/activity", "maxpower", nil)
+	var feed struct {
+		Activity []activityView `json:"activity"`
+	}
+	_ = json.Unmarshal(body, &feed)
+	var invoked, created bool
+	for _, e := range feed.Activity {
+		if e.Agent != "helper" {
+			t.Fatalf("activity must be scoped to helper, got %+v", e)
+		}
+		switch e.Kind {
+		case "invoked":
+			invoked = true
+		case "created":
+			created = true
+		}
+	}
+	if !invoked || !created {
+		t.Fatalf("activity want a real invoked + created event, got %+v", feed.Activity)
+	}
+
+	// Cross-org isolation: acme sees none of maxpower's metrics/activity.
+	_, body = do(t, app, http.MethodGet, "/v1/agents/metrics?range=24H", "acme", nil)
+	_ = json.Unmarshal(body, &m)
+	if len(m.Series) != 0 {
+		t.Fatalf("acme must see zero series, got %+v", m.Series)
+	}
+	_, body = do(t, app, http.MethodGet, "/v1/agents/activity", "acme", nil)
+	_ = json.Unmarshal(body, &feed)
+	if len(feed.Activity) != 0 {
+		t.Fatalf("acme must see zero activity, got %+v", feed.Activity)
+	}
+}
+
 // TestHTTPRunWithoutAIFailsClosed: when no AI client is wired, run 503s and
 // never fabricates output.
 func TestHTTPRunWithoutAIFailsClosed(t *testing.T) {
