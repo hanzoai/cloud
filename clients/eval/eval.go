@@ -169,7 +169,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("eval.Mount: open metastore: %w", err)
 	}
-	tel, err := newCHTelemetry(log)
+	tel, err := newDatastoreTelemetry(log)
 	if err != nil {
 		// Datastore is misconfigured (bad addr/creds) — an operator error worth
 		// surfacing, but it must not take down the whole surface: log and run with
