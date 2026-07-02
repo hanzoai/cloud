@@ -29,6 +29,7 @@
 package platform
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -68,6 +69,7 @@ type EnvVarJSON struct {
 type svc struct {
 	store     *Store
 	k8s       *k8sClient
+	cancel    context.CancelFunc // stops the build reconciler on Shutdown
 	log       luxlog.Logger
 	brand     string
 	env       string
@@ -107,6 +109,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}
 	mounted = s
 	s.routes(app)
+
+	// Own the git build→deploy handoff: a background reconciler that applies the
+	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
+	// "building" deployments from the store, so it resumes across a cloud restart.
+	// Started only when the cluster client resolved (else deploy/build fail closed
+	// and there is nothing to reconcile).
+	if k.dyn != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		s.cancel = cancel
+		go s.runBuildReconciler(ctx)
+	}
 
 	log.Info("platform control plane mounted",
 		"prefix", "/v1/platform", "k8s", k.dyn != nil, "brand", deps.Brand, "env", deps.Env)
@@ -742,6 +755,9 @@ func getenv(key, dflt string) string {
 func Shutdown() error {
 	if mounted == nil || mounted.store == nil {
 		return nil
+	}
+	if mounted.cancel != nil {
+		mounted.cancel() // stop the build reconciler
 	}
 	err := mounted.store.Close()
 	mounted = nil
