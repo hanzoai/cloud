@@ -358,6 +358,52 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 	}
 }
 
+// TestFinance_RevenueSourceDown_NoFabrication proves the anti-fabrication property
+// (RED MED-1): when the revenue source (IAM listOrgs) is unreadable but commerce
+// COGS is fine, revenue reports configured:false (never a fake zero), so the board
+// cannot render a fabricated negative margin / "burning" alarm. COGS flows on.
+func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
+	commerce := newFakeCommerceFinance()
+	defer commerce.Close()
+
+	// IAM points nowhere reachable → listOrgs errors; commerce /v1/costs still 200s.
+	doReq, _ := mountSvc(t, "http://127.0.0.1:0", commerce.URL, "")
+	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
+
+	resp, body := doReq("GET", "/v1/admin/finance", admin)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("finance: got %d (body=%s)", resp.StatusCode, body)
+	}
+	var env struct {
+		Data financeData `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	d := env.Data
+	// Revenue source unreadable → honest not-configured, NOT a fabricated zero.
+	if d.Revenue.Configured {
+		t.Error("revenue must report configured:false when the IAM org list is unreadable")
+	}
+	if d.Revenue.TotalRevenueCents != 0 {
+		t.Errorf("unreadable revenue must be 0, got %d", d.Revenue.TotalRevenueCents)
+	}
+	// COGS is independent — still configured from commerce /v1/costs.
+	if !d.Cost.Configured || d.Cost.TotalCents == 0 {
+		t.Errorf("COGS must remain configured when the revenue source is down: %+v", d.Cost)
+	}
+	// The commerce (revenue) source is present and NOT ok — honest degraded state.
+	var revSrc *sourceStatus
+	for i := range d.Sources {
+		if d.Sources[i].Name == "commerce" {
+			revSrc = &d.Sources[i]
+		}
+	}
+	if revSrc == nil || revSrc.OK {
+		t.Errorf("commerce revenue source must be present and not-ok when unreadable: %+v", revSrc)
+	}
+}
+
 // newFakeCommerceFinance serves the vendor-COGS god-view (/v1/costs) plus
 // usage-rollup ($150 consumed) and subscriptions (one active $50/mo sub) so the
 // finance COGS + revenue + MRR aggregation is deterministic.
