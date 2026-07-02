@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // config is resolved once from env at Mount. Endpoints default to the
