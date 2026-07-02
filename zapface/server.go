@@ -5,8 +5,8 @@ import (
 	zaprpc "github.com/zap-proto/go/rpc"
 
 	fiber "github.com/gofiber/fiber/v3"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/wsx"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/wsx"
 )
 
 // Options configure the ZAP WebSocket face.

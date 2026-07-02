@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 //go:embed catalog.json

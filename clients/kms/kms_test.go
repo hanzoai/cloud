@@ -28,8 +28,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kmsembed"
-	"github.com/hanzoai/zip"
-	"github.com/hanzoai/zip/middleware"
+	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 
 	// Register the kms subsystem (init) into cloud.Registry.
 	_ "github.com/hanzoai/cloud/clients/kms"

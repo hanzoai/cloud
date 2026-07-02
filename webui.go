@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // The unified console UI, embedded into the ONE cloud binary.
