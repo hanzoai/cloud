@@ -39,7 +39,7 @@ import (
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // reserved names would collide with static sub-routes under /v1/prompts.
-var reserved = map[string]bool{"metrics": true, "new": true}
+var reserved = map[string]bool{"metrics": true, "new": true, "catalog": true}
 
 const (
 	// maxContent caps a single prompt version's body (Red MED-1). Templates are
@@ -161,6 +161,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/prompts", s.list)
 	app.Post("/v1/prompts", s.create)
 	app.Get("/v1/prompts/metrics", s.metrics)
+	app.Get("/v1/prompts/catalog", s.catalog)
 	app.Get("/v1/prompts/:name", s.get)
 	app.Delete("/v1/prompts/:name", s.del)
 
