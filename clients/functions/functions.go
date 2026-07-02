@@ -56,10 +56,23 @@ const (
 	window7d = 7 * 24 * 60 * 60
 )
 
+// invokeFeeEnvPrefix is the operator knob for the per-invocation compute fee.
+// The effective fee is cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke"): the
+// global CLOUD_FUNCTION_FEE_CENTS override, else the $1.00 default. Set it to 0
+// to make invocations free (and therefore un-gated), mirroring the edge gate's
+// price==0 short-circuit. A serverless invocation runs real sandbox compute, so
+// it is billed the SAME way provisioning bills a create and ml bills a submit —
+// via the ONE shared cloud.ResourceMeter (product "functions"); there is no
+// second metering path.
+const invokeFeeEnvPrefix = "CLOUD_FUNCTION_FEE_CENTS"
+
 type svc struct {
 	store *Store
 	exec  *execClient
 	log   luxlog.Logger
+	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
+	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
+	bill *cloud.ResourceMeter
 }
 
 var mounted *svc
@@ -168,7 +181,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("functions.Mount: open store: %w", err)
 	}
-	s := &svc{store: store, exec: newExecClient(), log: log}
+	s := &svc{store: store, exec: newExecClient(), log: log, bill: cloud.NewResourceMeter(deps, "functions")}
 	mounted = s
 
 	// Static sub-routes before the :name param route so a real function can
@@ -185,7 +198,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/functions/:name/logs", s.logs)
 	app.Post("/v1/functions/:name/invoke", s.invoke)
 
-	log.Info("functions mounted", "exec", s.exec.configured(), "brand", deps.Brand)
+	log.Info("functions mounted", "exec", s.exec.configured(), "brand", deps.Brand, "billing", s.bill.Enabled())
 	return nil
 }
 
