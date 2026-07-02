@@ -6,6 +6,7 @@ package kms_test
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -445,4 +446,30 @@ func TestAdminEdge_NonAdminEmptyOrgDenied(t *testing.T) {
 	}
 	// Even targeting an org whose name is empty-ish is rejected by routing/validOrg.
 	t.Logf("empty principal denied (403) — cannot match any :org")
+}
+
+// TestVector8_ForgedOrgNoPrincipalDenied — the KMS facet of the cross-tenant break.
+// The guard's non-admin branch compares ctx.Org() == :org. The identity middleware
+// RESTORES a client X-Org-Id on the bearer-less path (X-User-Id left EMPTY), so an
+// off-gateway caller can send X-Org-Id: victim AND route :org=victim — ctx.Org()
+// would EQUAL :org and the equality check alone would pass, reading the victim
+// org's secrets with NO credential. The validated-principal gate (ctx.User()!="")
+// closes it: no principal → 403 regardless of the forged match. Unlike
+// TestAdminEdge_NonAdminEmptyOrgDenied (empty org, never matches any :org), here
+// the forged org EXACTLY matches the route, so only the principal gate stops it.
+func TestVector8_ForgedOrgNoPrincipalDenied(t *testing.T) {
+	app, _ := newApp(t, baseCfg(t, masterKeyB64(t)))
+
+	req := httptest.NewRequest("GET", "/v1/kms/orgs/victim/secrets", nil)
+	req.Header.Set("X-Org-Id", "victim") // forged; EQUALS the route :org
+	// deliberately NO X-User-Id / X-User-IsAdmin — the anonymous-forge signature.
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("forged request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 403 {
+		t.Fatalf("forged X-Org-Id==:org with no principal = %d, want 403 (cross-tenant secret read)", resp.StatusCode)
+	}
+	t.Logf("forged X-Org-Id matching :org denied (403) — principal gate holds")
 }

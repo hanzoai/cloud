@@ -35,6 +35,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
@@ -144,5 +145,37 @@ func TestHTTPValidation(t *testing.T) {
 	// opportunity referencing a missing company → 422.
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/opportunities", "o", map[string]any{"name": "D", "companyId": "comp_ghost"}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("opp bad ref want 422, got %d", code)
+	}
+}
+
+// TestRed_NoPrincipalForgedOrgRefused is the F4 guard for the cross-tenant break
+// RED found live: an off-gateway caller forges X-Org-Id with NO validated
+// principal (no X-User-Id — the state the identity middleware leaves on the
+// bearer-less path) and MUST be refused 403 on every CRM data route, never served
+// another tenant's PII. This asserts ORG AUTHENTICITY, not WHERE org=? column
+// scoping: the forged org is well-formed and matches a REAL seeded tenant, yet the
+// request is refused before any store access.
+func TestRed_NoPrincipalForgedOrgRefused(t *testing.T) {
+	app := mountApp(t)
+
+	// Seed a real tenant's PII through the legitimate (validated) path.
+	if code, _ := do(t, app, http.MethodPost, "/v1/crm/companies", "victim",
+		map[string]any{"name": "VictimCo", "domainName": "victim.example"}); code != http.StatusCreated {
+		t.Fatalf("seed create want 201, got %d", code)
+	}
+
+	// Every CRM collection, forged as "victim" with NO X-User-Id → 403.
+	for _, p := range []string{"/v1/crm/companies", "/v1/crm/contacts", "/v1/crm/opportunities", "/v1/crm/summary"} {
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		req.Header.Set("X-Org-Id", "victim") // forged; equals the seeded tenant's org
+		// deliberately NO X-User-Id — the anonymous-forge signature.
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("forged GET %s: %v", p, err)
+		}
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("forged GET %s want 403 (no validated principal), got %d", p, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
 	}
 }
