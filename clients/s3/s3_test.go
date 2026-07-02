@@ -45,15 +45,15 @@ import (
 func newApp(t *testing.T, creds bool) *zip.App {
 	t.Helper()
 	// Clear any ambient S3 env; set creds only when requested.
-	for _, k := range []string{"CLOUD_S3_ADMIN_ACCESS_KEY", "CLOUD_S3_ADMIN_SECRET_KEY", "CLOUD_S3_ADMIN_ENDPOINT", "CLOUD_S3_PUBLIC_ENDPOINT"} {
+	for _, k := range []string{"S3_ADMIN_ACCESS_KEY", "S3_ADMIN_SECRET_KEY", "S3_ADMIN_ENDPOINT", "S3_PUBLIC_ENDPOINT"} {
 		t.Setenv(k, "")
 	}
 	if creds {
-		t.Setenv("CLOUD_S3_ADMIN_ACCESS_KEY", "AKIATEST")
-		t.Setenv("CLOUD_S3_ADMIN_SECRET_KEY", "secrettest")
+		t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
+		t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
 		// Point the internal endpoint at an unroutable host so any accidental live
 		// call fails fast (the gates we assert run before it anyway).
-		t.Setenv("CLOUD_S3_ADMIN_ENDPOINT", "127.0.0.1:1")
+		t.Setenv("S3_ADMIN_ENDPOINT", "127.0.0.1:1")
 	}
 	cfg := &cloud.Config{
 		Brand:     "hanzo",
