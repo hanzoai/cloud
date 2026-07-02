@@ -11,18 +11,22 @@ import (
 	"time"
 )
 
-// TestComputeFinance_Math is the PURE derivation proof: given a fixed DO cost
-// view and commerce revenue view, gross margin, margin %, runway, and
-// profitability are exactly the arithmetic the dashboard promises — no I/O.
+// TestComputeFinance_Math is the PURE derivation proof: given a fixed multi-vendor
+// COGS view and commerce revenue view, gross margin, margin %, runway, and
+// profitability are exactly the arithmetic the dashboard promises — no I/O. The
+// margin cost is the COGS total (all vendors); runway is the DO-credit projection.
 func TestComputeFinance_Math(t *testing.T) {
-	// Cost: $40k credit, $30k of it already burned this month over 30 elapsed
-	// days → $1k/day burn, $10k credit left. Revenue: $35k realized.
+	// COGS: $30k total across vendors. DO treasury: $40k credit, $10k left, burning
+	// $1k/day. Revenue: $35k realized.
 	in := financeInput{
-		do: doCost{
-			Configured:            true,
-			CreditRemainingCents:  1_000_000, // $10,000 credit remaining
-			MonthToDateSpendCents: 3_000_000, // $30,000 burned MTD
-			AvgDailyBurnCents:     100_000,   // $1,000/day
+		cost: financeCost{
+			Configured: true,
+			TotalCents: 3_000_000, // $30,000 COGS across all vendors (the margin cost)
+			DigitalOcean: doCost{
+				Configured:           true,
+				CreditRemainingCents: 1_000_000, // $10,000 promo credit remaining
+				AvgDailyBurnCents:    100_000,   // $1,000/day DO burn (runway input)
+			},
 		},
 		revenue: financeRevenue{
 			Configured:        true,
@@ -54,11 +58,14 @@ func TestComputeFinance_Math(t *testing.T) {
 // revenue → negative margin, not profitable, runway still finite.
 func TestComputeFinance_BurningFasterThanEarning(t *testing.T) {
 	in := financeInput{
-		do: doCost{
-			Configured:            true,
-			CreditRemainingCents:  2_000_000, // $20,000 left
-			MonthToDateSpendCents: 4_000_000, // $40,000 burned
-			AvgDailyBurnCents:     200_000,   // $2,000/day
+		cost: financeCost{
+			Configured: true,
+			TotalCents: 4_000_000, // $40,000 COGS (the margin cost)
+			DigitalOcean: doCost{
+				Configured:           true,
+				CreditRemainingCents: 2_000_000, // $20,000 left
+				AvgDailyBurnCents:    200_000,   // $2,000/day
+			},
 		},
 		revenue: financeRevenue{Configured: true, TotalRevenueCents: 1_000_000}, // $10,000
 	}
@@ -80,7 +87,7 @@ func TestComputeFinance_BurningFasterThanEarning(t *testing.T) {
 // margin % is 0 when revenue is 0.
 func TestComputeFinance_HonestUnconfigured(t *testing.T) {
 	in := financeInput{
-		do:      doCost{Configured: false}, // DO_API_TOKEN unset
+		cost:    financeCost{Configured: false, DigitalOcean: doCost{Configured: false}}, // commerce + DO both off
 		revenue: financeRevenue{Configured: false},
 	}
 	got := computeFinance(in)
@@ -107,7 +114,7 @@ func TestComputeFinance_HonestUnconfigured(t *testing.T) {
 // configured but burn is zero (no division by zero, no fabricated infinity).
 func TestComputeFinance_ZeroBurnNullRunway(t *testing.T) {
 	in := financeInput{
-		do:      doCost{Configured: true, CreditRemainingCents: 4_000_000, AvgDailyBurnCents: 0},
+		cost:    financeCost{Configured: true, TotalCents: 0, DigitalOcean: doCost{Configured: true, CreditRemainingCents: 4_000_000, AvgDailyBurnCents: 0}},
 		revenue: financeRevenue{Configured: true, TotalRevenueCents: 100_000},
 	}
 	got := computeFinance(in)
@@ -219,7 +226,23 @@ func TestFinance_RealAggregation(t *testing.T) {
 	}
 	d := env.Data
 
-	// ── DO cost: credit = -account_balance = $10,000; spend = MTD usage $3,000.
+	// ── COGS: commerce /v1/costs — DO compute $3,000 + OpenAI $500 = $3,500 total,
+	// the multi-vendor breakdown that is now the margin cost (not the DO MTD spend).
+	if !d.Cost.Configured {
+		t.Fatal("commerce COGS must be configured in this test")
+	}
+	if d.Cost.TotalCents != 350_000 {
+		t.Errorf("cost.totalCents = %d, want 350000 ($3,500 multi-vendor COGS)", d.Cost.TotalCents)
+	}
+	if len(d.Cost.Vendors) != 2 {
+		t.Fatalf("cost.vendors must carry 2 lines (DO + OpenAI), got %d", len(d.Cost.Vendors))
+	}
+	if d.Cost.Vendors[0].Vendor == "" || d.Cost.Vendors[0].AmountCents == 0 {
+		t.Errorf("vendor line must carry a vendor + amount, got %+v", d.Cost.Vendors[0])
+	}
+
+	// ── DO treasury: credit = -account_balance = $10,000; MTD usage $3,000 (runway
+	// input, NOT the margin cost); burn-down history preserved.
 	if !d.Cost.DigitalOcean.Configured {
 		t.Fatal("DO must be configured in this test")
 	}
@@ -247,12 +270,12 @@ func TestFinance_RealAggregation(t *testing.T) {
 		t.Errorf("MRR = %d, want 10000 (2 orgs × $50/mo active sub)", d.Revenue.MRRCents)
 	}
 
-	// ── Derived: margin = 30,000 - 300,000 = -270,000 (burning faster).
-	if d.Derived.GrossMarginCents != -270_000 {
-		t.Errorf("grossMargin = %d, want -270000", d.Derived.GrossMarginCents)
+	// ── Derived: margin = revenue 30,000 - COGS 350,000 = -320,000 (COGS > revenue).
+	if d.Derived.GrossMarginCents != -320_000 {
+		t.Errorf("grossMargin = %d, want -320000 (revenue 30k - COGS 350k)", d.Derived.GrossMarginCents)
 	}
 	if d.Derived.Profitable {
-		t.Error("not profitable: revenue $300 < cost $3,000")
+		t.Error("not profitable: revenue $300 < COGS $3,500")
 	}
 	// runway present because DO configured + burn > 0.
 	if d.Derived.RunwayDays == nil {
@@ -268,6 +291,9 @@ func TestFinance_RealAggregation(t *testing.T) {
 	}
 	if !src["commerce"].OK {
 		t.Errorf("commerce source must be ok: %+v", src["commerce"])
+	}
+	if !src["commerce-costs"].OK {
+		t.Errorf("commerce-costs source must be ok: %+v", src["commerce-costs"])
 	}
 }
 
@@ -294,6 +320,12 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	d := env.Data
+	// COGS still flows from commerce even with the DO treasury read off — the DO
+	// compute COGS line belongs to commerce /v1/costs, decoupled from our DO credit
+	// read, so a missing DO_API_TOKEN never blanks the margin.
+	if !d.Cost.Configured || d.Cost.TotalCents == 0 || len(d.Cost.Vendors) == 0 {
+		t.Errorf("commerce COGS must remain configured with vendors when DO treasury is off: %+v", d.Cost)
+	}
 	if d.Cost.DigitalOcean.Configured {
 		t.Error("DO must report configured:false with no token")
 	}
@@ -326,12 +358,19 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 	}
 }
 
-// newFakeCommerceFinance serves usage-rollup ($150 consumed) and subscriptions
-// (one active $50/mo sub) so the finance revenue + MRR aggregation is deterministic.
+// newFakeCommerceFinance serves the vendor-COGS god-view (/v1/costs) plus
+// usage-rollup ($150 consumed) and subscriptions (one active $50/mo sub) so the
+// finance COGS + revenue + MRR aggregation is deterministic.
 func newFakeCommerceFinance() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/costs"):
+			// The vendor-COGS god-view: DO compute $3,000 + OpenAI $500 = $3,500 total.
+			io.WriteString(w, `{"period":"2026-07","vendors":[
+				{"vendor":"digitalocean","service":"compute","amountCents":300000,"source":"actual","currency":"usd"},
+				{"vendor":"openai","service":"llm-inference","amountCents":50000,"source":"actual","currency":"usd"}
+			],"totalCents":350000,"currency":"usd"}`)
 		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
 			io.WriteString(w, `{"consumedCents":15000,"overageCents":0,"balance":{"balanceCents":0,"availableCents":0}}`)
 		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
