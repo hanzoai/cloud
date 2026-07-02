@@ -421,6 +421,35 @@ func (s *Store) ListRuns(ctx context.Context, org, agent string, limit int) ([]R
 	return out, rows.Err()
 }
 
+// RunsSince returns the org's runs across ALL agents with created_at >= since,
+// newest first, capped. It powers the org-wide surfaces: the recent-activity
+// feed (since=0 → the newest runs regardless of age) and the invocation
+// histogram (since=windowStart → every run in the window, order-independent for
+// bucketing). since<=0 means "no lower bound". Tenancy is the org column, so a
+// caller never sees another org's runs. Every row is a real recorded execution.
+func (s *Store) RunsSince(ctx context.Context, org string, since int64, limit int) ([]Run, error) {
+	if limit <= 0 || limit > 10000 {
+		limit = 200
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id,org,agent_name,status,model,input,output,error,duration_ms,created_at
+		 FROM agent_runs WHERE org=? AND created_at>=? ORDER BY created_at DESC LIMIT ?`, org, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("runs since: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Run
+	for rows.Next() {
+		var r Run
+		if err := rows.Scan(&r.ID, &r.Org, &r.AgentName, &r.Status, &r.Model, &r.Input,
+			&r.Output, &r.Error, &r.DurationMs, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // CountRuns returns how many runs an org's agent has (for the list rollup).
 func (s *Store) CountRuns(ctx context.Context, org, agent string) (int, error) {
 	var n int
