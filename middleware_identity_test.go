@@ -130,6 +130,13 @@ func TestSanitizeIdentity(t *testing.T) {
 	expiredAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, past))
 	wrongKeyAdmin := signWith(t, otherKey, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
 	wrongAudAdmin := signWith(t, key, tokenClaims("evil-app", "admin", "z@hanzo.ai", true, future))
+	// Owners whose IAM name carries whitespace — the RED CRIT-2 residual vector.
+	// The whitespace rides in the JWT `owner` claim (JSON-preserved, so it is
+	// transport-independent, unlike a header which fasthttp OWS-trims), so a
+	// fold-sibling org "acme " / "ac me" would previously collapse onto tenant
+	// "acme". The middleware must refuse to grant tenancy from it.
+	trailWSOwner := signWith(t, key, tokenClaims("hanzo-console", "acme ", "sneak@acme.io", false, future))
+	internalWSOwner := signWith(t, key, tokenClaims("hanzo-console", "ac me", "sneak@acme.io", false, future))
 
 	cases := []struct {
 		name      string
@@ -217,6 +224,32 @@ func TestSanitizeIdentity(t *testing.T) {
 			},
 			wantAdmin: false,
 			wantOrg:   "",
+		},
+		{
+			// RED CRIT-2 residual: a validated principal whose org name is a
+			// whitespace fold-sibling of a real org grants NO tenancy — it must not
+			// collapse onto tenant "acme".
+			name:      "trailing-whitespace owner grants no org (injective boundary)",
+			mutate:    bearer(trailWSOwner),
+			wantAdmin: false,
+			wantOrg:   "",
+		},
+		{
+			name:      "internal-whitespace owner grants no org (injective boundary)",
+			mutate:    bearer(internalWSOwner),
+			wantAdmin: false,
+			wantOrg:   "",
+		},
+		{
+			// A global admin cannot org-switch INTO a whitespace-bearing org (the
+			// switch target is refused); they fall back to their own admin org.
+			name: "global admin org-switch to a whitespace org is refused",
+			mutate: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+globalAdmin)
+				r.Header.Set("X-Org-Id", "ac me") // internal space survives transport
+			},
+			wantAdmin: true,
+			wantOrg:   "admin",
 		},
 		{
 			name:      "GLOBAL admin via session cookie",
