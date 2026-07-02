@@ -17,6 +17,7 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -108,6 +109,21 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 		s.log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
+	// (MED-1) Version-monotonicity gate. Concurrent builds for the SAME app whose
+	// Jobs finish OUT OF ORDER must never let an OLDER build overwrite a NEWER
+	// deployment that already went live. If a newer version is already the app's
+	// live deployment, this build is SUPERSEDED: its image built fine, but we do
+	// NOT apply its (older) CR nor move the app — record it terminally and stop.
+	superseded, err := s.buildSuperseded(ctx, d, app)
+	if err != nil {
+		s.log.Warn("reconcile: version check", "org", d.Org, "dep", d.ID, "err", err)
+		return // transient (apiserver/store hiccup) — re-check next tick
+	}
+	if superseded {
+		s.supersedeBuild(ctx, d, b)
+		return
+	}
+
 	if err := s.k8s.applyService(ctx, d.Org, proj.Slug, app, d.Image); err != nil {
 		s.failBuild(ctx, d, b, "apply Service CR: "+err.Error())
 		return
@@ -122,13 +138,56 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	if uErr := s.store.UpdateDeployment(ctx, d); uErr != nil {
 		s.log.Warn("reconcile: finalize deployment", "dep", d.ID, "err", uErr)
 	}
+	// Advance the app to live at this build's version via the ONE monotonic
+	// finalize (shared with deployImage). The atomic CAS re-checks monotonicity at
+	// write time, so a newer deploy that raced in between the gate and here is not
+	// clobbered — its live version stands and this finalize is a no-op.
 	_, tag := splitImageRef(d.Image)
-	app.Status, app.CurrentDeploy, app.ImageTag, app.Namespace, app.UpdatedAt = "live", d.ID, tag, tenantNamespace(d.Org), now
-	if uErr := s.store.UpdateApplication(ctx, app); uErr != nil {
+	advanced, uErr := s.store.FinalizeLive(ctx, d, tag, tenantNamespace(d.Org), now)
+	switch {
+	case uErr != nil:
 		s.log.Warn("reconcile: finalize application", "app", app.Slug, "err", uErr)
+	case !advanced:
+		s.log.Info("build reconciled but superseded at finalize (newer version already live)",
+			"org", d.Org, "app", app.Slug, "dep", d.ID, "version", d.Version)
+	default:
+		s.log.Info("build reconciled → deployed (git)",
+			"org", d.Org, "app", app.Slug, "ns", tenantNamespace(d.Org), "image", d.Image, "dep", d.ID)
 	}
-	s.log.Info("build reconciled → deployed (git)",
-		"org", d.Org, "app", app.Slug, "ns", tenantNamespace(d.Org), "image", d.Image, "dep", d.ID)
+}
+
+// buildSuperseded reports whether a NEWER deployment is already the app's live
+// deployment, so this (older) build must not overwrite it. The live version is
+// resolved from app.CurrentDeploy; an empty pointer, a pointer to THIS deployment,
+// or a dangling pointer is not superseded (there is nothing newer to protect).
+func (s *svc) buildSuperseded(ctx context.Context, d Deployment, app Application) (bool, error) {
+	if app.CurrentDeploy == "" || app.CurrentDeploy == d.ID {
+		return false, nil
+	}
+	live, err := s.store.GetDeployment(ctx, d.Org, d.ApplicationID, app.CurrentDeploy)
+	if errors.Is(err, errNotFound) {
+		return false, nil // dangling live pointer — don't block progress
+	}
+	if err != nil {
+		return false, err
+	}
+	return d.Version < live.Version, nil
+}
+
+// supersedeBuild records a build that succeeded but was overtaken by a newer
+// deployment already live: the image is REAL (build → succeeded), but the
+// deployment is terminal "superseded" and the app is left untouched. Honest —
+// the app view keeps showing the newer version live; this one never regressed it.
+func (s *svc) supersedeBuild(ctx context.Context, d Deployment, b Build) {
+	now := time.Now().Unix()
+	if b.ID != "" {
+		b.Status, b.UpdatedAt = "succeeded", now
+		_ = s.store.UpdateBuild(ctx, b)
+	}
+	d.Status, d.Message, d.UpdatedAt = "superseded", "a newer deployment went live before this build finished", now
+	_ = s.store.UpdateDeployment(ctx, d)
+	s.log.Info("build superseded (newer version already live)",
+		"org", d.Org, "dep", d.ID, "version", d.Version)
 }
 
 // failBuild records the honest failure across build + deployment + app. Never

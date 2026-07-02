@@ -447,6 +447,34 @@ func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
 	return nil
 }
 
+// FinalizeLive advances an application to `live` at deployment d — atomically and
+// MONOTONICALLY. It is the ONE way the platform marks an app live, shared by the
+// synchronous image deploy (deploy.go) and the async git build reconciler
+// (reconcile.go). The app is moved to this deployment ONLY when d's version is at
+// least the version of the app's currently-live deployment: the guard is a single
+// conditional UPDATE (SQLite serializes it under MaxOpenConns(1)), so an OLDER
+// version whose write races in LATE can never overwrite a NEWER one already live
+// — no read-then-write TOCTOU. Returns whether the app advanced (false ⇒ a newer
+// version is already live, i.e. this deployment was superseded, or the app row is
+// gone). Every predicate is org-scoped.
+func (s *Store) FinalizeLive(ctx context.Context, d Deployment, imageTag, namespace string, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_apps
+		    SET status='live', current_deploy=?, image_tag=?, namespace=?, updated_at=?
+		  WHERE org=? AND id=?
+		    AND NOT EXISTS (
+		          SELECT 1 FROM platform_deployments cur
+		           WHERE cur.id = platform_apps.current_deploy
+		             AND cur.application_id = platform_apps.id
+		             AND cur.version > ?)`,
+		d.ID, imageTag, namespace, now, d.Org, d.ApplicationID, d.Version)
+	if err != nil {
+		return false, fmt.Errorf("finalize live: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // DeleteApplication removes an app plus its deployments/builds, scoped to org.
 func (s *Store) DeleteApplication(ctx context.Context, org, projectID, slug string) (Application, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
