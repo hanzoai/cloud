@@ -74,7 +74,8 @@ type svc struct {
 	brand     string
 	env       string
 	domain    string
-	sitesHost string // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
+	sitesHost string   // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
+	appLock   appMutex // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 }
 
 // mounted is the active service so Shutdown can release the store.
