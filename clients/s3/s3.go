@@ -93,11 +93,24 @@ const maxListKeys = 1000
 // slug-valid name is always a legal S3 bucket name.
 var bucketNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
+// opFeeEnvPrefix is the operator knob for the per-operation object-storage fee.
+// The effective fee is cloud.ResourceFeeCents(opFeeEnvPrefix, "op"): the global
+// CLOUD_S3_FEE_CENTS override, else the $1.00 default. Set it to 0 to make S3
+// data-plane ops free (and therefore un-gated). Object storage has no live-size
+// source in this data plane, so it is billed per-OPERATION (the S3 request-price
+// model) via the ONE shared cloud.ResourceMeter (product "s3"); GB-month storage
+// footprint reuses the SAME meter with a usage-derived amount once a live-size
+// source exists — there is no second metering path.
+const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
+
 // svc holds the shared S3 admin connection. A not-Configured() admin means no
 // credentials are present; the subsystem then mounts health/config only and every
 // op fails closed 503.
 type svc struct {
 	admin s3admin.Admin
+	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
+	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
+	bill *cloud.ResourceMeter
 }
 
 // Mount wires /v1/s3/* onto app.
@@ -110,7 +123,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "s3")
 
-	s := &svc{admin: s3admin.New()}
+	s := &svc{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
 	// The guard fails each op closed with 503 (s.admin.Configured() is false), so
@@ -154,9 +167,19 @@ func init() {
 	})
 }
 
-// guard wraps a handler with the org gate + fail-closed check. A request with no
-// resolvable org is refused 403 before S3 is touched; an unconfigured admin is
-// 503. The resolved org is stashed in Locals so handlers read it once.
+// guard wraps a handler with the org gate + fail-closed check, and is the ONE
+// place the s3 data plane meters per-org spend. A request with no resolvable org
+// is refused 403 before S3 is touched; an unconfigured admin is 503. The resolved
+// org is stashed in Locals so handlers read it once.
+//
+// Billing (fail-closed, per-org, single place): every guarded data-plane op is a
+// billable object-storage operation. Before the handler runs, Gate checks the
+// caller's balance — an unfunded org (402) or, in the default fail-closed
+// posture, an unreachable commerce (503) is refused with NOTHING touched (no free
+// storage op). After the handler SUCCEEDS, Meter debits the caller's org ledger
+// (per-op fee, product "s3", async best-effort so the debit never blocks the
+// response). A handler error is surfaced and NOT billed — mirrors the edge gate
+// ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
 func (s *svc) guard(h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {
 		if !s.admin.Configured() {
@@ -167,7 +190,16 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
 		ctx.Locals(orgKey, org)
-		return h(ctx)
+
+		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
+		if err := s.bill.Gate(ctx.Context(), org, "op", fee); err != nil {
+			return cloud.DenyResource(ctx, err)
+		}
+		if err := h(ctx); err != nil {
+			return err // handler failed — surface it; do not bill failed work.
+		}
+		s.bill.Meter(org, "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
+		return nil
 	}
 }
 
