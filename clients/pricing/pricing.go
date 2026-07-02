@@ -28,11 +28,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/principal"
 	hpricing "github.com/hanzoai/pricing"
 	"github.com/zap-proto/zip"
 )
@@ -209,15 +209,27 @@ func rawDispatch(c *zip.Ctx, route string, params map[string]string) (int, json.
 	if host == nil {
 		return 0, nil, fmt.Errorf("pricing not initialised")
 	}
-	tenant := c.Org()
-	if tenant == "" {
-		tenant = "hanzo"
+	// Public catalog: only a VALIDATED principal selects its org overlay; an
+	// anonymous or client-forged X-Org-Id falls back to the public "hanzo" default.
+	tenant := "hanzo"
+	if org, ok := principal.Tenant(c); ok {
+		tenant = org
 	}
 	resp, err := host.Dispatch(c.Context(), gojahost.Request{Route: route, Params: params, Tenant: tenant})
 	if err != nil {
 		return 0, nil, err
 	}
 	return resp.Status, resp.Body, nil
+}
+
+// trustedOrg is the caller's org for catalog VISIBILITY gating, honored only for
+// a VALIDATED principal; an anonymous or client-forged X-Org-Id yields "" (the
+// public, non-org view) so it cannot peek another org's enablement overlay.
+func trustedOrg(c *zip.Ctx) string {
+	if org, ok := principal.Tenant(c); ok {
+		return org
+	}
+	return ""
 }
 
 // dispatch writes a goja route's output verbatim — the ungated pass-through for
@@ -255,7 +267,7 @@ func gatedModelList(route string) zip.Handler {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			return passthrough(c, status, body) // unrecognised shape: never corrupt it.
 		}
-		gated, err := cat.Models(c.Context(), payload.Models, strings.TrimSpace(c.Org()), c.IsAdmin())
+		gated, err := cat.Models(c.Context(), payload.Models, trustedOrg(c), c.IsAdmin())
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
 		}
@@ -284,7 +296,7 @@ func gatedModel(c *zip.Ctx) error {
 	if err := json.Unmarshal(body, &m); err != nil {
 		return passthrough(c, status, body)
 	}
-	gated, err := cat.Models(c.Context(), []Model{m}, strings.TrimSpace(c.Org()), c.IsAdmin())
+	gated, err := cat.Models(c.Context(), []Model{m}, trustedOrg(c), c.IsAdmin())
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
 	}
@@ -317,7 +329,7 @@ func gatedProviders(c *zip.Ctx) error {
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"updated":   payload.Updated,
-		"providers": VisibleProviders(payload.Providers, snap, strings.TrimSpace(c.Org()), c.IsAdmin()),
+		"providers": VisibleProviders(payload.Providers, snap, trustedOrg(c), c.IsAdmin()),
 	})
 }
 
@@ -342,7 +354,7 @@ func gatedSummary(c *zip.Ctx) error {
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
 		}
-		payload["providers"] = VisibleProviders(provs, snap, strings.TrimSpace(c.Org()), c.IsAdmin())
+		payload["providers"] = VisibleProviders(provs, snap, trustedOrg(c), c.IsAdmin())
 	}
 	return c.JSON(http.StatusOK, payload)
 }
@@ -366,7 +378,7 @@ func gatedRoot(c *zip.Ctx) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": "catalog gate failed"})
 	}
-	GateRootData(data, snap, strings.TrimSpace(c.Org()), c.IsAdmin())
+	GateRootData(data, snap, trustedOrg(c), c.IsAdmin())
 	return c.JSON(http.StatusOK, data)
 }
 

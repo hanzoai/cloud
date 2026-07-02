@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -472,13 +473,7 @@ func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 // never lowercased/stripped/truncated. Normalizing would collapse distinct
 // owners into one bucket — a cross-tenant break (Red HIGH-1). Reject only empty
 // or pathologically long. No magic "admin" bucket.
-func tenant(c *zip.Ctx) (string, bool) {
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
-}
+func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
 // sanitizeNs normalizes the function NAMESPACE — a cosmetic grouping/display
 // field the caller supplies, NOT the tenant isolation key (that is the org).
