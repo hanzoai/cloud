@@ -338,6 +338,37 @@ func TestScoreConfigRoundTrip(t *testing.T) {
 	}
 }
 
+// TestRunConcurrencyCap pins the per-org run limiter (Red MED): an org can hold
+// at most maxConcurrentRunsPerOrg slots; the next acquire is refused (→ 429 at the
+// HTTP layer); releasing frees a slot. Uses a dedicated org so it can't be
+// perturbed by other tests sharing the global limiter.
+func TestRunConcurrencyCap(t *testing.T) {
+	const org = "concurrency-cap-probe"
+	acquired := 0
+	defer func() {
+		for i := 0; i < acquired; i++ {
+			releaseRunSlot(org)
+		}
+	}()
+	for i := 0; i < maxConcurrentRunsPerOrg; i++ {
+		if !acquireRunSlot(org) {
+			t.Fatalf("slot %d within cap should acquire", i)
+		}
+		acquired++
+	}
+	if acquireRunSlot(org) {
+		acquired++
+		t.Fatalf("acquiring beyond the cap (%d) must be refused", maxConcurrentRunsPerOrg)
+	}
+	// Freeing one slot makes exactly one available again.
+	releaseRunSlot(org)
+	acquired--
+	if !acquireRunSlot(org) {
+		t.Fatal("after a release, a slot must be available")
+	}
+	acquired++
+}
+
 func TestRunRecordRollup(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

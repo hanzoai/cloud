@@ -57,6 +57,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -78,7 +79,55 @@ const (
 	// defaultListLimit / maxListLimit bound metastore list responses.
 	defaultListLimit = 100
 	maxListLimit     = 500
+
+	// maxConcurrentRunsPerOrg caps how many /v1/evals/runs one org may have
+	// in-flight at once (Red MED). A run drives up to maxRunItems paired LLM calls
+	// against the SHARED in-process gateway; without a cap, one org firing many
+	// concurrent 100-item runs exhausts gateway connections/goroutines and
+	// degrades prompts/agents/chat for EVERY tenant. Excess runs fail fast with
+	// 429 (never queued — queuing just moves the exhaustion).
+	maxConcurrentRunsPerOrg = 4
 )
+
+// maxRunDuration is the total wall-clock deadline for one run (Red MED). A run
+// that exceeds it is cancelled; its unfinished items are recorded as errors and
+// the partial summary is returned honestly, so a runaway run can never pin a
+// request (and a gateway slot) indefinitely. A var so tests can shrink it.
+var maxRunDuration = 10 * time.Minute
+
+// runSlots is the per-org run-concurrency limiter: one buffered channel per org,
+// capacity maxConcurrentRunsPerOrg. acquireRunSlot is non-blocking (fail-fast to
+// 429); the map is keyed by the validated org, so its cardinality is bounded by
+// real tenants, not attacker-chosen values.
+var (
+	runSlotsMu sync.Mutex
+	runSlots   = map[string]chan struct{}{}
+)
+
+func acquireRunSlot(org string) bool {
+	runSlotsMu.Lock()
+	sem := runSlots[org]
+	if sem == nil {
+		sem = make(chan struct{}, maxConcurrentRunsPerOrg)
+		runSlots[org] = sem
+	}
+	runSlotsMu.Unlock()
+	select {
+	case sem <- struct{}{}:
+		return true
+	default:
+		return false // org is at its concurrent-run cap
+	}
+}
+
+func releaseRunSlot(org string) {
+	runSlotsMu.Lock()
+	sem := runSlots[org]
+	runSlotsMu.Unlock()
+	if sem != nil {
+		<-sem
+	}
+}
 
 // nameRE constrains a dataset / evaluator / score-config / score name: it is BOTH
 // the org-unique handle AND a URL path segment (/v1/evals/datasets/:name), so
@@ -371,11 +420,11 @@ func (s *service) getDataset(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	items, err := s.store.ListItems(c.Context(), org, name, false, maxListLimit)
+	n, err := s.store.CountItems(c.Context(), org, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "items: %v", err)
 	}
-	return c.JSON(http.StatusOK, toDatasetView(d, len(items)))
+	return c.JSON(http.StatusOK, toDatasetView(d, n))
 }
 
 func (s *service) deleteDataset(c *zip.Ctx) error {
@@ -872,10 +921,28 @@ func (s *service) runHandler(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusUnprocessableEntity, "evals/runs: dataset %q has no active items", rr.Dataset)
 	}
 
+	// Bound the run (Red MED): fail fast if this org is already at its concurrent-
+	// run cap (429, never queued), and cap the whole run's wall-clock so a runaway
+	// can't pin the request + a shared-gateway slot. The slot is released and the
+	// context cancelled on every return path.
+	if !acquireRunSlot(org) {
+		return zip.Errorf(http.StatusTooManyRequests,
+			"evals/runs: too many concurrent runs for this org (max %d); retry when one finishes", maxConcurrentRunsPerOrg)
+	}
+	defer releaseRunSlot(org)
+	runCtx, cancel := context.WithTimeout(c.Context(), maxRunDuration)
+	defer cancel()
+
 	summary := runSummary{Dataset: rr.Dataset, Model: rr.Model, JudgeModel: judge.Model, RunName: runName, Items: len(items)}
 	var sum float64
 	for _, it := range items {
-		res := s.runItem(c.Context(), org, authz, runName, rr.Model, judge, it)
+		// Stop early once the deadline is hit; remaining items are unrun, and the
+		// partial summary is returned honestly (Scored counts only real successes).
+		if runCtx.Err() != nil {
+			summary.Results = append(summary.Results, itemResult{ItemID: it.ID, Error: "run: " + runCtx.Err().Error()})
+			continue
+		}
+		res := s.runItem(runCtx, org, authz, runName, rr.Model, judge, it)
 		summary.Results = append(summary.Results, res)
 		if res.Error == "" {
 			sum += res.Score
