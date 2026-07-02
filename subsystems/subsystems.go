@@ -93,6 +93,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
 	_ "github.com/hanzoai/cloud/clients/crm"       // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
+	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
 
