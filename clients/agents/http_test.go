@@ -2,6 +2,7 @@ package agents
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountApp mounts the agents surface with a deterministic fake AI so run() is
@@ -23,6 +24,10 @@ func mountApp(t *testing.T, ai types.AIClient) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
+	// Mount starts the scheduler goroutine when AI is non-nil and sets the global
+	// `mounted` singleton; tear both down at test end so the loop goroutine can't
+	// leak and clobber a later test's singleton (Red re-review LOW).
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
 }
 
@@ -39,7 +44,11 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		// A validated principal: the run path (money-moving) requires a non-empty
+		// c.User() (X-User-Id). SanitizeIdentity sets this only from a verified
+		// JWT; the test app has no sanitizer, so we inject it directly, exactly as
+		// the gateway would. Empty org => no user (the anonymous 403 path).
+		req.Header.Set("X-User-Id", "u-"+org)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {

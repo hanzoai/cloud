@@ -8,7 +8,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/coder/websocket v1.8.12
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
-	github.com/hanzoai/commerce/metering v0.1.0
+	github.com/hanzoai/commerce/metering v0.1.2
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.19.8-0.20260622075908-c2fd4872545b
 	github.com/hanzoai/kms/sdk/go v1.1.1
