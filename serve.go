@@ -180,6 +180,14 @@ func Serve(enable []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = healthSrv.Shutdown(shutdownCtx)
+	// Tear down subsystems that own process-lifetime resources (background
+	// workers, DB handles) BEFORE the HTTP server closes, within the deadline —
+	// e.g. the agents scheduler drains its in-flight runs (so a scheduled run's
+	// InsertRun + debit land) and closes its store. Best-effort: a teardown error
+	// is logged, not fatal, so one subsystem can't strand shutdown.
+	if err := ShutdownAll(shutdownCtx, cfg); err != nil {
+		deps.Logger.Warn("subsystem shutdown", "err", err)
+	}
 	// Close the audit store last so any in-flight append has drained through the
 	// serialized writer and the SQLite file is flushed cleanly.
 	if auditRec != nil {
