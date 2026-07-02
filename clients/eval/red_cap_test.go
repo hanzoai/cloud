@@ -28,27 +28,38 @@ func TestRed_ContentCapped(t *testing.T) {
 	}
 }
 
-// TestRed_ForgedHeaderCannotCrossTenant is the cross-tenant regression guard: a
-// caller authenticated as org A cannot read org B's scores by setting
-// X-Project-Id / a second X-Org-Id — the server scopes by c.Org() only. (In the
-// live stack SanitizeIdentity mints X-Org-Id from the validated bearer and strips
-// client copies; here we prove the handler trusts ONLY that value.)
+// TestRed_ForgedHeaderCannotCrossTenant is the cross-tenant regression guard for
+// BOTH the header-scoping rule and the principal gate (Red HIGH):
+//   - a request with NO validated principal (empty X-User-Id) but a forged
+//     X-Org-Id is refused outright (403) — the restored X-Org-Id is untrusted;
+//   - a VALIDATED caller in org A who also sets X-Project-Id/X-Org-Id: victim
+//     still scopes by their own validated org and sees none of victim's data.
 func TestRed_ForgedHeaderCannotCrossTenant(t *testing.T) {
 	app, _ := mountApp(t)
 
-	// victim (org B) writes a score.
+	// victim writes a score (validated principal via the helper).
 	if code, _ := do(t, app, http.MethodPost, "/v1/evals/scores", "victim",
 		map[string]any{"name": "quality", "value": 0.99}); code != http.StatusCreated {
 		t.Fatalf("victim score: %d", code)
 	}
 
-	// attacker (org A) sets X-Project-Id: victim — must NOT see victim's score.
+	// (1) Bearer-less / opaque-key attacker: X-Org-Id forged, NO X-User-Id → 403.
 	req := newReq(http.MethodGet, "/v1/evals/scores", nil)
+	req.Header.Set("X-Org-Id", "victim")     // forged, restored on the no-principal path
+	req.Header.Set("X-Project-Id", "victim") // client sub-scope
+	if code, _ := send(t, app, req); code != http.StatusForbidden {
+		t.Fatalf("no-principal forged-org read want 403, got %d", code)
+	}
+
+	// (2) Validated attacker in their OWN org, also setting X-Project-Id: victim →
+	// scopes by the validated org (attacker), sees none of victim's scores.
+	req = newReq(http.MethodGet, "/v1/evals/scores", nil)
+	req.Header.Set("X-User-Id", "u_attacker") // validated principal
 	req.Header.Set("X-Org-Id", "attacker")
 	req.Header.Set("X-Project-Id", "victim")
 	code, body := send(t, app, req)
 	if code != http.StatusOK {
-		t.Fatalf("attacker list want 200, got %d", code)
+		t.Fatalf("validated attacker list want 200, got %d", code)
 	}
 	if strings.Contains(string(body), "0.99") || strings.Contains(string(body), "quality") {
 		t.Fatalf("cross-tenant score leak via X-Project-Id: %s", body)
@@ -90,10 +101,12 @@ func TestRed_RunNameAndJudgeNameGuarded(t *testing.T) {
 		map[string]any{"datasetName": "qa", "input": "x", "expectedOutput": "x"}); code != http.StatusCreated {
 		t.Fatalf("seed item: %d", code)
 	}
-	// A traversal-looking runName is rejected at the boundary.
+	// A traversal-looking runName is rejected at the boundary (validated principal
+	// present, so the request reaches the runName guard).
 	req := newReqJSON(http.MethodPost, "/v1/evals/runs", map[string]any{
 		"dataset": "qa", "model": "m", "runName": "../../etc/passwd",
 	})
+	req.Header.Set("X-User-Id", "u_o")
 	req.Header.Set("X-Org-Id", "o")
 	req.Header.Set("Authorization", "Bearer hk-test")
 	if code, _ := send(t, app, req); code != http.StatusBadRequest {
