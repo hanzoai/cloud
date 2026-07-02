@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
@@ -181,14 +182,39 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 	return clients.DisabledCommerce()
 }
 
+// pickAIClient resolves deps.AI — the client the agents subsystem runs chat
+// completions through. Unlike the co-resident subsystems, there is NO in-process
+// "ai" mount that fills a nil deps.AI: inference is an external gateway, so this
+// must return a concrete client, never nil. (A nil deps.AI was the live bug —
+// the default all-enabled config returned nil here and nothing ever filled it,
+// so every /v1/agents/:name/run 503'd "inference is not configured".)
+//
+// Preference order:
+//  1. Static-key HTTP gateway when a base URL AND a static key are configured —
+//     an operator override / pre-provisioned key. The key is a KMS-injected
+//     secret; only the base URL and default model are ever logged.
+//  2. M2M HTTP gateway when a base URL AND the binary's IAM identity are present
+//     (the durable Hanzo default): the client mints+refreshes a client-
+//     credentials token from IAM_CLIENT_ID/SECRET — no static key to rotate. The
+//     secret is never logged.
+//  3. ZAP RPC when an addr is configured (split-deploy of a future ai subsystem).
+//  4. Fail-closed stub otherwise — a run records an honest error, never fakes one.
 func pickAIClient(cfg *Config, log luxlog.Logger) AIClient {
-	if cfg.Enabled("ai") {
-		return nil
+	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
+		log.Info("deps.AI → HTTP gateway (static key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
+		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
+	}
+	if cfg.AIBaseURL != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" && cfg.IAMIssuer != "" {
+		tokenURL := strings.TrimRight(cfg.IAMIssuer, "/") + "/v1/iam/oauth/token"
+		log.Info("deps.AI → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
+			"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
+		return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
 	}
 	if cfg.AIZAPAddr != "" {
 		log.Info("deps.AI → ZAP RPC", "addr", cfg.AIZAPAddr)
 		return clients.AIRPCAt(cfg.AIZAPAddr)
 	}
+	log.Info("deps.AI → disabled (no CLOUD_AI_API_KEY, no IAM M2M identity, no gateway configured)")
 	return clients.DisabledAI()
 }
 
