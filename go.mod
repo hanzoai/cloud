@@ -31,8 +31,8 @@ require (
 )
 
 require (
+	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
-	github.com/hanzoai/zip v0.2.0 // indirect
 	github.com/zap-proto/http v0.2.0 // indirect
 )
 
@@ -63,7 +63,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
-	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/Machiel/slugify v1.0.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
@@ -647,14 +646,14 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.789.1-0.20260701221616-296a9e9becb4
-	github.com/hanzoai/authz v1.10.1
-	github.com/hanzoai/base v1.4.1
-	github.com/hanzoai/commerce v1.42.27
-	github.com/hanzoai/licensing v0.1.0
-	github.com/hanzoai/metrics v0.4.0
-	github.com/hanzoai/o11y v1.3.7
-	github.com/hanzoai/vfs v0.4.1
+	github.com/hanzoai/ai v1.789.1
+	github.com/hanzoai/authz v1.10.3
+	github.com/hanzoai/base v1.4.6
+	github.com/hanzoai/commerce v1.42.29
+	github.com/hanzoai/licensing v0.1.1
+	github.com/hanzoai/metrics v0.4.1
+	github.com/hanzoai/o11y v1.3.12
+	github.com/hanzoai/vfs v0.4.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
