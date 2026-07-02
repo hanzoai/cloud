@@ -45,6 +45,7 @@ type svc struct {
 	iam      *iamClient
 	commerce *commerceClient
 	health   *healthClient
+	do       *doClient
 	adminOrg string
 	// auditStore is cloud's OWN tamper-evident audit store (nil when unconfigured,
 	// in which case /v1/admin/audit falls back to the IAM get-records proxy). Serve
@@ -68,6 +69,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		iam:        newIAMClient(iamBase(deps)),
 		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		health:     newHealthClient(o11yHealthURL()),
+		do:         newDOClient(doTokenFromEnv()),
 		adminOrg:   adminOrgOf(deps),
 		auditStore: deps.Audit,
 	}
@@ -82,12 +84,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
 	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
+	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
 
 	logger.Info("admin surface mounted",
 		"prefix", "/v1/admin",
 		"iam", s.iam.configured(),
 		"commerce", s.commerce.configured(),
+		"digitalocean", s.do.configured(),
 		"adminOrg", s.adminOrg,
 	)
 	return nil
