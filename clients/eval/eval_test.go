@@ -27,8 +27,15 @@ func TestTenantIgnoresClientProjectID(t *testing.T) {
 		return c.String(http.StatusOK, org)
 	})
 
-	call := func(orgHeader, projectHeader string) string {
+	// user is the VALIDATED principal signal (X-User-Id, set only by
+	// SanitizeIdentity from a verified token). When empty, tenant() must fail
+	// closed regardless of X-Org-Id (Red HIGH: the restored X-Org-Id is untrusted
+	// without a validated principal).
+	call := func(user, orgHeader, projectHeader string) string {
 		req := httptest.NewRequest(http.MethodGet, "/echo-tenant", nil)
+		if user != "" {
+			req.Header.Set("X-User-Id", user) // in prod: minted by SanitizeIdentity from a verified token
+		}
 		if orgHeader != "" {
 			req.Header.Set("X-Org-Id", orgHeader) // in prod: minted by SanitizeIdentity
 		}
@@ -44,14 +51,22 @@ func TestTenantIgnoresClientProjectID(t *testing.T) {
 		return string(b)
 	}
 
-	if got := call("maxpower", "victim-org"); got != "maxpower" {
+	// A validated principal: forged X-Project-Id is ignored, org is authoritative.
+	if got := call("u1", "maxpower", "victim-org"); got != "maxpower" {
 		t.Fatalf("forged X-Project-Id leaked into tenant: got %q, want %q", got, "maxpower")
 	}
-	if got := call("maxpower", ""); got != "maxpower" {
+	if got := call("u1", "maxpower", ""); got != "maxpower" {
 		t.Fatalf("tenant without project: got %q, want %q", got, "maxpower")
 	}
-	if got := call("", "victim-org"); got != "" {
+	// X-Project-Id alone (no org) never becomes the tenant.
+	if got := call("u1", "", "victim-org"); got != "" {
 		t.Fatalf("X-Project-Id alone became the tenant: got %q, want empty", got)
+	}
+	// Red HIGH: NO validated principal (empty X-User-Id) — even with a full
+	// X-Org-Id — yields NO tenant. The bearer-less/opaque-key forged-org path is
+	// closed at the tenant gate.
+	if got := call("", "victim", "victim"); got != "" {
+		t.Fatalf("no-principal forged X-Org-Id became the tenant: got %q, want empty", got)
 	}
 }
 
