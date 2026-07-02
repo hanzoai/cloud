@@ -1,6 +1,13 @@
 name: release
 
-# Builds and pushes ghcr.io/hanzoai/cloud:<tag> on tag (v*) / main / dispatch.
+# Builds, SMOKE-TESTS, then pushes ghcr.io/hanzoai/cloud:<tag> on tag (v*) /
+# main / dispatch. The image is booted for real and must reach "listening"
+# BEFORE it is allowed to publish (see the smoke step) — a green go
+# build/vet/test does NOT catch a binary that PANICS at startup, and one that
+# ships crash-loops in prod (v1.786.14/.15/.16 compiled clean but died at boot
+# with "mount metrics: metrics.Mount: app is *zip.App, want *zip.App" from an
+# incomplete hanzoai/zip → zap-proto/zip migration, published green, and took
+# the deployment down). Running the binary is the only gate that catches it.
 #
 # Self-contained on the self-hosted arcd amd64 scale set — NEVER GitHub-hosted
 # runners (this org's GitHub-hosted Actions are billing-frozen: jobs fail in ~5s
@@ -60,7 +67,98 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push
+      # ── Build → SMOKE → push ─────────────────────────────────────────────────
+      # 1. Build once to a LOCAL tag (load into the daemon, do NOT push). This
+      #    warms the BuildKit builder cache — the expensive console/npm + Go
+      #    layers are computed here.
+      # 2. Boot that exact image and assert it reaches "listening" with no
+      #    startup-crash signature (the gate).
+      # 3. Re-run build with push:true and the real tags: identical context /
+      #    platform / secrets, so every layer is a cache hit from step 1 and the
+      #    step only exports + pushes the already-tested image. Nothing that
+      #    failed the smoke test can ever reach the registry.
+      - name: Build (load locally for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: cloud:smoke
+          labels: ${{ steps.meta.outputs.labels }}
+          # gh_token: BuildKit secret the Dockerfile consumes to fetch private
+          # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
+          secrets: |
+            gh_token=${{ secrets.GH_PAT }}
+
+      - name: Smoke test — the binary MUST boot to "listening" with no crash signature
+        run: |
+          set -euo pipefail
+          IMAGE=cloud:smoke
+          CID=""
+          cleanup() { [ -n "$CID" ] && docker rm -f "$CID" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          # Minimal, production-representative boot env:
+          #  • a writable ephemeral /data root — the audit store, the embedded
+          #    KMS secrets plane and every per-tenant SQLite open files under
+          #    CLOUD_DATA_DIR; an unwritable dir would fail EVERY image before
+          #    MountAll and the gate would stop discriminating good from bad; and
+          #  • a throwaway 32-byte KMS master key so the KMS plane mounts on its
+          #    normal ready path exactly as prod does (no real secret is used).
+          # The subsystem that crashed the incident (metrics, mount order 40)
+          # mounts AFTER kms (order 10), so the boot must get past kms for the
+          # gate to observe the panic — this env does exactly that.
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+          CID="$(docker run -d \
+            --tmpfs /data:rw,size=64m \
+            -e CLOUD_DATA_DIR=/data \
+            -e CLOUD_ENV=smoke \
+            -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+            "$IMAGE")"
+
+          # Poll up to 60s for boot to either finish ("listening" is logged once
+          # every subsystem has mounted and both transports are about to bind) or
+          # die (a Mount panic exits the process). A healthy boot is ~1-2s; the
+          # ceiling only guards a cold daemon.
+          listening=0
+          for _ in $(seq 1 60); do
+            logs="$(docker logs "$CID" 2>&1 || true)"
+            if printf '%s' "$logs" | grep -q '"message":"listening"'; then listening=1; break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ]; then break; fi
+            sleep 1
+          done
+
+          logs="$(docker logs "$CID" 2>&1 || true)"
+          echo "::group::cloud:smoke boot logs"
+          printf '%s\n' "$logs"
+          echo "::endgroup::"
+
+          # (1) No startup-crash signature. Catches the incident's Mount
+          #     type-assert panic AND any generic Go panic — case-insensitive so
+          #     a re-worded variant can't slip through — BEFORE a byte is pushed.
+          if printf '%s' "$logs" | grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App'; then
+            echo "SMOKE FAIL: startup-crash signature in boot logs (see above)"
+            exit 1
+          fi
+
+          # (2) Reached "listening" — proof that MountAll returned for every
+          #     enabled subsystem (a failed Mount returns before this line).
+          if [ "$listening" -ne 1 ]; then
+            echo "SMOKE FAIL: binary never reached \"listening\" (a subsystem did not mount)"
+            exit 1
+          fi
+
+          # (3) Still alive — a server that logged "listening" then exited (e.g. a
+          #     listener bind failure) is not a healthy image.
+          if [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ]; then
+            echo "SMOKE FAIL: process exited after \"listening\""
+            exit 1
+          fi
+
+          echo "SMOKE PASS: cloud:smoke booted to \"listening\" with no crash signature"
+
+      - name: Push (cache hit from the smoke build — publishes the tested image)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -68,8 +166,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # gh_token: BuildKit secret the Dockerfile consumes to fetch private
-          # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
           secrets: |
             gh_token=${{ secrets.GH_PAT }}
 
