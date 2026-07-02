@@ -194,16 +194,14 @@ func (k *k8sClient) buildImageRef(org, app, tag string) string {
 	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), provisioning.SanitizeOrg(org), app, tag)
 }
 
-// ensureNamespace creates tenant-<org> if it does not exist and ALWAYS ensures
-// the tenant's ResourceQuota + LimitRange are present (idempotent). Applying the
-// bounds on every call — not only at first create — means older tenant
-// namespaces are brought under quota too, and a deleted quota is re-created on
-// the next deploy (MED-3). The namespace is labeled with the org so cluster
-// tooling can attribute it.
-func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
-	if err := k.ready(); err != nil {
-		return err
-	}
+// ensureNamespaceExists creates tenant-<org> if it does not exist (idempotent).
+// Creating the namespace is what TRIGGERS the operator's tenant-RBAC controller to
+// project cloud-api's `cloud-api-platform` RoleBinding into it — so this is the ONE
+// precondition for tenant RBAC ever becoming ready. Pure namespace mechanism: no
+// RBAC wait, no quota. Both the synchronous image path (ensureNamespace, which then
+// BLOCKS on the RoleBinding) and the async build reconciler (ensureTenantReady,
+// which only PROBES) build on it, so there is exactly one namespace-create rule.
+func (k *k8sClient) ensureNamespaceExists(ctx context.Context, ns, org string) error {
 	_, err := k.dyn.Resource(namespacesGVR).Get(ctx, ns, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		obj := &unstructured.Unstructured{Object: map[string]any{
@@ -220,7 +218,25 @@ func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 		if _, cErr := k.dyn.Resource(namespacesGVR).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
 			return cErr
 		}
-	} else if err != nil {
+		return nil
+	}
+	return err
+}
+
+// ensureNamespace is the SYNCHRONOUS (image-source) tenant preparation: create the
+// namespace, BLOCK up to ~45s for the operator's async RoleBinding to land, then
+// ensure the tenant's ResourceQuota + LimitRange (idempotent). Applying the bounds
+// on every call — not only at first create — means older tenant namespaces are
+// brought under quota too, and a deleted quota is re-created on the next deploy
+// (MED-3). The caller is a single client deploy that must succeed without a manual
+// retry, so the bounded wait is worth it here; the async build reconciler uses the
+// NON-BLOCKING ensureTenantReady instead (its 10s tick is its retry loop, so it must
+// never park mid-reconcile and head-of-line-block other orgs).
+func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
+	if err := k.ready(); err != nil {
+		return err
+	}
+	if err := k.ensureNamespaceExists(ctx, ns, org); err != nil {
 		return err
 	}
 	// A BRAND-NEW tenant namespace is created above, but the operator's tenant-RBAC
@@ -244,6 +260,33 @@ func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 	// the OPERATOR's tenant-RBAC controller — cloud-api touches NO K8s Secret and
 	// holds no `secrets` grant. serviceCR references it by name only.
 	return nil
+}
+
+// ensureTenantReady is the NON-BLOCKING readiness gate for the async build
+// reconciler (reconcile.go). It creates the tenant namespace if absent (idempotent —
+// the trigger for the operator's RoleBinding) and does exactly ONE readiness probe.
+// It NEVER blocks on the operator's async RoleBinding the way the synchronous
+// ensureNamespace does (bounded ~45s waitForTenantRBAC): the reconciler is itself a
+// retry loop on a 10s tick, so parking in a per-deployment wait would head-of-line-
+// block EVERY other org's go-live behind one slow tenant onboarding. Instead the
+// reconciler probes once and, if not ready, leaves the deployment "building" and
+// re-drives next tick.
+//
+//   - ready=true            → the RoleBinding has landed; the caller may applyService
+//     now (its own waitForTenantRBAC resolves on the first probe, no sleep).
+//   - ready=false, err=nil  → namespace exists but RBAC is still provisioning; retry
+//     on a later tick (the namespace now exists, so the operator will project the
+//     RoleBinding before then).
+//   - err!=nil              → a real cluster error (namespace create / probe blip);
+//     the reconciler retries it as transient too, failing only past the deadline.
+func (k *k8sClient) ensureTenantReady(ctx context.Context, ns, org string) (bool, error) {
+	if err := k.ready(); err != nil {
+		return false, err
+	}
+	if err := k.ensureNamespaceExists(ctx, ns, org); err != nil {
+		return false, err
+	}
+	return k.canGetResourceQuotas(ctx, ns)
 }
 
 // ensureBoundObject create-or-updates one namespaced policy object (ResourceQuota
