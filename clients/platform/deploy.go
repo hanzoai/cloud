@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zap-proto/zip"
@@ -30,6 +31,47 @@ import (
 type deployReq struct {
 	Commit string `json:"commit"` // git commit/ref to build (git-source)
 	Tag    string `json:"tag"`    // image tag to deploy (image-source)
+}
+
+// inflightGate bounds concurrent in-flight SYNCHRONOUS image deploys PER ORG (L1).
+// The git build path is already capped in the cluster (countActiveBuilds →
+// errTooManyBuilds → 429); the image path has no build Job to count, so cloud-api
+// counts in-flight deploys itself. It exists because deployImage's applyLive may
+// park up to ~45s in waitForTenantRBAC on a cold-start / wedged operator, and
+// without a cap a single validated org could pile up that many held request
+// goroutines. Fail-closed and retryable: over-cap refuses with 429, never proceeds
+// unbounded. Process-local (per replica), which is exactly the goroutine-pile-up
+// boundary each replica needs; the map is pruned to zero entries so keys never grow
+// unbounded.
+type inflightGate struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+// acquire reserves one in-flight slot for org, or reports false when org is already
+// at max (caller must 429). Balanced by exactly one release on the success path.
+func (g *inflightGate) acquire(org string, max int) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.n == nil {
+		g.n = map[string]int{}
+	}
+	if g.n[org] >= max {
+		return false
+	}
+	g.n[org]++
+	return true
+}
+
+// release returns org's slot; pruning the key at zero keeps the map bounded.
+func (g *inflightGate) release(org string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.n[org] <= 1 {
+		delete(g.n, org)
+		return
+	}
+	g.n[org]--
 }
 
 func (s *svc) deploy(c *zip.Ctx) error {
@@ -75,6 +117,16 @@ func (s *svc) deploy(c *zip.Ctx) error {
 // deployImage applies the operator Service CR with the requested image tag and
 // lands the deployment "deploying" (the operator finishes the rollout async).
 func (s *svc) deployImage(c *zip.Ctx, org, project string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) error {
+	// (L1) Bound concurrent in-flight deploys for this org: applyLive below may park
+	// up to ~45s in waitForTenantRBAC on a cold-start / wedged operator, so a cap
+	// prevents one org piling up held request goroutines (mirrors the git build cap).
+	// Over-cap is a retryable THROTTLE, not a deploy failure — refuse with 429 BEFORE
+	// recording any attempt, since nothing was tried cluster-side.
+	if !s.deployGate.acquire(org, s.k8s.limits.maxConcurrentDeploys()) {
+		return zip.Errorf(http.StatusTooManyRequests, "too many concurrent deploys for this org; retry shortly")
+	}
+	defer s.deployGate.release(org)
+
 	tag := firstNonEmpty(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
 	image := a.ImageRepo + ":" + tag
 
