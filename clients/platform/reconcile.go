@@ -109,27 +109,27 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 		s.log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
-	// (MED-1) Version-monotonicity gate. Concurrent builds for the SAME app whose
-	// Jobs finish OUT OF ORDER must never let an OLDER build overwrite a NEWER
-	// deployment that already went live. If a newer version is already the app's
-	// live deployment, this build is SUPERSEDED: its image built fine, but we do
-	// NOT apply its (older) CR nor move the app — record it terminally and stop.
-	superseded, err := s.buildSuperseded(ctx, d, app)
-	if err != nil {
-		s.log.Warn("reconcile: version check", "org", d.Org, "dep", d.ID, "err", err)
-		return // transient (apiserver/store hiccup) — re-check next tick
-	}
+	// Build succeeded — write the operator Service CR and advance the app to live
+	// as ONE per-app-serialized, version-monotonic step (shared with deployImage).
+	// Under a per-app lock, applyLive re-checks supersession against the current
+	// live pointer, applies the (built-image) CR only if this build is NOT
+	// superseded, and finalizes live — so an OLDER build whose Job finished LATE
+	// can never leave the live Service CR image lagging the recorded live version
+	// (MED-1 monotonicity + RED LOW-1 joint ordering).
+	now := time.Now().Unix()
+	_, tag := splitImageRef(d.Image)
+	advanced, superseded, err := s.applyLive(ctx, d.Org, proj.Slug, app, d, tag, d.Image, now)
 	if superseded {
+		// A newer version is already live: this build's image is fine but its
+		// (older) CR must NOT be written — record it terminally and stop.
 		s.supersedeBuild(ctx, d, b)
 		return
 	}
-
-	if err := s.k8s.applyService(ctx, d.Org, proj.Slug, app, d.Image); err != nil {
+	if err != nil {
 		s.failBuild(ctx, d, b, "apply Service CR: "+err.Error())
 		return
 	}
 
-	now := time.Now().Unix()
 	b.Status, b.UpdatedAt = "succeeded", now
 	if uErr := s.store.UpdateBuild(ctx, b); uErr != nil {
 		s.log.Warn("reconcile: finalize build", "build", b.ID, "err", uErr)
@@ -138,21 +138,12 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	if uErr := s.store.UpdateDeployment(ctx, d); uErr != nil {
 		s.log.Warn("reconcile: finalize deployment", "dep", d.ID, "err", uErr)
 	}
-	// Advance the app to live at this build's version via the ONE monotonic
-	// finalize (shared with deployImage). The atomic CAS re-checks monotonicity at
-	// write time, so a newer deploy that raced in between the gate and here is not
-	// clobbered — its live version stands and this finalize is a no-op.
-	_, tag := splitImageRef(d.Image)
-	advanced, uErr := s.store.FinalizeLive(ctx, d, tag, tenantNamespace(d.Org), now)
-	switch {
-	case uErr != nil:
-		s.log.Warn("reconcile: finalize application", "app", app.Slug, "err", uErr)
-	case !advanced:
-		s.log.Info("build reconciled but superseded at finalize (newer version already live)",
-			"org", d.Org, "app", app.Slug, "dep", d.ID, "version", d.Version)
-	default:
+	if advanced {
 		s.log.Info("build reconciled → deployed (git)",
 			"org", d.Org, "app", app.Slug, "ns", tenantNamespace(d.Org), "image", d.Image, "dep", d.ID)
+	} else {
+		s.log.Info("build reconciled but superseded at finalize (newer version already live)",
+			"org", d.Org, "app", app.Slug, "dep", d.ID, "version", d.Version)
 	}
 }
 
