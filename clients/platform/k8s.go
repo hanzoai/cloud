@@ -19,10 +19,11 @@ package platform
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/provisioning"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -43,30 +44,40 @@ var jobsGVR = schema.GroupVersionResource{Group: "batch", Version: "v1", Resourc
 // namespacesGVR lets the deploy path ensure the tenant namespace exists.
 var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 
+// resourceQuotasGVR / limitRangesGVR let ensureNamespace bound a tenant's total
+// footprint (MED-3). Both are core/v1 namespaced objects.
+var resourceQuotasGVR = schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}
+var limitRangesGVR = schema.GroupVersionResource{Version: "v1", Resource: "limitranges"}
+
+// errTooManyBuilds is returned by launchBuildJob when the caller's org already
+// has the maximum number of concurrent build Jobs in flight (MED-3, shared-build
+// DoS). The deploy path maps it to HTTP 429.
+var errTooManyBuilds = errors.New("platform: too many concurrent builds for this org")
+
 const platformUserAgent = "hanzo-cloud-platform"
 
 // buildImagePrefix is the GHCR namespace tenant build images are pushed under.
-// Each org's images live at ghcr.io/hanzoai/tenant-<org>-<app>:<tag>; the org
-// segment is derived from the validated tenant, so images never collide or leak
-// across orgs. Overridable by the operator via CLOUD_PLATFORM_IMAGE_PREFIX.
+// Each org's images live at ghcr.io/hanzoai/tenant-<org>/<app>:<tag>; the org
+// and app are SEPARATE '/'-joined path components derived from the validated
+// tenant, so the (org,app)→image mapping is injective and images never collide
+// or leak across orgs. Overridable by the operator via CLOUD_PLATFORM_IMAGE_PREFIX.
 const defaultBuildImagePrefix = "ghcr.io/hanzoai"
 
-// orgLabelRE mirrors the DNS-1123 label rule for a namespace segment.
-var orgLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-
-// k8sClient wraps the dynamic client + the resolved build image prefix. nil dyn
-// ⇒ no cluster resolved; every cluster op fails closed with initErr.
+// k8sClient wraps the dynamic client + the resolved build image prefix + the
+// per-tenant resource policy. nil dyn ⇒ no cluster resolved; every cluster op
+// fails closed with initErr.
 type k8sClient struct {
 	dyn         dynamic.Interface
 	initErr     string
 	imagePrefix string
-	buildNS     string // namespace CI Jobs run in (default "hanzo")
+	buildNS     string         // namespace CI Jobs run in (default "hanzo")
+	limits      resourceLimits // per-tenant replica/quota/build bounds (MED-3)
 }
 
 // newK8sClient builds the dynamic client from the in-cluster service account,
 // falling back to KUBECONFIG for local/dev — identical to paassvc.newDynamic.
 func newK8sClient(imagePrefix, buildNS string) *k8sClient {
-	c := &k8sClient{imagePrefix: imagePrefix, buildNS: buildNS}
+	c := &k8sClient{imagePrefix: imagePrefix, buildNS: buildNS, limits: newResourceLimits()}
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -100,9 +111,14 @@ func (k *k8sClient) ready() error {
 
 // tenantNamespace derives the physical namespace for an org. This is the
 // cross-tenant isolation boundary: the org is the VALIDATED tenant (c.Org()),
-// so the namespace is not attacker-controlled. Sanitized to a DNS-1123 label.
+// so the namespace is not attacker-controlled. The slug is produced by the ONE
+// hardened, INJECTIVE org normalizer (provisioning.SanitizeOrg — identity on a
+// clean DNS label, else fold + a SHA-256 suffix of the raw owner), so two
+// distinct owners can NEVER collapse onto the same namespace (CRIT-2). Reusing
+// that single function keeps cloud's whole tenant→namespace/bucket/DB boundary
+// consistent, rather than forking a third, lossy slug rule.
 func tenantNamespace(org string) string {
-	org = sanitizeOrg(org)
+	org = provisioning.SanitizeOrg(org)
 	if org == "" {
 		org = "unknown"
 	}
@@ -110,8 +126,14 @@ func tenantNamespace(org string) string {
 }
 
 // buildImageRef is the deterministic per-tenant output image for a git build:
-// <prefix>/tenant-<org>-<app>:<tag>. The org segment binds the image to the
-// validated tenant so two orgs' builds can never target the same repo.
+// <prefix>/tenant-<org>/<app>:<tag>. org and app live in SEPARATE path
+// components, joined by '/', which neither an org slug (provisioning.SanitizeOrg
+// output) nor an app slug (slugRE) can contain — so the (org,app) pair is
+// UNIQUELY recoverable from the ref and the mapping is INJECTIVE (CRIT-2). The
+// previous single-component "tenant-<org>-<app>" join was ambiguous: (org=a-b,
+// app=c) and (org=a,app=b-c) both rendered "tenant-a-b-c", letting one tenant
+// push to another's image. With an injective org slug AND a '/'-separated,
+// slug-free boundary, distinct tenants always target distinct repositories.
 func (k *k8sClient) buildImageRef(org, app, tag string) string {
 	prefix := k.imagePrefix
 	if prefix == "" {
@@ -120,38 +142,68 @@ func (k *k8sClient) buildImageRef(org, app, tag string) string {
 	if tag == "" {
 		tag = "latest"
 	}
-	return fmt.Sprintf("%s/tenant-%s-%s:%s", strings.TrimRight(prefix, "/"), sanitizeOrg(org), app, tag)
+	return fmt.Sprintf("%s/tenant-%s/%s:%s", strings.TrimRight(prefix, "/"), provisioning.SanitizeOrg(org), app, tag)
 }
 
-// ensureNamespace creates tenant-<org> if it does not exist (idempotent). A
-// namespace is labeled with the org so cluster tooling can attribute it.
+// ensureNamespace creates tenant-<org> if it does not exist and ALWAYS ensures
+// the tenant's ResourceQuota + LimitRange are present (idempotent). Applying the
+// bounds on every call — not only at first create — means older tenant
+// namespaces are brought under quota too, and a deleted quota is re-created on
+// the next deploy (MED-3). The namespace is labeled with the org so cluster
+// tooling can attribute it.
 func (k *k8sClient) ensureNamespace(ctx context.Context, ns, org string) error {
 	if err := k.ready(); err != nil {
 		return err
 	}
 	_, err := k.dyn.Resource(namespacesGVR).Get(ctx, ns, metav1.GetOptions{})
-	if err == nil {
-		return nil
-	}
-	if !apierrors.IsNotFound(err) {
-		return err
-	}
-	obj := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "v1",
-		"kind":       "Namespace",
-		"metadata": map[string]any{
-			"name": ns,
-			"labels": map[string]any{
-				"hanzo.ai/org":        org,
-				"hanzo.ai/managed-by": "platform",
+	if apierrors.IsNotFound(err) {
+		obj := &unstructured.Unstructured{Object: map[string]any{
+			"apiVersion": "v1",
+			"kind":       "Namespace",
+			"metadata": map[string]any{
+				"name": ns,
+				"labels": map[string]any{
+					"hanzo.ai/org":        org,
+					"hanzo.ai/managed-by": "platform",
+				},
 			},
-		},
-	}}
-	_, err = k.dyn.Resource(namespacesGVR).Create(ctx, obj, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+		}}
+		if _, cErr := k.dyn.Resource(namespacesGVR).Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+			return cErr
+		}
+	} else if err != nil {
 		return err
+	}
+	// Bound the tenant's total footprint (idempotent create-or-update).
+	if err := k.ensureBoundObject(ctx, resourceQuotasGVR, ns, tenantQuotaName, k.limits.resourceQuota(ns)); err != nil {
+		return fmt.Errorf("ensure resourcequota: %w", err)
+	}
+	if err := k.ensureBoundObject(ctx, limitRangesGVR, ns, tenantLimitRangeName, k.limits.limitRange(ns)); err != nil {
+		return fmt.Errorf("ensure limitrange: %w", err)
 	}
 	return nil
+}
+
+// ensureBoundObject create-or-updates one namespaced policy object (ResourceQuota
+// / LimitRange) so the tenant's declared bounds always match the operator's
+// current config: it Creates when absent and merge-patches .spec when present
+// (an operator raising the limits takes effect on the next deploy). Any other
+// get error propagates.
+func (k *k8sClient) ensureBoundObject(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, desired *unstructured.Unstructured) error {
+	_, err := k.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		_, cErr := k.dyn.Resource(gvr).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
+		if cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+			return cErr
+		}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	patch, _ := json.Marshal(map[string]any{"spec": desired.Object["spec"]})
+	_, err = k.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
+	return err
 }
 
 // serviceCR renders the operator hanzo.ai/v1 Service CR for an application. The
@@ -166,6 +218,8 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 			"tag":        tag,
 			"pullPolicy": "Always",
 		},
+		// a.Replicas is already clamped to [1,maxReplicas] at the applyService
+		// boundary (and at createApp/start); max1 is the final floor guard.
 		"replicas": int64(max1(a.Replicas)),
 		"ports": []any{
 			map[string]any{"name": "http", "containerPort": int64(portOr(a.Port))},
@@ -212,6 +266,9 @@ func (k *k8sClient) applyService(ctx context.Context, org, project string, a App
 	if err := k.ensureNamespace(ctx, ns, org); err != nil {
 		return fmt.Errorf("ensure namespace %s: %w", ns, err)
 	}
+	// Final replica clamp at the write boundary (defense in depth for MED-3: even
+	// a row that somehow carried an out-of-bounds replica count is bounded here).
+	a.Replicas = k.limits.clampReplicas(a.Replicas)
 	desired := serviceCR(ns, org, project, a, image)
 	existing, err := k.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, a.Slug, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
@@ -237,6 +294,11 @@ func (k *k8sClient) applyService(ctx context.Context, org, project string, a App
 func (k *k8sClient) scaleService(ctx context.Context, org, name string, replicas int) error {
 	if err := k.ready(); err != nil {
 		return err
+	}
+	// Bound the scale target: 0 (stop) passes through; a start clamps to
+	// [1,maxReplicas] so scale-up can never exceed the per-app ceiling (MED-3).
+	if replicas > 0 {
+		replicas = k.limits.clampReplicas(replicas)
 	}
 	ns := tenantNamespace(org)
 	patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"replicas": int64(replicas)}})
@@ -289,27 +351,63 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	if err := k.ready(); err != nil {
 		return "", err
 	}
+
+	// (CRIT-1) VALIDATE every attacker-controlled build input at the single choke
+	// point that constructs the privileged Job. repo.url must be an https URL to
+	// an allowlisted git host with no shell/flag metacharacters; a non-empty
+	// dockerfile must be a safe relative path; a non-empty ref must be a safe
+	// branch/tag/commit. This fails closed for a hostile persisted app row OR a
+	// hostile deploy-body ref — the caller records the build FAILED and surfaces
+	// the reason (never a fabricated success).
+	ref := gitRef
+	if strings.TrimSpace(ref) == "" {
+		ref = firstNonEmpty(a.RepoBranch, "main")
+	}
+	cleanURL, cleanDockerfile, cleanRef, err := validateBuildInputs(a.RepoURL, a.Dockerfile, ref)
+	if err != nil {
+		return "", fmt.Errorf("invalid build input: %w", err)
+	}
+	dockerfile := cleanDockerfile
+	if dockerfile == "" {
+		dockerfile = "Dockerfile"
+	}
+
+	// (MED-3) Cap concurrent builds per org so a tenant cannot spawn unbounded
+	// privileged Jobs in the shared build namespace. Counted just-in-time from the
+	// live Jobs the org owns; refuse with errTooManyBuilds (→ HTTP 429) when at
+	// the ceiling.
+	active, err := k.countActiveBuilds(ctx, org)
+	if err != nil {
+		return "", fmt.Errorf("count active builds: %w", err)
+	}
+	if active >= k.limits.maxConcurrentBuilds() {
+		return "", errTooManyBuilds
+	}
+
 	// Deterministic Job name (arcd model): pf-build-<org>-<app>-<buildID[:12]>.
 	// Because the build ID is unique per attempt, a retry of the SAME build
 	// collides (409 AlreadyExists) rather than spawning a duplicate — the
-	// idempotency key, no monotonic counter.
-	jobName := truncate("pf-build-"+sanitizeOrg(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
-	gitURL := a.RepoURL
-	if gitURL == "" {
-		return "", fmt.Errorf("application has no git repo URL to build")
+	// idempotency key, no monotonic counter. The org slug is the INJECTIVE
+	// normalizer so two orgs' identically-named apps never share a Job name.
+	jobName := truncate("pf-build-"+provisioning.SanitizeOrg(org)+"-"+a.Slug+"-"+jobIDSuffix(buildID), 63)
+
+	// buildctl-daemonless git frontend context: https://<repo>.git#<ref>.
+	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
+
+	// (CRIT-1) Emit buildctl as EXEC-FORM argv — NEVER a `sh -c` string. Each
+	// validated value is a single argv element handed to execve, so no shell ever
+	// parses it: a ';', '|', or '#' in an input can neither chain a command nor
+	// smuggle a flag. The output image ref is FORCED server-side (the `image`
+	// param, computed by buildImageRef from the validated tenant) and appears as
+	// its own fixed argv element, so a client can never override --output/--opt to
+	// push to another tenant's repo.
+	command := []any{
+		"buildctl-daemonless.sh", "build",
+		"--frontend=dockerfile.v0",
+		"--opt", "context=" + buildCtx,
+		"--opt", "filename=" + dockerfile,
+		"--output", "type=image,name=" + image + ",push=true",
 	}
-	ref := gitRef
-	if ref == "" {
-		ref = firstNonEmpty(a.RepoBranch, "main")
-	}
-	dockerfile := firstNonEmpty(a.Dockerfile, "Dockerfile")
-	// buildctl-daemonless git frontend context: https://<repo>#<ref>.
-	buildCtx := strings.TrimSuffix(gitURL, ".git") + ".git#" + ref
-	cmd := fmt.Sprintf(
-		"buildctl-daemonless.sh build --frontend=dockerfile.v0 "+
-			"--opt context=%s --opt filename=%s "+
-			"--output type=image,name=%s,push=true",
-		buildCtx, dockerfile, image)
 
 	job := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "batch/v1",
@@ -321,6 +419,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 				"hanzo.ai/org":         org,
 				"hanzo.ai/managed-by":  "platform",
 				"hanzo.ai/application": a.Slug,
+				"hanzo.ai/build":       "true",
 			},
 		},
 		"spec": map[string]any{
@@ -328,15 +427,15 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 			"ttlSecondsAfterFinished": int64(3600),
 			"template": map[string]any{
 				"spec": map[string]any{
-					"restartPolicy":      "Never",
-					"nodeSelector":       map[string]any{"runner-pool": "32g"},
-					"tolerations":        []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
-					"imagePullSecrets":   []any{map[string]any{"name": "kaniko-ghcr"}},
+					"restartPolicy":                "Never",
+					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
+					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
+					"imagePullSecrets":             []any{map[string]any{"name": "kaniko-ghcr"}},
 					"automountServiceAccountToken": false,
 					"containers": []any{map[string]any{
-						"name":    "buildkit",
-						"image":   "moby/buildkit:v0.16.0",
-						"command": []any{"sh", "-c", cmd},
+						"name":            "buildkit",
+						"image":           "moby/buildkit:v0.16.0",
+						"command":         command,
 						"securityContext": map[string]any{"privileged": true},
 						"env": []any{
 							map[string]any{"name": "DOCKER_CONFIG", "value": "/ghcr"},
@@ -359,25 +458,67 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	return jobName, nil
 }
 
-// ── pure helpers ─────────────────────────────────────────────────────────────
+// countActiveBuilds returns how many build Jobs the org currently has that are
+// NOT finished (no succeeded/failed completion). Jobs are labeled
+// hanzo.ai/org=<org> + hanzo.ai/build=true in the shared build namespace; a
+// server-side label selector narrows the list and each candidate's status is
+// re-checked client-side so a completed-but-not-yet-TTL'd Job does not count.
+func (k *k8sClient) countActiveBuilds(ctx context.Context, org string) (int, error) {
+	sel := "hanzo.ai/build=true,hanzo.ai/org=" + org
+	list, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).List(ctx, metav1.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for i := range list.Items {
+		// Client-side re-check of BOTH labels (defensive) and completion status.
+		lbls, _, _ := unstructured.NestedStringMap(list.Items[i].Object, "metadata", "labels")
+		if lbls["hanzo.ai/build"] != "true" || lbls["hanzo.ai/org"] != org {
+			continue
+		}
+		if jobFinished(&list.Items[i]) {
+			continue
+		}
+		n++
+	}
+	return n, nil
+}
 
-func sanitizeOrg(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
+// jobFinished reports whether a batch/v1 Job has completed (succeeded or failed),
+// so it no longer counts toward the per-org concurrent-build cap.
+func jobFinished(job *unstructured.Unstructured) bool {
+	if succeeded, ok := nestedInt(mustStatus(job), "succeeded"); ok && succeeded > 0 {
+		return true
+	}
+	if failed, ok := nestedInt(mustStatus(job), "failed"); ok && failed > 0 {
+		return true
+	}
+	conds, _, _ := unstructured.NestedSlice(job.Object, "status", "conditions")
+	for _, c := range conds {
+		cm, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		t, _ := cm["type"].(string)
+		st, _ := cm["status"].(string)
+		if (t == "Complete" || t == "Failed") && st == "True" {
+			return true
 		}
 	}
-	out := strings.Trim(b.String(), "-")
-	if len(out) > 48 {
-		out = strings.Trim(out[:48], "-")
-	}
-	return out
+	return false
 }
+
+// mustStatus returns the Job's status map (or nil), a small helper for jobFinished.
+func mustStatus(job *unstructured.Unstructured) map[string]any {
+	s, _, _ := unstructured.NestedMap(job.Object, "status")
+	return s
+}
+
+// ── pure helpers ─────────────────────────────────────────────────────────────
+//
+// The org→slug normalizer is NOT here: cloud has exactly ONE, the injective
+// provisioning.SanitizeOrg (see tenantNamespace / buildImageRef). A second,
+// lossy copy previously lived here and was the CRIT-2 collision — deleted.
 
 func splitImageRef(ref string) (repo, tag string) {
 	if at := strings.LastIndex(ref, "@"); at >= 0 {
