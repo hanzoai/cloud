@@ -30,7 +30,7 @@ const (
 
 // blobStore writes a project's built static files into S3 under a deterministic
 // prefix and serves them publicly. It reuses the SAME shared admin credentials
-// the provisioning control plane uses (CLOUD_S3_ADMIN_*), so there is one S3
+// the provisioning control plane uses (S3_ADMIN_*), so there is one S3
 // access path for the whole cloud binary.
 type blobStore struct {
 	endpoint  string
@@ -45,11 +45,11 @@ type blobStore struct {
 
 func openBlobStore() *blobStore {
 	return &blobStore{
-		endpoint:  env("CLOUD_S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
-		ak:        os.Getenv("CLOUD_S3_ADMIN_ACCESS_KEY"),
-		sk:        os.Getenv("CLOUD_S3_ADMIN_SECRET_KEY"),
-		secure:    boolEnv("CLOUD_S3_SECURE", false),
-		region:    env("CLOUD_S3_REGION", "us-east-1"),
+		endpoint:  env("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
+		ak:        os.Getenv("S3_ADMIN_ACCESS_KEY"),
+		sk:        os.Getenv("S3_ADMIN_SECRET_KEY"),
+		secure:    boolEnv("S3_SECURE", false),
+		region:    env("S3_REGION", "us-east-1"),
 		bucket:    env("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
 		publicURL: strings.TrimRight(env("CLOUD_PROJECTS_PUBLIC_URL", "https://s3.hanzo.ai"), "/"),
 		sitesURL:  strings.TrimRight(os.Getenv("CLOUD_PROJECTS_SITES_URL"), "/"),
