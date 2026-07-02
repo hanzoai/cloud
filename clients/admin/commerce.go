@@ -150,6 +150,53 @@ func monthlyNormalizedCents(priceCents int64, interval string) int64 {
 	}
 }
 
+// vendorCost mirrors commerce's api/costs.VendorCost — one line of what WE pay a
+// vendor for a service in a period (COGS, USD cents). Decoded verbatim from
+// GET /v1/costs so the finance board renders the per-vendor breakdown without
+// re-deriving any cost cloud-side.
+type vendorCost struct {
+	Vendor      string `json:"vendor"`
+	Service     string `json:"service"`
+	AmountCents int64  `json:"amountCents"`
+	Source      string `json:"source"` // "actual" | "estimated"
+	Note        string `json:"note,omitempty"`
+}
+
+// costReport is the GET /v1/costs response: every vendor COGS line for a period
+// plus the total. TotalCents is the platform's whole COGS (DigitalOcean compute +
+// the LLM providers we resell) — the single figure the finance margin math folds.
+type costReport struct {
+	Period     string       `json:"period"`
+	Vendors    []vendorCost `json:"vendors"`
+	TotalCents int64        `json:"totalCents"`
+	Currency   string       `json:"currency"`
+}
+
+// costs reads commerce's vendor-COGS god-view (GET /v1/costs) for a period — the
+// SINGLE source of truth for what we pay every vendor. It authenticates with the
+// admin S2S service token (COMMERCE_SERVICE_TOKEN, no IAM user identity), which
+// commerce's requireCostsAdmin admits on its M2M path (Admin bit + empty Subject).
+// Returns a zero report (not an error) when commerce is unconfigured so a partial
+// deploy degrades to honest zeros rather than a 5xx.
+func (c *commerceClient) costs(ctx context.Context, org, period string) (costReport, error) {
+	var out costReport
+	if !c.configured() {
+		return out, nil
+	}
+	q := url.Values{}
+	if period != "" {
+		q.Set("period", period)
+	}
+	body, err := c.get(ctx, "/v1/costs", q, org)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return out, fmt.Errorf("commerce costs decode: %w", err)
+	}
+	return out, nil
+}
+
 // get performs one admin-authenticated commerce GET and returns the raw body.
 func (c *commerceClient) get(ctx context.Context, path string, q url.Values, org string) ([]byte, error) {
 	u := c.base + path
