@@ -34,10 +34,15 @@ import (
 	"sync"
 	"time"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
-	// graph (see clients/pricing, clients/provisioning). Blank import registers
-	// the "sqlite" driver name.
-	_ "modernc.org/sqlite"
+	// hanzoai/sqlite is the org-canonical dual-backend "sqlite" driver: it
+	// registers the "sqlite" database/sql name ONCE under BOTH build configs —
+	// CGO (prod) => SQLCipher (encrypted at rest), !CGO (dev/CI) => pure-Go
+	// modernc. Importing modernc.org/sqlite DIRECTLY here double-registers the
+	// "sqlite" driver in any binary that ALSO links the CGO/SQLCipher backend
+	// (e.g. Hanzo IAM), panicking at init ("sql: Register called twice for
+	// driver sqlite"). Blank-import the canonical driver so there is exactly ONE
+	// "sqlite" registration everywhere. sql.Open("sqlite", …) is unchanged.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // Mirror is the optional OLAP projection sink (the datastore/ClickHouse). It is
