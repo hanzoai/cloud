@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/zip"
+	"github.com/zap-proto/zip"
 )
 
 // auditRow is one record in the operator's audit table (AuditRow). The JSON tags

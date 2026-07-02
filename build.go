@@ -35,7 +35,7 @@ import (
 // JSON does not appear in any of these paths. Inter-subsystem calls
 // are ZAP-typed Go values either via direct method dispatch (mode 1)
 // or via ZAP RPC over the wire (mode 2). JSON happens only at the
-// gateway/ingress edge, through the hanzoai/zip jsonenc helper.
+// gateway/ingress edge, through the zip jsonenc helper.
 //
 // Payments and Vault are special: they are NEVER in-process per
 // HIP-0106 solo-vault CDE. Their clients always resolve via
