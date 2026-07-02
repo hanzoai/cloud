@@ -85,6 +85,17 @@ import (
 	// Global-admin only; the user-facing view lives in console2.
 	_ "github.com/hanzoai/cloud/clients/paassvc" // order 128 — /v1/paas/*
 
+	// Platform (PaaS) control plane — PER-ORG, user-facing: the native Go port of
+	// the standalone Dokploy (platform.hanzo.ai) tRPC backend. Users create
+	// projects + applications, build them (arcd BuildKit) and deploy them
+	// (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).
+	// Complements paassvc (admin fleet board) and projectsvc (static sites): this
+	// is the container-app PaaS. Every route is org-scoped by the validated
+	// X-Org-Id and the deploy namespace is DERIVED from it (tenant-<org>), never
+	// taken from the request — the cross-tenant isolation boundary. Order 124
+	// binds /v1/platform/* before projectsvc (125) and the AI catch-all (150).
+	_ "github.com/hanzoai/cloud/clients/platform" // order 124 — /v1/platform/*
+
 	// Product control planes: per-org, Base/SQLite-backed application surfaces
 	// mounted natively in the cloud binary (the "all products in the cloud
 	// binary" thesis). Each is org-scoped by the gateway-minted X-Org-Id.
