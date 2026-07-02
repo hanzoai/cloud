@@ -89,18 +89,17 @@ func (s *svc) deployImage(c *zip.Ctx, org, project string, a Application, depID 
 	if clusterErr != nil {
 		return s.failDeployment(c, &d, a, http.StatusServiceUnavailable, "cluster unavailable: "+clusterErr.Error())
 	}
-	if err := s.k8s.applyService(c.Context(), org, project, a, image); err != nil {
+
+	// Write the CR and advance the app to live as ONE per-app-serialized,
+	// version-monotonic step (shared with the git build reconciler): the CR write
+	// is jointly ordered with the live finalize under a per-app lock so two
+	// concurrent deploys can never leave the live Service CR image lagging the
+	// recorded live version (RED LOW-1). The operator reconciles the rollout.
+	advanced, superseded, err := s.applyLive(c.Context(), org, project, a, d, tag, image, time.Now().Unix())
+	if err != nil {
 		return s.failDeployment(c, &d, a, deployErrStatus(err), "apply Service CR: "+err.Error())
 	}
-
-	// Success: the CR is written; the operator reconciles the rollout. Advance the
-	// app to live via the ONE monotonic finalize (shared with the git build
-	// reconciler) so two concurrent deploys can never regress the live version.
-	advanced, err := s.store.FinalizeLive(c.Context(), d, tag, tenantNamespace(org), time.Now().Unix())
-	switch {
-	case err != nil:
-		s.log.Warn("finalize app failed (continuing)", "app", a.Slug, "err", err)
-	case !advanced:
+	if superseded || !advanced {
 		s.log.Info("deploy superseded by a newer concurrent deploy (app already at a newer version)",
 			"org", org, "app", a.Slug, "version", version)
 	}
