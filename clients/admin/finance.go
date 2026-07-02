@@ -15,6 +15,12 @@ import (
 // shows the honest not-configured state rather than a fabricated read.
 var errUnconfigured = errors.New("not configured")
 
+// errPartialRevenue marks a revenue read that succeeded at the org-list level but
+// had one or more per-org failures — the fleet total is real but PARTIAL. srcOf
+// reports it as a not-ok source so the console shows a degraded state rather than
+// presenting an under-count as authoritative.
+var errPartialRevenue = errors.New("partial: one or more org revenue reads failed")
+
 // ── /v1/admin/finance — SaaS business/finance dashboard (FinanceData) ─────────
 //
 // The profitability panel the Hanzo Admin Console renders on admin.hanzo.ai: what
@@ -178,7 +184,7 @@ func (s *svc) finance(c *zip.Ctx) error {
 	// the margin cost. Honest not-configured when commerce is unreachable.
 	cost := financeCost{Period: period}
 	if s.commerce.configured() {
-		report, err := s.commerce.costs(ctx, s.adminOrg, period)
+		report, err := s.commerce.costs(ctx, period)
 		if err != nil {
 			cost.Error = err.Error()
 			sources = append(sources, srcOf("commerce-costs", err, 0, now))
@@ -234,31 +240,46 @@ func (s *svc) finance(c *zip.Ctx) error {
 	cost.DigitalOcean = do
 
 	// ── Revenue: commerce (fleet-wide) ────────────────────────────────────
-	rev := financeRevenue{Configured: s.commerce.configured()}
-	if s.commerce.configured() {
-		orgs, orgErr := s.listOrgs(ctx, cr)
-		if orgErr != nil {
-			sources = append(sources, srcOf("commerce", orgErr, 0, now))
-		} else {
-			var totalRev, mrr int64
-			for _, o := range orgs {
-				subj := orgSubject(o.Name)
-				if r, e := s.commerce.usageRollup(ctx, o.Name, subj); e == nil {
-					totalRev += r.ConsumedCents
-				}
-				if m, e := s.commerce.mrrCents(ctx, o.Name, subj); e == nil {
-					mrr += m
-				}
+	// Configured means the revenue source was actually READ, not merely wired: on a
+	// transient IAM/commerce failure it stays FALSE so computeFinance and the console
+	// never fabricate a negative margin / red "burning" alarm from a fake zero.
+	rev := financeRevenue{}
+	if !s.commerce.configured() {
+		sources = append(sources, srcOf("commerce", errUnconfigured, 0, now))
+	} else if orgs, orgErr := s.listOrgs(ctx, cr); orgErr != nil {
+		// The revenue source is unreadable → honest not-configured, never a zero
+		// that would flip the margin negative on an upstream hiccup.
+		sources = append(sources, srcOf("commerce", orgErr, 0, now))
+	} else {
+		var totalRev, mrr int64
+		partial := false
+		for _, o := range orgs {
+			subj := orgSubject(o.Name)
+			if r, e := s.commerce.usageRollup(ctx, o.Name, subj); e == nil {
+				totalRev += r.ConsumedCents
+			} else {
+				partial = true
 			}
-			// Realized revenue = what customers consumed (metered spend). Credits
-			// consumed mirrors that same figure at the fleet level.
-			rev.TotalRevenueCents = totalRev
-			rev.CreditsConsumedCents = totalRev
-			rev.MRRCents = mrr
+			if m, e := s.commerce.mrrCents(ctx, o.Name, subj); e == nil {
+				mrr += m
+			} else {
+				partial = true
+			}
+		}
+		// Realized revenue = what customers consumed (metered spend). Credits
+		// consumed mirrors that same figure at the fleet level.
+		rev.Configured = true
+		rev.TotalRevenueCents = totalRev
+		rev.CreditsConsumedCents = totalRev
+		rev.MRRCents = mrr
+		// A per-org read failure means the fleet total is PARTIAL — mark the source
+		// not-ok so the console shows a degraded state, never presents an under-count
+		// as authoritative.
+		if partial {
+			sources = append(sources, srcOf("commerce", errPartialRevenue, len(orgs), now))
+		} else {
 			sources = append(sources, srcOf("commerce", nil, len(orgs), now))
 		}
-	} else {
-		sources = append(sources, srcOf("commerce", errUnconfigured, 0, now))
 	}
 
 	return ok(c, computeFinance(financeInput{
