@@ -3,7 +3,7 @@
 // Every subsystem that touches the shared object store — clients/projectsvc (the
 // deploy blob store) and clients/s3 (the /v1/s3 file-manager control plane) —
 // builds its *minio.Client here, from the SAME admin credentials
-// (CLOUD_S3_ADMIN_*). There is no second S3 client construction anywhere in the
+// (S3_ADMIN_*). There is no second S3 client construction anywhere in the
 // binary: one endpoint, one credential source, one connect path (DRY).
 //
 // The backend is the SeaweedFS S3 gateway (s3.hanzo.svc:9000), which speaks the
@@ -28,7 +28,7 @@ import (
 )
 
 // Admin holds the shared S3 admin connection parameters, sourced once from the
-// environment the operator injects (the k8s secret hanzo-s3 → CLOUD_S3_ADMIN_*).
+// environment the operator injects (the k8s secret hanzo-s3 → S3_ADMIN_*).
 // It is a value: construct it with New() and pass it around; it holds no live
 // connection, so it is safe to copy and to build clients from concurrently.
 type Admin struct {
@@ -51,23 +51,23 @@ type Admin struct {
 // the exact variables clients/projectsvc/blob.go already consumes, so the two
 // subsystems resolve identical credentials and endpoint with no drift.
 //
-//	CLOUD_S3_ADMIN_ENDPOINT      internal admin host:port (default s3.hanzo.svc:9000)
-//	CLOUD_S3_ADMIN_ACCESS_KEY    access key (no default — absence = not configured)
-//	CLOUD_S3_ADMIN_SECRET_KEY    secret key (no default — absence = not configured)
-//	CLOUD_S3_SECURE              TLS to the internal endpoint (default false)
-//	CLOUD_S3_REGION              signing region (default us-east-1)
-//	CLOUD_S3_PUBLIC_ENDPOINT     browser-routable host for presigned URLs
+//	S3_ADMIN_ENDPOINT      internal admin host:port (default s3.hanzo.svc:9000)
+//	S3_ADMIN_ACCESS_KEY    access key (no default — absence = not configured)
+//	S3_ADMIN_SECRET_KEY    secret key (no default — absence = not configured)
+//	S3_SECURE              TLS to the internal endpoint (default false)
+//	S3_REGION              signing region (default us-east-1)
+//	S3_PUBLIC_ENDPOINT     browser-routable host for presigned URLs
 //	                             (default s3.hanzo.ai; strips any scheme)
-//	CLOUD_S3_PUBLIC_SECURE       TLS for the public host (default true)
+//	S3_PUBLIC_SECURE       TLS for the public host (default true)
 func New() Admin {
 	return Admin{
-		endpoint:       env("CLOUD_S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
-		publicEndpoint: hostOnly(env("CLOUD_S3_PUBLIC_ENDPOINT", "s3.hanzo.ai")),
-		ak:             os.Getenv("CLOUD_S3_ADMIN_ACCESS_KEY"),
-		sk:             os.Getenv("CLOUD_S3_ADMIN_SECRET_KEY"),
-		secure:         boolEnv("CLOUD_S3_SECURE", false),
-		publicSecure:   boolEnv("CLOUD_S3_PUBLIC_SECURE", true),
-		region:         env("CLOUD_S3_REGION", "us-east-1"),
+		endpoint:       env("S3_ADMIN_ENDPOINT", "s3.hanzo.svc:9000"),
+		publicEndpoint: hostOnly(env("S3_PUBLIC_ENDPOINT", "s3.hanzo.ai")),
+		ak:             os.Getenv("S3_ADMIN_ACCESS_KEY"),
+		sk:             os.Getenv("S3_ADMIN_SECRET_KEY"),
+		secure:         boolEnv("S3_SECURE", false),
+		publicSecure:   boolEnv("S3_PUBLIC_SECURE", true),
+		region:         env("S3_REGION", "us-east-1"),
 	}
 }
 
@@ -83,7 +83,7 @@ func (a Admin) Region() string { return a.region }
 // delete, and streamed put/get through the server).
 func (a Admin) Client() (*minio.Client, error) {
 	if !a.Configured() {
-		return nil, fmt.Errorf("s3admin: CLOUD_S3_ADMIN_ACCESS_KEY/SECRET_KEY not set")
+		return nil, fmt.Errorf("s3admin: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set")
 	}
 	return minio.New(a.endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(a.ak, a.sk, ""),
