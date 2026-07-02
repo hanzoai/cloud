@@ -94,10 +94,14 @@ var authorityHeaders = []string{
 // X-User-IsAdmin is NEVER restored from client input.
 //
 // FAIL MODE. If the validator can't verify a token (JWKS unreachable on a cold
-// cache, issuer/audience misconfigured), the request resolves anonymous: admin
-// fails SECURE (legit admins get 403 until config is corrected — a bounded
-// availability cost), while org scoping is unaffected (the gateway-minted
-// X-Org-Id is restored on the no-principal path). Never fails OPEN to admin.
+// cache, issuer/audience misconfigured), the request resolves anonymous and BOTH
+// planes fail SECURE. Admin fails closed (X-User-IsAdmin is never restored from
+// client input), and — since F1 — the DATA plane fails closed too: it gates on a
+// validated principal (clients/principal.Validated) and the anonymous request
+// carries no X-User-Id, so the restored X-Org-Id is refused, not served. Never
+// fails OPEN. The availability cost is bounded to COLD caches: the jwksCache is
+// stale-on-error (a warm cache keeps validating through a transient JWKS outage),
+// so only a from-cold JWKS failure degrades to anonymous-403.
 func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 	adminOrg = strings.TrimSpace(adminOrg)
 	return func(c *zip.Ctx) error {
