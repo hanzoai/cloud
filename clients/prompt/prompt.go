@@ -59,9 +59,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // list → { data: [PromptMeta], meta: {...} } (Langfuse-compatible envelope the
-// console2 Prompts module already accepts).
+// console2 Prompts module already accepts). On an org's first visit its store is
+// empty, so we seed the vendored Hanzo starter catalog (idempotent — only when
+// the org has none) before listing.
 func (s *service) list(c *zip.Ctx) error {
-	metas, err := s.store.List(tenant(c))
+	org := tenant(c)
+	if n, err := s.store.SeedIfEmpty(org); err != nil {
+		s.log.Warn("prompts: seed catalog failed", "org", org, "err", err)
+	} else if n > 0 {
+		s.log.Info("prompts: seeded starter catalog", "org", org, "count", n)
+	}
+	metas, err := s.store.List(org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "prompts: list: %v", err)
 	}
