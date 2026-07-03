@@ -37,8 +37,10 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	}
 	fa := app.Fiber()
 
-	// Search routes through to the searxng proxy.
+	// Search routes through to the searxng proxy. The client presents the shared
+	// key as X-API-Key (searchGuard now requires it, like the scrape sibling).
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x&format=json", nil)
+	req.Header.Set("X-API-Key", "k")
 	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("search route: %v", err)
@@ -91,11 +93,12 @@ func TestSearchProxyRewritesToSearchPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newSearchProxy: %v", err)
 	}
-	t.Setenv("WEBSEARCH_API_KEY", "") // key optional for search
+	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
 	h := searchGuard(proxy)
 
 	req := httptest.NewRequest(http.MethodGet,
 		"http://api.hanzo.ai/v1/websearch/search?q=hanzo+ai&format=json&engines=google,bing", nil)
+	req.Header.Set("X-API-Key", "svc-key")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -132,10 +135,13 @@ func TestSearchWrongKeyRejected(t *testing.T) {
 	}
 }
 
-// A missing X-API-Key is allowed for search (searxng key is optional).
-func TestSearchMissingKeyAllowed(t *testing.T) {
+// SECURITY (F2): a MISSING X-API-Key must be REJECTED — /v1/websearch/search is
+// not an open proxy. Previously a missing key passed (searxng key was treated as
+// optional), so any unauthenticated caller could drive the Hanzo metasearch
+// instance. It now fails closed exactly like the scrape sibling.
+func TestSearchMissingKeyRejected(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"results":[]}`)
+		t.Fatal("upstream must not be reached without a key")
 	}))
 	defer up.Close()
 	proxy, _ := newSearchProxy(up.URL)
@@ -145,8 +151,27 @@ func TestSearchMissingKeyAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (missing key allowed for searxng)", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (missing key must be rejected — no open proxy)", rec.Code)
+	}
+}
+
+// Search fails closed with no configured key (503), mirroring scrape.
+func TestSearchUnsetKeyFailsClosed(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("upstream must not be reached when the key is unset")
+	}))
+	defer up.Close()
+	proxy, _ := newSearchProxy(up.URL)
+	t.Setenv("WEBSEARCH_API_KEY", "")
+	h := searchGuard(proxy)
+
+	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
+	req.Header.Set("X-API-Key", "anything")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503 (fail closed when unconfigured)", rec.Code)
 	}
 }
 
