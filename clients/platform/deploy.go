@@ -343,9 +343,14 @@ func (s *svc) getDeployment(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toDeploymentView(d))
 }
 
-// deploymentLogs returns the build+deploy log context for a deployment. The
-// first slice returns the recorded status timeline + the BuildKit Job reference;
-// live pod-log streaming is phase 2. It never fabricates log content.
+// deploymentLogs returns REAL logs for a deployment: the recorded status timeline
+// PLUS the live pod logs streamed from the cluster — the build pod's logs while a
+// git build runs, and the running app pod's logs once deployed. Every cluster read
+// is org-scoped (build logs by the deterministic job-name label in the build ns; app
+// logs from tenant-<org>) and time-boxed; when a pod is not yet present or the
+// cluster is unreachable it degrades to the recorded timeline and says so honestly —
+// it NEVER fabricates log content. The `source` field tells the console what the
+// `logs` body is (build|app|none) so it can label the pane.
 func (s *svc) deploymentLogs(c *zip.Ctx) error {
 	org, ok := s.tenant(c)
 	if !ok {
@@ -362,24 +367,45 @@ func (s *svc) deploymentLogs(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get deployment: %v", err)
 	}
+
+	// Recorded timeline (always real, always present).
 	var lines []string
 	lines = append(lines, fmt.Sprintf("deployment %s v%d source=%s status=%s", d.ID, d.Version, d.Source, d.Status))
 	if d.Image != "" {
 		lines = append(lines, "image: "+d.Image)
 	}
-	if d.BuildID != "" {
+
+	// source classifies which pod's logs the `logs` body carries so the console can
+	// label the pane. A git deployment shows the BUILD pod's logs (the interesting
+	// signal while it's building or if it failed); an image/live deployment shows the
+	// APP pod's logs. "none" when neither pod is reachable yet.
+	source := "none"
+	if d.Source == "git" && d.BuildID != "" {
 		if b, bErr := s.store.GetBuild(c.Context(), org, d.BuildID); bErr == nil {
-			lines = append(lines, fmt.Sprintf("build %s status=%s job=%s", b.ID, b.Status, b.JobName))
-			if b.JobName != "" {
-				lines = append(lines, "(live BuildKit Job logs stream in phase 2: kubectl -n "+s.k8s.buildNS+" logs job/"+b.JobName+")")
+			var streamed bool
+			lines, streamed = s.buildLogContext(c.Context(), d, b, lines)
+			if streamed {
+				source = "build"
 			}
 		}
 	}
+
+	// Once an app is (or is going) live, ALSO surface the running app pod's logs —
+	// the runtime signal the user needs after a deploy. Appended after the build
+	// context so a git deploy shows both build and runtime when both exist.
+	if a.Status == "live" || a.Status == "deploying" || d.Source == "image" {
+		if logs, ok := s.k8s.appLogs(c.Context(), org, a.Slug); ok {
+			lines = append(lines, "── app logs ("+tenantNamespace(org)+"/"+a.Slug+") ──", logs)
+			source = "app"
+		}
+	}
+
 	if d.Message != "" {
 		lines = append(lines, "message: "+d.Message)
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"deploymentId": d.ID,
+		"source":       source,
 		"logs":         strings.Join(lines, "\n"),
 	})
 }
