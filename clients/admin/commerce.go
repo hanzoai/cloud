@@ -315,6 +315,16 @@ func (c *commerceClient) transactions(ctx context.Context, org, user string, lim
 	if err != nil {
 		return nil, err
 	}
+	// Commerce serves the ledger WRAPPED as { count, transactions:[...] } (verified
+	// live). Decode that shape; tolerate a bare array too so a contract change in
+	// either direction degrades gracefully rather than silently reading zero rows
+	// (which would make the analytics honest-empty despite real usage).
+	var wrap struct {
+		Transactions []txn `json:"transactions"`
+	}
+	if err := json.Unmarshal(body, &wrap); err == nil && wrap.Transactions != nil {
+		return wrap.Transactions, nil
+	}
 	var rows []txn
 	if err := json.Unmarshal(body, &rows); err != nil {
 		return nil, fmt.Errorf("commerce transactions decode: %w", err)
