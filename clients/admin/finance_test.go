@@ -204,7 +204,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	do := newFakeDO()
 	defer do.Close()
 
-	doReq, s := mountSvc(t, iam.server.URL, commerce.URL, "")
+	doReq, s, _ := mountSvc(t, iam.server.URL, commerce.URL, "")
 	s.do = newDOClientWithBase(do.URL, "test-do-token") // configured DO client
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
@@ -306,7 +306,7 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 	commerce := newFakeCommerceFinance()
 	defer commerce.Close()
 
-	doReq, _ := mountSvc(t, iam.server.URL, commerce.URL, "") // s.do already has empty token → unconfigured
+	doReq, _, _ := mountSvc(t, iam.server.URL, commerce.URL, "") // s.do already has empty token → unconfigured
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := doReq("GET", "/v1/admin/finance", admin)
@@ -367,7 +367,7 @@ func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
 	defer commerce.Close()
 
 	// IAM points nowhere reachable → listOrgs errors; commerce /v1/costs still 200s.
-	doReq, _ := mountSvc(t, "http://127.0.0.1:0", commerce.URL, "")
+	doReq, _, _ := mountSvc(t, "http://127.0.0.1:0", commerce.URL, "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := doReq("GET", "/v1/admin/finance", admin)

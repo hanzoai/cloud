@@ -53,7 +53,9 @@ package analytics
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -159,6 +161,48 @@ func requireDatastore() error {
 	return nil
 }
 
+// warehouseErr maps a ClickHouse query failure to the HONEST HTTP status. A
+// connectivity failure — the warehouse became unreachable mid-request (dial /
+// i/o timeout / refused / reset / EOF) — is a transient 503 "unavailable", the
+// SAME contract requireDatastore() uses when the pool never connected. Only a
+// REACHABLE warehouse that rejected the query (bad SQL, protocol error) is a 502
+// bad-gateway. This is the fix for /v1/analytics/* surfacing a raw 502 on a
+// ClickHouse `:9000` i/o timeout — the caller now gets an honest 503 it can retry.
+func warehouseErr(kind string, err error) error {
+	if isWarehouseUnreachable(err) {
+		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %s: %v", kind, err)
+	}
+	return zip.Errorf(http.StatusBadGateway, "analytics %s query: %v", kind, err)
+}
+
+// isWarehouseUnreachable reports whether err is a transport/connectivity failure
+// to ClickHouse (as opposed to a query the warehouse actively rejected). It checks
+// the typed context/net signals first, then the connectivity strings the
+// clickhouse-go driver surfaces without a typed net.Error wrapper.
+func isWarehouseUnreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	for _, sub := range []string{
+		"i/o timeout", "timeout", "connection refused", "connection reset",
+		"no route to host", "broken pipe", "eof", "network is unreachable",
+		"no such host", "dial ", "connect: ", "read: connection", "write: connection",
+	} {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
 func topLimit(c *zip.Ctx) int {
 	n, err := strconv.Atoi(strings.TrimSpace(c.Query("limit")))
 	if err != nil || n <= 0 {
@@ -200,7 +244,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 		"countIf(status = 'error') AS errors FROM " + llmTable + " WHERE " + where
 	llmRows, err := aiobject.DatastoreQuery(ctx, llmSQL, args...)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "analytics llm query: %v", err)
+		return warehouseErr("llm", err)
 	}
 	llm := buildLLMOverview(firstRow(llmRows))
 
@@ -260,7 +304,7 @@ func (s *svc) timeseries(c *zip.Ctx) error {
 		bucketFn, llmTable, where)
 	rows, err := aiobject.DatastoreQuery(ctx, seriesSQL, args...)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "analytics timeseries query: %v", err)
+		return warehouseErr("timeseries", err)
 	}
 
 	return c.JSON(http.StatusOK, Timeseries{
@@ -302,7 +346,7 @@ func (s *svc) top(c *zip.Ctx) error {
 		"GROUP BY model ORDER BY cost_cents DESC, requests DESC LIMIT %d", llmTable, where, limit)
 	modelRows, err := aiobject.DatastoreQuery(ctx, modelSQL, args...)
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "analytics top-models query: %v", err)
+		return warehouseErr("top-models", err)
 	}
 
 	// Top products — honest-empty until commerce emits order events.
