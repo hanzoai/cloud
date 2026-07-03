@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/security/detect"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -88,7 +89,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/security/scans/:id", s.getScan)
 	app.Get("/v1/security/findings/:id", s.getFinding)
 
-	log.Info("security mounted", "brand", deps.Brand, "rules", len(rules),
+	log.Info("security mounted", "brand", deps.Brand, "rules", detect.RuleCount(),
 		"db", filepath.Join(deps.DataDir, "security.db"))
 	return nil
 }
@@ -175,13 +176,13 @@ func toFindingView(f StoredFinding) findingView {
 // ok whenever the store opened. Registered before the generic liveness route so
 // the real probe is not shadowed (mirrors s3svc/kmssvc).
 func (s *svc) health(c *zip.Ctx) error {
-	return c.JSON(200, map[string]any{"status": "ok", "rules": len(rules)})
+	return c.JSON(200, map[string]any{"status": "ok", "rules": detect.RuleCount()})
 }
 
 // listRules serves the detection catalog. No tenant scope — the catalog is the
 // same for everyone and discloses nothing tenant-specific.
 func (s *svc) listRules(c *zip.Ctx) error {
-	return c.JSON(200, map[string]any{"data": Rules()})
+	return c.JSON(200, map[string]any{"data": detect.Rules()})
 }
 
 // submitScan runs the engine over the submitted files, persists the scan +
@@ -226,7 +227,7 @@ func (s *svc) submitScan(c *zip.Ctx) error {
 	sc := Scan{ID: scanID, Org: org, Project: project, Files: len(body.Files), CreatedAt: now}
 	var stored []StoredFinding
 	for _, f := range body.Files {
-		for _, fnd := range ScanContent(f.Path, f.Content) {
+		for _, fnd := range detect.ScanContent(f.Path, f.Content) {
 			id, err := genID("fnd")
 			if err != nil {
 				return zip.Errorf(500, "rng: %v", err)
@@ -238,13 +239,13 @@ func (s *svc) submitScan(c *zip.Ctx) error {
 				Fingerprint: fnd.Fingerprint, CreatedAt: now,
 			})
 			switch fnd.Severity {
-			case SeverityCritical:
+			case detect.SeverityCritical:
 				sc.Critical++
-			case SeverityHigh:
+			case detect.SeverityHigh:
 				sc.High++
-			case SeverityMedium:
+			case detect.SeverityMedium:
 				sc.Medium++
-			case SeverityLow:
+			case detect.SeverityLow:
 				sc.Low++
 			}
 		}
@@ -314,7 +315,7 @@ func (s *svc) listFindings(c *zip.Ctx) error {
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	minSev := strings.ToLower(strings.TrimSpace(c.Query("minSeverity")))
-	if minSev != "" && severityRank[minSev] == 0 {
+	if minSev != "" && detect.SeverityRank(minSev) == 0 {
 		return zip.ErrBadRequest("minSeverity must be one of critical|high|medium|low")
 	}
 	fs, err := s.store.ListFindings(c.Context(), org, strings.TrimSpace(c.Query("scanId")), minSev, limit)
