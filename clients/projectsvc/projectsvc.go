@@ -42,6 +42,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 )
@@ -62,6 +63,7 @@ var frameworks = map[string]bool{
 type svc struct {
 	store *Store
 	blob  *blobStore
+	cf    *sites.Purger
 	log   luxlog.Logger
 }
 
@@ -89,8 +91,12 @@ type projectView struct {
 	LiveURL             string   `json:"liveUrl,omitempty"`
 	Bucket              string   `json:"bucket,omitempty"`
 	CurrentDeploymentID string   `json:"currentDeploymentId,omitempty"`
-	CreatedAt           int64    `json:"createdAt"`
-	UpdatedAt           int64    `json:"updatedAt"`
+	// Cache is the site's edge-cache state: the HTML/document Cache-Control policy
+	// in effect (TTL) and the last edge-purge time, so a console can show freshness.
+	CacheControl string `json:"cacheControl,omitempty"`
+	LastPurgeAt  int64  `json:"lastPurgeAt,omitempty"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
 }
 
 func toProjectView(p Project) projectView {
@@ -98,7 +104,8 @@ func toProjectView(p Project) projectView {
 		ID: p.ID, Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
 		Repo:      repoView{URL: p.RepoURL, Branch: p.RepoBranch, Provider: p.RepoProvider},
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
-		CurrentDeploymentID: p.CurrentDeploy, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
@@ -148,8 +155,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("projectsvc.Mount: open store: %w", err)
 	}
 
-	s := &svc{store: store, blob: openBlobStore(), log: log}
+	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log}
 	mounted = s
+
+	// Inject the store as the site server's slug→project resolver. This is what
+	// lights up `<slug>.hanzo.app` (host-routed at the compose root, ahead of the
+	// API pipeline) — it resolves the validated subdomain to its authoritative
+	// tenant + S3 prefix through THIS store. Set once at mount; the site middleware
+	// reads it per request.
+	sites.SetResolver(siteResolver{store: store})
 
 	app.Post("/v1/projects", s.create)
 	app.Post("/v1/projects/fork", s.fork)
@@ -281,10 +295,11 @@ func (s *svc) get(c *zip.Ctx) error {
 }
 
 type updateReq struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Framework   *string `json:"framework"`
-	Repo        *struct {
+	Name         *string `json:"name"`
+	Description  *string `json:"description"`
+	Framework    *string `json:"framework"`
+	CacheControl *string `json:"cacheControl"`
+	Repo         *struct {
 		URL    string `json:"url"`
 		Branch string `json:"branch"`
 	} `json:"repo"`
@@ -323,6 +338,16 @@ func (s *svc) update(c *zip.Ctx) error {
 		}
 		p.Framework = f
 	}
+	if body.CacheControl != nil {
+		cc := strings.TrimSpace(*body.CacheControl)
+		if len(cc) > 256 {
+			return zip.ErrBadRequest("cacheControl too long")
+		}
+		if strings.ContainsAny(cc, "\r\n") {
+			return zip.ErrBadRequest("cacheControl must not contain newlines")
+		}
+		p.CacheControl = cc
+	}
 	if body.Repo != nil {
 		p.RepoURL = strings.TrimSpace(body.Repo.URL)
 		p.RepoBranch = strings.TrimSpace(body.Repo.Branch)
@@ -354,6 +379,10 @@ func (s *svc) del(c *zip.Ctx) error {
 	if !deleted {
 		return zip.ErrNotFound("project not found")
 	}
+	// Release the public subdomain binding so the slug is free to reclaim.
+	if uErr := s.store.UnbindHost(c.Context(), p.Slug, org, p.Slug); uErr != nil {
+		s.log.Warn("unbind host failed (continuing)", "org", org, "slug", p.Slug, "err", uErr)
+	}
 	// Best-effort purge of the live site; metadata is already gone, so a purge
 	// failure must not resurrect the project — log and continue.
 	if s.blob.configured() {
@@ -362,6 +391,10 @@ func (s *svc) del(c *zip.Ctx) error {
 				s.log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "err", pErr)
 			}
 		}
+	}
+	// Purge the Cloudflare edge so the deleted site stops serving from cache.
+	if pErr := s.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); pErr != nil {
+		s.log.Warn("cloudflare purge failed on delete (continuing)", "org", org, "slug", p.Slug, "err", pErr)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
