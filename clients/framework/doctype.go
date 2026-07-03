@@ -280,6 +280,12 @@ func (d *DocType) Validate() error {
 
 // normalize trims the DocType's identifying strings in place and defaults empty
 // slices so the stored/returned shape is canonical.
+//
+// SECURE BY DEFAULT: when no permissions are declared, seed the System Manager
+// grant so a doctype is NEVER silently permless. A permless doctype is thus
+// governed by the org owner (a System Manager) and closed to everyone else — the
+// generic UI and audit always see an explicit permission set, and the enforcement
+// (permission.can) is default-deny for a role-less member.
 func (d *DocType) normalize() {
 	d.Name = strings.TrimSpace(d.Name)
 	d.Module = strings.TrimSpace(d.Module)
@@ -287,7 +293,10 @@ func (d *DocType) normalize() {
 	if d.Fields == nil {
 		d.Fields = []DocField{}
 	}
-	if d.Perms == nil {
-		d.Perms = []DocPerm{}
+	if len(d.Perms) == 0 {
+		d.Perms = []DocPerm{{
+			Role: RoleSystemManager,
+			Read: true, Write: true, Create: true, Delete: true, Submit: true, Cancel: true,
+		}}
 	}
 }
