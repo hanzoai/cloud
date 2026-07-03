@@ -134,12 +134,15 @@ func baseContentFields() []framework.DocField {
 	return []framework.DocField{
 		{Fieldname: "title", Fieldtype: framework.FieldData, Label: "Title", Reqd: true, InListView: true},
 		{Fieldname: "slug", Fieldtype: framework.FieldData, Label: "Slug", Reqd: true, InListView: true},
-		{Fieldname: "body", Fieldtype: framework.FieldText, Label: "Body"},
+		{Fieldname: "body", Fieldtype: framework.FieldRichText, Label: "Body"},
 		{Fieldname: "excerpt", Fieldtype: framework.FieldSmall, Label: "Excerpt"},
 		{Fieldname: "status", Fieldtype: framework.FieldSelect, Label: "Status", Options: "Draft\nPublished", Default: "Draft", InListView: true},
 		{Fieldname: "author", Fieldtype: framework.FieldLink, Label: "Author", Options: "Author"},
 		{Fieldname: "featured_image", Fieldtype: framework.FieldAttach, Label: "Featured Image"},
 		{Fieldname: "tags", Fieldtype: framework.FieldData, Label: "Tags"},
+		// Optional project scope: the console's org→project switcher filters content
+		// by this field (empty = org-level). One CMS engine; project is a filter.
+		{Fieldname: "project", Fieldtype: framework.FieldData, Label: "Project"},
 	}
 }
 
