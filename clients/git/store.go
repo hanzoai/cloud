@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
-	// graph (prompts/projectsvc/provisioning use it). Blank import registers
-	// the "sqlite" driver name.
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // errConflict is returned when (org,project,name) already exists on create;
@@ -31,7 +33,7 @@ type Repo struct {
 	Org           string
 	Project       string // may be "" (org-level repo)
 	Name          string
-	Description    string
+	Description   string
 	DefaultBranch string
 	SizeBytes     int64
 	CreatedAt     int64
