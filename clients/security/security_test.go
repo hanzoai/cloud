@@ -12,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/security/detect"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -93,7 +94,7 @@ func TestSubmitScanFindsAndRedacts(t *testing.T) {
 		t.Fatal("scan detail has no findings")
 	}
 	f := detail.Findings[0]
-	if f.Fingerprint != fingerprint(secret) {
+	if f.Fingerprint != detect.Fingerprint(secret) {
 		t.Fatalf("fingerprint mismatch: %q", f.Fingerprint)
 	}
 	if strings.Contains(f.Preview, secret) {
@@ -178,7 +179,7 @@ func TestFindingsSeverityFilter(t *testing.T) {
 		t.Fatal("expected at least the critical finding")
 	}
 	for _, f := range fl.Data {
-		if f.Severity != SeverityCritical {
+		if f.Severity != detect.SeverityCritical {
 			t.Fatalf("minSeverity=critical returned a %s finding", f.Severity)
 		}
 	}
@@ -207,7 +208,7 @@ func TestValidationAndOpenRoutes(t *testing.T) {
 		t.Fatalf("rules want 200, got %d", code)
 	}
 	var rl struct {
-		Data []RuleView `json:"data"`
+		Data []detect.RuleView `json:"data"`
 	}
 	_ = json.Unmarshal(body, &rl)
 	if len(rl.Data) == 0 {
