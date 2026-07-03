@@ -26,6 +26,14 @@ const durableZAPPort = 19999
 // won't collect) and lets Serve stop it on shutdown.
 var embeddedTasks *tasksengine.Embedded
 
+// EmbeddedTasks returns the ONE in-process tasks engine, or nil until
+// wireDurableIngest has run (or if it failed to start). The Tasks HTTP/UI surface
+// (clients/tasksvc, mounted at /v1/tasks/*) serves on THIS shared engine — there is
+// exactly one engine per process, shared by ai's durable ingest AND the Tasks
+// product surface, never a second Embed. The surface resolves it lazily (per
+// request) because subsystem Mount runs during MountAll, before wireDurableIngest.
+func EmbeddedTasks() *tasksengine.Embedded { return embeddedTasks }
+
 // wireDurableIngest embeds the ONE hanzoai/tasks engine IN-PROCESS — the unified durable
 // queue (there is no second async system; tasks/CONTRACT) — and injects a per-org
 // loopback ZAP dialer into ai's ingest. A long ingest (github/crawl/s3) then runs as a
