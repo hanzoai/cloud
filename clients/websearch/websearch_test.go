@@ -192,6 +192,75 @@ func TestScrapeAdaptsCrawlToFirecrawlShape(t *testing.T) {
 	}
 }
 
+// REGRESSION: the deployed hanzoai/crawl:0.0.1 (Crawl4AI 0.8.6) returns
+// `markdown` as an OBJECT {raw_markdown, fit_markdown, ...}, not a bare string,
+// AND signals the batch with a boolean "success" (no "status"). A `string`
+// Markdown field errored the whole decode → crawl() failed → every scrape
+// returned {success:false} (empty page content). This asserts the real 0.8.6
+// envelope + object markdown adapt correctly, preferring fit_markdown. The body
+// literal is trimmed from an actual crawl4ai 0.8.6 /crawl response.
+func TestScrapeHandlesCrawl4AIObjectMarkdown(t *testing.T) {
+	crawlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{
+			"success": true,
+			"server_processing_time_s": 1.2,
+			"results": [{
+				"url": "https://ex.com",
+				"success": true,
+				"status_code": 200,
+				"markdown": {
+					"raw_markdown": "# Raw Hello\n\nlots of nav noise",
+					"fit_markdown": "# Hello\n\nclean body",
+					"markdown_with_citations": "# Hello [1]",
+					"references_markdown": "[1]: https://ex.com"
+				},
+				"metadata": {"title": "Ex", "description": "d"}
+			}]
+		}`)
+	}))
+	defer crawlSrv.Close()
+
+	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
+	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", crawlSrv.URL)
+
+	req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai/v1/websearch/v1/scrape",
+		strings.NewReader(`{"url":"https://ex.com"}`))
+	req.Header.Set("Authorization", "Bearer svc-key")
+	rec := httptest.NewRecorder()
+	scrapeHandler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s, want 200", rec.Code, rec.Body.String())
+	}
+	var out firecrawlResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode response: %v (%s)", err, rec.Body.String())
+	}
+	// Must succeed (not the {success:false} the string-typed field produced) and
+	// carry the CLEANED fit_markdown, not raw and not empty.
+	if !out.Success || out.Data == nil {
+		t.Fatalf("response = %+v, want success:true with data (object markdown must decode)", out)
+	}
+	if out.Data.Markdown != "# Hello\n\nclean body" {
+		t.Fatalf("markdown = %q, want the fit_markdown '# Hello\\n\\nclean body'", out.Data.Markdown)
+	}
+	if out.Data.Metadata["title"] != "Ex" {
+		t.Fatalf("metadata not passed through: %+v", out.Data.Metadata)
+	}
+}
+
+// The bare-string markdown form (older mirror / other crawlers) must still work.
+func TestMarkdownFieldAcceptsBareString(t *testing.T) {
+	var r crawlResult
+	if err := json.Unmarshal([]byte(`{"url":"u","markdown":"# S","success":true}`), &r); err != nil {
+		t.Fatalf("decode bare-string markdown: %v", err)
+	}
+	if string(r.Markdown) != "# S" {
+		t.Fatalf("markdown = %q, want '# S'", r.Markdown)
+	}
+}
+
 // Scrape fails closed with no configured key.
 func TestScrapeUnsetKeyFailsClosed(t *testing.T) {
 	t.Setenv("WEBSEARCH_API_KEY", "")
