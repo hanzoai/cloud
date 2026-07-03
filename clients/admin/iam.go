@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -102,6 +103,93 @@ func (c *iamClient) get(ctx context.Context, cr creds, path string, q url.Values
 	}
 	var env envelope
 	if err := json.Unmarshal(body, &env); err != nil {
+		return envelope{}, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
+	}
+	if env.Status != "ok" {
+		msg := env.Msg
+		if msg == "" {
+			msg = fmt.Sprintf("iam status %d", resp.StatusCode)
+		}
+		return envelope{}, fmt.Errorf("iam: %s", msg)
+	}
+	return env, nil
+}
+
+// getUserRaw fetches ONE user as its FULL wire object (GET /v1/iam/get-user?id=
+// owner/name), preserving every field. The suspend/reactivate action reads the
+// whole object, flips isForbidden, and writes it back — update-user REPLACES the
+// row, so operating on the full object (not a typed subset) is what keeps every
+// other field intact. Replays the caller's own credential, so IAM authorizes the
+// read as the same validated global admin.
+func (c *iamClient) getUserRaw(ctx context.Context, cr creds, id string) (map[string]any, error) {
+	q := url.Values{"id": {id}}
+	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
+	if err != nil {
+		return nil, err
+	}
+	var user map[string]any
+	if err := json.Unmarshal(env.Data, &user); err != nil {
+		return nil, fmt.Errorf("iam get-user decode: %w", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("iam get-user %q: empty", id)
+	}
+	return user, nil
+}
+
+// updateUserRaw writes a full user object back (POST /v1/iam/update-user?id=
+// owner/name). The caller's replayed credential is a VALIDATED global admin, whom
+// IAM's CheckPermissionForUpdateUser admits to set privileged fields (isForbidden)
+// on any user — a tenant/org-admin is refused by IAM itself, so this can never be
+// abused to suspend across a boundary the caller couldn't already cross. admin
+// adds no service credential of its own; IAM re-checks IsGlobalAdmin.
+func (c *iamClient) updateUserRaw(ctx context.Context, cr creds, id string, user map[string]any) error {
+	q := url.Values{"id": {id}}
+	body, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+	_, err = c.post(ctx, cr, "/v1/iam/update-user", q, body)
+	return err
+}
+
+// post performs one authenticated POST (JSON body) replaying the caller's cookie +
+// bearer, and decodes the /v1 envelope. A non-ok envelope (or an IAM 401/403) is
+// an error the mutation surfaces honestly + records as a failed audited attempt.
+func (c *iamClient) post(ctx context.Context, cr creds, path string, q url.Values, body []byte) (envelope, error) {
+	if !c.configured() {
+		return envelope{}, fmt.Errorf("iam endpoint not configured")
+	}
+	u := c.base + path
+	if enc := q.Encode(); enc != "" {
+		u += "?" + enc
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return envelope{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	if cr.cookie != "" {
+		req.Header.Set("Cookie", cr.cookie)
+	}
+	if cr.auth != "" {
+		req.Header.Set("Authorization", cr.auth)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return envelope{}, fmt.Errorf("iam unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if err != nil {
+		return envelope{}, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return envelope{}, fmt.Errorf("iam denied (%d)", resp.StatusCode)
+	}
+	var env envelope
+	if err := json.Unmarshal(respBody, &env); err != nil {
 		return envelope{}, fmt.Errorf("iam non-envelope response (%d)", resp.StatusCode)
 	}
 	if env.Status != "ok" {
