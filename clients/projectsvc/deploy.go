@@ -2,6 +2,7 @@ package projectsvc
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -9,8 +10,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
+
+// onPublish runs the go-live side effects for a project whose new build just
+// landed at its S3 prefix: it claims the public subdomain (first-come, idempotent
+// for the owner) and purges the Cloudflare edge by cache-tag so the new publish
+// is instantly live at the edge. Both are best-effort — a host already owned by
+// another project, or an unconfigured/failing CF token, must NOT fail the deploy
+// (the site is already live at its S3 URL). It stamps LastPurgeAt on the project
+// (the caller persists it in the same UpdateProject that flips status to live).
+func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
+	now := time.Now().Unix()
+	if err := s.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
+		switch {
+		case errors.Is(err, errHostTaken):
+			s.log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
+		case errors.Is(err, errReservedHost):
+			s.log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug)
+		default:
+			s.log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+		}
+	}
+	if err := s.cf.PurgeTags(ctx, sites.CacheTag(org, p.Slug)); err != nil {
+		s.log.Warn("cloudflare purge failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+	}
+	p.LastPurgeAt = now
+}
 
 // deploy ships a project live. Two modes, one endpoint:
 //
@@ -114,7 +141,7 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
 	}
 
-	prefix, files, total, upErr := s.blob.uploadSite(c.Context(), org, p.Slug, st)
+	prefix, files, total, upErr := s.blob.uploadSite(c.Context(), org, p.Slug, p.CacheControl, st)
 	if upErr != nil {
 		d.Status = "error"
 		d.Message = upErr.Error()
@@ -131,6 +158,7 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 	}
 
 	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.blob.bucket, time.Now().Unix()
+	s.onPublish(c.Context(), org, &p)
 	if err := s.store.UpdateProject(c.Context(), p); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize project: %v", err)
 	}
@@ -198,6 +226,7 @@ func (s *svc) completeDeployment(c *zip.Ctx) error {
 	p.UpdatedAt = now
 	if status == "live" {
 		p.Status, p.LiveURL, p.CurrentDeploy = "live", d.LiveURL, d.ID
+		s.onPublish(c.Context(), org, &p)
 	} else {
 		p.Status = "error"
 	}
