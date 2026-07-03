@@ -32,12 +32,20 @@ require (
 
 require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
+	github.com/beego/beego/v2 v2.3.8 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/hanzoai/sqlite v0.1.4 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
+	github.com/luxfi/bft v0.1.5 // indirect
+	github.com/luxfi/constants v1.5.8 // indirect
+	github.com/luxfi/p2p v1.21.1 // indirect
+	github.com/luxfi/sampler v1.1.0 // indirect
+	github.com/luxfi/validators v1.2.0 // indirect
+	github.com/luxfi/version v1.0.1 // indirect
+	github.com/luxfi/warp v1.19.3 // indirect
 	github.com/luxwallet/connect/go v0.1.3 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
@@ -46,6 +54,7 @@ require (
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
+	gonum.org/v1/gonum v0.17.0 // indirect
 )
 
 require (
@@ -333,7 +342,7 @@ require (
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
 	github.com/hanzoai/sigv4 v0.4.2 // indirect
 	github.com/hanzoai/storage-go v1.0.0 // indirect
-	github.com/hanzoai/tasks v1.40.0 // indirect
+	github.com/hanzoai/tasks v1.43.0 // indirect
 	github.com/hanzoai/xorm v1.1.6 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
@@ -652,7 +661,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.796.1
+	github.com/hanzoai/ai v1.796.2
 	github.com/hanzoai/authz v1.10.3
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
