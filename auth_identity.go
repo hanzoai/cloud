@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -65,18 +66,27 @@ var jwtSigAlgs = []gojose.SignatureAlgorithm{
 	gojose.PS256, gojose.PS384, gojose.PS512,
 }
 
-// identityValidator validates an IAM JWT against a cached JWKS. Issuer +
-// audience + expiry are always enforced.
+// identityValidator validates an IAM JWT against a cached JWKS. Issuer (any of a
+// trusted SET) + audience + expiry are always enforced.
+//
+// The issuer is a SET so ONE cloud binary validates every white-label brand's
+// tokens (hanzo iss=hanzo.id AND lux iss=lux.id, ...). Signature verification is
+// unaffected: the in-cluster IAM serves EVERY brand's signing cert in one JWKS
+// (cert-hanzo/cert-lux/cert-zoo/...), keyed by the token kid, so a single
+// jwksURL verifies all brands. Only the issuer-string comparison had to widen.
 type identityValidator struct {
-	issuer    string
+	issuers   []string
 	audiences []string
 	cache     *jwksCache
 }
 
-// newIdentityValidator builds a validator. ttl<=0 uses the 15m JWKS default.
+// newIdentityValidator builds a validator whose trusted-issuer set is the primary
+// issuer UNIONED with every white-label brand issuer (BrandIssuers) plus any
+// WHITELABEL_ISSUERS override. ttl<=0 uses the 15m JWKS default. The union is
+// fail-secure: it only ADDS the known-good brand issuers, never an arbitrary one.
 func newIdentityValidator(issuer, jwksURL string, audiences []string, ttl time.Duration) *identityValidator {
 	return &identityValidator{
-		issuer:    strings.TrimSpace(issuer),
+		issuers:   trustedIssuers(issuer),
 		audiences: audiences,
 		cache:     newJWKSCache(jwksURL, ttl),
 	}
@@ -99,8 +109,7 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 		return nil, err
 	}
 
-	// Reject a missing issuer: an empty expected issuer would skip the
-	// comparison and let tokens from any issuer pass.
+	// Reject a missing issuer: an empty issuer must never pass the set check.
 	if claims.Issuer == "" {
 		return nil, fmt.Errorf("missing issuer")
 	}
@@ -110,7 +119,13 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	if claims.Expiry == nil {
 		return nil, fmt.Errorf("missing expiry")
 	}
-	expected := jwt.Expected{Issuer: v.issuer}
+	// Issuer must be one of the trusted brand issuers. go-jose's jwt.Expected
+	// checks a SINGLE issuer, so the issuer is validated here against the set and
+	// left out of Expected (audience + expiry stay with Expected).
+	if !issuerAllowed(claims.Issuer, v.issuers) {
+		return nil, fmt.Errorf("untrusted issuer %q", claims.Issuer)
+	}
+	expected := jwt.Expected{}
 	if len(v.audiences) > 0 {
 		expected.AnyAudience = jwt.Audience(v.audiences)
 	}
@@ -278,4 +293,50 @@ func basicFromAuth(auth string) string {
 		return pass
 	}
 	return user
+}
+
+// trustedIssuers returns the full trusted-issuer set for the in-binary validator:
+// the PRIMARY issuer (the deployment's own brand, cfg.IAMIssuer) UNIONED with every
+// white-label brand issuer (BrandIssuers) and any WHITELABEL_ISSUERS override
+// (comma-separated). Fail-secure: it only ADDS known-good issuers; a nil/empty
+// result is impossible when a primary is set, so the issuer check is always
+// enforced. Duplicates are removed; order is primary-first.
+func trustedIssuers(primary string) []string {
+	out := make([]string, 0, 6)
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		for _, e := range out {
+			if e == v {
+				return
+			}
+		}
+		out = append(out, v)
+	}
+	add(primary)
+	for _, iss := range BrandIssuers() {
+		add(iss)
+	}
+	for _, iss := range splitTrim(os.Getenv("WHITELABEL_ISSUERS")) {
+		add(iss)
+	}
+	return out
+}
+
+// issuerAllowed reports whether iss is one of the trusted issuers. An empty set
+// (no primary, no brands — never the case in production) skips the check, matching
+// the prior "empty issuer disables the check" behavior; a non-empty set is
+// fail-secure (a token whose iss is not in the set is rejected).
+func issuerAllowed(iss string, trusted []string) bool {
+	if len(trusted) == 0 {
+		return true
+	}
+	for _, t := range trusted {
+		if iss == t {
+			return true
+		}
+	}
+	return false
 }
