@@ -48,7 +48,7 @@ type Dataset struct {
 
 // DatasetItem is one input/expected pair inside a dataset. Items are addressed
 // by their own id; (org,dataset,id) scopes every lookup. Status ACTIVE|ARCHIVED
-// mirrors the Langfuse item lifecycle (a run consumes only ACTIVE items).
+// mirrors the observation item lifecycle (a run consumes only ACTIVE items).
 type DatasetItem struct {
 	ID        string
 	Org       string
@@ -140,7 +140,7 @@ func openStore(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
-	// Every table's identity is COMPOSITE with org (Langfuse keys these `(id,
+	// Every table's identity is COMPOSITE with org (the model keys these `(id,
 	// projectId)`). The `id` is NEVER a global cross-org key: making it a global
 	// PRIMARY KEY would (a) stop two orgs from ever using the same item id and (b)
 	// leak a cross-tenant existence oracle (org A's create 409s iff org B already
