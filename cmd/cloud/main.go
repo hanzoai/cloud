@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -23,6 +24,10 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
+	shutdown := initTelemetry(ctx, "hanzo-cloud")
+	defer shutdown(ctx)
+
 	// nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
 	if err := cloud.Serve(nil); err != nil {
 		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
