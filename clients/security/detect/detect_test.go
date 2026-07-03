@@ -1,4 +1,4 @@
-package security
+package detect
 
 import (
 	"strings"
@@ -46,7 +46,7 @@ func TestScanDetectsProviderSecrets(t *testing.T) {
 				if got.Fingerprint == "" || strings.Contains(got.Fingerprint, tc.secret) {
 					t.Fatalf("fingerprint bad/leaky: %q", got.Fingerprint)
 				}
-				if got.Fingerprint != fingerprint(tc.secret) {
+				if got.Fingerprint != Fingerprint(tc.secret) {
 					t.Fatalf("fingerprint mismatch: %q", got.Fingerprint)
 				}
 			}
