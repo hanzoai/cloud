@@ -74,6 +74,7 @@ const (
 	FieldText     = "Text"
 	FieldSmall    = "SmallText"
 	FieldLong     = "LongText"
+	FieldRichText = "RichText" // WYSIWYG body; value is a Lexical EditorState JSON string
 	FieldSelect   = "Select"
 	FieldLink     = "Link"
 	FieldTable    = "Table"
@@ -86,7 +87,7 @@ const (
 var validFieldtypes = map[string]bool{
 	FieldData: true, FieldInt: true, FieldFloat: true, FieldCurrency: true,
 	FieldCheck: true, FieldDate: true, FieldDatetime: true, FieldText: true,
-	FieldSmall: true, FieldLong: true, FieldSelect: true, FieldLink: true,
+	FieldSmall: true, FieldLong: true, FieldRichText: true, FieldSelect: true, FieldLink: true,
 	FieldTable: true, FieldAttach: true, FieldJSON: true, FieldPassword: true,
 }
 
