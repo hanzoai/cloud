@@ -33,9 +33,13 @@ import (
 
 // identityHeaders are forwarded to Visor so it sees the SAME gateway-minted
 // tenant context cloud validated (already sanitized + re-injected by
-// middleware_identity upstream). Authorization is forwarded only when no service
-// credential is configured (see authorize).
-var identityHeaders = []string{"X-Org-Id", "X-User-Id", "X-User-Email"}
+// middleware_identity upstream). This INCLUDES the org sub-scopes X-Project-Id /
+// X-App-Id: SanitizeIdentity has already REFUSED any cross-org project claim and
+// dropped scope on the anonymous path, so what reaches here is trustworthy —
+// forwarding it lets Visor attribute compute (compute_usage.app/project) to the
+// caller's OWN project, never another tenant's. Authorization is forwarded only
+// when no service credential is configured (see authorize).
+var identityHeaders = []string{"X-Org-Id", "X-User-Id", "X-User-Email", "X-Project-Id", "X-App-Id"}
 
 // defaultBase is the in-cluster Visor Service (Beego, httpport 19000). Overridable
 // by VISOR_URL for other environments and for tests (an httptest.Server URL).

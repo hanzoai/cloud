@@ -43,8 +43,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // slugRE constrains a project slug to a DNS/identifier-safe token. The slug is
@@ -164,6 +164,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// tenant + S3 prefix through THIS store. Set once at mount; the site middleware
 	// reads it per request.
 	sites.SetResolver(siteResolver{store: store})
+
+	// Register the store as a project-ownership resolver for the identity trust
+	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
+	// refused before any subsystem reads it. Same inversion as sites.SetResolver —
+	// cloud does not import projectsvc.
+	cloud.RegisterTenantScopeResolver(projectScopeResolver{store: store})
 
 	app.Post("/v1/projects", s.create)
 	app.Post("/v1/projects/fork", s.fork)

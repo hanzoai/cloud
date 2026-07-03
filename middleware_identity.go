@@ -66,15 +66,20 @@ var cookieTokenNames = []string{"iam_access_token", "access_token", "hanzo_token
 // so nothing a client sent survives as identity, then re-injects from a
 // validated principal.
 //
-// Deliberately NOT in this list: org/project SUB-SCOPES (X-Project-Id,
-// X-Environment). Those are sub-scopes WITHIN an org that some callers pass
-// through verbatim (provisioning reads project/env) — they are NOT identity
-// authority. A service must NEVER derive TENANT scope from a client X-Project-Id:
-// the native evals subsystem, for one, scopes exclusively by c.Org() (the
-// validated bearer owner) and ignores X-Project-Id entirely — trusting it for
-// tenancy was the cross-tenant break the native rewrite closed. Per-PROJECT
-// scoping, if ever needed, must come from a project-membership check UNDER the
-// validated org, never a raw sub-scope header.
+// Deliberately NOT in this list: org SUB-SCOPES (X-Project-Id, X-App-Id,
+// X-Environment). Those are sub-scopes WITHIN an org, NOT identity authority, so
+// they are not minted from the token like the headers above. They ARE still
+// sanitized — but as sub-scopes, in a separate pass (sanitizeSubScopes, keyed on
+// subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
+// is RE-INJECTED for a validated principal only when it is not a cross-org claim
+// (projectIsForeign — tenant_scope.go refuses a project REGISTERED to a DIFFERENT
+// org), and both are dropped on the anonymous path. This IS the "project-
+// membership check UNDER the validated org" the data plane always required: a
+// service must never derive tenant scope from a raw X-Project-Id, and after this
+// pass a surviving X-Project-Id is either the caller's OWN registered project or
+// an unregistered free-form label that can only ever scope the caller's own org
+// (every consumer AND-s it with the validated org). The native evals subsystem,
+// which scopes exclusively by c.Org() and ignores X-Project-Id, is unaffected.
 var authorityHeaders = []string{
 	"X-User-Id",
 	"X-Org-Id",
@@ -91,6 +96,14 @@ var authorityHeaders = []string{
 	"X-Tenant-ID",
 	"X-Org",
 }
+
+// subScopeHeaders are org SUB-SCOPES (project/app) — caller-provided narrowings,
+// NOT identity authority. They are deleted on ingress like the authority headers
+// so no raw client copy survives, then re-injected by sanitizeSubScopes only for
+// a validated principal and only after passing the cross-org guard. Unlike
+// authorityHeaders they are not minted from the token; they must merely be proven
+// non-foreign to the validated org.
+var subScopeHeaders = []string{"X-Project-Id", "X-App-Id"}
 
 // SanitizeIdentity returns the identity-trust-boundary middleware.
 //
@@ -132,16 +145,23 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		req := c.Fiber().Request()
 
-		// Capture the requested org before stripping (admin org-switch input +
-		// Phase-1 data passthrough), then delete every authority header. A client
-		// org bearing a whitespace/control/format rune is refused here (not
-		// trimmed): trimming would collapse "acme " onto "acme", and the injective
-		// tenant boundary must never fold two distinct org identifiers into one.
+		// Capture the requested org + sub-scopes before stripping (admin org-switch
+		// input + Phase-1 data passthrough for the org; cross-org validation input
+		// for the sub-scopes), then delete every authority header AND every sub-scope
+		// header, so nothing a client sent survives as identity OR scope. A client
+		// org bearing a whitespace/control/format rune is refused here (not trimmed):
+		// trimming would collapse "acme " onto "acme", and the injective tenant
+		// boundary must never fold two distinct org identifiers into one.
 		cliOrg := string(req.Header.Peek("X-Org-Id"))
 		if OrgHasUnsafeRune(cliOrg) {
 			cliOrg = ""
 		}
+		cliProject := strings.TrimSpace(string(req.Header.Peek("X-Project-Id")))
+		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
 		for _, h := range authorityHeaders {
+			req.Header.Del(h)
+		}
+		for _, h := range subScopeHeaders {
 			req.Header.Del(h)
 		}
 
@@ -162,28 +182,71 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			if claims.Email != "" {
 				req.Header.Set("X-User-Email", claims.Email)
 			}
+			// effOrg is the org actually acted as: the switched-to org for a global
+			// admin, else the principal's own owner. Sub-scopes are validated against
+			// THIS org (a global admin viewing org X may legitimately carry X's
+			// project; a project owned by neither is refused).
+			var effOrg string
 			switch {
 			case claims.IsAdmin && owner != "" && owner == adminOrg:
 				// Verified GLOBAL admin: admin authority + honored org-switch.
 				req.Header.Set("X-User-IsAdmin", "true")
 				if cliOrg != "" {
-					req.Header.Set("X-Org-Id", cliOrg)
+					effOrg = cliOrg
 				} else {
-					req.Header.Set("X-Org-Id", owner)
+					effOrg = owner
 				}
+				req.Header.Set("X-Org-Id", effOrg)
 			case owner != "":
 				// Any other principal: pinned to their own org, never admin.
+				effOrg = owner
 				req.Header.Set("X-Org-Id", owner)
 			}
+			sanitizeSubScopes(c, effOrg, cliProject, cliApp)
 			return c.Continue()
 		}
 
-		// No verified principal: admin authority is gone for good. Restore the
-		// client org for the Phase-1 data path only (see residual note above).
+		// No verified principal: admin authority is gone for good and the sub-scopes
+		// stay stripped (no trusted org to validate a project against, and the data
+		// plane gates on a validated principal anyway). Restore only the client org
+		// for the Phase-1 data path (see residual note above).
 		if cliOrg != "" {
 			req.Header.Set("X-Org-Id", cliOrg)
 		}
 		return c.Continue()
+	}
+}
+
+// sanitizeSubScopes re-injects the org SUB-SCOPES (X-Project-Id, X-App-Id) for a
+// VALIDATED principal, the raw client copies having been deleted on ingress. It
+// is the project/app half of the trust boundary:
+//
+//   - X-Project-Id is re-injected only when it is NOT a cross-org claim
+//     (projectIsForeign): the caller's OWN registered project, or an unregistered
+//     free-form label, survives; a project REGISTERED to a different org is
+//     refused (dropped). This is the membership-check-under-the-validated-org that
+//     per-project scope always required.
+//   - X-App-Id is a caller LABEL, not an isolation boundary: NO cloud subsystem
+//     scopes access by it (git/security/eval scope by org + optional project, and
+//     platform scopes apps by route params under the validated org), and an app is
+//     always nested under an org-owned project, so the un-forgeable org column
+//     bounds any mislabel to the caller's OWN subtree. It is forwarded as-is on the
+//     validated path (a compute_usage attribution dimension) and dropped on the
+//     anonymous path. If apps ever become a cross-org-consumed key, add a symmetric
+//     appIsForeign guard here — the resolver already carries the org.
+//
+// With no effective org (an unsafe/absent owner) NOTHING is re-injected: an
+// org-less request carries no scope.
+func sanitizeSubScopes(c *zip.Ctx, org, project, app string) {
+	if org == "" {
+		return
+	}
+	req := c.Fiber().Request()
+	if project != "" && !projectIsForeign(c.Context(), org, project) {
+		req.Header.Set("X-Project-Id", project)
+	}
+	if app != "" {
+		req.Header.Set("X-App-Id", app)
 	}
 }
 
