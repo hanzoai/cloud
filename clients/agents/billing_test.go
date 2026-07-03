@@ -180,6 +180,41 @@ func TestRunDebitsCallerOrg(t *testing.T) {
 	}
 }
 
+// TestRunByReturnedIDMetersOnce: running an agent addressed by the id create
+// returned debits the caller org EXACTLY ONCE with product=agent — the run path
+// meters identically whether the agent is addressed by id or by name.
+func TestRunByReturnedIDMetersOnce(t *testing.T) {
+	bs := &billServer{available: 100000}
+	app := mountBilled(t, bs.start(t), &fakeAI{content: "the answer"})
+
+	_, body := do(t, app, http.MethodPost, "/v1/agents", "acme",
+		map[string]any{"name": "a", "model": "gpt-4o-mini", "instructions": "x"})
+	var created agentView
+	if err := json.Unmarshal(body, &created); err != nil || created.ID == "" {
+		t.Fatalf("create must return an id, got %s (err %v)", body, err)
+	}
+
+	code, rbody := do(t, app, http.MethodPost, "/v1/agents/"+created.ID+"/run", "acme", map[string]any{"input": "hi"})
+	if code != http.StatusOK {
+		t.Fatalf("run by returned id want 200, got %d (%s)", code, rbody)
+	}
+	if !waitForDebit(func() bool { return bs.debits() == 1 }) {
+		t.Fatalf("a run by id must debit exactly once, got %d", bs.debits())
+	}
+	org, ubody := bs.lastDebit()
+	if org != "acme" {
+		t.Fatalf("debited org %q, want caller %q", org, "acme")
+	}
+	var u struct {
+		Provider string `json:"provider"`
+		Model    string `json:"model"`
+	}
+	_ = json.Unmarshal(ubody, &u)
+	if u.Provider != meterKind || u.Model != "gpt-4o-mini" {
+		t.Fatalf("debit must be product=agent for the agent's model, got provider=%q model=%q", u.Provider, u.Model)
+	}
+}
+
 // TestFailedRunNotBilled: when the model errors, the run is recorded as an error
 // but NOT billed — failed work is never charged (mirrors the edge gate).
 func TestFailedRunNotBilled(t *testing.T) {
