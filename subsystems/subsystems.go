@@ -28,7 +28,7 @@ package subsystems
 // scaling for the security/edge tier.
 //
 // KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by
-// clients/kmsembed, replacing the legacy Infisical fork). Its master key is
+// clients/kms, replacing the legacy Infisical fork). Its master key is
 // injected by the operator via a K8s Secret env; absent it the subsystem serves
 // fail-closed health-only.
 import (
@@ -46,7 +46,7 @@ import (
 	// "kmssvc" (order 10) so the real /v1/kms/health probe is not shadowed by the
 	// generic liveness route; secret ops fail closed until the operator injects
 	// CLOUD_KMS_MASTER_KEY_REF.
-	_ "github.com/hanzoai/cloud/clients/kms" // order 10 — /v1/kms/*
+	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
@@ -81,6 +81,14 @@ import (
 	// no tenant sees another's. Fails closed (503) without DO_API_TOKEN. Backs the
 	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
 	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
+
+	// Console standalone surface: the native Go port of console2's two NON-proxy
+	// server routes (app/keys + app/onboard) — mint/revoke the user's `hk-` Cloud
+	// API key and create the user's org — done as the confidential `hanzo-console`
+	// IAM client on the VALIDATED caller's behalf. Porting these lets console2 drop
+	// its last stateful Node handlers and be statically exported (task #41, "True
+	// 1-binary FE"): the embedded SPA calls /v1/console/* on its own origin.
+	_ "github.com/hanzoai/cloud/clients/console" // order 122 — /v1/console/keys,/v1/console/onboard
 
 	// Projects control plane: the ONE org-scoped store of buildable/deployable
 	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
