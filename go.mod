@@ -24,7 +24,6 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/zip v1.2.1
-	go.mongodb.org/mongo-driver/v2 v2.5.0
 	golang.org/x/term v0.44.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
@@ -43,6 +42,8 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
 	github.com/zap-proto/http v0.2.0 // indirect
+	go.mongodb.org/mongo-driver v1.17.9 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 )
@@ -589,7 +590,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
 	go.mau.fi/util v0.8.3 // indirect
-	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/collector/featuregate v1.51.0 // indirect
 	go.opentelemetry.io/collector/pdata v1.51.0 // indirect
