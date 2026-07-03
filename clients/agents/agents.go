@@ -44,7 +44,15 @@ import (
 	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// agentTracer emits the per-run/per-step agent spans (shipped over ZAP to
+// o11y). A run is one root span; each step nests an LLM GenAI client span.
+var agentTracer = otel.Tracer("hanzo.ai/cloud/agents")
 
 // nameRE constrains an agent's org-unique name at the create boundary — the one
 // place a name is written. Path addressing (Store.Resolve, parameterized) accepts
@@ -618,14 +626,34 @@ func (s *svc) run(c *zip.Ctx) error {
 // it means no run happened. A run that executed but the model failed returns a
 // recorded error-status Run and a nil error.
 func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
+	// Root span per run — the whole trace (balance gate → step → LLM call)
+	// nests under it, shipped over ZAP to o11y (SigNoz).
+	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("hanzo.agent.name", a.Name),
+		attribute.String("hanzo.agent.org", a.Org),
+		attribute.String("gen_ai.request.model", a.Model),
+	)
+
 	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
 	// Gate the AGENT's own org — never a caller default, never another tenant.
 	// fee<=0 or unconfigured billing makes this a no-op (allows).
 	if err := s.bill.Gate(ctx, a.Org, meterKind, fee); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
 	}
 
 	r := executeRun(ctx, s.ai, a.Org, a, input)
+	span.SetAttributes(
+		attribute.String("hanzo.agent.run_id", r.ID),
+		attribute.String("hanzo.agent.run_status", r.Status),
+		attribute.Int64("hanzo.agent.duration_ms", r.DurationMs),
+	)
+	if r.Status == "error" {
+		span.SetStatus(codes.Error, r.Error)
+	}
 	if err := s.store.InsertRun(ctx, r); err != nil {
 		s.log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
 	}
@@ -656,6 +684,11 @@ func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, cl
 // status "ok" with output, or "error" with the upstream failure. Pure of HTTP
 // and persistence so it is directly testable; the caller records + responds.
 func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, input string) Run {
+	// Child step span; the AI client opens its own GenAI span nested under this.
+	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
+	defer span.End()
+	span.SetAttributes(attribute.String("gen_ai.request.model", a.Model))
+
 	prompt := a.Instructions
 	if in := strings.TrimSpace(input); in != "" {
 		if prompt != "" {
@@ -672,6 +705,8 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 		DurationMs: dur, CreatedAt: time.Now().Unix(),
 	}
 	if aiErr != nil {
+		span.RecordError(aiErr)
+		span.SetStatus(codes.Error, "agent step failed")
 		r.Status = "error"
 		r.Error = aiErr.Error()
 	} else {
