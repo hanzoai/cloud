@@ -1,23 +1,24 @@
-// Package security is the native code-security surface of the Hanzo cloud
-// binary: /v1/security/*. It scans caller-submitted source for hardcoded
-// secrets, in-process, with zero external tooling (no semgrep/gitleaks binary
-// to install, no network) — the one Semgrep-class capability that ships
-// complete today. The detection logic ports the concept behind hanzoai/guard
-// (the LLM-boundary redactor) to code at rest, and is the substrate a native
-// AST/SAST engine (on hanzoai/ast) and scanner-orchestration layer grow onto
-// per the plan of record in hanzoai/security POSTURE.md.
+// Package detect is the pure, dependency-free secret-detection engine behind
+// Hanzo's native code-security surface. It scans source for hardcoded secrets
+// with zero external tooling (no semgrep/gitleaks binary, no network) — the one
+// Semgrep-class capability that ships complete today. The logic ports the
+// concept behind hanzoai/guard (the LLM-boundary redactor) to code at rest, and
+// is the substrate a native AST/SAST engine (on hanzoai/ast) grows onto per the
+// plan of record in hanzoai/security POSTURE.md.
 //
-// engine.go is that detection core, and it is deliberately self-contained:
-// pure functions over (path, content) → findings, no I/O, no store, no HTTP.
-// The store (store.go) and the subsystem (security.go) compose around it.
+// It is deliberately a LEAF: only the standard library is imported, and the API
+// is pure functions over (path, content) → findings — no I/O, no store, no
+// HTTP, no cloud deps. That decomplection is the point: the HTTP subsystem
+// (clients/security) AND the `hanzo security scan` CLI both consume THIS engine,
+// so the detection logic exists once and neither surface drags the other in.
 //
-// THE ONE INVARIANT: a finding NEVER carries the raw secret. It carries a
-// masked preview (first/last few chars, middle starred) plus a SHA-256
-// fingerprint of the secret. That is enough to locate it, dedupe identical
-// occurrences, and confirm a rotation happened — and nothing more. Persisting
-// the plaintext would make the findings DB a secret store, which is exactly
-// the thing we scan to prevent (global rule: never store secrets in the clear).
-package security
+// THE ONE INVARIANT: a Finding NEVER carries the raw secret. It carries a masked
+// preview (first/last few chars, middle starred) plus a SHA-256 fingerprint of
+// the secret — enough to locate it, dedupe identical occurrences, and confirm a
+// rotation happened, and nothing more. Persisting the plaintext would make the
+// findings DB a secret store, exactly the thing we scan to prevent (global rule:
+// never store secrets in the clear).
+package detect
 
 import (
 	"crypto/sha256"
@@ -47,6 +48,25 @@ var severityRank = map[string]int{
 
 // SeverityRank exposes the ordering for callers that filter/sort findings.
 func SeverityRank(sev string) int { return severityRank[sev] }
+
+// SeveritiesAtOrAbove returns the severity names ranked >= min (unordered), so a
+// store can build an `IN (...)` filter without reaching into the rank map. An
+// unknown min yields every severity (rank 0 floor), which is the safe "no
+// filter" behavior.
+func SeveritiesAtOrAbove(min string) []string {
+	floor := severityRank[min]
+	out := make([]string, 0, len(severityRank))
+	for sev, rank := range severityRank {
+		if rank >= floor {
+			out = append(out, sev)
+		}
+	}
+	return out
+}
+
+// RuleCount is the number of detection rules in the catalog (for health/log
+// lines that report engine size without materializing the catalog).
+func RuleCount() int { return len(rules) }
 
 // Rule is one secret-detection pattern. A rule is EITHER a direct regex whose
 // whole match is the secret (Pattern, with an optional Group capturing the
@@ -161,7 +181,7 @@ func ScanContent(path, content string) []Finding {
 			if r.minEntropy > 0 && shannonEntropy(secret) < r.minEntropy {
 				continue // low-entropy assignment (e.g. secret = "changeme") — skip
 			}
-			fp := fingerprint(secret)
+			fp := Fingerprint(secret)
 			line := lineOf(lineStarts, ss)
 			key := r.ID + "\x00" + itoa(line) + "\x00" + fp
 			if _, dup := seen[key]; dup {
@@ -215,10 +235,10 @@ func lessRuleView(a, b RuleView) bool {
 
 // ---- helpers (pure) ----
 
-// fingerprint is the hex SHA-256 of the raw secret. Identical secrets across
+// Fingerprint is the hex SHA-256 of a raw secret. Identical secrets across
 // files/scans share a fingerprint (dedupe + rotation tracking); the original is
 // not recoverable from it.
-func fingerprint(secret string) string {
+func Fingerprint(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 	return hex.EncodeToString(sum[:])
 }
