@@ -35,6 +35,7 @@ require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/hanzoai/sqlite v0.1.4 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
@@ -42,6 +43,8 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
 	github.com/zap-proto/http v0.2.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 )
 
 require (
@@ -417,7 +420,7 @@ require (
 	github.com/luxfi/mdns v0.1.1 // indirect
 	github.com/luxfi/metric v1.5.8 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
-	github.com/luxfi/pq v1.0.3 // indirect
+	github.com/luxfi/pq v1.1.0 // indirect
 	github.com/luxfi/pulsar v1.1.1 // indirect
 	github.com/luxfi/threshold v1.9.9 // indirect
 	github.com/luxfi/zap v1.2.0 // indirect
@@ -653,7 +656,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.789.1
+	github.com/hanzoai/ai v1.790.1
 	github.com/hanzoai/authz v1.10.3
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
