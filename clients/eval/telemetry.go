@@ -16,7 +16,7 @@ import (
 // split (CTO directive): traces, observations and scores-as-events land in
 // datastore (hanzoai's ClickHouse fork), NOT SQLite. datastore is THE backend
 // for all AI observability, so this is the same MergeTree, insert-only discipline
-// the audit OLAP mirror uses (audit_mirror.go) and it reuses the Langfuse v3
+// the audit OLAP mirror uses (audit_mirror.go) and it reuses the v3
 // ClickHouse shapes (traces/observations/scores) since datastore IS ClickHouse.
 //
 // ONE DATASTORE CLIENT (CTO consolidation). This store does NOT open a second
@@ -104,11 +104,11 @@ type TraceFilter struct {
 // Observation is ONE production LLM generation — the read projection of the
 // proven `hanzo.cloud_usage` ledger (written on every AI call by ai/object's
 // zapWriteUsage, the same funnel that emits the OTel GenAI span). It is the
-// Langfuse-v3 "observation of type GENERATION" shape the console's Observe surface
+// v3 "observation of type GENERATION" shape the console's Observe surface
 // renders: model/provider, in/out/total tokens, cost, status, attribution. This is
 // a READ over an ai/object-owned table — eval never writes it (its own tables stay
 // eval_traces/eval_scores) — so there is exactly ONE emission path (recordTrace),
-// fanned to o11y (span), Langfuse (span), and this ledger; no parallel write.
+// fanned to o11y (span), the observability ingest (span), and this ledger; no parallel write.
 type Observation struct {
 	ID               string
 	TraceID          string
@@ -198,7 +198,7 @@ func (t *dsTelemetry) ready(ctx context.Context) error {
 }
 
 // ensureTables creates the append-only telemetry tables idempotently. These are
-// the datastore projections of the Langfuse v3 traces/observations/scores model:
+// the datastore projections of the v3 traces/observations/scores model:
 // MergeTree (insert-only), partitioned by month, ordered org-first so a tenant's
 // reads are a contiguous prefix.
 func (t *dsTelemetry) ensureTables(ctx context.Context) error {

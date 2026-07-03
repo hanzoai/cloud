@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// toObservationView maps a cloud_usage-ledger row (Observation) into the Langfuse-v3
+// toObservationView maps a cloud_usage-ledger row (Observation) into the v3
 // GENERATION shape the console Observe surface renders.
 func TestToObservationViewSuccess(t *testing.T) {
 	ts := time.Date(2026, 7, 3, 21, 35, 38, 0, time.UTC)
