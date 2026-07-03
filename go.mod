@@ -703,3 +703,5 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
+
+replace github.com/hanzoai/metrics => /tmp/claude-1000/-home-z/00c48167-9e0b-486b-8553-fcee6c68dfdf/scratchpad/hip-metrics

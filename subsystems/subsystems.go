@@ -27,26 +27,29 @@ package subsystems
 // Keeping those separate preserves blast-radius isolation and independent
 // scaling for the security/edge tier.
 //
-// KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by
-// clients/kmsembed, replacing the legacy Infisical fork). Its master key is
-// injected by the operator via a K8s Secret env; absent it the subsystem serves
-// fail-closed health-only.
+// KMS is embedded in-process — clients/kms mounts /v1/kms/* backed by its own
+// in-process luxfi/kms store (clients/kms core.go, replacing the legacy Infisical
+// fork). Its master key is injected by the operator via a K8s Secret env; absent
+// it the subsystem serves fail-closed health-only. As of the HIP-0106 composition-
+// root migration kms is wired explicitly in serve.go, not via this bundle (below).
 import (
 	_ "github.com/hanzoai/ai"        // order 150
 	_ "github.com/hanzoai/authz"     // order 70
 	_ "github.com/hanzoai/base"      // order 60
 	_ "github.com/hanzoai/commerce"  // order 100
 	_ "github.com/hanzoai/licensing" // order 110
-	_ "github.com/hanzoai/metrics"   // order 40
 	_ "github.com/hanzoai/o11y"      // order 70
 	_ "github.com/hanzoai/vfs"       // order 20
 
-	// Embedded KMS secrets plane (HIP-0106): mounts /v1/kms/* backed by the
-	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as
-	// "kmssvc" (order 10) so the real /v1/kms/health probe is not shadowed by the
-	// generic liveness route; secret ops fail closed until the operator injects
-	// CLOUD_KMS_MASTER_KEY_REF.
-	_ "github.com/hanzoai/cloud/clients/kms" // order 10 — /v1/kms/*
+	// NOTE (HIP-0106 composition-root migration): kms (order 10, /v1/kms/*) and
+	// metrics (order 40, /v1/{metrics,logs,traces}/*) are NO LONGER registered
+	// here. They were the first two subsystems converted to the explicit New/Mount
+	// model and are wired directly in serve.go's composition root — constructed
+	// with their own narrow deps and Mounted in order, no global registry entry,
+	// no init() side effect. Every remaining subsystem below still self-registers
+	// via init() into cloud.Registry and mounts through MountAll; each moves up to
+	// the composition root as it is converted, and this bundle disappears when the
+	// last one lands.
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
