@@ -117,6 +117,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
+	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
 
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
