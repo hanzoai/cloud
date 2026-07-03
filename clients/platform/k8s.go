@@ -122,6 +122,7 @@ type k8sClient struct {
 	imagePrefix string
 	buildNS     string         // namespace CI Jobs run in (default "hanzo")
 	limits      resourceLimits // per-tenant replica/quota/build bounds (MED-3)
+	kmsSync     kmsSyncConfig  // KMSSecret CR operator config (secrets.go)
 	// First-deploy tenant-RBAC readiness wait (waitForTenantRBAC). Zero ⇒ the
 	// production constants (tenantRBACReadyTimeout / tenantRBACPollInitial); tests
 	// shrink them for fast, deterministic coverage. Not env-configurable: these do
@@ -133,7 +134,7 @@ type k8sClient struct {
 // newK8sClient builds the dynamic client from the in-cluster service account,
 // falling back to KUBECONFIG for local/dev — identical to paassvc.newDynamic.
 func newK8sClient(imagePrefix, buildNS string) *k8sClient {
-	c := &k8sClient{imagePrefix: imagePrefix, buildNS: buildNS, limits: newResourceLimits()}
+	c := &k8sClient{imagePrefix: imagePrefix, buildNS: buildNS, limits: newResourceLimits(), kmsSync: newKMSSyncConfig()}
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -441,7 +442,7 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 			map[string]any{"name": tenantPullSecretName},
 		},
 	}
-	if env := envList(a.EnvJSON); len(env) > 0 {
+	if env := renderEnv(managedSecretName(a.Slug), a.EnvJSON); len(env) > 0 {
 		spec["env"] = env
 	}
 	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
@@ -881,16 +882,31 @@ func nestedInt(m map[string]any, key string) (int, bool) {
 	}
 }
 
-func envList(envJSON string) []any {
-	var kvs []EnvVarJSON
-	if envJSON == "" {
-		return nil
-	}
-	_ = json.Unmarshal([]byte(envJSON), &kvs)
+// renderEnv builds the operator Service CR `spec.env` for an app. A plain env var
+// renders as `{name, value}`; a secret:true var renders as a Kubernetes
+// `valueFrom.secretKeyRef` → the operator-materialized Secret `secretName`, key =
+// the env key (secrets.go). The secret's PLAINTEXT is NEVER rendered here — the
+// value lived only in KMS and reaches the pod via the k8s Secret. `optional:true`
+// so the pod boots even before the KMSSecret sync lands (the env var is simply
+// absent until the operator materializes the Secret) — honest degradation, never a
+// crash-loop. A secret var must carry ONLY valueFrom (never a `value`), which the
+// hanzo operator asserts before rendering the container env.
+func renderEnv(secretName, envJSON string) []any {
+	kvs := parseEnv(envJSON)
 	out := make([]any, 0, len(kvs))
 	for _, kv := range kvs {
 		if kv.Secret {
-			continue // secret env is KMS-sealed (phase 2); never rendered inline
+			out = append(out, map[string]any{
+				"name": kv.Key,
+				"valueFrom": map[string]any{
+					"secretKeyRef": map[string]any{
+						"name":     secretName,
+						"key":      kv.Key,
+						"optional": true,
+					},
+				},
+			})
+			continue
 		}
 		out = append(out, map[string]any{"name": kv.Key, "value": kv.Value})
 	}
