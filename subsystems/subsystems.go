@@ -28,7 +28,7 @@ package subsystems
 // scaling for the security/edge tier.
 //
 // KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by
-// clients/kmsembed, replacing the legacy Infisical fork). Its master key is
+// clients/kms, replacing the legacy Infisical fork). Its master key is
 // injected by the operator via a K8s Secret env; absent it the subsystem serves
 // fail-closed health-only.
 import (
@@ -46,7 +46,7 @@ import (
 	// "kmssvc" (order 10) so the real /v1/kms/health probe is not shadowed by the
 	// generic liveness route; secret ops fail closed until the operator injects
 	// CLOUD_KMS_MASTER_KEY_REF.
-	_ "github.com/hanzoai/cloud/clients/kms" // order 10 — /v1/kms/*
+	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
