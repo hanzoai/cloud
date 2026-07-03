@@ -31,7 +31,7 @@ func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *svc) {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &svc{store: store, k8s: k, log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
+	s := &svc{store: store, k8s: k, kms: newFakeKMS(), log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s.routes(app)
 	return app, s
@@ -60,6 +60,7 @@ func fakeK8s() *k8sClient {
 		namespacesGVR:     "NamespaceList",
 		resourceQuotasGVR: "ResourceQuotaList",
 		limitRangesGVR:    "LimitRangeList",
+		kmsSecretsGVR:     "KMSSecretList",
 	})
 	// Model a cluster where cloud-api's per-tenant RBAC is already present: the
 	// SelfSubjectAccessReview readiness probe (waitForTenantRBAC) resolves
@@ -67,7 +68,7 @@ func fakeK8s() *k8sClient {
 	// wait. Tests of the async-RBAC race prepend their own SSAR reactor to override
 	// this default (see tenant_rbac_test.go).
 	allowSSAR(dyn, func() bool { return true })
-	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo", limits: testLimits()}
+	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo", limits: testLimits(), kmsSync: newKMSSyncConfig()}
 }
 
 // allowSSAR installs a reactor that answers every SelfSubjectAccessReview with
@@ -388,17 +389,54 @@ func TestHTTPCrossTenantIsolation(t *testing.T) {
 	}
 }
 
-// TestHTTPSecretEnvRejected proves secret env vars are refused (fail-closed, no
-// plaintext ever stored) until KMS sealing lands.
-func TestHTTPSecretEnvRejected(t *testing.T) {
-	app := mountApp(t)
+// TestHTTPSecretEnvSealed proves secret env vars are ACCEPTED and sealed into KMS:
+// the create succeeds, the response never echoes the plaintext (masked), and the
+// stored row carries no plaintext — the value lives only in KMS.
+func TestHTTPSecretEnvSealed(t *testing.T) {
+	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
+	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
+	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
+		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
+		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}, {"key": "PUBLIC", "value": "ok"}},
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("secret env want 201, got %d (%s)", code, body)
+	}
+	if bytes.Contains(body, []byte("hunter2")) {
+		t.Fatal("secret value must never be echoed back over the API")
+	}
+	// The persisted env_json must carry NO plaintext (the secret value is blanked).
+	proj, err := s.store.GetProject(context.Background(), "maxpower", "web")
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	a, err := s.store.GetApplication(context.Background(), "maxpower", proj.ID, "api")
+	if err != nil {
+		t.Fatalf("get app: %v", err)
+	}
+	if bytes.Contains([]byte(a.EnvJSON), []byte("hunter2")) {
+		t.Fatalf("plaintext secret leaked into the store: %s", a.EnvJSON)
+	}
+	// The sealed value must be readable back from KMS at the app's coordinate.
+	got, err := s.kms.GetSecret(context.Background(), kmsSecretRef("maxpower", "api", "DB_PASSWORD"))
+	if err != nil || string(got) != "hunter2" {
+		t.Fatalf("secret not sealed into KMS: got %q err=%v", got, err)
+	}
+}
+
+// TestHTTPSecretEnvFailsClosedWithoutKMS proves that when KMS is unavailable the
+// create is refused (503) and NOTHING is persisted — a plaintext secret never
+// lands in the DB as a fallback.
+func TestHTTPSecretEnvFailsClosedWithoutKMS(t *testing.T) {
+	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
+	s.kms = nil // KMS not configured
 	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},
 		"env": []map[string]any{{"key": "DB_PASSWORD", "value": "hunter2", "secret": true}},
 	})
-	if code != http.StatusNotImplemented {
-		t.Fatalf("secret env want 501, got %d (%s)", code, body)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("secret env with no KMS want 503, got %d (%s)", code, body)
 	}
 	if bytes.Contains(body, []byte("hunter2")) {
 		t.Fatal("secret value must never be echoed in the error")
