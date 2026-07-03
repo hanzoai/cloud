@@ -1,0 +1,284 @@
+package sites
+
+import (
+	"context"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// fakeResolver records the slugs it is asked to resolve so a test can assert that
+// the tenant is ALWAYS keyed by the validated host slug and never by the path.
+type fakeResolver struct {
+	mu    sync.Mutex
+	calls []string
+	site  Site
+	found bool
+	err   error
+}
+
+func (f *fakeResolver) Resolve(_ context.Context, slug string) (Site, bool, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, slug)
+	f.mu.Unlock()
+	return f.site, f.found, f.err
+}
+
+func (f *fakeResolver) slugs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.calls))
+	copy(out, f.calls)
+	return out
+}
+
+func testServer() *Server {
+	return New(Config{Apex: "hanzo.app", Reserved: []string{"app", "api", "admin"}}, luxlog.New("test"))
+}
+
+// ---- resolveKey / objectKey: the traversal boundary (RED focus) ----------
+
+// TestResolveKeyNeverEscapesPrefix is the core tenant-isolation proof. For a
+// battery of hostile paths, the object key that would be fetched MUST stay under
+// the project's own `<org>/<slug>/` prefix — never another org's, never another
+// project's, never absolute, never a parent. If any input escaped, a
+// `<slug>.hanzo.app` request could read another tenant's S3 objects.
+func TestResolveKeyNeverEscapesPrefix(t *testing.T) {
+	const prefix = "orgA/site1" // this project's hard-bounded prefix
+	hostile := []string{
+		"/",
+		"/index.html",
+		"/../../../etc/passwd",
+		"/../orgB/site9/secret.env",
+		"/..%2f..%2forgB%2fsecret",        // (already-decoded form fasthttp would pass)
+		"/....//....//orgB",
+		"/a/b/../../../../orgB/x",
+		"//orgB/x",
+		"/./././../orgB",
+		"/assets/../../orgB/site9/index.html",
+		"/%2e%2e/%2e%2e/orgB",
+		`/..\..\orgB\x`,
+		"/foo/..",
+		"/..",
+		"/.",
+		"/legit/deep/path/app.css",
+		strings.Repeat("/..", 50) + "/orgB/secret",
+	}
+	for _, in := range hostile {
+		rel := resolveKey(in)
+		if strings.HasPrefix(rel, "/") {
+			t.Fatalf("resolveKey(%q) = %q is absolute", in, rel)
+		}
+		// No real ".." path SEGMENT survives (unencoded traversal is collapsed by
+		// rooted path.Clean). A literal "%2f" is NOT a separator to S3 — object
+		// keys are opaque strings — so an encoded sequence stays inside the prefix
+		// as a (nonexistent) literal key; the decisive guard is prefix containment.
+		if strings.Contains("/"+rel+"/", "/../") {
+			t.Fatalf("resolveKey(%q) = %q has a .. segment", in, rel)
+		}
+		key := objectKey(prefix, rel)
+		if !strings.HasPrefix(key, prefix+"/") {
+			t.Fatalf("objectKey(%q, resolveKey(%q)=%q) = %q escaped prefix", prefix, in, rel, key)
+		}
+		// The decisive assertion: no hostile input can reach orgB's namespace — every
+		// produced key is physically under this project's own prefix.
+		if !strings.HasPrefix(key, "orgA/site1/") {
+			t.Fatalf("input %q produced out-of-tenant key %q", in, key)
+		}
+	}
+}
+
+func TestResolveKeyFallbacks(t *testing.T) {
+	cases := map[string]string{
+		"/":           "",
+		"":            "",
+		"/index.html": "index.html",
+		"/docs/":      "docs", // path.Clean strips the trailing slash
+		"/docs":       "docs",
+		"/a/b/c.js":   "a/b/c.js",
+		"/./a":        "a",
+		"/a/./b/":     "a/b",
+		`/a\b`:        "a/b",
+	}
+	for in, want := range cases {
+		if got := resolveKey(in); got != want {
+			t.Errorf("resolveKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCandidates(t *testing.T) {
+	s := testServer()
+	eq := func(in string, want ...string) {
+		got := s.candidates(in)
+		if strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("candidates(%q) = %v, want %v", in, got, want)
+		}
+	}
+	eq("", "index.html")
+	eq("docs", "docs", "docs/index.html")
+	eq("assets/app.js", "assets/app.js")
+}
+
+// ---- siteSlug: host routing + reserved exclusions -----------------------
+
+func TestSiteSlug(t *testing.T) {
+	s := testServer()
+	site := func(host, wantSlug string) {
+		slug, ok := s.siteSlug(host)
+		if !ok || slug != wantSlug {
+			t.Errorf("siteSlug(%q) = (%q,%v), want (%q,true)", host, slug, ok, wantSlug)
+		}
+	}
+	notSite := func(host string) {
+		if slug, ok := s.siteSlug(host); ok {
+			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site", host, slug)
+		}
+	}
+	site("maxpower.hanzo.app", "maxpower")
+	site("MaxPower.Hanzo.App", "maxpower") // case-insensitive
+	site("my-cool-site.hanzo.app", "my-cool-site")
+	site("maxpower.hanzo.app:443", "maxpower") // port stripped
+
+	notSite("hanzo.app")            // apex, no label
+	notSite("www.hanzo.app")        // reserved
+	notSite("app.hanzo.app")        // reserved (real app host)
+	notSite("api.hanzo.app")        // reserved
+	notSite("a.b.hanzo.app")        // multi-label
+	notSite("api.hanzo.ai")         // different zone → normal pipeline
+	notSite("console.hanzo.ai")     // different zone
+	notSite("-bad.hanzo.app")       // invalid slug
+	notSite("UPPER_bad.hanzo.app")  // underscore invalid
+	notSite("../orgb.hanzo.app")    // traversal-shaped label rejected
+	notSite("evil.hanzo.app.evil.com")
+}
+
+// ---- middleware: passthrough vs terminal + resolver keying --------------
+
+func newTestApp(s *Server) *zip.App {
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	app.Use(s.Middleware())
+	// Sentinel terminal handler: reached ONLY when the middleware passed through
+	// (i.e. the request was NOT a site host). A site host is terminal in the
+	// middleware and must never reach here.
+	app.All("/*", func(c *zip.Ctx) error {
+		c.SetHeader("X-Sentinel", "hit")
+		return c.String(200, "sentinel")
+	})
+	return app
+}
+
+func TestMiddlewarePassthroughForNonSiteHosts(t *testing.T) {
+	SetResolver(&fakeResolver{})
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+	for _, host := range []string{"api.hanzo.ai", "console.hanzo.ai", "hanzo.app", "www.hanzo.app"} {
+		req := httptest.NewRequest("GET", "http://"+host+"/anything", nil)
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("test %s: %v", host, err)
+		}
+		if resp.Header.Get("X-Sentinel") != "hit" {
+			t.Errorf("host %q did not pass through to the normal pipeline", host)
+		}
+	}
+}
+
+// TestMiddlewareTenantKeyedByHostNotPath is the second half of the isolation
+// proof: even when the path screams "give me another org", the resolver is only
+// ever asked about the HOST slug. The org/prefix therefore cannot be influenced
+// by the path or any client header.
+func TestMiddlewareTenantKeyedByHostNotPath(t *testing.T) {
+	fr := &fakeResolver{found: false} // not found → honest 404, no S3 needed
+	SetResolver(fr)
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+
+	req := httptest.NewRequest("GET", "http://victim.hanzo.app/index.html", nil)
+	// Attacker-controlled headers that must be ignored by the site server.
+	req.Header.Set("X-Org-Id", "attacker-org")
+	req.Header.Set("X-Forwarded-Host", "otherorg.hanzo.app")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.Header.Get("X-Sentinel") == "hit" {
+		t.Fatal("site host leaked into the normal API pipeline")
+	}
+	if resp.Header.Get("X-Hanzo-Site") != "victim" {
+		t.Errorf("X-Hanzo-Site = %q, want victim", resp.Header.Get("X-Hanzo-Site"))
+	}
+	if resp.StatusCode != 404 {
+		t.Errorf("status = %d, want 404 (not found)", resp.StatusCode)
+	}
+	got := fr.slugs()
+	if len(got) != 1 || got[0] != "victim" {
+		t.Fatalf("resolver called with %v, want exactly [victim] — tenant must be keyed by host only", got)
+	}
+}
+
+func TestMiddlewareNoResolverIs404(t *testing.T) {
+	SetResolver(nil)
+	app := newTestApp(testServer())
+	req := httptest.NewRequest("GET", "http://x.hanzo.app/", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	if resp.StatusCode != 404 || resp.Header.Get("X-Sentinel") == "hit" {
+		t.Errorf("no-resolver site host: status=%d sentinel=%q, want 404 terminal",
+			resp.StatusCode, resp.Header.Get("X-Sentinel"))
+	}
+}
+
+// ---- cache policy -------------------------------------------------------
+
+func TestCacheControlFor(t *testing.T) {
+	cases := map[string]string{
+		"index.html":         "public, max-age=60, s-maxage=86400",
+		"about/index.html":   "public, max-age=60, s-maxage=86400",
+		"assets/app.4f3a9c21.js": "public, max-age=31536000, immutable",
+		"assets/style.a1b2c3d4.css": "public, max-age=31536000, immutable",
+		"logo.svg":           "public, max-age=3600",   // not fingerprinted
+		"app.js":             "public, max-age=3600",   // not fingerprinted
+		"data.json":          "public, max-age=3600",   // default class
+		"favicon.ico":        "public, max-age=3600",
+	}
+	for key, want := range cases {
+		if got := CacheControlFor(key, ""); got != want {
+			t.Errorf("CacheControlFor(%q) = %q, want %q", key, got, want)
+		}
+	}
+	// The per-project HTML override applies to documents only, never to immutable assets.
+	if got := CacheControlFor("index.html", "public, max-age=10"); got != "public, max-age=10" {
+		t.Errorf("html override = %q, want public, max-age=10", got)
+	}
+	if got := CacheControlFor("app.4f3a9c21.js", "public, max-age=10"); got != "public, max-age=31536000, immutable" {
+		t.Errorf("asset must ignore html override, got %q", got)
+	}
+}
+
+func TestIsFingerprinted(t *testing.T) {
+	yes := []string{"app.4f3a9c21.js", "chunk-AB12CD34.css", "vendor_0a1b2c3d.js", "x.deadbeef12345678.woff2"}
+	no := []string{"app.js", "style.css", "index.html", "logo.svg", "v2.css"}
+	for _, k := range yes {
+		if !isFingerprinted(k) {
+			t.Errorf("isFingerprinted(%q) = false, want true", k)
+		}
+	}
+	for _, k := range no {
+		if isFingerprinted(k) {
+			t.Errorf("isFingerprinted(%q) = true, want false", k)
+		}
+	}
+}
+
+func TestCacheTag(t *testing.T) {
+	if got := CacheTag("acme", "blog"); got != "site-acme-blog" {
+		t.Errorf("CacheTag = %q, want site-acme-blog", got)
+	}
+}

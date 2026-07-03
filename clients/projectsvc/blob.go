@@ -16,6 +16,7 @@ import (
 	minio "github.com/minio/minio-go/v7"
 
 	"github.com/hanzoai/cloud/clients/s3admin"
+	"github.com/hanzoai/cloud/clients/sites"
 )
 
 // Deploy artifact guards. A builder one-click deploy ships a small tar(.gz) of
@@ -145,9 +146,12 @@ func walkTarGz(r io.Reader) (*site, error) {
 }
 
 // uploadSite replaces the project's live prefix with the artifact's files:
-// it purges the existing prefix, then puts every file with a content-type
-// derived from its extension. Returns the file count and total bytes written.
-func (b *blobStore) uploadSite(ctx context.Context, org, slug string, st *site) (prefix string, files int, total int64, err error) {
+// it purges the existing prefix, then puts every file with a content-type derived
+// from its extension and the canonical Cache-Control policy (sites.CacheControlFor,
+// the SAME policy the site server serves with). htmlOverride is the project's
+// optional per-project HTML/document TTL override (empty = honest default).
+// Returns the file count and total bytes written.
+func (b *blobStore) uploadSite(ctx context.Context, org, slug, htmlOverride string, st *site) (prefix string, files int, total int64, err error) {
 	cli, err := b.client()
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("s3 connect: %w", err)
@@ -166,7 +170,7 @@ func (b *blobStore) uploadSite(ctx context.Context, org, slug string, st *site) 
 			ct = "application/octet-stream"
 		}
 		_, err := cli.PutObject(ctx, b.bucket, key, bytes.NewReader(data), int64(len(data)),
-			minio.PutObjectOptions{ContentType: ct, CacheControl: cacheControlFor(rel)})
+			minio.PutObjectOptions{ContentType: ct, CacheControl: sites.CacheControlFor(rel, htmlOverride)})
 		if err != nil {
 			return "", 0, 0, fmt.Errorf("put %q: %w", key, err)
 		}
@@ -224,20 +228,6 @@ func purgePrefix(ctx context.Context, cli *minio.Client, bucket, prefix string) 
 // bucket is not enumerable.
 func publicReadPolicy(bucket string) string {
 	return `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::` + bucket + `/*"]}]}`
-}
-
-// cacheControlFor returns a sensible Cache-Control per asset class: HTML is
-// always revalidated (so a redeploy is seen immediately); hashed assets cache
-// long. Heuristic by extension — content-hashed bundles are the common case.
-func cacheControlFor(rel string) string {
-	switch path.Ext(rel) {
-	case ".html", ".json", ".xml", ".txt":
-		return "no-cache"
-	case ".js", ".css", ".woff", ".woff2", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif", ".ico":
-		return "public, max-age=31536000, immutable"
-	default:
-		return "public, max-age=3600"
-	}
 }
 
 // safeRel normalizes a tar entry name to a clean relative path or rejects it.
