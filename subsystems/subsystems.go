@@ -136,6 +136,20 @@ import (
 	// engine; ERP/Helpdesk register the same way.
 	_ "github.com/hanzoai/cloud/clients/cms" // (no order) — registers the "cms" framework module
 
+	// The ERP app lane: ERPNext-core DocType fixtures (item/warehouse/sales-order/
+	// sales-invoice/stock-entry/journal-entry/…, module "erp") + native-Go business
+	// hooks (line/document totals, GL posting on invoice/journal/payment submit,
+	// stock ledger on stock-entry submit, double-entry gates) registered with the
+	// framework at init. No HTTP surface of its own — ERP IS documents on
+	// /v1/framework/*, installed per-org via /v1/framework/modules/erp/install.
+	_ "github.com/hanzoai/cloud/clients/erp" // (no order) — registers the "erp" framework module + hooks
+
+	// The Help Center app lane: Frappe Helpdesk-core DocType fixtures (hd-ticket/
+	// hd-agent/hd-team/hd-sla/hd-canned-response, module "help") registered with the
+	// framework at init. Pure fixtures (no hooks); installed per-org via
+	// /v1/framework/modules/help/install. Third lane on the engine.
+	_ "github.com/hanzoai/cloud/clients/help" // (no order) — registers the "help" framework module
+
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
