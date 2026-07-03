@@ -8,13 +8,17 @@
 //
 // Surface (all org-scoped; console2's AgentsModule reads {agents:[...]}):
 //
-//	GET    /v1/agents                list agents for the org      -> {agents:[...]}
-//	POST   /v1/agents                create an agent              -> Agent
-//	GET    /v1/agents/:name          agent detail + recent runs   -> AgentDetail
-//	PATCH  /v1/agents/:name          update an agent              -> Agent
-//	DELETE /v1/agents/:name          delete an agent (+ its runs)
-//	POST   /v1/agents/:name/run      run the agent {input}        -> RunResult
-//	GET    /v1/agents/:name/runs     run history                  -> {runs:[...]}
+//	GET    /v1/agents               list agents for the org      -> {agents:[...]}
+//	POST   /v1/agents               create an agent              -> Agent
+//	GET    /v1/agents/:ref          agent detail + recent runs   -> AgentDetail
+//	PATCH  /v1/agents/:ref          update an agent              -> Agent
+//	DELETE /v1/agents/:ref          delete an agent (+ its runs)
+//	POST   /v1/agents/:ref/run      run the agent {input}        -> RunResult
+//	GET    /v1/agents/:ref/runs     run history                  -> {runs:[...]}
+//
+// :ref is either the agent's public id (the `agent_...` handle create and list
+// return) OR its org-unique name — resolved by Store.Resolve, so a created agent
+// is immediately gettable and runnable by whatever create/list handed back.
 //
 // The store is SQLite in deps.DataDir (Base/SQLite-only). It holds definitions
 // and run I/O only — never a secret; tool credentials live in KMS by reference.
@@ -42,8 +46,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// nameRE is the org-unique handle AND the URL path segment — the traversal
-// guard at the boundary.
+// nameRE constrains an agent's org-unique name at the create boundary — the one
+// place a name is written. Path addressing (Store.Resolve, parameterized) accepts
+// the name OR the `agent_...` id, so it needs no separate path validation.
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 const (
@@ -251,9 +256,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get("/v1/agents", s.list)
 	app.Post("/v1/agents", s.create)
-	// Static org-wide surfaces MUST register before the :name wildcard: Fiber
-	// matches routes in registration order, so a bare `/v1/agents/:name` would
-	// otherwise capture "metrics"/"activity"/"sessions" as a name and 404 them
+	// Static org-wide surfaces MUST register before the :ref wildcard: Fiber
+	// matches routes in registration order, so a bare `/v1/agents/:ref` would
+	// otherwise capture "metrics"/"activity"/"sessions" as a ref and 404 them
 	// (Red route audit). Registering the literals first makes them win.
 	app.Get("/v1/agents/metrics", s.metrics)
 	app.Get("/v1/agents/activity", s.activity)
@@ -261,11 +266,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// before :name for the same registration-order reason (and internally the
 	// static /stream precedes /:id).
 	s.mountSessions(app)
-	app.Get("/v1/agents/:name", s.get)
-	app.Patch("/v1/agents/:name", s.update)
-	app.Delete("/v1/agents/:name", s.del)
-	app.Post("/v1/agents/:name/run", s.run)
-	app.Get("/v1/agents/:name/runs", s.runs)
+	app.Get("/v1/agents/:ref", s.get)
+	app.Patch("/v1/agents/:ref", s.update)
+	app.Delete("/v1/agents/:ref", s.del)
+	app.Post("/v1/agents/:ref/run", s.run)
+	app.Get("/v1/agents/:ref/runs", s.runs)
 
 	// Long-running scheduler: invokes each long-running agent's run on its cron
 	// cadence through the SAME runAgent path as the HTTP handler (one run path,
@@ -404,15 +409,14 @@ func (s *svc) get(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	name := nameParam(c)
-	a, err := s.store.Get(c.Context(), org, name)
+	a, err := s.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	runs, err := s.store.ListRuns(c.Context(), org, name, 20)
+	runs, err := s.store.ListRuns(c.Context(), org, a.Name, 20)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -441,8 +445,7 @@ func (s *svc) update(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	name := nameParam(c)
-	a, err := s.store.Get(c.Context(), org, name)
+	a, err := s.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -518,7 +521,7 @@ func (s *svc) update(c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	n, _ := s.store.CountRuns(c.Context(), org, name)
+	n, _ := s.store.CountRuns(c.Context(), org, a.Name)
 	return c.JSON(http.StatusOK, toView(a, n))
 }
 
@@ -527,7 +530,17 @@ func (s *svc) del(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	deleted, err := s.store.Delete(c.Context(), org, nameParam(c))
+	// Resolve id-or-name first, then delete by the canonical name (agent_runs
+	// cascades on agent_name). Deleting by a raw id would never match the store's
+	// name key and silently 404 a real agent.
+	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	if err == errNotFound {
+		return zip.ErrNotFound("agent not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
+	}
+	deleted, err := s.store.Delete(c.Context(), org, a.Name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -551,20 +564,18 @@ func (s *svc) run(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	// A run MOVES MONEY (it debits org's commerce ledger), so it requires a
-	// VALIDATED principal — not merely a client-supplied X-Org-Id. SanitizeIdentity
-	// sets X-User-Id (c.User()) ONLY from a JWT it verified, and on the no-bearer
-	// direct-to-pod path it restores the client's raw X-Org-Id but leaves X-User-Id
-	// EMPTY. Gating the run on c.User() refuses exactly that anonymous-forge path:
-	// without it, a direct caller could set X-Org-Id to any tenant and charge a run
-	// against that victim's balance (Red MEDIUM-2). Read/list/create are the softer
-	// Phase-1 data path; the money action is held to the higher bar. Same guard the
+	// tenant() above already required a VALIDATED principal (principal.Tenant
+	// returns ok only when c.User() — set solely from a JWT SanitizeIdentity
+	// verified — is non-empty), so every path here, run included, is closed to the
+	// no-bearer direct-to-pod forge path. This explicit re-assertion is a local,
+	// money-path invariant: a run MOVES MONEY (debits the org's commerce ledger),
+	// so the debit's principal requirement is stated where the money moves and
+	// never silently depends on tenant()'s internals (Red MEDIUM-2). Same guard the
 	// s3 / provisioning subsystems use.
 	if strings.TrimSpace(c.User()) == "" {
 		return zip.ErrForbidden("a validated principal is required to run an agent")
 	}
-	name := nameParam(c)
-	a, err := s.store.Get(c.Context(), org, name)
+	a, err := s.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -677,14 +688,20 @@ func (s *svc) runs(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	name := nameParam(c)
+	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	if err == errNotFound {
+		return zip.ErrNotFound("agent not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
+	}
 	limit := 50
 	if q := strings.TrimSpace(c.Query("limit")); q != "" {
 		if n, err := strconv.Atoi(q); err == nil {
 			limit = n
 		}
 	}
-	runs, err := s.store.ListRuns(c.Context(), org, name, limit)
+	runs, err := s.store.ListRuns(c.Context(), org, a.Name, limit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -813,7 +830,9 @@ func trimMsg(s string) string {
 
 // ---- helpers ----
 
-func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
+// refParam is the URL path segment addressing an agent: its public id or its
+// org-unique name. Store.Resolve accepts either — see the package doc.
+func refParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("ref")) }
 
 // tenant resolves the org — the tenant isolation KEY. It uses c.Org() EXACTLY
 // as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
