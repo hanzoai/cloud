@@ -113,6 +113,14 @@ import (
 	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
 	_ "github.com/hanzoai/cloud/clients/analytics" // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
 	_ "github.com/hanzoai/cloud/clients/crm"       // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
+	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/
+	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
+	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
+	// on — ONE engine + ONE generic UI renders every business app. Per-org on
+	// Base/SQLite, org derived ONCE via principal.Tenant (no Frappe/Python
+	// runtime dep). Order 129 binds /v1/framework/* before the AI /v1/* catch-all.
+	_ "github.com/hanzoai/cloud/clients/framework" // order 129 — /v1/framework/* (DocType engine)
+
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
