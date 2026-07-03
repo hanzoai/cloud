@@ -47,7 +47,11 @@ func Serve(enable []string) error {
 
 	deps := BuildDeps(cfg)
 
-	app := zip.New(zip.Config{Logger: deps.Logger})
+	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
+	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
+	// cookies on every subdomain) no longer 431s legitimate requests at the
+	// public edge. Env GATEWAY_READ_BUFFER_SIZE, default 32 KiB (see config.go).
+	app := zip.New(zip.Config{Logger: deps.Logger, ReadBufferSize: cfg.ReadBufferSize})
 
 	// Canonical middleware pipeline. Order matters:
 	//  1. Recover         — panic → JSON 500
