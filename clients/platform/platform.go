@@ -69,6 +69,7 @@ type EnvVarJSON struct {
 type svc struct {
 	store      *Store
 	k8s        *k8sClient
+	kms        cloud.KMSClient // embedded KMS for sealing secret env (secrets.go); nil ⇒ secret env fails closed
 	cancel     context.CancelFunc // stops the build reconciler on Shutdown
 	log        luxlog.Logger
 	brand      string
@@ -108,7 +109,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
-	s := &svc{store: store, k8s: k, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
+	s := &svc{store: store, k8s: k, kms: deps.KMS, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
 		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}
 	mounted = s
 	s.routes(app)
@@ -144,6 +145,10 @@ func (s *svc) routes(app *zip.App) {
 	app.Post("/v1/platform/projects/:project/apps", s.createApp)
 	app.Get("/v1/platform/projects/:project/apps/:app", s.getApp)
 	app.Delete("/v1/platform/projects/:project/apps/:app", s.deleteApp)
+
+	// env management: replace an app's env set (plain + secret). Secret values are
+	// sealed into KMS; plaintext is never persisted (secrets.go). One write path.
+	app.Put("/v1/platform/projects/:project/apps/:app/env", s.setEnv)
 
 	// deploy lifecycle + history (deploy.go)
 	app.Post("/v1/platform/projects/:project/apps/:app/deploy", s.deploy)
@@ -278,6 +283,8 @@ type appView struct {
 	CurrentDeploymentID string       `json:"currentDeploymentId,omitempty"`
 	Phase               string       `json:"phase,omitempty"`
 	Health              string       `json:"health,omitempty"`
+	SecretSync          string       `json:"secretSync,omitempty"`       // ""|pending|syncing|ready|failed (secrets.go)
+	SecretSyncDetail    string       `json:"secretSyncDetail,omitempty"` // honest reason when not ready
 	CreatedAt           int64        `json:"createdAt"`
 	UpdatedAt           int64        `json:"updatedAt"`
 }
@@ -416,10 +423,13 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 	if !deleted {
 		return zip.ErrNotFound("project not found")
 	}
-	// Best-effort teardown of each app's Service CR in the tenant namespace.
+	// Best-effort teardown of each app's Service CR + KMSSecret in the tenant ns.
 	for _, a := range apps {
 		if err := s.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
 			s.log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
+		}
+		if err := s.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
+			s.log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
 		}
 	}
 	_ = p
@@ -510,18 +520,20 @@ func (s *svc) createApp(c *zip.Ctx) error {
 	if !buildTypes[buildType] {
 		return zip.ErrBadRequest("unsupported buildType")
 	}
-	// Fail-closed on secret env: plaintext secrets are NEVER stored. KMS-sealed
-	// secret env is a phase-2 capability; until then reject secret:true loudly.
+	// Validate env keys at the boundary, then SEAL secret:true values into KMS so
+	// plaintext is NEVER persisted (sealSecretEnv blanks the stored value; the real
+	// value lives only in the embedded KMS). Fails closed if KMS is unavailable —
+	// a plaintext secret never lands in the DB as a fallback.
 	for _, e := range body.Env {
 		if !envKeyRE.MatchString(e.Key) {
 			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
-		if e.Secret {
-			return zip.Errorf(http.StatusNotImplemented,
-				"secret env vars require KMS sealing (phase 2); set secret:false or manage the secret via /v1/kms")
-		}
 	}
-	envJSON, _ := json.Marshal(body.Env)
+	sealedEnv, err := s.sealSecretEnv(c.Context(), org, slug, body.Env)
+	if err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+	}
+	envJSON, _ := json.Marshal(sealedEnv)
 	// Seed the canonical default host so every app has a working HTTPS URL the
 	// moment it deploys, then validate the full ingress set (subtree hosts + the
 	// default always pass; a bare custom host at create still 501s — it must go
@@ -579,6 +591,9 @@ func (s *svc) listApps(c *zip.Ctx) error {
 		if a.Status == "live" || a.Status == "deploying" {
 			v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
 		}
+		if len(secretEnvKeys(a.EnvJSON)) > 0 {
+			v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, true)
+		}
 		out = append(out, v)
 	}
 	return c.JSON(http.StatusOK, out)
@@ -615,6 +630,7 @@ func (s *svc) getApp(c *zip.Ctx) error {
 	}
 	v := toAppView(a)
 	v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
 	return c.JSON(http.StatusOK, v)
 }
 
@@ -640,7 +656,61 @@ func (s *svc) deleteApp(c *zip.Ctx) error {
 	if err := s.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
 		s.log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
 	}
+	if err := s.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
+		s.log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
+	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ── env management ─────────────────────────────────────────────────────────────
+
+type setEnvReq struct {
+	Env []EnvVarJSON `json:"env"`
+}
+
+// setEnv REPLACES an app's env set (plain + secret) — the ONE post-create write
+// path for env vars. Secret:true values are sealed into KMS (sealSecretEnv blanks
+// the persisted value); a secret dropped from the set is removed from the CR on
+// the next deploy. Fails closed if KMS is unavailable. If the app is already
+// deployed it re-declares the secret sync immediately (the operator re-materializes
+// the Secret); pods pick up changed env on their next deploy/restart.
+func (s *svc) setEnv(c *zip.Ctx) error {
+	org, ok := s.tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	_, a, herr := s.loadApp(c, org)
+	if herr != nil {
+		return herr
+	}
+	var body setEnvReq
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	for _, e := range body.Env {
+		if !envKeyRE.MatchString(e.Key) {
+			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
+		}
+	}
+	sealed, err := s.sealSecretEnv(c.Context(), org, a.Slug, body.Env)
+	if err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+	}
+	envJSON, _ := json.Marshal(sealed)
+	a.EnvJSON = string(envJSON)
+	a.UpdatedAt = time.Now().Unix()
+	if err := s.store.UpdateApplication(c.Context(), a); err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "persist env: %v", err)
+	}
+	// Re-declare the secret sync so an added/removed secret updates the KMSSecret CR
+	// now (only meaningful once the tenant namespace exists — i.e. after a deploy).
+	if a.Namespace != "" {
+		s.ensureSecretSync(c.Context(), org, a)
+	}
+	v := toAppView(a)
+	v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
+	return c.JSON(http.StatusOK, v)
 }
 
 // ── health ───────────────────────────────────────────────────────────────────
