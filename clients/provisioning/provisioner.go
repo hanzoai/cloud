@@ -294,6 +294,14 @@ func (p *docdbProvisioner) Create(ctx context.Context, physical, user, pw string
 	if err := db.CreateCollection(ctx, "_meta"); err != nil {
 		return "", "", 0, "", fmt.Errorf("create collection: %w", err)
 	}
+	// Per-tenant-scoped grant: readWrite on ONLY this tenant's database. This is
+	// the tenant-SAFE role we require — a provisioned docdb user must never reach
+	// another tenant's data. NOTE: hanzoai/docdb (FerretDB/DocumentDB) does not yet
+	// implement the per-db `readWrite` role (only the cluster-wide clusterAdmin /
+	// readWriteAnyDatabase), so this call currently fails and the `docdb` kind is
+	// gated OFF in provisioning.go (unavailableKinds) rather than fall back to a
+	// cross-tenant role. When FerretDB adds per-db roles, drop the gate and this
+	// works as-is with correct isolation.
 	cmd := bson.D{
 		{Key: "createUser", Value: user},
 		{Key: "pwd", Value: pw},
