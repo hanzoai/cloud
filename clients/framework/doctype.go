@@ -99,7 +99,7 @@ var needsOptions = map[string]bool{FieldSelect: true, FieldLink: true, FieldTabl
 // why the static routes can be registered before the generic /:doctype routes
 // without ambiguity.
 var reservedDocTypeNames = map[string]bool{
-	"doctypes": true, "roles": true, "health": true, "summary": true,
+	"doctypes": true, "roles": true, "health": true, "summary": true, "modules": true,
 }
 
 // Limits. maxField bounds a single scalar text value; maxDocBytes bounds a whole
