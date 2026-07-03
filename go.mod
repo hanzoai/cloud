@@ -631,7 +631,7 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.35.3 // indirect
+	k8s.io/api v0.35.3
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/metrics v0.30.0 // indirect
@@ -690,8 +690,15 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
-// Pin to last real go-sqlite3 release; v2.0.3+incompatible is a phantom (no module).
-replace github.com/mattn/go-sqlite3 => github.com/mattn/go-sqlite3 v1.14.16
+// Phantom-version fix: some transitive dep requires the non-existent
+// mattn/go-sqlite3 v2.0.3+incompatible. Redirect it to the last REAL go-sqlite3
+// release (drop-in, package sqlite3) via a VERSIONED replace (left side pins the
+// phantom) so Go never tries to read v2.0.3's go.mod during module-graph load —
+// the unversioned form didn't. NOTE: cloud's PRIMARY sqlite is modernc.org/sqlite
+// (pure-Go). hanzoai/sqlite (encrypted, package `sqlite`) is a separate driver, NOT
+// a go-sqlite3 drop-in — adopting it for encryption-at-rest is a real migration, not
+// this phantom fix.
+replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.16
 
 replace github.com/prometheus/alertmanager => github.com/hanzoai/alertmanager v0.28.2
 
