@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/sites"
+
 	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
 	// graph (provisioningsvc uses it). Blank import registers the "sqlite" name.
 	_ "modernc.org/sqlite"
@@ -22,6 +24,12 @@ var (
 	// globally unique; a losing bind never blocks a deploy (the site still serves
 	// at its S3 URL), it just doesn't claim the pretty host.
 	errHostTaken = errors.New("projects: site host already bound to another project")
+	// errReservedHost is returned by BindHost for a reserved label (api, admin, a
+	// brand/auth term, …). Together with the createProject reject, this makes the
+	// global site_hosts table PHYSICALLY UNABLE to hold a reserved host — so a
+	// reserved subdomain can never resolve to a project even if the ingress regex
+	// drifts. See clients/sites/reserved.go for the ONE reserved-list source.
+	errReservedHost = errors.New("projects: site host is a reserved label")
 )
 
 // Project is the org-scoped, canonical record of a buildable/deployable site.
@@ -365,6 +373,11 @@ func (s *Store) GetDeployment(ctx context.Context, org, projectID, id string) (D
 // is already bound to a DIFFERENT project it returns errHostTaken WITHOUT
 // overwriting — a losing bind must never hijack another tenant's live subdomain.
 func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64) error {
+	// A reserved label may never enter site_hosts, whatever the caller — the
+	// storage invariant that makes the serve-time reserved gate a mere backstop.
+	if sites.IsReserved(host) {
+		return errReservedHost
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
