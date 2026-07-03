@@ -148,15 +148,55 @@ type crawlRequest struct {
 	Urls []string `json:"urls"`
 }
 
+// markdownField decodes Crawl4AI's `markdown`, which is SHAPE-POLYMORPHIC across
+// versions and was the reason scrape returned empty content:
+//   - Crawl4AI ≤ ~0.5 / the older mirror: a bare JSON string.
+//   - Crawl4AI 0.8.x (the deployed hanzoai/crawl:0.0.1 = 0.8.6) and 0.9.x: an
+//     OBJECT {raw_markdown, fit_markdown, markdown_with_citations, ...}.
+// A plain `string` field errors the whole json.Decode on the object form, so
+// crawl() failed and every scrape returned {success:false}. This unmarshaler
+// accepts either: a string verbatim, or the object's fit_markdown (the
+// noise-reduced, LLM-oriented variant) with raw_markdown as fallback.
+type markdownField string
+
+func (m *markdownField) UnmarshalJSON(b []byte) error {
+	// Bare string form.
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*m = markdownField(s)
+		return nil
+	}
+	// Object form: prefer the fit (cleaned) markdown, fall back to raw.
+	var obj struct {
+		FitMarkdown string `json:"fit_markdown"`
+		RawMarkdown string `json:"raw_markdown"`
+	}
+	if err := json.Unmarshal(b, &obj); err != nil {
+		return err
+	}
+	if obj.FitMarkdown != "" {
+		*m = markdownField(obj.FitMarkdown)
+	} else {
+		*m = markdownField(obj.RawMarkdown)
+	}
+	return nil
+}
+
 type crawlResult struct {
 	URL      string                 `json:"url"`
-	Markdown string                 `json:"markdown"`
+	Markdown markdownField          `json:"markdown"`
 	Success  bool                   `json:"success"`
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// crawlResponse is the Crawl4AI /crawl envelope. The field that signals batch
+// success differs by version — older builds set a top-level "status" string,
+// 0.8.x/0.9.x set a boolean "success" — but scrape only needs Results[0], whose
+// own per-result Success is authoritative, so both envelope fields are accepted
+// and neither is required.
 type crawlResponse struct {
 	Status  string        `json:"status"`
+	Success bool          `json:"success"`
 	Results []crawlResult `json:"results"`
 }
 
@@ -191,7 +231,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, firecrawlResponse{
 		Success: true,
-		Data:    &firecrawlData{Markdown: res.Markdown, Metadata: res.Metadata},
+		Data:    &firecrawlData{Markdown: string(res.Markdown), Metadata: res.Metadata},
 	})
 }
 
