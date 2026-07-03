@@ -1,18 +1,21 @@
 package platform
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
 
 // TestValidateOrgDomainsBindsToOrg proves a custom ingress host must be under the
 // caller's OWN "<org>.<sitesHost>" subtree — a tenant can never claim another
-// org's host or a Hanzo apex (RED — domain hijack).
+// org's host or a Hanzo apex (RED — domain hijack). With no store, no host can be
+// a verified custom claim, so every non-subtree host is refused.
 func TestValidateOrgDomainsBindsToOrg(t *testing.T) {
+	ctx := context.Background()
 	s := &svc{sitesHost: "hanzo.app"}
 	ok := []string{"api.maxpower.hanzo.app", "web.staging.maxpower.hanzo.app"}
 	for _, d := range ok {
-		if err := s.validateOrgDomains("maxpower", []string{d}); err != nil {
+		if err := s.validateOrgDomains(ctx, "maxpower", []string{d}); err != nil {
 			t.Errorf("own-org domain %q should be allowed, got %v", d, err)
 		}
 	}
@@ -25,12 +28,12 @@ func TestValidateOrgDomainsBindsToOrg(t *testing.T) {
 		"api.maxpower.hanzo.app.evil.com", // suffix-in-the-middle trick
 	}
 	for _, d := range bad {
-		if err := s.validateOrgDomains("maxpower", []string{d}); err == nil {
+		if err := s.validateOrgDomains(ctx, "maxpower", []string{d}); err == nil {
 			t.Errorf("cross-tenant/apex domain %q MUST be refused", d)
 		}
 	}
 	// empty is fine (no ingress).
-	if err := s.validateOrgDomains("maxpower", nil); err != nil {
+	if err := s.validateOrgDomains(ctx, "maxpower", nil); err != nil {
 		t.Errorf("no domains should be allowed, got %v", err)
 	}
 }
