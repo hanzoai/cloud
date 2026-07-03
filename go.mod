@@ -27,7 +27,7 @@ require (
 	golang.org/x/term v0.44.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
-	modernc.org/sqlite v1.51.0
+	github.com/hanzoai/sqlite v0.1.4
 )
 
 require (
@@ -36,7 +36,7 @@ require (
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
-	github.com/hanzoai/sqlite v0.1.4 // indirect
+	modernc.org/sqlite v1.51.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/luxfi/bft v0.1.5 // indirect
@@ -699,10 +699,11 @@ replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-2026012609
 // mattn/go-sqlite3 v2.0.3+incompatible. Redirect it to the last REAL go-sqlite3
 // release (drop-in, package sqlite3) via a VERSIONED replace (left side pins the
 // phantom) so Go never tries to read v2.0.3's go.mod during module-graph load —
-// the unversioned form didn't. NOTE: cloud's PRIMARY sqlite is modernc.org/sqlite
-// (pure-Go). hanzoai/sqlite (encrypted, package `sqlite`) is a separate driver, NOT
-// a go-sqlite3 drop-in — adopting it for encryption-at-rest is a real migration, not
-// this phantom fix.
+// the unversioned form didn't. NOTE: cloud's ONE sqlite driver is now
+// github.com/hanzoai/sqlite — it registers the "sqlite" name under both build
+// tags (cgo → mattn+SQLCipher, hence this go-sqlite3 pin; !cgo → pure-Go
+// modernc). Every cloud store imports the fork, never modernc directly, so the
+// "sqlite" driver is registered exactly once.
 replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.16
 
 replace github.com/prometheus/alertmanager => github.com/hanzoai/alertmanager v0.28.2
