@@ -73,6 +73,15 @@ import (
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
 	_ "github.com/hanzoai/cloud/clients/provisioning" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
 
+	// DigitalOcean-native infra plane: the org-scoped /v1/vpcs + /v1/load-balancers
+	// surface over the digitalocean/godo SDK (DO is Hanzo's EXCLUSIVE cloud venue).
+	// DO is a single account, so tenant isolation is a name prefix — a resource's
+	// physical DO name is "o"<orgHash>-<friendly> (provisioning.BucketName, the SAME
+	// org-hash convention S3 uses); list/get/delete filter to the caller's prefix so
+	// no tenant sees another's. Fails closed (503) without DO_API_TOKEN. Backs the
+	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
+	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
+
 	// Projects control plane: the ONE org-scoped store of buildable/deployable
 	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
