@@ -81,6 +81,31 @@ type Deployment struct {
 	UpdatedAt     int64
 }
 
+// Domain is a BYO custom (arbitrary-host) domain a tenant has claimed for an
+// application — `yourco.com` / `app.yourco.com`. The org's own hanzo.app subtree
+// hosts and the app's default host are STRUCTURAL (they live in the app's
+// DomainsJSON and are validated by suffix), so they are NOT rows here; this table
+// exists for the two things a custom host needs that a subtree host does not:
+//
+//   - GLOBAL UNIQUENESS — Host is the PRIMARY KEY, so exactly one org can ever
+//     claim `yourco.com` (the site_hosts model). A second org's claim collides.
+//   - an OWNERSHIP-VERIFICATION lifecycle — Status pending → verified, gated on a
+//     DNS challenge Token the customer publishes at `_hanzo-challenge.<host>`.
+//
+// A custom host is rendered into the app's operator ingress (added to DomainsJSON)
+// ONLY once its row is `verified` — an unverified claim never reaches the CR.
+type Domain struct {
+	Host       string
+	Org        string
+	ProjectID  string
+	AppID      string
+	AppSlug    string
+	Status     string // pending | verified
+	Token      string
+	CreatedAt  int64
+	VerifiedAt int64
+}
+
 // Build is one arcd (in-cluster BuildKit) build record (Dokploy fork: build_job).
 type Build struct {
 	ID            string
@@ -200,6 +225,19 @@ CREATE TABLE IF NOT EXISTS platform_builds (
   updated_at     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_pf_builds_app ON platform_builds(application_id, created_at);
+
+CREATE TABLE IF NOT EXISTS platform_domains (
+  host         TEXT PRIMARY KEY,
+  org          TEXT NOT NULL,
+  project_id   TEXT NOT NULL,
+  app_id       TEXT NOT NULL,
+  app_slug     TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  token        TEXT NOT NULL DEFAULT '',
+  created_at   INTEGER NOT NULL,
+  verified_at  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -321,6 +359,9 @@ func (s *Store) DeleteProject(ctx context.Context, org, slug string) (Project, [
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_deployments WHERE org=? AND application_id=?`, org, a.ID); err != nil {
 			return Project{}, nil, false, fmt.Errorf("delete deployments: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_domains WHERE org=? AND app_id=?`, org, a.ID); err != nil {
+			return Project{}, nil, false, fmt.Errorf("delete domains: %w", err)
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND project_id=?`, org, p.ID); err != nil {
@@ -520,6 +561,9 @@ func (s *Store) DeleteApplication(ctx context.Context, org, projectID, slug stri
 	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_deployments WHERE org=? AND application_id=?`, org, a.ID); err != nil {
 		return Application{}, false, fmt.Errorf("delete deployments: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_domains WHERE org=? AND app_id=?`, org, a.ID); err != nil {
+		return Application{}, false, fmt.Errorf("delete domains: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND id=?`, org, a.ID); err != nil {
 		return Application{}, false, fmt.Errorf("delete app: %w", err)
 	}
@@ -715,4 +759,107 @@ func (s *Store) ListBuildsByOrg(ctx context.Context, org string) ([]Build, error
 		out = append(out, b)
 	}
 	return out, rows.Err()
+}
+
+// ── domains (custom BYO hosts) ─────────────────────────────────────────────────
+
+const domainCols = `host,org,project_id,app_id,app_slug,status,token,created_at,verified_at`
+
+func scanDomain(sc interface{ Scan(...any) error }) (Domain, error) {
+	var d Domain
+	err := sc.Scan(&d.Host, &d.Org, &d.ProjectID, &d.AppID, &d.AppSlug, &d.Status, &d.Token, &d.CreatedAt, &d.VerifiedAt)
+	return d, err
+}
+
+// CreateDomain claims a custom host for an app. Host is the PRIMARY KEY, so a
+// second claim of the SAME host (by any org, any app) collides → errConflict.
+// This is the global-uniqueness boundary (two orgs can never both claim
+// `yourco.com`).
+func (s *Store) CreateDomain(ctx context.Context, d Domain) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO platform_domains (`+domainCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
+		d.Host, d.Org, d.ProjectID, d.AppID, d.AppSlug, d.Status, d.Token, d.CreatedAt, d.VerifiedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return errConflict
+		}
+		return fmt.Errorf("insert domain: %w", err)
+	}
+	return nil
+}
+
+// LookupDomain resolves a host GLOBALLY (across every org) — the uniqueness
+// probe. It is the ONLY store read not scoped to a caller's org, and exists
+// solely so the add-domain handler can answer "is this host already claimed, and
+// by whom" to decide a 409. The caller MUST NOT echo a foreign row's details
+// back to a tenant (it reveals only that the host is taken, never by whom).
+func (s *Store) LookupDomain(ctx context.Context, host string) (Domain, bool, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+domainCols+` FROM platform_domains WHERE host=?`, host)
+	d, err := scanDomain(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Domain{}, false, nil
+	}
+	if err != nil {
+		return Domain{}, false, fmt.Errorf("lookup domain: %w", err)
+	}
+	return d, true, nil
+}
+
+// GetDomain resolves a custom domain scoped to (org, app_id, host) — the tenant
+// path used by verify/delete. Org is always in the predicate so a caller can
+// never read another tenant's domain row.
+func (s *Store) GetDomain(ctx context.Context, org, appID, host string) (Domain, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+domainCols+` FROM platform_domains WHERE org=? AND app_id=? AND host=?`, org, appID, host)
+	d, err := scanDomain(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Domain{}, errNotFound
+	}
+	if err != nil {
+		return Domain{}, fmt.Errorf("get domain: %w", err)
+	}
+	return d, nil
+}
+
+// ListDomainsByApp returns every custom domain claimed for an app, org-scoped.
+func (s *Store) ListDomainsByApp(ctx context.Context, org, appID string) ([]Domain, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+domainCols+` FROM platform_domains WHERE org=? AND app_id=? ORDER BY created_at ASC, host ASC`, org, appID)
+	if err != nil {
+		return nil, fmt.Errorf("list domains: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Domain
+	for rows.Next() {
+		d, err := scanDomain(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan domain: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// MarkDomainVerified flips a pending custom domain to verified, org+app scoped.
+// Reports whether a row advanced (false ⇒ no such pending row for this tenant).
+func (s *Store) MarkDomainVerified(ctx context.Context, org, appID, host string, now int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE platform_domains SET status='verified', verified_at=? WHERE org=? AND app_id=? AND host=?`,
+		now, org, appID, host)
+	if err != nil {
+		return false, fmt.Errorf("mark domain verified: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// DeleteDomain releases a custom domain claim, org+app scoped. Reports whether a
+// row was removed.
+func (s *Store) DeleteDomain(ctx context.Context, org, appID, host string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM platform_domains WHERE org=? AND app_id=? AND host=?`, org, appID, host)
+	if err != nil {
+		return false, fmt.Errorf("delete domain: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
