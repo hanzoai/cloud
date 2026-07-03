@@ -67,11 +67,11 @@ const dedicatedAdminUser = "admin"
 // fabricated price). defaultStoragePriceCents mirrors hanzoai/pricing
 // infrastructure.blockStorage.pricePerGBMonthly ($0.08/GB-month).
 const (
-	dedicatedSizeEnvPrefix   = "CLOUD_DEDICATED_SIZE"                 // per-kind CLOUD_DEDICATED_SIZE_DATASTORE
-	defaultDedicatedSize     = "10Gi"                                 // one instance's default storage footprint
+	dedicatedSizeEnvPrefix   = "CLOUD_DEDICATED_SIZE" // per-kind CLOUD_DEDICATED_SIZE_DATASTORE
+	defaultDedicatedSize     = "10Gi"                 // one instance's default storage footprint
 	storagePriceEnv          = "CLOUD_STORAGE_PRICE_CENTS_PER_GB_MONTH"
-	defaultStoragePriceCents = 8                                      // $0.08/GB-month
-	dedicatedMeterInterval   = 24 * time.Hour                         // one GB-day charge per tick
+	defaultStoragePriceCents = 8              // $0.08/GB-month
+	dedicatedMeterInterval   = 24 * time.Hour // one GB-day charge per tick
 )
 
 // Tenant-RBAC readiness wait bounds — a brand-new tenant namespace's RoleBinding
@@ -106,7 +106,7 @@ type engine struct {
 	image      string // container image repository
 	tag        string // container image tag (pinned; never :latest)
 	ports      []enginePort
-	clientPort int    // the port a customer connects on (the DSN port)
+	clientPort int // the port a customer connects on (the DSN port)
 	// secretEnv builds the admin Secret data; each key is an env var the image
 	// reads (referenced by the CR via one envFrom secretRef), so the instance
 	// boots with THIS admin credential — never a plaintext in the CR/commit.
@@ -116,6 +116,16 @@ type engine struct {
 	// pod memory floor/ceiling — a database needs a real memory reservation.
 	memReq string
 	memLim string
+	// dataMount, when non-empty, is the container path the instance's "data" PVC
+	// mounts at. The operator only mounts the PVC when the CR names a volumeMount
+	// (build_statefulset does not auto-mount), so an engine that must persist to
+	// disk MUST set this — else the pod writes to ephemeral container storage.
+	dataMount string
+	// iamAuth marks an IAM-native engine (Hanzo Base): callers authenticate via
+	// Hanzo IAM, so there is NO per-resource admin password. The admin Secret
+	// carries IAM/KMS config instead, and no password is generated, sealed, or
+	// returned. secretEnv/dsn ignore the user/pw args for such engines.
+	iamAuth bool
 }
 
 // dedicatedEngines is the closed set of kinds provisioned as a dedicated
@@ -143,26 +153,45 @@ var dedicatedEngines = map[string]engine{
 			return fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s?protocol=http", user, pw, host, port, db)
 		},
 	},
-	// FerretDB/DocumentDB ("docdb"): ghcr.io/hanzoai/docdb:0.1.0 speaks the
-	// MongoDB wire protocol over an embedded PostgreSQL provisioned from
-	// POSTGRES_* — the exact env the shared docdb DocDB CR uses.
+	// Hanzo Base ("docdb"): the managed "document database" is a dedicated
+	// per-org Hanzo Base instance — JSON document collections on per-tenant
+	// SQLite with native realtime (SSE at /v1/realtime), on :8090 with data at
+	// /data. IAM-native: the base image's platform plugin validates the org's
+	// Hanzo IAM tokens (IAM_URL/KMS_URL/IAM_CLIENT_* via the admin Secret), so
+	// there is NO per-resource password. ZERO MongoDB / Mongo-wire / FerretDB —
+	// the per-org docdb instance IS a Base instance now. The engine runs on the
+	// generic Datastore controller (spec.type is free-form; image/ports/
+	// volumeMounts drive the StatefulSet verbatim — no operator branch needed).
 	"docdb": {
-		prefix: "ddb", dsType: "docdb",
-		image: "ghcr.io/hanzoai/docdb", tag: "0.1.0",
-		ports:      []enginePort{{"mongo", 27017}},
-		clientPort: 27017,
+		prefix: "ddb", dsType: "base",
+		image: "ghcr.io/hanzoai/base", tag: env("CLOUD_DEDICATED_DOCDB_TAG", "v1.5.3"),
+		ports:      []enginePort{{"http", 8090}},
+		clientPort: 8090,
+		dataMount:  "/data",
+		iamAuth:    true,
 		memReq:     "128Mi", memLim: "512Mi",
-		secretEnv: func(user, pw, db string) map[string]string {
-			return map[string]string{
-				"POSTGRES_DB":       db,
-				"POSTGRES_USER":     user,
-				"POSTGRES_PASSWORD": pw,
-			}
+		secretEnv: func(_, _, _ string) map[string]string {
+			return baseInstanceEnv()
 		},
-		dsn: func(user, pw, host string, port int, db string) string {
-			return fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=admin", user, pw, host, port, db)
+		dsn: func(_, _, host string, port int, _ string) string {
+			return fmt.Sprintf("http://%s:%d/v1", host, port)
 		},
 	},
+}
+
+// baseInstanceEnv is the boot env for a dedicated Hanzo Base instance: the IAM +
+// KMS coordinates the base image's platform plugin reads to validate the org's
+// Hanzo IAM tokens (and derive the per-tenant encryption key). Sourced from the
+// cloud binary's OWN configured IAM identity; only keys that are set are
+// projected. There is NO per-resource password — Base is IAM-native.
+func baseInstanceEnv() map[string]string {
+	m := map[string]string{}
+	for _, k := range []string{"IAM_URL", "KMS_URL", "IAM_CLIENT_ID", "IAM_CLIENT_SECRET"} {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			m[k] = v
+		}
+	}
+	return m
 }
 
 // tenantNamespace is the org's physical namespace — the cross-tenant isolation
@@ -231,9 +260,16 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 		return zip.Errorf(http.StatusBadGateway, "ensure tenant: %v", err)
 	}
 
-	pw, err := genToken(24)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	// Secretful engines get a per-instance admin password; IAM-native engines
+	// (Base) do not — callers authenticate via Hanzo IAM, so nothing is sealed
+	// or returned.
+	pw := ""
+	if !e.iamAuth {
+		p, gerr := genToken(24)
+		if gerr != nil {
+			return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
+		}
+		pw = p
 	}
 	id, err := genID()
 	if err != nil {
@@ -247,14 +283,23 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	// below — but NEVER stored in plaintext at rest here.
 	secretRef := fmt.Sprintf("org/%s/%s/%s", org, kind, name)
 	storedRef := ""
-	if s.sec.Enabled() {
-		if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
-			s.log.Error("kms put failed", "kind", kind, "err", err)
-			return zip.Errorf(http.StatusInternalServerError, "store secret failed")
+	if !e.iamAuth {
+		if s.sec.Enabled() {
+			if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
+				s.log.Error("kms put failed", "kind", kind, "err", err)
+				return zip.Errorf(http.StatusInternalServerError, "store secret failed")
+			}
+			storedRef = secretRef
+		} else {
+			s.log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
 		}
-		storedRef = secretRef
-	} else {
-		s.log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
+	}
+
+	// IAM-native engines return no credential; the customer authenticates via
+	// Hanzo IAM against the instance's own API.
+	respUser, respPw := user, pw
+	if e.iamAuth {
+		respUser, respPw = "", ""
 	}
 
 	// Project the admin Secret (the env the image boots from) then apply the
@@ -282,7 +327,7 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	r := Resource{
 		ID: id, Org: org, Kind: kind, Name: name,
 		PhysicalName: inst, SecretRef: storedRef,
-		Host: host, Port: e.clientPort, Username: user, DBName: db,
+		Host: host, Port: e.clientPort, Username: respUser, DBName: db,
 		Status: statusProvisioning, CreatedAt: time.Now().Unix(), Size: size,
 	}
 	if err := s.store.Insert(ctx, r); err != nil {
@@ -305,8 +350,8 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 
 	return c.JSON(http.StatusCreated, createResp{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
-		Host: host, Port: e.clientPort, Username: user, Database: db,
-		ConnectionString: e.dsn(user, pw, host, e.clientPort, db), Password: pw,
+		Host: host, Port: e.clientPort, Username: respUser, Database: db,
+		ConnectionString: e.dsn(user, pw, host, e.clientPort, db), Password: respPw,
 	})
 }
 
@@ -493,6 +538,13 @@ func datastoreCR(ns, org, inst, resourceID, kind string, e engine, size, storage
 			"limits":   map[string]any{"cpu": "1000m", "memory": e.memLim},
 		},
 		"partOf": "managed-database",
+	}
+	// Mount the "data" PVC (the operator names its volumeClaimTemplate "data")
+	// only when the engine declares a data path — the operator's build_statefulset
+	// does NOT auto-mount, so without this the instance writes to ephemeral
+	// container storage and loses data on restart.
+	if e.dataMount != "" {
+		spec["volumeMounts"] = []any{map[string]any{"name": "data", "mountPath": e.dataMount}}
 	}
 	if pullSecret != "" {
 		spec["imagePullSecrets"] = []any{map[string]any{"name": pullSecret}}
