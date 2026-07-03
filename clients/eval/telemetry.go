@@ -101,11 +101,45 @@ type TraceFilter struct {
 // Telemetry is the append-only event store for eval traces + scores. Every
 // method takes an authoritative org (via the value's Org field or the filter);
 // no method can read across orgs.
+// Observation is ONE production LLM generation — the read projection of the
+// proven `hanzo.cloud_usage` ledger (written on every AI call by ai/object's
+// zapWriteUsage, the same funnel that emits the OTel GenAI span). It is the
+// Langfuse-v3 "observation of type GENERATION" shape the console's Observe surface
+// renders: model/provider, in/out/total tokens, cost, status, attribution. This is
+// a READ over an ai/object-owned table — eval never writes it (its own tables stay
+// eval_traces/eval_scores) — so there is exactly ONE emission path (recordTrace),
+// fanned to o11y (span), Langfuse (span), and this ledger; no parallel write.
+type Observation struct {
+	ID               string
+	TraceID          string
+	Org              string
+	UserID           string
+	Model            string
+	Provider         string
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	CostCents        int64
+	Status           string
+	ErrorMsg         string
+	Timestamp        time.Time
+}
+
+// ObservationFilter scopes a generations read. Org is authoritative (bound, never
+// interpolated); Model/UserID are optional narrowers; Limit is always bounded.
+type ObservationFilter struct {
+	Org    string
+	Model  string
+	UserID string
+	Limit  int
+}
+
 type Telemetry interface {
 	RecordTrace(ctx context.Context, t Trace) error
 	RecordScore(ctx context.Context, sc ScoreEvent) error
 	ListScores(ctx context.Context, f ScoreFilter) ([]ScoreEvent, error)
 	ListTraces(ctx context.Context, f TraceFilter) ([]Trace, error)
+	ListObservations(ctx context.Context, f ObservationFilter) ([]Observation, error)
 	Close() error
 }
 
@@ -341,6 +375,58 @@ func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, e
 	return out, nil
 }
 
+// ListObservations reads production LLM generations from the shared, ai/object-owned
+// `hanzo.cloud_usage` ledger (NOT an eval-owned table). Org bound as a positional
+// parameter (?) — never interpolated; optional Model/UserID narrowers likewise; a
+// LIMIT is always applied. cloud_usage carries UInt32 token / UInt64 cost columns, so
+// numeric coercion goes through asInt64 (asFloat only handles float types).
+func (t *dsTelemetry) ListObservations(ctx context.Context, f ObservationFilter) ([]Observation, error) {
+	if f.Org == "" {
+		return nil, fmt.Errorf("evals telemetry: observations read missing org")
+	}
+	if err := t.ready(ctx); err != nil {
+		return nil, err
+	}
+	q := "SELECT id, timestamp, organization, user_id, model, provider, request_id, " +
+		"prompt_tokens, completion_tokens, total_tokens, cost_cents, status, error_msg FROM " +
+		t.table("cloud_usage") + " WHERE organization = ?"
+	args := []any{f.Org}
+	if f.Model != "" {
+		q += " AND model = ?"
+		args = append(args, f.Model)
+	}
+	if f.UserID != "" {
+		q += " AND user_id = ?"
+		args = append(args, f.UserID)
+	}
+	q += " ORDER BY timestamp DESC LIMIT ?"
+	args = append(args, uint64(boundedLimit(f.Limit)))
+
+	rows, err := aiobject.DatastoreQuery(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("evals telemetry: query observations: %w", err)
+	}
+	out := make([]Observation, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Observation{
+			ID:               asString(r["id"]),
+			TraceID:          asString(r["request_id"]),
+			Org:              asString(r["organization"]),
+			UserID:           asString(r["user_id"]),
+			Model:            asString(r["model"]),
+			Provider:         asString(r["provider"]),
+			PromptTokens:     asInt64(r["prompt_tokens"]),
+			CompletionTokens: asInt64(r["completion_tokens"]),
+			TotalTokens:      asInt64(r["total_tokens"]),
+			CostCents:        asInt64(r["cost_cents"]),
+			Status:           asString(r["status"]),
+			ErrorMsg:         asString(r["error_msg"]),
+			Timestamp:        asTime(r["timestamp"]),
+		})
+	}
+	return out, nil
+}
+
 // Close is a no-op: dsTelemetry does not own the shared datastore connection
 // (aiobject does), so it has nothing to release.
 func (t *dsTelemetry) Close() error { return nil }
@@ -436,6 +522,16 @@ func (m *memTelemetry) ListTraces(_ context.Context, f TraceFilter) ([]Trace, er
 	return capSlice(out, boundedLimit(f.Limit)), nil
 }
 
+// ListObservations: the in-memory store holds no production cloud_usage ledger
+// (that table is ai/object-owned and datastore-only), so tests see an honest empty
+// generations list rather than fabricated rows.
+func (m *memTelemetry) ListObservations(_ context.Context, f ObservationFilter) ([]Observation, error) {
+	if f.Org == "" {
+		return nil, fmt.Errorf("evals telemetry: observations read missing org")
+	}
+	return []Observation{}, nil
+}
+
 func (m *memTelemetry) Close() error { return nil }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -493,6 +589,47 @@ func asFloat(v any) float64 {
 		}
 	case float32:
 		return float64(f)
+	}
+	return 0
+}
+
+// asInt64 coerces the integer/float native scan types the ClickHouse driver returns
+// for UInt*/Int*/Float* columns (cloud_usage tokens are UInt32, cost_cents UInt64).
+// asFloat handles only float types, so token/cost columns need this dedicated coercer.
+func asInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int32:
+		return int64(n)
+	case int16:
+		return int64(n)
+	case int8:
+		return int64(n)
+	case int:
+		return int64(n)
+	case uint64:
+		return int64(n)
+	case uint32:
+		return int64(n)
+	case uint16:
+		return int64(n)
+	case uint8:
+		return int64(n)
+	case uint:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case float32:
+		return int64(n)
+	case *uint64:
+		if n != nil {
+			return int64(*n)
+		}
+	case *int64:
+		if n != nil {
+			return *n
+		}
 	}
 	return 0
 }
