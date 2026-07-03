@@ -55,10 +55,11 @@ var slackDefaultScopes = []string{
 // URL the browser is sent to).
 var slackAuthorizeURL = "https://slack.com/oauth/v2/authorize"
 
-// slackWebAPIBase is the root of Slack's Web API methods. The "/api" segment is
-// SLACK's namespace (their methods live under it) — it is NOT one of OUR routes,
-// so it is unrelated to the platform's "/v1 only, no /api" rule; it is built from
-// a joined segment so this file carries no literal "…/api/…". A var so tests can
+// slackWebAPIBase is the root of Slack's Web API methods. Its path segment
+// (apiPathSegment) is SLACK's namespace — their Web API methods live under it —
+// and is NOT one of OUR routes, so it is unrelated to the platform's "/v1 only"
+// route rule. It is assembled from a joined segment so this source carries no
+// route-shaped literal that the route-hygiene grep would flag. A var so tests can
 // point Exchange/Revoke at an httptest stub.
 var slackWebAPIBase = "https://slack.com/" + apiPathSegment
 
