@@ -342,7 +342,7 @@ require (
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
 	github.com/hanzoai/sigv4 v0.4.2 // indirect
 	github.com/hanzoai/storage-go v1.0.0 // indirect
-	github.com/hanzoai/tasks v1.43.0 // indirect
+	github.com/hanzoai/tasks v1.43.0
 	github.com/hanzoai/xorm v1.1.6 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
@@ -661,7 +661,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.796.3
+	github.com/hanzoai/ai v1.796.4
 	github.com/hanzoai/authz v1.10.3
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
