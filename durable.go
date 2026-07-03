@@ -8,6 +8,8 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	aiobject "github.com/hanzoai/ai/object"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
@@ -33,8 +35,16 @@ var embeddedTasks *tasksengine.Embedded
 // EnqueueIngest returns ErrTasksNotConfigured → the handler runs ingest inline (always
 // works). Called once, after MountAll (ai is mounted) and before Listen.
 func wireDurableIngest(ctx context.Context, deps Deps) {
+	// A stable data dir the engine owns. Cloud's container is distroless (no /tmp), so
+	// Embed's default os.MkdirTemp("") fallback fails — pin it to cloud's data root.
+	dataDir := filepath.Join(firstNonEmptyStr(deps.DataDir, "/data"), "tasks")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		deps.Logger.Warn("durable ingest: data dir unavailable; ingest runs inline", "err", err)
+		return
+	}
 	emb, err := tasksengine.Embed(ctx, tasksengine.EmbedConfig{
 		ZAPPort: durableZAPPort,
+		DataDir: dataDir,
 		NodeID:  "cloud-tasks",
 		// RequireIdentity defaults false: the engine is loopback-only and shares cloud's
 		// trust boundary. The org travels as the ZAP Namespace (per-org client) and data
@@ -49,5 +59,15 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 	aiobject.SetIngestDialer(func(org string) (tasksclient.Client, error) {
 		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: org})
 	})
-	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr)
+	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
+}
+
+// firstNonEmptyStr returns the first non-empty string, else the last.
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
