@@ -166,6 +166,12 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 		ON agents(org, name) WHERE execution_mode='long-running' AND schedule<>''`); err != nil {
 		return fmt.Errorf("migrate: scheduled index: %w", err)
 	}
+	// Live agent-session control-plane tables live in the SAME agents.db (one
+	// store, one tenancy column) — sessions/events are to runs what the subagent
+	// tree is to a single call.
+	if err := s.migrateSessions(); err != nil {
+		return err
+	}
 	return nil
 }
 
