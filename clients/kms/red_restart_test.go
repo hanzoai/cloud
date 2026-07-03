@@ -1,4 +1,4 @@
-package kmsembed
+package kms
 
 // RED tests for the embedded KMS client internals: encryption-key restart
 // semantics (rotation / downgrade), Sign fail-closed, and master-key non-leakage.
