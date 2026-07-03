@@ -82,6 +82,14 @@ import (
 	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
 	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
 
+	// Console standalone surface: the native Go port of console2's two NON-proxy
+	// server routes (app/keys + app/onboard) — mint/revoke the user's `hk-` Cloud
+	// API key and create the user's org — done as the confidential `hanzo-console`
+	// IAM client on the VALIDATED caller's behalf. Porting these lets console2 drop
+	// its last stateful Node handlers and be statically exported (task #41, "True
+	// 1-binary FE"): the embedded SPA calls /v1/console/* on its own origin.
+	_ "github.com/hanzoai/cloud/clients/console" // order 122 — /v1/console/keys,/v1/console/onboard
+
 	// Projects control plane: the ONE org-scoped store of buildable/deployable
 	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
