@@ -64,3 +64,33 @@ func BrandFor(id string) BrandInfo {
 func IssuerForBrand(id string) string {
 	return BrandFor(id).IAMIssuer
 }
+
+// BrandIssuers returns the OIDC issuer of every configured white-label brand. The
+// in-binary identity validator (auth_identity.go) trusts a token whose `iss` is
+// any of these, so ONE cloud binary validates hanzo AND lux/zoo/pars tokens. One
+// source of truth: derived from the same `brands` registry above.
+func BrandIssuers() []string {
+	out := make([]string, 0, len(brands))
+	for _, b := range brands {
+		if b.IAMIssuer != "" {
+			out = append(out, b.IAMIssuer)
+		}
+	}
+	return out
+}
+
+// BrandAudiences returns the OAuth `aud` (== IAM client_id == app name) of every
+// white-label brand's cloud login app: `<brand>-cloud` (hanzo-cloud, lux-cloud,
+// zoo-cloud, pars-cloud, bootnode-cloud). A brand's session token carries
+// aud=<brand>-cloud (HIP-0111: client_id == app == aud), so the audience allowlist
+// must include each to accept a lux/zoo/pars token on the ONE binary. Derived from
+// the same `brands` registry as BrandIssuers — one source of truth, no hand-listing.
+func BrandAudiences() []string {
+	out := make([]string, 0, len(brands))
+	for id := range brands {
+		if id != "" {
+			out = append(out, id+"-cloud")
+		}
+	}
+	return out
+}
