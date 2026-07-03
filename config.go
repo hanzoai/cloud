@@ -80,6 +80,20 @@ type Config struct {
 	// AdminListenAddr is the admin endpoint (default :8081, gated by IAM admin).
 	AdminListenAddr string
 
+	// SitesApex is the zone whose subdomains are PUBLIC published-site hosts
+	// (`<slug>.<apex>`, default hanzo.app). The site host-router (clients/sites)
+	// serves the root path space for these hosts from OUR S3, ahead of the API
+	// pipeline, so a published site is a public artifact — never a tenant API call.
+	// Env CLOUD_SITES_APEX.
+	SitesApex string
+
+	// SitesReserved lists subdomain labels under SitesApex that are NOT sites and
+	// must fall through to the normal pipeline (real app/api hosts on the apex).
+	// This is the reserved-host exclusion that stops a published site from
+	// shadowing a real hanzo.app app. The empty label (apex) and "www" are always
+	// reserved; these add to them. Env CLOUD_SITES_RESERVED (comma-separated).
+	SitesReserved []string
+
 	// Endpoints for out-of-process subsystems (payments, vault). Empty
 	// means the subsystem is disabled OR the deployment expects a default
 	// service-discovery resolution.
@@ -158,6 +172,8 @@ func LoadConfig() *Config {
 		ZAPListenAddr:    getenv("CLOUD_ZAP_LISTEN", ":9653"),
 		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
+		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
+		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Env:              getenv("CLOUD_ENV", ""),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
