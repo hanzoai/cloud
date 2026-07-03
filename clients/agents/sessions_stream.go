@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -139,7 +140,12 @@ func (s *svc) sessionsStream(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	root := trimField(c.Query("root"))
+	// CLONE the root filter: c.Query returns a zero-copy view into the fasthttp
+	// request buffer, and the stream loop below OUTLIVES this handler (it runs
+	// under SendStreamWriter after the Ctx is recycled). tenant() already clones
+	// org for exactly this reason; root is retained past the request the same way,
+	// so it must be an owned copy or the filter races a reused buffer.
+	root := strings.Clone(trimField(c.Query("root")))
 
 	c.SetHeader("Content-Type", "text/event-stream")
 	c.SetHeader("Cache-Control", "no-cache")
