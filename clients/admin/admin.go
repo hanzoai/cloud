@@ -471,11 +471,16 @@ func (s *svc) orgMoney(ctx context.Context, org string) (int64, int64) {
 	return spend, credits
 }
 
-// orgSubject is the billing subject commerce keys an org's aggregate on. Commerce
-// meters per "org/user" and the org-level roll-up passes the org's own slug as the
-// user key ("org/org") via the `user` query param — commerce filters by that within
-// its service namespace, NOT by any request org header (X-IAM-Org-Id is not read).
-func orgSubject(org string) string { return org + "/" + org }
+// orgSubject is the billing subject commerce keys an org's wallet on. Commerce's
+// per-org billing store (the 2026-07 durability rework, commerce >=1.46.8)
+// namespaces by the TRUSTED X-Org-Id header (set by commerceClient.get from this
+// same org) and keys the org wallet under the BARE org slug as the `user` subject —
+// NOT "org/user". The prior "org/org" subject (with the wrong X-IAM-Org-Id header)
+// resolved to an EMPTY wallet, so every per-org money panel read $0 while real
+// balances existed (lux $10,000, maxpower $20,498). Verified live against commerce
+// /v1/billing/{balance,usage-rollup}: user=<org> + X-Org-Id=<org> returns the real
+// wallet; user="org/org" or a missing/other org header returns $0.
+func orgSubject(org string) string { return org }
 
 // srcOf builds a SourceStatus freshness row for the overview.
 func srcOf(name string, err error, rows int, at string) sourceStatus {
