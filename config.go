@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -79,6 +80,19 @@ type Config struct {
 
 	// AdminListenAddr is the admin endpoint (default :8081, gated by IAM admin).
 	AdminListenAddr string
+
+	// ReadBufferSize is the fasthttp per-conn request-read buffer for the public
+	// HTTP edge (zip/fiber), in bytes. fasthttp caps total request-header size at
+	// this value and returns 431 (Request Header Fields Too Large) above it. The
+	// framework default is 4 KiB — too small once a multi-domain SSO session (an
+	// admin-guard Domain=.hanzo.ai cookie set on EVERY subdomain) pushes a
+	// browser's request headers past ~4 KiB, 431-ing legitimate requests. This
+	// raises the edge ceiling to a sane 32 KiB (nginx large_client_header_buffers
+	// parity). Env GATEWAY_READ_BUFFER_SIZE (shared with the gateway edge so both
+	// trust boundaries agree on ONE value); tunable down if the per-conn memory
+	// budget (SCALE_STANDARD §8) demands it. Internal zip services keep the 4 KiB
+	// framework default — only the browser-facing edge opts up.
+	ReadBufferSize int
 
 	// SitesApex is the zone whose subdomains are PUBLIC published-site hosts
 	// (`<slug>.<apex>`, default hanzo.app). The site host-router (clients/sites)
@@ -172,6 +186,7 @@ func LoadConfig() *Config {
 		ZAPListenAddr:    getenv("CLOUD_ZAP_LISTEN", ":9653"),
 		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
+		ReadBufferSize:   getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
 		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
@@ -329,6 +344,20 @@ func getenvBool(key string) bool {
 	default:
 		return false
 	}
+}
+
+// getenvInt reads key as a base-10 int, returning dflt when unset, blank, or
+// unparseable (a malformed override can never silently zero a scale knob).
+func getenvInt(key string, dflt int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return dflt
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return dflt
+	}
+	return n
 }
 
 // Validate returns an error if the config is missing required values.
