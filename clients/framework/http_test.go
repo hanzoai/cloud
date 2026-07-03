@@ -477,6 +477,90 @@ func TestLinkAndFetchFrom(t *testing.T) {
 	}
 }
 
+// TestSingleSubmitImmutability is the LOW-1 fix: a submitted Single must be
+// immutable — PUT/POST (both upsert via writeSingle) must 409, data unchanged —
+// the SAME immutability the non-Single path enforces.
+func TestSingleSubmitImmutability(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	settings := map[string]any{
+		"name": "Settings", "isSingle": true, "isSubmittable": true,
+		"fields": []map[string]any{{"fieldname": "value", "fieldtype": "Data"}},
+	}
+	if code, b := do(t, app, http.MethodPost, "/v1/framework/doctypes", org, settings); code != http.StatusCreated {
+		t.Fatalf("define single want 201, got %d (%s)", code, b)
+	}
+	// Create the single.
+	code, body := do(t, app, http.MethodPost, "/v1/framework/Settings", org, map[string]any{"value": "v1"})
+	var doc map[string]any
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusCreated || doc["value"] != "v1" || doc["docstatus"] != float64(0) {
+		t.Fatalf("create single want 201/v1/draft, got %d %+v", code, doc)
+	}
+	// Submit it (0→1).
+	code, body = do(t, app, http.MethodPost, "/v1/framework/Settings/Settings/submit", org, nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["docstatus"] != float64(1) {
+		t.Fatalf("submit single want docstatus 1, got %d %+v", code, doc)
+	}
+	// PUT on a submitted single → 409 (this was the mutable bug).
+	if code, _ := do(t, app, http.MethodPut, "/v1/framework/Settings/Settings", org, map[string]any{"value": "v2"}); code != http.StatusConflict {
+		t.Fatalf("PUT submitted single want 409, got %d", code)
+	}
+	// POST (upsert) on a submitted single → also 409 (same guard, both verbs).
+	if code, _ := do(t, app, http.MethodPost, "/v1/framework/Settings", org, map[string]any{"value": "v3"}); code != http.StatusConflict {
+		t.Fatalf("POST submitted single want 409, got %d", code)
+	}
+	// Data unchanged, still submitted.
+	code, body = do(t, app, http.MethodGet, "/v1/framework/Settings/Settings", org, nil)
+	_ = json.Unmarshal(body, &doc)
+	if code != http.StatusOK || doc["value"] != "v1" || doc["docstatus"] != float64(1) {
+		t.Fatalf("submitted single must be unchanged (v1/docstatus 1), got %d %+v", code, doc)
+	}
+}
+
+// TestPermlessDefaultClosed is the LOW-2 fix: a doctype with no declared perms is
+// DEFAULT-CLOSED (manager-only), not open to every org member; and the org
+// owner/creator (first to administer) is the System Manager — one-time.
+func TestPermlessDefaultClosed(t *testing.T) {
+	app := mountApp(t)
+	const org = "acme"
+	memo := map[string]any{
+		"name":   "Memo",
+		"fields": []map[string]any{{"fieldname": "body", "fieldtype": "Data", "reqd": true}},
+		// deliberately NO permissions → must NOT become open-to-all.
+	}
+	// owner1 is the FIRST to administer acme → becomes System Manager (org now configured).
+	if code, b := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "owner1", false, memo); code != http.StatusCreated {
+		t.Fatalf("owner1 define Memo want 201, got %d (%s)", code, b)
+	}
+	// A role-less non-owner on the CONFIGURED org is DENIED on the permless doctype.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/Memo", org, "member2", false, nil); code != http.StatusForbidden {
+		t.Fatalf("member2 read permless Memo want 403 (default-closed), got %d", code)
+	}
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/Memo", org, "member2", false, map[string]any{"body": "x"}); code != http.StatusForbidden {
+		t.Fatalf("member2 create permless Memo want 403, got %d", code)
+	}
+	// Owner seeding is ONE-TIME: member2 cannot become manager by defining.
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "member2", false, taskDocType()); code != http.StatusForbidden {
+		t.Fatalf("member2 define doctype want 403 (owner seeding is one-time), got %d", code)
+	}
+	// The owner (System Manager) CAN read + create.
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/Memo", org, "owner1", false, nil); code != http.StatusOK {
+		t.Fatalf("owner1 read Memo want 200, got %d", code)
+	}
+	if code, b := call(t, app, http.MethodPost, "/v1/framework/Memo", org, "owner1", false, map[string]any{"body": "y"}); code != http.StatusCreated {
+		t.Fatalf("owner1 create Memo want 201, got %d (%s)", code, b)
+	}
+	// The seeded default perm is EXPLICIT on the returned doctype (never silently permless).
+	code, body := call(t, app, http.MethodGet, "/v1/framework/doctypes/Memo", org, "owner1", false, nil)
+	var got DocType
+	_ = json.Unmarshal(body, &got)
+	if code != http.StatusOK || len(got.Perms) != 1 || got.Perms[0].Role != RoleSystemManager || !got.Perms[0].Read {
+		t.Fatalf("Memo must carry an explicit System Manager perm, got %d %+v", code, got.Perms)
+	}
+}
+
 // TestNoOrgRefused is the belt-and-suspenders no-principal check on the read path.
 func TestNoOrgRefused(t *testing.T) {
 	app := mountApp(t)
