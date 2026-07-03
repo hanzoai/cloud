@@ -226,8 +226,13 @@ func purgePrefix(ctx context.Context, cli *minio.Client, bucket, prefix string) 
 // publicReadPolicy is the canonical anonymous read-only bucket policy. Listing
 // is denied; only GetObject is public, so deployed assets are fetchable but the
 // bucket is not enumerable.
+//
+// The Principal MUST be the scalar string "*" and the Resource a scalar string
+// (not {"AWS":["*"]} / arrays): SeaweedFS's S3 policy engine rejects the array
+// forms with "Policy has invalid resource". This scalar form is equally valid
+// on AWS S3 and MinIO, so it is the one canonical policy for every backend.
 func publicReadPolicy(bucket string) string {
-	return `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::` + bucket + `/*"]}]}`
+	return `{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::` + bucket + `/*"}]}`
 }
 
 // safeRel normalizes a tar entry name to a clean relative path or rejects it.
