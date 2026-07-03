@@ -120,26 +120,48 @@ func TestBuildImageRefIsInjective(t *testing.T) {
 	}
 }
 
-// TestSecretEnvNeverRenderedIntoCR proves that even if a secret env var reaches
-// the store (it is rejected at the handler boundary), the CR renderer drops it —
-// a secret value is never written into the operator CR's plaintext .spec.env.
+// TestSecretEnvNeverRenderedIntoCR proves the CR renderer emits a secret env var
+// as a Kubernetes valueFrom.secretKeyRef (never an inline plaintext value): the
+// secret's VALUE appears nowhere in the rendered spec, and the secret entry carries
+// only valueFrom (no `value`), the shape the hanzo operator requires.
 func TestSecretEnvNeverRenderedIntoCR(t *testing.T) {
 	env := []EnvVarJSON{
 		{Key: "PUBLIC", Value: "ok", Secret: false},
 		{Key: "DB_PASSWORD", Value: "hunter2", Secret: true},
 	}
 	b, _ := json.Marshal(env)
-	rendered := envList(string(b))
-	if len(rendered) != 1 {
-		t.Fatalf("only the non-secret var should render, got %d", len(rendered))
-	}
-	m := rendered[0].(map[string]any)
-	if m["name"] != "PUBLIC" {
-		t.Fatalf("expected PUBLIC, got %v", m)
+	rendered := renderEnv(managedSecretName("api"), string(b))
+	if len(rendered) != 2 {
+		t.Fatalf("both vars should render (plain + secretKeyRef), got %d", len(rendered))
 	}
 	// The secret value must appear nowhere in the rendered spec.
 	if strings.Contains(mustJSON(rendered), "hunter2") {
 		t.Fatal("secret value leaked into rendered CR env")
+	}
+	// Locate the secret entry and assert its shape: valueFrom.secretKeyRef, no value.
+	var secretEntry map[string]any
+	for _, e := range rendered {
+		m := e.(map[string]any)
+		if m["name"] == "DB_PASSWORD" {
+			secretEntry = m
+		}
+	}
+	if secretEntry == nil {
+		t.Fatal("DB_PASSWORD secret env not rendered")
+	}
+	if _, hasValue := secretEntry["value"]; hasValue {
+		t.Fatal("secret env must NOT carry an inline value (operator rejects value+valueFrom)")
+	}
+	vf, ok := secretEntry["valueFrom"].(map[string]any)
+	if !ok {
+		t.Fatal("secret env must carry valueFrom")
+	}
+	skr, ok := vf["secretKeyRef"].(map[string]any)
+	if !ok {
+		t.Fatal("secret env valueFrom must carry secretKeyRef")
+	}
+	if skr["name"] != managedSecretName("api") || skr["key"] != "DB_PASSWORD" {
+		t.Fatalf("secretKeyRef must point at the managed Secret/key, got %v", skr)
 	}
 }
 
