@@ -98,6 +98,64 @@ func TestSessionEventSeqAndCounts(t *testing.T) {
 	}
 }
 
+// TestSessionEventSeqConcurrent proves the store's per-session Seq is gap-free
+// and duplicate-free under CONCURRENT appends — the exact race vector #4. The
+// store runs on a single connection (SetMaxOpenConns(1)) so the MAX(seq)+1
+// read-then-write is serialised; the UNIQUE(session_id,seq) index is the final
+// backstop. N goroutines append to the SAME session in parallel; the returned
+// seqs must be EXACTLY {1..N} (no gap = no lost write, no dupe = no double
+// allocation), and the persisted count must equal N. Run under -race.
+func TestSessionEventSeqConcurrent(t *testing.T) {
+	s := testSessionStore(t)
+	ctx := context.Background()
+	if err := s.CreateSession(ctx, mkSession("acme", "root", "", "root")); err != nil {
+		t.Fatalf("root: %v", err)
+	}
+	const n = 64
+	var wg sync.WaitGroup
+	seqs := make([]int64, n)
+	errs := make([]error, n)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			id, err := genID("evt")
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			e, err := s.AppendEvent(ctx, Event{
+				ID: id, SessionID: "root", Org: "acme", Kind: KindLog,
+				CreatedAt: time.Now().Unix(),
+			})
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			seqs[i] = e.Seq
+		}(i)
+	}
+	wg.Wait()
+	seen := map[int64]bool{}
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("append %d: %v", i, errs[i])
+		}
+		if seen[seqs[i]] {
+			t.Fatalf("duplicate seq %d — MAX+1 allocation raced", seqs[i])
+		}
+		seen[seqs[i]] = true
+	}
+	for want := int64(1); want <= n; want++ {
+		if !seen[want] {
+			t.Fatalf("gap: seq %d missing — a concurrent append was lost", want)
+		}
+	}
+	if got, _ := s.CountEvents(ctx, "acme", "root"); got != n {
+		t.Fatalf("persisted event count want %d, got %d", n, got)
+	}
+}
+
 func genIDMust(t *testing.T) string {
 	t.Helper()
 	id, err := genID("evt")
