@@ -35,27 +35,41 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/hanzoai/cloud/zaptrace"
 )
+
+// defaultZapEndpoint is the collector's ZAP-native OTLP receiver (zapreceiver).
+const defaultZapEndpoint = "otel-collector.hanzo.svc:4319"
 
 // initTelemetry installs the global OTel tracer provider for serviceName and
 // returns a shutdown func that flushes and stops the exporter. The returned func
 // is ALWAYS non-nil, so callers defer it unconditionally. An operator may
 // override serviceName at runtime with OTEL_SERVICE_NAME.
 func initTelemetry(ctx context.Context, serviceName string) func(context.Context) {
-	endpoint := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
-	if endpoint == "" {
-		log.Printf("telemetry: disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to emit OTel spans to o11y)")
+	// Enable when a ZAP endpoint is set OR (legacy) any OTLP endpoint is set —
+	// keep the clean no-op-when-unset posture so this is safe before the
+	// collector is live.
+	zapEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_ZAP_ENDPOINT"))
+	legacy := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
+	if zapEndpoint == "" && legacy == "" {
+		log.Printf("telemetry: disabled (set OTEL_EXPORTER_ZAP_ENDPOINT to emit OTel spans over ZAP to o11y)")
 		return func(context.Context) {}
+	}
+	if zapEndpoint == "" {
+		zapEndpoint = defaultZapEndpoint
 	}
 	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); v != "" {
 		serviceName = v
 	}
-	exp, err := otlptracehttp.New(ctx)
+	// ZAP-native transport: spans ride the ZAP wire (zap-proto/http), never
+	// OTLP-HTTP(:4318)/gRPC(:4317). Payload stays standard OTLP protobuf.
+	exp, err := otlptrace.New(ctx, zaptrace.New(zapEndpoint))
 	if err != nil {
-		log.Printf("telemetry: create OTLP trace exporter: %v", err)
+		log.Printf("telemetry: create ZAP trace exporter: %v", err)
 		return func(context.Context) {}
 	}
 	tp := sdktrace.NewTracerProvider(
@@ -63,7 +77,7 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 		sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", serviceName))),
 	)
 	otel.SetTracerProvider(tp)
-	log.Printf("telemetry: OTel spans -> o11y via OTLP (service.name=%s)", serviceName)
+	log.Printf("telemetry: OTel spans -> o11y over ZAP wire=%s (service.name=%s)", zapEndpoint, serviceName)
 	return func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
