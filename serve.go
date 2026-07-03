@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
 	"github.com/zap-proto/zip"
@@ -56,6 +57,18 @@ func Serve(enable []string) error {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
+
+	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
+	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a
+	// published-site host (`<slug>.hanzo.app`) is served the site's static bytes
+	// from OUR S3 and returns HERE, never entering the authenticated/billed API
+	// pipeline. A published site is a PUBLIC artifact: no IAM JWT, no balance gate.
+	// For every other Host this middleware calls Continue() and the pipeline below
+	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projectsvc store,
+	// injected at its Mount via sites.SetResolver; until then a site host 404s
+	// honestly. Tenant isolation (org+prefix come only from the store keyed by the
+	// validated slug; object keys are rooted-clean) lives in clients/sites.
+	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved}, deps.Logger).Middleware())
 
 	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
 	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
