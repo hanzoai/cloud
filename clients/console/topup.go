@@ -274,7 +274,7 @@ func recordHusdPayment(ctx context.Context, cfg topupConfig, cr caller, txHash, 
 		"toAddress":   cfg.treasury,
 		"userId":      cr.id, // the VALIDATED caller — never a client-supplied id
 	})
-	raw, status, err := commerceDo(ctx, cfg, http.MethodPost, "/v1/billing/payment", nil, cr.owner, payload)
+	raw, status, err := commerceDo(ctx, cfg.commerce, cfg.token, http.MethodPost, "/v1/billing/payment", nil, cr.owner, payload)
 	if err != nil {
 		return "", zip.Errorf(http.StatusBadGateway, "could not reach commerce to record the payment: %v", err)
 	}
@@ -295,7 +295,7 @@ func recordHusdPayment(ctx context.Context, cfg topupConfig, cr caller, txHash, 
 // the credit is already recorded, so a read error degrades to 0, not a failure.
 func commerceBalanceCents(ctx context.Context, cfg topupConfig, cr caller) int64 {
 	q := url.Values{"user": {cr.id}, "currency": {"usd"}}
-	raw, status, err := commerceDo(ctx, cfg, http.MethodGet, "/v1/billing/balance", q, cr.owner, nil)
+	raw, status, err := commerceDo(ctx, cfg.commerce, cfg.token, http.MethodGet, "/v1/billing/balance", q, cr.owner, nil)
 	if err != nil || status < 200 || status >= 300 {
 		return 0
 	}
@@ -314,12 +314,14 @@ func commerceBalanceCents(ctx context.Context, cfg topupConfig, cr caller) int64
 
 // commerceDo performs one S2S commerce request: admin bearer + X-Org-Id (commerce's
 // EdgeAuth trusts the org header ONLY behind the service token). Returns the raw
-// body + status. Mirrors clients/admin/commerce.go's auth.
-func commerceDo(ctx context.Context, cfg topupConfig, method, path string, q url.Values, org string, body []byte) ([]byte, int, error) {
-	if cfg.commerce == "" {
+// body + status. Mirrors clients/admin/commerce.go's auth. Takes (base, token) rather
+// than the HUSD topupConfig so both the wallet top-up AND the /v1/billing/* data bridge
+// (billing.go) share this ONE S2S transport.
+func commerceDo(ctx context.Context, base, token, method, path string, q url.Values, org string, body []byte) ([]byte, int, error) {
+	if base == "" {
 		return nil, 0, fmt.Errorf("commerce not configured")
 	}
-	u := cfg.commerce + path
+	u := base + path
 	if enc := q.Encode(); enc != "" {
 		u += "?" + enc
 	}
@@ -335,8 +337,8 @@ func commerceDo(ctx context.Context, cfg topupConfig, method, path string, q url
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if cfg.token != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
