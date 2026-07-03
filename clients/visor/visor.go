@@ -24,6 +24,15 @@
 //	POST   /v1/clusters/:clusterId/pools          add a node pool                -> nodePoolView
 //	POST   /v1/clusters/:clusterId/pools/:poolId/scale  scale a node pool        -> nodePoolView
 //	DELETE /v1/clusters/:clusterId/pools/:poolId   delete a node pool             -> 204
+//	POST   /v1/machines/:id/bind-agent            bind a cloud Agent to a machine -> agentBinding
+//	GET    /v1/machines/:id/agent-binding          the machine's agent binding    -> agentBinding (404 if none)
+//	DELETE /v1/machines/:id/agent-binding          unbind the agent               -> 204
+//	GET    /v1/agent-bindings                     the org's agent bindings        -> {agentBindings:[agentBinding]}
+//	GET    /v1/bots                               the org's bots (kind=bot)       -> {bots:[botView]}
+//	POST   /v1/bots/launch                        launch a bot (machine+bind)     -> botView | quote
+//	GET    /v1/bots/:id                            one bot by id                  -> botView (404 if not a bot)
+//	DELETE /v1/bots/:id                            terminate a bot (unbind+delete) -> 204
+//	POST   /v1/bots/:id/:action                   stop|pause|message the bot      -> action result
 //
 // The tenant (principal.Tenant) is passed to Visor as ?owner=<org>, so a caller
 // can only ever read or mutate their OWN tenant's compute; the org is taken from
@@ -80,6 +89,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// org-scoped — the catalog is identical for every tenant.
 	app.Get("/v1/compute/regions", s.listRegions)
 	app.Get("/v1/compute/sizes", s.listSizes)
+
+	// Agent↔machine binding — thin proxy over vm's binding surface (mark a machine
+	// as running the @hanzo/bot runtime for a cloud Agent). Deeper than
+	// /v1/machines/:id so no machine id captures these literals. See bots.go.
+	app.Post("/v1/machines/:id/bind-agent", s.bindMachineAgent)
+	app.Get("/v1/machines/:id/agent-binding", s.getMachineAgentBinding)
+	app.Delete("/v1/machines/:id/agent-binding", s.unbindMachineAgent)
+	app.Get("/v1/agent-bindings", s.listAgentBindings)
+
+	// Bots — a Bot is a kind=bot machine + an agent binding, composed from the vm
+	// compute + binding surface (bots.go). The sibling of /v1/machines. launch is
+	// an explicit literal, registered before :id so it never binds as an id.
+	app.Get("/v1/bots", s.listBots)
+	app.Post("/v1/bots/launch", s.launchBot)
+	app.Get("/v1/bots/:id", s.getBot)
+	app.Delete("/v1/bots/:id", s.deleteBot)
+	app.Post("/v1/bots/:id/:action", s.botAction)
 
 	s.log.Info("visor compute surface mounted", "target", s.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
