@@ -24,9 +24,11 @@
 // searxngInstanceUrl / firecrawlApiUrl at this surface (public api.hanzo.ai/v1
 // or the internal cloud-api svc DNS — same binary either way).
 //
-// AUTH: firecrawl requires a Bearer key; searxng accepts an optional X-API-Key.
-// Both are the same shared service key WEBSEARCH_API_KEY (KMS-sourced, synced
-// into the pod env). An unset key fails closed on the authed scrape path.
+// AUTH: BOTH surfaces require the shared service key WEBSEARCH_API_KEY
+// (KMS-sourced, synced into the pod env) and fail closed — firecrawl as a Bearer
+// key, searxng as X-API-Key. An unset key 503s and any missing/mismatched key
+// 401s, so neither /v1/websearch/search nor /v1/websearch/*/scrape is ever an
+// open proxy. The LibreChat clients send the configured key on both paths.
 package websearch
 
 import (
@@ -105,18 +107,26 @@ func newSearchProxy(rawURL string) (http.Handler, error) {
 	return proxy, nil
 }
 
-// searchGuard applies the OPTIONAL searxng key check: if WEBSEARCH_API_KEY is
-// set and the caller sent an X-API-Key, it must match; a missing X-API-Key is
-// allowed (searxng treats the key as optional), matching the client which only
-// sends it when configured.
+// searchGuard REQUIRES the shared service key, fail-closed exactly like the
+// scrape sibling — /v1/websearch/search must not be an open proxy to the
+// Hanzo-operated metasearch instance (a request-forgery + cost surface).
+//   - key unset          → 503 (surface not configured; never "open to all").
+//   - X-API-Key missing   → 401 (constant-time compare of "" vs want fails).
+//   - X-API-Key mismatch  → 401.
+// The LibreChat searxng client sends the configured searxngApiKey as X-API-Key
+// (universe chat configmap wires searxngApiKey=${WEBSEARCH_API_KEY}), so the
+// real caller is unaffected; only anonymous callers are turned away.
 func searchGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if want := apiKey(); want != "" {
-			if got := strings.TrimSpace(r.Header.Get("X-API-Key")); got != "" &&
-				subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
-				writeErr(w, http.StatusUnauthorized, "invalid api key")
-				return
-			}
+		want := apiKey()
+		if want == "" {
+			writeErr(w, http.StatusServiceUnavailable, "web search not configured")
+			return
+		}
+		got := strings.TrimSpace(r.Header.Get("X-API-Key"))
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			writeErr(w, http.StatusUnauthorized, "invalid api key")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
