@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/sites"
+
 	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
 	// graph (provisioningsvc uses it). Blank import registers the "sqlite" name.
 	_ "modernc.org/sqlite"
@@ -17,6 +19,17 @@ import (
 var (
 	errConflict = errors.New("projects: project already exists")
 	errNotFound = errors.New("projects: project not found")
+	// errHostTaken is returned by BindHost when the requested public subdomain is
+	// already owned by a DIFFERENT project. Subdomain allocation is first-come and
+	// globally unique; a losing bind never blocks a deploy (the site still serves
+	// at its S3 URL), it just doesn't claim the pretty host.
+	errHostTaken = errors.New("projects: site host already bound to another project")
+	// errReservedHost is returned by BindHost for a reserved label (api, admin, a
+	// brand/auth term, …). Together with the createProject reject, this makes the
+	// global site_hosts table PHYSICALLY UNABLE to hold a reserved host — so a
+	// reserved subdomain can never resolve to a project even if the ingress regex
+	// drifts. See clients/sites/reserved.go for the ONE reserved-list source.
+	errReservedHost = errors.New("projects: site host is a reserved label")
 )
 
 // Project is the org-scoped, canonical record of a buildable/deployable site.
@@ -39,8 +52,16 @@ type Project struct {
 	LiveURL       string
 	Bucket        string
 	CurrentDeploy string
-	CreatedAt     int64
-	UpdatedAt     int64
+	// CacheControl is the per-project override for the HTML/document Cache-Control
+	// header applied to deployed objects (and honored by the site server). Empty =
+	// the honest default (public, max-age=60, s-maxage=86400). Content-hashed
+	// assets are always immutable regardless of this override.
+	CacheControl string
+	// LastPurgeAt is the unix time of the last successful (or attempted) Cloudflare
+	// edge purge for this site. Surfaced on the API so a console can show cache freshness.
+	LastPurgeAt int64
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 // Deployment is one deploy attempt for a project, versioned monotonically per
@@ -137,9 +158,35 @@ CREATE TABLE IF NOT EXISTS deployments (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_deployments_project_version ON deployments(project_id, version);
 CREATE INDEX IF NOT EXISTS ix_deployments_project_created ON deployments(project_id, created_at);
+
+-- site_hosts is the GLOBAL public-hostname namespace: it binds a globally-unique
+-- host (the subdomain slug for <slug>.hanzo.app; a full custom domain later) to
+-- exactly one project (org, slug). Project slugs are only org-unique, so this
+-- separate table is what makes a bare subdomain resolve deterministically to one
+-- tenant — the authoritative binding the site server keys on. First-come wins;
+-- the PK enforces one owner per host.
+CREATE TABLE IF NOT EXISTS site_hosts (
+  host        TEXT PRIMARY KEY,
+  org         TEXT NOT NULL,
+  slug        TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_site_hosts_org_slug ON site_hosts(org, slug);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Additive column migrations for existing databases. SQLite has no
+	// ADD COLUMN IF NOT EXISTS, so attempt each and ignore the duplicate-column
+	// error — the idempotent forward-only migration pattern.
+	for _, alter := range []string{
+		`ALTER TABLE projects ADD COLUMN cache_control TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects ADD COLUMN last_purge_at INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("migrate alter: %w", err)
+		}
 	}
 	return nil
 }
@@ -147,13 +194,14 @@ CREATE INDEX IF NOT EXISTS ix_deployments_project_created ON deployments(project
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,created_at,updated_at`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,cache_control,last_purge_at,created_at,updated_at`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
 	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description,
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
-		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CreatedAt, &p.UpdatedAt)
+		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy,
+		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
@@ -161,10 +209,11 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CreatedAt, p.UpdatedAt)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy,
+		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -211,10 +260,10 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,cache_control=?,last_purge_at=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.UpdatedAt, p.Org, p.Slug)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CacheControl, p.LastPurgeAt, p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
@@ -317,6 +366,81 @@ func (s *Store) GetDeployment(ctx context.Context, org, projectID, id string) (D
 		return Deployment{}, fmt.Errorf("get deployment: %w", err)
 	}
 	return d, nil
+}
+
+// BindHost claims the global public host for (org, slug), first-come. It is
+// idempotent for the SAME owner (a re-deploy just refreshes updated_at). If host
+// is already bound to a DIFFERENT project it returns errHostTaken WITHOUT
+// overwriting — a losing bind must never hijack another tenant's live subdomain.
+func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64) error {
+	// A reserved label may never enter site_hosts, whatever the caller — the
+	// storage invariant that makes the serve-time reserved gate a mere backstop.
+	if sites.IsReserved(host) {
+		return errReservedHost
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var curOrg, curSlug string
+	row := tx.QueryRowContext(ctx, `SELECT org, slug FROM site_hosts WHERE host=?`, host)
+	switch err := row.Scan(&curOrg, &curSlug); {
+	case errors.Is(err, sql.ErrNoRows):
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO site_hosts (host, org, slug, created_at, updated_at) VALUES (?,?,?,?,?)`,
+			host, org, slug, now, now); err != nil {
+			return fmt.Errorf("bind host: %w", err)
+		}
+	case err != nil:
+		return fmt.Errorf("bind host lookup: %w", err)
+	default:
+		if curOrg != org || curSlug != slug {
+			return errHostTaken
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE site_hosts SET updated_at=? WHERE host=?`, now, host); err != nil {
+			return fmt.Errorf("touch host: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// UnbindHost releases a host binding, but only the row owned by (org, slug) — so
+// deleting project A can never drop project B's host even if they somehow shared
+// a row (they cannot, but the scoping makes the guarantee explicit).
+func (s *Store) UnbindHost(ctx context.Context, host, org, slug string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM site_hosts WHERE host=? AND org=? AND slug=?`, host, org, slug)
+	if err != nil {
+		return fmt.Errorf("unbind host: %w", err)
+	}
+	return nil
+}
+
+// ResolveHost returns the project a public host is bound to, joining the global
+// site_hosts binding to the org-scoped project. This is the authoritative
+// slug→project resolution the site server uses; the org and bucket come ONLY from
+// here, never from the request. Missing binding OR missing project ⇒ errNotFound.
+func (s *Store) ResolveHost(ctx context.Context, host string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+prefixCols("p")+` FROM site_hosts h JOIN projects p ON p.org=h.org AND p.slug=h.slug WHERE h.host=?`, host)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve host: %w", err)
+	}
+	return p, nil
+}
+
+// prefixCols qualifies each projectCols name with a table alias (for JOINs).
+func prefixCols(alias string) string {
+	parts := strings.Split(projectCols, ",")
+	for i, c := range parts {
+		parts[i] = alias + "." + c
+	}
+	return strings.Join(parts, ",")
 }
 
 // ListDeployments returns deployments for a project, newest version first.
