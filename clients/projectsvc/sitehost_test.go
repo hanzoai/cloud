@@ -3,6 +3,7 @@ package projectsvc
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 )
 
@@ -84,20 +85,57 @@ func TestSiteResolverAdapter(t *testing.T) {
 		t.Fatalf("unbound slug = (found=%v,err=%v), want (false,nil)", found, err)
 	}
 
-	p := mkProject("acme", "blog", "Blog")
+	p := mkProject("acme", "myblog", "My Blog")
 	p.Status, p.Bucket = "live", "hanzo-sites"
 	if err := s.CreateProject(ctx, p); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if err := s.BindHost(ctx, "blog", "acme", "blog", 100); err != nil {
+	if err := s.BindHost(ctx, "myblog", "acme", "myblog", 100); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
-	site, found, err := r.Resolve(ctx, "blog")
+	site, found, err := r.Resolve(ctx, "myblog")
 	if err != nil || !found {
 		t.Fatalf("resolve = (found=%v,err=%v)", found, err)
 	}
-	if site.Org != "acme" || site.Slug != "blog" || site.Bucket != "hanzo-sites" ||
-		site.Prefix != "acme/blog" || site.Status != "live" {
+	if site.Org != "acme" || site.Slug != "myblog" || site.Bucket != "hanzo-sites" ||
+		site.Prefix != "acme/myblog" || site.Status != "live" {
 		t.Fatalf("unexpected site: %+v", site)
+	}
+}
+
+// TestBindHostRejectsReserved proves the storage invariant: BindHost refuses a
+// reserved label (here `api`) even when a project with that slug somehow exists
+// (created via the store, bypassing the handler guard). So site_hosts can NEVER
+// physically contain a reserved host, and a reserved subdomain never resolves —
+// the serve-time gate is a backstop, not the sole guard.
+func TestBindHostRejectsReserved(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := mkProject("acme", "api", "API")
+	p.Status = "live"
+	if err := s.CreateProject(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.BindHost(ctx, "api", "acme", "api", 100); !errors.Is(err, errReservedHost) {
+		t.Fatalf("BindHost(api) = %v, want errReservedHost", err)
+	}
+	if _, err := s.ResolveHost(ctx, "api"); !errors.Is(err, errNotFound) {
+		t.Fatalf("reserved host must not resolve, got %v", err)
+	}
+}
+
+// TestCreateRejectsReservedSlug proves the create-time guard through the real HTTP
+// handler: a reserved slug is a 400; a normal slug still creates. ONE reserved-list
+// source (sites.IsReserved) is enforced here and at BindHost.
+func TestCreateRejectsReservedSlug(t *testing.T) {
+	app := mountApp(t)
+	for _, slug := range []string{"api", "admin", "login", "wallet", "hanzo"} {
+		status, body := do(t, app, "POST", "/v1/projects", "acme", map[string]any{"name": "X", "slug": slug})
+		if status != http.StatusBadRequest {
+			t.Errorf("create slug %q status=%d body=%s, want 400", slug, status, body)
+		}
+	}
+	if status, body := do(t, app, "POST", "/v1/projects", "acme", map[string]any{"name": "My Site", "slug": "my-site"}); status != http.StatusCreated {
+		t.Fatalf("create normal slug status=%d body=%s, want 201", status, body)
 	}
 }
