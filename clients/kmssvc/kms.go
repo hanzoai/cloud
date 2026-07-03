@@ -3,7 +3,7 @@
 //
 // It re-declares luxfi/kms's REST surface (cmd/kms is package main with no
 // mountable handler) on cloud's Fiber app, backed by the SAME embedded
-// SecretStore the in-process cloud.KMSClient uses (clients/kmsembed.Client,
+// SecretStore the in-process cloud.KMSClient uses (clients/kms.Client,
 // built in build.go and handed through deps.KMS), and gated by cloud's ONE auth
 // boundary (SanitizeIdentity → c.Org()/c.IsAdmin()) — never a parallel JWT stack.
 //
@@ -18,7 +18,7 @@
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
 // as /orgs/{org}{subpath}, so one org can never address another org's records.
 // This mirrors clients/paassvc and clients/admin.
-package kms
+package kmssvc
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kmsembed"
+	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -38,7 +38,7 @@ import (
 // disabled); the subsystem then mounts only the honest fail-closed health/config
 // so the binary never pretends to host secrets it cannot.
 type svc struct {
-	kms *kmsembed.Client
+	kms *kms.Client
 }
 
 // Mount wires /v1/kms/* onto app.
@@ -51,10 +51,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "kms")
 
-	// deps.KMS is the in-process kmsembed.Client (build.go pickKMSClient) when kms
+	// deps.KMS is the in-process kms.Client (build.go pickKMSClient) when kms
 	// is co-resident. Anything else (RPC/disabled stub) means secrets are served
 	// elsewhere, so the REST surface mounts health/config only.
-	kc, _ := deps.KMS.(*kmsembed.Client)
+	kc, _ := deps.KMS.(*kms.Client)
 	s := &svc{kms: kc}
 
 	app.Get("/v1/kms/health", s.health)
@@ -127,7 +127,7 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 			return zip.ErrForbidden("caller may only access its own org's secrets")
 		}
 		if !s.kms.Ready() {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", kmsembed.ErrMasterKeyMissing.Error())
+			return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 		}
 		return h(ctx)
 	}
@@ -148,7 +148,7 @@ func (s *svc) health(ctx *zip.Ctx) error {
 	res["signing"] = s.kms.SigningConfigured()
 	if !s.kms.Ready() {
 		res["status"], res["ready"] = "degraded", false
-		res["error"] = kmsembed.ErrMasterKeyMissing.Error()
+		res["error"] = kms.ErrMasterKeyMissing.Error()
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["ready"] = true
@@ -191,7 +191,7 @@ func (s *svc) listSecrets(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
 	sub := ctx.Query("path")
-	if !kmsembed.ValidSubpath(sub) {
+	if !kms.ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	metas, err := s.kms.List(orgPath(org, sub), env)
@@ -215,7 +215,7 @@ func (s *svc) getSecret(ctx *zip.Ctx) error {
 	}
 	val, err := s.kms.Get(path, name, env)
 	if err != nil {
-		if errors.Is(err, kmsembed.ErrSecretNotFound) {
+		if errors.Is(err, kms.ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -243,7 +243,7 @@ func (s *svc) putSecret(ctx *zip.Ctx) error {
 	if !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
-	if !kmsembed.ValidSubpath(req.Path) {
+	if !kms.ValidSubpath(req.Path) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	path := orgPath(org, req.Path)
@@ -265,7 +265,7 @@ func (s *svc) deleteSecret(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("secret name is required and must be a clean '/'-separated path")
 	}
 	if err := s.kms.Delete(path, name, env); err != nil {
-		if errors.Is(err, kmsembed.ErrSecretNotFound) {
+		if errors.Is(err, kms.ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -299,12 +299,12 @@ func validOrg(org string) bool {
 	return true
 }
 
-// The key-shape validators live in ONE place — clients/kmsembed — so the HTTP
+// The key-shape validators live in ONE place — clients/kms — so the HTTP
 // boundary and the in-process store methods enforce identically (DRY). The
-// subsystem reuses kmsembed.ValidSegment / ValidSubpath here to return a specific
+// subsystem reuses kms.ValidSegment / ValidSubpath here to return a specific
 // 400 early, before the request reaches the store.
-func validName(s string) bool { return kmsembed.ValidSegment(s, kmsembed.MaxNameLen) }
-func validEnv(s string) bool  { return kmsembed.ValidSegment(s, kmsembed.MaxEnvLen) }
+func validName(s string) bool { return kms.ValidSegment(s, kms.MaxNameLen) }
+func validEnv(s string) bool  { return kms.ValidSegment(s, kms.MaxEnvLen) }
 
 // orgPath folds an org + an optional relative subpath into the store path,
 // namespacing every org under /orgs/{org}. "" subpath → /orgs/{org}.
@@ -329,7 +329,7 @@ func targetOf(org, sub string) (path, name string, ok bool) {
 	} else {
 		name = sub
 	}
-	if !validName(name) || !kmsembed.ValidSubpath(subpath) {
+	if !validName(name) || !kms.ValidSubpath(subpath) {
 		return "", "", false
 	}
 	return orgPath(org, subpath), name, true
