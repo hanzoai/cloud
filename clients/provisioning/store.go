@@ -37,6 +37,11 @@ type Resource struct {
 	DBName       string
 	Status       string
 	CreatedAt    int64
+	// Size is the declared storage footprint of a DEDICATED-instance resource
+	// (e.g. "10Gi"), empty for the shared-logical kinds. It is the live-size
+	// source the recurring footprint meter multiplies into a per-org GB-time
+	// charge — so an instance the org runs is billed for what it reserves.
+	Size string
 }
 
 // Store is the provisioning metadata database. ONE SQLite file
@@ -103,9 +108,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_provisioned_physical
   ON provisioned_resources(physical_name);
 CREATE INDEX IF NOT EXISTS ix_provisioned_org_kind_rank
   ON provisioned_resources(org, kind, created_at);
+-- Cross-org status scan for the recurring footprint meter (list every ready
+-- dedicated instance to charge its org).
+CREATE INDEX IF NOT EXISTS ix_provisioned_status
+  ON provisioned_resources(status);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Additive column for the dedicated-instance size dimension. CREATE TABLE
+	// IF NOT EXISTS never alters an existing table, so add the column
+	// idempotently — a "duplicate column name" on an already-migrated DB is the
+	// expected no-op, any other error is real.
+	if _, err := s.db.Exec(`ALTER TABLE provisioned_resources ADD COLUMN size TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrate size column: %w", err)
 	}
 	return nil
 }
@@ -113,12 +130,12 @@ CREATE INDEX IF NOT EXISTS ix_provisioned_org_kind_rank
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const resourceCols = `id,org,kind,name,physical_name,secret_ref,host,port,username,dbname,status,created_at`
+const resourceCols = `id,org,kind,name,physical_name,secret_ref,host,port,username,dbname,status,created_at,size`
 
 func scanResource(sc interface{ Scan(...any) error }) (Resource, error) {
 	var r Resource
 	err := sc.Scan(&r.ID, &r.Org, &r.Kind, &r.Name, &r.PhysicalName, &r.SecretRef,
-		&r.Host, &r.Port, &r.Username, &r.DBName, &r.Status, &r.CreatedAt)
+		&r.Host, &r.Port, &r.Username, &r.DBName, &r.Status, &r.CreatedAt, &r.Size)
 	return r, err
 }
 
@@ -133,9 +150,9 @@ func (s *Store) Insert(ctx context.Context, r Resource) error {
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO provisioned_resources (`+resourceCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO provisioned_resources (`+resourceCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.Kind, r.Name, r.PhysicalName, r.SecretRef,
-		r.Host, r.Port, r.Username, r.DBName, r.Status, r.CreatedAt)
+		r.Host, r.Port, r.Username, r.DBName, r.Status, r.CreatedAt, r.Size)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -188,6 +205,43 @@ func (s *Store) List(ctx context.Context, org, kind string) ([]Resource, error) 
 	}
 	defer func() { _ = rows.Close() }()
 
+	var out []Resource
+	for rows.Next() {
+		r, err := scanResource(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// UpdateStatus advances one resource's status (e.g. dedicated "provisioning" ->
+// "ready" once the operator reports the instance is up). Scoped to (org,kind,
+// name) so it can never touch another tenant's row. Reports whether a row moved.
+func (s *Store) UpdateStatus(ctx context.Context, org, kind, name, status string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE provisioned_resources SET status=? WHERE org=? AND kind=? AND name=?`,
+		status, org, kind, name)
+	if err != nil {
+		return false, fmt.Errorf("update status: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ListAllByStatus returns every row (across ALL orgs) in the given status. It is
+// the read side of the recurring footprint meter: the sweep lists every "ready"
+// row and charges each dedicated instance's OWN org. Rows carry Org/Kind/Size so
+// the caller attributes and prices without a second lookup.
+func (s *Store) ListAllByStatus(ctx context.Context, status string) ([]Resource, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+resourceCols+` FROM provisioned_resources WHERE status=? ORDER BY org ASC, kind ASC, name ASC`,
+		status)
+	if err != nil {
+		return nil, fmt.Errorf("list by status: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
 	var out []Resource
 	for rows.Next() {
 		r, err := scanResource(rows)
