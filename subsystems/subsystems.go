@@ -184,6 +184,16 @@ import (
 	// findings store the redacted preview + SHA-256 fingerprint, NEVER the secret.
 	_ "github.com/hanzoai/cloud/clients/security" // order 136 — /v1/security/*
 
+	// Connectors control plane: the generic, provider-agnostic OAuth connector
+	// framework. One registry, N providers (Slack live; GitHub scaffolded;
+	// Google/Salesforce plug into the SAME registry later). Per-org customer tokens
+	// go to KMS custody; the callback is state-authed (HMAC + single-use nonce), the
+	// org derived ONLY from the signed state. Uses the GENERIC
+	// /v1/integrations/{provider}/callback — it MUST NOT mount any /v1/slack/* route
+	// (team-go owns /v1/slack/*). Order 137 binds after security (136), before the
+	// AI /v1/* catch-all (150).
+	_ "github.com/hanzoai/cloud/clients/integrations" // order 137 — /v1/integrations/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
