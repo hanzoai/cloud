@@ -70,6 +70,9 @@ func (s *svc) applyLive(ctx context.Context, org, project string, app Applicatio
 	if e := s.k8s.applyService(ctx, org, project, app, image); e != nil {
 		return false, false, e
 	}
+	// Declare the app's secret-env sync alongside its Service CR (best-effort —
+	// never fails the deploy; secrets show "pending" until the operator syncs).
+	s.ensureSecretSync(ctx, org, app)
 	adv, e := s.store.FinalizeLive(ctx, d, tag, tenantNamespace(org), now)
 	if e != nil {
 		s.log.Warn("applyLive: finalize live failed (continuing)", "org", org, "app", app.Slug, "err", e)

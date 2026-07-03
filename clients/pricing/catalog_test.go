@@ -77,7 +77,7 @@ func TestVisibleCatalog_DefaultAllVisible(t *testing.T) {
 func TestVisibleCatalog_DisabledHiddenExceptBeta(t *testing.T) {
 	full := catSample()
 	snap := map[string]Overlay{
-		overlayKey(kindModel, "zen4"): {Kind: kindModel, ID: "zen4", Enabled: false, BetaOrgs: []string{"acme"}},
+		overlayKey(kindModel, "zen4"): {Kind: kindModel, ID: "zen4", Enabled: false, Beta: true, BetaOrgs: []string{"acme"}},
 	}
 
 	other := VisibleCatalog(full, snap, "other", false)
@@ -143,7 +143,7 @@ func TestVisibleCatalog_AdminSeesAll(t *testing.T) {
 	full := catSample()
 	snap := map[string]Overlay{
 		overlayKey(kindModel, "zen4"):          {Kind: kindModel, ID: "zen4", Enabled: false},
-		overlayKey(kindProvider, "OpenRouter"): {Kind: kindProvider, ID: "OpenRouter", Enabled: false, BetaOrgs: []string{"acme"}},
+		overlayKey(kindProvider, "OpenRouter"): {Kind: kindProvider, ID: "OpenRouter", Enabled: false, Beta: true, BetaOrgs: []string{"acme"}},
 	}
 	got := VisibleCatalog(full, snap, "", true)
 	if len(got) != 3 {
@@ -170,7 +170,7 @@ func TestVisibleCatalog_AdminSeesAll(t *testing.T) {
 func TestVisibleCatalog_ProviderCascade(t *testing.T) {
 	full := catSample()
 	snap := map[string]Overlay{
-		overlayKey(kindProvider, "Anthropic"): {Kind: kindProvider, ID: "Anthropic", Enabled: false, BetaOrgs: []string{"acme"}},
+		overlayKey(kindProvider, "Anthropic"): {Kind: kindProvider, ID: "Anthropic", Enabled: false, Beta: true, BetaOrgs: []string{"acme"}},
 	}
 	other := VisibleCatalog(full, snap, "other", false)
 	if catHasID(other, "anthropic/claude-opus-4.6") {
@@ -236,7 +236,7 @@ func TestCatalogStore_RoundTrip(t *testing.T) {
 	}
 
 	o := Overlay{
-		Kind: kindModel, ID: "anthropic/claude-opus-4.6", Enabled: false,
+		Kind: kindModel, ID: "anthropic/claude-opus-4.6", Enabled: false, Beta: true,
 		BetaOrgs: []string{"acme", "beta"}, Overrides: json.RawMessage(`{"badge":"x"}`), UpdatedAt: 123,
 	}
 	if err := c.Upsert(ctx, o); err != nil {
@@ -246,8 +246,11 @@ func TestCatalogStore_RoundTrip(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}
-	if got.Enabled || len(got.BetaOrgs) != 2 || string(got.Overrides) != `{"badge":"x"}` || got.UpdatedAt != 123 {
+	if got.Enabled || !got.Beta || len(got.BetaOrgs) != 2 || string(got.Overrides) != `{"badge":"x"}` || got.UpdatedAt != 123 {
 		t.Errorf("round-trip mismatch: %+v", got)
+	}
+	if got.State() != "beta" {
+		t.Errorf("round-trip state = %q, want beta", got.State())
 	}
 
 	// Re-upsert (PK conflict path) flips enabled and clears beta/overrides.
@@ -265,7 +268,7 @@ func TestCatalogStore_RoundTrip(t *testing.T) {
 	}
 
 	// Gate through the store.
-	_ = c.Upsert(ctx, Overlay{Kind: kindModel, ID: "zen4", Enabled: false, BetaOrgs: []string{"acme"}})
+	_ = c.Upsert(ctx, Overlay{Kind: kindModel, ID: "zen4", Enabled: false, Beta: true, BetaOrgs: []string{"acme"}})
 	full := catSample()
 	if got, err := c.Models(ctx, full, "other", false); err != nil || catHasID(got, "zen4") {
 		t.Errorf("Models: zen4 must be hidden for non-beta org (err=%v)", err)
@@ -328,7 +331,7 @@ func TestGateRootData(t *testing.T) {
 	// zen4 disabled (model); Anthropic disabled (provider) with beta acme.
 	snap := map[string]Overlay{
 		overlayKey(kindModel, "zen4"):         {Kind: kindModel, ID: "zen4", Enabled: false},
-		overlayKey(kindProvider, "Anthropic"): {Kind: kindProvider, ID: "Anthropic", Enabled: false, BetaOrgs: []string{"acme"}},
+		overlayKey(kindProvider, "Anthropic"): {Kind: kindProvider, ID: "Anthropic", Enabled: false, Beta: true, BetaOrgs: []string{"acme"}},
 	}
 
 	// Non-beta customer: zen4 and the Anthropic model gone from EVERY field.
