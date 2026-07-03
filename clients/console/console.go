@@ -6,14 +6,16 @@
 // statically exported (task #41, "True 1-binary FE": the console SPA is go:embed'd
 // and every dynamic call terminates at THIS binary's /v1, no separate Node origin).
 //
-// WHY THESE TWO (and not the rest). console2's other server routes are pure BFF
-// reverse-proxies (app/cloud, app/ai, app/commerce, …) that forward the browser to
-// a backend service. In the one-binary model the cloud binary IS that backend, so
-// those proxies vanish — the SPA calls /v1/* on its own origin and the already-
-// mounted subsystems answer. `keys` and `onboard` are different: they are NOT
-// proxies, they run real logic (mint/revoke the user's `hk-` key; create an org +
-// move the user in) as the confidential `hanzo-console` client. They have no cloud
-// equivalent, so they must be ported for the static export to be complete.
+// WHY THESE (and not the pure passthrough proxies). console2's PURE BFF reverse-
+// proxies — app/cloud, app/ai, app/commerce, whose only server work is minting a
+// user Bearer — vanish in the one-binary model: the SPA calls the canonical /v1/*
+// on its own origin and the already-mounted subsystems answer. The routes ported
+// HERE are the ones that do REAL server work a static SPA cannot: `keys`/`onboard`
+// run privileged IAM logic as the confidential `hanzo-console` client; `waitlist`/
+// `embed-status`/`topup` do server-side verification; and the /v1/billing/* bridge
+// (billing.go) injects the commerce SERVICE token and pins the caller's own billing
+// subject SERVER-SIDE (a passthrough would leak cross-tenant ledgers). Each has no
+// pure-proxy equivalent, so it must be ported for the static export to be complete.
 //
 // SURFACE (every route requires a VALIDATED principal — a gateway-minted, IAM-
 // verified X-User-Id; a client-forged X-Org-Id on the bearer-less path is refused):
@@ -23,6 +25,9 @@
 //	DELETE /v1/console/keys      — revoke the key.
 //	POST   /v1/console/onboard   — create the caller's org (+ move them in on first run).
 //	GET    /v1/console/health    — real IAM-configured probe (fail-closed when unwired).
+//	GET    /v1/billing/*         — per-tenant billing read (balance/usage/invoices/…),
+//	POST   /v1/billing/*           forwarded to commerce with the service token, SCOPED
+//	                              to the validated caller's own subject (billing.go).
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every
@@ -99,6 +104,12 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/console/embed-status", s.embedStatus)
 	app.Post("/v1/console/topup/wallet", s.walletTopup)
 	app.Get("/v1/console/health", s.health)
+	// Per-tenant billing DATA bridge (task #41 BFF catch-all sweep) — the canonical
+	// /v1/billing/* the statically-exported console calls, forwarded to commerce with
+	// the admin service token and SCOPED to the validated caller's own subject
+	// (billing.go). GET+POST only, mirroring app/billing/v1/[...path]/route.ts.
+	app.Get("/v1/billing/*", s.billingData)
+	app.Post("/v1/billing/*", s.billingData)
 }
 
 // init registers the subsystem. Registered as "consolesvc" (not "console") so
