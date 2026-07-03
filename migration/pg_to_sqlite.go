@@ -64,7 +64,12 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // Options configures the migration.
@@ -428,7 +433,7 @@ func joinColIdents(cols []ColumnInfo) string {
 
 // normalize coerces a PG-typed value into something SQLite accepts.
 // Booleans → 0/1; times → RFC3339Nano UTC strings; everything else
-// passes through (modernc.org/sqlite accepts all standard
+// passes through (the hanzoai/sqlite driver accepts all standard
 // database/sql primitives).
 func normalize(pgType string, v any) any {
 	if v == nil {
