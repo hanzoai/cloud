@@ -73,6 +73,43 @@ func TestCreateGetListDelete(t *testing.T) {
 	}
 }
 
+// TestResolveByIdOrName proves the id/name split that made a created agent
+// un-gettable is closed: Store.Resolve returns the SAME agent whether addressed
+// by its public id (the handle create/list return) or its org-unique name, and
+// stays fail-closed for another tenant's ref and unknown refs.
+func TestResolveByIdOrName(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	a := mk("maxpower", "helper") // ID = "maxpower-helper-id", Name = "helper"
+	if err := s.Create(ctx, a); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	byID, err := s.Resolve(ctx, "maxpower", a.ID)
+	if err != nil || byID.Name != "helper" || byID.ID != a.ID {
+		t.Fatalf("resolve by id must return the agent, got %+v err=%v", byID, err)
+	}
+	byName, err := s.Resolve(ctx, "maxpower", "helper")
+	if err != nil || byName.ID != a.ID {
+		t.Fatalf("resolve by name must return the SAME agent, got %+v err=%v", byName, err)
+	}
+	if byID.ID != byName.ID {
+		t.Fatalf("id and name must resolve to the same row: %q vs %q", byID.ID, byName.ID)
+	}
+
+	// Cross-org: maxpower's id/name must be invisible to acme (fail-closed).
+	if _, err := s.Resolve(ctx, "acme", a.ID); err != errNotFound {
+		t.Fatalf("cross-org resolve by id must be errNotFound, got %v", err)
+	}
+	if _, err := s.Resolve(ctx, "acme", "helper"); err != errNotFound {
+		t.Fatalf("cross-org resolve by name must be errNotFound, got %v", err)
+	}
+	// Unknown ref.
+	if _, err := s.Resolve(ctx, "maxpower", "agent_deadbeef"); err != errNotFound {
+		t.Fatalf("unknown ref must be errNotFound, got %v", err)
+	}
+}
+
 // TestTenantIsolation: one org cannot read, run-log, or delete another's agents.
 func TestTenantIsolation(t *testing.T) {
 	s := testStore(t)

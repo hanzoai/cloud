@@ -17,14 +17,10 @@ import (
 	"strings"
 	"time"
 
-	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
 	pgx "github.com/jackc/pgx/v5"
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	redis "github.com/redis/go-redis/v9"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // errAlreadyExists is returned by a Provisioner when the backend reports the
@@ -46,15 +42,16 @@ type Provisioner interface {
 // newRegistry builds one Provisioner per kind from environment configuration.
 // Construction never dials a backend — connections open lazily per request so
 // a single down backend cannot block startup.
+// The registry holds ONLY the shared-logical kinds. datastore + docdb are
+// provisioned by the dedicated-instance strategy (dedicated.go) and are
+// deliberately absent here — create() routes them before consulting reg.
 func newRegistry() map[string]Provisioner {
 	return map[string]Provisioner{
-		"sql":       newPostgres(),
-		"vector":    newQdrant(),
-		"datastore": newDatastore(),
-		"kv":        newRedis(),
-		"search":    newMeili(),
-		"s3":        newS3(),
-		"docdb":     newDocdb(),
+		"sql":    newPostgres(),
+		"vector": newQdrant(),
+		"kv":     newRedis(),
+		"search": newMeili(),
+		"s3":     newS3(),
 	}
 }
 
@@ -120,87 +117,6 @@ func isPGDuplicate(err error) bool {
 	return strings.Contains(s, "already exists") || strings.Contains(s, "duplicate")
 }
 
-// ----- datastore (ClickHouse HTTP wire protocol) -----------------------------
-// env: CLOUD_DATASTORE_ADMIN_ADDR (default datastore.hanzo.svc:8123),
-//      CLOUD_DATASTORE_ADMIN_USER (default), CLOUD_DATASTORE_ADMIN_PASSWORD
-
-type datastoreProvisioner struct {
-	addr string
-	user string
-	pass string
-	host string
-	port int
-}
-
-func newDatastore() *datastoreProvisioner {
-	addr := env("CLOUD_DATASTORE_ADMIN_ADDR", "datastore.hanzo.svc:8123")
-	host, port := splitAddr(addr, 8123)
-	return &datastoreProvisioner{
-		addr: addr,
-		user: env("CLOUD_DATASTORE_ADMIN_USER", "default"),
-		pass: os.Getenv("CLOUD_DATASTORE_ADMIN_PASSWORD"),
-		host: host,
-		port: port,
-	}
-}
-
-func (p *datastoreProvisioner) open() (interface {
-	Exec(ctx context.Context, query string, args ...any) error
-	Close() error
-}, error) {
-	return clickhouse.Open(&clickhouse.Options{
-		Addr:     []string{p.addr},
-		Protocol: clickhouse.HTTP,
-		Auth:     clickhouse.Auth{Username: p.user, Password: p.pass},
-	})
-}
-
-func (p *datastoreProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
-	conn, err := p.open()
-	if err != nil {
-		return "", "", 0, "", fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-
-	if err := conn.Exec(ctx, fmt.Sprintf("CREATE DATABASE %s", chIdent(physical))); err != nil {
-		if isCHDuplicate(err) {
-			return "", "", 0, "", errAlreadyExists
-		}
-		return "", "", 0, "", fmt.Errorf("create database: %w", err)
-	}
-	if err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %s IDENTIFIED BY '%s'", chIdent(user), sqlLit(pw))); err != nil {
-		_ = conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", chIdent(physical)))
-		return "", "", 0, "", fmt.Errorf("create user: %w", err)
-	}
-	if err := conn.Exec(ctx, fmt.Sprintf("GRANT ALL ON %s.* TO %s", chIdent(physical), chIdent(user))); err != nil {
-		_ = conn.Exec(ctx, fmt.Sprintf("DROP USER IF EXISTS %s", chIdent(user)))
-		_ = conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", chIdent(physical)))
-		return "", "", 0, "", fmt.Errorf("grant: %w", err)
-	}
-	cs := fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s?protocol=http", user, pw, p.host, p.port, physical)
-	return cs, p.host, p.port, physical, nil
-}
-
-func (p *datastoreProvisioner) Drop(ctx context.Context, physical, user string) error {
-	conn, err := p.open()
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-	if err := conn.Exec(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s", chIdent(physical))); err != nil {
-		return fmt.Errorf("drop database: %w", err)
-	}
-	if err := conn.Exec(ctx, fmt.Sprintf("DROP USER IF EXISTS %s", chIdent(user))); err != nil {
-		return fmt.Errorf("drop user: %w", err)
-	}
-	return nil
-}
-
-func isCHDuplicate(err error) bool {
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "already exists") || strings.Contains(s, "code: 82")
-}
-
 // ----- Redis / Valkey (kv) --------------------------------------------------
 // env: CLOUD_KV_ADMIN_ADDR (default kv.hanzo.svc:6379),
 //      CLOUD_KV_ADMIN_USER (default), CLOUD_KV_ADMIN_PASSWORD
@@ -251,75 +167,6 @@ func (p *redisProvisioner) Drop(ctx context.Context, physical, user string) erro
 	defer func() { _ = rdb.Close() }()
 	if err := rdb.Do(ctx, "ACL", "DELUSER", user).Err(); err != nil {
 		return fmt.Errorf("acl deluser: %w", err)
-	}
-	return nil
-}
-
-// ----- docdb (MongoDB wire protocol) ---------------------------------------
-// env: CLOUD_DOCDB_ADMIN_URI (default mongodb://docdb.hanzo.svc:27017/admin)
-
-type docdbProvisioner struct {
-	uri  string
-	host string
-	port int
-}
-
-func newDocdb() *docdbProvisioner {
-	uri := env("CLOUD_DOCDB_ADMIN_URI", "mongodb://docdb.hanzo.svc:27017/admin")
-	host, port := hostPortFromURL(uri, 27017)
-	return &docdbProvisioner{uri: uri, host: host, port: port}
-}
-
-func (p *docdbProvisioner) connect(ctx context.Context) (*mongo.Client, error) {
-	cli, err := mongo.Connect(options.Client().ApplyURI(p.uri))
-	if err != nil {
-		return nil, err
-	}
-	if err := cli.Ping(ctx, nil); err != nil {
-		_ = cli.Disconnect(ctx)
-		return nil, err
-	}
-	return cli, nil
-}
-
-func (p *docdbProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
-	cli, err := p.connect(ctx)
-	if err != nil {
-		return "", "", 0, "", fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = cli.Disconnect(ctx) }()
-
-	db := cli.Database(physical)
-	// A Mongo database materializes when its first collection appears.
-	if err := db.CreateCollection(ctx, "_meta"); err != nil {
-		return "", "", 0, "", fmt.Errorf("create collection: %w", err)
-	}
-	cmd := bson.D{
-		{Key: "createUser", Value: user},
-		{Key: "pwd", Value: pw},
-		{Key: "roles", Value: bson.A{bson.M{"role": "readWrite", "db": physical}}},
-	}
-	if err := db.RunCommand(ctx, cmd).Err(); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
-			return "", "", 0, "", errAlreadyExists
-		}
-		_ = db.Drop(ctx)
-		return "", "", 0, "", fmt.Errorf("create user: %w", err)
-	}
-	cs := fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=%s", user, pw, p.host, p.port, physical, physical)
-	return cs, p.host, p.port, physical, nil
-}
-
-func (p *docdbProvisioner) Drop(ctx context.Context, physical, user string) error {
-	cli, err := p.connect(ctx)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = cli.Disconnect(ctx) }()
-	db := cli.Database(physical)
-	_ = db.RunCommand(ctx, bson.D{{Key: "dropUser", Value: user}}).Err()
-	if err := db.Drop(ctx); err != nil {
-		return fmt.Errorf("drop database: %w", err)
 	}
 	return nil
 }
@@ -574,7 +421,6 @@ func genToken(n int) (string, error) {
 }
 
 func pgIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
-func chIdent(s string) string { return "`" + strings.ReplaceAll(s, "`", "``") + "`" }
 func sqlLit(s string) string  { return strings.ReplaceAll(s, "'", "''") }
 
 func env(key, def string) string {
