@@ -7,7 +7,12 @@ import (
 	"sort"
 	"testing"
 
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // TestRoundTripPerOrgUserRouting exercises the introspective copy plus
@@ -318,5 +323,5 @@ func equalStringSlices(a, b []string) bool {
 // test stays readable.
 type fileCheck struct{ path string }
 
-func openCheck(path, _ string) fileCheck      { return fileCheck{path} }
+func openCheck(path, _ string) fileCheck          { return fileCheck{path} }
 func (f fileCheck) ReadDir(_ string) (any, error) { return nil, nil }
