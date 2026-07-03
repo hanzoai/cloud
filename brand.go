@@ -64,3 +64,17 @@ func BrandFor(id string) BrandInfo {
 func IssuerForBrand(id string) string {
 	return BrandFor(id).IAMIssuer
 }
+
+// BrandIssuers returns the OIDC issuer of every configured white-label brand. The
+// in-binary identity validator (auth_identity.go) trusts a token whose `iss` is
+// any of these, so ONE cloud binary validates hanzo AND lux/zoo/pars tokens. One
+// source of truth: derived from the same `brands` registry above.
+func BrandIssuers() []string {
+	out := make([]string, 0, len(brands))
+	for _, b := range brands {
+		if b.IAMIssuer != "" {
+			out = append(out, b.IAMIssuer)
+		}
+	}
+	return out
+}
