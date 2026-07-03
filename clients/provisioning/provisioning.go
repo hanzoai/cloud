@@ -50,6 +50,28 @@ import (
 // the backend (so "sql"/"s3", not "postgres"/"minio").
 var kinds = []string{"sql", "vector", "datastore", "kv", "search", "s3", "docdb"}
 
+// unavailableKinds are kinds whose backend cannot currently grant a per-tenant-
+// SAFE credential. The control plane REFUSES to provision them — an honest 503
+// "not yet available" (the console renders "coming soon") — rather than mint a
+// cross-tenant capability or hand out a half-provisioned resource. This is the
+// security bar: never a shared/cluster-wide grant. Removing a kind here re-enables
+// it; do that ONLY once its backend can scope the grant to the single tenant DB.
+//
+//   - datastore (ClickHouse): the deployment exposes no grant-capable admin — the
+//     available admin holds access_management but not ALL privileges WITH GRANT
+//     OPTION, so a provisioned per-tenant user cannot be granted usable DDL on its
+//     own database (server rejects GRANT ALL, Code 497). Unblocking is backend-side
+//     (a grant-capable admin on the datastore StatefulSet), not a provisioner change.
+//   - docdb (Mongo/FerretDB): hanzoai/docdb (DocumentDB) implements only cluster-
+//     wide roles — clusterAdmin (→ Postgres SUPERUSER) and readWriteAnyDatabase —
+//     with no per-database role, so a provisioned user cannot be scoped to its own
+//     tenant DB. The provisioner already requests the correct per-db `readWrite`
+//     role (docdbProvisioner.Create); it stays gated until FerretDB supports it.
+var unavailableKinds = map[string]string{
+	"datastore": "datastore provisioning is not yet available: the ClickHouse backend has no grant-capable per-tenant admin",
+	"docdb":     "docdb provisioning is not yet available: the document engine supports only cluster-wide roles, not per-tenant scoping",
+}
+
 // publicEndpoint returns the CUSTOMER-FACING host+port for a provisioned
 // resource. The internal admin address (e.g. vector.hanzo.svc:6333) is a
 // server-side detail and must NEVER leak to a tenant or into an app config.
@@ -224,6 +246,14 @@ func (s *svc) create(kind string) zip.Handler {
 		prov := s.reg[kind]
 		if prov == nil {
 			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
+		}
+
+		// Honest availability gate. Some kinds have a provisioner wired but their
+		// backend cannot yet mint a per-tenant-SAFE credential; refuse with 503
+		// BEFORE billing or any backend write, so a customer is never handed a
+		// cross-tenant capability nor charged for a resource we won't create.
+		if reason, gated := unavailableKinds[kind]; gated {
+			return zip.Errorf(http.StatusServiceUnavailable, "%s", reason)
 		}
 
 		var body struct {
