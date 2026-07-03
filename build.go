@@ -9,7 +9,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/clients"
-	"github.com/hanzoai/cloud/clients/kmsembed"
+	"github.com/hanzoai/cloud/clients/kms"
 )
 
 // BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
@@ -135,12 +135,12 @@ func pickIAMClient(cfg *Config, log luxlog.Logger) IAMClient {
 // every subsystem. Absent co-residency the legacy ZAP-RPC + disabled fallbacks
 // apply (out-of-process KMS, or not wired).
 //
-// The internal subsystem name is "kmssvc" (see clients/kms.init — it avoids the
+// The internal subsystem name is "kmssvc" (see clients/kmssvc.init — it avoids the
 // serve.go generic-health shadow on /v1/kms/health); the client gate keys on the
 // same name so "enabled" is one concept.
 func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 	if cfg.Enabled("kmssvc") {
-		c, err := kmsembed.New(kmsembed.Config{
+		c, err := kms.New(kms.Config{
 			DataDir:      cfg.DataDir,
 			MasterKeyB64: cfg.KMSMasterKeyRef,
 			MPCAddr:      cfg.KMSMPCAddr,
