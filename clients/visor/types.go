@@ -41,6 +41,11 @@ type visorMachine struct {
 	PublicIp    string `json:"publicIp"`
 	PrivateIp   string `json:"privateIp"`
 	CpuSize     string `json:"cpuSize"`
+	// Tag is the comma-joined provider tag list (the resell /v1/machines surface
+	// carries it). It records `hanzo-kind:<kind>` (kind=bot for a Bot) and, once
+	// the launch cloud-init installs the runtime, `hanzo-bot:<agentName>`. bots.go
+	// reads it to tell a Bot machine from a plain one.
+	Tag string `json:"tag"`
 }
 
 // visorNodePool mirrors visor/object.NodePool (JSON subset relevant to clusters).
