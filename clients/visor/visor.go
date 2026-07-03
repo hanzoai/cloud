@@ -73,6 +73,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", s.scalePool)
 	app.Delete("/v1/clusters/:clusterId/pools/:poolId", s.deletePool)
 
+	// Compute catalog: the global region + size lists that back the Machines/GPUs
+	// launch drawer. Namespaced under /v1/compute (visor's domain) — "sizes"/"regions"
+	// are catalog dimensions shared by machines AND gpus, not owned nouns, so they
+	// nest under compute rather than sitting bare at top level. Org-gated but not
+	// org-scoped — the catalog is identical for every tenant.
+	app.Get("/v1/compute/regions", s.listRegions)
+	app.Get("/v1/compute/sizes", s.listSizes)
+
 	s.log.Info("visor compute surface mounted", "target", s.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
 	return nil
@@ -129,6 +137,29 @@ func (s *svc) getMachine(c *zip.Ctx) error {
 		return zip.ErrNotFound("machine not found")
 	}
 	return c.JSON(http.StatusOK, toMachineView(m))
+}
+
+// ---- compute catalog (regions / sizes) ----
+
+// listRegions and listSizes expose the global compute catalog that backs the launch
+// drawer. Both delegate to catalog: DRY, one org-gated passthrough of Visor's
+// authoritative list. GET /v1/compute/regions, GET /v1/compute/sizes.
+func (s *svc) listRegions(c *zip.Ctx) error { return s.catalog(c, "/v1/regions") }
+func (s *svc) listSizes(c *zip.Ctx) error   { return s.catalog(c, "/v1/sizes") }
+
+// catalog proxies a global (non-org-scoped) Visor catalog list. Org-gated so only a
+// validated principal reaches it, but no ?owner is forwarded — the region/size catalog
+// is identical for every tenant. The Visor payload is passed through verbatim so the
+// wire shape stays the single source of truth.
+func (s *svc) catalog(c *zip.Ctx, upstream string) error {
+	if _, ok := tenant(c); !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var data json.RawMessage
+	if err := s.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, data)
 }
 
 type launchReq struct {
