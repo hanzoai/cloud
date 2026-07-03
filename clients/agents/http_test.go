@@ -115,6 +115,81 @@ func TestHTTPGateIsolationAndRun(t *testing.T) {
 	}
 }
 
+// TestHTTPCreateThenGetRunByReturnedID reproduces Dave's exact flow and proves
+// the id/name disconnect is fixed: create returns an id, and GETting AND running
+// that agent BY THE RETURNED ID (not just the name) both resolve the SAME agent.
+// Before the fix, get/run keyed the path only against the name column, so the id
+// create handed back 404'd — a created agent was not runnable.
+func TestHTTPCreateThenGetRunByReturnedID(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "the answer"})
+
+	// Create — capture the id the API returns (exactly what a client keeps).
+	code, body := do(t, app, http.MethodPost, "/v1/agents", "maxpower",
+		map[string]any{"name": "verify-run", "model": "gpt-4o-mini", "instructions": "be terse"})
+	if code != http.StatusCreated {
+		t.Fatalf("create want 201, got %d (%s)", code, body)
+	}
+	var created agentView
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatalf("create shape: %v (%s)", err, body)
+	}
+	if created.ID == "" || created.Name != "verify-run" {
+		t.Fatalf("create must return id+name, got %+v", created)
+	}
+	id := created.ID
+
+	// GET by the RETURNED ID must be 200 and the same agent (was 404 pre-fix).
+	code, body = do(t, app, http.MethodGet, "/v1/agents/"+id, "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET by returned id want 200, got %d (%s)", code, body)
+	}
+	var got agentDetail
+	_ = json.Unmarshal(body, &got)
+	if got.ID != id || got.Name != "verify-run" {
+		t.Fatalf("GET by id resolved the wrong agent, got %+v", got.agentView)
+	}
+
+	// GET by NAME must resolve the SAME agent (both identifiers work).
+	code, body = do(t, app, http.MethodGet, "/v1/agents/verify-run", "maxpower", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET by name want 200, got %d (%s)", code, body)
+	}
+	var byName agentDetail
+	_ = json.Unmarshal(body, &byName)
+	if byName.ID != id {
+		t.Fatalf("GET by name must be the SAME agent as by id: %q vs %q", byName.ID, id)
+	}
+
+	// RUN by the RETURNED ID must execute and return real output (was 404 pre-fix).
+	code, body = do(t, app, http.MethodPost, "/v1/agents/"+id+"/run", "maxpower", map[string]any{"input": "hi"})
+	if code != http.StatusOK {
+		t.Fatalf("run by returned id want 200, got %d (%s)", code, body)
+	}
+	var rv runView
+	_ = json.Unmarshal(body, &rv)
+	if rv.Status != "ok" || rv.Output != "the answer" {
+		t.Fatalf("run by id must return the model output, got %+v", rv)
+	}
+
+	// The run recorded under the agent is visible via runs-by-id AND runs-by-name.
+	code, body = do(t, app, http.MethodGet, "/v1/agents/"+id+"/runs", "maxpower", nil)
+	if code != http.StatusOK || !bytes.Contains(body, []byte("the answer")) {
+		t.Fatalf("runs by id want the recorded run, got %d %s", code, body)
+	}
+	code, body = do(t, app, http.MethodGet, "/v1/agents/verify-run/runs", "maxpower", nil)
+	if code != http.StatusOK || !bytes.Contains(body, []byte("the answer")) {
+		t.Fatalf("runs by name want the same recorded run, got %d %s", code, body)
+	}
+
+	// Cross-org fail-closed: acme cannot GET or run maxpower's agent BY ITS ID.
+	if c2, _ := do(t, app, http.MethodGet, "/v1/agents/"+id, "acme", nil); c2 != http.StatusNotFound {
+		t.Fatalf("acme GET maxpower agent by id want 404, got %d", c2)
+	}
+	if c2, _ := do(t, app, http.MethodPost, "/v1/agents/"+id+"/run", "acme", map[string]any{"input": "x"}); c2 != http.StatusNotFound {
+		t.Fatalf("acme run maxpower agent by id want 404, got %d", c2)
+	}
+}
+
 // TestHTTPMetricsAndActivityNotShadowed proves /v1/agents/metrics and
 // /v1/agents/activity resolve to their own handlers (not captured by the :name
 // wildcard) and that every number is derived from REAL recorded runs.
