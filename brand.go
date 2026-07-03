@@ -78,3 +78,19 @@ func BrandIssuers() []string {
 	}
 	return out
 }
+
+// BrandAudiences returns the OAuth `aud` (== IAM client_id == app name) of every
+// white-label brand's cloud login app: `<brand>-cloud` (hanzo-cloud, lux-cloud,
+// zoo-cloud, pars-cloud, bootnode-cloud). A brand's session token carries
+// aud=<brand>-cloud (HIP-0111: client_id == app == aud), so the audience allowlist
+// must include each to accept a lux/zoo/pars token on the ONE binary. Derived from
+// the same `brands` registry as BrandIssuers — one source of truth, no hand-listing.
+func BrandAudiences() []string {
+	out := make([]string, 0, len(brands))
+	for id := range brands {
+		if id != "" {
+			out = append(out, id+"-cloud")
+		}
+	}
+	return out
+}
