@@ -444,14 +444,8 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 	if env := envList(a.EnvJSON); len(env) > 0 {
 		spec["env"] = env
 	}
-	if hosts := domainList(a.DomainsJSON); len(hosts) > 0 {
-		spec["ingress"] = map[string]any{
-			"enabled":          true,
-			"hosts":            toAnySlice(hosts),
-			"ingressClassName": "hanzo",
-			"tls":              true,
-			"clusterIssuer":    "letsencrypt-prod",
-		}
+	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
+		spec["ingress"] = ing
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "hanzo.ai/v1",
@@ -554,6 +548,72 @@ func (k *k8sClient) observeService(ctx context.Context, org, name string) (phase
 	phase, _, _ = unstructured.NestedString(obj.Object, "status", "phase")
 	status, _, _ := unstructured.NestedMap(obj.Object, "status")
 	return phase, healthFromStatus(status)
+}
+
+// ingressSpec renders the operator Service CR ingress block for a set of hosts,
+// or nil when there are none. It is the ONE place the ingress + cert-manager TLS
+// shape is defined, shared by serviceCR (full-CR apply on deploy) and applyIngress
+// (the incremental domain-change patch) so the TLS wiring can never diverge
+// between the two write paths. The operator's build_ingress materializes one k8s
+// Ingress per host with `cert-manager.io/cluster-issuer: letsencrypt-prod`, so a
+// verified host added here gets its ACME cert for free.
+func ingressSpec(hosts []string) map[string]any {
+	if len(hosts) == 0 {
+		return nil
+	}
+	return map[string]any{
+		"enabled":          true,
+		"hosts":            toAnySlice(hosts),
+		"ingressClassName": "hanzo",
+		"tls":              true,
+		"clusterIssuer":    "letsencrypt-prod",
+	}
+}
+
+// applyIngress merge-patches ONLY the Service CR's ingress block to match an
+// app's current active host set — the operator-native way a domain add / remove /
+// custom-verify takes effect BETWEEN full deploys (a deploy already renders the
+// hosts via serviceCR). hosts>0 sets the cert-manager TLS ingress; hosts==0
+// removes it (JSON null). If the app has no Service CR yet (never deployed), it
+// is a no-op: the hosts persist in the app's DomainsJSON and render on the next
+// deploy. Every call is scoped to ns == tenant-<org>.
+func (k *k8sClient) applyIngress(ctx context.Context, org, name string, hosts []string) error {
+	if err := k.ready(); err != nil {
+		return err
+	}
+	ns := tenantNamespace(org)
+	// A JSON merge-patch replaces the ingress subtree when hosts>0 and removes the
+	// key (null) when hosts==0 — so a removed last domain tears the Ingress down.
+	var ingress any
+	if ing := ingressSpec(hosts); ing != nil {
+		ingress = ing
+	}
+	patch, _ := json.Marshal(map[string]any{"spec": map[string]any{"ingress": ingress}})
+	_, err := k.dyn.Resource(servicesGVR).Namespace(ns).Patch(ctx, name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil // app not deployed yet — hosts render on the next deploy
+	}
+	return err
+}
+
+// observeDomains reads the operator-reconciled Service CR to report which of an
+// app's ingress hosts are actually LIVE. The operator publishes status.endpoints
+// (the URLs it materialized an Ingress + cert-manager cert for) and status.phase.
+// This is the honest source for per-domain live/provisioning state in the console
+// — never a fabricated "cert ready". Best-effort: any error yields empty (honest
+// unknown / not-yet-deployed), never invented endpoints.
+func (k *k8sClient) observeDomains(ctx context.Context, org, name string) (endpoints []string, phase string) {
+	if k.ready() != nil {
+		return nil, ""
+	}
+	ns := tenantNamespace(org)
+	obj, err := k.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, ""
+	}
+	phase, _, _ = unstructured.NestedString(obj.Object, "status", "phase")
+	eps, _, _ := unstructured.NestedStringSlice(obj.Object, "status", "endpoints")
+	return eps, phase
 }
 
 // launchBuildJob creates an in-cluster BuildKit Job (arcd model) that builds the
