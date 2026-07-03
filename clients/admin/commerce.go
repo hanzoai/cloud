@@ -15,11 +15,13 @@ import (
 // for the money panels (spend, tokens, credits, COGS). Commerce runs as its own
 // deployment; these are HTTP calls authenticated with the admin-scoped
 // COMMERCE_SERVICE_TOKEN (a KMS-sourced secret already on the cloud env — never
-// hard-coded here). Commerce resolves the billing namespace from its OWN
-// service-token config (COMMERCE_SERVICE_ORG), NOT from a request header; the
-// per-org money reads distinguish orgs by the `user` query param within that
-// namespace. (The X-IAM-Org-Id header get() sends is advisory — commerce does not
-// consult it — so it is omitted for the fleet-wide /v1/costs god-view.)
+// hard-coded here). PER-ORG reads (balance/usage-rollup/subscriptions) resolve the
+// org's billing namespace from the TRUSTED X-Org-Id header — commerce's EdgeAuth
+// trusts it ONLY when the bearer is the service token — and key the wallet under the
+// bare org slug (`user`). The fleet-wide /v1/costs god-view is org-INDEPENDENT
+// (DigitalOcean + provider vendor bills) and sends NO org, so commerce falls back to
+// its own service namespace (COMMERCE_SERVICE_ORG) there. (An earlier revision sent
+// X-IAM-Org-Id, which commerce does NOT read — every per-org money panel read $0.)
 type commerceClient struct {
 	base  string // e.g. http://commerce.hanzo.svc.cluster.local:8001
 	token string // admin S2S bearer (secret; never logged)
@@ -223,7 +225,12 @@ func (c *commerceClient) get(ctx context.Context, path string, q url.Values, org
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	if org != "" {
-		req.Header.Set("X-IAM-Org-Id", org)
+		// Commerce's EdgeAuth (middleware/edgeauth.go) trusts X-Org-Id ONLY after it
+		// verifies the bearer is the COMMERCE_SERVICE_TOKEN, then resolves the per-org
+		// billing namespace from it. This is the service-to-service org selector.
+		// X-IAM-Org-Id is NOT read by commerce — it silently resolved to the default
+		// (COMMERCE_SERVICE_ORG) namespace, so every real org's balance/spend read $0.
+		req.Header.Set("X-Org-Id", org)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
