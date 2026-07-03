@@ -1,4 +1,4 @@
-package kms_test
+package kmssvc_test
 
 // Integration tests for the embedded KMS subsystem, exercised through the REAL
 // orchestrator path (BuildDeps → the init()-registered MountSpec → the zip/Fiber
@@ -27,12 +27,12 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kmsembed"
+	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
 	// Register the kms subsystem (init) into cloud.Registry.
-	_ "github.com/hanzoai/cloud/clients/kms"
+	_ "github.com/hanzoai/cloud/clients/kmssvc"
 )
 
 // masterKeyB64 returns a fresh random 32-byte master key, base64-encoded as the
@@ -120,8 +120,8 @@ func TestKMSClientRoundtrip(t *testing.T) {
 	if kc == nil {
 		t.Fatal("deps.KMS is nil; expected in-process client when kmssvc enabled")
 	}
-	if _, ok := kc.(*kmsembed.Client); !ok {
-		t.Fatalf("deps.KMS is %T, want *kmsembed.Client (in-process)", kc)
+	if _, ok := kc.(*kms.Client); !ok {
+		t.Fatalf("deps.KMS is %T, want *kms.Client (in-process)", kc)
 	}
 
 	ctx := context.Background()
@@ -140,7 +140,7 @@ func TestKMSClientRoundtrip(t *testing.T) {
 	}
 
 	// A missing secret is a clean not-found, not a panic or a fabricated value.
-	if _, err := kc.GetSecret(ctx, "does-not-exist"); !errors.Is(err, kmsembed.ErrSecretNotFound) {
+	if _, err := kc.GetSecret(ctx, "does-not-exist"); !errors.Is(err, kms.ErrSecretNotFound) {
 		t.Errorf("GetSecret(missing) err = %v, want ErrSecretNotFound", err)
 	}
 }
@@ -161,7 +161,7 @@ func TestSecretNotStoredInPlaintext(t *testing.T) {
 		t.Fatalf("PutSecret: %v", err)
 	}
 	// Close so the KV flushes to disk, then scan the store files for the marker.
-	if c, ok := deps.KMS.(*kmsembed.Client); ok {
+	if c, ok := deps.KMS.(*kms.Client); ok {
 		if err := c.Close(); err != nil {
 			t.Fatalf("close: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestSignFailsClosedNoMPC(t *testing.T) {
 	if sig != nil {
 		t.Fatalf("Sign returned a %d-byte signature with no MPC — must never fabricate", len(sig))
 	}
-	if !errors.Is(err, kmsembed.ErrSignUnavailable) {
+	if !errors.Is(err, kms.ErrSignUnavailable) {
 		t.Errorf("Sign err = %v, want ErrSignUnavailable", err)
 	}
 }
