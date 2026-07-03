@@ -1,4 +1,4 @@
-package kmsembed
+package kms
 
 // RED RE-REVIEW — attacking the new 3-way store-open switch in New() and the
 // hoisted validCoords. Goal: defeat the fail-secure switch via any
@@ -250,7 +250,7 @@ func TestRR6_InMemoryNeverTouchesDisk(t *testing.T) {
 }
 
 // RR-7: validator dedup — the facade (parseRef→Get/Put) must reject the SAME bad
-// coords the HTTP boundary rejects, now that validation is hoisted into kmsembed.
+// coords the HTTP boundary rejects, now that validation is hoisted into kms.
 // Re-run the facade-asymmetry attack; it must now be BLOCKED.
 func TestRR7_FacadeValidationNowEnforced(t *testing.T) {
 	log := luxlog.NewNoOpLogger()
