@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver (already in the cloud
-	// dep graph via graph). Blank import registers the "sqlite" driver name.
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // errConflict is returned by Insert when the (org,kind,name) tuple already
@@ -53,7 +56,7 @@ type Store struct {
 }
 
 // openStore opens (creating if needed) the SQLite metadata DB at path and runs
-// the migration. The "sqlite" driver is modernc's pure-Go build.
+// the migration. The "sqlite" driver is the hanzoai/sqlite fork.
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
