@@ -62,8 +62,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // Run sizing: a synchronous run is bounded so one request cannot fan out into
@@ -206,6 +206,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/evals/scores", s.listScores)
 
 	app.Get("/v1/evals/traces", s.listTraces)
+	// Production LLM generations (Langfuse "observations of type GENERATION"), read
+	// from the proven hanzo.cloud_usage ledger — the console Observe > Observations
+	// surface. One emission (recordTrace) already writes this ledger; this only reads.
+	app.Get("/v1/evals/observations", s.listObservations)
 
 	app.Post("/v1/evals/runs", s.runHandler)
 	app.Get("/v1/evals/runs", s.listRuns)
@@ -818,6 +822,97 @@ func (s *service) listTraces(c *zip.Ctx) error {
 		out = append(out, toTraceView(tr))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": out})
+}
+
+// listObservations lists production LLM generations for the caller's org (from the
+// hanzo.cloud_usage ledger). Org is authoritative from the validated principal —
+// never a client header. Optional ?model / ?userId narrowers; ?limit bounded.
+func (s *service) listObservations(c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	if s.tel == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
+	}
+	obs, err := s.tel.ListObservations(c.Context(), ObservationFilter{
+		Org:    org, // authoritative
+		Model:  strings.TrimSpace(c.Query("model")),
+		UserID: strings.TrimSpace(c.Query("userId")),
+		Limit:  listLimit(c),
+	})
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list observations: %v", err)
+	}
+	out := make([]observationView, 0, len(obs))
+	for _, o := range obs {
+		out = append(out, toObservationView(o))
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": out})
+}
+
+// observationView is the Langfuse-v3 observation shape the console Observe surface
+// consumes (src/lib/api/o11y.ts `Observation`): a GENERATION with token usage, model,
+// level, and cost/provider/attribution in metadata.
+type observationUsage struct {
+	Unit   string `json:"unit"`
+	Input  int64  `json:"input"`
+	Output int64  `json:"output"`
+	Total  int64  `json:"total"`
+}
+
+type observationView struct {
+	ID                  string           `json:"id"`
+	TraceID             string           `json:"traceId"`
+	ParentObservationID *string          `json:"parentObservationId"`
+	Name                string           `json:"name"`
+	Type                string           `json:"type"`
+	StartTime           string           `json:"startTime"`
+	EndTime             *string          `json:"endTime"`
+	Level               string           `json:"level"`
+	StatusMessage       *string          `json:"statusMessage"`
+	Model               string           `json:"model"`
+	Usage               observationUsage `json:"usage"`
+	Metadata            map[string]any   `json:"metadata,omitempty"`
+}
+
+func toObservationView(o Observation) observationView {
+	name := o.Model
+	if name == "" {
+		name = "generation"
+	}
+	level := "DEFAULT"
+	if o.Status != "" && o.Status != "success" {
+		level = "ERROR"
+	}
+	var statusMsg *string
+	if o.ErrorMsg != "" {
+		m := o.ErrorMsg
+		statusMsg = &m
+	}
+	return observationView{
+		ID:            o.ID,
+		TraceID:       o.TraceID,
+		Name:          name,
+		Type:          "GENERATION",
+		StartTime:     o.Timestamp.UTC().Format(time.RFC3339),
+		Level:         level,
+		StatusMessage: statusMsg,
+		Model:         o.Model,
+		Usage: observationUsage{
+			Unit:   "TOKENS",
+			Input:  o.PromptTokens,
+			Output: o.CompletionTokens,
+			Total:  o.TotalTokens,
+		},
+		Metadata: map[string]any{
+			"provider":  o.Provider,
+			"costCents": o.CostCents,
+			"currency":  "usd",
+			"userId":    o.UserID,
+			"org":       o.Org,
+		},
+	}
 }
 
 // ── run orchestration ────────────────────────────────────────────────────────
