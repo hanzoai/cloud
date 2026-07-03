@@ -22,9 +22,9 @@ import (
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	redis "github.com/redis/go-redis/v9"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"github.com/hanzoai/base"
+	"github.com/hanzoai/base/core"
 )
 
 // errAlreadyExists is returned by a Provisioner when the backend reports the
@@ -255,71 +255,91 @@ func (p *redisProvisioner) Drop(ctx context.Context, physical, user string) erro
 	return nil
 }
 
-// ----- docdb (MongoDB wire protocol) ---------------------------------------
-// env: CLOUD_DOCDB_ADMIN_URI (default mongodb://docdb.hanzo.svc:27017/admin)
+// ----- docdb (Hanzo Base — document collections on SQLite + realtime) -------
+// env: CLOUD_DOCDB_PUBLIC_URL (default https://api.hanzo.ai)
+//
+// The "document database" product is a Hanzo Base document Collection: a
+// schemaless JSON document store (each record carries a `data` json field)
+// with native realtime subscriptions (SSE at /v1/base/realtime), on Base's
+// per-tenant encrypted SQLite (HIP-0302, HIP-0105). It is IAM-native and
+// carries ZERO MongoDB / Mongo-wire / FerretDB — Base is the only backend.
+//
+// Base is a co-resident in-process cloud subsystem (registered at order 60,
+// mounted at /v1/base). We create the Collection DIRECTLY on the mounted app
+// via base.App(): the REST /v1/base/collections surface is superuser-gated and
+// Base local password auth is retired (IAM-only), so an out-of-band HTTP create
+// is not available to this server-side control plane. Each provisioned resource
+// is ONE Collection named by the caller's physical name (the same
+// "o"<orgHash>_<name> tenant-namespacing every other kind uses), so isolation
+// is by collection name + the control-plane UNIQUE(physical_name) guard —
+// identical to how vector→Qdrant-collection and search→Meili-index isolate. The
+// customer reaches it at
+// {CLOUD_DOCDB_PUBLIC_URL}/v1/base/collections/<physical>/records (+ /realtime).
 
 type docdbProvisioner struct {
-	uri  string
-	host string
-	port int
+	publicURL string
+	host      string
+	port      int
 }
 
 func newDocdb() *docdbProvisioner {
-	uri := env("CLOUD_DOCDB_ADMIN_URI", "mongodb://docdb.hanzo.svc:27017/admin")
-	host, port := hostPortFromURL(uri, 27017)
-	return &docdbProvisioner{uri: uri, host: host, port: port}
+	pub := strings.TrimRight(env("CLOUD_DOCDB_PUBLIC_URL", "https://api.hanzo.ai"), "/")
+	host, port := hostPortFromURL(pub, 443)
+	return &docdbProvisioner{publicURL: pub, host: host, port: port}
 }
 
-func (p *docdbProvisioner) connect(ctx context.Context) (*mongo.Client, error) {
-	cli, err := mongo.Connect(options.Client().ApplyURI(p.uri))
-	if err != nil {
-		return nil, err
+// app returns the co-resident Base app or an error if the base subsystem is
+// not mounted (fail-closed — never a silent no-op provision).
+func (p *docdbProvisioner) app() (core.App, error) {
+	app := base.App()
+	if app == nil {
+		return nil, errors.New("base subsystem not mounted")
 	}
-	if err := cli.Ping(ctx, nil); err != nil {
-		_ = cli.Disconnect(ctx)
-		return nil, err
-	}
-	return cli, nil
+	return app, nil
 }
 
-func (p *docdbProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
-	cli, err := p.connect(ctx)
-	if err != nil {
-		return "", "", 0, "", fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = cli.Disconnect(ctx) }()
+// docdbAuthRule gates document CRUD + realtime to authenticated principals.
+// Cross-tenant isolation is the unguessable 64-bit-orgHash collection name plus
+// the control-plane UNIQUE(physical_name) guard — the same posture the other
+// shared-backend kinds (vector, search) rely on.
+const docdbAuthRule = `@request.auth.id != ""`
 
-	db := cli.Database(physical)
-	// A Mongo database materializes when its first collection appears.
-	if err := db.CreateCollection(ctx, "_meta"); err != nil {
+func (p *docdbProvisioner) Create(_ context.Context, physical, _, _ string) (string, string, int, string, error) {
+	app, err := p.app()
+	if err != nil {
+		return "", "", 0, "", err
+	}
+	if existing, _ := app.FindCollectionByNameOrId(physical); existing != nil {
+		return "", "", 0, "", errAlreadyExists
+	}
+
+	col := core.NewBaseCollection(physical)
+	col.Fields.Add(&core.JSONField{Name: "data", MaxSize: core.DefaultJSONFieldMaxSize})
+	rule := docdbAuthRule
+	col.ListRule = &rule
+	col.ViewRule = &rule
+	col.CreateRule = &rule
+	col.UpdateRule = &rule
+	col.DeleteRule = &rule
+
+	if err := app.Save(col); err != nil {
 		return "", "", 0, "", fmt.Errorf("create collection: %w", err)
 	}
-	cmd := bson.D{
-		{Key: "createUser", Value: user},
-		{Key: "pwd", Value: pw},
-		{Key: "roles", Value: bson.A{bson.M{"role": "readWrite", "db": physical}}},
-	}
-	if err := db.RunCommand(ctx, cmd).Err(); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
-			return "", "", 0, "", errAlreadyExists
-		}
-		_ = db.Drop(ctx)
-		return "", "", 0, "", fmt.Errorf("create user: %w", err)
-	}
-	cs := fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=%s", user, pw, p.host, p.port, physical, physical)
+	cs := p.publicURL + "/v1/base/collections/" + physical + "/records"
 	return cs, p.host, p.port, physical, nil
 }
 
-func (p *docdbProvisioner) Drop(ctx context.Context, physical, user string) error {
-	cli, err := p.connect(ctx)
+func (p *docdbProvisioner) Drop(_ context.Context, physical, _ string) error {
+	app, err := p.app()
 	if err != nil {
-		return fmt.Errorf("connect: %w", err)
+		return err
 	}
-	defer func() { _ = cli.Disconnect(ctx) }()
-	db := cli.Database(physical)
-	_ = db.RunCommand(ctx, bson.D{{Key: "dropUser", Value: user}}).Err()
-	if err := db.Drop(ctx); err != nil {
-		return fmt.Errorf("drop database: %w", err)
+	col, err := app.FindCollectionByNameOrId(physical)
+	if err != nil || col == nil {
+		return nil // already gone — idempotent
+	}
+	if err := app.Delete(col); err != nil {
+		return fmt.Errorf("drop collection: %w", err)
 	}
 	return nil
 }

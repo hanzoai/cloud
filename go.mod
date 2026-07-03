@@ -658,7 +658,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hanzoai/ai v1.790.2
 	github.com/hanzoai/authz v1.10.3
-	github.com/hanzoai/base v1.4.6
+	github.com/hanzoai/base v1.4.7
 	github.com/hanzoai/commerce v1.42.29
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
