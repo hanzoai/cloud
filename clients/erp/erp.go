@@ -333,11 +333,15 @@ func journalEntryAccount() framework.DocType {
 
 // glEntry is a general-ledger posting: an account, a debit OR credit, and the
 // source voucher. Written ONLY by the posting hooks (via the store, which bypasses
-// perms); ledgerPerms makes it System-Manager read-only, so no human edits the
-// accounting truth through the generic surface.
+// perms) with a deterministic per-leg name (prompt autoname), so a concurrent or
+// retried post is idempotent. ledgerPerms closes it to every NON-manager role on
+// the generic surface (a granted Erp User gets 403 read/write). The org owner
+// (System Manager) and a global admin retain full control within THEIR OWN tenant —
+// the framework's manager bypass, a within-tenant authority, never a cross-org
+// escalation.
 func glEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtGLEntry, Module: Module, TitleField: "account",
+		Name: dtGLEntry, Module: Module, Autoname: "prompt", TitleField: "account",
 		Fields: []framework.DocField{
 			{Fieldname: "posting_date", Fieldtype: framework.FieldData, Label: "Posting Date", InListView: true},
 			{Fieldname: "account", Fieldtype: framework.FieldData, Label: "Account", InListView: true},
@@ -352,10 +356,12 @@ func glEntry() framework.DocType {
 }
 
 // stockLedgerEntry is one immutable stock movement: item, warehouse, signed qty,
-// and the source voucher. Current stock for (item, warehouse) is SUM(qty).
+// and the source voucher. Current stock for (item, warehouse) is SUM(qty). Written
+// only by the posting hooks with a deterministic per-leg name (prompt autoname), so
+// a concurrent or retried post is idempotent; read-only to non-manager roles.
 func stockLedgerEntry() framework.DocType {
 	return framework.DocType{
-		Name: dtStockLedger, Module: Module, TitleField: "item",
+		Name: dtStockLedger, Module: Module, Autoname: "prompt", TitleField: "item",
 		Fields: []framework.DocField{
 			{Fieldname: "posting_date", Fieldtype: framework.FieldData, Label: "Posting Date", InListView: true},
 			{Fieldname: "item", Fieldtype: framework.FieldData, Label: "Item", InListView: true},

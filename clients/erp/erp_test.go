@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -259,7 +260,127 @@ func TestLedgerReadOnlyToRoles(t *testing.T) {
 	}
 }
 
+// TestConcurrentSubmitPostsExactlyOnce is the Red HIGH regression: N concurrent
+// submits of ONE invoice must post the GL EXACTLY ONCE (idempotent, deterministic
+// leg names), with exactly one 200 (the docstatus-flip winner) — never the 4–6×
+// over-post of the original hash-named posting.
+func TestConcurrentSubmitPostsExactlyOnce(t *testing.T) {
+	app := mount(t)
+	const org = "race"
+	call(t, app, http.MethodPost, "/v1/framework/modules/erp/install", org, nil)
+	mustCreate(t, app, org, dtItem, map[string]any{"item_code": "w1", "item_name": "W1"})
+	mustCreate(t, app, org, dtCustomer, map[string]any{"customer_name": "c1"})
+	inv := mustCreate(t, app, org, dtSalesInvoice, map[string]any{
+		"customer": "c1", "items": []map[string]any{{"item": "w1", "qty": 1, "rate": 100}},
+	})
+	name := str(inv["name"])
+
+	const racers = 8
+	codes := make([]int, racers)
+	var wg sync.WaitGroup
+	wg.Add(racers)
+	for i := range codes {
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = submitStatus(app, org, dtSalesInvoice, name)
+		}(i)
+	}
+	wg.Wait()
+
+	won := 0
+	for _, c := range codes {
+		if c == http.StatusOK {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Fatalf("exactly one concurrent submit must win the flip, got %d (codes %v)", won, codes)
+	}
+	if n := len(listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+name+`"}`)); n != 2 {
+		t.Fatalf("concurrent submit must post the GL exactly once (2 legs), got %d entries", n)
+	}
+}
+
+// TestCancelReversesPostings is the Red MEDIUM regression: cancelling a submitted
+// voucher REVERSES its ledger (append negating rows), so the net GL and net stock
+// return to zero — a cancelled voucher no longer contributes to a balance.
+func TestCancelReversesPostings(t *testing.T) {
+	app := mount(t)
+	const org = "cancel"
+	call(t, app, http.MethodPost, "/v1/framework/modules/erp/install", org, nil)
+	mustCreate(t, app, org, dtItem, map[string]any{"item_code": "w1", "item_name": "W1"})
+	mustCreate(t, app, org, dtWarehouse, map[string]any{"warehouse_name": "wh"})
+	mustCreate(t, app, org, dtCustomer, map[string]any{"customer_name": "c1"})
+
+	// GL: submit invoice (Dr 100 / Cr 100) then cancel → reversal nets to zero.
+	inv := mustCreate(t, app, org, dtSalesInvoice, map[string]any{
+		"customer": "c1", "items": []map[string]any{{"item": "w1", "qty": 1, "rate": 100}},
+	})
+	mustSubmit(t, app, org, dtSalesInvoice, str(inv["name"]))
+	if code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesInvoice+"/"+str(inv["name"])+"/cancel", org, nil); code != http.StatusOK {
+		t.Fatalf("cancel invoice want 200, got %d (%s)", code, body)
+	}
+	gl := listDocs(t, app, org, `/v1/framework/`+dtGLEntry+`?filters={"voucher_no":"`+str(inv["name"])+`"}`)
+	if len(gl) != 4 { // 2 forward + 2 reversal
+		t.Fatalf("cancelled invoice want 4 GL rows (2 fwd + 2 rev), got %d", len(gl))
+	}
+	var netDebit, netCredit float64
+	for _, e := range gl {
+		netDebit += num(e["debit"])
+		netCredit += num(e["credit"])
+	}
+	if netDebit != netCredit || netDebit-netCredit != 0 {
+		t.Fatalf("net GL after cancel must be zero-sum, got debit=%v credit=%v", netDebit, netCredit)
+	}
+
+	// Stock: submit a receipt (+5) then cancel → SLE nets to zero.
+	ste := mustCreate(t, app, org, dtStockEntry, map[string]any{
+		"stock_entry_type": "Receipt", "items": []map[string]any{{"item": "w1", "qty": 5, "target_warehouse": "wh"}},
+	})
+	mustSubmit(t, app, org, dtStockEntry, str(ste["name"]))
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtStockEntry+"/"+str(ste["name"])+"/cancel", org, nil); code != http.StatusOK {
+		t.Fatalf("cancel stock entry want 200, got %d", code)
+	}
+	var netQty float64
+	for _, e := range listDocs(t, app, org, `/v1/framework/`+dtStockLedger+`?filters={"voucher_no":"`+str(ste["name"])+`"}`) {
+		netQty += num(e["qty"])
+	}
+	if netQty != 0 {
+		t.Fatalf("net stock after cancel must be zero, got %v", netQty)
+	}
+}
+
+// TestNonFiniteTotalRejected is the Red LOW regression: an overflowing qty*rate must
+// be a clean 422 from the totals hook, not a store-marshal 500.
+func TestNonFiniteTotalRejected(t *testing.T) {
+	app := mount(t)
+	const org = "overflow"
+	call(t, app, http.MethodPost, "/v1/framework/modules/erp/install", org, nil)
+	mustCreate(t, app, org, dtItem, map[string]any{"item_code": "w1", "item_name": "W1"})
+	mustCreate(t, app, org, dtCustomer, map[string]any{"customer_name": "c1"})
+	code, body := call(t, app, http.MethodPost, "/v1/framework/"+dtSalesOrder, org, map[string]any{
+		"customer": "c1", "items": []map[string]any{{"item": "w1", "qty": 1e200, "rate": 1e200}},
+	})
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("non-finite total want 422, got %d (%s)", code, body)
+	}
+}
+
 // ---- helpers ----
+
+// submitStatus fires /submit and returns the status code (−1 on transport error);
+// goroutine-safe (no t.Fatalf) for the concurrency test.
+func submitStatus(app *zip.App, org, doctype, name string) int {
+	req := httptest.NewRequest(http.MethodPost, "/v1/framework/"+doctype+"/"+name+"/submit", nil)
+	req.Header.Set("X-Org-Id", org)
+	req.Header.Set("X-User-Id", "u_"+org)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		return -1
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
 
 func mount(t *testing.T) *zip.App {
 	t.Helper()
