@@ -77,6 +77,7 @@ type svc struct {
 	sitesHost  string       // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
 	appLock    appMutex     // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate inflightGate // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
+	resolver   dnsResolver  // custom-domain ownership verification (domains.go); nil ⇒ system resolver
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -151,6 +152,13 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments", s.listDeployments)
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id", s.getDeployment)
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", s.deploymentLogs)
+
+	// custom domains + org-subtree hosts (domains.go): list, add (subtree active /
+	// custom pending-with-challenge), verify a custom claim's DNS, remove.
+	app.Get("/v1/platform/projects/:project/apps/:app/domains", s.listDomains)
+	app.Post("/v1/platform/projects/:project/apps/:app/domains", s.addDomain)
+	app.Post("/v1/platform/projects/:project/apps/:app/domains/:host/verify", s.verifyDomain)
+	app.Delete("/v1/platform/projects/:project/apps/:app/domains/:host", s.removeDomain)
 
 	app.Get("/v1/platform/health", s.health)
 
@@ -514,8 +522,12 @@ func (s *svc) createApp(c *zip.Ctx) error {
 		}
 	}
 	envJSON, _ := json.Marshal(body.Env)
-	domains := sanitizeDomains(body.Domains)
-	if err := s.validateOrgDomains(org, domains); err != nil {
+	// Seed the canonical default host so every app has a working HTTPS URL the
+	// moment it deploys, then validate the full ingress set (subtree hosts + the
+	// default always pass; a bare custom host at create still 501s — it must go
+	// through add-domain → verify first).
+	domains := s.seedDefaultDomain(org, slug, sanitizeDomains(body.Domains))
+	if err := s.validateOrgDomains(c.Context(), org, domains); err != nil {
 		return err
 	}
 	domainsJSON, _ := json.Marshal(domains)
@@ -708,25 +720,31 @@ func branchDefault(repoURL string) string {
 	return "main"
 }
 
-// validateOrgDomains binds every requested ingress host to the CALLER's own org
-// (RED — cross-tenant/apex domain hijack). Without this, a tenant could set
-// domains:["api.hanzo.ai"] or another org's host and the operator would render
-// an Ingress claiming it. In the first slice a custom domain MUST be under the
-// tenant's own subtree "<org>.<sitesHost>" (e.g. maxpower may only claim
-// "*.maxpower.hanzo.app"), so a domain can never target another org's space or a
-// Hanzo apex. Verified custom domains (arbitrary hosts + DNS/ACME proof) are a
-// phase-2 capability (domain CRUD, [DESIGN]); until then unverified hosts are
-// refused rather than blindly trusted.
-func (s *svc) validateOrgDomains(org string, domains []string) error {
-	if len(domains) == 0 {
-		return nil
-	}
-	suffix := "." + org + "." + s.sitesHost // e.g. ".maxpower.hanzo.app"
+// validateOrgDomains binds every ingress host that will render into the operator
+// CR to the CALLER's own org (RED — cross-tenant/apex domain hijack). Without it,
+// a tenant could set domains:["api.hanzo.ai"] or another org's host and the
+// operator would render an Ingress claiming it. A host is accepted iff it is
+// EITHER under the tenant's own subtree "<org>.<sitesHost>" (structurally owned,
+// e.g. "*.maxpower.hanzo.app") OR a BYO custom domain this org has already PROVEN
+// ownership of (a verified platform_domains row). Every other host — an unverified
+// claim, another org's domain, a Hanzo apex — is refused (501), so an arbitrary
+// host can only reach the ingress through add-domain → DNS verify, never blindly.
+func (s *svc) validateOrgDomains(ctx context.Context, org string, domains []string) error {
 	for _, d := range domains {
-		if !strings.HasSuffix(d, suffix) || len(d) <= len(suffix) {
-			return zip.Errorf(http.StatusNotImplemented,
-				"custom domain %q is not verified for this org; the first slice allows only hosts under %q (verified custom domains are phase 2)", d, org+"."+s.sitesHost)
+		if s.isOrgSubtreeHost(org, d) {
+			continue
 		}
+		// A non-subtree host is allowed only when this org owns a VERIFIED claim on
+		// it. LookupDomain is the global (cross-org) uniqueness read; we accept it
+		// only when the row is this org's AND verified — a foreign or pending row is
+		// refused, so the ownership boundary holds.
+		if s.store != nil {
+			if row, found, err := s.store.LookupDomain(ctx, d); err == nil && found && row.Org == org && row.Status == "verified" {
+				continue
+			}
+		}
+		return zip.Errorf(http.StatusNotImplemented,
+			"custom domain %q is not verified for this org; add it to the app and complete DNS verification first (only hosts under %q, or an ownership-verified custom domain, are accepted)", d, org+"."+s.sitesHost)
 	}
 	return nil
 }
