@@ -23,9 +23,12 @@ import (
 	"sync"
 	"time"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
-	// graph (provisioningsvc uses it). Blank import registers the "sqlite" name.
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // Overlay entity kinds. A model is keyed by its id (id||name); a provider by its
@@ -375,8 +378,9 @@ type catalog struct {
 
 // openCatalog opens (creating if needed) the overlay DB at path and migrates it.
 // path may be ":memory:" for an ephemeral, non-persistent overlay (degraded
-// mode when no DataDir is configured). The "sqlite" driver is modernc's pure-Go
-// build. MaxOpenConns(1) serializes writes against the file lock without retry.
+// mode when no DataDir is configured). The "sqlite" driver is the hanzoai/sqlite
+// fork (mattn+SQLCipher on cgo, pure-Go on !cgo). MaxOpenConns(1) serializes
+// writes against the file lock without retry.
 func openCatalog(path string) (*catalog, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
