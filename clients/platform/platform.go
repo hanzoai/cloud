@@ -152,6 +152,16 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", s.deploymentLogs)
 
 	app.Get("/v1/platform/health", s.health)
+
+	// console aggregates (Environments / Pipelines / Builds / Releases) — flat,
+	// top-level REST DERIVED from the SAME project/app/deploy/build data above
+	// (console.go). GET-only projections: the ONE write path stays POST .../apps
+	// and .../deploy. Registered here (order 124) so they bind before the /v1/*
+	// AI catch-all; every handler is org-scoped through s.tenant like the rest.
+	app.Get("/v1/environments", s.listEnvironments)
+	app.Get("/v1/pipelines", s.listPipelines)
+	app.Get("/v1/builds", s.listBuilds)
+	app.Get("/v1/releases", s.listReleases)
 }
 
 // Registered as "platformsvc" (not "platform") so serve.go's generic
