@@ -129,6 +129,13 @@ import (
 	// runtime dep). Order 129 binds /v1/framework/* before the AI /v1/* catch-all.
 	_ "github.com/hanzoai/cloud/clients/framework" // order 129 — /v1/framework/* (DocType engine)
 
+	// The CMS app lane: DocType fixtures (Page/Post/Article/Media/Navigation/
+	// Author, module "cms") registered with the framework at init. It mounts NO
+	// HTTP surface of its own — CMS content IS documents on /v1/framework/*,
+	// installed per-org via /v1/framework/modules/cms/install. First lane on the
+	// engine; ERP/Helpdesk register the same way.
+	_ "github.com/hanzoai/cloud/clients/cms" // (no order) — registers the "cms" framework module
+
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
