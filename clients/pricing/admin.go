@@ -35,7 +35,12 @@ const (
 // existing overlay. A brand-new overlay defaults to enabled (the catalog
 // default), so PATCH {"enabled":false} is the first act that hides an entry.
 type patchBody struct {
-	Enabled   *bool            `json:"enabled,omitempty"`
+	Enabled  *bool   `json:"enabled,omitempty"`
+	Beta     *bool   `json:"beta,omitempty"`
+	// State is the high-level tri-state setter ("off"|"beta"|"ga") that sets
+	// enabled+beta coherently; the low-level Enabled/Beta pointers (applied after)
+	// override it for fine control.
+	State     *string          `json:"state,omitempty"`
 	BetaOrgs  *[]string        `json:"betaOrgs,omitempty"`
 	Overrides *json.RawMessage `json:"overrides,omitempty"`
 }
@@ -134,14 +139,37 @@ func adminPatch(c *zip.Ctx, kind, id string) error {
 	if !ok {
 		cur = Overlay{Kind: kind, ID: id, Enabled: true} // catalog default.
 	}
+	if body.State != nil {
+		switch strings.ToLower(strings.TrimSpace(*body.State)) {
+		case "ga", "on", "enabled":
+			cur.Enabled, cur.Beta = true, false
+		case "beta":
+			cur.Enabled, cur.Beta = false, true
+		case "off", "disabled":
+			cur.Enabled, cur.Beta = false, false
+		default:
+			return zip.ErrBadRequest("state must be off|beta|ga")
+		}
+	}
 	if body.Enabled != nil {
 		cur.Enabled = *body.Enabled
+	}
+	if body.Beta != nil {
+		cur.Beta = *body.Beta
 	}
 	if body.BetaOrgs != nil {
 		cur.BetaOrgs = normalizeOrgs(*body.BetaOrgs)
 	}
 	if body.Overrides != nil {
 		cur.Overrides = normalizeOverride(*body.Overrides)
+	}
+	// Backward-compat with the pre-tri-state PATCH: a disabled entry carrying a
+	// non-empty beta-org list IS a beta (those orgs see it), unless the caller
+	// explicitly set state/beta. Preserves the old {enabled:false,betaOrgs:[x]}
+	// contract while the explicit `beta` flag makes an intentional `off` (empty
+	// betaOrgs) an absolute kill switch a self-opt-in can never re-open.
+	if body.State == nil && body.Beta == nil && !cur.Enabled && len(cur.BetaOrgs) > 0 {
+		cur.Beta = true
 	}
 	cur.Kind, cur.ID = kind, id
 	cur.UpdatedAt = time.Now().Unix()
