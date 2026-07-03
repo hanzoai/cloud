@@ -280,18 +280,21 @@ type docdbProvisioner struct {
 	publicURL string
 	host      string
 	port      int
+	// appFn resolves the co-resident Base app; defaults to base.App and is
+	// overridden in tests to inject an in-process TestApp.
+	appFn func() core.App
 }
 
 func newDocdb() *docdbProvisioner {
 	pub := strings.TrimRight(env("CLOUD_DOCDB_PUBLIC_URL", "https://api.hanzo.ai"), "/")
 	host, port := hostPortFromURL(pub, 443)
-	return &docdbProvisioner{publicURL: pub, host: host, port: port}
+	return &docdbProvisioner{publicURL: pub, host: host, port: port, appFn: base.App}
 }
 
 // app returns the co-resident Base app or an error if the base subsystem is
 // not mounted (fail-closed — never a silent no-op provision).
 func (p *docdbProvisioner) app() (core.App, error) {
-	app := base.App()
+	app := p.appFn()
 	if app == nil {
 		return nil, errors.New("base subsystem not mounted")
 	}
