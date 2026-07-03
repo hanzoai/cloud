@@ -2,6 +2,7 @@ package sites
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -280,5 +281,69 @@ func TestIsFingerprinted(t *testing.T) {
 func TestCacheTag(t *testing.T) {
 	if got := CacheTag("acme", "blog"); got != "site-acme-blog" {
 		t.Errorf("CacheTag = %q, want site-acme-blog", got)
+	}
+}
+
+// ---- reserved policy (the ONE shared source) ----------------------------
+
+func TestIsReserved(t *testing.T) {
+	SetReservedExtra([]string{"custom1", "custom2"})
+	defer SetReservedExtra(nil)
+	// Baked-in (can't be removed by config) + operator extras, case-insensitive.
+	for _, l := range []string{"", "www", "api", "admin", "login", "secure", "wallet",
+		"account", "signin", "gateway", "cdn", "static", "assets", "hanzo", "lux", "zoo",
+		"API", "Admin", "custom1", "custom2"} {
+		if !IsReserved(l) {
+			t.Errorf("IsReserved(%q) = false, want true", l)
+		}
+	}
+	for _, l := range []string{"maxpower", "my-site", "cool-thing", "blog2", "acme-app"} {
+		if IsReserved(l) {
+			t.Errorf("IsReserved(%q) = true, want false", l)
+		}
+	}
+}
+
+// TestReservedHostNeverServes is the serve-time backstop: even with a resolver that
+// WOULD serve any slug as a live site, a reserved host is passed through to the
+// normal pipeline (sentinel) — it is never served as a site. Combined with the
+// create+bind rejects, a reserved subdomain can never shadow a real app/api host.
+func TestReservedHostNeverServes(t *testing.T) {
+	SetResolver(&fakeResolver{found: true, site: Site{Org: "x", Slug: "api", Bucket: "b", Prefix: "x/api", Status: "live"}})
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+	for _, host := range []string{"api.hanzo.app", "admin.hanzo.app", "login.hanzo.app", "wallet.hanzo.app", "www.hanzo.app"} {
+		req := httptest.NewRequest("GET", "http://"+host+"/", nil)
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("test %s: %v", host, err)
+		}
+		if resp.Header.Get("X-Sentinel") != "hit" {
+			t.Errorf("reserved host %q was served as a site instead of passthrough", host)
+		}
+	}
+}
+
+// TestSiteRejectsNonGet: a site host answers only GET/HEAD; anything else is 405
+// with an Allow header (and never reaches resolution).
+func TestSiteRejectsNonGet(t *testing.T) {
+	SetResolver(&fakeResolver{found: false})
+	defer SetResolver(nil)
+	app := newTestApp(testServer())
+	for _, m := range []string{"POST", "PUT", "DELETE", "PATCH"} {
+		req := httptest.NewRequest(m, "http://x.hanzo.app/", nil)
+		resp, err := app.Fiber().Test(req)
+		if err != nil {
+			t.Fatalf("test %s: %v", m, err)
+		}
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("%s → %d, want 405", m, resp.StatusCode)
+		}
+		if resp.Header.Get("Allow") != "GET, HEAD" {
+			t.Errorf("%s Allow=%q, want 'GET, HEAD'", m, resp.Header.Get("Allow"))
+		}
+		if resp.Header.Get("X-Sentinel") == "hit" {
+			t.Errorf("%s leaked into the API pipeline", m)
+		}
 	}
 }
