@@ -181,8 +181,11 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 				io.WriteString(w, `{"subscriptions":[]}`)
 			}
 		case strings.HasSuffix(r.URL.Path, "/transactions"):
+			// Commerce serves the ledger WRAPPED as { count, transactions:[...] }
+			// (the live contract) — the fake mirrors it so the decode is guarded
+			// against the real shape, not a bare array a mock would let pass.
 			rows := usage[org]
-			b, _ := json.Marshal(rows)
+			b, _ := json.Marshal(map[string]any{"count": len(rows), "transactions": rows})
 			w.Write(b)
 		default:
 			w.WriteHeader(404)
