@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -110,7 +111,13 @@ const defaultBuildImagePrefix = "ghcr.io/hanzoai"
 // per-tenant resource policy. nil dyn ⇒ no cluster resolved; every cluster op
 // fails closed with initErr.
 type k8sClient struct {
-	dyn         dynamic.Interface
+	dyn dynamic.Interface
+	// clientset is the TYPED client, held ONLY for the pod-log subresource
+	// (Pods().GetLogs streams a raw body the dynamic client cannot express). All CR
+	// reads/writes stay on dyn; this is the one typed capability platform needs.
+	// nil when the cluster is unresolved (logs then fall back to the recorded
+	// timeline, like every other cluster op here degrades).
+	clientset   kubernetes.Interface
 	initErr     string
 	imagePrefix string
 	buildNS     string         // namespace CI Jobs run in (default "hanzo")
@@ -144,6 +151,13 @@ func newK8sClient(imagePrefix, buildNS string) *k8sClient {
 		return c
 	}
 	c.dyn = dyn
+	// Typed client for the pod-log subresource ONLY (deployment logs). Best-effort:
+	// a failure here leaves clientset nil so logs fall back to the recorded timeline,
+	// but it never disables the CR control plane (which is all on dyn). From the SAME
+	// rest.Config, so it authenticates as the same cloud-api service account.
+	if cs, csErr := kubernetes.NewForConfig(cfg); csErr == nil {
+		c.clientset = cs
+	}
 	return c
 }
 
