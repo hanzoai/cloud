@@ -10,7 +10,7 @@
 //	kv        -> Redis       kv.hanzo.svc:6379        ACL SETUSER (keyspace scope)
 //	search    -> Meilisearch search.hanzo.svc:7700    POST /indexes
 //	s3        -> S3/MinIO     s3.hanzo.svc:9000        MakeBucket
-//	docdb     -> MongoDB      docdb.hanzo.svc:27017    createCollection + createUser
+//	docdb     -> Hanzo Base   in-process /v1/base      NewBaseCollection (SQLite + realtime)
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id /
 // c.Org()). Empty org is rejected 403 unless the caller is an admin. The
@@ -84,13 +84,13 @@ func publicEndpoint(kind string) (host string, port int) {
 
 // secretfulKinds are the kinds whose backend wires a real per-resource
 // credential (so the generated password is meaningful and gets sealed in KMS /
-// returned once). The others (vector, search, storage) authenticate with a
-// shared, out-of-band key, so no per-resource password is produced.
+// returned once). The others (vector, search, s3, docdb) authenticate with a
+// shared, out-of-band key or IAM — docdb is Hanzo Base, which is IAM-native
+// (no per-resource password), so it is not secretful.
 var secretfulKinds = map[string]bool{
 	"sql":       true,
 	"kv":        true,
 	"datastore": true,
-	"docdb":     true,
 }
 
 // nameRE constrains the user-supplied resource name to a DNS/identifier-safe
@@ -599,7 +599,7 @@ func sanitizeIdent(name string) string { return strings.ReplaceAll(name, "-", "_
 // physicalName namespaces a resource on a shared backend as
 // "o"<orgHash>_<sanitizedName>. The leading 'o' keeps it alpha-initial (a valid
 // identifier for every backend); the fixed-width org hash disambiguates org
-// from name; sanitizeIdent makes the name a safe SQL/Mongo/ClickHouse
+// from name; sanitizeIdent makes the name a safe SQL/ClickHouse/Base-collection
 // identifier. Injective in (org,name) up to a 64-bit SHA-256 collision. With
 // name ≤ 40 chars (nameRE) the identifier is ≤ 58 chars — inside Postgres's
 // 63-char identifier limit.
