@@ -119,6 +119,16 @@ import (
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
 	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
 
+	// Networking control plane: tenant-scoped facade over Hanzo Zero Trust
+	// (hanzoai/zt, an OpenZiti fabric). Fronts the controller's Edge Management API
+	// and serves the console's Networks/ServiceMesh/Edge pages: /v1/networks (the
+	// org's overlay, projected from its edge-routers), /v1/mesh/services (ZT edge
+	// services) and /v1/edge/nodes (ZT edge-routers + real online status). Every
+	// resource is org-scoped by the "org-<org>" role attribute (the ONE tenancy
+	// convention ZT expresses natively), so a caller only ever sees their own
+	// footprint. Fails closed (503) without ZT_CLIENT_ID/ZT_CLIENT_SECRET.
+	_ "github.com/hanzoai/cloud/clients/zt" // order 134 — /v1/networks/*,/v1/mesh/services,/v1/edge/nodes (networking → Hanzo Zero Trust)
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
