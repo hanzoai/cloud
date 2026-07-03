@@ -1,5 +1,5 @@
 // Package eval mounts the Hanzo Cloud /v1/evals/* surface: a NATIVE, org-scoped
-// evaluation system that replaces the Langfuse v3 fork (the crash-looping
+// evaluation system that replaces the retired 3.x observability-console fork (the crash-looping
 // console proxy this file used to be). Nothing proxies to console anymore.
 //
 // Storage split (CTO directive), two orthogonal stores this package composes:
@@ -206,7 +206,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/evals/scores", s.listScores)
 
 	app.Get("/v1/evals/traces", s.listTraces)
-	// Production LLM generations (Langfuse "observations of type GENERATION"), read
+	// Production LLM generations ("observations of type GENERATION"), read
 	// from the proven hanzo.cloud_usage ledger — the console Observe > Observations
 	// surface. One emission (recordTrace) already writes this ledger; this only reads.
 	app.Get("/v1/evals/observations", s.listObservations)
@@ -851,7 +851,7 @@ func (s *service) listObservations(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": out})
 }
 
-// observationView is the Langfuse-v3 observation shape the console Observe surface
+// observationView is the v3 observation shape the console Observe surface
 // consumes (src/lib/api/o11y.ts `Observation`): a GENERATION with token usage, model,
 // level, and cost/provider/attribution in metadata.
 type observationUsage struct {
@@ -1317,7 +1317,7 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// genUUID returns a v4 UUID (trace ids follow the OTel/Langfuse trace-id shape).
+// genUUID returns a v4 UUID (trace ids follow the OTel trace-id shape).
 func genUUID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
