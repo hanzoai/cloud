@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/security/detect"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
 	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
@@ -224,14 +226,14 @@ func (s *Store) ListFindings(ctx context.Context, org, scanID, minSeverity strin
 		q += ` AND scan_id=?`
 		args = append(args, scanID)
 	}
-	if r := severityRank[minSeverity]; r > 0 {
+	if detect.SeverityRank(minSeverity) > 0 {
 		// Enumerate the severities at or above the floor — SQLite has no rank
-		// function and an IN list is index-friendly.
+		// function and an IN list is index-friendly. The names are a fixed
+		// enum from the engine (never user input), so quoting them into the
+		// SQL is injection-safe.
 		var keep []string
-		for sev, rank := range severityRank {
-			if rank >= r {
-				keep = append(keep, "'"+sev+"'")
-			}
+		for _, sev := range detect.SeveritiesAtOrAbove(minSeverity) {
+			keep = append(keep, "'"+sev+"'")
 		}
 		q += ` AND severity IN (` + strings.Join(keep, ",") + `)`
 	}
