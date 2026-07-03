@@ -28,6 +28,10 @@
 //	GET    /v1/billing/*         — per-tenant billing read (balance/usage/invoices/…),
 //	POST   /v1/billing/*           forwarded to commerce with the service token, SCOPED
 //	                              to the validated caller's own subject (billing.go).
+//	GET    /v1/commerce/*        — per-tenant STORE (products/orders/customers/…),
+//	…      /v1/commerce/*          forwarded to commerce's bare /v1/<kind> with the
+//	                              service token, SCOPED to the validated caller's own
+//	                              org; full CRUD, store-heads only (commerce.go).
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
 // (principal.Validated / c.Org() / c.User()), the same trust boundary every
@@ -110,6 +114,16 @@ func (s *svc) routes(app *zip.App) {
 	// (billing.go). GET+POST only, mirroring app/billing/v1/[...path]/route.ts.
 	app.Get("/v1/billing/*", s.billingData)
 	app.Post("/v1/billing/*", s.billingData)
+	// Per-tenant STORE DATA bridge (task #41 BFF catch-all sweep) — the canonical
+	// /v1/commerce/* the statically-exported console calls, forwarded to commerce's
+	// bare store surface /v1/<kind> with the admin service token and SCOPED to the
+	// validated caller's own org (commerce.go). Full CRUD, mirroring the five method
+	// exports of app/commerce/[...path]/route.ts.
+	app.Get("/v1/commerce/*", s.commerceData)
+	app.Post("/v1/commerce/*", s.commerceData)
+	app.Put("/v1/commerce/*", s.commerceData)
+	app.Patch("/v1/commerce/*", s.commerceData)
+	app.Delete("/v1/commerce/*", s.commerceData)
 }
 
 // init registers the subsystem. Registered as "consolesvc" (not "console") so
