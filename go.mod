@@ -15,6 +15,7 @@ require (
 	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
+	github.com/hanzoai/sqlite v0.1.4
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
@@ -23,11 +24,13 @@ require (
 	github.com/redis/go-redis/v9 v9.20.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
+	github.com/zap-proto/http v0.2.0
 	github.com/zap-proto/zip v1.2.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0
+	go.opentelemetry.io/proto/otlp v1.10.0
 	golang.org/x/term v0.44.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
-	github.com/hanzoai/sqlite v0.1.4
 )
 
 require (
@@ -36,7 +39,6 @@ require (
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
-	modernc.org/sqlite v1.51.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/luxfi/bft v0.1.5 // indirect
@@ -49,12 +51,10 @@ require (
 	github.com/luxwallet/connect/go v0.1.3 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
-	github.com/zap-proto/http v0.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
+	modernc.org/sqlite v1.51.0 // indirect
 )
 
 require (
@@ -603,11 +603,11 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.67.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.44.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
-	go.opentelemetry.io/otel/trace v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
@@ -628,7 +628,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260511170946-3700d4141b60 // indirect
 	google.golang.org/grpc v1.81.1 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
@@ -661,7 +661,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.796.2
+	github.com/hanzoai/ai v1.796.3
 	github.com/hanzoai/authz v1.10.3
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
