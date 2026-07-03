@@ -121,11 +121,14 @@ type engine struct {
 	// (build_statefulset does not auto-mount), so an engine that must persist to
 	// disk MUST set this — else the pod writes to ephemeral container storage.
 	dataMount string
-	// iamAuth marks an IAM-native engine (Hanzo Base): callers authenticate via
-	// Hanzo IAM, so there is NO per-resource admin password. The admin Secret
-	// carries IAM/KMS config instead, and no password is generated, sealed, or
-	// returned. secretEnv/dsn ignore the user/pw args for such engines.
-	iamAuth bool
+	// fsGroup, when non-zero, is the pod-level securityContext.fsGroup the
+	// operator stamps on the StatefulSet (spec.fsGroup). A freshly-provisioned
+	// block PVC is mounted root:root, so a NON-root image (FerretDB runs as UID
+	// 1000, distroless — no entrypoint can chown) cannot write its data dir until
+	// the kubelet group-owns the volume to fsGroup. Only engines whose image runs
+	// non-root and self-manages nothing need this; a root/self-chowning image
+	// (ClickHouse) leaves it 0 and gets no securityContext (byte-identical STS).
+	fsGroup int64
 }
 
 // dedicatedEngines is the closed set of kinds provisioned as a dedicated
@@ -153,45 +156,44 @@ var dedicatedEngines = map[string]engine{
 			return fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s?protocol=http", user, pw, host, port, db)
 		},
 	},
-	// Hanzo Base ("docdb"): the managed "document database" is a dedicated
-	// per-org Hanzo Base instance — JSON document collections on per-tenant
-	// SQLite with native realtime (SSE at /v1/realtime), on :8090 with data at
-	// /data. IAM-native: the base image's platform plugin validates the org's
-	// Hanzo IAM tokens (IAM_URL/KMS_URL/IAM_CLIENT_* via the admin Secret), so
-	// there is NO per-resource password. ZERO MongoDB / Mongo-wire / FerretDB —
-	// the per-org docdb instance IS a Base instance now. The engine runs on the
-	// generic Datastore controller (spec.type is free-form; image/ports/
-	// volumeMounts drive the StatefulSet verbatim — no operator branch needed).
+	// FerretDB on Hanzo SQL ("docdb"): the managed "document database" is a
+	// dedicated per-org FerretDB instance speaking the MongoDB wire protocol on
+	// :27017, backed by Hanzo SQL (SQLite, pure-Go modernc — Mongo databases map
+	// to SQLite files under /state, collections to tables, documents to JSON1
+	// rows). Existing MongoDB drivers/clients (mongodb://) work unchanged. ZERO
+	// raw mongod (no WiredTiger), ZERO Postgres. Per-instance SCRAM auth via
+	// FerretDB's SQLite-backend authentication (FERRETDB_SETUP_*). Runs on the
+	// generic Datastore controller — image/ports/volumeMounts drive the
+	// StatefulSet verbatim, no operator branch needed.
 	"docdb": {
-		prefix: "ddb", dsType: "base",
-		image: "ghcr.io/hanzoai/base", tag: env("CLOUD_DEDICATED_DOCDB_TAG", "v1.5.3"),
-		ports:      []enginePort{{"http", 8090}},
-		clientPort: 8090,
-		dataMount:  "/data",
-		iamAuth:    true,
+		prefix: "ddb", dsType: "docdb",
+		image: "ghcr.io/hanzoai/docdb-sqlite", tag: env("CLOUD_DEDICATED_DOCDB_TAG", "1.24.0"),
+		ports:      []enginePort{{"mongo", 27017}},
+		clientPort: 27017,
+		dataMount:  "/state",
+		fsGroup:    1000, // FerretDB image runs as UID:GID 1000 (distroless); PVC must be group-writable
 		memReq:     "128Mi", memLim: "512Mi",
-		secretEnv: func(_, _, _ string) map[string]string {
-			return baseInstanceEnv()
+		secretEnv: func(user, pw, db string) map[string]string {
+			// FerretDB v1.24 SQLite backend + per-instance SCRAM auth. Data at
+			// rest is SQLite files under /state — NO mongod, NO Postgres. The
+			// SQLite backend requires new-auth to bootstrap the setup user, and
+			// --setup-database is rejected without it (FerretDB main.go). State
+			// dir is pinned to the PVC so process state persists across restarts.
+			return map[string]string{
+				"FERRETDB_HANDLER":              "sqlite",
+				"FERRETDB_SQLITE_URL":           "file:/state/",
+				"FERRETDB_STATE_DIR":            "/state",
+				"FERRETDB_LISTEN_ADDR":          ":27017",
+				"FERRETDB_TEST_ENABLE_NEW_AUTH": "true",
+				"FERRETDB_SETUP_USERNAME":       user,
+				"FERRETDB_SETUP_PASSWORD":       pw,
+				"FERRETDB_SETUP_DATABASE":       db,
+			}
 		},
-		dsn: func(_, _, host string, port int, _ string) string {
-			return fmt.Sprintf("http://%s:%d/v1", host, port)
+		dsn: func(user, pw, host string, port int, db string) string {
+			return fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=%s", user, pw, host, port, db, db)
 		},
 	},
-}
-
-// baseInstanceEnv is the boot env for a dedicated Hanzo Base instance: the IAM +
-// KMS coordinates the base image's platform plugin reads to validate the org's
-// Hanzo IAM tokens (and derive the per-tenant encryption key). Sourced from the
-// cloud binary's OWN configured IAM identity; only keys that are set are
-// projected. There is NO per-resource password — Base is IAM-native.
-func baseInstanceEnv() map[string]string {
-	m := map[string]string{}
-	for _, k := range []string{"IAM_URL", "KMS_URL", "IAM_CLIENT_ID", "IAM_CLIENT_SECRET"} {
-		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
-			m[k] = v
-		}
-	}
-	return m
 }
 
 // tenantNamespace is the org's physical namespace — the cross-tenant isolation
@@ -260,16 +262,9 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 		return zip.Errorf(http.StatusBadGateway, "ensure tenant: %v", err)
 	}
 
-	// Secretful engines get a per-instance admin password; IAM-native engines
-	// (Base) do not — callers authenticate via Hanzo IAM, so nothing is sealed
-	// or returned.
-	pw := ""
-	if !e.iamAuth {
-		p, gerr := genToken(24)
-		if gerr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
-		}
-		pw = p
+	pw, err := genToken(24)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	id, err := genID()
 	if err != nil {
@@ -283,23 +278,14 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	// below — but NEVER stored in plaintext at rest here.
 	secretRef := fmt.Sprintf("org/%s/%s/%s", org, kind, name)
 	storedRef := ""
-	if !e.iamAuth {
-		if s.sec.Enabled() {
-			if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
-				s.log.Error("kms put failed", "kind", kind, "err", err)
-				return zip.Errorf(http.StatusInternalServerError, "store secret failed")
-			}
-			storedRef = secretRef
-		} else {
-			s.log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
+	if s.sec.Enabled() {
+		if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
+			s.log.Error("kms put failed", "kind", kind, "err", err)
+			return zip.Errorf(http.StatusInternalServerError, "store secret failed")
 		}
-	}
-
-	// IAM-native engines return no credential; the customer authenticates via
-	// Hanzo IAM against the instance's own API.
-	respUser, respPw := user, pw
-	if e.iamAuth {
-		respUser, respPw = "", ""
+		storedRef = secretRef
+	} else {
+		s.log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
 	}
 
 	// Project the admin Secret (the env the image boots from) then apply the
@@ -327,7 +313,7 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	r := Resource{
 		ID: id, Org: org, Kind: kind, Name: name,
 		PhysicalName: inst, SecretRef: storedRef,
-		Host: host, Port: e.clientPort, Username: respUser, DBName: db,
+		Host: host, Port: e.clientPort, Username: user, DBName: db,
 		Status: statusProvisioning, CreatedAt: time.Now().Unix(), Size: size,
 	}
 	if err := s.store.Insert(ctx, r); err != nil {
@@ -350,8 +336,8 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 
 	return c.JSON(http.StatusCreated, createResp{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
-		Host: host, Port: e.clientPort, Username: respUser, Database: db,
-		ConnectionString: e.dsn(user, pw, host, e.clientPort, db), Password: respPw,
+		Host: host, Port: e.clientPort, Username: user, Database: db,
+		ConnectionString: e.dsn(user, pw, host, e.clientPort, db), Password: pw,
 	})
 }
 
@@ -545,6 +531,11 @@ func datastoreCR(ns, org, inst, resourceID, kind string, e engine, size, storage
 	// container storage and loses data on restart.
 	if e.dataMount != "" {
 		spec["volumeMounts"] = []any{map[string]any{"name": "data", "mountPath": e.dataMount}}
+	}
+	// A non-root image (fsGroup set) needs the operator to group-own its PVC via
+	// the pod securityContext.fsGroup, else it cannot write the mounted volume.
+	if e.fsGroup != 0 {
+		spec["fsGroup"] = e.fsGroup
 	}
 	if pullSecret != "" {
 		spec["imagePullSecrets"] = []any{map[string]any{"name": pullSecret}}

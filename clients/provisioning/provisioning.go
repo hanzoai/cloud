@@ -10,7 +10,7 @@
 //	kv        -> Redis       kv.hanzo.svc:6379        ACL SETUSER (keyspace scope)
 //	search    -> Meilisearch search.hanzo.svc:7700    POST /indexes
 //	s3        -> S3/MinIO     s3.hanzo.svc:9000        MakeBucket
-//	docdb     -> Hanzo Base   dedicated per-org instance (Datastore CR): SQLite + realtime, IAM-native
+//	docdb     -> FerretDB     dedicated per-org instance (Datastore CR): MongoDB wire on Hanzo SQL (SQLite)
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id /
 // c.Org()). Empty org is rejected 403 unless the caller is an admin. The
