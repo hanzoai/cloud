@@ -20,6 +20,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
 	// graph (provisioningsvc uses it). Blank import registers the "sqlite" name.
@@ -59,25 +61,64 @@ func overlayKey(kind, id string) string { return kind + "\x00" + id }
 // Overlay is the mutable enablement STATE for one catalog entry. Zero value (no
 // row) == enabled, no beta orgs, no override; the gate treats an absent row as
 // visible, so an empty store is a no-op.
+//
+// Tri-state (the #30/#31 enablement model), encoded by (Enabled, Beta):
+//   - ga   = Enabled            → visible to EVERYONE.
+//   - beta = !Enabled && Beta    → hidden from the public; visible to opted-in/
+//     granted orgs (BetaOrgs). Users may SELF-OPT-IN to a beta item.
+//   - off  = !Enabled && !Beta   → hidden from EVERYONE, absolutely. BetaOrgs are
+//     IGNORED — a self-opt-in can never bypass an `off` kill switch.
 type Overlay struct {
 	Kind      string          `json:"kind"`
 	ID        string          `json:"id"`
 	Enabled   bool            `json:"enabled"`
+	Beta      bool            `json:"beta,omitempty"`
 	BetaOrgs  []string        `json:"betaOrgs,omitempty"`
 	Overrides json.RawMessage `json:"overrides,omitempty"`
 	UpdatedAt int64           `json:"updatedAt,omitempty"`
 }
 
-// visibleTo reports whether org may see the entry this overlay governs: enabled
-// for everyone, OR org is on the beta list (private beta of an otherwise-hidden
-// entry). The absent-row case (default-visible) is handled by the caller.
+// State is the tri-state label (off|beta|ga) an operator sets and the console
+// renders. Derived from (Enabled, Beta) so there is ONE source of truth.
+func (o Overlay) State() string {
+	switch {
+	case o.Enabled:
+		return "ga"
+	case o.Beta:
+		return "beta"
+	default:
+		return "off"
+	}
+}
+
+// visibleTo reports whether org may see the entry this overlay governs:
+//   - ga (Enabled): visible to everyone.
+//   - off (!Enabled && !Beta): visible to NO ONE — the BetaOrgs list is ignored,
+//     so a stray/self-added org can never see an off item (the kill switch is
+//     absolute; this is the security invariant a self-opt-in must not bypass).
+//   - beta (!Enabled && Beta): visible only to an org on the BetaOrgs list.
+//
+// The absent-row case (default-visible) is handled by the caller.
 func (o Overlay) visibleTo(org string) bool {
 	if o.Enabled {
 		return true
 	}
+	if !o.Beta {
+		return false // off — absolute; BetaOrgs cannot re-open it.
+	}
 	if org == "" {
 		return false
 	}
+	for _, b := range o.BetaOrgs {
+		if b == org {
+			return true
+		}
+	}
+	return false
+}
+
+// optedIn reports whether org is on this overlay's beta list.
+func (o Overlay) optedIn(org string) bool {
 	for _, b := range o.BetaOrgs {
 		if b == org {
 			return true
@@ -322,10 +363,14 @@ func applyMergePatch(target, patch map[string]any) map[string]any {
 // ----- store ----------------------------------------------------------------
 
 // catalog is the enablement overlay store: one SQLite table mapping (kind,id) ->
-// {enabled, betaOrgs, overrides}. ONE file holds every entry; reads load a full
-// snapshot once per request and the gate then runs purely in memory.
+// {enabled, beta, betaOrgs, overrides}. ONE file holds every entry; reads load a
+// full snapshot once per request and the gate then runs purely in memory. mu makes
+// the read-modify-write of a single row (admin set / user opt-in) atomic across
+// concurrent requests — MaxOpenConns(1) serializes the statements, but a Get-then-
+// Upsert from two requests could otherwise interleave and lose an opt-in.
 type catalog struct {
 	db *sql.DB
+	mu sync.Mutex
 }
 
 // openCatalog opens (creating if needed) the overlay DB at path and migrates it.
@@ -369,7 +414,41 @@ CREATE TABLE IF NOT EXISTS catalog_overlay (
 	if _, err := c.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// Additive migration: the `beta` eligibility flag (the off-vs-beta
+	// disambiguation the tri-state + self-opt-in need). Guard on the column's
+	// presence so it runs exactly once. Backfill beta=1 for any row that ALREADY
+	// carries a beta-org list, so a pre-existing private beta (set via the old
+	// enabled+betaOrgs PATCH) KEEPS working after the upgrade — no regression.
+	if !c.hasColumn("catalog_overlay", "beta") {
+		if _, err := c.db.Exec(`ALTER TABLE catalog_overlay ADD COLUMN beta INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("migrate beta col: %w", err)
+		}
+		if _, err := c.db.Exec(`UPDATE catalog_overlay SET beta=1 WHERE enabled=0 AND beta_orgs != '[]' AND beta_orgs != ''`); err != nil {
+			return fmt.Errorf("migrate beta backfill: %w", err)
+		}
+	}
 	return nil
+}
+
+// hasColumn reports whether `table` already has column `col` (SQLite
+// PRAGMA table_info), so the additive migration is idempotent.
+func (c *catalog) hasColumn(table, col string) bool {
+	rows, err := c.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, typ        string
+			dflt             any
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err == nil && name == col {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *catalog) Close() error {
@@ -379,7 +458,7 @@ func (c *catalog) Close() error {
 	return c.db.Close()
 }
 
-const overlayCols = `kind,id,enabled,beta_orgs,overrides,updated_at`
+const overlayCols = `kind,id,enabled,beta_orgs,overrides,updated_at,beta`
 
 func scanOverlay(sc interface{ Scan(...any) error }) (Overlay, error) {
 	var (
@@ -387,11 +466,13 @@ func scanOverlay(sc interface{ Scan(...any) error }) (Overlay, error) {
 		enabled  int
 		betaJSON string
 		ovr      string
+		beta     int
 	)
-	if err := sc.Scan(&o.Kind, &o.ID, &enabled, &betaJSON, &ovr, &o.UpdatedAt); err != nil {
+	if err := sc.Scan(&o.Kind, &o.ID, &enabled, &betaJSON, &ovr, &o.UpdatedAt, &beta); err != nil {
 		return Overlay{}, err
 	}
 	o.Enabled = enabled != 0
+	o.Beta = beta != 0
 	if betaJSON != "" && betaJSON != "[]" {
 		_ = json.Unmarshal([]byte(betaJSON), &o.BetaOrgs)
 	}
@@ -449,18 +530,91 @@ func (c *catalog) Upsert(ctx context.Context, o Overlay) error {
 	if o.Enabled {
 		enabled = 1
 	}
+	betaFlag := 0
+	if o.Beta {
+		betaFlag = 1
+	}
 	_, err := c.db.ExecContext(ctx,
-		`INSERT INTO catalog_overlay (`+overlayCols+`) VALUES (?,?,?,?,?,?)
+		`INSERT INTO catalog_overlay (`+overlayCols+`) VALUES (?,?,?,?,?,?,?)
 		 ON CONFLICT(kind,id) DO UPDATE SET
 		   enabled=excluded.enabled,
 		   beta_orgs=excluded.beta_orgs,
 		   overrides=excluded.overrides,
-		   updated_at=excluded.updated_at`,
-		o.Kind, o.ID, enabled, beta, string(o.Overrides), o.UpdatedAt)
+		   updated_at=excluded.updated_at,
+		   beta=excluded.beta`,
+		o.Kind, o.ID, enabled, beta, string(o.Overrides), o.UpdatedAt, betaFlag)
 	if err != nil {
 		return fmt.Errorf("upsert: %w", err)
 	}
 	return nil
+}
+
+// errNotBeta is returned when a self-service opt-in targets an item that is not in
+// beta — a `ga` item is already visible (no opt-in needed) and an `off` item is a
+// kill switch a user must NOT be able to re-open. This is the security invariant of
+// the self-opt-in path: it can never bypass `off`, and it never touches global state.
+var errNotBeta = errors.New("item is not in beta")
+
+// mutate is the atomic read-modify-write of ONE overlay row (admin set / user
+// opt-in), serialized by c.mu so two concurrent writers cannot lose each other's
+// change. A missing row defaults to the catalog default (ga) before fn runs.
+func (c *catalog) mutate(ctx context.Context, kind, id string, fn func(*Overlay) error) (Overlay, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cur, ok, err := c.Get(ctx, kind, id)
+	if err != nil {
+		return Overlay{}, err
+	}
+	if !ok {
+		cur = Overlay{Kind: kind, ID: id, Enabled: true} // catalog default (ga)
+	}
+	cur.Kind, cur.ID = kind, id
+	if err := fn(&cur); err != nil {
+		return Overlay{}, err
+	}
+	cur.UpdatedAt = time.Now().Unix()
+	if err := c.Upsert(ctx, cur); err != nil {
+		return Overlay{}, err
+	}
+	return cur, nil
+}
+
+// OptIn adds org to a BETA item's allow-list (self-service). It refuses anything
+// that is not in beta (errNotBeta), so a caller can never opt their org into an
+// `off` item (bypassing the kill switch) or a `ga` item (already visible). The org
+// is the SANITIZED caller org supplied by the handler — never client-controllable —
+// so a user can only ever opt in THEIR OWN org.
+func (c *catalog) OptIn(ctx context.Context, kind, id, org string) (Overlay, error) {
+	if strings.TrimSpace(org) == "" {
+		return Overlay{}, fmt.Errorf("org required")
+	}
+	return c.mutate(ctx, kind, id, func(o *Overlay) error {
+		if o.State() != "beta" {
+			return errNotBeta
+		}
+		if !o.optedIn(org) {
+			o.BetaOrgs = append(o.BetaOrgs, org)
+		}
+		return nil
+	})
+}
+
+// OptOut removes org from an item's beta allow-list (idempotent). Only ever affects
+// the caller's own org (the handler passes the sanitized org).
+func (c *catalog) OptOut(ctx context.Context, kind, id, org string) (Overlay, error) {
+	if strings.TrimSpace(org) == "" {
+		return Overlay{}, fmt.Errorf("org required")
+	}
+	return c.mutate(ctx, kind, id, func(o *Overlay) error {
+		kept := make([]string, 0, len(o.BetaOrgs))
+		for _, b := range o.BetaOrgs {
+			if b != org {
+				kept = append(kept, b)
+			}
+		}
+		o.BetaOrgs = kept
+		return nil
+	})
 }
 
 // Models fetches the live overlay snapshot and gates `full` for org — the ONE

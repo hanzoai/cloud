@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -99,13 +100,16 @@ func (c *commerceClient) creditsCents(ctx context.Context, org, user string) (in
 	return b.Available, nil
 }
 
-// subscriptionsWire is the /v1/billing/subscriptions list shape the MRR reader
-// folds over. Only the fields MRR needs are decoded (status + plan price/interval);
-// commerce emits plan.price in the currency's minor unit (cents) per its wire.
+// subscriptionsWire is the /v1/billing/subscriptions list shape the MRR + plan
+// readers fold over. Only the fields we need are decoded (status + plan
+// name/price/interval); commerce emits plan.price in the currency's minor unit
+// (cents) per its wire.
 type subscriptionsWire struct {
 	Subscriptions []struct {
 		Status string `json:"status"`
 		Plan   struct {
+			Name     string `json:"name"`
+			ID       string `json:"id"`
 			Price    int64  `json:"price"`
 			Currency string `json:"currency"`
 			Interval string `json:"interval"`
@@ -113,32 +117,54 @@ type subscriptionsWire struct {
 	} `json:"subscriptions"`
 }
 
-// mrrCents returns the monthly-recurring-revenue contribution of org `org`'s
-// ACTIVE subscriptions, normalized to a monthly figure (a yearly plan counts as
-// price/12). Only "active"/"trialing" subscriptions count toward MRR; canceled or
-// past-due do not. Zero (not an error) when commerce is unconfigured, so a partial
-// deploy degrades to honest zero rather than a fabricated recurring number.
-func (c *commerceClient) mrrCents(ctx context.Context, org, user string) (int64, error) {
+// subSummary is the plan + MRR view of an org's subscriptions in ONE read: the
+// active plan name (the customer's tier), the normalized monthly recurring cents,
+// and whether any subscription is active. "pay-as-you-go" is the honest default
+// for a metered customer with no active subscription (not a fabricated tier).
+type subSummary struct {
+	Plan   string // active plan name, else "pay-as-you-go"
+	MRR    int64  // monthly-normalized recurring cents from active subs
+	Active bool   // any active/trialing subscription present
+}
+
+// subscriptionSummary reads /v1/billing/subscriptions ONCE and derives both the
+// plan tier and the MRR contribution, so the customer list/detail and the revenue
+// board share a single upstream read (DRY). Only "active"/"trialing" subscriptions
+// count; canceled/past-due do not. An honest zero/"pay-as-you-go" (not an error)
+// when commerce is unconfigured, so a partial deploy degrades to honest values.
+func (c *commerceClient) subscriptionSummary(ctx context.Context, org, user string) (subSummary, error) {
+	sum := subSummary{Plan: "pay-as-you-go"}
 	if !c.configured() {
-		return 0, nil
+		return sum, nil
 	}
 	q := url.Values{"user": {user}}
 	body, err := c.get(ctx, "/v1/billing/subscriptions", q, org)
 	if err != nil {
-		return 0, err
+		return sum, err
 	}
 	var w subscriptionsWire
 	if err := json.Unmarshal(body, &w); err != nil {
-		return 0, fmt.Errorf("commerce subscriptions decode: %w", err)
+		return sum, fmt.Errorf("commerce subscriptions decode: %w", err)
 	}
-	var mrr int64
 	for _, s := range w.Subscriptions {
 		switch strings.ToLower(strings.TrimSpace(s.Status)) {
 		case "active", "trialing":
-			mrr += monthlyNormalizedCents(s.Plan.Price, s.Plan.Interval)
+			sum.MRR += monthlyNormalizedCents(s.Plan.Price, s.Plan.Interval)
+			sum.Active = true
+			if name := strings.TrimSpace(s.Plan.Name); name != "" && sum.Plan == "pay-as-you-go" {
+				sum.Plan = name
+			}
 		}
 	}
-	return mrr, nil
+	return sum, nil
+}
+
+// mrrCents returns the monthly-recurring-revenue contribution of org `org`'s
+// ACTIVE subscriptions (see subscriptionSummary). Kept as the narrow reader the
+// finance/revenue folds call; it delegates so there is ONE subscriptions decode.
+func (c *commerceClient) mrrCents(ctx context.Context, org, user string) (int64, error) {
+	sum, err := c.subscriptionSummary(ctx, org, user)
+	return sum.MRR, err
 }
 
 // monthlyNormalizedCents normalizes a plan price to a monthly figure by its
@@ -208,6 +234,137 @@ func (c *commerceClient) costs(ctx context.Context, period string) (costReport, 
 		return out, fmt.Errorf("commerce costs decode: %w", err)
 	}
 	return out, nil
+}
+
+// depositResult is the /v1/billing/deposit 201 response — the transaction id of
+// the credit that landed. The operator surfaces it as the receipt of a grant.
+type depositResult struct {
+	TransactionID string `json:"transactionId"`
+	User          string `json:"user"`
+	Amount        int64  `json:"amount"`
+	Currency      string `json:"currency"`
+}
+
+// deposit grants credit to an org's wallet by creating a commerce Deposit
+// transaction (POST /v1/billing/deposit). This is the ONE money-in primitive the
+// admin credit action uses (refunds/comps/support) — it is symmetric with the
+// balance READ: the same X-Org-Id=<org> namespace + `user`=<org> subject the
+// creditsCents/usageRollup reads resolve, so a grant lands exactly where the
+// balance panel reads it. Authenticated with the admin S2S COMMERCE_SERVICE_TOKEN
+// (commerce's /billing admin group), which is the same credential the reads use.
+// Commerce's EdgeAuth additionally pins the body `user` to the X-Org-Id subject,
+// so the grant can never be mis-targeted to another org's wallet. amountCents must
+// be positive (a grant, never a silent debit) — the handler validates + caps it.
+func (c *commerceClient) deposit(ctx context.Context, org, user string, amountCents int64, currency, notes, tags string) (depositResult, error) {
+	var out depositResult
+	if !c.configured() {
+		return out, errUnconfigured
+	}
+	if currency == "" {
+		currency = "usd"
+	}
+	body, err := json.Marshal(map[string]any{
+		"user":     user,
+		"currency": currency,
+		"amount":   amountCents,
+		"notes":    notes,
+		"tags":     tags,
+	})
+	if err != nil {
+		return out, err
+	}
+	respBody, err := c.post(ctx, "/v1/billing/deposit", org, body)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		return out, fmt.Errorf("commerce deposit decode: %w", err)
+	}
+	return out, nil
+}
+
+// txn is one commerce ledger row (GET /v1/billing/transactions). Cents is the
+// canonical unit; Type is "deposit" (credit) or "withdraw" (usage/consumption).
+// CreatedAt is the RFC3339 event time the analytics fold buckets on.
+type txn struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	Amount    int64  `json:"amount"`
+	Currency  string `json:"currency"`
+	Tags      string `json:"tags,omitempty"`
+	Notes     string `json:"notes,omitempty"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// transactions reads an org's ledger (GET /v1/billing/transactions) for one
+// billing subject. The rows carry a real event timestamp + type, so the analytics
+// aggregator can derive signup-cohort retention, active-customer windows, churn,
+// and usage-over-time from actual consumption events — NOT a fabricated series.
+// `limit` bounds the read (the endpoint sorts newest-first). Returns an empty
+// slice (not an error) when commerce is unconfigured so a partial deploy degrades
+// to an honest empty history rather than a 5xx.
+func (c *commerceClient) transactions(ctx context.Context, org, user string, limit int) ([]txn, error) {
+	if !c.configured() {
+		return nil, nil
+	}
+	q := url.Values{"user": {user}}
+	if limit > 0 {
+		q.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	body, err := c.get(ctx, "/v1/billing/transactions", q, org)
+	if err != nil {
+		return nil, err
+	}
+	// Commerce serves the ledger WRAPPED as { count, transactions:[...] } (verified
+	// live). Decode that shape; tolerate a bare array too so a contract change in
+	// either direction degrades gracefully rather than silently reading zero rows
+	// (which would make the analytics honest-empty despite real usage).
+	var wrap struct {
+		Transactions []txn `json:"transactions"`
+	}
+	if err := json.Unmarshal(body, &wrap); err == nil && wrap.Transactions != nil {
+		return wrap.Transactions, nil
+	}
+	var rows []txn
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("commerce transactions decode: %w", err)
+	}
+	return rows, nil
+}
+
+// post performs one admin-authenticated commerce POST (JSON body) and returns the
+// raw response. It carries the SAME trust context as get: the admin S2S service
+// token as the bearer and X-Org-Id=<org> as the per-org namespace selector that
+// commerce's EdgeAuth trusts only after verifying the service token. A non-2xx is
+// an error (the caller surfaces it honestly + records the failed attempt in the
+// audit trail — a grant that did not land is never reported as success).
+func (c *commerceClient) post(ctx context.Context, path, org string, body []byte) ([]byte, error) {
+	u := c.base + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("commerce unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("commerce status %d", resp.StatusCode)
+	}
+	return respBody, nil
 }
 
 // get performs one admin-authenticated commerce GET and returns the raw body.
