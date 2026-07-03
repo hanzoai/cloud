@@ -1,4 +1,4 @@
-package kms_test
+package kmssvc_test
 
 // RED adversarial tests — attacking the embedded KMS org-scope + envelope.
 // These are PROOF-OF-BREACH probes; a PASS here means the attack was BLOCKED,
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/kmsembed"
+	"github.com/hanzoai/cloud/clients/kms"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 )
 
@@ -138,7 +138,7 @@ func TestVector2b_NoAPIControlledPathSplit(t *testing.T) {
 	t.Logf("path traversal '../a' rejected with 400")
 	// Where did it actually land? Check org "a" cannot see it, and the stored
 	// record's Path is NOT /orgs/a.
-	kc := deps.KMS.(*kmsembed.Client)
+	kc := deps.KMS.(*kms.Client)
 	// org a lists its root — must be empty of PWN.
 	metas, err := kc.List("/orgs/a", "default")
 	if err != nil {
@@ -157,11 +157,11 @@ func TestVector2b_NoAPIControlledPathSplit(t *testing.T) {
 // The store KEY is kms/secrets/{path}/{env}/{name} derived from the *query*
 // (path,name,env). The record's OWN Path/Name/Env JSON fields are what Open uses
 // to reconstruct the ciphertext AAD. store.Put keys on secret.Path/Name/Env, and
-// kmsembed always Seals with the SAME (path,name,env) it keys on — so key and
+// kms always Seals with the SAME (path,name,env) it keys on — so key and
 // fields agree. The LATENT risk: the envelope alone does not bind a record to its
 // store key; if any future/rogue writer keys a record at path P' while its
 // self-described Path is P (P != P'), Open still succeeds (it trusts the record).
-// This proves the isolation rests ENTIRELY on kmsembed.Put keying == sealing, and
+// This proves the isolation rests ENTIRELY on kms.Put keying == sealing, and
 // on the HTTP guard — NOT on cryptographic org-binding. Demonstrate the divergence
 // at the store layer (which the envelope is supposed to make safe).
 func TestDeepA_StoreKeyRecordDivergence(t *testing.T) {
@@ -192,7 +192,7 @@ func TestDeepA_StoreKeyRecordDivergence(t *testing.T) {
 	t.Logf("LATENT (defense-in-depth): envelope binds to the record's OWN fields, " +
 		"not to the store key. Cross-org isolation = store-key namespacing + HTTP guard ONLY. " +
 		"A raw-store writer that decouples key from fields is not caught by the crypto. " +
-		"kmsembed.Put keeps them in lockstep, so this is NOT reachable via /v1/kms — but the " +
+		"kms.Put keeps them in lockstep, so this is NOT reachable via /v1/kms — but the " +
 		"name-only DEK-wrap AAD means the DEK wrap itself provides ZERO path/env/org binding.")
 }
 
@@ -201,7 +201,7 @@ func TestDeepA_StoreKeyRecordDivergence(t *testing.T) {
 // the list prefix kms/secrets//orgs/x/{env}/ is NOT a prefix of //orgs/xy/... .
 func TestDeepB_SiblingOrgListPrefix(t *testing.T) {
 	app, deps := newApp(t, baseCfg(t, masterKeyB64(t)))
-	kc := deps.KMS.(*kmsembed.Client)
+	kc := deps.KMS.(*kms.Client)
 
 	// Seed secrets in org "x", "xy", and "x-attacker".
 	for _, org := range []string{"x", "xy", "x-attacker"} {
@@ -312,7 +312,7 @@ func TestVector4_NoCrossOrgExistenceOracle(t *testing.T) {
 // escape the org? Prove what actually happens.
 func TestVector7_NameWithSlashKeyShapeConfusion(t *testing.T) {
 	app, deps := newApp(t, baseCfg(t, masterKeyB64(t)))
-	kc := deps.KMS.(*kmsembed.Client)
+	kc := deps.KMS.(*kms.Client)
 
 	// Caller in org "x" PUTs a secret whose NAME contains a slash and env-like tail.
 	body, _ := json.Marshal(map[string]string{"name": "sub/EVIL", "value": "slash-in-name", "env": "default"})
