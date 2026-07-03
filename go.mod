@@ -7,6 +7,7 @@ go 1.26.4
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.1
 	github.com/coder/websocket v1.8.12
+	github.com/digitalocean/godo v1.197.0
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/hanzoai/commerce/metering v0.1.2
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
@@ -33,6 +34,8 @@ require (
 require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/zap-proto/http v0.2.0 // indirect
 )
 
