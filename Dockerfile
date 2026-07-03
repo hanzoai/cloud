@@ -39,13 +39,22 @@ RUN --mount=type=secret,id=gh_token \
     fi && \
     git clone --depth 1 --branch "${CONSOLE2_REF}" "${CONSOLE2_REPO}" . && \
     npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
-# Always emit /out. When console2 exposes a static-embed target it holds the real
-# bundle; otherwise /out stays EMPTY so the Go build keeps the committed fallback
-# shell. Never fail the image (a missing static target is a degrade, not an error).
+# Always emit /out. When console2 exposes a static-embed target AND it builds, /out
+# holds the real bundle; otherwise /out stays EMPTY so the Go build keeps the
+# committed fallback shell. Never fail the image — a static target that is missing
+# OR that fails to build is a degrade, not an error (the standalone console2
+# Deployment is the primary console; this embed is a same-origin convenience). A
+# console2 prerender/export crash (e.g. /signin Server-Components error) must NOT
+# take down the cloud backend image.
 RUN mkdir -p /out && \
     if npm run 2>/dev/null | grep -q ' build:embed'; then \
       echo ">> console2 build:embed → static bundle"; \
-      npm run build:embed && cp -r out/. /out/; \
+      if npm run build:embed && [ -d out ]; then \
+        cp -r out/. /out/; \
+        echo ">> embedded console2 static bundle"; \
+      else \
+        echo ">> console2 build:embed FAILED — degrading to committed fallback shell (non-fatal)"; \
+      fi; \
     else \
       echo ">> console2 has no static-embed target yet; cloud embeds the fallback shell"; \
     fi
