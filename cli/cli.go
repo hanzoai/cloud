@@ -62,6 +62,7 @@ var controlCommands = map[string]string{
 	"build":    "enqueue a platform-native (arcd) build",
 	"k8s":      "deploy-target helpers (current target)",
 	"config":   "view/edit ~/.hanzo/config preferences",
+	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
 }
 
 // IsControlVerb reports whether sub is a client-mode command (and therefore
@@ -388,6 +389,7 @@ func newRootCmd() *cobra.Command {
 		newBuildCmd(envOf, &f),
 		newK8sCmd(envOf, &f),
 		newConfigCmd(),
+		newSecurityCmd(envOf),
 	)
 	return root
 }
