@@ -19,14 +19,16 @@ import (
 // mount builds a zip app with admin mounted against the given upstream bases,
 // and returns a `do` helper that issues test requests through the whole app.
 func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, path string, hdr map[string]string) (*http.Response, []byte) {
-	do, _ := mountSvc(t, iamURL, commerceURL, healthURL)
+	do, _, _ := mountSvc(t, iamURL, commerceURL, healthURL)
 	return do
 }
 
-// mountSvc is mount but also returns the underlying svc so finance tests can
-// swap in a fake DigitalOcean client (s.do) before issuing a request. The
-// handlers read s.do live at request time, so an override here takes effect.
-func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *svc) {
+// mountSvc is mount but also returns the underlying svc (so finance tests can swap
+// in a fake DigitalOcean client, and the cockpit tests can attach an audit store)
+// AND the raw fiber app (so tests that need a request BODY can drive it directly —
+// the returned `do` sends a nil body). The handlers read s.* live at request time,
+// so an override before issuing a request takes effect.
+func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *svc, *fiber.App) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &svc{
@@ -48,6 +50,13 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
+	app.Get("/v1/admin/customers", s.guard(s.customers))
+	app.Get("/v1/admin/customers/:org", s.guard(s.customerDetail))
+	app.Post("/v1/admin/customers/:org/credit", s.guard(s.grantCredit))
+	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
+	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
+	app.Get("/v1/admin/revenue", s.guard(s.revenue))
+	app.Get("/v1/admin/analytics", s.guard(s.analytics))
 	fa := app.Fiber()
 
 	return func(method, path string, hdr map[string]string) (*http.Response, []byte) {
@@ -62,7 +71,7 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 		}
 		b, _ := io.ReadAll(resp.Body)
 		return resp, b
-	}, s
+	}, s, fa
 }
 
 // adminRoutes is every mounted /v1/admin route + its method — the full god-mode
@@ -80,6 +89,13 @@ var adminRoutes = []struct{ method, path string }{
 	{"GET", "/v1/admin/products"},
 	{"GET", "/v1/admin/finance"},
 	{"POST", "/v1/admin/sync"},
+	{"GET", "/v1/admin/customers"},
+	{"GET", "/v1/admin/customers/acme"},
+	{"POST", "/v1/admin/customers/acme/credit"},
+	{"POST", "/v1/admin/customers/acme/suspend"},
+	{"POST", "/v1/admin/customers/acme/reactivate"},
+	{"GET", "/v1/admin/revenue"},
+	{"GET", "/v1/admin/analytics"},
 }
 
 // TestGate_DeniesEveryRoute proves the non-negotiable: EVERY /v1/admin/* route is
