@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	luxlog "github.com/luxfi/log"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,11 +127,14 @@ func TestKMSSecretRef_Injective(t *testing.T) {
 }
 
 // TestKMSSecretCR_Shape proves the KMSSecret CR is the canonical kms-operator
-// shape: managed Secret + universalAuth + the per-app KMS scope; and the secret's
-// plaintext never appears in it.
+// shape AND carries the ORG-SCOPED coordinates that make the operator read exactly
+// what cloud sealed under its per-tenant auth: projectSlug=<org> (the /v1/kms/orgs/
+// {org} segment the guard checks against the authenticated owner), secretsPath=
+// platform/<app>, and the explicit key roster the CRD requires (no list endpoint).
+// The secret's plaintext never appears in it.
 func TestKMSSecretCR_Shape(t *testing.T) {
 	k := &k8sClient{kmsSync: newKMSSyncConfig()}
-	cr := k.kmsSecretCR("tenant-maxpower", "maxpower", "api")
+	cr := k.kmsSecretCR("tenant-maxpower", "maxpower", "api", []string{"API_KEY", "DB_PASSWORD"})
 	if got, _, _ := unstructured.NestedString(cr.Object, "apiVersion"); got != "secrets.lux.network/v1alpha1" {
 		t.Fatalf("apiVersion: %s", got)
 	}
@@ -142,11 +147,108 @@ func TestKMSSecretCR_Shape(t *testing.T) {
 	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "managedSecretReference", "secretName"); got != "api-env" {
 		t.Fatalf("managed secretName: %s", got)
 	}
-	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "secretsScope", "secretsPath"); got != "/platform/tenant-maxpower/api" {
-		t.Fatalf("secretsPath: %s", got)
+	scope := "spec.authentication.universalAuth.secretsScope"
+	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "secretsScope", "projectSlug"); got != "maxpower" {
+		t.Fatalf("%s.projectSlug must be the tenant org, got %q", scope, got)
 	}
-	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "hostAPI"); got == "" {
-		t.Fatal("hostAPI must be set")
+	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "secretsScope", "secretsPath"); got != "platform/api" {
+		t.Fatalf("%s.secretsPath: %q", scope, got)
+	}
+	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "secretsScope", "envSlug"); got != "default" {
+		t.Fatalf("%s.envSlug: %q", scope, got)
+	}
+	// keys REQUIRED (CRD MinItems=1) and sorted, byte-stable.
+	keys, _, _ := unstructured.NestedStringSlice(cr.Object, "spec", "authentication", "universalAuth", "secretsScope", "keys")
+	if len(keys) != 2 || keys[0] != "API_KEY" || keys[1] != "DB_PASSWORD" {
+		t.Fatalf("%s.keys must be the explicit sorted roster, got %v", scope, keys)
+	}
+	// credentialsRef is the PER-TENANT creds Secret in THIS namespace — never shared.
+	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "credentialsRef", "secretName"); got != "platform-kms-auth" {
+		t.Fatalf("credentialsRef.secretName must be the per-tenant creds Secret, got %q", got)
+	}
+	if got, _, _ := unstructured.NestedString(cr.Object, "spec", "authentication", "universalAuth", "credentialsRef", "secretNamespace"); got != "tenant-maxpower" {
+		t.Fatalf("credentialsRef.secretNamespace must be the tenant namespace, got %q", got)
+	}
+	// hostAPI is the ROOT (operator appends /v1/kms/…); a suffixed host would double
+	// the prefix on the operator's login + read URLs.
+	host, _, _ := unstructured.NestedString(cr.Object, "spec", "hostAPI")
+	if host == "" || strings.HasSuffix(host, "/v1/kms") {
+		t.Fatalf("hostAPI must be the KMS root without a /v1/kms suffix, got %q", host)
+	}
+}
+
+// fakeIdentity is a hermetic tenantKMSIdentity that hands back an org-bound
+// credential. It records the org it was asked for so a test can assert cloud never
+// requests one org's identity while provisioning another.
+type fakeIdentity struct {
+	mu       sync.Mutex
+	askedFor []string
+	fail     bool
+}
+
+func (f *fakeIdentity) EnsureOrgIdentity(_ context.Context, org string) (string, string, error) {
+	f.mu.Lock()
+	f.askedFor = append(f.askedFor, org)
+	f.mu.Unlock()
+	if f.fail {
+		return "", "", fmt.Errorf("iam provisioning unavailable")
+	}
+	// Credential is bound to THIS org (the concrete impl mints owner=<org>); the
+	// fake encodes that binding in the clientId so the projection can be asserted.
+	return "mi-" + org, "sec-" + org, nil
+}
+
+// TestEnsureTenantKMSAuth_FailClosedWhenUnprovisioned proves that with NO identity
+// provisioner wired (the default), cloud creates NO creds Secret — the operator
+// cannot authenticate, so the tenant's sync stays fail-closed pending. It NEVER
+// falls back to a shared reader.
+func TestEnsureTenantKMSAuth_FailClosedWhenUnprovisioned(t *testing.T) {
+	k := fakeK8s()
+	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: nil, log: luxlog.New("test")}
+	s.ensureTenantKMSAuth(context.Background(), "maxpower")
+	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
+		t.Fatal("no provisioner ⇒ no creds Secret must be created (fail-closed, never a shared reader)")
+	}
+}
+
+// TestEnsureTenantKMSAuth_ProvisionsPerTenant proves that WITH a provisioner, cloud
+// projects the tenant's OWN org-bound credential into tenant-<org> under the exact
+// data keys the operator reads (clientId/clientSecret), and asks the provisioner
+// only for that org — never a cross-tenant identity.
+func TestEnsureTenantKMSAuth_ProvisionsPerTenant(t *testing.T) {
+	k := fakeK8s()
+	id := &fakeIdentity{}
+	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: id, log: luxlog.New("test")}
+	ctx := context.Background()
+	s.ensureTenantKMSAuth(ctx, "maxpower")
+
+	sec, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(ctx, "platform-kms-auth", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("per-tenant creds Secret not projected: %v", err)
+	}
+	sd, _, _ := unstructured.NestedStringMap(sec.Object, "stringData")
+	if sd["clientId"] != "mi-maxpower" || sd["clientSecret"] != "sec-maxpower" {
+		t.Fatalf("creds Secret must carry the org-bound identity under clientId/clientSecret, got %v", sd)
+	}
+	// The provisioner was asked ONLY for maxpower — never a different tenant.
+	if len(id.askedFor) != 1 || id.askedFor[0] != "maxpower" {
+		t.Fatalf("provisioner must be asked only for the deploying org, got %v", id.askedFor)
+	}
+	// Idempotent: a second pass reuses the existing Secret (no error, no dup ask).
+	s.ensureTenantKMSAuth(ctx, "maxpower")
+	if len(id.askedFor) != 1 {
+		t.Fatalf("existing creds Secret must short-circuit provisioning, asked=%v", id.askedFor)
+	}
+}
+
+// TestEnsureTenantKMSAuth_ProvisionFailureStaysPending proves a provisioner error
+// leaves NO creds Secret (fail-closed) — never a partial or wrong-org credential.
+func TestEnsureTenantKMSAuth_ProvisionFailureStaysPending(t *testing.T) {
+	k := fakeK8s()
+	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: &fakeIdentity{fail: true}, log: luxlog.New("test")}
+	s.ensureTenantKMSAuth(context.Background(), "maxpower")
+	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
+		t.Fatal("provisioner failure must leave no creds Secret (fail-closed)")
 	}
 }
 
@@ -188,7 +290,7 @@ func TestObserveSecretSync(t *testing.T) {
 		t.Fatalf("absent CR → pending, got %q", st)
 	}
 	// Seed a KMSSecret with a Ready=True condition and assert "ready".
-	cr := k.kmsSecretCR("tenant-maxpower", "maxpower", "api")
+	cr := k.kmsSecretCR("tenant-maxpower", "maxpower", "api", []string{"DB_PASSWORD"})
 	_ = unstructured.SetNestedSlice(cr.Object, []any{
 		map[string]any{"type": "Ready", "status": "True", "message": ""},
 	}, "status", "conditions")
