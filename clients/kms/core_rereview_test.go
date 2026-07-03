@@ -1,4 +1,4 @@
-package kmsembed
+package kms
 
 // RED RE-REVIEW — attacking the new 3-way store-open switch in New() and the
 // hoisted validCoords. Goal: defeat the fail-secure switch via any

@@ -1,5 +1,7 @@
-// Package kms embeds luxfi/kms in-process inside the unified Hanzo Cloud binary
-// per HIP-0106 ("all Go embeds in cloud"), replacing the legacy Infisical fork.
+// core.go — the embedded luxfi/kms store that backs the kms subsystem in the
+// unified Hanzo Cloud binary per HIP-0106 ("all Go embeds in cloud"), replacing
+// the legacy Infisical fork. The package doc lives in kms.go; this file is the
+// cloud-free store core (New + the types.KMSClient impl + sealed store access).
 //
 // It has two faces, both backed by the SAME embedded luxfi/kms library:
 //
@@ -36,14 +38,14 @@
 // clear error whenever the MPC backend is not configured (CLOUD_KMS_MPC_ADDR /
 // CLOUD_KMS_MPC_VAULT_ID unset). A signature is NEVER fabricated.
 //
-// SECURITY — the REST surface (clients/kms) reuses cloud's ONE auth boundary
-// (SanitizeIdentity in serve.go establishes the validated principal; handlers
-// read c.Org()/c.IsAdmin()) rather than a parallel JWT stack. This package is the
-// cloud-free CLIENT core (the types.KMSClient impl + sealed store access); it
-// imports NO cloud package so build.go's BuildDeps can construct it without an
-// import cycle (cloud → clients/kmsembed → cloud/types only). The Fiber routes
-// that expose it live in the clients/kms subsystem, which imports this package.
-package kmsembed
+// SECURITY — the REST surface (Mount, in kms.go of THIS package) reuses cloud's
+// ONE auth boundary (SanitizeIdentity in serve.go establishes the validated
+// principal; handlers read c.Org()/c.IsAdmin()) rather than a parallel JWT stack.
+// The whole package imports NO cloud (only cloud/types + zap-proto/zip + luxfi),
+// so the composition root constructs New() once and passes the *Client into
+// Mount (via kms.Deps.Store) and into deps.KMS explicitly — no import cycle, no
+// global registry, no init() side effect.
+package kms
 
 import (
 	"context"
