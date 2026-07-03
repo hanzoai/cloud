@@ -10,9 +10,9 @@ import (
 
 // TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an enabled
 // Mount-fills-it subsystem's Client field nil — the subsystem Mount() installs
-// it. KMS is the exception (see TestBuildDeps_KMSEnabledIsInProcess): it is
-// constructed eagerly in BuildDeps because its store must exist before any
-// dependent subsystem mounts.
+// it. KMS is now constructed by the composition root (Serve, via kms.New) and
+// injected as deps.KMS — NOT by BuildDeps. See
+// TestBuildDeps_KMSConstructedByCompositionRoot.
 func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
@@ -27,12 +27,15 @@ func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
 	}
 }
 
-// TestBuildDeps_KMSEnabledIsInProcess verifies the HIP-0106 "embed KMS in cloud"
-// contract: when the kms subsystem (kmssvc) is enabled, deps.KMS is a live
-// in-process client (never nil, never a disabled stub) so other subsystems get a
-// working KMS via direct Go dispatch with no RPC. Absent a master key it still
-// resolves (health-only, fail-closed) — the point is that deps.KMS is populated.
-func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
+// TestBuildDeps_KMSConstructedByCompositionRoot verifies the HIP-0106 explicit-
+// wiring contract: BuildDeps NO LONGER constructs the embedded KMS store — the
+// composition root (Serve) does, via kms.New, and injects it as deps.KMS. So
+// BuildDeps with kmssvc enabled but no ZAP endpoint yields the fail-closed
+// DISABLED stub (non-nil), which Serve overwrites with the live store. The real
+// in-process store + its /v1/kms/* wiring are proven directly in
+// clients/kms/kms_test.go (kms.New + kms.Mount) and in the boot-parity smoke in
+// cmd/cloud/main_test.go.
+func TestBuildDeps_KMSConstructedByCompositionRoot(t *testing.T) {
 	cfg := &cloud.Config{
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
@@ -42,16 +45,16 @@ func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
 	deps := cloud.BuildDeps(cfg)
 
 	if deps.KMS == nil {
-		t.Fatal("deps.KMS: enabled kmssvc must give an in-process client, got nil")
+		t.Fatal("deps.KMS must be non-nil (the disabled stub), never nil")
 	}
-	// It must NOT be the fail-closed disabled stub — that stub returns IsDisabled
-	// errors; an in-process client (no master key) returns a master-key error.
+	// With KMS construction moved to Serve, BuildDeps returns the fail-closed
+	// disabled stub here (no ZAP endpoint configured). Serve overrides it.
 	_, err := deps.KMS.GetSecret(context.Background(), "any")
 	if err == nil {
-		t.Fatal("GetSecret with no master key must fail closed")
+		t.Fatal("GetSecret on the disabled stub must fail closed")
 	}
-	if clients.IsDisabled(err) {
-		t.Errorf("deps.KMS resolved to the DISABLED stub, want the in-process client: %v", err)
+	if !clients.IsDisabled(err) {
+		t.Errorf("BuildDeps must leave deps.KMS as the disabled stub (Serve fills the real store); got %v", err)
 	}
 }
 

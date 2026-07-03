@@ -1,11 +1,18 @@
-// Package kms is the Fiber-facing subsystem that exposes the embedded luxfi/kms
-// secrets-manager as /v1/kms/* on the unified Hanzo Cloud binary (HIP-0106).
+// Package kms is the embedded luxfi/kms secrets plane of the unified Hanzo Cloud
+// binary (HIP-0106), in the decomplected New/Mount composition-root form.
 //
-// It re-declares luxfi/kms's REST surface (cmd/kms is package main with no
-// mountable handler) on cloud's Fiber app, backed by the SAME embedded
-// SecretStore the in-process cloud.KMSClient uses (clients/kmsembed.Client,
-// built in build.go and handed through deps.KMS), and gated by cloud's ONE auth
-// boundary (SanitizeIdentity → c.Org()/c.IsAdmin()) — never a parallel JWT stack.
+// ONE package, two orthogonal faces backed by the SAME embedded SecretStore:
+//
+//	New(cfg) (*Client, error)     — the cloud-free store core (core.go): the
+//	                                 in-process types.KMSClient (GetSecret/PutSecret/
+//	                                 Sign) other subsystems call via deps.KMS, plus
+//	                                 the sealed store access the routes serve from.
+//	Mount(app *zip.App, deps Deps) — re-declares luxfi/kms's REST surface on cloud's
+//	                                 zip.App: /v1/kms/*, JWT-gated + org-scoped.
+//
+// The composition root (cmd/cloud → serve.go) constructs the *Client with New
+// ONCE, passes it into Mount (kms.Deps.Store) AND injects it as deps.KMS for the
+// other subsystems — explicit wiring, no global registry, no init() side effect.
 //
 //	GET    /v1/kms/health                 — real probe (503 in health-only mode); public
 //	GET    /v1/kms/config                 — SPA runtime config;                    public
@@ -18,6 +25,10 @@
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
 // as /orgs/{org}{subpath}, so one org can never address another org's records.
 // This mirrors clients/paassvc and clients/admin.
+//
+// The package imports ONLY zap-proto/zip + cloud/types + clients/principal + luxfi
+// (NO hanzoai/cloud). A subsystem depends on the 4 things it uses, declared in its
+// own Deps — not a 12-field god-struct.
 package kms
 
 import (
@@ -27,22 +38,36 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kmsembed"
 	"github.com/hanzoai/cloud/clients/principal"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// svc holds the embedded KMS client the routes serve from. A nil client means
-// KMS is not co-resident in this process (secrets served out-of-process or
-// disabled); the subsystem then mounts only the honest fail-closed health/config
-// so the binary never pretends to host secrets it cannot.
+// Deps is the NARROW dependency surface Mount declares — only what the routes
+// use. The composition root builds it from Config + the New() store and calls
+// Mount explicitly.
+type Deps struct {
+	// Store is the embedded secret store New() returns. nil ⇒ the REST surface
+	// mounts health/config only (secrets served out-of-process or disabled), so
+	// the binary never pretends to host secrets it cannot.
+	Store *Client
+	// Logger is the canonical Hanzo logger; Mount derives a scoped child.
+	Logger luxlog.Logger
+	// Brand / Env / IAMIssuer scope the public /v1/kms/config the console reads.
+	Brand     string
+	Env       string
+	IAMIssuer string
+}
+
+// svc holds the embedded KMS store the routes serve from. A nil store means KMS
+// is not co-resident in this process; the subsystem then mounts only the honest
+// fail-closed health/config.
 type svc struct {
-	kms *kmsembed.Client
+	kms *Client
 }
 
 // Mount wires /v1/kms/* onto app.
-func Mount(app *zip.App, deps cloud.Deps) error {
+func Mount(app *zip.App, deps Deps) error {
 	if app == nil {
 		return fmt.Errorf("kms.Mount: nil zip.App")
 	}
@@ -51,17 +76,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "kms")
 
-	// deps.KMS is the in-process kmsembed.Client (build.go pickKMSClient) when kms
-	// is co-resident. Anything else (RPC/disabled stub) means secrets are served
-	// elsewhere, so the REST surface mounts health/config only.
-	kc, _ := deps.KMS.(*kmsembed.Client)
-	s := &svc{kms: kc}
+	// deps.Store is the in-process store New() built. Nil means secrets are
+	// served elsewhere (RPC/disabled), so the REST surface mounts health/config only.
+	s := &svc{kms: deps.Store}
 
 	app.Get("/v1/kms/health", s.health)
 	app.Get("/v1/kms/config", configHandler(deps))
 
-	if kc == nil {
-		log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")
+	if deps.Store == nil {
+		log.Warn("kms REST mounted health-only: no in-process KMS store (secrets served out-of-process or disabled)")
 		return nil
 	}
 
@@ -72,33 +95,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	log.Info("kms subsystem mounted",
 		"prefix", "/v1/kms",
-		"ready", kc.Ready(),
-		"signing", kc.SigningConfigured(),
+		"ready", deps.Store.Ready(),
+		"signing", deps.Store.SigningConfigured(),
 		"brand", deps.Brand,
 		"env", deps.Env,
 	)
 	return nil
-}
-
-// init registers the subsystem. Registered as "kmssvc" (not "kms") for the same
-// reason clients/paassvc uses "paassvc": serve.go auto-mounts a generic
-// GET /v1/<name>/health BEFORE MountAll and zip is first-match-wins, so a name of
-// "kms" would shadow the real fail-closed /v1/kms/health with a fake 200. The
-// name "kmssvc" parks the generic liveness at the unrouted /v1/kmssvc/health and
-// lets the real probe own /v1/kms/health. The /v1/kms API prefix is independent
-// of the internal subsystem name (paassvc → /v1/paas). Enable with
-// --enable=kmssvc, or leave --enable empty for the default all-on bundle.
-//
-// Order 10 is KMS's reserved slot: it mounts before every dependent subsystem so
-// deps.KMS is a live in-process client by the time authz/commerce/ai mount.
-func init() {
-	cloud.Register("kmssvc", 10, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("kms.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
 }
 
 // guard wraps a secrets handler with the org-scope gate. Fail-closed: a request
@@ -127,7 +129,7 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 			return zip.ErrForbidden("caller may only access its own org's secrets")
 		}
 		if !s.kms.Ready() {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", kmsembed.ErrMasterKeyMissing.Error())
+			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
 		}
 		return h(ctx)
 	}
@@ -142,13 +144,13 @@ func (s *svc) health(ctx *zip.Ctx) error {
 	res := map[string]any{"service": "kms", "status": "ok"}
 	if s.kms == nil {
 		res["status"], res["ready"] = "degraded", false
-		res["error"] = "no in-process KMS client (secrets served out-of-process or disabled)"
+		res["error"] = "no in-process KMS store (secrets served out-of-process or disabled)"
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["signing"] = s.kms.SigningConfigured()
 	if !s.kms.Ready() {
 		res["status"], res["ready"] = "degraded", false
-		res["error"] = kmsembed.ErrMasterKeyMissing.Error()
+		res["error"] = ErrMasterKeyMissing.Error()
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["ready"] = true
@@ -159,7 +161,7 @@ func (s *svc) health(ctx *zip.Ctx) error {
 // console logs in against + the KMS API base). Kept under the /v1/kms namespace
 // (not /v1/admin) so a gateway that admin-gates the /v1/admin/* prefix cannot
 // block the console's legitimate public config fetch. No secrets, so it is public.
-func configHandler(deps cloud.Deps) zip.Handler {
+func configHandler(deps Deps) zip.Handler {
 	issuer := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/")
 	return func(ctx *zip.Ctx) error {
 		return ctx.JSON(http.StatusOK, map[string]any{
@@ -191,7 +193,7 @@ func (s *svc) listSecrets(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
 	sub := ctx.Query("path")
-	if !kmsembed.ValidSubpath(sub) {
+	if !ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	metas, err := s.kms.List(orgPath(org, sub), env)
@@ -215,7 +217,7 @@ func (s *svc) getSecret(ctx *zip.Ctx) error {
 	}
 	val, err := s.kms.Get(path, name, env)
 	if err != nil {
-		if errors.Is(err, kmsembed.ErrSecretNotFound) {
+		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -243,7 +245,7 @@ func (s *svc) putSecret(ctx *zip.Ctx) error {
 	if !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
-	if !kmsembed.ValidSubpath(req.Path) {
+	if !ValidSubpath(req.Path) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	path := orgPath(org, req.Path)
@@ -265,7 +267,7 @@ func (s *svc) deleteSecret(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("secret name is required and must be a clean '/'-separated path")
 	}
 	if err := s.kms.Delete(path, name, env); err != nil {
-		if errors.Is(err, kmsembed.ErrSecretNotFound) {
+		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -299,12 +301,12 @@ func validOrg(org string) bool {
 	return true
 }
 
-// The key-shape validators live in ONE place — clients/kmsembed — so the HTTP
-// boundary and the in-process store methods enforce identically (DRY). The
-// subsystem reuses kmsembed.ValidSegment / ValidSubpath here to return a specific
-// 400 early, before the request reaches the store.
-func validName(s string) bool { return kmsembed.ValidSegment(s, kmsembed.MaxNameLen) }
-func validEnv(s string) bool  { return kmsembed.ValidSegment(s, kmsembed.MaxEnvLen) }
+// The key-shape validators live in ONE place — core.go — so the HTTP boundary and
+// the in-process store methods enforce identically (DRY). validName/validEnv reuse
+// ValidSegment here to return a specific 400 early, before the request reaches the
+// store.
+func validName(s string) bool { return ValidSegment(s, MaxNameLen) }
+func validEnv(s string) bool  { return ValidSegment(s, MaxEnvLen) }
 
 // orgPath folds an org + an optional relative subpath into the store path,
 // namespacing every org under /orgs/{org}. "" subpath → /orgs/{org}.
@@ -329,7 +331,7 @@ func targetOf(org, sub string) (path, name string, ok bool) {
 	} else {
 		name = sub
 	}
-	if !validName(name) || !kmsembed.ValidSubpath(subpath) {
+	if !validName(name) || !ValidSubpath(subpath) {
 		return "", "", false
 	}
 	return orgPath(org, subpath), name, true
@@ -342,7 +344,3 @@ func envOr(env string) string {
 	}
 	return defaultEnv
 }
-
-// defaultEnv is the secret environment used when a request omits ?env=, matching
-// luxfi/kms's REST default.
-const defaultEnv = "default"

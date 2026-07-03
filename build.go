@@ -9,7 +9,6 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/clients"
-	"github.com/hanzoai/cloud/clients/kmsembed"
 )
 
 // BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
@@ -127,32 +126,14 @@ func pickIAMClient(cfg *Config, log luxlog.Logger) IAMClient {
 	return clients.DisabledIAM()
 }
 
-// pickKMSClient resolves deps.KMS. When the kms subsystem is co-resident
-// (Enabled("kmssvc")) it returns the IN-PROCESS Client backed by the embedded
-// luxfi/kms SecretStore under CLOUD_DATA_DIR — no external RPC. A store-open
-// failure is NOT fatal to the whole binary: it falls back to the disabled stub
-// (fail-closed) and logs, so a bad data dir degrades KMS rather than crashing
-// every subsystem. Absent co-residency the legacy ZAP-RPC + disabled fallbacks
-// apply (out-of-process KMS, or not wired).
-//
-// The internal subsystem name is "kmssvc" (see clients/kms.init — it avoids the
-// serve.go generic-health shadow on /v1/kms/health); the client gate keys on the
-// same name so "enabled" is one concept.
+// pickKMSClient resolves deps.KMS for the OUT-OF-PROCESS cases only. The
+// co-resident, in-process store is constructed ONCE by the composition root
+// (Serve, via kms.New) and injected as deps.KMS there — BuildDeps no longer
+// reaches into the embedded store, so KMS construction lives in exactly one place
+// (the explicit-wiring model, HIP-0106). Here: a configured ZAP addr → RPC client;
+// otherwise the fail-closed disabled stub, which Serve overwrites with the live
+// store when the kmssvc subsystem is enabled in this process.
 func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
-	if cfg.Enabled("kmssvc") {
-		c, err := kmsembed.New(kmsembed.Config{
-			DataDir:      cfg.DataDir,
-			MasterKeyB64: cfg.KMSMasterKeyRef,
-			MPCAddr:      cfg.KMSMPCAddr,
-			MPCVaultID:   cfg.KMSMPCVaultID,
-		}, log)
-		if err != nil {
-			log.Error("deps.KMS: embedded KMS unavailable, failing closed", "err", err)
-			return clients.DisabledKMS()
-		}
-		log.Info("deps.KMS → in-process (embedded luxfi/kms)", "ready", c.Ready(), "signing", c.SigningConfigured())
-		return c
-	}
 	if cfg.KMSZAPAddr != "" {
 		log.Info("deps.KMS → ZAP RPC", "addr", cfg.KMSZAPAddr)
 		return clients.KMSRPCAt(cfg.KMSZAPAddr)

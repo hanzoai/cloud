@@ -1,16 +1,17 @@
 package kms_test
 
-// Integration tests for the embedded KMS subsystem, exercised through the REAL
-// orchestrator path (BuildDeps → the init()-registered MountSpec → the zip/Fiber
-// stack), mirroring cmd/cloud/main_test.go. Requests run in-process via
-// app.Fiber().Test — no listener, no external KMS, no PostgreSQL.
+// Integration tests for the embedded KMS subsystem in the decomplected New/Mount
+// form: the test builds the app EXACTLY as the composition root does — kms.New →
+// zip.App → kms.Mount — with NO cloud import, no BuildDeps, no registry. That the
+// subsystem is fully exercisable without hanzoai/cloud IS the decomplection proof.
+// Requests run in-process via app.Fiber().Test — no listener, no external KMS.
 //
-// SanitizeIdentity does not run in this harness (it is wired in serve.go, not
-// MountAll), so a test simulates a validated principal by setting the same
-// identity headers SanitizeIdentity would emit: X-Org-Id and X-User-IsAdmin. In
-// production those are stripped from client input and re-issued only for a
-// JWT-validated principal, so the org-scope gate is real; here we drive it
-// directly.
+// SanitizeIdentity does not run in this harness (it is wired in serve.go, not the
+// subsystem), so a test simulates a validated principal by setting the same
+// identity headers SanitizeIdentity would emit: X-Org-Id + X-User-Id (+ optionally
+// X-User-IsAdmin). In production those are stripped from client input and re-issued
+// only for a JWT-validated principal, so the org-scope gate is real; here we drive
+// it directly.
 
 import (
 	"context"
@@ -26,14 +27,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kmsembed"
+	kms "github.com/hanzoai/cloud/clients/kms"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
-
-	// Register the kms subsystem (init) into cloud.Registry.
-	_ "github.com/hanzoai/cloud/clients/kms"
 )
+
+// tcfg is the minimal test config the composition root needs to stand up the kms
+// subsystem — no cloud.Config, no god-struct. enabled=false leaves the store nil
+// (out-of-process/disabled), mounting health/config only.
+type tcfg struct {
+	brand     string
+	iamIssuer string
+	dataDir   string
+	masterKey string
+	enabled   bool
+}
 
 // masterKeyB64 returns a fresh random 32-byte master key, base64-encoded as the
 // operator would inject it via CLOUD_KMS_MASTER_KEY_REF.
@@ -46,32 +55,41 @@ func masterKeyB64(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(k)
 }
 
-// newApp wires BuildDeps + the canonical middleware + MountAll for the kmssvc
-// subsystem, exactly like main()'s path. Returns the app and the built deps (so
-// tests can reach the in-process KMSClient directly).
-func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
+func baseCfg(t *testing.T, masterKey string) tcfg {
 	t.Helper()
-	deps := cloud.BuildDeps(cfg)
-	app := zip.New(zip.Config{Logger: deps.Logger})
-	app.Use(middleware.Recover())
-	app.Use(middleware.RequestID())
-	app.Use(middleware.Logger(deps.Logger))
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
-		t.Fatalf("MountAll: %v", err)
+	return tcfg{
+		brand:     "hanzo",
+		iamIssuer: "https://hanzo.id",
+		dataDir:   t.TempDir(),
+		masterKey: masterKey,
+		enabled:   true,
 	}
-	return app, deps
 }
 
-func baseCfg(t *testing.T, masterKey string) *cloud.Config {
+// newApp wires kms.New + the canonical middleware + kms.Mount, exactly like the
+// composition root's path. Returns the app and the in-process store (so tests can
+// reach the KMSClient facade directly).
+func newApp(t *testing.T, cfg tcfg) (*zip.App, *kms.Client) {
 	t.Helper()
-	return &cloud.Config{
-		Brand:           "hanzo",
-		Domain:          "api.hanzo.ai",
-		IAMIssuer:       "https://hanzo.id",
-		DataDir:         t.TempDir(),
-		Enable:          []string{"kmssvc"},
-		KMSMasterKeyRef: masterKey,
+	logger := luxlog.New("test")
+	var store *kms.Client
+	if cfg.enabled {
+		s, err := kms.New(kms.Config{DataDir: cfg.dataDir, MasterKeyB64: cfg.masterKey}, logger)
+		if err != nil {
+			t.Fatalf("kms.New: %v", err)
+		}
+		store = s
 	}
+	app := zip.New(zip.Config{Logger: logger})
+	app.Use(middleware.Recover())
+	app.Use(middleware.RequestID())
+	app.Use(middleware.Logger(logger))
+	if err := kms.Mount(app, kms.Deps{
+		Store: store, Logger: logger, Brand: cfg.brand, IAMIssuer: cfg.iamIssuer,
+	}); err != nil {
+		t.Fatalf("kms.Mount: %v", err)
+	}
+	return app, store
 }
 
 // TestHealthReadyWithMasterKey: with a master key configured, /v1/kms/health is
@@ -111,17 +129,12 @@ func TestHealthFailClosedWithoutMasterKey(t *testing.T) {
 }
 
 // TestKMSClientRoundtrip: a PutSecret→GetSecret roundtrip through the in-process
-// cloud.KMSClient (deps.KMS) against a temp CLOUD_DATA_DIR.
+// KMSClient (the store New returns) against a temp CLOUD_DATA_DIR.
 func TestKMSClientRoundtrip(t *testing.T) {
 	cfg := baseCfg(t, masterKeyB64(t))
-	_, deps := newApp(t, cfg)
-
-	kc := deps.KMS
+	_, kc := newApp(t, cfg)
 	if kc == nil {
-		t.Fatal("deps.KMS is nil; expected in-process client when kmssvc enabled")
-	}
-	if _, ok := kc.(*kmsembed.Client); !ok {
-		t.Fatalf("deps.KMS is %T, want *kmsembed.Client (in-process)", kc)
+		t.Fatal("store is nil; expected in-process client when kmssvc enabled")
 	}
 
 	ctx := context.Background()
@@ -140,7 +153,7 @@ func TestKMSClientRoundtrip(t *testing.T) {
 	}
 
 	// A missing secret is a clean not-found, not a panic or a fabricated value.
-	if _, err := kc.GetSecret(ctx, "does-not-exist"); !errors.Is(err, kmsembed.ErrSecretNotFound) {
+	if _, err := kc.GetSecret(ctx, "does-not-exist"); !errors.Is(err, kms.ErrSecretNotFound) {
 		t.Errorf("GetSecret(missing) err = %v, want ErrSecretNotFound", err)
 	}
 }
@@ -150,21 +163,16 @@ func TestKMSClientRoundtrip(t *testing.T) {
 // (never store secrets in plaintext).
 func TestSecretNotStoredInPlaintext(t *testing.T) {
 	dir := t.TempDir()
-	cfg := &cloud.Config{
-		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
-		DataDir: dir, Enable: []string{"kmssvc"}, KMSMasterKeyRef: masterKeyB64(t),
-	}
-	_, deps := newApp(t, cfg)
+	cfg := tcfg{brand: "hanzo", iamIssuer: "https://hanzo.id", dataDir: dir, masterKey: masterKeyB64(t), enabled: true}
+	_, kc := newApp(t, cfg)
 
 	marker := []byte("PLAINTEXT-MARKER-should-never-hit-disk")
-	if err := deps.KMS.PutSecret(context.Background(), "svc/DB_URL@main", marker); err != nil {
+	if err := kc.PutSecret(context.Background(), "svc/DB_URL@main", marker); err != nil {
 		t.Fatalf("PutSecret: %v", err)
 	}
 	// Close so the KV flushes to disk, then scan the store files for the marker.
-	if c, ok := deps.KMS.(*kmsembed.Client); ok {
-		if err := c.Close(); err != nil {
-			t.Fatalf("close: %v", err)
-		}
+	if err := kc.Close(); err != nil {
+		t.Fatalf("close: %v", err)
 	}
 
 	found := false
@@ -194,16 +202,16 @@ func TestSecretNotStoredInPlaintext(t *testing.T) {
 // error when no MPC backend is configured. It must NEVER return a signature.
 func TestSignFailsClosedNoMPC(t *testing.T) {
 	cfg := baseCfg(t, masterKeyB64(t)) // master key present, but no MPC
-	_, deps := newApp(t, cfg)
+	_, kc := newApp(t, cfg)
 
-	sig, err := deps.KMS.Sign(context.Background(), "validator-1", []byte("payload"))
+	sig, err := kc.Sign(context.Background(), "validator-1", []byte("payload"))
 	if err == nil {
 		t.Fatal("Sign returned nil error with no MPC configured — must fail closed")
 	}
 	if sig != nil {
 		t.Fatalf("Sign returned a %d-byte signature with no MPC — must never fabricate", len(sig))
 	}
-	if !errors.Is(err, kmsembed.ErrSignUnavailable) {
+	if !errors.Is(err, kms.ErrSignUnavailable) {
 		t.Errorf("Sign err = %v, want ErrSignUnavailable", err)
 	}
 }

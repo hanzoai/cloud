@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
+	"github.com/hanzoai/metrics"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
@@ -46,6 +48,33 @@ func Serve(enable []string) error {
 	}
 
 	deps := BuildDeps(cfg)
+
+	// ── Explicit KMS construction (HIP-0106 composition root) ────────────────────
+	// KMS is the first subsystem built EXPLICITLY, in the one place the graph is
+	// visible: kms.New constructs the embedded luxfi/kms store ONCE. The store is
+	// then (a) injected as deps.KMS so registry-mounted consumers (authz/commerce/
+	// ai) reach a live in-process client, and (b) handed to kms.Mount below. A
+	// store-open failure degrades KMS to fail-closed health-only (deps.KMS keeps the
+	// BuildDeps disabled stub) rather than crashing every subsystem.
+	//
+	// TRANSITIONAL: `deps.KMS = kmsStore` is the migration bridge — the ~34 not-yet-
+	// converted subsystems still read the deps god-struct. It is deleted (with Deps/
+	// BuildDeps/MountAll) once every subsystem is converted to explicit New/Mount.
+	var kmsStore *kms.Client
+	if cfg.Enabled("kmssvc") {
+		s, err := kms.New(kms.Config{
+			DataDir:      cfg.DataDir,
+			MasterKeyB64: cfg.KMSMasterKeyRef,
+			MPCAddr:      cfg.KMSMPCAddr,
+			MPCVaultID:   cfg.KMSMPCVaultID,
+		}, deps.Logger)
+		if err != nil {
+			deps.Logger.Error("kms: embedded store unavailable, serving fail-closed", "err", err)
+		} else {
+			kmsStore = s
+			deps.KMS = s // transitional bridge (see above)
+		}
+	}
 
 	app := zip.New(zip.Config{Logger: deps.Logger})
 
@@ -116,6 +145,36 @@ func Serve(enable []string) error {
 		app.Get("/v1/"+name+"/health", func(c *zip.Ctx) error {
 			return c.JSON(200, map[string]string{"service": name, "status": "ok"})
 		})
+	}
+
+	// ── Explicitly-wired subsystems (HIP-0106 composition root) ──────────────────
+	// These do NOT go through the global registry: main constructs their narrow
+	// deps and calls Mount directly, in order, so the whole graph is visible in one
+	// place. Each imports only zap-proto/zip (+ cloud/types) — never cloud. kms
+	// (order 10) mounts first, metrics (order 40) next; each owns a disjoint /v1
+	// namespace and needs nothing another subsystem fills, so preceding MountAll is
+	// safe. The remaining subsystems still mount via MountAll below (TRANSITIONAL —
+	// each moves up here as it is converted to New/Mount, and MountAll/Registry/Deps
+	// are deleted when the last one lands).
+	if cfg.Enabled("kmssvc") {
+		if err := kms.Mount(app, kms.Deps{
+			Store:     kmsStore,
+			Logger:    deps.Logger,
+			Brand:     cfg.Brand,
+			Env:       cfg.Env,
+			IAMIssuer: cfg.IAMIssuer,
+		}); err != nil {
+			return fmt.Errorf("mount kms: %w", err)
+		}
+	}
+	if cfg.Enabled("metrics") {
+		if err := metrics.Mount(app, metrics.Deps{
+			Logger:  deps.Logger,
+			DataDir: cfg.DataDir,
+			Brand:   cfg.Brand,
+		}); err != nil {
+			return fmt.Errorf("mount metrics: %w", err)
+		}
 	}
 
 	if err := MountAll(app, cfg, deps); err != nil {
@@ -200,6 +259,12 @@ func Serve(enable []string) error {
 	// is logged, not fatal, so one subsystem can't strand shutdown.
 	if err := ShutdownAll(shutdownCtx, cfg); err != nil {
 		deps.Logger.Warn("subsystem shutdown", "err", err)
+	}
+	// Explicit teardown for the explicitly-mounted subsystems (HIP-0106): the kms
+	// store's embedded KV is closed here — the composition root that opened it also
+	// closes it. This is the ShutdownAll analogue for the explicit-wiring path.
+	if kmsStore != nil {
+		_ = kmsStore.Close()
 	}
 	// Close the audit store last so any in-flight append has drained through the
 	// serialized writer and the SQLite file is flushed cleanly.
