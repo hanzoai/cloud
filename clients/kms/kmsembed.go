@@ -41,9 +41,9 @@
 // read c.Org()/c.IsAdmin()) rather than a parallel JWT stack. This package is the
 // cloud-free CLIENT core (the types.KMSClient impl + sealed store access); it
 // imports NO cloud package so build.go's BuildDeps can construct it without an
-// import cycle (cloud → clients/kmsembed → cloud/types only). The Fiber routes
+// import cycle (cloud → clients/kms → cloud/types only). The Fiber routes
 // that expose it live in the clients/kms subsystem, which imports this package.
-package kmsembed
+package kms
 
 import (
 	"context"

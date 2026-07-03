@@ -1,4 +1,4 @@
-package kms_test
+package kmssvc_test
 
 // RED: dual-mount precedence. With BOTH kmssvc (order 10, mounts FIRST, registers
 // PUBLIC /v1/kms/config) AND admin (order 146, registers GATED /v1/admin/{orgs,
