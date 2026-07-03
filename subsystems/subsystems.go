@@ -155,6 +155,13 @@ import (
 	// unauth read); honest 502 when an upstream is unreachable, never a fabricated row.
 	_ "github.com/hanzoai/cloud/clients/graph" // order 135 — /v1/indexers,/v1/oracles (chain data → luxfi indexer + graph)
 
+	// Security control plane: the native code-security surface — a dependency-free
+	// in-process secrets scanner (pattern + Shannon-entropy) over caller-submitted
+	// source, org-scoped findings persisted under DataDir, one metered unit per
+	// scan, audit-emitting. The first Semgrep-class capability shipped natively;
+	// findings store the redacted preview + SHA-256 fingerprint, NEVER the secret.
+	_ "github.com/hanzoai/cloud/clients/security" // order 136 — /v1/security/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
