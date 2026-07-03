@@ -309,14 +309,42 @@ var defaultJWTAudiences = []string{
 // jwtAudiencesFromEnv resolves the JWT audience allowlist for the identity
 // sanitizer. CLOUD_JWT_AUDIENCES wins; GATEWAY_ALLOWED_AUDIENCES (the gateway's
 // own override, shared so both agree) is honored next; otherwise the baked
-// default. Never empty, so the audience check is always enforced.
+// default. The white-label brand cloud audiences (BrandAudiences: <brand>-cloud)
+// are ALWAYS unioned in — baked like BrandIssuers so ONE binary accepts a
+// lux/zoo/pars token (aud=<brand>-cloud) even when the env override predates the
+// brands (fail-secure: only ADDS known-good brand client_ids, never an arbitrary
+// aud). Never empty, so the audience check is always enforced.
 func jwtAudiencesFromEnv() []string {
+	base := append([]string(nil), defaultJWTAudiences...)
 	for _, key := range []string{"CLOUD_JWT_AUDIENCES", "GATEWAY_ALLOWED_AUDIENCES"} {
 		if list := splitTrim(os.Getenv(key)); len(list) > 0 {
-			return list
+			base = list
+			break
 		}
 	}
-	return append([]string(nil), defaultJWTAudiences...)
+	return unionStrings(base, BrandAudiences())
+}
+
+// unionStrings appends every value of add not already present in base, preserving
+// order and dropping empties. Used to fold the always-trusted brand audiences into
+// the resolved allowlist without duplicating an env-supplied entry.
+func unionStrings(base, add []string) []string {
+	out := append([]string(nil), base...)
+	seen := make(map[string]struct{}, len(out)+len(add))
+	for _, s := range out {
+		seen[s] = struct{}{}
+	}
+	for _, s := range add {
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }
 
 // splitTrim splits a comma-separated list, trimming and dropping empties.
