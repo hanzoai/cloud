@@ -7,11 +7,19 @@ import (
 	"time"
 
 	openai "github.com/sashabaranov/go-openai"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/hanzoai/cloud/types"
 )
+
+// aiTracer emits the LLM/agent GenAI spans (OTel gen_ai.* semantic conventions)
+// shipped over the ZAP wire to o11y. One tracer for the whole clients package.
+var aiTracer = otel.Tracer("hanzo.ai/cloud")
 
 // httpAI is the real, in-process types.AIClient: it runs chat completions
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
@@ -90,6 +98,17 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	if model == "" {
 		model = a.defaultModel
 	}
+
+	// GenAI client span (OTel semantic conventions) — one span per LLM call,
+	// nested under any active agent-run span carried on ctx.
+	ctx, span := aiTracer.Start(ctx, "chat "+model, trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("gen_ai.system", "hanzo"),
+		attribute.String("gen_ai.operation.name", "chat"),
+		attribute.String("gen_ai.request.model", model),
+	)
+
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
 	defer cancel()
 
@@ -100,9 +119,17 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		},
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "chat completion failed")
 		return nil, fmt.Errorf("cloud: chat completion (model %q): %w", model, err)
 	}
+	span.SetAttributes(
+		attribute.String("gen_ai.response.model", resp.Model),
+		attribute.Int("gen_ai.usage.input_tokens", resp.Usage.PromptTokens),
+		attribute.Int("gen_ai.usage.output_tokens", resp.Usage.CompletionTokens),
+	)
 	if len(resp.Choices) == 0 {
+		span.SetStatus(codes.Error, "no choices")
 		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices", model)
 	}
 	return &types.ChatResponse{Content: resp.Choices[0].Message.Content}, nil
