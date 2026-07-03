@@ -164,6 +164,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
 	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
 
+	// Enablement registry (#30/#31) over the SAME overlay store (see enablement.go):
+	// global off|beta|ga (admin) + per-user/org beta self-opt-in (any authed user).
+	app.Get("/v1/admin/enablement", adminEnablementList)
+	app.Put("/v1/admin/enablement", adminEnablementSet)
+	app.Get("/v1/enablement", enablementView)
+	app.Post("/v1/enablement/optin", enablementOptIn)
+	app.Post("/v1/enablement/optout", enablementOptOut)
+
 	// Convenience aliases (the cleaner top-level surface from server.mjs).
 	// NOTE: the bare /v1/models alias is DELIBERATELY NOT mounted here. In the
 	// unified binary the AI subsystem owns the OpenAI-compatible /v1/models

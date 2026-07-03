@@ -92,6 +92,12 @@ func (s *svc) routes(app *zip.App) {
 	app.Post("/v1/console/keys", s.mintKey)
 	app.Delete("/v1/console/keys", s.revokeKey)
 	app.Post("/v1/console/onboard", s.onboard)
+	// The remaining standalone console server routes, ported native (task #41):
+	// waitlist join (session-bound email), embed-status (entitlement + reachability
+	// probe), and the HUSD wallet top-up (on-chain verify → commerce credit).
+	app.Post("/v1/console/waitlist", s.waitlistJoin)
+	app.Get("/v1/console/embed-status", s.embedStatus)
+	app.Post("/v1/console/topup/wallet", s.walletTopup)
 	app.Get("/v1/console/health", s.health)
 }
 
