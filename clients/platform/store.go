@@ -411,6 +411,29 @@ func (s *Store) ListApplications(ctx context.Context, org, projectID string) ([]
 	return out, rows.Err()
 }
 
+// ListAllApplications returns every application under org across ALL its
+// projects, newest-updated first. It is the org-wide input to the console
+// aggregates (environments/pipelines/builds/releases in console.go). Org is the
+// ONLY predicate — the SAME tenancy boundary as every other query — so it can
+// never surface another tenant's apps.
+func (s *Store) ListAllApplications(ctx context.Context, org string) ([]Application, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+appCols+` FROM platform_apps WHERE org=? ORDER BY updated_at DESC, id ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list all apps: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Application
+	for rows.Next() {
+		a, err := scanApp(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan app: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 func listAppsTx(ctx context.Context, tx *sql.Tx, org, projectID string) ([]Application, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT `+appCols+` FROM platform_apps WHERE org=? AND project_id=?`, org, projectID)
@@ -582,6 +605,27 @@ func (s *Store) ListDeployments(ctx context.Context, org, appID string) ([]Deplo
 	return out, rows.Err()
 }
 
+// ListDeploymentsByOrg returns every deployment for org across ALL apps,
+// newest-created first. Org-wide input to the console releases/pipelines
+// aggregates (console.go); org is the only tenancy predicate.
+func (s *Store) ListDeploymentsByOrg(ctx context.Context, org string) ([]Deployment, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentCols+` FROM platform_deployments WHERE org=? ORDER BY created_at DESC, id ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list deployments by org: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Deployment
+	for rows.Next() {
+		d, err := scanDeployment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan deployment: %w", err)
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 // ListBuildingDeployments returns every deployment still in the "building" state
 // across ALL orgs, oldest first. It is the input to the build reconciler
 // (reconcile.go), which owns the git build→deploy handoff. Because the query is
@@ -649,4 +693,26 @@ func (s *Store) GetBuild(ctx context.Context, org, id string) (Build, error) {
 		return Build{}, fmt.Errorf("get build: %w", err)
 	}
 	return b, nil
+}
+
+// ListBuildsByOrg returns every build record for org across ALL apps,
+// newest-created first. Org-wide input to the console builds aggregate
+// (console.go); org is the only tenancy predicate. These are REAL BuildKit build
+// records — the aggregate never fabricates a build that did not run.
+func (s *Store) ListBuildsByOrg(ctx context.Context, org string) ([]Build, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+buildCols+` FROM platform_builds WHERE org=? ORDER BY created_at DESC, id ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list builds by org: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Build
+	for rows.Next() {
+		b, err := scanBuild(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan build: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
 }
