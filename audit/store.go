@@ -34,10 +34,12 @@ import (
 	"sync"
 	"time"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
-	// graph (see clients/pricing, clients/provisioning). Blank import registers
-	// the "sqlite" driver name.
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // Mirror is the optional OLAP projection sink (the datastore/ClickHouse). It is
@@ -105,7 +107,7 @@ type CheckpointFunc func(cp Checkpoint)
 // the chain head from it, so a restart continues the SAME chain rather than
 // forking a new one. path may be ":memory:" for tests. mirror may be nil.
 //
-// modernc's "sqlite" driver; MaxOpenConns(1) serializes every statement against
+// the hanzoai/sqlite "sqlite" driver; MaxOpenConns(1) serializes every statement against
 // the file lock — the same single-writer discipline pricing/provisioning use,
 // here doubling as the chain's serialization guarantee.
 func Open(path string, mirror Mirror) (*Recorder, error) {
