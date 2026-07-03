@@ -232,6 +232,13 @@ func (s *svc) createProject(c *zip.Ctx, org string, body createReq) error {
 	if !slugRE.MatchString(slug) {
 		return zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
+	// A reserved label (api, admin, login, a brand term, …) may never become a
+	// project slug — so it can never be published to <slug>.hanzo.app and shadow a
+	// real app/api host. ONE reserved-list source (clients/sites/reserved.go),
+	// enforced here at create AND at BindHost.
+	if sites.IsReserved(slug) {
+		return zip.ErrBadRequest("slug is a reserved subdomain and cannot be used")
+	}
 	framework := strings.ToLower(strings.TrimSpace(body.Framework))
 	if framework == "" {
 		framework = "static"

@@ -24,9 +24,12 @@ import (
 func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
 	now := time.Now().Unix()
 	if err := s.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
-		if errors.Is(err, errHostTaken) {
+		switch {
+		case errors.Is(err, errHostTaken):
 			s.log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
-		} else {
+		case errors.Is(err, errReservedHost):
+			s.log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug)
+		default:
 			s.log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "err", err)
 		}
 	}
