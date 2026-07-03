@@ -87,3 +87,64 @@ func TestNewIdentityValidator_MultiIssuer(t *testing.T) {
 		t.Fatalf("validator must reject an untrusted issuer, set=%v", v.issuers)
 	}
 }
+
+// TestBrandAudiences proves every brand's cloud audience (<brand>-cloud) is derived
+// from the brands registry — one source of truth, mirroring BrandIssuers.
+func TestBrandAudiences(t *testing.T) {
+	got := BrandAudiences()
+	for _, want := range []string{"hanzo-cloud", "lux-cloud", "zoo-cloud", "pars-cloud", "bootnode-cloud"} {
+		found := false
+		for _, g := range got {
+			if g == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("BrandAudiences()=%v missing %q", got, want)
+		}
+	}
+}
+
+// TestJWTAudiencesFromEnv_BrandUnion proves the resolved audience allowlist ALWAYS
+// includes every brand's <brand>-cloud aud (so a lux token validates), whether the
+// list comes from the baked default or a hanzo-only env override — and that an
+// env-supplied entry is not duplicated.
+func TestJWTAudiencesFromEnv_BrandUnion(t *testing.T) {
+	has := func(list []string, v string) bool {
+		for _, s := range list {
+			if s == v {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Baked default path (no env).
+	os.Unsetenv("CLOUD_JWT_AUDIENCES")
+	os.Unsetenv("GATEWAY_ALLOWED_AUDIENCES")
+	def := jwtAudiencesFromEnv()
+	for _, want := range []string{"hanzo-cloud", "lux-cloud", "zoo-cloud", "pars-cloud"} {
+		if !has(def, want) {
+			t.Errorf("baked audiences %v missing brand aud %q", def, want)
+		}
+	}
+
+	// A legacy hanzo-only env override must STILL accept lux-cloud (brand union),
+	// with no duplicate of the env-supplied hanzo-cloud.
+	os.Setenv("GATEWAY_ALLOWED_AUDIENCES", "hanzo-app,hanzo-console,hanzo-cloud")
+	defer os.Unsetenv("GATEWAY_ALLOWED_AUDIENCES")
+	got := jwtAudiencesFromEnv()
+	if !has(got, "lux-cloud") {
+		t.Fatalf("hanzo-only env override must still accept lux-cloud, got %v", got)
+	}
+	n := 0
+	for _, s := range got {
+		if s == "hanzo-cloud" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("hanzo-cloud must appear exactly once (no duplicate), got %d in %v", n, got)
+	}
+}
