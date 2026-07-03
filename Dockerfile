@@ -16,23 +16,25 @@
 # at a pinned ref (CONSOLE2_REF) using the same gh_token BuildKit secret the Go
 # build uses for private modules.
 #
-# NOTE ON THE HONEST CURRENT STATE: console2 today ships 15 Next server route
-# handlers (app/**/route.ts) that hold KMS-sourced service tokens and mint
-# short-lived user tokens — so `next build` emits a Node server bundle, not a
-# static export, and `output: export` would fail. Until console2 exposes a
-# static-export target (npm run build:embed → out/) — or those server routes
-# land in cloud as native /v1 endpoints — this stage produces no /out and the Go
-# build embeds the committed fallback shell (webui/dist/index.html), which is a
-# real, same-origin /v1 bootstrap. The moment console2 emits out/, this stage
-# copies it and the SAME image serves the full @hanzo/gui console with zero Go
-# changes. The stage never fails the image: a missing static target degrades to
-# the shell, it does not error.
+# console2 exposes `npm run build:embed` (scripts/build-embed.mjs): it prunes the
+# Next server route handlers (BFF proxies — they collapse to the cloud /v1/* the
+# SPA calls same-origin), wraps the client catch-all pages for output:'export',
+# and neutralizes the root layout's request-time headers() read (the per-host
+# <title>, resolved client-side in the embed) so the STATIC export prerenders
+# clean — emitting out/. This stage runs it and copies out/ into /out, which the
+# Go build drops into webui/dist so //go:embed bakes the FULL @hanzo/gui console
+# into the ONE binary. The stage still degrades to the committed fallback shell,
+# non-fatally, if build:embed is ever absent or fails (a console2 export
+# regression must never take down the cloud backend image) — but the intended,
+# working path is the real bundle.
 FROM public.ecr.aws/docker/library/node:24-alpine AS console
 ARG CONSOLE2_REPO=https://github.com/hanzoai/console2.git
 ARG CONSOLE2_REF=main
 RUN apk add --no-cache git
 WORKDIR /console
-ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=6144
+# The static export prerenders every page (webpack compile + export prerender);
+# give the heap headroom so a large @hanzo/gui build never OOMs into the stub.
+ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \

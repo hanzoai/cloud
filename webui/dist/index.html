@@ -10,10 +10,11 @@
 
       This file exists so `//go:embed all:webui/dist` compiles and the ONE
       `hanzoai/cloud` binary always serves a same-origin console entry, even in
-      a plain `go build` (no Node toolchain). The cloud image's build pipeline
-      (Dockerfile) runs `npm run build` on hanzoai/console2 and OVERWRITES this
-      directory with the real static bundle before `go build`, so the shipped
-      image serves the full @hanzo/gui console. See webui.go + Dockerfile.
+      a plain `go build` (no Node toolchain). The build pipeline runs
+      `npm run build:embed` on hanzoai/console2 (a static export) and OVERWRITES
+      this directory with the real static bundle before `go build`, so the
+      shipped binary serves the full @hanzo/gui console. See webui.go, the
+      Makefile `webui` target, and the Dockerfile console stage.
 
       It is deliberately dependency-free and calls /v1 on its OWN origin — the
       same host that serves this HTML also serves the API, so the session cookie
