@@ -24,7 +24,6 @@ package sites
 
 import (
 	"context"
-	"io"
 	"mime"
 	"net/http"
 	"path"
@@ -46,11 +45,6 @@ import (
 // guard at the host boundary. A label with a dot, slash, uppercase, or leading/
 // trailing dash never matches, so `../otherorg`, `a.b`, and `WWW` all 404.
 var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
-
-// maxServeBytes caps a single served object. It matches the projectsvc per-file
-// deploy cap (64 MiB) so anything deployable is servable; a larger object (which
-// the deploy path could not have produced) is refused rather than buffered.
-const maxServeBytes = 64 << 20
 
 // Site is the authoritative binding for a published subdomain: the tenant (Org),
 // the S3 location (Bucket + Prefix), and the publish Status. Every field is
@@ -103,30 +97,26 @@ type Config struct {
 }
 
 // Server is the host-routed public site edge. It holds the S3 access path
-// (s3admin, the SAME credentials as the deploy blob store) plus the apex and
-// reserved-label set. It reads the package resolver at request time.
+// (s3admin, the SAME credentials as the deploy blob store) plus the apex. The
+// reserved-label policy is the package-level shared source (reserved.go), so
+// serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
-	apex     string
-	reserved map[string]bool
-	admin    s3admin.Admin
-	log      luxlog.Logger
+	apex  string
+	admin s3admin.Admin
+	log   luxlog.Logger
 }
 
-// New builds the Server from Config. An empty apex defaults to hanzo.app. The
-// reserved set always includes the empty label and www (the apex + its canonical
-// alias are never sites) on top of any operator-provided labels.
+// New builds the Server from Config. An empty apex defaults to hanzo.app.
+// Operator-supplied Reserved labels are registered into the shared reserved source
+// (ADDING to the baked-in defaults, never removing them), so createProject and
+// BindHost enforce the exact same set the serve gate does.
 func New(cfg Config, log luxlog.Logger) *Server {
 	apex := strings.ToLower(strings.TrimSpace(cfg.Apex))
 	if apex == "" {
 		apex = "hanzo.app"
 	}
-	reserved := map[string]bool{"": true, "www": true}
-	for _, r := range cfg.Reserved {
-		if r = strings.ToLower(strings.TrimSpace(r)); r != "" {
-			reserved[r] = true
-		}
-	}
-	return &Server{apex: apex, reserved: reserved, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	SetReservedExtra(cfg.Reserved)
+	return &Server{apex: apex, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
 // Middleware is the host-router. For a site host it serves the request and
@@ -160,7 +150,7 @@ func (s *Server) siteSlug(host string) (string, bool) {
 	if label == "" || strings.Contains(label, ".") {
 		return "", false // apex or multi-label host
 	}
-	if s.reserved[label] || !slugRE.MatchString(label) {
+	if IsReserved(label) || !slugRE.MatchString(label) {
 		return "", false
 	}
 	return label, true
@@ -171,6 +161,13 @@ func (s *Server) siteSlug(host string) (string, bool) {
 // outside `<Bucket>/<Prefix>/`.
 func (s *Server) serve(c *zip.Ctx, slug string) error {
 	c.SetHeader("X-Hanzo-Site", slug)
+
+	// A published site is a static read surface: only GET/HEAD. Anything else is
+	// 405 (hygiene + avoids cache-key confusion at the CDN).
+	if m := c.Method(); m != http.MethodGet && m != http.MethodHead {
+		c.SetHeader("Allow", "GET, HEAD")
+		return s.errorPage(c, http.StatusMethodNotAllowed, "method not allowed")
+	}
 
 	r := currentResolver()
 	if r == nil {
@@ -215,7 +212,14 @@ func (s *Server) serve(c *zip.Ctx, slug string) error {
 		if cc == "" {
 			cc = CacheControlFor(key, "")
 		}
-		return s.stream(c, obj, info, key, cc)
+		ct := contentType(key)
+		if ct == "" {
+			ct = info.ContentType
+		}
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		return s.streamObject(c, obj, info.Size, ct, cc, http.StatusOK)
 	}
 	return s.notFound(c, cli, site)
 }
@@ -254,45 +258,30 @@ func (s *Server) open(ctx context.Context, cli *minio.Client, bucket, key string
 	return obj, info, true
 }
 
-// stream writes the object body with the right Content-Type and Cache-Control.
-// The type is derived from the KEY extension (we control the upload, so the
-// extension is authoritative), falling back to the stored S3 type. The body is
-// buffered under maxServeBytes and written in one shot.
-func (s *Server) stream(c *zip.Ctx, obj *minio.Object, info minio.ObjectInfo, key, cacheControl string) error {
-	defer func() { _ = obj.Close() }()
-	if info.Size > maxServeBytes {
-		return s.errorPage(c, http.StatusInternalServerError, "object too large")
+// streamObject streams an S3 object straight to the client — NO full-object
+// buffering. This runs on the unauthenticated, gateway-bypassed edge, so buffering
+// (even bounded) would let concurrent large-asset requests OOM the pod; a direct
+// stream costs one small fasthttp copy buffer regardless of object size.
+//
+// Content-Length is set from info.Size (SendStream's size arg). fasthttp CLOSES the
+// object after the body is written (it implements io.Closer) — so we must NOT Close
+// it here (that would truncate the stream); the response writer owns the close.
+func (s *Server) streamObject(c *zip.Ctx, obj *minio.Object, size int64, contentType, cacheControl string, status int) error {
+	c.SetHeader("Content-Type", contentType)
+	if cacheControl != "" {
+		c.SetHeader("Cache-Control", cacheControl)
 	}
-	body, err := io.ReadAll(io.LimitReader(obj, maxServeBytes+1))
-	if err != nil || int64(len(body)) > maxServeBytes {
-		return s.errorPage(c, http.StatusInternalServerError, "read failed")
-	}
-	ct := contentType(key)
-	if ct == "" {
-		ct = info.ContentType
-	}
-	if ct == "" {
-		ct = "application/octet-stream"
-	}
-	c.SetHeader("Content-Type", ct)
-	c.SetHeader("Cache-Control", cacheControl)
-	return c.Bytes(http.StatusOK, body)
+	c.Status(status)
+	return c.Fiber().SendStream(obj, int(size))
 }
 
 // notFound serves the site's own 404.html when it published one, else a plain
-// default 404. The 404.html is fetched from the SAME prefix, so it too is
-// tenant-bounded.
+// default 404. The 404.html is fetched from the SAME prefix (tenant-bounded) and
+// streamed, not buffered.
 func (s *Server) notFound(c *zip.Ctx, cli *minio.Client, site Site) error {
 	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
 	if ok {
-		defer func() { _ = obj.Close() }()
-		if info.Size <= maxServeBytes {
-			if body, err := io.ReadAll(io.LimitReader(obj, maxServeBytes)); err == nil {
-				c.SetHeader("Content-Type", "text/html; charset=utf-8")
-				c.SetHeader("Cache-Control", "no-cache")
-				return c.Bytes(http.StatusNotFound, body)
-			}
-		}
+		return s.streamObject(c, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
 	}
 	return s.errorPage(c, http.StatusNotFound, "page not found")
 }
