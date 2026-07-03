@@ -93,6 +93,13 @@ type svc struct {
 	// sched is the long-running-agent scheduler; nil until started, stopped on
 	// Shutdown. It shares svc so it runs agents through the SAME runAgent path.
 	sched *scheduler
+	// bus is the in-process fan-out behind the live session/event stream (SSE +
+	// ZAP). Set in Mount; nil-safe (a direct-construct unit test skips fan-out).
+	bus *bus
+	// tasks is the seam to the hanzoai/tasks durable-execution engine that control
+	// commands forward to for task-backed sessions. Defaults to the disabled
+	// controller (record-only) until a live tasks client is wired in Mount.
+	tasks TaskController
 }
 
 var mounted *svc
@@ -233,6 +240,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		ai:    deps.AI,
 		log:   log,
 		bill:  cloud.NewResourceMeter(deps, meterKind),
+		bus:   newBus(),
+		// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
+		// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
+		// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
+		// to the engine's Signal/Cancel API (see sessions_tasks.go).
+		tasks: disabledTaskController{},
 	}
 	mounted = s
 
@@ -240,10 +253,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/agents", s.create)
 	// Static org-wide surfaces MUST register before the :name wildcard: Fiber
 	// matches routes in registration order, so a bare `/v1/agents/:name` would
-	// otherwise capture "metrics"/"activity" as a name and 404 them (Red route
-	// audit). Registering the literals first makes them win.
+	// otherwise capture "metrics"/"activity"/"sessions" as a name and 404 them
+	// (Red route audit). Registering the literals first makes them win.
 	app.Get("/v1/agents/metrics", s.metrics)
 	app.Get("/v1/agents/activity", s.activity)
+	// Live agent-session control plane: /v1/agents/sessions[/...]. Registered
+	// before :name for the same registration-order reason (and internally the
+	// static /stream precedes /:id).
+	s.mountSessions(app)
 	app.Get("/v1/agents/:name", s.get)
 	app.Patch("/v1/agents/:name", s.update)
 	app.Delete("/v1/agents/:name", s.del)
@@ -602,6 +619,12 @@ func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, cl
 		s.log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
 	}
 
+	// Make the run visible in the live session registry as a ROOT session (the
+	// same registry the @hanzo/dev outer-agent + subagent flows use). Best-effort:
+	// it NEVER fails the run — the run and its billing already happened. DRY: this
+	// is the ONE run path (HTTP + scheduler), so every run becomes a session here.
+	s.openRunSession(ctx, a, r, actor)
+
 	// Bill only a successful run (mirrors the edge gate: failed work is not
 	// charged). Rich attribution: product=agent (Provider), the agent's model,
 	// and the actor for the audit trail. Fire-and-forget on a background context.
@@ -897,6 +920,11 @@ func Shutdown(ctx context.Context) error {
 	}
 	if mounted.sched != nil {
 		mounted.sched.stop(ctx)
+	}
+	// Close the live-stream bus so every open SSE/ZAP subscriber's loop returns
+	// and its handler unblocks within the shutdown deadline.
+	if mounted.bus != nil {
+		mounted.bus.close()
 	}
 	var err error
 	if mounted.store != nil {
