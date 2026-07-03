@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -174,20 +175,100 @@ func newFakeIAM() *fakeIAM {
 	return f
 }
 
-// newFakeCommerce serves the billing reads with fixed cents so the money
-// aggregation is deterministic.
-func newFakeCommerce() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// fakeCommerce mimics the LIVE commerce billing contract (commerce >=1.46.8, the
+// 2026-07 per-org durability rework): the per-org wallet is resolved from the
+// TRUSTED X-Org-Id header (set only with the service-token bearer) and keyed under
+// the BARE org slug as the `user` subject. A wrong header (X-IAM-Org-Id) or a wrong
+// subject ("org/org") resolves to an EMPTY wallet — so this fake is a regression
+// guard for the reconciliation bug that made every admin money panel read $0 while
+// real balances existed (lux $10,000, maxpower $20,498). Verified against live
+// commerce /v1/billing/{balance,usage-rollup}.
+type fakeCommerce struct {
+	server          *httptest.Server
+	balances        map[string]int64 // org slug -> availableCents (credits)
+	spend           map[string]int64 // org slug -> consumedCents (month-to-date)
+	sawIAMOrgHeader bool             // true if the stale X-IAM-Org-Id header was ever sent
+}
+
+func newFakeCommerce() *fakeCommerce {
+	f := &fakeCommerce{
+		balances: map[string]int64{"acme": 5000, "hanzo": 5000},
+		spend:    map[string]int64{"acme": 1500, "hanzo": 1500},
+	}
+	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("X-IAM-Org-Id") != "" {
+			f.sawIAMOrgHeader = true
+		}
+		// Live commerce trusts ONLY X-Org-Id (with the service-token bearer) for the
+		// org namespace and keys the wallet under the bare org slug. Anything else
+		// (missing X-Org-Id, or user != org) resolves to an empty wallet.
+		org := r.Header.Get("X-Org-Id")
+		user := r.URL.Query().Get("user")
+		bal, spend := int64(0), int64(0)
+		if org != "" && user == org {
+			bal, spend = f.balances[org], f.spend[org]
+		}
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
-			io.WriteString(w, `{"consumedCents":1500,"overageCents":0,"balance":{"balanceCents":5000,"availableCents":5000}}`)
+			fmt.Fprintf(w, `{"consumedCents":%d,"overageCents":0,"balance":{"balanceCents":%d,"availableCents":%d}}`, spend, bal, bal)
 		case strings.HasSuffix(r.URL.Path, "/balance"):
-			io.WriteString(w, `{"user":"x","currency":"usd","balance":5000,"holds":0,"available":5000}`)
+			fmt.Fprintf(w, `{"user":%q,"currency":"usd","balance":%d,"holds":0,"available":%d}`, user, bal, bal)
+		case strings.HasSuffix(r.URL.Path, "/subscriptions"):
+			io.WriteString(w, `{"subscriptions":[]}`)
 		default:
 			w.WriteHeader(404)
 		}
 	}))
+	return f
+}
+
+// TestCommerce_ReconcilesWithXOrgIdBareSlug pins the exact live-commerce contract
+// the admin money aggregation depends on: the org selector is the TRUSTED X-Org-Id
+// header and the wallet subject is the BARE org slug (user=<org>) — NOT
+// X-IAM-Org-Id and NOT "org/org". This is the regression guard for the $0-fleet-
+// revenue bug (commerce.go had X-IAM-Org-Id; admin.go orgSubject had "org/org", so
+// every real balance read $0). /v1/admin/orgs must surface acme's real $50.00.
+func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
+	// orgSubject MUST be the bare slug (not "org/org").
+	if got := orgSubject("acme"); got != "acme" {
+		t.Fatalf("orgSubject(\"acme\") = %q, want \"acme\" (bare slug; \"acme/acme\" reads an empty commerce wallet)", got)
+	}
+
+	iam := newFakeIAM()
+	defer iam.server.Close()
+	commerce := newFakeCommerce()
+	defer commerce.server.Close()
+
+	do := mount(t, iam.server.URL, commerce.server.URL, "")
+	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
+	resp, body := do("GET", "/v1/admin/orgs", admin)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("orgs: got %d (body=%s)", resp.StatusCode, body)
+	}
+	var env struct {
+		Data []orgRow `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// acme (sorted first) must show its REAL money, proving the header + subject key.
+	var acme *orgRow
+	for i := range env.Data {
+		if env.Data[i].Org == "acme" {
+			acme = &env.Data[i]
+		}
+	}
+	if acme == nil {
+		t.Fatalf("acme org missing from %+v", env.Data)
+	}
+	if acme.CreditsCents != 5000 || acme.SpendCents != 1500 {
+		t.Errorf("acme money = credits %d / spend %d, want 5000/1500 — the money did NOT reconcile (stale X-IAM-Org-Id or org/org subject reads $0)", acme.CreditsCents, acme.SpendCents)
+	}
+	// The stale header must NEVER be sent.
+	if commerce.sawIAMOrgHeader {
+		t.Error("admin sent the stale X-IAM-Org-Id header — commerce reads X-Org-Id only")
+	}
 }
 
 // TestOrgs_RealAggregation drives /v1/admin/orgs against fake IAM + commerce and
@@ -198,9 +279,9 @@ func TestOrgs_RealAggregation(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerce()
-	defer commerce.Close()
+	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.URL, "")
+	do := mount(t, iam.server.URL, commerce.server.URL, "")
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
 		"Authorization": "Bearer operator-jwt", "Cookie": "iam_access_token=operator-jwt",
@@ -335,9 +416,9 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerce()
-	defer commerce.Close()
+	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.URL, "") // no o11y health → source not-ok
+	do := mount(t, iam.server.URL, commerce.server.URL, "") // no o11y health → source not-ok
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := do("GET", "/v1/admin/overview", admin)
@@ -391,9 +472,9 @@ func TestUsage_RealTotalsHonestEmptySeries(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerce()
-	defer commerce.Close()
+	defer commerce.server.Close()
 
-	do := mount(t, iam.server.URL, commerce.URL, "")
+	do := mount(t, iam.server.URL, commerce.server.URL, "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := do("GET", "/v1/admin/usage", admin)
