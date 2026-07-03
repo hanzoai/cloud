@@ -208,3 +208,33 @@ func TestListFiltersAndCounts(t *testing.T) {
 		t.Fatalf("empty org counts want 0/0/0, got %d/%d/%d", c2, ct2, o2)
 	}
 }
+
+// TestSummaryReflectsCreateImmediately locks the /v1/crm/summary contract: the
+// summary handler counts LIVE (s.Counts → SELECT COUNT per table on the same
+// store the writes hit), so a create/delete is reflected with ZERO lag. This
+// guards against a regression to an eventually-consistent materialized rollup —
+// which the console E2E caught as a stale +1. A create then a Counts in the same
+// synchronous flow must show the increment; a delete must show the decrement.
+func TestSummaryReflectsCreateImmediately(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+
+	if c, _, _, err := s.Counts(ctx, "o"); err != nil || c != 0 {
+		t.Fatalf("initial companies want 0, got %d err=%v", c, err)
+	}
+
+	if _, err := s.CreateCompany(ctx, Company{ID: "comp_now", Org: "o", Name: "Now Inc", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatalf("CreateCompany: %v", err)
+	}
+	// Same call the summary handler makes — must reflect the create immediately.
+	if c, _, _, err := s.Counts(ctx, "o"); err != nil || c != 1 {
+		t.Fatalf("summary must reflect the create immediately: companies want 1, got %d err=%v", c, err)
+	}
+
+	if _, err := s.DeleteCompany(ctx, "o", "comp_now"); err != nil {
+		t.Fatalf("DeleteCompany: %v", err)
+	}
+	if c, _, _, err := s.Counts(ctx, "o"); err != nil || c != 0 {
+		t.Fatalf("summary must reflect the delete immediately: companies want 0, got %d err=%v", c, err)
+	}
+}
