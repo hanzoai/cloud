@@ -113,7 +113,10 @@ type iamOrg struct {
 	CreatedTime string `json:"createdTime"`
 }
 
-// iamUser is the IAM User subset mapped into OperatorUser.
+// iamUser is the IAM User subset mapped into OperatorUser. AccessKey is decoded
+// ONLY to derive API-key PRESENCE (hasApiKey) for the customer detail — its VALUE
+// is never surfaced in any admin response (the hk- key is a credential, not a
+// display field), so no secret leaves this binary.
 type iamUser struct {
 	Owner          string `json:"owner"`
 	Name           string `json:"name"`
@@ -124,4 +127,5 @@ type iamUser struct {
 	LastSigninTime string `json:"lastSigninTime"`
 	IsAdmin        bool   `json:"isAdmin"`
 	IsForbidden    bool   `json:"isForbidden"`
+	AccessKey      string `json:"accessKey"`
 }
