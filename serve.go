@@ -152,6 +152,11 @@ func Serve(enable []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Durable ingest: embed the ONE tasks engine in-process + inject the per-org dialer
+	// into ai (long github/crawl/s3 ingests run as durable workflows; upload stays
+	// inline). Fail-soft — inline fallback if the engine can't start. See durable.go.
+	wireDurableIngest(ctx, deps)
+
 	// Health/metrics listener (HealthListenAddr, default :9090). Serves the
 	// liveness/readiness contract the platform probes hit (/healthz, /readyz)
 	// on a port SEPARATE from the public API, so a saturated/again-starting API
