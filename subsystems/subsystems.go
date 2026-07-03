@@ -129,6 +129,16 @@ import (
 	// footprint. Fails closed (503) without ZT_CLIENT_ID/ZT_CLIENT_SECRET.
 	_ "github.com/hanzoai/cloud/clients/zt" // order 134 — /v1/networks/*,/v1/mesh/services,/v1/edge/nodes (networking → Hanzo Zero Trust)
 
+	// Chain-data control plane: principal-gated facade over the Lux chain-data plane
+	// (luxfi/indexer explorer REST + luxfi/graph GraphQL). Serves the console's
+	// Indexer and Oracles pages: /v1/indexers (the deployment's per-network indexing
+	// status — chain/network/height/health from the indexer's /health + latest block)
+	// and /v1/oracles (on-chain price feeds from the graph's O-Chain PriceFeed
+	// registry). Chain data is a public ledger scoped per brand (each brand's cloud is
+	// wired to its OWN indexer/graph), so the tenancy boundary is principal-gating (no
+	// unauth read); honest 502 when an upstream is unreachable, never a fabricated row.
+	_ "github.com/hanzoai/cloud/clients/graph" // order 135 — /v1/indexers,/v1/oracles (chain data → luxfi indexer + graph)
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
