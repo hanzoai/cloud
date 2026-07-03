@@ -37,8 +37,14 @@ import (
 // KMS is not co-resident in this process (secrets served out-of-process or
 // disabled); the subsystem then mounts only the honest fail-closed health/config
 // so the binary never pretends to host secrets it cannot.
+//
+// iamTokenURL is the IAM client_credentials endpoint the /v1/kms/auth/login broker
+// exchanges a caller's clientId/clientSecret at. Empty ⇒ login fails closed (503):
+// cloud is NOT a token issuer, so with no IAM to broker to there is no way to mint
+// a validatable bearer.
 type svc struct {
-	kms *kms.Client
+	kms         *kms.Client
+	iamTokenURL string
 }
 
 // Mount wires /v1/kms/* onto app.
@@ -55,10 +61,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// is co-resident. Anything else (RPC/disabled stub) means secrets are served
 	// elsewhere, so the REST surface mounts health/config only.
 	kc, _ := deps.KMS.(*kms.Client)
-	s := &svc{kms: kc}
+	// tokenURL mirrors build.go's AI M2M identity resolution: {issuer}/v1/iam/oauth/
+	// token is IAM's client_credentials endpoint. The login broker exchanges a
+	// per-tenant machine-identity credential there for an owner-scoped IAM JWT.
+	tokenURL := ""
+	if iss := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"); iss != "" {
+		tokenURL = iss + "/v1/iam/oauth/token"
+	}
+	s := &svc{kms: kc, iamTokenURL: tokenURL}
 
 	app.Get("/v1/kms/health", s.health)
 	app.Get("/v1/kms/config", configHandler(deps))
+	// The login broker is PUBLIC (it IS the credential exchange) and independent of
+	// the local store: the kms-operator POSTs its per-tenant clientId/clientSecret
+	// here to mint the owner-scoped IAM bearer it then carries on the org-scoped
+	// secret reads. Mounted even in health-only mode so the auth handshake is
+	// consistent; it fails closed (503) when no IAM issuer is configured.
+	app.Post("/v1/kms/auth/login", s.login)
 
 	if kc == nil {
 		log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")

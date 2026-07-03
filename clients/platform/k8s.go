@@ -51,6 +51,14 @@ var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namesp
 var resourceQuotasGVR = schema.GroupVersionResource{Version: "v1", Resource: "resourcequotas"}
 var limitRangesGVR = schema.GroupVersionResource{Version: "v1", Resource: "limitranges"}
 
+// secretsGVR is the core/v1 Secret. cloud writes exactly ONE kind here: the
+// per-tenant KMS-auth creds Secret (secrets.go applyTenantKMSAuthSecret) the
+// KMSSecret CR's credentialsRef points at. The per-tenant ClusterRole grants only
+// get/create/delete on core secrets (no patch/update) — projection is create-if-
+// absent, and rotation deletes-then-recreates. cloud NEVER reads the app's own
+// managed <app>-env Secret (that is the operator's, materialized from KMS).
+var secretsGVR = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
+
 // selfSubjectAccessReviewsGVR is the authorization.k8s.io/v1 SelfSubjectAccessReview
 // virtual resource. cloud-api POSTs one to ask the apiserver, as its OWN identity,
 // "can I act in this namespace yet?" — the readiness probe that closes the
