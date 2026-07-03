@@ -52,25 +52,16 @@ var kinds = []string{"sql", "vector", "datastore", "kv", "search", "s3", "docdb"
 
 // unavailableKinds are kinds whose backend cannot currently grant a per-tenant-
 // SAFE credential. The control plane REFUSES to provision them — an honest 503
-// "not yet available" (the console renders "coming soon") — rather than mint a
-// cross-tenant capability or hand out a half-provisioned resource. This is the
-// security bar: never a shared/cluster-wide grant. Removing a kind here re-enables
-// it; do that ONLY once its backend can scope the grant to the single tenant DB.
+// "not yet available" — rather than mint a cross-tenant capability. This is the
+// security bar: never a shared/cluster-wide grant.
 //
-//   - datastore (ClickHouse): the deployment exposes no grant-capable admin — the
-//     available admin holds access_management but not ALL privileges WITH GRANT
-//     OPTION, so a provisioned per-tenant user cannot be granted usable DDL on its
-//     own database (server rejects GRANT ALL, Code 497). Unblocking is backend-side
-//     (a grant-capable admin on the datastore StatefulSet), not a provisioner change.
-//   - docdb (Mongo/FerretDB): hanzoai/docdb (DocumentDB) implements only cluster-
-//     wide roles — clusterAdmin (→ Postgres SUPERUSER) and readWriteAnyDatabase —
-//     with no per-database role, so a provisioned user cannot be scoped to its own
-//     tenant DB. The provisioner already requests the correct per-db `readWrite`
-//     role (docdbProvisioner.Create); it stays gated until FerretDB supports it.
-var unavailableKinds = map[string]string{
-	"datastore": "datastore provisioning is not yet available: the ClickHouse backend has no grant-capable per-tenant admin",
-	"docdb":     "docdb provisioning is not yet available: the document engine supports only cluster-wide roles, not per-tenant scoping",
-}
+// It is now EMPTY: datastore + docdb — the only two kinds a shared
+// ClickHouse/FerretDB could never scope a per-tenant role on — moved to the
+// DEDICATED-instance strategy (dedicated.go, dedicatedEngines), where the org
+// owns the whole instance so its admin credential is naturally tenant-scoped.
+// The mechanism stays so any FUTURE kind can be honest-gated before it can mint
+// a cross-tenant capability; a kind is never both gated and dedicated.
+var unavailableKinds = map[string]string{}
 
 // publicEndpoint returns the CUSTOMER-FACING host+port for a provisioned
 // resource. The internal admin address (e.g. vector.hanzo.svc:6333) is a
@@ -104,15 +95,29 @@ func publicEndpoint(kind string) (host string, port int) {
 	return host, port
 }
 
+// endpointFor is the customer-facing host+port for a resource. A DEDICATED
+// instance is reached at its OWN in-cluster Service (<instance>.tenant-<org>.svc)
+// — the org's app (which also runs in tenant-<org>) dials it directly; there is
+// no shared public host for it. A shared-logical resource is reached through the
+// public gateway (publicEndpoint). So the two strategies advertise the address
+// that actually routes to the resource, never a wrong shared host.
+func endpointFor(r Resource) (string, int) {
+	if _, dedicated := dedicatedEngines[r.Kind]; dedicated {
+		return r.Host, r.Port
+	}
+	return publicEndpoint(r.Kind)
+}
+
 // secretfulKinds are the kinds whose backend wires a real per-resource
 // credential (so the generated password is meaningful and gets sealed in KMS /
 // returned once). The others (vector, search, storage) authenticate with a
 // shared, out-of-band key, so no per-resource password is produced.
+// (datastore + docdb also carry a real per-instance admin credential, but the
+// dedicated strategy handles their secret lifecycle directly — see dedicated.go
+// — so they are NOT listed here, which only governs the shared-logical path.)
 var secretfulKinds = map[string]bool{
-	"sql":       true,
-	"kv":        true,
-	"datastore": true,
-	"docdb":     true,
+	"sql": true,
+	"kv":  true,
 }
 
 // nameRE constrains the user-supplied resource name to a DNS/identifier-safe
@@ -141,6 +146,11 @@ type svc struct {
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
 	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
 	bill *cloud.ResourceMeter
+	// orch is the cluster orchestrator for the DEDICATED-instance strategy
+	// (datastore, docdb). Nil off-cluster: dedicated create then fails closed 503.
+	orch orchestrator
+	// stopMeter halts the recurring footprint meter (set by startFootprintMeter).
+	stopMeter func()
 }
 
 type createResp struct {
@@ -205,6 +215,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		reg:   newRegistry(),
 		log:   log,
 		bill:  cloud.NewResourceMeter(deps, "provisioning"),
+		orch:  newOrchestrator(),
 	}
 	mounted = s
 
@@ -216,8 +227,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		app.Delete("/v1/"+k+"/:name", s.drop(k))
 	}
 
+	// Recurring per-org footprint meter for running dedicated instances.
+	s.startFootprintMeter()
+
 	log.Info("provisioning mounted",
 		"kinds", len(kinds),
+		"dedicated", len(dedicatedEngines),
+		"cluster", s.orch != nil && s.orch.Ready() == nil,
 		"kms", s.sec.Enabled(),
 		"brand", deps.Brand,
 		"env", deps.Env,
@@ -236,24 +252,15 @@ func init() {
 	})
 }
 
-// create provisions a new logical resource of kind for the caller's org.
+// create provisions a new resource of kind for the caller's org. Two strategies
+// share one preamble (auth, name validation, billing gate, dedup): the shared-
+// logical kinds create a resource inside a live shared backend; the dedicated
+// kinds (datastore, docdb) launch the org's OWN instance (createDedicated).
 func (s *svc) create(kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
-		}
-		prov := s.reg[kind]
-		if prov == nil {
-			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
-		}
-
-		// Honest availability gate. Some kinds have a provisioner wired but their
-		// backend cannot yet mint a per-tenant-SAFE credential; refuse with 503
-		// BEFORE billing or any backend write, so a customer is never handed a
-		// cross-tenant capability nor charged for a resource we won't create.
-		if reason, gated := unavailableKinds[kind]; gated {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", reason)
 		}
 
 		var body struct {
@@ -267,17 +274,24 @@ func (s *svc) create(kind string) zip.Handler {
 			return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 		}
 
+		// Honest availability gate (now empty, kept as the mechanism). Refuse a
+		// gated kind BEFORE billing or any write, so a customer is never handed a
+		// cross-tenant capability nor charged for a resource we won't create. A
+		// dedicated kind is never in this map.
+		if reason, gated := unavailableKinds[kind]; gated {
+			return zip.Errorf(http.StatusServiceUnavailable, "%s", reason)
+		}
+
 		ctx := c.Context()
 
 		// Pre-provision balance gate (fail-closed, per-org). Refuse BEFORE any
-		// backend resource is created: an unfunded org — or, in the default
-		// fail-closed posture, an unreachable commerce — gets 402/503 and nothing
-		// is provisioned (no free provisioning). Scoped to THIS caller's org (the
-		// same slug that namespaces the resource below and that #66's identity
-		// sanitizer derives from a validated JWT, not a spoofable header), so the
-		// charge can never target another tenant. fee is computed once and reused
-		// by the post-success debit; fee==0 (a free kind) or unconfigured billing
-		// makes this a no-op.
+		// resource is created: an unfunded org — or, in the default fail-closed
+		// posture, an unreachable commerce — gets 402/503 and nothing is
+		// provisioned. Scoped to THIS caller's org (the same slug that namespaces
+		// the resource, derived from a validated JWT, not a spoofable header), so
+		// the charge can never target another tenant. fee is computed once and
+		// reused by the post-success debit; fee==0 or unconfigured billing makes
+		// this a no-op. Applies to BOTH strategies.
 		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
 		if err := s.bill.Gate(ctx, org, kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
@@ -290,6 +304,17 @@ func (s *svc) create(kind string) zip.Handler {
 			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 		}
 
+		// DEDICATED-instance strategy (datastore, docdb): the org's OWN isolated
+		// instance, launched via an operator Datastore CR in tenant-<org>.
+		if e, dedicated := dedicatedEngines[kind]; dedicated {
+			return s.createDedicated(c, ctx, kind, org, name, e, fee)
+		}
+
+		// SHARED-logical strategy (sql, vector, kv, search, s3).
+		prov := s.reg[kind]
+		if prov == nil {
+			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
+		}
 		physical := physicalName(org, name)
 
 		// Global uniqueness guard (across ALL orgs/kinds). The fixed-width org
@@ -401,10 +426,10 @@ func (s *svc) list(kind string) zip.Handler {
 		}
 		out := make([]listItem, 0, len(rows))
 		for _, r := range rows {
-			ph, pp := publicEndpoint(r.Kind)
+			host, port := endpointFor(r)
 			out = append(out, listItem{
 				ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-				Host: ph, Port: pp, CreatedAt: r.CreatedAt,
+				Host: host, Port: port, CreatedAt: r.CreatedAt,
 			})
 		}
 		return c.JSON(http.StatusOK, out)
@@ -419,17 +444,23 @@ func (s *svc) get(kind string) zip.Handler {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
 		name := strings.ToLower(strings.TrimSpace(c.Param("name")))
-		r, err := s.store.Get(c.Context(), org, kind, name)
+		ctx := c.Context()
+		r, err := s.store.Get(ctx, org, kind, name)
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("resource not found")
 		}
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 		}
-		ph, pp := publicEndpoint(r.Kind)
+		// For a dedicated instance, reconcile provisioning -> ready from the
+		// operator's live CR status before answering (honest readiness).
+		if _, dedicated := dedicatedEngines[r.Kind]; dedicated {
+			r = s.reconcileDedicated(ctx, r)
+		}
+		host, port := endpointFor(r)
 		return c.JSON(http.StatusOK, getResp{
 			ID: r.ID, Name: r.Name, Kind: r.Kind, Status: r.Status,
-			Host: ph, Port: pp, Username: r.Username, Database: r.DBName,
+			Host: host, Port: port, Username: r.Username, Database: r.DBName,
 		})
 	}
 }
@@ -453,7 +484,15 @@ func (s *svc) drop(kind string) zip.Handler {
 			return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 		}
 
-		if prov := s.reg[kind]; prov != nil {
+		if _, dedicated := dedicatedEngines[kind]; dedicated {
+			// Tear down the org's dedicated instance (CR + admin Secret); the
+			// operator GCs the StatefulSet + Service + PVC. Removing the row below
+			// also stops the recurring footprint meter for this instance.
+			if err := s.dropDedicated(ctx, r); err != nil {
+				s.log.Error("deprovision instance failed", "kind", kind, "org", org, "name", name, "err", err)
+				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
+			}
+		} else if prov := s.reg[kind]; prov != nil {
 			if err := prov.Drop(ctx, r.PhysicalName, r.Username); err != nil {
 				s.log.Error("deprovision failed", "kind", kind, "org", org, "name", name, "err", err)
 				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
@@ -681,6 +720,10 @@ var mounted *svc
 func Shutdown(context.Context) error {
 	if mounted == nil || mounted.store == nil {
 		return nil
+	}
+	if mounted.stopMeter != nil {
+		mounted.stopMeter()
+		mounted.stopMeter = nil
 	}
 	err := mounted.store.Close()
 	mounted = nil
