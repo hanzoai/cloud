@@ -16,7 +16,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/brainwave",
-  "preview": "https://gallery.hanzo.ai/screenshots/brainwave-update-May2024.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/synapse.png"
  },
  {
   "slug": "zuzu-app",
@@ -34,7 +34,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/zuzu-app",
-  "preview": "https://gallery.hanzo.ai/screenshots/zuzu-next-app.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/unity.png"
  },
  {
   "slug": "bento-cards-v1-multipurpose-next-js",
@@ -52,7 +52,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v1-multipurpose-next-js",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v1-multipurpose-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/mosaic.png"
  },
  {
   "slug": "bento-cards-v1-multipurpose-react",
@@ -70,7 +70,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v1-multipurpose-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v1-multipurpose.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/mosaic-react.png"
  },
  {
   "slug": "bento-cards-v2-ai-next-js",
@@ -88,7 +88,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v2-ai-next-js",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v2-ai-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/matrix.png"
  },
  {
   "slug": "bento-cards-v2-ai-react",
@@ -106,7 +106,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v2-ai-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v2-ai.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/matrix.png"
  },
  {
   "slug": "bento-cards-v3",
@@ -160,7 +160,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v3-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v3-html-final.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/loop.png"
  },
  {
   "slug": "bento-cards-v4-html",
@@ -178,7 +178,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v4-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v4-html.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-3.png"
  },
  {
   "slug": "bento-cards-v4-react",
@@ -196,7 +196,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/bento-cards-v4-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/bento-v4-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/bento-3-2.png"
  },
  {
   "slug": "carsova",
@@ -232,7 +232,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/carsova-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/carsova-html-final.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/carsova.png"
  },
  {
   "slug": "innovise",
@@ -250,7 +250,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/innovise",
-  "preview": "https://gallery.hanzo.ai/screenshots/innovise.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/studio.png"
  },
  {
   "slug": "streamline-shadcn",
@@ -268,7 +268,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/streamline-shadcn",
-  "preview": "https://gallery.hanzo.ai/screenshots/streamline-shadcn.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/blocks.png"
  },
  {
   "slug": "beta-crm",
@@ -286,7 +286,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/beta-crm",
-  "preview": "https://gallery.hanzo.ai/screenshots/betacrm-html.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/beta.png"
  },
  {
   "slug": "beta-crm-duplicate",
@@ -322,7 +322,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/bitcloud-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/bitcloud-main.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/cipher-html.png"
  },
  {
   "slug": "bitcloud-react",
@@ -340,7 +340,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/bitcloud-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/bitcloud-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/cipher-react.png"
  },
  {
   "slug": "bruddle-dashboard",
@@ -359,7 +359,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/bruddle-dashboard",
-  "preview": "https://gallery.hanzo.ai/screenshots/bruddle.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/analytics.png"
  },
  {
   "slug": "square-dashboard",
@@ -377,7 +377,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/square-dashboard",
-  "preview": "https://gallery.hanzo.ai/screenshots/square-dashboard.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/analytics-dashboard.png"
  },
  {
   "slug": "fofood-store",
@@ -395,7 +395,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/fofood-store",
-  "preview": "https://gallery.hanzo.ai/screenshots/fofood-store.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/savor.png"
  },
  {
   "slug": "hygge-e-commerce-bootstrap",
@@ -413,7 +413,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/hygge-e-commerce-bootstrap",
-  "preview": "https://gallery.hanzo.ai/screenshots/hygge-bootstrap.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/hygge.png"
  },
  {
   "slug": "hygge-e-commerce-html",
@@ -449,7 +449,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/fitnesspro-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/fitnesspro.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/soar.png"
  },
  {
   "slug": "fitnesspro-react",
@@ -467,7 +467,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/fitnesspro-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/fitnesspro-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/soar.png"
  },
  {
   "slug": "folio-about",
@@ -683,7 +683,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/folio-full",
-  "preview": "https://gallery.hanzo.ai/screenshots/folio-full.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/folio.png"
  },
  {
   "slug": "folio-grid-2-columns",
@@ -791,7 +791,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/folio-index",
-  "preview": "https://gallery.hanzo.ai/screenshots/folio-main.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/folio.png"
  },
  {
   "slug": "folio-main",
@@ -953,7 +953,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/hidden-oasis",
-  "preview": "https://gallery.hanzo.ai/screenshots/hidden-oasis-html-final.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/hidden-oasis.png"
  },
  {
   "slug": "code-app-landing",
@@ -971,7 +971,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/code-app-landing",
-  "preview": "https://gallery.hanzo.ai/screenshots/code-app.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/construct.png"
  },
  {
   "slug": "code-marketing-landing",
@@ -989,7 +989,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/code-marketing-landing",
-  "preview": "https://gallery.hanzo.ai/screenshots/code-landing.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/deploy.png"
  },
  {
   "slug": "arch",
@@ -1007,7 +1007,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/arch",
-  "preview": "https://gallery.hanzo.ai/screenshots/arch.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/vault.png"
  },
  {
   "slug": "digiverse-studio",
@@ -1043,7 +1043,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/flowmint-portfolio",
-  "preview": "https://gallery.hanzo.ai/screenshots/flowmint-portfolio.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/mint.png"
  },
  {
   "slug": "kael-donovan",
@@ -1061,7 +1061,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/kael-donovan",
-  "preview": "https://gallery.hanzo.ai/screenshots/kael-donovan.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/prism.png"
  },
  {
   "slug": "kalli",
@@ -1097,7 +1097,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/rebel",
-  "preview": "https://gallery.hanzo.ai/screenshots/rebel-main.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/kinetic.png"
  },
  {
   "slug": "webcanvas",
@@ -1115,7 +1115,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/webcanvas",
-  "preview": "https://gallery.hanzo.ai/screenshots/webCanvas.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/canvas.png"
  },
  {
   "slug": "fusion-saas-nft",
@@ -1133,7 +1133,7 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/fusion-saas-nft",
-  "preview": "https://gallery.hanzo.ai/screenshots/fusion-v2-saas-nft.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/quantum.png"
  },
  {
   "slug": "garuda",
@@ -1151,7 +1151,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/garuda",
-  "preview": "https://gallery.hanzo.ai/screenshots/garuda.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/launch.png"
  },
  {
   "slug": "solo-saas",
@@ -1169,7 +1169,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/solo-saas",
-  "preview": "https://gallery.hanzo.ai/screenshots/solo-saas.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/solo.png"
  },
  {
   "slug": "teaser-saas-landing",
@@ -1187,7 +1187,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/teaser-saas-landing",
-  "preview": "https://gallery.hanzo.ai/screenshots/teaser-saas-landing.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/saas-landing.png"
  },
  {
   "slug": "xora-html",
@@ -1205,7 +1205,7 @@
   "tier": 3,
   "rating": 3,
   "source": "https://gallery.hanzo.ai/templates/xora-html",
-  "preview": "https://gallery.hanzo.ai/screenshots/xora-html.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/prism.png"
  },
  {
   "slug": "xora-react",
@@ -1223,7 +1223,7 @@
   "tier": 2,
   "rating": 4,
   "source": "https://gallery.hanzo.ai/templates/xora-react",
-  "preview": "https://gallery.hanzo.ai/screenshots/xora-react.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/prism-react.png"
  },
  {
   "slug": "simple-social",
@@ -1242,6 +1242,6 @@
   "tier": 1,
   "rating": 5,
   "source": "https://gallery.hanzo.ai/templates/simple-social",
-  "preview": "https://gallery.hanzo.ai/screenshots/simple-social-code.png"
+  "preview": "https://gallery.hanzo.ai/screenshots/circle.png"
  }
 ]
