@@ -1,0 +1,391 @@
+// Package sites is the public site-server for published projects: the
+// host-routed edge that turns `<slug>.hanzo.app` into the static site a user
+// deployed to OUR S3.
+//
+// It is NOT a /v1 API. It owns the ROOT path space for requests whose Host is a
+// site host (`<slug>.<apex>`, apex default hanzo.app). It is installed as the
+// FIRST middleware in the compose root (serve.go), before identity/billing, so a
+// public site GET never enters the authenticated API pipeline — a site is a
+// public artifact, not a tenant API call.
+//
+// Tenant isolation is the whole point (this is RED-reviewed). The org and the S3
+// prefix a request may read come ONLY from the store lookup keyed by the
+// validated subdomain slug — NEVER from the request path, a client header, or the
+// Host beyond the one validated label. One slug ⇒ exactly one `<org>/<slug>/` S3
+// prefix, hard-bounded, and the object key is rooted-clean so no `..`/encoded
+// traversal can escape that prefix into another project or org. See resolveKey +
+// its exhaustive test.
+//
+// The resolver (slug → {org,bucket,prefix,status}) is the projectsvc store,
+// injected via SetResolver at mount. sites does NOT import projectsvc (projectsvc
+// imports cloud, cloud imports sites — importing projectsvc here would form a
+// cycle); the store implements the tiny Resolver interface and registers itself.
+package sites
+
+import (
+	"context"
+	"io"
+	"mime"
+	"net/http"
+	"path"
+	"regexp"
+	"strings"
+	"sync"
+
+	minio "github.com/minio/minio-go/v7"
+	"github.com/zap-proto/zip"
+
+	luxlog "github.com/luxfi/log"
+
+	"github.com/hanzoai/cloud/clients/s3admin"
+)
+
+// slugRE is the subdomain-label grammar. It is byte-identical to projectsvc's
+// slug grammar (the slug IS the subdomain), so a label that could never be a
+// project slug is rejected before any store lookup — the injection/traversal
+// guard at the host boundary. A label with a dot, slash, uppercase, or leading/
+// trailing dash never matches, so `../otherorg`, `a.b`, and `WWW` all 404.
+var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
+
+// maxServeBytes caps a single served object. It matches the projectsvc per-file
+// deploy cap (64 MiB) so anything deployable is servable; a larger object (which
+// the deploy path could not have produced) is refused rather than buffered.
+const maxServeBytes = 64 << 20
+
+// Site is the authoritative binding for a published subdomain: the tenant (Org),
+// the S3 location (Bucket + Prefix), and the publish Status. Every field is
+// server-owned — produced by the store from the validated slug, never from the
+// request. Prefix is the hard tenant boundary for object reads.
+type Site struct {
+	Org    string
+	Slug   string
+	Bucket string
+	Prefix string
+	Status string
+}
+
+// Resolver maps a validated subdomain slug to its authoritative Site. It is the
+// projectsvc store (the ONE source of project truth). found=false ⇒ no such
+// published subdomain (honest 404); err ⇒ a real store failure (honest 500).
+type Resolver interface {
+	Resolve(ctx context.Context, slug string) (Site, bool, error)
+}
+
+var (
+	resolverMu sync.RWMutex
+	resolver   Resolver
+)
+
+// SetResolver installs the slug→Site resolver. projectsvc.Mount calls this once
+// with its store. Until it is set, every site request is an honest 404 (the
+// projects subsystem is not mounted), never a crash.
+func SetResolver(r Resolver) {
+	resolverMu.Lock()
+	resolver = r
+	resolverMu.Unlock()
+}
+
+func currentResolver() Resolver {
+	resolverMu.RLock()
+	r := resolver
+	resolverMu.RUnlock()
+	return r
+}
+
+// Config configures the site host-router. Apex is the zone whose subdomains are
+// site hosts (hanzo.app). Reserved is the set of subdomain labels that are NOT
+// sites (they belong to real app hosts) and must fall through to the normal
+// pipeline — the reserved-host exclusion that stops a site from shadowing a real
+// hanzo.app app or api.
+type Config struct {
+	Apex     string
+	Reserved []string
+}
+
+// Server is the host-routed public site edge. It holds the S3 access path
+// (s3admin, the SAME credentials as the deploy blob store) plus the apex and
+// reserved-label set. It reads the package resolver at request time.
+type Server struct {
+	apex     string
+	reserved map[string]bool
+	admin    s3admin.Admin
+	log      luxlog.Logger
+}
+
+// New builds the Server from Config. An empty apex defaults to hanzo.app. The
+// reserved set always includes the empty label and www (the apex + its canonical
+// alias are never sites) on top of any operator-provided labels.
+func New(cfg Config, log luxlog.Logger) *Server {
+	apex := strings.ToLower(strings.TrimSpace(cfg.Apex))
+	if apex == "" {
+		apex = "hanzo.app"
+	}
+	reserved := map[string]bool{"": true, "www": true}
+	for _, r := range cfg.Reserved {
+		if r = strings.ToLower(strings.TrimSpace(r)); r != "" {
+			reserved[r] = true
+		}
+	}
+	return &Server{apex: apex, reserved: reserved, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+}
+
+// Middleware is the host-router. For a site host it serves the request and
+// returns (terminal — the API pipeline is never entered). For every other host
+// it calls Continue() so the normal /v1 + console pipeline runs unchanged.
+func (s *Server) Middleware() zip.Handler {
+	return func(c *zip.Ctx) error {
+		slug, ok := s.siteSlug(c.Fiber().Hostname())
+		if !ok {
+			return c.Continue()
+		}
+		return s.serve(c, slug)
+	}
+}
+
+// siteSlug extracts the site slug from a Host, or reports that this is not a site
+// host. A host is a site iff it is exactly `<label>.<apex>` where <label> is a
+// single non-reserved DNS label matching slugRE. Multi-label hosts (a.b.apex),
+// the apex itself, reserved labels, and malformed labels are NOT sites — they
+// fall through to the normal pipeline.
+func (s *Server) siteSlug(host string) (string, bool) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i] // strip any :port
+	}
+	suffix := "." + s.apex
+	if !strings.HasSuffix(host, suffix) {
+		return "", false
+	}
+	label := strings.TrimSuffix(host, suffix)
+	if label == "" || strings.Contains(label, ".") {
+		return "", false // apex or multi-label host
+	}
+	if s.reserved[label] || !slugRE.MatchString(label) {
+		return "", false
+	}
+	return label, true
+}
+
+// serve resolves the slug to its Site and streams the requested object from the
+// project's S3 prefix. Every failure renders an honest page; nothing is ever read
+// outside `<Bucket>/<Prefix>/`.
+func (s *Server) serve(c *zip.Ctx, slug string) error {
+	c.SetHeader("X-Hanzo-Site", slug)
+
+	r := currentResolver()
+	if r == nil {
+		return s.errorPage(c, http.StatusNotFound, "site not found")
+	}
+	site, found, err := r.Resolve(c.Context(), slug)
+	if err != nil {
+		s.log.Error("resolve failed", "slug", slug, "err", err)
+		return s.errorPage(c, http.StatusInternalServerError, "temporarily unavailable")
+	}
+	if !found || site.Status != "live" {
+		return s.errorPage(c, http.StatusNotFound, "site not found")
+	}
+	if !s.admin.Configured() {
+		return s.errorPage(c, http.StatusServiceUnavailable, "storage not configured")
+	}
+	cli, err := s.admin.Client()
+	if err != nil {
+		return s.errorPage(c, http.StatusServiceUnavailable, "storage not configured")
+	}
+
+	// The cache tag lets Cloudflare purge exactly this site's assets on redeploy.
+	// It is derived from server-owned values (Org+Slug), never the request.
+	c.SetHeader("Cache-Tag", CacheTag(site.Org, site.Slug))
+
+	rel := resolveKey(c.Path())
+	// Candidate keys, tried in order: the exact object, then a directory-index
+	// fallback for extension-less paths (so /docs serves docs/index.html), then
+	// the SPA/site root index for the bare root. All candidates are prefix-bounded
+	// by objectKey (rooted-clean), so no candidate can escape the tenant prefix.
+	candidates := s.candidates(rel)
+	for _, key := range candidates {
+		obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, key))
+		if !ok {
+			continue
+		}
+		// The per-project cache override lives on the stored object's Cache-Control
+		// (set at deploy); honor it so the site-server path and the direct-S3 path
+		// return the same TTL. Fall back to the computed policy when the object
+		// carries none.
+		cc := info.Metadata.Get("Cache-Control")
+		if cc == "" {
+			cc = CacheControlFor(key, "")
+		}
+		return s.stream(c, obj, info, key, cc)
+	}
+	return s.notFound(c, cli, site)
+}
+
+// candidates returns the ordered object keys to try for a cleaned request path.
+// resolveKey never yields a trailing slash (path.Clean strips it), so a directory
+// request and an extension-less path are the same case: try the exact key, then
+// its index.html child.
+//   - ""            → index.html                    (site root)
+//   - "assets/a.js" → assets/a.js                    (a file with an extension)
+//   - "docs"        → docs, then docs/index.html     (file, else directory index)
+func (s *Server) candidates(rel string) []string {
+	switch {
+	case rel == "":
+		return []string{"index.html"}
+	case path.Ext(rel) == "":
+		return []string{rel, rel + "/index.html"}
+	default:
+		return []string{rel}
+	}
+}
+
+// open fetches an object and returns it plus its info, or ok=false when the key
+// is absent (or any read error — a site request never surfaces an S3 error to the
+// client, it just misses). The caller must Close the returned object.
+func (s *Server) open(ctx context.Context, cli *minio.Client, bucket, key string) (*minio.Object, minio.ObjectInfo, bool) {
+	obj, err := cli.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, minio.ObjectInfo{}, false
+	}
+	info, err := obj.Stat()
+	if err != nil {
+		_ = obj.Close()
+		return nil, minio.ObjectInfo{}, false
+	}
+	return obj, info, true
+}
+
+// stream writes the object body with the right Content-Type and Cache-Control.
+// The type is derived from the KEY extension (we control the upload, so the
+// extension is authoritative), falling back to the stored S3 type. The body is
+// buffered under maxServeBytes and written in one shot.
+func (s *Server) stream(c *zip.Ctx, obj *minio.Object, info minio.ObjectInfo, key, cacheControl string) error {
+	defer func() { _ = obj.Close() }()
+	if info.Size > maxServeBytes {
+		return s.errorPage(c, http.StatusInternalServerError, "object too large")
+	}
+	body, err := io.ReadAll(io.LimitReader(obj, maxServeBytes+1))
+	if err != nil || int64(len(body)) > maxServeBytes {
+		return s.errorPage(c, http.StatusInternalServerError, "read failed")
+	}
+	ct := contentType(key)
+	if ct == "" {
+		ct = info.ContentType
+	}
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	c.SetHeader("Content-Type", ct)
+	c.SetHeader("Cache-Control", cacheControl)
+	return c.Bytes(http.StatusOK, body)
+}
+
+// notFound serves the site's own 404.html when it published one, else a plain
+// default 404. The 404.html is fetched from the SAME prefix, so it too is
+// tenant-bounded.
+func (s *Server) notFound(c *zip.Ctx, cli *minio.Client, site Site) error {
+	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
+	if ok {
+		defer func() { _ = obj.Close() }()
+		if info.Size <= maxServeBytes {
+			if body, err := io.ReadAll(io.LimitReader(obj, maxServeBytes)); err == nil {
+				c.SetHeader("Content-Type", "text/html; charset=utf-8")
+				c.SetHeader("Cache-Control", "no-cache")
+				return c.Bytes(http.StatusNotFound, body)
+			}
+		}
+	}
+	return s.errorPage(c, http.StatusNotFound, "page not found")
+}
+
+// errorPage renders a minimal, honest HTML status page. It never leaks internal
+// detail — msg is a fixed, safe string chosen by the caller.
+func (s *Server) errorPage(c *zip.Ctx, status int, msg string) error {
+	c.SetHeader("Content-Type", "text/html; charset=utf-8")
+	c.SetHeader("Cache-Control", "no-cache")
+	body := "<!doctype html><html><head><meta charset=\"utf-8\"><title>" +
+		httpStatusText(status) + "</title></head><body style=\"font-family:system-ui;text-align:center;padding:4rem\"><h1>" +
+		httpStatusText(status) + "</h1><p>" + htmlEscape(msg) + "</p></body></html>"
+	return c.Bytes(status, []byte(body))
+}
+
+// resolveKey turns a request path into a cleaned, tenant-relative key fragment.
+// This is the traversal boundary: it roots the path at "/", runs path.Clean
+// (which resolves every "." and ".." segment against that root), then strips the
+// leading "/". The result provably contains no ".." segment, so joining it under
+// a fixed prefix can never escape that prefix — regardless of how many "..",
+// backslashes, or percent-encoded dots the client sends (fasthttp has already
+// percent-decoded + normalized c.Path(); this re-clean is the defensive guarantee
+// that does not depend on that normalization).
+func resolveKey(reqPath string) string {
+	p := strings.ReplaceAll(reqPath, `\`, "/")
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	clean := path.Clean(p)          // e.g. "/../../a" → "/a", "/a/./b" → "/a/b"
+	rel := strings.TrimPrefix(clean, "/")
+	if rel == "." {
+		return ""
+	}
+	return rel
+}
+
+// objectKey joins a tenant prefix with a cleaned relative key. rel comes from
+// resolveKey (no ".." segments) OR is a fixed literal ("index.html", "404.html"),
+// so the result is always within `<prefix>/`. This is the single join site —
+// tenant containment lives here and in resolveKey, nowhere else.
+func objectKey(prefix, rel string) string {
+	return prefix + "/" + rel
+}
+
+// contentType maps a key to a MIME type by extension.
+func contentType(key string) string { return mime.TypeByExtension(path.Ext(key)) }
+
+// CacheControlFor is the ONE canonical cache policy by asset class, used both when
+// WRITING an object at deploy (projectsvc/blob.go) and when SERVING one here, so a
+// site's TTL is identical on the site-server path and the direct-S3 path.
+//
+//   - HTML documents  → short browser TTL + long shared-cache TTL: a redeploy is
+//     seen fast (60s), while the CDN holds it for a day (purged instantly on
+//     redeploy by cache-tag). htmlOverride, when non-empty, replaces this for a
+//     project (the per-project cacheControl knob); it applies to documents only.
+//   - content-hashed / immutable assets → cache for a year (a new build changes
+//     the hash, so the URL is safe forever). NOT overridable — always correct.
+//   - everything else → a conservative middle TTL.
+func CacheControlFor(key, htmlOverride string) string {
+	switch path.Ext(key) {
+	case ".html", ".htm":
+		if strings.TrimSpace(htmlOverride) != "" {
+			return htmlOverride
+		}
+		return "public, max-age=60, s-maxage=86400"
+	case ".js", ".mjs", ".css", ".woff", ".woff2", ".png", ".jpg", ".jpeg",
+		".gif", ".svg", ".webp", ".avif", ".ico", ".ttf", ".otf", ".wasm":
+		if isFingerprinted(key) {
+			return "public, max-age=31536000, immutable"
+		}
+		return "public, max-age=3600"
+	default:
+		return "public, max-age=3600"
+	}
+}
+
+// fingerprintRE matches a content-hash segment in a filename (Vite/Next/webpack
+// emit e.g. `app.4f3a9c21.js` or `chunk-AB12CD34.css`). Such names are immutable:
+// a new build changes the hash, so the old URL is safe to cache forever.
+var fingerprintRE = regexp.MustCompile(`[.\-_][0-9a-fA-F]{8,}\.[a-z0-9]+$`)
+
+func isFingerprinted(key string) bool { return fingerprintRE.MatchString(path.Base(key)) }
+
+func htmlEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
+}
+
+func httpStatusText(code int) string {
+	if t := http.StatusText(code); t != "" {
+		return t
+	}
+	return "Error"
+}
