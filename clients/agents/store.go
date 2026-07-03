@@ -281,7 +281,8 @@ func (s *Store) Create(ctx context.Context, a Agent) error {
 	return nil
 }
 
-// Get returns the agent for (org,name) or errNotFound.
+// Get returns the agent for the exact (org,name) or errNotFound. It is the
+// precise name primitive; path-addressed handlers use Resolve (id-or-name).
 func (s *Store) Get(ctx context.Context, org, name string) (Agent, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE org=? AND name=?`, org, name)
 	a, err := scanAgent(row)
@@ -290,6 +291,28 @@ func (s *Store) Get(ctx context.Context, org, name string) (Agent, error) {
 	}
 	if err != nil {
 		return Agent{}, fmt.Errorf("get agent: %w", err)
+	}
+	return a, nil
+}
+
+// Resolve returns the agent identified by ref within org, matching either its
+// public id (the `agent_...` handle create and list hand back) OR its org-unique
+// name. This is the ONE lookup every path-addressed handler (get/update/delete/
+// run/runs) uses, so a just-created agent is immediately addressable by exactly
+// the identifier create/list returned — no id-vs-name split. If a ref somehow
+// equals one agent's id and another's name, the id match wins (the stable public
+// handle is authoritative). Tenancy is the org filter, so a ref belonging to
+// another tenant is errNotFound — fail-closed, never cross-org.
+func (s *Store) Resolve(ctx context.Context, org, ref string) (Agent, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+agentCols+` FROM agents WHERE org=? AND (id=? OR name=?)
+		 ORDER BY (id=?) DESC LIMIT 1`, org, ref, ref, ref)
+	a, err := scanAgent(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Agent{}, errNotFound
+	}
+	if err != nil {
+		return Agent{}, fmt.Errorf("resolve agent: %w", err)
 	}
 	return a, nil
 }
