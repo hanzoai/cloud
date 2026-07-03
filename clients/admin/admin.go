@@ -88,6 +88,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/compute", s.guard(s.compute))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
 
+	// Customer management — the operator cockpit. List (static) precedes the :org
+	// param route; the write actions are POST (distinct method), so none collide.
+	app.Get("/v1/admin/customers", s.guard(s.customers))
+	app.Get("/v1/admin/customers/:org", s.guard(s.customerDetail))
+	app.Post("/v1/admin/customers/:org/credit", s.guard(s.grantCredit))
+	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
+	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
+
+	// Fleet revenue aggregate + native SaaS analytics (retention/growth/churn).
+	app.Get("/v1/admin/revenue", s.guard(s.revenue))
+	app.Get("/v1/admin/analytics", s.guard(s.analytics))
+
 	logger.Info("admin surface mounted",
 		"prefix", "/v1/admin",
 		"iam", s.iam.configured(),
