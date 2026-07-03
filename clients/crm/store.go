@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	// modernc.org/sqlite is the pure-Go SQLite driver already in the cloud dep
-	// graph (prompts/agents/eval/provisioning use it). Blank import registers "sqlite".
-	_ "modernc.org/sqlite"
+	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
+	// the "sqlite" database/sql name under both build tags (cgo →
+	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
+	// modernc directly instead would double-register "sqlite" under CGO and
+	// panic at init. Blank import registers the driver.
+	_ "github.com/hanzoai/sqlite"
 )
 
 // Sentinel errors. Handlers map these to HTTP status codes:
