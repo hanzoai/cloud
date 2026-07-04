@@ -97,6 +97,70 @@ func TestStateMalformedFails(t *testing.T) {
 	}
 }
 
+// TestStateDotInjectionRejected proves the payload|mac split cannot be gamed: a
+// second '.' (splitting differently than the signer did), an empty MAC half, and
+// an empty payload half all fail — the MAC is bound to the exact payload substring
+// before the FIRST dot, and a base64url payload/MAC never itself contains a '.'.
+func TestStateDotInjectionRejected(t *testing.T) {
+	s := testSvc()
+	tok, _ := s.sign("acme", "slack", "n")
+	dot := strings.IndexByte(tok, '.')
+	payloadB64, macB64 := tok[:dot], tok[dot+1:]
+
+	cases := []string{
+		payloadB64 + "." + macB64 + ".extra", // trailing dot-injected segment
+		payloadB64 + "." + "." + macB64,      // MAC half starts with a dot → decode/verify fail
+		payloadB64 + ".",                     // empty MAC
+		"." + macB64,                         // empty payload
+		payloadB64 + macB64,                  // no separator
+	}
+	for _, bad := range cases {
+		if _, err := s.verify(bad, "slack"); err == nil {
+			t.Fatalf("dot-injected/degenerate token %q must fail verify", bad)
+		}
+	}
+}
+
+// TestStateMACCheckedBeforeParse proves the MAC is verified BEFORE the payload is
+// json-parsed: a token whose payload half is valid base64url of NON-JSON bytes,
+// carrying an attacker-chosen MAC, is rejected at the constant-time MAC gate and
+// never reaches (and never panics in) json.Unmarshal.
+func TestStateMACCheckedBeforeParse(t *testing.T) {
+	s := testSvc()
+	garbage := base64.URLEncoding.EncodeToString([]byte("this-is-not-json-{{{"))
+	forgedMAC := base64.URLEncoding.EncodeToString(make([]byte, 32)) // all-zero MAC
+	if _, err := s.verify(garbage+"."+forgedMAC, "slack"); err == nil {
+		t.Fatal("a non-JSON payload with a forged MAC must fail at the MAC gate, not parse")
+	}
+}
+
+// TestStateBadOrgRejected proves the state-derived org is validated inside verify:
+// even a token signed with the REAL key (so the MAC is valid) is rejected when its
+// org would smuggle path structure — so a callback can never fold a hostile org
+// into the KMS/store key, independent of the connect-boundary check.
+func TestStateBadOrgRejected(t *testing.T) {
+	s := testSvc()
+	for _, org := range []string{"bad/org", "..", "a b", "org\x00", ""} {
+		tok, err := s.sign(org, "slack", "n")
+		if err != nil {
+			t.Fatalf("sign %q: %v", org, err)
+		}
+		if _, err := s.verify(tok, "slack"); err == nil {
+			t.Fatalf("validly-signed state with hostile org %q must still fail verify", org)
+		}
+	}
+}
+
+// TestStateOverlongRejected proves an oversized token is rejected before any
+// base64 work — capping the allocation a forged callback can force.
+func TestStateOverlongRejected(t *testing.T) {
+	s := testSvc()
+	huge := strings.Repeat("A", maxStateLen+1) + "." + strings.Repeat("B", 64)
+	if _, err := s.verify(huge, "slack"); err == nil {
+		t.Fatal("token longer than maxStateLen must fail verify")
+	}
+}
+
 func TestResolveStateKey(t *testing.T) {
 	// Valid base64 of >=32 bytes is used verbatim.
 	key := make([]byte, 40)
