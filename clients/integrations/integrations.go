@@ -40,6 +40,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -65,6 +66,19 @@ const (
 	// Integrations are not environment-sharded (a connection is per-org, not
 	// per-env), so one stable env keeps store/read/delete addressing identical.
 	kmsEnv = "default"
+
+	// maxCodeLen bounds the OAuth `code` the callback accepts. A real authorization
+	// code is short (a few hundred bytes; well under 1 KiB); anything larger is
+	// hostile, so it is rejected before it is handed to a provider Exchange. This is
+	// the handler-level cap that also covers the in-process ZAP plane (which replays
+	// /v1 handlers without fasthttp's request-URI read-buffer limit).
+	maxCodeLen = 2048
+
+	// maxMetaLen bounds a provider-supplied NON-secret metadata field (account
+	// label, external id, bot user id, scope) at the ingest boundary. Display names
+	// can be long unicode, so 256 is generous — it only stops a hostile/oversized
+	// upstream field from bloating the per-org row.
+	maxMetaLen = 256
 )
 
 // OAuthConfig is a provider's resolved APP credentials, read from ENV at request
@@ -410,6 +424,9 @@ func (s *svc) callback(c *zip.Ctx) error {
 	if code == "" {
 		return s.failRedirect(c, p.ID, "missing authorization code")
 	}
+	if len(code) > maxCodeLen {
+		return s.failRedirect(c, p.ID, "authorization code too large")
+	}
 	if !p.Configured() {
 		return s.failRedirect(c, p.ID, "provider not configured")
 	}
@@ -422,6 +439,15 @@ func (s *svc) callback(c *zip.Ctx) error {
 		s.log.Warn("oauth exchange failed", "provider", p.ID, "org", payload.Org, "err", err)
 		return s.failRedirect(c, p.ID, "token exchange failed")
 	}
+	// Harden the provider-supplied NON-secret metadata at the framework ingest
+	// boundary — ONE place, every provider — before it is logged, stored, or
+	// reflected in the redirect. Strips control chars (kills log-line/separator
+	// injection via e.g. a crafted Slack workspace name) and bounds length. Secret
+	// token VALUES are never passed through here; they go straight to the KMS seal.
+	res.ExternalID = sanitizeMeta(res.ExternalID)
+	res.AccountLabel = sanitizeMeta(res.AccountLabel)
+	res.BotUserID = sanitizeMeta(res.BotUserID)
+	res.Scopes = sanitizeScopes(res.Scopes)
 	// Seal every returned token into the org's KMS namespace BEFORE writing the
 	// connection row, so a KMS failure leaves NO half-connected state advertising a
 	// token that was never stored.
@@ -527,14 +553,23 @@ func (s *svc) sortedProviderIDs() []string {
 
 // successRedirect 302s to {console}/integrations?connected={provider}&account=<label>.
 func (s *svc) successRedirect(c *zip.Ctx, provider, account string) error {
-	loc := s.consoleURL + "/integrations?connected=" + url.QueryEscape(provider) + "&account=" + url.QueryEscape(account)
-	return redirect(c, loc)
+	return redirect(c, consoleRedirectURL(s.consoleURL, "connected", provider, "account", account))
 }
 
 // failRedirect 302s to {console}/integrations?error={provider}&reason=<short msg>.
 func (s *svc) failRedirect(c *zip.Ctx, provider, reason string) error {
-	loc := s.consoleURL + "/integrations?error=" + url.QueryEscape(provider) + "&reason=" + url.QueryEscape(reason)
-	return redirect(c, loc)
+	return redirect(c, consoleRedirectURL(s.consoleURL, "error", provider, "reason", reason))
+}
+
+// consoleRedirectURL builds the ONE console-return URL shape both redirects use:
+// {base}/integrations?{statusKey}={provider}&{detailKey}={detail}. base is the
+// env-fixed console origin; every DYNAMIC segment (provider, and the possibly
+// provider-supplied detail such as a Slack workspace name) is query-escaped, so
+// it can never break out of the query into the path/host/scheme — nor inject a
+// CR/LF into the Location header. The redirect host is always the console origin.
+func consoleRedirectURL(base, statusKey, provider, detailKey, detail string) string {
+	return base + "/integrations?" + statusKey + "=" + url.QueryEscape(provider) +
+		"&" + detailKey + "=" + url.QueryEscape(detail)
 }
 
 // redirect writes a 302 with the Location header. stdlib-clean: no dependency on
@@ -572,8 +607,8 @@ func (s *svc) kmsGet(org, provider, name string) ([]byte, error) {
 
 func (s *svc) kmsDelete(org, provider, name string) error {
 	err := s.kms.Delete(kmsPath(org, provider), name, kmsEnv)
-	if err != nil && err == kms.ErrSecretNotFound {
-		return nil // idempotent
+	if errors.Is(err, kms.ErrSecretNotFound) {
+		return nil // idempotent — deleting an absent secret is not an error
 	}
 	return err
 }
@@ -693,4 +728,36 @@ func nonNil(xs []string) []string {
 		return []string{}
 	}
 	return xs
+}
+
+// sanitizeMeta hardens a provider-supplied, NON-secret metadata string (account
+// label, external id, bot user id, scope) at the framework ingest boundary: it
+// STRIPS ASCII C0 control characters and DEL — so a crafted value (a Slack
+// workspace name carrying an embedded CR/LF or NUL) cannot inject a log line,
+// smuggle a separator, or store an unprintable byte — and BOUNDS the length.
+// Printable Unicode (emoji, non-ASCII display names) is preserved. A byte-boundary
+// truncation is repaired with ToValidUTF8 so the stored value is always valid UTF-8.
+func sanitizeMeta(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+	if len(s) > maxMetaLen {
+		s = strings.ToValidUTF8(s[:maxMetaLen], "")
+	}
+	return s
+}
+
+// sanitizeScopes applies sanitizeMeta to each granted scope, dropping any that
+// sanitize to empty. One rule for every provider-supplied display string.
+func sanitizeScopes(xs []string) []string {
+	out := make([]string, 0, len(xs))
+	for _, x := range xs {
+		if x = sanitizeMeta(strings.TrimSpace(x)); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }
