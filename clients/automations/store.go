@@ -95,6 +95,10 @@ CREATE TABLE IF NOT EXISTS automations_runs (
   status          TEXT NOT NULL DEFAULT 'RUNNING',
   start_time      INTEGER NOT NULL DEFAULT 0,
   finish_time     INTEGER NOT NULL DEFAULT 0,
+  -- metered is the EXACTLY-ONCE billing/audit idempotency flag: a run is metered
+  -- + audited by whichever caller flips it 0→1 (ClaimMeter), so the manual, MCP,
+  -- and scheduled-cron entrypoints together bill a run at most once (MED-1).
+  metered         INTEGER NOT NULL DEFAULT 0,
   created         INTEGER NOT NULL,
   updated         INTEGER NOT NULL
 );
@@ -341,6 +345,36 @@ func (s *Store) CreateRun(ctx context.Context, r FlowRun) (FlowRun, error) {
 		return FlowRun{}, fmt.Errorf("insert run: %w", err)
 	}
 	return r, nil
+}
+
+// CreateRunIfAbsent inserts a run row keyed on its id, doing NOTHING if it already
+// exists. It reports whether THIS call created the row. Idempotent by run id (=the
+// workflow execution id), so a retried run-start bookkeeping step, or a manual
+// handler + the durable path racing to record the same run, converge on one row.
+func (s *Store) CreateRunIfAbsent(ctx context.Context, r FlowRun) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO automations_runs (`+runCols+`) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`,
+		r.ID, r.Org, r.FlowID, r.FlowVersionID, r.WorkflowID, r.Status,
+		r.StartTime, r.FinishTime, r.Created, r.Updated)
+	if err != nil {
+		return false, fmt.Errorf("insert run if absent: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ClaimMeter atomically flips the run's metered flag 0→1 for (org,id) and reports
+// whether THIS call won the flip. It is the exactly-once billing gate: only the
+// winner meters + audits the run, so no entrypoint double-bills a run (MED-1). The
+// (org,id) predicate keeps the claim tenant-scoped.
+func (s *Store) ClaimMeter(ctx context.Context, org, id string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE automations_runs SET metered=1 WHERE org=? AND id=? AND metered=0`, org, id)
+	if err != nil {
+		return false, fmt.Errorf("claim meter: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 func (s *Store) GetRun(ctx context.Context, org, id string) (FlowRun, error) {

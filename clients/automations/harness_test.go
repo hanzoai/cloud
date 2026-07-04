@@ -11,6 +11,7 @@ import (
 
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -28,6 +29,34 @@ func newApp(t *testing.T) *zip.App {
 	}
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 	return app
+}
+
+// newAppWithAudit mounts the subsystem with a REAL in-memory audit recorder so a
+// test can read the tamper-evident trail back and assert outcomes (LOW-1) and
+// exactly-once run bookkeeping (MED-1). Returns the recorder for querying.
+func newAppWithAudit(t *testing.T) (*zip.App, *audit.Recorder) {
+	t.Helper()
+	rec, err := audit.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("audit.Open: %v", err)
+	}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Audit: rec}
+	if err := Mount(app, deps); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+	return app, rec
+}
+
+// auditCount returns how many records match (org, action) in the recorder.
+func auditCount(t *testing.T, rec *audit.Recorder, org, action string) int {
+	t.Helper()
+	rows, _, err := rec.Query(context.Background(), audit.Filter{Org: org, Action: action, Limit: 1000})
+	if err != nil {
+		t.Fatalf("audit query: %v", err)
+	}
+	return len(rows)
 }
 
 type httpResult struct {
