@@ -96,7 +96,11 @@ func init() {
 // unconfigured, in ONE place, before any handler touches the controller.
 func (s *svc) gate(c *zip.Ctx) (string, error) {
 	if !s.cl.configured() {
-		return "", zip.Errorf(http.StatusServiceUnavailable, "zt is not configured (ZT_CLIENT_ID/ZT_CLIENT_SECRET not set)")
+		// Customer-facing body names NO internal env/config (the Warn log at Mount
+		// records ZT_CLIENT_ID/ZT_CLIENT_SECRET for ops). Fail-closed 503 = "mounted
+		// but not configured on this deployment", which the console renders as a clean
+		// "not available yet" state.
+		return "", zip.Errorf(http.StatusServiceUnavailable, "networking is not configured on this deployment")
 	}
 	org, ok := principal.Tenant(c)
 	if !ok {
