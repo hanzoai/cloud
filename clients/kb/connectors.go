@@ -38,12 +38,22 @@ import (
 
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/zap-proto/zip"
 )
 
 // providers is the closed set of supported connector kinds. An unknown provider is
 // rejected before any OAuth or store access (fail closed).
-var providers = map[string]bool{"github": true, "slack": true, "google": true}
+//
+// github/slack/google are FIRST-PARTY Go connectors (native list+fetch in sync.go).
+// notion is the first LONG-TAIL connector: its OAuth lifecycle is identical (same
+// HMAC-org-bound state, same KMS token path), but its PULL runs the activepieces JS
+// piece through the isolated auto engine runner (pieceSync in sync_piece.go) rather
+// than native Go — proving the hybrid model. Every ~280 activepieces app plugs in the
+// same way (add it here + one pieceConnectors entry); the ingestion path is unchanged
+// (framework.Ingest), so a JS-sourced doc lands in the SAME per-org store + index as a
+// Go-sourced one.
+var providers = map[string]bool{"github": true, "slack": true, "google": true, "notion": true}
 
 // oauthApp is a provider's OAuth application config, resolved from env at use. The
 // client secret is read from env (KMS-injected on the deployment) and never logged.
@@ -81,6 +91,14 @@ func oauthConfig(provider string) (oauthApp, bool) {
 		app.authURL = "https://accounts.google.com/o/oauth2/v2/auth"
 		app.tokenURL = "https://oauth2.googleapis.com/token"
 		app.scope = getenv("KB_GOOGLE_SCOPE", "https://www.googleapis.com/auth/drive.readonly")
+	case "notion":
+		// Notion is a long-tail connector: OAuth here, PULL via the activepieces JS
+		// piece through the auto runner (see sync_piece.go). Notion's OAuth has no
+		// space-separated scopes (capabilities are granted at integration setup), so
+		// the scope stays empty.
+		app.authURL = "https://api.notion.com/v1/oauth/authorize"
+		app.tokenURL = "https://api.notion.com/v1/oauth/token"
+		app.scope = getenv("KB_NOTION_SCOPE", "")
 	}
 	return app, true
 }
@@ -93,11 +111,16 @@ func (s *svc) callbackURL(provider string) string {
 	return strings.TrimRight(base, "/") + "/v1/kb/connectors/" + provider + "/callback"
 }
 
-// kmsRef is the deterministic KMS path holding an org's provider token. It embeds
-// the org so one org's token is never at another's path; the value is written/read
-// through the KMS client and never appears in the document or logs.
+// kmsRef is the deterministic KMS path holding an org's provider token. It embeds the
+// org so one org's token is never at another's path. The org is run through
+// provisioning.SanitizeOrg — the codebase's ONE org-slug normalizer (shared with
+// S3/KMS/projectsvc) — so the KMS path is INJECTIVE in the owner: distinct owners
+// that would fold onto one path ("a b" vs "a_b", or a '/'-bearing org that would
+// break the path structure) get a hash-suffixed slug and stay distinct (RED LOW-1).
+// The value is written/read through the KMS client and never appears in the document
+// or logs.
 func kmsRef(org, provider string) string {
-	return "kb/connectors/" + org + "/" + provider + "/oauth-token"
+	return "kb/connectors/" + provisioning.SanitizeOrg(org) + "/" + provider + "/oauth-token"
 }
 
 // ---- OAuth state (org-bound, signed, expiring) ----
@@ -282,6 +305,7 @@ func (s *svc) listConnectors(c *zip.Ctx) error {
 			"configured": configured,
 			"status":     "disconnected",
 			"docCount":   0,
+			"kind":       kindOf(provider), // "native" | "piece" — one list, badged
 		}
 		if name, _ := framework.FindByField(c.Context(), org, DTConnector, "provider", provider); name != "" {
 			if docs, err := framework.Search(c.Context(), org, DTConnector, map[string]string{"name": name}, 1); err == nil && len(docs) == 1 {

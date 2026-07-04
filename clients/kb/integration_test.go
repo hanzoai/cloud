@@ -216,18 +216,24 @@ func TestKBSpinePerOrgRAG(t *testing.T) {
 	}
 
 	// The hook must have upserted exactly one point into A's collection, org-pinned.
+	// The collection name is derived through the SAME collection() helper the indexer
+	// uses (which runs the org through provisioning.SanitizeOrg for an injective
+	// physical namespace), so the test asserts the REAL collection, not a hardcoded
+	// one — and the payload.org pin stays the raw org ("A").
+	colA := (&indexer{}).collection("A")
+	colB := (&indexer{}).collection("B")
 	fv.mu.Lock()
-	aPoints := fv.upserts["kb_A"]
-	bPoints := fv.upserts["kb_B"]
+	aPoints := fv.upserts[colA]
+	bPoints := fv.upserts[colB]
 	fv.mu.Unlock()
 	if len(aPoints) != 1 {
-		t.Fatalf("expected 1 upsert into kb_A, got %d", len(aPoints))
+		t.Fatalf("expected 1 upsert into %s, got %d", colA, len(aPoints))
 	}
 	if str(aPoints[0]["org"]) != "A" || str(aPoints[0]["doctype"]) != DTPage {
-		t.Errorf("kb_A payload not org-pinned/typed: %+v", aPoints[0])
+		t.Errorf("%s payload not org-pinned/typed: %+v", colA, aPoints[0])
 	}
 	if len(bPoints) != 0 {
-		t.Errorf("org A's write leaked into kb_B: %+v", bPoints)
+		t.Errorf("org A's write leaked into %s: %+v", colB, bPoints)
 	}
 
 	// Org A retrieves its knowledge via the RAG entry point.
@@ -291,10 +297,11 @@ func TestMemoryIndexedSameStore(t *testing.T) {
 	if code, b := req(t, app, http.MethodPost, "/v1/framework/kb-memory", "A", mem); code != http.StatusCreated {
 		t.Fatalf("create memory: %d %s", code, b)
 	}
+	colA := (&indexer{}).collection("A")
 	fv.mu.Lock()
-	pts := fv.upserts["kb_A"]
+	pts := fv.upserts[colA]
 	fv.mu.Unlock()
 	if len(pts) != 1 || str(pts[0]["doctype"]) != DTMemory {
-		t.Fatalf("memory not indexed into kb_A: %+v", pts)
+		t.Fatalf("memory not indexed into %s: %+v", colA, pts)
 	}
 }
