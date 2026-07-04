@@ -115,6 +115,7 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, kind string, costCents i
 // of BillingGate). A debit failure is logged for reconciliation, not swallowed.
 func (rm *ResourceMeter) Meter(org, kind string, amountCents int64, requestID, clientIP string) {
 	rm.MeterUsage(org, kind, metering.Usage{
+		Model:       kind, // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item ledger attribution.
 		AmountCents: amountCents,
 		RequestID:   requestID,
 		ClientIP:    clientIP,
