@@ -191,3 +191,40 @@ func TestAIHTTP_EmptyChoices(t *testing.T) {
 		t.Errorf("expected no-choices error, got: %v", err)
 	}
 }
+
+// TestAIHTTP_Models asserts httpAI implements types.ModelLister: it GETs the
+// gateway's OpenAI-compatible /models list (Bearer-authenticated) and returns the
+// served model ids — the catalog the agents subsystem validates a model against.
+func TestAIHTTP_Models(t *testing.T) {
+	var gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data": []map[string]any{
+				{"id": "zen-flash", "object": "model"},
+				{"id": "deepseek-v4-flash", "object": "model"},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	lister, ok := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").(types.ModelLister)
+	if !ok {
+		t.Fatal("httpAI must implement types.ModelLister")
+	}
+	ids, err := lister.Models(context.Background())
+	if err != nil {
+		t.Fatalf("Models: %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "zen-flash" || ids[1] != "deepseek-v4-flash" {
+		t.Fatalf("model ids: got %v want [zen-flash deepseek-v4-flash]", ids)
+	}
+	if gotPath != "/models" {
+		t.Errorf("path: got %q want /models", gotPath)
+	}
+	if gotAuth != "Bearer sk-test" {
+		t.Errorf("auth: got %q want Bearer sk-test", gotAuth)
+	}
+}
