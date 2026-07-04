@@ -177,6 +177,18 @@ import (
 	// ingest external docs INTO the same store + index; tokens in KMS, never plaintext).
 	_ "github.com/hanzoai/cloud/clients/kb" // order 130 — "kb" framework module + hooks + /v1/kb/*
 
+	// Team control plane (HIP-0106, task #45): the native-Go port of hanzo team-go
+	// into the cloud binary — the SPA READ PLANE + bots-as-members. Mounts the
+	// account API (/v1/team/account, JSON-RPC login + workspace selection over the
+	// IAM OAuth bridge), the transactor data-plane WebSocket (/v1/team/transactor/
+	// :token, ZAP-envelope frames over zip's wsx, serverVersion pinned 0.6.0), and
+	// the bots read routes (/v1/team/bots, /v1/team/bots/sync). Bots-as-members are
+	// sourced IN-PROCESS from the canonical agents registry (agents.ListForOrg) and
+	// projected as workspace Employees — no IAM-SA HTTP hop. Every data path derives
+	// its org from a VERIFIED token claim / principal.Tenant, never a client header.
+	// Order 138 binds /v1/team/* before the AI /v1/* catch-all (150).
+	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
+
 	// order 140 — /v1/auto/* per-org reverse proxy to the standalone Hanzo Auto engine
 	// (workflows + the connector catalog, in-platform, scoped to the validated tenant).
 	_ "github.com/hanzoai/cloud/clients/auto"
