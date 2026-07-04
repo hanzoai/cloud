@@ -45,6 +45,13 @@ func (v *memVFS) Get(_ context.Context, key string) ([]byte, error) {
 	return b, nil
 }
 
+func (v *memVFS) Delete(_ context.Context, key string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	delete(v.m, key) // idempotent — missing key is a no-op
+	return nil
+}
+
 // uploadFile drives the REAL FrontStorage upload shape: POST
 // /v1/team/files/{workspace}, multipart field "file" whose FILENAME is the
 // client-generated blob uuid (formData.append('file', file, uuid)).
@@ -206,10 +213,80 @@ func TestFilesMembershipRequired(t *testing.T) {
 	if code, _ := uploadFile(t, app, wsA.UUID, uuid.NewString(), authB, []byte("x")); code != http.StatusNotFound {
 		t.Fatalf("same-org non-member upload = %d, want 404", code)
 	}
+	// …and cannot DELETE from it (same membership guard as download).
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+wsA.UUID+"/"+blobA+"?file="+blobA, authB, nil); code != http.StatusNotFound {
+		t.Fatalf("same-org non-member delete = %d, want 404", code)
+	}
+	// Alice's blob must survive the denied cross-member delete.
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
+		t.Fatalf("alice's blob destroyed by a non-member delete")
+	}
 	// Sanity: Bob CAN use his own workspace.
 	blobB := uuid.NewString()
 	if code, _ := uploadFile(t, app, wsB.UUID, blobB, authB, []byte("bob")); code != http.StatusOK {
 		t.Fatalf("member upload to own workspace failed")
+	}
+}
+
+// TestFilesDelete proves the FrontStorage deleteFile contract: DELETE
+// /:workspace/:filename?file=:blobId removes the blob (subsequent GET → 404), and
+// is idempotent + no-oracle (a second delete of the now-missing blob still 204s).
+func TestFilesDelete(t *testing.T) {
+	app := mountTeam(t)
+	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
+	ws, _ := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	auth := bearerFor(t, acct, org)
+
+	blobID := uuid.NewString()
+	if code, _ := uploadFile(t, app, ws.UUID, blobID, auth, []byte("bytes")); code != http.StatusOK {
+		t.Fatal("upload failed")
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, auth, nil); code != http.StatusOK {
+		t.Fatalf("pre-delete GET = %d, want 200", code)
+	}
+	// DELETE (front.ts shape: /:workspace/:file?file=:file) → 204.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+ws.UUID+"/"+blobID+"?file="+blobID+"&workspace="+ws.UUID, auth, nil); code != http.StatusNoContent {
+		t.Fatalf("delete = %d, want 204", code)
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, auth, nil); code != http.StatusNotFound {
+		t.Fatalf("post-delete GET = %d, want 404 (blob gone)", code)
+	}
+	// Idempotent + no-oracle: deleting the now-missing blob still 204s.
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+ws.UUID+"/"+blobID+"?file="+blobID, auth, nil); code != http.StatusNoContent {
+		t.Fatalf("idempotent delete = %d, want 204", code)
+	}
+}
+
+// TestFilesDeleteCrossTenantDenied proves DELETE is tenant-isolated with no
+// existence oracle: org-b cannot destroy org-a's blob — via org-a's workspace it is
+// refused (404, not a member), and via its OWN workspace with org-a's blobId it is
+// a harmless no-op (204, different physical key). org-a's blob survives both.
+func TestFilesDeleteCrossTenantDenied(t *testing.T) {
+	app := mountTeam(t)
+	ctx := context.Background()
+	const acctA, acctB = "aaaaaaaa-2222-4222-8222-00000000000a", "bbbbbbbb-2222-4222-8222-00000000000b"
+	wsA, _ := mounted.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	authA := bearerFor(t, acctA, "org-a")
+	authB := bearerFor(t, acctB, "org-b")
+
+	blobA := uuid.NewString()
+	if code, _ := uploadFile(t, app, wsA.UUID, blobA, authA, []byte("org-a secret")); code != http.StatusOK {
+		t.Fatal("org-a upload failed")
+	}
+	// (a) org-b via org-a's workspace → 404 (not a member).
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+wsA.UUID+"/"+blobA+"?file="+blobA, authB, nil); code != http.StatusNotFound {
+		t.Fatalf("cross-org delete via org-a ws = %d, want 404", code)
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
+		t.Fatalf("org-a blob destroyed by cross-org delete (via org-a ws)")
+	}
+	// (b) org-b via its OWN workspace + org-a's blobId → 204 no-op (different key).
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+wsB.UUID+"/"+blobA+"?file="+blobA, authB, nil); code != http.StatusNoContent {
+		t.Fatalf("org-b delete in own ws = %d, want 204 (no-op)", code)
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
+		t.Fatalf("org-a blob destroyed by cross-org delete (via org-b ws + org-a blobId) — KEY ISOLATION BROKEN")
 	}
 }
 
