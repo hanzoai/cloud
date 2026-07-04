@@ -224,6 +224,16 @@ import (
 	// AI /v1/* catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/integrations" // order 137 — /v1/integrations/*
 
+	// Connectors+Automations engine (HIP-0106, task #51): the /v1/automations/*
+	// surface — org-scoped flows that run durably on the ONE shared in-process tasks
+	// engine, invoking Tier-A connectors whose per-org credentials are custodied by
+	// clients/integrations (KMS-sealed, reached ONLY via integrations.TokenFor). ONE
+	// SQLite file, org column on every table; the durable activity's sole credential
+	// scope is the VALIDATED FlowRunInput.Owner. Order 148 binds after integrations
+	// (137) and BEFORE the AI /v1/* catch-all (150) so /v1/automations/* wins. Also
+	// serves the HIP-0300 MCP tool surface (/v1/automations/mcp) that /v1/agents calls.
+	_ "github.com/hanzoai/cloud/clients/automations" // order 148 — /v1/automations/*
+
 	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
