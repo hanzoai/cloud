@@ -49,6 +49,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Connectors — per-org OAuth ingestion into the same store + index.
 	app.Get("/v1/kb/connectors", s.listConnectors)
+	// The ONE catalog: every connectable source (native Go + long-tail JS pieces).
+	app.Get("/v1/kb/connectors/catalog", s.listCatalog)
 	app.Get("/v1/kb/connectors/:provider/connect", s.connectStart)
 	app.Get("/v1/kb/connectors/:provider/callback", s.connectCallback)
 	app.Post("/v1/kb/connectors/:provider/sync", s.syncConnector)
