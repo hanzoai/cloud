@@ -95,6 +95,13 @@ import (
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
 	_ "github.com/hanzoai/cloud/clients/projectsvc" // order 125 — /v1/projects/*
 
+	// Tracker control plane: the native-Go, per-org issue tracker (projects +
+	// issues) on SQLite — the durable replacement for the Huly/Svelte hanzo.team
+	// tracker whose upstream reactive-batching render race left issue lists
+	// rendering zero rows. Native @hanzo/gui over this one store sidesteps that
+	// entire class of bug (rows come back as plain JSON and render deterministically).
+	_ "github.com/hanzoai/cloud/clients/tracker" // order 129 — /v1/tracker/*
+
 	// PaaS control plane: the native, in-process port of the standalone Dokploy
 	// platform's deploy lifecycle. Reads the operator `Service` CR fleet as the
 	// declared/running/drift board and deploys by merge-patching a CR's
