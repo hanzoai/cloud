@@ -176,6 +176,10 @@ import (
 	// ingest external docs INTO the same store + index; tokens in KMS, never plaintext).
 	_ "github.com/hanzoai/cloud/clients/kb" // order 130 — "kb" framework module + hooks + /v1/kb/*
 
+	// order 140 — /v1/auto/* per-org reverse proxy to the standalone Hanzo Auto engine
+	// (workflows + the connector catalog, in-platform, scoped to the validated tenant).
+	_ "github.com/hanzoai/cloud/clients/auto"
+
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*

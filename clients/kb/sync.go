@@ -55,7 +55,12 @@ func (s *svc) runSync(ctx context.Context, org, provider, token string) (int, st
 	case "google":
 		return 0, "", fmt.Errorf("google sync: listing not yet implemented (connection stored; wire drive.files to ingestDoc)")
 	default:
-		return 0, "", fmt.Errorf("unknown provider %q", provider)
+		// Long-tail: a connector whose pull is an activepieces JS piece run through the
+		// auto engine runner. The provider must be a known pieceConnector (a closed set,
+		// checked inside pieceSync); an unknown one is rejected there. The token is the
+		// OAuth access token this org authorized; pieceSync hands it to the piece as
+		// `auth` and files each returned record via the SAME framework.Ingest path.
+		return s.pieceSync(ctx, org, provider, token)
 	}
 }
 
