@@ -83,15 +83,19 @@ CREATE TABLE IF NOT EXISTS oauth_nonces (
 );
 CREATE INDEX IF NOT EXISTS ix_nonces_created ON oauth_nonces(created_at);
 
--- slack_events is the Slack agent bridge's durable event-dedupe table (see
--- slack_dedupe.go). Created here in migrate() — fail-loud at Mount, one place —
--- so the billed webhook path never runs against a missing table (a lazy first-use
--- ensure could half-init and permanently disable the path).
-CREATE TABLE IF NOT EXISTS slack_events (
-  event_key  TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL
+-- bridge_events is the ChatBridge's durable, provider-keyed event-dedupe table
+-- (see bridge_dedupe.go) shared by every platform (Slack/Teams/Discord/Telegram).
+-- Created here in migrate() — fail-loud at Mount, one place — so the billed webhook
+-- path never runs against a missing table (a lazy first-use ensure could half-init
+-- and permanently disable the path). PK is (provider, event_key) so platform id
+-- spaces never collide.
+CREATE TABLE IF NOT EXISTS bridge_events (
+  provider   TEXT NOT NULL,
+  event_key  TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (provider, event_key)
 );
-CREATE INDEX IF NOT EXISTS ix_slack_events_created ON slack_events(created_at);
+CREATE INDEX IF NOT EXISTS ix_bridge_events_created ON bridge_events(created_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -222,6 +226,38 @@ func (s *Store) ConsumeNonce(ctx context.Context, nonce, org, provider string) (
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil
+}
+
+// ClaimNonce atomically resolves the org bound to a nonce for `provider` and
+// consumes it (single-use), returning the org. Unlike ConsumeNonce it does NOT know
+// the org up front — it is the redemption side of a deep-link connect code
+// (Telegram): the code arrives in a webhook that has not yet resolved a tenant, so
+// the code ITSELF carries the org. found=false (nil error) when the code is
+// unknown/already-claimed. The Store opens with MaxOpenConns(1) (store.go), so this
+// read-then-delete pair runs with no concurrent writer — the DELETE's RowsAffected
+// is the single-use proof.
+func (s *Store) ClaimNonce(ctx context.Context, nonce, provider string) (string, bool, error) {
+	if strings.TrimSpace(nonce) == "" {
+		return "", false, nil
+	}
+	var org string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT org FROM oauth_nonces WHERE nonce=? AND provider=?`, nonce, provider).Scan(&org)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("claim nonce: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM oauth_nonces WHERE nonce=? AND provider=? AND org=?`, nonce, provider, org)
+	if err != nil {
+		return "", false, fmt.Errorf("claim nonce delete: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return "", false, nil // lost the race to a concurrent claim
+	}
+	return org, true, nil
 }
 
 // GCNonces deletes nonces created before `before` (unix seconds). Returns how

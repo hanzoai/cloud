@@ -246,21 +246,36 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 
 	app.Get("/v1/integrations", s.list)
-	// Slack agent bridge (clients/integrations/slack_events.go + slack_link.go).
-	// These LITERAL paths are registered BEFORE the /:provider wildcards so they
-	// win under Fiber's registration-order matching and a later `:provider`-shaped
-	// change can never shadow them (same discipline as clients/agents' static-
-	// before-:ref rule). They are PUBLIC at the JWT layer — reached like
-	// /:provider/callback (IdentityMiddleware only POPULATES a principal, never
-	// rejects; DefaultPrice returns 0 so BillingGate passes through) — because
-	// their auth is done INSIDE the handler: HMAC-SHA256 over the raw body for the
-	// events/commands webhooks, and signed __Host- cookie + state for the link legs.
-	// They must NOT be placed behind any principal/tenant gate.
+	// ChatBridge agent front-doors (bridge.go + the per-platform adapters). These
+	// LITERAL paths are registered BEFORE the /:provider wildcards so they win under
+	// Fiber's registration-order matching and a later `:provider`-shaped change can
+	// never shadow them (same discipline as clients/agents' static-before-:ref rule).
+	// They are PUBLIC at the JWT layer — reached like /:provider/callback
+	// (IdentityMiddleware only POPULATES a principal, never rejects; DefaultPrice
+	// returns 0 so BillingGate passes through) — because their auth is done INSIDE the
+	// handler at each platform's OWN trust boundary: Slack HMAC, Discord Ed25519,
+	// Teams Bot Framework JWT, Telegram secret-token, and signed __Host- cookie +
+	// state for the link legs. They must NOT be placed behind any principal/tenant
+	// gate. (Telegram's connect is a LITERAL that deliberately shadows the generic
+	// /:provider/connect — it must precede that wildcard, which it does here.)
 	app.Post("/v1/integrations/slack/events", s.slackEvents)
 	app.Post("/v1/integrations/slack/commands", s.slackCommands)
 	app.Get("/v1/integrations/slack/link", s.slackLink)
 	app.Get("/v1/integrations/slack/link/slack", s.slackLinkSlack)
 	app.Get("/v1/integrations/slack/link/callback", s.slackLinkCallback)
+	app.Post("/v1/integrations/discord/interactions", s.discordInteractions)
+	app.Get("/v1/integrations/discord/link", s.discordLink)
+	app.Get("/v1/integrations/discord/link/discord", s.discordLinkDiscord)
+	app.Get("/v1/integrations/discord/link/callback", s.discordLinkCallback)
+	app.Post("/v1/integrations/teams/events", s.teamsEvents)
+	app.Get("/v1/integrations/teams/link", s.teamsLink)
+	app.Get("/v1/integrations/teams/link/aad", s.teamsLinkAAD)
+	app.Get("/v1/integrations/teams/link/callback", s.teamsLinkCallback)
+	app.Post("/v1/integrations/telegram/connect", s.telegramConnect)
+	app.Post("/v1/integrations/telegram/webhook", s.telegramWebhook)
+	app.Get("/v1/integrations/telegram/link", s.telegramLink)
+	app.Get("/v1/integrations/telegram/link/auth", s.telegramLinkAuth)
+	app.Get("/v1/integrations/telegram/link/callback", s.telegramLinkCallback)
 	app.Get("/v1/integrations/:provider", s.get)
 	app.Post("/v1/integrations/:provider/connect", s.connect)
 	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
