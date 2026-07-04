@@ -23,6 +23,7 @@ package kmssvc
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -42,10 +43,46 @@ const (
 	loginHTTPTimeout  = 15 * time.Second
 	maxLoginRespBytes = 1 << 20  // 1 MiB cap on the IAM token response
 	maxLoginBodyBytes = 64 << 10 // 64 KiB cap on the inbound login body
+
+	// loginMaxConnsPerHost hard-bounds the concurrent outbound connections the public
+	// /v1/kms/auth/login broker may open to the IAM token host. The broker is a
+	// public, unauthenticated fan-out to IAM, so without a bound a flood of login
+	// attempts could pin an unbounded number of upstream connections open against IAM
+	// (a DoS amplifier / outbound-conn pinning). HTTP/2 is disabled on this client
+	// (TLSNextProto below) so this is a TRUE concurrency ceiling — one in-flight
+	// exchange per connection — not "N conns each multiplexing unlimited streams".
+	loginMaxConnsPerHost = 32
+
+	// loginRateLimit / loginRateWindow bound login attempts PER SOURCE IP — the
+	// credential-stuffing-through-cloud dimension. The kms-operator authenticates
+	// per tenant and caches each token ~1h, so its steady-state login rate from a
+	// single (in-cluster) source IP is a few per minute — far under this ceiling —
+	// while a brute-force source is cut to loginRateLimit/window. Per-pod, best
+	// effort; loginMaxConnsPerHost is the hard backstop on the actual IAM fan-out.
+	loginRateLimit  = 60
+	loginRateWindow = time.Minute
 )
 
-// loginHTTPClient is the shared client for the IAM token exchange.
-var loginHTTPClient = &http.Client{Timeout: loginHTTPTimeout}
+// loginHTTPClient is the shared client for the IAM token exchange. Its transport
+// caps concurrent connections to the IAM host (loginMaxConnsPerHost) and disables
+// HTTP/2 so that cap is a real concurrency bound on the public login broker's
+// outbound fan-out. Timeouts are set so a slow or absent IAM cannot wedge a
+// connection open indefinitely.
+var loginHTTPClient = &http.Client{
+	Timeout: loginHTTPTimeout,
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxConnsPerHost:       loginMaxConnsPerHost,
+		MaxIdleConns:          loginMaxConnsPerHost,
+		MaxIdleConnsPerHost:   loginMaxConnsPerHost,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// Disable HTTP/2 so MaxConnsPerHost bounds CONCURRENCY: h2 would multiplex
+		// many in-flight exchanges over a single connection, defeating the ceiling.
+		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+	},
+}
 
 // loginRequest is the operator's universalAuth credential (kmsapi.Client.Login
 // posts exactly this shape).
