@@ -1210,6 +1210,8 @@ github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5
 github.com/hanzoai/storage-go v1.0.0/go.mod h1:IPXouQWTki5LKa9Y3qfOr6o8Qwlmc4sGObJnGMNKCOM=
 github.com/hanzoai/tasks v1.46.0 h1:x2L8cM2OCHUjNKSbaeKa1G0kKs2LxyUkxXVMZbvKQpc=
 github.com/hanzoai/tasks v1.46.0/go.mod h1:DfBjEr4ONXo3W2GAmJQd2qwP0zAccD705PxC4xj1KOU=
+github.com/hanzoai/tasks v1.47.0 h1:uDh1PxBN711jPcGA5keeXEyfBiolow/KCTcVcN2sDfM=
+github.com/hanzoai/tasks v1.47.0/go.mod h1:DfBjEr4ONXo3W2GAmJQd2qwP0zAccD705PxC4xj1KOU=
 github.com/hanzoai/vfs v0.4.4 h1:XYkNPmpKcTiarTw/nG5p7aI38AmmYRNZkucwAj0GQBg=
 github.com/hanzoai/vfs v0.4.4/go.mod h1:efMt/hQsAl2U2MboFrvpSPQ50DaPjO5eAy5xU+/kXfs=
 github.com/hanzoai/xorm v1.1.6 h1:z8B3alP39taTGLA4BonBa+7RHIOMmjYjxF3N9gpzh84=
