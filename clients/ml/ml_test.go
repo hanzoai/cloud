@@ -154,9 +154,9 @@ func TestInternalURL(t *testing.T) {
 // silently breaks every call against that CRD.
 func TestGVRs(t *testing.T) {
 	cases := []struct {
-		name             string
-		group, ver, res  string
-		got              [3]string
+		name            string
+		group, ver, res string
+		got             [3]string
 	}{
 		{"InferenceService", "serving.kserve.io", "v1beta1", "inferenceservices",
 			[3]string{isvcGVR.Group, isvcGVR.Version, isvcGVR.Resource}},
