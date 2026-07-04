@@ -29,7 +29,10 @@ func TestOrgGating403(t *testing.T) {
 	}
 }
 
-// TestPiecesCatalog: the /pieces endpoint returns the seeded Tier-A catalogue.
+// TestPiecesCatalog: the /pieces endpoint returns the full piece catalogue and,
+// within it, the Tier-A executable connectors (core/slack/github/google_*). The
+// count is not pinned to the seed — the full 701-piece catalogue is embedded — so
+// the invariant is PieceCount==len(Pieces) and every Tier-A connector is present.
 func TestPiecesCatalog(t *testing.T) {
 	app := newApp(t)
 	r := req(t, app, http.MethodGet, "/v1/automations/pieces", "acme", nil)
@@ -40,8 +43,8 @@ func TestPiecesCatalog(t *testing.T) {
 	if err := json.Unmarshal(r.Body, &cat); err != nil {
 		t.Fatalf("pieces body: %v (%s)", err, r.Body)
 	}
-	if cat.PieceCount != 5 || len(cat.Pieces) != 5 {
-		t.Fatalf("catalogue want 5 pieces, got count=%d len=%d", cat.PieceCount, len(cat.Pieces))
+	if cat.PieceCount != len(cat.Pieces) || len(cat.Pieces) < 5 {
+		t.Fatalf("catalogue inconsistent/too small: count=%d len=%d", cat.PieceCount, len(cat.Pieces))
 	}
 	byName := map[string]PieceMetadata{}
 	for _, p := range cat.Pieces {
