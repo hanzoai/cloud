@@ -124,10 +124,15 @@ func (s *svc) listBots(c *zip.Ctx) error {
 
 // botLaunchReq is the POST /v1/bots/launch body. A bot needs a machine size and,
 // for a real launch, a name; agent is the cloud /v1/agents identity the bot runs
-// (defaulting to the bot's name so a bot is self-named by default).
+// (defaulting to the bot's name so a bot is self-named by default). Model and
+// Instructions configure the auto-created bound agent — both optional: an empty
+// Model takes the deployment default (a valid catalog model) at agent create,
+// and Instructions is the bot's system prompt.
 type botLaunchReq struct {
 	Name         string `json:"name"`
 	Agent        string `json:"agent"`
+	Model        string `json:"model"`
+	Instructions string `json:"instructions"`
 	Size         string `json:"size"`
 	InstanceType string `json:"instanceType"`
 	Region       string `json:"region"`
@@ -149,27 +154,44 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 		return zip.ErrBadRequest("size is required")
 	}
 	name := strings.TrimSpace(body.Name)
-	if !body.DryRun && name == "" {
-		return zip.ErrBadRequest("name is required to launch a bot")
-	}
 
-	// The machine half: launch a kind=bot machine. vm stamps hanzo-kind:bot and
-	// bootstraps the @hanzo/bot runtime cloud-init for a bot spec (specIsBot).
-	launch := map[string]any{
-		"name": name, "size": size, "region": body.Region,
-		"kind": "bot", "dryRun": body.DryRun,
-	}
-	var data json.RawMessage
-	if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
-		return err
-	}
-	// dryRun: pass vm's price quote through unchanged (the authoritative price).
+	// dryRun is a price quote only — it launches nothing, binds nothing and
+	// creates no agent (spends nothing), so it short-circuits before the agent
+	// half. Pass vm's quote through unchanged (the authoritative price).
 	if body.DryRun {
+		launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": true}
+		var data json.RawMessage
+		if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+			return err
+		}
 		var quote any
 		if len(data) > 0 {
 			_ = json.Unmarshal(data, &quote)
 		}
 		return c.JSON(http.StatusOK, quote)
+	}
+
+	if name == "" {
+		return zip.ErrBadRequest("name is required to launch a bot")
+	}
+
+	// The agent half, FIRST: create-if-absent the cloud Agent this bot runs, so a
+	// launched bot is immediately messageable — messageBot runs the bound agent
+	// via /v1/agents/:agent/run, which Resolves it from the store and 404s "agent
+	// not found" if it was never created (the gap this closes). Doing it before
+	// the machine launch also fails a bad request (e.g. a non-catalog model → 400)
+	// BEFORE any metered machine is provisioned. org is the validated tenant.
+	agent := firstNonEmpty(strings.TrimSpace(body.Agent), name)
+	if err := s.ensureAgent(c, agent, body.Model, body.Instructions); err != nil {
+		return err
+	}
+
+	// The machine half: launch a kind=bot machine. vm stamps hanzo-kind:bot and
+	// bootstraps the @hanzo/bot runtime cloud-init for a bot spec (specIsBot).
+	launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": false}
+	var data json.RawMessage
+	if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+		return err
 	}
 
 	// vm returns {machine, quote[, meteringError]} — extract the launched machine.
@@ -185,9 +207,8 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "bot launch: vm returned no machine")
 	}
 
-	// The agent half: bind the cloud Agent to the freshly-launched machine. org is
+	// Bind the (now-existing) cloud Agent to the freshly-launched machine. org is
 	// the validated tenant (never a client field); agent defaults to the bot name.
-	agent := firstNonEmpty(strings.TrimSpace(body.Agent), name)
 	var binding agentBinding
 	if err := s.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(machineID)+"/bind-agent",
 		q("owner", org),
@@ -196,6 +217,53 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, toBotView(wrap.Machine, &binding))
+}
+
+// ensureAgent create-if-absent brings the bot's bound cloud Agent into being so a
+// launched bot is immediately messageable. It self-calls the SAME POST /v1/agents
+// the console uses — one create path, never a second store — forwarding the
+// caller's validated identity so the agent is created in the caller's OWN org
+// (IDOR-safe: the agents surface scopes the create by the same principal.Tenant).
+// An empty model is passed through: agent-create fills the deployment default (a
+// valid catalog model), so a bot launched without a model still runs.
+//
+// Idempotent: an agent that already exists (409) is reused, not an error — a
+// relaunch, or an explicit agent shared by several bots, is fine. A genuine
+// rejection (e.g. a non-catalog model → 400) is surfaced verbatim so a bad launch
+// fails fast with the real reason, before any machine is provisioned.
+func (s *svc) ensureAgent(c *zip.Ctx, agent, model, instructions string) error {
+	payload, err := json.Marshal(map[string]any{
+		"name":         agent,
+		"model":        strings.TrimSpace(model),
+		"instructions": instructions,
+	})
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "bots: encode agent-create: %v", err)
+	}
+	req, err := http.NewRequestWithContext(c.Context(), http.MethodPost, agentsBase()+"/v1/agents", bytes.NewReader(payload))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "bots: build agent-create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for _, h := range selfIdentityHeaders {
+		if v := c.Header(h); v != "" {
+			req.Header.Set(h, v)
+		}
+	}
+	resp, err := selfClient.Do(req)
+	if err != nil {
+		return zip.Errorf(http.StatusBadGateway, "bots: agent-create unreachable: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	rb, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	switch resp.StatusCode {
+	case http.StatusCreated, http.StatusConflict:
+		return nil // created, or already exists (idempotent create-if-absent)
+	default:
+		// Surface the agent surface's own status + reason (e.g. a 400 for a
+		// non-catalog model) so the launch fails fast with the real cause.
+		return zip.Errorf(resp.StatusCode, "bots: agent-create %d: %s", resp.StatusCode, snippet(rb))
+	}
 }
 
 func (s *svc) getBot(c *zip.Ctx) error {
