@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	kms "github.com/hanzoai/kms/sdk/go"
+	kms "github.com/hanzoai/cloud/clients/mpcseal"
 	luxlog "github.com/luxfi/log"
 )
 
-// secrets wraps the Hanzo KMS client (github.com/hanzoai/kms/sdk/go) for
+// secrets wraps cloud's MPC-sealing client (clients/mpcseal) for
 // storing provisioned-resource passwords. Encryption is client-side: the CEK
 // is derived from CLOUD_KMS_PASSPHRASE and never leaves this process; the MPC
 // nodes only ever see ciphertext.
