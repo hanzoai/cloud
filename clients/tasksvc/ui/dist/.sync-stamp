@@ -1,0 +1,8 @@
+# Provenance of this embedded Tasks SPA build. See ../README.md to regenerate.
+app=@hanzo/tasks (admin-tasks)
+base=/_/tasks/
+api_prefix=/v1/tasks
+source_repo=hanzoai/gui:apps/admin-tasks
+source_commit=4e37bed98c
+built_with=vite+hanzogui@7.3.x
+note=last-known-good build; admin-tasks HEAD not independently buildable until hanzogui@7.3.x + @hanzogui/admin colocate in one workspace

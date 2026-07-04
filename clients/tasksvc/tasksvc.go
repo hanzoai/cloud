@@ -35,9 +35,9 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
+	tasksui "github.com/hanzoai/cloud/clients/tasksvc/ui"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
-	tasksui "github.com/hanzoai/tasks/ui"
 	"github.com/zap-proto/zip"
 )
 
@@ -55,7 +55,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.All("/v1/tasks", h)
 	app.All("/v1/tasks/*", h)
 
-	// The UI is a static asset bundle — engine-independent, mount directly.
+	// The UI is a static asset bundle embedded in THIS binary
+	// (clients/tasksvc/ui) — engine-independent, mount directly. Serving it
+	// here is what lets cloud front tasks.hanzo.ai and retire the standalone
+	// tasks-ui pod.
 	ui := zip.AdaptNetHTTP(http.StripPrefix("/_/tasks", tasksui.Handler()))
 	app.All("/_/tasks", ui)
 	app.All("/_/tasks/*", ui)
