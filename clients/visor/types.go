@@ -128,6 +128,11 @@ type clusterView struct {
 	NodeSize      string         `json:"nodeSize,omitempty"`
 	NodeCount     int            `json:"nodeCount"`
 	CreatedAt     string         `json:"createdAt,omitempty"`
+	// Fleet fields (additive): "managed" (Visor-provisioned) vs "byo" (attached
+	// kubeconfig), and the live GPU inventory a BYO cluster reports.
+	Kind      string `json:"kind,omitempty"`
+	NvidiaGPU int    `json:"nvidiaGpu,omitempty"`
+	AmdGPU    int    `json:"amdGpu,omitempty"`
 }
 
 // ---- mapping (PURE); firstNonEmpty lives in client.go (one helper, one place) ----

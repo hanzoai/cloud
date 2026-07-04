@@ -52,9 +52,10 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/fleet"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,13 +126,17 @@ var orgRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$`)
 const computeFeeEnvPrefix = "CLOUD_COMPUTE_FEE_CENTS"
 
 type svc struct {
-	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
+	dyn     dynamic.Interface // in-cluster (home) client; nil when unresolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health
 	hc      *http.Client      // predictor data-plane client (inference latency)
 	log     luxlog.Logger
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
 	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
 	bill *cloud.ResourceMeter
+	// fleet is the shared per-org BYO-cluster registry (owned by the visor fleet
+	// surface). dynForOrg federates ML serving onto the org's registered cluster
+	// via it; a nil/empty registry => serving stays on the home in-cluster client.
+	fleet *fleet.Registry
 }
 
 // Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106.
@@ -151,6 +156,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	} else {
 		s.dyn = dyn
 	}
+	// Shared BYO-cluster registry (registration surface is the visor fleet at
+	// /v1/clusters; ml only READS it to federate serving onto the org's cluster).
+	s.fleet = fleet.New(deps.Brand, log)
 
 	// Models (kserve InferenceService).
 	app.Get("/v1/ml/models", s.list(modelKind))
@@ -555,6 +563,18 @@ func (s *svc) k8sErr(c *zip.Ctx, k resourceKind, op string, err error) error {
 // (least privilege; blast-radius separation). See universe
 // infra/k8s/cloud/ml-rbac.yaml (ClusterRoleBinding cloud-mlsvc -> cloud-ml).
 const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
+
+// dynForOrg returns the client ML operations should target for an org: its registered
+// BYO cluster (federated via the shared fleet registry, read-only from ml's side) or
+// the home in-cluster client when the org has no attached cluster. The ONE federation
+// seam — handlers resolve their client through here so a BYO cluster transparently
+// becomes the org's ML compute plane.
+func (s *svc) dynForOrg(org string) dynamic.Interface {
+	if d := s.fleet.DynForOrg(org); d != nil {
+		return d
+	}
+	return s.dyn
+}
 
 // newDynamic builds the dynamic client. In-cluster it authenticates as the
 // dedicated cloud-ml identity when HANZO_ML_TOKEN_FILE points at a mounted
