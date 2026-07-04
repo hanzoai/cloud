@@ -3,6 +3,7 @@ package integrations
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -116,6 +117,48 @@ func TestStoreNonceSingleUse(t *testing.T) {
 	// The correct binding still works afterward (the failed attempts didn't burn it).
 	if ok, _ := s.ConsumeNonce(ctx, "n2", "acme", "slack"); !ok {
 		t.Fatal("correct binding must still consume n2")
+	}
+}
+
+// TestStoreConsumeNonceConcurrentSingleWinner is the RACE proof for two (here N)
+// concurrent OAuth callbacks presenting the SAME valid state: the single atomic
+// DELETE ... WHERE nonce AND org AND provider (RowsAffected==1) is the gate, so
+// EXACTLY ONE consumer wins and the rest see zero rows — no read-then-delete
+// TOCTOU window, no double-exchange. Run under `-race`.
+func TestStoreConsumeNonceConcurrentSingleWinner(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	if err := s.PutNonce(ctx, "hot", "acme", "slack"); err != nil {
+		t.Fatalf("put nonce: %v", err)
+	}
+	const racers = 32
+	var wg sync.WaitGroup
+	wins := make(chan bool, racers)
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start // release all goroutines together to maximize contention
+			ok, err := s.ConsumeNonce(ctx, "hot", "acme", "slack")
+			if err != nil {
+				t.Errorf("consume: %v", err)
+				return
+			}
+			wins <- ok
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(wins)
+	won := 0
+	for ok := range wins {
+		if ok {
+			won++
+		}
+	}
+	if won != 1 {
+		t.Fatalf("exactly one concurrent consumer must win, got %d", won)
 	}
 }
 
