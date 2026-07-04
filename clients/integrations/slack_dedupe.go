@@ -19,9 +19,11 @@ import (
 // runs the integrations store as a single embedded-SQLite writer, so the billed
 // Slack webhook path MUST run single-replica; that is the shipping invariant.
 // Multi-replica is a follow-up (back this with a shared SETNX store — Valkey /
-// Postgres — keyed on event_id). Note the residual is already small: we always
-// 2xx-ack, and Slack only retries on a NON-2xx / timeout, so a duplicate delivery
-// to a second replica requires our ack to first exceed Slack's ~3s budget.
+// Postgres — keyed on event_id). Note the residual is already small: every event
+// we actually run or dedup is 2xx-acked (only a capacity SHED returns a retriable
+// non-2xx, and a shed never ran, so it is not a double-process), and Slack only
+// retries on a non-2xx / timeout — so a duplicate delivery to a second replica
+// requires our ack to first exceed Slack's ~3s budget.
 
 // slackEventTTL bounds how long a dedupe row is retained. Slack's event retry
 // horizon is minutes; a day is a wide margin, after which a row can no longer
