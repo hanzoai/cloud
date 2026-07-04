@@ -20,8 +20,15 @@ import (
 // to exercise the no-inference fail-closed path.
 func mountApp(t *testing.T, ai types.AIClient) *zip.App {
 	t.Helper()
+	return mountAppModel(t, ai, "")
+}
+
+// mountAppModel is mountApp with an explicit deployment default model
+// (deps.AIDefaultModel), so a test can exercise the empty-model → default path.
+func mountAppModel(t *testing.T, ai types.AIClient, defaultModel string) *zip.App {
+	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, AIDefaultModel: defaultModel}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	// Mount starts the scheduler goroutine when AI is non-nil and sets the global

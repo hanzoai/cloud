@@ -52,6 +52,14 @@ type Deps struct {
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
 
+	// AIDefaultModel is the served model a subsystem uses when a caller supplies
+	// none (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). It is the ONE
+	// cloud-side model default, sourced from config so no subsystem hardcodes a
+	// model id. The agents subsystem stores it on an agent created without an
+	// explicit model, so a bot launched without a model still runs on a valid
+	// catalog model. Model routing itself stays the gateway's job.
+	AIDefaultModel string
+
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM      IAMClient
