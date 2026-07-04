@@ -12,12 +12,10 @@ require (
 	github.com/hanzoai/commerce/metering v0.1.2
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.28.12
-	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/sqlite v0.1.5
-	github.com/hanzoai/zip v0.2.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
@@ -432,7 +430,7 @@ require (
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/geth v1.17.5 // indirect
 	github.com/luxfi/ids v1.2.15 // indirect
-	github.com/luxfi/kms v1.11.6
+	github.com/luxfi/kms v1.11.8
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.1.4 // indirect
 	github.com/luxfi/magnetar v1.2.0 // indirect
