@@ -229,6 +229,27 @@ type creditRequest struct {
 	AmountCents int64  `json:"amountCents"`
 	Currency    string `json:"currency"`
 	Reason      string `json:"reason"`
+	// Source splits the grant into the commerce ledger's two money buckets:
+	//   - "trial"   (default) — a non-cash promo/comp credit (billing/bucket
+	//                Credit): spendable on non-premium metered usage only, NEVER
+	//                refundable cash and NEVER paid out. A staff comp is a trial
+	//                grant by default (we don't mint payout-able money on a comp).
+	//   - "prepaid" — real money added to the customer's cash balance (e.g. a
+	//                manual settlement of a wire). Refundable, GPU-eligible.
+	// Mapped to the commerce deposit Tags DepositKind reads (grant:* → Credit,
+	// bare admin-grant → Prepaid). Unknown/empty → trial (fail-closed to non-cash).
+	Source string `json:"source"`
+}
+
+// grantTag maps a grant source to the commerce deposit Tags that billing/bucket
+// DepositKind classifies into Credit (trial) vs Prepaid (real money). Default
+// (empty/unknown/"trial") is the non-cash Credit bucket — a staff comp is never
+// silently minted as payout-able real money.
+func grantTag(source string) (tag, normalized string) {
+	if strings.ToLower(strings.TrimSpace(source)) == "prepaid" {
+		return "admin-grant", "prepaid" // DepositKind: bare → Prepaid (real money)
+	}
+	return "grant:admin", "trial" // DepositKind: grant:* → Credit (non-cash trial)
 }
 
 // maxGrantCents caps a single grant at $100,000 — a guardrail against a fat-finger
@@ -237,17 +258,24 @@ type creditRequest struct {
 const maxGrantCents int64 = 100 * 100 * 1000
 
 func (s *svc) grantCredit(c *zip.Ctx) error {
-	ctx := c.Context()
-	cr := callerCreds(c)
 	org := customerOrgParam(c)
 	if org == "" {
 		return fail(c, "org is required")
 	}
-
 	var req creditRequest
 	if err := c.Bind(&req); err != nil {
 		return fail(c, "invalid request body")
 	}
+	return s.applyGrant(c, org, req)
+}
+
+// applyGrant is the ONE credit-write core shared by POST /v1/admin/customers/:org/credit
+// (org from the path) and POST /v1/admin/grants (org from the body): validate the
+// amount + target org, deposit into the org's commerce ledger (trial vs prepaid by
+// source), and record the tamper-evident audit row. One path, one way to grant.
+func (s *svc) applyGrant(c *zip.Ctx, org string, req creditRequest) error {
+	ctx := c.Context()
+	cr := callerCreds(c)
 	if req.AmountCents <= 0 {
 		return fail(c, "amountCents must be positive")
 	}
@@ -271,14 +299,15 @@ func (s *svc) grantCredit(c *zip.Ctx) error {
 	subj := orgSubject(org)
 	before, _ := s.commerce.creditsCents(ctx, org, subj)
 
+	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	res, derr := s.commerce.deposit(ctx, org, subj, req.AmountCents, currency, notes, "admin-grant")
+	res, derr := s.commerce.deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
 		s.emitAudit(c, "admin.customer.credit", "credit", org,
 			map[string]any{"balanceCents": before},
-			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "error": derr.Error()},
+			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "error": derr.Error()},
 			audit.Outcome{Result: "error", Status: 200, Reason: "grant failed"})
 		return fail(c, "grant failed: "+derr.Error())
 	}
@@ -286,13 +315,14 @@ func (s *svc) grantCredit(c *zip.Ctx) error {
 	after, _ := s.commerce.creditsCents(ctx, org, subj)
 	s.emitAudit(c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
-		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "transactionId": res.TransactionID},
+		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TransactionID},
 		audit.Outcome{Result: "success", Status: 200})
 
 	return ok(c, map[string]any{
 		"org":           org,
 		"grantedCents":  req.AmountCents,
 		"currency":      currency,
+		"source":        source,
 		"balanceCents":  after,
 		"transactionId": res.TransactionID,
 	})
@@ -300,7 +330,7 @@ func (s *svc) grantCredit(c *zip.Ctx) error {
 
 // ── POST /v1/admin/customers/:org/{suspend,reactivate} — access control ──────
 
-func (s *svc) suspendCustomer(c *zip.Ctx) error  { return s.setForbidden(c, true) }
+func (s *svc) suspendCustomer(c *zip.Ctx) error    { return s.setForbidden(c, true) }
 func (s *svc) reactivateCustomer(c *zip.Ctx) error { return s.setForbidden(c, false) }
 
 // setForbidden flips IAM `isForbidden` on every member of the org — suspend
