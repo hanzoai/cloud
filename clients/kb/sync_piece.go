@@ -44,6 +44,15 @@ func autoUpstream() string {
 	return "http://auto.hanzo.svc.cluster.local:80"
 }
 
+// pieceRunSecret is the shared secret the auto engine's /v1/auto/pieces/{piece}/run
+// endpoint requires (its X-Piece-Run-Secret gate). cloud is the ONLY legitimate caller
+// of that endpoint — it resolves each org's real token and pins the provider URL — so
+// the engine gates piece execution on this secret to close the cross-org-write + SSRF
+// forge that a presence-only X-Org-Id check would leave open. Both sides read the SAME
+// value from KMS (auto-secrets/PIECES_RUNNER_SECRET). Absent here, pieceSync fails
+// closed (an empty header can't match the engine's non-empty secret).
+func pieceRunSecret() string { return strings.TrimSpace(os.Getenv("PIECES_RUNNER_SECRET")) }
+
 // pieceConnector declares how ONE long-tail provider pulls through a piece: which
 // activepieces piece + action to run, the props to send, how to shape the OAuth token
 // into the piece's `auth`, and how to turn a returned record into a normalized
@@ -141,11 +150,19 @@ func (s *svc) pieceSync(ctx context.Context, org, provider, token string) (int, 
 }
 
 // runPiece calls the auto engine's on-demand piece-run endpoint in-cluster, stamping
-// the validated org as X-Org-Id. The credential is sent as `auth` in the body; the
-// engine's runner hands it to the piece and touches nothing else. A 5xx/timeout is an
-// infrastructure error; an ok:false body is a piece-level failure surfaced to the
-// caller.
+// the validated org as X-Org-Id and the piece-run secret as X-Piece-Run-Secret (so the
+// engine accepts the call as cloud's connector, not an arbitrary in-cluster pod — the
+// engine trusts X-Org-Id absolutely and gates this write+SSRF surface on the secret).
+// The credential is sent as `auth` in the body; the engine's runner hands it to the
+// piece and touches nothing else. A 5xx/timeout is an infrastructure error; an
+// ok:false body is a piece-level failure surfaced to the caller.
 func (s *svc) runPiece(ctx context.Context, org, piece, action string, auth any, props map[string]any) (pieceRunResult, error) {
+	secret := pieceRunSecret()
+	if secret == "" {
+		// Fail closed: without the secret the engine will refuse (403), so surface a
+		// clear "not configured" rather than making a doomed call.
+		return pieceRunResult{}, fmt.Errorf("auto piece run: PIECES_RUNNER_SECRET not configured")
+	}
 	body, err := json.Marshal(map[string]any{"action": action, "auth": auth, "props": props})
 	if err != nil {
 		return pieceRunResult{}, err
@@ -156,7 +173,8 @@ func (s *svc) runPiece(ctx context.Context, org, piece, action string, auth any,
 		return pieceRunResult{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Org-Id", org) // the validated tenant; the engine scopes to it
+	req.Header.Set("X-Org-Id", org)              // the validated tenant; the engine scopes to it
+	req.Header.Set("X-Piece-Run-Secret", secret) // authorizes cloud as the caller (RED H1/M1)
 	resp, err := syncHTTP.Do(req)
 	if err != nil {
 		return pieceRunResult{}, fmt.Errorf("auto piece run: %w", err)
