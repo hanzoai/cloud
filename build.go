@@ -262,9 +262,13 @@ func pickO11yClient(cfg *Config, log luxlog.Logger) O11yClient {
 }
 
 func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
-	if cfg.Enabled("vfs") {
-		return nil
-	}
+	// deps.VFS must NEVER be nil (R-7): files.go and any other VFS consumer call
+	// s.vfs.Put/Get/Delete unconditionally, so a nil here is a per-request 500
+	// (dishonest degradation) instead of a fail-closed 502. Unlike the
+	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
+	// after MountAll (Mount receives deps by value), so we ALWAYS hand back a
+	// concrete client: a ZAP-RPC client when an endpoint is set, else the
+	// fail-closed DisabledVFS stub (Put/Get/Delete return a non-nil error → 502).
 	if cfg.VFSZAPAddr != "" {
 		log.Info("deps.VFS → ZAP RPC", "addr", cfg.VFSZAPAddr)
 		return clients.VFSRPCAt(cfg.VFSZAPAddr)
