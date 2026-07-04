@@ -1,11 +1,29 @@
 package notify
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	ntypes "github.com/hanzoai/notify/pkg/types"
 )
+
+// fakeKMS is a cloud.KMSClient backed by a ref→value map. It models cloud's
+// embedded KMS: creds() reads orgs/<org>/notify/<svc>/<key>. Any unseeded ref
+// returns ErrSecretNotFound so a partially-configured provider fails closed.
+type fakeKMS struct{ m map[string]string }
+
+func (f fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
+	if v, ok := f.m[ref]; ok {
+		return []byte(v), nil
+	}
+	return nil, errors.New("secret not found")
+}
+func (f fakeKMS) PutSecret(context.Context, string, []byte) error { return nil }
+func (f fakeKMS) Sign(context.Context, string, []byte) ([]byte, error) {
+	return nil, errors.New("sign unsupported")
+}
 
 func TestRenderOTPEmail(t *testing.T) {
 	subject, body, err := render(&ntypes.SendRequest{
@@ -86,10 +104,12 @@ func TestRenderUnknownTemplate(t *testing.T) {
 }
 
 func TestDefaultProviderSMSTwilio(t *testing.T) {
-	t.Setenv("TWILIO_ACCOUNT_SID", "ACxxxx")
-	t.Setenv("TWILIO_AUTH_TOKEN", "tok")
-	t.Setenv("TWILIO_PHONE_NUMBER", "+15551230000")
-	s := &service{}
+	// Twilio creds live ONLY in KMS at orgs/<org>/notify/twilio/<key>.
+	s := &service{kms: fakeKMS{m: map[string]string{
+		"orgs/hanzo/notify/twilio/account-sid": "ACxxxx",
+		"orgs/hanzo/notify/twilio/auth-token":  "tok",
+		"orgs/hanzo/notify/twilio/from-number": "+15551230000",
+	}}}
 	got, err := s.defaultProvider(t.Context(), "hanzo", "sms")
 	if err != nil {
 		t.Fatalf("defaultProvider: %v", err)
@@ -99,45 +119,56 @@ func TestDefaultProviderSMSTwilio(t *testing.T) {
 	}
 }
 
-func TestDefaultProviderSMSFromNumberAlias(t *testing.T) {
-	// Only the TWILIO_FROM_NUMBER alias is set (not TWILIO_PHONE_NUMBER); it must
-	// still satisfy the from-number requirement — mirrors notifyd's envFirst.
-	t.Setenv("TWILIO_ACCOUNT_SID", "ACxxxx")
-	t.Setenv("TWILIO_AUTH_TOKEN", "tok")
-	t.Setenv("TWILIO_PHONE_NUMBER", "")
-	t.Setenv("TWILIO_FROM_NUMBER", "+15551230000")
-	s := &service{}
-	got, err := s.defaultProvider(t.Context(), "hanzo", "sms")
-	if err != nil || got != "twilio" {
-		t.Fatalf("want twilio via alias, got %q err=%v", got, err)
+func TestDefaultProviderScopedPerOrg(t *testing.T) {
+	// Creds are org-scoped: a token for org "hanzo" must NOT read another org's
+	// twilio creds. Seeding only "lux" leaves "hanzo" unconfigured.
+	s := &service{kms: fakeKMS{m: map[string]string{
+		"orgs/lux/notify/twilio/account-sid": "ACxxxx",
+		"orgs/lux/notify/twilio/auth-token":  "tok",
+		"orgs/lux/notify/twilio/from-number": "+15551230000",
+	}}}
+	if _, err := s.defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
+		t.Fatal("expected error: hanzo has no twilio creds; lux's must not leak")
+	}
+	if got, err := s.defaultProvider(t.Context(), "lux", "sms"); err != nil || got != "twilio" {
+		t.Fatalf("want twilio for lux, got %q err=%v", got, err)
 	}
 }
 
 func TestDefaultProviderSMSNoneConfigured(t *testing.T) {
-	for _, k := range []string{
-		"TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER", "TWILIO_FROM_NUMBER",
-		"PLIVO_AUTH_ID", "PLIVO_AUTH_TOKEN",
-	} {
-		t.Setenv(k, "")
-	}
-	s := &service{}
+	// Empty KMS → no provider → fail closed. Also covers the nil-store case.
+	s := &service{kms: fakeKMS{m: map[string]string{}}}
 	if _, err := s.defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
 		t.Fatal("expected error when no SMS provider is configured")
+	}
+	if _, err := (&service{}).defaultProvider(t.Context(), "hanzo", "sms"); err == nil {
+		t.Fatal("expected error when KMS store is nil (fail closed)")
 	}
 }
 
 func TestDefaultProviderEmailMail(t *testing.T) {
-	// No twilio_email from-email → falls back to SMTP mail.
-	t.Setenv("TWILIO_FROM_EMAIL", "")
-	t.Setenv("SMTP_HOST", "smtp.example.com")
-	t.Setenv("SENDER_EMAIL", "no-reply@hanzo.ai")
-	s := &service{}
+	// No twilio_email account → falls back to SMTP mail (both from KMS only).
+	s := &service{kms: fakeKMS{m: map[string]string{
+		"orgs/hanzo/notify/mail/smtp-host":    "smtp.example.com",
+		"orgs/hanzo/notify/mail/sender-email": "no-reply@hanzo.ai",
+	}}}
 	got, err := s.defaultProvider(t.Context(), "hanzo", "email")
 	if err != nil {
 		t.Fatalf("defaultProvider: %v", err)
 	}
 	if got != "mail" {
 		t.Errorf("want mail, got %q", got)
+	}
+}
+
+func TestCredsNeverReadEnv(t *testing.T) {
+	// Regression: even with the legacy env vars set, creds() must ignore them —
+	// KMS is the ONLY source. A nil store yields no creds regardless of env.
+	t.Setenv("TWILIO_ACCOUNT_SID", "ACfromenv")
+	t.Setenv("TWILIO_AUTH_TOKEN", "envtok")
+	t.Setenv("TWILIO_PHONE_NUMBER", "+15559999999")
+	if c := (&service{}).creds(t.Context(), "hanzo", "twilio"); len(c) != 0 {
+		t.Fatalf("creds must not read env; got %v", c)
 	}
 }
 
