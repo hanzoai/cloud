@@ -11,7 +11,17 @@
 // without re-importing through cloud.
 package types
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrBlobNotFound is the sentinel a WORKING VFS backend returns from Get/Delete
+// when the blob does not exist. It lets a consumer (clients/team files) tell a
+// genuine miss (→ 404 / idempotent delete) apart from a backend that is
+// unavailable/disabled (any OTHER error → fail closed 502) — so a missing blob
+// never masquerades as an outage and a real outage never masquerades as 404.
+var ErrBlobNotFound = errors.New("vfs: blob not found")
 
 // Claims is the JWT-validated identity surface gateway hands to
 // downstream subsystems per HIP-0026. Sub = JWT `sub`, Org = JWT
