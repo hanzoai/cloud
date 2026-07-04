@@ -1,0 +1,104 @@
+{
+  "pieceCount": 5,
+  "pieces": [
+    {
+      "name": "core",
+      "displayName": "Core",
+      "description": "Built-in control-flow and generic I/O steps. No credentials required.",
+      "logoUrl": "https://cdn.hanzo.ai/automations/core.svg",
+      "version": "1.0.0",
+      "categories": ["CORE"],
+      "auth": { "type": "none", "required": false },
+      "actions": [
+        { "name": "http_request", "displayName": "HTTP Request", "description": "Issue an HTTP GET/POST and return {status, headers, body}.", "props": [
+          { "name": "url", "type": "string", "required": true },
+          { "name": "method", "type": "string" },
+          { "name": "body", "type": "string" },
+          { "name": "headers", "type": "object" }
+        ] },
+        { "name": "delay", "displayName": "Delay", "description": "Pause the flow for a bounded number of seconds.", "props": [
+          { "name": "seconds", "type": "number", "required": true }
+        ] },
+        { "name": "code", "displayName": "Transform", "description": "Return the reference-resolved input map (a Go data-mapper transform).", "props": [
+          { "name": "input", "type": "object" }
+        ] },
+        { "name": "wait_for_approval", "displayName": "Wait for Approval", "description": "A manual waitpoint; inside a flow it blocks until a resume signal.", "props": [
+          { "name": "reason", "type": "string" }
+        ] }
+      ],
+      "triggers": [
+        { "name": "schedule", "displayName": "Schedule", "description": "Start the flow on a cron schedule.", "strategy": "POLLING", "props": [
+          { "name": "cron", "type": "string", "required": true }
+        ] },
+        { "name": "manual", "displayName": "Manual", "description": "Start the flow only on an explicit run.", "strategy": "MANUAL", "props": [] }
+      ]
+    },
+    {
+      "name": "slack",
+      "displayName": "Slack",
+      "description": "Post messages to a connected Slack workspace.",
+      "logoUrl": "https://cdn.hanzo.ai/automations/slack.svg",
+      "version": "1.0.0",
+      "categories": ["COMMUNICATION"],
+      "auth": { "type": "bot_token", "required": true },
+      "actions": [
+        { "name": "send_message", "displayName": "Send Message", "description": "Post a message to a Slack channel via chat.postMessage.", "props": [
+          { "name": "channel", "type": "string", "required": true },
+          { "name": "text", "type": "string", "required": true }
+        ] }
+      ],
+      "triggers": []
+    },
+    {
+      "name": "github",
+      "displayName": "GitHub",
+      "description": "Manage issues and repositories on GitHub.",
+      "logoUrl": "https://cdn.hanzo.ai/automations/github.svg",
+      "version": "1.0.0",
+      "categories": ["DEVELOPER_TOOLS"],
+      "auth": { "type": "oauth2", "required": true },
+      "actions": [
+        { "name": "create_issue", "displayName": "Create Issue", "description": "Open an issue on a repository.", "props": [
+          { "name": "owner", "type": "string", "required": true },
+          { "name": "repo", "type": "string", "required": true },
+          { "name": "title", "type": "string", "required": true },
+          { "name": "body", "type": "string" }
+        ] },
+        { "name": "list_repos", "displayName": "List Repositories", "description": "List repositories the installation can access.", "props": [] }
+      ],
+      "triggers": []
+    },
+    {
+      "name": "google_sheets",
+      "displayName": "Google Sheets",
+      "description": "Append rows to Google Sheets.",
+      "logoUrl": "https://cdn.hanzo.ai/automations/google_sheets.svg",
+      "version": "1.0.0",
+      "categories": ["PRODUCTIVITY"],
+      "auth": { "type": "oauth2", "required": true },
+      "actions": [
+        { "name": "append_row", "displayName": "Append Row", "description": "Append a row of values to a spreadsheet range.", "props": [
+          { "name": "spreadsheetId", "type": "string", "required": true },
+          { "name": "range", "type": "string", "required": true },
+          { "name": "values", "type": "array", "required": true }
+        ] }
+      ],
+      "triggers": []
+    },
+    {
+      "name": "google_drive",
+      "displayName": "Google Drive",
+      "description": "List and manage Google Drive files.",
+      "logoUrl": "https://cdn.hanzo.ai/automations/google_drive.svg",
+      "version": "1.0.0",
+      "categories": ["PRODUCTIVITY"],
+      "auth": { "type": "oauth2", "required": true },
+      "actions": [
+        { "name": "list_files", "displayName": "List Files", "description": "List files matching an optional query.", "props": [
+          { "name": "query", "type": "string" }
+        ] }
+      ],
+      "triggers": []
+    }
+  ]
+}
