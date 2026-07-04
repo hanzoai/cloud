@@ -77,6 +77,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/gpus/alerts", s.gpuAlerts)
 	app.Get("/v1/gpus", s.listGPUs)
 
+	// BYO fleet: the org's bring-your-own machines that dialed in via
+	// `hanzo gpu connect`. Raw list here; the same workers are folded into
+	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
+	// pages show them alongside Visor-provisioned compute.
+	app.Get("/v1/fleet/workers", s.listFleetWorkers)
+
 	app.Get("/v1/clusters", s.listClusters)
 	app.Post("/v1/clusters/:clusterId/pools", s.createPool)
 	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", s.scalePool)
@@ -136,11 +142,21 @@ func (s *svc) listMachines(c *zip.Ctx) error {
 	}
 	var machines []visorMachine
 	if err := s.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
-		return err
+		// Visor (the DOKS/reseller provider) is unreachable — do not hide the
+		// tenant's OWN bring-your-own compute behind an upstream blip. Log and
+		// fall through with no Visor rows; the BYO fold-in below still lists the
+		// dialed-in GPUs. In production Visor is up and both sets return.
+		s.log.Warn("visor get-machines failed; returning BYO-only machine list", "org", org, "err", err)
+		machines = nil
 	}
 	out := make([]machineView, 0, len(machines))
 	for _, m := range machines {
 		out = append(out, toMachineView(m))
+	}
+	// Fold in the org's BYO machines (provider="byo") so the console's Machines
+	// page shows dialed-in GPUs next to Visor-provisioned ones.
+	for _, w := range byoWorkers(org) {
+		out = append(out, byoMachineView(w))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"machines": out})
 }
@@ -263,11 +279,19 @@ func (s *svc) listGPUs(c *zip.Ctx) error {
 	}
 	var machines []visorMachine
 	if err := s.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
-		return err
+		// Resilient union (see listMachines): a Visor outage must not hide the
+		// tenant's BYO accelerators. Log and continue with the BYO fold-in.
+		s.log.Warn("visor get-machines failed; returning BYO-only gpu list", "org", org, "err", err)
+		machines = nil
 	}
 	out := make([]gpuView, 0)
 	for _, m := range machines {
 		out = append(out, gpusFromMachine(m)...)
+	}
+	// Fold in the org's BYO accelerators (provider="byo") so the console's GPUs
+	// page lists dialed-in cards with their real model + VRAM.
+	for _, w := range byoWorkers(org) {
+		out = append(out, byoGPUViews(w)...)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"gpus": out})
 }
