@@ -84,6 +84,20 @@ func register(c *Connector) {
 	if c.Triggers == nil {
 		c.Triggers = map[string]*Trigger{}
 	}
+	// INF-1: MCP tool names are "<connector>_<action>", and both halves may contain
+	// underscores (e.g. "google_sheets"+"append_row"), so two DIFFERENT pairs could
+	// collide into ONE tool name and make resolveTool ambiguous. Refuse at init — a
+	// future connector can never silently shadow another's tool.
+	for an := range c.Actions {
+		tool := c.Name + "_" + an
+		for exName, ex := range registry {
+			for exAn := range ex.Actions {
+				if exName+"_"+exAn == tool {
+					panic("automations: tool-name collision " + tool + " (" + c.Name + "." + an + " vs " + exName + "." + exAn + ")")
+				}
+			}
+		}
+	}
 	registry[c.Name] = c
 }
 
