@@ -2,7 +2,7 @@ package kmssvc
 
 // login.go — the /v1/kms/auth/login broker.
 //
-// The kms-operator's universalAuth transport (github.com/hanzoai/kms-operator
+// The kms-operator's universalAuth transport (github.com/luxfi/kms-operator
 // packages/kmsapi) authenticates by POSTing {clientId, clientSecret} to
 // {hostAPI}/v1/kms/auth/login and expecting {accessToken, expiresIn, tokenType}.
 // cloud hosts the operator's KMS at cloud.hanzo.svc, so cloud must serve that
