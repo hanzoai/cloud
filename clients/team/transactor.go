@@ -376,73 +376,110 @@ func mustJSON(v any) []byte {
 
 // ── roster reconcile (bots-as-members) ────────────────────────────────────────
 
-// reconcileRoster projects the workspace roster into the docs store on EVERY
-// connect (idempotent): every human member (from the account store) AND every one
-// of the org's agents (from the in-process agents lister) becomes a
-// contact:class:Person + contact:mixin:Employee (+ a hanzo social identity) so
-// they render in Contacts → Employees. This is the decompleced #19 win: bots are
-// sourced from the canonical agents store in-process — no IAM-SA HTTP hop, no Base
-// collection. It reconciles unconditionally (not sentinel-gated), so an agent
-// created after the first connect still becomes an Employee.
+// reconcileRoster is the connect-time roster projection (no live broadcast — the
+// client reads the populated store on its first findAll).
+func (s *session) reconcileRoster() { s.reconcile(false) }
+
+// reconcile projects the workspace roster into the docs store on EVERY connect
+// (idempotent, no sentinel): every human member (from the account store) AND every
+// one of the org's agents (from the in-process agents lister) becomes a
+// contact:class:Person + contact:mixin:Employee (+ a hanzo social identity) so they
+// render in Contacts → Employees — the decompleced #19 win (bots sourced from the
+// canonical agents store in-process, no IAM-SA HTTP hop, no Base collection).
+//
+// It ALSO runs the removal half (Red): a previously-projected BOT Employee whose
+// agent id is no longer in the authoritative live set is DEACTIVATED — otherwise a
+// deleted agent would linger as a stale active=true team member forever. Its Person
+// survives (authorship history); humans are never touched. Removal runs ONLY when
+// the bot list is authoritative (lister present AND no error), so a transient
+// lister failure is never misread as "all agents gone".
+//
+// When broadcast is true the applied txes are fanned to the workspace's open
+// sessions (the admin re-sync path). Returns the number of live roster entries
+// (humans + live bots) processed.
 //
 // ISOLATION: s.org is the VERIFIED token tenant; both sources are queried
 // org-scoped, so a workspace only ever receives its OWN org's humans and agents.
-func (s *session) reconcileRoster() {
+func (s *session) reconcile(broadcast bool) int {
 	ctx := context.Background()
+	var applied []json.RawMessage
+	apply := func(txes ...map[string]any) {
+		for _, t := range txes {
+			raw, err := json.Marshal(t)
+			if err != nil {
+				continue
+			}
+			_, a := s.applyTx(raw)
+			applied = append(applied, a...)
+		}
+	}
+
+	count := 0
 	// Humans — the account store's member rows for this workspace, org-scoped.
 	if s.server.accounts != nil {
 		members, err := s.server.accounts.MembersForWorkspaceUUID(ctx, s.org, s.workspace)
 		if err == nil {
 			for _, m := range members {
-				s.applyLocal(MemberTxes(Member{
-					UserID: m.UserID,
-					Name:   pick(m.DisplayName, m.UserID),
-					Role:   m.Role,
-					IsBot:  m.IsBot,
-					Active: !m.IsBot || m.Active,
+				apply(MemberTxes(Member{
+					UserID: m.UserID, Name: pick(m.DisplayName, m.UserID),
+					Role: m.Role, IsBot: m.IsBot, Active: !m.IsBot || m.Active,
 				}, s.exists(PersonRef(m.UserID)))...)
+				count++
 			}
 		}
 	}
-	// Bots — the org's in-process agents. A missing/disabled agents subsystem is
-	// non-fatal (bots are additive): the human roster still renders.
+
+	// Bots — the org's in-process agents. desired is the authoritative live set; we
+	// only compute it (and later remove) when the lister SUCCEEDS, so a transient
+	// error never nukes every bot member.
+	desired := map[string]bool{}
+	botsListed := false
 	if s.server.bots != nil {
 		bots, err := s.server.bots(ctx, s.org)
 		if err == nil {
+			botsListed = true
 			for _, b := range bots {
 				uid := botUserID(b.ID)
 				if uid == "" {
 					continue
 				}
-				s.applyLocal(MemberTxes(Member{
-					UserID: uid,
-					Name:   pick(b.Name, uid),
-					Role:   "member",
-					IsBot:  true,
-					Active: b.Active,
+				desired[uid] = true
+				apply(MemberTxes(Member{
+					UserID: uid, Name: pick(b.Name, uid), Role: "member", IsBot: true, Active: b.Active,
 				}, s.exists(PersonRef(uid)))...)
+				count++
 			}
 		}
 	}
+
+	// Removal-reconcile: deactivate any stale bot Employee (position=="Agent") whose
+	// agent id is no longer live. mixinTx flips only Employee.active (name + Person
+	// untouched); already-inactive bots are skipped (idempotent-quiet).
+	if botsListed {
+		for _, doc := range s.queryDocs(mixinEmployee, map[string]any{"position": "Agent"}) {
+			uid := str(doc["personUuid"])
+			if uid == "" || desired[uid] {
+				continue
+			}
+			if emp, ok := doc[mixinEmployee].(map[string]any); ok {
+				if active, _ := emp["active"].(bool); !active {
+					continue
+				}
+			}
+			apply(mixinTx(str(doc["_id"]), clPerson, spaceContacts, mixinEmployee, acctSystem, map[string]any{"active": false}))
+		}
+	}
+
+	if broadcast && len(applied) > 0 {
+		s.server.hub.broadcast(s.workspace, applied)
+	}
+	return count
 }
 
 // exists reports whether a doc id is already in this session's workspace store.
 func (s *session) exists(id string) bool {
 	d, _ := s.store.get(s.org, s.workspace, id)
 	return d != nil
-}
-
-// applyLocal applies projection txes to this session's store without a broadcast
-// (roster reconcile runs before the client's first query, so there is nothing
-// live to notify — the client reads the populated store on its initial findAll).
-func (s *session) applyLocal(txes ...map[string]any) {
-	for _, t := range txes {
-		raw, err := json.Marshal(t)
-		if err != nil {
-			continue
-		}
-		s.applyTx(raw)
-	}
 }
 
 // ── in-process projection bridge (Apply / ingest) ─────────────────────────────
@@ -473,17 +510,6 @@ func (srv *transServer) ingest(org, workspace, account string, txes ...map[strin
 	if len(applied) > 0 {
 		srv.hub.broadcast(workspace, applied)
 	}
-}
-
-// hasDoc reports whether a doc id already exists in a workspace store. It lets a
-// projection choose create-vs-update so a re-projection never full-replaces a doc
-// (which would clobber fields the SPA owns — see MemberTxes).
-func hasDoc(org, workspace, id string) bool {
-	if live == nil {
-		return false
-	}
-	d, _ := live.store.get(org, workspace, id)
-	return d != nil
 }
 
 // ── live broadcast hub ────────────────────────────────────────────────────────

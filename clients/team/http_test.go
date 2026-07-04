@@ -18,12 +18,13 @@ import (
 const testSecret = "team-http-test-secret"
 
 // mountTeam mounts the team subsystem onto a fresh zip.App with an isolated
-// DataDir and a pinned SERVER_SECRET, and returns the app.
+// DataDir, a pinned (non-default) SERVER_SECRET so the subsystem is functional
+// (not degraded), and an in-memory VFS so the files plane round-trips in tests.
 func mountTeam(t *testing.T) *zip.App {
 	t.Helper()
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
@@ -31,17 +32,25 @@ func mountTeam(t *testing.T) *zip.App {
 }
 
 // call drives one request through the real Fiber stack. headers carries identity
-// (X-Org-Id/X-User-Id/X-User-IsAdmin) and/or Authorization.
+// (X-Org-Id/X-User-Id/X-User-IsAdmin) and/or Authorization. A []byte body is sent
+// RAW (octet-stream, for file uploads); any other non-nil body is JSON-encoded.
 func call(t *testing.T, app *zip.App, method, path string, headers map[string]string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
+	contentType := ""
+	switch b := body.(type) {
+	case nil:
+	case []byte:
 		r = bytes.NewReader(b)
+		contentType = "application/octet-stream"
+	default:
+		bs, _ := json.Marshal(b)
+		r = bytes.NewReader(bs)
+		contentType = "application/json"
 	}
 	req := httptest.NewRequest(method, path, r)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -66,7 +75,7 @@ func TestSelectWorkspaceHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
-	sess, err := token.Generate(acct, "", map[string]any{"org": org}, testSecret)
+	sess, err := token.Generate(acct, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), testSecret)
 	if err != nil {
 		t.Fatalf("mint session token: %v", err)
 	}
@@ -136,7 +145,7 @@ func TestSelectWorkspaceCrossTenantBlocked(t *testing.T) {
 	}
 
 	// org-b's caller presents org-a's slug.
-	tokB, _ := token.Generate(acctB, "", map[string]any{"org": "org-b"}, testSecret)
+	tokB, _ := token.Generate(acctB, "", map[string]any{"org": "org-b"}, expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + tokB},
 		map[string]any{"method": "selectWorkspace", "params": map[string]any{"workspaceUrl": wsA.Slug}})
@@ -203,6 +212,81 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 	}
 	if len(lr.Bots) != 0 {
 		t.Fatalf("bots = %d, want 0 (agents not mounted in test)", len(lr.Bots))
+	}
+}
+
+// TestDegradedWithoutSecret is the Red CRITICAL guard: with SERVER_SECRET unset
+// (and no dev escape hatch) Mount still SUCCEEDS (the cloud binary + all other
+// subsystems stay up), but every /v1/team route fails closed with 503 and NO token
+// is ever decoded — so a forged token is useless. A valid secret enables the
+// routes. (The uniform /v1/team/health probe is owned by serve.go and stays 200; it
+// is not registered by Mount, so this unit test asserts the route-degrade, which is
+// the security-load-bearing half.)
+func TestDegradedWithoutSecret(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "")     // unset
+	t.Setenv("TEAM_DEV_INSECURE", "") // no escape hatch
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+
+	// A validated principal that would otherwise 200 now gets 503 — fail closed.
+	code, body := call(t, app, http.MethodGet, "/v1/team/bots",
+		map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("degraded /v1/team/bots = %d, want 503 (%s)", code, body)
+	}
+	// The account RPC is 503 too (no token decoded/accepted while degraded).
+	if code, _ := call(t, app, http.MethodPost, "/v1/team/account", nil, rpcRequest{Method: "getUserWorkspaces"}); code != http.StatusServiceUnavailable {
+		t.Fatalf("degraded /v1/team/account = %d, want 503", code)
+	}
+	// The default-secret literal is ALSO degraded (a public key must never sign).
+	_ = Shutdown()
+	t.Setenv("SERVER_SECRET", "secret") // == token.DefaultSecret
+	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app2, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
+	}
+	if code, _ := call(t, app2, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("default-secret /v1/team/bots = %d, want 503 (public key must not sign)", code)
+	}
+}
+
+// TestDevInsecureEnablesRoutes proves the explicit dev escape hatch
+// (TEAM_DEV_INSECURE=1) runs functional on the default secret — for local dev
+// only. The route is NOT degraded.
+func TestDevInsecureEnablesRoutes(t *testing.T) {
+	t.Setenv("SERVER_SECRET", "")
+	t.Setenv("TEAM_DEV_INSECURE", "1")
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+	// Functional: a validated principal gets 200 (empty list), not 503.
+	if code, body := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusOK {
+		t.Fatalf("dev-insecure /v1/team/bots = %d, want 200 (%s)", code, body)
+	}
+}
+
+// TestSetCookieRejectsBadToken is the fix for the login-CSRF/fixation vector:
+// PUT /cookie must verify the token before persisting it, so a caller-supplied
+// garbage/forged token is refused (401) and never becomes a session cookie.
+func TestSetCookieRejectsBadToken(t *testing.T) {
+	app := mountTeam(t)
+	// A verifiable token this service signed → accepted.
+	good, _ := token.Generate("550e8400-e29b-41d4-a716-446655440000", "", map[string]any{"org": "acme"}, expUnix(sessionTokenTTL), testSecret)
+	if code, _ := call(t, app, http.MethodPut, "/v1/team/account/cookie", nil, map[string]any{"token": good}); code != http.StatusOK {
+		t.Fatalf("valid token PUT /cookie = %d, want 200", code)
+	}
+	// Garbage / forged token → rejected, never stored.
+	if code, _ := call(t, app, http.MethodPut, "/v1/team/account/cookie", nil, map[string]any{"token": "not.a.token"}); code != http.StatusUnauthorized {
+		t.Fatalf("bad token PUT /cookie = %d, want 401", code)
+	}
+	forged, _ := token.Generate("550e8400-e29b-41d4-a716-446655440000", "", map[string]any{"org": "acme"}, expUnix(sessionTokenTTL), "attacker-secret")
+	if code, _ := call(t, app, http.MethodPut, "/v1/team/account/cookie", nil, map[string]any{"token": forged}); code != http.StatusUnauthorized {
+		t.Fatalf("foreign-signed token PUT /cookie = %d, want 401", code)
 	}
 }
 
