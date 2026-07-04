@@ -90,6 +90,9 @@ func (c *rpcVFS) Put(_ context.Context, _ string, _ []byte) error {
 func (c *rpcVFS) Get(_ context.Context, _ string) ([]byte, error) {
 	return nil, c.errf("Get")
 }
+func (c *rpcVFS) Delete(_ context.Context, _ string) error {
+	return c.errf("Delete")
+}
 
 type rpcMQ struct{ rpcEndpoint }
 
