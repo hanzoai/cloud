@@ -56,10 +56,22 @@ func Serve(enable []string) error {
 	// Canonical middleware pipeline. Order matters:
 	//  1. Recover         — panic → JSON 500
 	//  2. RequestID       — generate / propagate X-Request-Id
-	//  3. Logger          — request-line log
-	//  4. SanitizeIdentity — establish a VALIDATED principal (see below)
+	//  3. Tracing         — one OTel SERVER span per /v1/* request, over ZAP
+	//  4. Logger          — request-line log
+	//  5. SanitizeIdentity — establish a VALIDATED principal (see below)
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
+
+	// Request tracing. Sits right after RequestID (so the span carries the
+	// request_id) and BEFORE identity/audit/billing/handlers, so the whole
+	// authenticated pipeline nests under one span and the span CONTEXT it writes
+	// via SetContext parents every downstream span (agent.run → agent.step →
+	// chat) into a single trace. Spans ship over the SAME global ZAP provider the
+	// log pipeline uses (cmd/cloud initTelemetry), landing in hanzoai/datastore.
+	// Health/readiness/metrics + non-/v1 paths are skipped (see traceable). See
+	// middleware_tracing.go.
+	app.Use(TracingMiddleware())
+
 	app.Use(middleware.Logger(deps.Logger))
 
 	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
