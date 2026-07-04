@@ -35,11 +35,15 @@
 // unauthenticated caller gets 401; a signed-in caller can only send scoped to their
 // OWN org.
 //
-// CREDENTIALS — never plaintext. Provider credentials are read from env (the
-// KMS-synced notify-twilio Secret the operator injects, exactly as notifyd reads
-// them) and, for keys absent from env, from KMS via cloud.Deps.KMS under the
-// documented shared/<service>/<key> and tenants/<org>/<service>/<key> paths. No
-// secret is ever hard-coded or logged.
+// CREDENTIALS — KMS only, never env, never plaintext, never logged. Provider
+// credentials are read EXCLUSIVELY from cloud's embedded KMS via cloud.Deps.KMS,
+// at the org-scoped, rotatable ref orgs/<org>/notify/<service>/<key> — the SAME
+// /orgs/<org> namespace clients/integrations uses, so a cred is writable and
+// rotatable through POST /v1/kms/orgs/:org/secrets with a validated org token
+// (no operator-injected env Secret, no restart to rotate). The org is the
+// VALIDATED principal's tenant (never a client header). A missing key yields an
+// empty value and constructProvider fails closed; no secret is ever hard-coded,
+// read from the environment, or logged.
 package notify
 
 import (
@@ -49,7 +53,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"text/template"
 
@@ -241,24 +244,21 @@ func (s *service) defaultProvider(ctx context.Context, org, channel string) (str
 	}
 }
 
-// creds resolves a provider's credential bag: env first (the notify-twilio Secret,
-// exactly as notifyd reads it), then KMS via cloud.Deps.KMS for any key absent
-// from env, under the documented shared/<service>/<key> then
-// tenants/<org>/<service>/<key> paths. Never hard-codes or logs a secret.
+// creds resolves a provider's credential bag from KMS ONLY — never env, never
+// plaintext, never logged. Each key is read from cloud's embedded KMS
+// (cloud.Deps.KMS) at the org-scoped, rotatable ref orgs/<org>/notify/<svc>/<key>,
+// the same /orgs/<org> convention clients/integrations uses (so a cred is
+// writable + rotatable via POST /v1/kms/orgs/:org/secrets). A nil store or a
+// missing key leaves the value empty; constructProvider then fails closed.
 func (s *service) creds(ctx context.Context, org, svc string) map[string]string {
-	out := envCreds(svc)
+	out := make(map[string]string, 4)
 	if s.kms == nil {
 		return out
 	}
 	for _, k := range credKeys(svc) {
-		if out[k] != "" {
-			continue
-		}
-		for _, ref := range []string{"shared/" + svc + "/" + k, "tenants/" + org + "/" + svc + "/" + k} {
-			if v, err := s.kms.GetSecret(ctx, ref); err == nil && len(v) > 0 {
-				out[k] = string(v)
-				break
-			}
+		ref := "orgs/" + org + "/notify/" + svc + "/" + k
+		if v, err := s.kms.GetSecret(ctx, ref); err == nil && len(v) > 0 {
+			out[k] = string(v)
 		}
 	}
 	return out
@@ -280,44 +280,6 @@ func credKeys(svc string) []string {
 		return []string{"smtp-host", "smtp-port", "smtp-user", "smtp-password", "sender-email", "sender-name"}
 	default:
 		return nil
-	}
-}
-
-// envCreds reads a provider's credentials from env — mirrors
-// internal/tenant.credsFromEnv (same env var names, incl. the TWILIO_PHONE_NUMBER
-// canonical / TWILIO_FROM_NUMBER alias the notify-twilio Secret uses).
-func envCreds(svc string) map[string]string {
-	switch svc {
-	case "plivo":
-		return map[string]string{
-			"auth-id":     os.Getenv("PLIVO_AUTH_ID"),
-			"auth-token":  os.Getenv("PLIVO_AUTH_TOKEN"),
-			"from-number": os.Getenv("PLIVO_FROM_NUMBER"),
-		}
-	case "twilio":
-		return map[string]string{
-			"account-sid": os.Getenv("TWILIO_ACCOUNT_SID"),
-			"auth-token":  os.Getenv("TWILIO_AUTH_TOKEN"),
-			"from-number": envFirst("TWILIO_PHONE_NUMBER", "TWILIO_FROM_NUMBER"),
-		}
-	case "twilio_email":
-		return map[string]string{
-			"account-sid": os.Getenv("TWILIO_ACCOUNT_SID"),
-			"auth-token":  os.Getenv("TWILIO_AUTH_TOKEN"),
-			"from-email":  os.Getenv("TWILIO_FROM_EMAIL"),
-			"from-name":   os.Getenv("TWILIO_FROM_NAME"),
-		}
-	case "mail":
-		return map[string]string{
-			"smtp-host":     os.Getenv("SMTP_HOST"),
-			"smtp-port":     os.Getenv("SMTP_PORT"),
-			"smtp-user":     os.Getenv("SMTP_USER"),
-			"smtp-password": os.Getenv("SMTP_PASSWORD"),
-			"sender-email":  os.Getenv("SENDER_EMAIL"),
-			"sender-name":   os.Getenv("SENDER_NAME"),
-		}
-	default:
-		return map[string]string{}
 	}
 }
 
@@ -486,15 +448,4 @@ func hasKeys(c map[string]string, keys ...string) bool {
 		}
 	}
 	return true
-}
-
-// envFirst returns the first non-empty env var value among keys — mirrors
-// internal/tenant.envFirst so a canonical name and its alias both work.
-func envFirst(keys ...string) string {
-	for _, k := range keys {
-		if v := os.Getenv(k); v != "" {
-			return v
-		}
-	}
-	return ""
 }
