@@ -2,6 +2,7 @@ package team
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -111,6 +112,75 @@ func TestReconcileRosterIdempotent(t *testing.T) {
 	}
 	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
 		t.Fatalf("active employees = %d, want 2", n)
+	}
+}
+
+// TestReconcileRemovesDeletedBot is the Phase-2B removal-reconcile: an agent that
+// is DELETED from the registry (no longer in ListForOrg) must not linger as a stale
+// active Employee — the next reconcile deactivates it (drops it from the Team list)
+// while its Person survives for authorship history. Idempotent.
+func TestReconcileRemovesDeletedBot(t *testing.T) {
+	const org = "acme"
+	const human = "44444444-4444-4444-8444-444444444444"
+	bots := []Bot{
+		{ID: "agent_a", Name: "alpha", Active: true},
+		{ID: "agent_b", Name: "bravo", Active: true},
+	}
+	_, sess, _ := rosterServer(t, org, human, "Grace Hopper", bots)
+	sess.seedWorkspace()
+	sess.reconcileRoster()
+	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 3 {
+		t.Fatalf("active employees (2 bots + human) = %d, want 3", n)
+	}
+
+	// agent_b is DELETED from the registry — the lister now returns only agent_a.
+	sess.server.bots = func(context.Context, string) ([]Bot, error) {
+		return []Bot{{ID: "agent_a", Name: "alpha", Active: true}}, nil
+	}
+	sess.reconcileRoster()
+
+	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
+		t.Fatalf("active employees after agent_b delete = %d, want 2 (human + agent_a)", n)
+	}
+	uidB := botUserID("agent_b")
+	pb := sess.queryDocs(clPerson, map[string]any{"personUuid": uidB})
+	if len(pb) != 1 {
+		t.Fatalf("deleted bot's Person = %d, want 1 (history preserved)", len(pb))
+	}
+	if emp, _ := pb[0][mixinEmployee].(map[string]any); emp == nil || emp["active"] != false {
+		t.Fatalf("deleted bot Employee not deactivated: %v", pb[0][mixinEmployee])
+	}
+	// agent_a is untouched (still active).
+	if n := len(sess.queryDocs(clPerson, map[string]any{"personUuid": botUserID("agent_a")})); n != 1 {
+		t.Fatalf("surviving bot missing")
+	}
+	// Idempotent: a second reconcile leaves the counts unchanged.
+	sess.reconcileRoster()
+	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
+		t.Fatalf("second reconcile active = %d, want 2 (idempotent)", n)
+	}
+}
+
+// TestReconcileTransientBotErrorKeepsBots proves the removal half is guarded: a
+// transient lister ERROR must NOT be read as "no agents" and deactivate every bot.
+// The existing bots stay active until an authoritative list says otherwise.
+func TestReconcileTransientBotErrorKeepsBots(t *testing.T) {
+	const org = "acme"
+	const human = "55555555-5555-4555-8555-555555555555"
+	_, sess, _ := rosterServer(t, org, human, "Ada", []Bot{{ID: "agent_x", Name: "x", Active: true}})
+	sess.seedWorkspace()
+	sess.reconcileRoster()
+	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
+		t.Fatalf("active employees = %d, want 2", n)
+	}
+
+	// The lister now ERRORS (agents subsystem hiccup) — must NOT nuke the bot.
+	sess.server.bots = func(context.Context, string) ([]Bot, error) {
+		return nil, fmt.Errorf("agents: transient")
+	}
+	sess.reconcileRoster()
+	if n := len(sess.queryDocs(mixinEmployee, map[string]any{"active": true})); n != 2 {
+		t.Fatalf("active employees after transient error = %d, want 2 (bot NOT nuked)", n)
 	}
 }
 
