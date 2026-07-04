@@ -10,7 +10,19 @@ LDFLAGS         ?= -s -w
 # Path to a hanzoai/console2 checkout used to build the embedded console bundle.
 CONSOLE2_DIR    ?= ../console2
 
-.PHONY: help webui build build-standalone run smoke test vet tidy docker docker-push clean
+# The shipped binary is pure Go (Dockerfile: CGO_ENABLED=0 → scratch). Default all
+# build/test targets to that mode so `make build`/`make test` exercise exactly
+# what prod runs — and, critically, register the ONE "sqlite" driver exactly once:
+# cloud's stores use github.com/hanzoai/sqlite (its !cgo backend IS modernc), and
+# the embedded deps (ai/base/commerce/o11y/orm/tasks) that import modernc directly
+# then resolve to the SAME package → a single registration. A plain CGO_ENABLED=1
+# build instead links the fork's mattn backend ALONGSIDE those modernc importers
+# and panics at init ("sql: Register called twice for driver sqlite"); `make
+# test-cgo` proves the cgo path via the fork's `sqlite_purego` opt-out tag, which
+# forces the fork to modernc too so the whole binary registers "sqlite" once.
+CGO_ENABLED     ?= 0
+
+.PHONY: help webui build build-standalone run smoke test test-cgo vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -28,7 +40,7 @@ webui: ## Build the real console2 static bundle into webui/dist (go:embed source
 
 build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui/dist holds — run `webui` first for the real console).
 	@mkdir -p bin
-	$(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
 
 build-standalone: webui build ## Build the REAL 1-binary console: console2 build:embed → webui/dist → go build.
 
@@ -38,11 +50,14 @@ run: build ## Run with iam,base,kms,gateway,o11y enabled (matches README quickst
 smoke: ## Build and run cmd/cloud-smoke (mount-time integration check).
 	$(GO) run ./cmd/cloud-smoke
 
-test: ## Run unit + integration tests.
-	$(GO) test ./...
+test: ## Run unit + integration tests (pure-Go, exactly as prod ships).
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
+
+test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
+	CGO_ENABLED=1 $(GO) test -tags sqlite_purego ./...
 
 vet: ## go vet across the module.
-	$(GO) vet ./...
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
 
 tidy: ## go mod tidy + verify go.sum.
 	$(GO) mod tidy
