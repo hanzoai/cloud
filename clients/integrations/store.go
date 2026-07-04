@@ -82,6 +82,16 @@ CREATE TABLE IF NOT EXISTS oauth_nonces (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_nonces_created ON oauth_nonces(created_at);
+
+-- slack_events is the Slack agent bridge's durable event-dedupe table (see
+-- slack_dedupe.go). Created here in migrate() — fail-loud at Mount, one place —
+-- so the billed webhook path never runs against a missing table (a lazy first-use
+-- ensure could half-init and permanently disable the path).
+CREATE TABLE IF NOT EXISTS slack_events (
+  event_key  TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_slack_events_created ON slack_events(created_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
