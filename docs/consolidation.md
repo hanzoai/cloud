@@ -62,7 +62,7 @@ tasksvc, templates, visor, websearch, zt.
 |---|---|
 | **iam** (`hanzoai/iam`) | Identity control plane; isolated blast radius by design (subsystems.go: "iam → iam.hanzo.ai, isolated control plane"). The binary CONSUMES it (JWT validation), never hosts it. |
 | **gateway** (`hanzoai/gateway/v2`), **ingress** | The edge — they route *to* this binary. Traefik/krakend substrate; fusing the edge into the app defeats the tier separation. |
-| **kms** (`hanzoai/kms`) | MPC-rooted secrets plane; the standalone MPC node set is the root of trust. Cloud embeds only the *facade* (`kmssvc`) fail-closed; the MPC nodes stay separate. |
+| **kms** (`luxfi/kms`, EMBEDDED) | KMS is now embedded in this binary (`clients/kms` store + `kmssvc` `/v1/kms`, fail-closed) — the standalone KMS Deployment is collapsed into cloud. Only the MPC signing ring (`luxfi/mpc`) stays a separate node set, the root of trust. |
 | **registry** (`hanzoai/registry`) | OCI distribution data plane (S3-backed fleet registry); a Docker registry protocol server, not a `/v1` control surface. |
 | **s3** (`hanzoai/s3`, SeaweedFS) | Object-storage data plane. Cloud already carries the control/browse facade (`clients/s3` + provisioning); the store is a separate fleet. |
 | **docdb** (`hanzoai/docdb`, FerretDB) | MongoDB-wire DB data plane over Postgres; provisioned via `clients/provisioning`, never hosted in-proc. |
