@@ -148,6 +148,12 @@ func init() {
 // Visor as ?owner, so a caller can never read or mutate another tenant's compute.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
+// project resolves the org SUB-SCOPE (principal.Project) that shards the BYO fleet
+// registry within an org. The default project keeps the legacy org-only shard, so
+// single-project callers are unchanged. Managed clusters (Visor node pools) stay
+// org-scoped; only the BYO fleet registry is project-sharded.
+func project(c *zip.Ctx) string { return principal.Project(c) }
+
 // ---- machines ----
 
 func (s *svc) listMachines(c *zip.Ctx) error {
@@ -333,9 +339,10 @@ func (s *svc) listClusters(c *zip.Ctx) error {
 	if err := s.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
 		return err
 	}
-	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones.
+	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones,
+	// the latter sharded by the caller's project sub-scope.
 	clusters := clustersFromPools(pools)
-	clusters = append(clusters, s.byoClusters(org)...)
+	clusters = append(clusters, s.byoClusters(org, project(c))...)
 	return c.JSON(http.StatusOK, map[string]any{"clusters": clusters})
 }
 
