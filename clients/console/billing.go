@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/zap-proto/zip"
 )
@@ -119,11 +120,27 @@ func scopedBillingBody(raw []byte, subject string) []byte {
 	return out
 }
 
-// isSafeSegment mirrors the Node route's segment guard: no empty, ".", "..", slash,
-// backslash, or null in a decoded path segment (defense in depth on top of the router's
-// own normalization).
+// isSafeSegment reports whether a path segment is safe to forward. It is the ONE segment
+// guard for this package (the billing AND commerce bridges): a segment is safe only if
+// it is non-empty, not "." / "..", and free of any character a downstream router could
+// re-split or re-decode into traversal — slash, backslash, percent-escape (`%2f`/`%2e`,
+// single- or N-encoded), matrix param (`;`), or a control char (incl. null). The router
+// leaves `%2f`/`%2e` UNdecoded in the wildcard param, but the Go http client — and
+// commerce's own router — WILL decode+normalize them downstream, turning
+// `x/..%2fbilling` into `/v1/billing`: a tunnel PAST the allow-list into the money
+// surface. Rejecting `%`/`;` at the segment makes single-, double-, and N-encoded
+// traversal impossible. Billing endpoints / commerce ids are opaque + escape-free, so
+// this never over-blocks. Mirrors console2's bearer-proxy pathIsClean.
 func isSafeSegment(s string) bool {
-	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\\\x00")
+	if s == "" || s == "." || s == ".." {
+		return false
+	}
+	for _, r := range s {
+		if r == '/' || r == '\\' || r == '%' || r == ';' || unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // commerceCreds resolves the commerce base + admin S2S token from server-only env
