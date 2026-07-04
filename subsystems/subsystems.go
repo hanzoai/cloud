@@ -150,6 +150,17 @@ import (
 	// /v1/framework/modules/help/install. Third lane on the engine.
 	_ "github.com/hanzoai/cloud/clients/help" // (no order) — registers the "help" framework module
 
+	// The Knowledge Base + unified AI-memory app lane: DocType fixtures (kb-page
+	// wiki tree via a self-Link `parent`, kb-memory agent memory, kb-source ingested
+	// docs, kb-connector connection metadata; module "kb") registered with the
+	// framework at init, PLUS an after_save hook that upserts every knowledge write
+	// to the org's vector namespace (index.go) — human wiki + AI memory are ONE
+	// per-org knowledge store, indexed once. Unlike the pure-fixture lanes it also
+	// mounts a thin control-plane subsystem (order 130): POST /v1/kb/search (the RAG
+	// retrieval entry point) and /v1/kb/connectors/* (Slack/GitHub/Google OAuth that
+	// ingest external docs INTO the same store + index; tokens in KMS, never plaintext).
+	_ "github.com/hanzoai/cloud/clients/kb" // order 130 — "kb" framework module + hooks + /v1/kb/*
+
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
