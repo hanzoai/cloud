@@ -45,10 +45,14 @@ const (
 	// slackAgentTimeout bounds one async agent turn end to end (org resolve +
 	// run + Slack post). Generous: a run executes a real model completion.
 	slackAgentTimeout = 110 * time.Second
-	// slackDefaultConcurrency caps simultaneous agent turns so a workspace
-	// insider cannot exhaust goroutines/FDs by bursting @hanzo. Overridable via
-	// SLACK_AGENT_CONCURRENCY.
+	// slackDefaultConcurrency caps simultaneous agent turns ACROSS ALL orgs so a
+	// workspace insider cannot exhaust goroutines/FDs by bursting @hanzo.
+	// Overridable via SLACK_AGENT_CONCURRENCY.
 	slackDefaultConcurrency = 32
+	// slackDefaultOrgConcurrency caps simultaneous agent turns for a SINGLE org (a
+	// fraction of the global pool) so one tenant cannot starve the others.
+	// Overridable via SLACK_AGENT_ORG_CONCURRENCY.
+	slackDefaultOrgConcurrency = 8
 	// slackMaxBody bounds the webhook body we read + sign over. Slack payloads are
 	// small; a hostile/oversized body can neither exhaust memory nor slip past the
 	// HMAC (we sign exactly what we read).
@@ -57,43 +61,94 @@ const (
 
 var (
 	slackBridgeOnce sync.Once
-	slackSem        chan struct{} // agent-turn concurrency cap (process-lifetime)
-	slackUsedStates *seenSet      // single-use link-state nonces (process-lifetime)
-	// slackEnsured tracks which mounted store has had its dedupe table created, so
-	// ensureSlackEvents runs once per store (correct across test remounts) without
-	// touching the hot path after the first call.
-	slackEnsured sync.Map // *Store -> struct{}
+	slackLim        *orgLimiter // bounded agent-turn pool: total cap + PER-ORG sub-limit
+	slackUsedStates *seenSet    // single-use link-state nonces (process-lifetime)
 )
 
-// slackBridgeReady lazily initializes the bridge's process state (bounded worker
-// pool + single-use link seen-set) and ensures the durable dedupe table exists
-// for THIS mount's store. Cheap + idempotent on the hot path; every Slack handler
+// slackBridgeReady lazily initializes the bridge's process state: the bounded
+// agent-turn pool (global cap + per-org sub-limit) and the single-use link
+// seen-set. The durable dedupe table is created in the store's migrate() at Mount,
+// so nothing store-scoped happens here. Cheap + idempotent; every Slack handler
 // calls it first.
 func (s *svc) slackBridgeReady() {
 	slackBridgeOnce.Do(func() {
-		slackSem = make(chan struct{}, slackAgentConcurrency())
+		slackLim = newOrgLimiter(slackAgentConcurrency(), slackOrgConcurrency())
 		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
 	})
-	if _, done := slackEnsured.LoadOrStore(s.store, struct{}{}); !done {
-		if err := s.store.ensureSlackEvents(); err != nil {
-			s.log.Warn("slack: ensure dedupe table", "err", err)
-		}
+}
+
+// slackDispatch runs an agent turn for `org` under the bounded pool. It acquires a
+// GLOBAL slot AND a PER-ORG slot non-blockingly; if either is exhausted the turn is
+// dropped + logged (a DoS insider cannot pile up unbounded goroutines/FDs). The
+// per-org sub-limit is AVAILABILITY isolation (Red M1): a single workspace bursting
+// distinct @hanzo events (each holding a slot up to slackAgentTimeout) can occupy
+// at most slackOrgConcurrency() slots, so it can never starve every other tenant's
+// turns. `org` is the RESOLVED tenant (OrgForExternalID), never a client value.
+func (s *svc) slackDispatch(org string, run func()) {
+	if !slackLim.acquire(org) {
+		s.log.Warn("slack: agent pool at capacity, turn dropped", "org", org)
+		return
+	}
+	go func() {
+		defer slackLim.release(org)
+		run()
+	}()
+}
+
+// orgLimiter bounds concurrent agent turns two ways: a GLOBAL cap (total in-flight
+// across all orgs) AND a PER-ORG cap (max in-flight for any single org). Data /
+// token / billing isolation already holds via the resolved org; this adds the
+// AVAILABILITY isolation that stops one tenant exhausting the shared worker pool.
+type orgLimiter struct {
+	mu       sync.Mutex
+	inflight map[string]int
+	perOrg   int
+	global   chan struct{}
+}
+
+func newOrgLimiter(global, perOrg int) *orgLimiter {
+	if global < 1 {
+		global = 1
+	}
+	if perOrg < 1 {
+		perOrg = 1
+	}
+	if perOrg > global {
+		perOrg = global
+	}
+	return &orgLimiter{inflight: make(map[string]int), perOrg: perOrg, global: make(chan struct{}, global)}
+}
+
+// acquire takes one global + one per-org slot for org, non-blocking. It returns
+// false (nothing acquired, no slot leaked) when the org is at its per-org cap OR
+// the global pool is full — the per-org check precedes the global take, and the
+// global take only bumps the per-org count on a successful send.
+func (l *orgLimiter) acquire(org string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inflight[org] >= l.perOrg {
+		return false
+	}
+	select {
+	case l.global <- struct{}{}:
+		l.inflight[org]++
+		return true
+	default:
+		return false
 	}
 }
 
-// slackDispatch runs an agent turn under the concurrency cap. It acquires a slot
-// non-blockingly; if the pool is full the turn is dropped + logged (a DoS insider
-// cannot pile up unbounded goroutines/FDs).
-func (s *svc) slackDispatch(run func()) {
-	select {
-	case slackSem <- struct{}{}:
-		go func() {
-			defer func() { <-slackSem }()
-			run()
-		}()
-	default:
-		s.log.Warn("slack: agent pool at capacity, turn dropped")
+// release returns the org's slot and the global slot. Called exactly once per
+// successful acquire.
+func (l *orgLimiter) release(org string) {
+	l.mu.Lock()
+	if n := l.inflight[org]; n > 1 {
+		l.inflight[org] = n - 1
+	} else {
+		delete(l.inflight, org)
 	}
+	l.mu.Unlock()
+	<-l.global
 }
 
 // ── Events webhook ──────────────────────────────────────────────────────────
@@ -133,8 +188,16 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 		if _, gerr := s.store.GCSlackEvents(c.Context(), staleSlackEventCutoff()); gerr != nil {
 			s.log.Warn("slack: dedupe gc", "err", gerr)
 		}
+		// ISOLATION ROOT, resolved SYNC so the per-org pool limit can key on it
+		// before a slot is taken: org comes ONLY from the install→org map for the
+		// Slack-verified team_id. An event for a team no org connected is dropped.
+		org, ok := OrgForExternalID("slack", d.TeamID)
+		if !ok {
+			s.log.Warn("slack: event for unconnected team", "team", d.TeamID)
+			return c.NoContent(http.StatusOK)
+		}
 		route := d
-		s.slackDispatch(func() { s.handleSlackAgent(route) })
+		s.slackDispatch(org, func() { s.handleSlackAgent(org, route) })
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -170,8 +233,12 @@ func (s *svc) slackCommands(c *zip.Ctx) error {
 	if !fresh {
 		return c.NoContent(http.StatusOK)
 	}
+	// Resolve the org SYNC (may be "" — a workspace whose Hanzo connection was
+	// removed) so the per-org pool limit keys on it; org=="" is bounded under the
+	// same limiter and handled (a "not connected" reply) in handleSlackSlash.
+	org, _ := OrgForExternalID("slack", team)
 	route := slackRoute{Kind: slackRouteAgent, TeamID: team, Channel: channel, User: user, Text: text}
-	s.slackDispatch(func() { s.handleSlackSlash(route, responseURL) })
+	s.slackDispatch(org, func() { s.handleSlackSlash(org, route, responseURL) })
 	return c.NoContent(http.StatusOK)
 }
 
@@ -194,24 +261,16 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 
 // ── the bridge (per-org isolated) ───────────────────────────────────────────
 
-// handleSlackAgent answers an @mention / DM. It resolves the org from the
-// Slack-verified team_id (ISOLATION ROOT), skips the bot's own echo, fetches THAT
-// org's bot token (the reply sink), and posts the agent's answer — or, when the
-// user is unlinked, the account-link prompt EPHEMERALLY (so a link URL never
-// reaches a whole channel) — into the SAME thread.
-func (s *svc) handleSlackAgent(d slackRoute) {
+// handleSlackAgent answers an @mention / DM for a PRE-RESOLVED org (the ISOLATION
+// ROOT, resolved in the sync webhook path via OrgForExternalID on the
+// Slack-verified team_id — never a client value). It skips the bot's own echo,
+// fetches THAT org's bot token (the reply sink), and posts the agent's answer — or,
+// when the user is unlinked, the account-link prompt EPHEMERALLY (so a link URL
+// never reaches a whole channel) — into the SAME thread.
+func (s *svc) handleSlackAgent(org string, d slackRoute) {
 	ctx, cancel := context.WithTimeout(context.Background(), slackAgentTimeout)
 	defer cancel()
 
-	// ISOLATION ROOT: org is derived ONLY from the install→org map keyed by the
-	// Slack-verified team_id — NEVER from the payload/client. A team resolves to
-	// exactly the org that connected it (earliest-connected wins in the store), so
-	// team A's event can never act as org B.
-	org, ok := OrgForExternalID("slack", d.TeamID)
-	if !ok {
-		s.log.Warn("slack: event for unconnected team", "team", d.TeamID)
-		return
-	}
 	// Echo-loop guard: drop the bot's OWN messages using THIS org's recorded bot
 	// user id (the CTO seam), belt-and-suspenders with the route-level bot_id drop.
 	if conn, ok := ConnectionFor(org, "slack"); ok && conn.BotUserID != "" && d.User == conn.BotUserID {
@@ -237,14 +296,14 @@ func (s *svc) handleSlackAgent(d slackRoute) {
 	}
 }
 
-// handleSlackSlash runs the agent for a slash command and delivers the reply via
-// the (host-pinned) response_url. An answer goes in_channel; a link prompt goes
-// ephemeral (only the invoker sees it).
-func (s *svc) handleSlackSlash(d slackRoute, responseURL string) {
+// handleSlackSlash runs the agent for a slash command (org PRE-RESOLVED in the
+// sync path) and delivers the reply via the (host-pinned) response_url. An answer
+// goes in_channel; a link prompt goes ephemeral (only the invoker sees it). An
+// empty org means the workspace's Hanzo connection was removed.
+func (s *svc) handleSlackSlash(org string, d slackRoute, responseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), slackAgentTimeout)
 	defer cancel()
-	org, ok := OrgForExternalID("slack", d.TeamID)
-	if !ok {
+	if org == "" {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "This Slack workspace isn't connected to Hanzo yet.")
 		return
 	}
@@ -521,6 +580,17 @@ func slackAgentConcurrency() int {
 		return v
 	}
 	return slackDefaultConcurrency
+}
+
+// slackOrgConcurrency caps how many agent turns a SINGLE org may run concurrently
+// (Red M1 availability isolation) — a fraction of the global pool, so one tenant
+// can't monopolize it. Overridable via SLACK_AGENT_ORG_CONCURRENCY; clamped to the
+// global cap in newOrgLimiter.
+func slackOrgConcurrency() int {
+	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("SLACK_AGENT_ORG_CONCURRENCY"))); err == nil && v > 0 {
+		return v
+	}
+	return slackDefaultOrgConcurrency
 }
 
 // slackReadBody returns the exact raw request body the HMAC must be computed over,
