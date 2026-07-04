@@ -92,6 +92,59 @@ func newIdentityValidator(issuer, jwksURL string, audiences []string, ttl time.D
 	}
 }
 
+// kmsMachineAudSuffix is the fixed suffix of a per-tenant PaaS-KMS sync machine
+// identity's audience. Each tenant's KMS sync authenticates as a dedicated,
+// NON-shared IAM application named "<org>-platform-kms" (Organization=<org>,
+// client_credentials grant), so IAM stamps the token's aud == the app's own
+// clientId == "<org>-platform-kms" (a non-shared app's audience is its clientId,
+// object/token_jwt.go tokenAudience) and owner == <org>
+// (object/token_oauth.go GetClientCredentialsToken sets owner = app.Organization).
+//
+// That audience is, by construction, absent from CLOUD_JWT_AUDIENCES — it is
+// per-tenant, not a fixed app — which is EXACTLY why the sync stayed pending: the
+// machine token failed the audience check below, SanitizeIdentity treated it as
+// anonymous, and the /v1/kms org-scope guard 403'd it before the store. The fix is
+// to accept this one audience, but ONLY when it equals the token's OWN owner claim
+// plus this suffix, so it certifies "the KMS sync identity for its own org" and
+// grants nothing wider. Tenancy is still enforced downstream by owner at the guard
+// (owner == :org); this only lets a legitimately-minted, owner-scoped machine token
+// clear validation. A per-tenant application means a per-tenant clientSecret — never
+// a shared platform-wide reader, which would be a cross-tenant hole.
+const kmsMachineAudSuffix = "-platform-kms"
+
+// kmsMachineAudience returns the audience a tenant org's PaaS-KMS sync identity
+// carries: "<owner>-platform-kms". An empty owner yields empty — no machine
+// audience is ever granted to an org-less token (fail closed).
+func kmsMachineAudience(owner string) string {
+	if owner == "" {
+		return ""
+	}
+	return owner + kmsMachineAudSuffix
+}
+
+// isKMSMachinePrincipal reports whether a validated token is a per-tenant KMS-sync
+// machine identity: its audience set contains the owner-bound machine audience
+// (<owner>-platform-kms). Such a principal is a client_credentials machine identity
+// scoped to exactly one org. SanitizeIdentity uses this to DENY it global-admin
+// authority even if it somehow carries isAdmin=true and owner==adminOrg, so V6's
+// audience widening can never be leveraged (via an admin-org machine token) into a
+// cross-tenant read. Its org-scoped data access is unaffected — this gates ONLY the
+// admin grant, keeping the machine path decoupled from admin inside cloud (rather
+// than resting on the external invariant "IAM never stamps isAdmin=true on a
+// machine-aud token", which cloud cannot see or enforce).
+func isKMSMachinePrincipal(claims *idClaims) bool {
+	mach := kmsMachineAudience(claims.Owner)
+	if mach == "" {
+		return false
+	}
+	for _, a := range claims.Audience {
+		if a == mach {
+			return true
+		}
+	}
+	return false
+}
+
 // validate parses raw, verifies its signature against the JWKS, and enforces
 // issuer/audience/expiry. Returns the claims on success, an error otherwise.
 func (v *identityValidator) validate(raw string) (*idClaims, error) {
@@ -125,9 +178,21 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	if !issuerAllowed(claims.Issuer, v.issuers) {
 		return nil, fmt.Errorf("untrusted issuer %q", claims.Issuer)
 	}
+	// Audience: the static allowlist (CLOUD_JWT_AUDIENCES / brand app client_ids)
+	// PLUS the per-tenant PaaS-KMS sync machine audience bound to THIS token's own
+	// owner (<owner>-platform-kms). The machine audience is added only when the
+	// allowlist is active (non-empty — always so in production) and only for the
+	// token's own org, so accepting it never widens tenancy: the /v1/kms guard still
+	// gates on owner == :org. Without this, a real client_credentials machine token
+	// (aud == its per-tenant clientId, never in the allowlist) fails here and the
+	// sync silently stays pending — the activation blocker.
 	expected := jwt.Expected{}
 	if len(v.audiences) > 0 {
-		expected.AnyAudience = jwt.Audience(v.audiences)
+		auds := v.audiences
+		if mach := kmsMachineAudience(claims.Owner); mach != "" {
+			auds = append(append(make([]string, 0, len(v.audiences)+1), v.audiences...), mach)
+		}
+		expected.AnyAudience = jwt.Audience(auds)
 	}
 	if err := claims.Claims.ValidateWithLeeway(expected, 2*time.Minute); err != nil {
 		return nil, fmt.Errorf("claims: %w", err)
