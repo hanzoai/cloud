@@ -1,46 +1,124 @@
 name: release
 
-# Builds, SMOKE-TESTS, then pushes ghcr.io/hanzoai/cloud:<tag> on tag (v*) /
-# main / dispatch. The image is booted for real and must reach "listening"
-# BEFORE it is allowed to publish (see the smoke step) — a green go
-# build/vet/test does NOT catch a binary that PANICS at startup, and one that
-# ships crash-loops in prod (v1.786.14/.15/.16 compiled clean but died at boot
-# with "mount metrics: metrics.Mount: app is *zip.App, want *zip.App" from an
-# incomplete hanzoai/zip → zap-proto/zip migration, published green, and took
-# the deployment down). Running the binary is the only gate that catches it.
+# Cuts a release of ghcr.io/hanzoai/cloud. The invariant this workflow exists to
+# enforce:
 #
-# Self-contained on the self-hosted arcd amd64 scale set — NEVER GitHub-hosted
-# runners (this org's GitHub-hosted Actions are billing-frozen: jobs fail in ~5s
-# with "recent account payments have failed").
+#     a git tag v<X.Y.Z> exists  ⇔  an image ghcr.io/hanzoai/cloud:v<X.Y.Z>
+#     was pushed AND booted to "listening" in the smoke test.
 #
-# Why not the shared hanzoai/.github docker-build.yml: that workflow logs into
-# GHCR with the repo's GITHUB_TOKEN, but the ghcr.io/hanzoai/cloud package is
-# linked to a DIFFERENT repo (hanzoai/ai, from the cloud->ai module rename), so
-# this repo's GITHUB_TOKEN is denied write to it (permission_denied:
-# write_package). We log in with GH_PAT instead (admin:org + write:packages →
-# writes any hanzoai package regardless of package-repo linkage), and pass it as
-# the BuildKit gh_token the Dockerfile uses to fetch private cross-org Go
-# modules. amd64-only: the cluster is amd64; pinning one platform completes on
-# the live scale set without waiting on the arm64 pool.
+# The tag is a RECEIPT for a proven image, minted only AFTER a successful push —
+# never a trigger for a build that might fail. The prior design triggered builds
+# FROM pushed tags, so a tag could exist with no image behind it (a failed or
+# never-run build) — universe would then try to roll that tag and the pods went
+# ImagePullBackOff (phantom v1.786.42/43). Here the order is inverted:
+#
+#     main push → compute next version → build → SMOKE → push image → tag → notify
+#
+# so a push/smoke/build failure fails the run BEFORE the tag step and leaves no
+# tag; universe is only ever notified of a version whose image is proven present.
+#
+# DO NOT push v* tags by hand anymore. This workflow OWNS them. A hand-cut tag has
+# no image behind it (exactly the phantom this prevents) and won't build (there is
+# no `tags:` trigger). Every merge to main IS the release; skip one with the usual
+# `[skip ci]` in the commit/merge message (a docs-only change need not ship).
+#
+# concurrency: a single serialized lane (cancel-in-progress:false — a
+# mid-flight push must finish, never be killed between "image pushed" and "tag
+# created"). Two main pushes can therefore never compute the same next number:
+# the queued run starts only after the running one tags, re-reads the tags, and
+# lands on the next patch. Monotonic by construction.
+#
+# The next version is max(highest git tag, highest pushed container tag) + 1 (patch
+# bump only — never a major/minor jump). Folding in the container tags means we
+# never reuse a number that already has a pushed image, even if some earlier run
+# pushed an image but died before tagging.
+#
+# ── Infra notes (unchanged, still true) ─────────────────────────────────────────
+# Self-hosted arcd amd64 scale set — NEVER GitHub-hosted runners (this org's
+# GitHub-hosted Actions are billing-frozen). GHCR login uses GH_PAT, not the repo
+# GITHUB_TOKEN: the ghcr.io/hanzoai/cloud package is linked to a DIFFERENT repo
+# (hanzoai/ai, from the cloud→ai module rename), so this repo's GITHUB_TOKEN is
+# denied write to it (permission_denied: write_package). GH_PAT (admin:org +
+# write:packages) writes any hanzoai package regardless of package-repo linkage,
+# and is the BuildKit gh_token the Dockerfile uses to fetch private cross-org Go
+# modules. amd64-only: the cluster is amd64; one platform completes on the live
+# scale set without waiting on the arm64 pool.
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
+# Cut tags on the cloud repo (git tag push) → contents: write. packages: write
+# to push the image; id-token for provenance.
 permissions:
-  contents: read
+  contents: write
   packages: write
   id-token: write
+
+# One serialized release lane. Never cancel in-flight: a run killed between
+# "image pushed" and "tag created" is exactly the drift we are preventing.
+concurrency:
+  group: release-cloud
+  cancel-in-progress: false
 
 jobs:
   build-amd64:
     # ARC ephemeral runners match jobs targeting the scale-set NAME as a label.
     runs-on: [hanzo-build-linux-amd64]
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      version_v: ${{ steps.ver.outputs.version_v }}
     steps:
-      - name: Checkout
+      - name: Checkout (full history + all tags — the version floor is read from tags)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute next version (monotonic patch bump over git + container tags)
+        id: ver
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet
+
+          # Highest semver git tag (vX.Y.Z), normalised without the leading v.
+          git_max="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' \
+            | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+
+          # Best-effort: highest ALREADY-PUSHED container tag, so a number that has
+          # an image (even from a run that died before tagging) is never reused.
+          cont_max=""
+          if command -v gh >/dev/null 2>&1; then
+            cont_max="$(GH_TOKEN="$GH_PAT" gh api --paginate \
+              '/orgs/hanzoai/packages/container/cloud/versions' \
+              --jq '.[].metadata.container.tags[]' 2>/dev/null \
+              | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+          fi
+
+          # Floor = highest of the two; fall back to 1.786.0 only if the repo has
+          # no tags at all (first release ever).
+          max="$(printf '%s\n%s\n%s\n' "1.786.0" "$git_max" "$cont_max" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+
+          major="${max%%.*}"; rest="${max#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+          version="${major}.${minor}.$((patch + 1))"
+
+          # Refuse to proceed if the number we intend to mint already exists as a
+          # git tag (a concurrent run beat us — the serialized lane makes this a
+          # can't-happen, but fail loud rather than clobber).
+          if git rev-parse -q --verify "refs/tags/v${version}" >/dev/null; then
+            echo "::error::computed v${version} already exists as a git tag — aborting to avoid collision"
+            exit 1
+          fi
+
+          echo "version=${version}"     >> "$GITHUB_OUTPUT"
+          echo "version_v=v${version}"  >> "$GITHUB_OUTPUT"
+          echo "major_minor=${major}.${minor}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+          echo "Next release: v${version} (git_max='${git_max:-none}' container_max='${cont_max:-none}')"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -55,28 +133,23 @@ jobs:
           username: hanzo-dev
           password: ${{ secrets.GH_PAT }}
 
-      - name: Extract metadata
+      - name: OCI labels
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/hanzoai/cloud
-          tags: |
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+          tags: type=raw,value=${{ steps.ver.outputs.version_v }}
 
-      # ── Build → SMOKE → push ─────────────────────────────────────────────────
-      # 1. Build once to a LOCAL tag (load into the daemon, do NOT push). This
-      #    warms the BuildKit builder cache — the expensive console/npm + Go
-      #    layers are computed here.
+      # ── Build → SMOKE → push → tag ───────────────────────────────────────────
+      # 1. Build once to a LOCAL tag (load into the daemon, do NOT push). Warms
+      #    the BuildKit cache — the expensive console/npm + Go layers land here.
       # 2. Boot that exact image and assert it reaches "listening" with no
       #    startup-crash signature (the gate).
       # 3. Re-run build with push:true and the real tags: identical context /
       #    platform / secrets, so every layer is a cache hit from step 1 and the
-      #    step only exports + pushes the already-tested image. Nothing that
-      #    failed the smoke test can ever reach the registry.
+      #    step only exports + pushes the already-tested image. Nothing that failed
+      #    the smoke test can reach the registry.
+      # 4. Only after the push succeeds, mint + push the git tag (the receipt).
       - name: Build (load locally for the smoke test)
         uses: docker/build-push-action@v6
         with:
@@ -135,8 +208,8 @@ jobs:
           echo "::endgroup::"
 
           # (1) No startup-crash signature. Catches the incident's Mount
-          #     type-assert panic AND any generic Go panic — case-insensitive so
-          #     a re-worded variant can't slip through — BEFORE a byte is pushed.
+          #     type-assert panic AND any generic Go panic — case-insensitive so a
+          #     re-worded variant can't slip through — BEFORE a byte is pushed.
           if printf '%s' "$logs" | grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App'; then
             echo "SMOKE FAIL: startup-crash signature in boot logs (see above)"
             exit 1
@@ -159,22 +232,44 @@ jobs:
           echo "SMOKE PASS: cloud:smoke booted to \"listening\" with no crash signature"
 
       - name: Push (cache hit from the smoke build — publishes the tested image)
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ghcr.io/hanzoai/cloud:${{ steps.ver.outputs.version_v }}
+            ghcr.io/hanzoai/cloud:${{ steps.ver.outputs.version }}
+            ghcr.io/hanzoai/cloud:${{ steps.ver.outputs.major_minor }}
+            ghcr.io/hanzoai/cloud:sha-${{ steps.ver.outputs.sha_short }}
+            ghcr.io/hanzoai/cloud:latest
           labels: ${{ steps.meta.outputs.labels }}
           secrets: |
             gh_token=${{ secrets.GH_PAT }}
 
-  # Notify universe so the GitOps pipeline rolls the new image to prod —
-  # same image-update contract every service uses (gateway, iam, …).
+      # THE RECEIPT: reached only because build + smoke + push all succeeded. If
+      # any of them failed the job already stopped and no tag was minted.
+      - name: Tag the proven image (git tag = receipt for a pushed, smoke-passed image)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version_v }}"
+          git config user.name  "hanzo-dev"
+          git config user.email "dev@hanzo.ai"
+          git tag -a "$V" -m "release $V — image ghcr.io/hanzoai/cloud:$V pushed and smoke-passed (${GITHUB_SHA})"
+          git push "https://x-access-token:${GH_PAT}@github.com/${GITHUB_REPOSITORY}.git" "$V"
+          echo "Tagged $V → ghcr.io/hanzoai/cloud:$V"
+
+  # Notify universe so the GitOps pipeline rolls the new image to prod — same
+  # image-update contract every service uses (gateway, iam, …). Runs ONLY after
+  # build-amd64 succeeds, i.e. only for a version whose image is proven pushed and
+  # tagged. A failed release never reaches here, so universe is never asked to
+  # deploy a phantom tag.
   notify-universe:
     needs: build-amd64
     runs-on: [hanzo-build-linux-amd64]
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Repository dispatch (image-update)
         uses: peter-evans/repository-dispatch@v3
@@ -185,7 +280,7 @@ jobs:
           client-payload: |
             {
               "service": "cloud",
-              "image":   "ghcr.io/hanzoai/cloud:${{ github.ref_name }}",
+              "image":   "ghcr.io/hanzoai/cloud:${{ needs.build-amd64.outputs.version_v }}",
               "sha":     "${{ github.sha }}",
               "env":     "all"
             }
