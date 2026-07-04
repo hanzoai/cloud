@@ -28,7 +28,7 @@ import (
 )
 
 // billServer is a minimal commerce double: it returns a fixed balance and records
-// the X-IAM-Org-Id header + body of any usage debit.
+// the X-Org-Id header + body of any usage debit (commerce reads X-Org-Id only).
 type billServer struct {
 	available int64
 
@@ -48,7 +48,7 @@ func (b *billServer) start(t *testing.T) string {
 		atomic.AddInt32(&b.usages, 1)
 		body, _ := io.ReadAll(r.Body)
 		b.mu.Lock()
-		b.usageOrg, b.usageBody = r.Header.Get("X-IAM-Org-Id"), body
+		b.usageOrg, b.usageBody = r.Header.Get("X-Org-Id"), body
 		b.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(w, `{"transactionId":"tx_1","type":"usage"}`)
