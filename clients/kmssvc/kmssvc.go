@@ -31,6 +31,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 )
 
 // svc holds the embedded KMS client the routes serve from. A nil client means
@@ -77,7 +78,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// here to mint the owner-scoped IAM bearer it then carries on the org-scoped
 	// secret reads. Mounted even in health-only mode so the auth handshake is
 	// consistent; it fails closed (503) when no IAM issuer is configured.
-	app.Post("/v1/kms/auth/login", s.login)
+	//
+	// Because it is public, unauthenticated, and fans out to IAM, it is the ONE route
+	// rate-limited PER SOURCE IP (credential-stuffing-through-cloud) — via a scoped
+	// group so the limiter touches only this path — while the outbound loginHTTPClient
+	// additionally caps concurrent IAM connections (login.go). Keyed on the source IP,
+	// not the org: this route runs before any validated principal exists, so there is
+	// no owner to key on (and X-Org-Id has already been stripped by SanitizeIdentity).
+	// The key is the REAL TCP peer (cloud sets no trusted-proxy header, so a forged
+	// X-Forwarded-For cannot inflate the key space), and cloud-api is fronted by the
+	// gateway/ingress — so the limiter's per-key bucket map is bounded by that small
+	// peer set, not by arbitrary internet IPs. loginMaxConnsPerHost is the hard bound
+	// on the actual IAM fan-out regardless.
+	app.Group("/v1/kms/auth", middleware.RateLimit(middleware.RateLimitConfig{
+		Limit:  loginRateLimit,
+		Window: loginRateWindow,
+		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
+	})).Post("/login", s.login)
 
 	if kc == nil {
 		log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")

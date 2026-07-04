@@ -233,6 +233,18 @@ type tenantKMSIdentity interface {
 	// EnsureOrgIdentity returns the clientId/clientSecret of a machine identity
 	// bound to org (its token's owner claim == org). MUST be idempotent per org and
 	// MUST NOT return a credential for any other org. An error leaves sync pending.
+	//
+	// AUDIENCE CONTRACT — must match cloud's validator (auth_identity.go,
+	// kmsMachineAudSuffix). The identity MUST be a DEDICATED, NON-SHARED IAM
+	// application named "<org>-platform-kms" (IAM clientId == app name), owned by the
+	// tenant (Organization=<org>), with the client_credentials grant enabled and its
+	// OWN per-tenant clientSecret. IAM then mints owner=<org> and aud=<org>-platform-kms
+	// (a non-shared app's aud is its clientId), which is exactly the owner-bound
+	// audience cloud accepts on the KMS machine path — so the operator's token clears
+	// SanitizeIdentity and the org-scope guard admits it to /orgs/<org> only. A SHARED
+	// app (one secret + an "@org"/"-org-" selector) is FORBIDDEN here: it would share
+	// one clientSecret across tenants — the cross-tenant hole this seam exists to
+	// avoid. NEVER mint the identity in the admin/master org; owner MUST be the tenant.
 	EnsureOrgIdentity(ctx context.Context, org string) (clientID, clientSecret string, err error)
 }
 
