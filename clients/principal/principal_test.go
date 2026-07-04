@@ -108,3 +108,65 @@ func TestValidated_OnlyFromUserId(t *testing.T) {
 		t.Fatal("Validated must be true with X-User-Id")
 	}
 }
+
+// projectProbe mounts a route that resolves the project via principal.Project and
+// returns it, driving the SAME zip.Ctx header accessor the gateway feeds.
+func projectProbe(t *testing.T, headers map[string]string) string {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Get("/p", func(c *zip.Ctx) error {
+		return c.JSON(200, map[string]any{"project": principal.Project(c)})
+	})
+	req := httptest.NewRequest("GET", "/p", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("projectProbe: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var out struct {
+		Project string `json:"project"`
+	}
+	b, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("projectProbe decode: %v (%s)", err, b)
+	}
+	return out.Project
+}
+
+// TestProject_DefaultsWhenAbsent: no X-Project-Id ⟹ the default project. This is
+// the backward-compat guarantee — existing single-project callers see "default".
+func TestProject_DefaultsWhenAbsent(t *testing.T) {
+	if p := projectProbe(t, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u"}); p != principal.DefaultProject {
+		t.Fatalf("absent X-Project-Id must resolve to %q, got %q", principal.DefaultProject, p)
+	}
+}
+
+// TestProject_ReadsMintedHeader: a gateway-minted X-Project-Id is returned verbatim
+// (trimmed) — the sub-scope the keyed surfaces shard on.
+func TestProject_ReadsMintedHeader(t *testing.T) {
+	if p := projectProbe(t, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u", "X-Project-Id": "research"}); p != "research" {
+		t.Fatalf("X-Project-Id must resolve verbatim, got %q", p)
+	}
+	// The literal default header collapses to the default scope (same key as absent).
+	if p := projectProbe(t, map[string]string{"X-Project-Id": "default"}); p != principal.DefaultProject {
+		t.Fatalf("literal default must resolve to %q, got %q", principal.DefaultProject, p)
+	}
+}
+
+// TestIsDefaultProject: empty and the literal default are the one default scope;
+// any other id is a distinct project.
+func TestIsDefaultProject(t *testing.T) {
+	for _, d := range []string{"", "default", "  ", " default "} {
+		if !principal.IsDefaultProject(d) {
+			t.Errorf("IsDefaultProject(%q) = false, want true", d)
+		}
+	}
+	for _, p := range []string{"research", "prod", "default-2", "acme"} {
+		if principal.IsDefaultProject(p) {
+			t.Errorf("IsDefaultProject(%q) = true, want false", p)
+		}
+	}
+}

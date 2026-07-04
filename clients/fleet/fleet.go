@@ -10,11 +10,14 @@
 // workload onto the org's registered cluster). One registry, two consumers — never a
 // second cluster surface.
 //
-// Tenant isolation is the org boundary: the kubeconfig is sealed in the org's KMS
-// (MPC nodes see only ciphertext) under a per-org ref prefix, and every method takes
-// the org as resolved from the ZAP-propagated, gateway-validated X-Org-Id — never a
-// client field. So lux sees only lux's clusters, zoo only zoo's, a customer only
-// their own.
+// Tenant isolation is the org boundary, narrowed by the org SUB-SCOPE (project):
+// the kubeconfig is sealed in the org's KMS (MPC nodes see only ciphertext) under a
+// per-org(+project) ref prefix, and every method takes the org + project as resolved
+// from the ZAP-propagated, gateway-validated X-Org-Id / X-Project-Id — never a client
+// field. So lux sees only lux's clusters, zoo only zoo's, a customer only their own —
+// and, within an org, one project's fleet is a distinct shard. The DEFAULT project
+// (principal.IsDefaultProject) keeps the legacy org-only key, so existing single-
+// project fleets are untouched (scopeRef).
 package fleet
 
 import (
@@ -26,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/principal"
 	kms "github.com/hanzoai/kms/sdk/go"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,28 +76,43 @@ func New(brand string, log luxlog.Logger) *Registry {
 // Enabled reports whether BYO registration can persist (KMS reachable).
 func (r *Registry) Enabled() bool { return r != nil && r.kms != nil }
 
-func indexRef(org string) string        { return org + "/fleet/clusters" }
-func configRef(org, name string) string { return org + "/fleet/clusters/" + name + "/kubeconfig" }
+// scopeRef is the KMS key prefix for an org's fleet within a project — the ONE
+// backward-compat seam. The default project (principal.IsDefaultProject) keeps the
+// legacy org-only prefix so existing keys are byte-identical; a non-default project
+// shards under "<org>/<project>". Every fleet key (index, kubeconfig, cache) derives
+// from here, so there is exactly one place the project segment is added or omitted.
+func scopeRef(org, project string) string {
+	if principal.IsDefaultProject(project) {
+		return org
+	}
+	return org + "/" + project
+}
 
-// List returns the org's registered BYO clusters (metadata only). Absent == empty.
-func (r *Registry) List(org string) ([]Cluster, error) {
+func indexRef(org, project string) string { return scopeRef(org, project) + "/fleet/clusters" }
+func configRef(org, project, name string) string {
+	return scopeRef(org, project) + "/fleet/clusters/" + name + "/kubeconfig"
+}
+
+// List returns the org+project's registered BYO clusters (metadata only). Absent == empty.
+func (r *Registry) List(org, project string) ([]Cluster, error) {
 	if !r.Enabled() {
 		return nil, nil
 	}
-	raw, err := r.kms.Get(indexRef(org))
+	raw, err := r.kms.Get(indexRef(org, project))
 	if err != nil || len(raw) == 0 {
 		return nil, nil
 	}
 	var list []Cluster
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, fmt.Errorf("corrupt fleet index for %s: %w", org, err)
+		return nil, fmt.Errorf("corrupt fleet index for %s: %w", scopeRef(org, project), err)
 	}
 	return list, nil
 }
 
-// Register attaches a BYO cluster: validate by REACHING it (node + GPU inventory),
-// seal the kubeconfig in the org's KMS, and index the metadata. Idempotent on name.
-func (r *Registry) Register(ctx context.Context, org, name, kubeconfig, provider string, isDefault bool) (Cluster, error) {
+// Register attaches a BYO cluster to the org+project fleet: validate by REACHING it
+// (node + GPU inventory), seal the kubeconfig in the org's KMS, and index the
+// metadata. Idempotent on name within the (org, project) shard.
+func (r *Registry) Register(ctx context.Context, org, project, name, kubeconfig, provider string, isDefault bool) (Cluster, error) {
 	if !r.Enabled() {
 		return Cluster{}, fmt.Errorf("fleet registration requires KMS (set CLOUD_KMS_NODES + CLOUD_KMS_PASSPHRASE)")
 	}
@@ -106,10 +125,10 @@ func (r *Registry) Register(ctx context.Context, org, name, kubeconfig, provider
 	if err != nil {
 		return Cluster{}, fmt.Errorf("cluster unreachable with this kubeconfig: %w", err)
 	}
-	if err := r.kms.Set(configRef(org, name), kubeBytes); err != nil {
+	if err := r.kms.Set(configRef(org, project, name), kubeBytes); err != nil {
 		return Cluster{}, fmt.Errorf("seal kubeconfig: %w", err)
 	}
-	list, err := r.List(org)
+	list, err := r.List(org, project)
 	if err != nil {
 		return Cluster{}, err
 	}
@@ -119,19 +138,20 @@ func (r *Registry) Register(ctx context.Context, org, name, kubeconfig, provider
 		Registered: time.Now().UTC().Format(time.RFC3339), Default: isDefault,
 	}
 	list = upsert(list, rec)
-	if err := r.writeIndex(org, list); err != nil {
+	if err := r.writeIndex(org, project, list); err != nil {
 		return Cluster{}, err
 	}
-	r.cache[org+"/"+name] = dyn
+	r.cache[scopeRef(org, project)+"/"+name] = dyn
 	return rec, nil
 }
 
-// Deregister detaches a BYO cluster (index + sealed kubeconfig + cached client).
-func (r *Registry) Deregister(org, name string) (bool, error) {
+// Deregister detaches a BYO cluster from the org+project fleet (index + sealed
+// kubeconfig + cached client).
+func (r *Registry) Deregister(org, project, name string) (bool, error) {
 	if !r.Enabled() {
 		return false, nil
 	}
-	list, err := r.List(org)
+	list, err := r.List(org, project)
 	if err != nil {
 		return false, err
 	}
@@ -147,22 +167,23 @@ func (r *Registry) Deregister(org, name string) (bool, error) {
 	if !found {
 		return false, nil
 	}
-	if err := r.writeIndex(org, out); err != nil {
+	if err := r.writeIndex(org, project, out); err != nil {
 		return false, err
 	}
-	_ = r.kms.Delete(configRef(org, name))
-	delete(r.cache, org+"/"+name)
+	_ = r.kms.Delete(configRef(org, project, name))
+	delete(r.cache, scopeRef(org, project)+"/"+name)
 	return true, nil
 }
 
-// DynForOrg returns the k8s client the org's workloads should target: its default
-// registered cluster (KMS-loaded, cached) or nil when the org has none (the caller
-// then falls back to the home in-cluster client). This is the ONE federation seam.
-func (r *Registry) DynForOrg(org string) dynamic.Interface {
+// DynForOrg returns the k8s client the org+project's workloads should target: its
+// default registered cluster (KMS-loaded, cached) or nil when the shard has none
+// (the caller then falls back to the home in-cluster client). This is the ONE
+// federation seam.
+func (r *Registry) DynForOrg(org, project string) dynamic.Interface {
 	if !r.Enabled() {
 		return nil
 	}
-	list, err := r.List(org)
+	list, err := r.List(org, project)
 	if err != nil || len(list) == 0 {
 		return nil
 	}
@@ -173,11 +194,11 @@ func (r *Registry) DynForOrg(org string) dynamic.Interface {
 			break
 		}
 	}
-	key := org + "/" + target.Name
+	key := scopeRef(org, project) + "/" + target.Name
 	if dyn, ok := r.cache[key]; ok {
 		return dyn
 	}
-	raw, err := r.kms.Get(configRef(org, target.Name))
+	raw, err := r.kms.Get(configRef(org, project, target.Name))
 	if err != nil || len(raw) == 0 {
 		return nil
 	}
@@ -189,12 +210,12 @@ func (r *Registry) DynForOrg(org string) dynamic.Interface {
 	return dyn
 }
 
-func (r *Registry) writeIndex(org string, list []Cluster) error {
+func (r *Registry) writeIndex(org, project string, list []Cluster) error {
 	raw, err := json.Marshal(list)
 	if err != nil {
 		return err
 	}
-	return r.kms.Set(indexRef(org), raw)
+	return r.kms.Set(indexRef(org, project), raw)
 }
 
 // --- helpers ---
