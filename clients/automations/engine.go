@@ -47,12 +47,57 @@ var tokenSource = integrations.TokenFor
 
 // ── the durable workflow ─────────────────────────────────────────────────────
 
+// RunStartInput / RunEndInput are the durable run-bookkeeping activity payloads. The
+// durable path is the SINGLE owner of run bookkeeping (MED-1): whichever entrypoint
+// drives a workflow — manual /run, MCP, or a scheduled cron tick — records the run
+// exactly once here, so metering/audit never double-count and every execution lands
+// a FlowRun row visible to listRuns/getRun.
+type (
+	RunStartInput struct {
+		RunID         string `json:"runId"`
+		Owner         string `json:"owner"`
+		FlowID        string `json:"flowId"`
+		FlowVersionID string `json:"flowVersionId"`
+	}
+	RunEndInput struct {
+		RunID  string `json:"runId"`
+		Owner  string `json:"owner"`
+		Status string `json:"status"`
+	}
+)
+
 // FlowRunWorkflow walks the flow's flattened step chain. Each side-effecting step
 // runs as a retried activity (ExecuteStepActivity); a core.wait_for_approval step
 // is a durable PAUSE that blocks on the resume signal. Prior step outputs are
 // threaded so later steps can reference them ({{step.field}}). Deterministic: it
 // executes steps strictly in order, Get-ing each before dispatching the next.
+//
+// It also owns run bookkeeping (MED-1): the per-EXECUTION run id is the workflow id
+// (workflow.GetInfo) — manual runs set it to the run id; a scheduled cron mints a
+// fresh one per tick — so a run-start activity persists+meters+audits the run
+// EXACTLY once, and a run-end activity records the terminal status.
 func FlowRunWorkflow(ctx workflow.Context, in FlowRunInput) (FlowRunResult, error) {
+	// The workflow id keys exactly-once bookkeeping. NOT in.RunID: a schedule embeds
+	// one fixed FlowRunInput, so every tick shares in.RunID but gets a distinct
+	// workflow id — the id that makes each tick its own metered run.
+	runID := workflow.GetInfo(ctx).WorkflowID
+	if runID == "" {
+		runID = in.RunID
+	}
+
+	bkCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second, BackoffCoefficient: 2.0,
+			MaximumInterval: 10 * time.Second, MaximumAttempts: 5,
+		},
+	})
+	// Run-start bookkeeping is best-effort: a failure never blocks execution (the
+	// activity is idempotent + retried, so transient errors recover on their own).
+	_ = workflow.ExecuteActivity(bkCtx, RecordRunStartActivity, RunStartInput{
+		RunID: runID, Owner: in.Owner, FlowID: in.FlowID, FlowVersionID: in.FlowVersionID,
+	}).Get(bkCtx, nil)
+
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		// A step (HTTP call, provider API) can take a while; cap at 10m (never above).
 		StartToCloseTimeout: 10 * time.Minute,
@@ -79,7 +124,7 @@ func FlowRunWorkflow(ctx workflow.Context, in FlowRunInput) (FlowRunResult, erro
 		var out StepOutput
 		si := StepInput{
 			Owner:       in.Owner, // the isolation boundary — copied verbatim, never widened
-			RunID:       in.RunID,
+			RunID:       runID,
 			Name:        step.Name,
 			PieceName:   step.PieceName,
 			ActionName:  step.ActionName,
@@ -87,11 +132,33 @@ func FlowRunWorkflow(ctx workflow.Context, in FlowRunInput) (FlowRunResult, erro
 			PrevOutputs: outputs,
 		}
 		if err := workflow.ExecuteActivity(actCtx, ExecuteStepActivity, si).Get(actCtx, &out); err != nil {
-			return FlowRunResult{RunID: in.RunID, Status: RunFailed, Outputs: outputs, Steps: len(outputs)}, err
+			_ = workflow.ExecuteActivity(bkCtx, RecordRunEndActivity, RunEndInput{RunID: runID, Owner: in.Owner, Status: string(RunFailed)}).Get(bkCtx, nil)
+			return FlowRunResult{RunID: runID, Status: RunFailed, Outputs: outputs, Steps: len(outputs)}, err
 		}
 		outputs[step.Name] = out.Output
 	}
-	return FlowRunResult{RunID: in.RunID, Status: RunSucceeded, Outputs: outputs, Steps: len(outputs)}, nil
+	_ = workflow.ExecuteActivity(bkCtx, RecordRunEndActivity, RunEndInput{RunID: runID, Owner: in.Owner, Status: string(RunSucceeded)}).Get(bkCtx, nil)
+	return FlowRunResult{RunID: runID, Status: RunSucceeded, Outputs: outputs, Steps: len(outputs)}, nil
+}
+
+// RecordRunStartActivity persists the run row + meters + audits EXACTLY once
+// (idempotent by run id via the store's metered-flag claim). The single owner of run
+// bookkeeping for every entrypoint. mounted==nil (an engine-only test without Mount)
+// is a no-op — nothing to record against.
+func RecordRunStartActivity(ctx context.Context, in RunStartInput) error {
+	if mounted == nil {
+		return nil
+	}
+	return mounted.recordRunStart(ctx, in)
+}
+
+// RecordRunEndActivity records a run's terminal status so listRuns reflects it
+// without a getRun refresh. Best-effort; mounted==nil is a no-op.
+func RecordRunEndActivity(ctx context.Context, in RunEndInput) error {
+	if mounted == nil {
+		return nil
+	}
+	return mounted.recordRunEnd(ctx, in)
 }
 
 // ExecuteStepActivity is the side-effecting body of ONE step. It is THE isolation
@@ -159,6 +226,8 @@ func orgEngineClient(org string) (tasksclient.Client, error) {
 	w := tasksworker.New(cli, automationsTaskQueue, tasksworker.Options{})
 	w.RegisterWorkflow(FlowRunWorkflow)
 	w.RegisterActivity(ExecuteStepActivity)
+	w.RegisterActivity(RecordRunStartActivity)
+	w.RegisterActivity(RecordRunEndActivity)
 	if err := w.Start(); err != nil {
 		cli.Close()
 		return nil, fmt.Errorf("automations worker start: %w", err)
