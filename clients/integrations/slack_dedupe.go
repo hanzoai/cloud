@@ -6,37 +6,30 @@ import (
 	"time"
 )
 
-// Durable Slack event de-duplication, added as methods on the existing
-// integrations Store (same package, same {DataDir}/integrations.db file — no new
-// store, no edit to store.go's migrate()). The table is created lazily on first
-// bridge use (ensureSlackEvents). It exists because an agent turn is BILLED: a
-// Slack retry (Slack re-delivers an event_id on a non-2xx or timeout) must never
-// trigger a SECOND billed run, and because the guarantee is DB-backed it survives
-// a process restart (and holds across replicas sharing the store) — an in-process
-// set would not.
+// Durable Slack event de-duplication, on the existing integrations Store (same
+// {DataDir}/integrations.db file). The table is created in the store's migrate()
+// (store.go) — fail-loud at Mount, one place. It exists because an agent turn is
+// BILLED: a Slack retry (Slack re-delivers an event_id when it does NOT get a 2xx
+// within ~3s) must never trigger a SECOND billed run, and because it is DB-backed
+// the guarantee survives a process restart.
+//
+// REPLICA SCOPE (Red M2): this table lives in the per-PROCESS embedded SQLite file
+// (Base/SQLite is single-writer per HIP-0302). It therefore dedupes WITHIN one
+// process only — the guarantee does NOT span replicas. The unified cloud binary
+// runs the integrations store as a single embedded-SQLite writer, so the billed
+// Slack webhook path MUST run single-replica; that is the shipping invariant.
+// Multi-replica is a follow-up (back this with a shared SETNX store — Valkey /
+// Postgres — keyed on event_id). Note the residual is already small: we always
+// 2xx-ack, and Slack only retries on a NON-2xx / timeout, so a duplicate delivery
+// to a second replica requires our ack to first exceed Slack's ~3s budget.
 
 // slackEventTTL bounds how long a dedupe row is retained. Slack's event retry
 // horizon is minutes; a day is a wide margin, after which a row can no longer
 // correspond to a live retry and is safe to reap.
 const slackEventTTL = 24 * time.Hour
 
-// ensureSlackEvents creates the durable dedupe table. Idempotent (IF NOT EXISTS);
-// called once per mounted store when the bridge is first used.
-func (s *Store) ensureSlackEvents() error {
-	const ddl = `
-CREATE TABLE IF NOT EXISTS slack_events (
-  event_key  TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_slack_events_created ON slack_events(created_at);`
-	if _, err := s.db.Exec(ddl); err != nil {
-		return fmt.Errorf("ensure slack_events: %w", err)
-	}
-	return nil
-}
-
 // MarkSlackEvent is the atomic durable dedupe test-and-set: it inserts event_key
-// and returns fresh=true only on the FIRST sighting. A duplicate (Slack retry of
+// and returns fresh=true only on the FIRST sighting. A duplicate (a Slack retry of
 // the same event_id / slash trigger_id) hits the PRIMARY KEY, the insert affects
 // zero rows, and fresh=false. An empty key is non-dedupable (fresh) — callers only
 // dedupe non-empty keys onto the billed path. The single INSERT ... ON CONFLICT DO
