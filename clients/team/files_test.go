@@ -3,7 +3,6 @@ package team
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -14,7 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/team/token"
+	"github.com/hanzoai/cloud/types"
 )
 
 // memVFS is an in-memory types.VFSClient for tests — the blob backend the files
@@ -40,7 +41,7 @@ func (v *memVFS) Get(_ context.Context, key string) ([]byte, error) {
 	defer v.mu.Unlock()
 	b, ok := v.m[key]
 	if !ok {
-		return nil, fmt.Errorf("memvfs: not found")
+		return nil, types.ErrBlobNotFound // a WORKING backend's genuine-miss signal
 	}
 	return b, nil
 }
@@ -288,6 +289,47 @@ func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+wsA.UUID+"/x?file="+blobA, authA, nil); code != http.StatusOK {
 		t.Fatalf("org-a blob destroyed by cross-org delete (via org-b ws + org-a blobId) — KEY ISOLATION BROKEN")
 	}
+}
+
+// TestFilesFailClosedWhenVFSDisabled is Red R-7: with the fail-closed
+// clients.DisabledVFS() backend (the default deps.VFS in a binary with no VFS
+// endpoint wired — never nil after the pickVFSClient fix), files upload/download/
+// DELETE FAIL CLOSED with 502, NOT a nil-deref 500/panic and NOT a silent
+// success. Authorize() still runs first (real workspace + membership), so this
+// exercises the actual vfs call path.
+func TestFilesFailClosedWhenVFSDisabled(t *testing.T) {
+	app := mountTeamVFS(t, clients.DisabledVFS())
+	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
+	ws, err := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := bearerFor(t, acct, org)
+	blobID := uuid.NewString()
+
+	if code, _ := uploadFile(t, app, ws.UUID, blobID, auth, []byte("x")); code != http.StatusBadGateway {
+		t.Fatalf("disabled-VFS upload = %d, want 502 (fail closed, not 500/panic)", code)
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, auth, nil); code != http.StatusBadGateway {
+		t.Fatalf("disabled-VFS download = %d, want 502", code)
+	}
+	if code, _ := call(t, app, http.MethodDelete, "/v1/team/files/"+ws.UUID+"/"+blobID+"?file="+blobID, auth, nil); code != http.StatusBadGateway {
+		t.Fatalf("disabled-VFS delete = %d, want 502", code)
+	}
+	// Sanity: authorize STILL runs first — a non-member is 404 (not 502), so the
+	// membership gate is not masked by the backend being down.
+	other, _ := bearerForOtherOrg(t)
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/files/"+ws.UUID+"/x?file="+blobID, other, nil); code != http.StatusNotFound {
+		t.Fatalf("cross-tenant on disabled backend = %d, want 404 (authorize precedes vfs)", code)
+	}
+}
+
+// bearerForOtherOrg mints a valid session token for a DIFFERENT org (a real
+// principal that is simply not a member of the target workspace).
+func bearerForOtherOrg(t *testing.T) (map[string]string, string) {
+	t.Helper()
+	const acct = "cccccccc-9999-4999-8999-00000000000c"
+	return bearerFor(t, acct, "other-org"), acct
 }
 
 // TestFilesContentTypeAllowList is Red F-B: the served Content-Type derives from

@@ -24,6 +24,7 @@ package team
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -161,10 +162,16 @@ func (s *filesSvc) download(c *zip.Ctx) error {
 		return zip.ErrBadRequest("file (blob id) required")
 	}
 	data, err := s.vfs.Get(c.Context(), blobKey(org, ws, blobID))
-	if err != nil || data == nil {
-		// A cross-org/-workspace blobId, a missing blob, or a disabled backend all
-		// land here as a 404 — no oracle.
+	switch {
+	case errors.Is(err, types.ErrBlobNotFound), err == nil && data == nil:
+		// Genuine miss (working backend). A cross-org/-workspace blobId is a DIFFERENT
+		// key that also does not exist → the SAME 404 (no existence oracle).
 		return zip.ErrNotFound("blob not found")
+	case err != nil:
+		// The backend is unavailable/disabled (deps.VFS never nil per R-7) → fail
+		// CLOSED with 502, never a nil-deref 500. Blanket across all keys, so it
+		// reveals no per-blob information.
+		return zip.Errorf(http.StatusBadGateway, "file storage unavailable")
 	}
 	// nosniff on EVERY response so the browser never re-sniffs the declared type.
 	c.SetHeader("X-Content-Type-Options", "nosniff")
@@ -202,10 +209,14 @@ func (s *filesSvc) deleteBlob(c *zip.Ctx) error {
 	if blobID == "" {
 		return zip.ErrBadRequest("file (blob id) required")
 	}
-	// Best-effort idempotent: ignore the backend result (a missing key is not a
-	// caller-visible error) so no within-workspace existence oracle leaks. The key
-	// is org+workspace-scoped, so this can only ever touch the caller's own blob.
-	_ = s.vfs.Delete(c.Context(), blobKey(org, ws, blobID))
+	// Idempotent + no-oracle on a WORKING backend: a present OR missing blob both
+	// return 204 (a missing key, ErrBlobNotFound, is not a caller-visible error), so
+	// deleting never confirms existence and a foreign blobId is a harmless no-op.
+	// But a backend that is unavailable/disabled (any OTHER error) fails CLOSED with
+	// 502 — never a silent success lie, never a nil-deref 500.
+	if err := s.vfs.Delete(c.Context(), blobKey(org, ws, blobID)); err != nil && !errors.Is(err, types.ErrBlobNotFound) {
+		return zip.Errorf(http.StatusBadGateway, "file storage unavailable")
+	}
 	return c.NoContent(http.StatusNoContent)
 }
 
