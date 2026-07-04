@@ -98,6 +98,12 @@ type svc struct {
 	store *Store
 	ai    types.AIClient
 	log   luxlog.Logger
+	// defaultModel is the deployment's configured default served model
+	// (deps.AIDefaultModel). An agent created without an explicit model is
+	// stored with it, so the ONE model default lives in config, never hardcoded
+	// per subsystem. Empty only on a deployment that configured no default, in
+	// which case create still requires an explicit model.
+	defaultModel string
 	// bill is the shared per-org gate+meter (reuses deps.Metering, the ONE
 	// commerce client — the same object ml/provisioning use). Nil/!Enabled()
 	// makes Gate allow and Meter a no-op, so an unconfigured deployment runs
@@ -249,11 +255,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
 	s := &svc{
-		store: store,
-		ai:    deps.AI,
-		log:   log,
-		bill:  cloud.NewResourceMeter(deps, meterKind),
-		bus:   newBus(),
+		store:        store,
+		ai:           deps.AI,
+		log:          log,
+		defaultModel: strings.TrimSpace(deps.AIDefaultModel),
+		bill:         cloud.NewResourceMeter(deps, meterKind),
+		bus:          newBus(),
 		// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
 		// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
 		// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
@@ -339,9 +346,19 @@ func (s *svc) create(c *zip.Ctx) error {
 	if !nameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
+	// Model resolution: a client-supplied model is validated against the
+	// gateway's served catalog (a clean 400 for e.g. claude-sonnet-4-5 that this
+	// gateway never serves, instead of a confusing run-time 502). An OMITTED
+	// model falls back to the deployment default (a valid catalog model the
+	// operator configured) — trusted, not re-validated — so a bot launched
+	// without a model still runs. If neither is present the model is required.
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
-		return zip.ErrBadRequest("model is required")
+		if model = s.defaultModel; model == "" {
+			return zip.ErrBadRequest("model is required")
+		}
+	} else if err := s.validateModel(c.Context(), model); err != nil {
+		return err
 	}
 	if len(body.Instructions) > maxInstructions {
 		return zip.ErrBadRequest("instructions too large")
@@ -468,6 +485,9 @@ func (s *svc) update(c *zip.Ctx) error {
 		m := strings.TrimSpace(*body.Model)
 		if m == "" {
 			return zip.ErrBadRequest("model cannot be empty")
+		}
+		if err := s.validateModel(c.Context(), m); err != nil {
+			return err
 		}
 		a.Model = m
 	}
@@ -914,6 +934,36 @@ func longRunningCap() int {
 		}
 	}
 	return maxLongRunningPerOrg
+}
+
+// validateModel rejects a client-supplied model that is NOT in this gateway's
+// served catalog, turning a would-be run-time 502 (the gateway rejecting a model
+// it never served) into a clean create/update-time 400 with the real reason. It
+// is a best-effort UX guard, NOT a security boundary: it runs only when the AI
+// client can enumerate the catalog (the real gateway client implements
+// types.ModelLister) AND the catalog comes back non-empty; a disabled/RPC client
+// or an unreachable/empty catalog skips the check (fail-open), so validation
+// infrastructure never blocks a create. An empty model is the caller's cue to
+// take the deployment default and is never routed here.
+func (s *svc) validateModel(ctx context.Context, model string) error {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	lister, ok := s.ai.(types.ModelLister)
+	if !ok {
+		return nil // this AI client cannot enumerate models — cannot validate
+	}
+	ids, err := lister.Models(ctx)
+	if err != nil || len(ids) == 0 {
+		return nil // catalog unreachable/empty — fail-open, never block on infra
+	}
+	for _, id := range ids {
+		if id == model {
+			return nil
+		}
+	}
+	return zip.ErrBadRequest(fmt.Sprintf("model %q is not in this gateway's catalog", model))
 }
 
 // validateRef bounds an opaque lifecycle reference (compute id / service-account
