@@ -94,6 +94,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/customers", s.guard(s.customers))
 	app.Get("/v1/admin/customers/:org", s.guard(s.customerDetail))
 	app.Post("/v1/admin/customers/:org/credit", s.guard(s.grantCredit))
+	app.Get("/v1/admin/grants", s.guard(s.grants))
+	app.Post("/v1/admin/grants", s.guard(s.issueGrant))
 	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
 	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
 
