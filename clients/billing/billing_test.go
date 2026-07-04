@@ -54,7 +54,7 @@ func (f *fakeCommerce) server(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/v1/billing/balance", h)
 	mux.HandleFunc("/v1/billing/gpu-eligibility", h)
 	mux.HandleFunc("/v1/billing/gpu-charge", h)
-	mux.HandleFunc("/v1/billing/payment-methods", h)
+	mux.HandleFunc("/v1/billing/portal/payment-methods", h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -130,14 +130,15 @@ func TestUsage_ClientCannotWidenScope(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("want 200, got %d", code)
 	}
-	// The subject is PINNED to the caller's own org; the forged keys never reach commerce.
-	if got := f.gotQuery.Get("user"); got != "maxpower" {
-		t.Fatalf("forged user must be overwritten with the caller org: got %q", got)
-	}
-	for _, k := range []string{"userId", "customerId", "org"} {
-		if f.gotQuery.Has(k) {
-			t.Fatalf("client-forged %q must NOT be forwarded to commerce (got %q)", k, f.gotQuery.Get(k))
+	// EVERY subject key is PINNED to the caller's own org (overwriting the forged values),
+	// so no endpoint is left unfiltered; only the non-subject `org` selector is dropped.
+	for _, k := range []string{"user", "userId", "customerId"} {
+		if got := f.gotQuery.Get(k); got != "maxpower" {
+			t.Fatalf("forged %q must be overwritten with the caller org: got %q", k, got)
 		}
+	}
+	if f.gotQuery.Has("org") {
+		t.Fatalf("client-forged org must NOT be forwarded to commerce (got %q)", f.gotQuery.Get("org"))
 	}
 	if f.gotOrg != "maxpower" {
 		t.Fatalf("X-Org-Id must be the caller's own org, got %q", f.gotOrg)
@@ -273,24 +274,23 @@ func TestGPUEligibility_ClientCannotWidenScope(t *testing.T) {
 	}
 }
 
-func TestPaymentMethods_ScopedAndType(t *testing.T) {
+func TestPaymentMethods_ProxiesPortal_Scoped(t *testing.T) {
 	f := &fakeCommerce{status: 200, body: `[{"id":"pm_1","brand":"visa","last4":"4242","isDefault":true}]`}
 	app := mountApp(t, f.server(t).URL, "svc-token")
 
-	code, body := call(t, app, http.MethodGet, "/v1/billing/payment-methods?type=card", "maxpower/dave", "maxpower")
+	// The console requests the same-origin /v1/billing/payment-methods (mounted on cloud);
+	// cloud proxies it to commerce's admin-group PORTAL read.
+	code, body := call(t, app, http.MethodGet, "/v1/billing/payment-methods", "maxpower/dave", "maxpower")
 	if code != 200 || string(body) != f.body {
 		t.Fatalf("payment-methods: want 200 verbatim, got %d (%s)", code, body)
 	}
-	if f.gotPath != "/v1/billing/payment-methods" {
-		t.Fatalf("commerce path: want /v1/billing/payment-methods, got %q", f.gotPath)
+	if f.gotPath != "/v1/billing/portal/payment-methods" {
+		t.Fatalf("commerce path: want /v1/billing/portal/payment-methods, got %q", f.gotPath)
 	}
-	// Commerce's privileged (service-token) branch filters CustomerId on ?user when
-	// customerId is absent, so pinning ?user=<org> scopes the list to the caller's cards.
-	if f.gotOrg != "maxpower" || f.gotQuery.Get("user") != "maxpower" {
-		t.Fatalf("payment-methods scope: org=%q user=%q", f.gotOrg, f.gotQuery.Get("user"))
-	}
-	if f.gotQuery.Get("type") != "card" {
-		t.Fatalf("type must pass through: got %q", f.gotQuery.Get("type"))
+	// PortalPaymentMethods 400s without a customerId; the proxy pins it (and user/userId)
+	// to the caller's own org, so the list is scoped to the caller's cards — never widenable.
+	if f.gotOrg != "maxpower" || f.gotQuery.Get("customerId") != "maxpower" || f.gotQuery.Get("user") != "maxpower" {
+		t.Fatalf("payment-methods scope: org=%q customerId=%q user=%q", f.gotOrg, f.gotQuery.Get("customerId"), f.gotQuery.Get("user"))
 	}
 }
 

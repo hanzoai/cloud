@@ -178,9 +178,17 @@ func init() {
 	})
 }
 
-// proxy resolves the caller's OWN org from the VALIDATED principal, pins the
-// commerce billing subject to it (the client can NEVER widen scope — user/org are
-// server-resolved, never read from the request), forwards ONLY the safe passthrough
+// billingSubjectKeys — every query/body param through which a commerce billing endpoint
+// identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
+// {user,userId,customerId} AND clients/console's billingData: pinning ALL of them is what
+// scopes EVERY endpoint no matter which one it filters on — usage/balance/gpu-eligibility
+// read `user`, portal/payment-methods requires `customerId`. Change all three in lockstep.
+var billingSubjectKeys = []string{"user", "userId", "customerId"}
+
+// proxy resolves the caller's OWN org from the VALIDATED principal, pins the commerce
+// billing subject to it on EVERY subject key (the client can NEVER widen scope — the
+// subject is server-resolved, never read from the request; a forged user/userId/
+// customerId is overwritten and `org` is dropped), forwards ONLY the safe passthrough
 // params, and returns commerce's raw body + status verbatim.
 func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) error {
 	org, ok := principal.Tenant(c)
@@ -194,11 +202,15 @@ func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) erro
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 
-	// Pin the subject to the caller's OWN org (the bare org slug is cloud's canonical
-	// per-org billing key — admin.orgSubject / metering identityFromCtx). Forward
-	// ONLY the whitelisted non-subject params; a client-supplied user/userId/
-	// customerId/org is never forwarded, so scope can never be widened.
-	q := url.Values{"user": {org}}
+	// Pin EVERY subject key to the caller's OWN org (the bare org slug is cloud's canonical
+	// per-org billing key — admin.orgSubject / metering identityFromCtx). Pinning the whole
+	// set leaves NO endpoint unfiltered regardless of which param it reads, so a request
+	// with no (or a forged) subject can never see another tenant's rows. Then forward ONLY
+	// the whitelisted non-subject passthrough params.
+	q := url.Values{}
+	for _, k := range billingSubjectKeys {
+		q.Set(k, org)
+	}
 	for _, k := range passthrough {
 		if v := strings.TrimSpace(c.Query(k)); v != "" {
 			q.Set(k, v)
@@ -241,13 +253,14 @@ func (s *svc) gpuEligibility(c *zip.Ctx) error {
 	return s.proxy(c, "/v1/billing/gpu-eligibility", "amountCents", "minPrepaidCents", "currency")
 }
 
-// paymentMethods → commerce GET /v1/billing/payment-methods: the org's saved cards as
-// the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
-// token). On the service-token (privileged) path commerce filters CustomerId on the
-// pinned subject (customerId, else user), so a caller sees ONLY its OWN org's methods;
-// `type` (card/bank_account/…) passes through. Backs the launch gate's card-on-file check.
+// paymentMethods → commerce GET /v1/billing/portal/payment-methods: the org's saved cards
+// as the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
+// token). The console requests the same-origin /v1/billing/payment-methods (mounted here);
+// this proxies to commerce's admin-group PORTAL read, which filters CustomerId on the
+// pinned subject (commerce 400s without a customerId — proxy always pins it), so a caller
+// sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
 func (s *svc) paymentMethods(c *zip.Ctx) error {
-	return s.proxy(c, "/v1/billing/payment-methods", "type")
+	return s.proxy(c, "/v1/billing/portal/payment-methods")
 }
 
 // gpuCharge → commerce POST /v1/billing/gpu-charge: the prepay-only, card-required GPU
@@ -299,7 +312,7 @@ func pinSubjectBody(raw []byte, subject string) []byte {
 	if err != nil {
 		return raw
 	}
-	for _, k := range []string{"user", "userId", "customerId"} {
+	for _, k := range billingSubjectKeys {
 		obj[k] = s
 	}
 	out, err := json.Marshal(obj)
