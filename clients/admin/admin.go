@@ -86,6 +86,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Get("/v1/admin/compute", s.guard(s.compute))
+	app.Get("/v1/admin/o11y", s.guard(s.o11y))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
 
 	// Customer management — the operator cockpit. List (static) precedes the :org
