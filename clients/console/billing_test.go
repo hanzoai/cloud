@@ -181,3 +181,28 @@ func TestBilling_ScopesWriteBodyToCaller(t *testing.T) {
 		t.Fatalf("non-subject body field must survive, got %v", f.body["threshold"])
 	}
 }
+
+func TestBilling_RejectsTraversalSegment(t *testing.T) {
+	f := &fakeBilling{}
+	t.Setenv("COMMERCE_URL", f.server(t).URL)
+	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
+	app := mountApp(t, "http://iam.invalid", "", "")
+	// Every traversal form — literal `..`, encoded slash (`%2f`), encoded dot
+	// (`%2e%2e`), matrix param (`;`) — must be REFUSED (400) and must NEVER reach
+	// commerce. Without the percent-escape rejection, `invoices/..%2fadmin` decodes
+	// downstream to `/v1/admin`, tunneling PAST /v1/billing into another surface.
+	for _, p := range []string{
+		"/v1/billing/invoices/../admin",   // literal ..
+		"/v1/billing/invoices/..%2fadmin", // encoded slash (%2f)
+		"/v1/billing/%2e%2e/admin",        // encoded dots (%2e%2e)
+		"/v1/billing/invoices;statement",  // matrix param (;)
+	} {
+		code, _ := callH(t, app, http.MethodGet, p, alice, "")
+		if code != http.StatusBadRequest {
+			t.Fatalf("traversal %q: want 400, got %d", p, code)
+		}
+	}
+	if f.path != "" {
+		t.Fatalf("a traversal must never reach commerce, but upstream saw %q", f.path)
+	}
+}
