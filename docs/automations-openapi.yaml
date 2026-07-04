@@ -1,0 +1,886 @@
+openapi: 3.0.3
+info:
+  title: Hanzo Cloud — Automations API
+  version: "1.0.0"
+  description: >-
+    The `/v1/automations` surface of Hanzo Cloud (hanzoai/cloud
+    `clients/automations`, HIP-0106 / task #51): a native-Go Connectors +
+    Automations engine that runs an org's flows durably on the shared in-process
+    hanzoai/tasks engine and invokes third-party connectors whose credentials are
+    custodied by `clients/integrations` (KMS-sealed, per-org). The reused
+    ActivePieces `web/` flow builder is the contract consumer — the JSON field
+    names match the ported shared contract
+    (`auto/packages/shared/src/lib/automation/`) verbatim.
+
+
+    Tenant isolation is physical, not policy: every request resolves its org from
+    the validated JWT `owner` claim (`principal.Tenant`) server-side; a flow, run,
+    or credential can never be authored into or read from another tenant.
+
+
+    **Auth:** every operation requires a bearer JWT EXCEPT `GET
+    /v1/automations/health` and the inbound webhook callback surface (out of this
+    focused spec), which are unauthenticated.
+servers:
+  - url: https://cloud.hanzo.ai
+    description: Hanzo Cloud (production)
+  - url: https://api.hanzo.ai
+    description: Hanzo API gateway
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: system
+    description: Health and piece catalogue.
+  - name: flows
+    description: Author, version, and control automation flows.
+  - name: runs
+    description: Inspect and resume flow executions.
+  - name: mcp
+    description: Model Context Protocol surface over the org's flows.
+
+paths:
+  /v1/automations/health:
+    get:
+      tags: [system]
+      operationId: getAutomationsHealth
+      summary: Liveness/readiness probe (unauthenticated).
+      security: []
+      responses:
+        "200":
+          description: The automations engine is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: The engine is not ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/automations/pieces:
+    get:
+      tags: [system]
+      operationId: listPieces
+      summary: Browse the connector (piece) catalogue.
+      description: >-
+        Returns the go:embed'd catalogue (`catalog/catalog.json`) — the full set
+        of connectors with their actions, triggers, auth descriptor, and props.
+      parameters:
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive substring filter over piece name/displayName.
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          description: Filter to a single piece category (e.g. `DEVELOPER_TOOLS`).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The connector catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalog"
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /v1/automations/flows:
+    post:
+      tags: [flows]
+      operationId: createFlow
+      summary: Create a flow (with an initial DRAFT version).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFlowRequest"
+      responses:
+        "201":
+          description: The created flow, populated with its draft version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    get:
+      tags: [flows]
+      operationId: listFlows
+      summary: List the org's flows.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FlowStatus"
+        - name: folderId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of flows.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlowPage"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/automations/flows/{id}:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    get:
+      tags: [flows]
+      operationId: getFlow
+      summary: Get one flow, populated with its current version.
+      responses:
+        "200":
+          description: The flow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [flows]
+      operationId: updateFlow
+      summary: Update flow-level fields (name, folder, status).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFlowRequest"
+      responses:
+        "200":
+          description: The updated flow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [flows]
+      operationId: deleteFlow
+      summary: Delete a flow and its versions/runs.
+      responses:
+        "204":
+          description: Deleted.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/flows/{id}/versions:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    get:
+      tags: [flows]
+      operationId: listFlowVersions
+      summary: List a flow's versions (newest first).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of versions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowVersionPage"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/flows/{id}/operations:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    post:
+      tags: [flows]
+      operationId: applyFlowOperation
+      summary: Apply one builder edit-operation to the draft version.
+      description: >-
+        The discriminated-union envelope the `web/` builder POSTs: a `type` plus an
+        opaque `request` decoded per type. Phase-1 applies the linear-chain subset
+        (add/update/delete/move action, update trigger, rename, change status);
+        tree-restructuring ops are honestly rejected, never faked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FlowOperation"
+      responses:
+        "200":
+          description: The flow after the operation is applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/flows/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    post:
+      tags: [flows]
+      operationId: runFlow
+      summary: Manually start a run of the flow's published version.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunFlowRequest"
+      responses:
+        "201":
+          description: The started run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowRun"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/flows/{id}/enable:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    post:
+      tags: [flows]
+      operationId: enableFlow
+      summary: Enable the flow (arm its trigger).
+      responses:
+        "200":
+          description: The enabled flow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/flows/{id}/disable:
+    parameters:
+      - $ref: "#/components/parameters/FlowId"
+    post:
+      tags: [flows]
+      operationId: disableFlow
+      summary: Disable the flow (disarm its trigger).
+      responses:
+        "200":
+          description: The disabled flow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopulatedFlow"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/runs:
+    get:
+      tags: [runs]
+      operationId: listRuns
+      summary: List the org's flow runs.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: flowId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/FlowRunStatus"
+      responses:
+        "200":
+          description: A page of runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowRunPage"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/automations/runs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [runs]
+      operationId: getRun
+      summary: Get one flow run.
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowRun"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/runs/{id}/resume:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [runs]
+      operationId: resumeRun
+      summary: Resume a PAUSED run (e.g. a waiting/approval step).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeRunRequest"
+      responses:
+        "200":
+          description: The resumed run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlowRun"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/automations/mcp:
+    post:
+      tags: [mcp]
+      operationId: mcpRpc
+      summary: Model Context Protocol JSON-RPC endpoint.
+      description: >-
+        The MCP surface exposing the org's flows/pieces as tools. Accepts a JSON-RPC
+        2.0 request (`initialize`, `tools/list`, `tools/call`, …) and returns the
+        JSON-RPC response. Scoped to the caller's org by the bearer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JsonRpcRequest"
+      responses:
+        "200":
+          description: The JSON-RPC response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JsonRpcResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: A Hanzo IAM (hanzo.id) JWT; the org is the validated `owner` claim.
+
+  parameters:
+    FlowId:
+      name: id
+      in: path
+      required: true
+      description: Flow id.
+      schema:
+        type: string
+    RunId:
+      name: id
+      in: path
+      required: true
+      description: Flow-run id.
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque seek-pagination cursor from a prior page's `next`.
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No such resource in the caller's org.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: Malformed request body or unsupported operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: NOT_FOUND
+        message:
+          type: string
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        time:
+          type: string
+          format: date-time
+
+    FlowStatus:
+      type: string
+      enum: [ENABLED, DISABLED]
+
+    FlowVersionState:
+      type: string
+      enum: [DRAFT, LOCKED]
+
+    TriggerStrategy:
+      type: string
+      description: How a flow starts.
+      enum: [POLLING, WEBHOOK, APP_WEBHOOK, MANUAL]
+
+    FlowActionType:
+      type: string
+      enum: [PIECE, CODE, LOOP_ON_ITEMS, ROUTER]
+
+    FlowTriggerType:
+      type: string
+      enum: [PIECE_TRIGGER, EMPTY]
+
+    FlowRunStatus:
+      type: string
+      enum: [RUNNING, SUCCEEDED, FAILED, PAUSED, QUEUED, CANCELED, TIMEOUT]
+
+    FlowOperationType:
+      type: string
+      enum:
+        - ADD_ACTION
+        - UPDATE_ACTION
+        - DELETE_ACTION
+        - MOVE_ACTION
+        - UPDATE_TRIGGER
+        - CHANGE_NAME
+        - CHANGE_STATUS
+
+    Flow:
+      type: object
+      description: An org-scoped automation. `projectId` IS the org (server-derived).
+      required: [id, projectId, status, created, updated]
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+          description: The owning org (server-derived from the JWT owner claim).
+        externalId:
+          type: string
+        folderId:
+          type: string
+        status:
+          $ref: "#/components/schemas/FlowStatus"
+        publishedVersionId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        created:
+          type: integer
+          format: int64
+        updated:
+          type: integer
+          format: int64
+
+    PopulatedFlow:
+      allOf:
+        - $ref: "#/components/schemas/Flow"
+        - type: object
+          required: [version]
+          properties:
+            version:
+              $ref: "#/components/schemas/FlowVersion"
+
+    FlowVersion:
+      type: object
+      description: One editable revision of a flow — a display name plus the root trigger.
+      required: [id, flowId, displayName, trigger, valid, state, created, updated]
+      properties:
+        id:
+          type: string
+        flowId:
+          type: string
+        displayName:
+          type: string
+        trigger:
+          $ref: "#/components/schemas/FlowTrigger"
+        valid:
+          type: boolean
+        state:
+          $ref: "#/components/schemas/FlowVersionState"
+        schemaVersion:
+          type: string
+        created:
+          type: integer
+          format: int64
+        updated:
+          type: integer
+          format: int64
+
+    StepSettings:
+      type: object
+      description: >-
+        The flattened union of piece/code step settings the engine reads to
+        dispatch a step: which piece, which action/trigger, and the input map.
+      properties:
+        pieceName:
+          type: string
+        pieceVersion:
+          type: string
+        actionName:
+          type: string
+        triggerName:
+          type: string
+        input:
+          type: object
+          additionalProperties: true
+
+    FlowTrigger:
+      type: object
+      description: The root of the step tree.
+      required: [name, type, displayName, valid, settings]
+      properties:
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/FlowTriggerType"
+        displayName:
+          type: string
+        valid:
+          type: boolean
+        strategy:
+          $ref: "#/components/schemas/TriggerStrategy"
+        settings:
+          $ref: "#/components/schemas/StepSettings"
+        nextAction:
+          $ref: "#/components/schemas/FlowAction"
+
+    FlowAction:
+      type: object
+      description: An action node; the engine walks the linear `nextAction` chain.
+      required: [name, type, displayName, valid, settings]
+      properties:
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/FlowActionType"
+        displayName:
+          type: string
+        valid:
+          type: boolean
+        skip:
+          type: boolean
+        settings:
+          $ref: "#/components/schemas/StepSettings"
+        nextAction:
+          $ref: "#/components/schemas/FlowAction"
+
+    FlowRun:
+      type: object
+      description: An execution record.
+      required: [id, flowId, flowVersionId, status, created, updated]
+      properties:
+        id:
+          type: string
+        flowId:
+          type: string
+        flowVersionId:
+          type: string
+        status:
+          $ref: "#/components/schemas/FlowRunStatus"
+        startTime:
+          type: integer
+          format: int64
+        finishTime:
+          type: integer
+          format: int64
+        created:
+          type: integer
+          format: int64
+        updated:
+          type: integer
+          format: int64
+
+    FlowOperation:
+      type: object
+      description: The discriminated-union edit envelope the builder POSTs.
+      required: [type, request]
+      properties:
+        type:
+          $ref: "#/components/schemas/FlowOperationType"
+        request:
+          type: object
+          description: The per-type operation payload, decoded by the apply switch.
+          additionalProperties: true
+
+    PropSpec:
+      type: object
+      description: One input property of an action/trigger.
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        type:
+          type: string
+          description: string | number | boolean | object | array
+        required:
+          type: boolean
+        description:
+          type: string
+
+    PieceAuth:
+      type: object
+      required: [type, required]
+      properties:
+        type:
+          type: string
+          description: >-
+            The credential a piece needs — OAUTH2 | SECRET_TEXT | CUSTOM_AUTH |
+            BASIC_AUTH | NONE.
+          enum: [OAUTH2, SECRET_TEXT, CUSTOM_AUTH, BASIC_AUTH, NONE]
+        required:
+          type: boolean
+
+    PieceAction:
+      type: object
+      required: [name, displayName, description, props]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        props:
+          type: array
+          items:
+            $ref: "#/components/schemas/PropSpec"
+
+    PieceTrigger:
+      type: object
+      required: [name, displayName, description, strategy, props]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        strategy:
+          $ref: "#/components/schemas/TriggerStrategy"
+        props:
+          type: array
+          items:
+            $ref: "#/components/schemas/PropSpec"
+
+    PieceMetadata:
+      type: object
+      required: [name, displayName, version, auth, actions, triggers]
+      properties:
+        name:
+          type: string
+          description: npm package name, e.g. `@activepieces/piece-github`.
+        displayName:
+          type: string
+        description:
+          type: string
+        logoUrl:
+          type: string
+        version:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+        auth:
+          $ref: "#/components/schemas/PieceAuth"
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PieceAction"
+        triggers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PieceTrigger"
+
+    Catalog:
+      type: object
+      required: [pieceCount, pieces]
+      properties:
+        generatedFrom:
+          type: string
+          example: hanzoai/auto
+        pieceCount:
+          type: integer
+        pieces:
+          type: array
+          items:
+            $ref: "#/components/schemas/PieceMetadata"
+
+    CreateFlowRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+        folderId:
+          type: string
+
+    UpdateFlowRequest:
+      type: object
+      description: Partial flow-level update.
+      properties:
+        displayName:
+          type: string
+        folderId:
+          type: string
+        status:
+          $ref: "#/components/schemas/FlowStatus"
+
+    RunFlowRequest:
+      type: object
+      description: Optional manual-run payload made available to the trigger step.
+      properties:
+        payload:
+          type: object
+          additionalProperties: true
+
+    ResumeRunRequest:
+      type: object
+      description: The resume payload delivered to the paused step.
+      properties:
+        requestId:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+
+    SeekPage:
+      type: object
+      description: Cursor (seek) page envelope.
+      required: [data]
+      properties:
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+
+    PopulatedFlowPage:
+      allOf:
+        - $ref: "#/components/schemas/SeekPage"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/PopulatedFlow"
+
+    FlowVersionPage:
+      allOf:
+        - $ref: "#/components/schemas/SeekPage"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/FlowVersion"
+
+    FlowRunPage:
+      allOf:
+        - $ref: "#/components/schemas/SeekPage"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/FlowRun"
+
+    JsonRpcRequest:
+      type: object
+      required: [jsonrpc, method]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        method:
+          type: string
+        params:
+          type: object
+          additionalProperties: true
+
+    JsonRpcResponse:
+      type: object
+      required: [jsonrpc]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
