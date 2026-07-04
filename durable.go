@@ -55,8 +55,12 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 		DataDir: dataDir,
 		NodeID:  "cloud-tasks",
 		// RequireIdentity defaults false: the engine is loopback-only and shares cloud's
-		// trust boundary. The org travels as the ZAP Namespace (per-org client) and data
-		// isolation is enforced in the workflow input (IngestSource is owner-scoped).
+		// trust boundary. Data isolation is enforced in the workflow INPUT (IngestSource
+		// is owner-scoped), so we enqueue into the engine's always-registered `default`
+		// namespace rather than a per-org namespace. The embedded engine only registers
+		// `default` at boot and does NOT lazily create namespaces on ExecuteWorkflow —
+		// dialing an unregistered per-org namespace makes the worker poll a namespace
+		// that doesn't exist and BLOCK, which silently forced ingest to fall back inline.
 	})
 	if err != nil {
 		deps.Logger.Warn("durable ingest: tasks embed failed; ingest runs inline", "err", err)
@@ -65,7 +69,7 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 	embeddedTasks = emb
 	addr := fmt.Sprintf("127.0.0.1:%d", emb.ZAPPort())
 	aiobject.SetIngestDialer(func(org string) (tasksclient.Client, error) {
-		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: org})
+		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
 	})
 	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
 }
