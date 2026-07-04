@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/provisioning"
 )
 
 // index.go is the ONE per-org vector-write + search path for KB knowledge. Every
@@ -100,13 +102,18 @@ func index() *indexer {
 func (x *indexer) enabled() bool { return x.embedKey != "" && x.vectorURL != "" }
 
 // collection is the org's PHYSICAL vector namespace. The "kb_" prefix keeps KB's
-// collections disjoint from any other vector use of the same org slug, and org is
-// the validated tenant (principal.Tenant), verbatim — never lowercased (folding
-// would collapse distinct owners into one namespace, a cross-tenant break). Qdrant
-// collection names accept the org's [A-Za-z0-9 ._-] charset; a space is replaced
-// with '_' defensively so the REST path stays clean.
+// collections disjoint from any other vector use of the same org slug. The org is
+// run through provisioning.SanitizeOrg — the codebase's ONE org-slug normalizer,
+// shared with S3/KMS/projectsvc — so the PHYSICAL namespace is INJECTIVE in the
+// owner: distinct owners that would otherwise fold onto one Qdrant collection ("a b"
+// vs "a_b") get a hash-suffixed slug and stay distinct, and an unsafe-rune org folds
+// to "" (which yields the sentinel "kb_" namespace that indexing/search both use
+// consistently, never a foreign one). This is defense in depth: the payload.org
+// filter already blocks a cross-tenant READ, but the physical boundary now holds too
+// (RED LOW-1). Sanitizing happens HERE, the one place every caller funnels through,
+// so index and search always derive the same collection for the same org.
 func (x *indexer) collection(org string) string {
-	return "kb_" + strings.ReplaceAll(org, " ", "_")
+	return "kb_" + provisioning.SanitizeOrg(org)
 }
 
 // pointID is the deterministic id for a document's vector: a UUIDv5-shaped hex of
