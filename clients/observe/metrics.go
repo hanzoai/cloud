@@ -110,7 +110,10 @@ func (s *service) redSeries(ctx context.Context, org, product, service string, r
 	routePrefix := "/v1/" + product
 	q := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
 		"count() AS reqs, " +
-		"countIf(response_status_code >= 500 OR status_code = 2) AS errs, " +
+		// response_status_code is LowCardinality(String) in signoz; coerce before the
+		// numeric compare (a raw >= 500 raises NO_COMMON_TYPE). status_code is the
+		// numeric span status (2 = ERROR).
+		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
 		"quantile(0.5)(duration_nano) AS p50, " +
 		"quantile(0.95)(duration_nano) AS p95 " +
 		"FROM signoz_traces.distributed_signoz_index_v3 " +
