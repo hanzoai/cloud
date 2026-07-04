@@ -24,6 +24,13 @@ const stateKeyEnv = "CLOUD_INTEGRATIONS_STATE_KEY"
 // short/typo'd operator secret rather than signing weakly.
 const minStateKeyLen = 32
 
+// maxStateLen bounds the state token verify will even look at. A legitimate token
+// (base64url payload + '.' + base64url of a 32-byte MAC) is ~160 bytes; 4 KiB is
+// far above any real value and caps the base64 decode work a forged callback can
+// force. The router/fasthttp already bound the request URI; this is the local
+// belt-and-suspenders at the crypto boundary.
+const maxStateLen = 4096
+
 // stateTTL bounds how long a signed state is valid. A var (not const) so a test
 // can force expiry deterministically; production never mutates it.
 var stateTTL = 10 * time.Minute
@@ -89,6 +96,12 @@ func (s *svc) sign(org, provider, nonce string) (string, error) {
 // rejected before it is ever parsed), then decode, then exp/provider/org checks.
 // Every failure returns errBadState (no distinguishing oracle).
 func (s *svc) verify(token, provider string) (statePayload, error) {
+	// Bound the token before any work: a well-formed state is ~160 bytes, so a
+	// multi-KB token is hostile. Rejecting first stops an attacker forcing a large
+	// base64 allocation (the MAC-half decode) on every forged callback.
+	if len(token) > maxStateLen {
+		return statePayload{}, errBadState
+	}
 	dot := strings.IndexByte(token, '.')
 	if dot <= 0 || dot == len(token)-1 {
 		return statePayload{}, errBadState
