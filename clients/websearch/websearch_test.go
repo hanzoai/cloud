@@ -67,6 +67,69 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	_ = sresp.Body.Close()
 }
 
+// A signed-in console user reaches search WITHOUT the shared key: the identity
+// middleware set X-User-Id (principal.Validated), so the zip-layer gate proxies
+// straight to SearXNG even with WEBSEARCH_API_KEY unset. This is the console
+// user-bearer path the /cloud proxy drives.
+func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
+	var reached bool
+	searchUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		_, _ = io.WriteString(w, `{"results":[{"url":"https://x","title":"T","content":"C"}]}`)
+	}))
+	defer searchUp.Close()
+	t.Setenv("WEBSEARCH_UPSTREAM", searchUp.URL)
+	t.Setenv("WEBSEARCH_API_KEY", "") // unset: the key path would 503 — the principal must pass regardless
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	fa := app.Fiber()
+
+	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x&format=json", nil)
+	req.Header.Set("X-User-Id", "user-123") // set only by the identity middleware from a verified JWT
+	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("search route: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("validated-principal search status %d, want 200 (must bypass the shared key)", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+	if !reached {
+		t.Fatal("upstream SearXNG was not reached for a validated principal")
+	}
+}
+
+// F2 STILL HOLDS at the router: a caller with NO validated principal AND no key is
+// refused — the principal path did not reopen the open-proxy hole. With the key
+// unset the key path fails closed (503); the anonymous caller never reaches SearXNG.
+func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
+	searchUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("upstream must not be reached by an anonymous caller with no key")
+	}))
+	defer searchUp.Close()
+	t.Setenv("WEBSEARCH_UPSTREAM", searchUp.URL)
+	t.Setenv("WEBSEARCH_API_KEY", "")
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test")}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	fa := app.Fiber()
+
+	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
+	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("search route: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("anonymous no-key search status %d, want 503 (fail closed, no open proxy)", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+}
+
 func TestMountRejectsBadInputs(t *testing.T) {
 	if err := Mount(nil, cloud.Deps{Logger: luxlog.New("test")}); err == nil {
 		t.Fatal("Mount(nil app) should error")
