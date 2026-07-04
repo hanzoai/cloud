@@ -82,8 +82,7 @@ func Serve(enable []string) error {
 	// gateway, closing the forgeable-admin trust boundary. The admin claim is
 	// granted ONLY to a validated GLOBAL admin (owner == AdminOrg). See
 	// middleware_identity.go / auth_identity.go.
-	identity := newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0)
-	app.Use(SanitizeIdentity(identity, cfg.AdminOrg))
+	app.Use(IdentityMiddleware(cfg))
 
 	// Audit trail (FedRAMP AU-* / SOC 2 CC-*). Runs AFTER SanitizeIdentity so the
 	// actor/isAdmin it records come from a VALIDATED principal (never a raw

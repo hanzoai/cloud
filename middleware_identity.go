@@ -188,8 +188,14 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case claims.IsAdmin && owner != "" && owner == adminOrg:
-				// Verified GLOBAL admin: admin authority + honored org-switch.
+			case claims.IsAdmin && owner != "" && owner == adminOrg && !isKMSMachinePrincipal(claims):
+				// Verified GLOBAL admin: admin authority + honored org-switch. A KMS-sync
+				// MACHINE principal (audience <owner>-platform-kms) is EXCLUDED here even
+				// if it carries isAdmin=true: V6 accepts the machine audience for data
+				// scope, but the machine path must never grant global admin, or an
+				// admin-org machine token could read every tenant. It falls through to the
+				// owner-scoped case below (org-scoped, no admin) — the audience widening
+				// stays decoupled from admin inside cloud, not reliant on IAM's behavior.
 				req.Header.Set("X-User-IsAdmin", "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
@@ -215,6 +221,15 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		}
 		return c.Continue()
 	}
+}
+
+// IdentityMiddleware builds the identity trust-boundary middleware from cfg: it
+// constructs the IAM JWT validator (trusted-issuer set, JWKS, audience allowlist)
+// and returns SanitizeIdentity bound to the admin org. This is the ONE constructor
+// for the boundary, so Serve and integration tests wire it identically — no second
+// copy of the validator-construction glue to drift.
+func IdentityMiddleware(cfg *Config) zip.Handler {
+	return SanitizeIdentity(newIdentityValidator(cfg.IAMIssuer, cfg.JWKSURL, cfg.JWTAudiences, 0), cfg.AdminOrg)
 }
 
 // sanitizeSubScopes re-injects the org SUB-SCOPES (X-Project-Id, X-App-Id) for a
