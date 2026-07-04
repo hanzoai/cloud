@@ -11,7 +11,17 @@
 // without re-importing through cloud.
 package types
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrBlobNotFound is the sentinel a WORKING VFS backend returns from Get/Delete
+// when the blob does not exist. It lets a consumer (clients/team files) tell a
+// genuine miss (→ 404 / idempotent delete) apart from a backend that is
+// unavailable/disabled (any OTHER error → fail closed 502) — so a missing blob
+// never masquerades as an outage and a real outage never masquerades as 404.
+var ErrBlobNotFound = errors.New("vfs: blob not found")
 
 // Claims is the JWT-validated identity surface gateway hands to
 // downstream subsystems per HIP-0026. Sub = JWT `sub`, Org = JWT
@@ -186,10 +196,13 @@ type O11yClient interface {
 	Span(ctx context.Context, name string) (context.Context, Span)
 }
 
-// VFSClient is the inter-subsystem interface to vfs.
+// VFSClient is the inter-subsystem interface to vfs. Delete removes the blob at
+// key (idempotent — a missing key is not an error at the seam; the underlying
+// hanzoai/vfs forwards to backend.Delete(ctx,key)).
 type VFSClient interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
+	Delete(ctx context.Context, key string) error
 }
 
 // MQClient is the inter-subsystem interface to mq.
