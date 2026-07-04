@@ -18,24 +18,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// mountSlackBridge registers the bridge routes on a Mount-ed app. This is the
-// EXACT list clients/integrations' owner adds to Mount (see the handoff header in
-// slack_events.go); the test wires it so the routes are drivable without a
-// Mount edit. It also readies the bridge (dedupe table + worker pool) as the first
-// live request would.
-func mountSlackBridge(t *testing.T, app *zip.App) {
-	t.Helper()
-	s := mounted
-	if s == nil {
-		t.Fatal("mountSlackBridge: integrations not mounted")
-	}
-	s.slackBridgeReady()
-	app.Post("/v1/integrations/slack/events", s.slackEvents)
-	app.Post("/v1/integrations/slack/commands", s.slackCommands)
-	app.Get("/v1/integrations/slack/link", s.slackLink)
-	app.Get("/v1/integrations/slack/link/slack", s.slackLinkSlack)
-	app.Get("/v1/integrations/slack/link/callback", s.slackLinkCallback)
-}
+// The bridge routes are registered by the real integrations.Mount (via newApp),
+// so tests drive them directly — no test-only route wiring.
 
 // slackSign computes Slack's v0 request signature over (timestamp, rawBody).
 func slackSign(secret, ts, body string) string {
@@ -216,8 +200,7 @@ func TestRouteSlackEvent(t *testing.T) {
 
 func TestSlackDedupeIdempotency(t *testing.T) {
 	slackConfiguredEnv(t)
-	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
+	newApp(t, newKMS(t)) // mounts the store (table created in migrate); sets `mounted`
 	ctx := context.Background()
 
 	fresh, err := mounted.store.MarkSlackEvent(ctx, "Ev-1")
@@ -243,7 +226,6 @@ func TestSlackEventsHMAC(t *testing.T) {
 	slackConfiguredEnv(t)
 	t.Setenv("SLACK_SIGNING_SECRET", "sig-secret-1")
 	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
 
 	body := `{"type":"url_verification","challenge":"abc123"}`
 
@@ -296,7 +278,6 @@ func TestSlackBridgeOrgIsolation(t *testing.T) {
 	stubSlackBridge(t, authCh)
 	kc := newKMS(t)
 	app := newApp(t, kc)
-	mountSlackBridge(t, app)
 	ctx := context.Background()
 
 	// Two orgs connect two distinct teams.
@@ -355,7 +336,6 @@ func TestSlackBridgeUnconnectedTeamDropped(t *testing.T) {
 	authCh := make(chan string, 2)
 	stubSlackBridge(t, authCh)
 	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
 
 	body := `{"type":"event_callback","team_id":"TNOBODY","event_id":"EvX","event":{"type":"app_mention","user":"U9","text":"<@B> hi","channel":"C1","ts":"1.1"}}`
 	if res := slackPost(t, app, "/v1/integrations/slack/events", "iso-secret-2", "application/json", body); res.Code != http.StatusOK {
@@ -380,7 +360,6 @@ func slackLinkConfiguredEnv(t *testing.T) {
 func TestSlackLinkLeg1SetsCookieAndRedirects(t *testing.T) {
 	slackLinkConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
 
 	entry, _ := signSlackLink(mounted.stateKey, "TACME", "Uacme", 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
@@ -440,7 +419,6 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 	t.Cleanup(func() { slackWebAPIBase = orig })
 
 	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
 
 	ss, _ := signSlackSubject(mounted.stateKey, "nonce-A", 0)
 
@@ -472,7 +450,6 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 func TestSlackLinkCallbackNoCookieRejected(t *testing.T) {
 	slackLinkConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
-	mountSlackBridge(t, app)
 	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/callback?code=c&state=s", "", nil)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("leg3 without a link cookie want 400, got %d (%s)", res.Code, res.Body)
@@ -489,7 +466,6 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	stubSlackBridge(t, authCh)
 	kc := newKMS(t)
 	app := newApp(t, kc)
-	mountSlackBridge(t, app)
 
 	// acme must own TACME so leg2's "workspace connected" check passes.
 	if cb := connectSlack(t, app, "acme", "acmecode"); cb.Code != http.StatusFound {
@@ -528,5 +504,75 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	u, _ := url.Parse(loc)
 	if st := u.Query().Get("state"); st != linkVal {
 		t.Fatalf("OIDC state must equal the link cookie value; state=%q cookie=%q", st, linkVal)
+	}
+}
+
+// ── route wiring: precedence + public (Red H1) ──────────────────────────────
+
+// TestSlackRoutePrecedence proves the literal bridge routes registered by Mount
+// win over the /:provider wildcard, and that the webhook is PUBLIC at the JWT
+// layer (reachable with no principal). Drives the REAL Mount (via newApp), not a
+// test-only wiring.
+func TestSlackRoutePrecedence(t *testing.T) {
+	slackLinkConfiguredEnv(t)
+	t.Setenv("SLACK_SIGNING_SECRET", "prec-secret")
+	app := newApp(t, newKMS(t))
+
+	// GET /v1/integrations/slack/link must hit slackLink (302 to Slack sign-in),
+	// NOT the /:provider GET handler (which would 200 a provider JSON view / 403).
+	entry, _ := signSlackLink(mounted.stateKey, "TACME", "Uacme", 0)
+	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
+	resp, err := app.Fiber().Test(rq)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusFound || !strings.Contains(resp.Header.Get("Location"), "slack.com/oauth/v2/authorize") {
+		t.Fatalf("GET /slack/link must hit slackLink (302 to Slack), got %d loc=%q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+
+	// The /:provider route still resolves for the bare provider id: GET
+	// /v1/integrations/slack (org-authed) returns the provider view — the literals
+	// did not shadow it.
+	if r := req(t, app, http.MethodGet, "/v1/integrations/slack", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("GET /v1/integrations/slack (provider view) want 200, got %d (%s)", r.Code, r.Body)
+	}
+
+	// The events webhook is PUBLIC at the JWT layer: a valid-HMAC challenge with NO
+	// principal reaches slackEvents and echoes — not blocked by any auth gate.
+	body := `{"type":"url_verification","challenge":"pc"}`
+	if res := slackPost(t, app, "/v1/integrations/slack/events", "prec-secret", "application/json", body); res.Code != http.StatusOK || string(res.Body) != "pc" {
+		t.Fatalf("events webhook must be reachable unauthenticated, got %d %q", res.Code, res.Body)
+	}
+}
+
+// TestOrgLimiter proves the per-org availability isolation (Red M1): one org can
+// hold at most its per-org cap, cannot starve a different org, and the global cap
+// bounds the total.
+func TestOrgLimiter(t *testing.T) {
+	l := newOrgLimiter(2, 1) // global 2, per-org 1
+
+	if !l.acquire("a") {
+		t.Fatal("first acquire for a must succeed")
+	}
+	if l.acquire("a") {
+		t.Fatal("a is at its per-org cap (1) — a second acquire must fail (one tenant can't monopolize)")
+	}
+	if !l.acquire("b") {
+		t.Fatal("a different org b must still acquire even though a is capped")
+	}
+	if l.acquire("c") {
+		t.Fatal("global pool is full (2 = a+b) — c must fail")
+	}
+	l.release("a") // frees a's per-org slot AND a global slot
+	if !l.acquire("a") {
+		t.Fatal("after release, a must acquire again")
+	}
+	// clamps: perOrg is capped to global; zero/negative caps floor to 1.
+	if lc := newOrgLimiter(4, 99); lc.perOrg != 4 {
+		t.Fatalf("perOrg must clamp to the global cap, got %d", lc.perOrg)
+	}
+	if lz := newOrgLimiter(0, 0); cap(lz.global) != 1 || lz.perOrg != 1 {
+		t.Fatalf("zero caps must floor to 1, got global=%d perOrg=%d", cap(lz.global), lz.perOrg)
 	}
 }
