@@ -11,6 +11,7 @@ import (
 
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/clients/s3admin"
 )
 
 // BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
@@ -267,12 +268,28 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// (dishonest degradation) instead of a fail-closed 502. Unlike the
 	// nil-then-Mount-fills convention other subsystems use, nothing fills deps.VFS
 	// after MountAll (Mount receives deps by value), so we ALWAYS hand back a
-	// concrete client: a ZAP-RPC client when an endpoint is set, else the
-	// fail-closed DisabledVFS stub (Put/Get/Delete return a non-nil error → 502).
+	// concrete client.
 	if cfg.VFSZAPAddr != "" {
 		log.Info("deps.VFS → ZAP RPC", "addr", cfg.VFSZAPAddr)
 		return clients.VFSRPCAt(cfg.VFSZAPAddr)
 	}
+	// Real blob backend (.97): the shared SeaweedFS S3 gateway — the canonical,
+	// key-based object store, reached with the SAME S3_ADMIN_* admin identity
+	// clients/s3 uses (s3admin, one construction). Present only when those creds
+	// are injected; a construction failure degrades to fail-closed rather than a
+	// nil deref. Team blobs (avatars/attachments) round-trip through this to the
+	// team-blobs bucket, org-scoped by the caller-built key prefix.
+	if admin := s3admin.New(); admin.Configured() {
+		v, err := clients.NewS3VFS(admin)
+		if err != nil {
+			log.Error("deps.VFS → S3 construction failed; falling back to fail-closed", "err", err)
+			return clients.DisabledVFS()
+		}
+		log.Info("deps.VFS → SeaweedFS S3", "bucket", clients.TeamBlobBucket)
+		return v
+	}
+	// No VFS endpoint and no S3 admin creds → fail-closed stub (R-7): Put/Get/Delete
+	// return a non-nil error → files answer 502, never a nil-deref 500.
 	return clients.DisabledVFS()
 }
 
