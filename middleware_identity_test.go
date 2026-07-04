@@ -217,6 +217,16 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg:   "",
 		},
 		{
+			// V6 residual close: a KMS-sync MACHINE principal (aud=<owner>-platform-kms)
+			// in the admin org with isAdmin=true VALIDATES (V6 accepts the machine aud)
+			// but is DENIED global admin — pinned to its own org, never cross-tenant. So
+			// the machine-audience widening cannot be leveraged into an admin bypass.
+			name:      "admin-org machine principal is denied global admin (V6 decoupling)",
+			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
+			wantAdmin: false,
+			wantOrg:   "admin",
+		},
+		{
 			name: "opaque hk- API key is not a JWT; no admin",
 			mutate: func(r *http.Request) {
 				r.Header.Set("Authorization", "Bearer hk-deadbeef")
