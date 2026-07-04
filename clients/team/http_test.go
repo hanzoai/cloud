@@ -11,20 +11,26 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
+	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 const testSecret = "team-http-test-secret"
 
-// mountTeam mounts the team subsystem onto a fresh zip.App with an isolated
+// mountTeam mounts the team subsystem with an in-memory VFS so the files plane
+// round-trips in tests.
+func mountTeam(t *testing.T) *zip.App { return mountTeamVFS(t, newMemVFS()) }
+
+// mountTeamVFS mounts the team subsystem onto a fresh zip.App with an isolated
 // DataDir, a pinned (non-default) SERVER_SECRET so the subsystem is functional
-// (not degraded), and an in-memory VFS so the files plane round-trips in tests.
-func mountTeam(t *testing.T) *zip.App {
+// (not degraded), and the given VFS backend (memVFS for round-trips, or
+// clients.DisabledVFS() to prove the files plane fails closed).
+func mountTeamVFS(t *testing.T, vfs types.VFSClient) *zip.App {
 	t.Helper()
 	t.Setenv("SERVER_SECRET", testSecret)
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
