@@ -197,7 +197,7 @@ func Serve(enable []string) error {
 			"domain", cfg.Domain,
 		)
 		// ONE app, TWO transports: ZAP is the primary machine transport
-		// (TLS 1.3 + PQ), plain HTTP the edge/browser extra. Both serve the
+		// (PLAINTEXT TCP over :9653 — parity with prior HTTP; needs mesh mTLS), plain HTTP the edge/browser extra. Both serve the
 		// identical route surface, so /v1/* answers over either. Serve returns
 		// the first listener error.
 		listenErr <- app.Listen(cfg.ZAPListenAddr, "http://"+cfg.ListenAddr)
