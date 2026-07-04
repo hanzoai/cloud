@@ -21,9 +21,16 @@ import (
 // another project, or an unconfigured/failing CF token, must NOT fail the deploy
 // (the site is already live at its S3 URL). It stamps LastPurgeAt on the project
 // (the caller persists it in the same UpdateProject that flips status to live).
-func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
+//
+// Returns true when THIS project owns its `<slug>.<apex>` subdomain (a fresh
+// claim or the idempotent re-bind of an owner), so the caller can report the
+// pretty subdomain as the canonical live URL; false means the host is taken or
+// reserved and the site is reachable at its S3 URL only.
+func (s *svc) onPublish(ctx context.Context, org string, p *Project) bool {
 	now := time.Now().Unix()
+	bound := true
 	if err := s.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
+		bound = false
 		switch {
 		case errors.Is(err, errHostTaken):
 			s.log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
@@ -37,6 +44,12 @@ func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
 		s.log.Warn("cloudflare purge failed (continuing)", "org", org, "slug", p.Slug, "err", err)
 	}
 	p.LastPurgeAt = now
+	return bound
+}
+
+// siteURL is the pretty public URL for a bound site: `https://<slug>.<apex>`.
+func (s *svc) siteURL(slug string) string {
+	return "https://" + slug + "." + s.apex
 }
 
 // deploy ships a project live. Two modes, one endpoint:
@@ -151,14 +164,23 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 		return zip.Errorf(http.StatusBadGateway, "upload failed: %v", upErr)
 	}
 
+	// Claim the pretty `<slug>.<apex>` subdomain (idempotent for the owner) +
+	// purge the edge BEFORE choosing the canonical URL, so a project that owns its
+	// subdomain reports `https://<slug>.hanzo.app` — the host the wildcard router
+	// actually serves — instead of the raw S3 path. A taken/reserved host falls
+	// back to the S3 URL (the site is still reachable there).
+	bound := s.onPublish(c.Context(), org, &p)
 	live := s.blob.liveURL(org, p.Slug)
+	if bound && s.apex != "" {
+		live = s.siteURL(p.Slug)
+	}
+
 	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
 	if err := s.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize deployment: %v", err)
 	}
 
 	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.blob.bucket, time.Now().Unix()
-	s.onPublish(c.Context(), org, &p)
 	if err := s.store.UpdateProject(c.Context(), p); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize project: %v", err)
 	}
@@ -213,20 +235,29 @@ func (s *svc) completeDeployment(c *zip.Ctx) error {
 	}
 	d.Message = strings.TrimSpace(body.Message)
 	d.Files, d.Bytes = body.Files, body.Bytes
-	if status == "live" {
-		d.LiveURL = strings.TrimSpace(body.LiveURL)
-		if d.LiveURL == "" {
-			d.LiveURL = s.blob.liveURL(org, p.Slug)
-		}
-	}
 	if err := s.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
 	}
 
 	p.UpdatedAt = now
 	if status == "live" {
-		p.Status, p.LiveURL, p.CurrentDeploy = "live", d.LiveURL, d.ID
-		s.onPublish(c.Context(), org, &p)
+		// Claim the subdomain first, then pick the canonical URL: prefer a
+		// caller-supplied explicit URL, else the pretty `<slug>.<apex>` when this
+		// project owns it, else the raw S3 URL.
+		bound := s.onPublish(c.Context(), org, &p)
+		live := strings.TrimSpace(body.LiveURL)
+		if live == "" {
+			if bound && s.apex != "" {
+				live = s.siteURL(p.Slug)
+			} else {
+				live = s.blob.liveURL(org, p.Slug)
+			}
+		}
+		d.LiveURL = live
+		if err := s.store.UpdateDeployment(c.Context(), d); err != nil {
+			return zip.Errorf(http.StatusInternalServerError, "update deployment url: %v", err)
+		}
+		p.Status, p.LiveURL, p.CurrentDeploy = "live", live, d.ID
 	} else {
 		p.Status = "error"
 	}
