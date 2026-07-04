@@ -2,7 +2,6 @@
 app=@hanzo/tasks (admin-tasks)
 base=/_/tasks/
 api_prefix=/v1/tasks
-source_repo=hanzoai/gui:apps/admin-tasks
-source_commit=4e37bed98c
-built_with=vite+hanzogui@7.3.x
-note=last-known-good build; admin-tasks HEAD not independently buildable until hanzogui@7.3.x + @hanzogui/admin colocate in one workspace
+source=hanzoai/admin:apps/admin-tasks + hanzoai/gui hanzogui@7.3.x workspace
+built_with=vite@8 (bunx vite build), hanzogui@7.3.0 + @hanzogui/*@7.3.0 + @hanzogui/admin@7.3.0 workspace-linked
+note=fresh from-source build (current admin-tasks HEAD). @hanzogui@7.3.x is unpublished; built in a combined gui+admin workspace per ../README.md.
