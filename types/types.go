@@ -186,10 +186,13 @@ type O11yClient interface {
 	Span(ctx context.Context, name string) (context.Context, Span)
 }
 
-// VFSClient is the inter-subsystem interface to vfs.
+// VFSClient is the inter-subsystem interface to vfs. Delete removes the blob at
+// key (idempotent — a missing key is not an error at the seam; the underlying
+// hanzoai/vfs forwards to backend.Delete(ctx,key)).
 type VFSClient interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
+	Delete(ctx context.Context, key string) error
 }
 
 // MQClient is the inter-subsystem interface to mq.

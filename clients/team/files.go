@@ -51,6 +51,9 @@ func (s *filesSvc) register(app *zip.App, guard guardFn) {
 	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
 	app.Post("/v1/team/files/:workspace", guard(s.upload))
 	app.Get("/v1/team/files/:workspace/:filename", guard(s.download))
+	// deleteFile: DELETE getFileUrl(ws, file) = /{workspace}/{file}?file={file}
+	// (front.ts) — the download route shape, DELETE method.
+	app.Delete("/v1/team/files/:workspace/:filename", guard(s.deleteBlob))
 }
 
 // principal resolves (account, org) from the request's VERIFIED session or
@@ -175,6 +178,35 @@ func (s *filesSvc) download(c *zip.Ctx) error {
 		c.SetHeader("Content-Disposition", "attachment; filename=\""+safeFilename(c.Param("filename"))+"\"")
 	}
 	return c.Bytes(http.StatusOK, data)
+}
+
+// deleteBlob removes a blob (front.ts deleteFile). Same org + workspace-membership
+// guard as download (F-C). It is IDEMPOTENT and NO-ORACLE: a cross-tenant request
+// is refused at authorize() with the SAME 404 as any missing workspace, and an
+// authorized delete of a present OR absent blob returns the SAME 204 — so deleting
+// never confirms a blob's existence, and a foreign blobId (a different physical
+// key the caller can never name into another tenant's box) is a harmless no-op.
+// front.ts only checks response.ok, so 204 satisfies the contract.
+func (s *filesSvc) deleteBlob(c *zip.Ctx) error {
+	account, org, err := s.principal(c)
+	if err != nil {
+		return zip.ErrUnauthorized("invalid session token")
+	}
+	ws := c.Param("workspace")
+	if err := s.authorize(c, account, org, ws); err != nil {
+		return err
+	}
+	// deleteFile calls getFileUrl(ws, file) with no filename → path segment == the
+	// blob id; ?file= carries it too. Accept either, prefer the explicit ?file=.
+	blobID := strings.TrimSpace(firstNonEmpty(c.Query("file"), c.Param("filename")))
+	if blobID == "" {
+		return zip.ErrBadRequest("file (blob id) required")
+	}
+	// Best-effort idempotent: ignore the backend result (a missing key is not a
+	// caller-visible error) so no within-workspace existence oracle leaks. The key
+	// is org+workspace-scoped, so this can only ever touch the caller's own blob.
+	_ = s.vfs.Delete(c.Context(), blobKey(org, ws, blobID))
+	return c.NoContent(http.StatusNoContent)
 }
 
 // blobKey is the physical, tenant-scoped VFS key. seg() sanitizes every component
