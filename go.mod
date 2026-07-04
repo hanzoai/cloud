@@ -15,7 +15,7 @@ require (
 	github.com/hanzoai/kms/sdk/go v1.1.1
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
-	github.com/hanzoai/sqlite v0.1.4
+	github.com/hanzoai/sqlite v0.1.5
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
@@ -661,7 +661,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hanzoai/ai v1.796.5
+	github.com/hanzoai/ai v1.799.1
 	github.com/hanzoai/authz v1.10.3
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
