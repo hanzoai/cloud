@@ -40,6 +40,22 @@ import (
 // rejected before it can become a storage key or namespace.
 const MaxOrgLen = 128
 
+// DefaultProject is the reserved id of every org's default project. It is the ONE
+// source of truth for the wire-contract value the gateway mints against
+// (iamauth.DefaultProject): an absent X-Project-Id and the literal "default"
+// denote the SAME scope, so keyed surfaces (fleet refs, ml namespaces) keep
+// today's un-suffixed keys for it — the backward-compatibility invariant.
+const DefaultProject = "default"
+
+// IsDefaultProject reports whether project is the org's default scope: the empty
+// header (no project selected) or the literal DefaultProject. Keyed surfaces call
+// this to decide whether to add a project segment, so "no project" and the
+// default project map to exactly one — today's — key.
+func IsDefaultProject(project string) bool {
+	p := strings.TrimSpace(project)
+	return p == "" || p == DefaultProject
+}
+
 // Validated reports whether the request carries a validated principal, i.e. the
 // identity middleware set X-User-Id from a verified credential. This is the ONE
 // predicate that separates a gateway-minted identity from a client-forged
@@ -83,4 +99,33 @@ func Tenant(c *zip.Ctx) (string, bool) {
 		return "", false
 	}
 	return strings.Clone(org), true
+}
+
+// Project resolves the caller's project — the org SUB-SCOPE that narrows WITHIN
+// the validated org (a fleet registry shard, an ml namespace suffix, a metering
+// attribution dimension). It mirrors c.Org() exactly: a zero-copy read of the
+// gateway-minted X-Project-Id header (in production the gateway mints it from the
+// validated IAM `project` claim; off-gateway, cloud.SanitizeIdentity re-injects it
+// only when it is not a cross-org claim — so by the time it is read here it is
+// trustworthy, never a raw client value).
+//
+// The header is present iff a NON-default project is in scope, so an empty header
+// resolves to DefaultProject — this is the backward-compatibility guarantee:
+// existing single-project callers see "default" and keyed surfaces keep today's
+// keys. The returned value is CLONED for the same reason Tenant clones: c.Org() /
+// c.Header() are zero-copy views into the reused fasthttp request buffer, and the
+// project is retained past the request as a storage-key / namespace component, so
+// it must be a stable owned copy that cannot mutate to unrelated bytes.
+//
+// Unlike Tenant, Project does not gate on Validated: it is a scope NARROWING, not
+// an authority. Every consumer AND-s it with the org resolved through Tenant (which
+// does gate), so an unvalidated request is already refused at the org boundary
+// before the project is ever used — the project can only ever narrow the caller's
+// OWN org.
+func Project(c *zip.Ctx) string {
+	project := strings.TrimSpace(c.Header("X-Project-Id"))
+	if project == "" {
+		return DefaultProject
+	}
+	return strings.Clone(project)
 }

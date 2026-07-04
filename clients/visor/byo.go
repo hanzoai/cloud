@@ -54,12 +54,13 @@ func (s *svc) attachCluster(c *zip.Ctx) error {
 	if !s.fleet.Enabled() {
 		return zip.Errorf(http.StatusServiceUnavailable, "BYO cluster attach not configured on this deployment (KMS required)")
 	}
-	// Nominal management-fee gate (fail-closed, per-org).
+	// Nominal management-fee gate (fail-closed, per-org — billing keys on the paying
+	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
 	if err := s.bill.Gate(c.Context(), org, byoClusterKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
-	rec, err := s.fleet.Register(c.Context(), org, name, req.Kubeconfig, req.Provider, req.Default)
+	rec, err := s.fleet.Register(c.Context(), org, project(c), name, req.Kubeconfig, req.Provider, req.Default)
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
@@ -78,7 +79,7 @@ func (s *svc) detachCluster(c *zip.Ctx) error {
 	if name == "" {
 		return zip.ErrBadRequest("cluster id required")
 	}
-	found, err := s.fleet.Deregister(org, name)
+	found, err := s.fleet.Deregister(org, project(c), name)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "detach: %v", err)
 	}
@@ -88,9 +89,10 @@ func (s *svc) detachCluster(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"detached": name})
 }
 
-// byoClusters returns the org's BYO clusters as clusterViews for the fleet merge.
-func (s *svc) byoClusters(org string) []clusterView {
-	list, err := s.fleet.List(org)
+// byoClusters returns the org+project's BYO clusters as clusterViews for the fleet
+// merge. The default project resolves the legacy org-only shard (unchanged view).
+func (s *svc) byoClusters(org, project string) []clusterView {
+	list, err := s.fleet.List(org, project)
 	if err != nil || len(list) == 0 {
 		return nil
 	}
