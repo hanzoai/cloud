@@ -13,6 +13,7 @@ require (
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.28.12
 	github.com/hanzoai/kms/sdk/go v1.1.1
+	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/sqlite v0.1.5
@@ -37,10 +38,15 @@ require (
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/beego/beego/v2 v2.3.8 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
+	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
+	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible // indirect
+	github.com/kevinburke/go-types v0.0.0-20240719050749-165e75e768f7 // indirect
+	github.com/kevinburke/rest v0.0.0-20240617045629-3ed0ad3487f0 // indirect
+	github.com/kevinburke/twilio-go v0.0.0-20240716172313-813590983ccc // indirect
 	github.com/luxfi/bft v0.1.5 // indirect
 	github.com/luxfi/constants v1.5.8 // indirect
 	github.com/luxfi/p2p v1.21.1 // indirect
@@ -51,9 +57,13 @@ require (
 	github.com/luxwallet/connect/go v0.1.3 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
+	github.com/plivo/plivo-go/v7 v7.57.0 // indirect
+	github.com/ttacon/builder v0.0.0-20170518171403-c099f663e1c2 // indirect
+	github.com/ttacon/libphonenumber v1.2.1 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
+	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	modernc.org/sqlite v1.51.0 // indirect
 )
 
