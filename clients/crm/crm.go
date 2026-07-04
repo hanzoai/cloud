@@ -49,7 +49,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
+	"github.com/zap-proto/zip/middleware"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -71,6 +73,14 @@ var stages = map[string]bool{
 type svc struct {
 	store *Store
 	log   luxlog.Logger
+	// ai screens Startup Program applications; nil disables screening (non-fatal).
+	ai types.AIClient
+	// defaultModel is the gateway model for screens ("" → gateway default).
+	defaultModel string
+	// brand is the org that owns the Startup Program pipeline (white-labels).
+	brand string
+	// screenSync runs the AI screen inline instead of detached (tests only).
+	screenSync bool
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -96,7 +106,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("crm.Mount: open store: %w", err)
 	}
-	s := &svc{store: store, log: log}
+	s := &svc{
+		store:        store,
+		log:          log,
+		ai:           deps.AI,
+		defaultModel: strings.TrimSpace(deps.AIDefaultModel),
+		brand:        strings.TrimSpace(deps.Brand),
+	}
 	mounted = s
 
 	app.Get("/v1/crm/summary", s.summary)
@@ -118,6 +134,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/crm/opportunities/:id", s.getOpp)
 	app.Put("/v1/crm/opportunities/:id", s.updateOpp)
 	app.Delete("/v1/crm/opportunities/:id", s.deleteOpp)
+
+	// Startup Program applications. The intake POST is PUBLIC (unauthenticated
+	// marketing form) and IP-rate-limited; the reads/mutations are staff-only,
+	// gated by tenant() like every other CRM route.
+	app.Group("/v1/crm", middleware.RateLimit(middleware.RateLimitConfig{
+		Limit:  intakeRateLimit,
+		Window: intakeRateWindow,
+		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
+	})).Post("/applications", s.apply)
+	app.Get("/v1/crm/applications", s.listApplications)
+	app.Get("/v1/crm/applications/:id", s.getApplication)
+	app.Patch("/v1/crm/applications/:id", s.patchApplication)
 
 	log.Info("crm mounted", "brand", deps.Brand)
 	return nil
