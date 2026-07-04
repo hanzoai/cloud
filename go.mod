@@ -17,6 +17,7 @@ require (
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/sqlite v0.1.5
+	github.com/hanzoai/zip v0.2.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
