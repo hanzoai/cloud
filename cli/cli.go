@@ -63,6 +63,7 @@ var controlCommands = map[string]string{
 	"k8s":      "deploy-target helpers (current target)",
 	"config":   "view/edit ~/.hanzo/config preferences",
 	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
+	"gpu":      "connect this machine's GPU to the Hanzo cloud fleet (connect/status/disconnect)",
 }
 
 // IsControlVerb reports whether sub is a client-mode command (and therefore
@@ -390,6 +391,7 @@ func newRootCmd() *cobra.Command {
 		newK8sCmd(envOf, &f),
 		newConfigCmd(),
 		newSecurityCmd(envOf),
+		newGPUCmd(envOf, &f),
 	)
 	return root
 }

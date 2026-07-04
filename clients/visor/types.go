@@ -95,6 +95,13 @@ type gpuView struct {
 	Status   string `json:"status,omitempty"`
 	Location string `json:"location,omitempty"`
 	Machine  string `json:"machine,omitempty"`
+	// Provider distinguishes a BYO accelerator ("byo") from a Visor-provisioned
+	// one (the machine's real provider). Memory is VRAM when known (BYO reports it
+	// from nvidia-smi; Visor's machine object carries none, so it stays empty and
+	// the UI renders "—"). Both are additive + omitempty: existing rows are
+	// unaffected and the console normalizer ignores fields it does not read.
+	Provider string `json:"provider,omitempty"`
+	Memory   string `json:"memory,omitempty"`
 }
 
 // nodePoolView is the shape console2 platform.ts NodePool consumes.
@@ -171,6 +178,7 @@ func gpusFromMachine(m visorMachine) []gpuView {
 			Status:   m.State,
 			Location: region,
 			Machine:  m.Name,
+			Provider: m.Provider,
 		})
 	}
 	return out
