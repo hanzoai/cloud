@@ -76,6 +76,14 @@ func (s *svc) mcpToolCall(c *zip.Ctx, org string, req mcpRequest) error {
 		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32601, err.Error()))
 	}
 
+	// Per-org concurrency bound (LOW-2): the tool executes SYNCHRONOUSLY here, so a
+	// burst of core.delay calls would otherwise pin a goroutine each for up to the
+	// delay cap. Held across Run, released after.
+	if !orgRunLimiter.acquire(org) {
+		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32005, "too many concurrent tool calls for this org"))
+	}
+	defer orgRunLimiter.release(org)
+
 	ctx := c.Context()
 	rc := RunContext{
 		Org:   org,
@@ -84,14 +92,18 @@ func (s *svc) mcpToolCall(c *zip.Ctx, org string, req mcpRequest) error {
 			return tokenSource(ctx, org, connector, secretName)
 		},
 	}
-	// Meter + audit the tool invocation (nil meter/recorder → no-op).
-	s.meterUnit(org, c)
-	s.auditEvent(c, org, "automations.mcp.call", p.Name, http.StatusOK)
 
+	// Meter + audit AFTER Run, deriving the outcome from the real result (LOW-1): a
+	// failed / SSRF-blocked / not-connected call is audited as an error and is NOT
+	// billed as a successful unit.
 	out, err := act.Run(ctx, rc)
 	if err != nil {
+		s.auditEvent(c, org, "automations.mcp.call", p.Name, "error", http.StatusFailedDependency)
 		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32000, err.Error()))
 	}
+	s.meterUnit(org, c)
+	s.auditEvent(c, org, "automations.mcp.call", p.Name, "ok", http.StatusOK)
+
 	text, _ := json.Marshal(out)
 	return c.JSON(http.StatusOK, mcpResultObj(req.ID, map[string]any{
 		"content": []map[string]any{{"type": "text", "text": string(text)}},
