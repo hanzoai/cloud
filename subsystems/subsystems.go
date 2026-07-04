@@ -90,6 +90,14 @@ import (
 	// 1-binary FE"): the embedded SPA calls /v1/console/* on its own origin.
 	_ "github.com/hanzoai/cloud/clients/console" // order 122 — /v1/console/keys,/v1/console/onboard
 
+	// Customer-facing, org-scoped billing READS: /v1/billing/{usage,balance}. On the
+	// console host the ingress sends /v1/* to cloud-api directly (the Next BFF is only
+	// at "/"), so the console's billing calls land here; this proxies the caller's OWN
+	// org ledger from commerce (org = validated owner claim; the all-orgs god view stays
+	// admin-only in clients/admin). Without it every product overview + o11y usage panel
+	// 403s ("Access required").
+	_ "github.com/hanzoai/cloud/clients/billing" // order 121 — /v1/billing/{usage,balance} (customer, org-scoped)
+
 	// Projects control plane: the ONE org-scoped store of buildable/deployable
 	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
