@@ -246,6 +246,21 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 
 	app.Get("/v1/integrations", s.list)
+	// Slack agent bridge (clients/integrations/slack_events.go + slack_link.go).
+	// These LITERAL paths are registered BEFORE the /:provider wildcards so they
+	// win under Fiber's registration-order matching and a later `:provider`-shaped
+	// change can never shadow them (same discipline as clients/agents' static-
+	// before-:ref rule). They are PUBLIC at the JWT layer — reached like
+	// /:provider/callback (IdentityMiddleware only POPULATES a principal, never
+	// rejects; DefaultPrice returns 0 so BillingGate passes through) — because
+	// their auth is done INSIDE the handler: HMAC-SHA256 over the raw body for the
+	// events/commands webhooks, and signed __Host- cookie + state for the link legs.
+	// They must NOT be placed behind any principal/tenant gate.
+	app.Post("/v1/integrations/slack/events", s.slackEvents)
+	app.Post("/v1/integrations/slack/commands", s.slackCommands)
+	app.Get("/v1/integrations/slack/link", s.slackLink)
+	app.Get("/v1/integrations/slack/link/slack", s.slackLinkSlack)
+	app.Get("/v1/integrations/slack/link/callback", s.slackLinkCallback)
 	app.Get("/v1/integrations/:provider", s.get)
 	app.Post("/v1/integrations/:provider/connect", s.connect)
 	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
