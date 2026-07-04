@@ -141,16 +141,60 @@ var httpClient = &http.Client{
 	},
 }
 
-// isPublicIP reports whether ip is a routable public address — i.e. NOT loopback,
-// private (RFC1918 / ULA), link-local, unspecified, or multicast. This is the SSRF
-// blocklist that keeps a user-authored URL off cluster-internal and cloud-metadata
-// (169.254.169.254 is link-local, covered) endpoints.
+// specialUseCIDRs are the IANA special-use ranges Go's net helpers do NOT cover.
+// Go's IsPrivate is only RFC1918 + ULA; IsLinkLocal* covers 169.254/16 + fe80::/10.
+// These add the ranges an SSRF attacker reaches for — notably CGNAT 100.64/10
+// (Alibaba's 100.100.100.200 metadata endpoint) and the reserved/benchmark/test
+// blocks — so the blocklist is honest about what it stops. Parsed once at init.
+var specialUseCIDRs = mustCIDRs(
+	"0.0.0.0/8",       // "this host on this network" (RFC 1122)
+	"100.64.0.0/10",   // CGNAT (RFC 6598) — Alibaba metadata 100.100.100.200
+	"192.0.0.0/24",    // IETF protocol assignments (RFC 6890)
+	"192.0.2.0/24",    // TEST-NET-1 (RFC 5737)
+	"192.88.99.0/24",  // 6to4 relay anycast (RFC 7526)
+	"198.18.0.0/15",   // benchmarking (RFC 2544)
+	"198.51.100.0/24", // TEST-NET-2 (RFC 5737)
+	"203.0.113.0/24",  // TEST-NET-3 (RFC 5737)
+	"240.0.0.0/4",     // reserved / former class E (RFC 1112)
+	"64:ff9b::/96",    // NAT64 well-known prefix (RFC 6052)
+)
+
+// isPublicIP reports whether ip is a routable PUBLIC address. It rejects loopback,
+// private (RFC1918/ULA), link-local, unspecified, multicast (Go's net helpers) PLUS
+// the IANA special-use ranges above. This is NOT a claim of a complete cloud-metadata
+// blocklist — 169.254.169.254 (AWS/GCP/Azure) is covered as link-local and
+// 100.100.100.200 (Alibaba) as CGNAT, but the guard is a general special-use/private
+// blocklist, not a per-cloud allowlist. Called by the dialer Control hook on the
+// concrete resolved IP, so it also closes the DNS-rebind TOCTOU window.
 func isPublicIP(ip net.IP) bool {
 	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return false
 	}
+	// Normalize an IPv4-mapped IPv6 (::ffff:a.b.c.d) to its v4 form so a mapped
+	// private/special address can't slip past the v4 CIDR checks.
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	for _, n := range specialUseCIDRs {
+		if n.Contains(ip) {
+			return false
+		}
+	}
 	return true
+}
+
+// mustCIDRs parses CIDR literals at init; a bad literal is a programming error.
+func mustCIDRs(cidrs ...string) []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic("automations: bad special-use CIDR " + c + ": " + err.Error())
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 func runHTTPRequest(ctx context.Context, rc RunContext) (any, error) {

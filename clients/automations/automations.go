@@ -59,7 +59,21 @@ const (
 	// metered per flow-run start and per MCP tool call.
 	meterKind    = "automations.run"
 	feeEnvPrefix = "CLOUD_AUTOMATIONS_FEE_CENTS"
+
+	// Noisy-neighbor bounds (MED-3 / LOW-2 / LOW-4). A flow tree is capped in step
+	// count AND total serialized size at every write; the resume payload is bounded;
+	// and each org gets a front-door concurrency limit so one tenant cannot exhaust
+	// worker goroutines (notably via a burst of synchronous MCP core.delay calls).
+	maxSteps            = 256
+	maxTriggerBytes     = 512 * 1024
+	maxResumePayload    = 64 * 1024
+	maxConcurrentPerOrg = 32
 )
+
+// orgRunLimiter bounds concurrent in-flight run-starts + MCP tool executions PER
+// ORG — a front-door DoS/noisy-neighbor guard (LOW-2). Per-org so one tenant's burst
+// never starves another; independent of the durable engine's own worker concurrency.
+var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 
 // catalogJSON is the go:embed'd Tier-A piece catalogue served at
 // /v1/automations/pieces. A separate agent later OVERWRITES this file with the full
@@ -200,6 +214,9 @@ func (s *svc) createFlow(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
+	if err := validateTrigger(body.Trigger); err != nil {
+		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	}
 	now := time.Now().UnixMilli()
 	flowID, err := genID("flow")
 	if err != nil {
@@ -283,7 +300,16 @@ func (s *svc) updateFlow(c *zip.Ctx) error {
 		f.ExternalID = clip(*body.ExternalID)
 	}
 	if body.PublishedVersionID != nil {
-		f.PublishedVersionID = clip(*body.PublishedVersionID)
+		pv := clip(*body.PublishedVersionID)
+		// LOW-3: a published version must be an EXISTING version OF THIS FLOW in THIS
+		// org — never an unvalidated (possibly cross-tenant / dangling) id. Empty clears it.
+		if pv != "" {
+			ver, verr := s.store.GetVersion(c.Context(), org, pv)
+			if verr != nil || ver.FlowID != f.ID {
+				return zip.Errorf(http.StatusUnprocessableEntity, "publishedVersionId must name a version of this flow")
+			}
+		}
+		f.PublishedVersionID = pv
 	}
 	if body.Metadata != nil {
 		f.Metadata = body.Metadata
@@ -340,6 +366,9 @@ func (s *svc) createVersion(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
+	if err := validateTrigger(body.Trigger); err != nil {
+		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	}
 	verID, err := genID("ver")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
@@ -389,6 +418,11 @@ func (s *svc) applyOperation(c *zip.Ctx) error {
 	if err != nil {
 		return mapOpErr(err)
 	}
+	// Re-bound the resulting tree so a sequence of ADD_ACTION ops can't grow a flow
+	// past the step/size caps one operation at a time (MED-3).
+	if err := validateTrigger(updated.Trigger); err != nil {
+		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
+	}
 	updated.Updated = time.Now().UnixMilli()
 	saved, err := s.store.UpdateVersion(c.Context(), *updated)
 	if err != nil {
@@ -423,6 +457,12 @@ func (s *svc) runFlow(c *zip.Ctx) error {
 	if err != nil {
 		return mapStoreErr(err, "flow has no runnable version")
 	}
+	// Per-org front-door concurrency bound (LOW-2).
+	if !orgRunLimiter.acquire(org) {
+		return zip.Errorf(http.StatusTooManyRequests, "too many concurrent automation requests for this org")
+	}
+	defer orgRunLimiter.release(org)
+
 	runID, err := genID("run")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
@@ -442,11 +482,13 @@ func (s *svc) runFlow(c *zip.Ctx) error {
 		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
 		Status: RunRunning, StartTime: now, Created: now, Updated: now,
 	}
-	if _, err := s.store.CreateRun(c.Context(), run); err != nil {
+	// Persist the row for IMMEDIATE visibility (getRun/listRuns), but do NOT meter or
+	// audit here: the durable run-start activity is the SINGLE owner of run
+	// bookkeeping and bills the run exactly once (MED-1), so the manual path never
+	// double-records. CreateRunIfAbsent leaves metered=0 for the activity to claim.
+	if _, err := s.store.CreateRunIfAbsent(c.Context(), run); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist run: %v", err)
 	}
-	s.meterUnit(org, c)
-	s.auditEvent(c, org, "automations.flow.run", f.ID, http.StatusCreated)
 	return c.JSON(http.StatusCreated, run)
 }
 
@@ -496,6 +538,11 @@ func (s *svc) resumeRun(c *zip.Ctx) error {
 	if err != nil {
 		return mapStoreErr(err, "run not found")
 	}
+	// LOW-4: bound the resume payload — it is delivered verbatim into the workflow
+	// as the waitpoint's output, so an unbounded body must not amplify engine state.
+	if len(c.Body()) > maxResumePayload {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "resume payload exceeds the %d-byte limit", maxResumePayload)
+	}
 	var payload any
 	if len(c.Body()) > 0 {
 		if err := json.Unmarshal(c.Body(), &payload); err != nil {
@@ -505,7 +552,7 @@ func (s *svc) resumeRun(c *zip.Ctx) error {
 	if err := signalResume(c.Context(), org, run.WorkflowID, payload); err != nil {
 		return engineErr(err)
 	}
-	s.auditEvent(c, org, "automations.run.resume", run.ID, http.StatusOK)
+	s.auditEvent(c, org, "automations.run.resume", run.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, map[string]any{"resumed": true})
 }
 
@@ -568,7 +615,7 @@ func (s *svc) setEnabled(c *zip.Ctx, org, flowID string, enable bool) error {
 	if enable {
 		action = "automations.flow.enable"
 	}
-	s.auditEvent(c, org, action, f.ID, http.StatusOK)
+	s.auditEvent(c, org, action, f.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, saved)
 }
 
@@ -588,15 +635,58 @@ func pollingCron(v FlowVersion, verr error) (string, bool) {
 	return cron, true
 }
 
+// ── run bookkeeping (MED-1: the SINGLE owner, exactly-once) ─────────────────────
+
+// recordRunStart is the exactly-once run bookkeeping the durable run-start activity
+// runs for EVERY entrypoint (manual, MCP, scheduled cron). It ensures the run row
+// exists (idempotent by run id) and meters+audits ONLY the caller that wins the
+// metered-flag claim — so a run is billed at most once no matter how many paths race
+// to record it. mounted-nil-safe via the activity wrapper.
+func (s *svc) recordRunStart(ctx context.Context, in RunStartInput) error {
+	now := time.Now().UnixMilli()
+	if _, err := s.store.CreateRunIfAbsent(ctx, FlowRun{
+		ID: in.RunID, Org: in.Owner, FlowID: in.FlowID, FlowVersionID: in.FlowVersionID,
+		WorkflowID: in.RunID, Status: RunRunning, StartTime: now, Created: now, Updated: now,
+	}); err != nil {
+		return err
+	}
+	won, err := s.store.ClaimMeter(ctx, in.Owner, in.RunID)
+	if err != nil {
+		return err
+	}
+	if !won {
+		return nil // another path already metered this run — exactly once
+	}
+	// meter + audit fire together, behind the SAME won-guard, so the audit trail's
+	// count of automations.flow.run records is an exact proxy for the meter count.
+	s.meterRun(in.Owner)
+	s.auditRun(ctx, in.Owner, in.FlowID, in.RunID)
+	return nil
+}
+
+// recordRunEnd records a run's terminal status so listRuns reflects it without a
+// getRun refresh. Best-effort.
+func (s *svc) recordRunEnd(ctx context.Context, in RunEndInput) error {
+	now := time.Now().UnixMilli()
+	return s.store.UpdateRunStatus(ctx, in.Owner, in.RunID, FlowRunStatus(in.Status), now, now)
+}
+
 // ── billing + audit ───────────────────────────────────────────────────────────
 
-// meterUnit records one metered unit for the caller's org. Nil/disabled meter → no-op.
+// meterUnit records one metered unit for an HTTP caller's org. Nil/disabled meter → no-op.
 func (s *svc) meterUnit(org string, c *zip.Ctx) {
 	s.bill.Meter(org, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 
-// auditEvent appends one tamper-evident audit record. Nil recorder → no-op.
-func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID string, status int) {
+// meterRun records one metered unit for a flow run from the durable path (no HTTP
+// context). Nil/disabled meter → no-op.
+func (s *svc) meterRun(org string) {
+	s.bill.Meter(org, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+}
+
+// auditEvent appends one tamper-evident audit record for an HTTP action. result is
+// "ok"|"error"; status is the HTTP status. Nil recorder → no-op.
+func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID, result string, status int) {
 	if s.audit == nil {
 		return
 	}
@@ -605,7 +695,7 @@ func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID string, status int)
 		Action:    action,
 		Resource:  audit.Resource{Type: "automations", ID: resourceID},
 		Auth:      audit.AuthContext{Method: "gateway", IsAdmin: c.IsAdmin()},
-		Outcome:   audit.Outcome{Result: "ok", Status: status},
+		Outcome:   audit.Outcome{Result: result, Status: status},
 		Method:    c.Method(),
 		Path:      c.Path(),
 		SourceIP:  cloud.ClientIP(c),
@@ -613,6 +703,24 @@ func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID string, status int)
 	}
 	if _, err := s.audit.Append(c.Context(), rec); err != nil {
 		s.log.Warn("audit append failed", "err", err, "action", action)
+	}
+}
+
+// auditRun appends the flow-run audit record from the durable path (no HTTP context,
+// so no actor sub/email/ip). Nil recorder → no-op.
+func (s *svc) auditRun(ctx context.Context, org, flowID, runID string) {
+	if s.audit == nil {
+		return
+	}
+	rec := audit.Record{
+		Actor:    audit.Actor{Org: org},
+		Action:   "automations.flow.run",
+		Resource: audit.Resource{Type: "automations", ID: flowID},
+		Auth:     audit.AuthContext{Method: "durable"},
+		Outcome:  audit.Outcome{Result: "ok", Status: http.StatusCreated},
+	}
+	if _, err := s.audit.Append(ctx, rec); err != nil {
+		s.log.Warn("audit append failed", "err", err, "action", "automations.flow.run", "run", runID)
 	}
 }
 
