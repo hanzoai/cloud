@@ -77,6 +77,22 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 		sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", serviceName))),
 	)
 	otel.SetTracerProvider(tp)
+
+	// Composition-root ownership: cloud installs the ONE tracer provider (ZAP),
+	// so retire the OTLP-exporter env before any subsystem boots. An embedded
+	// subsystem — notably hanzoai/ai's object.InitTelemetry, invoked during
+	// ai.Bootstrap at mount — reads OTEL_EXPORTER_OTLP_*ENDPOINT and, if set,
+	// installs a SECOND, competing OTLP tracer provider. That second provider
+	// forks the trace path: it wins the global slot for any tracer created
+	// afterward (the ai GenAI tracer), stranding those spans on OTLP(:4318) while
+	// this ZAP provider owns the rest — the exact split that left receiver="zap"
+	// at zero. Clearing it here guarantees exactly one provider (ZAP) and one
+	// wire, deterministically, regardless of CR env drift. In the fused binary
+	// OTLP is only ever the collector's interop RECEIVER, never cloud's exporter;
+	// standalone cmd/aid (no ZAP endpoint) is unaffected and keeps its OTLP path.
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
 	log.Printf("telemetry: OTel spans -> o11y over ZAP wire=%s (service.name=%s)", zapEndpoint, serviceName)
 	return func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
