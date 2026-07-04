@@ -134,3 +134,26 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	}
 	return &types.ChatResponse{Content: resp.Choices[0].Message.Content}, nil
 }
+
+// Models implements types.ModelLister: it returns the ids of the models this
+// gateway currently serves — the OpenAI-compatible GET /v1/models list (the same
+// served set the run path resolves a model against). The agents subsystem calls
+// it to reject a non-catalog model at create time. The call is bounded by
+// aiHTTPTimeout so a slow gateway cannot wedge a create, and never returns the
+// key: only model ids leave this method.
+func (a *httpAI) Models(ctx context.Context) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
+	defer cancel()
+
+	list, err := a.client.ListModels(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cloud: list models: %w", err)
+	}
+	ids := make([]string, 0, len(list.Models))
+	for _, m := range list.Models {
+		if id := strings.TrimSpace(m.ID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}

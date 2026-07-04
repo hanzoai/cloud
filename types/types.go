@@ -167,6 +167,18 @@ type AIClient interface {
 	ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
 }
 
+// ModelLister is an OPTIONAL capability an AIClient may ALSO implement: it
+// enumerates the model ids the gateway currently serves (its OpenAI-compatible
+// /v1/models catalog). The agents subsystem uses it to reject a non-catalog
+// model at agent create/update time with a clean 400, instead of letting the run
+// surface a confusing gateway 502 for a model this gateway never served. An
+// AIClient that cannot enumerate models (the disabled stub, the ZAP-RPC client)
+// simply does not implement it, and callers fall back to skipping the check —
+// so model validation is a best-effort UX guard, never a hard dependency.
+type ModelLister interface {
+	Models(ctx context.Context) ([]string, error)
+}
+
 // O11yClient is the inter-subsystem interface to o11y.
 type O11yClient interface {
 	Counter(name string, tags ...string) Counter

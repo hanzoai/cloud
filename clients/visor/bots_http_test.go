@@ -5,12 +5,98 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// fakeAgents is a faithful stand-in for the cloud /v1/agents surface the bot
+// composition depends on. It implements exactly the two behaviors a bot relies
+// on, so a test proves the launch→message path without a real gateway:
+//
+//	POST /v1/agents            create-if-absent — records the agent and 201s;
+//	                           409 on a repeat (idempotency); 400 when a
+//	                           non-empty model is outside its catalog (so a test
+//	                           proves launchBot propagates the model-validation
+//	                           400 before provisioning any machine).
+//	POST /v1/agents/:name/run  runs ONLY an agent that was actually created
+//	                           (200 pong), else 404 "agent not found" — the exact
+//	                           Resolve semantics messageBot depends on, so a test
+//	                           proves resolve-now-succeeds because launch created it.
+type fakeAgents struct {
+	mu           sync.Mutex
+	created      map[string]map[string]string // name -> {model, instructions}
+	catalog      map[string]bool              // served models, for validation
+	lastRunAgent string
+	lastRunInput string
+}
+
+func newFakeAgents() *fakeAgents {
+	return &fakeAgents{
+		created: map[string]map[string]string{},
+		catalog: map[string]bool{"zen-flash": true, "deepseek-v4-flash": true},
+	}
+}
+
+func (a *fakeAgents) server(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+
+	// POST /v1/agents — create-if-absent (with model validation).
+	mux.HandleFunc("/v1/agents", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ Name, Model, Instructions string }
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if m := strings.TrimSpace(b.Model); m != "" && !a.catalog[m] {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"model not in catalog"}`))
+			return
+		}
+		if _, exists := a.created[b.Name]; exists {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":"agent already exists in this org"}`))
+			return
+		}
+		a.created[b.Name] = map[string]string{"model": b.Model, "instructions": b.Instructions}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"agent_x","name":"` + b.Name + `"}`))
+	})
+
+	// POST /v1/agents/{name}/run — runs only a created agent, else 404 (Resolve).
+	mux.HandleFunc("/v1/agents/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/agents/"), "/run")
+		var b struct{ Input string }
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.lastRunAgent, a.lastRunInput = name, b.Input
+		if _, ok := a.created[name]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"agent not found"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok","output":"pong"}`))
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// wasCreated reports whether an agent of that name was created via POST /v1/agents.
+func (a *fakeAgents) wasCreated(name string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, ok := a.created[name]
+	return ok
+}
 
 // botVM is a stand-in for the vm (Visor) resell compute + agent-binding surface.
 // It speaks the casibase {status,msg,data} envelope, scopes every read by the
@@ -171,16 +257,18 @@ func TestBotsGatedNoPrincipal(t *testing.T) {
 
 func TestBotLaunchQuoteAndReal(t *testing.T) {
 	f := newBotVM()
-	app := mountBots(t, f, "")
+	fa := newFakeAgents()
+	app := mountBots(t, f, fa.server(t).URL)
 
-	// dryRun → the price quote verbatim, no machine, no bind.
+	// dryRun → the price quote verbatim, no machine, no bind, NO agent created.
 	code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper", "dryRun": true})
 	if code != http.StatusOK || !strings.Contains(string(body), `"priceHourly"`) {
 		t.Fatalf("dryRun want 200 quote, got %d %s", code, body)
 	}
-	if len(f.bots) != 0 || f.lastBindName != "" {
-		t.Fatalf("dryRun must not launch or bind (bots=%d bind=%q)", len(f.bots), f.lastBindName)
+	if len(f.bots) != 0 || f.lastBindName != "" || fa.wasCreated("helper") {
+		t.Fatalf("dryRun must not launch, bind or create an agent (bots=%d bind=%q created=%v)",
+			len(f.bots), f.lastBindName, fa.wasCreated("helper"))
 	}
 
 	// A real launch → 201 botView with the agent bound (agent defaults to name).
@@ -188,6 +276,10 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"})
 	if code != http.StatusCreated {
 		t.Fatalf("launch want 201, got %d %s", code, body)
+	}
+	// The bound agent was auto-created (so the bot is immediately messageable).
+	if !fa.wasCreated("helper") {
+		t.Fatalf("launch must auto-create the bound agent")
 	}
 	var bv botView
 	if err := json.Unmarshal(body, &bv); err != nil {
@@ -219,7 +311,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 
 func TestBotListGetDelete(t *testing.T) {
 	f := newBotVM()
-	app := mountBots(t, f, "")
+	app := mountBots(t, f, newFakeAgents().server(t).URL)
 	// Launch two bots for acme.
 	for _, n := range []string{"a", "b"} {
 		if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
@@ -279,7 +371,7 @@ func TestBotListGetDelete(t *testing.T) {
 
 func TestBotStopPause(t *testing.T) {
 	f := newBotVM()
-	app := mountBots(t, f, "")
+	app := mountBots(t, f, newFakeAgents().server(t).URL)
 	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "c"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
@@ -311,35 +403,83 @@ func TestBotStopPause(t *testing.T) {
 
 func TestBotMessageRunsAgent(t *testing.T) {
 	f := newBotVM()
-	// Fake agents surface: records the agent + input, returns a run result.
-	var gotAgent, gotInput string
-	agents := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAgent = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/agents/"), "/run")
-		var b struct {
-			Input string `json:"input"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		gotInput = b.Input
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","output":"pong"}`))
-	}))
-	defer agents.Close()
+	fa := newFakeAgents()
+	app := mountBots(t, f, fa.server(t).URL)
 
-	app := mountBots(t, f, agents.URL)
+	// Launch a bot with an explicit agent name — launch auto-creates that agent.
 	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "chat", "agent": "concierge"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
 	}
+	if !fa.wasCreated("concierge") {
+		t.Fatalf("launch must auto-create the bound agent 'concierge'")
+	}
 
-	// message → runs the BOUND agent with the caller's input; response passes through.
+	// message → runs the BOUND agent with the caller's input; because launch
+	// created it, Resolve succeeds and the response passes through (200 pong).
 	code, body := do(t, app, http.MethodPost, "/v1/bots/drop-chat/message", "acme",
 		map[string]any{"input": "ping"})
 	if code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
 		t.Fatalf("message want 200 pong, got %d %s", code, body)
 	}
-	if gotAgent != "concierge" || gotInput != "ping" {
-		t.Fatalf("message must run the bound agent: agent=%q input=%q", gotAgent, gotInput)
+	if fa.lastRunAgent != "concierge" || fa.lastRunInput != "ping" {
+		t.Fatalf("message must run the bound agent: agent=%q input=%q", fa.lastRunAgent, fa.lastRunInput)
+	}
+}
+
+// TestBotLaunchAutoCreateClosesTheGap is the regression for the launch→message
+// gap: a launched bot must be immediately messageable. It proves both halves —
+// the OLD broken path and the NEW fixed one — against the SAME faithful agents
+// fake whose /run 404s "agent not found" for any agent that was never created
+// (exactly what messageBot's in-process Resolve does).
+func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
+	f := newBotVM()
+	fa := newFakeAgents()
+	app := mountBots(t, f, fa.server(t).URL)
+
+	// OLD path (the bug): a machine bound to an agent that was NEVER created is
+	// un-messageable — run Resolves nothing → 404. We reproduce it by binding an
+	// agent directly (the thin proxy does NOT auto-create), then messaging it.
+	f.bots["drop-ghost"] = map[string]any{"owner": "acme", "name": "ghost", "id": "drop-ghost", "state": "running", "tag": "hanzo-kind:bot"}
+	if code, _ := do(t, app, http.MethodPost, "/v1/machines/drop-ghost/bind-agent", "acme",
+		map[string]any{"agentName": "ghost"}); code != http.StatusOK {
+		t.Fatal("seed direct bind")
+	}
+	if fa.wasCreated("ghost") {
+		t.Fatalf("precondition: a direct bind must NOT create the agent")
+	}
+	if code, body := do(t, app, http.MethodPost, "/v1/bots/drop-ghost/message", "acme",
+		map[string]any{"input": "hi"}); code != http.StatusNotFound {
+		t.Fatalf("bug repro: messaging an uncreated agent must 404, got %d %s", code, body)
+	}
+
+	// NEW path (the fix): launchBot auto-creates the bound agent, so the very same
+	// message now Resolves and runs → 200. launch → message works.
+	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
+		t.Fatal("launch")
+	}
+	if code, body := do(t, app, http.MethodPost, "/v1/bots/drop-helper/message", "acme",
+		map[string]any{"input": "hi"}); code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
+		t.Fatalf("launched bot must be messageable, got %d %s", code, body)
+	}
+
+	// Idempotent: relaunching the same bot (agent already exists → 409 create) is
+	// NOT an error — launch still 201s and the bot stays messageable.
+	if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
+		t.Fatalf("relaunch (idempotent create) want 201, got %d %s", code, body)
+	}
+
+	// Model validation propagates: a launch naming a non-catalog model fails fast
+	// with the agent surface's 400 — and provisions NO machine (fail-fast order).
+	botsBefore := len(f.bots)
+	if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "badmodel", "model": "claude-sonnet-4-5"}); code != http.StatusBadRequest {
+		t.Fatalf("launch with non-catalog model want 400, got %d %s", code, body)
+	}
+	if len(f.bots) != botsBefore {
+		t.Fatalf("a bad-model launch must not provision a machine (bots %d→%d)", botsBefore, len(f.bots))
 	}
 }
 
