@@ -576,3 +576,84 @@ func TestOrgLimiter(t *testing.T) {
 		t.Fatalf("zero caps must floor to 1, got global=%d perOrg=%d", cap(lz.global), lz.perOrg)
 	}
 }
+
+// ── delta review: shed ordering (M-1) + async recover (M-2) ─────────────────
+
+// TestSlackShedReturnsNon2xxAndDoesNotRecord proves Red M-1: when the per-org pool
+// is saturated the webhook SHEDS the turn — returning a retriable NON-2xx and
+// recording NOTHING — so Slack re-delivers when a slot frees and the @mention is
+// never silently lost to a burned dedupe key. Uses a deterministic cap-1 limiter.
+func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
+	slackConfiguredEnv(t)
+	t.Setenv("SLACK_SIGNING_SECRET", "shed-secret")
+	authCh := make(chan string, 2)
+	stubSlackBridge(t, authCh)
+	app := newApp(t, newKMS(t))
+	mounted.slackBridgeReady()
+
+	// Swap in a cap-1 limiter, then saturate it so the next handler acquire sheds.
+	saved := slackLim
+	slackLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { slackLim = saved })
+
+	if cb := connectSlack(t, app, "shedorg", "acmecode"); cb.Code != http.StatusFound {
+		t.Fatalf("connect: %d (%s)", cb.Code, cb.Body)
+	}
+	if !slackLim.acquire("shedorg") {
+		t.Fatal("precondition: fill the cap-1 pool")
+	}
+
+	body := `{"type":"event_callback","team_id":"TACME","event_id":"EvShed","event":{"type":"app_mention","user":"Ushed","text":"<@BACME> hi","channel":"C1","ts":"1.1"}}`
+	res := slackPost(t, app, "/v1/integrations/slack/events", "shed-secret", "application/json", body)
+	if res.Code == http.StatusOK || res.Code < 400 {
+		t.Fatalf("a shed turn must return a retriable NON-2xx so Slack re-delivers, got %d", res.Code)
+	}
+	// The dedupe key was NOT burned: marking it now must be FRESH — else a later
+	// retry would be deduped away and the message lost forever.
+	if fresh, err := mounted.store.MarkSlackEvent(context.Background(), "EvShed"); err != nil || !fresh {
+		t.Fatalf("shed must NOT record the event_id (fresh=%v err=%v)", fresh, err)
+	}
+	// And no reply was posted (the turn never ran).
+	select {
+	case a := <-authCh:
+		t.Fatalf("a shed turn must post no reply, saw %q", a)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestSlackTurnPanicRecoveredAndSlotReleased proves Red M-2: a panic in the async
+// agent turn is CONTAINED (never crashes the shared multi-tenant process) AND the
+// pool slot is released. Uses a deterministic cap-1 limiter; if recover failed the
+// panic would abort the whole test binary.
+func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
+	slackConfiguredEnv(t)
+	newApp(t, newKMS(t))
+	mounted.slackBridgeReady()
+
+	saved := slackLim
+	slackLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { slackLim = saved })
+
+	const org = "panicorg"
+	// Simulate the handler acquiring the single slot, then hand a PANICKING turn to
+	// slackSpawn (which owns the release).
+	if !slackLim.acquire(org) {
+		t.Fatal("precondition: acquire the single slot")
+	}
+	mounted.slackSpawn(org, func() { panic("boom in a slack turn") })
+
+	// The recovered goroutine must release its slot; poll until a fresh acquire
+	// succeeds. Reaching here at all proves the panic did not crash the process.
+	released := false
+	for i := 0; i < 400; i++ {
+		if slackLim.acquire(org) {
+			slackLim.release(org)
+			released = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !released {
+		t.Fatal("a panicking turn must release its slot (and never crash the shared process)")
+	}
+}
