@@ -105,16 +105,11 @@ func (s *svc) commerceData(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "commerce endpoint required")
 	}
 	for _, seg := range strings.Split(sub, "/") {
-		// isSafeSegment rejects empty/./../slash/backslash/null; the extra `%`/`;`
-		// rejection closes ENCODED traversal. The router leaves `%2f`/`%2e` UNdecoded
-		// in this wildcard param (they carry no literal `/` here, so isSafeSegment
-		// alone misses them), but the Go http client — and commerce's own router —
-		// WILL decode+normalize them downstream, turning `product/..%2fbilling` into
-		// `/v1/billing`: a tunnel PAST the store-head allow-list into the money surface.
-		// Rejecting any residual percent-escape / matrix-param segment makes single-,
-		// double-, and N-encoded traversal impossible here, mirroring console2's
-		// bearer-proxy pathIsClean (commerce store ids are opaque + escape-free).
-		if !isSafeSegment(seg) || strings.ContainsAny(seg, "%;") {
+		// isSafeSegment is the ONE guard (billing.go): it rejects empty/./../slash/
+		// backslash/control AND percent-escape/matrix-param, so encoded traversal
+		// (`product/..%2fbilling` → downstream `/v1/billing`) can never tunnel PAST the
+		// store-head allow-list into the money surface.
+		if !isSafeSegment(seg) {
 			return zip.ErrBadRequest("invalid commerce path")
 		}
 	}
