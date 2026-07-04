@@ -24,11 +24,18 @@
 // searxngInstanceUrl / firecrawlApiUrl at this surface (public api.hanzo.ai/v1
 // or the internal cloud-api svc DNS — same binary either way).
 //
-// AUTH: BOTH surfaces require the shared service key WEBSEARCH_API_KEY
-// (KMS-sourced, synced into the pod env) and fail closed — firecrawl as a Bearer
-// key, searxng as X-API-Key. An unset key 503s and any missing/mismatched key
-// 401s, so neither /v1/websearch/search nor /v1/websearch/*/scrape is ever an
-// open proxy. The LibreChat clients send the configured key on both paths.
+// AUTH: two callers, two ONE-WAY-equivalent gates, never an open proxy —
+//   - SEARCH (/v1/websearch/search) admits EITHER a validated principal
+//     (principal.Validated — X-User-Id minted by the identity middleware from a
+//     verified JWT: the signed-in console user via the /cloud bearer proxy) OR the
+//     shared service key WEBSEARCH_API_KEY as X-API-Key (the hanzo.chat server,
+//     which reaches cloud service-to-service with no user principal). A caller with
+//     neither is refused.
+//   - SCRAPE (/v1/websearch/*/scrape) requires the shared key as a Bearer (the chat
+//     server path only; the console surfaces scrape read-only, does not drive it).
+// An unset key 503s and any missing/mismatched key 401s on the key path; a request
+// with a validated principal never needs the key. So neither surface is ever an
+// open proxy, and the signed-in console user reaches search without the shared key.
 package websearch
 
 import (
@@ -45,6 +52,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -311,7 +319,28 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return err
 	}
-	app.All("/v1/websearch/search", zip.AdaptNetHTTP(searchGuard(searchProxy)))
+	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
+	// the zip layer so the same request either reaches the metasearch proxy or is
+	// refused — it is NEVER an open proxy (F2):
+	//   1. a VALIDATED PRINCIPAL — principal.Validated(c) is true when the identity
+	//      middleware set X-User-Id from a verified JWT (the SAME gate the whole
+	//      /v1 data plane uses). This is the console user surface: the /cloud proxy
+	//      mints a short-lived user bearer, cloud validates it, and the query
+	//      proxies straight to SearXNG (no shared key needed, the caller is already
+	//      authenticated + metered by the gateway).
+	//   2. the shared X-API-Key — searchGuard, for the hanzo.chat server which reaches
+	//      cloud WITHOUT a user principal (service-to-service). Unchanged: 503 when
+	//      the key is unset, 401 on a missing/wrong key.
+	// A caller with NEITHER a validated principal NOR a valid key is refused (401/503),
+	// so the anonymous-forge / open-proxy path stays closed.
+	proxyDirect := zip.AdaptNetHTTP(searchProxy)
+	proxyGuarded := zip.AdaptNetHTTP(searchGuard(searchProxy))
+	app.All("/v1/websearch/search", func(c *zip.Ctx) error {
+		if principal.Validated(c) {
+			return proxyDirect(c)
+		}
+		return proxyGuarded(c)
+	})
 
 	scrape := zip.AdaptNetHTTPFunc(scrapeHandler)
 	// Firecrawl builds {apiUrl}/{version}/scrape; pin firecrawlVersion:v1 so the
