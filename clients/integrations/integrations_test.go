@@ -382,6 +382,200 @@ func TestIntegrationsOrgIsolation(t *testing.T) {
 	}
 }
 
+// stubSlackTeam is stubSlackAPI with an attacker-controlled team name + bot user,
+// used to prove ingest sanitization of provider-supplied metadata.
+func stubSlackTeam(t *testing.T, teamName, botUser string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/oauth.v2.access", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":           true,
+			"access_token": "xoxb-real-token",
+			"scope":        "chat:write",
+			"bot_user_id":  botUser,
+			"team":         map[string]string{"id": "T0TEAM", "name": teamName},
+		})
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	orig := slackWebAPIBase
+	slackWebAPIBase = ts.URL
+	t.Cleanup(func() { slackWebAPIBase = orig })
+}
+
+// TestConsoleRedirectNoOpenRedirect proves the callback Location is pinned to the
+// env-fixed console origin: a hostile provider-supplied detail (workspace name)
+// can never break out of the query into the host/scheme/path, nor inject CRLF.
+func TestConsoleRedirectNoOpenRedirect(t *testing.T) {
+	const base = "https://console.hanzo.ai"
+	hostile := []string{
+		"//evil.com",
+		"https://evil.com/pwn",
+		"@evil.com",
+		"foo\r\nSet-Cookie: x=1",
+		"a/../../etc/passwd",
+		"?injected=1#frag",
+		"\x00\x1b]0;title\x07",
+	}
+	for _, detail := range hostile {
+		loc := consoleRedirectURL(base, "connected", "slack", "account", detail)
+		if !strings.HasPrefix(loc, base+"/integrations?") {
+			t.Fatalf("Location must stay on the console origin, got %q", loc)
+		}
+		if strings.ContainsAny(loc, "\r\n") {
+			t.Fatalf("Location must never carry a raw CR/LF (header injection): %q", loc)
+		}
+		u, err := url.Parse(loc)
+		if err != nil {
+			t.Fatalf("Location must parse: %q: %v", loc, err)
+		}
+		if u.Scheme != "https" || u.Host != "console.hanzo.ai" || u.Path != "/integrations" {
+			t.Fatalf("hostile detail %q broke out of the query: scheme=%q host=%q path=%q", detail, u.Scheme, u.Host, u.Path)
+		}
+	}
+}
+
+// TestIntegrationsCallbackSanitizesMeta proves vector 7: a crafted Slack workspace
+// name (control chars + oversized) is stripped/bounded at ingest before it is
+// stored, returned in JSON, logged, or reflected in the redirect Location.
+func TestIntegrationsCallbackSanitizesMeta(t *testing.T) {
+	slackConfiguredEnv(t)
+	evilName := "Ac\r\nme\x00Inc\x1b]0;x\x07" + strings.Repeat("Z", 4096)
+	stubSlackTeam(t, evilName, "U\r\nBOT")
+	app := newApp(t, newKMS(t))
+
+	cb := connectSlack(t, app, "acme", "goodcode")
+	if cb.Code != http.StatusFound {
+		t.Fatalf("callback want 302, got %d (%s)", cb.Code, cb.Body)
+	}
+	// The redirect Location carries the (escaped) account but no raw control bytes
+	// and stays on the console host.
+	if strings.ContainsAny(cb.Location, "\r\n\x00") {
+		t.Fatalf("redirect Location must carry no raw control bytes: %q", cb.Location)
+	}
+	if !strings.Contains(cb.Location, "console.hanzo.ai/integrations?connected=slack") {
+		t.Fatalf("redirect Location off console origin: %q", cb.Location)
+	}
+
+	conn, ok := ConnectionFor("acme", "slack")
+	if !ok {
+		t.Fatal("connection row must exist")
+	}
+	for _, s := range []string{conn.AccountLabel, conn.BotUserID} {
+		for _, r := range s {
+			if r < 0x20 || r == 0x7f {
+				t.Fatalf("stored metadata must contain no control chars, found %q in %q", r, s)
+			}
+		}
+	}
+	if len(conn.AccountLabel) > maxMetaLen {
+		t.Fatalf("stored account label must be bounded to %d, got %d", maxMetaLen, len(conn.AccountLabel))
+	}
+	// The token itself was NOT mangled by sanitization (secret path is separate).
+	got, err := TokenFor(context.Background(), "acme", "slack", "bot_token")
+	if err != nil || string(got) != "xoxb-real-token" {
+		t.Fatalf("secret token must be untouched by metadata sanitization: %q err=%v", got, err)
+	}
+}
+
+// TestIntegrationsDisconnectNoPrincipal403 proves the secret-DELETE path is closed
+// to the anonymous-forge (X-Org-Id, no bearer): a forged disconnect is 403 and
+// NEVER deletes the victim org's connection or its custodied KMS secret.
+func TestIntegrationsDisconnectNoPrincipal403(t *testing.T) {
+	slackConfiguredEnv(t)
+	stubSlackAPI(t)
+	kc := newKMS(t)
+	app := newApp(t, kc)
+
+	if cb := connectSlack(t, app, "acme", "goodcode"); cb.Code != http.StatusFound {
+		t.Fatalf("setup connect: %d", cb.Code)
+	}
+	// Forge: X-Org-Id present but NO validated principal (org == "" sends no headers;
+	// send the header directly to simulate the bearer-less restore path).
+	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/slack/disconnect", nil)
+	rq.Header.Set("X-Org-Id", "acme") // forged org, no X-User-Id
+	resp, err := app.Fiber().Test(rq)
+	if err != nil {
+		t.Fatalf("test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("forged disconnect want 403, got %d", resp.StatusCode)
+	}
+	// The victim's connection + secret survive.
+	if _, ok := ConnectionFor("acme", "slack"); !ok {
+		t.Fatal("forged disconnect must NOT delete the connection row")
+	}
+	if _, err := kc.Get(kmsPath("acme", "slack"), "bot_token", kmsEnv); err != nil {
+		t.Fatalf("forged disconnect must NOT delete the KMS secret: %v", err)
+	}
+}
+
+// TestIntegrationsGithubScaffoldCallbackFailsClosed proves vector 9: even with a
+// GENUINE signed state + live nonce for the unconfigured github scaffold, the
+// callback fails closed at the Configured gate BEFORE any exchange — no connection
+// row, no fabricated success. githubExchange is unreachable in production.
+func TestIntegrationsGithubScaffoldCallbackFailsClosed(t *testing.T) {
+	// github has NO creds in env → Configured()==false.
+	app := newApp(t, newKMS(t))
+	ctx := context.Background()
+
+	// Mint a real, valid state + nonce for github using the mounted signer/store.
+	nonce, err := genToken()
+	if err != nil {
+		t.Fatalf("nonce: %v", err)
+	}
+	if err := mounted.store.PutNonce(ctx, nonce, "acme", "github"); err != nil {
+		t.Fatalf("put nonce: %v", err)
+	}
+	state, err := mounted.sign("acme", "github", nonce)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	r := req(t, app, http.MethodGet,
+		"/v1/integrations/github/callback?code=inst_123&state="+url.QueryEscape(state), "", nil)
+	if r.Code != http.StatusFound || !strings.Contains(r.Location, "error=github") {
+		t.Fatalf("github scaffold callback must fail closed, got %d %q", r.Code, r.Location)
+	}
+	if _, ok := ConnectionFor("acme", "github"); ok {
+		t.Fatal("github scaffold must NEVER create a connection (fabricated success)")
+	}
+}
+
+// TestIntegrationsCallbackOversizedCodeRejected proves the callback bounds the
+// OAuth code param: an oversized code is refused before any provider exchange.
+func TestIntegrationsCallbackOversizedCodeRejected(t *testing.T) {
+	slackConfiguredEnv(t)
+	stubSlackAPI(t)
+	app := newApp(t, newKMS(t))
+
+	res := req(t, app, http.MethodPost, "/v1/integrations/slack/connect", "acme", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("connect: %d", res.Code)
+	}
+	var out struct {
+		AuthorizeURL string `json:"authorizeUrl"`
+	}
+	_ = json.Unmarshal(res.Body, &out)
+	u, _ := url.Parse(out.AuthorizeURL)
+	state := u.Query().Get("state")
+
+	// A code just over the handler cap but still within fasthttp's request-URI read
+	// buffer, so it reaches the handler (rather than being rejected by the
+	// transport) and trips the explicit maxCodeLen guard.
+	huge := strings.Repeat("x", maxCodeLen+64)
+	cb := req(t, app, http.MethodGet,
+		"/v1/integrations/slack/callback?code="+huge+"&state="+url.QueryEscape(state), "", nil)
+	if cb.Code != http.StatusFound || !strings.Contains(cb.Location, "error=slack") {
+		t.Fatalf("oversized code must fail closed, got %d %q", cb.Code, cb.Location)
+	}
+	if _, ok := ConnectionFor("acme", "slack"); ok {
+		t.Fatal("oversized code must never create a connection")
+	}
+}
+
 func TestIntegrationsSeamUnmountedFailsClosed(t *testing.T) {
 	// Force the unmounted state and prove every seam fails closed.
 	_ = Shutdown(context.Background())
