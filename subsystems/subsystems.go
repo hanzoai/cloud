@@ -224,6 +224,12 @@ import (
 	// AI /v1/* catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/integrations" // order 137 — /v1/integrations/*
 
+	// Notify send surface (HIP-0106 fold of the standalone notifyd): mounts the
+	// native /v1/notify/send OTP path in-process. Reuses notifyd's OWN public
+	// provider packages (github.com/hanzoai/notify/service/*); the async Temporal
+	// notify-send queue plane is intentionally NOT folded.
+	_ "github.com/hanzoai/cloud/clients/notify" // order 139 — /v1/notify/send (+ /sms,/email,/health)
+
 	// Connectors+Automations engine (HIP-0106, task #51): the /v1/automations/*
 	// surface — org-scoped flows that run durably on the ONE shared in-process tasks
 	// engine, invoking Tier-A connectors whose per-org credentials are custodied by
