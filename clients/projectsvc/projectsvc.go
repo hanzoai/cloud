@@ -65,6 +65,10 @@ type svc struct {
 	blob  *blobStore
 	cf    *sites.Purger
 	log   luxlog.Logger
+	// apex is the published-site zone (e.g. "hanzo.app"). A deploy that claims
+	// its `<slug>.<apex>` subdomain reports that pretty URL as the live URL; only
+	// a taken/reserved host falls back to the raw S3 URL.
+	apex string
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -155,7 +159,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("projectsvc.Mount: open store: %w", err)
 	}
 
-	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log}
+	apex := strings.ToLower(strings.TrimSpace(env("CLOUD_SITES_APEX", "hanzo.app")))
+	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log, apex: apex}
 	mounted = s
 
 	// Inject the store as the site server's slug→project resolver. This is what
