@@ -1,5 +1,6 @@
-// Package billing mounts the CUSTOMER-facing, org-scoped billing READ surface
-// (/v1/billing/usage, /v1/billing/balance) on the unified cloud binary.
+// Package billing mounts the CUSTOMER-facing, org-scoped billing surface
+// (/v1/billing/{usage,balance,gpu-eligibility,gpu-charge,payment-methods}) on the
+// unified cloud binary.
 //
 // WHY THIS EXISTS. On the console host (console.hanzo.ai) the ingress routes
 // /v1/* straight to cloud-api:8000 — the console's Next BFF is reached only at
@@ -33,7 +34,9 @@
 package billing
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -101,6 +104,32 @@ func (p *commerceProxy) get(ctx context.Context, path, org string, q url.Values)
 	return body, resp.StatusCode, nil
 }
 
+// post performs one service-token commerce POST scoped to org, forwarding the JSON
+// body and returning commerce's raw body + status VERBATIM. Same S2S trust as get: the
+// caller's OWN org rides X-Org-Id (the selector commerce keys the per-org wallet under)
+// and the admin service token authorizes the write. Used by gpu-charge — the ONLY money
+// WRITE on this customer surface.
+func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.base+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("X-Org-Id", org)
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return b, resp.StatusCode, nil
+}
+
 type svc struct {
 	commerce *commerceProxy
 	log      luxlog.Logger
@@ -124,6 +153,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get("/v1/billing/usage", s.usage)
 	app.Get("/v1/billing/balance", s.balance)
+	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
+	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
+	// usage/balance: the subject is pinned to the caller's OWN org, so the console reads
+	// eligibility/card status and charges exactly the wallet a launch debits — never
+	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
+	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
+	// 401 (route exists) instead of the wildcard's admin-shaped 403.
+	app.Get("/v1/billing/gpu-eligibility", s.gpuEligibility)
+	app.Post("/v1/billing/gpu-charge", s.gpuCharge)
+	app.Get("/v1/billing/payment-methods", s.paymentMethods)
 
 	log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", s.commerce.configured())
 	return nil
@@ -189,4 +228,83 @@ func (s *svc) usage(c *zip.Ctx) error {
 // ({balance,holds,available} in USD cents), the SAME wallet the gateway debits.
 func (s *svc) balance(c *zip.Ctx) error {
 	return s.proxy(c, "/v1/billing/balance", "currency")
+}
+
+// gpuEligibility → commerce GET /v1/billing/gpu-eligibility: the read-only launch gate
+// ({eligible,reason,prepaidAvailable,cardOnFile,requiredCents,...}). It reads PREPAID
+// available (never the combined balance) + card-on-file, so the launch UI can show the
+// exact remedy (add a card / add prepaid) — it never 402s. The immediate charge
+// (amountCents) and the 24h-minimum floor (minPrepaidCents) + currency pass through; the
+// subject is pinned to the caller's OWN org (commerce keys the wallet under the bare org
+// slug), so the gate reads exactly the wallet gpu-charge debits.
+func (s *svc) gpuEligibility(c *zip.Ctx) error {
+	return s.proxy(c, "/v1/billing/gpu-eligibility", "amountCents", "minPrepaidCents", "currency")
+}
+
+// paymentMethods → commerce GET /v1/billing/payment-methods: the org's saved cards as
+// the masked descriptor commerce returns (brand + last4 + expiry — never a PAN/CVV/
+// token). On the service-token (privileged) path commerce filters CustomerId on the
+// pinned subject (customerId, else user), so a caller sees ONLY its OWN org's methods;
+// `type` (card/bank_account/…) passes through. Backs the launch gate's card-on-file check.
+func (s *svc) paymentMethods(c *zip.Ctx) error {
+	return s.proxy(c, "/v1/billing/payment-methods", "type")
+}
+
+// gpuCharge → commerce POST /v1/billing/gpu-charge: the prepay-only, card-required GPU
+// debit. Commerce enforces BOTH gates + the gpu-tagged (credits-never-consulted)
+// bucketing server-side, so this is a thin, org-scoped hop: the caller's charge params
+// (amountCents/currency/requestId/tag) ride the body, but the billing SUBJECT is PINNED
+// server-side to the caller's OWN org — a client can never charge another tenant. Commerce's
+// status is forwarded VERBATIM (201 ok / 402 {card_required|insufficient_prepaid}), so the
+// launch UI renders the exact remedy; a money verdict is never 500-masked.
+func (s *svc) gpuCharge(c *zip.Ctx) error {
+	org, ok := principal.Tenant(c)
+	if !ok {
+		// A customer's OWN GPU charge — never admin-gate it; an absent identity is a
+		// true "not signed in" (401), matching usage/balance.
+		return zip.ErrUnauthorized("sign in to charge a GPU")
+	}
+	if !s.commerce.configured() {
+		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+	// Pin the billing subject to the caller's OWN org on the body — commerce's ChargeGPU
+	// reads `user` from the JSON body, so a forged body subject must never widen scope.
+	body := pinSubjectBody(c.Body(), org)
+	respBody, status, err := s.commerce.post(c.Context(), "/v1/billing/gpu-charge", org, body)
+	if err != nil {
+		s.log.Warn("commerce gpu-charge failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	c.SetHeader("Content-Type", "application/json")
+	// A money write's result must never be cached by the browser or an intermediary.
+	c.SetHeader("Cache-Control", "no-store")
+	return c.Bytes(status, respBody)
+}
+
+// pinSubjectBody overwrites every commerce billing-subject key on a top-level JSON object
+// with subject (the caller's OWN org), so a POST body can NEVER act on another tenant's
+// wallet. The keys mirror commerce's edge-auth billing-subject set {user,userId,customerId}
+// (kept identical to clients/console's scopedBillingBody), so whichever param commerce reads
+// is the caller's. A non-object/empty body starts fresh with only the pinned subject (commerce
+// then 400s on the missing amount — honest), so the subject can never be omitted. Non-subject
+// fields (amountCents/currency/requestId/tag) are preserved verbatim.
+func pinSubjectBody(raw []byte, subject string) []byte {
+	obj := map[string]json.RawMessage{}
+	if len(bytes.TrimSpace(raw)) > 0 {
+		if err := json.Unmarshal(raw, &obj); err != nil {
+			obj = map[string]json.RawMessage{} // non-object body — keep only the pinned subject
+		}
+	}
+	s, err := json.Marshal(subject)
+	if err != nil {
+		return raw
+	}
+	for _, k := range []string{"user", "userId", "customerId"} {
+		obj[k] = s
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return raw
+	}
+	return out
 }
