@@ -1,26 +1,32 @@
 package team
 
 // This file is the workspace FILES plane (Phase 2A) — the blob store the Huly SPA
-// hits at UPLOAD_URL=/v1/files (POST) and FILES_URL=/v1/files/:workspace/:filename
-// ?file=:blobId (GET). The CTO repoints those env vars to /v1/team/files at
-// cutover. team-go's pkg/files was only a 307 alias to Base's file API (no store),
-// so this is a fresh implementation of the same contract backed by cloud's
-// CANONICAL blob seam, deps.VFS (Put/Get) — no new store invented (ONE way).
+// hits via its FrontStorage client (foundations/core/packages/storage-client/src/
+// client/front.ts). team-go's pkg/files was only a 307 alias to Base's file API
+// (no store), so this is a fresh implementation of the SAME FrontStorage contract
+// backed by cloud's CANONICAL blob seam, deps.VFS (Put/Get) — no new store (ONE
+// way).
 //
-// TENANT ISOLATION — the SAME invariant as the docs store. The org is the VERIFIED
-// session-token extra.org claim (never a client header); the physical blob key
-// embeds BOTH the org and the workspace (team/blobs/<org>/<ws>/<blobId>), and the
-// named :workspace is asserted to belong to that org (WorkspaceByUUID). So a caller
-// in org B naming org A's blobId computes key team/blobs/<B>/<ws>/<blobId>, which
-// does not exist → 404: a cross-org blob read is structurally impossible, not
-// merely access-checked.
+// CONTRACT (front.ts, authoritative):
+//   - upload:   POST {UPLOAD_URL}/{workspace}, multipart field "file" whose
+//               FILENAME is the CLIENT-generated blob uuid (formData.append(
+//               'file', file, uuid)); Authorization: Bearer <token>; response
+//               body is DISCARDED (uploadFile returns void).
+//   - download: GET /{workspace}/{filename}?file={blobId}&workspace={workspace}.
+//
+// TENANT ISOLATION (same invariant as the docs store, defense in depth):
+//   - org is the VERIFIED session/workspace-token extra.org claim (never a header);
+//   - the caller is asserted to be a MEMBER of :workspace (account store members
+//     table) — not merely same-org — before any store/serve;
+//   - the physical key embeds org+workspace+blobId (team/blobs/<org>/<ws>/<blobId>),
+//     so a cross-org/-workspace blobId simply does not resolve (404). Multiple
+//     independent layers; every denial is a 404 (no member/existence oracle).
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -34,7 +40,7 @@ import (
 const maxBlobSize = 100 << 20
 
 // filesSvc serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
-// accounts asserts workspace-in-org; secret verifies the session token.
+// accounts asserts workspace membership; secret verifies the session token.
 type filesSvc struct {
 	vfs      types.VFSClient
 	accounts *accountStore
@@ -42,14 +48,14 @@ type filesSvc struct {
 }
 
 func (s *filesSvc) register(app *zip.App, guard guardFn) {
-	app.Post("/v1/team/files", guard(s.upload))
+	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
+	app.Post("/v1/team/files/:workspace", guard(s.upload))
 	app.Get("/v1/team/files/:workspace/:filename", guard(s.download))
 }
 
-// principal resolves (org, workspaceClaim) from the request's VERIFIED session or
-// workspace token (bearer or the HttpOnly account cookie). workspaceClaim is the
-// token's Workspace claim (present on a workspace token, empty on a session token).
-func (s *filesSvc) principal(c *zip.Ctx) (org, workspaceClaim string, err error) {
+// principal resolves (account, org) from the request's VERIFIED session or
+// workspace token (bearer or the HttpOnly account cookie).
+func (s *filesSvc) principal(c *zip.Ctx) (account, org string, err error) {
 	t, _, err := sessionToken(c, s.secret)
 	if err != nil {
 		return "", "", err
@@ -58,127 +64,160 @@ func (s *filesSvc) principal(c *zip.Ctx) (org, workspaceClaim string, err error)
 	if strings.TrimSpace(org) == "" {
 		return "", "", fmt.Errorf("token carries no org")
 	}
-	return org, t.Workspace, nil
+	return t.Account, org, nil
 }
 
-// resolveWorkspace asserts wsUUID belongs to org (the tenant boundary) and returns
-// it. A foreign tenant's uuid → 404 (no cross-tenant existence oracle).
-func (s *filesSvc) resolveWorkspace(c *zip.Ctx, org, wsUUID string) (string, error) {
+// authorize asserts :workspace belongs to org AND the caller is a MEMBER of it
+// (Red F-C: bind files to workspace membership, not just same-org). Any failure is
+// a 404 — no oracle distinguishing "no such workspace", "not your org", or "not a
+// member".
+func (s *filesSvc) authorize(c *zip.Ctx, account, org, wsUUID string) error {
 	wsUUID = strings.TrimSpace(wsUUID)
 	if wsUUID == "" {
-		return "", zip.ErrBadRequest("workspace required")
+		return zip.ErrBadRequest("workspace required")
 	}
 	if s.accounts == nil {
-		return "", zip.Errorf(http.StatusServiceUnavailable, "team: file storage unavailable")
+		return zip.Errorf(http.StatusServiceUnavailable, "team: file storage unavailable")
 	}
-	if _, err := s.accounts.WorkspaceByUUID(c.Context(), org, wsUUID); err != nil {
-		return "", zip.ErrNotFound("workspace not found")
+	w, err := s.accounts.WorkspaceByUUID(c.Context(), org, wsUUID)
+	if err != nil {
+		return zip.ErrNotFound("workspace not found")
 	}
-	return wsUUID, nil
+	if _, ok := s.accounts.Membership(c.Context(), w.ID, account); !ok {
+		return zip.ErrNotFound("workspace not found")
+	}
+	return nil
 }
 
-// upload stores a blob for the caller's workspace and returns its blobId. The
-// workspace comes from the workspace-token claim if present, else the ?workspace=
-// query. Accepts a multipart "file" field or a raw body.
+// upload stores the uploaded bytes under the CLIENT-supplied blob uuid (the
+// multipart file's filename). The server does NOT mint the id — the front owns it
+// (front.ts: formData.append('file', file, uuid)). Response body is irrelevant
+// (uploadFile discards it); we echo the id for curl/debug.
 func (s *filesSvc) upload(c *zip.Ctx) error {
-	org, wsClaim, err := s.principal(c)
+	account, org, err := s.principal(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
-	ws, err := s.resolveWorkspace(c, org, firstNonEmpty(wsClaim, c.Query("workspace")))
-	if err != nil {
+	ws := c.Param("workspace")
+	if err := s.authorize(c, account, org, ws); err != nil {
 		return err
 	}
-	data, err := readUpload(c)
+	fh, err := c.Fiber().FormFile("file")
+	if err != nil || fh == nil {
+		return zip.ErrBadRequest(`multipart field "file" required`)
+	}
+	// The blob id is the multipart filename (client-generated uuid v4). Validate it
+	// is a UUID — the front always sends one, and this rejects any other value from
+	// becoming a storage key (belt: seg() also sanitizes it in blobKey).
+	blobID := fh.Filename
+	if uuid.Validate(blobID) != nil {
+		return zip.ErrBadRequest("blob id (multipart filename) must be a uuid")
+	}
+	if fh.Size > maxBlobSize {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "file too large (max %d bytes)", maxBlobSize)
+	}
+	f, err := fh.Open()
 	if err != nil {
-		return err
+		return zip.ErrBadRequest("cannot read upload")
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxBlobSize+1))
+	if err != nil {
+		return zip.ErrBadRequest("cannot read upload")
+	}
+	if len(data) > maxBlobSize {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "file too large (max %d bytes)", maxBlobSize)
 	}
 	if len(data) == 0 {
 		return zip.ErrBadRequest("empty upload")
 	}
-	blobID := uuid.NewString()
 	if err := s.vfs.Put(c.Context(), blobKey(org, ws, blobID), data); err != nil {
 		// deps.VFS is DisabledVFS (fail-closed) unless the operator wires a real VFS
-		// backend — surface an honest 502 rather than a silent success.
+		// backend — an honest 502, never a silent success.
 		return zip.Errorf(http.StatusBadGateway, "file storage unavailable")
 	}
-	// The Huly uploader reads the response body as the blob id. Plain text keeps it
-	// compatible across front versions.
 	return c.String(http.StatusOK, blobID)
 }
 
-// download streams a blob. The blob id is the ?file= query (Huly's FILES_URL) with
-// a fallback to the :filename path segment (the /files/:ws/:blobId shape); the
-// :filename drives the Content-Type only.
+// download streams a blob by its client id (?file=). The served Content-Type is
+// derived from the STORED BYTES via a strict image allow-list — NEVER from the
+// client :filename (Red F-B: a crafted .svg name would otherwise force
+// image/svg+xml → active XSS). Anything not a recognized raster image is served
+// inert: application/octet-stream + attachment + nosniff.
 func (s *filesSvc) download(c *zip.Ctx) error {
-	org, _, err := s.principal(c)
+	account, org, err := s.principal(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
 	}
-	ws, err := s.resolveWorkspace(c, org, c.Param("workspace"))
-	if err != nil {
+	ws := c.Param("workspace")
+	if err := s.authorize(c, account, org, ws); err != nil {
 		return err
 	}
-	blobID := strings.TrimSpace(firstNonEmpty(c.Query("file"), c.Param("filename")))
+	blobID := strings.TrimSpace(c.Query("file"))
 	if blobID == "" {
 		return zip.ErrBadRequest("file (blob id) required")
 	}
 	data, err := s.vfs.Get(c.Context(), blobKey(org, ws, blobID))
 	if err != nil || data == nil {
-		// A cross-org blobId, a missing blob, or a disabled backend all land here as
-		// a 404 — no oracle distinguishing "not yours" from "not found".
+		// A cross-org/-workspace blobId, a missing blob, or a disabled backend all
+		// land here as a 404 — no oracle.
 		return zip.ErrNotFound("blob not found")
 	}
-	c.SetHeader("Content-Type", contentType(c.Param("filename")))
+	// nosniff on EVERY response so the browser never re-sniffs the declared type.
+	c.SetHeader("X-Content-Type-Options", "nosniff")
 	c.SetHeader("Cache-Control", "private, max-age=31536000, immutable")
+	if img := imageType(data); img != "" {
+		// Recognized raster image → serve inline with its true (byte-derived) type.
+		c.SetHeader("Content-Type", img)
+	} else {
+		// Everything else is inert: no inline rendering, forced download.
+		c.SetHeader("Content-Type", "application/octet-stream")
+		c.SetHeader("Content-Disposition", "attachment; filename=\""+safeFilename(c.Param("filename"))+"\"")
+	}
 	return c.Bytes(http.StatusOK, data)
 }
 
-// readUpload returns the uploaded bytes from a multipart "file" field or, failing
-// that, the raw request body — capped at maxBlobSize.
-func readUpload(c *zip.Ctx) ([]byte, error) {
-	if fh, err := c.Fiber().FormFile("file"); err == nil && fh != nil {
-		if fh.Size > maxBlobSize {
-			return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "file too large (max %d bytes)", maxBlobSize)
-		}
-		f, err := fh.Open()
-		if err != nil {
-			return nil, zip.ErrBadRequest("cannot read upload")
-		}
-		defer func() { _ = f.Close() }()
-		return io.ReadAll(io.LimitReader(f, maxBlobSize+1))
-	}
-	body := c.Body()
-	if len(body) > maxBlobSize {
-		return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "file too large (max %d bytes)", maxBlobSize)
-	}
-	// Copy: c.Body() is a view into the reused fasthttp buffer, and the bytes are
-	// handed to vfs.Put which may retain them past the request.
-	out := make([]byte, len(body))
-	copy(out, body)
-	return out, nil
-}
-
 // blobKey is the physical, tenant-scoped VFS key. seg() sanitizes every component
-// (org is the verified claim; ws is asserted in-org; blobId folds in a
-// client-supplied value — seg() is the traversal guard on it).
+// (org is the verified claim; ws is asserted in-org + member; blobId is a validated
+// uuid — seg() is the last-line traversal guard on it).
 func blobKey(org, workspace, blobID string) string {
 	return "team/blobs/" + seg(org) + "/" + seg(workspace) + "/" + seg(blobID)
 }
 
-// contentType infers a response Content-Type from the filename extension, falling
-// back to a safe generic. application/octet-stream (not text/html) so a stored blob
-// can never be served as an executable HTML/script document (stored-XSS guard).
-func contentType(filename string) string {
-	ext := strings.ToLower(filepath.Ext(filename))
-	if ext == "" {
-		return "application/octet-stream"
+// imageType returns the canonical MIME type of a recognized raster image from its
+// MAGIC BYTES, or "" for anything else. This is the ALLOW-LIST (Red F-B): only
+// image/png|jpeg|gif|webp are ever served inline, and only when the STORED bytes
+// actually are that image — a mislabeled/crafted upload (SVG, HTML, XHTML, …)
+// falls through to "" and is served inert. Deterministic; no reliance on the
+// client filename or Go's evolving sniff table.
+func imageType(data []byte) string {
+	switch {
+	case len(data) >= 8 && bytes.Equal(data[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
+		return "image/png"
+	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+		return "image/jpeg"
+	case len(data) >= 6 && (string(data[:6]) == "GIF87a" || string(data[:6]) == "GIF89a"):
+		return "image/gif"
+	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
+		return "image/webp"
 	}
-	if ct := mime.TypeByExtension(ext); ct != "" {
-		if strings.HasPrefix(ct, "text/html") || strings.Contains(ct, "javascript") {
-			return "application/octet-stream"
+	return ""
+}
+
+// safeFilename reduces a client filename to a header-safe download name: only
+// [A-Za-z0-9._-] survive (killing quotes, CR/LF header-injection and path
+// separators); empty/dot-only → "download".
+func safeFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+			b.WriteRune(r)
 		}
-		return ct
 	}
-	return "application/octet-stream"
+	out := strings.TrimSpace(b.String())
+	if out == "" || out == "." || out == ".." {
+		return "download"
+	}
+	return out
 }
