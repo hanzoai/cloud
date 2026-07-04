@@ -47,6 +47,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/fleet"
 	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -55,6 +56,11 @@ import (
 type svc struct {
 	cl  *client
 	log luxlog.Logger
+	// fleet is the shared per-org BYO-cluster registry (KMS-sealed kubeconfigs);
+	// bill meters the nominal management fee. BYO clusters are MERGED into the
+	// managed clusters on /v1/clusters — one fleet surface, two sources.
+	fleet *fleet.Registry
+	bill  *cloud.ResourceMeter
 }
 
 // Mount wires the compute surface onto app per HIP-0106.
@@ -65,7 +71,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("visor.Mount: nil deps.Logger")
 	}
-	s := &svc{cl: newClient(), log: deps.Logger.New("subsystem", "visor")}
+	s := &svc{
+		cl:    newClient(),
+		log:   deps.Logger.New("subsystem", "visor"),
+		fleet: fleet.New(deps.Brand, deps.Logger.New("subsystem", "fleet")),
+		bill:  cloud.NewResourceMeter(deps, "compute"),
+	}
 
 	// Static routes register before their :param siblings so Fiber's
 	// registration-order match never lets a machine/cluster id capture a literal.
@@ -84,6 +95,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/fleet/workers", s.listFleetWorkers)
 
 	app.Get("/v1/clusters", s.listClusters)
+	// BYO: attach an existing cluster (kubeconfig) or detach one. Managed clusters
+	// (Visor-provisioned DOKS/AWS/…) + BYO ones surface together on GET /v1/clusters.
+	app.Post("/v1/clusters", s.attachCluster)
+	app.Delete("/v1/clusters/:id", s.detachCluster)
 	app.Post("/v1/clusters/:clusterId/pools", s.createPool)
 	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", s.scalePool)
 	app.Delete("/v1/clusters/:clusterId/pools/:poolId", s.deletePool)
@@ -318,7 +333,10 @@ func (s *svc) listClusters(c *zip.Ctx) error {
 	if err := s.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, map[string]any{"clusters": clustersFromPools(pools)})
+	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones.
+	clusters := clustersFromPools(pools)
+	clusters = append(clusters, s.byoClusters(org)...)
+	return c.JSON(http.StatusOK, map[string]any{"clusters": clusters})
 }
 
 type poolReq struct {
