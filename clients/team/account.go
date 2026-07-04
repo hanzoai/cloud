@@ -36,6 +36,18 @@ const authCookie = "account-token"
 // never exposed to page JS.
 const iamTokenCookie = "hanzo_iam_token"
 
+// Token lifetimes. Every minted token now carries an `exp` (Decode enforces it),
+// bounding the replay window on a captured token. The session token matches the
+// 30-day cookie; the workspace token — which rides in the transactor URL path and
+// is thus log-prone — is short (12h) and re-minted by selectWorkspace on demand.
+const (
+	sessionTokenTTL   = 30 * 24 * time.Hour
+	workspaceTokenTTL = 12 * time.Hour
+)
+
+// expUnix returns the unix-second expiry `d` from now — the `exp` claim value.
+func expUnix(d time.Duration) int64 { return time.Now().Add(d).Unix() }
+
 type config struct {
 	iamEndpoint     string // OIDC issuer base (deps.IAMIssuer / IAM_ENDPOINT)
 	iamClientID     string // IAM_CLIENT_ID (KMS-synced env)
@@ -147,13 +159,13 @@ func statusWorkspaceNotFound(url string) Status {
 
 // ── route registration ────────────────────────────────────────────────────────
 
-func (g *api) register(app *zip.App) {
-	app.Post("/v1/team/account", g.rpc)
-	app.Get("/v1/team/account/providers", g.providers)
-	app.Get("/v1/team/account/auth/:provider", g.authStart)
-	app.Get("/v1/team/account/auth/:provider/callback", g.authCallback)
-	app.Put("/v1/team/account/cookie", g.setCookie)
-	app.Delete("/v1/team/account/cookie", g.clearCookie)
+func (g *api) register(app *zip.App, guard guardFn) {
+	app.Post("/v1/team/account", guard(g.rpc))
+	app.Get("/v1/team/account/providers", guard(g.providers))
+	app.Get("/v1/team/account/auth/:provider", guard(g.authStart))
+	app.Get("/v1/team/account/auth/:provider/callback", guard(g.authCallback))
+	app.Put("/v1/team/account/cookie", guard(g.setCookie))
+	app.Delete("/v1/team/account/cookie", guard(g.clearCookie))
 }
 
 // ── REST: providers ───────────────────────────────────────────────────────────
@@ -226,7 +238,7 @@ func (g *api) authCallback(c *zip.Ctx) error {
 	// account uuid. Idempotent (only fills empty).
 	_ = g.accounts.EnsureMemberName(ctx, account, displayName)
 
-	tok, err := token.Generate(account, "", map[string]any{"org": org}, g.cfg.serverSecret)
+	tok, err := token.Generate(account, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), g.cfg.serverSecret)
 	if err != nil {
 		return g.bounce(c, "", c.Query("state"), "token_failed")
 	}
@@ -246,7 +258,14 @@ func (g *api) setCookie(c *zip.Ctx) error {
 	if body.Token == "" {
 		body.Token = bearer(c)
 	}
-	g.setSessionCookie(c, authCookie, body.Token, 30*24*3600)
+	// VERIFY the token (signature + expiry) before persisting it as the session
+	// cookie. Storing an unverified, caller-supplied value is a login-CSRF /
+	// session-fixation vector — an attacker could pin a cookie the victim's browser
+	// then presents as authenticated. Only a token THIS service signed is accepted.
+	if _, err := token.Decode(body.Token, g.cfg.serverSecret, true); err != nil {
+		return zip.ErrUnauthorized("invalid session token")
+	}
+	g.setSessionCookie(c, authCookie, body.Token, int(sessionTokenTTL.Seconds()))
 	return c.JSON(http.StatusOK, map[string]any{"result": true})
 }
 
@@ -329,8 +348,9 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 		return g.fail(c, statusUnauthorized("not a member of "+wsURL))
 	}
 	// Carry the tenant into the workspace token so the transactor routes to
-	// orgs/<org>/ws/<workspace>.db.
-	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org}, g.cfg.serverSecret)
+	// orgs/<org>/ws/<workspace>.db. Short-lived (workspaceTokenTTL) — it rides in
+	// the transactor URL path, so a bounded lifetime caps replay on capture.
+	wsTok, err := token.Generate(account, ws.UUID, map[string]any{"org": org}, expUnix(workspaceTokenTTL), g.cfg.serverSecret)
 	if err != nil {
 		return g.fail(c, statusError("mint workspace token: "+err.Error()))
 	}
@@ -379,27 +399,43 @@ func (g *api) getSocialIds(c *zip.Ctx) error {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// account decodes the request's HS256 bearer/cookie token (minted by this service)
-// into (AccountUuid, org, token). The SPA sends OUR token, not an IAM JWT. The org
-// is the token's SIGNED extra.org claim — the tenant key for every account-store
-// query — never a client header.
+// sessionToken decodes AND verifies (signature + expiry) the request's HS256
+// bearer/cookie token — the one this service minted. bearer takes precedence over
+// the cookie. It is the ONE place a team session token is turned into a principal,
+// shared by the account RPC and the files plane.
+//
+// The SPA sends OUR HS256 token, not an IAM RS256 JWT: an IAM bearer would simply
+// fail the HMAC check (ErrSignature) and be rejected here, so there is no separate
+// algorithm routing to maintain (why token.Alg was removed). token.Decode with
+// verify=true also enforces `exp`/`nbf`, so a captured expired token is refused.
+func sessionToken(c *zip.Ctx, secret string) (*token.Token, string, error) {
+	raw := bearer(c)
+	if raw == "" {
+		raw = c.Fiber().Req().Cookies(authCookie)
+	}
+	if raw == "" {
+		return nil, "", fmt.Errorf("no token")
+	}
+	t, err := token.Decode(raw, secret, true)
+	if err != nil {
+		return nil, "", err
+	}
+	if t.Account == "" {
+		return nil, "", fmt.Errorf("token has no account")
+	}
+	return t, raw, nil
+}
+
+// account resolves (AccountUuid, org, token) from the request's verified session
+// token. The org is the token's SIGNED extra.org claim — the tenant key for every
+// account-store query — never a client header.
 func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
-	tok = bearer(c)
-	if tok == "" {
-		tok = c.Fiber().Req().Cookies(authCookie)
-	}
-	if tok == "" {
-		return "", "", "", fmt.Errorf("no token")
-	}
-	t, err := token.Decode(tok, g.cfg.serverSecret, true)
+	t, raw, err := sessionToken(c, g.cfg.serverSecret)
 	if err != nil {
 		return "", "", "", err
 	}
-	if t.Account == "" {
-		return "", "", "", fmt.Errorf("token has no account")
-	}
 	org, _ = t.Extra["org"].(string)
-	return t.Account, org, tok, nil
+	return t.Account, org, raw, nil
 }
 
 // bounce redirects to the SPA with the minted token (or an error).
