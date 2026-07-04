@@ -131,26 +131,26 @@ func TestSlackSubjectStateRoundtrip(t *testing.T) {
 	for i := range key {
 		key[i] = byte(i + 7)
 	}
-	st, err := signSlackSubject(key, "nonce-abc", 0)
+	st, err := signSubject(key, "nonce-abc", 0)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	sub, nonce, ok := verifySlackSubject(key, st, 0)
+	sub, nonce, ok := verifySubject(key, st, 0)
 	if !ok || sub != "nonce-abc" || nonce == "" {
 		t.Fatalf("roundtrip mismatch: sub=%q nonce=%q ok=%v", sub, nonce, ok)
 	}
 	// Tampered MAC → fail.
-	if _, _, ok := verifySlackSubject(key, st[:len(st)-1]+"Z", 0); ok {
+	if _, _, ok := verifySubject(key, st[:len(st)-1]+"Z", 0); ok {
 		t.Fatal("tampered state must fail")
 	}
 	// Different key → fail (a forged state under the wrong key never verifies).
 	other := make([]byte, 32)
-	if _, _, ok := verifySlackSubject(other, st, 0); ok {
+	if _, _, ok := verifySubject(other, st, 0); ok {
 		t.Fatal("state under a different key must fail")
 	}
 	// Expired → fail.
-	past, _ := signSlackSubject(key, "s", time.Now().Add(-slackLinkTTLSec*time.Second-time.Minute).Unix())
-	if _, _, ok := verifySlackSubject(key, past, 0); ok {
+	past, _ := signSubject(key, "s", time.Now().Add(-linkStateTTLSec*time.Second-time.Minute).Unix())
+	if _, _, ok := verifySubject(key, past, 0); ok {
 		t.Fatal("expired state must fail")
 	}
 	// Link subject (team:user) roundtrips.
@@ -203,19 +203,19 @@ func TestSlackDedupeIdempotency(t *testing.T) {
 	newApp(t, newKMS(t)) // mounts the store (table created in migrate); sets `mounted`
 	ctx := context.Background()
 
-	fresh, err := mounted.store.MarkSlackEvent(ctx, "Ev-1")
+	fresh, err := mounted.store.MarkEvent(ctx, "slack", "Ev-1")
 	if err != nil || !fresh {
 		t.Fatalf("first sighting must be fresh (err=%v fresh=%v)", err, fresh)
 	}
-	again, err := mounted.store.MarkSlackEvent(ctx, "Ev-1")
+	again, err := mounted.store.MarkEvent(ctx, "slack", "Ev-1")
 	if err != nil || again {
 		t.Fatalf("a Slack retry of the same event_id must be a duplicate (err=%v again=%v)", err, again)
 	}
 	// A different id is fresh; an empty key is non-dedupable (always fresh).
-	if f, _ := mounted.store.MarkSlackEvent(ctx, "Ev-2"); !f {
+	if f, _ := mounted.store.MarkEvent(ctx, "slack", "Ev-2"); !f {
 		t.Fatal("a distinct event_id must be fresh")
 	}
-	if f, _ := mounted.store.MarkSlackEvent(ctx, ""); !f {
+	if f, _ := mounted.store.MarkEvent(ctx, "slack", ""); !f {
 		t.Fatal("an empty key must be non-dedupable (fresh)")
 	}
 }
@@ -420,7 +420,7 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 
 	app := newApp(t, newKMS(t))
 
-	ss, _ := signSlackSubject(mounted.stateKey, "nonce-A", 0)
+	ss, _ := signSubject(mounted.stateKey, "nonce-A", 0)
 
 	// (a) No init cookie at all → refused.
 	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), "", nil)
@@ -476,7 +476,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	// pairing directly: sign the slack-signin state over a known nonce and present
 	// the matching init cookie.
 	const nonce = "leg2-nonce"
-	ss, _ := signSlackSubject(mounted.stateKey, nonce, 0)
+	ss, _ := signSubject(mounted.stateKey, nonce, 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"="+nonce)
 	resp, err := app.Fiber().Test(rq)
@@ -589,17 +589,17 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	authCh := make(chan string, 2)
 	stubSlackBridge(t, authCh)
 	app := newApp(t, newKMS(t))
-	mounted.slackBridgeReady()
+	bridgeReady()
 
 	// Swap in a cap-1 limiter, then saturate it so the next handler acquire sheds.
-	saved := slackLim
-	slackLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { slackLim = saved })
+	saved := bridgeLim
+	bridgeLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { bridgeLim = saved })
 
 	if cb := connectSlack(t, app, "shedorg", "acmecode"); cb.Code != http.StatusFound {
 		t.Fatalf("connect: %d (%s)", cb.Code, cb.Body)
 	}
-	if !slackLim.acquire("shedorg") {
+	if !bridgeLim.acquire("shedorg") {
 		t.Fatal("precondition: fill the cap-1 pool")
 	}
 
@@ -610,7 +610,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	}
 	// The dedupe key was NOT burned: marking it now must be FRESH — else a later
 	// retry would be deduped away and the message lost forever.
-	if fresh, err := mounted.store.MarkSlackEvent(context.Background(), "EvShed"); err != nil || !fresh {
+	if fresh, err := mounted.store.MarkEvent(context.Background(), "slack", "EvShed"); err != nil || !fresh {
 		t.Fatalf("shed must NOT record the event_id (fresh=%v err=%v)", fresh, err)
 	}
 	// And no reply was posted (the turn never ran).
@@ -628,26 +628,26 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	slackConfiguredEnv(t)
 	newApp(t, newKMS(t))
-	mounted.slackBridgeReady()
+	bridgeReady()
 
-	saved := slackLim
-	slackLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { slackLim = saved })
+	saved := bridgeLim
+	bridgeLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { bridgeLim = saved })
 
 	const org = "panicorg"
 	// Simulate the handler acquiring the single slot, then hand a PANICKING turn to
-	// slackSpawn (which owns the release).
-	if !slackLim.acquire(org) {
+	// bridgeSpawn (which owns the release).
+	if !bridgeLim.acquire(org) {
 		t.Fatal("precondition: acquire the single slot")
 	}
-	mounted.slackSpawn(org, func() { panic("boom in a slack turn") })
+	mounted.bridgeSpawn(org, func() { panic("boom in a slack turn") })
 
 	// The recovered goroutine must release its slot; poll until a fresh acquire
 	// succeeds. Reaching here at all proves the panic did not crash the process.
 	released := false
 	for i := 0; i < 400; i++ {
-		if slackLim.acquire(org) {
-			slackLim.release(org)
+		if bridgeLim.acquire(org) {
+			bridgeLim.release(org)
 			released = true
 			break
 		}

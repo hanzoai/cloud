@@ -3,7 +3,6 @@ package integrations
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/zap-proto/zip"
 )
 
@@ -53,7 +51,7 @@ const (
 func (s *svc) setSlackCookie(c *zip.Ctx, name, val string) {
 	c.Fiber().Cookie(&fiber.Cookie{
 		Name: name, Value: val, Path: "/",
-		MaxAge: slackLinkTTLSec, HTTPOnly: true, Secure: true,
+		MaxAge: linkStateTTLSec, HTTPOnly: true, Secure: true,
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
 }
@@ -71,7 +69,7 @@ func (s *svc) clearSlackCookie(c *zip.Ctx, name string) {
 // ── leg 1: begin the per-user link (Slack sign-in) ──────────────────────────
 
 func (s *svc) slackLink(c *zip.Ctx) error {
-	s.slackBridgeReady()
+	bridgeReady()
 	if !s.slackLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -85,7 +83,7 @@ func (s *svc) slackLink(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	ss, err := signSlackSubject(s.stateKey, initNonce, 0)
+	ss, err := signSubject(s.stateKey, initNonce, 0)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "state: %v", err)
 	}
@@ -107,7 +105,7 @@ func (s *svc) slackUserAuthorizeURL(state string) string {
 // ── leg 2: Slack sign-in callback ───────────────────────────────────────────
 
 func (s *svc) slackLinkSlack(c *zip.Ctx) error {
-	s.slackBridgeReady()
+	bridgeReady()
 	if !s.slackLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -123,7 +121,7 @@ func (s *svc) slackLinkSlack(c *zip.Ctx) error {
 	if len(code) > maxCodeLen {
 		return zip.ErrBadRequest("authorization code too large")
 	}
-	subject, _, ok := verifySlackSubject(s.stateKey, state, 0)
+	subject, _, ok := verifySubject(s.stateKey, state, 0)
 	if !ok {
 		s.clearSlackCookie(c, slackInitCookie)
 		return zip.ErrBadRequest("invalid or expired link")
@@ -138,7 +136,7 @@ func (s *svc) slackLinkSlack(c *zip.Ctx) error {
 	// Single-use: consume the SAME continuity token the gate compared (subject ==
 	// leg-1 init nonce == init cookie value), so the gate token and single-use token
 	// are ONE value that cannot desync.
-	if slackUsedStates.seenAndAdd(subject, time.Time{}) {
+	if bridgeSeen.seenAndAdd(subject, time.Time{}) {
 		s.clearSlackCookie(c, slackInitCookie)
 		return zip.ErrBadRequest("link already used")
 	}
@@ -174,7 +172,7 @@ const slackLinkedHTML = `<!doctype html><meta charset="utf-8"><title>Hanzo conne
 	`<h1>Hanzo connected</h1><p>Your Hanzo account is linked. Return to Slack and mention <b>@hanzo</b>.</p></body>`
 
 func (s *svc) slackLinkCallback(c *zip.Ctx) error {
-	s.slackBridgeReady()
+	bridgeReady()
 	if !s.slackLinkConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "account linking not configured")
 	}
@@ -226,7 +224,7 @@ func (s *svc) slackLinkCallback(c *zip.Ctx) error {
 	}
 	// Consume the single-use nonce AFTER a successful exchange (anti-griefing: a
 	// bogus code cannot burn a valid nonce).
-	if slackUsedStates.seenAndAdd(nonce, time.Time{}) {
+	if bridgeSeen.seenAndAdd(nonce, time.Time{}) {
 		s.clearSlackCookie(c, slackLinkCookie)
 		return zip.ErrBadRequest("link already used")
 	}
@@ -243,7 +241,7 @@ func (s *svc) slackLinkCallback(c *zip.Ctx) error {
 	// Seal the binding under the WORKSPACE org's KMS namespace (the same org the
 	// bot token lives under). The (team,user) is the Slack-verified cookie subject;
 	// the refresh token is NEVER a DB column and NEVER logged.
-	if err := s.putSlackUserLink(org, slackUser, slackUserLink{Subject: sub, Org: userOrg, Refresh: ts.Refresh}); err != nil {
+	if err := s.putUserLink(org, "slack", slackUser, userLink{Subject: sub, Org: userOrg, Refresh: ts.Refresh}); err != nil {
 		s.log.Error("slack: user link save", "team", teamID, "err", err) // never logs the token
 		s.clearSlackCookie(c, slackLinkCookie)
 		return zip.Errorf(http.StatusInternalServerError, "token store failed")
@@ -264,69 +262,6 @@ func (s *svc) slackLinkURL(teamID, slackUser string) (string, error) {
 		return "", err
 	}
 	return "https://" + s.domain + "/v1/integrations/slack/link?state=" + url.QueryEscape(state), nil
-}
-
-// ── per-user Hanzo binding (KMS-custodied, per-org) ─────────────────────────
-
-const (
-	slackUserSecretPrefix = "user:"
-	slackUserSecretSuffix = ":refresh"
-)
-
-// slackUserSecretName is the KMS secret name for a linked Slack user's binding —
-// "user:<slackUser>:refresh" under the org's integrations/slack namespace. Slack
-// user ids are [A-Z0-9] (no '/', NUL, or control chars), so this is a valid KMS
-// segment.
-func slackUserSecretName(slackUser string) string {
-	return slackUserSecretPrefix + slackUser + slackUserSecretSuffix
-}
-
-// slackUserLink is the on-behalf-of binding for a linked Slack user: the Hanzo
-// account subject (what RunOnBehalf attributes the spend to), the account org, and
-// the Hanzo refresh token (sealed for future token minting; the in-process run
-// needs only the subject). Sealed KMS-encrypted; never a DB column, never logged.
-type slackUserLink struct {
-	Subject string `json:"subject"`
-	Org     string `json:"org"`
-	Refresh string `json:"refresh"`
-}
-
-func (s *svc) putSlackUserLink(org, slackUser string, link slackUserLink) error {
-	if !validOrg(org) {
-		return fmt.Errorf("slack: invalid org")
-	}
-	blob, err := json.Marshal(link)
-	if err != nil {
-		return err
-	}
-	return s.kmsPut(org, "slack", slackUserSecretName(slackUser), blob)
-}
-
-// getSlackUserLink returns the linked (org, slackUser) binding. found=false (nil
-// error) when the user has not linked (no secret). Fails closed on invalid org /
-// KMS-down.
-func (s *svc) getSlackUserLink(org, slackUser string) (slackUserLink, bool, error) {
-	if !validOrg(org) {
-		return slackUserLink{}, false, fmt.Errorf("slack: invalid org")
-	}
-	if !s.kmsReady() {
-		return slackUserLink{}, false, kms.ErrMasterKeyMissing
-	}
-	raw, err := s.kmsGet(org, "slack", slackUserSecretName(slackUser))
-	if errors.Is(err, kms.ErrSecretNotFound) {
-		return slackUserLink{}, false, nil
-	}
-	if err != nil {
-		return slackUserLink{}, false, err
-	}
-	var link slackUserLink
-	if err := json.Unmarshal(raw, &link); err != nil {
-		return slackUserLink{}, false, fmt.Errorf("slack: user link decode: %w", err)
-	}
-	if link.Subject == "" {
-		return slackUserLink{}, false, nil
-	}
-	return link, true, nil
 }
 
 // ── Slack sign-in (user_scope) code exchange ────────────────────────────────
@@ -418,7 +353,7 @@ func slackOIDCToken(ctx context.Context, form url.Values) (slackTokenSet, error)
 		return slackTokenSet{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, slackMaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, bridgeMaxBody))
 	if resp.StatusCode != http.StatusOK {
 		return slackTokenSet{}, fmt.Errorf("slack: IAM token status %d", resp.StatusCode)
 	}
@@ -463,7 +398,7 @@ func (s *svc) slackOIDCIdentity(ctx context.Context, access string) (sub, org st
 		Sub   string `json:"sub"`
 		Owner string `json:"owner"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, slackMaxBody)).Decode(&u); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, bridgeMaxBody)).Decode(&u); err != nil {
 		return "", "", err
 	}
 	if u.Sub == "" {
