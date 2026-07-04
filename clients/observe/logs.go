@@ -137,7 +137,9 @@ func (s *service) infraLogs(ctx context.Context, service string, sinceNs int64, 
 // deployed products), so it works for both cloud-fused and standalone products.
 func (s *service) requestLogs(ctx context.Context, org, product, service string, sinceNs int64, windowSec, limit int) ([]logLine, error) {
 	routePrefix := "/v1/" + product
-	q := "SELECT timestamp, name, httpRoute, response_status_code, status_code, duration_nano " +
+	// response_status_code is LowCardinality(String) in signoz — coerce to Int in SQL
+	// so the row read gets a number (asInt64 on a string yields 0).
+	q := "SELECT timestamp, name, httpRoute, toInt32OrZero(response_status_code) AS http_status, status_code, duration_nano " +
 		"FROM signoz_traces.distributed_signoz_index_v3 WHERE attributes_string['hanzo.org'] = ? " +
 		"AND (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?)"
 	args := []any{org, routePrefix, routePrefix + "/", service}
@@ -158,7 +160,7 @@ func (s *service) requestLogs(ctx context.Context, org, product, service string,
 	out := make([]logLine, 0, len(rows))
 	for _, r := range rows {
 		ts := asTime(r["timestamp"])
-		httpStatus := asInt64(r["response_status_code"])
+		httpStatus := asInt64(r["http_status"])
 		spanStatus := asInt64(r["status_code"])
 		durMs := float64(asInt64(r["duration_nano"])) / 1e6
 		route := asString(r["httpRoute"])
