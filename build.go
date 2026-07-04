@@ -3,6 +3,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/hanzoai/commerce/metering"
@@ -204,11 +205,13 @@ func pickAIClient(cfg *Config, log luxlog.Logger) AIClient {
 		log.Info("deps.AI → HTTP gateway (static key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
 		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
 	}
-	if cfg.AIBaseURL != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" && cfg.IAMIssuer != "" {
-		tokenURL := strings.TrimRight(cfg.IAMIssuer, "/") + "/v1/iam/oauth/token"
-		log.Info("deps.AI → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
-			"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
-		return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
+	if cfg.AIBaseURL != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" {
+		tokenURL := aiM2MTokenURL(cfg)
+		if tokenURL != "" {
+			log.Info("deps.AI → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
+				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
+			return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
+		}
 	}
 	if cfg.AIZAPAddr != "" {
 		log.Info("deps.AI → ZAP RPC", "addr", cfg.AIZAPAddr)
@@ -216,6 +219,32 @@ func pickAIClient(cfg *Config, log luxlog.Logger) AIClient {
 	}
 	log.Info("deps.AI → disabled (no CLOUD_AI_API_KEY, no IAM M2M identity, no gateway configured)")
 	return clients.DisabledAI()
+}
+
+// aiM2MTokenURL resolves IAM's client_credentials endpoint the agent runner mints
+// its M2M inference token at. It MUST be reachable FROM INSIDE THE CLUSTER: the
+// runner runs in-cluster and the public issuer host (https://hanzo.id) is fronted
+// by Cloudflare, which 403s a server-side (non-browser) loopback POST with edge
+// error 1006 — so minting against the PUBLIC issuer URL fails and every
+// POST /v1/agents/:ref/run 502s (root-caused 2026-07-04: in-cluster POST to
+// https://hanzo.id/v1/iam/oauth/token → 403/1006, while http://iam.hanzo.svc/... → 200).
+// This mirrors the KMS login-broker resolution (clients/kmssvc) exactly — one
+// split-horizon policy, no drift. Prefer, in order: an explicit override
+// (CLOUD_AI_IAM_TOKEN_URL), the in-cluster IAM service base (IAM_URL — already
+// wired to http://iam.hanzo.svc for JWKS), then the public issuer as a last resort
+// (single-process / no split-horizon deploys). Returns "" only when no identity is
+// resolvable, which keeps the M2M branch off (caller falls through to the stub).
+func aiM2MTokenURL(cfg *Config) string {
+	if override := strings.TrimSpace(os.Getenv("CLOUD_AI_IAM_TOKEN_URL")); override != "" {
+		return override
+	}
+	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
+		return base + "/v1/iam/oauth/token"
+	}
+	if iss := strings.TrimRight(strings.TrimSpace(cfg.IAMIssuer), "/"); iss != "" {
+		return iss + "/v1/iam/oauth/token"
+	}
+	return ""
 }
 
 func pickO11yClient(cfg *Config, log luxlog.Logger) O11yClient {
