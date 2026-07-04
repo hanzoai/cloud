@@ -18,15 +18,17 @@
 // GET /v1/train/experiments/{name}/trials lists the katib Trials owned by an
 // experiment.
 //
-// Tenancy: every request is scoped to the gateway-minted org (X-Org-Id /
-// c.Org()) and lands in a PER-ORG Kubernetes namespace ("ml-"<org>). The
-// namespace IS the tenant boundary — an org physically cannot name into,
-// list, read, mutate or predict against another org's resources because the
-// dynamic client is always pinned to the caller's namespace. The org slug is
-// validated against a strict DNS-label regex (no lossy sanitize), so the
-// org->namespace map is injective: two distinct orgs can never fold onto one
-// namespace. Empty org is rejected 403 unless the caller is a gateway-minted
-// admin (bucketed under the literal "ml-admin" namespace).
+// Tenancy: every request is scoped to the gateway-minted org (X-Org-Id / c.Org())
+// narrowed by the org SUB-SCOPE (X-Project-Id / principal.Project), and lands in a
+// PER-ORG(+PROJECT) Kubernetes namespace: "ml-"<org> for the default project (the
+// backward-compatible single-project shape) and "ml-"<org>"-"<project> for a
+// non-default one. The namespace IS the tenant boundary — a tenant physically cannot
+// name into, list, read, mutate or predict against another org's (or project's)
+// resources because the dynamic client is always pinned to the caller's namespace.
+// Both org and project are validated against strict DNS-label regexes (no lossy
+// sanitize), so the (org, project)->namespace map is injective: two distinct scopes
+// can never fold onto one namespace. Empty org is rejected 403 unless the caller is a
+// gateway-minted admin (bucketed under the literal "ml-admin" namespace).
 //
 // k8s client: built in-process from the in-cluster service account
 // (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev. It is NOT
@@ -97,6 +99,7 @@ const (
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "hanzo-cloud"
 	orgLabel       = "hanzo.ai/org"
+	projectLabel   = "hanzo.ai/project" // org SUB-SCOPE; stamped only for a non-default project
 	katibExpLabel  = "katib.kubeflow.org/experiment"
 	nsPrefix       = "ml-"
 	predictBodyCap = 32 << 20 // 32 MiB ceiling on a predictor response read
@@ -112,6 +115,15 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // "ml-"<org> is an injective tenant->namespace map and stays a valid DNS-1123
 // label (<=63 chars: "ml-" + <=42).
 var orgRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$`)
+
+// projectRE constrains the org SUB-SCOPE (X-Project-Id) that suffixes the tenant
+// namespace to a DNS-1123 label — the SAME slug shape projectsvc enforces — so the
+// (org, project) -> namespace map stays injective (no lossy fold) and the suffix is
+// always a valid label segment. A non-conforming project (e.g. an opaque id) is
+// REFUSED, never folded; the default project adds no suffix, so this gates only the
+// non-default case. The composed "ml-"<org>"-"<project> is still length-checked
+// against the 63-char label ceiling in tenantNS.
+var projectRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
 // computeFeeEnvPrefix is the operator knob for the per-create compute fee. The
 // effective fee is cloud.ResourceFeeCents(computeFeeEnvPrefix, kind): a per-kind
@@ -214,7 +226,7 @@ func (s *svc) list(k resourceKind) zip.Handler {
 		if err := s.ready(); err != nil {
 			return err
 		}
-		ns, _, err := s.tenant(c)
+		ns, _, _, err := s.tenant(c)
 		if err != nil {
 			return err
 		}
@@ -234,7 +246,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 		if err := s.ready(); err != nil {
 			return err
 		}
-		ns, org, err := s.tenant(c)
+		ns, org, project, err := s.tenant(c)
 		if err != nil {
 			return err
 		}
@@ -270,7 +282,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 			return cloud.DenyResource(c, err)
 		}
 
-		if err := s.ensureNamespace(c.Context(), ns, org); err != nil {
+		if err := s.ensureNamespace(c.Context(), ns, org, project); err != nil {
 			return zip.Errorf(http.StatusBadGateway, "ensure tenant namespace: %v", err)
 		}
 		obj := &unstructured.Unstructured{Object: map[string]any{
@@ -279,7 +291,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 			"metadata": map[string]any{
 				"name":      name,
 				"namespace": ns,
-				"labels":    labelsFor(org, req.Labels),
+				"labels":    labelsFor(org, project, req.Labels),
 			},
 			"spec": spec,
 		}}
@@ -307,7 +319,7 @@ func (s *svc) get(k resourceKind) zip.Handler {
 		if err := s.ready(); err != nil {
 			return err
 		}
-		ns, _, err := s.tenant(c)
+		ns, _, _, err := s.tenant(c)
 		if err != nil {
 			return err
 		}
@@ -327,7 +339,7 @@ func (s *svc) patch(k resourceKind) zip.Handler {
 		if err := s.ready(); err != nil {
 			return err
 		}
-		ns, _, err := s.tenant(c)
+		ns, _, _, err := s.tenant(c)
 		if err != nil {
 			return err
 		}
@@ -355,7 +367,7 @@ func (s *svc) del(k resourceKind) zip.Handler {
 		if err := s.ready(); err != nil {
 			return err
 		}
-		ns, _, err := s.tenant(c)
+		ns, _, _, err := s.tenant(c)
 		if err != nil {
 			return err
 		}
@@ -379,7 +391,7 @@ func (s *svc) predict(c *zip.Ctx) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	ns, _, err := s.tenant(c)
+	ns, _, _, err := s.tenant(c)
 	if err != nil {
 		return err
 	}
@@ -429,7 +441,7 @@ func (s *svc) trials(c *zip.Ctx) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	ns, _, err := s.tenant(c)
+	ns, _, _, err := s.tenant(c)
 	if err != nil {
 		return err
 	}
@@ -485,49 +497,70 @@ func (s *svc) health(name string, gvrs ...schema.GroupVersionResource) zip.Handl
 
 // ── tenancy + k8s plumbing ───────────────────────────────────────────────────
 
-// tenant resolves the per-org namespace for a request from the gateway-minted
-// identity. Pure mapping lives in tenantNS for testability.
-func (s *svc) tenant(c *zip.Ctx) (ns, org string, err error) {
+// tenant resolves the per-org(+project) namespace for a request from the
+// gateway-minted identity. Pure mapping lives in tenantNS for testability. The
+// returned project is the validated sub-scope (DefaultProject for a single-project
+// caller) — used for resource labels and the BYO-cluster federation shard.
+func (s *svc) tenant(c *zip.Ctx) (ns, org, project string, err error) {
 	if !principal.Validated(c) {
 		// No validated principal — the restored X-Org-Id is a forge. Refuse before
 		// mapping to a per-org k8s namespace (provisions/reads ML resources).
-		return "", "", zip.ErrForbidden("no validated principal")
+		return "", "", "", zip.ErrForbidden("no validated principal")
 	}
-	return tenantNS(c.Org(), c.IsAdmin())
+	return tenantNS(c.Org(), principal.Project(c), c.IsAdmin())
 }
 
-// tenantNS maps a gateway org slug to its tenant namespace. Empty org is
-// rejected unless admin (literal "admin" bucket). The org is lowercased and
-// validated against orgRE with NO lossy sanitize, making org->namespace
-// injective — two distinct orgs can never fold onto one namespace.
-func tenantNS(rawOrg string, isAdmin bool) (ns, org string, err error) {
+// tenantNS maps a gateway org slug + project sub-scope to its tenant namespace.
+// Empty org is rejected unless admin (literal "admin" bucket). The org is lowercased
+// and validated against orgRE with NO lossy sanitize, making org->namespace
+// injective. The DEFAULT project keeps the legacy per-org namespace ("ml-"<org>) so
+// existing single-project tenants are byte-identical; a non-default project appends
+// "-"<project> (validated against projectRE, same no-fold discipline) and the whole
+// label is checked against the 63-char DNS-1123 ceiling. The (org, project) ->
+// namespace map is therefore injective across both dimensions.
+func tenantNS(rawOrg, rawProject string, isAdmin bool) (ns, org, project string, err error) {
 	org = strings.ToLower(strings.TrimSpace(rawOrg))
-	if org == "" {
-		if isAdmin {
-			return nsPrefix + "admin", "admin", nil
-		}
-		return "", "", zip.ErrForbidden("X-Org-Id required")
+	switch {
+	case org == "" && isAdmin:
+		org = "admin" // literal admin bucket
+	case org == "":
+		return "", "", "", zip.ErrForbidden("X-Org-Id required")
+	case !orgRE.MatchString(org):
+		return "", "", "", zip.ErrForbidden("invalid org identifier")
 	}
-	if !orgRE.MatchString(org) {
-		return "", "", zip.ErrForbidden("invalid org identifier")
+	// Default project → legacy per-org namespace (backward-compatible).
+	if principal.IsDefaultProject(rawProject) {
+		return nsPrefix + org, org, principal.DefaultProject, nil
 	}
-	return nsPrefix + org, org, nil
+	project = strings.ToLower(strings.TrimSpace(rawProject))
+	if !projectRE.MatchString(project) {
+		return "", "", "", zip.ErrForbidden("invalid project identifier")
+	}
+	ns = nsPrefix + org + "-" + project
+	if len(ns) > 63 {
+		return "", "", "", zip.ErrForbidden("org and project together exceed the 63-char kubernetes namespace limit")
+	}
+	return ns, org, project, nil
 }
 
 // ensureNamespace idempotently creates the tenant namespace before the first
 // resource lands in it.
-func (s *svc) ensureNamespace(ctx context.Context, ns, org string) error {
+func (s *svc) ensureNamespace(ctx context.Context, ns, org, project string) error {
 	if _, err := s.dyn.Resource(nsGVR).Get(ctx, ns, metav1.GetOptions{}); err == nil {
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
+	}
+	labels := map[string]any{managedByLabel: managedByValue, orgLabel: org}
+	if !principal.IsDefaultProject(project) {
+		labels[projectLabel] = project
 	}
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Namespace",
 		"metadata": map[string]any{
 			"name":   ns,
-			"labels": map[string]any{managedByLabel: managedByValue, orgLabel: org},
+			"labels": labels,
 		},
 	}}
 	if _, err := s.dyn.Resource(nsGVR).Create(ctx, obj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -564,13 +597,13 @@ func (s *svc) k8sErr(c *zip.Ctx, k resourceKind, op string, err error) error {
 // infra/k8s/cloud/ml-rbac.yaml (ClusterRoleBinding cloud-mlsvc -> cloud-ml).
 const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
 
-// dynForOrg returns the client ML operations should target for an org: its registered
-// BYO cluster (federated via the shared fleet registry, read-only from ml's side) or
-// the home in-cluster client when the org has no attached cluster. The ONE federation
-// seam — handlers resolve their client through here so a BYO cluster transparently
-// becomes the org's ML compute plane.
-func (s *svc) dynForOrg(org string) dynamic.Interface {
-	if d := s.fleet.DynForOrg(org); d != nil {
+// dynForOrg returns the client ML operations should target for an org+project: its
+// registered BYO cluster (federated via the shared fleet registry, read-only from
+// ml's side) or the home in-cluster client when the shard has no attached cluster.
+// The ONE federation seam — handlers resolve their client through here so a BYO
+// cluster transparently becomes the org+project's ML compute plane.
+func (s *svc) dynForOrg(org, project string) dynamic.Interface {
+	if d := s.fleet.DynForOrg(org, project); d != nil {
 		return d
 	}
 	return s.dyn
@@ -608,15 +641,20 @@ func newDynamic() (dynamic.Interface, error) {
 
 func reqName(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("name"))) }
 
-// labelsFor stamps the managed-by + tenant-org labels onto a create. The org
-// label is set LAST so a caller can never override the tenant boundary marker.
-func labelsFor(org string, user map[string]string) map[string]any {
+// labelsFor stamps the managed-by + tenant-org(+project) labels onto a create. The
+// org label is set LAST (after any user labels) so a caller can never override the
+// tenant boundary marker; the project label is stamped only for a non-default
+// project (attribution within the org — absent for single-project tenants).
+func labelsFor(org, project string, user map[string]string) map[string]any {
 	m := map[string]any{}
 	for k, v := range user {
 		m[k] = v
 	}
 	m[managedByLabel] = managedByValue
 	m[orgLabel] = org
+	if !principal.IsDefaultProject(project) {
+		m[projectLabel] = project
+	}
 	return m
 }
 
