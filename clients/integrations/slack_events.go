@@ -77,22 +77,32 @@ func (s *svc) slackBridgeReady() {
 	})
 }
 
-// slackDispatch runs an agent turn for `org` under the bounded pool. It acquires a
-// GLOBAL slot AND a PER-ORG slot non-blockingly; if either is exhausted the turn is
-// dropped + logged (a DoS insider cannot pile up unbounded goroutines/FDs). The
-// per-org sub-limit is AVAILABILITY isolation (Red M1): a single workspace bursting
-// distinct @hanzo events (each holding a slot up to slackAgentTimeout) can occupy
-// at most slackOrgConcurrency() slots, so it can never starve every other tenant's
-// turns. `org` is the RESOLVED tenant (OrgForExternalID), never a client value.
-func (s *svc) slackDispatch(org string, run func()) {
-	if !slackLim.acquire(org) {
-		s.log.Warn("slack: agent pool at capacity, turn dropped", "org", org)
-		return
-	}
+// slackSpawn runs an ALREADY-SLOTTED agent turn in a recovered goroutine. The
+// webhook handler acquires the pool slot SYNCHRONOUSLY (slackLim.acquire) BEFORE
+// recording the dedupe key, so a capacity shed can return a retriable non-2xx
+// without burning the event_id (Red M-1); the slotted turn is then handed here.
+// Two guarantees: (1) the slot is released on every exit, and (2) a panic anywhere
+// in the turn (handleSlack* → slackAgentReply → agents.RunOnBehalf — a large
+// surface over UNTRUSTED Slack input) is CONTAINED. On the SHARED multi-tenant
+// cloud binary this is non-negotiable: middleware.Recover() wraps only the sync
+// request goroutine, so an unrecovered panic here would crash EVERY tenant and
+// subsystem (Red M-2). The recover defer is registered LAST so it runs FIRST
+// (LIFO), and release still runs after it — a panicking turn frees its slot.
+func (s *svc) slackSpawn(org string, run func()) {
 	go func() {
 		defer slackLim.release(org)
+		defer s.slackRecover(org)
 		run()
 	}()
+}
+
+// slackRecover contains a panic in an async agent turn so it can never crash the
+// shared cloud process. Called ONLY as a deferred func (recover must be a direct
+// call in the deferred function).
+func (s *svc) slackRecover(org string) {
+	if r := recover(); r != nil {
+		s.log.Error("slack: agent turn panic (recovered)", "org", org, "err", r)
+	}
 }
 
 // orgLimiter bounds concurrent agent turns two ways: a GLOBAL cap (total in-flight
@@ -174,30 +184,43 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 	case slackRouteChallenge:
 		return c.String(http.StatusOK, d.Challenge)
 	case slackRouteAgent:
-		// DURABLE dedupe (billed path): a Slack retry must never double-run. Fail
-		// CLOSED on a dedupe error (skip) rather than risk a double charge.
+		// ISOLATION ROOT, resolved SYNC (so the per-org limiter keys on the real
+		// tenant and a shed happens BEFORE anything is recorded): org comes ONLY
+		// from the install→org map for the Slack-verified team_id. An event for a
+		// team no org connected is dropped (nothing to do — not a shed).
+		org, ok := OrgForExternalID("slack", d.TeamID)
+		if !ok {
+			s.log.Warn("slack: event for unconnected team", "team", d.TeamID)
+			return c.NoContent(http.StatusOK)
+		}
+		// SHED BEFORE the dedupe write (Red M-1). Try to acquire a pool slot first;
+		// if the pool is full, record NOTHING and return a retriable NON-2xx — the
+		// turn never ran, so no event_id is burned and Slack re-delivers when a slot
+		// frees (no lost @mention, no double-run).
+		if !slackLim.acquire(org) {
+			s.log.Warn("slack: at capacity, shedding for retry", "org", org)
+			return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
+		}
+		// Slot held. DURABLE dedupe (BILLED path): a Slack retry of an event that
+		// already ran must never double-run. Release the slot on every path that
+		// does NOT dispatch. Fail CLOSED on a dedupe error (skip) rather than risk a
+		// double charge.
 		fresh, err := s.store.MarkSlackEvent(c.Context(), slackEventKey(raw))
 		if err != nil {
+			slackLim.release(org)
 			s.log.Warn("slack: event dedupe error, skipping", "err", err)
 			return c.NoContent(http.StatusOK)
 		}
 		if !fresh {
+			slackLim.release(org)
 			return c.NoContent(http.StatusOK)
 		}
 		// Opportunistic GC so the dedupe table cannot grow without bound.
 		if _, gerr := s.store.GCSlackEvents(c.Context(), staleSlackEventCutoff()); gerr != nil {
 			s.log.Warn("slack: dedupe gc", "err", gerr)
 		}
-		// ISOLATION ROOT, resolved SYNC so the per-org pool limit can key on it
-		// before a slot is taken: org comes ONLY from the install→org map for the
-		// Slack-verified team_id. An event for a team no org connected is dropped.
-		org, ok := OrgForExternalID("slack", d.TeamID)
-		if !ok {
-			s.log.Warn("slack: event for unconnected team", "team", d.TeamID)
-			return c.NoContent(http.StatusOK)
-		}
 		route := d
-		s.slackDispatch(org, func() { s.handleSlackAgent(org, route) })
+		s.slackSpawn(org, func() { s.handleSlackAgent(org, route) })
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -225,20 +248,26 @@ func (s *svc) slackCommands(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("missing team_id or user_id")
 	}
+	// Resolve the org SYNC (may be "" — a workspace whose Hanzo connection was
+	// removed; bounded under the same limiter, handled in handleSlackSlash), then
+	// SHED before the dedupe write (Red M-1), same order as the events path.
+	org, _ := OrgForExternalID("slack", team)
+	if !slackLim.acquire(org) {
+		s.log.Warn("slack: at capacity, shedding slash", "org", org)
+		return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
+	}
 	fresh, err := s.store.MarkSlackEvent(c.Context(), triggerID)
 	if err != nil {
+		slackLim.release(org)
 		s.log.Warn("slack: slash dedupe error, skipping", "err", err)
 		return c.NoContent(http.StatusOK)
 	}
 	if !fresh {
+		slackLim.release(org)
 		return c.NoContent(http.StatusOK)
 	}
-	// Resolve the org SYNC (may be "" — a workspace whose Hanzo connection was
-	// removed) so the per-org pool limit keys on it; org=="" is bounded under the
-	// same limiter and handled (a "not connected" reply) in handleSlackSlash.
-	org, _ := OrgForExternalID("slack", team)
 	route := slackRoute{Kind: slackRouteAgent, TeamID: team, Channel: channel, User: user, Text: text}
-	s.slackDispatch(org, func() { s.handleSlackSlash(org, route, responseURL) })
+	s.slackSpawn(org, func() { s.handleSlackSlash(org, route, responseURL) })
 	return c.NoContent(http.StatusOK)
 }
 
