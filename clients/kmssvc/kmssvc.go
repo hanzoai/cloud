@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -62,12 +63,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// is co-resident. Anything else (RPC/disabled stub) means secrets are served
 	// elsewhere, so the REST surface mounts health/config only.
 	kc, _ := deps.KMS.(*kms.Client)
-	// tokenURL mirrors build.go's AI M2M identity resolution: {issuer}/v1/iam/oauth/
-	// token is IAM's client_credentials endpoint. The login broker exchanges a
-	// per-tenant machine-identity credential there for an owner-scoped IAM JWT.
-	tokenURL := ""
-	if iss := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"); iss != "" {
-		tokenURL = iss + "/v1/iam/oauth/token"
+	// tokenURL is IAM's client_credentials endpoint the login broker exchanges a
+	// per-tenant machine credential at. It MUST be reachable FROM INSIDE THE CLUSTER:
+	// the broker runs in-cluster and the public issuer host (e.g. https://hanzo.id) is
+	// fronted by Cloudflare, which 403s a server-side (non-browser) loopback POST — so
+	// brokering against the PUBLIC issuer URL fails 401 and the whole per-tenant KMS
+	// secret sync silently stays pending (root-caused 2026-07-04: in-cluster POST to
+	// https://hanzo.id/v1/iam/oauth/token → 403, while http://iam.hanzo.svc/... → 200).
+	// Prefer, in order: an explicit override (CLOUD_KMS_IAM_TOKEN_URL), the in-cluster
+	// IAM service base (IAM_URL — already wired to http://iam.hanzo.svc for JWKS), then
+	// the public issuer as a last resort (single-process / no split-horizon deploys).
+	tokenURL := strings.TrimSpace(os.Getenv("CLOUD_KMS_IAM_TOKEN_URL"))
+	if tokenURL == "" {
+		if base := strings.TrimRight(strings.TrimSpace(os.Getenv("IAM_URL")), "/"); base != "" {
+			tokenURL = base + "/v1/iam/oauth/token"
+		}
+	}
+	if tokenURL == "" {
+		if iss := strings.TrimRight(strings.TrimSpace(deps.IAMIssuer), "/"); iss != "" {
+			tokenURL = iss + "/v1/iam/oauth/token"
+		}
 	}
 	s := &svc{kms: kc, iamTokenURL: tokenURL}
 
