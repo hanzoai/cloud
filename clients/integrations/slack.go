@@ -94,9 +94,16 @@ func slackCreds() OAuthConfig {
 	}
 }
 
+// slackConfigured reports whether Slack can BEGIN a connect (authorize) flow.
+// The Slack consent URL needs only the PUBLIC client_id — so an org can reach
+// Slack's "Allow" screen as soon as the deployment sets SLACK_CLIENT_ID. The
+// SECRET (SLACK_CLIENT_SECRET) is required only at the callback's token exchange
+// (slackExchange), which validates it against Slack: a missing/wrong secret
+// yields an honest failure redirect (?error=slack), never a silent dead-end.
+// Gating `available`/connect on client_id alone is therefore correct and lets the
+// connect card light up before the (KMS-synced) secret lands.
 func slackConfigured() bool {
-	c := slackCreds()
-	return c.ClientID != "" && c.ClientSecret != ""
+	return slackCreds().ClientID != ""
 }
 
 // slackAuthorize builds the consent URL. Scopes are read fresh (one source of
@@ -129,6 +136,14 @@ type slackOAuthResponse struct {
 // returns the token under "bot_token" for KMS custody plus the non-secret team /
 // bot metadata for the connection row.
 func slackExchange(ctx context.Context, creds OAuthConfig, redirectURI, code string) (*ExchangeResult, error) {
+	// The exchange (unlike authorize) REQUIRES the secret. If a deployment has
+	// SLACK_CLIENT_ID (so the connect card lit up + reached Slack's consent) but
+	// not yet SLACK_CLIENT_SECRET, fail with an honest, specific reason instead of
+	// a cryptic Slack "bad_client_secret". The caller renders this as a failure
+	// redirect (?error=slack&reason=…) — never a dead-end.
+	if strings.TrimSpace(creds.ClientSecret) == "" {
+		return nil, fmt.Errorf("slack integration is not fully configured on this deployment: SLACK_CLIENT_SECRET is not set")
+	}
 	form := url.Values{
 		"client_id":     {creds.ClientID},
 		"client_secret": {creds.ClientSecret},
