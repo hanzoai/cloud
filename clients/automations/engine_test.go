@@ -84,6 +84,8 @@ func TestDurableFlowRunSucceeds(t *testing.T) {
 	w := tasksworker.New(cli, automationsTaskQueue, tasksworker.Options{})
 	w.RegisterWorkflow(FlowRunWorkflow)
 	w.RegisterActivity(ExecuteStepActivity)
+	w.RegisterActivity(RecordRunStartActivity)
+	w.RegisterActivity(RecordRunEndActivity)
 	if err := w.Start(); err != nil {
 		t.Fatalf("worker start: %v", err)
 	}
