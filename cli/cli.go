@@ -392,6 +392,7 @@ func newRootCmd() *cobra.Command {
 		newConfigCmd(),
 		newSecurityCmd(envOf),
 		newGPUCmd(envOf, &f),
+		newEngineCmd(envOf, &f),
 	)
 	return root
 }
