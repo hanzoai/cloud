@@ -257,8 +257,11 @@ func (m *Manager) RestoreAll(ctx context.Context) error {
 	restored := 0
 	for _, name := range globalDBs {
 		if err := m.restoreOne(ctx, name); err != nil {
-			if errors.Is(err, replicate.ErrNoSnapshots) {
-				continue // nothing in S3 yet — keep local / let the subsystem create it
+			// Both sentinels mean "no restorable backup exists yet" (empty
+			// prefix / no complete snapshot chain) — keep the local file and let
+			// the subsystem create it fresh; the primary's first ship seeds S3.
+			if errors.Is(err, replicate.ErrNoSnapshots) || errors.Is(err, replicate.ErrTxNotAvailable) {
+				continue
 			}
 			return fmt.Errorf("restore %s: %w", name, err)
 		}
