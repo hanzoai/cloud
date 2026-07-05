@@ -4,20 +4,31 @@
 //
 // WRAP, DON'T REWRITE. IAM is a Beego app (~150 routes registered in
 // hanzoai/iam/routers.InitAPI over controllers.ApiController/RootController).
-// iamserver.Init() runs the ENTIRE IAM bootstrap — config, SQLite store, KMS
-// signing keys, controllers, authz filters, LDAP/RADIUS listeners, background
-// sync loops — WITHOUT binding the HTTP listener (that is web.Run()'s job, still
-// used by the standalone `hanzo iam` / iamd path). After Init the full IAM
+// iamserver.InitEmbed() runs the ENTIRE IAM identity runtime — config, SQLite
+// store, KMS signing keys, controllers, authz filters, background sync/monitor
+// loops — as an in-process embed: it is standalone iamd's bootstrap MINUS the
+// standalone-daemon side effects that would crash or endanger this shared
+// process (no StopOldInstance `lsof`/SIGKILL, no LDAP/RADIUS listeners, no
+// export/os.Exit), binds NO HTTP listener, and RETURNS AN ERROR instead of
+// panicking. (The standalone `hanzo iam` / iamd path still uses iamserver.Init +
+// web.Run, byte-for-byte unchanged.) After a successful InitEmbed the full IAM
 // http.Handler is web.BeeApp.Handlers; this subsystem mounts THAT verbatim on
 // cloud's shared zip.App at every path prefix IAM owns. No auth logic is
 // reimplemented — the same controllers answer, so hanzo.id's OAuth/OIDC semantics
 // (authorize clientId org-resolution, JWT audiences, SuperAdmin owner=="admin",
 // argon2id password hashing) are preserved byte-for-byte.
 //
-// The one hook web.Run() performs that Init() omits is Beego session-manager
-// registration; the embed path fires it explicitly (initSessions), mirroring the
-// sanctioned iam.Embed path, else every session-touching request (login,
-// authorize) nil-derefs in the router.
+// The one hook web.Run() performs that the embed bootstrap omits is Beego
+// session-manager registration; this subsystem fires it explicitly (initSessions),
+// mirroring the sanctioned iam.Embed path, else every session-touching request
+// (login, authorize) nil-derefs in the router.
+//
+// FAIL-CLOSED, NOT FAIL-LOUD. A broken/misconfigured IAM does NOT crash the
+// consolidated binary: InitEmbed's error (or a session/handler failure) degrades
+// THIS subsystem to a 503 fail-closed on every IAM prefix (mountFailClosed) while
+// every co-resident subsystem (KMS, o11y, …) stays up — the blast-radius
+// isolation the whole consolidation exists for, mirroring the KMS
+// "no master key → health-only" pattern.
 //
 // Mounted in-process (whole Beego handler, full request path preserved):
 //
@@ -35,10 +46,12 @@
 // operator adds "iam" to the cloud deployment's --enable only AFTER IAM's config
 // (Beego app.conf + env + KMS signing keys) is present in the cloud runtime and
 // the fold is verified (login/authorize/token/jwks + the operator SSO chain). Until
-// then hanzo.id is served by the standalone iam pod via ingress and this subsystem
-// stays unmounted. iamserver.Init() fails loud on missing config — the same
-// contract standalone iamd has — so a misconfigured IAM never serves half-open; do
-// not add "iam" to the live --enable before config + verification.
+// then hanzo.id is served by the standalone iam pod via ingress. A cloud pod that
+// enables "iam" MUST run at replicas=1 (Config.Validate enforces this): IAM's
+// session store is Beego's process-local "memory" provider, so a horizontally
+// scaled app tier would mint a login/authorize session on one replica and lose it
+// on the next. If a broken config slips through, the subsystem serves 503
+// fail-closed (above) rather than crashing cloud.
 package iamsvc
 
 import (
@@ -79,39 +92,70 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "iam")
 
 	// IAM persists its SQLite store under <DataDir>/iam, matching the sanctioned
-	// iam.Embed default. Set before Init reads config — Beego's conf resolves env
-	// ahead of app.conf, so this wins.
+	// iam.Embed default. Set before InitEmbed reads config — Beego's conf resolves
+	// env ahead of app.conf, so this wins. Setenv only fails on a malformed key,
+	// which is impossible here, so the error is ignored (mirrors iam.Embed).
 	dataDir := filepath.Join(deps.DataDir, "iam")
 	if deps.DataDir != "" {
-		if err := os.Setenv("IAM_DATA_DIR", dataDir); err != nil {
-			return fmt.Errorf("iam: set IAM_DATA_DIR: %w", err)
-		}
+		_ = os.Setenv("IAM_DATA_DIR", dataDir)
 	}
 
 	// cloud owns process shutdown, not Beego's graceful runner.
 	web.BConfig.Listen.Graceful = false
 
-	// Full IAM bootstrap: config, SQLite, KMS signing keys, controllers, authz
-	// filters, LDAP/RADIUS, background loops. Does NOT bind a listener — cloud's
-	// zip.App serves the handler below. Fails loud on hard misconfig (same
-	// contract as standalone iamd), so a broken IAM never mounts half-open.
-	iamserver.Init()
+	// Full IAM bootstrap via the EMBED-MODE entrypoint: the identical identity
+	// runtime to standalone iamd (config, SQLite, KMS signing keys, controllers,
+	// authz filters, background sync/monitor loops) MINUS the standalone-daemon
+	// side effects that would crash or endanger this shared process — no
+	// StopOldInstance (`lsof`/SIGKILL), no LDAP/RADIUS listeners (unmanaged UDP +
+	// empty shared secret), no export/os.Exit, no HTTP listener (cloud's zip.App
+	// serves the handler below). InitEmbed RETURNS an error (recovering bootstrap
+	// panics) instead of panicking, so a broken/misconfigured IAM degrades THIS
+	// subsystem to fail-closed health-only — every co-resident subsystem (KMS,
+	// o11y, …) stays up. That blast-radius isolation is the whole point of the
+	// consolidation, and mirrors the KMS "no master key → health-only" pattern.
+	if err := iamserver.InitEmbed(); err != nil {
+		log.Error("iam bootstrap failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err)
+		mountFailClosed(app)
+		return nil
+	}
 
 	// web.Run() normally registers the Beego session manager; the embed path skips
 	// web.Run, so fire that one hook here. Without it every session-touching
 	// request (login, authorize) nil-derefs in the router.
 	if err := initSessions(); err != nil {
-		return fmt.Errorf("iam: session init: %w", err)
+		log.Error("iam session init failed — serving fail-closed 503", "err", err)
+		mountFailClosed(app)
+		return nil
 	}
 
 	handler := web.BeeApp.Handlers // *web.ControllerRegister implements http.Handler
 	if handler == nil {
-		return fmt.Errorf("iam: nil Beego handler after Init")
+		log.Error("iam produced a nil Beego handler — serving fail-closed 503")
+		mountFailClosed(app)
+		return nil
 	}
 	mountHandler(app, handler)
 
 	log.Info("iam embedded in-process (Beego handler mounted)", "data_dir", dataDir, "prefixes", iamPrefixes)
 	return nil
+}
+
+// mountFailClosed serves an honest JSON 503 on every IAM prefix when the embed
+// cannot boot, so /v1/iam/* answers "iam unavailable" instead of falling through
+// to the console SPA catch-all (which would return HTML 200 for an auth path).
+// cloud and every other subsystem stay up — the fold's blast-radius isolation.
+// During staged rollout hanzo.id is still served by the standalone iam pod via
+// ingress, so clients never see this path until cutover.
+func mountFailClosed(app *zip.App) {
+	failed := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"iam unavailable","code":503}`))
+	}))
+	for _, p := range iamPrefixes {
+		app.All(p+"/*", failed)
+	}
 }
 
 // mountHandler attaches the IAM http.Handler at every prefix IAM owns. Split from
