@@ -89,6 +89,9 @@ func (disabledVFS) Put(_ context.Context, _ string, _ []byte) error {
 func (disabledVFS) Get(_ context.Context, _ string) ([]byte, error) {
 	return nil, &disabledErr{"vfs"}
 }
+func (disabledVFS) Delete(_ context.Context, _ string) error {
+	return &disabledErr{"vfs"}
+}
 
 type disabledMQ struct{}
 

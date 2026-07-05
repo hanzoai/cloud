@@ -216,6 +216,23 @@ func (s *accountStore) WorkspaceBySlug(ctx context.Context, org, slug string) (w
 	return w, nil
 }
 
+// WorkspaceByUUID resolves a workspace by (org, uuid) — the org scope is the
+// tenant boundary the files plane relies on: a blob request naming another org's
+// workspace uuid resolves to errNoWorkspace, so it can never reach that org's
+// blobs. Returns errNoWorkspace when absent in the org.
+func (s *accountStore) WorkspaceByUUID(ctx context.Context, org, uuid string) (workspace, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+wsCols+` FROM workspaces WHERE owner_org = ? AND uuid = ?`, org, uuid)
+	w, err := scanWorkspace(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return workspace{}, errNoWorkspace
+	}
+	if err != nil {
+		return workspace{}, fmt.Errorf("workspace by uuid: %w", err)
+	}
+	return w, nil
+}
+
 // Membership returns the account's role in a workspace, or ("", false) if the
 // account is not a member. The role is ALWAYS read from the members row, never a
 // self-asserted claim.
