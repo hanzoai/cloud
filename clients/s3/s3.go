@@ -193,13 +193,13 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 		ctx.Locals(orgKey, org)
 
 		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
-		if err := s.bill.Gate(ctx.Context(), org, "op", fee); err != nil {
+		if err := s.bill.Gate(ctx.Context(), org, principal.Project(ctx), "op", fee); err != nil {
 			return cloud.DenyResource(ctx, err)
 		}
 		if err := h(ctx); err != nil {
 			return err // handler failed — surface it; do not bill failed work.
 		}
-		s.bill.Meter(org, "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
+		s.bill.Meter(org, principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
 	}
 }
