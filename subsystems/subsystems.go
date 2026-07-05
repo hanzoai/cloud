@@ -18,19 +18,28 @@
 package subsystems
 
 // The unified `cloud` binary is the APPLICATION layer plus the embedded KMS
-// secrets plane (HIP-0106 "all Go embeds in cloud"). The remaining
+// secrets plane and the embedded IAM identity plane (HIP-0106 "all Go embeds in
+// cloud" — "one Go binary embeds IAM + KMS + o11y"). The remaining
 // infrastructure/edge subsystems run as their own deployments, NOT fused in:
-//   - iam   → iam.hanzo.ai (Hanzo IAM)        — identity, isolated control plane
 //   - mcp   → its own deployment             — tool surface
 //   - gateway, ingress → the edge            — they route *to* this binary
 //   - amqp  → removed (unused)
 // Keeping those separate preserves blast-radius isolation and independent
 // scaling for the security/edge tier.
 //
-// KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by
+// KMS is embedded in-process (clients/kmssvc mounts /v1/kms/* backed by
 // clients/kms, replacing the legacy Infisical fork). Its master key is
 // injected by the operator via a K8s Secret env; absent it the subsystem serves
 // fail-closed health-only.
+//
+// IAM is embedded in-process (clients/iamsvc mounts /v1/iam/* + /.well-known/* +
+// /login/oauth/* + /_/iam/* + /cas/* + /scim/* by wrapping IAM's own Beego
+// handler via iamserver.Init — the LAST binary-consolidation piece). It is the
+// identity authority (order 50, mounts before its dependents). ACTIVATION IS
+// STAGED: the operator adds "iam" to the deployment's --enable only AFTER IAM's
+// config (Beego app.conf + env + KMS signing keys) is present in the cloud
+// runtime and the fold is verified; until then hanzo.id is served by the
+// standalone iam pod via ingress. See clients/iamsvc.
 import (
 	_ "github.com/hanzoai/ai"        // order 150
 	_ "github.com/hanzoai/authz"     // order 70
@@ -47,6 +56,17 @@ import (
 	// generic liveness route; secret ops fail closed until the operator injects
 	// CLOUD_KMS_MASTER_KEY_REF.
 	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
+
+	// Embedded IAM identity plane (HIP-0106, the LAST binary-consolidation piece):
+	// wraps IAM's own Beego handler (iamserver.Init) and mounts /v1/iam/* (API +
+	// OAuth + OIDC + login), /.well-known/* (root OIDC/JWKS), /login/oauth/*,
+	// /_/iam/*, /cas/*, /scim/*. Order 50 — the identity authority, mounts before
+	// dependents. Auth semantics (authorize clientId org-resolution, JWT audiences,
+	// SuperAdmin owner=="admin", argon2id hashing) are IAM's, unchanged. Activation
+	// is the enable-list gate — do NOT add "iam" to the live --enable until IAM
+	// config is present + the fold is verified (staged cutover from the standalone
+	// iam pod). See clients/iamsvc.
+	_ "github.com/hanzoai/cloud/clients/iamsvc" // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
@@ -136,8 +156,8 @@ import (
 	// owner of /v1/prompts/* (it supersedes the earlier clients/prompt facade).
 	_ "github.com/hanzoai/cloud/clients/affiliates" // order 144 — /v1/affiliates/* + /v1/admin/affiliates* (partner-commission loop: ongoing commission via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/agents"     // order 127 — /v1/agents/*
-	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/analytics"  // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
+	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
 	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/

@@ -15,6 +15,16 @@ type Config struct {
 	// Example: --enable=iam,base,kms,commerce,ai,gateway,o11y
 	Enable []string
 
+	// Replicas is the app-tier replica count the operator injects (CLOUD_REPLICAS,
+	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It exists to
+	// enforce ONE contract: embedded IAM (clients/iamsvc) uses Beego's
+	// process-local "memory" session store, so an iam-enabled cloud MUST run at a
+	// single replica or login/authorize sessions are lost across replicas.
+	// Validate refuses to boot iam-enabled above 1; the helm chart pins replicas=1
+	// whenever "iam" is in --enable. Migrating IAM sessions to a shared store lifts
+	// this.
+	Replicas int
+
 	// Brand is the white-label brand identifier.
 	Brand string
 
@@ -191,6 +201,7 @@ func LoadConfig() *Config {
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Env:              getenv("CLOUD_ENV", ""),
+		Replicas:         getenvInt("CLOUD_REPLICAS", 0),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
@@ -399,6 +410,16 @@ func (c *Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		return fmt.Errorf("data-dir is required")
+	}
+	// Embedded IAM (clients/iamsvc) uses Beego's process-local "memory" session
+	// store, so a horizontally scaled app tier would mint a login/authorize
+	// session on one replica and fail to find it on the next. Refuse to boot an
+	// iam-enabled cloud above a single replica. CLOUD_REPLICAS=0 (unset) is the
+	// unmanaged/dev case and is allowed — the helm chart pins replicas=1 whenever
+	// "iam" is in --enable, so a managed deployment always sets it. Migrate IAM
+	// sessions to a shared store to lift this.
+	if c.Enabled("iam") && c.Replicas > 1 {
+		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a process-local session store and requires replicas=1 (pin the Deployment to 1 replica or migrate IAM sessions to a shared store)", c.Replicas)
 	}
 	return nil
 }
