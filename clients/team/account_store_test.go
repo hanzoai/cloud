@@ -116,7 +116,7 @@ func TestSelectWorkspaceCore(t *testing.T) {
 	if !ok || role != "owner" {
 		t.Fatalf("membership gate: role=%q ok=%v", role, ok)
 	}
-	wsTok, err := token.Generate(acct, ws.UUID, map[string]any{"org": org}, secret)
+	wsTok, err := token.Generate(acct, ws.UUID, map[string]any{"org": org}, expUnix(workspaceTokenTTL), secret)
 	if err != nil {
 		t.Fatalf("mint workspace token: %v", err)
 	}

@@ -23,9 +23,9 @@ type botsBridge struct {
 	accounts *accountStore
 }
 
-func (b *botsBridge) register(app *zip.App) {
-	app.Get("/v1/team/bots", b.list)
-	app.Post("/v1/team/bots/sync", b.sync)
+func (b *botsBridge) register(app *zip.App, guard guardFn) {
+	app.Get("/v1/team/bots", guard(b.list))
+	app.Post("/v1/team/bots/sync", guard(b.sync))
 }
 
 // botView is the published shape of one bot member.
@@ -79,9 +79,10 @@ func (b *botsBridge) sync(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"synced": true, "projected": projected})
 }
 
-// syncOrg projects the org's agents into each of the org's workspaces via the
-// in-process ingest path (same applyTx + hub broadcast as a live connect). Returns
-// the number of (workspace × bot) projections applied.
+// syncOrg re-runs the FULL roster reconcile (humans + bots add AND stale-bot
+// removal) for each of the org's workspaces, via the SAME session.reconcile path a
+// live connect uses — one reconcile, one way. It broadcasts the applied txes so
+// connected clients refresh live. Returns the number of roster entries touched.
 func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 	if b.accounts == nil || b.trans == nil {
 		return 0, nil
@@ -90,25 +91,13 @@ func (b *botsBridge) syncOrg(ctx context.Context, org string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	bots, err := agentsBotLister(ctx, org)
-	if err != nil {
-		return 0, nil // no agents subsystem → nothing to project (not an error)
-	}
-	projected := 0
+	touched := 0
 	for _, ws := range wss {
-		for _, bt := range bots {
-			uid := botUserID(bt.ID)
-			if uid == "" {
-				continue
-			}
-			exists := hasDoc(org, ws.UUID, PersonRef(uid))
-			Apply(org, ws.UUID, acctSystem, MemberTxes(Member{
-				UserID: uid, Name: pick(bt.Name, uid), Role: "member", IsBot: true, Active: bt.Active,
-			}, exists)...)
-			projected++
-		}
+		sess := &session{server: b.trans, store: b.trans.store, hier: b.trans.hier, org: org, workspace: ws.UUID, account: acctSystem}
+		sess.seedWorkspace()
+		touched += sess.reconcile(true) // broadcast: an admin re-sync updates live clients
 	}
-	return projected, nil
+	return touched, nil
 }
 
 // agentsBotLister is the ONE in-process seam to the canonical agent registry: it
