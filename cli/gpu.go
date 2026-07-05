@@ -14,6 +14,12 @@ package cli
 // so the CLI never sends an org header. Job types are pluggable (jobHandlers); v1
 // ships `echo` (trivial, no GPU — smoke/E2E) and `studio.render` (POST to the local
 // ComfyUI at 127.0.0.1:8188 and poll history).
+//
+// --serve-engine adds the `engine.serve` capability: the worker probes a local
+// hanzo-engine (the OpenAI + Anthropic model server on :1234), advertises its model
+// endpoint in the presence record, and prints (or with --register-provider, POSTs)
+// the /v1/add-provider call that routes api.hanzo.ai model traffic to this GPU. One
+// fleet, two job types: engine.serve (model serving) alongside studio.render.
 
 import (
 	"bufio"
@@ -46,6 +52,17 @@ const (
 	claimLeaseSecs = 120
 	// localComfyUI is the studio render backend the studio.render handler drives.
 	localComfyUI = "http://127.0.0.1:8188"
+	// defaultEngineURL is where --serve-engine probes hanzo-engine on THIS node.
+	// hanzo-engine binds its OpenAI + Anthropic HTTP API on 0.0.0.0:1234 by default.
+	defaultEngineURL = "http://localhost:1234"
+)
+
+// Fleet capability names advertised in the presence record. studioCap is always
+// present (the worker claims gpu-jobs); engineCap is added by --serve-engine so the
+// gateway can route model calls to a hanzo-engine running on this node.
+const (
+	studioCap = "studio.render"
+	engineCap = "engine.serve"
 )
 
 // ---------------------------------------------------------------------------
@@ -63,19 +80,34 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 
 	var jobsNS string
 	var daemon bool
+	var serveEngine bool
+	var engineURL string
+	var engineEndpoint string
+	var registerProvider bool
 	connect := &cobra.Command{
 		Use:   "connect",
 		Short: "Register this GPU and run the outbound worker loop",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if daemon {
-				return installDaemon(cmd, jobsNS)
+			opts := connectOpts{
+				jobsNS:           jobsNS,
+				serveEngine:      serveEngine,
+				engineURL:        engineURL,
+				engineEndpoint:   engineEndpoint,
+				registerProvider: registerProvider,
 			}
-			return runConnect(cmd, envOf(), jobsNS)
+			if daemon {
+				return installDaemon(cmd, opts)
+			}
+			return runConnect(cmd, envOf(), opts)
 		},
 	}
 	connect.Flags().StringVar(&jobsNS, "jobs-namespace", defaultJobsNS, "tasks namespace to claim jobs from")
 	connect.Flags().BoolVar(&daemon, "daemon", false, "install a systemd --user unit (Restart=always) instead of running in the foreground")
+	connect.Flags().BoolVar(&serveEngine, "serve-engine", false, "also advertise a hanzo-engine model server (OpenAI + Anthropic) running on this node")
+	connect.Flags().StringVar(&engineURL, "engine-url", defaultEngineURL, "local URL where hanzo-engine is probed (GET /v1/models)")
+	connect.Flags().StringVar(&engineEndpoint, "engine-endpoint", "", "public URL to advertise for gateway routing (defaults to --engine-url; a BYO node needs a reachable URL/tunnel)")
+	connect.Flags().BoolVar(&registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
 
 	status := &cobra.Command{
 		Use:   "status",
@@ -108,6 +140,23 @@ type worker struct {
 	jobsNS   string
 	gpus     []gpuInfo
 	handlers map[string]jobHandler
+
+	// engine.serve — advertise a hanzo-engine model server running on this node.
+	serveEngine  bool
+	engineURL    string               // local URL probed for /v1/models
+	engineAdvURL string               // endpoint advertised for gateway routing
+	engine       *engineAdvertisement // latest probe result (nil until probed)
+}
+
+// engineAdvertisement describes a hanzo-engine model server on this node.
+// hanzo-engine serves the OpenAI AND Anthropic HTTP APIs from ONE axum port
+// (0.0.0.0:1234), so the gateway can route model calls here as an OpenAI-compatible
+// (Type=Local) provider. This rides in the fleet presence record's Input.
+type engineAdvertisement struct {
+	URL    string   `json:"url"`              // base the gateway calls (…:1234)
+	APIs   []string `json:"apis,omitempty"`   // wire formats served: ["openai","anthropic"]
+	Models []string `json:"models,omitempty"` // model ids from GET /v1/models
+	Status string   `json:"status"`           // "ready" | "unreachable"
 }
 
 type gpuInfo struct {
@@ -116,13 +165,17 @@ type gpuInfo struct {
 }
 
 // registration is the fleet presence activity's Input — the shape cloud's
-// clients/visor/fleet.go fleetRegistration decodes.
+// clients/visor/fleet.go fleetRegistration decodes. Capabilities + Engine are
+// additive (omitempty): an older cloud that does not read them still renders the
+// GPU; a newer one advertises the engine endpoint on GET /v1/fleet/workers.
 type registration struct {
-	Hostname string    `json:"hostname"`
-	Os       string    `json:"os"`
-	Version  string    `json:"version"`
-	JobQueue string    `json:"jobQueue"`
-	GPUs     []gpuInfo `json:"gpus"`
+	Hostname     string               `json:"hostname"`
+	Os           string               `json:"os"`
+	Version      string               `json:"version"`
+	JobQueue     string               `json:"jobQueue"`
+	GPUs         []gpuInfo            `json:"gpus"`
+	Capabilities []string             `json:"capabilities,omitempty"`
+	Engine       *engineAdvertisement `json:"engine,omitempty"`
 }
 
 type jobHandler func(ctx context.Context, input json.RawMessage) (any, error)
@@ -187,24 +240,53 @@ func detectGPUs() []gpuInfo {
 // connect.
 // ---------------------------------------------------------------------------
 
-func runConnect(cmd *cobra.Command, env *Env, jobsNS string) error {
+// connectOpts is the resolved `hanzo gpu connect` configuration.
+type connectOpts struct {
+	jobsNS           string
+	serveEngine      bool
+	engineURL        string // local URL to probe hanzo-engine
+	engineEndpoint   string // public URL to advertise (defaults to engineURL)
+	registerProvider bool   // auto POST /v1/add-provider for the engine
+}
+
+func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	if _, err := env.ensureToken(ctx); err != nil {
 		return err
 	}
-	w, err := newWorker(env, jobsNS)
+	w, err := newWorker(env, opts.jobsNS)
 	if err != nil {
 		return err
 	}
 	out := cmd.OutOrStdout()
+
+	// engine.serve: probe the local hanzo-engine once so the first registration
+	// carries its live model list + reachability.
+	if opts.serveEngine {
+		w.serveEngine = true
+		w.engineURL = firstNonEmpty(opts.engineURL, defaultEngineURL)
+		w.engineAdvURL = firstNonEmpty(opts.engineEndpoint, w.engineURL)
+		w.refreshEngine(ctx)
+	}
 
 	if err := w.register(ctx); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
 	fmt.Fprintf(out, "connected %q to %s (org %s) — %s\n", w.hostname, w.baseURL, orgOf(env), describeGPUs(w.gpus))
 	fmt.Fprintf(out, "claiming %s jobs; heartbeating every %s. Ctrl-C to stop (the machine goes offline after ~90s; `hanzo gpu disconnect` removes it).\n", w.jobsNS, heartbeatEvery)
+
+	if w.serveEngine {
+		w.printEngineHint(out)
+		if opts.registerProvider {
+			if err := w.registerProvider(ctx, w.engine); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "register-provider: %v\n", err)
+			} else {
+				fmt.Fprintf(out, "  → registered org model provider %q on %s\n", "gpu-"+w.identity, w.baseURL)
+			}
+		}
+	}
 
 	hb := time.NewTicker(heartbeatEvery)
 	defer hb.Stop()
@@ -221,6 +303,16 @@ func runConnect(cmd *cobra.Command, env *Env, jobsNS string) error {
 			fmt.Fprintln(out, "\nstopping (machine will go offline; run `hanzo gpu disconnect` to remove it)")
 			return nil
 		case <-hb.C:
+			// Re-probe the engine; if its reachability or model set changed, rewrite
+			// the presence record so the fleet advertisement stays honest (e.g. the
+			// engine came up after connect, or loaded a new model).
+			if w.serveEngine && w.refreshEngine(ctx) {
+				if err := w.register(ctx); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "re-advertise engine: %v\n", err)
+				} else {
+					fmt.Fprintf(out, "engine %s — %s\n", w.engine.URL, describeEngine(w.engine))
+				}
+			}
 			if err := w.heartbeat(ctx); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "heartbeat: %v\n", err)
 			}
@@ -243,22 +335,40 @@ func (w *worker) register(ctx context.Context) error {
 			return fmt.Errorf("ensure namespace %q: %w", ns, err)
 		}
 	}
-	reg := registration{
-		Hostname: w.hostname,
-		Os:       runtime.GOOS,
-		Version:  Version,
-		JobQueue: w.jobsNS,
-		GPUs:     w.gpus,
-	}
 	_, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+fleetNS+"/activities", map[string]any{
 		"activityId":       w.identity,
 		"runId":            w.identity,
 		"activityType":     map[string]any{"name": "fleet.worker"},
 		"taskQueue":        fleetNS,
 		"heartbeatTimeout": "120s",
-		"input":            reg,
+		"input":            w.buildRegistration(),
 	}, nil)
 	return err
+}
+
+// buildRegistration is the pure presence-record payload: this machine's inventory,
+// its advertised capabilities, and (when serving) its hanzo-engine endpoint.
+func (w *worker) buildRegistration() registration {
+	return registration{
+		Hostname:     w.hostname,
+		Os:           runtime.GOOS,
+		Version:      Version,
+		JobQueue:     w.jobsNS,
+		GPUs:         w.gpus,
+		Capabilities: w.capabilities(),
+		Engine:       w.engine,
+	}
+}
+
+// capabilities lists what this worker does for the org. studio.render is always
+// present (it claims gpu-jobs); engine.serve is added when --serve-engine advertises
+// a local hanzo-engine model server.
+func (w *worker) capabilities() []string {
+	caps := []string{studioCap}
+	if w.serveEngine {
+		caps = append(caps, engineCap)
+	}
+	return caps
 }
 
 func (w *worker) heartbeat(ctx context.Context) error {
@@ -329,13 +439,15 @@ type claimedActivity struct {
 // ---------------------------------------------------------------------------
 
 type fleetWorker struct {
-	ID            string    `json:"id"`
-	Hostname      string    `json:"hostname"`
-	Provider      string    `json:"provider"`
-	Location      string    `json:"location"`
-	Status        string    `json:"status"`
-	GPUs          []gpuInfo `json:"gpus"`
-	LastHeartbeat string    `json:"lastHeartbeat"`
+	ID            string               `json:"id"`
+	Hostname      string               `json:"hostname"`
+	Provider      string               `json:"provider"`
+	Location      string               `json:"location"`
+	Status        string               `json:"status"`
+	GPUs          []gpuInfo            `json:"gpus"`
+	LastHeartbeat string               `json:"lastHeartbeat"`
+	Capabilities  []string             `json:"capabilities,omitempty"`
+	Engine        *engineAdvertisement `json:"engine,omitempty"`
 }
 
 func runGPUStatus(cmd *cobra.Command, env *Env) error {
@@ -364,6 +476,9 @@ func runGPUStatus(cmd *cobra.Command, env *Env) error {
 			}
 			fmt.Fprintf(out, "%-20s %-8s %-10s %-28s %s%s\n",
 				fw.Hostname, fw.Status, fw.Provider, describeGPUs(fw.GPUs), fw.LastHeartbeat, marker)
+			if fw.Engine != nil {
+				fmt.Fprintf(out, "%-20s   ↳ engine %s — %s\n", "", fw.Engine.URL, describeEngine(fw.Engine))
+			}
 		}
 	})
 }
@@ -584,10 +699,151 @@ func collectOutputs(entry json.RawMessage) []string {
 }
 
 // ---------------------------------------------------------------------------
+// engine.serve — advertise a local hanzo-engine model server.
+// ---------------------------------------------------------------------------
+
+// probeEngine GETs {base}/v1/models and returns the served model ids. hanzo-engine
+// answers an OpenAI-shaped {"object":"list","data":[{"id":...}]} once it is serving;
+// a transport error or non-2xx means it is not up yet.
+func probeEngine(ctx context.Context, base string) ([]string, error) {
+	url := strings.TrimRight(base, "/") + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	cl := &http.Client{Timeout: 5 * time.Second}
+	resp, err := cl.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("GET %s: HTTP %d", url, resp.StatusCode)
+	}
+	var ml struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &ml); err != nil {
+		return nil, fmt.Errorf("decode model list: %w", err)
+	}
+	ids := make([]string, 0, len(ml.Data))
+	for _, m := range ml.Data {
+		if m.ID != "" {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids, nil
+}
+
+// refreshEngine re-probes the local engine and updates w.engine, returning true when
+// the advertisement materially changed (reachability or model set) so the caller can
+// rewrite the presence record.
+func (w *worker) refreshEngine(ctx context.Context) bool {
+	prev := w.engine
+	adv := &engineAdvertisement{URL: w.engineAdvURL, APIs: []string{"openai", "anthropic"}}
+	if models, err := probeEngine(ctx, w.engineURL); err != nil {
+		adv.Status = "unreachable"
+	} else {
+		adv.Status = "ready"
+		adv.Models = models
+	}
+	w.engine = adv
+	return !sameEngine(prev, adv)
+}
+
+func sameEngine(a, b *engineAdvertisement) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.URL != b.URL || a.Status != b.Status || len(a.Models) != len(b.Models) {
+		return false
+	}
+	for i := range a.Models {
+		if a.Models[i] != b.Models[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func describeEngine(adv *engineAdvertisement) string {
+	if adv == nil {
+		return "no engine"
+	}
+	if adv.Status != "ready" {
+		return adv.Status
+	}
+	n := len(adv.Models)
+	if n == 1 {
+		return "ready · 1 model"
+	}
+	return fmt.Sprintf("ready · %d models", n)
+}
+
+// providerBody is the POST /v1/add-provider payload registering this node's engine
+// as an org model provider. hanzo-engine is OpenAI-compatible, so Type=Local: the
+// gateway speaks the OpenAI wire format to it and auto-appends /v1 to providerUrl.
+func (w *worker) providerBody() map[string]any {
+	model := "default"
+	if w.engine != nil && len(w.engine.Models) > 0 {
+		model = w.engine.Models[0]
+	}
+	url := ""
+	if w.engine != nil {
+		url = w.engine.URL
+	}
+	return map[string]any{
+		"name":               "gpu-" + w.identity,
+		"category":           "Model",
+		"type":               "Local",
+		"providerUrl":        url,
+		"subType":            model,
+		"compatibleProvider": model,
+	}
+}
+
+// printEngineHint prints the ready-to-run registration so an operator can route
+// api.hanzo.ai model calls to this GPU (or pass --register-provider to do it here).
+func (w *worker) printEngineHint(out io.Writer) {
+	adv := w.engine
+	if adv == nil {
+		return
+	}
+	fmt.Fprintf(out, "serving hanzo-engine (OpenAI + Anthropic) at %s — %s\n", adv.URL, describeEngine(adv))
+	body, _ := json.Marshal(w.providerBody())
+	fmt.Fprintln(out, "  route api.hanzo.ai model calls to this GPU by registering it as an org provider:")
+	fmt.Fprintf(out, "    curl -sS %s/v1/add-provider -H \"Authorization: Bearer $HANZO_TOKEN\" \\\n", w.baseURL)
+	fmt.Fprintf(out, "      -H 'Content-Type: application/json' -d '%s'\n", body)
+	fmt.Fprintln(out, "  (or pass --register-provider. The endpoint must be reachable from api.hanzo.ai —")
+	fmt.Fprintln(out, "   a cloud GPU is in-cluster; a BYO node needs a public URL/tunnel. add-provider needs a platform-admin token today.)")
+}
+
+// registerProvider POSTs /v1/add-provider so the gateway routes model calls to this
+// node's engine. Requires the engine to be reachable and (today) a platform-admin
+// token; both failures are reported clearly rather than swallowed.
+func (w *worker) registerProvider(ctx context.Context, adv *engineAdvertisement) error {
+	if adv == nil || adv.Status != "ready" {
+		return fmt.Errorf("engine not ready at %s — start hanzo-engine, then retry", w.engineURL)
+	}
+	code, err := w.call(ctx, http.MethodPost, "/v1/add-provider", w.providerBody(), nil)
+	if err != nil {
+		if code == http.StatusForbidden {
+			return fmt.Errorf("add-provider is gated to a platform-admin token today; register from the console or with an admin token: %w", err)
+		}
+		return err
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
 // Daemon install (systemd --user).
 // ---------------------------------------------------------------------------
 
-func installDaemon(cmd *cobra.Command, jobsNS string) error {
+func installDaemon(cmd *cobra.Command, opts connectOpts) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -601,8 +857,20 @@ func installDaemon(cmd *cobra.Command, jobsNS string) error {
 		return err
 	}
 	args := "gpu connect"
-	if jobsNS != "" && jobsNS != defaultJobsNS {
-		args += " --jobs-namespace " + jobsNS
+	if opts.jobsNS != "" && opts.jobsNS != defaultJobsNS {
+		args += " --jobs-namespace " + opts.jobsNS
+	}
+	if opts.serveEngine {
+		args += " --serve-engine"
+		if opts.engineURL != "" && opts.engineURL != defaultEngineURL {
+			args += " --engine-url " + opts.engineURL
+		}
+		if opts.engineEndpoint != "" {
+			args += " --engine-endpoint " + opts.engineEndpoint
+		}
+		if opts.registerProvider {
+			args += " --register-provider"
+		}
 	}
 	unit := fmt.Sprintf(`[Unit]
 Description=Hanzo GPU worker (bring-your-own compute)
