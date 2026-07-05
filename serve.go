@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/internal/hareplica"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/zapface"
 	"github.com/zap-proto/zip"
@@ -46,6 +47,21 @@ func Serve(enable []string) error {
 	}
 
 	deps := BuildDeps(cfg)
+
+	// Zero-downtime SQLite HA (HIP: on-stack SQLite HA). The operator renders
+	// the topology (StatefulSet + per-pod PVC + headless + primary-only
+	// Service); this manager owns the mechanism — boot-restore each global DB
+	// from SeaweedFS S3, elect a single primary via s3.Leaser, ship the WAL,
+	// route writes to the primary, drain on preStop. No-op when HA_ENABLED is
+	// unset (byte-identical single-Deployment behavior). See internal/hareplica.
+	haMgr := hareplica.New(hareplica.ConfigFromEnv(deps.DataDir, getenv), deps.Logger)
+	if haMgr.Enabled() {
+		// Catch this pod up BEFORE any subsystem opens a handle, so it serves
+		// (and, if elected, ships) an authoritative copy — never a stale one.
+		if err := haMgr.RestoreAll(context.Background()); err != nil {
+			return fmt.Errorf("ha boot restore: %w", err)
+		}
+	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
 	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
@@ -85,6 +101,13 @@ func Serve(enable []string) error {
 	// honestly. Tenant isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
 	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved}, deps.Logger).Middleware())
+
+	// HA write routing. Sits BEFORE identity/audit/billing so that when this
+	// pod is a standby, a mutating /v1 request is forwarded to the primary-only
+	// Service and the PRIMARY performs identity + audit + billing + the DB write
+	// exactly once (the standby is a pure transport). Reads are served locally.
+	// No-op on the primary or when HA is disabled.
+	app.Use(haWriteForward(haMgr))
 
 	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
 	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
@@ -137,6 +160,17 @@ func Serve(enable []string) error {
 		return fmt.Errorf("mount: %w", err)
 	}
 
+	// HA election + shipping. Runs AFTER MountAll so every enabled subsystem's
+	// DB file exists: on a lease win this pod becomes primary (self-labels
+	// hanzo.ai/role=primary, renews, ships each WAL to S3); on a loss it stays a
+	// read-serving standby for its lifetime (no hot-promotion → no split-brain).
+	// Marks the pod Ready (gating /readyz) only once caught up + elected.
+	if haMgr.Enabled() {
+		if err := haMgr.Start(context.Background()); err != nil {
+			return fmt.Errorf("ha start: %w", err)
+		}
+	}
+
 	// Browser-facing ZAP RPC plane. console2 (@hanzo/gui + @zap-proto/web)
 	// reaches the SAME /v1 handlers over a WebSocket carrying binary ZAP frames
 	// — no second copy of any business logic: each call is replayed in-process
@@ -177,7 +211,7 @@ func Serve(enable []string) error {
 	// is fatal (propagated via listenErr) so a misconfigured port fails loud.
 	healthSrv := &http.Server{
 		Addr:              cfg.HealthListenAddr,
-		Handler:           healthMux(),
+		Handler:           healthMux(haMgr),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -212,6 +246,15 @@ func Serve(enable []string) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	// HA drain backstop: if the operator preStop hook already POSTed
+	// /internal/drain this is a near no-op; on a bare SIGTERM (no preStop) it
+	// still does the orderly final Sync + lease release + role-label drop before
+	// the shippers' underlying files are closed by ShutdownAll. Idempotent.
+	if haMgr.Enabled() {
+		if err := haMgr.Drain(shutdownCtx); err != nil {
+			deps.Logger.Warn("ha drain", "err", err)
+		}
+	}
 	_ = healthSrv.Shutdown(shutdownCtx)
 	// Tear down subsystems that own process-lifetime resources (background
 	// workers, DB handles) BEFORE the HTTP server closes, within the deadline —
@@ -230,12 +273,16 @@ func Serve(enable []string) error {
 }
 
 // healthMux is the liveness/readiness + metrics contract on the ops port
-// (HIP-0113). /healthz, /readyz, /health return 200 once the process is up
-// (readiness can grow a real dependency check later); /metrics exposes a
-// minimal Prometheus surface so scrapes target THIS listener, not the product
-// API. Kept dependency-free (stdlib only) so the ops surface never shares
-// failure modes with the API stack.
-func healthMux() *http.ServeMux {
+// (HIP-0113). /healthz + /health report process liveness (always 200 once up).
+// /readyz reports READINESS: in HA mode it is 200 only once this pod has
+// boot-restored + elected (hareplica.Ready), so a not-caught-up pod is kept OUT
+// of the Service endpoints during a rolling deploy — this is what makes the roll
+// zero-downtime (a pod never serves until it holds a caught-up copy). Non-HA
+// deployments are unconditionally ready (byte-identical to prior behavior).
+// /internal/drain is the preStop handoff hook (loopback-only: least privilege).
+// /metrics exposes a minimal Prometheus surface. Stdlib only so the ops surface
+// never shares failure modes with the API stack.
+func healthMux(m *hareplica.Manager) *http.ServeMux {
 	mux := http.NewServeMux()
 	ok := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -243,8 +290,41 @@ func healthMux() *http.ServeMux {
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}
 	mux.HandleFunc("/healthz", ok)
-	mux.HandleFunc("/readyz", ok)
 	mux.HandleFunc("/health", ok)
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if m.Enabled() && !m.Ready() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"not ready"}`))
+			return
+		}
+		ok(w, r)
+	})
+	mux.HandleFunc("/internal/drain", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if !hareplica.LoopbackOnly(r.RemoteAddr) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if !m.Enabled() {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"drained":"noop"}`))
+			return
+		}
+		dctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+		defer cancel()
+		if err := m.Drain(dctx); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"drained":"error"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"drained":"ok"}`))
+	})
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		_, _ = w.Write([]byte("# HELP cloud_up 1 if the process is serving.\n# TYPE cloud_up gauge\ncloud_up 1\n"))
