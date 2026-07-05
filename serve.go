@@ -112,6 +112,13 @@ func Serve(enable []string) error {
 	deps.Audit = auditRec
 	app.Use(AuditTrail(auditRec))
 
+	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated
+	// principal to key on org/project/service) and AFTER audit (so a 429 is
+	// recorded), and BEFORE BillingGate so an over-rate request is rejected before
+	// any balance/spend-cap work. No-op when metering is unconfigured; fail-open
+	// when commerce is unreachable — a rate-limit outage never blocks paid traffic.
+	app.Use(ScopeRateLimit(deps.Metering))
+
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —
 	// so every priced route is balance-gated once, at the edge, fail-closed.

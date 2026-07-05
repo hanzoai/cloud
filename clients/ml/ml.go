@@ -278,7 +278,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 		// so billing can never target another tenant. fee is reused by the
 		// post-success debit; fee==0 or unconfigured billing makes this a no-op.
 		fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
-		if err := s.bill.Gate(c.Context(), org, k.kind, fee); err != nil {
+		if err := s.bill.Gate(c.Context(), org, project, k.kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
@@ -309,7 +309,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 		// Resource created — debit the caller's org ledger for the compute
 		// submission (per-org, env-attributed, async best-effort). Ongoing
 		// GPU-hour cost reuses s.bill.Meter from a future runtime usage watcher.
-		s.bill.Meter(org, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.bill.Meter(org, project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
 		return c.JSON(http.StatusCreated, view(out, true))
 	}
 }
