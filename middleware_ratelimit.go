@@ -83,7 +83,7 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 		return c.Next()
 	}
 	project := principal.Project(c)
-	service := serviceFromPath(c.Path())
+	service := canonicalService(c.Path())
 
 	key, rpm := bindingRateRule(rl.rulesFor(c.Context(), org), org, project, service)
 	if rpm <= 0 {
