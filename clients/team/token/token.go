@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -61,11 +62,20 @@ var ErrMalformed = errors.New("token: malformed")
 // ErrSignature is returned when HMAC verification fails.
 var ErrSignature = errors.New("token: signature mismatch")
 
+// ErrExpired is returned by Decode(verify=true) when the token's `exp` has passed.
+var ErrExpired = errors.New("token: expired")
+
+// ErrNotYetValid is returned by Decode(verify=true) when the token's `nbf` is in
+// the future.
+var ErrNotYetValid = errors.New("token: not yet valid")
+
 // Generate mints an HS256 token for account (always) and workspace (optional —
 // pass "" for an account/login token that is not yet scoped to a workspace).
 // extra is folded in as the leading `extra` claim when non-empty (e.g.
-// {"org":"acme"}). Both ids are validated as UUIDs.
-func Generate(account, workspace string, extra map[string]any, secret string) (string, error) {
+// {"org":"acme"}). exp is the expiry as a unix-second timestamp — pass 0 to mint
+// a token WITHOUT an `exp` claim (the wire-golden / non-expiring case). Both ids
+// are validated as UUIDs.
+func Generate(account, workspace string, extra map[string]any, exp int64, secret string) (string, error) {
 	if err := requireUUID("account", account); err != nil {
 		return "", err
 	}
@@ -77,7 +87,7 @@ func Generate(account, workspace string, extra map[string]any, secret string) (s
 	if secret == "" {
 		secret = DefaultSecret
 	}
-	payload, err := marshalCompact(Token{Extra: extra, Account: account, Workspace: workspace})
+	payload, err := marshalCompact(Token{Extra: extra, Account: account, Workspace: workspace, Exp: exp})
 	if err != nil {
 		return "", err
 	}
@@ -86,9 +96,13 @@ func Generate(account, workspace string, extra map[string]any, secret string) (s
 	return signing + "." + sign(signing, secret), nil
 }
 
-// Decode verifies (when verify is true) and parses an HS256 token. It does not
-// interpret exp/nbf — the upstream `decodeToken` likewise leaves expiry policy
-// to callers; team tokens are minted without exp by default.
+// Decode verifies (when verify is true) and parses an HS256 token. When verify is
+// true it enforces the temporal claims: a token whose `exp` has passed is rejected
+// (ErrExpired) and a token whose `nbf` is in the future is rejected
+// (ErrNotYetValid). A missing claim (0) is not enforced. This closes the
+// permanent-replay window on a captured token (the transactor token rides in the
+// URL path — log-prone — so a bounded lifetime is the mitigation until the front
+// moves it off the URL, #60).
 func Decode(tok, secret string, verify bool) (*Token, error) {
 	h, body, sig, err := split(tok)
 	if err != nil {
@@ -110,28 +124,16 @@ func Decode(tok, secret string, verify bool) (*Token, error) {
 	if err := json.Unmarshal(raw, &t); err != nil {
 		return nil, fmt.Errorf("token: decode payload: %w", err)
 	}
+	if verify {
+		now := time.Now().Unix()
+		if t.Exp != 0 && now >= t.Exp {
+			return nil, ErrExpired
+		}
+		if t.Nbf != 0 && now < t.Nbf {
+			return nil, ErrNotYetValid
+		}
+	}
 	return &t, nil
-}
-
-// Alg returns the `alg` from a token header without verifying anything. The
-// account layer uses it to route IAM-issued RS* tokens (verified against the
-// IAM JWKS upstream) away from the HS256 path.
-func Alg(tok string) (string, error) {
-	h, _, _, err := split(tok)
-	if err != nil {
-		return "", err
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(h)
-	if err != nil {
-		return "", fmt.Errorf("token: bad header: %w", err)
-	}
-	var hd struct {
-		Alg string `json:"alg"`
-	}
-	if err := json.Unmarshal(raw, &hd); err != nil {
-		return "", fmt.Errorf("token: decode header: %w", err)
-	}
-	return hd.Alg, nil
 }
 
 func split(tok string) (h, body, sig string, err error) {
