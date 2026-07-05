@@ -30,7 +30,7 @@ func TestBearerFromHeader(t *testing.T) {
 // authenticated RPC.
 func TestTokenRoundTrip(t *testing.T) {
 	const account = "550e8400-e29b-41d4-a716-446655440000"
-	tok, err := token.Generate(account, "", map[string]any{"org": "acme"}, "s3cret")
+	tok, err := token.Generate(account, "", map[string]any{"org": "acme"}, 0, "s3cret")
 	if err != nil {
 		t.Fatal(err)
 	}
