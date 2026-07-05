@@ -18,6 +18,13 @@
 // frames, X-Wing PQ-KEM handshake), NEVER OTLP-over-HTTP(:4318) or
 // OTLP-over-gRPC(:4317). The collector's zapreceiver (:4319) terminates it and
 // writes to hanzoai/datastore.
+//
+// The ExportTraceServiceRequest envelope is hand-encoded from the grpc-free
+// trace messages (see UploadTraces) rather than the generated
+// collector/trace/v1 request type, whose sibling gRPC service stubs
+// (trace_service_grpc.pb.go, no build tag) would pull google.golang.org/grpc
+// into the module graph. Hanzo services speak ZAP/HTTP/WS, never gRPC — do NOT
+// "simplify" this back to coltrace.ExportTraceServiceRequest.
 package zaptrace
 
 import (
@@ -28,8 +35,8 @@ import (
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -78,9 +85,20 @@ func (c *Client) UploadTraces(_ context.Context, protoSpans []*tracepb.ResourceS
 	if tr == nil {
 		return fmt.Errorf("zaptrace: client not started")
 	}
-	body, err := proto.Marshal(&coltracepb.ExportTraceServiceRequest{ResourceSpans: protoSpans})
-	if err != nil {
-		return err
+	// Encode the OTLP ExportTraceServiceRequest wire form directly from the
+	// grpc-free trace messages. The request is a single repeated field —
+	// `repeated ResourceSpans resource_spans = 1` — so appending each
+	// ResourceSpans under field 1 is byte-identical to marshaling a
+	// coltrace.ExportTraceServiceRequest, without importing the collector proto
+	// package that would drag google.golang.org/grpc in (see package doc).
+	var body []byte
+	for _, rs := range protoSpans {
+		rsBytes, err := proto.Marshal(rs)
+		if err != nil {
+			return err
+		}
+		body = protowire.AppendTag(body, 1, protowire.BytesType)
+		body = protowire.AppendBytes(body, rsBytes)
 	}
 
 	req := fasthttp.AcquireRequest()
