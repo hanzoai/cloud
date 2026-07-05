@@ -1,0 +1,710 @@
+package authors
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"sync"
+	"testing"
+
+	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
+)
+
+// fakeCommerce is an in-memory commerce ledger: it records deposits per org (the
+// wallet balance) and lets a test SET a deploying org's metered spend (the accrual
+// base). It is the money-seam stand-in that lets the tests PROVE royalty accrues
+// (spend × share) and a credits payout moves a wallet — without a live commerce.
+type fakeCommerce struct {
+	mu       sync.Mutex
+	balance  map[string]int64
+	spend    map[string]int64
+	deposits int
+	failDep  bool
+	seq      int
+}
+
+func newFakeCommerce() *fakeCommerce {
+	return &fakeCommerce{balance: map[string]int64{}, spend: map[string]int64{}}
+}
+
+func (f *fakeCommerce) configured() bool { return true }
+
+func (f *fakeCommerce) deposit(_ context.Context, org, _ string, amountCents int64, _, _, _ string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failDep {
+		return "", errUnconfigured
+	}
+	f.balance[org] += amountCents
+	f.deposits++
+	f.seq++
+	return "txn_test_" + org + "_" + strconv.Itoa(f.seq), nil
+}
+
+func (f *fakeCommerce) spendCents(_ context.Context, org, _ string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.spend[org], nil
+}
+
+func (f *fakeCommerce) setSpend(org string, cents int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.spend[org] = cents
+}
+
+func (f *fakeCommerce) bal(org string) int64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.balance[org]
+}
+
+func (f *fakeCommerce) depositCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.deposits
+}
+
+// fakeGitHub is the identity stand-in. A test can register a LINKED account for an
+// org (login + token), mark specific owner/repo pairs as admin-owned by a token, and
+// stage hanzo.json file contents per repo+branch. This lets the tests PROVE both
+// verification methods without touching IAM or GitHub.
+type fakeGitHub struct {
+	mu     sync.Mutex
+	linked map[string]ghLink // org → linked account
+	admin  map[string]bool   // "token|owner/repo" → admin
+	files  map[string][]byte // "owner/repo@branch/path" → body
+}
+
+type ghLink struct {
+	login string
+	token string
+}
+
+func newFakeGitHub() *fakeGitHub {
+	return &fakeGitHub{linked: map[string]ghLink{}, admin: map[string]bool{}, files: map[string][]byte{}}
+}
+
+func (g *fakeGitHub) setLinked(org, login, token string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.linked[org] = ghLink{login: login, token: token}
+}
+
+func (g *fakeGitHub) setAdmin(token, owner, repo string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.admin[token+"|"+owner+"/"+repo] = true
+}
+
+func (g *fakeGitHub) setFile(owner, repo, branch, path string, body []byte) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.files[owner+"/"+repo+"@"+branch+"/"+path] = body
+}
+
+func (g *fakeGitHub) linkedAccount(_ context.Context, org, _ string) (string, string, bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	l, ok := g.linked[org]
+	if !ok {
+		return "", "", false, nil
+	}
+	return l.login, l.token, true, nil
+}
+
+func (g *fakeGitHub) repoAdmin(_ context.Context, token, owner, repo string) (bool, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.admin[token+"|"+owner+"/"+repo], nil
+}
+
+func (g *fakeGitHub) fetchFile(_ context.Context, owner, repo, branch, path string) ([]byte, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
+}
+
+// mount builds an authors app backed by a fresh store + injected fakes, returning the
+// app, the svc, and the fakes for assertions.
+func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce, *fakeGitHub) {
+	t.Helper()
+	store, err := openStore(t.TempDir() + "/authors.db")
+	if err != nil {
+		t.Fatalf("openStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	fc := newFakeCommerce()
+	fg := newFakeGitHub()
+	s := &svc{
+		store:     store,
+		commerce:  fc,
+		github:    fg,
+		log:       luxlog.New("test"),
+		badgeBase: "https://hanzo.app",
+	}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app.Get("/v1/authors", s.myAuthors)
+	app.Post("/v1/authors/connect", s.connect)
+	app.Post("/v1/authors/repos/verify", s.verifyRepo)
+	app.Post("/v1/authors/deploys/record", s.recordDeploy)
+	app.Get("/v1/admin/authors", s.adminList)
+	app.Post("/v1/admin/authors/sweep", s.adminSweep)
+	app.Post("/v1/admin/authors/:id/approve", s.adminApprove)
+	app.Post("/v1/admin/authors/:id/suspend", s.adminSuspend)
+	app.Post("/v1/admin/authors/:id/payout", s.adminPayout)
+	return app, s, fc, fg
+}
+
+// req drives one HTTP request. org sets a VALIDATED principal (X-Org-Id + X-User-Id,
+// the Tenant() gate); admin additionally sets X-User-IsAdmin.
+func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	hr := httptest.NewRequest(method, path, r)
+	if body != nil {
+		hr.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		hr.Header.Set("X-Org-Id", org)
+		hr.Header.Set("X-User-Id", "u_"+org)
+	}
+	if admin {
+		hr.Header.Set("X-User-IsAdmin", "true")
+	}
+	resp, err := app.Fiber().Test(hr)
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// envData pulls the `data` object out of an admin envelope {status,msg,data}.
+func envData(t *testing.T, body []byte) map[string]json.RawMessage {
+	t.Helper()
+	var env struct {
+		Status string                     `json:"status"`
+		Data   map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode envelope: %v (%s)", err, body)
+	}
+	return env.Data
+}
+
+// connectOrg connects `org` as an author (optionally with a supplied login), returning
+// the author id + verify code.
+func connectOrg(t *testing.T, app *zip.App, s *svc, org, login string) (id, verifyCode string) {
+	t.Helper()
+	code, body := req(t, app, http.MethodPost, "/v1/authors/connect", org, false, map[string]any{"githubLogin": login})
+	if code != http.StatusCreated {
+		t.Fatalf("connect(%s) want 201, got %d (%s)", org, code, body)
+	}
+	var r struct {
+		ID         string `json:"id"`
+		VerifyCode string `json:"verifyCode"`
+		Status     string `json:"status"`
+	}
+	_ = json.Unmarshal(body, &r)
+	if r.ID == "" || r.VerifyCode == "" || r.Status != StatusConnected {
+		t.Fatalf("connect(%s) bad response: %s", org, body)
+	}
+	return r.ID, r.VerifyCode
+}
+
+// approve admits an author to earning via the admin route.
+func approve(t *testing.T, app *zip.App, id string) {
+	t.Helper()
+	if st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+id+"/approve", "admin", true, nil); st != http.StatusOK {
+		t.Fatalf("approve(%s) want 200, got %d (%s)", id, st, body)
+	}
+}
+
+// TestNormalizeRepo: every cosmetic form of a GitHub reference collapses to the ONE
+// canonical github.com/owner/name; junk normalizes to "".
+func TestNormalizeRepo(t *testing.T) {
+	want := "github.com/acme/widgets"
+	for _, in := range []string{
+		"https://github.com/acme/widgets",
+		"https://github.com/acme/widgets.git",
+		"http://www.github.com/Acme/Widgets/",
+		"github.com/acme/widgets",
+		"acme/widgets",
+		"git@github.com:acme/widgets.git",
+		"https://github.com/acme/widgets?tab=readme",
+	} {
+		if got := normalizeRepo(in); got != want {
+			t.Fatalf("normalizeRepo(%q) = %q, want %q", in, got, want)
+		}
+	}
+	for _, in := range []string{"", "  ", "not a repo", "https://gitlab.com/a/b", "github.com/onlyowner"} {
+		if got := normalizeRepo(in); got != "" {
+			t.Fatalf("normalizeRepo(%q) = %q, want empty", in, got)
+		}
+	}
+}
+
+// TestFileProvesCode: hanzo.json JSON field OR a bare substring both prove the code;
+// a wrong/empty code does not.
+func TestFileProvesCode(t *testing.T) {
+	code := "avc_abc123"
+	if !fileProvesCode([]byte(`{"hanzoAuthorCode":"avc_abc123"}`), code) {
+		t.Fatal("json field should prove")
+	}
+	if !fileProvesCode([]byte(`# verify\navc_abc123\n`), code) {
+		t.Fatal("substring should prove")
+	}
+	if fileProvesCode([]byte(`{"hanzoAuthorCode":"other"}`), code) {
+		t.Fatal("wrong code proved")
+	}
+	if fileProvesCode([]byte(``), code) || fileProvesCode([]byte(`avc_abc123`), "") {
+		t.Fatal("empty proved")
+	}
+}
+
+// TestConnectIdempotentAndLinkedIdentity: connect is one-author-per-org (first wins,
+// re-link updates login); an IAM-linked account overrides the supplied login and marks
+// the identity verified. No principal → 403.
+func TestConnectIdempotentAndLinkedIdentity(t *testing.T) {
+	app, s, _, fg := mount(t)
+	ctx := context.Background()
+
+	if code, _ := req(t, app, http.MethodPost, "/v1/authors/connect", "", false, map[string]any{}); code != http.StatusForbidden {
+		t.Fatalf("no-principal connect want 403, got %d", code)
+	}
+	// No supplied login + no linked account → 400.
+	if code, _ := req(t, app, http.MethodPost, "/v1/authors/connect", "orgA", false, map[string]any{}); code != http.StatusBadRequest {
+		t.Fatalf("no-login connect want 400, got %d", code)
+	}
+
+	// First connect with a supplied login → 201 connected, unverified identity.
+	id, _ := connectOrg(t, app, s, "orgA", "AcmeDev")
+	a, _ := s.store.GetByID(ctx, id)
+	if a.GithubLogin != "acmedev" || a.VerifiedAt != 0 {
+		t.Fatalf("supplied login connect: login=%q verifiedAt=%d", a.GithubLogin, a.VerifiedAt)
+	}
+
+	// Re-connect with an IAM-linked account → 200, login re-linked to the verified one.
+	fg.setLinked("orgA", "acme-official", "tok_a")
+	code, body := req(t, app, http.MethodPost, "/v1/authors/connect", "orgA", false, map[string]any{"githubLogin": "ignored"})
+	if code != http.StatusOK {
+		t.Fatalf("re-connect want 200, got %d (%s)", code, body)
+	}
+	var re struct {
+		Created  bool   `json:"created"`
+		Verified bool   `json:"verified"`
+		Login    string `json:"githubLogin"`
+	}
+	_ = json.Unmarshal(body, &re)
+	if re.Created || !re.Verified || re.Login != "acme-official" {
+		t.Fatalf("re-connect not idempotent-relink-verify: %+v (%s)", re, body)
+	}
+	a2, _ := s.store.GetByID(ctx, id)
+	if a2.ID != a.ID || a2.VerifiedAt == 0 {
+		t.Fatalf("re-connect broke identity: %+v", a2)
+	}
+}
+
+// TestVerifyRepoBothMethods is the CORE verification proof: the OAuth admin-check and
+// the hanzo.json file method each verify a repo; a repo we can't prove is 422; a repo
+// owned by another author is 409.
+func TestVerifyRepoBothMethods(t *testing.T) {
+	app, s, _, fg := mount(t)
+
+	// orgA connects and verifies via OAuth (linked token has admin on acme/widgets).
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	st, body := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "https://github.com/acme/widgets"})
+	if st != http.StatusCreated {
+		t.Fatalf("oauth verify want 201, got %d (%s)", st, body)
+	}
+	var vr struct {
+		Repo struct {
+			RepoURL       string `json:"repoUrl"`
+			Verified      bool   `json:"verified"`
+			Method        string `json:"method"`
+			BadgeMarkdown string `json:"badgeMarkdown"`
+		} `json:"repo"`
+	}
+	_ = json.Unmarshal(body, &vr)
+	if vr.Repo.RepoURL != "github.com/acme/widgets" || !vr.Repo.Verified || vr.Repo.Method != MethodOAuth {
+		t.Fatalf("oauth verify wrong: %+v", vr.Repo)
+	}
+	if vr.Repo.BadgeMarkdown != "[![Deploy on Hanzo](https://hanzo.app/deploy-badge.svg)](https://hanzo.app/new?template=https://github.com/acme/widgets)" {
+		t.Fatalf("badge markdown wrong: %q", vr.Repo.BadgeMarkdown)
+	}
+
+	// orgB connects and verifies a DIFFERENT repo via the FILE method (hanzo.json on
+	// main contains its verify code; no linked token).
+	idB, codeB := connectOrg(t, app, s, "orgB", "bobdev")
+	fg.setFile("bob", "tool", "main", verifyFile, []byte(`{"hanzoAuthorCode":"`+codeB+`"}`))
+	st, body = req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgB", false, map[string]any{"repoUrl": "bob/tool"})
+	if st != http.StatusCreated {
+		t.Fatalf("file verify want 201, got %d (%s)", st, body)
+	}
+	_ = json.Unmarshal(body, &vr)
+	if vr.Repo.Method != MethodFile || !vr.Repo.Verified {
+		t.Fatalf("file verify wrong: %+v", vr.Repo)
+	}
+
+	// A repo orgB can't prove (no token, no file) → 422.
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgB", false, map[string]any{"repoUrl": "bob/secret"}); st != http.StatusUnprocessableEntity {
+		t.Fatalf("unprovable verify want 422, got %d", st)
+	}
+	// orgB tries to claim orgA's already-verified repo → 409.
+	fg.setFile("acme", "widgets", "main", verifyFile, []byte(codeB))
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgB", false, map[string]any{"repoUrl": "acme/widgets"}); st != http.StatusConflict {
+		t.Fatalf("cross-author claim want 409, got %d", st)
+	}
+	// Verify-before-connect → 400.
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgZ", false, map[string]any{"repoUrl": "z/z"}); st != http.StatusBadRequest {
+		t.Fatalf("verify-before-connect want 400, got %d", st)
+	}
+	// Malformed repo → 400.
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "not a repo"}); st != http.StatusBadRequest {
+		t.Fatalf("malformed repo want 400, got %d", st)
+	}
+	_ = idA
+	_ = idB
+}
+
+// TestRecordDeployAttribution: a deploy of a VERIFIED author repo records an edge
+// (idempotent); a deploy of a non-author repo is a recorded:false no-op; a self-deploy
+// is recorded but flagged self.
+func TestRecordDeployAttribution(t *testing.T) {
+	app, s, _, fg := mount(t)
+	ctx := context.Background()
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+
+	// No principal → 403.
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "", false, map[string]any{"repoUrl": "acme/widgets", "project": "p1"}); st != http.StatusForbidden {
+		t.Fatalf("no-principal deploy want 403, got %d", st)
+	}
+	// Deploy of a NON-author repo → recorded:false, 200.
+	st, body := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "someone/else", "project": "p0"})
+	if st != http.StatusOK {
+		t.Fatalf("non-author deploy want 200, got %d", st)
+	}
+	if recorded(t, body) {
+		t.Fatalf("non-author deploy reported recorded=true")
+	}
+	// Missing project → 400.
+	if st, _ := req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets"}); st != http.StatusBadRequest {
+		t.Fatalf("missing project want 400, got %d", st)
+	}
+
+	// orgB deploys acme/widgets → 201 recorded, not self.
+	st, body = req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "https://github.com/acme/widgets", "project": "proj-b"})
+	if st != http.StatusCreated || !recorded(t, body) {
+		t.Fatalf("orgB deploy want 201 recorded, got %d (%s)", st, body)
+	}
+	var dv struct {
+		Created bool `json:"created"`
+		Self    bool `json:"self"`
+	}
+	_ = json.Unmarshal(body, &dv)
+	if !dv.Created || dv.Self {
+		t.Fatalf("orgB deploy view wrong: %+v", dv)
+	}
+	// Re-deploy same project/org → 200 idempotent (not created).
+	st, body = req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	_ = json.Unmarshal(body, &dv)
+	if st != http.StatusOK || dv.Created {
+		t.Fatalf("re-deploy want 200 not-created, got %d %+v", st, dv)
+	}
+	// Author's OWN org deploys → recorded but self=true.
+	st, body = req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgA", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-a"})
+	_ = json.Unmarshal(body, &dv)
+	if st != http.StatusCreated || !dv.Self {
+		t.Fatalf("self-deploy want 201 self=true, got %d %+v", st, dv)
+	}
+	// The author now has 2 deploy events; distinct earning orgs excludes self (orgA).
+	orgs, _ := s.store.DistinctDeployingOrgs(ctx, idA, "orgA", 100)
+	if len(orgs) != 1 || orgs[0] != "orgB" {
+		t.Fatalf("distinct deploying orgs = %v, want [orgB]", orgs)
+	}
+}
+
+// TestSweepAccruesSpendTimesShareIdempotent is the CORE earning proof: after a
+// deploying org makes metered spend, the sweep accrues royalty = spend × share into
+// the author's balance, at-most-once per period; a self-deploy never accrues.
+func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgA", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-a"}) // self
+
+	// Not approved yet → sweep accrues nothing (sweep set is approved-only).
+	code, body := req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	if code != http.StatusOK || sweptAccrued(t, body) != 0 {
+		t.Fatalf("pre-approve sweep want 0, got %d (%s)", code, body)
+	}
+	approve(t, app, idA)
+
+	// Spend by orgB $100 (10000c); orgA (self) spends $999 but must NOT accrue.
+	fc.setSpend("orgB", 10000)
+	fc.setSpend("orgA", 99900)
+
+	code, body = req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	if code != http.StatusOK || sweptAccrued(t, body) != 1 {
+		t.Fatalf("accrual sweep want 1, got %d (%s)", code, body)
+	}
+	a, _ := s.store.GetByID(ctx, idA)
+	const want = 10000 * defaultShareBps / bpsDenom // 500
+	if a.AccruedCents != want || a.PendingCents() != want {
+		t.Fatalf("accrued=%d pending=%d, want %d (orgB spend×share, self excluded)", a.AccruedCents, a.PendingCents(), want)
+	}
+
+	// Idempotent: a re-sweep in the SAME period accrues nothing more.
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	a2, _ := s.store.GetByID(ctx, idA)
+	if a2.AccruedCents != want {
+		t.Fatalf("double-accrual! accrued=%d, want %d", a2.AccruedCents, want)
+	}
+	if fc.depositCount() != 0 {
+		t.Fatalf("accrual issued a deposit (%d) — it must not", fc.depositCount())
+	}
+}
+
+// TestLazyAccrualOnAuthorRead proves the author's OWN GET /v1/authors runs the accrual
+// sweep (self-updating dashboard) and surfaces the badge snippet + repos/deploys.
+func TestLazyAccrualOnAuthorRead(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	// Link the GitHub identity BEFORE connect so the author is identity-verified.
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	approve(t, app, idA)
+	fc.setSpend("orgB", 5000) // $50 → royalty 250c ($2.50)
+
+	code, body := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET /v1/authors want 200, got %d (%s)", code, body)
+	}
+	var v struct {
+		IsAuthor     bool   `json:"isAuthor"`
+		Status       string `json:"status"`
+		GithubLogin  string `json:"githubLogin"`
+		Verified     bool   `json:"verified"`
+		AccruedCents int64  `json:"accruedCents"`
+		PendingCents int64  `json:"pendingCents"`
+		Repos        []struct {
+			RepoURL       string `json:"repoUrl"`
+			Verified      bool   `json:"verified"`
+			BadgeMarkdown string `json:"badgeMarkdown"`
+		} `json:"repos"`
+		Deploys []struct {
+			RepoURL      string `json:"repoUrl"`
+			DeployingOrg string `json:"deployingOrg"`
+		} `json:"deploys"`
+	}
+	if err := json.Unmarshal(body, &v); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	const want = 5000 * defaultShareBps / bpsDenom // 250
+	if !v.IsAuthor || v.Status != StatusApproved || v.GithubLogin != "acmedev" || !v.Verified {
+		t.Fatalf("dashboard head wrong: %+v", v)
+	}
+	if v.AccruedCents != want || v.PendingCents != want {
+		t.Fatalf("lazy accrual not reflected: accrued=%d pending=%d, want %d", v.AccruedCents, v.PendingCents, want)
+	}
+	if len(v.Repos) != 1 || !v.Repos[0].Verified || v.Repos[0].BadgeMarkdown == "" {
+		t.Fatalf("repos wrong: %+v", v.Repos)
+	}
+	if len(v.Deploys) != 1 || v.Deploys[0].DeployingOrg != "orgB" {
+		t.Fatalf("deploys wrong: %+v", v.Deploys)
+	}
+	_ = idA
+}
+
+// TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard: a credits payout issues
+// exactly ONE commerce grant + moves paid; a cash payout is record-only; a payout can
+// never exceed pending.
+func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	approve(t, app, idA)
+	fc.setSpend("orgB", 10000) // accrue 500c pending
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	// Non-admin is refused on payout.
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "orgA", false, map[string]any{"amountCents": 100, "method": "credits"}); st != http.StatusForbidden {
+		t.Fatalf("non-admin payout want 403, got %d", st)
+	}
+	// Over-pending → 400 (500 available, ask 900).
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 900, "method": "credits"}); st != http.StatusBadRequest {
+		t.Fatalf("over-pending payout want 400, got %d", st)
+	}
+
+	// Credits payout of 300c → ONE grant into orgA's wallet, paid moves.
+	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 300, "method": "credits", "reference": "ledger-1"})
+	if st != http.StatusOK {
+		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
+	}
+	if fc.bal("orgA") != 300 || fc.depositCount() != 1 {
+		t.Fatalf("credits payout wallet=%d deposits=%d, want 300/1", fc.bal("orgA"), fc.depositCount())
+	}
+	a, _ := s.store.GetByID(ctx, idA)
+	if a.PaidCents != 300 || a.PendingCents() != 200 {
+		t.Fatalf("after credits payout: paid=%d pending=%d (want 300/200)", a.PaidCents, a.PendingCents())
+	}
+	pd := envData(t, body)
+	var payout struct {
+		AmountCents int64  `json:"amountCents"`
+		Method      string `json:"method"`
+		Txn         string `json:"txn"`
+	}
+	_ = json.Unmarshal(pd["payout"], &payout)
+	if payout.AmountCents != 300 || payout.Method != "credits" || payout.Txn == "" {
+		t.Fatalf("payout view wrong: %+v", payout)
+	}
+
+	// Cash payout of the remaining 200c via wire → RECORD-ONLY (no new grant).
+	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 200, "method": "wire", "reference": "wire-xyz"})
+	if st != http.StatusOK {
+		t.Fatalf("cash payout want 200, got %d", st)
+	}
+	if fc.depositCount() != 1 || fc.bal("orgA") != 300 {
+		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
+	}
+	a, _ = s.store.GetByID(ctx, idA)
+	if a.PaidCents != 500 || a.PendingCents() != 0 {
+		t.Fatalf("after cash payout: paid=%d pending=%d (want 500/0)", a.PaidCents, a.PendingCents())
+	}
+	// Drained → any further payout is 400.
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1, "method": "credits"}); st != http.StatusBadRequest {
+		t.Fatalf("drained payout want 400, got %d", st)
+	}
+}
+
+// TestAdminGateAndDirectory: every /v1/admin/authors* route is global-admin
+// fail-closed, and the directory exposes orgs + counts + a summary.
+func TestAdminGateAndDirectory(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	idA, _ := connectOrg(t, app, s, "orgA", "acmedev")
+	fg.setLinked("orgA", "acmedev", "tok_a")
+	fg.setAdmin("tok_a", "acme", "widgets")
+	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
+	approve(t, app, idA)
+	fc.setSpend("orgB", 10000)
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	// A non-admin tenant is refused 403 on EVERY admin route.
+	for _, p := range []string{"/v1/admin/authors", "/v1/admin/authors/sweep",
+		"/v1/admin/authors/" + idA + "/approve", "/v1/admin/authors/" + idA + "/suspend",
+		"/v1/admin/authors/" + idA + "/payout"} {
+		method := http.MethodPost
+		if p == "/v1/admin/authors" {
+			method = http.MethodGet
+		}
+		if code, _ := req(t, app, method, p, "orgA", false, map[string]any{"amountCents": 1, "method": "credits"}); code != http.StatusForbidden {
+			t.Fatalf("non-admin %s want 403, got %d", p, code)
+		}
+	}
+
+	// Global admin sees the directory with the author + counts + a summary.
+	code, body := req(t, app, http.MethodGet, "/v1/admin/authors", "admin", true, nil)
+	if code != http.StatusOK {
+		t.Fatalf("admin list want 200, got %d (%s)", code, body)
+	}
+	data := envData(t, body)
+	var authors []adminAuthorView
+	if err := json.Unmarshal(data["authors"], &authors); err != nil {
+		t.Fatalf("decode authors: %v", err)
+	}
+	if len(authors) != 1 {
+		t.Fatalf("admin authors len = %d, want 1", len(authors))
+	}
+	a0 := authors[0]
+	const want = 10000 * defaultShareBps / bpsDenom
+	if a0.Org != "orgA" || a0.GithubLogin != "acmedev" || a0.Status != StatusApproved || a0.RepoCount != 1 || a0.DeployCount != 1 || a0.AccruedCents != want {
+		t.Fatalf("admin row wrong: %+v", a0)
+	}
+	var sum adminSummary
+	if err := json.Unmarshal(data["summary"], &sum); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if sum.Total != 1 || sum.Approved != 1 || sum.AccruedCents != want {
+		t.Fatalf("summary wrong: %+v", sum)
+	}
+
+	// Suspend flips status; a suspended author accrues nothing more on the next sweep.
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/suspend", "admin", true, nil); st != http.StatusOK {
+		t.Fatalf("suspend want 200, got %d", st)
+	}
+	fc.setSpend("orgB", 20000) // more spend, but suspended → no accrual
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	a, _ := s.store.GetByID(context.Background(), idA)
+	if a.AccruedCents != want {
+		t.Fatalf("suspended author accrued more: %d, want %d", a.AccruedCents, want)
+	}
+}
+
+// recorded pulls the boolean "recorded" flag out of a deploy response.
+func recorded(t *testing.T, body []byte) bool {
+	t.Helper()
+	var out struct {
+		Recorded bool `json:"recorded"`
+	}
+	_ = json.Unmarshal(body, &out)
+	return out.Recorded
+}
+
+// sweptAccrued pulls the "accrued" count out of an ENVELOPED sweep response.
+func sweptAccrued(t *testing.T, body []byte) int {
+	t.Helper()
+	var out struct {
+		Data struct {
+			Accrued int `json:"accrued"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(body, &out)
+	return out.Data.Accrued
+}
+
+// TestMount exercises the real Mount wiring (store open + route registration) against
+// a temp DataDir, proving the package boots as the binary loads it.
+func TestMount(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Brand: "hanzo"}); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown() })
+	r := httptest.NewRequest(http.MethodGet, "/v1/authors", nil)
+	resp, err := app.Fiber().Test(r)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("mounted GET /v1/authors (no principal) want 403, got %d", resp.StatusCode)
+	}
+}
