@@ -220,7 +220,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 
 	kind := "project"
 	fee := createFeeCents(kind)
-	if err := s.bill.Gate(c.Context(), org, kind, fee); err != nil {
+	if err := s.bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -236,7 +236,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.bill.Meter(org, kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
@@ -394,7 +394,7 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 
 	kind := "issue"
 	fee := createFeeCents(kind)
-	if err := s.bill.Gate(c.Context(), org, kind, fee); err != nil {
+	if err := s.bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -412,7 +412,7 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.bill.Meter(org, kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
 }
 
