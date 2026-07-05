@@ -19,6 +19,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/fleet"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,14 +58,14 @@ func (s *svc) attachCluster(c *zip.Ctx) error {
 	// Nominal management-fee gate (fail-closed, per-org — billing keys on the paying
 	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
-	if err := s.bill.Gate(c.Context(), org, byoClusterKind, fee); err != nil {
+	if err := s.bill.Gate(c.Context(), org, principal.Project(c), byoClusterKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 	rec, err := s.fleet.Register(c.Context(), org, project(c), name, req.Kubeconfig, req.Provider, req.Default)
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
-	s.bill.Meter(org, byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.bill.Meter(org, principal.Project(c), byoClusterKind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, byoToClusterView(rec))
 }
 
