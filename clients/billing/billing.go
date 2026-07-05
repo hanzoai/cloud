@@ -164,6 +164,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/billing/gpu-charge", s.gpuCharge)
 	app.Get("/v1/billing/payment-methods", s.paymentMethods)
 
+	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
+	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
+	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
+	s.mountFinance(app)
+
 	log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", s.commerce.configured())
 	return nil
 }
