@@ -88,6 +88,36 @@ func TestBillingGate_SpendWarnHeader(t *testing.T) {
 	}
 }
 
+// (MED-4) A resource-path spend-cap denial renders the DISTINCT 402
+// spend_cap_exceeded — mirroring the edge gate — never the 503 out-of-funds shape
+// (wrong code + retry storm). One handler drives DenyResource with each error.
+func TestDenyResource_SpendCapDistinct402(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		wantCode int
+		wantBody string
+	}{
+		{"spend_cap", metering.ErrSpendCapExceeded, http.StatusPaymentRequired, "spend_cap_exceeded"},
+		{"insufficient", metering.ErrInsufficientBalance, http.StatusPaymentRequired, "insufficient_balance"},
+	}
+	for _, tc := range cases {
+		app := zip.New(zip.Config{})
+		app.Post("/v1/x", func(c *zip.Ctx) error { return DenyResource(c, tc.err) })
+		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodPost, "/v1/x", nil))
+		if err != nil {
+			t.Fatalf("%s: Test: %v", tc.name, err)
+		}
+		if resp.StatusCode != tc.wantCode {
+			t.Fatalf("%s: status = %d, want %d", tc.name, resp.StatusCode, tc.wantCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if !containsSub(string(body), `"code":"`+tc.wantBody+`"`) {
+			t.Fatalf("%s: body %q missing %q", tc.name, string(body), tc.wantBody)
+		}
+	}
+}
+
 // rateApp wires an app with ONLY the scope rate limiter in front of a handler.
 func rateApp(t *testing.T, m *metering.Client) *zip.App {
 	t.Helper()
