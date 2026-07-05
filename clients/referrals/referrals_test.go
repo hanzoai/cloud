@@ -364,13 +364,16 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)
 	}
-	var out struct {
-		Referrals []adminReferralView `json:"referrals"`
-		Summary   adminSummary        `json:"summary"`
+	var env struct {
+		Data struct {
+			Referrals []adminReferralView `json:"referrals"`
+			Summary   adminSummary        `json:"summary"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+	out := env.Data
 	if len(out.Referrals) != 1 {
 		t.Fatalf("admin referrals len = %d, want 1", len(out.Referrals))
 	}
@@ -383,13 +386,16 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	}
 }
 
-// credited pulls the "credited" count out of a sweep response.
+// credited pulls the "credited" count out of an ENVELOPED sweep response
+// ({status,msg,data:{swept,credited}}).
 func credited(body []byte) int {
 	var out struct {
-		Credited int `json:"credited"`
+		Data struct {
+			Credited int `json:"credited"`
+		} `json:"data"`
 	}
 	_ = json.Unmarshal(body, &out)
-	return out.Credited
+	return out.Data.Credited
 }
 
 // lower is a tiny helper (avoid importing strings just for the test).
