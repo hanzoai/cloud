@@ -79,11 +79,45 @@ release. Migration: import the existing `/var/lib/cloud/*.db` into the object st
 (Dave's `tracker`/`agents`/`projects` rows) before AND after cutover.
 
 ### Staged rollout (forward-only, semver — NEVER sha; operator CR + universe main; never `kubectl set image`)
-1. Prove the primitive (DONE — `hack/sqlite-ha-proto`).
-2. Land operator changes (StatefulSet+VCT, configurable preStop, primary Service).
-3. Wire cloud app (replicate registration, lease→role, write routing, preStop);
-   fix cloud go.sum dep-rot so it builds in CI (build CI, not local docker).
-4. Scratch-namespace 2-pod deploy; tight-loop `GET /v1/tracker/projects` across a
-   real roll → all 200 (measured blip target: 0 / sub-second).
-5. Windowed prod cutover: migrate `/var/lib/cloud` DBs into SeaweedFS, verify
-   Dave's data before/after, bump `cloud` CR to the new semver on universe main.
+1. Prove the primitive — **DONE** (`hack/sqlite-ha-proto`).
+2. Land operator changes — **DONE** (operator `feat/sqlite-ha-operator`, commit
+   076a86d). `ServiceSpec.ha` (HaSpec) → StatefulSet + per-pod `volumeClaimTemplate`
+   + headless + primary-only Service (`hanzo.ai/role: primary`); `ServiceSpec.preStop`
+   configurable (default `sleep 5` byte-identical); `build_primary_service`. Non-HA
+   Services byte-identical (guarded). 17 service + 115 lib tests green; CRDs
+   regenerated.
+3. Wire cloud app — **DONE** (`feat/sqlite-ha-app`, commits c3779df + 585da55).
+   `internal/hareplica.Manager`: boot-`RestoreAll` from S3 → `s3.Leaser` election
+   (role FIXED at boot — no hot-promotion, empirically a long-lived
+   `SetMaxOpenConns(1)` reader does NOT see `Restore(Follow)`, so a promoted
+   standby would write on stale handles) → primary self-labels + ships WAL;
+   `haWriteForward` middleware routes mutating `/v1` to the primary Service;
+   `/readyz` gates on caught-up; loopback-only `/internal/drain` preStop hook.
+   Builds standalone (`GOWORK=off`) — cmd/cloud links; 11 unit tests. (The
+   luxfi/constants "dep-rot" is a `go.work` workspace-only issue; cloud's own
+   go.mod is clean — CI builds cloud standalone.)
+4. Scratch-namespace proof — **DONE** (both halves, captured):
+   - **Data layer** — `hack/ha-nodeproof` drives the REAL `hareplica.Manager`
+     through an orderly handoff against REAL SeaweedFS: single-primary election,
+     WAL ship, standby catch-up (30 rows), Drain→a fresh pod acquires the freed
+     lease holding EVERY committed row (45 → ZERO loss), `integrity_check ok`,
+     730 reads / 0 failures.
+   - **k8s read-availability** — the operator-equivalent 2-pod StatefulSet
+     (`universe/infra/k8s/cloud-ha-scratch/`) rolled on hanzo-k8s under a
+     tight-loop `GET`: **190/190 = 200, 0 non-200** across a real rolling deploy.
+5. Windowed prod cutover — **GATED (data-safety): needs Red review + a
+   Red-reviewed HA cloud image + Dave's-data migration/integrity sign-off BEFORE
+   flipping prod SQLite.** Runbook:
+   a. Land stages 2+3 on `main` (operator + cloud) so CI publishes the HA image
+      `ghcr.io/hanzoai/cloud:vX.Y.Z` (≥ v1.786.87). Deploy the HA cloud FIRST to
+      the scratch ns with the real image; re-run `probe.sh` end-to-end.
+   b. Migrate `/var/lib/cloud/*.db` → SeaweedFS: bring up ONE HA pod pointed at the
+      prod PVC data; its first `Sync` seeds an LTX generation per DB. Verify:
+      `PRAGMA integrity_check` + row counts of Dave's `tracker`/`agents`/`projects`
+      in S3-restored copies EQUAL the prod originals (before).
+   c. Bump the `cloud` CR (`services.hanzo.ai/cloud`) to `spec.ha` + the new semver
+      on universe `main`; operator rolls it (never `kubectl set image`). Keep
+      `CLOUD_JWKS_URL`, `ai v1.800.4`, IAM multi-tenant auth env.
+   d. PROVE on live prod: tight-loop `GET /v1/tracker/health` across the prod roll
+      → all 200. Re-verify Dave's row counts + `integrity_check` AFTER (both sides
+      equal). Roll-forward only if any check fails.
