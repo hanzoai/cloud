@@ -108,7 +108,12 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, project, kind string, co
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
 		User: org, Org: org, AmountCents: costCents,
-		Project: project, Service: rm.provider,
+		// Service (=provider) is server-set → validated. Project is the caller's
+		// X-Project-Id, NOT yet claim-bound, so ProjectValidated stays false: a
+		// project-scoped cap on a resource DEGRADES to soft (org- and
+		// service-scoped caps stay hard), matching the edge posture. When IAM mints
+		// a project claim, thread principal.ValidatedProject through here to harden.
+		Project: project, ProjectValidated: false, Service: rm.provider,
 	})
 }
 
@@ -179,6 +184,17 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 // returns (denyBilling), so every Hanzo surface emits one error contract:
 // 402 insufficient_balance / 503 balance_unavailable.
 func DenyResource(c *zip.Ctx, err error) error {
+	// Funded but over a per-scope cap (issue #70): the DISTINCT 402, mirroring the
+	// edge gate — never the 503 out-of-funds/unavailable shape (wrong code + a
+	// retry storm against a cap that will not clear until the period rolls over).
+	if errors.Is(err, metering.ErrSpendCapExceeded) {
+		return c.JSON(http.StatusPaymentRequired, map[string]any{
+			"error": map[string]string{
+				"code":    "spend_cap_exceeded",
+				"message": "Spend cap reached for this scope. Raise it at console.hanzo.ai/limits",
+			},
+		})
+	}
 	if errors.Is(err, metering.ErrInsufficientBalance) {
 		return c.JSON(http.StatusPaymentRequired, map[string]any{
 			"error": map[string]string{
