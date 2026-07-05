@@ -178,7 +178,6 @@ github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXY
 github.com/Jeffail/gabs v1.4.0 h1://5fYRRTq1edjfIrQGvdkcd22pkYUrHZ5YC/H2GJVAo=
 github.com/Jeffail/gabs v1.4.0/go.mod h1:6xMvQMK4k33lb7GUUpaAPh6nKMmemQeg5d4gn7/bOXc=
 github.com/Knetic/govaluate v3.0.0+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
-github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible h1:1G1pk05UrOh0NlF1oeaaix1x8XzrfjIDK47TY0Zehcw=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Machiel/slugify v1.0.1 h1:EfWSlRWstMadsgzmiV7d0yVd2IFlagWH68Q+DcYCm4E=
 github.com/Machiel/slugify v1.0.1/go.mod h1:fTFGn5uWEynW4CUMG7sWkYXOf1UgDxyTM3DbR6Qfg3k=
@@ -450,6 +449,8 @@ github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
 github.com/blinkbean/dingtalk v1.1.3 h1:MbidFZYom7DTFHD/YIs+eaI7kRy52kmWE/sy0xjo6E4=
 github.com/blinkbean/dingtalk v1.1.3/go.mod h1:9BaLuGSBqY3vT5hstValh48DbsKO7vaHaJnG9pXwbto=
+github.com/bmatcuk/doublestar/v4 v4.9.2 h1:b0mc6WyRSYLjzofB2v/0cuDUZ+MqoGyH3r0dVij35GI=
+github.com/bmatcuk/doublestar/v4 v4.9.2/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
 github.com/bool64/dev v0.2.40 h1:LUSD+Aq+WB3KwVntqXstevJ0wB12ig1bEgoG8ZafsZU=
@@ -513,6 +514,8 @@ github.com/carmel/gooxml v0.0.0-20220216072414-40ff56130850 h1:5HOeLYzNkwXRWppRF
 github.com/carmel/gooxml v0.0.0-20220216072414-40ff56130850/go.mod h1:2u6ODG4PzDELX8qnX0wOGCdPJpWxnC5hBM7542SFrYc=
 github.com/casbin/casbin v1.7.0/go.mod h1:c67qKN6Oum3UF5Q1+BByfFxkwKvhwW57ITjqwtzR1KE=
 github.com/casbin/casbin/v2 v2.37.0/go.mod h1:vByNa/Fchek0KZUgG5wEsl7iFsiviAYKRtgrQfcJqHg=
+github.com/casbin/govaluate v1.3.0 h1:VA0eSY0M2lA86dYd5kPPuNZMUD9QkWnOCnavGrw9myc=
+github.com/casbin/govaluate v1.3.0/go.mod h1:G/UnbIjZk/0uMNaLwZZmFQrR72tYRZWQkO70si/iR7A=
 github.com/cenkalti/backoff v2.2.1+incompatible h1:tNowT99t7UNflLxfYYSlKYsBpXdEet03Pg2g16Swow4=
 github.com/cenkalti/backoff v2.2.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=
 github.com/cenkalti/backoff/v4 v4.1.1/go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
@@ -1010,8 +1013,6 @@ github.com/golang/mock v1.4.3/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt
 github.com/golang/mock v1.4.4/go.mod h1:l3mdAwkq5BuhzHwde/uurv3sEJeZMXNpwsxVWU71h+4=
 github.com/golang/mock v1.5.0/go.mod h1:CWnOUgYIOo4TcNZ0wHX3YZCqsaM1I1Jvs6v3mP3KVu8=
 github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
-github.com/golang/mock v1.7.0-rc.1 h1:YojYx61/OLFsiv6Rw1Z96LpldJIy31o+UHmwAUMJ6/U=
-github.com/golang/mock v1.7.0-rc.1/go.mod h1:s42URUywIqd+OcERslBJvOjepvNymP31m3q8d/GkuRs=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.2/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
@@ -1178,8 +1179,8 @@ github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 h1:2VTzZjLZBgl62/EtslC
 github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542/go.mod h1:Ow0tF8D4Kplbc8s8sSb3V2oUCygFHVp8gC3Dn6U4MNI=
 github.com/hanzoai/ai v1.800.9 h1:41PlVftSE3EgX1bqBS9rrjTi4HzfsvbO0t8xPMUcU+U=
 github.com/hanzoai/ai v1.800.9/go.mod h1:U77IrFwMclCkbcRPSCzIkHxpwj4BrFYJW7wcaRRAKGw=
-github.com/hanzoai/authz v1.10.3 h1:ikBLkpwrgssXv6SPviIS28YQEmwcLG+hdRPioSGuRRw=
-github.com/hanzoai/authz v1.10.3/go.mod h1:EGzev/cAcAQsP4w2R2PvhTuvru8o/XHTRw4I9KrftfQ=
+github.com/hanzoai/authz v1.10.4 h1:sDAr5pnGakkFV8klY/aKHwWGROpFTS/xvSos0xr4NYs=
+github.com/hanzoai/authz v1.10.4/go.mod h1:9wf6n6BvrvxRULUtL3yc+vmprwwvAGZLGJoMHhiQSK4=
 github.com/hanzoai/authzstore v0.1.1 h1:4GsvB+bKs+gFtfKDMoYq/C7KxJAHrXLwtwdSutTakbo=
 github.com/hanzoai/authzstore v0.1.1/go.mod h1:ZpiA4r7yoCC/4WO9CcsDezcYVVv40AmH8qoQSrBNtLo=
 github.com/hanzoai/base v1.4.6 h1:u52xLTpLnJTzIc6tUdFRnI1KMYKchDfTVaWAfNe8uSo=
@@ -1214,8 +1215,8 @@ github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1 h1:uQGUlQsmBvZmfU
 github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1/go.mod h1:zJr4NZygb2gyqkQpZ2Yf/UzbOhIhVfLCj8ST925KPrI=
 github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUjXU=
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
-github.com/hanzoai/iam v1.28.12 h1:2xDTt4/iEMcG5icLyIFeni4/bjbvwEr3ssXMUqSwK+g=
-github.com/hanzoai/iam v1.28.12/go.mod h1:8Ac8sdfQwDbqTN109JrLlXFTknzQJSS2fapoFygb0nU=
+github.com/hanzoai/iam v1.31.16 h1:qn4nUg4CamziRwT5XVUsomVz+g1WYfCvUi79bG5BQTk=
+github.com/hanzoai/iam v1.31.16/go.mod h1:Vibg782d6rjtW2I54TthLIHliEk5Peeowa82idvnz3E=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
 github.com/hanzoai/iamsdk/v2 v2.1.2/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.3 h1:x4v5VjCv8onxLsWRSOrRifxLdYEvYBQjYzgnv1NNeKg=
@@ -1258,10 +1259,6 @@ github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5
 github.com/hanzoai/storage-go v1.0.0/go.mod h1:IPXouQWTki5LKa9Y3qfOr6o8Qwlmc4sGObJnGMNKCOM=
 github.com/hanzoai/tasks v1.49.0 h1:M/Sp5XKhIgzRhBYsJdkr9dgsGIWPDfD1CfFpIUGGbUU=
 github.com/hanzoai/tasks v1.49.0/go.mod h1:DfBjEr4ONXo3W2GAmJQd2qwP0zAccD705PxC4xj1KOU=
-github.com/hanzoai/vfs v0.4.4 h1:XYkNPmpKcTiarTw/nG5p7aI38AmmYRNZkucwAj0GQBg=
-github.com/hanzoai/vfs v0.4.4/go.mod h1:efMt/hQsAl2U2MboFrvpSPQ50DaPjO5eAy5xU+/kXfs=
-github.com/hanzoai/vfs v0.6.1 h1:OU3WZNVu//M0UAjt9nygKZiCrWd/W7A4htcMfb/u244=
-github.com/hanzoai/vfs v0.6.1/go.mod h1:NyQJ+POT174+iJj6fxncG748FjMgUfaVpSgaH00vOMU=
 github.com/hanzoai/vfs v0.6.2 h1:eTAIYbTpa6Twj+NRnGAtT4EBXL3aCP6CHOLm6uHoEmw=
 github.com/hanzoai/vfs v0.6.2/go.mod h1:NyQJ+POT174+iJj6fxncG748FjMgUfaVpSgaH00vOMU=
 github.com/hanzoai/xorm v1.1.6 h1:z8B3alP39taTGLA4BonBa+7RHIOMmjYjxF3N9gpzh84=
@@ -1574,8 +1571,6 @@ github.com/luxfi/accel v1.2.4 h1:5VbIHyEvvfobn2zBiTFODxDw1CeqxCepZOLlvkuf9yQ=
 github.com/luxfi/accel v1.2.4/go.mod h1:ISIwAX+ZfsL/S5nsP2JvfldXN6Nc+QzoWf6Jtaq+xsQ=
 github.com/luxfi/address v1.0.1 h1:Sc4keyuVzBIvHr7uVeYZf2/WY9YDGUgDi/iiWenj49g=
 github.com/luxfi/address v1.0.1/go.mod h1:5j3Eh66v9zvv1GbNdZwt+23krV8JlSDaRzmWZU8ZRM0=
-github.com/luxfi/age v1.5.1 h1:Gj8iHMMi0lGkKT/mlXV2HVBr2m3vt2v0eKVsTMTtAQM=
-github.com/luxfi/age v1.5.1/go.mod h1:iAYAxgvrXxcy746+Ovh/eWWDuF9teJLNcCSSOX9RYW0=
 github.com/luxfi/age v1.6.0 h1:KMD8gSOP4NVCb7NWSlRcgBZNV2xm2a+qQWPyPmiX6f4=
 github.com/luxfi/age v1.6.0/go.mod h1:7cu9CIyikgyAvr5MlXFapEDQ15yBaHOSdKkK5lG04WE=
 github.com/luxfi/atomic v1.0.0 h1:xUV60MuzRvXngaQ1sM0yVC2v4TRoLlUGkkH7M9PS4yw=
