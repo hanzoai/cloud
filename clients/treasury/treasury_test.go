@@ -37,11 +37,11 @@ func mount(t *testing.T) (*zip.App, *svc) {
 	app := zip.New(zip.Config{Logger: log})
 	app.Get("/v1/finance/treasury", s.myTreasury)
 	app.Get("/v1/finance/accounts", s.myAccounts)
-	app.Get("/v1/admin/finance", s.adminReport)
-	app.Post("/v1/admin/finance/policy", s.adminSetPolicy)
-	app.Post("/v1/admin/finance/sweep", s.adminSweep)
-	app.Post("/v1/admin/finance/seed", s.adminSeed)
-	app.Post("/v1/admin/finance/anchor", s.adminAnchor)
+	app.Get("/v1/admin/treasury", s.adminReport)
+	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)
+	app.Post("/v1/admin/treasury/sweep", s.adminSweep)
+	app.Post("/v1/admin/treasury/seed", s.adminSeed)
+	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)
 	return app, s
 }
 
@@ -107,11 +107,11 @@ func TestAdmin_RequiresAdmin(t *testing.T) {
 	for _, p := range []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/admin/finance"},
-		{http.MethodPost, "/v1/admin/finance/policy"},
-		{http.MethodPost, "/v1/admin/finance/sweep"},
-		{http.MethodPost, "/v1/admin/finance/seed"},
-		{http.MethodPost, "/v1/admin/finance/anchor"},
+		{http.MethodGet, "/v1/admin/treasury"},
+		{http.MethodPost, "/v1/admin/treasury/policy"},
+		{http.MethodPost, "/v1/admin/treasury/sweep"},
+		{http.MethodPost, "/v1/admin/treasury/seed"},
+		{http.MethodPost, "/v1/admin/treasury/anchor"},
 	} {
 		// A non-admin org caller must be refused.
 		if code, _ := req(t, app, p.method, p.path, "acme", false, map[string]any{}); code != http.StatusForbidden {
@@ -124,7 +124,7 @@ func TestAdmin_RequiresAdmin(t *testing.T) {
 
 func TestPolicy_SetAndRead(t *testing.T) {
 	app, _ := mount(t)
-	code, body := req(t, app, http.MethodPost, "/v1/admin/finance/policy", "root", true, policyRequest{RevenueShareBps: 500})
+	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 500})
 	if code != http.StatusOK {
 		t.Fatalf("set policy = %d (%s)", code, body)
 	}
@@ -141,7 +141,7 @@ func TestPolicy_SetAndRead(t *testing.T) {
 
 func TestSeed_FundsReserve(t *testing.T) {
 	app, s := mount(t)
-	code, body := req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 10_000, Memo: "bootstrap"})
+	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 10_000, Memo: "bootstrap"})
 	if code != http.StatusOK {
 		t.Fatalf("seed = %d (%s)", code, body)
 	}
@@ -153,15 +153,15 @@ func TestSeed_FundsReserve(t *testing.T) {
 func TestSweep_AccruesRevenueShare_Idempotent(t *testing.T) {
 	app, s := mount(t)
 	// 10% policy.
-	req(t, app, http.MethodPost, "/v1/admin/finance/policy", "root", true, policyRequest{RevenueShareBps: 1000})
+	req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 1000})
 	// Sweep $2000 revenue for 2026-07 → $200 accrual.
-	_, body := req(t, app, http.MethodPost, "/v1/admin/finance/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	_, body := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
 	d := unwrap(t, body)
 	if d["accruedCents"].(float64) != 20_000 {
 		t.Fatalf("accrued = %v, want 20000", d["accruedCents"])
 	}
 	// Re-sweep the SAME period → no double accrual.
-	_, body2 := req(t, app, http.MethodPost, "/v1/admin/finance/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	_, body2 := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
 	d2 := unwrap(t, body2)
 	if d2["created"].(bool) {
 		t.Fatal("re-sweep same period must be idempotent (created=false)")
@@ -173,8 +173,8 @@ func TestSweep_AccruesRevenueShare_Idempotent(t *testing.T) {
 
 func TestAdminReport_Shape(t *testing.T) {
 	app, _ := mount(t)
-	req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 5_000})
-	_, body := req(t, app, http.MethodGet, "/v1/admin/finance", "root", true, nil)
+	req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 5_000})
+	_, body := req(t, app, http.MethodGet, "/v1/admin/treasury", "root", true, nil)
 	d := unwrap(t, body)
 	if _, ok := d["report"]; !ok {
 		t.Fatal("report missing")
@@ -202,7 +202,7 @@ func TestAdminReport_Shape(t *testing.T) {
 
 func TestAccounts_ScopeIsolation(t *testing.T) {
 	app, _ := mount(t)
-	req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 5_000})
+	req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 5_000})
 
 	// A per-org caller sees ONLY its own tenant prefix (empty here — honest) and
 	// NEVER the house fund:reserve account.
