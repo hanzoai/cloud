@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/commerce/metering"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // recCommerce answers the metering client's balance + usage calls and records,
@@ -99,7 +99,7 @@ func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
 		t.Fatalf("Gate(funded) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "acme" {
@@ -112,7 +112,7 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "sql", 100); err != metering.ErrInsufficientBalance {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != metering.ErrInsufficientBalance {
 		t.Fatalf("Gate(zero balance) = %v, want ErrInsufficientBalance", err)
 	}
 }
@@ -123,7 +123,7 @@ func TestResourceMeter_GateFreeKindNoCommerceCall(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "sql", 0); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 0); err != nil {
 		t.Fatalf("Gate(free kind) = %v, want nil", err)
 	}
 	if n := fc.balances(); n != 0 {
@@ -138,7 +138,7 @@ func TestResourceMeter_GateFailClosedOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	err := rm.Gate(t.Context(), "acme", "sql", 100)
+	err := rm.Gate(t.Context(), "acme", "", "sql", 100)
 	if err == nil {
 		t.Fatal("Gate(commerce 5xx, fail-closed) = nil, want a deny error (no free provisioning on outage)")
 	}
@@ -152,7 +152,7 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", true /* fail-open */)
 
-	if err := rm.Gate(t.Context(), "acme", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
 		t.Fatalf("Gate(commerce 5xx, fail-open) = %v, want nil", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	rm.Meter("acme", "sql", 250, "req-1", "203.0.113.7")
+	rm.Meter("acme", "", "sql", 250, "req-1", "203.0.113.7")
 
 	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
 		t.Fatalf("usage records = %d, want 1 (Meter must debit on success)", fc.usages())
@@ -198,7 +198,7 @@ func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "globex", "vector", 100); err != nil {
+	if err := rm.Gate(t.Context(), "globex", "", "vector", 100); err != nil {
 		t.Fatalf("Gate(globex) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "globex" {
@@ -212,7 +212,7 @@ func TestResourceMeter_EnvNeverBypassesGate(t *testing.T) {
 	for _, env := range []string{"testnet", "devnet"} {
 		fc := &recCommerce{balanceAvailable: 0}
 		rm := meterFor(t, fc.server(t).URL, env, false)
-		if err := rm.Gate(t.Context(), "acme", "sql", 100); err != metering.ErrInsufficientBalance {
+		if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != metering.ErrInsufficientBalance {
 			t.Fatalf("env=%s: Gate(zero) = %v, want ErrInsufficientBalance (test/dev must still bill)", env, err)
 		}
 	}
@@ -226,10 +226,10 @@ func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
 		t.Fatalf("Gate(unconfigured) = %v, want nil (no-op)", err)
 	}
-	rm.Meter("acme", "sql", 100, "r", "") // must not panic
+	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
 }
 
 // A nil ResourceMeter and a meter with a nil client are safe no-ops (defensive:
@@ -239,16 +239,16 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("nil ResourceMeter must report !Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
 		t.Fatalf("nil Gate = %v, want nil", err)
 	}
-	rm.Meter("acme", "sql", 100, "r", "") // must not panic
+	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
 
 	rm2 := NewResourceMeter(Deps{Logger: luxlog.New("test")}, "provisioning") // nil metering
 	if rm2.Enabled() {
 		t.Fatal("ResourceMeter with nil client must report !Enabled()")
 	}
-	if err := rm2.Gate(t.Context(), "acme", "sql", 100); err != nil {
+	if err := rm2.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
 		t.Fatalf("nil-client Gate = %v, want nil", err)
 	}
 }
