@@ -3,6 +3,7 @@ package org
 import (
 	"context"
 	"fmt"
+	"github.com/hanzoai/vfs/replica"
 )
 
 // vfsClient is the subset of hanzoai/vfs (deps.VFS / types.VFSClient) the store
@@ -37,7 +38,7 @@ func (s *vfsStore) Get(ctx context.Context, key string) ([]byte, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
-	return data, version(data), nil
+	return data, replica.Version(data), nil
 }
 
 func (s *vfsStore) Version(ctx context.Context, key string) (string, error) {
@@ -48,5 +49,5 @@ func (s *vfsStore) Version(ctx context.Context, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return version(data), nil
+	return replica.Version(data), nil
 }
