@@ -215,20 +215,58 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 
 // ── customer surface ─────────────────────────────────────────────────────────
 
+// treasurySummary is the GET /v1/finance/treasury shape the finance UI consumes
+// (@hanzo/finance-ui TreasurySummary): the backed reserve, the portion committed to
+// pending payouts, the free balance, and the Hanzo L1 anchor. USD cents throughout.
+// Policy (the revenue-share backing the payouts) rides along as the documented
+// transparency extra — the finance normalizer reads only its own fields and ignores it.
+type treasurySummary struct {
+	Currency       string          `json:"currency"`
+	ReserveCents   int64           `json:"reserveCents"`
+	CommittedCents int64           `json:"committedCents"`
+	AvailableCents int64           `json:"availableCents"`
+	Anchor         *treasuryAnchor `json:"anchor,omitempty"`
+	Policy         ledger.Policy   `json:"policy"`
+}
+
+// treasuryAnchor is the on-chain anchor sub-view: the chain the reserve root is
+// committed to and, once committed, the last anchored block + time.
+type treasuryAnchor struct {
+	ChainID    int64  `json:"chainId"`
+	Address    string `json:"address,omitempty"`
+	Block      uint64 `json:"block,omitempty"`
+	AnchoredAt string `json:"anchoredAt,omitempty"`
+}
+
 // myTreasury answers GET /v1/finance/treasury for any validated caller: the
-// reserve-fund health + the revenue-share policy. This is a TRANSPARENCY view — a
-// partner/author can see the pool that backs their payouts is solvent — not per-org
-// money (that is the customer's commerce balance at /v1/billing/balance). Policy is
-// read-only here; only global-admin sets it.
+// reserve-fund health projected into the finance TreasurySummary shape. This is a
+// TRANSPARENCY view — a partner/author can see the pool that backs their payouts is
+// solvent — not per-org money (that is the customer's commerce balance at
+// /v1/finance/balance). The reserve is available-now (ReserveCents = Accrued − Paid),
+// so committed is an honest 0 and available == reserve until a pending-payout hold
+// concept exists. The anchor is the honest on-chain status (never a fabricated block).
 func (s *svc) myTreasury(c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
 	}
-	rep, err := s.record.Snapshot(c.Context())
+	ctx := c.Context()
+	rep, err := s.record.Snapshot(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	return c.JSON(http.StatusOK, rep)
+	st := s.anchor.status(ctx, s.record)
+	anchor := &treasuryAnchor{ChainID: st.ChainID, Address: st.Contract, Block: st.LastBlock}
+	if st.LastAt > 0 {
+		anchor.AnchoredAt = time.Unix(st.LastAt, 0).UTC().Format(time.RFC3339)
+	}
+	return c.JSON(http.StatusOK, treasurySummary{
+		Currency:       "usd",
+		ReserveCents:   rep.ReserveCents,
+		CommittedCents: 0,
+		AvailableCents: rep.ReserveCents,
+		Anchor:         anchor,
+		Policy:         rep.Policy,
+	})
 }
 
 // accountView is one row of the scope-aware accounts read.
