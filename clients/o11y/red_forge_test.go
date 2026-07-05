@@ -56,3 +56,48 @@ func TestRed_O11yProxyGatesForgedOrgNoPrincipal(t *testing.T) {
 		t.Fatal("validated request did not reach the o11y runtime — gate is over-blocking legitimate callers")
 	}
 }
+
+// Health/liveness endpoints carry no tenant data and the o11y runtime serves them
+// without identity (that is how the k8s pod probes pass). The gate MUST let them
+// through unauthenticated so the admin System Health probe (CLOUD_O11Y_HEALTH_URL)
+// and the external o11y.* hosts keep working after the embed serves in-process —
+// while still blocking unauthenticated DATA routes.
+func TestGateExemptsHealthPathsButGatesData(t *testing.T) {
+	var reached atomic.Bool
+	backend := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Store(true)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	})
+	gated := gate(backend)
+
+	// Health under the /v1/o11y external prefix, NO principal → must pass (200).
+	for _, p := range []string{
+		"/v1/o11y/api/v1/health",
+		"/v1/o11y/api/v2/livez",
+		"/v1/o11y/api/v2/readyz",
+	} {
+		reached.Store(false)
+		req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai"+p, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("unauth health %s = HTTP %d, want 200 (health must bypass the principal gate)", p, rec.Code)
+		}
+		if !reached.Load() {
+			t.Fatalf("unauth health %s did not reach the runtime — gate over-blocking health", p)
+		}
+	}
+
+	// A data route with NO principal must STILL be gated (403), backend never reached.
+	reached.Store(false)
+	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/o11y/api/v1/query_range", nil)
+	rec := httptest.NewRecorder()
+	gated.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unauth data route = HTTP %d, want 403 (data must stay gated)", rec.Code)
+	}
+	if reached.Load() {
+		t.Fatal("unauth data route reached the runtime — health exemption leaked to data paths")
+	}
+}
