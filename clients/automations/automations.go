@@ -675,13 +675,13 @@ func (s *svc) recordRunEnd(ctx context.Context, in RunEndInput) error {
 
 // meterUnit records one metered unit for an HTTP caller's org. Nil/disabled meter → no-op.
 func (s *svc) meterUnit(org string, c *zip.Ctx) {
-	s.bill.Meter(org, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+	s.bill.Meter(org, principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 
 // meterRun records one metered unit for a flow run from the durable path (no HTTP
 // context). Nil/disabled meter → no-op.
 func (s *svc) meterRun(org string) {
-	s.bill.Meter(org, meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+	s.bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
 }
 
 // auditEvent appends one tamper-evident audit record for an HTTP action. result is
