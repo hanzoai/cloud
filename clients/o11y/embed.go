@@ -79,8 +79,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}
-	setenvDefault("O11Y_SQLSTORE_SQLITE_PATH", filepath.Join(dataDir, "o11y.db"))
-	setenvDefault("O11Y_PROMETHEUS_ACTIVE__QUERY__TRACKER_PATH", dataDir)
+	applyEmbedEnvDefaults(dataDir)
 
 	ctx := context.Background()
 
@@ -108,6 +107,25 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 	embeddedRuntime = runtime
 	embeddedServer = server
 	return server.PublicHandler(), nil
+}
+
+// applyEmbedEnvDefaults sets the env the embedded runtime needs but the operator
+// does not have to know about — all overridable (setenvDefault), all safe for
+// cloud's distroless single-process container:
+//
+//   - the sqlite control-plane store and Prometheus active-query tracker are
+//     pinned under cloud's writable data root (the distroless image has no /tmp);
+//   - the runtime's own OTel self-metrics Prometheus pull reader is turned OFF.
+//     Its SigNoz default binds 0.0.0.0:9090, which collides with cloud's health
+//     listener (CLOUD_HEALTH_LISTEN=:9090) and crash-loops the whole process — the
+//     one listener the standalone pod never contended for. Cloud owns process-level
+//     observability (it exports its own OTel telemetry), so activating the embed can
+//     never take cloud down on a :9090 clash. An operator can still re-enable it on
+//     a FREE port by setting the vars explicitly.
+func applyEmbedEnvDefaults(dataDir string) {
+	setenvDefault("O11Y_SQLSTORE_SQLITE_PATH", filepath.Join(dataDir, "o11y.db"))
+	setenvDefault("O11Y_PROMETHEUS_ACTIVE__QUERY__TRACKER_PATH", dataDir)
+	setenvDefault("O11Y_INSTRUMENTATION_METRICS_ENABLED", "false")
 }
 
 // firstNonEmpty returns the first non-empty string, else "".
