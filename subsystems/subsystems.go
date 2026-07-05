@@ -160,6 +160,15 @@ import (
 	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
+	// The native treasury: the platform's OWN double-entry reserve fund, one layer
+	// ABOVE the per-org commerce credit ledger. A revenue-share policy accrues a %
+	// of net platform revenue INTO the fund; the referral/affiliate/author payouts
+	// DEBIT the fund (treasury.Reserve) so every payout is backed by funded capital,
+	// never unbounded minting. The double-entry engine (clients/treasury/ledger) is
+	// store-agnostic and cloud-decoupled — the seed of the native hanzoai/finance
+	// central ledger (the Go replacement for the Formance stack). Order 146 (with the
+	// admin surface); its routes are specific so they bind ahead of the AI catch-all.
+	_ "github.com/hanzoai/cloud/clients/treasury" // order 146 — /v1/finance/* + /v1/admin/finance/* (scope-aware finance engine: reserve fund + backed payouts, native/Formance ledger of record, Hanzo L1 anchored)
 	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/
 	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
 	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
