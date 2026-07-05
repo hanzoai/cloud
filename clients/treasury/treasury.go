@@ -26,15 +26,18 @@
 //
 //	GET  /v1/finance/treasury          (org)          reserve health + policy (the pool backing MY payouts)
 //	GET  /v1/finance/accounts          (org)          MY ledger accounts (admin: ?scope=house | ?org=<t>)
-//	GET  /v1/admin/finance             (global-admin) full report + journal + anchor status
-//	POST /v1/admin/finance/policy      (global-admin) set the revenue-share %
-//	POST /v1/admin/finance/sweep       (global-admin) accrue the revenue-share into the fund for a period
-//	POST /v1/admin/finance/seed        (global-admin) inject bootstrap capital into the fund
-//	POST /v1/admin/finance/anchor      (global-admin) anchor the ledger root on Hanzo L1
+//	GET  /v1/admin/treasury            (global-admin) full report + journal + anchor status
+//	POST /v1/admin/treasury/policy     (global-admin) set the revenue-share %
+//	POST /v1/admin/treasury/sweep      (global-admin) accrue the revenue-share into the fund for a period
+//	POST /v1/admin/treasury/seed       (global-admin) inject bootstrap capital into the fund
+//	POST /v1/admin/treasury/anchor     (global-admin) anchor the ledger root on Hanzo L1
 //
 // The three surfaces (admin.hanzo.ai global-admin, console.hanzo.ai per-org customer,
 // finance.hanzo.ai per-org operator) are the SAME engine projected by IAM scope. A
 // separate frontend agent builds the console + finance surfaces against this contract.
+// The reserve-fund admin board is the `treasury` admin head (distinct from the
+// existing /v1/admin/finance COGS/margin god-view in clients/admin — they compose,
+// never collide).
 //
 // serve.go auto-registers GET /v1/finance/health.
 package treasury
@@ -79,7 +82,7 @@ type svc struct {
 	record     ledger.Backend  // the ledger of record — native (default) or Formance
 	log        luxlog.Logger
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
-	anchor     *anchorer        // Hanzo L1 anchor (Phase 2); nil-safe
+	anchor     *anchorer       // Hanzo L1 anchor (Phase 2); nil-safe
 }
 
 // mounted is the process singleton the Reserve helper resolves. Set at Mount; nil
@@ -130,15 +133,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
 	// their own accounts; the reserve fund + revenue-share + house mutations are
-	// locked to global-admin under /v1/admin/finance/* (the console admin-proxy
+	// locked to global-admin under /v1/admin/treasury* (the console admin-proxy
 	// convention, enveloped).
-	app.Get("/v1/finance/treasury", s.myTreasury)          // per-org: reserve transparency + policy
-	app.Get("/v1/finance/accounts", s.myAccounts)          // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	app.Get("/v1/admin/finance", s.adminReport)            // global-admin: report + journal + anchor
-	app.Post("/v1/admin/finance/policy", s.adminSetPolicy) // global-admin: set revenue-share %
-	app.Post("/v1/admin/finance/sweep", s.adminSweep)      // global-admin: accrue revenue-share
-	app.Post("/v1/admin/finance/seed", s.adminSeed)        // global-admin: inject reserve capital
-	app.Post("/v1/admin/finance/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
+	app.Get("/v1/finance/treasury", s.myTreasury)           // per-org: reserve transparency + policy
+	app.Get("/v1/finance/accounts", s.myAccounts)           // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	app.Get("/v1/admin/treasury", s.adminReport)            // global-admin: report + journal + anchor
+	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy) // global-admin: set revenue-share %
+	app.Post("/v1/admin/treasury/sweep", s.adminSweep)      // global-admin: accrue revenue-share
+	app.Post("/v1/admin/treasury/seed", s.adminSeed)        // global-admin: inject reserve capital
+	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
 	return nil
@@ -149,7 +152,7 @@ func init() {
 	// growth loops (referrals 149 etc. are LATER, but ordering is irrelevant: the
 	// loops call treasury.Reserve at REQUEST time, long after every Mount ran, so
 	// the mounted singleton is always set). Routes are specific (/v1/finance/*,
-	// /v1/admin/finance/*) so they bind ahead of the AI /v1/* catch-all (150).
+	// /v1/admin/treasury*) so they bind ahead of the AI /v1/* catch-all (150).
 	cloud.RegisterWithShutdown("treasury", 146, func(app any, deps cloud.Deps) error {
 		a, ok := app.(*zip.App)
 		if !ok {
@@ -280,7 +283,7 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 
 // ── admin surface (global-admin, fail-closed) ────────────────────────────────
 
-// adminReport answers GET /v1/admin/finance — the full fund report, the recent
+// adminReport answers GET /v1/admin/treasury — the full fund report, the recent
 // journal (double-entry postings), and the Hanzo L1 anchor status. Global-admin only.
 func (s *svc) adminReport(c *zip.Ctx) error {
 	if !c.IsAdmin() {
@@ -302,7 +305,7 @@ func (s *svc) adminReport(c *zip.Ctx) error {
 	})
 }
 
-// policyRequest is the POST /v1/admin/finance/policy body.
+// policyRequest is the POST /v1/admin/treasury/policy body.
 type policyRequest struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 }
@@ -324,7 +327,7 @@ func (s *svc) adminSetPolicy(c *zip.Ctx) error {
 	return adminOK(c, map[string]any{"policy": pol})
 }
 
-// sweepRequest is the POST /v1/admin/finance/sweep body. RevenueCents is the net
+// sweepRequest is the POST /v1/admin/treasury/sweep body. RevenueCents is the net
 // platform revenue MEASURED for the period (the caller — a cron or an operator —
 // supplies it from the revenue view; treasury does the accounting, not the metering,
 // keeping the concerns orthogonal). Period defaults to the current UTC month.
@@ -369,7 +372,7 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 	})
 }
 
-// seedRequest is the POST /v1/admin/finance/seed body — a bootstrap capital
+// seedRequest is the POST /v1/admin/treasury/seed body — a bootstrap capital
 // injection into the reserve fund. Ref (optional) is an idempotency key; without one
 // each seed is a distinct injection.
 type seedRequest struct {
