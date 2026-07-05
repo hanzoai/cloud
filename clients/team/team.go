@@ -172,6 +172,11 @@ func loadConfig(deps cloud.Deps) config {
 		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
 		transactor:      strings.TrimRight(os.Getenv("TRANSACTOR_URL"), "/"),
 		provider:        "openid",
+		// Public origin for the OAuth redirect_uri behind the gateway (so cloud can
+		// sit behind the gateway uniformly like api.hanzo.ai and still emit the
+		// correct public callback). TEAM_PUBLIC_URL preferred; PUBLIC_ORIGIN is the
+		// shared fallback name. Unset → derive from the request Host (no regression).
+		publicURL: strings.TrimRight(firstNonEmpty(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 	}
 }
 
