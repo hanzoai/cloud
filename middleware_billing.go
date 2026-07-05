@@ -18,6 +18,7 @@ package cloud
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/principal"
@@ -67,10 +68,27 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 		}
 
 		in := identityFromCtx(c)
+		// Gate on the actual request price, so the balance check is
+		// available>=price (not merely >0) AND the per-scope spend cap is
+		// measured against this request's cost — the anti-overshoot property the
+		// resource meter already has.
+		in.AmountCents = cents
 
-		// Pre-request gate. Authorize encodes fail-open/closed internally.
-		if err := m.Authorize(c.Context(), in); err != nil {
-			return denyBilling(c, err)
+		// Pre-request gate. AuthorizeVerdict encodes fail-open/closed internally
+		// and returns the spend-cap verdict + soft-warn utilization in ONE round
+		// trip.
+		v, err := m.AuthorizeVerdict(c.Context(), in)
+		if err != nil {
+			// Balance unknown -> fail-closed -> 503.
+			return denyUnavailable(c)
+		}
+		if !v.Allow {
+			return denyVerdict(c, v, in)
+		}
+		// At/over a covering cap's soft threshold: signal the client but let the
+		// request through (the request still succeeds).
+		if v.WarnPct > 0 {
+			c.SetHeader("X-Spend-Warn", strconv.Itoa(v.WarnPct))
 		}
 
 		if err := c.Next(); err != nil {
@@ -90,6 +108,8 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 			Currency:    in.Currency,
 			AmountCents: cents,
 			Provider:    meteringProvider,
+			Project:     in.Project, // scope attribution → the per-scope cap sums over it.
+			Service:     in.Service,
 			RequestID:   c.RequestID(),
 			Status:      "success",
 			ClientIP:    clientIP(c),
@@ -99,24 +119,59 @@ func BillingGate(m *metering.Client, price func(c *zip.Ctx) int64) zip.Handler {
 	}
 }
 
-// denyBilling renders the two denial shapes, matching the metering middleware's
-// net/http defaults so every Hanzo surface returns an identical error body.
-func denyBilling(c *zip.Ctx, err error) error {
-	if err == metering.ErrInsufficientBalance {
+// denyVerdict renders the edge gate's denial for a non-allow Verdict — the ONE
+// place the edge maps a metering verdict to the frozen HTTP contract:
+//
+//	Reason "spend_cap"           -> 402 spend_cap_exceeded (+ scope/cap/spent detail).
+//	Reason "insufficient_balance"-> 402 insufficient_balance.
+//
+// The spend_cap body carries the scope (project/service) and the cap/spent so the
+// console can show the caller exactly which ceiling stopped them and how far over.
+func denyVerdict(c *zip.Ctx, v metering.Verdict, in metering.AuthInput) error {
+	if v.Reason == "spend_cap" {
 		return c.JSON(402, map[string]any{
-			"error": map[string]string{
-				"code":    "insufficient_balance",
-				"message": "Add credits at console.hanzo.ai",
+			"error": map[string]any{
+				"code": "spend_cap_exceeded",
+				"scope": map[string]string{
+					"project": in.Project,
+					"service": in.Service,
+				},
+				"capCents":   v.CapCents,
+				"spentCents": v.SpentCents,
+				"message":    "Spend cap reached for this scope. Raise it at console.hanzo.ai/limits",
 			},
 		})
 	}
-	// Balance unknown -> fail-closed -> 503.
+	return c.JSON(402, map[string]any{
+		"error": map[string]string{
+			"code":    "insufficient_balance",
+			"message": "Add credits at console.hanzo.ai",
+		},
+	})
+}
+
+// denyUnavailable renders the fail-closed "balance unknown" shape (503), matching
+// the metering middleware's net/http default so every Hanzo surface is identical.
+func denyUnavailable(c *zip.Ctx) error {
 	return c.JSON(503, map[string]any{
 		"error": map[string]string{
 			"code":    "balance_unavailable",
 			"message": "Billing temporarily unavailable",
 		},
 	})
+}
+
+// serviceFromPath derives the SERVER-SIDE service label for a request from its
+// path: the subsystem segment after /v1 (e.g. "/v1/ai/chat" -> "ai"). This is the
+// scope's service axis — derived from the route, NEVER a client field, so a
+// caller can never spoof another service's cap. Empty for non-/v1 paths.
+func serviceFromPath(path string) string {
+	p := strings.TrimPrefix(path, "/")
+	parts := strings.SplitN(p, "/", 3)
+	if len(parts) >= 2 && parts[0] == "v1" {
+		return parts[1]
+	}
+	return ""
 }
 
 // identityFromCtx builds the commerce billing identity from the gateway-minted
@@ -146,7 +201,16 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	if user == "" {
 		user = sub // org-less fallback
 	}
-	return metering.AuthInput{User: user, Org: org}
+	// Scope axes for the per-scope spend cap (issue #70), both SERVER-DERIVED:
+	// project from the validated X-Project-Id (principal.Project narrows only the
+	// caller's OWN org), service from the request path. Never a client field, so a
+	// caller cannot target another scope's cap.
+	return metering.AuthInput{
+		User:    user,
+		Org:     org,
+		Project: principal.Project(c),
+		Service: serviceFromPath(c.Path()),
+	}
 }
 
 // clientIP extracts the originating IP from X-Forwarded-For (the gateway sets

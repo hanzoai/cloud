@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -174,7 +175,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// charge can never target another tenant. fee is computed once and reused by
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
-	if err := s.bill.Gate(c.Context(), org, "invoke", fee); err != nil {
+	if err := s.bill.Gate(c.Context(), org, principal.Project(c), "invoke", fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -212,7 +213,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// best-effort so the debit never blocks or corrupts this response; a debit
 	// failure is logged for reconciliation.
 	if runErr == nil {
-		s.bill.Meter(org, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		s.bill.Meter(org, principal.Project(c), "invoke", fee, c.RequestID(), cloud.ClientIP(c))
 	}
 	code := http.StatusOK
 	if iv.Status != "ok" {
