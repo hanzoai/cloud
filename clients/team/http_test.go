@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -68,6 +69,59 @@ func call(t *testing.T, app *zip.App, method, path string, headers map[string]st
 	defer func() { _ = resp.Body.Close() }()
 	out, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, out
+}
+
+// authStartRedirectURI drives GET /v1/team/account/auth/openid with a chosen
+// request Host and returns the redirect_uri the 302 carries (the OAuth callback
+// cloud asks IAM to bounce back to).
+func authStartRedirectURI(t *testing.T, app *zip.App, host string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "http://"+host+"/v1/team/account/auth/openid", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("authStart Test: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("authStart status = %d, want 302", resp.StatusCode)
+	}
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("bad Location %q: %v", resp.Header.Get("Location"), err)
+	}
+	return loc.Query().Get("redirect_uri")
+}
+
+// TestAuthStartRedirectURIHonorsPublicURL is the v.98 fix: with TEAM_PUBLIC_URL
+// set, the OAuth redirect_uri is the PUBLIC callback REGARDLESS of the request
+// Host — so behind the gateway (Host rewritten to the internal cluster host) cloud
+// still emits the callback IAM accepts, and Dave's login works.
+func TestAuthStartRedirectURIHonorsPublicURL(t *testing.T) {
+	t.Setenv("TEAM_PUBLIC_URL", "https://hanzo.team")
+	app := mountTeam(t)
+	// A request whose Host is the INTERNAL cluster host (what the gateway forwards).
+	got := authStartRedirectURI(t, app, "cloud.hanzo.svc.cluster.local:8000")
+	if want := "https://hanzo.team/v1/team/account/auth/openid/callback"; got != want {
+		t.Fatalf("redirect_uri = %q, want %q (public URL wins, Host ignored)", got, want)
+	}
+}
+
+// TestAuthStartRedirectURIFallsBackToHost proves NO regression when TEAM_PUBLIC_URL
+// is unset: the redirect_uri follows the request Host (originOf) — the direct-route
+// and every other deployment are unchanged.
+func TestAuthStartRedirectURIFallsBackToHost(t *testing.T) {
+	t.Setenv("TEAM_PUBLIC_URL", "")
+	t.Setenv("PUBLIC_ORIGIN", "")
+	app := mountTeam(t)
+	got := authStartRedirectURI(t, app, "hanzo.team")
+	if want := "https://hanzo.team/v1/team/account/auth/openid/callback"; got != want {
+		t.Fatalf("redirect_uri = %q, want %q (follows request Host)", got, want)
+	}
+	// And a DIFFERENT host is reflected verbatim (proves it is host-derived).
+	got2 := authStartRedirectURI(t, app, "cloud.hanzo.svc.cluster.local:8000")
+	if want := "https://cloud.hanzo.svc.cluster.local:8000/v1/team/account/auth/openid/callback"; got2 != want {
+		t.Fatalf("redirect_uri = %q, want %q (host-derived)", got2, want)
+	}
 }
 
 // TestSelectWorkspaceHTTP is the end-to-end account-RPC proof: a bearer-authed
