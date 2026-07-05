@@ -44,6 +44,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/treasury"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -337,6 +338,25 @@ func (s *svc) qualifyAndGrant(ctx context.Context, ref Referral) (Referral, erro
 	if spent <= 0 {
 		return ref, nil // not qualified yet — the referee hasn't used the product
 	}
+
+	// BACK the bonus against the platform reserve fund BEFORE latching: the combined
+	// bonus ($15) debits fund:reserve (double-entry fund→payout:referral), idempotent
+	// by the referral id. Not backed → the fund is empty; leave the referral pending
+	// (honest, retried on the next sweep/qualify check) rather than mint unbacked
+	// credit. Idempotent by ref, so a concurrent qualify + the latch below can never
+	// double-charge the fund. Unmounted treasury → passthrough (backed=true).
+	backed, entryID, berr := treasury.Reserve(ctx, treasury.ProgramReferral, "referral:"+ref.ID,
+		fmt.Sprintf("Referral bonus: %s qualified (code %s)", ref.RefereeOrg, ref.Code),
+		referrerBonusCents+refereeBonusCents)
+	if berr != nil {
+		return ref, fmt.Errorf("reserve referral bonus: %w", berr) // stays pending, retried
+	}
+	if !backed {
+		s.log.Warn("referrals: bonus deferred — treasury reserve insufficient",
+			"id", ref.ID, "neededCents", referrerBonusCents+refereeBonusCents)
+		return ref, nil // honestly pending until the fund is replenished
+	}
+	_ = entryID // the fund debit is linked to this referral by its ref (referral:<id>)
 
 	won, err := s.store.LatchCredit(ctx, ref.ID, referrerBonusCents, refereeBonusCents, time.Now().Unix())
 	if err != nil {
