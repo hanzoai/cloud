@@ -3,15 +3,22 @@ package team
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 )
+
+// guardFn wraps a route handler so it fails closed (503) in degraded mode. It is
+// applied per-route by Mount so the enforcement lives in ONE place and the health
+// probe is never wrapped.
+type guardFn = func(zip.Handler) zip.Handler
 
 // svc is the mounted team subsystem: the two stores + the wired config. Held so
 // Shutdown can release the DB handles and the roster hub.
@@ -55,6 +62,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	cfg := loadConfig(deps)
+
+	// Fail-closed HS256 posture (Red CRITICAL). When SERVER_SECRET is unset/default
+	// (and no dev escape hatch), the subsystem serves HEALTH-ONLY: every /v1/team
+	// route is guarded to 503 and NO token is ever decoded/accepted, so a forged
+	// token cannot be used — while Mount still SUCCEEDS so the cloud binary and all
+	// other subsystems stay up (mirrors clients/kmssvc; erroring here would fail the
+	// whole MountAll). /v1/team/health (serve.go's uniform contract) is unaffected.
+	degraded := resolveSecret(&cfg, log)
+
+	// guard wraps a handler so it 503s in degraded mode. Applied per-route (NEVER to
+	// /v1/team/health, which serve.go owns at the root) so the liveness probe is
+	// never degraded — a group/prefix middleware would risk catching health.
+	guard := func(h zip.Handler) zip.Handler {
+		if !degraded {
+			return h
+		}
+		return func(c *zip.Ctx) error {
+			return zip.Errorf(http.StatusServiceUnavailable, "team: signing secret not configured")
+		}
+	}
+
 	trans := &transServer{
 		store:    newStore(filepath.Join(root, "workspaces")),
 		hier:     buildHierarchy(modelJSON),
@@ -68,17 +96,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	live = trans
 
 	acct := &api{accounts: accounts, trans: trans, cfg: cfg, log: log}
-	acct.register(app)
+	acct.register(app, guard)
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
 	// path segment — no slashes), decoded + VERIFIED before the upgrade.
-	app.Get("/v1/team/transactor/:token", trans.serveWS)
+	app.Get("/v1/team/transactor/:token", guard(trans.serveWS))
 
 	bridge := &botsBridge{trans: trans, accounts: accounts}
-	bridge.register(app)
+	bridge.register(app, guard)
+
+	// Files plane: the workspace blob store the Huly front's UPLOAD_URL/FILES_URL
+	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
+	// verified session token — the SAME isolation invariant as the docs store.
+	fsvc := &filesSvc{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
+	fsvc.register(app, guard)
 
 	mounted = &svc{accounts: accounts, trans: trans}
-	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint)
+	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil
 }
 
@@ -115,26 +149,62 @@ func Shutdown() error {
 }
 
 // loadConfig resolves the team config from deps + KMS-synced env. Secrets
-// (IAM_CLIENT_SECRET, SERVER_SECRET) come from env values the operator syncs from
-// KMS — never plaintext in code, never a git-committed value.
+// (TEAM_IAM_CLIENT_SECRET, SERVER_SECRET) come from env values the operator syncs
+// from KMS — never plaintext in code, never a git-committed value.
+//
+// The IAM OAuth client is TEAM-NAMESPACED (TEAM_IAM_CLIENT_ID / _SECRET, default
+// client id "hanzo-team"), NOT the generic IAM_CLIENT_ID: in the unified cloud
+// binary IAM_CLIENT_ID=hanzo-cloud is cloud's OWN confidential client, whose
+// registered redirect URIs are console/cloud — not hanzo.team. team's account flow
+// needs the hanzo-team app (whose redirect URIs include the team callback), so
+// reading the generic id would break Dave's login at cutover.
+//
+// serverSecret is read RAW here (no default); Mount decides degrade-vs-dev so a
+// missing/default HS256 secret fails closed rather than silently signing tokens
+// with a public literal.
 func loadConfig(deps cloud.Deps) config {
 	return config{
 		iamEndpoint:     firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
-		iamClientID:     os.Getenv("IAM_CLIENT_ID"),
-		iamClientSecret: os.Getenv("IAM_CLIENT_SECRET"),
-		iamOrg:          firstNonEmpty(os.Getenv("IAM_ORG"), deps.Brand, "hanzo"),
-		serverSecret:    env("SERVER_SECRET", token.DefaultSecret),
+		iamClientID:     firstNonEmpty(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
+		iamClientSecret: os.Getenv("TEAM_IAM_CLIENT_SECRET"),
+		iamOrg:          firstNonEmpty(os.Getenv("IAM_ORG"), "hanzo"),
+		serverSecret:    os.Getenv("SERVER_SECRET"),
 		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
 		transactor:      strings.TrimRight(os.Getenv("TRANSACTOR_URL"), "/"),
 		provider:        "openid",
+		// Public origin for the OAuth redirect_uri behind the gateway (so cloud can
+		// sit behind the gateway uniformly like api.hanzo.ai and still emit the
+		// correct public callback). TEAM_PUBLIC_URL preferred; PUBLIC_ORIGIN is the
+		// shared fallback name. Unset → derive from the request Host (no regression).
+		publicURL: strings.TrimRight(firstNonEmpty(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 	}
 }
 
 // env returns the value of key, or fallback when unset. The ONE env helper for the
-// package (used by the docs store, the config loader).
+// package (used by the docs store).
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
 	return fallback
+}
+
+// resolveSecret decides the HS256 signing posture from the RAW SERVER_SECRET env.
+// It returns degraded=true (fail-closed, health-only) when the secret is unset or
+// the public DefaultSecret literal AND the TEAM_DEV_INSECURE=1 escape hatch is not
+// set — so no production path ever signs/verifies a team token with a known key
+// (which would let a forged {extra.org, workspace} token read+write ANY tenant's
+// docs). With the dev escape hatch it runs functional on the default secret,
+// loudly. It mutates cfg.serverSecret to the concrete signing key for the dev case.
+func resolveSecret(cfg *config, log luxlog.Logger) (degraded bool) {
+	if cfg.serverSecret != "" && cfg.serverSecret != token.DefaultSecret {
+		return false // a real, non-default secret — functional and secure
+	}
+	if os.Getenv("TEAM_DEV_INSECURE") == "1" {
+		cfg.serverSecret = token.DefaultSecret
+		log.Warn("team: running on the DEFAULT HS256 signing secret (TEAM_DEV_INSECURE=1) — NEVER in production")
+		return false
+	}
+	log.Error("team: SERVER_SECRET is unset or the public default — subsystem DEGRADED (health-only); every /v1/team route returns 503 until a KMS-synced SERVER_SECRET is provided")
+	return true
 }
