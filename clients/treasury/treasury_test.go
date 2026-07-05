@@ -28,19 +28,20 @@ func mount(t *testing.T) (*zip.App, *svc) {
 	log := luxlog.New("test")
 	s := &svc{
 		store:  store,
-		ledger: ledger.New(store),
+		record: ledger.New(store),
 		log:    log,
 		anchor: newAnchorer(cloud.Deps{}, log),
 	}
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	app.Get("/v1/treasury", s.myTreasury)
-	app.Get("/v1/admin/treasury", s.adminReport)
-	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)
-	app.Post("/v1/admin/treasury/sweep", s.adminSweep)
-	app.Post("/v1/admin/treasury/seed", s.adminSeed)
-	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)
+	app.Get("/v1/finance/treasury", s.myTreasury)
+	app.Get("/v1/finance/accounts", s.myAccounts)
+	app.Get("/v1/admin/finance", s.adminReport)
+	app.Post("/v1/admin/finance/policy", s.adminSetPolicy)
+	app.Post("/v1/admin/finance/sweep", s.adminSweep)
+	app.Post("/v1/admin/finance/seed", s.adminSeed)
+	app.Post("/v1/admin/finance/anchor", s.adminAnchor)
 	return app, s
 }
 
@@ -93,11 +94,11 @@ func unwrap(t *testing.T, body []byte) map[string]any {
 
 func TestTreasury_RequiresAuth(t *testing.T) {
 	app, _ := mount(t)
-	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "", false, nil); code != http.StatusForbidden {
-		t.Fatalf("GET /v1/treasury unauth = %d, want 403", code)
+	if code, _ := req(t, app, http.MethodGet, "/v1/finance/treasury", "", false, nil); code != http.StatusForbidden {
+		t.Fatalf("GET /v1/finance/treasury unauth = %d, want 403", code)
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/treasury", "acme", false, nil); code != http.StatusOK {
-		t.Fatalf("GET /v1/treasury as org = %d, want 200", code)
+	if code, _ := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", false, nil); code != http.StatusOK {
+		t.Fatalf("GET /v1/finance/treasury as org = %d, want 200", code)
 	}
 }
 
@@ -106,11 +107,11 @@ func TestAdmin_RequiresAdmin(t *testing.T) {
 	for _, p := range []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/admin/treasury"},
-		{http.MethodPost, "/v1/admin/treasury/policy"},
-		{http.MethodPost, "/v1/admin/treasury/sweep"},
-		{http.MethodPost, "/v1/admin/treasury/seed"},
-		{http.MethodPost, "/v1/admin/treasury/anchor"},
+		{http.MethodGet, "/v1/admin/finance"},
+		{http.MethodPost, "/v1/admin/finance/policy"},
+		{http.MethodPost, "/v1/admin/finance/sweep"},
+		{http.MethodPost, "/v1/admin/finance/seed"},
+		{http.MethodPost, "/v1/admin/finance/anchor"},
 	} {
 		// A non-admin org caller must be refused.
 		if code, _ := req(t, app, p.method, p.path, "acme", false, map[string]any{}); code != http.StatusForbidden {
@@ -123,12 +124,12 @@ func TestAdmin_RequiresAdmin(t *testing.T) {
 
 func TestPolicy_SetAndRead(t *testing.T) {
 	app, _ := mount(t)
-	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 500})
+	code, body := req(t, app, http.MethodPost, "/v1/admin/finance/policy", "root", true, policyRequest{RevenueShareBps: 500})
 	if code != http.StatusOK {
 		t.Fatalf("set policy = %d (%s)", code, body)
 	}
 	// customer read reflects the policy
-	_, cb := req(t, app, http.MethodGet, "/v1/treasury", "acme", true, nil)
+	_, cb := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", true, nil)
 	var rep ledger.Report
 	if err := json.Unmarshal(cb, &rep); err != nil {
 		t.Fatalf("decode report: %v", err)
@@ -140,11 +141,11 @@ func TestPolicy_SetAndRead(t *testing.T) {
 
 func TestSeed_FundsReserve(t *testing.T) {
 	app, s := mount(t)
-	code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 10_000, Memo: "bootstrap"})
+	code, body := req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 10_000, Memo: "bootstrap"})
 	if code != http.StatusOK {
 		t.Fatalf("seed = %d (%s)", code, body)
 	}
-	if bal, _ := s.ledger.ReserveCents(context.Background()); bal != 10_000 {
+	if bal, _ := s.record.ReserveCents(context.Background()); bal != 10_000 {
 		t.Fatalf("reserve = %d, want 10000", bal)
 	}
 }
@@ -152,28 +153,28 @@ func TestSeed_FundsReserve(t *testing.T) {
 func TestSweep_AccruesRevenueShare_Idempotent(t *testing.T) {
 	app, s := mount(t)
 	// 10% policy.
-	req(t, app, http.MethodPost, "/v1/admin/treasury/policy", "root", true, policyRequest{RevenueShareBps: 1000})
+	req(t, app, http.MethodPost, "/v1/admin/finance/policy", "root", true, policyRequest{RevenueShareBps: 1000})
 	// Sweep $2000 revenue for 2026-07 → $200 accrual.
-	_, body := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	_, body := req(t, app, http.MethodPost, "/v1/admin/finance/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
 	d := unwrap(t, body)
 	if d["accruedCents"].(float64) != 20_000 {
 		t.Fatalf("accrued = %v, want 20000", d["accruedCents"])
 	}
 	// Re-sweep the SAME period → no double accrual.
-	_, body2 := req(t, app, http.MethodPost, "/v1/admin/treasury/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
+	_, body2 := req(t, app, http.MethodPost, "/v1/admin/finance/sweep", "root", true, sweepRequest{Period: "2026-07", RevenueCents: 200_000})
 	d2 := unwrap(t, body2)
 	if d2["created"].(bool) {
 		t.Fatal("re-sweep same period must be idempotent (created=false)")
 	}
-	if bal, _ := s.ledger.ReserveCents(context.Background()); bal != 20_000 {
+	if bal, _ := s.record.ReserveCents(context.Background()); bal != 20_000 {
 		t.Fatalf("reserve double-accrued: %d, want 20000", bal)
 	}
 }
 
 func TestAdminReport_Shape(t *testing.T) {
 	app, _ := mount(t)
-	req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 5_000})
-	_, body := req(t, app, http.MethodGet, "/v1/admin/treasury", "root", true, nil)
+	req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 5_000})
+	_, body := req(t, app, http.MethodGet, "/v1/admin/finance", "root", true, nil)
 	d := unwrap(t, body)
 	if _, ok := d["report"]; !ok {
 		t.Fatal("report missing")
@@ -197,6 +198,56 @@ func TestAdminReport_Shape(t *testing.T) {
 	}
 }
 
+// ── scope-aware accounts (tenant isolation) ──────────────────────────────────
+
+func TestAccounts_ScopeIsolation(t *testing.T) {
+	app, _ := mount(t)
+	req(t, app, http.MethodPost, "/v1/admin/finance/seed", "root", true, seedRequest{AmountCents: 5_000})
+
+	// A per-org caller sees ONLY its own tenant prefix (empty here — honest) and
+	// NEVER the house fund:reserve account.
+	_, body := req(t, app, http.MethodGet, "/v1/finance/accounts", "acme", false, nil)
+	var org struct {
+		Scope    string        `json:"scope"`
+		Tenant   string        `json:"tenant"`
+		Accounts []accountView `json:"accounts"`
+	}
+	if err := json.Unmarshal(body, &org); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if org.Scope != "org" || org.Tenant != "acme" {
+		t.Fatalf("scope/tenant = %q/%q, want org/acme", org.Scope, org.Tenant)
+	}
+	for _, a := range org.Accounts {
+		if a.Address == "fund:reserve" {
+			t.Fatal("per-org caller leaked the house reserve account")
+		}
+	}
+	// Unauth → 403.
+	if code, _ := req(t, app, http.MethodGet, "/v1/finance/accounts", "", false, nil); code != http.StatusForbidden {
+		t.Fatalf("unauth accounts = %d, want 403", code)
+	}
+	// Global-admin ?scope=house sees the seeded reserve.
+	_, hb := req(t, app, http.MethodGet, "/v1/finance/accounts?scope=house", "root", true, nil)
+	var house struct {
+		Scope    string        `json:"scope"`
+		Accounts []accountView `json:"accounts"`
+	}
+	_ = json.Unmarshal(hb, &house)
+	if house.Scope != "house" {
+		t.Fatalf("admin house scope = %q", house.Scope)
+	}
+	var reserve int64
+	for _, a := range house.Accounts {
+		if a.Address == "fund:reserve" {
+			reserve = a.BalanceCents
+		}
+	}
+	if reserve != 5_000 {
+		t.Fatalf("house fund:reserve = %d, want 5000", reserve)
+	}
+}
+
 // ── the Reserve seam (backed payouts) ────────────────────────────────────────
 
 func TestReserve_Passthrough_WhenUnmounted(t *testing.T) {
@@ -211,7 +262,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	_, s := mount(t) // installs mounted
 	ctx := context.Background()
 	// Fund $50 via seed.
-	if _, _, err := s.ledger.Seed(ctx, "seed:test", "cap", 5_000, 1); err != nil {
+	if _, _, err := s.record.Seed(ctx, "seed:test", "cap", 5_000, 1); err != nil {
 		t.Fatal(err)
 	}
 	// Backed: $30 payout debits the fund.
@@ -219,7 +270,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if err != nil || !backed || id == "" {
 		t.Fatalf("backed reserve: backed=%v id=%q err=%v", backed, id, err)
 	}
-	if bal, _ := s.ledger.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("reserve after backed payout = %d, want 2000", bal)
 	}
 	// Blocked: $50 > remaining $20 → not backed, fund intact.
@@ -230,7 +281,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if backed2 {
 		t.Fatal("insufficient reserve must NOT back the payout")
 	}
-	if bal, _ := s.ledger.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("blocked payout altered fund: %d, want 2000", bal)
 	}
 	// Idempotent replay of the backed ref: no second debit.
@@ -238,7 +289,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if err != nil || !backed3 {
 		t.Fatalf("replay: backed=%v err=%v", backed3, err)
 	}
-	if bal, _ := s.ledger.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("replay double-charged fund: %d, want 2000", bal)
 	}
 }
