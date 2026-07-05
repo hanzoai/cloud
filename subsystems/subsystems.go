@@ -137,6 +137,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/agents"    // order 127 — /v1/agents/*
 	_ "github.com/hanzoai/cloud/clients/analytics" // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
 	_ "github.com/hanzoai/cloud/clients/crm"       // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
+	_ "github.com/hanzoai/cloud/clients/referrals" // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
 	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/
 	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
 	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
