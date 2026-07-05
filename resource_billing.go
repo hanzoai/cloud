@@ -96,11 +96,20 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // would authorize an arbitrarily expensive charge (the debit still lands, taking
 // the ledger negative). This mirrors what a prepaid gate must do: refuse a
 // request the balance cannot cover BEFORE the work runs.
-func (rm *ResourceMeter) Gate(ctx context.Context, org, kind string, costCents int64) error {
+// project is the caller's validated org SUB-SCOPE (principal.Project(c)) — the
+// scope's project axis — and service is intrinsically this meter's provider, so
+// a per-scope spend cap (issue #70) on (project, provider) is enforced on resource
+// creation exactly as it is on the request edge. Pass "" for project on a
+// background/no-principal path (the resource is then gated only by org- and
+// service-scoped caps).
+func (rm *ResourceMeter) Gate(ctx context.Context, org, project, kind string, costCents int64) error {
 	if !rm.Enabled() || costCents <= 0 {
 		return nil
 	}
-	return rm.m.Authorize(ctx, metering.AuthInput{User: org, Org: org, AmountCents: costCents})
+	return rm.m.Authorize(ctx, metering.AuthInput{
+		User: org, Org: org, AmountCents: costCents,
+		Project: project, Service: rm.provider,
+	})
 }
 
 // Meter records a successful charge to the caller's org ledger. It is the ONE
@@ -113,10 +122,11 @@ func (rm *ResourceMeter) Gate(ctx context.Context, org, kind string, costCents i
 // exists, so the charge must never block or corrupt the response the caller
 // received, and a request-context cancellation must not cancel the debit (mirror
 // of BillingGate). A debit failure is logged for reconciliation, not swallowed.
-func (rm *ResourceMeter) Meter(org, kind string, amountCents int64, requestID, clientIP string) {
+func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, requestID, clientIP string) {
 	rm.MeterUsage(org, kind, metering.Usage{
 		Model:       kind, // the billed unit within the product (e.g. "sql", "invoke", "op") — per-item ledger attribution.
 		AmountCents: amountCents,
+		Project:     project, // scope attribution → the per-scope cap sums over it.
 		RequestID:   requestID,
 		ClientIP:    clientIP,
 	})
@@ -145,6 +155,9 @@ func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
 	u.Org = org  // X-Org-Id -> caller's namespace (overrides client default).
 	if u.Provider == "" {
 		u.Provider = rm.provider
+	}
+	if u.Service == "" {
+		u.Service = rm.provider // scope service axis = this meter's provider.
 	}
 	if u.Status == "" {
 		u.Status = "success"
