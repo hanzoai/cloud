@@ -161,17 +161,36 @@ func denyUnavailable(c *zip.Ctx) error {
 	})
 }
 
-// serviceFromPath derives the SERVER-SIDE service label for a request from its
-// path: the subsystem segment after /v1 (e.g. "/v1/ai/chat" -> "ai"). This is the
-// scope's service axis — derived from the route, NEVER a client field, so a
-// caller can never spoof another service's cap. Empty for non-/v1 paths.
-func serviceFromPath(path string) string {
+// serviceAliases maps a /v1/<seg> path segment to the CANONICAL service label
+// when a subsystem meters under a provider label that differs from its path
+// segment — so the edge gate (canonicalService) and the resource meter (its
+// NewResourceMeter provider) emit the SAME service axis and a per-scope cap binds
+// on both surfaces (issue #70 INFO-7). This map is the ONE source of truth; a new
+// subsystem whose provider != path segment adds itself here. Keep in lockstep with
+// the NewResourceMeter(deps, "<provider>") calls.
+var serviceAliases = map[string]string{
+	"ml":       "compute",       // clients/ml    NewResourceMeter(deps, "compute")
+	"visor":    "compute",       // clients/visor NewResourceMeter(deps, "compute")
+	"agents":   "agent",         // clients/agents provider "agent"
+	"security": "security.scan", // clients/security provider "security.scan"
+}
+
+// canonicalService derives the SERVER-SIDE service label for a request from its
+// route: the subsystem segment after /v1 (e.g. "/v1/ai/chat" -> "ai"), mapped
+// through serviceAliases to the canonical provider label. It is the scope's
+// service axis — from the route, NEVER a client field, so a caller can never spoof
+// another service's cap. Empty for non-/v1 paths.
+func canonicalService(path string) string {
 	p := strings.TrimPrefix(path, "/")
 	parts := strings.SplitN(p, "/", 3)
-	if len(parts) >= 2 && parts[0] == "v1" {
-		return parts[1]
+	if len(parts) < 2 || parts[0] != "v1" {
+		return ""
 	}
-	return ""
+	seg := parts[1]
+	if alias, ok := serviceAliases[seg]; ok {
+		return alias
+	}
+	return seg
 }
 
 // identityFromCtx builds the commerce billing identity from the gateway-minted
@@ -201,15 +220,18 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	if user == "" {
 		user = sub // org-less fallback
 	}
-	// Scope axes for the per-scope spend cap (issue #70), both SERVER-DERIVED:
-	// project from the validated X-Project-Id (principal.Project narrows only the
-	// caller's OWN org), service from the request path. Never a client field, so a
-	// caller cannot target another scope's cap.
+	// Scope axes for the per-scope spend cap (issue #70). Service is SERVER-DERIVED
+	// from the route (canonicalService), so it cannot be spoofed. Project is the
+	// caller's X-Project-Id; ValidatedProject reports whether it is claim-bound —
+	// when it is not (today), commerce degrades a project-scoped hard cap to soft,
+	// so a forgeable project can neither hard-stop nor be evaded.
+	project, projectValidated := principal.ValidatedProject(c)
 	return metering.AuthInput{
-		User:    user,
-		Org:     org,
-		Project: principal.Project(c),
-		Service: serviceFromPath(c.Path()),
+		User:             user,
+		Org:              org,
+		Project:          project,
+		ProjectValidated: projectValidated,
+		Service:          canonicalService(c.Path()),
 	}
 }
 
