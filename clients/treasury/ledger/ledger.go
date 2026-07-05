@@ -165,15 +165,58 @@ type Store interface {
 	SetPolicy(ctx context.Context, p Policy) error
 }
 
-// Ledger is the double-entry engine bound to a Store. It is safe for concurrent use
-// to the extent the Store's Tx is serializable (the SQLite adapter serializes on a
-// single connection, so the balance guard holds under load).
+// Backend is the ledger-of-record PORT the treasury posts through. TWO adapters
+// satisfy it: the native engine below (Base/SQLite — the offline/default backend, so
+// the reserve fund ships today) and the Formance adapter in clients/treasury/formance
+// (the Postgres-backed Formance Ledger, the production ledger of record when
+// FORMANCE_LEDGER_URL is wired — HIP finance stack). The treasury client holds the
+// Hanzo policy/fund/payout logic ABOVE this port; the port GUARANTEES double-entry +
+// the reserve overdraw guard (Formance via Numscript source semantics; the native
+// engine via its balance guard). The two adapters are byte-compatible on the accounts
+// that matter (fund:reserve, payout:<program>), so switching backend is a config flip.
+type Backend interface {
+	// Name identifies the backend of record ("native" | "formance").
+	Name() string
+	Policy(ctx context.Context) (Policy, error)
+	SetPolicy(ctx context.Context, bps, now int64) (Policy, error)
+	Accrue(ctx context.Context, period string, revenueCents, now int64) (Entry, bool, error)
+	Seed(ctx context.Context, ref, memo string, amountCents, now int64) (Entry, bool, error)
+	DebitReserve(ctx context.Context, program, ref, memo string, amountCents, now int64) (Entry, bool, bool, error)
+	Snapshot(ctx context.Context) (Report, error)
+	Entries(ctx context.Context, limit int) ([]Entry, error)
+	ReserveCents(ctx context.Context) (int64, error)
+	Root(ctx context.Context) ([32]byte, int, error)
+	// AccountsWithPrefix returns account→balance for every account under prefix — the
+	// scope-aware read primitive: a per-org caller reads its own "org:<tenant>:"
+	// prefix; global-admin reads house prefixes ("fund:", "payout:", "revenue:").
+	AccountsWithPrefix(ctx context.Context, prefix string) (map[string]int64, error)
+}
+
+// PolicyStore is the small native config store the Formance backend borrows to hold
+// the Hanzo revenue-share policy (which Formance does not model — it is Hanzo config,
+// not accounting). sqlstore satisfies it, so policy persists identically regardless of
+// which backend owns the journal.
+type PolicyStore interface {
+	Policy(ctx context.Context) (Policy, error)
+	SetPolicy(ctx context.Context, p Policy) error
+}
+
+// Ledger is the native double-entry engine bound to a Store — the offline/default
+// Backend. It is safe for concurrent use to the extent the Store's Tx is serializable
+// (the SQLite adapter serializes on a single connection, so the balance guard holds
+// under load).
 type Ledger struct {
 	store Store
 }
 
 // New binds the engine to a persistence adapter.
 func New(store Store) *Ledger { return &Ledger{store: store} }
+
+// Name reports the native backend id. (Backend interface.)
+func (l *Ledger) Name() string { return "native" }
+
+// compile-time proof the native engine satisfies the ledger-of-record port.
+var _ Backend = (*Ledger)(nil)
 
 // Store exposes the underlying adapter for read-only queries the engine does not
 // wrap (recent-entries listing, policy read) — the cloud handler layer uses it
@@ -394,6 +437,11 @@ func (l *Ledger) Entries(ctx context.Context, limit int) ([]Entry, error) {
 	return l.store.Entries(ctx, limit)
 }
 
+// AccountsWithPrefix returns account→balance for accounts under prefix (Backend).
+func (l *Ledger) AccountsWithPrefix(ctx context.Context, prefix string) (map[string]int64, error) {
+	return l.store.BalancesWithPrefix(ctx, prefix)
+}
+
 // Root computes a deterministic commitment over the ENTIRE journal plus the reserve
 // balance: a SHA-256 hash-chain of every entry (in a canonical created-at,id order)
 // and each of its postings, terminated by the fund balance. It is what the Hanzo L1
@@ -407,26 +455,37 @@ func (l *Ledger) Root(ctx context.Context) (root [32]byte, entryCount int, err e
 	if err != nil {
 		return [32]byte{}, 0, fmt.Errorf("root: list entries: %w", err)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].CreatedAt != entries[j].CreatedAt {
-			return entries[i].CreatedAt < entries[j].CreatedAt
+	reserve, err := l.store.Balance(ctx, AccountReserve)
+	if err != nil {
+		return [32]byte{}, 0, fmt.Errorf("root: reserve balance: %w", err)
+	}
+	return ComputeRoot(entries, reserve), len(entries), nil
+}
+
+// ComputeRoot hashes a journal (in a canonical created-at,id order) plus the reserve
+// balance into a 32-byte commitment — the value the Hanzo L1 anchor commits on-chain.
+// Both backends (native + Formance) use it, so the on-chain root is computed one way
+// regardless of which ledger owns the books.
+func ComputeRoot(entries []Entry, reserveCents int64) [32]byte {
+	sorted := make([]Entry, len(entries))
+	copy(sorted, entries)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].CreatedAt != sorted[j].CreatedAt {
+			return sorted[i].CreatedAt < sorted[j].CreatedAt
 		}
-		return entries[i].ID < entries[j].ID
+		return sorted[i].ID < sorted[j].ID
 	})
 	h := sha256.New()
-	for _, e := range entries {
+	for _, e := range sorted {
 		fmt.Fprintf(h, "%s|%s|%s|%s|%d|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.AmountCents, e.CreatedAt)
 		for _, p := range e.Postings {
 			fmt.Fprintf(h, "\t%s|%d\n", p.Account, p.Amount)
 		}
 	}
-	reserve, err := l.store.Balance(ctx, AccountReserve)
-	if err != nil {
-		return [32]byte{}, 0, fmt.Errorf("root: reserve balance: %w", err)
-	}
-	fmt.Fprintf(h, "reserve|%d\n", reserve)
+	fmt.Fprintf(h, "reserve|%d\n", reserveCents)
+	var root [32]byte
 	copy(root[:], h.Sum(nil))
-	return root, len(entries), nil
+	return root
 }
 
 // Policy returns the current revenue-share policy.
