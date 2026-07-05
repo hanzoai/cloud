@@ -278,7 +278,9 @@ func (s *svc) adminList(c *zip.Ctx) error {
 			CreatedAt: r.CreatedAt, QualifiedAt: r.QualifiedAt, CreditedAt: r.CreditedAt,
 		})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"referrals": views, "summary": sum})
+	// Envelope { status, msg, data } — the /v1/admin/* convention the console's
+	// admin-aggregate proxy + originGet read (same as clients/admin).
+	return adminOK(c, map[string]any{"referrals": views, "summary": sum})
 }
 
 // adminSweep answers POST /v1/admin/referrals/sweep — the periodic qualify path
@@ -305,7 +307,15 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 			credited++
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"swept": swept, "credited": credited})
+	return adminOK(c, map[string]any{"swept": swept, "credited": credited})
+}
+
+// adminOK writes the { status:"ok", msg, data } envelope the console's admin
+// surface (originGet/originPost via app/admin/aggregate) unwraps — identical to
+// clients/admin's ok(). The customer /v1/referrals surface stays bare JSON (read
+// via the /cloud proxy + restGet), matching clients/crm.
+func adminOK(c *zip.Ctx, data any) error {
+	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
 }
 
 // ── qualify → grant core (the ONE credit path, shared by sweep + lazy read) ───
