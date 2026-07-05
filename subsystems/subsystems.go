@@ -168,7 +168,7 @@ import (
 	// store-agnostic and cloud-decoupled — the seed of the native hanzoai/finance
 	// central ledger (the Go replacement for the Formance stack). Order 146 (with the
 	// admin surface); its routes are specific so they bind ahead of the AI catch-all.
-	_ "github.com/hanzoai/cloud/clients/treasury" // order 146 — /v1/treasury/* + /v1/admin/treasury* (reserve fund + backed payouts, Hanzo L1 anchored)
+	_ "github.com/hanzoai/cloud/clients/treasury" // order 146 — /v1/finance/* + /v1/admin/finance/* (scope-aware finance engine: reserve fund + backed payouts, native/Formance ledger of record, Hanzo L1 anchored)
 	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/
 	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
 	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
