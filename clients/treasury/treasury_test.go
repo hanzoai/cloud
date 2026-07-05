@@ -293,3 +293,52 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 		t.Fatalf("replay double-charged fund: %d, want 2000", bal)
 	}
 }
+
+// ── finance TreasurySummary shape ────────────────────────────────────────────
+
+// TestTreasury_FinanceSummaryShape proves GET /v1/finance/treasury emits the exact
+// @hanzo/finance-ui TreasurySummary shape (USD cents): reserve == available (no
+// pending-payout holds), committed 0, and the honest Hanzo L1 anchor (chainId 36963,
+// not-yet-anchored → no fabricated block).
+func TestTreasury_FinanceSummaryShape(t *testing.T) {
+	app, _ := mount(t)
+	// Seed $250.00 into the reserve so reserve/available are non-zero.
+	if code, body := req(t, app, http.MethodPost, "/v1/admin/treasury/seed", "root", true, seedRequest{AmountCents: 25_000, Memo: "bootstrap"}); code != http.StatusOK {
+		t.Fatalf("seed = %d (%s)", code, body)
+	}
+	_, body := req(t, app, http.MethodGet, "/v1/finance/treasury", "acme", false, nil)
+	var got struct {
+		Currency       string `json:"currency"`
+		ReserveCents   int64  `json:"reserveCents"`
+		CommittedCents int64  `json:"committedCents"`
+		AvailableCents int64  `json:"availableCents"`
+		Anchor         *struct {
+			ChainID    int64  `json:"chainId"`
+			Address    string `json:"address"`
+			Block      uint64 `json:"block"`
+			AnchoredAt string `json:"anchoredAt"`
+		} `json:"anchor"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode summary: %v (%s)", err, body)
+	}
+	if got.Currency != "usd" {
+		t.Fatalf("currency = %q, want usd", got.Currency)
+	}
+	if got.ReserveCents != 25_000 {
+		t.Fatalf("reserveCents = %d, want 25000", got.ReserveCents)
+	}
+	if got.CommittedCents != 0 {
+		t.Fatalf("committedCents = %d, want 0 (no pending-payout holds)", got.CommittedCents)
+	}
+	if got.AvailableCents != 25_000 {
+		t.Fatalf("availableCents = %d, want 25000 (== reserve)", got.AvailableCents)
+	}
+	if got.Anchor == nil || got.Anchor.ChainID != defaultHanzoChainID {
+		t.Fatalf("anchor chainId = %+v, want %d", got.Anchor, defaultHanzoChainID)
+	}
+	// Honest: nothing anchored yet → no fabricated block/time.
+	if got.Anchor.Block != 0 || got.Anchor.AnchoredAt != "" {
+		t.Fatalf("anchor must be honest-empty until committed: block=%d anchoredAt=%q", got.Anchor.Block, got.Anchor.AnchoredAt)
+	}
+}
