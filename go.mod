@@ -514,7 +514,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
-	github.com/luxfi/age v1.5.1 // indirect
+	github.com/luxfi/age v1.6.0 // indirect
 	github.com/luxfi/cache v1.2.1 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
@@ -772,7 +772,7 @@ require (
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
 	github.com/hanzoai/o11y v1.5.0
-	github.com/hanzoai/vfs v0.4.4
+	github.com/hanzoai/vfs v0.6.2
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
