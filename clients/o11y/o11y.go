@@ -73,9 +73,16 @@ func newHandler(rawURL string) (http.Handler, error) {
 // principal.Validated uses), so its presence is the authoritative principal gate.
 // Every legitimate /v1/o11y/* caller arrives through the console BFF with a
 // user-bound bearer, so this refuses only the anonymous-forge path.
+//
+// Liveness/readiness endpoints are exempt: they carry NO tenant data (the o11y
+// runtime itself serves them without identity — that is how the k8s pod probes
+// pass), so a principal gate on them would only break unauthenticated health
+// probes (admin System Health's CLOUD_O11Y_HEALTH_URL, the external o11y.* hosts,
+// k8s) without protecting anything. Data routes (/v1/o11y/api/v1/query_range, …)
+// stay gated.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
+		if !isHealthPath(r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"status":"error","msg":"no validated principal"}`))
@@ -83,6 +90,17 @@ func gate(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isHealthPath reports whether p is an o11y liveness/readiness endpoint. These
+// are the exact paths the runtime special-cases (served unstripped, no identity),
+// reached either directly or under the /v1/o11y external prefix — so we match on
+// suffix rather than exact path.
+func isHealthPath(p string) bool {
+	return strings.HasSuffix(p, "/api/v1/health") ||
+		strings.HasSuffix(p, "/api/v2/healthz") ||
+		strings.HasSuffix(p, "/api/v2/readyz") ||
+		strings.HasSuffix(p, "/api/v2/livez")
 }
 
 func init() {
