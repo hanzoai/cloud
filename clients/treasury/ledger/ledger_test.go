@@ -332,10 +332,10 @@ func TestSnapshot_Reconciles(t *testing.T) {
 	ctx := context.Background()
 	m := newMem()
 	l := New(m)
-	_, _ = l.SetPolicy(ctx, 2_000, 1) // 20%
-	_, _, _ = l.Accrue(ctx, "2026-07", 100_000, 10)             // +20000 fund
-	_, _, _, _ = l.DebitReserve(ctx, "referral", "r1", "", 5_000, 20)   // -5000
-	_, _, _, _ = l.DebitReserve(ctx, "affiliate", "a1", "", 3_000, 30)  // -3000
+	_, _ = l.SetPolicy(ctx, 2_000, 1)                                  // 20%
+	_, _, _ = l.Accrue(ctx, "2026-07", 100_000, 10)                    // +20000 fund
+	_, _, _, _ = l.DebitReserve(ctx, "referral", "r1", "", 5_000, 20)  // -5000
+	_, _, _, _ = l.DebitReserve(ctx, "affiliate", "a1", "", 3_000, 30) // -3000
 
 	rep, err := l.Snapshot(ctx)
 	if err != nil {
