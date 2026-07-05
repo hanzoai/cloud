@@ -129,3 +129,25 @@ func Project(c *zip.Ctx) string {
 	}
 	return strings.Clone(project)
 }
+
+// ValidatedProject returns the caller's project AND whether that project is bound
+// to a VALIDATED identity claim — the signal a per-scope spend cap uses to decide
+// whether a project-scoped cap may HARD-enforce (402) or must DEGRADE to a soft
+// warn (issue #70 project-spoof defense).
+//
+// Today it returns validated=FALSE. X-Project-Id survives SanitizeIdentity only as
+// "the caller's OWN registered project OR an unregistered free-form label"
+// (middleware_identity.go): cross-org projects are refused, but the caller still
+// CHOOSES the label — it is not bound to a server-minted claim. So a caller can
+// evade a project cap (tag spend with a different project) or, if it were hard,
+// weaponize it. hanzo.id tokens carry owner/sub but NO project claim, so the
+// gateway cannot mint a trustworthy X-Project-Id. Until IAM mints a project claim
+// AND the gateway binds X-Project-Id to it server-side, project caps stay SOFT.
+//
+// This is the ONE lever: when that claim exists, return (project, true) here and
+// project/service caps auto-harden across the edge gate and the resource meter.
+// The ORG axis is always validated (owner claim); the SERVICE axis is
+// server-derived (route/provider) — both are already trustworthy.
+func ValidatedProject(c *zip.Ctx) (string, bool) {
+	return Project(c), false
+}
