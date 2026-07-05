@@ -57,6 +57,13 @@ type config struct {
 	frontURL        string // browser destination after IAM (default: request origin)
 	transactor      string // wss:// base returned by selectWorkspace (default: derived)
 	provider        string // IAM provider name surfaced to the SPA ("openid")
+	// publicURL is the deployment's PUBLIC origin (e.g. https://hanzo.team), from
+	// TEAM_PUBLIC_URL / PUBLIC_ORIGIN. Behind the gateway the request Host is the
+	// INTERNAL cluster host (cloud.hanzo.svc:8000), which IAM rejects as an OAuth
+	// callback — so when set this is the origin the redirect_uri (and the front
+	// bounce) are built from, letting cloud sit behind the gateway uniformly. Unset
+	// → the request origin (originOf), unchanged for the direct-route deployment.
+	publicURL string
 }
 
 // api is the account control-plane handler set.
@@ -183,7 +190,7 @@ func (g *api) providers(c *zip.Ctx) error {
 // server-side in authCallback.
 func (g *api) authStart(c *zip.Ctx) error {
 	provider := providerParam(c)
-	origin := originOf(c)
+	origin := g.callbackOrigin(c)
 	redirect := origin + "/v1/team/account/auth/" + provider + "/callback"
 	q := url.Values{
 		"client_id":     {g.cfg.iamClientID},
@@ -207,7 +214,7 @@ func (g *api) authCallback(c *zip.Ctx) error {
 	if code == "" {
 		return g.bounce(c, "", c.Query("state"), "missing_code")
 	}
-	origin := originOf(c)
+	origin := g.callbackOrigin(c)
 	redirect := origin + "/v1/team/account/auth/" + provider + "/callback"
 
 	access, err := g.exchangeCode(code, redirect)
@@ -438,11 +445,29 @@ func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
 	return t.Account, org, raw, nil
 }
 
+// callbackOrigin is the ORIGIN the OAuth redirect_uri is built from — the SAME
+// value in authStart (authorize) and authCallback (token exchange), so the two
+// redirect_uri strings are byte-identical (IAM requires the exchange redirect_uri
+// to match the authorize one). Behind the gateway the request Host is the internal
+// cluster host, which IAM rejects, so a configured public origin (publicURL) wins;
+// unset → the request origin (originOf), so the direct-route and every other
+// deployment are unchanged. originOf itself is NOT modified (still the fallback and
+// used elsewhere).
+func (g *api) callbackOrigin(c *zip.Ctx) string {
+	if g.cfg.publicURL != "" {
+		return g.cfg.publicURL
+	}
+	return originOf(c)
+}
+
 // bounce redirects to the SPA with the minted token (or an error).
 func (g *api) bounce(c *zip.Ctx, tok, navigateURL, errCode string) error {
 	front := g.cfg.frontURL
 	if front == "" {
-		front = originOf(c)
+		// Behind the gateway the request origin is the internal host, so honor the
+		// public origin for the front bounce too (else the browser would be sent to
+		// cloud.hanzo.svc). FRONT_URL still overrides when set.
+		front = g.callbackOrigin(c)
 	}
 	path := "/login:component:LoginApp/auth"
 	if tok == "" {
