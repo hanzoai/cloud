@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	aiobject "github.com/hanzoai/ai/object"
+	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasksclient "github.com/hanzoai/tasks/pkg/sdk/client"
 	tasksengine "github.com/hanzoai/tasks/pkg/tasks"
 )
@@ -21,6 +23,14 @@ import (
 // no cross-service auth, no per-org token minting. Non-9999 to never collide with the
 // cluster tasks Service if one also runs.
 const durableZAPPort = 19999
+
+// durableGatedZAPPort is the CLUSTER-reachable, identity-gated ZAP port the embedded
+// engine exposes via Embedded.ServeGated (published on cloud's Service in universe).
+// Unlike durableZAPPort (loopback, ungated, ai-ingest only), every request here must
+// carry a valid IAM auth_token — the same trust anchor as HTTP SanitizeIdentity —
+// org-scoped to the token owner. 9999 mirrors the port the retired tasksd exposed, so
+// a consumer repoint changes only the host (tasks.hanzo.svc → cloud.hanzo.svc).
+const durableGatedZAPPort = 9999
 
 // embeddedTasks keeps the in-process engine alive for the process (a package ref the GC
 // won't collect) and lets Serve stop it on shutdown.
@@ -72,6 +82,28 @@ func wireDurableIngest(ctx context.Context, deps Deps) {
 		return tasksclient.Dial(tasksclient.Options{HostPort: addr, Namespace: "default"})
 	})
 	deps.Logger.Info("durable ingest wired: in-process tasks engine", "addr", addr, "dataDir", dataDir)
+
+	// Expose the SAME engine on a cluster-reachable, IDENTITY-GATED ZAP listener so the
+	// standalone tasksd's consumers (auto, hanzo-playground, platform) run their durable
+	// work here. RequireIdentity: every request must carry an IAM auth_token, validated
+	// against {IAMIssuer}/v1/iam/.well-known/jwks (HIP-0111) and org-scoped to its owner —
+	// the SAME trust anchor as the HTTP SanitizeIdentity boundary. The loopback dialer above
+	// stays ungated (in-process ai-ingest shares cloud's trust boundary). Fail-soft: a
+	// missing issuer or a bind failure logs and leaves the gated surface down without
+	// touching ai-ingest.
+	if deps.IAMIssuer == "" {
+		deps.Logger.Warn("durable tasks: no IAM issuer; gated cluster ZAP listener NOT exposed", "port", durableGatedZAPPort)
+		return
+	}
+	validator := tasksauth.NewValidator(tasksauth.JWTConfig{
+		Issuer:  deps.IAMIssuer,
+		JWKSURL: strings.TrimRight(deps.IAMIssuer, "/") + "/v1/iam/.well-known/jwks",
+	})
+	if err := emb.ServeGated(ctx, durableGatedZAPPort, validator); err != nil {
+		deps.Logger.Error("durable tasks: gated cluster ZAP listener failed to start", "err", err, "port", durableGatedZAPPort)
+		return
+	}
+	deps.Logger.Info("durable tasks: gated cluster ZAP listener up", "port", durableGatedZAPPort, "issuer", deps.IAMIssuer)
 }
 
 // firstNonEmptyStr returns the first non-empty string, else the last.
