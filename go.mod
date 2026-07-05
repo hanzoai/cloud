@@ -9,7 +9,7 @@ require (
 	github.com/coder/websocket v1.8.12
 	github.com/digitalocean/godo v1.197.0
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
-	github.com/hanzoai/commerce/metering v0.1.2
+	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.28.12
 	github.com/hanzoai/notify v1.6.18
