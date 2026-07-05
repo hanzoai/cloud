@@ -4,7 +4,15 @@ metadata:
   name: {{ include "cloud.fullname" . }}
   labels: {{- include "cloud.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  # Embedded IAM (clients/iamsvc) uses Beego's process-local "memory" session
+  # store, so a horizontally scaled app tier would mint a login/authorize session
+  # on one replica and lose it on the next. When "iam" is in the enable list the
+  # Deployment is PINNED to a single replica; cloud's Config.Validate also refuses
+  # to boot iam-enabled above CLOUD_REPLICAS=1 (defence in depth). Migrate IAM
+  # sessions to a shared store to lift this.
+  {{- $iamEnabled := has "iam" (splitList "," .Values.hanzo.enable) }}
+  {{- $replicas := ternary 1 (int .Values.replicaCount) $iamEnabled }}
+  replicas: {{ $replicas }}
   selector:
     matchLabels: {{- include "cloud.selectorLabels" . | nindent 6 }}
   template:
@@ -25,6 +33,11 @@ spec:
             - "--data-dir={{ .Values.hanzo.dataDir }}"
             - "--iam-issuer={{ .Values.hanzo.iamIssuer }}"
             - "--enable={{ .Values.hanzo.enable }}"
+          env:
+            # Mirrors the resolved replica count so Config.Validate can enforce the
+            # single-replica contract embedded IAM requires (memory session store).
+            - name: CLOUD_REPLICAS
+              value: {{ $replicas | quote }}
           ports:
             - name: http
               containerPort: 8080
