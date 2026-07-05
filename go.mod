@@ -11,7 +11,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
-	github.com/hanzoai/iam v1.28.12
+	github.com/hanzoai/iam v1.31.16
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
@@ -35,9 +35,10 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
-	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible // indirect
 	github.com/antonmedv/expr v1.15.3 // indirect
 	github.com/beego/beego/v2 v2.3.8 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.9.2 // indirect
+	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
@@ -427,7 +428,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/authzstore v0.1.1 // indirect
-	github.com/hanzoai/beego/v2 v2.3.10 // indirect
+	github.com/hanzoai/beego/v2 v2.3.10
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
@@ -766,7 +767,7 @@ require (
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
 	github.com/hanzoai/ai v1.800.9
-	github.com/hanzoai/authz v1.10.3
+	github.com/hanzoai/authz v1.10.4
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
 	github.com/hanzoai/licensing v0.1.1
