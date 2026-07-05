@@ -57,6 +57,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/treasury"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -454,9 +455,29 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 		}
 	}
 
-	// A credits payout issues the actual grant AFTER the reservation. The reservation
-	// is the safety authority (at-most-pending); a grant failure is logged loud (never
-	// silent) so an operator reconciles from the payout row + audit.
+	// BACK the payout against the platform reserve fund (double-entry
+	// fund→payout:affiliate, idempotent by payout id). This is the SECOND guard: a
+	// payout must not exceed EITHER the affiliate's pending commission (above) OR the
+	// funded reserve (here). Not backed → VOID the pending reservation (restore it)
+	// and refuse honestly — the platform has not reserved capital for this payout.
+	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAffiliate, "payout:"+payoutID,
+		fmt.Sprintf("Affiliate commission payout (%s)", a.Code), body.AmountCents)
+	if berr != nil || !backed {
+		if verr := s.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
+			s.log.Error("affiliates: void after unbacked payout failed", "payout", payoutID, "err", verr)
+		}
+		if berr != nil {
+			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
+		}
+		reserve, _ := treasury.ReserveCents(ctx)
+		return zip.Errorf(http.StatusPaymentRequired,
+			"treasury reserve insufficient to back this payout (%d cents available); replenish via /v1/admin/treasury/sweep or seed", reserve)
+	}
+
+	// A credits payout issues the actual grant AFTER both reservations. The
+	// reservations are the safety authority (at-most-pending AND at-most-reserve); a
+	// grant failure is logged loud (never silent) so an operator reconciles from the
+	// payout row + audit.
 	if method == methodCredits {
 		txn, gerr := s.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
 			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag)
