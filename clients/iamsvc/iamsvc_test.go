@@ -84,6 +84,31 @@ func TestMountHandlerPreservesFullPath(t *testing.T) {
 	}
 }
 
+// TestMountFailClosed503 proves the fail-soft path: when the embed cannot boot,
+// mountFailClosed serves an honest JSON 503 on every IAM prefix instead of
+// letting /v1/iam/* fall through to the console SPA (HTML 200). cloud and every
+// co-resident subsystem stay up — the blast-radius isolation the consolidation
+// exists for.
+func TestMountFailClosed503(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	mountFailClosed(app)
+	for _, p := range []string{
+		"/v1/iam/oauth/token",
+		"/v1/iam/.well-known/jwks",
+		"/.well-known/openid-configuration",
+		"/login/oauth/authorize",
+	} {
+		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, p, nil))
+		if err != nil {
+			t.Fatalf("Test(%s): %v", p, err)
+		}
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("%s = %d, want 503 (fail-closed)", p, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+}
+
 // TestInitSessionsIdempotent proves the session-manager hook is safe to call more
 // than once (Beego's GlobalSessions is a process singleton) and wires the memory
 // provider IAM configures. Beego defaults SessionProvider to "memory" and
