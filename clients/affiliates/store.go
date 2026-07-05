@@ -563,6 +563,31 @@ func (s *Store) RecordPayout(ctx context.Context, payoutID, affiliateID string, 
 	return Payout{ID: payoutID, AffiliateID: affiliateID, AmountCents: amountCents, Method: method, Reference: reference, CreatedAt: now}, nil
 }
 
+// VoidPayout reverses a RecordPayout that could not be BACKED by the treasury
+// reserve: it deletes the payout row and restores the reserved amount to pending
+// (paid_cents −= amount), in one transaction. It is the compensating action when the
+// fund cannot cover a payout the pending-guard already reserved — so a blocked payout
+// leaves the affiliate's pending intact, honestly, instead of silently burning it.
+func (s *Store) VoidPayout(ctx context.Context, payoutID, affiliateID string, amountCents int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("void tx: %w", err)
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM affiliate_payouts WHERE id=?`, payoutID); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete payout: %w", err)
+	}
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE affiliates SET paid_cents = paid_cents - ? WHERE id=?`, amountCents, affiliateID); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("restore pending: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("void commit: %w", err)
+	}
+	return nil
+}
+
 // SetPayoutTxn records the commerce ledger transaction id after a credits payout
 // deposit lands (best-effort receipt; the pending reservation is the authority).
 func (s *Store) SetPayoutTxn(ctx context.Context, payoutID, txn string) error {
