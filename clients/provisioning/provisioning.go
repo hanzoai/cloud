@@ -293,7 +293,7 @@ func (s *svc) create(kind string) zip.Handler {
 		// reused by the post-success debit; fee==0 or unconfigured billing makes
 		// this a no-op. Applies to BOTH strategies.
 		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
-		if err := s.bill.Gate(ctx, org, kind, fee); err != nil {
+		if err := s.bill.Gate(ctx, org, principal.Project(c), kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
@@ -396,7 +396,7 @@ func (s *svc) create(kind string) zip.Handler {
 		// blocks or corrupts this 201; a debit failure is logged for
 		// reconciliation). Recurring storage footprint reuses s.bill.Meter with a
 		// GB-month amount once a live-size source exists.
-		s.bill.Meter(org, kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 
 		// Return the PUBLIC endpoint, never the internal admin host. Remap the
 		// connection string's host:port too so a copy-pasted DSN is routable.
