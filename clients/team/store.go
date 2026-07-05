@@ -34,12 +34,15 @@ func newStore(dir string) *docStore { return &docStore{dir: dir, dbs: map[string
 var pathSanitize = regexp.MustCompile(`[^a-zA-Z0-9_.-]`)
 
 // seg makes an org/workspace value safe as a single path segment. It is the
-// traversal guard on the tenant key: any char outside [A-Za-z0-9_.-] becomes '_',
-// so an org or workspace can never contain a '/' or '..' that escapes its
-// orgs/<org>/ws/<workspace> box. (The org itself is already the VERIFIED token
-// claim, never a client header — this is defense in depth on the filesystem.)
+// traversal guard on the tenant key: any char outside [A-Za-z0-9_.-] becomes '_'
+// (killing '/'), AND the two dot-only components "." and ".." — which ARE inside
+// that class and would otherwise pass through as the current/parent directory —
+// are mapped to "_". So a segment can never be a path traversal or escape its
+// orgs/<org>/ws/<workspace> box. (The org is already the VERIFIED token claim,
+// never a client header; this is defense in depth on the filesystem — and files
+// blob keys, which fold in a client-supplied blobId, rely on it directly.)
 func seg(s string) string {
-	if s == "" {
+	if s == "" || s == "." || s == ".." {
 		return "_"
 	}
 	return pathSanitize.ReplaceAllString(s, "_")
