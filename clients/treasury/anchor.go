@@ -32,7 +32,7 @@ import (
 //	TREASURY_ANCHOR_SIGNER_KMS_REF  KMS secret ref for the anchor signer key
 //
 // Phase 1 ships the root computation, the config surface and an HONEST status: with
-// no signer wired, POST /v1/admin/treasury/anchor returns the root that WOULD be
+// no signer wired, POST /v1/admin/finance/anchor returns the root that WOULD be
 // committed plus the exact remaining step, and records nothing false. Phase 2 wires
 // the luxfi/geth submit + on-chain record behind this same status/handler.
 const defaultHanzoChainID = 36963
@@ -68,8 +68,8 @@ func (a *anchorer) configured() bool {
 	return a != nil && a.rpcURL != "" && a.signerRef != ""
 }
 
-// anchorStatus is the anchor view embedded in GET /v1/admin/treasury and returned by
-// POST /v1/admin/treasury/anchor.
+// anchorStatus is the anchor view embedded in GET /v1/admin/finance and returned by
+// POST /v1/admin/finance/anchor.
 type anchorStatus struct {
 	ChainID          int64  `json:"chainId"`
 	RPCConfigured    bool   `json:"rpcConfigured"`
@@ -82,9 +82,11 @@ type anchorStatus struct {
 }
 
 // status computes the current ledger root and reports whether the chain path is
-// wired. It never fabricates an anchored state.
-func (a *anchorer) status(ctx context.Context, l *ledger.Ledger) anchorStatus {
-	root, count, err := l.Root(ctx)
+// wired. It never fabricates an anchored state. The root is computed over WHICHEVER
+// backend is the ledger of record (native or Formance) via the shared ledger.Backend
+// port, so the anchor is backend-agnostic.
+func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
+	root, count, err := b.Root(ctx)
 	st := anchorStatus{
 		ChainID:          a.chainID,
 		RPCConfigured:    a.rpcURL != "",
@@ -100,19 +102,19 @@ func (a *anchorer) status(ctx context.Context, l *ledger.Ledger) anchorStatus {
 	st.CurrentRoot = "0x" + hex.EncodeToString(root[:])
 	st.Status = "pending"
 	if a.configured() {
-		st.Note = "chain wiring present; POST /v1/admin/treasury/anchor to commit the current root to Hanzo L1"
+		st.Note = "chain wiring present; POST /v1/admin/finance/anchor to commit the current root to Hanzo L1"
 	} else {
 		st.Note = "anchor pending chain wiring — set TREASURY_ANCHOR_RPC_URL + TREASURY_ANCHOR_SIGNER_KMS_REF (KMS ref, never a plaintext key) to enable on-chain commits"
 	}
 	return st
 }
 
-// adminAnchor answers POST /v1/admin/treasury/anchor — commit the current ledger
+// adminAnchor answers POST /v1/admin/finance/anchor — commit the current ledger
 // root to Hanzo L1. Global-admin only. Phase 1 returns the root that WOULD be
 // committed plus the exact remaining step (Phase 2 submits + records the tx).
 func (s *svc) adminAnchor(c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
-	return adminOK(c, map[string]any{"anchor": s.anchor.status(c.Context(), s.ledger)})
+	return adminOK(c, map[string]any{"anchor": s.anchor.status(c.Context(), s.record)})
 }

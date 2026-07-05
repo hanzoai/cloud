@@ -1,26 +1,42 @@
-// Package treasury mounts the Hanzo Cloud /v1/treasury/* surface: the platform's
+// Package treasury mounts the Hanzo Cloud /v1/finance/* surface: the platform's
 // OWN fund/reserve accounting, one layer ABOVE the per-org commerce credit ledger.
 // Where commerce tracks what each CUSTOMER holds and spends, treasury tracks the
 // PLATFORM's books — a real, backed reserve fund that stands behind the growth-loop
 // payouts (referrals, affiliates, OSS authors) so a payout is a debit against funded
 // capital, never unbounded minting.
 //
-// It is the cloud-facing adapter around the store-agnostic double-entry engine in
-// clients/treasury/ledger (the seed of the native hanzoai/finance central ledger):
-// this file owns HTTP, tenant gating, audit and the KMS-signed L1 anchor; the engine
-// owns the accounting. The two never leak into each other — the engine has no idea
-// an HTTP request exists, so it lifts to hanzoai/finance untouched.
+// It is the cloud-facing adapter around the ledger-of-record PORT (ledger.Backend):
+// this file owns HTTP, tenant scoping, audit and the KMS-signed L1 anchor + the Hanzo
+// policy/fund/payout logic; the backend owns the double-entry. Two backends satisfy
+// the port — the native Base/SQLite engine (clients/treasury/ledger, offline/default)
+// and the Formance adapter (clients/treasury/formance, the Postgres-backed ledger of
+// record when FORMANCE_LEDGER_URL is wired). Selecting one is a config flip.
 //
-// Surface:
+// Storage tiers (OLTP → OLAP): the authoritative double-entry is the ledger-of-record
+// backend (single-writer, overdraw-guarded — reserve/revenue/house on the house
+// tenant). Cross-tenant GLOBAL analytics is the ClickHouse OLAP projection in the
+// shared hanzoai/datastore, fed by the SAME event stream o11y already emits — treasury
+// money-actions mirror there via cloud's audit ClickHouse mirror, so there is NO second
+// metering pipeline. ClickHouse is NEVER the ledger of record; single-tenant drill-down
+// reads the authoritative ledger, cross-tenant aggregates read the projection.
 //
-//	GET  /v1/treasury                 (org)          reserve health + policy (transparency: the pool backing MY payouts)
-//	GET  /v1/admin/treasury           (global-admin) full report + journal + anchor status
-//	POST /v1/admin/treasury/policy    (global-admin) set the revenue-share %
-//	POST /v1/admin/treasury/sweep     (global-admin) accrue the revenue-share into the fund for a period
-//	POST /v1/admin/treasury/seed      (global-admin) inject bootstrap capital into the fund
-//	POST /v1/admin/treasury/anchor    (global-admin) anchor the ledger root on Hanzo L1 (Phase 2)
+// ONE scope-aware /v1/finance/* engine, three tenancy surfaces — the tenant is derived
+// from the validated IAM identity, house/reserve is locked to global-admin, and a
+// per-org caller only ever sees its own tenant:
 //
-// serve.go auto-registers GET /v1/treasury/health.
+//	GET  /v1/finance/treasury          (org)          reserve health + policy (the pool backing MY payouts)
+//	GET  /v1/finance/accounts          (org)          MY ledger accounts (admin: ?scope=house | ?org=<t>)
+//	GET  /v1/admin/finance             (global-admin) full report + journal + anchor status
+//	POST /v1/admin/finance/policy      (global-admin) set the revenue-share %
+//	POST /v1/admin/finance/sweep       (global-admin) accrue the revenue-share into the fund for a period
+//	POST /v1/admin/finance/seed        (global-admin) inject bootstrap capital into the fund
+//	POST /v1/admin/finance/anchor      (global-admin) anchor the ledger root on Hanzo L1
+//
+// The three surfaces (admin.hanzo.ai global-admin, console.hanzo.ai per-org customer,
+// finance.hanzo.ai per-org operator) are the SAME engine projected by IAM scope. A
+// separate frontend agent builds the console + finance surfaces against this contract.
+//
+// serve.go auto-registers GET /v1/finance/health.
 package treasury
 
 import (
@@ -37,6 +53,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/treasury/formance"
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
 	"github.com/hanzoai/cloud/clients/treasury/ledger/sqlstore"
 	luxlog "github.com/luxfi/log"
@@ -58,8 +75,8 @@ const (
 )
 
 type svc struct {
-	store      *sqlstore.Store
-	ledger     *ledger.Ledger
+	store      *sqlstore.Store // native store: policy config always, journal when native backend
+	record     ledger.Backend  // the ledger of record — native (default) or Formance
 	log        luxlog.Logger
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
 	anchor     *anchorer        // Hanzo L1 anchor (Phase 2); nil-safe
@@ -89,23 +106,41 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}
+	// Select the ledger of RECORD. Formance (Postgres-backed, the production ledger)
+	// when FORMANCE_LEDGER_URL is wired; else the native Base/SQLite engine (the
+	// offline/default, so the reserve fund works today). The Hanzo revenue-share
+	// policy is held in the native store either way (it is config, not accounting).
+	var record ledger.Backend
+	if base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL")); base != "" {
+		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), store)
+		log.Info("treasury ledger of record: formance", "url", base)
+	} else {
+		record = ledger.New(store)
+		log.Info("treasury ledger of record: native (Base/SQLite) — set FORMANCE_LEDGER_URL for Formance")
+	}
 	s := &svc{
 		store:      store,
-		ledger:     ledger.New(store),
+		record:     record,
 		log:        log,
 		auditStore: deps.Audit,
 		anchor:     newAnchorer(deps, log),
 	}
 	mounted = s
 
-	app.Get("/v1/treasury", s.myTreasury)
-	app.Get("/v1/admin/treasury", s.adminReport)
-	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)
-	app.Post("/v1/admin/treasury/sweep", s.adminSweep)
-	app.Post("/v1/admin/treasury/seed", s.adminSeed)
-	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)
+	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
+	// per-org reads derive the tenant from the validated IAM identity and see ONLY
+	// their own accounts; the reserve fund + revenue-share + house mutations are
+	// locked to global-admin under /v1/admin/finance/* (the console admin-proxy
+	// convention, enveloped).
+	app.Get("/v1/finance/treasury", s.myTreasury)          // per-org: reserve transparency + policy
+	app.Get("/v1/finance/accounts", s.myAccounts)          // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	app.Get("/v1/admin/finance", s.adminReport)            // global-admin: report + journal + anchor
+	app.Post("/v1/admin/finance/policy", s.adminSetPolicy) // global-admin: set revenue-share %
+	app.Post("/v1/admin/finance/sweep", s.adminSweep)      // global-admin: accrue revenue-share
+	app.Post("/v1/admin/finance/seed", s.adminSeed)        // global-admin: inject reserve capital
+	app.Post("/v1/admin/finance/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
 
-	log.Info("treasury mounted", "brand", deps.Brand, "anchor", s.anchor.configured())
+	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
 	return nil
 }
 
@@ -113,8 +148,8 @@ func init() {
 	// Order 146 — alongside the admin surface (clients/admin is 146), after the
 	// growth loops (referrals 149 etc. are LATER, but ordering is irrelevant: the
 	// loops call treasury.Reserve at REQUEST time, long after every Mount ran, so
-	// the mounted singleton is always set). Routes are specific (/v1/treasury*,
-	// /v1/admin/treasury*) so they bind ahead of the AI /v1/* catch-all (150).
+	// the mounted singleton is always set). Routes are specific (/v1/finance/*,
+	// /v1/admin/finance/*) so they bind ahead of the AI /v1/* catch-all (150).
 	cloud.RegisterWithShutdown("treasury", 146, func(app any, deps cloud.Deps) error {
 		a, ok := app.(*zip.App)
 		if !ok {
@@ -146,7 +181,7 @@ func Reserve(ctx context.Context, program, ref, memo string, amountCents int64) 
 	if s == nil {
 		return true, "", nil // unmounted → passthrough (backward-safe)
 	}
-	entry, backed, created, err := s.ledger.DebitReserve(ctx, program, ref, memo, amountCents, time.Now().Unix())
+	entry, backed, created, err := s.record.DebitReserve(ctx, program, ref, memo, amountCents, time.Now().Unix())
 	if err != nil {
 		return false, "", err
 	}
@@ -158,49 +193,116 @@ func Reserve(ctx context.Context, program, ref, memo string, amountCents int64) 
 	return backed, entry.ID, nil
 }
 
+// ReserveCents reports the reserve fund's currently available balance (minor units)
+// and whether the treasury subsystem is mounted. The growth loops use it only to
+// render an honest "X cents available" message when a payout is blocked for lack of
+// reserve — never as an authority (the atomic guard in DebitReserve is the
+// authority). Unmounted → (0, false).
+func ReserveCents(ctx context.Context) (int64, bool) {
+	s := mounted
+	if s == nil {
+		return 0, false
+	}
+	bal, err := s.record.ReserveCents(ctx)
+	if err != nil {
+		return 0, true
+	}
+	return bal, true
+}
+
 // ── customer surface ─────────────────────────────────────────────────────────
 
-// myTreasury answers GET /v1/treasury for any validated caller: the reserve-fund
-// health + the revenue-share policy. This is a TRANSPARENCY view — a partner/author
-// can see the pool that backs their payouts is solvent — not per-org money (that is
-// the customer's commerce balance at /v1/billing/balance). Policy is read-only here;
-// only global-admin sets it.
+// myTreasury answers GET /v1/finance/treasury for any validated caller: the
+// reserve-fund health + the revenue-share policy. This is a TRANSPARENCY view — a
+// partner/author can see the pool that backs their payouts is solvent — not per-org
+// money (that is the customer's commerce balance at /v1/billing/balance). Policy is
+// read-only here; only global-admin sets it.
 func (s *svc) myTreasury(c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
 	}
-	rep, err := s.ledger.Snapshot(c.Context())
+	rep, err := s.record.Snapshot(c.Context())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
 	return c.JSON(http.StatusOK, rep)
 }
 
+// accountView is one row of the scope-aware accounts read.
+type accountView struct {
+	Address      string `json:"address"`
+	BalanceCents int64  `json:"balanceCents"`
+}
+
+// myAccounts answers GET /v1/finance/accounts — the scope-aware ledger-account read
+// that the console (surface #2) and finance.hanzo.ai (surface #3) consume. It is
+// tenant-isolated SERVER-SIDE: a per-org caller sees ONLY accounts under its own
+// "org:<tenant>:" prefix, never house or another tenant's accounts. Global-admin may
+// widen with ?scope=house (the reserve/revenue/payout house accounts) or ?org=<t> (a
+// specific tenant) — the ONLY way to cross the tenant boundary, and only for admins.
+// Honest empty until a tenant has ledger postings (the commerce→ledger projection is
+// the rebrand/datastore agents' concurrent work; this contract is stable for them).
+func (s *svc) myAccounts(c *zip.Ctx) error {
+	tenant, ok := principal.Tenant(c)
+	if !ok {
+		return zip.ErrForbidden("sign in to view accounts")
+	}
+	prefix := "org:" + tenant + ":"
+	scope := "org"
+	if c.IsAdmin() {
+		switch strings.TrimSpace(c.Query("scope")) {
+		case "house":
+			prefix, scope = "", "house" // all accounts; the report separates house from tenant
+		default:
+			if org := strings.TrimSpace(c.Query("org")); org != "" {
+				prefix, scope, tenant = "org:"+org+":", "org", org
+			}
+		}
+	}
+	balances, err := s.record.AccountsWithPrefix(c.Context(), prefix)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
+	}
+	accounts := make([]accountView, 0, len(balances))
+	for addr, bal := range balances {
+		// house scope: exclude per-tenant accounts so the admin house view stays house-only.
+		if scope == "house" && strings.HasPrefix(addr, "org:") {
+			continue
+		}
+		accounts = append(accounts, accountView{Address: addr, BalanceCents: bal})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"scope":    scope,
+		"tenant":   tenant,
+		"accounts": accounts,
+	})
+}
+
 // ── admin surface (global-admin, fail-closed) ────────────────────────────────
 
-// adminReport answers GET /v1/admin/treasury — the full fund report, the recent
+// adminReport answers GET /v1/admin/finance — the full fund report, the recent
 // journal (double-entry postings), and the Hanzo L1 anchor status. Global-admin only.
 func (s *svc) adminReport(c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	rep, err := s.ledger.Snapshot(ctx)
+	rep, err := s.record.Snapshot(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	entries, err := s.ledger.Entries(ctx, journalLimitOf(c))
+	entries, err := s.record.Entries(ctx, journalLimitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "journal: %v", err)
 	}
 	return adminOK(c, map[string]any{
 		"report":  rep,
 		"journal": entries,
-		"anchor":  s.anchor.status(ctx, s.ledger),
+		"anchor":  s.anchor.status(ctx, s.record),
 	})
 }
 
-// policyRequest is the POST /v1/admin/treasury/policy body.
+// policyRequest is the POST /v1/admin/finance/policy body.
 type policyRequest struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 }
@@ -214,7 +316,7 @@ func (s *svc) adminSetPolicy(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	pol, err := s.ledger.SetPolicy(c.Context(), body.RevenueShareBps, time.Now().Unix())
+	pol, err := s.record.SetPolicy(c.Context(), body.RevenueShareBps, time.Now().Unix())
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
@@ -222,7 +324,7 @@ func (s *svc) adminSetPolicy(c *zip.Ctx) error {
 	return adminOK(c, map[string]any{"policy": pol})
 }
 
-// sweepRequest is the POST /v1/admin/treasury/sweep body. RevenueCents is the net
+// sweepRequest is the POST /v1/admin/finance/sweep body. RevenueCents is the net
 // platform revenue MEASURED for the period (the caller — a cron or an operator —
 // supplies it from the revenue view; treasury does the accounting, not the metering,
 // keeping the concerns orthogonal). Period defaults to the current UTC month.
@@ -248,7 +350,7 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 	if body.RevenueCents < 0 {
 		return zip.ErrBadRequest("revenueCents must be >= 0")
 	}
-	entry, created, err := s.ledger.Accrue(c.Context(), period, body.RevenueCents, time.Now().Unix())
+	entry, created, err := s.record.Accrue(c.Context(), period, body.RevenueCents, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
 	}
@@ -257,7 +359,7 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.AmountCents,
 		})
 	}
-	reserve, _ := s.ledger.ReserveCents(c.Context())
+	reserve, _ := s.record.ReserveCents(c.Context())
 	return adminOK(c, map[string]any{
 		"period":       period,
 		"revenueCents": body.RevenueCents,
@@ -267,7 +369,7 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 	})
 }
 
-// seedRequest is the POST /v1/admin/treasury/seed body — a bootstrap capital
+// seedRequest is the POST /v1/admin/finance/seed body — a bootstrap capital
 // injection into the reserve fund. Ref (optional) is an idempotency key; without one
 // each seed is a distinct injection.
 type seedRequest struct {
@@ -297,7 +399,7 @@ func (s *svc) adminSeed(c *zip.Ctx) error {
 	if memo == "" {
 		memo = "reserve capital injection"
 	}
-	entry, created, err := s.ledger.Seed(c.Context(), ref, memo, body.AmountCents, time.Now().Unix())
+	entry, created, err := s.record.Seed(c.Context(), ref, memo, body.AmountCents, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
 	}
@@ -306,7 +408,7 @@ func (s *svc) adminSeed(c *zip.Ctx) error {
 			"amountCents": body.AmountCents, "ref": ref, "entryId": entry.ID,
 		})
 	}
-	reserve, _ := s.ledger.ReserveCents(c.Context())
+	reserve, _ := s.record.ReserveCents(c.Context())
 	return adminOK(c, map[string]any{"entry": entry, "created": created, "reserveCents": reserve})
 }
 
@@ -314,7 +416,7 @@ func (s *svc) adminSeed(c *zip.Ctx) error {
 
 // adminOK writes the { status:"ok", msg, data } envelope the console's admin
 // surface (originGet/originPost via app/admin/aggregate) unwraps — identical to
-// clients/admin and clients/referrals. The customer /v1/treasury surface stays bare
+// clients/admin and clients/referrals. The customer /v1/finance surface stays bare
 // JSON (read via the /cloud proxy + restGet).
 func adminOK(c *zip.Ctx, data any) error {
 	return c.JSON(http.StatusOK, map[string]any{"status": "ok", "msg": "", "data": data})
