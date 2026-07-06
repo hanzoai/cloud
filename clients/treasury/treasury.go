@@ -48,7 +48,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,8 +77,8 @@ const (
 )
 
 type svc struct {
-	store      *sqlstore.Store // native store: policy config always, journal when native backend
-	record     ledger.Backend  // the ledger of record — native (default) or Formance
+	stores     *sqlstore.Manager // per-tenant Base files; House() is the reserve/house ledger
+	record     ledger.Backend    // ledger of record bound to the HOUSE store — native (default) or Formance
 	log        luxlog.Logger
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
 	anchor     *anchorer       // Hanzo L1 anchor (Phase 2); nil-safe
@@ -102,27 +101,33 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("treasury.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("treasury.Mount: data dir: %w", err)
-	}
-	store, err := sqlstore.Open(filepath.Join(deps.DataDir, "treasury.db"))
+	// Per-tenant Base storage: the house/reserve ledger is one file, every customer
+	// tenant is its own file, all under CLOUD_DATA_DIR. This is the standing rule —
+	// prod runs live on per-tenant SQLite.
+	stores, err := sqlstore.NewManager(deps.DataDir)
 	if err != nil {
-		return fmt.Errorf("treasury.Mount: open store: %w", err)
+		return fmt.Errorf("treasury.Mount: open stores: %w", err)
 	}
-	// Select the ledger of RECORD. Formance (Postgres-backed, the production ledger)
-	// when FORMANCE_LEDGER_URL is wired; else the native Base/SQLite engine (the
-	// offline/default, so the reserve fund works today). The Hanzo revenue-share
-	// policy is held in the native store either way (it is config, not accounting).
+	// The reserve fund is single-writer + overdraw-guarded, so the ledger of RECORD
+	// binds to the ONE house store. Its DRIVER is chosen by StorageDriver() (the one
+	// place that decides): the native Base/SQLite engine by default — what prod runs —
+	// or the Formance Postgres ledger of record as an OPT-IN (FORMANCE_LEDGER_URL).
+	// Either way per-CUSTOMER books stay on per-tenant Base files (myAccounts below).
+	house, err := stores.House()
+	if err != nil {
+		return fmt.Errorf("treasury.Mount: open house ledger: %w", err)
+	}
 	var record ledger.Backend
-	if base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL")); base != "" {
-		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), store)
-		log.Info("treasury ledger of record: formance", "url", base)
+	if StorageDriver() == DriverPostgres {
+		base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL"))
+		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), house)
+		log.Info("treasury ledger of record: formance (postgres, opt-in)", "url", base)
 	} else {
-		record = ledger.New(store)
-		log.Info("treasury ledger of record: native (Base/SQLite) — set FORMANCE_LEDGER_URL for Formance")
+		record = ledger.New(house)
+		log.Info("treasury ledger of record: native Base/SQLite (per-tenant) — default; set FORMANCE_LEDGER_URL for Postgres")
 	}
 	s := &svc{
-		store:      store,
+		stores:     stores,
 		record:     record,
 		log:        log,
 		auditStore: deps.Audit,
@@ -143,7 +148,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/admin/treasury/seed", s.adminSeed)        // global-admin: inject reserve capital
 	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
 
-	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
+	log.Info("treasury mounted", "brand", deps.Brand, "storageDriver", StorageDriver(), "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
 	return nil
 }
 
@@ -300,7 +305,7 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 			}
 		}
 	}
-	balances, err := s.record.AccountsWithPrefix(c.Context(), prefix)
+	balances, err := s.accountBalances(c.Context(), scope, tenant, prefix)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
 	}
@@ -317,6 +322,23 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 		"tenant":   tenant,
 		"accounts": accounts,
 	})
+}
+
+// accountBalances resolves WHICH store a scope-aware accounts read touches — the
+// tenant→file selection. The house scope reads the ledger of RECORD (native Base OR
+// the Formance/Postgres opt-in, so the house books honour the configured backend);
+// an org scope reads that tenant's OWN per-tenant Base file. A per-org caller can
+// therefore only ever read its own file, and one tenant's writes never appear in
+// another's read.
+func (s *svc) accountBalances(ctx context.Context, scope, tenant, prefix string) (map[string]int64, error) {
+	if scope == "house" {
+		return s.record.AccountsWithPrefix(ctx, prefix)
+	}
+	store, err := s.stores.Get(tenant)
+	if err != nil {
+		return nil, err
+	}
+	return store.BalancesWithPrefix(ctx, prefix)
 }
 
 // ── admin surface (global-admin, fail-closed) ────────────────────────────────
@@ -502,12 +524,12 @@ func journalLimitOf(c *zip.Ctx) int {
 	return n
 }
 
-// Shutdown closes the treasury store. Idempotent.
+// Shutdown closes every open treasury store (house + tenants). Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.stores == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.stores.Close()
 	mounted = nil
 	return err
 }
