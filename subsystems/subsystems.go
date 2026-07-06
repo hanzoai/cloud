@@ -156,6 +156,7 @@ import (
 	// owner of /v1/prompts/* (it supersedes the earlier clients/prompt facade).
 	_ "github.com/hanzoai/cloud/clients/affiliates" // order 144 — /v1/affiliates/* + /v1/admin/affiliates* (partner-commission loop: ongoing commission via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/agents"     // order 127 — /v1/agents/*
+	_ "github.com/hanzoai/cloud/clients/wallets"    // order 127 — /v1/wallets/* (configurable KMS/MPC/treasury custody)
 	_ "github.com/hanzoai/cloud/clients/analytics"  // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
 	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
