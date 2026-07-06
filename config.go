@@ -282,11 +282,33 @@ func LoadConfig() *Config {
 	return cfg
 }
 
+// stagedSubsystems require EXPLICIT enablement: they are deliberately NOT part of
+// the empty-Enable "mount everything" default and mount ONLY when named in
+// CLOUD_ENABLE. This is the HIP-0106 staged-rollout contract, enforced in code.
+//
+// "iam" is staged because iamsvc.Mount boots the WHOLE Beego identity runtime via
+// iamserver.InitEmbed(), which initialises process-global Beego config (web.BConfig
+// / the shared AppConfig). The `ai` subsystem is a sibling casibase/casdoor fork
+// linked against the SAME beego module, and reads that same process-global at its
+// own bootstrap. Booting the IAM embed under the mount-all default corrupts the
+// shared global so `ai` can no longer open its SQLite store — the binary crashes at
+// boot with "ai: bootstrap: unable to open database file (14)" (SQLITE_CANTOPEN),
+// which is exactly why every cloud release since the IAM embed (#142) failed its
+// boot smoke and the fleet stayed pinned to a pre-embed image. Until that
+// shared-global isolation is solved AND the fold is verified (login/authorize/
+// token/jwks + the operator SSO chain), the operator activates IAM by ADDING "iam"
+// to CLOUD_ENABLE explicitly; until then hanzo.id is served by the standalone iam
+// pod and cloud runs iam-less exactly as it does in production today (pickIAMClient
+// falls back to the remote/disabled IAM client — see build.go). ONE activation
+// mechanism (the enable-list), ONE place.
+var stagedSubsystems = map[string]bool{"iam": true}
+
 // Enabled reports whether subsystem `name` is enabled in this config.
-// Empty Enable list = all subsystems enabled.
+// Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
+// (stagedSubsystems), which mount only when named in Enable explicitly.
 func (c *Config) Enabled(name string) bool {
 	if len(c.Enable) == 0 {
-		return true
+		return !stagedSubsystems[name]
 	}
 	for _, s := range c.Enable {
 		if s == name {
