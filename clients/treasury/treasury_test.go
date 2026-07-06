@@ -20,15 +20,19 @@ import (
 // singleton (so the Reserve helper resolves it), cleaning both up.
 func mount(t *testing.T) (*zip.App, *svc) {
 	t.Helper()
-	store, err := sqlstore.Open(t.TempDir() + "/treasury.db")
+	stores, err := sqlstore.NewManager(t.TempDir())
 	if err != nil {
-		t.Fatalf("open store: %v", err)
+		t.Fatalf("open stores: %v", err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() { _ = stores.Close() })
+	house, err := stores.House()
+	if err != nil {
+		t.Fatalf("open house ledger: %v", err)
+	}
 	log := luxlog.New("test")
 	s := &svc{
-		store:  store,
-		record: ledger.New(store),
+		stores: stores,
+		record: ledger.New(house),
 		log:    log,
 		anchor: newAnchorer(cloud.Deps{}, log),
 	}
