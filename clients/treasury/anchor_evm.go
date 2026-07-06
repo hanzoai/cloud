@@ -62,9 +62,9 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 	if err != nil {
 		return nil, fmt.Errorf("nonce: %w", err)
 	}
-	gasPrice, err := cl.SuggestGasPrice(ctx)
+	tipCap, feeCap, err := dynamicFees(ctx, cl)
 	if err != nil {
-		return nil, fmt.Errorf("gas price: %w", err)
+		return nil, err
 	}
 
 	var to common.Address
@@ -77,13 +77,17 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 		data = append(append([]byte{}, selfTxMagic...), root[:]...)
 	}
 
-	tx := types.NewTx(&types.LegacyTx{
-		Nonce:    nonce,
-		To:       &to,
-		Value:    big.NewInt(0),
-		Gas:      anchorGasLimit,
-		GasPrice: gasPrice,
-		Data:     data,
+	// Hanzo L1 (36963) runs a coreth EIP-1559 fee market, so the anchor is a
+	// DynamicFeeTx — see dynamicFees for the 25 gwei min-base-fee handling.
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &to,
+		Value:     big.NewInt(0),
+		Gas:       anchorGasLimit,
+		GasTipCap: tipCap,
+		GasFeeCap: feeCap,
+		Data:      data,
 	})
 	signed, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), priv)
 	if err != nil {
@@ -114,6 +118,37 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 	a.store(rec)
 	a.log.Info("treasury: anchored ledger root", "root", rec.Root, "txHash", rec.TxHash, "block", rec.Block, "chainId", a.chainID)
 	return rec, nil
+}
+
+// dynamicFees computes EIP-1559 fee caps for the Hanzo L1 (36963). Its coreth fee
+// market pins a hard 25 gwei minimum base fee (genesis feeConfig.minBaseFee) and a
+// ~1 wei minimum priority fee. A legacy tx priced at exactly SuggestGasPrice
+// (base+1) gets stranded the instant the base fee ticks up, so the anchor submits a
+// DynamicFeeTx instead: the tip is floored at 1 gwei (safely above the chain's 1 wei
+// floor, still a negligible ~50k gas cost) and the fee cap carries 2x-base-fee
+// headroom so a base-fee rise between signing and inclusion can't strand the anchor.
+// Falls back to the legacy gas price on a pre-1559 chain (no base fee in the header).
+func dynamicFees(ctx context.Context, cl *ethclient.Client) (tipCap, feeCap *big.Int, err error) {
+	head, err := cl.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("latest header (base fee): %w", err)
+	}
+	if head.BaseFee == nil || head.BaseFee.Sign() == 0 {
+		gp, gerr := cl.SuggestGasPrice(ctx)
+		if gerr != nil {
+			return nil, nil, fmt.Errorf("gas price: %w", gerr)
+		}
+		return gp, gp, nil
+	}
+	tipCap, err = cl.SuggestGasTipCap(ctx)
+	if err != nil || tipCap == nil {
+		tipCap = big.NewInt(0)
+	}
+	if minTip := big.NewInt(1_000_000_000); tipCap.Cmp(minTip) < 0 { // 1 gwei floor
+		tipCap = minTip
+	}
+	feeCap = new(big.Int).Add(new(big.Int).Mul(head.BaseFee, big.NewInt(2)), tipCap)
+	return tipCap, feeCap, nil
 }
 
 // store sets the in-memory last record and persists it to DataDir (best-effort).
