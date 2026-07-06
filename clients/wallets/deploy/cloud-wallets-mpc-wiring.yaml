@@ -1,0 +1,56 @@
+# NOT APPLIED — reference manifest for the Hanzo-branded luxfi/mpc signer cluster.
+#
+# The signer cluster ITSELF is already canonical in universe and is NOT
+# duplicated here (one and only one way — DRY):
+#
+#   hanzoai/universe  infra/k8s/mpc/statefulset.yaml
+#     • 3-node, 2-of-3 threshold ring on ghcr.io/luxfi/mpc:v1.14.0 (the OSS dep;
+#       ghcr.io/luxfi/* is the correct registry for an upstream Lux dependency)
+#     • namespace hanzo-mpc; dashboard API :8081
+#     • Service  mpc-api-svc  (ClusterIP)  →  http://mpc-api-svc.hanzo-mpc.svc:8081
+#     • MPC_JWT_SECRET (+ MPC_PASSWORD, DATABASE_URL, KV_URL) are KMS-sourced via
+#       infra/k8s/kms-canonical-crs/hanzo-mpc (KMSSecret → kms.hanzo.ai), NEVER plaintext
+#     • mpc.hanzo.ai routes to mpc-api-svc:8081 (infra/k8s/ingress/routes.yaml)
+#
+# This file is the ONLY thing the wallets subsystem adds: the cloud-side
+# CONSUMPTION wiring. cloud's clients/wallets MPC + treasury custody talks to
+# that cluster over HTTP and mints the JWT the cluster validates (issuer
+# mpc.lux.network, audience mpc-api, claim org_id) using the SAME shared HS256
+# secret the cluster holds — pulled from KMS, never a plaintext env value.
+#
+# Going LIVE is a deliberate ops toggle (not GitOps auto-applied): apply this as
+# a strategic-merge patch onto the cloud (unified-binary) Deployment once the
+# hanzo-mpc ring is healthy. The two env vars are all that flips clients/wallets
+# MPC/treasury custody from fail-closed (ErrMPCNotConfigured) to live.
+#
+#   kubectl -n hanzo patch deployment cloud --patch-file \
+#     clients/wallets/deploy/cloud-wallets-mpc-wiring.yaml
+#
+# (Match `metadata.name` below to the live cloud unified-binary Deployment.)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud
+  namespace: hanzo
+spec:
+  template:
+    spec:
+      containers:
+        - name: cloud
+          env:
+            # Comma-separated mpc node base URLs. Unset ⇒ mpc/treasury custody
+            # fail closed (ErrMPCNotConfigured); KMS single-sig custody is
+            # unaffected (it is in-process, always available).
+            - name: CLOUD_WALLETS_MPC_ADDR
+              value: "http://mpc-api-svc.hanzo-mpc.svc:8081"
+            # KMS ref (cloud embedded-KMS coordinate) of the SHARED HS256 JWT
+            # secret the mpc ring validates with — the SAME value KMS syncs into
+            # the ring's mpc-secrets/jwt-secret (project hanzo, env prod, path
+            # /mpc-secrets, key jwt-secret). NEVER a plaintext secret here; only
+            # the ref. Unset ⇒ mpc/treasury custody fail closed.
+            - name: CLOUD_WALLETS_MPC_JWT_SECRET_REF
+              value: "mpc-secrets/jwt-secret@prod"
+            # Optional: default custody for a wallet created without an explicit
+            # `custody` (defaults to "kms" when unset).
+            - name: CLOUD_WALLETS_DEFAULT_CUSTODY
+              value: "kms"
