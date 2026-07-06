@@ -387,3 +387,63 @@ func TestIdentityValidator(t *testing.T) {
 		}
 	})
 }
+
+// TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin locks the exact global-admin
+// invariant the cloud admin surfaces (incl. /v1/admin/treasury/*) gate on:
+//
+//	global admin  ⟺  validated principal with (owner == adminOrg) AND isAdmin
+//
+// It drives real JWKS-validated bearer tokens through the SAME SanitizeIdentity
+// boundary (adminOrg = "admin"), then reads the re-minted c.IsAdmin() a downstream
+// admin gate sees. Two of the five cases are the decisive ones for the treasury
+// flip (#51): a NON-admin sitting in the admin org, and a hanzo-org ADMIN.
+//
+// Why this matters (the #51 identity wrinkle): the sole global admin z@hanzo.ai is
+// global admin because IAM promotes @hanzo.ai to the admin org (owner == adminOrg),
+// NOT because it lives in the "hanzo" org. This test proves the boundary must NOT
+// be relaxed to "owner == hanzo": doing so (e.g. IAM_ADMIN_ORG=hanzo) would elevate
+// EVERY hanzo-org admin to see all tenants' finances. The gate stays owner==adminOrg
+// AND isAdmin; the fix for z is that its token carries owner=admin, not that the
+// gate widens. A hanzo-org admin — and a normal hanzo user — get NOTHING here.
+func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	app, got := newIdentityApp(t, v) // adminOrg = "admin"
+	future := time.Now().Add(time.Hour)
+
+	cases := []struct {
+		name      string
+		owner     string
+		email     string
+		isAdmin   bool
+		wantAdmin bool
+	}{
+		// z@hanzo.ai, the sole global admin — IAM-promoted into the admin org.
+		{"admin-org admin (z@hanzo.ai) is global admin", "admin", "z@hanzo.ai", true, true},
+		// A non-admin somehow in the admin org gets NOTHING: proves isAdmin is REQUIRED,
+		// so the gate is not "owner==adminOrg" alone.
+		{"admin-org NON-admin is not global admin", "admin", "svc@hanzo.ai", false, false},
+		// A hanzo-org ADMIN (org owner) is NOT a global admin: proves owner==adminOrg is
+		// REQUIRED. THIS is the case that rejects widening the gate to the hanzo org.
+		{"hanzo-org admin is NOT global admin", "hanzo", "boss@hanzo.ai", true, false},
+		// A normal hanzo-org user: not elevated.
+		{"normal hanzo-org user is not global admin", "hanzo", "joe@hanzo.ai", false, false},
+		// A cross-org admin (org admin of some other tenant): not elevated.
+		{"cross-org admin is not global admin", "acme", "dave@acme.io", true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			*got = captured{}
+			tok := signWith(t, key, tokenClaims("hanzo-console", tc.owner, tc.email, tc.isAdmin, future))
+			probe(t, app, bearer(tok))
+			if got.admin != tc.wantAdmin {
+				t.Errorf("global-admin for owner=%q isAdmin=%v: got %v, want %v",
+					tc.owner, tc.isAdmin, got.admin, tc.wantAdmin)
+			}
+		})
+	}
+}
