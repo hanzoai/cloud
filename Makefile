@@ -22,7 +22,7 @@ CONSOLE2_DIR    ?= ../console2
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
 CGO_ENABLED     ?= 0
 
-.PHONY: help webui build build-standalone run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help webui build build-standalone run smoke test test-cgo test-race vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -55,6 +55,9 @@ test: ## Run unit + integration tests (pure-Go, exactly as prod ships).
 
 test-cgo: ## Prove the cgo build works too — forces the fork's pure-Go backend via -tags sqlite_purego so the embedded modernc importers don't double-register "sqlite".
 	CGO_ENABLED=1 $(GO) test -tags sqlite_purego ./...
+
+test-race: ## Run tests under the race detector. -race REQUIRES CGO=1, which links the fork's mattn "sqlite" alongside the embedded modernc importers and panics at init ("sql: Register called twice for driver sqlite"); the sqlite_purego tag forces the fork to modernc too, so the whole binary registers "sqlite" exactly once — the ONE way to race-test the cloud (fixes clients/{graph,kmssvc,o11y}).
+	CGO_ENABLED=1 $(GO) test -race -tags sqlite_purego ./...
 
 vet: ## go vet across the module.
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) vet ./...
