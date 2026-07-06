@@ -522,11 +522,11 @@ require (
 	github.com/luxfi/consensus v1.25.15 // indirect
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/corona v0.7.6 // indirect
-	github.com/luxfi/crypto v1.19.21 // indirect
+	github.com/luxfi/crypto v1.19.21
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/database v1.19.3 // indirect
 	github.com/luxfi/fhe v1.8.2 // indirect
-	github.com/luxfi/geth v1.17.5 // indirect
+	github.com/luxfi/geth v1.17.5
 	github.com/luxfi/ids v1.2.15 // indirect
 	github.com/luxfi/kms v1.11.8
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
