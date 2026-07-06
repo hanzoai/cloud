@@ -393,18 +393,21 @@ func TestIdentityValidator(t *testing.T) {
 //
 //	global admin  ⟺  validated principal with (owner == adminOrg) AND isAdmin
 //
-// It drives real JWKS-validated bearer tokens through the SAME SanitizeIdentity
-// boundary (adminOrg = "admin"), then reads the re-minted c.IsAdmin() a downstream
-// admin gate sees. Two of the five cases are the decisive ones for the treasury
-// flip (#51): a NON-admin sitting in the admin org, and a hanzo-org ADMIN.
+// adminOrg is DEPLOYMENT config (IAM_ADMIN_ORG): the operator pins it to the org
+// its platform operators actually live in. Hanzo pins it to "hanzo" — the org the
+// sole operator, founder z@hanzo.ai, is minted into as owner=hanzo, isAdmin=true
+// (task #51). This test pins it to "admin" hermetically; the CODE it exercises is
+// identical for any adminOrg value, so it proves the invariant, not the choice.
 //
-// Why this matters (the #51 identity wrinkle): the sole global admin z@hanzo.ai is
-// global admin because IAM promotes @hanzo.ai to the admin org (owner == adminOrg),
-// NOT because it lives in the "hanzo" org. This test proves the boundary must NOT
-// be relaxed to "owner == hanzo": doing so (e.g. IAM_ADMIN_ORG=hanzo) would elevate
-// EVERY hanzo-org admin to see all tenants' finances. The gate stays owner==adminOrg
-// AND isAdmin; the fix for z is that its token carries owner=admin, not that the
-// gate widens. A hanzo-org admin — and a normal hanzo user — get NOTHING here.
+// It drives real JWKS-validated bearer tokens through the SAME SanitizeIdentity
+// boundary and reads the re-minted c.IsAdmin() a downstream admin gate sees. The
+// two security properties it locks — independent of which org adminOrg names:
+//   - isAdmin is REQUIRED: a NON-admin sitting in the admin org gets nothing, so
+//     the gate is never "owner == adminOrg" alone.
+//   - owner is REQUIRED: an admin of ANY OTHER org gets nothing, so an org-admin of
+//     one tenant can never reach the global (all-tenants) admin surface — only the
+//     operator org's admins do. This is what keeps global-admin the operator's, and
+//     what "isAdmin required" keeps from being every operator-org user.
 func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -422,17 +425,18 @@ func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 		isAdmin   bool
 		wantAdmin bool
 	}{
-		// z@hanzo.ai, the sole global admin — IAM-promoted into the admin org.
-		{"admin-org admin (z@hanzo.ai) is global admin", "admin", "z@hanzo.ai", true, true},
-		// A non-admin somehow in the admin org gets NOTHING: proves isAdmin is REQUIRED,
-		// so the gate is not "owner==adminOrg" alone.
-		{"admin-org NON-admin is not global admin", "admin", "svc@hanzo.ai", false, false},
-		// A hanzo-org ADMIN (org owner) is NOT a global admin: proves owner==adminOrg is
-		// REQUIRED. THIS is the case that rejects widening the gate to the hanzo org.
-		{"hanzo-org admin is NOT global admin", "hanzo", "boss@hanzo.ai", true, false},
-		// A normal hanzo-org user: not elevated.
-		{"normal hanzo-org user is not global admin", "hanzo", "joe@hanzo.ai", false, false},
-		// A cross-org admin (org admin of some other tenant): not elevated.
+		// An admin IN the configured admin org is the global admin (in prod this is
+		// z@hanzo.ai, owner==the operator org, isAdmin=true).
+		{"admin in the configured admin org is global admin", "admin", "z@hanzo.ai", true, true},
+		// A non-admin in the admin org gets NOTHING: proves isAdmin is REQUIRED, so the
+		// gate is not "owner==adminOrg" alone (a normal operator-org user is not global).
+		{"non-admin in the admin org is not global admin", "admin", "svc@hanzo.ai", false, false},
+		// An ADMIN of a DIFFERENT org is NOT a global admin: proves owner==adminOrg is
+		// REQUIRED — an org-admin of one tenant never reaches the all-tenants surface.
+		{"admin of another org is not global admin", "globex", "boss@globex.io", true, false},
+		// A normal user of another org: not elevated.
+		{"normal user of another org is not global admin", "globex", "joe@globex.io", false, false},
+		// A cross-org admin of yet another tenant: not elevated.
 		{"cross-org admin is not global admin", "acme", "dave@acme.io", true, false},
 	}
 	for _, tc := range cases {
