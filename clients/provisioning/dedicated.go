@@ -107,12 +107,36 @@ type engine struct {
 	tag        string // container image tag (pinned; never :latest)
 	ports      []enginePort
 	clientPort int // the port a customer connects on (the DSN port)
-	// secretEnv builds the admin Secret data; each key is an env var the image
-	// reads (referenced by the CR via one envFrom secretRef), so the instance
-	// boots with THIS admin credential — never a plaintext in the CR/commit.
+	// secretEnv builds the admin Secret data. For an envFrom engine (secretMount
+	// == "") each key is an env var the image reads (the CR references it via one
+	// envFrom secretRef), so the instance boots with THIS admin credential. For a
+	// mounted engine (secretMount != "") the map is instead a set of FILES the
+	// secret projects — its keys are filenames, its values file contents (e.g.
+	// kv's "kv.conf" -> "requirepass <pw>"). Either way the credential lives ONLY
+	// in the runtime Secret — never a plaintext in the CR/commit.
 	secretEnv func(user, pw, db string) map[string]string
 	// dsn builds the customer connection string.
 	dsn func(user, pw, host string, port int, db string) string
+	// adminUser overrides the DSN/role username (else dedicatedAdminUser="admin").
+	// Valkey ("kv") authenticates its built-in "default" user via requirepass —
+	// there is no "admin" ACL user — so kv sets this to "default"; a made-up
+	// username would fail AUTH. Empty ⇒ "admin" (datastore/sql/docdb).
+	adminUser string
+	// env is non-secret plain env stamped on the CR's spec.env. sql needs
+	// PGDATA=<mount>/pgdata: a fresh block PVC root holds a lost+found that
+	// Postgres initdb refuses, so PGDATA must be a SUBDIRECTORY of the mount (the
+	// same layout the shared sql-0 uses). Empty for engines that need none.
+	env map[string]string
+	// args are container args stamped on the CR's spec.args (the image ENTRYPOINT
+	// is preserved). kv loads its per-instance requirepass from the mounted config
+	// file by passing it as the first arg; the envFrom engines set none.
+	args []string
+	// secretMount, when set, mounts the admin Secret as FILES at this path instead
+	// of exporting it via envFrom. Valkey ("kv") reads its password from a
+	// requirepass config file (the kv-server binary does NOT read a password from
+	// env), so its admin Secret is a config file mounted here + loaded via args —
+	// still RBAC-scoped, never inlined in the CR. Empty ⇒ envFrom (the default).
+	secretMount string
 	// pod memory floor/ceiling — a database needs a real memory reservation.
 	memReq string
 	memLim string
@@ -132,9 +156,69 @@ type engine struct {
 }
 
 // dedicatedEngines is the closed set of kinds provisioned as a dedicated
-// instance. Its membership is exactly the former unavailableKinds set, now
-// un-gated because isolation is by instance.
+// instance. It is exactly the FOUR on-demand data add-ons — Hanzo KV / SQL /
+// DocDB / Datastore — every product runs on Base/SQLite by default and an org
+// ENABLES one of these per instance on demand (disabling reverts to Base). All
+// four route through the ONE identical dedicated path (createDedicated), varying
+// only by the data in this table: the operator materializes each as a Datastore
+// CR of the matching spec.type (valkey / postgresql / docdb / datastore). Adding
+// an add-on kind = one more entry here; nothing else in the control plane
+// special-cases a kind. sql + kv moved here from the shared-logical registry so
+// each org OWNS its instance — a per-tenant credential is naturally scoped and a
+// cross-tenant grant is impossible (one tenant per instance).
 var dedicatedEngines = map[string]engine{
+	// PostgreSQL ("sql"): ghcr.io/hanzoai/sql provisions POSTGRES_USER (as a
+	// SUPERUSER, with POSTGRES_PASSWORD) on POSTGRES_DB at entrypoint — the exact
+	// env the shared sql-0 StatefulSet uses. PGDATA must be a SUBDIRECTORY of the
+	// data mount: a fresh block PVC root carries a lost+found that Postgres initdb
+	// refuses, so the shared sql-0 sets PGDATA=/var/lib/postgresql/data/pgdata and
+	// we mirror it. Root/self-chowning image (no fsGroup needed).
+	"sql": {
+		prefix: "sql", dsType: "postgresql",
+		image: "ghcr.io/hanzoai/sql", tag: env("CLOUD_DEDICATED_SQL_TAG", "18"),
+		ports:      []enginePort{{"sql", 5432}},
+		clientPort: 5432,
+		dataMount:  "/var/lib/postgresql/data",
+		env:        map[string]string{"PGDATA": "/var/lib/postgresql/data/pgdata"},
+		memReq:     "128Mi", memLim: "512Mi",
+		secretEnv: func(user, pw, db string) map[string]string {
+			return map[string]string{
+				"POSTGRES_USER":     user,
+				"POSTGRES_PASSWORD": pw,
+				"POSTGRES_DB":       db,
+			}
+		},
+		dsn: func(user, pw, host string, port int, db string) string {
+			return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, pw, host, port, db)
+		},
+	},
+	// Valkey ("kv"): ghcr.io/hanzoai/kv runs the kv-server binary directly, which
+	// authenticates its built-in "default" user via `requirepass`. The binary does
+	// NOT read a password from env, so — unlike the env-configured engines — kv's
+	// admin Secret is a valkey config FILE ("kv.conf" -> "requirepass <pw>")
+	// MOUNTED at secretMount and loaded as the first arg; the password stays
+	// RBAC-scoped in the Secret, never inlined in the CR spec. DSN user is
+	// "default" (there is no "admin" ACL user). Root/self-chowning image.
+	"kv": {
+		prefix: "kv", dsType: "valkey",
+		image: "ghcr.io/hanzoai/kv", tag: env("CLOUD_DEDICATED_KV_TAG", "9"),
+		ports:       []enginePort{{"kv", 6379}},
+		clientPort:  6379,
+		dataMount:   "/data",
+		adminUser:   "default",
+		secretMount: "/etc/kvconf",
+		args:        []string{"/etc/kvconf/kv.conf", "--bind", "0.0.0.0", "--dir", "/data", "--protected-mode", "no", "--maxmemory-policy", "allkeys-lru"},
+		memReq:      "64Mi", memLim: "512Mi",
+		secretEnv: func(_, pw, _ string) map[string]string {
+			// A valkey config snippet, not env: requirepass sets the default
+			// user's password (genToken output is [A-Za-z0-9_-] — no quoting
+			// needed, no injection). The instance boots reading THIS file.
+			return map[string]string{"kv.conf": "requirepass " + pw + "\n"}
+		},
+		dsn: func(user, pw, host string, port int, _ string) string {
+			return fmt.Sprintf("redis://%s:%s@%s:%d", user, pw, host, port)
+		},
+	},
 	// ClickHouse ("datastore"): ghcr.io/hanzoai/datastore:26 provisions
 	// DATASTORE_USER (with DATASTORE_PASSWORD) on DATASTORE_DB at entrypoint and
 	// drops the built-in default user, so the provisioned user is the instance
@@ -231,8 +315,10 @@ func dedicatedSize(kind string) string {
 
 // createDedicated launches the org's dedicated instance and records it as
 // "provisioning". Called by create() after the shared preamble (org resolved,
-// name validated, billing gated, (org,kind,name) dedup checked).
-func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64) error {
+// name validated, billing gated, (org,kind,name) dedup checked). When instance
+// is non-empty the assembled DSN is also projected as <KIND>_URL into that app
+// instance's addons Secret, switching it off Base onto this backend.
+func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64, instance string) error {
 	if s.orch == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: no cluster client")
 	}
@@ -270,7 +356,10 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	user := dedicatedAdminUser
+	user := e.adminUser
+	if user == "" {
+		user = dedicatedAdminUser
+	}
 	secretName := inst + "-admin"
 
 	// Seal the instance admin credential in KMS (durable + audited). The password
@@ -310,11 +399,12 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	}
 
 	host := fmt.Sprintf("%s.%s.svc", inst, ns)
+	dsn := e.dsn(user, pw, host, e.clientPort, db)
 	r := Resource{
 		ID: id, Org: org, Kind: kind, Name: name,
 		PhysicalName: inst, SecretRef: storedRef,
 		Host: host, Port: e.clientPort, Username: user, DBName: db,
-		Status: statusProvisioning, CreatedAt: time.Now().Unix(), Size: size,
+		Status: statusProvisioning, CreatedAt: time.Now().Unix(), Size: size, Instance: instance,
 	}
 	if err := s.store.Insert(ctx, r); err != nil {
 		// Undo the instance + secret we just created.
@@ -329,15 +419,32 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 
-	// The instance is launching + persisted — attribute the provision to the
-	// caller's OWN org, carrying the size dimension so the invoice line names the
-	// instance. The recurring footprint meter charges ongoing GB-time.
+	// Instance binding (no-op when not instance-bound): project the DSN as
+	// <KIND>_URL into the app instance's addons Secret so it switches off Base onto
+	// this backend. This is done AFTER Insert (only the row winner reaches it, so
+	// concurrent duplicates can't race the injection) and is part of the atomic
+	// provision — a failure rolls back the row + instance + secret so the org is
+	// never billed for a half-wired resource and the instance stays on Base.
+	if err := s.injectAddonURL(ctx, org, instance, kind, dsn); err != nil {
+		_, _ = s.store.Delete(ctx, org, kind, name)
+		_ = s.orch.DeleteDatastore(ctx, ns, inst)
+		_ = s.orch.DeleteSecret(ctx, ns, secretName)
+		if storedRef != "" {
+			_ = s.sec.Delete(storedRef)
+		}
+		s.log.Error("inject addon url failed; rolled back provision", "kind", kind, "org", org, "instance", instance, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "wire instance: %v", err)
+	}
+
+	// The instance is launching + persisted + wired — attribute the provision to
+	// the caller's OWN org, carrying the size dimension so the invoice line names
+	// the instance. The recurring footprint meter charges ongoing GB-time.
 	s.meterProvision(org, kind, size, fee, c.RequestID(), cloud.ClientIP(c))
 
 	return c.JSON(http.StatusCreated, createResp{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
 		Host: host, Port: e.clientPort, Username: user, Database: db,
-		ConnectionString: e.dsn(user, pw, host, e.clientPort, db), Password: pw,
+		ConnectionString: dsn, Password: pw,
 	})
 }
 
@@ -518,19 +625,54 @@ func datastoreCR(ns, org, inst, resourceID, kind string, e engine, size, storage
 		"replicas": int64(1),
 		"storage":  storage,
 		"ports":    ports,
-		"envFrom":  []any{map[string]any{"secretRef": map[string]any{"name": secretName}}},
 		"resources": map[string]any{
 			"requests": map[string]any{"cpu": "100m", "memory": e.memReq},
 			"limits":   map[string]any{"cpu": "1000m", "memory": e.memLim},
 		},
 		"partOf": "managed-database",
 	}
+	// Admin-credential wiring. Env-configured engines (datastore/sql/docdb) read
+	// it via one envFrom secretRef. A mounted engine (kv) instead reads a config
+	// FILE the same Secret projects — mounted read-only at secretMount and loaded
+	// via args — because the kv-server binary takes no password from env. Either
+	// way the Secret is referenced by NAME only; no plaintext lands in the CR.
+	var volumeMounts []any
 	// Mount the "data" PVC (the operator names its volumeClaimTemplate "data")
 	// only when the engine declares a data path — the operator's build_statefulset
 	// does NOT auto-mount, so without this the instance writes to ephemeral
 	// container storage and loses data on restart.
 	if e.dataMount != "" {
-		spec["volumeMounts"] = []any{map[string]any{"name": "data", "mountPath": e.dataMount}}
+		volumeMounts = append(volumeMounts, map[string]any{"name": "data", "mountPath": e.dataMount})
+	}
+	if e.secretMount != "" {
+		spec["volumes"] = []any{map[string]any{
+			"name":   "addon-secret",
+			"secret": map[string]any{"secretName": secretName},
+		}}
+		volumeMounts = append(volumeMounts, map[string]any{
+			"name": "addon-secret", "mountPath": e.secretMount, "readOnly": true,
+		})
+	} else {
+		spec["envFrom"] = []any{map[string]any{"secretRef": map[string]any{"name": secretName}}}
+	}
+	if len(volumeMounts) > 0 {
+		spec["volumeMounts"] = volumeMounts
+	}
+	// Non-secret plain env (e.g. sql's PGDATA subdirectory).
+	if len(e.env) > 0 {
+		envList := make([]any, 0, len(e.env))
+		for k, v := range e.env {
+			envList = append(envList, map[string]any{"name": k, "value": v})
+		}
+		spec["env"] = envList
+	}
+	// Container args (e.g. kv loading its per-instance requirepass config first).
+	if len(e.args) > 0 {
+		args := make([]any, 0, len(e.args))
+		for _, a := range e.args {
+			args = append(args, a)
+		}
+		spec["args"] = args
 	}
 	// A non-root image (fsGroup set) needs the operator to group-own its PVC via
 	// the pod securityContext.fsGroup, else it cannot write the mounted volume.
@@ -597,6 +739,14 @@ type orchestrator interface {
 	DatastorePhase(ctx context.Context, ns, name string) (string, error)
 	DeleteDatastore(ctx context.Context, ns, name string) error
 	DeleteSecret(ctx context.Context, ns, name string) error
+	// PatchAddonSecret merges key=value into the instance's addons Secret
+	// (create-if-absent), preserving the other <KIND>_URL keys already there. This
+	// is the injection sink for instance binding — the app reads <KIND>_URL from
+	// it to switch off Base onto a provisioned backend.
+	PatchAddonSecret(ctx context.Context, ns, name, org, key, value string) error
+	// RemoveAddonSecretKey deletes one <KIND>_URL from the addons Secret so the
+	// instance reverts to Base. A missing Secret is a no-op success (idempotent).
+	RemoveAddonSecretKey(ctx context.Context, ns, name, key string) error
 	// DeletePVC removes a StatefulSet-retained data volume. Owner-ref GC tears
 	// down the StatefulSet + Service when the CR is deleted, but a StatefulSet
 	// deliberately RETAINS its volumeClaimTemplate PVCs — so a dropped instance

@@ -17,13 +17,11 @@ require (
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/signoz-otel-collector v0.144.6
 	github.com/hanzoai/sqlite v0.1.5
-	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
-	github.com/redis/go-redis/v9 v9.20.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.2.0
@@ -74,6 +72,7 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
+	github.com/jackc/pgx/v5 v5.9.1 // indirect
 	github.com/jellydator/ttlcache/v3 v3.4.0 // indirect
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
@@ -109,6 +108,7 @@ require (
 	github.com/prometheus/prometheus v0.311.3 // indirect
 	github.com/prometheus/sigv4 v0.4.1 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.4.0 // indirect
+	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/ttacon/builder v0.0.0-20170518171403-c099f663e1c2 // indirect
