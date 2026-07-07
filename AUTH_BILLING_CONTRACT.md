@@ -110,6 +110,68 @@ cloud is the single meter and gate. `SanitizeIdentity` (mirrored in-binary by
   subsystems record their own per-org usage; the edge gate returns price 0 for
   them so nothing is billed twice (`DefaultPrice` / `selfMeteredPrefixes`).
 
+## 4a. Per-product metering + the product/agent cost axes
+
+Two metering seams share the ONE commerce ledger (`Deps.Metering`):
+
+- **`BillingGate`** (`middleware_billing.go`) — the request EDGE, priced by PATH
+  (`DefaultPrice`). `/v1/ai/*` self-meters token spend upstream (gateway/ai), so it
+  is price-0 here to avoid double-billing.
+- **`ResourceMeter`** (`resource_billing.go`) — IN-HANDLER, priced per-org after the
+  caller's org is resolved. Every non-LLM product uses it: `Gate` (fail-closed
+  pre-auth, `available >= fee`, default fee $1.00 / `DefaultResourceFeeCents`) then
+  `Meter`/`MeterUsage` (debit-on-success, `provider = <product>`). Balance floor is
+  enforced BY DEFAULT — a zero/negative-balance priced call → **402** (proven:
+  `clients/{functions,s3,agents,ml,provisioning}/billing_test.go` `*RefusesUnfundedOrg`).
+
+Metering+gating coverage (each meters its OWN org, debits on success):
+
+| Product | provider label | fee knob | code |
+|---|---|---|---|
+| functions | `functions` | `CLOUD_FUNCTIONS_FEE_CENTS` | `clients/functions/invoke.go` |
+| s3 | `s3` | `S3_*` | `clients/s3/s3.go` |
+| agents | `agent` | `CLOUD_AGENT_FEE_CENTS` | `clients/agents/agents.go` |
+| compute / GPU | `compute` | provision knobs | `clients/ml/ml.go`, `clients/visor/*` |
+| provisioning (sql/kv/vector/docdb) | `provisioning` | `CLOUD_PROVISION_FEE_CENTS[_KIND]` | `clients/provisioning/*` |
+| automations | `automations` | `CLOUD_AUTOMATIONS_FEE_CENTS` | `clients/automations/automations.go` |
+| tracker | `tracker` | fee knob | `clients/tracker/tracker.go` |
+| security | `security.scan` | — | `clients/security/security.go` |
+
+**Product/agent read axes.** The console's per-product Metrics dashboard groups on
+`metadata.product` (and `metadata.agent`). Commerce's `RecordUsage` persists the
+metering SURFACE (`provider`) and billed UNIT (`model`) but has **no `product`
+field** (its `usageRequest` drops `project`/`service`/`product`/`agent`). So the
+customer read handler `clients/billing/usage.go` is the ONE read-side adapter:
+`usage()` fetches the org-scoped ledger and, on 200, injects a canonical
+`metadata.product` onto every row (`productOf`: `agent→agents`,
+`provisioning→<kind>`, token-metered→`inference`, else `provider`) so the
+breakdowns POPULATE from the SAME charged ledger. It also honors, server-side (was
+silently ignored):
+
+- `GET /v1/billing/usage?product=<id>` — filter to one product,
+- `GET /v1/billing/usage?groupBy=product` — per-product rollup
+  `{product,requests,amountCents}`.
+
+A row that already carries `metadata.product`/`agent` wins, so this degrades to a
+no-op when the meter/commerce persist them natively (forward-compatible).
+
+**Remaining checklist** (each is the same seam):
+
+1. **Native `product`/`agent` fields** — add `Product`/`Agent` to
+   `commerce/metering.Usage` + `commerce` `usageRequest`/metadata, have each
+   `ResourceMeter` caller pass its product id, and drop the read-side `productOf`
+   derivation (decomplect: the meter KNOWS its product; record it, don't re-derive).
+   Cross-repo (commerce) — additive/backward-compatible.
+2. **Agent-NAME axis** — needs (1): the agent run debit records `provider=agent` +
+   `model=<llm>` but not the agent name, so `metadata.agent` stays honest-empty
+   until commerce persists an `agent` field the agents meter sets to `a.Name`.
+3. **compute split** — `ml` (predict) and `visor` (GPU) both meter `provider=compute`;
+   read-side can't split `inference` vs `gpus`. Needs (1) so each sets its product id.
+4. **exec / containers** (`clients/exec`, Code Interpreter) — authed by a shared
+   service key (X-API-Key), NO per-org identity, so it can't meter per-org; its
+   compute is billed upstream at the chat/agent layer that invokes it.
+5. **playground** — routes to `/v1/ai/*`, already metered as AI inference.
+
 ## 5. Secrets
 
 - Per-tenant, KMS-managed only (`kms.hanzo.ai`, KMSSecret CRDs). No shared

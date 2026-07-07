@@ -101,8 +101,19 @@ func TestUsage_ScopedToCallerOrg_PassesThroughVerbatim(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("usage: want 200, got %d (%s)", code, body)
 	}
-	if string(body) != f.body {
-		t.Fatalf("usage body not verbatim:\n got %s\nwant %s", body, f.body)
+	// The body is no longer byte-verbatim: usage() enriches each row's metadata with
+	// the canonical product/agent dims. Assert the row survives enrichment intact.
+	var got struct {
+		Usage []struct {
+			TransactionID string         `json:"transactionId"`
+			Metadata      map[string]any `json:"metadata"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("usage body decode: %v (%s)", err, body)
+	}
+	if len(got.Usage) != 1 || got.Usage[0].TransactionID != "t1" || got.Usage[0].Metadata["model"] != "gpt-4o-mini" {
+		t.Fatalf("usage row not preserved through enrichment: %s", body)
 	}
 	// commerce saw the caller's OWN org as both the S2S selector and the pinned subject.
 	if f.gotOrg != "maxpower" {
