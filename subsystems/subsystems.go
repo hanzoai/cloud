@@ -56,6 +56,8 @@ import (
 	// generic liveness route; secret ops fail closed until the operator injects
 	// CLOUD_KMS_MASTER_KEY_REF.
 	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
+	_ "github.com/hanzoai/cloud/clients/pubsub" // order 5 — embedded NATS :4222 + JetStream
+	_ "github.com/hanzoai/cloud/clients/kafka"  // order 6 — embedded Kafka adaptor :9092
 
 	// Embedded IAM identity plane (HIP-0106, the LAST binary-consolidation piece):
 	// wraps IAM's own Beego handler (iamserver.Init) and mounts /v1/iam/* (API +
