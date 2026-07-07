@@ -41,7 +41,7 @@ func sampleRecord(action string) Record {
 		Auth:      AuthContext{Method: "jwt", IsAdmin: true},
 		Outcome:   Outcome{Result: "success", Status: 200},
 		SourceIP:  "203.0.113.7",
-		UserAgent: "console2",
+		UserAgent: "console",
 		RequestID: "req-123",
 		Method:    "DELETE",
 		Path:      "/v1/admin/orgs/acme",
