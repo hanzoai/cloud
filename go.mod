@@ -9,7 +9,6 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
-	github.com/hanzo-fi/ledger v0.0.0-20260706014215-3cabbf9addc1
 	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.31.17
@@ -17,7 +16,7 @@ require (
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/sqlite v0.1.5
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
@@ -36,43 +35,17 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
-	github.com/IBM/sarama v1.46.3 // indirect
-	github.com/ThreeDotsLabs/watermill v1.5.1 // indirect
-	github.com/ThreeDotsLabs/watermill-aws v1.0.1 // indirect
-	github.com/ThreeDotsLabs/watermill-http/v2 v2.3.1 // indirect
-	github.com/ThreeDotsLabs/watermill-kafka/v3 v3.1.2 // indirect
-	github.com/ThreeDotsLabs/watermill-nats/v2 v2.1.3 // indirect
-	github.com/ajg/form v1.7.1 // indirect
-	github.com/alitto/pond v1.9.2 // indirect
-	github.com/antlr/antlr4/runtime/Go/antlr v1.4.10 // indirect
 	github.com/antonmedv/expr v1.15.3 // indirect
-	github.com/aws/aws-msk-iam-sasl-signer-go v1.0.4 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.20 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.24 // indirect
-	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beego/beego/v2 v2.3.8 // indirect
-	github.com/bluele/gcache v0.0.2 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.2 // indirect
-	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
-	github.com/dnwe/otelsarama v0.0.0-20240308230250-9388d9d40bc0 // indirect
-	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
-	github.com/eapache/queue v1.1.0 // indirect
 	github.com/edsrzf/mmap-go v1.2.0 // indirect
 	github.com/elastic/lunes v0.2.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb // indirect
-	github.com/formancehq/go-libs/v5 v5.6.1 // indirect
-	github.com/formancehq/numscript v0.0.24 // indirect
-	github.com/getkin/kin-openapi v0.134.0 // indirect
-	github.com/go-chi/chi v4.1.2+incompatible // indirect
-	github.com/go-chi/chi/v5 v5.3.0 // indirect
-	github.com/go-chi/cors v1.2.2 // indirect
-	github.com/go-chi/render v1.0.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gojek/heimdall/v7 v7.0.3 // indirect
@@ -87,10 +60,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
-	github.com/iancoleman/strcase v0.3.0 // indirect
-	github.com/invopop/jsonschema v0.13.0 // indirect
-	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 // indirect
-	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c // indirect
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/kevinburke/go-types v0.0.0-20240719050749-165e75e768f7 // indirect
@@ -98,8 +67,6 @@ require (
 	github.com/kevinburke/twilio-go v0.0.0-20240716172313-813590983ccc // indirect
 	github.com/leodido/go-syslog/v4 v4.3.0 // indirect
 	github.com/leodido/ragel-machinery v0.0.0-20190525184631-5f46317e436b // indirect
-	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
-	github.com/logrusorgru/aurora v2.0.3+incompatible // indirect
 	github.com/luxfi/bft v0.1.5 // indirect
 	github.com/luxfi/constants v1.5.8 // indirect
 	github.com/luxfi/p2p v1.21.1 // indirect
@@ -109,15 +76,8 @@ require (
 	github.com/luxfi/warp v1.19.3 // indirect
 	github.com/luxwallet/connect/go v0.1.3 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
-	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
-	github.com/muhlemmer/gu v0.3.1 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
-	github.com/nats-io/nats.go v1.49.0 // indirect
-	github.com/oasdiff/yaml v0.0.0-20260313112342-a3ea61cb4d4c // indirect
-	github.com/oasdiff/yaml3 v0.0.0-20260224194419-61cd415a242b // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
-	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/olivere/elastic/v7 v7.0.32 // indirect
 	github.com/open-telemetry/opamp-go v0.22.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/exp/metrics v0.148.0 // indirect
@@ -125,7 +85,6 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/stanza v0.144.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatocumulativeprocessor v0.148.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
-	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/perses/spec v0.1.2 // indirect
 	github.com/plivo/plivo-go/v7 v7.57.0 // indirect
 	github.com/prometheus/client_golang/exp v0.0.0-20260325093428-d8591d0db856 // indirect
@@ -134,28 +93,13 @@ require (
 	github.com/prometheus/prometheus v0.311.3 // indirect
 	github.com/prometheus/sigv4 v0.4.1 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.4.0 // indirect
-	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
-	github.com/riandyrn/otelchi v0.12.2 // indirect
-	github.com/shomali11/util v0.0.0-20220717175126-f0771b70947f // indirect
-	github.com/shomali11/xsql v0.0.0-20190608141458-bf76292144df // indirect
 	github.com/soheilhy/cmux v0.1.5 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/ttacon/builder v0.0.0-20170518171403-c099f663e1c2 // indirect
 	github.com/ttacon/libphonenumber v1.2.1 // indirect
-	github.com/uptrace/bun/dialect/pgdialect v1.2.18 // indirect
-	github.com/uptrace/opentelemetry-go-extra/otellogrus v0.3.2 // indirect
-	github.com/uptrace/opentelemetry-go-extra/otelutil v0.3.2 // indirect
+	github.com/uptrace/bun/dialect/pgdialect v1.2.9 // indirect
 	github.com/valyala/fastjson v1.6.7 // indirect
 	github.com/vjeantet/grok v1.0.1 // indirect
-	github.com/wk8/go-ordered-map/v2 v2.1.9-0.20240816141633-0a40785b4f41 // indirect
-	github.com/woodsbury/decimal128 v1.3.0 // indirect
-	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
-	github.com/xdg-go/scram v1.2.0 // indirect
-	github.com/xdg-go/stringprep v1.0.4 // indirect
-	github.com/xo/dburl v0.24.2 // indirect
 	github.com/yuin/goldmark v1.7.16 // indirect
-	github.com/zitadel/oidc/v3 v3.45.3 // indirect
-	github.com/zitadel/schema v1.3.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opentelemetry.io/collector/client v1.54.0 // indirect
 	go.opentelemetry.io/collector/component v1.54.0 // indirect
@@ -205,26 +149,21 @@ require (
 	go.opentelemetry.io/contrib/bridges/otelzap v0.13.0 // indirect
 	go.opentelemetry.io/contrib/config v0.10.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.63.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/host v0.66.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.67.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/runtime v0.66.0 // indirect
 	go.opentelemetry.io/contrib/otelconf v0.18.0 // indirect
-	go.opentelemetry.io/contrib/propagators/b3 v1.41.0 // indirect
+	go.opentelemetry.io/contrib/propagators/b3 v1.39.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.14.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.41.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.39.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.60.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdoutlog v0.14.0 // indirect
-	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.41.0 // indirect
+	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.44.0 // indirect
 	go.opentelemetry.io/otel/log v0.19.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v0.19.0 // indirect
-	go.uber.org/dig v1.19.0 // indirect
-	go.uber.org/fx v1.24.0 // indirect
 	go.uber.org/goleak v1.3.0 // indirect
-	go.vallahaye.net/batcher v0.6.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	modernc.org/sqlite v1.51.0 // indirect
@@ -313,7 +252,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.9 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sns v1.39.14 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sns v1.39.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.15 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.10 // indirect
@@ -387,7 +326,7 @@ require (
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/drswork/go-twitter v0.0.0-20221107160839-dea1b6ed53d7 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/elimity-com/scim v0.0.0-20230426070224-941a5eac92f3 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -573,7 +512,7 @@ require (
 	github.com/line/line-bot-sdk-go v7.8.0+incompatible // indirect
 	github.com/lithammer/shortuuid v3.0.0+incompatible // indirect
 	github.com/lor00x/goldap v0.0.0-20180618054307-a546dffdd1a3 // indirect
-	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
+	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
 	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
 	github.com/luxfi/age v1.6.0 // indirect
@@ -604,7 +543,7 @@ require (
 	github.com/luxfi/zap v1.2.0 // indirect
 	github.com/magefile/mage v1.17.1 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
-	github.com/mailru/easyjson v0.9.2 // indirect
+	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/markbates/going v1.0.0 // indirect
 	github.com/markbates/goth v1.82.0 // indirect
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
@@ -681,7 +620,7 @@ require (
 	github.com/russellhaering/gosaml2 v0.11.0 // indirect
 	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/sagikazarmark/locafero v0.9.0 // indirect
+	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/sashabaranov/go-openai v1.32.0
@@ -698,7 +637,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0 // indirect
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.12 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
@@ -710,7 +649,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.20.1 // indirect
+	github.com/spf13/viper v1.19.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/square/square-go-sdk/v3 v3.0.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
@@ -732,7 +671,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/thanhpk/randstr v1.0.4 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
-	github.com/tidwall/match v1.2.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
@@ -742,9 +681,9 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ua-parser/uap-go v0.0.0-20251207011819-db9adb27a0b8 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
-	github.com/uptrace/bun v1.2.18
-	github.com/uptrace/bun/dialect/sqlitedialect v1.2.18
-	github.com/uptrace/bun/extra/bunotel v1.2.18 // indirect
+	github.com/uptrace/bun v1.2.9 // indirect
+	github.com/uptrace/bun/dialect/sqlitedialect v1.2.9 // indirect
+	github.com/uptrace/bun/extra/bunotel v1.2.9 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2 // indirect
 	github.com/utahta/go-linenotify v0.5.0 // indirect
 	github.com/valllabh/ocsf-schema-golang v1.0.3 // indirect
@@ -878,14 +817,3 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
-
-// Pin bun to the version hanzoai/o11y (v1.5.0) compiles against: bun v1.2.18
-// removed schema.Formatter/NewFormatter/Append, which o11y still uses. ledgercore
-// (hanzo-fi/ledger) floors v1.2.18 in its own module but its compiled closure
-// does not use any v1.2.18-only bun API, so v1.2.9 satisfies both.
-replace (
-	github.com/uptrace/bun => github.com/uptrace/bun v1.2.9
-	github.com/uptrace/bun/dialect/pgdialect => github.com/uptrace/bun/dialect/pgdialect v1.2.9
-	github.com/uptrace/bun/dialect/sqlitedialect => github.com/uptrace/bun/dialect/sqlitedialect v1.2.9
-	github.com/uptrace/bun/extra/bunotel => github.com/uptrace/bun/extra/bunotel v1.2.9
-)
