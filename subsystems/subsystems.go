@@ -57,6 +57,21 @@ import (
 	// CLOUD_KMS_MASTER_KEY_REF.
 	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
 
+	// Embedded messaging data plane (HIP-0106): the native Hanzo PubSub core
+	// (NATS + JetStream) folded in-process from github.com/hanzoai/pubsub/embed,
+	// replacing the standalone `pubsub` Deployment. Single embedded node, JetStream
+	// over the file store — NO ZooKeeper/raft/etcd (Lux consensus only). Binds NATS
+	// :4222 when CLOUD_PUBSUB_ENABLED is set; a no-op otherwise (staged cutover),
+	// fail-closed on start error. Order 5 so it binds before clients/kafka dials it.
+	_ "github.com/hanzoai/cloud/clients/pubsub" // order 5 — embedded NATS :4222 + JetStream
+
+	// Embedded Kafka-wire adaptor (HIP-0106): github.com/hanzoai/stream folded
+	// in-process, translating the Kafka protocol to/from the embedded JetStream
+	// above, replacing the standalone `insights-kafka` Deployment. Binds Kafka
+	// :9092 when CLOUD_KAFKA_ENABLED is set; a no-op otherwise, fail-closed on a
+	// connect/bind error. Order 6 so it dials clients/pubsub (order 5) after it binds.
+	_ "github.com/hanzoai/cloud/clients/kafka" // order 6 — embedded Kafka :9092 over JetStream
+
 	// Embedded IAM identity plane (HIP-0106, the LAST binary-consolidation piece):
 	// wraps IAM's own Beego handler (iamserver.Init) and mounts /v1/iam/* (API +
 	// OAuth + OIDC + login), /.well-known/* (root OIDC/JWKS), /login/oauth/*,
