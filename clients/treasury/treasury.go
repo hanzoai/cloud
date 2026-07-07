@@ -48,6 +48,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -77,8 +78,8 @@ const (
 )
 
 type svc struct {
-	stores     *sqlstore.Manager // per-tenant Base files; House() is the reserve/house ledger
-	record     ledger.Backend    // ledger of record bound to the HOUSE store — native (default) or Formance
+	store      *sqlstore.Store // native store: policy config always, journal when native backend
+	record     ledger.Backend  // the ledger of record — native (default) or Formance
 	log        luxlog.Logger
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
 	anchor     *anchorer       // Hanzo L1 anchor (Phase 2); nil-safe
@@ -101,33 +102,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("treasury.Mount: empty DataDir")
 	}
-	// Per-tenant Base storage: the house/reserve ledger is one file, every customer
-	// tenant is its own file, all under CLOUD_DATA_DIR. This is the standing rule —
-	// prod runs live on per-tenant SQLite.
-	stores, err := sqlstore.NewManager(deps.DataDir)
-	if err != nil {
-		return fmt.Errorf("treasury.Mount: open stores: %w", err)
+	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+		return fmt.Errorf("treasury.Mount: data dir: %w", err)
 	}
-	// The reserve fund is single-writer + overdraw-guarded, so the ledger of RECORD
-	// binds to the ONE house store. Its DRIVER is chosen by StorageDriver() (the one
-	// place that decides): the native Base/SQLite engine by default — what prod runs —
-	// or the Formance Postgres ledger of record as an OPT-IN (FORMANCE_LEDGER_URL).
-	// Either way per-CUSTOMER books stay on per-tenant Base files (myAccounts below).
-	house, err := stores.House()
+	store, err := sqlstore.Open(filepath.Join(deps.DataDir, "treasury.db"))
 	if err != nil {
-		return fmt.Errorf("treasury.Mount: open house ledger: %w", err)
+		return fmt.Errorf("treasury.Mount: open store: %w", err)
 	}
+	// Select the ledger of RECORD. Formance (Postgres-backed, the production ledger)
+	// when FORMANCE_LEDGER_URL is wired; else the native Base/SQLite engine (the
+	// offline/default, so the reserve fund works today). The Hanzo revenue-share
+	// policy is held in the native store either way (it is config, not accounting).
 	var record ledger.Backend
-	if StorageDriver() == DriverPostgres {
-		base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL"))
-		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), house)
-		log.Info("treasury ledger of record: formance (postgres, opt-in)", "url", base)
+	if base := strings.TrimSpace(os.Getenv("FORMANCE_LEDGER_URL")); base != "" {
+		record = formance.New(base, os.Getenv("FORMANCE_LEDGER_NAME"), os.Getenv("FORMANCE_LEDGER_TOKEN"), store)
+		log.Info("treasury ledger of record: formance", "url", base)
 	} else {
-		record = ledger.New(house)
-		log.Info("treasury ledger of record: native Base/SQLite (per-tenant) — default; set FORMANCE_LEDGER_URL for Postgres")
+		record = ledger.New(store)
+		log.Info("treasury ledger of record: native (Base/SQLite) — set FORMANCE_LEDGER_URL for Formance")
 	}
 	s := &svc{
-		stores:     stores,
+		store:      store,
 		record:     record,
 		log:        log,
 		auditStore: deps.Audit,
@@ -148,7 +143,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/admin/treasury/seed", s.adminSeed)        // global-admin: inject reserve capital
 	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
 
-	log.Info("treasury mounted", "brand", deps.Brand, "storageDriver", StorageDriver(), "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
+	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
 	return nil
 }
 
@@ -220,58 +215,20 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 
 // ── customer surface ─────────────────────────────────────────────────────────
 
-// treasurySummary is the GET /v1/finance/treasury shape the finance UI consumes
-// (@hanzo/finance-ui TreasurySummary): the backed reserve, the portion committed to
-// pending payouts, the free balance, and the Hanzo L1 anchor. USD cents throughout.
-// Policy (the revenue-share backing the payouts) rides along as the documented
-// transparency extra — the finance normalizer reads only its own fields and ignores it.
-type treasurySummary struct {
-	Currency       string          `json:"currency"`
-	ReserveCents   int64           `json:"reserveCents"`
-	CommittedCents int64           `json:"committedCents"`
-	AvailableCents int64           `json:"availableCents"`
-	Anchor         *treasuryAnchor `json:"anchor,omitempty"`
-	Policy         ledger.Policy   `json:"policy"`
-}
-
-// treasuryAnchor is the on-chain anchor sub-view: the chain the reserve root is
-// committed to and, once committed, the last anchored block + time.
-type treasuryAnchor struct {
-	ChainID    int64  `json:"chainId"`
-	Address    string `json:"address,omitempty"`
-	Block      uint64 `json:"block,omitempty"`
-	AnchoredAt string `json:"anchoredAt,omitempty"`
-}
-
 // myTreasury answers GET /v1/finance/treasury for any validated caller: the
-// reserve-fund health projected into the finance TreasurySummary shape. This is a
-// TRANSPARENCY view — a partner/author can see the pool that backs their payouts is
-// solvent — not per-org money (that is the customer's commerce balance at
-// /v1/finance/balance). The reserve is available-now (ReserveCents = Accrued − Paid),
-// so committed is an honest 0 and available == reserve until a pending-payout hold
-// concept exists. The anchor is the honest on-chain status (never a fabricated block).
+// reserve-fund health + the revenue-share policy. This is a TRANSPARENCY view — a
+// partner/author can see the pool that backs their payouts is solvent — not per-org
+// money (that is the customer's commerce balance at /v1/billing/balance). Policy is
+// read-only here; only global-admin sets it.
 func (s *svc) myTreasury(c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
 	}
-	ctx := c.Context()
-	rep, err := s.record.Snapshot(ctx)
+	rep, err := s.record.Snapshot(c.Context())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	st := s.anchor.status(ctx, s.record)
-	anchor := &treasuryAnchor{ChainID: st.ChainID, Address: st.Contract, Block: st.LastBlock}
-	if st.LastAt > 0 {
-		anchor.AnchoredAt = time.Unix(st.LastAt, 0).UTC().Format(time.RFC3339)
-	}
-	return c.JSON(http.StatusOK, treasurySummary{
-		Currency:       "usd",
-		ReserveCents:   rep.ReserveCents,
-		CommittedCents: 0,
-		AvailableCents: rep.ReserveCents,
-		Anchor:         anchor,
-		Policy:         rep.Policy,
-	})
+	return c.JSON(http.StatusOK, rep)
 }
 
 // accountView is one row of the scope-aware accounts read.
@@ -305,7 +262,7 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 			}
 		}
 	}
-	balances, err := s.accountBalances(c.Context(), scope, tenant, prefix)
+	balances, err := s.record.AccountsWithPrefix(c.Context(), prefix)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
 	}
@@ -322,23 +279,6 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 		"tenant":   tenant,
 		"accounts": accounts,
 	})
-}
-
-// accountBalances resolves WHICH store a scope-aware accounts read touches — the
-// tenant→file selection. The house scope reads the ledger of RECORD (native Base OR
-// the Formance/Postgres opt-in, so the house books honour the configured backend);
-// an org scope reads that tenant's OWN per-tenant Base file. A per-org caller can
-// therefore only ever read its own file, and one tenant's writes never appear in
-// another's read.
-func (s *svc) accountBalances(ctx context.Context, scope, tenant, prefix string) (map[string]int64, error) {
-	if scope == "house" {
-		return s.record.AccountsWithPrefix(ctx, prefix)
-	}
-	store, err := s.stores.Get(tenant)
-	if err != nil {
-		return nil, err
-	}
-	return store.BalancesWithPrefix(ctx, prefix)
 }
 
 // ── admin surface (global-admin, fail-closed) ────────────────────────────────
@@ -524,12 +464,12 @@ func journalLimitOf(c *zip.Ctx) int {
 	return n
 }
 
-// Shutdown closes every open treasury store (house + tenants). Idempotent.
+// Shutdown closes the treasury store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.stores == nil {
+	if mounted == nil || mounted.store == nil {
 		return nil
 	}
-	err := mounted.stores.Close()
+	err := mounted.store.Close()
 	mounted = nil
 	return err
 }
