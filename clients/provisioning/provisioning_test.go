@@ -13,6 +13,7 @@ import (
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -455,25 +456,20 @@ func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	}
 }
 
-// TestCreateKMSDegradePersistsNoPlaintext: with KMS unconfigured, create returns
-// the generated password ONCE and persists NO plaintext (stored row carries an
-// empty secret_ref and the password appears in no stored column).
+// TestCreateKMSDegradePersistsNoPlaintext: with KMS unconfigured, a dedicated
+// create returns the generated instance-admin password ONCE and persists NO
+// plaintext — the row carries an empty secret_ref and the password appears in no
+// stored column (it lives only in the runtime admin Secret the instance boots
+// from). Exercised on the dedicated path (kv/sql/docdb/datastore) since those are
+// the only kinds that mint a per-resource credential.
 func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
-	s, mp := newTestSvc(t, "kv")
+	orch := newFakeOrch()
+	s := newDedicatedSvc(t, orch)
 	if s.sec.Enabled() {
 		t.Fatal("precondition: KMS must be degraded for this test")
 	}
-	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/kv", s.create("kv"))
 
-	req, _ := http.NewRequest("POST", "/v1/kv", strings.NewReader(`{"name":"cache"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Org-Id", "acme")
-	req.Header.Set("X-User-Id", "u-acme") // validated principal (tenant() gates on X-User-Id)
-	resp, err := app.Fiber().Test(req)
-	if err != nil {
-		t.Fatalf("Test: %v", err)
-	}
+	resp := postCreate(t, s, "datastore", "acme", "cache")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
@@ -483,16 +479,23 @@ func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
-	// Password is returned exactly once on create under KMS-degrade...
+	// Password is returned exactly once on create under KMS-degrade, and it is the
+	// exact credential the instance boots with (the admin Secret it reads).
 	if cr.Password == "" {
 		t.Fatal("expected password returned once on create under KMS-degrade")
 	}
-	if cr.Password != mp.gotPw {
-		t.Fatalf("returned password %q != password handed to backend %q", cr.Password, mp.gotPw)
+	inst := instanceName("datastore", "acme", "cache")
+	sec := orch.secrets["tenant-acme/"+inst+"-admin"]
+	if sec == nil {
+		t.Fatalf("admin Secret not projected for the instance")
+	}
+	sd, _, _ := unstructured.NestedStringMap(sec.Object, "stringData")
+	if sd["DATASTORE_PASSWORD"] != cr.Password {
+		t.Fatalf("returned password must match the Secret the instance boots with")
 	}
 
 	// ...but NOTHING is persisted in plaintext.
-	row, err := s.store.Get(context.Background(), "acme", "kv", "cache")
+	row, err := s.store.Get(context.Background(), "acme", "datastore", "cache")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
