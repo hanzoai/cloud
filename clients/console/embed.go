@@ -1,4 +1,4 @@
-// embed.go ports console2's app/embed-status/route.ts into the unified binary at
+// embed.go ports console's app/embed-status/route.ts into the unified binary at
 // GET /v1/console/embed-status (task #41). It answers ONE question for the console's
 // data-product modules (Content Studio / ERP / Help Center): is this brand's shared
 // embedded app provisioned and reachable, so the module can decide embed-vs-provision

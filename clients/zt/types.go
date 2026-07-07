@@ -3,9 +3,9 @@
 // mapping between them. The view JSON keys mirror the console modules EXACTLY so the
 // Networks, Service Mesh and Edge pages render with no front-end change:
 //
-//   - networkView  -> console2 NetworksModule.tsx   BootnodeNetwork {id,name,chain,status,nodes,rpc}
-//   - meshView     -> console2 ServiceMeshModule.tsx MeshService     {id,service,namespace,mtls,requests,status}
-//   - edgeNodeView -> console2 EdgeModule.tsx        EdgeNode        {id,name,region,status,requests,latency}
+//   - networkView  -> console NetworksModule.tsx   BootnodeNetwork {id,name,chain,status,nodes,rpc}
+//   - meshView     -> console ServiceMeshModule.tsx MeshService     {id,service,namespace,mtls,requests,status}
+//   - edgeNodeView -> console EdgeModule.tsx        EdgeNode        {id,name,region,status,requests,latency}
 //
 // Every field is a REAL ZT value or an honest omission. Telemetry ZT's management
 // API does not carry (per-service request counts, per-router latency) is left off
@@ -68,7 +68,7 @@ type ztEdgeRouter struct {
 
 // ---- console view structs ----
 
-// networkView is the shape console2 NetworksModule (BootnodeNetwork) consumes. It
+// networkView is the shape console NetworksModule (BootnodeNetwork) consumes. It
 // represents the org's slice of the ZT overlay — one network whose nodes are the
 // org's edge-routers. chain/rpc are honestly omitted (a ZT overlay is not a
 // blockchain with an RPC), so those columns render blank rather than fabricated.
@@ -79,7 +79,7 @@ type networkView struct {
 	Nodes  int    `json:"nodes"`
 }
 
-// meshView is the shape console2 ServiceMeshModule (MeshService) consumes — one row
+// meshView is the shape console ServiceMeshModule (MeshService) consumes — one row
 // per ZT edge service. mtls reflects the service's E2E encryption requirement;
 // requests is omitted (the management API carries no per-service metrics).
 type meshView struct {
@@ -89,7 +89,7 @@ type meshView struct {
 	Status  string `json:"status"`
 }
 
-// edgeNodeView is the shape console2 EdgeModule (EdgeNode) consumes — one row per ZT
+// edgeNodeView is the shape console EdgeModule (EdgeNode) consumes — one row per ZT
 // edge-router. status is the REAL online/disabled/offline signal; region is filled
 // only from a "region-<slug>" role attribute (honest "—" otherwise); requests and
 // latency are omitted (no per-router telemetry in the management API).

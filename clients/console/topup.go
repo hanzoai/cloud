@@ -1,4 +1,4 @@
-// topup.go ports console2's app/billing/v1/topup/wallet/route.ts into the unified
+// topup.go ports console's app/billing/v1/topup/wallet/route.ts into the unified
 // binary at POST /v1/console/topup/wallet (task #41). It is the verify-and-record
 // seam for an HUSD wallet top-up: the browser sends an HUSD ERC-20 transfer to the
 // treasury and posts the tx hash here; this handler reads the receipt from the Hanzo
