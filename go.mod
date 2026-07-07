@@ -197,7 +197,6 @@ require (
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
-	cloud.google.com/go/compute v1.58.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.7.0 // indirect
 	cloud.google.com/go/monitoring v1.25.0 // indirect
@@ -789,7 +788,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzoai/ai v1.800.9
+	github.com/hanzoai/ai v1.800.10-0.20260707194923-8e65b8c3b4cf
 	github.com/hanzoai/authz v1.10.4
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
