@@ -144,7 +144,7 @@ func Serve(enable []string) error {
 		return fmt.Errorf("mount: %w", err)
 	}
 
-	// Browser-facing ZAP RPC plane. console2 (@hanzo/gui + @zap-proto/web)
+	// Browser-facing ZAP RPC plane. console (@hanzo/gui + @zap-proto/web)
 	// reaches the SAME /v1 handlers over a WebSocket carrying binary ZAP frames
 	// — no second copy of any business logic: each call is replayed in-process
 	// through this Fiber app (see zapface). Mounted AFTER MountAll so every /v1
@@ -155,7 +155,7 @@ func Serve(enable []string) error {
 	}))
 
 	// Unified console UI — the SAME binary serves the @hanzo/gui console (built
-	// from hanzoai/console2 and embedded via //go:embed) at the web root. Mounted
+	// from hanzoai/console and embedded via //go:embed) at the web root. Mounted
 	// LAST, after every /v1 route + the /zap plane + the health contract, so
 	// Fiber's in-order matching gives the API precedence: real API routes win,
 	// and only paths that match nothing else fall through to the SPA (index.html

@@ -26,7 +26,7 @@ import (
 //go:embed catalog.json
 var catalogJSON []byte
 
-// Template is one starter kit as the console2 gallery browser consumes it. The
+// Template is one starter kit as the console gallery browser consumes it. The
 // `Source`/`Preview` URLs point at the live gallery (gallery.hanzo.ai), the real
 // fork/deploy + screenshot surfaces.
 type Template struct {
