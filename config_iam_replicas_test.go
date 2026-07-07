@@ -21,11 +21,7 @@ func TestValidateIAMSingleReplica(t *testing.T) {
 		{"iam enabled, 1 replica -> ok", []string{"iam"}, 1, false},
 		{"iam enabled, replicas unset -> ok", []string{"iam"}, 0, false},
 		{"iam disabled, 5 replicas -> ok", []string{"kmssvc", "o11y"}, 5, false},
-		// iam is STAGED (config.go stagedSubsystems): the empty (mount-all) default
-		// no longer auto-enables it, so a scaled empty-list deploy carries no embedded
-		// IAM and thus no process-local session store — the guard correctly stands
-		// down. iam gains the single-replica constraint only when named EXPLICITLY.
-		{"empty (mount-all) list does NOT enable iam, 4 replicas -> ok", nil, 4, false},
+		{"all enabled (empty list) is iam-enabled, 4 replicas -> refuse", nil, 4, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
