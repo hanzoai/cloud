@@ -3,9 +3,9 @@
 // The view JSON keys mirror the console normalizers EXACTLY so the Machines,
 // GPUs and Clusters pages render with no front-end change:
 //
-//   - machineView  -> console2 src/lib/api/visor.ts    normalizeMachine
-//   - gpuView      -> console2 src/lib/api/compute.ts   normalizeGpu
-//   - clusterView  -> console2 src/lib/api/platform.ts  Cluster + NodePool
+//   - machineView  -> console src/lib/api/visor.ts    normalizeMachine
+//   - gpuView      -> console src/lib/api/compute.ts   normalizeGpu
+//   - clusterView  -> console src/lib/api/platform.ts  Cluster + NodePool
 //
 // Every field is a REAL Visor value or an honest omission. Telemetry Visor does
 // not carry (GPU utilization/temperature/power) is left off the gpuView so the
@@ -64,7 +64,7 @@ type visorNodePool struct {
 
 // ---- console view structs ----
 
-// machineView is the shape console2 visor.ts normalizeMachine consumes. `id` is
+// machineView is the shape console visor.ts normalizeMachine consumes. `id` is
 // the org-scoped machine NAME (the stable key the :id routes address), not the
 // ephemeral provider id.
 type machineView struct {
@@ -83,7 +83,7 @@ type machineView struct {
 	Os          string `json:"os,omitempty"`
 }
 
-// gpuView is the shape console2 compute.ts normalizeGpu consumes — one row per
+// gpuView is the shape console compute.ts normalizeGpu consumes — one row per
 // physical accelerator. Model/region/status are REAL (from the GPU machine and
 // its size slug); live telemetry is absent because Visor's machine object carries
 // none, so the UI renders "—".
@@ -104,7 +104,7 @@ type gpuView struct {
 	Memory   string `json:"memory,omitempty"`
 }
 
-// nodePoolView is the shape console2 platform.ts NodePool consumes.
+// nodePoolView is the shape console platform.ts NodePool consumes.
 type nodePoolView struct {
 	PoolID    string `json:"poolId,omitempty"`
 	Name      string `json:"name,omitempty"`
@@ -115,7 +115,7 @@ type nodePoolView struct {
 	AutoScale bool   `json:"autoScale,omitempty"`
 }
 
-// clusterView is the shape console2 platform.ts Cluster consumes. The authoritative
+// clusterView is the shape console platform.ts Cluster consumes. The authoritative
 // node inventory is NodePools; nodeSize/nodeCount are the derived display fields
 // the simple Clusters list uses (and the GPU derivation reads).
 type clusterView struct {
@@ -249,7 +249,7 @@ func clustersFromPools(pools []visorNodePool) []clusterView {
 	return out
 }
 
-// ---- GPU size-slug parsing (PURE, ported from console2 compute.ts gpuSpecOf) ----
+// ---- GPU size-slug parsing (PURE, ported from console compute.ts gpuSpecOf) ----
 
 type gpuSpec struct {
 	model   string
