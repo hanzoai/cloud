@@ -83,7 +83,7 @@ func newAnchorer(deps cloud.Deps, log luxlog.Logger) *anchorer {
 // reach the chain AND a signer key provisioned from KMS). Until both are present the
 // anchor is compute-and-report only.
 func (a *anchorer) configured() bool {
-	return a != nil && a.rpcURL != "" && a.signerKeyHex() != ""
+	return a != nil && a.rpcURL != "" && (boundAnchorSigner != nil || a.signerKeyHex() != "")
 }
 
 // signerKeyHex returns the anchor signer's private key, provisioned from KMS into the
