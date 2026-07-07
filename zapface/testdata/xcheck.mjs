@@ -1,8 +1,8 @@
-// Cross-language ZAP wire check, driven by the REAL @zap-proto runtime console2
+// Cross-language ZAP wire check, driven by the REAL @zap-proto runtime console
 // ships. Two modes:
 //
 //   node xcheck.mjs req  <method> <superjsonPayload> <promiseID>
-//     -> prints the hex of the exact bytes console2's @zap-proto/web client puts
+//     -> prints the hex of the exact bytes console's @zap-proto/web client puts
 //        on the WebSocket for one call (rpc envelope wrapping the inner
 //        {method,payload} ZapRequest). Go's rpc.ParseRequest + parseZapRequest
 //        must decode these.
@@ -12,7 +12,7 @@
 //        ZapReply) using the real parseResponse + the ZapReply struct offsets,
 //        and prints JSON {promiseID, ok, status, result, errorJson}.
 //
-// Uses console2's installed @zap-proto/zap so the bytes are byte-identical to
+// Uses console's installed @zap-proto/zap so the bytes are byte-identical to
 // what the live browser client emits.
 import {
   Builder,
@@ -20,12 +20,12 @@ import {
   StructView,
   buildRequest,
   parseResponse,
-} from '/Users/a/work/hanzo/console2/node_modules/@zap-proto/zap/dist/index.js'
+} from '/Users/a/work/hanzo/console/node_modules/@zap-proto/zap/dist/index.js'
 
 const METHOD_RPC = 1
 
 // Inner ZapRequest { method @0 :Text, payload @8 :Text } size 16 — mirrors
-// console2/src/lib/zap/transport.ts newZapRequest.
+// console/src/lib/zap/transport.ts newZapRequest.
 function newZapRequest(method, payload) {
   const b = new Builder(256)
   const ob = b.startObject(16)

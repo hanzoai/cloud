@@ -119,7 +119,7 @@ or `https://<sites-host>/<org>/<slug>/` when the `hanzoai/static` container
 (the static-app image) is configured to serve the bucket behind the gateway.
 GitHub export is an optional, separate step — going live never requires it.
 
-## Console2 module notes
+## Console module notes
 
 - List view → `GET /v1/projects`. Status badge from `status`; "Open" links to
   `https://hanzo.app/build/<slug>`; "Visit" links to `liveUrl`.
