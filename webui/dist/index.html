@@ -11,7 +11,7 @@
       This file exists so `//go:embed all:webui/dist` compiles and the ONE
       `hanzoai/cloud` binary always serves a same-origin console entry, even in
       a plain `go build` (no Node toolchain). The build pipeline runs
-      `npm run build:embed` on hanzoai/console2 (a static export) and OVERWRITES
+      `npm run build:embed` on hanzoai/console (a static export) and OVERWRITES
       this directory with the real static bundle before `go build`, so the
       shipped binary serves the full @hanzo/gui console. See webui.go, the
       Makefile `webui` target, and the Dockerfile console stage.
@@ -42,7 +42,7 @@
         <p>Served by the unified <code>hanzoai/cloud</code> binary — one artifact
           serves this UI and the <code>/v1</code> API on the same origin.</p>
         <p>This is the fallback shell. The shipped image embeds the full
-          <code>@hanzo/gui</code> console built from <code>hanzoai/console2</code>.</p>
+          <code>@hanzo/gui</code> console built from <code>hanzoai/console</code>.</p>
         <div class="status" id="status">Checking <code>/v1</code> on this origin…</div>
       </div>
     </div>

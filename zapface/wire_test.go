@@ -8,7 +8,7 @@ import (
 	zaprpc "github.com/zap-proto/go/rpc"
 )
 
-// buildClientRequestBytes reproduces, byte-for-byte, what console2's
+// buildClientRequestBytes reproduces, byte-for-byte, what console's
 // @zap-proto/web client puts on the WebSocket for one call:
 //
 //	conn.bootstrap.call(METHOD_RPC, { payload: newZapRequest({method, payload}) })
@@ -37,7 +37,7 @@ func buildClientRequestBytes(method, payload string, promiseID uint32) []byte {
 // rpc envelope -> inner ZapRequest -> (method, SuperJSON payload).
 func TestParseClientRequest(t *testing.T) {
 	const method = "get-providers"
-	// console2 sends SuperJSON.stringify(input); a plain object X -> {"json":X}.
+	// console sends SuperJSON.stringify(input); a plain object X -> {"json":X}.
 	input := map[string]any{"owner": "admin", "store": "default", "limit": "20"}
 	innerJSON, _ := json.Marshal(input)
 	payload := superJSONWrap(innerJSON) // {"json":{...}}
@@ -164,7 +164,7 @@ func TestErrorReply(t *testing.T) {
 }
 
 // TestBuildHTTPRequest proves the (method,input) -> /v1 HTTP mapping matches the
-// the /v1 REST convention the console2 ProviderApi uses.
+// the /v1 REST convention the console ProviderApi uses.
 func TestBuildHTTPRequest(t *testing.T) {
 	cases := []struct {
 		name       string
