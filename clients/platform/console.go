@@ -39,7 +39,7 @@ import (
 
 // ── views (the exact JSON the console FE modules consume) ─────────────────────
 
-// environmentView matches console2 EnvironmentsModule `Environment`.
+// environmentView matches console EnvironmentsModule `Environment`.
 type environmentView struct {
 	ID        string   `json:"id"`
 	Name      string   `json:"name"`
@@ -49,7 +49,7 @@ type environmentView struct {
 	UpdatedAt string   `json:"updatedAt,omitempty"`
 }
 
-// pipelineView matches console2 PipelinesModule `Pipeline`.
+// pipelineView matches console PipelinesModule `Pipeline`.
 type pipelineView struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -59,7 +59,7 @@ type pipelineView struct {
 	Duration string `json:"duration,omitempty"`
 }
 
-// buildView matches console2 BuildsModule `Build`.
+// buildView matches console BuildsModule `Build`.
 type buildView struct {
 	ID        string `json:"id"`
 	Repo      string `json:"repo,omitempty"`
@@ -69,7 +69,7 @@ type buildView struct {
 	Duration  string `json:"duration,omitempty"`
 }
 
-// releaseView matches console2 ReleasesModule `Release`.
+// releaseView matches console ReleasesModule `Release`.
 type releaseView struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`

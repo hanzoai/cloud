@@ -1,5 +1,5 @@
 // onboarding.go — PURE org-naming + reserved-name policy, no transport/IAM. A
-// faithful Go port of console2's src/lib/server/onboarding.ts, decomplected from
+// faithful Go port of console's src/lib/server/onboarding.ts, decomplected from
 // the handler so the naming rules are one testable thing (the route does the IAM
 // calls; this decides the slug). Two concerns:
 //

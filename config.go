@@ -271,9 +271,9 @@ func LoadConfig() *Config {
 	cfg.JWTAudiences = jwtAudiencesFromEnv()
 
 	// Browser ZAP-over-WS Origin allowlist. Default to the console SPA hosts so
-	// console2 can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
+	// the console can connect cross-origin; override with CLOUD_ZAP_WEB_ORIGINS.
 	zapOrigins := getenv("CLOUD_ZAP_WEB_ORIGINS",
-		"console2.hanzo.ai,console.hanzo.ai,cloud.hanzo.ai,localhost:4000")
+		"console.hanzo.ai,cloud.hanzo.ai,localhost:4000")
 	for _, o := range strings.Split(zapOrigins, ",") {
 		if s := strings.TrimSpace(o); s != "" {
 			cfg.ZAPWebOrigins = append(cfg.ZAPWebOrigins, s)
