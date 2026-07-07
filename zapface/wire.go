@@ -17,19 +17,19 @@
 //     rpc.ParseRequest into rpc.Call{Method,PromiseID,Target,Cap,Payload}; the
 //     reply is rpc.BuildResponse(status, promiseID, body). These are
 //     byte-for-byte identical to the TS runtime's buildRequest/parseResponse,
-//     so a frame built by console2's @zap-proto/web is decoded here and our
+//     so a frame built by console's @zap-proto/web is decoded here and our
 //     reply is decoded there.
-//   - The INNER request payload (rpc.Call.Payload) is console2's ZapRequest
+//   - The INNER request payload (rpc.Call.Payload) is console's ZapRequest
 //     struct: { method @0 :Text, payload @8 :Text } (fixed size 16). `method`
 //     is the /v1 endpoint name (e.g. "get-providers"); `payload` is a
 //     SuperJSON string of the call arguments (” for none).
-//   - The INNER reply body is console2's ZapReply struct:
+//   - The INNER reply body is console's ZapReply struct:
 //     { ok @0 :Bool, status @4 :UInt32, result @8 :Text, errorJson @16 :Text }
 //     (fixed size 24). `result` is a SuperJSON string of the /v1 `data`;
 //     `errorJson` is a JSON error envelope when ok == false.
 //
 // The inner struct offsets/sizes live ONLY here — the single source of truth
-// mirroring console2/src/lib/zap/transport.ts.
+// mirroring console/src/lib/zap/transport.ts.
 package zapface
 
 import (
@@ -38,7 +38,7 @@ import (
 	zap "github.com/zap-proto/go"
 )
 
-// ZapRequest inner-struct layout — mirrors console2 transport.ts (zapRequestOff
+// ZapRequest inner-struct layout — mirrors console transport.ts (zapRequestOff
 // / zapRequestSize). Method and Payload are the only fields the browser sends.
 const (
 	reqMethodOff  = 0
@@ -46,7 +46,7 @@ const (
 	reqFixedSize  = 16
 )
 
-// ZapReply inner-struct layout — mirrors console2 transport.ts (zapReplyOff).
+// ZapReply inner-struct layout — mirrors console transport.ts (zapReplyOff).
 const (
 	replyOkOff        = 0
 	replyStatusOff    = 4
@@ -63,7 +63,7 @@ type zapRequest struct {
 }
 
 // parseZapRequest decodes the inner ZapRequest struct from rpc.Call.Payload.
-// The bytes are a v1 ZAP message (console2's Builder emits v1).
+// The bytes are a v1 ZAP message (console's Builder emits v1).
 func parseZapRequest(b []byte) (zapRequest, error) {
 	m, err := zap.Parse(b)
 	if err != nil {
@@ -98,7 +98,7 @@ func encodeZapReply(rep zapReply) []byte {
 }
 
 // superJSONWrap wraps a raw JSON value as the SuperJSON wire shape that
-// console2's `SuperJSON.parse(reply.result)` expects: a plain value V is
+// console's `SuperJSON.parse(reply.result)` expects: a plain value V is
 // transported as {"json": V}. (SuperJSON adds a "meta" key only for
 // non-JSON-native types — Dates/Maps/BigInt — which /v1 responses do not
 // emit, so the bare {"json":...} envelope round-trips losslessly.)

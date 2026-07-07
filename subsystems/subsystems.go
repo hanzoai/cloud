@@ -105,10 +105,10 @@ import (
 	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
 	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
 
-	// Console standalone surface: the native Go port of console2's two NON-proxy
+	// Console standalone surface: the native Go port of console's two NON-proxy
 	// server routes (app/keys + app/onboard) — mint/revoke the user's `hk-` Cloud
 	// API key and create the user's org — done as the confidential `hanzo-console`
-	// IAM client on the VALIDATED caller's behalf. Porting these lets console2 drop
+	// IAM client on the VALIDATED caller's behalf. Porting these lets console drop
 	// its last stateful Node handlers and be statically exported (task #41, "True
 	// 1-binary FE"): the embedded SPA calls /v1/console/* on its own origin.
 	_ "github.com/hanzoai/cloud/clients/console" // order 122 — /v1/console/keys,/v1/console/onboard
@@ -137,7 +137,7 @@ import (
 	// platform's deploy lifecycle. Reads the operator `Service` CR fleet as the
 	// declared/running/drift board and deploys by merge-patching a CR's
 	// `.spec.image` (the operator reconciles the rollout) — the ONE deploy path.
-	// Global-admin only; the user-facing view lives in console2.
+	// Global-admin only; the user-facing view lives in console.
 	_ "github.com/hanzoai/cloud/clients/paassvc" // order 128 — /v1/paas/*
 
 	// Platform (PaaS) control plane — PER-ORG, user-facing: the native Go port of
@@ -303,7 +303,7 @@ import (
 	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
 	// instead of the "runtime not initialized" 503.
 	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
-	// The console2 SPA is go:embed'd and served at "/" by webui.go's
+	// The console SPA is go:embed'd and served at "/" by webui.go's
 	// mountConsole, called directly from Serve AFTER every /v1/* route mounts
 	// (so real API routes always win; unmatched paths fall back to the SPA).
 	// That is the "one binary" endgame — the unified cloud binary IS the

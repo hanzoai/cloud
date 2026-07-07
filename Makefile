@@ -7,8 +7,8 @@ PKG             ?= ./cmd/cloud
 DOCKER_IMAGE    ?= ghcr.io/hanzoai/cloud
 DOCKER_TAG      ?= dev
 LDFLAGS         ?= -s -w
-# Path to a hanzoai/console2 checkout used to build the embedded console bundle.
-CONSOLE2_DIR    ?= ../console2
+# Path to a hanzoai/console checkout used to build the embedded console bundle.
+CONSOLE_DIR    ?= ../console
 
 # The shipped binary is pure Go (Dockerfile: CGO_ENABLED=0 → scratch). Default all
 # build/test targets to that mode so `make build`/`make test` exercise exactly
@@ -27,22 +27,22 @@ CGO_ENABLED     ?= 0
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-webui: ## Build the real console2 static bundle into webui/dist (go:embed source). CONSOLE2_DIR=<path to console2>.
+webui: ## Build the real console static bundle into webui/dist (go:embed source). CONSOLE_DIR=<path to console>.
 	@command -v npm >/dev/null 2>&1 || { echo "npm is required to build the console bundle"; exit 1; }
-	@test -f "$(CONSOLE2_DIR)/package.json" || { echo "console2 checkout not found at $(CONSOLE2_DIR) — set CONSOLE2_DIR=<path>"; exit 1; }
-	@test -d "$(CONSOLE2_DIR)/node_modules" || (cd "$(CONSOLE2_DIR)" && npm install --no-audit --no-fund)
-	cd "$(CONSOLE2_DIR)" && NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192 npm run build:embed
+	@test -f "$(CONSOLE_DIR)/package.json" || { echo "console checkout not found at $(CONSOLE_DIR) — set CONSOLE_DIR=<path>"; exit 1; }
+	@test -d "$(CONSOLE_DIR)/node_modules" || (cd "$(CONSOLE_DIR)" && npm install --no-audit --no-fund)
+	cd "$(CONSOLE_DIR)" && NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192 npm run build:embed
 	# Overlay the fresh static export onto webui/dist, keeping only the tracked
 	# fallbacks (.gitignore + assets/.gitkeep); the real bundle is build-time-only.
 	find webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name assets -exec rm -rf {} +
-	cp -r "$(CONSOLE2_DIR)/out/." webui/dist/
-	@echo ">> embedded real console2 bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
+	cp -r "$(CONSOLE_DIR)/out/." webui/dist/
+	@echo ">> embedded real console bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
 
 build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui/dist holds — run `webui` first for the real console).
 	@mkdir -p bin
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/$(BIN) $(PKG)
 
-build-standalone: webui build ## Build the REAL 1-binary console: console2 build:embed → webui/dist → go build.
+build-standalone: webui build ## Build the REAL 1-binary console: console build:embed → webui/dist → go build.
 
 hanzo: ## Build the hanzo control-plane CLI into ./bin/hanzo (pure Go, same mode as cmd/cloud — registers the ONE "sqlite" driver exactly once; a plain CGO_ENABLED=1 `go build ./cmd/hanzo` links the fork's mattn backend alongside the embedded modernc importers and panics, see header).
 	@mkdir -p bin
