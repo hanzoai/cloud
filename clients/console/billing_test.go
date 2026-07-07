@@ -11,7 +11,7 @@ import (
 )
 
 // billing_test.go — the per-tenant billing bridge (billing.go). Proves the tenant
-// scoping that prevents cross-tenant billing reads (the Go port of console2's
+// scoping that prevents cross-tenant billing reads (the Go port of console's
 // billing-scope.test.ts) AND the IDOR-safe handler forwarding.
 
 // ── pure scoping ─────────────────────────────────────────────────────────────
