@@ -155,7 +155,7 @@ func init() {
 	})
 }
 
-// ── request/response shapes (console2 VpcModule / LoadBalancerModule contract) ──
+// ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──
 
 type vpcView struct {
 	ID      string   `json:"id"`
