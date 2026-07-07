@@ -4,7 +4,7 @@
 # UI from one process: the console is compiled into the Go binary via
 # //go:embed (see webui.go). The pipeline is:
 #
-#   1. console  stage → build the hanzoai/console2 static bundle
+#   1. console  stage → build the hanzoai/console static bundle
 #   2. (copied) → into  webui/dist/  of the Go build context
 #   3. build    stage → `go build` bakes webui/dist into the binary (go:embed)
 #
@@ -12,11 +12,11 @@
 # Service, no second origin — the embedded console calls /v1 on its own host.
 #
 # ── console UI stage ─────────────────────────────────────────────────────────
-# Builds the console2 SPA and emits a STATIC bundle at /out. console2 is fetched
-# at a pinned ref (CONSOLE2_REF) using the same gh_token BuildKit secret the Go
+# Builds the console SPA and emits a STATIC bundle at /out. console is fetched
+# at a pinned ref (CONSOLE_REF) using the same gh_token BuildKit secret the Go
 # build uses for private modules.
 #
-# console2 exposes `npm run build:embed` (scripts/build-embed.mjs): it prunes the
+# console exposes `npm run build:embed` (scripts/build-embed.mjs): it prunes the
 # Next server route handlers (BFF proxies — they collapse to the cloud /v1/* the
 # SPA calls same-origin), wraps the client catch-all pages for output:'export',
 # and neutralizes the root layout's request-time headers() read (the per-host
@@ -24,12 +24,12 @@
 # clean — emitting out/. This stage runs it and copies out/ into /out, which the
 # Go build drops into webui/dist so //go:embed bakes the FULL @hanzo/gui console
 # into the ONE binary. The stage still degrades to the committed fallback shell,
-# non-fatally, if build:embed is ever absent or fails (a console2 export
+# non-fatally, if build:embed is ever absent or fails (a console export
 # regression must never take down the cloud backend image) — but the intended,
 # working path is the real bundle.
 FROM public.ecr.aws/docker/library/node:24-alpine AS console
-ARG CONSOLE2_REPO=https://github.com/hanzoai/console2.git
-ARG CONSOLE2_REF=main
+ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
+ARG CONSOLE_REF=main
 RUN apk add --no-cache git
 WORKDIR /console
 # The static export prerenders every page (webpack compile + export prerender);
@@ -39,26 +39,26 @@ RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
-    git clone --depth 1 --branch "${CONSOLE2_REF}" "${CONSOLE2_REPO}" . && \
+    git clone --depth 1 --branch "${CONSOLE_REF}" "${CONSOLE_REPO}" . && \
     npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
-# Always emit /out. When console2 exposes a static-embed target AND it builds, /out
+# Always emit /out. When console exposes a static-embed target AND it builds, /out
 # holds the real bundle; otherwise /out stays EMPTY so the Go build keeps the
 # committed fallback shell. Never fail the image — a static target that is missing
-# OR that fails to build is a degrade, not an error (the standalone console2
+# OR that fails to build is a degrade, not an error (the standalone console
 # Deployment is the primary console; this embed is a same-origin convenience). A
-# console2 prerender/export crash (e.g. /signin Server-Components error) must NOT
+# console prerender/export crash (e.g. /signin Server-Components error) must NOT
 # take down the cloud backend image.
 RUN mkdir -p /out && \
     if npm run 2>/dev/null | grep -q ' build:embed'; then \
-      echo ">> console2 build:embed → static bundle"; \
+      echo ">> console build:embed → static bundle"; \
       if npm run build:embed && [ -d out ]; then \
         cp -r out/. /out/; \
-        echo ">> embedded console2 static bundle"; \
+        echo ">> embedded console static bundle"; \
       else \
-        echo ">> console2 build:embed FAILED — degrading to committed fallback shell (non-fatal)"; \
+        echo ">> console build:embed FAILED — degrading to committed fallback shell (non-fatal)"; \
       fi; \
     else \
-      echo ">> console2 has no static-embed target yet; cloud embeds the fallback shell"; \
+      echo ">> console has no static-embed target yet; cloud embeds the fallback shell"; \
     fi
 
 # ── Go build stage ───────────────────────────────────────────────────────────
