@@ -41,6 +41,17 @@ type byoGPU struct {
 	MemoryTotal string `json:"memoryTotal,omitempty"` // VRAM, e.g. "122880 MiB"
 }
 
+// engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
+// (advertised by `hanzo gpu connect --serve-engine`). hanzo-engine serves the OpenAI
+// AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
+// GPU as an OpenAI-compatible provider. Surfaced verbatim on GET /v1/fleet/workers.
+type engineAdvertisement struct {
+	URL    string   `json:"url"`
+	APIs   []string `json:"apis,omitempty"`   // ["openai","anthropic"]
+	Models []string `json:"models,omitempty"` // ids from the node's GET /v1/models
+	Status string   `json:"status,omitempty"` // "ready" | "unreachable"
+}
+
 // byoWorker is a connected BYO machine, normalized from its `fleet` presence
 // activity. It is the raw shape GET /v1/fleet/workers returns and the source the
 // machine/gpu unions map from.
@@ -56,15 +67,22 @@ type byoWorker struct {
 	Os            string   `json:"os,omitempty"`
 	Version       string   `json:"version,omitempty"`
 	JobQueue      string   `json:"jobQueue,omitempty"`
+	// Capabilities the worker advertises ("studio.render", "engine.serve"); Engine
+	// is present when it runs a hanzo-engine model server. Both additive + omitempty.
+	Capabilities []string             `json:"capabilities,omitempty"`
+	Engine       *engineAdvertisement `json:"engine,omitempty"`
 }
 
 // fleetRegistration is the JSON the CLI stores as the presence activity's Input.
+// Mirror of the CLI's `registration` (cloud/cli/gpu.go) — extend both in lockstep.
 type fleetRegistration struct {
-	Hostname string   `json:"hostname"`
-	Os       string   `json:"os"`
-	Version  string   `json:"version"`
-	JobQueue string   `json:"jobQueue"`
-	GPUs     []byoGPU `json:"gpus"`
+	Hostname     string               `json:"hostname"`
+	Os           string               `json:"os"`
+	Version      string               `json:"version"`
+	JobQueue     string               `json:"jobQueue"`
+	GPUs         []byoGPU             `json:"gpus"`
+	Capabilities []string             `json:"capabilities,omitempty"`
+	Engine       *engineAdvertisement `json:"engine,omitempty"`
 }
 
 // byoWorkers reads the org's BYO fleet from the in-process tasks engine and
@@ -105,6 +123,8 @@ func byoWorkers(org string) []byoWorker {
 			Os:            reg.Os,
 			Version:       reg.Version,
 			JobQueue:      reg.JobQueue,
+			Capabilities:  reg.Capabilities,
+			Engine:        reg.Engine,
 		})
 	}
 	return out
