@@ -1,6 +1,6 @@
 // Package botsvc mounts /v1/bot/* — a reverse proxy to the in-cluster
 // bot-gateway (the OpenAI-compatible agent gateway that owns channels, skills,
-// and the agent API). The console2 Bot module probes /v1/bot/health and links
+// and the agent API). The console Bot module probes /v1/bot/health and links
 // out to the operational surfaces; without this the route 404s "not routed on
 // this host". No bot logic is reimplemented here — bot-gateway owns it.
 //
