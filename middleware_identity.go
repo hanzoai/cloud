@@ -7,7 +7,7 @@ package cloud
 // (hanzoai/gateway) is the sole minter of those headers: it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
 // cloud TRUSTS that contract. But cloud-api is also reachable WITHOUT the gateway
-// in front — directly in-cluster (cloud-api.hanzo.svc:8000, used by console2's
+// in front — directly in-cluster (cloud-api.hanzo.svc:8000, used by console's
 // BFF) and historically on the public host cloud-api.hanzo.ai. On those paths a
 // caller can simply send `X-User-IsAdmin: true` and every cloud admin gate
 // (c.IsAdmin()) believes it. That is the forgeable-admin trust boundary.
@@ -127,7 +127,7 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id"}
 // and the console browser data path depends on this header. So a direct-to-pod
 // caller can still SELECT a tenant for DATA reads. Closing that needs the data
 // path to carry a bearer universally OR the NetworkPolicy locked to gateway-only
-// (which would break console2's legitimate direct in-cluster BFF) — Phase-2. The
+// (which would break console's legitimate direct in-cluster BFF) — Phase-2. The
 // ADMIN boundary (this fix's P0) is closed on every path regardless, because
 // X-User-IsAdmin is NEVER restored from client input.
 //
