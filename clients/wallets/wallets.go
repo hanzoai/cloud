@@ -39,9 +39,9 @@ import (
 
 // Config env keys — the config seam.
 const (
-	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"            // comma-sep node base URLs; unset ⇒ mpc/treasury fail closed
-	envMPCSecretRef   = "CLOUD_WALLETS_MPC_JWT_SECRET_REF"  // KMS ref of the HS256 JWT secret; NEVER a plaintext value
-	envDefaultCustody = "CLOUD_WALLETS_DEFAULT_CUSTODY"     // default wallet custody; default "kms"
+	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"        // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury fail closed
+	envMPCKeyRef      = "CLOUD_WALLETS_MPC_API_KEY_REF" // KMS ref of the ring's MPC_INTERNAL_API_KEY bearer token; NEVER a plaintext value
+	envDefaultCustody = "CLOUD_WALLETS_DEFAULT_CUSTODY" // default wallet custody; default "kms"
 )
 
 type svc struct {
@@ -108,8 +108,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // buildCustody assembles the available custody backends. KMS is always present
-// (the in-process spine); MPC + treasury only when the cluster + JWT secret are
-// both wired — otherwise those Kinds are absent and custodyFor fails closed.
+// (the in-process spine); MPC + treasury only when the ring address + internal
+// API key are both wired — otherwise those Kinds are absent and custodyFor
+// fails closed.
 func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 	m := map[Kind]Custody{}
 	if deps.KMS != nil {
@@ -121,32 +122,32 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 	if len(nodes) == 0 {
 		return m // mpc/treasury fail closed (ErrMPCNotConfigured)
 	}
-	secret := loadMPCSecret(deps, log)
-	if len(secret) == 0 {
-		log.Warn("wallets: " + envMPCAddr + " set but JWT secret unresolved; mpc/treasury custody fail closed")
+	key := loadMPCKey(deps, log)
+	if len(key) == 0 {
+		log.Warn("wallets: " + envMPCAddr + " set but MPC API key unresolved; mpc/treasury custody fail closed")
 		return m
 	}
-	client := newMPCClient(nodes, secret)
+	client := newMPCClient(nodes, key)
 	m[KindMPC] = mpcCustody{http: client}
 	m[KindTreasury] = treasuryCustody{http: client}
 	log.Info("wallets: mpc custody configured", "nodes", len(nodes))
 	return m
 }
 
-// loadMPCSecret fetches the HS256 JWT secret from KMS by the ref in
-// CLOUD_WALLETS_MPC_JWT_SECRET_REF. NEVER a plaintext env value. Empty ref or a
-// KMS error ⇒ nil ⇒ mpc/treasury fail closed.
-func loadMPCSecret(deps cloud.Deps, log luxlog.Logger) []byte {
-	ref := strings.TrimSpace(os.Getenv(envMPCSecretRef))
+// loadMPCKey fetches the ring's MPC_INTERNAL_API_KEY bearer token from KMS by
+// the ref in CLOUD_WALLETS_MPC_API_KEY_REF. NEVER a plaintext env value. Empty
+// ref or a KMS error ⇒ nil ⇒ mpc/treasury fail closed.
+func loadMPCKey(deps cloud.Deps, log luxlog.Logger) []byte {
+	ref := strings.TrimSpace(os.Getenv(envMPCKeyRef))
 	if ref == "" || deps.KMS == nil {
 		return nil
 	}
-	secret, err := deps.KMS.GetSecret(context.Background(), ref)
+	key, err := deps.KMS.GetSecret(context.Background(), ref)
 	if err != nil {
-		log.Warn("wallets: mpc JWT secret ref did not resolve from KMS", "ref", ref, "err", err)
+		log.Warn("wallets: mpc API key ref did not resolve from KMS", "ref", ref, "err", err)
 		return nil
 	}
-	return secret
+	return key
 }
 
 // custodyFor resolves the backend for a kind. Missing mpc/treasury ⇒ fail closed
