@@ -23,10 +23,10 @@
 # <title>, resolved client-side in the embed) so the STATIC export prerenders
 # clean — emitting out/. This stage runs it and copies out/ into /out, which the
 # Go build drops into webui/dist so //go:embed bakes the FULL @hanzo/gui console
-# into the ONE binary. The stage still degrades to the committed fallback shell,
-# non-fatally, if build:embed is ever absent or fails (a console export
-# regression must never take down the cloud backend image) — but the intended,
-# working path is the real bundle.
+# into the ONE binary. This stage FAILS HARD: the prod image MUST carry the real
+# console — a missing/broken build:embed is a build ERROR, never a silent degrade
+# to the placeholder shell. The one escape hatch is --build-arg ALLOW_PLACEHOLDER=1
+# (pure-Go dev image with no Node console), which is NEVER set for prod.
 FROM public.ecr.aws/docker/library/node:24-alpine AS console
 ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
 ARG CONSOLE_REF=main
@@ -41,24 +41,33 @@ RUN --mount=type=secret,id=gh_token \
     fi && \
     git clone --depth 1 --branch "${CONSOLE_REF}" "${CONSOLE_REPO}" . && \
     npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
-# Always emit /out. When console exposes a static-embed target AND it builds, /out
-# holds the real bundle; otherwise /out stays EMPTY so the Go build keeps the
-# committed fallback shell. Never fail the image — a static target that is missing
-# OR that fails to build is a degrade, not an error (the standalone console
-# Deployment is the primary console; this embed is a same-origin convenience). A
-# console prerender/export crash (e.g. /signin Server-Components error) must NOT
-# take down the cloud backend image.
-RUN mkdir -p /out && \
+# FAIL-HARD. build:embed MUST emit a REAL bundle — a non-empty out/index.html AND
+# an out/_next/ chunk dir — and /out then carries it into the Go embed path. If the
+# target is absent, the export fails, or the output is the placeholder shape, this
+# is a build ERROR (exit 1): the prod image can NEVER silently ship the committed
+# fallback shell. Escape hatch: --build-arg ALLOW_PLACEHOLDER=1 leaves /out empty
+# (Go build keeps the committed shell) for a pure-Go dev image — NEVER set in prod.
+ARG ALLOW_PLACEHOLDER=0
+RUN mkdir -p /out; \
+    ok=0; \
     if npm run 2>/dev/null | grep -q ' build:embed'; then \
-      echo ">> console build:embed → static bundle"; \
-      if npm run build:embed && [ -d out ]; then \
+      if npm run build:embed && [ -s out/index.html ] && [ -d out/_next ]; then \
         cp -r out/. /out/; \
-        echo ">> embedded console static bundle"; \
+        echo ">> embedded REAL console static bundle: $(wc -c < out/index.html)-byte index.html, $(du -sh out/_next | cut -f1) _next/"; \
+        ok=1; \
       else \
-        echo ">> console build:embed FAILED — degrading to committed fallback shell (non-fatal)"; \
+        echo ">> console build:embed produced NO real bundle (missing/empty out/index.html or out/_next)"; \
       fi; \
     else \
-      echo ">> console has no static-embed target yet; cloud embeds the fallback shell"; \
+      echo ">> console exposes no build:embed target"; \
+    fi; \
+    if [ "$ok" != "1" ]; then \
+      if [ "$ALLOW_PLACEHOLDER" = "1" ]; then \
+        echo ">> ALLOW_PLACEHOLDER=1 — keeping committed fallback shell (DEV image only; NEVER prod)"; \
+      else \
+        echo ">> FATAL: refusing to ship the placeholder console. Fix the console build:embed, or pass --build-arg ALLOW_PLACEHOLDER=1 for a pure-Go dev image."; \
+        exit 1; \
+      fi; \
     fi
 
 # ── Go build stage ───────────────────────────────────────────────────────────

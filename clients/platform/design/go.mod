@@ -5,7 +5,7 @@
 // The cloud runtime mounts /v1/platform on the canonical zip router (one
 // router, per HIP-0106); this module exists only to (a) express the API
 // design-first in the Goa DSL and (b) `goa gen` the OpenAPI 3 contract that
-// console2 + external clients consume. Nested go.mod ⇒ `go build ./...` from
+// console + external clients consume. Nested go.mod ⇒ `go build ./...` from
 // the cloud root skips it.
 module github.com/hanzoai/platform-design
 
