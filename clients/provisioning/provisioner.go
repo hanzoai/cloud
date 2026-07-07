@@ -17,10 +17,8 @@ import (
 	"strings"
 	"time"
 
-	pgx "github.com/jackc/pgx/v5"
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	redis "github.com/redis/go-redis/v9"
 )
 
 // errAlreadyExists is returned by a Provisioner when the backend reports the
@@ -39,137 +37,23 @@ type Provisioner interface {
 	Drop(ctx context.Context, physicalName, user string) error
 }
 
-// newRegistry builds one Provisioner per kind from environment configuration.
-// Construction never dials a backend — connections open lazily per request so
-// a single down backend cannot block startup.
-// The registry holds ONLY the shared-logical kinds. datastore + docdb are
-// provisioned by the dedicated-instance strategy (dedicated.go) and are
-// deliberately absent here — create() routes them before consulting reg.
+// newRegistry builds one Provisioner per SHARED-logical kind from environment
+// configuration. Construction never dials a backend — connections open lazily
+// per request so a single down backend cannot block startup.
+// The registry holds ONLY the shared-logical kinds (vector, search, s3). The
+// four on-demand data add-ons (kv, sql, docdb, datastore) are provisioned by the
+// dedicated-instance strategy (dedicated.go, dedicatedEngines) — each org owns
+// its instance — and are deliberately absent here: create() routes a dedicated
+// kind before consulting reg.
 func newRegistry() map[string]Provisioner {
 	return map[string]Provisioner{
-		"sql":    newPostgres(),
 		"vector": newQdrant(),
-		"kv":     newRedis(),
 		"search": newMeili(),
 		"s3":     newS3(),
 	}
 }
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
-
-// ----- Postgres (databases) -------------------------------------------------
-// env: CLOUD_SQL_ADMIN_DSN (default postgres://postgres@sql.hanzo.svc:5432/postgres?sslmode=disable)
-
-type postgresProvisioner struct {
-	dsn  string
-	host string
-	port int
-}
-
-func newPostgres() *postgresProvisioner {
-	dsn := env("CLOUD_SQL_ADMIN_DSN", "postgres://postgres@sql.hanzo.svc:5432/postgres?sslmode=disable")
-	host, port := hostPortFromURL(dsn, 5432)
-	return &postgresProvisioner{dsn: dsn, host: host, port: port}
-}
-
-func (p *postgresProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
-	conn, err := pgx.Connect(ctx, p.dsn)
-	if err != nil {
-		return "", "", 0, "", fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = conn.Close(ctx) }()
-
-	if _, err := conn.Exec(ctx, fmt.Sprintf(`CREATE ROLE %s LOGIN PASSWORD '%s'`, pgIdent(user), sqlLit(pw))); err != nil {
-		if isPGDuplicate(err) {
-			return "", "", 0, "", errAlreadyExists
-		}
-		return "", "", 0, "", fmt.Errorf("create role: %w", err)
-	}
-	if _, err := conn.Exec(ctx, fmt.Sprintf(`CREATE DATABASE %s OWNER %s`, pgIdent(physical), pgIdent(user))); err != nil {
-		// Roll back the role we just created so a retry is clean.
-		_, _ = conn.Exec(ctx, fmt.Sprintf(`DROP ROLE IF EXISTS %s`, pgIdent(user)))
-		if isPGDuplicate(err) {
-			return "", "", 0, "", errAlreadyExists
-		}
-		return "", "", 0, "", fmt.Errorf("create database: %w", err)
-	}
-	cs := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, pw, p.host, p.port, physical)
-	return cs, p.host, p.port, physical, nil
-}
-
-func (p *postgresProvisioner) Drop(ctx context.Context, physical, user string) error {
-	conn, err := pgx.Connect(ctx, p.dsn)
-	if err != nil {
-		return fmt.Errorf("connect: %w", err)
-	}
-	defer func() { _ = conn.Close(ctx) }()
-	if _, err := conn.Exec(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS %s`, pgIdent(physical))); err != nil {
-		return fmt.Errorf("drop database: %w", err)
-	}
-	if _, err := conn.Exec(ctx, fmt.Sprintf(`DROP ROLE IF EXISTS %s`, pgIdent(user))); err != nil {
-		return fmt.Errorf("drop role: %w", err)
-	}
-	return nil
-}
-
-func isPGDuplicate(err error) bool {
-	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "already exists") || strings.Contains(s, "duplicate")
-}
-
-// ----- Redis / Valkey (kv) --------------------------------------------------
-// env: CLOUD_KV_ADMIN_ADDR (default kv.hanzo.svc:6379),
-//      CLOUD_KV_ADMIN_USER (default), CLOUD_KV_ADMIN_PASSWORD
-//
-// The logical resource is an ACL user constrained to the key prefix
-// "<physical>:*" with full command access inside that keyspace.
-
-type redisProvisioner struct {
-	addr string
-	user string
-	pass string
-	host string
-	port int
-}
-
-func newRedis() *redisProvisioner {
-	addr := env("CLOUD_KV_ADMIN_ADDR", "kv.hanzo.svc:6379")
-	host, port := splitAddr(addr, 6379)
-	return &redisProvisioner{
-		addr: addr,
-		user: env("CLOUD_KV_ADMIN_USER", "default"),
-		pass: os.Getenv("CLOUD_KV_ADMIN_PASSWORD"),
-		host: host,
-		port: port,
-	}
-}
-
-func (p *redisProvisioner) client() *redis.Client {
-	return redis.NewClient(&redis.Options{Addr: p.addr, Username: p.user, Password: p.pass})
-}
-
-func (p *redisProvisioner) Create(ctx context.Context, physical, user, pw string) (string, string, int, string, error) {
-	rdb := p.client()
-	defer func() { _ = rdb.Close() }()
-
-	prefix := physical + ":"
-	// ACL SETUSER is idempotent (overwrites); the control-plane UNIQUE index is
-	// the real duplicate guard. Restrict to the resource keyspace + all commands.
-	if err := rdb.Do(ctx, "ACL", "SETUSER", user, "reset", "on", ">"+pw, "~"+prefix+"*", "+@all").Err(); err != nil {
-		return "", "", 0, "", fmt.Errorf("acl setuser: %w", err)
-	}
-	cs := fmt.Sprintf("redis://%s:%s@%s:%d/0", user, pw, p.host, p.port)
-	return cs, p.host, p.port, prefix, nil
-}
-
-func (p *redisProvisioner) Drop(ctx context.Context, physical, user string) error {
-	rdb := p.client()
-	defer func() { _ = rdb.Close() }()
-	if err := rdb.Do(ctx, "ACL", "DELUSER", user).Err(); err != nil {
-		return fmt.Errorf("acl deluser: %w", err)
-	}
-	return nil
-}
 
 // ----- Qdrant (vector) ------------------------------------------------------
 // env: CLOUD_VECTOR_ADMIN_URL (default http://vector.hanzo.svc:6333),
@@ -410,8 +294,10 @@ func truncate(b []byte) string {
 }
 
 // genToken returns n bytes of crypto-random data as URL-safe base64 (no
-// padding). The alphabet [A-Za-z0-9_-] contains no quote characters, so the
-// password is safe to interpolate into single-quoted SQL string literals.
+// padding). The alphabet [A-Za-z0-9_-] carries no quote/space/URL-delimiter
+// characters, so the generated password is safe to interpolate verbatim into a
+// DSN's userinfo, a valkey `requirepass <pw>` config line, or a quoted
+// identifier — no escaping and no injection surface.
 func genToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -419,9 +305,6 @@ func genToken(n int) (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
-
-func pgIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
-func sqlLit(s string) string  { return strings.ReplaceAll(s, "'", "''") }
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {

@@ -27,19 +27,49 @@ type fakeOrch struct {
 	ready      error
 	ensureErr  error
 	phase      string
+	patchErr   error // injected failure for PatchAddonSecret
 	datastores map[string]*unstructured.Unstructured
 	secrets    map[string]*unstructured.Unstructured
+	addons     map[string]map[string]string // ns/name -> key -> value (the <instance>-addons Secret data)
 	ensured    []string
 	deletedDS  []string
 	deletedSec []string
 	deletedPVC []string
+	ops        []string // ordered trace of injection/teardown ops (drop-order assertions)
 }
 
 func newFakeOrch() *fakeOrch {
 	return &fakeOrch{
 		datastores: map[string]*unstructured.Unstructured{},
 		secrets:    map[string]*unstructured.Unstructured{},
+		addons:     map[string]map[string]string{},
 	}
+}
+
+// PatchAddonSecret merges key=value into the in-memory addons Secret, preserving
+// other keys — mirroring the strategic-merge the real orchestrator performs.
+func (f *fakeOrch) PatchAddonSecret(_ context.Context, ns, name, _, key, value string) error {
+	if f.patchErr != nil {
+		return f.patchErr
+	}
+	k := ns + "/" + name
+	if f.addons[k] == nil {
+		f.addons[k] = map[string]string{}
+	}
+	f.addons[k][key] = value
+	f.ops = append(f.ops, "inject:"+k+":"+key)
+	return nil
+}
+
+// RemoveAddonSecretKey deletes one key from the in-memory addons Secret. Missing
+// Secret/key is a no-op success (idempotent), like the real JSON-merge delete.
+func (f *fakeOrch) RemoveAddonSecretKey(_ context.Context, ns, name, key string) error {
+	k := ns + "/" + name
+	if f.addons[k] != nil {
+		delete(f.addons[k], key)
+	}
+	f.ops = append(f.ops, "remove:"+k+":"+key)
+	return nil
 }
 
 func (f *fakeOrch) Ready() error { return f.ready }
@@ -58,6 +88,7 @@ func (f *fakeOrch) ApplyDatastore(_ context.Context, ns, name string, obj *unstr
 func (f *fakeOrch) DatastorePhase(context.Context, string, string) (string, error) { return f.phase, nil }
 func (f *fakeOrch) DeleteDatastore(_ context.Context, ns, name string) error {
 	f.deletedDS = append(f.deletedDS, ns+"/"+name)
+	f.ops = append(f.ops, "teardown:"+ns+"/"+name)
 	delete(f.datastores, ns+"/"+name)
 	return nil
 }
