@@ -315,3 +315,49 @@ func TestDedicated_InjectFailureRollsBack(t *testing.T) {
 		t.Fatalf("admin Secret not rolled back after inject failure")
 	}
 }
+
+// TestDedicated_InjectPartialWriteRollsBackOrphanKey proves the tightened
+// rollback (Red low-1): when the inject PATCH LANDS server-side yet still
+// returns an error (a dropped response / post-commit timeout), the rollback
+// SCRUBS the already-written <KIND>_URL so the instance is never left pointing
+// at the backend we then tear down — a dangling DSN is strictly worse than Base.
+func TestDedicated_InjectPartialWriteRollsBackOrphanKey(t *testing.T) {
+	orch := newFakeOrch()
+	orch.patchErr = context.DeadlineExceeded
+	orch.patchErrAfterWrite = true // the key lands, THEN the call reports failure
+	s := newDedicatedSvc(t, orch)
+
+	resp := postCreateInstance(t, s, "datastore", "acme", "warehouse", "commerce")
+	if resp.StatusCode != http.StatusBadGateway {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s, want 502 (inject failed)", resp.StatusCode, body)
+	}
+
+	// The orphan DATASTORE_URL that briefly landed must be gone — else a live
+	// instance would point at a torn-down backend.
+	if v := orch.addons["tenant-acme/commerce-addons"]["DATASTORE_URL"]; v != "" {
+		t.Fatalf("orphan DATASTORE_URL survived a failed inject: %q", v)
+	}
+	// And the scrub must have actually RUN (a remove op AFTER the inject) — not
+	// merely be absent because the write never happened.
+	injectIdx, removeIdx := -1, -1
+	for i, op := range orch.ops {
+		switch op {
+		case "inject:tenant-acme/commerce-addons:DATASTORE_URL":
+			injectIdx = i
+		case "remove:tenant-acme/commerce-addons:DATASTORE_URL":
+			removeIdx = i
+		}
+	}
+	if injectIdx < 0 || removeIdx < 0 || removeIdx < injectIdx {
+		t.Fatalf("rollback must scrub the landed key (inject then remove); ops=%v", orch.ops)
+	}
+	// The rest of the provision is still fully rolled back.
+	if _, err := s.store.Get(context.Background(), "acme", "datastore", "warehouse"); err == nil {
+		t.Fatalf("row persisted despite inject failure")
+	}
+	inst := instanceName("datastore", "acme", "warehouse")
+	if orch.datastores["tenant-acme/"+inst] != nil || orch.secrets["tenant-acme/"+inst+"-admin"] != nil {
+		t.Fatalf("backend not rolled back after inject failure")
+	}
+}

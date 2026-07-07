@@ -27,8 +27,9 @@ type fakeOrch struct {
 	ready      error
 	ensureErr  error
 	phase      string
-	patchErr   error // injected failure for PatchAddonSecret
-	datastores map[string]*unstructured.Unstructured
+	patchErr           error // injected failure for PatchAddonSecret
+	patchErrAfterWrite bool  // when set with patchErr, the write LANDS then the call reports failure (models a committed-but-errored PATCH)
+	datastores         map[string]*unstructured.Unstructured
 	secrets    map[string]*unstructured.Unstructured
 	addons     map[string]map[string]string // ns/name -> key -> value (the <instance>-addons Secret data)
 	ensured    []string
@@ -49,7 +50,7 @@ func newFakeOrch() *fakeOrch {
 // PatchAddonSecret merges key=value into the in-memory addons Secret, preserving
 // other keys — mirroring the strategic-merge the real orchestrator performs.
 func (f *fakeOrch) PatchAddonSecret(_ context.Context, ns, name, _, key, value string) error {
-	if f.patchErr != nil {
+	if f.patchErr != nil && !f.patchErrAfterWrite {
 		return f.patchErr
 	}
 	k := ns + "/" + name
@@ -58,6 +59,12 @@ func (f *fakeOrch) PatchAddonSecret(_ context.Context, ns, name, _, key, value s
 	}
 	f.addons[k][key] = value
 	f.ops = append(f.ops, "inject:"+k+":"+key)
+	// patchErrAfterWrite: the key LANDED server-side but the call reports an
+	// error (dropped response / post-commit timeout) — the exact partial failure
+	// createDedicated's rollback must scrub so no orphan <KIND>_URL survives.
+	if f.patchErr != nil {
+		return f.patchErr
+	}
 	return nil
 }
 
