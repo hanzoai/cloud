@@ -45,6 +45,7 @@ require (
 	golang.org/x/term v0.44.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
+	sigs.k8s.io/controller-runtime v0.23.3
 )
 
 require (
@@ -195,6 +196,7 @@ require (
 	go.uber.org/goleak v1.3.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
+	k8s.io/apiextensions-apiserver v0.35.0 // indirect
 	modernc.org/sqlite v1.51.0 // indirect
 )
 
