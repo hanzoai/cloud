@@ -16,7 +16,7 @@ import (
 //
 // `all:` embeds the whole tree (dotfiles included). At a plain `go build` this is
 // the committed fallback shell (webui/dist/index.html); the build pipeline runs
-// hanzoai/console2's `npm run build:embed` (a static export) and OVERWRITES
+// hanzoai/console's `npm run build:embed` (a static export) and OVERWRITES
 // webui/dist with the real @hanzo/gui static bundle BEFORE `go build`, so the
 // shipped binary carries the full console. That pipeline is the Dockerfile
 // console stage for the image, and the `make webui` target for a standalone
