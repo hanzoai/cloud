@@ -45,6 +45,14 @@ type Resource struct {
 	// source the recurring footprint meter multiplies into a per-org GB-time
 	// charge — so an instance the org runs is billed for what it reserves.
 	Size string
+	// Instance binds a DEDICATED-instance resource to the app instance whose
+	// on-demand add-on it is (e.g. "commerce"). When set, the assembled DSN is
+	// injected as <KIND>_URL into the Secret "<instance>-addons" in tenant-<org>,
+	// so that instance switches off Base onto this backend; drop removes it and
+	// the instance reverts to Base. Empty = not instance-bound (the DSN is only
+	// returned once, wired by the caller) — the pre-instance-binding behavior, so
+	// every existing provision is unchanged.
+	Instance string
 }
 
 // Store is the provisioning metadata database. ONE SQLite file
@@ -127,18 +135,25 @@ CREATE INDEX IF NOT EXISTS ix_provisioned_status
 		!strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("migrate size column: %w", err)
 	}
+	// Additive column for the app-instance binding dimension (the on-demand
+	// add-on target). Same idempotent ALTER pattern as `size`: a "duplicate
+	// column name" on an already-migrated DB is the expected no-op.
+	if _, err := s.db.Exec(`ALTER TABLE provisioned_resources ADD COLUMN instance TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrate instance column: %w", err)
+	}
 	return nil
 }
 
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const resourceCols = `id,org,kind,name,physical_name,secret_ref,host,port,username,dbname,status,created_at,size`
+const resourceCols = `id,org,kind,name,physical_name,secret_ref,host,port,username,dbname,status,created_at,size,instance`
 
 func scanResource(sc interface{ Scan(...any) error }) (Resource, error) {
 	var r Resource
 	err := sc.Scan(&r.ID, &r.Org, &r.Kind, &r.Name, &r.PhysicalName, &r.SecretRef,
-		&r.Host, &r.Port, &r.Username, &r.DBName, &r.Status, &r.CreatedAt, &r.Size)
+		&r.Host, &r.Port, &r.Username, &r.DBName, &r.Status, &r.CreatedAt, &r.Size, &r.Instance)
 	return r, err
 }
 
@@ -153,9 +168,9 @@ func (s *Store) Insert(ctx context.Context, r Resource) error {
 	defer func() { _ = tx.Rollback() }()
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO provisioned_resources (`+resourceCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO provisioned_resources (`+resourceCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.Kind, r.Name, r.PhysicalName, r.SecretRef,
-		r.Host, r.Port, r.Username, r.DBName, r.Status, r.CreatedAt, r.Size)
+		r.Host, r.Port, r.Username, r.DBName, r.Status, r.CreatedAt, r.Size, r.Instance)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -205,6 +220,30 @@ func (s *Store) List(ctx context.Context, org, kind string) ([]Resource, error) 
 		org, kind)
 	if err != nil {
 		return nil, fmt.Errorf("list: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Resource
+	for rows.Next() {
+		r, err := scanResource(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ListByInstance returns every resource an org has bound to one app instance,
+// oldest first — the set of on-demand add-ons active for that instance (each is
+// one <KIND>_URL projected into the instance's addons Secret). Scoped to (org,
+// instance) so it can never surface another tenant's bindings.
+func (s *Store) ListByInstance(ctx context.Context, org, instance string) ([]Resource, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+resourceCols+` FROM provisioned_resources WHERE org=? AND instance=? ORDER BY created_at ASC, id ASC`,
+		org, instance)
+	if err != nil {
+		return nil, fmt.Errorf("list by instance: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
