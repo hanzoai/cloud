@@ -2,6 +2,7 @@ package treasury
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,77 @@ var anchorSelector = crypto.Keccak256([]byte("anchor(bytes32)"))[:4]
 // "HZTA"+root, so an anchor is identifiable on-chain even without a deployed contract.
 var selfTxMagic = []byte("HZTA")
 
+// txSigner is the anchor's signing seam: it yields the sender address and signs
+// the 32-byte EVM signing hash. Two backends satisfy it — a local, KMS-provisioned
+// key (keySigner, single-sig) and a quorum-gated treasury MPC wallet (mpcSigner,
+// the reserve's 3-of-5, bound via BindAnchorSigner). submit() is agnostic to which
+// one signs; the signature is applied identically.
+type txSigner interface {
+	address() common.Address
+	signHash(ctx context.Context, hash []byte) ([]byte, error)
+}
+
+// keySigner signs with the anchor's own KMS-provisioned secp256k1 key (the
+// single-signer path this refactor generalizes away from as the default).
+type keySigner struct{ priv *ecdsa.PrivateKey }
+
+func (k keySigner) address() common.Address {
+	return common.Address(crypto.PubkeyToAddress(k.priv.PublicKey))
+}
+func (k keySigner) signHash(_ context.Context, hash []byte) ([]byte, error) {
+	return crypto.Sign(hash, k.priv)
+}
+
+// mpcSigner delegates the signing hash to a quorum-gated custody backend — the
+// reserve's treasury MPC wallet (3-of-5). The address is the wallet's fixed EVM
+// address; the signature is produced by the threshold ring, never a local key.
+type mpcSigner struct {
+	addr common.Address
+	sign func(ctx context.Context, hash []byte) ([]byte, error)
+}
+
+func (m mpcSigner) address() common.Address { return m.addr }
+func (m mpcSigner) signHash(ctx context.Context, hash []byte) ([]byte, error) {
+	return m.sign(ctx, hash)
+}
+
+// boundAnchorSigner, when set by the wallets/finance seam (BindAnchorSigner),
+// makes the anchor commit with the reserve's treasury MPC wallet instead of a
+// local key — quorum-gated. nil ⇒ fall back to the KMS-provisioned key.
+var boundAnchorSigner txSigner
+
+// BindAnchorSigner binds a quorum-gated treasury signer (the reserve's 3-of-5
+// MPC wallet) as the anchor's signer: addr is the wallet's EVM address, and sign
+// delegates the 32-byte signing hash to the threshold ring. A nil sign unbinds
+// (revert to the local key). This is the finance seam — the treasury reserve
+// wallet, not a single key, governs on-chain anchors.
+func BindAnchorSigner(addr common.Address, sign func(ctx context.Context, hash []byte) ([]byte, error)) {
+	if sign == nil {
+		boundAnchorSigner = nil
+		return
+	}
+	boundAnchorSigner = mpcSigner{addr: addr, sign: sign}
+}
+
+// signer resolves the anchor's signing backend: the bound quorum-gated treasury
+// signer when present (the reserve MPC wallet), else the local KMS-provisioned
+// key. Returns an error when neither is available (submit fails closed — a
+// signature is never fabricated).
+func (a *anchorer) signer() (txSigner, error) {
+	if boundAnchorSigner != nil {
+		return boundAnchorSigner, nil
+	}
+	keyHex := a.signerKeyHex()
+	if keyHex == "" {
+		return nil, fmt.Errorf("no anchor signer: bind a treasury MPC wallet (BindAnchorSigner) or provision TREASURY_ANCHOR_SIGNER_KEY from KMS")
+	}
+	priv, err := crypto.HexToECDSA(trim0x(keyHex))
+	if err != nil {
+		return nil, fmt.Errorf("parse KMS-provisioned signer key: %w", err)
+	}
+	return keySigner{priv: priv}, nil
+}
+
 // submit signs and sends the current ledger root to the Hanzo L1, then waits for the
 // receipt. It uses the luxfi/geth EVM client; the signer key is provisioned from KMS
 // (never plaintext in code/manifest). Prefers the TreasuryAnchor contract call when
@@ -40,13 +112,14 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 	if err != nil {
 		return nil, fmt.Errorf("compute root: %w", err)
 	}
-	priv, err := crypto.HexToECDSA(trim0x(a.signerKeyHex()))
+	sgn, err := a.signer()
 	if err != nil {
-		return nil, fmt.Errorf("parse KMS-provisioned signer key: %w", err)
+		return nil, err
 	}
-	// crypto.PubkeyToAddress returns luxfi/crypto's own common.Address; the geth
-	// client speaks luxfi/geth's common.Address. Both are [20]byte, so convert once.
-	from := common.Address(crypto.PubkeyToAddress(priv.PublicKey))
+	// The sender is the signer's address — a local KMS key's pubkey address, or the
+	// reserve treasury MPC wallet's fixed EVM address (quorum-gated). Both are
+	// luxfi/geth [20]byte common.Address.
+	from := sgn.address()
 
 	cl, err := ethclient.DialContext(ctx, a.rpcURL)
 	if err != nil {
@@ -85,9 +158,18 @@ func (a *anchorer) submit(ctx context.Context, b ledger.Backend) (*anchorRecord,
 		GasPrice: gasPrice,
 		Data:     data,
 	})
-	signed, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), priv)
+	// Sign through the seam: hash the tx for this chain, delegate the 32-byte
+	// signing hash to the resolved backend (local key OR the reserve's 3-of-5 MPC
+	// wallet), then apply the recoverable signature. Decouples the tx builder from
+	// WHERE the private material lives.
+	evmSigner := types.LatestSignerForChainID(chainID)
+	sig, err := sgn.signHash(ctx, evmSigner.Hash(tx).Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("sign tx: %w", err)
+	}
+	signed, err := tx.WithSignature(evmSigner, sig)
+	if err != nil {
+		return nil, fmt.Errorf("apply signature: %w", err)
 	}
 	if err := cl.SendTransaction(ctx, signed); err != nil {
 		return nil, fmt.Errorf("send tx: %w", err)
