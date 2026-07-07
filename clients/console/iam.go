@@ -1,9 +1,9 @@
 // iam.go is the ONE HTTP path from the console subsystem to Hanzo IAM, acting as
 // the confidential first-party `hanzo-console` client (client_secret_basic). It
-// ports the privileged IAM primitives that console2's server-only
+// ports the privileged IAM primitives that console's server-only
 // src/lib/server/identity.ts drove — mint/revoke/get the per-user `hk-` key and
 // create/read/update an organization — so those standalone Next server routes can
-// be retired and console2 statically exported (task #41, "True 1-binary FE").
+// be retired and console statically exported (task #41, "True 1-binary FE").
 //
 // WHY A CONFIDENTIAL CLIENT (and not the caller's own token). These ops are
 // privileged: `mint-user-keys` writes a user's AccessKey, `add-organization`

@@ -1,12 +1,12 @@
 // Package console mounts the console's OWN standalone server surface natively in
 // the unified cloud binary at /v1/console/* (HIP-0106). It is the Go port of the
-// two console2 Next server routes that hold NO backend-proxy role but DO privileged
+// two console Next server routes that hold NO backend-proxy role but DO privileged
 // IAM work on the signed-in user's behalf — app/keys/route.ts and
-// app/onboard/route.ts — so console2 can drop those Node server handlers and be
+// app/onboard/route.ts — so console can drop those Node server handlers and be
 // statically exported (task #41, "True 1-binary FE": the console SPA is go:embed'd
 // and every dynamic call terminates at THIS binary's /v1, no separate Node origin).
 //
-// WHY THESE (and not the pure passthrough proxies). console2's PURE BFF reverse-
+// WHY THESE (and not the pure passthrough proxies). console's PURE BFF reverse-
 // proxies — app/cloud, app/ai, app/commerce, whose only server work is minting a
 // user Bearer — vanish in the one-binary model: the SPA calls the canonical /v1/*
 // on its own origin and the already-mounted subsystems answer. The routes ported

@@ -93,13 +93,13 @@ func (d *dispatcher) dispatch(call zaprpc.Call, cookieHeader, authHeader, accept
 
 	// Success. The REST `getList` path reads data2 (total) alongside data; the
 	// ZAP `list` twin only consumes `data` (Provider[]), so result == data.
-	// SuperJSON-wrap so console2's SuperJSON.parse(reply.result) yields `data`.
+	// SuperJSON-wrap so console's SuperJSON.parse(reply.result) yields `data`.
 	return zapReply{ok: true, status: http.StatusOK, result: superJSONWrap(env.Data)}
 }
 
 // buildHTTPRequest maps (method, SuperJSON input) onto a /v1 request.
 //
-// the /v1 convention (mirrored from console2/src/lib/api/providers.ts):
+// the /v1 convention (mirrored from console/src/lib/api/providers.ts):
 //   - "get-*"  -> GET  /v1/<method> with scalar input fields as the query.
 //   - others   -> POST /v1/<method> with scalar input fields lifted to the
 //     query (identity hints like id/owner) and the single nested

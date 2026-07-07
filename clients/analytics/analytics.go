@@ -138,7 +138,7 @@ func tenant(c *zip.Ctx) (string, bool) {
 }
 
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
-// reusing ai/object.ResolveCloudUsageWindow so analytics and the console2 Overview
+// reusing ai/object.ResolveCloudUsageWindow so analytics and the console Overview
 // share ONE window grammar (24h|7d|30d|custom). A bad range is a 400.
 func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
 	rangeLabel := strings.TrimSpace(c.Query("range"))

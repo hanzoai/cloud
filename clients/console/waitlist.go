@@ -1,4 +1,4 @@
-// waitlist.go ports console2's app/waitlist/route.ts — the "Join waitlist" CTA on
+// waitlist.go ports console's app/waitlist/route.ts — the "Join waitlist" CTA on
 // coming-soon products — into the unified binary at POST /v1/console/waitlist
 // (task #41). It is NOT a backend that owns the list: it is the session-gated,
 // email-binding seam in front of the Hanzo Base waitlist plugin (the hanzoai/

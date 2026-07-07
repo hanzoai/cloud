@@ -5,7 +5,7 @@
 // prompts. Creating a prompt whose name already exists appends a new version —
 // real, inspectable history, never a fabricated rollup.
 //
-// Surface (all org-scoped; the shape console2's PromptsModule consumes):
+// Surface (all org-scoped; the shape console's PromptsModule consumes):
 //
 //	GET    /v1/prompts            list current prompts for the org   -> {data:[PromptMeta]}
 //	POST   /v1/prompts            create or add-a-version            -> PromptDetail
@@ -59,9 +59,9 @@ type svc struct {
 // mounted is the active service so Shutdown can release the store.
 var mounted *svc
 
-// ---- HTTP response shapes (the published contract console2 consumes) ----
+// ---- HTTP response shapes (the published contract console consumes) ----
 
-// promptMeta is the list-row shape (console2 PromptMeta): name + version
+// promptMeta is the list-row shape (console PromptMeta): name + version
 // numbers + taxonomy + last-updated.
 type promptMeta struct {
 	Name          string   `json:"name"`

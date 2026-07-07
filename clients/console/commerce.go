@@ -1,4 +1,4 @@
-// commerce.go — the per-tenant STORE data bridge, the Go port of console2's
+// commerce.go — the per-tenant STORE data bridge, the Go port of console's
 // app/commerce/[...path]/route.ts (task #41, the BFF catch-all sweep; the store twin
 // of billing.go). It lets the statically-exported console reach its merchant store at
 // the CANONICAL same-origin /v1/commerce/* (nothing before /v1/): GET|POST|PUT|PATCH|
@@ -15,7 +15,7 @@
 // console namespaces the store under /v1/commerce/* only to keep the generic store
 // heads (product/order/user/store) from colliding with the rest of the /v1 surface;
 // this bridge strips that console-side namespace and forwards to commerce's real bare
-// head — EXACTLY the mapping console2's next.config rewrite already proved live
+// head — EXACTLY the mapping console's next.config rewrite already proved live
 // (`/v1/commerce/:path*` → `/commerce/v1/:path*` → commerce.svc/v1/:path*).
 //
 // WHY A SERVER HANDLER (not a same-origin passthrough). Commerce's store is
@@ -32,7 +32,7 @@
 // (403) BEFORE any commerce call — the exact off-gateway forge principal.Validated
 // closes. Least privilege on the path: only the merchant store heads are reachable, so
 // this bridge can NOT tunnel to /v1/billing (its own subject-scoped bridge), /v1/checkout
-// (the money path), or /v1/_/commerce/tenants (tenant admin) — mirroring console2's
+// (the money path), or /v1/_/commerce/tenants (tenant admin) — mirroring console's
 // proxy-allow.ts allowCommerceSurface.
 package console
 
@@ -45,7 +45,7 @@ import (
 )
 
 // commerceStoreHeads — the merchant store REST heads reachable through /v1/commerce/*.
-// Kept IDENTICAL to console2's proxy-allow.ts COMMERCE_HEADS (the same defense-in-depth
+// Kept IDENTICAL to console's proxy-allow.ts COMMERCE_HEADS (the same defense-in-depth
 // allow-list the Node /commerce proxy enforced), matching commerce's `rest.New(<kind>{})`
 // route names. Change both together. This is what keeps the bridge a STORE proxy: a head
 // not in this set (billing, checkout, namespace, _) is 404'd before any upstream call, so
