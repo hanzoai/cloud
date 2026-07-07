@@ -120,6 +120,9 @@ func init() {
 			log.Warn("embedded o11y init failed; falling back to reverse proxy", "err", err)
 		} else if h != nil {
 			o11y.SetHandler(gate(h))
+			// Runtime (and its ONE datastore connection) is live; start native
+			// metrics ingest — opt-in, fail-soft (metrics.go).
+			startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
 			log.Info("o11y runtime handler installed (in-process runtime)")
 			return nil
 		}
