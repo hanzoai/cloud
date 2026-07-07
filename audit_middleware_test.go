@@ -435,7 +435,7 @@ func TestScrubToken_RedReviewBypassClasses(t *testing.T) {
 	}
 	// Normal UAs must be byte-identical (no false scrub).
 	for _, ua := range []string{
-		"console2", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+		"console", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
 		"curl/8.1.2", "Go-http-client/2.0",
 	} {
 		if got := scrubFreeText(ua); got != ua {
