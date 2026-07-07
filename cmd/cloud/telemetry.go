@@ -36,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -59,17 +60,12 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 		log.Printf("telemetry: disabled (set OTEL_EXPORTER_ZAP_ENDPOINT to emit OTel spans over ZAP to o11y)")
 		return func(context.Context) {}
 	}
-	if zapEndpoint == "" {
-		zapEndpoint = defaultZapEndpoint
-	}
 	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); v != "" {
 		serviceName = v
 	}
-	// ZAP-native transport: spans ride the ZAP wire (zap-proto/http), never
-	// OTLP-HTTP(:4318)/gRPC(:4317). Payload stays standard OTLP protobuf.
-	exp, err := otlptrace.New(ctx, zaptrace.New(zapEndpoint))
+	exp, wire, err := newTraceExporter(ctx, zapEndpoint, legacy)
 	if err != nil {
-		log.Printf("telemetry: create ZAP trace exporter: %v", err)
+		log.Printf("telemetry: create trace exporter: %v", err)
 		return func(context.Context) {}
 	}
 	tp := sdktrace.NewTracerProvider(
@@ -93,7 +89,7 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
-	log.Printf("telemetry: OTel spans -> o11y over ZAP wire=%s (service.name=%s)", zapEndpoint, serviceName)
+	log.Printf("telemetry: OTel spans -> o11y over %s (service.name=%s)", wire, serviceName)
 	return func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -110,4 +106,32 @@ func firstNonEmptyEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// newTraceExporter builds the trace exporter for the configured transport and
+// returns it with a human-readable wire label for logging.
+//
+// ZAP stays the preferred, canonical cross-service transport: when a ZAP endpoint
+// is set (the default in split deploys), spans ride the ZAP wire (zap-proto/http)
+// exactly as before. When NO ZAP endpoint is set but an OTLP endpoint is, spans
+// ship over standard OTLP-HTTP — the path used to LOOP BACK to cloud's OWN
+// in-process OTLP ingest (clients/o11y) at localhost:4318 once the standalone
+// otel-collector is folded in. Selection is by env alone; no code path changes
+// between deploys, and standalone daemons (cmd/aid) keep their existing wire.
+func newTraceExporter(ctx context.Context, zapEndpoint, otlpEndpoint string) (*otlptrace.Exporter, string, error) {
+	if zapEndpoint == "" && otlpEndpoint != "" {
+		var opts []otlptracehttp.Option
+		if strings.Contains(otlpEndpoint, "://") {
+			opts = append(opts, otlptracehttp.WithEndpointURL(otlpEndpoint))
+		} else {
+			opts = append(opts, otlptracehttp.WithEndpoint(otlpEndpoint), otlptracehttp.WithInsecure())
+		}
+		exp, err := otlptracehttp.New(ctx, opts...)
+		return exp, "OTLP-HTTP=" + otlpEndpoint, err
+	}
+	if zapEndpoint == "" {
+		zapEndpoint = defaultZapEndpoint
+	}
+	exp, err := otlptrace.New(ctx, zaptrace.New(zapEndpoint))
+	return exp, "ZAP wire=" + zapEndpoint, err
 }
