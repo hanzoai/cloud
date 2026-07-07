@@ -23,7 +23,7 @@
 // clients/admin). Unlike clients/ml (per-tenant namespaces), the PaaS control
 // plane reads and mutates SYSTEM Service CRs across the whole fleet, so it is
 // admin-only: a tenant must never patch another org's — or a platform — service.
-// The user-facing PaaS view lives in console2; users never call this surface.
+// The user-facing PaaS view lives in console; users never call this surface.
 //
 // k8s client: built in-process from the in-cluster service account
 // (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev — the identical
@@ -161,7 +161,7 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 
 // AppView is one service row on the drift board: the observed tags + topology +
 // the derived drift verdict. It is the Go analogue of the platform's `AppView`
-// (apps-api.ts) so console2 renders the same shape the Dokploy board did.
+// (apps-api.ts) so console renders the same shape the Dokploy board did.
 type AppView struct {
 	ID          string   `json:"id"`   // <org>/<app>/<env>, e.g. hanzoai/iam/main
 	Org         string   `json:"org"`  // image namespace, e.g. hanzoai

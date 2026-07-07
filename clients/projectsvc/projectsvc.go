@@ -10,7 +10,7 @@
 // truth; the builder keeps only per-project working state (chat, draft files)
 // in Hanzo Base.
 //
-// Surface (all org-scoped; see CONTRACT.md — the published shape console2
+// Surface (all org-scoped; see CONTRACT.md — the published shape console
 // consumes):
 //
 //	POST   /v1/projects                      create

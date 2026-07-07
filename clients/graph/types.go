@@ -3,8 +3,8 @@
 // console modules EXACTLY so the Indexer and Oracles pages render with no front-end
 // change:
 //
-//   - indexerView -> console2 IndexerModule.tsx  Indexer {id,chain,network,height,lag,status,updatedAt}
-//   - oracleView  -> console2 OraclesModule.tsx  Oracle  {id,name,feed,value,source,status,updatedAt}
+//   - indexerView -> console IndexerModule.tsx  Indexer {id,chain,network,height,lag,status,updatedAt}
+//   - oracleView  -> console OraclesModule.tsx  Oracle  {id,name,feed,value,source,status,updatedAt}
 //
 // Every field is a REAL upstream value or an honest omission. Data the upstream does
 // not carry — the chain HEAD (hence true indexing lag) — is left off so the UI renders
@@ -20,7 +20,7 @@ import (
 
 // ---- console view structs ----
 
-// indexerView is the shape console2 IndexerModule (Indexer) consumes. `lag` is
+// indexerView is the shape console IndexerModule (Indexer) consumes. `lag` is
 // deliberately absent from the output (the indexer REST exposes the indexed height
 // but not the chain HEAD, so lag is not derivable — omitted, never invented).
 type indexerView struct {
@@ -33,7 +33,7 @@ type indexerView struct {
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// oracleView is the shape console2 OraclesModule (Oracle) consumes — one row per
+// oracleView is the shape console OraclesModule (Oracle) consumes — one row per
 // on-chain price feed. requests/telemetry the graph does not carry are omitted.
 type oracleView struct {
 	ID        string `json:"id"`

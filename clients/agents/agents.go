@@ -6,7 +6,7 @@
 // gateway-minted X-Org-Id (HIP-0026) enforced as the org column on every
 // query, so one tenant can never read, run, or delete another's agents.
 //
-// Surface (all org-scoped; console2's AgentsModule reads {agents:[...]}):
+// Surface (all org-scoped; console's AgentsModule reads {agents:[...]}):
 //
 //	GET    /v1/agents               list agents for the org      -> {agents:[...]}
 //	POST   /v1/agents               create an agent              -> Agent
@@ -158,9 +158,9 @@ type runView struct {
 	CreatedAt  string `json:"createdAt"`
 }
 
-// ---- overview shapes (console2 Agents dashboard: metrics + activity) ----
+// ---- overview shapes (console Agents dashboard: metrics + activity) ----
 //
-// These mirror the console's normalizers EXACTLY (console2 src/lib/api/agents.ts:
+// These mirror the console's normalizers EXACTLY (console src/lib/api/agents.ts:
 // normalizeMetrics reads {series:[{key,points:[{t,v}]}], resource:{...}};
 // normalizeActivity reads {activity:[{id,kind,agent,message,at}]}). Every number
 // is derived from real agent_runs rows — never a fabricated trend. A metric this
