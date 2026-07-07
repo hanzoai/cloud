@@ -2,15 +2,23 @@
 // turns "create a database" into a real logical resource inside an
 // already-live, shared product backend, per the unified /v1 binary (HIP-0106).
 //
-// One HTTP surface, seven kinds, one Provisioner each:
+// One HTTP surface, seven kinds, two strategies:
 //
-//	sql       -> Postgres    sql.hanzo.svc:5432       CREATE DATABASE + ROLE
+// DEDICATED-instance — the four on-demand data add-ons. Each org OWNS its
+// instance (an operator Datastore CR in tenant-<org>), so its admin credential
+// is naturally tenant-scoped; the assembled DSN is injected as <KIND>_URL into
+// the app instance's addons Secret, switching it off Base onto the backend:
+//
+//	kv        -> Hanzo KV        Datastore type=valkey       redis://…:6379
+//	sql       -> Hanzo SQL       Datastore type=postgresql   postgres://…:5432
+//	docdb     -> Hanzo DocDB     Datastore type=docdb        mongodb://…:27017
+//	datastore -> Hanzo Datastore Datastore type=datastore    clickhouse://…:8123
+//
+// SHARED-logical — a logical resource inside an already-live shared backend:
+//
 //	vector    -> Qdrant      vector.hanzo.svc:6333    PUT /collections/{name}
-//	datastore -> ClickHouse  datastore.hanzo.svc:8123 CREATE DATABASE + USER
-//	kv        -> Redis       kv.hanzo.svc:6379        ACL SETUSER (keyspace scope)
 //	search    -> Meilisearch search.hanzo.svc:7700    POST /indexes
 //	s3        -> S3/MinIO     s3.hanzo.svc:9000        MakeBucket
-//	docdb     -> FerretDB     dedicated per-org instance (Datastore CR): MongoDB wire on Hanzo SQL (SQLite)
 //
 // Tenancy: every request is scoped to the gateway-minted org (X-Org-Id /
 // c.Org()). Empty org is rejected 403 unless the caller is an admin. The
@@ -108,17 +116,16 @@ func endpointFor(r Resource) (string, int) {
 	return publicEndpoint(r.Kind)
 }
 
-// secretfulKinds are the kinds whose backend wires a real per-resource
-// credential (so the generated password is meaningful and gets sealed in KMS /
-// returned once). The others (vector, search, storage) authenticate with a
-// shared, out-of-band key, so no per-resource password is produced.
-// (datastore + docdb also carry a real per-instance admin credential, but the
-// dedicated strategy handles their secret lifecycle directly — see dedicated.go
-// — so they are NOT listed here, which only governs the shared-logical path.)
-var secretfulKinds = map[string]bool{
-	"sql": true,
-	"kv":  true,
-}
+// secretfulKinds are the SHARED-logical kinds whose backend wires a real
+// per-resource credential (so the generated password is meaningful and gets
+// sealed in KMS / returned once). It is now EMPTY: the only shared-logical kinds
+// left are vector, search and s3, which authenticate with a shared, out-of-band
+// key, so no per-resource password is produced. The four dedicated add-ons (kv,
+// sql, docdb, datastore) DO carry a real per-instance admin credential, but the
+// dedicated strategy handles their secret lifecycle directly (see dedicated.go);
+// this map only governs the shared-logical path. Kept as the mechanism so a
+// FUTURE secretful shared kind can opt in with one entry.
+var secretfulKinds = map[string]bool{}
 
 // nameRE constrains the user-supplied resource name to a DNS/identifier-safe
 // slug. Validated at the boundary; the physical name and every SQL identifier
@@ -265,6 +272,11 @@ func (s *svc) create(kind string) zip.Handler {
 
 		var body struct {
 			Name string `json:"name"`
+			// Instance binds a DEDICATED add-on to the app instance whose
+			// <instance>-addons Secret receives the <KIND>_URL (e.g. "commerce").
+			// Optional: empty means "not instance-bound" — the DSN is returned once
+			// and wired by the caller (the pre-instance-binding behavior).
+			Instance string `json:"instance"`
 		}
 		if err := c.Bind(&body); err != nil {
 			return err
@@ -272,6 +284,13 @@ func (s *svc) create(kind string) zip.Handler {
 		name := strings.ToLower(strings.TrimSpace(body.Name))
 		if !nameRE.MatchString(name) {
 			return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+		}
+		// instance keys a k8s Secret name (<instance>-addons); constrain it to the
+		// same DNS/identifier-safe slug as name so it can never inject a malformed
+		// or path-traversing Secret reference. Empty is allowed (no binding).
+		instance := strings.ToLower(strings.TrimSpace(body.Instance))
+		if instance != "" && !nameRE.MatchString(instance) {
+			return zip.ErrBadRequest("instance must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 		}
 
 		// Honest availability gate (now empty, kept as the mechanism). Refuse a
@@ -307,7 +326,7 @@ func (s *svc) create(kind string) zip.Handler {
 		// DEDICATED-instance strategy (datastore, docdb): the org's OWN isolated
 		// instance, launched via an operator Datastore CR in tenant-<org>.
 		if e, dedicated := dedicatedEngines[kind]; dedicated {
-			return s.createDedicated(c, ctx, kind, org, name, e, fee)
+			return s.createDedicated(c, ctx, kind, org, name, e, fee, instance)
 		}
 
 		// SHARED-logical strategy (sql, vector, kv, search, s3).
@@ -485,6 +504,15 @@ func (s *svc) drop(kind string) zip.Handler {
 		}
 
 		if _, dedicated := dedicatedEngines[kind]; dedicated {
+			// Revert the app instance to Base FIRST: remove the <KIND>_URL from the
+			// addons Secret so the app stops using this backend BEFORE we tear it
+			// down (never leave a live instance pointed at a deleted backend). Fail
+			// closed — block the teardown on error so a retry finishes the revert;
+			// drop is idempotent. No-op when the resource is not instance-bound.
+			if err := s.removeAddonURL(ctx, org, r.Instance, kind); err != nil {
+				s.log.Error("revert instance to base failed", "kind", kind, "org", org, "name", name, "instance", r.Instance, "err", err)
+				return zip.Errorf(http.StatusBadGateway, "revert instance: %v", err)
+			}
 			// Tear down the org's dedicated instance (CR + admin Secret); the
 			// operator GCs the StatefulSet + Service + PVC. Removing the row below
 			// also stops the recurring footprint meter for this instance.
