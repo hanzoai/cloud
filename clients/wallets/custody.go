@@ -103,8 +103,8 @@ type Wallet struct {
 }
 
 // Fail-closed sentinels. ErrMPCNotConfigured is returned whenever an MPC/treasury
-// wallet is provisioned or signed without a configured cluster + JWT secret —
-// the operator must wire CLOUD_WALLETS_MPC_ADDR (and the KMS JWT secret ref).
+// wallet is provisioned or signed without a configured ring + internal API key —
+// the operator must wire CLOUD_WALLETS_MPC_ADDR (and the KMS API-key ref).
 var (
 	ErrMPCNotConfigured = errors.New("mpc cluster not configured; set CLOUD_WALLETS_MPC_ADDR")
 	ErrUnknownCustody   = errors.New("unknown custody kind")
@@ -187,9 +187,10 @@ func (k kmsCustody) Rotate(ctx context.Context, w *Wallet) (string, error) {
 
 // ── MPC threshold custody (delegated to the luxfi/mpc cluster over HTTP) ──────
 
-// mpcCustody creates a vault + m-of-n wallet on the deployed luxfi/mpc cluster
-// and signs by delegating the digest to the cluster. w.KeyRef holds the mpc
-// wallet id so Sign/Rotate can address it.
+// mpcCustody creates an m-of-n wallet on the deployed luxfi/mpc ring (a
+// threshold keygen) and signs by delegating the digest to the ring. org_id is
+// the tenant scope; w.KeyRef holds the ring wallet id so Sign/Rotate can
+// address it.
 type mpcCustody struct{ http *mpcClient }
 
 func (mpcCustody) Kind() Kind { return KindMPC }
@@ -198,15 +199,11 @@ func (m mpcCustody) Provision(ctx context.Context, w *Wallet) (string, error) {
 	if !m.http.configured() {
 		return "", ErrMPCNotConfigured
 	}
-	vaultID, err := m.http.createVault(ctx, w.Org, w.Name)
+	walletID, address, err := m.http.keygen(ctx, w.Org, "")
 	if err != nil {
 		return "", err
 	}
-	walletID, address, err := m.http.createWallet(ctx, w.Org, vaultID, w.Name)
-	if err != nil {
-		return "", err
-	}
-	w.KeyRef = walletID // the mpc wallet id — the Sign handle
+	w.KeyRef = walletID // the ring wallet id — the Sign handle
 	return address, nil
 }
 
@@ -217,25 +214,26 @@ func (m mpcCustody) Sign(ctx context.Context, w *Wallet, digest []byte) ([]byte,
 	if len(digest) != 32 {
 		return nil, fmt.Errorf("wallets: digest must be 32 bytes, got %d", len(digest))
 	}
-	return m.http.sign(ctx, w.Org, w.KeyRef, digest)
+	return m.http.sign(ctx, w.Org, w.KeyRef, evmChainID(w.Chain), digest)
 }
 
-// Rotate triggers an MPC RESHARE: the share distribution rolls but the public
-// key — and therefore the address — is UNCHANGED. So it returns w.Address.
+// Rotate is a no-op for a ring wallet: the threshold shares are managed inside
+// the fixed-membership ring, and the public key — and therefore the address —
+// is invariant. So it returns w.Address unchanged.
 func (m mpcCustody) Rotate(ctx context.Context, w *Wallet) (string, error) {
 	if !m.http.configured() {
 		return "", ErrMPCNotConfigured
-	}
-	if err := m.http.reshare(ctx, w.Org, w.KeyRef); err != nil {
-		return "", err
 	}
 	return w.Address, nil
 }
 
 // ── Treasury custody (luxfi/mpc named-signer governance over HTTP) ────────────
 
-// treasuryCustody creates a treasury (named-signer, tiered-quorum) wallet on the
-// cluster and signs via the treasury sign route. Same fail-closed rule.
+// treasuryCustody is a reserve/treasury wallet backed by the SAME m-of-n ring
+// threshold primitive as KindMPC. The distinction is governance, not signing
+// mechanics: a treasury wallet's quorum policy (e.g. 3-of-5 named signers) is
+// enforced by the finance/treasury policy layer over this primitive, not by a
+// separate ring route. Same fail-closed rule.
 type treasuryCustody struct{ http *mpcClient }
 
 func (treasuryCustody) Kind() Kind { return KindTreasury }
@@ -244,7 +242,7 @@ func (t treasuryCustody) Provision(ctx context.Context, w *Wallet) (string, erro
 	if !t.http.configured() {
 		return "", ErrMPCNotConfigured
 	}
-	walletID, address, err := t.http.createTreasury(ctx, w.Org, w.Name, w.Chain)
+	walletID, address, err := t.http.keygen(ctx, w.Org, "")
 	if err != nil {
 		return "", err
 	}
@@ -259,17 +257,34 @@ func (t treasuryCustody) Sign(ctx context.Context, w *Wallet, digest []byte) ([]
 	if len(digest) != 32 {
 		return nil, fmt.Errorf("wallets: digest must be 32 bytes, got %d", len(digest))
 	}
-	return t.http.treasurySign(ctx, w.Org, w.KeyRef, digest)
+	return t.http.sign(ctx, w.Org, w.KeyRef, evmChainID(w.Chain), digest)
 }
 
-// Rotate rolls a treasury signer via the cluster's rotate-signer route; the
-// wallet address is preserved.
+// Rotate preserves the address (ring-managed shares, invariant public key).
 func (t treasuryCustody) Rotate(ctx context.Context, w *Wallet) (string, error) {
 	if !t.http.configured() {
 		return "", ErrMPCNotConfigured
 	}
-	if err := t.http.rotateTreasurySigner(ctx, w.Org, w.KeyRef); err != nil {
-		return "", err
-	}
 	return w.Address, nil
+}
+
+// evmChainID extracts the numeric EVM chain id from a wallet Chain string. It
+// accepts a CAIP-2 "eip155:<n>" form or a bare decimal; anything else ⇒ 0
+// (chain-agnostic), which the ring treats as an unbound digest sign.
+func evmChainID(chain string) int {
+	s := strings.TrimSpace(chain)
+	if i := strings.LastIndex(s, ":"); i >= 0 {
+		s = s[i+1:]
+	}
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		n = n*10 + int(r-'0')
+	}
+	if s == "" {
+		return 0
+	}
+	return n
 }
