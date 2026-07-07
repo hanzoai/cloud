@@ -15,8 +15,10 @@ require (
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
+	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/signoz-otel-collector v0.144.6
 	github.com/hanzoai/sqlite v0.1.5
+	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
@@ -47,6 +49,7 @@ require (
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
+	github.com/antithesishq/antithesis-sdk-go v0.7.0 // indirect
 	github.com/antonmedv/expr v1.15.3 // indirect
 	github.com/beego/beego/v2 v2.3.8 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.2 // indirect
@@ -90,8 +93,11 @@ require (
 	github.com/luxfi/warp v1.19.3 // indirect
 	github.com/luxwallet/connect/go v0.1.3 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
+	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
+	github.com/nats-io/jwt/v2 v2.8.1 // indirect
+	github.com/nats-io/nats.go v1.50.0 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
 	github.com/open-telemetry/opamp-go v0.22.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0 // indirect
@@ -467,7 +473,7 @@ require (
 	github.com/hanzoai/orm v0.5.2 // indirect
 	github.com/hanzoai/oss v1.8.5 // indirect
 	github.com/hanzoai/pdf v1.2.0 // indirect
-	github.com/hanzoai/pubsub-go v1.0.0 // indirect
+	github.com/hanzoai/pubsub-go v1.0.1-0.20260513042624-1b25bdfe16a6 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
 	github.com/hanzoai/storage-go v1.0.0 // indirect
