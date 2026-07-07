@@ -122,7 +122,7 @@ built on Fiber v3. The ONE Go web framework. No `.Fast` escape hatch.
 
 ## Console UI — embedded in the ONE binary
 
-The same `hanzoai/cloud` binary serves the [console](https://github.com/hanzoai/console2)
+The same `hanzoai/cloud` binary serves the [console](https://github.com/hanzoai/console)
 (`@hanzo/gui`) UI at the web root AND the `/v1` API from one process — one
 artifact, one origin, no separate console Service. The UI is compiled in via
 `//go:embed` (see `webui.go`).
@@ -130,7 +130,7 @@ artifact, one origin, no separate console Service. The UI is compiled in via
 Pipeline (in the `Dockerfile`, before `go build`):
 
 ```
-console stage  →  build console2 static bundle  →  /out
+console stage  →  build console static bundle  →  /out
       COPY --from=console /out/ → src/webui/dist/     (overlays the fallback shell)
 build stage    →  go build   →  //go:embed all:webui/dist bakes it into /cloud
 ```
@@ -153,14 +153,16 @@ even without the Node toolchain. The image build overwrites `webui/dist` with th
 real console bundle. See `webui_test.go` for the boot-and-assert tests
 (`/` → shell, deep link → shell 200, `/v1/*` → API, unmatched `/v1` → 404).
 
-> Honest current state: console2 ships 15 Next server route handlers
-> (`app/**/route.ts`) that hold KMS-sourced service tokens and mint short-lived
-> user tokens, so it emits a Node server bundle, not a static export
-> (`output: export` would fail). Until console2 exposes a `build:embed` static
-> target — or those handlers land here as native `/v1` endpoints — the image
-> embeds the fallback shell, and the separate console2 Service stays up. The Go
-> embed/serve plumbing is complete and needs no further change to light up the
-> full console the moment the static bundle exists.
+Current state: `hanzoai/console` exposes `build:embed` (`scripts/build-embed.mjs`),
+which stashes its Next server route handlers (BFF proxies that collapse to the
+cloud `/v1/*` the SPA calls same-origin), wraps the client catch-all pages for
+`output: 'export'`, neutralizes the root layout's request-time `headers()` read,
+and emits a real static export at `out/` (a ~360 KB `index.html` + `_next/`
+chunks). The image build (and `make webui`) run it and overlay `webui/dist`, so
+`//go:embed` bakes the FULL `@hanzo/gui` console into the ONE binary. The
+Dockerfile console stage FAILS HARD if that bundle is missing or degenerate —
+the placeholder shell can never silently ship to prod (escape hatch:
+`--build-arg ALLOW_PLACEHOLDER=1` for a pure-Go dev image).
 
 ## Status
 
