@@ -207,20 +207,7 @@ func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) erro
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 
-	// Pin EVERY subject key to the caller's OWN org (the bare org slug is cloud's canonical
-	// per-org billing key — admin.orgSubject / metering identityFromCtx). Pinning the whole
-	// set leaves NO endpoint unfiltered regardless of which param it reads, so a request
-	// with no (or a forged) subject can never see another tenant's rows. Then forward ONLY
-	// the whitelisted non-subject passthrough params.
-	q := url.Values{}
-	for _, k := range billingSubjectKeys {
-		q.Set(k, org)
-	}
-	for _, k := range passthrough {
-		if v := strings.TrimSpace(c.Query(k)); v != "" {
-			q.Set(k, v)
-		}
-	}
+	q := scopedBillingQuery(c, org, passthrough...)
 
 	body, status, err := s.commerce.get(c.Context(), commercePath, org, q)
 	if err != nil {
@@ -233,12 +220,64 @@ func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) erro
 	return c.Bytes(status, body)
 }
 
+// scopedBillingQuery pins EVERY commerce billing subject key to the caller's OWN org
+// (the bare org slug is cloud's canonical per-org billing key — admin.orgSubject /
+// metering identityFromCtx). Pinning the whole set leaves NO endpoint unfiltered
+// regardless of which param it reads, so a request with no (or a forged) subject can
+// never see another tenant's rows. Only the whitelisted non-subject passthrough params
+// are forwarded. The ONE place the subject boundary is built (proxy + usage share it).
+func scopedBillingQuery(c *zip.Ctx, org string, passthrough ...string) url.Values {
+	q := url.Values{}
+	for _, k := range billingSubjectKeys {
+		q.Set(k, org)
+	}
+	for _, k := range passthrough {
+		if v := strings.TrimSpace(c.Query(k)); v != "" {
+			q.Set(k, v)
+		}
+	}
+	return q
+}
+
 // usage → commerce GET /v1/billing/usage: the RAW per-request ledger the console's
-// normalizeUsageRecords parses (one row per billed call). Not time-filtered here —
-// the console applies the 24h/7d/30d window client-side — but start/end pass through
-// for callers that request a server window.
+// per-product Metrics + AI Metrics pages parse (one row per billed call). start/end
+// pass through for a server window (the console also filters client-side).
+//
+// Beyond the verbatim ledger it ENRICHES + optionally REDUCES the response — the ONE
+// place the product/agent cost dimensions the console renders are made real:
+//   - Each row's metadata gets a canonical `product` (and `agent` when known) derived
+//     from what commerce persists (provider/model), so the console's per-product
+//     breakdown POPULATES from the SAME charged ledger (commerce has no product field
+//     yet; productOf in usage.go is the read-side adapter).
+//   - `?product=<id>` filters to ONE product server-side (was silently ignored).
+//   - `?groupBy=product` returns a per-product rollup {product,requests,amountCents}.
+//
+// On any parse failure it returns commerce's body VERBATIM — enrichment must never
+// lose or corrupt the real ledger.
 func (s *svc) usage(c *zip.Ctx) error {
-	return s.proxy(c, "/v1/billing/usage", "start", "end")
+	org, ok := principal.Tenant(c)
+	if !ok {
+		return zip.ErrUnauthorized("sign in to view billing")
+	}
+	if !s.commerce.configured() {
+		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
+	}
+
+	q := scopedBillingQuery(c, org, "start", "end")
+	body, status, err := s.commerce.get(c.Context(), "/v1/billing/usage", org, q)
+	if err != nil {
+		s.log.Warn("commerce billing read failed", "org", org, "path", "/v1/billing/usage", "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	c.SetHeader("Content-Type", "application/json")
+	c.SetHeader("Cache-Control", "no-store")
+	if status != http.StatusOK {
+		return c.Bytes(status, body) // pass commerce errors through untouched
+	}
+	if out, ok := enrichUsageLedger(body, strings.TrimSpace(c.Query("product")), strings.TrimSpace(c.Query("groupBy"))); ok {
+		return c.Bytes(status, out)
+	}
+	return c.Bytes(status, body)
 }
 
 // balance → commerce GET /v1/billing/balance: the org's prepaid credit balance
