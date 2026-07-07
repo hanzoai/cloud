@@ -328,32 +328,50 @@ func TestCustodySeamSelectsBackend(t *testing.T) {
 func TestMPCPathWiredCompiles(t *testing.T) {
 	const (
 		stubAddr = "0x00112233445566778899aabbccddeeff00112233"
+		stubKey  = "shared-mpc-internal-api-key"
 		// 65-byte recoverable-shaped signature (content is opaque to the client).
 		stubSig = "0x" + "11" + sigHexBody
 	)
-	// The stub emulates luxfi/mpc and asserts the minted JWT carries org_id=acme.
+	// The stub emulates the luxfi/mpc ring's INTERNAL threshold API: it gates on
+	// the static bearer key and asserts every call carries org_id=acme.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if org := jwtOrg(t, r.Header.Get("Authorization")); org != "acme" {
-			http.Error(w, "bad org_id: "+org, http.StatusUnauthorized)
+		if r.Header.Get("Authorization") != "Bearer "+stubKey {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if org, _ := body["org_id"].(string); org != "acme" {
+			http.Error(w, "bad org_id", http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/vaults":
-			_ = json.NewEncoder(w).Encode(map[string]string{"id": "vault_stub"})
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/vaults/") && strings.HasSuffix(r.URL.Path, "/wallets"):
-			_ = json.NewEncoder(w).Encode(map[string]string{"id": "wal_stub", "walletId": "wal_stub", "address": stubAddr})
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/wallets/") && strings.HasSuffix(r.URL.Path, "/sign"):
-			_ = json.NewEncoder(w).Encode(map[string]string{"signature": stubSig})
+		case r.Method == http.MethodPost && r.URL.Path == "/keygen":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"wallet_id": "wal_stub", "result_type": "success", "evm_address": stubAddr,
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/sign":
+			// The ring requires wallet_id + a 32-byte payload_hash + an
+			// idempotency_key — assert the client populated them.
+			if body["wallet_id"] != "wal_stub" || body["idempotency_key"] == "" {
+				http.Error(w, "missing sign fields", http.StatusBadRequest)
+				return
+			}
+			if h, _ := body["payload_hash"].(string); len(h) != 64 {
+				http.Error(w, "payload_hash not 32-byte hex", http.StatusBadRequest)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"signature": stubSig, "status": "success"})
 		default:
 			http.Error(w, "unexpected route: "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
 	}))
 	t.Cleanup(srv.Close)
 
-	client := newMPCClient([]string{srv.URL}, []byte("shared-mpc-jwt-secret"))
+	client := newMPCClient([]string{srv.URL}, []byte(stubKey))
 	if !client.configured() {
-		t.Fatal("mpc client should be configured with a node + secret")
+		t.Fatal("mpc client should be configured with a node + key")
 	}
 	s, app := newSvc(t, map[Kind]Custody{KindMPC: mpcCustody{http: client}}, KindMPC)
 
@@ -366,7 +384,7 @@ func TestMPCPathWiredCompiles(t *testing.T) {
 		t.Fatalf("mpc wallet address = %q, want stub %q", w.Address, stubAddr)
 	}
 	// KeyRef is never serialized over the API (json:"-"); verify via the store
-	// that the mpc wallet id was recorded as the sign handle.
+	// that the ring wallet id was recorded as the sign handle.
 	stored, found, err := s.store.getWallet(context.Background(), "acme", w.ID)
 	if err != nil || !found {
 		t.Fatalf("store getWallet: found=%v err=%v", found, err)
@@ -375,7 +393,7 @@ func TestMPCPathWiredCompiles(t *testing.T) {
 		t.Fatalf("mpc key ref = %q, want stub wallet id", stored.KeyRef)
 	}
 
-	// Sign reaches the stub's wallet-scoped sign route and returns the signature.
+	// Sign reaches the ring's /sign route and returns the threshold signature.
 	digest := crypto.Keccak256([]byte("mpc sign"))
 	sig := signOnce(t, app, "acme", w.ID, digest)
 	if hex.EncodeToString(sig) != trim0x(stubSig) {
@@ -388,30 +406,3 @@ func TestMPCPathWiredCompiles(t *testing.T) {
 // opaque to the client, which only hex-decodes and returns it.
 const sigHexBody = "0000000000000000000000000000000000000000000000000000000000000000" +
 	"0000000000000000000000000000000000000000000000000000000000000000"
-
-// jwtOrg extracts the org_id claim from a "Bearer <jwt>" header, asserting the
-// token is a well-formed 3-part JWT — this proves the client minted it.
-func jwtOrg(t *testing.T, authHeader string) string {
-	t.Helper()
-	token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		t.Fatalf("authorization is not a JWT: %q", authHeader)
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		t.Fatalf("jwt payload not base64url: %v", err)
-	}
-	var c struct {
-		OrgID string `json:"org_id"`
-		Iss   string `json:"iss"`
-		Aud   string `json:"aud"`
-	}
-	if err := json.Unmarshal(payload, &c); err != nil {
-		t.Fatalf("jwt claims: %v", err)
-	}
-	if c.Iss != mpcJWTIssuer || c.Aud != mpcJWTAudience {
-		t.Fatalf("jwt iss/aud = %q/%q, want %q/%q", c.Iss, c.Aud, mpcJWTIssuer, mpcJWTAudience)
-	}
-	return c.OrgID
-}
