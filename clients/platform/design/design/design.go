@@ -15,7 +15,7 @@
 //
 // So Goa is used design-first as the AUTHORITATIVE CONTRACT: this DSL is the
 // single source of truth for the /v1/platform surface, and `goa gen` emits the
-// OpenAPI 3 document (gen/http/openapi3.*) that console2 and external clients
+// OpenAPI 3 document (gen/http/openapi3.*) that console and external clients
 // consume. The runtime handlers implement this exact contract natively on zip
 // (clients/platform/*.go), staying behind SanitizeIdentity and keeping the
 // binary's go.mod free of any goa.design runtime dependency. Design → Go
