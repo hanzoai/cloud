@@ -17,7 +17,7 @@ it is a nested module, `go build ./...` from the cloud root skips it.
 
 - `design/design.go` — the Goa DSL (source of truth).
 - `gen/http/openapi3.json` / `gen/http/openapi3.yaml` — the generated OpenAPI 3
-  contract (committed; consumed by console2 + clients).
+  contract (committed; consumed by console + clients).
 
 ## Regenerate
 
