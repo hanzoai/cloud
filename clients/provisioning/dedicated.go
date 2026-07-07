@@ -219,13 +219,18 @@ var dedicatedEngines = map[string]engine{
 			return fmt.Sprintf("redis://%s:%s@%s:%d", user, pw, host, port)
 		},
 	},
-	// ClickHouse ("datastore"): ghcr.io/hanzoai/datastore:26 provisions
+	// ClickHouse ("datastore"): ghcr.io/hanzoai/datastore provisions
 	// DATASTORE_USER (with DATASTORE_PASSWORD) on DATASTORE_DB at entrypoint and
 	// drops the built-in default user, so the provisioned user is the instance
-	// admin — the exact env the shared datastore StatefulSet uses.
+	// admin — the exact env the shared datastore StatefulSet uses. Tag is pinned
+	// to an IMMUTABLE build (env-overridable, symmetric with sql/kv/docdb): a
+	// floating ":26" resolves to whichever of the two datastore lineages (bridge
+	// vs fork, distinct data dirs) last pushed under it — a per-org instance must
+	// boot a deterministic image, so pin the digest-stable tag the shared
+	// datastore CR already runs.
 	"datastore": {
 		prefix: "ds", dsType: "datastore",
-		image: "ghcr.io/hanzoai/datastore", tag: "26",
+		image: "ghcr.io/hanzoai/datastore", tag: env("CLOUD_DEDICATED_DATASTORE_TAG", "26.2.3.2"),
 		ports:      []enginePort{{"http", 8123}, {"native", 9000}},
 		clientPort: 8123,
 		memReq:     "256Mi", memLim: "1Gi",
@@ -426,6 +431,14 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	// provision — a failure rolls back the row + instance + secret so the org is
 	// never billed for a half-wired resource and the instance stays on Base.
 	if err := s.injectAddonURL(ctx, org, instance, kind, dsn); err != nil {
+		// Best-effort revert to Base FIRST. injectAddonURL is not atomic: the
+		// strategic-merge PATCH can LAND server-side yet still return err (a
+		// dropped response, a timeout after the write commits). Delete any
+		// <KIND>_URL we may have written BEFORE we tear the backend down, so a
+		// committed-but-errored inject can't leave the instance pointing at a
+		// deleted backend — a dangling DSN is worse than Base. Idempotent: a
+		// no-write inject makes this a no-op (missing key/Secret is success).
+		_ = s.removeAddonURL(ctx, org, instance, kind)
 		_, _ = s.store.Delete(ctx, org, kind, name)
 		_ = s.orch.DeleteDatastore(ctx, ns, inst)
 		_ = s.orch.DeleteSecret(ctx, ns, secretName)
