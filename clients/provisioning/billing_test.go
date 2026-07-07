@@ -112,9 +112,9 @@ func postCreate(t *testing.T, s *svc, kind, org, name string) *http.Response {
 // runs before the backend). No free provisioning.
 func TestCreate_RefusesUnfundedOrg(t *testing.T) {
 	bs := &billServer{available: 0}
-	s, mp := newBilledSvc(t, bs.start(t), "sql")
+	s, mp := newBilledSvc(t, bs.start(t), "vector")
 
-	resp := postCreate(t, s, "sql", "acme", "orders")
+	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusPaymentRequired {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 402", resp.StatusCode, body)
@@ -135,9 +135,9 @@ func TestCreate_RefusesUnfundedOrg(t *testing.T) {
 // client default hanzo) is debited the provision fee.
 func TestCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 	bs := &billServer{available: 100000}
-	s, mp := newBilledSvc(t, bs.start(t), "sql")
+	s, mp := newBilledSvc(t, bs.start(t), "vector")
 
-	resp := postCreate(t, s, "sql", "acme", "orders")
+	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
@@ -168,11 +168,11 @@ func TestCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 // A free kind (fee 0) is un-gated: even at zero balance the resource is created
 // and nothing is debited.
 func TestCreate_FreeKindUngated(t *testing.T) {
-	t.Setenv("CLOUD_PROVISION_FEE_CENTS_SQL", "0")
+	t.Setenv("CLOUD_PROVISION_FEE_CENTS_VECTOR", "0")
 	bs := &billServer{available: 0}
-	s, mp := newBilledSvc(t, bs.start(t), "sql")
+	s, mp := newBilledSvc(t, bs.start(t), "vector")
 
-	resp := postCreate(t, s, "sql", "acme", "orders")
+	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201 (free kind is un-gated)", resp.StatusCode, body)
@@ -190,8 +190,8 @@ func TestCreate_FreeKindUngated(t *testing.T) {
 // Billing unconfigured (no commerce URL) → the gate is a no-op: provisioning
 // works and nothing is billed (an unconfigured deployment is never blocked).
 func TestCreate_BillingUnconfiguredNoop(t *testing.T) {
-	s, mp := newBilledSvc(t, "", "sql") // empty commerce URL => !Enabled()
-	resp := postCreate(t, s, "sql", "acme", "orders")
+	s, mp := newBilledSvc(t, "", "vector") // empty commerce URL => !Enabled()
+	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 201", resp.StatusCode, body)
