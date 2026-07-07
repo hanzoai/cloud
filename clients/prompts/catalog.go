@@ -20,7 +20,7 @@ import (
 //go:embed catalog.json
 var catalogJSON []byte
 
-// CatalogEntry is one starter prompt as the console2 browse UI consumes it.
+// CatalogEntry is one starter prompt as the console browse UI consumes it.
 type CatalogEntry struct {
 	Name   string   `json:"name"`
 	Type   string   `json:"type"`
