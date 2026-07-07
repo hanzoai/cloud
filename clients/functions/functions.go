@@ -5,7 +5,7 @@
 // resource limits, and the NAMES of the secrets it mounts — never a secret
 // value (values live in KMS by reference, the Secret-Manager principle).
 //
-// Surface (the shape console2's FunctionsModule / functions.ts consume):
+// Surface (the shape console's FunctionsModule / functions.ts consume):
 //
 //	GET    /v1/functions                    list functions           -> {functions:[...]}
 //	POST   /v1/functions                    create / redeploy        -> ServerlessFunction
@@ -78,7 +78,7 @@ type svc struct {
 
 var mounted *svc
 
-// ---- HTTP response shapes (console2 functions.ts contract) ----
+// ---- HTTP response shapes (console functions.ts contract) ----
 
 type functionView struct {
 	Name           string   `json:"name"`
@@ -406,7 +406,7 @@ func (s *svc) triggers(c *zip.Ctx) error {
 
 func (s *svc) deployments(c *zip.Ctx) error {
 	// Each function's current record IS its live deployment; return them as the
-	// deployment inventory (console2 normalizes this as a function list).
+	// deployment inventory (console normalizes this as a function list).
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")

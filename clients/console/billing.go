@@ -1,4 +1,4 @@
-// billing.go — the per-tenant billing DATA bridge, the Go port of console2's
+// billing.go — the per-tenant billing DATA bridge, the Go port of console's
 // app/billing/v1/[...path]/route.ts (task #41, the BFF catch-all sweep). It lets the
 // statically-exported console reach its own money surface at the CANONICAL same-origin
 // /v1/billing/* (nothing before /v1/): GET|POST /v1/billing/<path> forwards to
@@ -13,7 +13,7 @@
 // only ONE leaves the others UNFILTERED, so a request with no (or a forged) param
 // returns every subject's rows in the namespace. This handler pins ALL of them to the
 // server-resolved subject (and drops ?org), on the query AND the write body — exactly
-// mirroring console2's billing-scope.ts and commerce's own edge-auth billingSubjectKeys.
+// mirroring console's billing-scope.ts and commerce's own edge-auth billingSubjectKeys.
 //
 // IDOR-safe: the subject is derived from the VALIDATED identity (resolveCaller →
 // principal.Validated / c.Org() / c.User()), NEVER a client-supplied userId/org. A
@@ -33,7 +33,7 @@ import (
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
-// {user,userId,customerId} AND console2's billing-scope.ts BILLING_SUBJECT_KEYS. Change
+// {user,userId,customerId} AND console's billing-scope.ts BILLING_SUBJECT_KEYS. Change
 // all three together — pinning ALL of them is what scopes EVERY endpoint no matter which
 // param it filters on.
 var billingSubjectKeys = []string{"user", "userId", "customerId"}
@@ -130,7 +130,7 @@ func scopedBillingBody(raw []byte, subject string) []byte {
 // `x/..%2fbilling` into `/v1/billing`: a tunnel PAST the allow-list into the money
 // surface. Rejecting `%`/`;` at the segment makes single-, double-, and N-encoded
 // traversal impossible. Billing endpoints / commerce ids are opaque + escape-free, so
-// this never over-blocks. Mirrors console2's bearer-proxy pathIsClean.
+// this never over-blocks. Mirrors console's bearer-proxy pathIsClean.
 func isSafeSegment(s string) bool {
 	if s == "" || s == "." || s == ".." {
 		return false
