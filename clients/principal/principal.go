@@ -8,7 +8,7 @@
 // (hanzoai/gateway) is the sole minter of those headers — it strips any
 // client-supplied copy and re-injects them from a validated IAM JWT (HIP-0026).
 // But cloud-api is ALSO reachable WITHOUT the gateway in front: directly
-// in-cluster (cloud-api.hanzo.svc:8000, used by console2's BFF) and, until the
+// in-cluster (cloud-api.hanzo.svc:8000, used by console's BFF) and, until the
 // ingress is locked down, on the public host api.cloud.hanzo.ai. The identity
 // middleware (SanitizeIdentity, ../../middleware_identity.go) closes the
 // forgeable-ADMIN hole on every path — X-User-IsAdmin is NEVER restored from
