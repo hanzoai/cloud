@@ -236,10 +236,6 @@ import (
 	// Order 138 binds /v1/team/* before the AI /v1/* catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
 
-	// order 140 — /v1/auto/* per-org reverse proxy to the standalone Hanzo Auto engine
-	// (workflows + the connector catalog, in-platform, scoped to the validated tenant).
-	_ "github.com/hanzoai/cloud/clients/auto"
-
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
