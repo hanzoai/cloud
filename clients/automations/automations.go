@@ -12,7 +12,8 @@
 // Surface (all under /v1/automations/*, all org-gated except the compose-root
 // generic GET /v1/automations/health):
 //
-//	GET    /v1/automations/pieces                     the piece catalogue (org-gated)
+//	GET    /v1/automations/connectors                 the connector catalogue (org-gated)
+//	GET    /v1/automations/pieces                     back-compat alias of /connectors
 //	GET    /v1/automations/flows                      list flows
 //	POST   /v1/automations/flows                      create a flow (+ initial draft version)
 //	GET    /v1/automations/flows/:id                  flow + latest version
@@ -75,9 +76,9 @@ const (
 // never starves another; independent of the durable engine's own worker concurrency.
 var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 
-// catalogJSON is the go:embed'd Tier-A piece catalogue served at
-// /v1/automations/pieces. A separate agent later OVERWRITES this file with the full
-// 701-piece set at the SAME schema+path; the Catalog unmarshal here is the contract.
+// catalogJSON is the go:embed'd connector catalogue served at
+// /v1/automations/connectors (and its /pieces back-compat alias). The Catalog
+// unmarshal here is the wire contract — a schema mismatch is a build-time fault.
 //
 //go:embed catalog/catalog.json
 var catalogJSON []byte
@@ -130,7 +131,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	app.Get("/v1/automations/pieces", s.pieces)
+	app.Get("/v1/automations/connectors", s.connectors)
+	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same
+	// body) so live clients pinned to it keep working. "pieces" is the retired
+	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
+	app.Get("/v1/automations/pieces", s.connectors)
 
 	app.Get("/v1/automations/flows", s.listFlows)
 	app.Post("/v1/automations/flows", s.createFlow)
@@ -150,7 +155,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Post("/v1/automations/mcp", s.mcp)
 
-	log.Info("automations mounted", "pieces", catalog.PieceCount, "connectors", len(registry), "brand", deps.Brand)
+	log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
 	return nil
 }
 
@@ -181,9 +186,9 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
-// ── pieces ────────────────────────────────────────────────────────────────────
+// ── connectors ────────────────────────────────────────────────────────────────────
 
-func (s *svc) pieces(c *zip.Ctx) error {
+func (s *svc) connectors(c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
