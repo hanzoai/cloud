@@ -282,6 +282,43 @@ func TestKeys_MintGetRevoke_ScopedToCaller(t *testing.T) {
 	}
 }
 
+// TestKeys_DirectBearerPath_MintsByUsernameNotUUID is the regression guard for the
+// cloud-direct hk- mint 502. On the in-binary direct-Bearer path SanitizeIdentity
+// stamps X-User-Id = the JWT subject (a UUID) and, distinctly, X-User-Name = the IAM
+// username. The user-key ops must target <owner>/<username> ("hanzo/z"), NOT
+// <owner>/<uuid> — which failed IAM's GetOwnerAndNameFromId user lookup ("password
+// or code is incorrect", surfaced as 502). The gateway path (no X-User-Name;
+// X-User-Id == username) must be UNCHANGED (keyID falls back to owner/name).
+func TestKeys_DirectBearerPath_MintsByUsernameNotUUID(t *testing.T) {
+	f := newFakeIAM()
+	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
+
+	const uuid = "2d4d67ab-30f1-474e-b81f-f60461852259"
+	req := httptest.NewRequest(http.MethodPost, "/v1/console/keys", nil)
+	req.Header.Set("X-User-Id", uuid) // direct-path stamp: the subject UUID
+	req.Header.Set("X-User-Name", "z") // direct-path stamp: the IAM username
+	req.Header.Set("X-Org-Id", "hanzo")
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("direct-path mint: want 200, got %d (%s)", resp.StatusCode, b)
+	}
+	if len(f.mintedFor) != 1 || f.mintedFor[0] != "hanzo/z" {
+		t.Fatalf("direct-path mint must target hanzo/z (username), never hanzo/<uuid>: got %v", f.mintedFor)
+	}
+	var minted struct {
+		AccessKey string `json:"accessKey"`
+	}
+	mustJSON(t, b, &minted)
+	if minted.AccessKey != "hk-hanzo-z-SECRET" {
+		t.Fatalf("direct-path mint returned wrong key: %q", minted.AccessKey)
+	}
+}
+
 func TestKeys_NotConfigured_501(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "", "") // confidential client unwired
