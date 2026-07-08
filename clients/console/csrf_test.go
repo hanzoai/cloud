@@ -1,6 +1,7 @@
 package console
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -127,19 +128,22 @@ func TestCSRF_BearerAuthSkipsCSRF(t *testing.T) {
 	}
 }
 
-// TestRateLimit_MintBurstThen429: the money-write per-IP cap returns 429 past the burst.
-func TestRateLimit_MintBurstThen429(t *testing.T) {
+// TestRateLimit_PerPrincipalBurstThen429: the money-write cap keys on the VALIDATED
+// principal (un-spoofable), returns 429 past the burst, and a DIFFERENT principal is
+// NOT throttled by the first's flood — and a forged X-Forwarded-For does not reset it.
+func TestRateLimit_PerPrincipalBurstThen429(t *testing.T) {
 	f := newFakeIAM()
 	app := mountApp(t, f.server(t).URL, "hanzo-console", "s3cr3t")
 
-	hdr := map[string]string{
-		"X-User-Id": "alice", "X-Org-Id": "acme",
-		"Authorization":   "Bearer j.w.t", // skip CSRF so we isolate the rate limiter
-		"X-Forwarded-For": "203.0.113.7",  // stable IP key
-	}
+	// alice floods, sending a FRESH X-Forwarded-For each request (the old XFF keying
+	// would have reset the bucket every time — it must NOT now).
 	var got429 bool
 	for i := 0; i < keysWriteRatePerMin+5; i++ {
-		code, _ := req(t, app, http.MethodPost, "/v1/console/keys", hdr, "")
+		code, _ := req(t, app, http.MethodPost, "/v1/console/keys", map[string]string{
+			"X-User-Id": "alice", "X-Org-Id": "acme",
+			"Authorization":   "Bearer j.w.t",                    // skip CSRF, isolate the limiter
+			"X-Forwarded-For": fmt.Sprintf("203.0.113.%d", i%250), // attacker rotates XFF
+		}, "")
 		if code == 429 {
 			got429 = true
 			break
@@ -149,6 +153,15 @@ func TestRateLimit_MintBurstThen429(t *testing.T) {
 		}
 	}
 	if !got429 {
-		t.Fatalf("expected a 429 after the per-IP burst of %d", keysWriteRatePerMin)
+		t.Fatalf("expected 429 after alice's per-principal burst of %d (XFF rotation must not reset it)", keysWriteRatePerMin)
+	}
+
+	// bob (a different validated principal) is unaffected by alice's exhausted bucket.
+	code, body := req(t, app, http.MethodPost, "/v1/console/keys", map[string]string{
+		"X-User-Id": "bob", "X-Org-Id": "acme",
+		"Authorization": "Bearer j.w.t",
+	}, "")
+	if code != http.StatusOK {
+		t.Fatalf("bob must have his own bucket, not alice's: want 200, got %d (%s)", code, body)
 	}
 }
