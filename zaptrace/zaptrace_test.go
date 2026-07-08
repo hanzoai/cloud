@@ -17,9 +17,9 @@ import (
 
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
+	"github.com/zap-proto/zap2pb"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 // TestUploadTracesOverZAP proves spans leave cloud over the ZAP wire: a real
@@ -37,7 +37,7 @@ func TestUploadTracesOverZAP(t *testing.T) {
 	)
 	srv := &zaphttp.Server{Handler: func(ctx *fasthttp.RequestCtx) {
 		var req coltracepb.ExportTraceServiceRequest
-		if err := proto.Unmarshal(ctx.PostBody(), &req); err != nil {
+		if err := zap2pb.Unmarshal(ctx.PostBody(), &req); err != nil {
 			ctx.SetStatusCode(400)
 			return
 		}
