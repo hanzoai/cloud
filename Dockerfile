@@ -35,6 +35,12 @@ WORKDIR /console
 # The static export prerenders every page (webpack compile + export prerender);
 # give the heap headroom so a large @hanzo/gui build never OOMs into the stub.
 ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192
+# Hanzo Analytics: the console's <HanzoAnalytics/> (env-gated) renders the one
+# native analytics.hanzo.ai tag only when a website-id is baked in. Default to the
+# console.hanzo.ai property (7dce54ee, public per-site) so console+team track on
+# the next cloud build. GA4/Pixel stay off (unset). Public id, not a KMS secret.
+ARG NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=7dce54ee-41f6-4751-96bf-fe005067c7c7
+ENV NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=$NEXT_PUBLIC_ANALYTICS_WEBSITE_ID
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
