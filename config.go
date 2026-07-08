@@ -187,6 +187,31 @@ type Config struct {
 	O11yZAPAddr     string
 	VFSZAPAddr      string
 	MQZAPAddr       string
+
+	// --- Control plane (consensus platform) — STAGE 0: parsed but INERT. ---
+	//
+	// These describe this instance's place in the control-plane quorum for the
+	// coming Quasar-PQ consensus wiring (see controlplane_deps.go for the
+	// architecture direction). In Stage 0 NOTHING reads them: no engine is
+	// started, no peer is dialed, no quorum is formed. They exist so operators can
+	// begin declaring control-plane topology ahead of the engine; setting any of
+	// them has ZERO runtime effect today.
+
+	// NodeID is this instance's stable identity within the control-plane quorum.
+	// Env NODE_ID. Empty ⇒ unset.
+	NodeID string
+
+	// Peers is the control-plane peer set (the other nodes this instance would
+	// form consensus with). Env PEERS (comma-separated). Empty ⇒ unset.
+	Peers []string
+
+	// Role is this instance's control-plane role: "voter" (participates in
+	// consensus) or "data" (data-plane only). Env ROLE. Empty ⇒ unset.
+	Role string
+
+	// ControlPlaneQuorum is the number of voter nodes required to form a
+	// control-plane quorum. Env CONTROL_PLANE_QUORUM. 0 ⇒ unset.
+	ControlPlaneQuorum int
 }
 
 // LoadConfig reads flags + env into a Config. Flags override env.
@@ -234,6 +259,13 @@ func LoadConfig() *Config {
 		O11yZAPAddr:        getenv("CLOUD_O11Y_ZAP_ADDR", ""),
 		VFSZAPAddr:         getenv("CLOUD_VFS_ZAP_ADDR", ""),
 		MQZAPAddr:          getenv("CLOUD_MQ_ZAP_ADDR", ""),
+
+		// Control plane (consensus platform) — STAGE 0 inert topology (see Config).
+		// Read but UNUSED: no subsystem consumes these until the engine is wired.
+		NodeID:             getenv("NODE_ID", ""),
+		Peers:              splitTrim(getenv("PEERS", "")),
+		Role:               getenv("ROLE", ""),
+		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
 	var enableCSV string
