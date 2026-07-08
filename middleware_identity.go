@@ -28,6 +28,7 @@ package cloud
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"unicode"
 
@@ -304,7 +305,14 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	// never asserts identity itself. No-op on gateway-fronted binaries (a bearer is
 	// already present, so this is never reached) and on binaries with no in-process
 	// IAM session manager (web.GlobalSessions == nil).
-	if tok == "" {
+	//
+	// GATED SAME-ORIGIN (RED H3): the session cookie is ambient — a cross-site or
+	// sibling-subdomain request would carry it and could drive the victim's own
+	// (correctly-scoped) money action via a state-changing GET the SameSite=Lax cookie
+	// still rides. So the bridge fires ONLY for a same-origin request. The Bearer/JWT
+	// -cookie paths above are unaffected (a token is not ambient). Non-browser and
+	// gateway-fronted callers use a bearer and never reach here.
+	if tok == "" && sessionBridgeSameOrigin(c) {
 		tok = sessionAccessToken(c)
 	}
 	if tok == "" || isAPIKey(tok) {
@@ -343,4 +351,29 @@ func sessionAccessToken(c *zip.Ctx) string {
 	}
 	tok, _ := store.Get(context.Background(), "accessToken").(string)
 	return tok
+}
+
+// sessionBridgeSameOrigin reports whether the request may use the ambient-cookie
+// session bridge (RED H3). A legitimate embed request is same-origin (the SPA calls
+// its OWN host); a cross-site OR sibling-subdomain (same-site) request that merely
+// rides the victim's session cookie is refused, so the bridge can never be a CSRF
+// vector even on a state-changing GET. Prefers Sec-Fetch-Site (browser-set,
+// JS-unforgeable); falls back to an Origin/Referer host==Host check when it is absent
+// (a modern browser always sends Sec-Fetch-Site, so the fallback is only for exotic
+// clients — which, lacking the httpOnly cookie, can't reach the bridge anyway).
+func sessionBridgeSameOrigin(c *zip.Ctx) bool {
+	if sfs := c.Header("Sec-Fetch-Site"); sfs != "" {
+		return sfs == "same-origin" || sfs == "none"
+	}
+	host := c.Fiber().Hostname()
+	for _, h := range []string{c.Header("Origin"), c.Header("Referer")} {
+		if h == "" {
+			continue
+		}
+		u, err := url.Parse(h)
+		if err != nil || !strings.EqualFold(u.Host, host) {
+			return false
+		}
+	}
+	return true
 }
