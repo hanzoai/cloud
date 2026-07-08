@@ -31,14 +31,14 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/goja"
 	"github.com/hanzoai/cloud/clients/principal"
 	hpricing "github.com/hanzoai/pricing"
 	"github.com/zap-proto/zip"
 )
 
 var (
-	host *gojahost.Host
+	host *goja.Host
 	// cat is the catalog enablement overlay (SQLite/Base). It lays mutable
 	// {enabled,betaOrgs,overrides} state over the static bundle and gates the
 	// catalog read path. nil only before Mount; the read handlers fall back to
@@ -77,7 +77,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("pricing.Mount: load plans catalog: %w", err)
 	}
 
-	h, err := gojahost.New(gojahost.Config{
+	h, err := goja.New(goja.Config{
 		Name:   "pricing",
 		Bundle: bundle,
 		Globals: map[string]any{
@@ -223,7 +223,7 @@ func rawDispatch(c *zip.Ctx, route string, params map[string]string) (int, json.
 	if org, ok := principal.Tenant(c); ok {
 		tenant = org
 	}
-	resp, err := host.Dispatch(c.Context(), gojahost.Request{Route: route, Params: params, Tenant: tenant})
+	resp, err := host.Dispatch(c.Context(), goja.Request{Route: route, Params: params, Tenant: tenant})
 	if err != nil {
 		return 0, nil, err
 	}
