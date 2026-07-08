@@ -13,30 +13,49 @@ import "strings"
 //   - The `product` param is NEVER interpolated raw into a query or a hostname.
 //     It is first shape-validated to a DNS-1123 label (validProduct) — so it can
 //     never smuggle a PromQL break-out (`"} or up{`), a ClickHouse fragment, or a
-//     path/host segment into the health prober (SSRF) — and then checked against
-//     the KNOWN set. An unknown-but-well-formed product resolves to `ok=false`,
-//     and every handler answers HONEST-EMPTY (never an error, never another
-//     service's data, never a probe of an arbitrary host).
+//     path/host segment into the health prober (SSRF) — then mapped through the
+//     console-slug ALIAS table, and finally the RESOLVED workload is checked
+//     against the KNOWN set. An unknown-but-well-formed product resolves to
+//     `ok=false`, and every handler answers HONEST-EMPTY (never an error, never
+//     another service's data, never a probe of an arbitrary host).
 //   - The known set mirrors the VERIFIED live services that emit a per-product
-//     signal (VM `up{service=…}` / log `resources_string['app']`). app == prom
-//     service == the id, and the health host is derived once (`<id>.hanzo.svc…`),
-//     so the mapping is DRY: one set, three derivations.
+//     signal (VM `up{service=…}` / log `resources_string['app']`). For a plain
+//     product id, app == prom service == the id, and the health host is derived
+//     once (`<id>.hanzo.svc…`), so the mapping is DRY: one set, three derivations.
 //
 // The `product` param is NOT a tenant selector — the org is ALWAYS resolved
 // server-side from the validated principal and pinned into every query. So
 // letting the client name WHICH product's telemetry it wants is safe: it still
 // only ever sees its OWN org's rows (non-admin) for that product.
 
-// knownServices is the VERIFIED set of in-cluster services that emit a
-// per-product observability signal. It is the allowlist for logs/metrics/status:
-// a product not in this set has no backing service and resolves to honest-empty.
+// productAlias maps a console catalog slug to its concrete k8s workload name when
+// they differ. Absent an entry, the product id IS the workload (identity), so ANY
+// product whose slug matches a known workload works with no per-product code — the
+// map only records the exceptions. The resolved workload is still allowlisted
+// (knownServices) after aliasing, so an alias can never point at an unbacked host.
+var productAlias = map[string]string{
+	"cloud-api": "cloud",
+	"api":       "cloud",
+	"llm":       "gateway",
+	"router":    "gateway",
+	"analytics": "insights-capture",
+	"observe":   "o11y",
+	"o11y":      "o11y",
+}
+
+// knownServices is the VERIFIED set of in-cluster WORKLOADS that emit a per-product
+// observability signal. It is the allowlist for logs/metrics/status: a resolved
+// workload not in this set has no backing service and yields honest-empty. Aliases
+// above may resolve TO these names (e.g. cloud-api → cloud, o11y → o11y), so the
+// alias targets are members here.
 var knownServices = map[string]bool{
 	"agents": true, "auto": true, "billing": true, "bot-gateway": true,
 	"chat": true, "cloud": true, "cloud-api": true, "commerce": true,
 	"datastore": true, "flow": true, "gateway": true, "hanzo-mpc": true,
 	"hanzo-playground": true, "iam": true, "insights-capture": true, "kms": true,
-	"models": true, "nats": true, "paas": true, "pricing": true, "rag-api": true,
-	"s3": true, "search": true, "studio": true, "vector": true, "visor": true,
+	"models": true, "nats": true, "o11y": true, "paas": true, "pricing": true,
+	"rag-api": true, "s3": true, "search": true, "studio": true, "vector": true,
+	"visor": true,
 }
 
 // clusterDNSSuffix is the in-cluster DNS suffix for the health prober. The
@@ -47,28 +66,36 @@ const clusterDNSSuffix = ".hanzo.svc.cluster.local"
 
 // service is the resolved infra identity for a product.
 type service struct {
-	// ID is the canonical service id (== the product param, validated).
+	// ID is the canonical product id (== the product param, validated).
 	ID string
 	// App is the ClickHouse `resources_string['app']` value for this product's logs.
 	App string
 	// PromService is the VictoriaMetrics `service` label value (up{service=…}).
 	PromService string
-	// HealthHost is the in-cluster host the status prober hits (<id>.hanzo.svc…).
+	// HealthHost is the in-cluster host the status prober hits (<workload>.hanzo.svc…).
 	HealthHost string
 }
 
 // resolveService validates + resolves a product param. ok=false means the product
 // is unknown/ill-formed and the caller must answer honest-empty (never an error).
+// Resolution is: shape-validate → alias to workload → allowlist the workload.
 func resolveService(product string) (service, bool) {
 	p := strings.TrimSpace(product)
-	if !validProduct(p) || !knownServices[p] {
+	if !validProduct(p) {
+		return service{}, false
+	}
+	workload := p
+	if a, ok := productAlias[p]; ok {
+		workload = a
+	}
+	if !knownServices[workload] {
 		return service{}, false
 	}
 	return service{
 		ID:          p,
-		App:         p,
-		PromService: p,
-		HealthHost:  p + clusterDNSSuffix,
+		App:         workload,
+		PromService: workload,
+		HealthHost:  workload + clusterDNSSuffix,
 	}, true
 }
 
