@@ -1,33 +1,34 @@
-// Package settings is the per-org, per-product configuration plane for the
-// unified Hanzo Cloud binary — the /v1/settings/:product surface that lets an org
-// read and edit a product's configuration, backed by a durable per-tenant store
-// with KMS custody for any secret-typed field.
+// Package settings is the per-org, per-product configuration plane for the unified
+// Hanzo Cloud binary: the /v1/settings/:product surface behind every product's
+// detail view in console.hanzo.ai (#59). It lets an org read and edit a product's
+// configuration, backed by a durable per-tenant SQLite store with KMS custody for
+// any secret-typed field.
 //
-// ONE settings engine, EVERY product. The console drives all ~130 products'
-// Settings tab through this single surface (product id → :product). The config
-// SCHEMA is a small, fixed, honest default set (fields that are genuinely stored,
-// org-scoped, and readable by a product's own backend via the in-process seam) —
-// merged with the org's persisted overrides. There is no per-product bespoke
-// server code; a product is just a (org, product) key.
+// ONE settings engine, EVERY product. The console drives all products' Settings tab
+// through this single surface (product id → :product). There is no per-product
+// bespoke server code — a product is just an (org, product) key.
 //
-// TENANT ISOLATION (what Red will attack). The org is ALWAYS principal.Tenant —
-// the validated IAM owner claim (HIP-0026), never a client-supplied header, query
-// param, or body field. Every store query binds `WHERE org=? AND product=?`;
-// every KMS secret is keyed /orgs/{org}/settings/{product}/{key}. An org can
-// therefore read or write ONLY its own product config. The product path segment is
-// strictly slug-validated at the boundary so it can never smuggle path structure
-// into the KMS key or the store key.
+// Surface (all org-scoped; /v1 only):
 //
-// SECRET CUSTODY. A secret-typed field's VALUE lives ONLY in KMS (sealed,
-// AES-256-GCM envelope); the store keeps only a non-secret marker that the secret
-// is set. A GET never returns a secret value (masked). If KMS is not Ready, a
-// write that includes a secret field fails closed (503) — a secret is NEVER
-// written to SQLite in plaintext.
+//	GET /v1/settings/:product   org config (read, secrets masked)  -> settingsView
+//	PUT /v1/settings/:product   org config (write)                 -> settingsView
 //
-// Surface (subsystem "settings", prefix /v1/settings; /v1 only):
+// TENANT ISOLATION is enforced SERVER-SIDE on every request. The org is
+// principal.Tenant(c) — the value SanitizeIdentity minted from the VALIDATED bearer
+// owner (HIP-0026) — and is NEVER read from a query param, body, or client header.
+// It is the mandatory predicate on every store statement. The client chooses a
+// PRODUCT (validated against a slug shape); it never supplies the org.
 //
-//	GET /v1/settings/:product   the merged config doc (secrets masked)  -> settingsView
-//	PUT /v1/settings/:product   persist config overrides                -> settingsView
+// SECRET CUSTODY. A secret field's VALUE lives ONLY in KMS at
+// orgs/{org}/settings/{product}/{key}; the store keeps only the non-secret JSON plus
+// the list of secret key NAMES (so the read path knows which fields are set-but-
+// masked). A plaintext secret can never reach SQLite — a secret write routes to KMS
+// or fails closed (503).
+//
+// This surface was previously mounted by clients/observe alongside the o11y read
+// paths; those reads now live in clients/o11y (the embedded runtime). Settings is
+// NOT observability — it is console product-detail config — so it is its own plane
+// here, its behavior preserved verbatim from the observe original.
 package settings
 
 import (
@@ -37,113 +38,45 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 const (
-	// kmsEnv is the KMS environment slug settings secrets are stored under. Settings
-	// are per-(org,product), not environment-sharded, so one stable env keeps
-	// store/read/delete addressing identical.
-	kmsEnv = "default"
-
-	// maxValueLen bounds a single non-secret config value at the ingest boundary.
-	maxValueLen = 4096
-	// maxSecretLen bounds a secret value handed to KMS.
-	maxSecretLen = 8192
+	// maxConfig bounds a stored non-secret config document.
+	maxConfig = 64 * 1024
+	// maxSecretValue bounds a single secret value routed to KMS.
+	maxSecretValue = 8 * 1024
+	// maxSecretKeys bounds how many secret fields one (org,product) may hold.
+	maxSecretKeys = 64
 )
 
-// fieldType enumerates the config field kinds. `secret` routes the value to KMS;
-// the rest are non-secret values persisted in the store.
-type fieldType string
+// productRE constrains the product identifier: it is a console catalog slug that
+// becomes a store key segment and a KMS ref segment, so this is the boundary guard.
+// It matches the k8s label shape (lowercase DNS-ish).
+var productRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 
-const (
-	typeString fieldType = "string"
-	typeBool   fieldType = "bool"
-	typeEmail  fieldType = "email"
-	typeURL    fieldType = "url"
-	typeSecret fieldType = "secret"
-)
+// secretMask is what the read path returns in place of a secret value; a PUT that
+// echoes it back means "unchanged", so the real value is never round-tripped.
+const secretMask = "••••••••"
 
-// fieldDef is a declared config field in the default schema.
-type fieldDef struct {
-	Key     string
-	Label   string
-	Type    fieldType
-	Default string
-}
-
-// defaultSchema is the fixed, universal config schema every product exposes. Kept
-// small and honest — each field is genuinely stored, org-scoped, and available to
-// a product's backend via Get(); nothing here fabricates product behavior. A
-// product-specific default set can be layered later without changing the surface.
-var defaultSchema = []fieldDef{
-	{Key: "displayName", Label: "Display name", Type: typeString},
-	{Key: "environment", Label: "Environment", Type: typeString, Default: "production"},
-	{Key: "notificationsEmail", Label: "Notifications email", Type: typeEmail},
-	{Key: "webhookUrl", Label: "Event webhook URL", Type: typeURL},
-	{Key: "webhookSecret", Label: "Webhook signing secret", Type: typeSecret},
-	{Key: "alertsEnabled", Label: "Enable alerts", Type: typeBool, Default: "false"},
-}
-
-// schemaIndex is defaultSchema keyed by field key (the allowlist for PUT).
-var schemaIndex = func() map[string]fieldDef {
-	m := make(map[string]fieldDef, len(defaultSchema))
-	for _, f := range defaultSchema {
-		m[f.Key] = f
-	}
-	return m
-}()
-
-// persistedDoc is the JSON shape stored in the SQLite `doc` column: non-secret
-// values, plus a marker set of secret keys that have a value in KMS. Secret values
-// are NEVER in here.
-type persistedDoc struct {
-	Values     map[string]string `json:"values"`
-	SecretsSet map[string]bool   `json:"secretsSet"`
-}
-
-// ── HTTP shapes (the console contract) ────────────────────────────────────────
-
-type fieldView struct {
-	Key    string `json:"key"`
-	Label  string `json:"label"`
-	Type   string `json:"type"`
-	Value  string `json:"value"` // non-secret value; "" for secret (masked)
-	Secret bool   `json:"secret"`
-	Set    bool   `json:"set,omitempty"` // secret only: whether a value is stored
-}
-
-type settingsView struct {
-	Product   string      `json:"product"`
-	Fields    []fieldView `json:"fields"`
-	UpdatedAt string      `json:"updatedAt,omitempty"`
-}
-
-type putRequest struct {
-	Fields []struct {
-		Key   string `json:"key"`
-		Value string `json:"value"`
-	} `json:"fields"`
-}
-
-// ── service / lifecycle ───────────────────────────────────────────────────────
-
-type svc struct {
-	store *Store
-	kms   *kms.Client // type-asserted from deps.KMS; nil ⇒ secret ops fail closed
+// service is the composition root for the settings surface. It owns the settings
+// store; KMS is nil ⇒ secret writes fail closed (never plaintext).
+type service struct {
+	store *SettingsStore
+	kms   cloud.KMSClient
 	log   luxlog.Logger
 }
 
-var mounted *svc
+var mounted *service
 
-// Mount wires /v1/settings/* onto app.
+// Mount registers the settings surface on app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("settings.Mount: nil zip.App")
@@ -158,28 +91,28 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
 		return fmt.Errorf("settings.Mount: data dir: %w", err)
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "settings.db"))
+	store, err := openSettingsStore(filepath.Join(deps.DataDir, "settings.db"))
 	if err != nil {
-		return fmt.Errorf("settings.Mount: open store: %w", err)
+		return fmt.Errorf("settings.Mount: open settings store: %w", err)
 	}
-	kc, _ := deps.KMS.(*kms.Client) // non-KMS impl leaves this nil → secret ops fail closed
-
-	s := &svc{store: store, kms: kc, log: log}
+	s := &service{store: store, kms: deps.KMS, log: log}
 	mounted = s
 
-	app.Get("/v1/settings/:product", s.get)
-	app.Put("/v1/settings/:product", s.put)
+	app.Get("/v1/settings/:product", s.getSettings)
+	app.Put("/v1/settings/:product", s.putSettings)
 
-	log.Info("settings surface mounted", "prefix", "/v1/settings", "kmsReady", s.kmsReady())
+	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", deps.Brand, "kms", deps.KMS != nil)
 	return nil
 }
 
 func init() {
-	// Order 138: after integrations (137), before the AI /v1/* catch-all (150).
+	// Order 138: after integrations (137), before the AI /v1/* catch-all (150). The
+	// /v1/settings prefix shares no path with another subsystem, so the order only
+	// needs to precede 150. RegisterWithShutdown so the store closes on graceful stop.
 	cloud.RegisterWithShutdown("settings", 138, cloud.Typed(Mount), Shutdown)
 }
 
-// Shutdown closes the store. Idempotent.
+// Shutdown releases the settings store. Idempotent.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
@@ -192,272 +125,194 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
-// ── handlers ──────────────────────────────────────────────────────────────────
+// ── tenant ───────────────────────────────────────────────────────────────────
 
-// get returns the merged config doc for (org, product): server defaults overlaid
-// with the org's persisted overrides, secret values masked.
-func (s *svc) get(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	product, err := requireProduct(c)
-	if err != nil {
-		return err
-	}
-	rec, found, err := s.store.Get(c.Context(), org, product)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load settings: %v", err)
-	}
-	doc := decodeDoc(rec.Doc)
-	view := s.render(product, doc)
-	if found {
-		view.UpdatedAt = rfc3339(rec.UpdatedAt)
-	}
-	return c.JSON(http.StatusOK, view)
-}
+// tenant resolves the org — the tenant-isolation KEY — for a VALIDATED principal
+// only. Fails closed (caller answers 403) for an unvalidated or org-less request.
+func (s *service) tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
 
-// put persists config overrides for (org, product). Non-secret values go to the
-// store; a secret value goes to KMS (fail closed when KMS is not ready). Unknown
-// field keys are rejected — the surface is the declared schema, not an arbitrary
-// blob. Returns the freshly-merged view (secrets masked).
-func (s *svc) put(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	product, err := requireProduct(c)
-	if err != nil {
-		return err
-	}
-	var body putRequest
-	if err := c.Bind(&body); err != nil {
-		return err
-	}
-
-	rec, _, err := s.store.Get(c.Context(), org, product)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "load settings: %v", err)
-	}
-	doc := decodeDoc(rec.Doc)
-
-	for _, f := range body.Fields {
-		def, known := schemaIndex[f.Key]
-		if !known {
-			return zip.ErrBadRequest("unknown setting: " + safeEcho(f.Key))
-		}
-		if def.Type == typeSecret {
-			if err := s.applySecret(org, product, def.Key, f.Value, doc); err != nil {
-				return err
-			}
-			continue
-		}
-		if len(f.Value) > maxValueLen {
-			return zip.ErrBadRequest(def.Key + " value too large")
-		}
-		if err := validateValue(def.Type, f.Value); err != nil {
-			return err
-		}
-		doc.Values[def.Key] = f.Value
-	}
-
-	blob, err := json.Marshal(doc)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "encode settings: %v", err)
-	}
-	now := time.Now().Unix()
-	if err := s.store.Put(c.Context(), org, product, string(blob), now); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist settings: %v", err)
-	}
-	view := s.render(product, doc)
-	view.UpdatedAt = rfc3339(now)
-	return c.JSON(http.StatusOK, view)
-}
-
-// applySecret writes a secret field's value to KMS and marks it set in the doc. An
-// empty value LEAVES the existing secret untouched (a masked GET returns "" so a
-// blind PUT-back must not clear it); a non-empty value seals to KMS. KMS not ready
-// ⇒ fail closed (503) — a secret is never persisted in the store.
-func (s *svc) applySecret(org, product, key, value string, doc *persistedDoc) error {
-	if value == "" {
-		return nil // no change — never overwrite/clear on an empty (masked) submit
-	}
-	if len(value) > maxSecretLen {
-		return zip.ErrBadRequest(key + " secret too large")
-	}
-	if !s.kmsReady() {
-		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
-	}
-	if err := s.kms.Put(kmsPath(org, product), key, kmsEnv, []byte(value)); err != nil {
-		s.log.Warn("settings kms seal failed", "org", org, "product", product, "key", key, "err", err)
-		return zip.Errorf(http.StatusInternalServerError, "secret custody failed")
-	}
-	doc.SecretsSet[key] = true
-	return nil
-}
-
-// render overlays a persisted doc onto the default schema and masks secrets.
-func (s *svc) render(product string, doc *persistedDoc) settingsView {
-	out := settingsView{Product: product, Fields: make([]fieldView, 0, len(defaultSchema))}
-	for _, def := range defaultSchema {
-		fv := fieldView{
-			Key:    def.Key,
-			Label:  def.Label,
-			Type:   string(def.Type),
-			Secret: def.Type == typeSecret,
-		}
-		if def.Type == typeSecret {
-			fv.Set = doc.SecretsSet[def.Key] // value is NEVER returned
-		} else if v, ok := doc.Values[def.Key]; ok {
-			fv.Value = v
-		} else {
-			fv.Value = def.Default
-		}
-		out.Fields = append(out.Fields, fv)
-	}
-	return out
-}
-
-func (s *svc) kmsReady() bool { return s.kms != nil && s.kms.Ready() }
-
-// ── in-process seam ───────────────────────────────────────────────────────────
-
-// Config returns an org's persisted NON-secret settings values for a product (the
-// merged view of defaults + overrides), for a product's own backend to consume.
-// Fails closed (nil) when unmounted. Secret values are NOT returned here — a
-// consumer fetches those from KMS by the documented path.
-func Config(ctx context.Context, org, product string) (map[string]string, bool) {
-	if mounted == nil || !validOrg(org) || !validProductSlug(product) {
-		return nil, false
-	}
-	rec, _, err := mounted.store.Get(ctx, org, product)
-	if err != nil {
-		return nil, false
-	}
-	doc := decodeDoc(rec.Doc)
-	out := make(map[string]string, len(defaultSchema))
-	for _, def := range defaultSchema {
-		if def.Type == typeSecret {
-			continue
-		}
-		if v, ok := doc.Values[def.Key]; ok {
-			out[def.Key] = v
-		} else if def.Default != "" {
-			out[def.Key] = def.Default
-		}
-	}
-	return out, true
-}
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-// requireProduct validates the :product path segment. It is folded into the KMS
-// key and the store key, so it is strictly slug-validated at the boundary.
-func requireProduct(c *zip.Ctx) (string, error) {
+// requireProductParam reads + validates the :product path segment against productRE.
+func requireProductParam(c *zip.Ctx) (string, error) {
 	p := strings.TrimSpace(c.Param("product"))
-	if !validProductSlug(p) {
-		return "", zip.ErrBadRequest("product must be a slug (lowercase alnum + hyphen, ≤63)")
+	if p == "" {
+		return "", zip.ErrBadRequest("product is required")
+	}
+	if !productRE.MatchString(p) {
+		return "", zip.ErrBadRequest("product must match ^[a-z0-9][a-z0-9._-]{0,62}$")
 	}
 	return p, nil
 }
 
-// kmsPath is the per-org, per-product KMS namespace. org + product are validated
-// at every entry point, so they can never smuggle path structure.
-func kmsPath(org, product string) string {
-	return "/orgs/" + org + "/settings/" + product
+// ── settings CRUD ────────────────────────────────────────────────────────────
+
+type settingsView struct {
+	Product    string          `json:"product"`
+	Config     json.RawMessage `json:"config"`
+	SecretKeys []string        `json:"secretKeys"` // names of set secret fields (values masked, never returned)
+	UpdatedAt  string          `json:"updatedAt"`
+	CreatedAt  string          `json:"createdAt"`
 }
 
-// decodeDoc parses the persisted doc, always returning non-nil maps.
-func decodeDoc(s string) *persistedDoc {
-	doc := &persistedDoc{Values: map[string]string{}, SecretsSet: map[string]bool{}}
-	if strings.TrimSpace(s) == "" {
-		return doc
+func (s *service) getSettings(c *zip.Ctx) error {
+	org, ok := s.tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
 	}
-	var d persistedDoc
-	if err := json.Unmarshal([]byte(s), &d); err == nil {
-		if d.Values != nil {
-			doc.Values = d.Values
-		}
-		if d.SecretsSet != nil {
-			doc.SecretsSet = d.SecretsSet
-		}
+	product, err := requireProductParam(c)
+	if err != nil {
+		return err
 	}
-	return doc
+	st, err := s.store.Get(c.Context(), org, product)
+	if err == errNotFound {
+		// No override yet — an honest empty config (the console merges its own
+		// display defaults). Not a 404: the tab always renders.
+		return c.JSON(http.StatusOK, settingsView{
+			Product: product, Config: json.RawMessage(`{}`), SecretKeys: []string{},
+		})
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get settings: %v", err)
+	}
+	return c.JSON(http.StatusOK, toSettingsView(st))
 }
 
-// validateValue enforces a light, honest shape on a non-secret value (empty is
-// always allowed = clear). URLs must be http(s); emails must contain an @; bools
-// must be true/false. Not a full validator — a boundary sanity gate.
-func validateValue(t fieldType, v string) error {
-	if v == "" {
+type settingsReq struct {
+	Config  map[string]any    `json:"config"`  // non-secret config; stored verbatim (bounded)
+	Secrets map[string]string `json:"secrets"` // secret fields; VALUES routed to KMS, never SQLite
+}
+
+func (s *service) putSettings(c *zip.Ctx) error {
+	org, ok := s.tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	product, err := requireProductParam(c)
+	if err != nil {
+		return err
+	}
+	var body settingsReq
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+
+	// Non-secret config: validate + serialize within the cap.
+	cfgJSON := []byte("{}")
+	if body.Config != nil {
+		b, mErr := json.Marshal(body.Config)
+		if mErr != nil {
+			return zip.ErrBadRequest("config must be JSON-serializable")
+		}
+		if len(b) > maxConfig {
+			return zip.ErrBadRequest("config too large (max 64KiB)")
+		}
+		cfgJSON = b
+	}
+
+	// Existing secret-key set (so a PUT that omits a secret keeps it).
+	var secretKeys []string
+	if prev, gErr := s.store.Get(c.Context(), org, product); gErr == nil {
+		secretKeys = prev.SecretKeys
+	} else if gErr != errNotFound {
+		return zip.Errorf(http.StatusInternalServerError, "load settings: %v", gErr)
+	}
+
+	// Route each provided secret to KMS. A secret VALUE never touches SQLite; if KMS
+	// is unavailable, the whole write fails closed rather than dropping or (worse)
+	// persisting the secret in plaintext.
+	if len(body.Secrets) > 0 {
+		if s.kms == nil {
+			return zip.Errorf(http.StatusServiceUnavailable, "settings: KMS not configured; refusing to store secrets")
+		}
+		for key, val := range body.Secrets {
+			if !productRE.MatchString(key) {
+				return zip.ErrBadRequest("secret key must match ^[a-z0-9][a-z0-9._-]{0,62}$")
+			}
+			if val == "" || val == secretMask {
+				// Empty / mask sentinel = "unchanged" — never overwrite a stored secret
+				// with a blank or the mask the read path returned.
+				continue
+			}
+			if len(val) > maxSecretValue {
+				return zip.ErrBadRequest("secret value too large (max 8KiB)")
+			}
+			ref := secretRef(org, product, key)
+			if err := s.kms.PutSecret(c.Context(), ref, []byte(val)); err != nil {
+				return zip.Errorf(http.StatusInternalServerError, "kms put secret: %v", err)
+			}
+			secretKeys = addStr(secretKeys, key)
+		}
+		if len(secretKeys) > maxSecretKeys {
+			return zip.ErrBadRequest("too many secret fields (max 64)")
+		}
+	}
+
+	now := time.Now().Unix()
+	st, err := s.store.Put(c.Context(), Settings{
+		Org: org, Product: product, Config: string(cfgJSON), SecretKeys: secretKeys, UpdatedAt: now,
+	})
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "persist settings: %v", err)
+	}
+	return c.JSON(http.StatusOK, toSettingsView(st))
+}
+
+func toSettingsView(st Settings) settingsView {
+	cfg := json.RawMessage(st.Config)
+	if len(cfg) == 0 {
+		cfg = json.RawMessage(`{}`)
+	}
+	keys := st.SecretKeys
+	if keys == nil {
+		keys = []string{}
+	}
+	return settingsView{
+		Product:    st.Product,
+		Config:     cfg,
+		SecretKeys: keys,
+		UpdatedAt:  rfc3339(st.UpdatedAt),
+		CreatedAt:  rfc3339(st.CreatedAt),
+	}
+}
+
+// secretRef is the KMS ref for a settings secret. Org + product are already
+// validated (owner claim / productRE); key is validated at the call site.
+func secretRef(org, product, key string) string {
+	return "orgs/" + org + "/settings/" + product + "/" + key
+}
+
+// ── shared helpers ───────────────────────────────────────────────────────────
+
+func encodeStrList(xs []string) string {
+	if len(xs) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(xs)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
+}
+
+func decodeStrList(s string) []string {
+	if s == "" {
 		return nil
 	}
-	switch t {
-	case typeURL:
-		if !strings.HasPrefix(v, "https://") && !strings.HasPrefix(v, "http://") {
-			return zip.ErrBadRequest("URL must start with http:// or https://")
-		}
-	case typeEmail:
-		if !strings.Contains(v, "@") || strings.ContainsAny(v, " \t\r\n") {
-			return zip.ErrBadRequest("invalid email")
-		}
-	case typeBool:
-		if v != "true" && v != "false" {
-			return zip.ErrBadRequest("bool must be true or false")
-		}
+	var xs []string
+	if err := json.Unmarshal([]byte(s), &xs); err != nil {
+		return nil
 	}
-	return nil
+	return xs
 }
 
-// validProductSlug accepts a DNS-1123-ish slug (lowercase alnum + internal
-// hyphen, ≤63). The product is folded into the KMS + store key, so it is validated
-// strictly at every boundary that reaches custody.
-func validProductSlug(p string) bool {
-	if p == "" || len(p) > 63 {
-		return false
-	}
-	for i, r := range p {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-		case r == '-' && i > 0 && i < len(p)-1:
-		default:
-			return false
+func addStr(xs []string, x string) []string {
+	for _, v := range xs {
+		if v == x {
+			return xs
 		}
 	}
-	return true
+	return append(xs, x)
 }
 
-// validOrg accepts a DNS-1123-ish org label (≤63). Mirrors the KMS/integrations
-// tenant boundary; the org is folded into the KMS secret path + the store key.
-func validOrg(org string) bool {
-	if org == "" || len(org) > 63 {
-		return false
-	}
-	for _, r := range org {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// safeEcho strips control chars from a value echoed back in an error (kills
-// log/response injection via a crafted key).
-func safeEcho(s string) string {
-	if len(s) > 64 {
-		s = s[:64]
-	}
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, s)
-}
-
-// rfc3339 renders a unix timestamp as RFC3339 UTC (empty for 0).
 func rfc3339(unix int64) string {
 	if unix == 0 {
 		return ""
