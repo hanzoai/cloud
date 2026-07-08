@@ -117,6 +117,17 @@ Two metering seams share the ONE commerce ledger (`Deps.Metering`):
 - **`BillingGate`** (`middleware_billing.go`) — the request EDGE, priced by PATH
   (`DefaultPrice`). `/v1/ai/*` self-meters token spend upstream (gateway/ai), so it
   is price-0 here to avoid double-billing.
+
+  **Auto-routing binds to the resolved model.** ai serves a virtual `auto`
+  (alias `zen-router`) model that it resolves to a concrete model id *before*
+  pricing/billing, then meters its own token cost keyed on the SERVED model and
+  reports it via the `X-Routed-Model` response header (echoed in the body
+  `model`). Because the edge prices `/v1/ai/*` by PATH (0), never by the request
+  model, `auto` bills as whatever it resolved to — the ai per-token meter is the
+  single source of the charge. The edge passes `X-Routed-Model` through untouched,
+  so the model reported to the client equals the model billed. Proven end-to-end:
+  `auto_routing_billing_test.go` (`TestAutoRoutingBillsAsResolvedModel`,
+  `TestDefaultPriceAiPathModelAgnostic`).
 - **`ResourceMeter`** (`resource_billing.go`) — IN-HANDLER, priced per-org after the
   caller's org is resolved. Every non-LLM product uses it: `Gate` (fail-closed
   pre-auth, `available >= fee`, default fee $1.00 / `DefaultResourceFeeCents`) then
