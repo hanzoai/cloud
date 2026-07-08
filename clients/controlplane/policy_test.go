@@ -40,8 +40,26 @@ func TestPolicy_ShardReassign_SameBlockReleaseDoesNotAuthorize(t *testing.T) {
 		{Kind: OpReleaseLease, Resource: "shard-X", Holder: "cloud-1", LeaseID: "cloud-1:writer"},
 		{Kind: OpReassignShardWriter, Resource: "shard-X", From: "cloud-1", To: "cloud-2"},
 	}}
-	if err := CheckInvariants(pre, b); !errors.Is(err, ErrShardReassignUnauthorized) {
-		t.Fatalf("a same-block release must NOT authorize displacing a live writer; want ErrShardReassignUnauthorized, got %v", err)
+	// The block is refused: the live-holder release is itself rejected, and even
+	// were it allowed the reassign has no proven-dead authorization. Either way a
+	// same-block release cannot displace a live writer.
+	if err := CheckInvariants(pre, b); err == nil {
+		t.Fatal("a same-block release must NOT authorize displacing a live writer (block must be refused)")
+	}
+}
+
+// TestPolicy_ReleaseLiveHolderRefused — a proposer cannot release a LIVE holder's
+// lease; only a proven-dead holder's lease can be released (increment-1). This
+// closes the release+assign double-write sibling of red_exploits #1.
+func TestPolicy_ReleaseLiveHolderRefused(t *testing.T) {
+	pre := shardState("shard-X", "cloud-1") // cloud-1 is LIVE
+	rel := &PlacementBlock{Ops: []PlacementOp{{Kind: OpReleaseLease, Resource: "shard-X", Holder: "cloud-1"}}}
+	if err := CheckInvariants(pre, rel); !errors.Is(err, ErrUnauthorizedRelease) {
+		t.Fatalf("releasing a live holder must be refused; want ErrUnauthorizedRelease, got %v", err)
+	}
+	pre.ProvenDead["cloud-1"] = true // out-of-band failure detector
+	if err := CheckInvariants(pre, rel); err != nil {
+		t.Fatalf("release of a proven-dead holder should be admitted, got %v", err)
 	}
 }
 
