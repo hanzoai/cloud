@@ -253,7 +253,9 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 // secret op is refused 503, never served insecurely.
 func TestRESTSecretOpsFailClosedWithoutKey(t *testing.T) {
 	app, _ := newApp(t, baseCfg(t, "")) // no key
-	body, _ := json.Marshal(map[string]string{"name": "X", "value": "y"})
+	// env is required on writes; supply it so the request reaches the
+	// master-key gate this test exercises (rather than 400-ing on input).
+	body, _ := json.Marshal(map[string]string{"name": "X", "value": "y", "env": "main"})
 	resp := do(t, app, "POST", "/v1/kms/orgs/hanzo/secrets", "hanzo", string(body), false, nil)
 	if resp.StatusCode != 503 {
 		t.Fatalf("POST secret (no key) = %d, want 503 (fail-closed)", resp.StatusCode)
