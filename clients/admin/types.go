@@ -5,12 +5,18 @@ package admin
 // contract, so the operator's TypeScript types decode these one-to-one.
 
 // adminMe is the operator identity (AdminMe / GET /v1/admin/me).
+//
+// SuperAdmin naming: isSuperAdmin is the CANONICAL key; isGlobalAdmin is the
+// transitional back-compat alias populated with the SAME value so a console
+// reading either key sees the truth during the rename migration. Both derive
+// from ONE fact — owner == AdminOrg (IAM's IsSuperAdmin, ex-IsGlobalAdmin).
 type adminMe struct {
 	Owner         string `json:"owner"`
 	Name          string `json:"name"`
 	Email         string `json:"email"`
 	DisplayName   string `json:"displayName"`
-	IsGlobalAdmin bool   `json:"isGlobalAdmin"`
+	IsSuperAdmin  bool   `json:"isSuperAdmin"`
+	IsGlobalAdmin bool   `json:"isGlobalAdmin"` // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
 }
 
 // sourceStatus is the freshness of one upstream the aggregator pulls from
@@ -57,7 +63,8 @@ type operatorUser struct {
 	Email         string `json:"email"`
 	DisplayName   string `json:"displayName"`
 	IsAdmin       bool   `json:"isAdmin"`
-	IsGlobalAdmin bool   `json:"isGlobalAdmin"`
+	IsSuperAdmin  bool   `json:"isSuperAdmin"`
+	IsGlobalAdmin bool   `json:"isGlobalAdmin"` // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
 	Tag           string `json:"tag"`
 	Created       string `json:"created"`
 	LastSignin    string `json:"lastSignin"`

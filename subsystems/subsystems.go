@@ -81,7 +81,8 @@ import (
 	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
-	_ "github.com/hanzoai/cloud/clients/settings"  // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
+	_ "github.com/hanzoai/cloud/clients/entitlements" // order 139 — /v1/orgs/:org/entitlements (per-org product enablement; commerce-gated adds; console paid-product sidebar)
+	_ "github.com/hanzoai/cloud/clients/settings"     // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 	_ "github.com/hanzoai/cloud/clients/world"     // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
 
