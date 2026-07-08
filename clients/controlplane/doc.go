@@ -29,22 +29,32 @@
 //
 //  1. Every finalized block carries a fully-aggregated triple-PQ QuasarCert.
 //     A block with anything less never applies.
-//  2. Each voter INDEPENDENTLY re-aggregates the collected legs, re-composes
-//     the cert, and runs QuasarCert.Verify before applying. No voter — not even
-//     the proposer — is trusted for the cert; every voter recomputes it.
+//  2. Each voter INDEPENDENTLY re-aggregates the collected legs and re-composes
+//     the cert; no voter — not even the proposer — is trusted for the cert. It
+//     then runs a STRUCTURAL well-formedness check on the cert it composed ITSELF
+//     (verifyOwnCertStructure — QuasarCert.Verify checks the triple is present
+//     and the signer count is consistent, NOT signatures). An externally received
+//     cert must instead go through the cryptographic quasar verify
+//     (VerifyUnderPolicy) — increment-2.
 //  3. One pod = one voter = one share. Share custody is 1:1 and structurally
 //     enforced (custody.go); a second share for the same node is refused.
 //  4. Honest voters refuse to sign (Round1) a block whose placement ops violate
 //     control-plane invariants (policy.go) — the policy gate runs BEFORE the
 //     crypto, so an invariant-violating block cannot even collect commitments.
+//     Displacement of a LIVE shard writer is fail-closed: only out-of-band
+//     proven-death authorizes it; a proposer-written release is not consent, and
+//     membership removal never manufactures proven-dead.
 //  5. Commit-reveal (Round1 commitment) + an ALL-Round1 barrier deny a rushing
-//     voter any adaptive advantage: no Round2 share is released until every
-//     Round1 commitment is locked, and each revealed share must open its own
-//     commitment.
+//     voter any adaptive advantage: no Round2 share is released until a quorum of
+//     Round1 commitments is locked, and each revealed share must open its own
+//     commitment. Round1 commitments are proof-of-possession authenticated (as
+//     Round2 legs are), so one node cannot forge a quorum of spoofed commitments
+//     to cross the barrier early.
 //  6. Aggregation dedupes by signer index and rejects rogue/unregistered legs
 //     (proof-of-possession) before counting quorum, and the BFT quorum
 //     (>2N/3) makes two conflicting digests at one height mathematically
-//     unable to both finalize.
+//     unable to both finalize. checkQuorumSafety asserts the 2q>N+f intersection
+//     bound at construction so this can never silently regress.
 //
 // # Why not the base quasar engine on the write path
 //
@@ -84,4 +94,44 @@
 //	              drop-in: ZAP messaging.
 //	ControlDB     seam in placement.go. Stub: in-memory map. Real drop-in:
 //	              the control.db persistence backend.
+//
+// # Adversarial review (red → blue) — what holds, what is deferred
+//
+// A red-team pass drove all eight priority vectors (red_exploits_test.go). The
+// NO-FORK CORE HELD under a hostile async transport: two honest voters may
+// compose byte-different certs at one height, but they apply the IDENTICAL block
+// (the RSM consumes the block, not the cert), and 2·quorum > N+f forces any two
+// quorums to intersect in a correct voter — so state cannot fork. Four class-A
+// breaks (pure orchestration/policy, independent of the crypto) were found and
+// CLOSED: the forged-release / ungated-membership DOUBLE-WRITE (now fail-closed
+// displacement), the forgeable anti-rush barrier (now Round1 proof-of-possession),
+// and the apply-boundary fork gate (now ParentRoot-checked); the self-composed
+// cert check is documented structural-only.
+//
+// CLASS-B CAVEAT (must internalize): in the stub every signing secret is derived
+// from a PUBLIC cluster seed, so an attacker can reconstruct any voter's leg. The
+// byzantine-safety tests are therefore only MEANINGFUL once real crypto lands —
+// the two skipped TestRed_B_* cases document this and MUST go green then (and
+// TestSafety_RogueAndForgedLegs_Rejected must then forge a correctly-derived leg,
+// not a bit-flipped one).
+//
+// # Increment-2 security work (before this guards a real KMS shard lease)
+//
+//   - Real distributed DKG across pods (not in-process, not seed-derived shares)
+//   - asymmetric ML-DSA identity keys, so leg/commit proof-of-possession is
+//     unforgeable and the byzantine-safety suite regains meaning.
+//   - Authenticated graceful handoff (holder self-resignation) and a KMS
+//     write-fence: reassigning a LIVE writer requires proof its prior lease epoch
+//     was revoked at the data plane FIRST (fence-before-reassign), tied to the
+//     strict-`<` epoch-CAS the data plane needs anyway.
+//   - RSM-level authorization re-verification (thread the registry into Apply so
+//     a future recovery path re-checks displacement authorization, not just
+//     ordering + invariants).
+//   - External-cert cryptographic verification (VerifyUnderPolicy /
+//     VerifyWithRealKeys) before any recovery/light-client path accepts a peer's
+//     cert — never the structural check.
+//   - A CI guard failing any release built `-tags controlplane`, plus a runtime
+//     assertion that ProductionBCCSigningReady() is true if this path is ever
+//     compiled into a serving binary. (Containment is total today: the package
+//     does not exist in the default build.)
 package controlplane

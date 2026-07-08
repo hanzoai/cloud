@@ -7,6 +7,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/luxfi/consensus/config"
@@ -240,3 +241,32 @@ func bftQuorum(n int) int { return 2*n/3 + 1 }
 // bftFaultTolerance is floor((N-1)/3): the max byzantine/crash faults a set of
 // N voters tolerates while preserving safety and liveness.
 func bftFaultTolerance(n int) int { return (n - 1) / 3 }
+
+// ErrUnsafeQuorum indicates a (N, quorum, f) triple that does not satisfy the
+// byzantine safety+liveness bounds; construction fails closed rather than run a
+// cluster that could fork or deadlock.
+var ErrUnsafeQuorum = errors.New("controlplane: unsafe quorum parameters")
+
+// checkQuorumSafety verifies the byzantine bounds for (n, quorum, f):
+//
+//	N ≥ 3f+1        — safety+liveness under f byzantine faults
+//	quorum ≥ 2f+1   — every quorum contains a correct majority
+//	2·quorum > N+f  — any two quorums intersect in ≥ f+1 nodes, so ≥1 correct
+//	                  node is common: two conflicting digests cannot both finalize
+//
+// The 2q>N+f intersection margin at N=7 is exactly 1 (10 > 9), and that margin
+// is the whole basis of the no-fork property (red_exploits #1). This guard makes
+// any future change to the quorum rule or f fail closed instead of silently
+// unsafe.
+func checkQuorumSafety(n, quorum, f int) error {
+	if f < 0 || n < 3*f+1 {
+		return fmt.Errorf("%w: N=%d < 3f+1 for f=%d", ErrUnsafeQuorum, n, f)
+	}
+	if quorum < 2*f+1 {
+		return fmt.Errorf("%w: quorum=%d < 2f+1 for f=%d", ErrUnsafeQuorum, quorum, f)
+	}
+	if 2*quorum <= n+f {
+		return fmt.Errorf("%w: 2*quorum=%d <= N+f=%d (quorums need not intersect in a correct node)", ErrUnsafeQuorum, 2*quorum, n+f)
+	}
+	return nil
+}
