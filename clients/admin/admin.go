@@ -179,7 +179,8 @@ func (s *svc) me(c *zip.Ctx) error {
 		Name:          name,
 		Email:         strings.TrimSpace(c.UserEmail()),
 		DisplayName:   name,
-		IsGlobalAdmin: true,
+		IsSuperAdmin:  true,
+		IsGlobalAdmin: true, // back-compat alias; same value as isSuperAdmin
 	})
 }
 
@@ -249,7 +250,8 @@ func (s *svc) users(c *zip.Ctx) error {
 			Email:         u.Email,
 			DisplayName:   u.DisplayName,
 			IsAdmin:       u.IsAdmin,
-			IsGlobalAdmin: u.Owner == s.adminOrg,
+			IsSuperAdmin:  u.Owner == s.adminOrg,
+			IsGlobalAdmin: u.Owner == s.adminOrg, // back-compat alias; same fact
 			Tag:           u.Tag,
 			Created:       u.CreatedTime,
 			LastSignin:    u.LastSigninTime,
