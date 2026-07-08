@@ -76,32 +76,43 @@ RUN mkdir -p /out; \
       fi; \
     fi
 
-# ── Go build stage ───────────────────────────────────────────────────────────
-# ECR Public mirror of the Docker library image — Docker Hub's unauthenticated
-# pull rate-limit (429 toomanyrequests) fails the build on shared CI runners.
-FROM public.ecr.aws/docker/library/golang:1.26-alpine AS build
-RUN apk add --no-cache ca-certificates tzdata git
+# ── Go build stage (CGO=1 + SQLCipher — REAL at-rest encryption) ─────────────
+# The unified binary embeds IAM (clients/iam) whose per-org store is SQLCipher-
+# encrypted (orgIsolation=sqlite), and commerce's per-tenant money DBs likewise.
+# A CGO=0 modernc build SILENTLY SHIPS PLAINTEXT. So this builds CGO=1 against
+# system libsqlcipher — hanzoai/iam's proven recipe: the `libsqlite3` tag + a
+# libsqlcipher symlink + -DSQLITE_HAS_CODEC, with the modernc double-registration
+# guard, TestEncryptionProof, and the cek.go golden-vector KAT baked in — so a
+# build that fails to link REAL SQLCipher, or that would decrypt existing stores
+# differently, produces NO image. alpine3.22 MATCHES the runtime base so the
+# libsqlcipher soname the binary links is the SAME one present at runtime. ECR
+# Public mirror avoids Docker Hub's 429 rate-limit on shared CI runners.
+FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22 AS build
+RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev pkgconfig binutils
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
+# mattn/go-sqlite3's `libsqlite3` tag hard-codes `-lsqlite3`, but alpine's
+# sqlcipher-dev ships ONLY libsqlcipher (no libsqlite3.so). Symlink so the link
+# resolves -lsqlite3 to libsqlcipher — REAL encryption. Do NOT `apk add sqlite-dev`
+# (a plaintext libsqlite3 would silently disable the codec; the gate below catches it).
+RUN set -eux; \
+    SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)"; \
+    test -n "$SC"; \
+    ln -sf "$SC" /usr/lib/libsqlite3.so; \
+    ln -sf "$SC" /usr/lib/libsqlite3.so.0
 WORKDIR /src
 # hanzoai/* and luxfi/* are PUBLIC and resolve via the IMMUTABLE public proxy +
 # sumdb — go.sum pins those canonical hashes, so a force-re-pointed tag can never
-# break the build. Routing them DIRECT (the old GOPRIVATE approach) re-fetches a
-# re-tagged tree (e.g. luxfi/age@v1.5.0) whose hash differs from go.sum's proxy
-# hash → "checksum mismatch / SECURITY ERROR". This matches the drop-GOPRIVATE
-# fix already shipped in hanzoai/iam + luxfi/kms. Only zap-proto/* stays first-
-# party-direct (kept in GOPRIVATE) — authenticated git via gh_token. GOPROXY
-# still routes nested-path monorepo tags (e.g. tencentcloud-sdk-go) through the
-# proxy. The committed go.sum is the single source of truth.
-ENV GOPRIVATE=github.com/zap-proto/* \
+# break the build. Only zap-proto/* stays first-party-direct (GOPRIVATE) —
+# authenticated git via gh_token. The committed go.sum is the single source of
+# truth. CGO_CFLAGS/LDFLAGS enable the SQLCipher codec + URI keying.
+ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" \
+    CGO_LDFLAGS="-lsqlcipher" \
+    GOPRIVATE=github.com/zap-proto/* \
     GONOSUMDB=github.com/zap-proto/* \
     GOSUMDB=off \
     GOPROXY=https://proxy.golang.org,direct \
     GOFLAGS=-mod=mod
 COPY go.mod go.sum ./
-# With go.sum recorded against live tag content and our orgs routed direct, this
-# verifies cleanly — no runtime go.sum regeneration. (The old `rm -f go.sum`
-# self-heal masked a stale go.sum and silently re-recorded unverified hashes on
-# ANY transient error; removed in favor of a correct, committed go.sum.)
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
@@ -109,15 +120,39 @@ RUN --mount=type=secret,id=gh_token \
     go mod download
 COPY . .
 # Drop the console static bundle into the embed path BEFORE `go build`, so
-# //go:embed all:webui/dist bakes it into the binary. /out from the console stage
-# is either the real static build (then it overlays the committed fallback shell)
-# or empty (then webui/dist keeps the shell that `COPY . .` already brought). The
-# committed assets/.gitkeep keeps the embed's assets/ dir present either way.
+# //go:embed all:webui/dist bakes it into the binary (same-origin console).
 COPY --from=console /out/ /src/webui/dist/
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /cloud ./cmd/cloud
+# RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
+# "sqlite" driver is registered twice (mattn + modernc) → panic at init.
+RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
+# RED gate — ENCRYPTION PROOF + the cek.go GOLDEN-VECTOR KAT, under the SAME CGO +
+# libsqlcipher build this image ships. TestEncryptionProof asserts real
+# ciphertext-at-rest (SQLITE_REQUIRE_CODEC=1 makes a plaintext link FAIL → NO
+# image). TestUnwrapGoldenFixture asserts a FROZEN pre-luxfi-swap 61-byte DEK
+# sidecar still decrypts under the shipped luxfi/crypto-AEAD code — existing
+# encrypted stores stay readable, or NO image.
+RUN SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" \
+      -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
+      github.com/hanzoai/sqlite
+RUN CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+# Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
+RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
+    ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
 
-# ── final image ──────────────────────────────────────────────────────────────
-FROM scratch
+# ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
+FROM public.ecr.aws/docker/library/alpine:3.22
+ARG REVISION=unknown
+LABEL org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="https://github.com/hanzoai/cloud"
+# Runtime needs libsqlcipher (the codec the binary links). It must NOT also carry
+# a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
+# plaintext sqlite and silently no-op PRAGMA key. sqlcipher-libs ships
+# libsqlcipher.so.0; alias libsqlite3.so.0 to it so sqlite3_* binds there.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs \
+    && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
+    && test -n "$SC" \
+    && ln -sf "$SC" /usr/lib/libsqlite3.so.0
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
