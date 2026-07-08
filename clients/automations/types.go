@@ -168,49 +168,53 @@ type FlowRun struct {
 	Updated       int64         `json:"updated"`
 }
 
-// ── Piece catalog (pieces/framework piece-metadata.ts, catalog wire schema) ──
+// ── Connector catalog (catalog wire schema) ──────────────────
+//
+// "Connector" is the ONE Hanzo term for an external-service integration a flow
+// step invokes (Slack/GitHub/Stripe/…). The pre-rename name "piece" (ActivePieces
+// jargon) is retired on this surface; the /v1/automations/pieces path survives only
+// as a back-compat alias (see automations.go). See HIP-0126.
 
-// Catalog is the browse catalogue served at GET /v1/automations/pieces. It is the
-// go:embed'd catalog/catalog.json, seeded here with the Tier-A pieces and later
-// overwritten by a separate agent with the full 701-piece set at this EXACT schema.
+// Catalog is the browse catalogue served at GET /v1/automations/connectors. It is
+// the go:embed'd catalog/catalog.json, seeded with the Tier-A connectors and later
+// overwritten with the full 700+ connector set at this EXACT schema.
 type Catalog struct {
-	PieceCount int             `json:"pieceCount"`
-	Pieces     []PieceMetadata `json:"pieces"`
+	ConnectorCount int                 `json:"connectorCount"`
+	Connectors     []ConnectorMetadata `json:"connectors"`
 }
 
-// PieceMetadata is one catalogue entry. NOTE: the framework's PieceMetadata models
-// actions/triggers as maps; the catalog WIRE schema (the one this must unmarshal,
-// including the 701-piece overwrite) uses arrays — so this Go shape uses arrays to
-// match the wire exactly, as the contract requires.
-type PieceMetadata struct {
-	Name        string         `json:"name"`
-	DisplayName string         `json:"displayName"`
-	Description string         `json:"description"`
-	LogoURL     string         `json:"logoUrl"`
-	Version     string         `json:"version"`
-	Categories  []string       `json:"categories"`
-	Auth        PieceAuth      `json:"auth"`
-	Actions     []PieceAction  `json:"actions"`
-	Triggers    []PieceTrigger `json:"triggers"`
+// ConnectorMetadata is one catalogue entry. The catalog WIRE schema models a
+// connector's actions/triggers as arrays, so this Go shape uses arrays to match the
+// wire exactly, as the contract requires.
+type ConnectorMetadata struct {
+	Name        string             `json:"name"`
+	DisplayName string             `json:"displayName"`
+	Description string             `json:"description"`
+	LogoURL     string             `json:"logoUrl"`
+	Version     string             `json:"version"`
+	Categories  []string           `json:"categories"`
+	Auth        ConnectorAuth      `json:"auth"`
+	Actions     []ConnectorAction  `json:"actions"`
+	Triggers    []ConnectorTrigger `json:"triggers"`
 }
 
-// PieceAuth is the catalogue's auth descriptor: which credential a piece needs
-// ("none" for core, "oauth2"/"bot_token" for a connected provider) and whether it
-// is required.
-type PieceAuth struct {
+// ConnectorAuth is the catalogue's auth descriptor: which credential a connector
+// needs ("none" for core, "oauth2"/"bot_token" for a connected provider) and
+// whether it is required.
+type ConnectorAuth struct {
 	Type     string `json:"type"`
 	Required bool   `json:"required"`
 }
 
-// PieceAction / PieceTrigger are the catalogue's action/trigger descriptors.
-type PieceAction struct {
+// ConnectorAction / ConnectorTrigger are the catalogue's action/trigger descriptors.
+type ConnectorAction struct {
 	Name        string     `json:"name"`
 	DisplayName string     `json:"displayName"`
 	Description string     `json:"description"`
 	Props       []PropSpec `json:"props"`
 }
 
-type PieceTrigger struct {
+type ConnectorTrigger struct {
 	Name        string     `json:"name"`
 	DisplayName string     `json:"displayName"`
 	Description string     `json:"description"`
