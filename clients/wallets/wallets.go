@@ -39,9 +39,11 @@ import (
 
 // Config env keys — the config seam.
 const (
-	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"        // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury fail closed
+	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"        // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury/safe fail closed
 	envMPCKeyRef      = "CLOUD_WALLETS_MPC_API_KEY_REF" // KMS ref of the ring's MPC_INTERNAL_API_KEY bearer token; NEVER a plaintext value
 	envDefaultCustody = "CLOUD_WALLETS_DEFAULT_CUSTODY" // default wallet custody; default "kms"
+	envSafeAPIAddr    = "CLOUD_WALLETS_MPC_API_ADDR"        // ring PRODUCT API base (:8081) for Safe smart wallets; unset ⇒ safe custody fail closed
+	envSafeJWTRef     = "CLOUD_WALLETS_MPC_JWT_SECRET_REF"  // KMS ref of the ring's MPC_JWT_SECRET (HS256); NEVER a plaintext value
 )
 
 type svc struct {
@@ -101,6 +103,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/wallets/:id", s.getWallet)
 	app.Post("/v1/wallets/:id/keys", s.rotateKeys)
 	app.Post("/v1/wallets/:id/sign", s.sign)
+	app.Post("/v1/wallets/:id/safe-tx", s.proposeSafeTx)
 
 	_, mpcOK := custody[KindMPC]
 	log.Info("wallets mounted", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
@@ -131,6 +134,18 @@ func buildCustody(deps cloud.Deps, log luxlog.Logger) map[Kind]Custody {
 	m[KindMPC] = mpcCustody{http: client}
 	m[KindTreasury] = treasuryCustody{http: client}
 	log.Info("wallets: mpc custody configured", "nodes", len(nodes))
+
+	// Safe smart-wallet custody additionally needs the ring PRODUCT API (:8081)
+	// AND the HS256 MPC_JWT_SECRET (resolved from KMS). Absent either, KindSafe is
+	// not offered (custodyFor fails it closed) while mpc/treasury stay available.
+	if safeBase := strings.TrimSpace(os.Getenv(envSafeAPIAddr)); safeBase != "" {
+		if secret := loadSafeJWTSecret(deps, log); len(secret) > 0 {
+			m[KindSafe] = safeCustody{mpc: client, safe: newSafeClient(safeBase, secret)}
+			log.Info("wallets: safe custody configured", "api", safeBase)
+		} else {
+			log.Warn("wallets: " + envSafeAPIAddr + " set but MPC JWT secret unresolved; safe custody fail closed")
+		}
+	}
 	return m
 }
 
@@ -150,6 +165,22 @@ func loadMPCKey(deps cloud.Deps, log luxlog.Logger) []byte {
 	return key
 }
 
+// loadSafeJWTSecret fetches the ring's MPC_JWT_SECRET (HS256) from KMS by the ref
+// in CLOUD_WALLETS_MPC_JWT_SECRET_REF. NEVER a plaintext env value. Empty ref or a
+// KMS error ⇒ nil ⇒ safe custody fail closed.
+func loadSafeJWTSecret(deps cloud.Deps, log luxlog.Logger) []byte {
+	ref := strings.TrimSpace(os.Getenv(envSafeJWTRef))
+	if ref == "" || deps.KMS == nil {
+		return nil
+	}
+	secret, err := deps.KMS.GetSecret(context.Background(), ref)
+	if err != nil {
+		log.Warn("wallets: mpc JWT secret ref did not resolve from KMS", "ref", ref, "err", err)
+		return nil
+	}
+	return secret
+}
+
 // custodyFor resolves the backend for a kind. Missing mpc/treasury ⇒ fail closed
 // (ErrMPCNotConfigured, 503-mappable); an unrecognized kind ⇒ ErrUnknownCustody
 // (400-mappable). This is the config-selects-backend resolver.
@@ -158,7 +189,7 @@ func (s *svc) custodyFor(kind Kind) (Custody, error) {
 		return c, nil
 	}
 	switch kind {
-	case KindMPC, KindTreasury:
+	case KindMPC, KindTreasury, KindSafe:
 		return nil, ErrMPCNotConfigured
 	case KindKMS:
 		return nil, fmt.Errorf("wallets: kms custody unavailable")
@@ -375,6 +406,59 @@ func (s *svc) sign(c *zip.Ctx) error {
 		"address":   w.Address,
 		"digest":    "0x" + hex.EncodeToString(digest),
 		"signature": "0x" + hex.EncodeToString(sig),
+	})
+}
+
+// proposeSafeTx composes the ring's Safe transaction propose + MPC-sign for a
+// KindSafe wallet (POST /v1/wallets/:id/safe-tx). The custody backend must
+// implement safeProposer (only safeCustody does); any other custody ⇒ 400. The
+// ring computes the EIP-712 Safe-tx hash (bound to the Safe contract + chainId)
+// and returns it with the threshold (r,s) its MPC produced — the owner approval.
+func (s *svc) proposeSafeTx(c *zip.Ctx) error {
+	org, ok := principal.Tenant(c)
+	if !ok {
+		return zip.ErrForbidden("sign in")
+	}
+	w, found, err := s.store.getWallet(c.Context(), org, idParam(c))
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
+	}
+	if !found {
+		return zip.ErrNotFound("wallet not found")
+	}
+	cust, err := s.custodyFor(w.Custody)
+	if err != nil {
+		return custodyHTTPError(err)
+	}
+	proposer, ok := cust.(safeProposer)
+	if !ok {
+		return zip.ErrBadRequest("wallet custody " + string(w.Custody) + " does not support safe transactions")
+	}
+	var body struct {
+		To      string `json:"to"`
+		Value   string `json:"value"`
+		Data    string `json:"data"`
+		ChainID int64  `json:"chainId"`
+		Nonce   int    `json:"nonce"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	res, err := proposer.ProposeTx(c.Context(), w, SafeTx{
+		To: strings.TrimSpace(body.To), Value: strings.TrimSpace(body.Value),
+		Data: strings.TrimSpace(body.Data), ChainID: body.ChainID, Nonce: body.Nonce,
+	})
+	if err != nil {
+		return custodyHTTPError(err)
+	}
+	s.emitAudit(c.Context(), org, c.User(), "wallets.wallet.safe_tx", w.ID,
+		map[string]any{"to": body.To, "chainId": body.ChainID, "safeTxHash": res.SafeTxHash})
+	return c.JSON(http.StatusOK, map[string]any{
+		"walletId":    w.ID,
+		"safeAddress": w.Address,
+		"safeTxHash":  res.SafeTxHash,
+		"r":           res.R,
+		"s":           res.S,
 	})
 }
 

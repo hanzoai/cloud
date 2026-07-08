@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -41,10 +42,18 @@ const (
 	KindKMS      Kind = "kms"      // in-process single-sig via the embedded luxfi/kms
 	KindMPC      Kind = "mpc"      // m-of-n threshold via the deployed luxfi/mpc cluster (HTTP)
 	KindTreasury Kind = "treasury" // named-signer governance via luxfi/mpc's treasury surface (HTTP)
+	KindSafe     Kind = "safe"     // Safe (Gnosis-Safe-style) smart wallet on the ring, owned by an MPC EOA (HTTP: :9800 keygen + :8081 deploy/propose)
 )
 
+// defaultSafeChainID is the EVM chain a Safe binds to when its wallet is
+// chain-agnostic. A Safe (and its EIP-712 domain) MUST be chain-bound, so this
+// defaults to the Hanzo L1 (36963); a wallet's Chain overrides it per-wallet.
+const defaultSafeChainID = 36963
+
 // Valid reports whether k is one of the three supported custody kinds.
-func (k Kind) Valid() bool { return k == KindKMS || k == KindMPC || k == KindTreasury }
+func (k Kind) Valid() bool {
+	return k == KindKMS || k == KindMPC || k == KindTreasury || k == KindSafe
+}
 
 // Tier mirrors luxfi/mpc's 9-tier wallet model (pkg/wallet/tier.go) as string
 // constants so cloud never imports the mpc package. The values are the wire
@@ -287,4 +296,110 @@ func evmChainID(chain string) int {
 		return 0
 	}
 	return n
+}
+
+// ── Safe smart-wallet custody (deployed luxfi/mpc ring: :9800 + :8081) ────────
+
+// safeCustody is a Safe (Gnosis-Safe-style) smart wallet owned by a threshold MPC
+// EOA on the deployed ring. It composes the TWO ring planes without importing
+// github.com/luxfi/mpc: the :9800 internal threshold API (mpcClient — keygen for
+// the owner EOA + owner-approval signing) and the :8081 product API (safeClient —
+// CREATE2 Safe deploy + EIP-712 Safe-tx propose). A Safe is a CONTRACT (no key of
+// its own): its "signature" is the MPC EOA owner's approval. Same fail-closed rule
+// as KindMPC — a Safe/address/signature is never fabricated.
+type safeCustody struct {
+	mpc  *mpcClient
+	safe *safeClient
+}
+
+func (safeCustody) Kind() Kind { return KindSafe }
+
+// Provision mints the owner EOA (threshold keygen on :9800), then deploys a
+// counterfactual Safe owned by that EOA (threshold 1) on the wallet's EVM chain
+// (:8081). w.Address becomes the CREATE2-predicted Safe contract address; w.KeyRef
+// encodes BOTH ring handles ("<mpcWalletID>|<smartWalletID>").
+func (s safeCustody) Provision(ctx context.Context, w *Wallet) (string, error) {
+	if !s.mpc.configured() || !s.safe.configured() {
+		return "", ErrMPCNotConfigured
+	}
+	walletID, mpcEOA, err := s.mpc.keygen(ctx, w.Org, "")
+	if err != nil {
+		return "", err
+	}
+	sw, err := s.safe.deploySafe(ctx, w.Org, walletID, safeChain(w.Chain), []string{mpcEOA}, 1)
+	if err != nil {
+		return "", err
+	}
+	w.KeyRef = walletID + "|" + sw.ID
+	return sw.ContractAddress, nil
+}
+
+// Sign produces an OWNER-approval signature: the Safe's MPC EOA owner signs the
+// 32-byte digest via the :9800 threshold API. The signature recovers to the owner
+// EOA (a Safe has no key), keeping /v1/wallets/:id/sign uniform across custodies.
+// The richer EIP-712 Safe-transaction flow is ProposeTx (safeProposer).
+func (s safeCustody) Sign(ctx context.Context, w *Wallet, digest []byte) ([]byte, error) {
+	if !s.mpc.configured() {
+		return nil, ErrMPCNotConfigured
+	}
+	if len(digest) != 32 {
+		return nil, fmt.Errorf("wallets: digest must be 32 bytes, got %d", len(digest))
+	}
+	walletID, _ := splitSafeRef(w.KeyRef)
+	return s.mpc.sign(ctx, w.Org, walletID, evmChainID(w.Chain), digest)
+}
+
+// Rotate is a no-op: the Safe address is counterfactual (CREATE2 over the fixed
+// owner set) and the owner's threshold shares are ring-managed, so both are
+// invariant. Returns w.Address unchanged.
+func (s safeCustody) Rotate(ctx context.Context, w *Wallet) (string, error) {
+	if !s.mpc.configured() || !s.safe.configured() {
+		return "", ErrMPCNotConfigured
+	}
+	return w.Address, nil
+}
+
+// ProposeTx proposes (and MPC-signs the EIP-712 hash of) a Safe transaction on the
+// ring, satisfying the safeProposer capability. swID is the second KeyRef handle.
+func (s safeCustody) ProposeTx(ctx context.Context, w *Wallet, tx SafeTx) (*SafeTxResult, error) {
+	if !s.safe.configured() {
+		return nil, ErrMPCNotConfigured
+	}
+	_, swID := splitSafeRef(w.KeyRef)
+	if swID == "" {
+		return nil, fmt.Errorf("wallets: wallet %s has no safe smart-wallet id", w.ID)
+	}
+	if tx.ChainID == 0 {
+		tx.ChainID = int64(evmChainID(safeChain(w.Chain)))
+	}
+	return s.safe.proposeSafeTx(ctx, w.Org, swID, tx)
+}
+
+// safeProposer is the OPTIONAL capability a custody backend exposes when it can
+// propose (and MPC-sign) a Safe transaction. Only safeCustody implements it; the
+// /v1/wallets/:id/safe-tx handler type-asserts for it and 400s otherwise. This is
+// the "values, not places" seam: the HTTP layer asks the backend whether it can
+// propose, it does not switch on the Kind.
+type safeProposer interface {
+	ProposeTx(ctx context.Context, w *Wallet, tx SafeTx) (*SafeTxResult, error)
+}
+
+// splitSafeRef splits a KindSafe KeyRef "<mpcWalletID>|<smartWalletID>" into its
+// two ring handles. A ref without the separator is treated as the MPC wallet id
+// with no Safe id (Sign still works; ProposeTx fails closed).
+func splitSafeRef(ref string) (mpcWalletID, smartWalletID string) {
+	if i := strings.IndexByte(ref, '|'); i >= 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return ref, ""
+}
+
+// safeChain resolves the numeric EVM chain-id STRING the ring binds a Safe to
+// (deploy label + EIP-712 domain). A chain-agnostic wallet defaults to the Hanzo
+// L1 (36963); a wallet's Chain ("eip155:<n>" or bare decimal) overrides it.
+func safeChain(chain string) string {
+	if n := evmChainID(chain); n > 0 {
+		return strconv.Itoa(n)
+	}
+	return strconv.Itoa(defaultSafeChainID)
 }
