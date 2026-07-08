@@ -84,13 +84,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // List returns the validated starter-kit catalog (the SAME slice the HTTP GET
-// serves). Exported so other subsystems — e.g. projectsvc's fork flow — read the
+// serves). Exported so other subsystems — e.g. projects's fork flow — read the
 // ONE embedded catalog instead of vendoring a second copy. Read-only reference
 // content; callers must not mutate the returned slice.
 func List() ([]Template, error) { return catalog() }
 
 // Get returns the template with the given slug, or (Template{}, false) if none.
-// This is the single accessor projectsvc uses to seed a Project from a template,
+// This is the single accessor projects uses to seed a Project from a template,
 // so the template→project mapping reads the catalog through one door.
 func Get(slug string) (Template, bool) {
 	cat, err := catalog()
@@ -125,11 +125,5 @@ func (s *svc) get(c *zip.Ctx) error {
 }
 
 func init() {
-	cloud.Register("templates", 129, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("templates.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("templates", 129, cloud.Typed(Mount))
 }

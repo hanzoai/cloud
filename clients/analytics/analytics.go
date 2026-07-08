@@ -43,12 +43,11 @@
 //	GET /v1/analytics/top          top models (real) + top products (honest-empty)
 //	GET /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
-// Registered as "analyticssvc" (NOT "analytics") + order 132: the name diverges
-// from the /v1/analytics route prefix so serve.go's generic GET /v1/<name>/health
-// liveness route parks at /v1/analyticssvc/health and our REAL /v1/analytics/health
-// (below) owns the probe — the same health-shadow-avoidance the kmssvc/s3svc
-// subsystems use. Order 132 binds /v1/analytics/* before the ai subsystem's /v1/*
-// catch-all (150).
+// Registered as id "analytics" with cloud.HealthOwner + order 132: it serves its
+// OWN /v1/analytics/health (below), and cloud.HealthOwner makes serve.go skip the
+// generic GET /v1/<name>/health so the always-ok route never shadows the real
+// probe — the same flag the kms/paas/s3 subsystems use. Order 132 binds
+// /v1/analytics/* before the ai subsystem's /v1/* catch-all (150).
 package analytics
 
 import (
@@ -104,13 +103,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("analyticssvc", 132, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("analytics.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("analytics", 132, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────

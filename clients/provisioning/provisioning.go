@@ -250,13 +250,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("provisioning", 120, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("provisioning.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("provisioning", 120, cloud.Typed(Mount))
 }
 
 // create provisions a new resource of kind for the caller's org. Two strategies

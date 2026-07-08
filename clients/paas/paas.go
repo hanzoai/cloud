@@ -30,7 +30,7 @@
 // construction clients/ml uses. When no kubeconfig is resolvable the subsystem
 // mounts anyway and every endpoint fails closed (503 + the real init error; the
 // health route reports "degraded"), never status-theater.
-package paassvc
+package paas
 
 import (
 	"context"
@@ -89,7 +89,7 @@ var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // to a floating tag is possible, but the drift board then flags it loudly).
 var imageRepoRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*[a-z0-9]$`)
 
-const userAgent = "hanzo-cloud-paassvc"
+const userAgent = "hanzo-cloud-paas"
 
 type svc struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
@@ -102,10 +102,10 @@ type svc struct {
 // CRs.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("paassvc.Mount: nil zip.App")
+		return fmt.Errorf("paas.Mount: nil zip.App")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("paassvc.Mount: nil deps.Logger")
+		return fmt.Errorf("paas.Mount: nil deps.Logger")
 	}
 	log := deps.Logger.New("subsystem", "paas")
 
@@ -127,22 +127,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// Registered under "paassvc" (not "paas") for the same reason clients/ml uses
-// "mlsvc": serve.go auto-mounts a generic GET /v1/<name>/health BEFORE MountAll
-// and zip is first-match-wins, so a name of "paas" would shadow the real-probe
-// /v1/paas/health. "paassvc" keeps the generic liveness at the unrouted
-// /v1/paassvc/health and lets the real probe own /v1/paas/health. Order 128 binds
-// the /v1/paas family before the projectsvc (125) neighbours and well before the
-// AI /v1/* catch-all (150); it has no ordering dependency (self-contained k8s
-// client).
+// Registered under the clean id "paas". It serves its OWN /v1/paas/health (a real
+// k8s-reachability probe) in Mount, so it registers with cloud.HealthOwner:
+// Serve's generic liveness loop skips a HealthOwner, so the always-ok route never
+// shadows the real probe. (This replaces the former "paas" id kludge, which
+// existed only to park the generic route at an unrouted path.) Order 128 binds the
+// /v1/paas family before the projects (125) neighbours and well before the AI
+// /v1/* catch-all (150); it has no ordering dependency (self-contained k8s client).
 func init() {
-	cloud.Register("paassvc", 128, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("paassvc.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("paas", 128, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // guard wraps a handler with the global-admin gate. Fail-closed: any request whose
