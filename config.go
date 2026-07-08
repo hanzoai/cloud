@@ -213,9 +213,11 @@ type Config struct {
 	// form consensus with). Env PEERS (comma-separated). Empty ⇒ unset.
 	Peers []string
 
-	// Role is this instance's control-plane role: "voter" (participates in
-	// consensus) or "data" (data-plane only). Env ROLE. Empty ⇒ unset.
-	Role string
+	// ControlPlaneRole is this instance's control-plane role: "voter"
+	// (participates in consensus) or "data" (data-plane only). Env ROLE.
+	// Empty ⇒ unset. Renamed from Role to resolve a collision with the HA
+	// writer/reader Role (role.Role) that landed concurrently on main.
+	ControlPlaneRole string
 
 	// ControlPlaneQuorum is the number of voter nodes required to form a
 	// control-plane quorum. Env CONTROL_PLANE_QUORUM. 0 ⇒ unset.
@@ -236,8 +238,8 @@ func LoadConfig() *Config {
 		Env:              getenv("CLOUD_ENV", ""),
 		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
-		Replicas:         getenvInt("CLOUD_REPLICAS", 0),
-		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
+		Replicas: getenvInt("CLOUD_REPLICAS", 0),
+		Domain:   getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
 		AdminOrg:        getenv("IAM_ADMIN_ORG", "admin"),
@@ -274,7 +276,7 @@ func LoadConfig() *Config {
 		// Read but UNUSED: no subsystem consumes these until the engine is wired.
 		NodeID:             getenv("NODE_ID", ""),
 		Peers:              splitTrim(getenv("PEERS", "")),
-		Role:               getenv("ROLE", ""),
+		ControlPlaneRole:   getenv("ROLE", ""),
 		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
