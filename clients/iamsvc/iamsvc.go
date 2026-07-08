@@ -103,17 +103,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// cloud owns process shutdown, not Beego's graceful runner.
 	web.BConfig.Listen.Graceful = false
 
-	// Full IAM bootstrap via the EMBED-MODE entrypoint: the identical identity
-	// runtime to standalone iamd (config, SQLite, KMS signing keys, controllers,
-	// authz filters, background sync/monitor loops) MINUS the standalone-daemon
-	// side effects that would crash or endanger this shared process — no
-	// StopOldInstance (`lsof`/SIGKILL), no LDAP/RADIUS listeners (unmanaged UDP +
-	// empty shared secret), no export/os.Exit, no HTTP listener (cloud's zip.App
-	// serves the handler below). InitEmbed RETURNS an error (recovering bootstrap
-	// panics) instead of panicking, so a broken/misconfigured IAM degrades THIS
-	// subsystem to fail-closed health-only — every co-resident subsystem (KMS,
-	// o11y, …) stays up. That blast-radius isolation is the whole point of the
-	// consolidation, and mirrors the KMS "no master key → health-only" pattern.
+	// EMBED-MODE bootstrap (see package doc): the full IAM runtime minus the
+	// standalone-daemon side effects, returning an error instead of panicking. A
+	// broken IAM therefore degrades THIS subsystem to fail-closed health-only while
+	// every co-resident subsystem stays up — the fold's blast-radius isolation.
 	if err := iamserver.InitEmbed(); err != nil {
 		log.Error("iam bootstrap failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err)
 		mountFailClosed(app)
