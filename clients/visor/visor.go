@@ -134,13 +134,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("visor", 133, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("visor.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("visor", 133, cloud.Typed(Mount))
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the

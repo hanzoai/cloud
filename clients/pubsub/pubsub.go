@@ -94,13 +94,7 @@ func shutdown(_ context.Context) error {
 }
 
 func init() {
-	cloud.RegisterWithShutdown("pubsub", order, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("pubsub.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, shutdown)
+	cloud.RegisterWithShutdown("pubsub", order, cloud.Typed(Mount), shutdown)
 }
 
 func envBool(k string) bool {

@@ -39,11 +39,11 @@ import (
 
 // Config env keys — the config seam.
 const (
-	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"        // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury/safe fail closed
-	envMPCKeyRef      = "CLOUD_WALLETS_MPC_API_KEY_REF" // KMS ref of the ring's MPC_INTERNAL_API_KEY bearer token; NEVER a plaintext value
-	envDefaultCustody = "CLOUD_WALLETS_DEFAULT_CUSTODY" // default wallet custody; default "kms"
-	envSafeAPIAddr    = "CLOUD_WALLETS_MPC_API_ADDR"        // ring PRODUCT API base (:8081) for Safe smart wallets; unset ⇒ safe custody fail closed
-	envSafeJWTRef     = "CLOUD_WALLETS_MPC_JWT_SECRET_REF"  // KMS ref of the ring's MPC_JWT_SECRET (HS256); NEVER a plaintext value
+	envMPCAddr        = "CLOUD_WALLETS_MPC_ADDR"           // comma-sep ring node base URLs (:9800); unset ⇒ mpc/treasury/safe fail closed
+	envMPCKeyRef      = "CLOUD_WALLETS_MPC_API_KEY_REF"    // KMS ref of the ring's MPC_INTERNAL_API_KEY bearer token; NEVER a plaintext value
+	envDefaultCustody = "CLOUD_WALLETS_DEFAULT_CUSTODY"    // default wallet custody; default "kms"
+	envSafeAPIAddr    = "CLOUD_WALLETS_MPC_API_ADDR"       // ring PRODUCT API base (:8081) for Safe smart wallets; unset ⇒ safe custody fail closed
+	envSafeJWTRef     = "CLOUD_WALLETS_MPC_JWT_SECRET_REF" // KMS ref of the ring's MPC_JWT_SECRET (HS256); NEVER a plaintext value
 )
 
 type svc struct {
@@ -201,13 +201,7 @@ func (s *svc) custodyFor(kind Kind) (Custody, error) {
 // init registers the subsystem. Order 127 — alongside the product control planes,
 // before the AI /v1/* catch-all (150). Routes are specific so they bind ahead of it.
 func init() {
-	cloud.RegisterWithShutdown("wallets", 127, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("wallets.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(context.Context) error { return Shutdown() })
+	cloud.RegisterWithShutdown("wallets", 127, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
 }
 
 // ── account handlers ─────────────────────────────────────────────────────────

@@ -548,11 +548,5 @@ func init() {
 	// Order 146: after productsvc (145); the admin surface has no ordering
 	// dependency (it fans out over HTTP), placed adjacent to the other console
 	// read facades.
-	cloud.Register("admin", 146, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("admin.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("admin", 146, cloud.Typed(Mount))
 }

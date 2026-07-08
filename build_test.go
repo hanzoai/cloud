@@ -37,7 +37,7 @@ func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
 		Brand:   "hanzo",
 		Domain:  "api.hanzo.ai",
 		DataDir: t.TempDir(),
-		Enable:  []string{"kmssvc"},
+		Enable:  []string{"kms"},
 	}
 	deps := cloud.BuildDeps(cfg)
 

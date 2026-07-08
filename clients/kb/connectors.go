@@ -114,7 +114,7 @@ func (s *svc) callbackURL(provider string) string {
 // kmsRef is the deterministic KMS path holding an org's provider token. It embeds the
 // org so one org's token is never at another's path. The org is run through
 // provisioning.SanitizeOrg — the codebase's ONE org-slug normalizer (shared with
-// S3/KMS/projectsvc) — so the KMS path is INJECTIVE in the owner: distinct owners
+// S3/KMS/projects) — so the KMS path is INJECTIVE in the owner: distinct owners
 // that would fold onto one path ("a b" vs "a_b", or a '/'-bearing org that would
 // break the path structure) get a hash-suffixed slug and stay distinct (RED LOW-1).
 // The value is written/read through the KMS client and never appears in the document
