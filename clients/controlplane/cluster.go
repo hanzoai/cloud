@@ -73,6 +73,11 @@ func NewCluster(n int) *Cluster {
 // NewClusterWithConfig builds an N-voter cluster with an explicit round config.
 func NewClusterWithConfig(n int, cfg RoundConfig) *Cluster {
 	quorum := bftQuorum(n)
+	// Fail closed on unsafe sizing: the no-fork property rests on the quorum
+	// intersection bound, so a bad (N, quorum, f) must never construct a cluster.
+	if err := checkQuorumSafety(n, quorum, bftFaultTolerance(n)); err != nil {
+		panic(fmt.Sprintf("controlplane: cluster construction: %v", err))
+	}
 	seed := []byte(fmt.Sprintf("cp-cluster-seed-%d", n))
 	pool := newNoncePool(seed, 16)
 	reg := NewValidatorRegistry()
