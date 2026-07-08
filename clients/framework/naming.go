@@ -126,8 +126,8 @@ func isHashRun(s string) bool {
 	return true
 }
 
-// expandDateToken replaces a known date token with its value for now, else
-// returns the segment as a literal.
+// expandDateToken replaces a known date token with its value derived from now,
+// else returns the segment as a literal.
 func expandDateToken(seg string, now time.Time) string {
 	switch seg {
 	case "YYYY":
