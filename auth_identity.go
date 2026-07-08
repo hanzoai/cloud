@@ -46,7 +46,8 @@ type idClaims struct {
 }
 
 // userID resolves the canonical user id: sub, then preferred_username, then
-// name. IAM may leave sub empty.
+// name. IAM may leave sub empty. This is the STABLE identifier (a UUID when IAM
+// sets sub) stamped as X-User-Id and consumed as the attribution key everywhere.
 func (c *idClaims) userID() string {
 	if c.Subject != "" {
 		return c.Subject
@@ -55,6 +56,21 @@ func (c *idClaims) userID() string {
 		return c.PreferredUsername
 	}
 	return c.Name
+}
+
+// username resolves the IAM USERNAME — the `name` half of the `<owner>/<name>`
+// key IAM's privileged ops (mint-user-keys, get-user) parse. Prefers the `name`
+// claim (IAM's canonical username, e.g. "z"), then preferred_username. It NEVER
+// returns the subject: sub is a UUID, and `<owner>/<uuid>` fails IAM's
+// GetOwnerAndNameFromId user lookup ("password or code is incorrect"). This is
+// the distinct-from-userID() value stamped as X-User-Name so the direct-Bearer
+// path builds owner/name correctly — the gateway historically minted
+// X-User-Id==name, which userID() (sub-first) breaks on the in-binary path.
+func (c *idClaims) username() string {
+	if c.Name != "" {
+		return c.Name
+	}
+	return c.PreferredUsername
 }
 
 // jwtSigAlgs is the accepted signature-algorithm allowlist passed to

@@ -143,9 +143,24 @@ func init() {
 // requires it — a bare token count of 1 throws "wrong token count"); owner is the
 // org (X-Org-Id).
 type caller struct {
-	id    string // <owner>/<name> (or the bare user id when owner-less)
-	owner string // validated org (may be "" for a zero-org, first-run user)
-	name  string // username within the org
+	id       string // <owner>/<name> (or the bare user id when owner-less)
+	owner    string // validated org (may be "" for a zero-org, first-run user)
+	name     string // == X-User-Id: the stable user id (a UUID on the direct path)
+	username string // IAM username (X-User-Name); the `name` half IAM's user-key ops parse
+}
+
+// keyID is the `<owner>/<username>` composite IAM's user-key ops (mint/get/revoke
+// user AccessKey) parse via GetOwnerAndNameFromId. It uses the IAM USERNAME, not
+// name (== X-User-Id): on the in-binary direct-Bearer path X-User-Id is the UUID
+// subject and `<owner>/<uuid>` fails IAM's user lookup ("password or code is
+// incorrect"). On the gateway path username==name so keyID()==id — no change.
+// Owner-less (first-run) callers can't own a key, so this is only reached with a
+// validated owner; it falls back to id defensively.
+func (cr caller) keyID() string {
+	if cr.owner != "" && cr.username != "" {
+		return cr.owner + "/" + cr.username
+	}
+	return cr.id
 }
 
 // resolveCaller derives the caller from the validated identity, or (zero,false)
@@ -171,7 +186,19 @@ func resolveCaller(c *zip.Ctx, requireOwner bool) (caller, bool) {
 	if owner != "" {
 		id = owner + "/" + name
 	}
-	return caller{id: id, owner: owner, name: name}, true
+	// username is the IAM USERNAME, kept DISTINCT from name (== X-User-Id) so the
+	// billing/topup subjects (which key on name) are byte-identical to today — this
+	// value narrows the blast radius to the IAM user-key ops alone (keyID()). It
+	// prefers X-User-Name (stamped from the validated `name` claim by
+	// SanitizeIdentity), because on the in-binary direct-Bearer path X-User-Id is the
+	// UUID subject and <owner>/<uuid> fails IAM's mint-user-keys/get-user lookup.
+	// Falls back to name for the gateway path (which mints X-User-Id==username). Both
+	// inputs are gateway/SanitizeIdentity-minted from a verified principal.
+	username := strings.TrimSpace(c.Header("X-User-Name"))
+	if username == "" {
+		username = name
+	}
+	return caller{id: id, owner: owner, name: name, username: username}, true
 }
 
 // ── keys (the per-user `hk-` Cloud API key) ──────────────────────────────────
@@ -193,7 +220,7 @@ func (s *svc) getKey(c *zip.Ctx) error {
 	if !s.iam.configured() {
 		return notConfigured("API key management")
 	}
-	uk, err := s.iam.getUserKey(c.Context(), cr.id)
+	uk, err := s.iam.getUserKey(c.Context(), cr.keyID())
 	if err != nil {
 		// Fail-soft on a transient IAM read: report "no key" rather than 5xx, so the
 		// page shows the honest empty state (never a fabricated key). The mint path
@@ -221,7 +248,7 @@ func (s *svc) mintKey(c *zip.Ctx) error {
 	if !s.iam.configured() {
 		return notConfigured("API key management")
 	}
-	key, err := s.iam.mintUserKey(c.Context(), cr.id)
+	key, err := s.iam.mintUserKey(c.Context(), cr.keyID())
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "could not mint an API key: %v", err)
 	}
@@ -237,7 +264,7 @@ func (s *svc) revokeKey(c *zip.Ctx) error {
 	if !s.iam.configured() {
 		return notConfigured("API key management")
 	}
-	if err := s.iam.revokeUserKey(c.Context(), cr.id); err != nil {
+	if err := s.iam.revokeUserKey(c.Context(), cr.keyID()); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "could not revoke the API key: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]bool{"ok": true})
