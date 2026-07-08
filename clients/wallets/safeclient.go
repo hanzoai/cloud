@@ -146,8 +146,31 @@ func (c *safeClient) createVault(ctx context.Context, org, name string) (string,
 func (c *safeClient) createWallet(ctx context.Context, org, vaultID, name string) (*mpcWallet, error) {
 	body := map[string]any{"name": name, "key_type": "secp256k1", "protocol": "cggmp21"}
 	var wl mpcWallet
-	if err := c.do(ctx, http.MethodPost, "/v1/vaults/"+vaultID+"/wallets", org, body, &wl); err != nil {
-		return nil, err
+	// Bounded retry on "vault not found": the ring commits the vault AFTER it
+	// writes the createVault 201 response, so a back-to-back createWallet (cloud
+	// fires them microseconds apart on one keep-alive conn) can race the commit
+	// and read-miss the just-created vault. A slower client (curl) never sees it.
+	// Retry the 404 with short backoff; every OTHER error fails fast.
+	var lastErr error
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
+			}
+		}
+		wl = mpcWallet{}
+		lastErr = c.do(ctx, http.MethodPost, "/v1/vaults/"+vaultID+"/wallets", org, body, &wl)
+		if lastErr == nil {
+			break
+		}
+		if !strings.Contains(strings.ToLower(lastErr.Error()), "vault not found") {
+			return nil, lastErr // not the race — fail fast
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
 	}
 	if wl.ID == "" || wl.WalletID == "" || wl.EVMAddress == "" {
 		return nil, fmt.Errorf("safe: create wallet returned an incomplete wallet (id/walletId/evmAddress)")
