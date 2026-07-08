@@ -34,10 +34,9 @@ import (
 
 	"github.com/valyala/fasthttp"
 	zaphttp "github.com/zap-proto/http"
+	"github.com/zap-proto/zap2pb"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
-	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 )
 
 // Client implements go.opentelemetry.io/otel/exporters/otlp/otlptrace.Client.
@@ -88,17 +87,16 @@ func (c *Client) UploadTraces(_ context.Context, protoSpans []*tracepb.ResourceS
 	// Encode the OTLP ExportTraceServiceRequest wire form directly from the
 	// grpc-free trace messages. The request is a single repeated field —
 	// `repeated ResourceSpans resource_spans = 1` — so appending each
-	// ResourceSpans under field 1 is byte-identical to marshaling a
-	// coltrace.ExportTraceServiceRequest, without importing the collector proto
-	// package that would drag google.golang.org/grpc in (see package doc).
+	// ResourceSpans under field 1 (via zap2pb, the one sanctioned protobuf
+	// boundary) is byte-identical to marshaling a coltrace.ExportTraceServiceRequest,
+	// without importing the collector proto package that would drag
+	// google.golang.org/grpc in (see package doc).
 	var body []byte
 	for _, rs := range protoSpans {
-		rsBytes, err := proto.Marshal(rs)
-		if err != nil {
+		var err error
+		if body, err = zap2pb.AppendMessage(body, 1, rs); err != nil {
 			return err
 		}
-		body = protowire.AppendTag(body, 1, protowire.BytesType)
-		body = protowire.AppendBytes(body, rsBytes)
 	}
 
 	req := fasthttp.AcquireRequest()
