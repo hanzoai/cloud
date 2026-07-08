@@ -130,7 +130,7 @@ func (s *Signer) Commit(rc RoundContext) (pulsarlib.SignRound1, []byte, error) {
 	if err != nil {
 		return pulsarlib.SignRound1{}, nil, err
 	}
-	return r1, commit(s.zshare(rc)), nil
+	return r1, commitZ(rc.SessionID, s.share.Index, s.zshare(rc)), nil
 }
 
 // Reveal runs the REAL Round2 (emitting the proof-carrying z partial, with the
@@ -159,12 +159,21 @@ func (s *Signer) Aggregate(rc RoundContext, r1 pulsarlib.SignRound1, legs []puls
 	return cc, err
 }
 
-// commit is the binding (and, given the sealed-secret entropy in the z-share,
-// hiding) commitment to a revealed share: H(z). Broadcast in Round1, opened in
-// Round2; a voter cannot open it with a different share (collision resistance).
-func commit(z []byte) []byte {
-	h := sha256.Sum256(append([]byte("cp-commit"), z...))
-	return h[:]
+// commitZ is the binding (and, given the sealed-secret entropy in the z-share,
+// hiding) commitment to a revealed share, domain-separated by session and party:
+// H("cp-commit" || sessionID || partyID || z). Broadcast in Round1, opened in
+// Round2; collision resistance stops opening it with a different share, and the
+// session/party binding stops replaying a commitment across sessions or parties
+// to seed a fake barrier entry (red_exploits #4 hardening).
+func commitZ(sid [32]byte, partyID uint32, z []byte) []byte {
+	h := sha256.New()
+	h.Write([]byte("cp-commit"))
+	h.Write(sid[:])
+	var idx [4]byte
+	binary.BigEndian.PutUint32(idx[:], partyID)
+	h.Write(idx[:])
+	h.Write(z)
+	return h.Sum(nil)
 }
 
 // expandBytes deterministically expands a seed into n bytes via SHA-512 in

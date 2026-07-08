@@ -240,7 +240,7 @@ func (v *Voter) ingestLeg(p pulsarlib.Partial, author pulsarlib.NodeID) {
 		return // forged or lifted proof-of-possession
 	}
 	wc, committed := v.committed[p.PartyID]
-	if !committed || !bytes.Equal(commit(p.ZShare), wc) {
+	if !committed || !bytes.Equal(commitZ(p.SessionID, p.PartyID, p.ZShare), wc) {
 		return // reveal without commit, or a share that does not open the commitment
 	}
 	if _, seen := v.legs[p.PartyID]; seen {
@@ -265,6 +265,19 @@ func (v *Voter) collectRound2() {
 		}
 	}
 	v.pending = keep
+}
+
+// verifyOwnCertStructure is the structural well-formedness gate for a cert the
+// voter COMPOSED ITSELF (never a peer's). The published QuasarCert.Verify
+// confirms the triple (BLS+Corona+MLDSARollup) is present and the signer count
+// is consistent — it does NOT verify signatures. This is sound HERE only because
+// every leg was already cryptographically gated in ingestLeg and the cert is
+// locally composed. An EXTERNALLY-received cert (a future recovery/light-client
+// path) MUST NOT be accepted through this structural check — it must go through
+// the cryptographic quasar verify (VerifyWithRealKeys / VerifyUnderPolicy),
+// increment-2. Accepting an external cert here would be forgeable (red_exploits #8).
+func verifyOwnCertStructure(cert *quasar.QuasarCert, voters []string) bool {
+	return cert.Verify(voters)
 }
 
 // tryFinalize aggregates the collected legs via the real Pulsar Finalize
@@ -294,9 +307,11 @@ func (v *Voter) tryFinalize() bool {
 	if err != nil {
 		return false
 	}
-	// Independent triple-gate verification — the voter accepts only a cert it
-	// itself composed and verified, never the proposer's or a peer's.
-	if !cert.Verify(v.voters) {
+	// Structural well-formedness of the SELF-COMPOSED cert (NOT a cryptographic
+	// verify — see verifyOwnCertStructure). Sound only because every leg was
+	// already gated in ingestLeg and this cert is locally composed; an external
+	// cert must never be accepted this way (red_exploits #8, increment-2).
+	if !verifyOwnCertStructure(cert, v.voters) {
 		return false
 	}
 	if err := v.rsm.Apply(v.block); err != nil {
