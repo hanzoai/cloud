@@ -28,13 +28,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -52,6 +55,12 @@ const (
 	claimLeaseSecs = 120
 	// localComfyUI is the studio render backend the studio.render handler drives.
 	localComfyUI = "http://127.0.0.1:8188"
+	// defaultStudioUploadURL is where finished render outputs are POSTed so they
+	// land in the org's gallery (orgs/{org}/output → S3 mirror). The render runs on
+	// the LOCAL studio; the deliverable is uploaded to the org's cloud studio,
+	// authorized by the user's IAM token — no S3/rclone credentials on the box.
+	// Overridable per-job (input.uploadUrl) or per-box (HANZO_STUDIO_UPLOAD_URL).
+	defaultStudioUploadURL = "https://studio.hanzo.ai"
 	// defaultEngineURL is where --serve-engine probes hanzo-engine on THIS node.
 	// hanzo-engine binds its OpenAI + Anthropic HTTP API on 0.0.0.0:1234 by default.
 	defaultEngineURL = "http://localhost:1234"
@@ -141,6 +150,15 @@ type worker struct {
 	gpus     []gpuInfo
 	handlers map[string]jobHandler
 
+	// studioUploadURL is the org studio base that receives finished render outputs
+	// (POST /upload/output). Falls back to defaultStudioUploadURL; a job may override
+	// it via input.uploadUrl.
+	studioUploadURL string
+
+	// policy is this machine's sharing policy (nil = permissive). Advertised in the
+	// fleet record and enforced at claim.
+	policy *SharePolicy
+
 	// engine.serve — advertise a hanzo-engine model server running on this node.
 	serveEngine  bool
 	engineURL    string               // local URL probed for /v1/models
@@ -176,6 +194,75 @@ type registration struct {
 	GPUs         []gpuInfo            `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
+	Policy       *SharePolicy         `json:"policy,omitempty"`
+}
+
+// SharePolicy is the per-machine sharing policy: which jobs this GPU accepts and for
+// whom. ONE object on the machine record (advertised in the fleet registration) and
+// enforced ONCE, at claim. A nil/zero policy is fully permissive — an unconfigured
+// box behaves exactly as before. A linked GPU can thus be shared to specific orgs /
+// projects / job types / models with per-scope limits, edited on the machine record
+// (desktop UI / visor) and loaded here via HANZO_GPU_POLICY (inline JSON) or
+// HANZO_GPU_POLICY_FILE (path).
+type SharePolicy struct {
+	AllowedOrgs     []string `json:"allowedOrgs,omitempty"`     // org owners allowed to run here (empty = any)
+	AllowedProjects []string `json:"allowedProjects,omitempty"` // project ids allowed (empty = any)
+	AllowedJobTypes []string `json:"allowedJobTypes,omitempty"` // e.g. ["studio.render"] (empty = any this worker handles)
+	AllowedModels   []string `json:"allowedModels,omitempty"`   // model ids allowed (empty = any)
+	MaxConcurrent   int      `json:"maxConcurrent,omitempty"`   // 0 = unbounded (the worker is serial today)
+}
+
+// loadSharePolicy reads the machine's sharing policy from HANZO_GPU_POLICY (inline
+// JSON) or HANZO_GPU_POLICY_FILE (a path to it). Returns (nil, nil) when unset.
+func loadSharePolicy() (*SharePolicy, error) {
+	raw := os.Getenv("HANZO_GPU_POLICY")
+	if raw == "" {
+		if f := os.Getenv("HANZO_GPU_POLICY_FILE"); f != "" {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				return nil, fmt.Errorf("read HANZO_GPU_POLICY_FILE: %w", err)
+			}
+			raw = string(b)
+		}
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var p SharePolicy
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return nil, fmt.Errorf("parse share policy: %w", err)
+	}
+	return &p, nil
+}
+
+// reject returns a non-empty reason when this machine's policy forbids running the
+// claimed job, or "" to allow it. It reads org/project/model from the job input
+// (best-effort: an absent field skips its gate). Enforcement point is the claim loop,
+// so a declined job is failed back for an eligible worker to take.
+func (p *SharePolicy) reject(jobType string, input json.RawMessage) string {
+	if p == nil {
+		return ""
+	}
+	if len(p.AllowedJobTypes) > 0 && !slices.Contains(p.AllowedJobTypes, jobType) {
+		return fmt.Sprintf("job type %q not allowed", jobType)
+	}
+	var meta struct {
+		Org     string `json:"org"`
+		Project string `json:"project"`
+		Model   string `json:"model"`
+	}
+	_ = json.Unmarshal(input, &meta)
+	if len(p.AllowedOrgs) > 0 && meta.Org != "" && !slices.Contains(p.AllowedOrgs, meta.Org) {
+		return fmt.Sprintf("org %q not allowed", meta.Org)
+	}
+	if len(p.AllowedProjects) > 0 && meta.Project != "" && !slices.Contains(p.AllowedProjects, meta.Project) {
+		return fmt.Sprintf("project %q not allowed", meta.Project)
+	}
+	if len(p.AllowedModels) > 0 && meta.Model != "" && !slices.Contains(p.AllowedModels, meta.Model) {
+		return fmt.Sprintf("model %q not allowed", meta.Model)
+	}
+	return ""
 }
 
 type jobHandler func(ctx context.Context, input json.RawMessage) (any, error)
@@ -187,17 +274,23 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 	}
 	id := sanitizeID(host)
 	w := &worker{
-		env:      env,
-		http:     &http.Client{Timeout: 60 * time.Second},
-		baseURL:  env.CloudURL,
-		identity: id,
-		hostname: host,
-		jobsNS:   firstNonEmpty(jobsNS, defaultJobsNS),
-		gpus:     detectGPUs(),
+		env:             env,
+		http:            &http.Client{Timeout: 60 * time.Second},
+		baseURL:         env.CloudURL,
+		identity:        id,
+		hostname:        host,
+		jobsNS:          firstNonEmpty(jobsNS, defaultJobsNS),
+		gpus:            detectGPUs(),
+		studioUploadURL: firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL),
 	}
+	policy, err := loadSharePolicy()
+	if err != nil {
+		return nil, err
+	}
+	w.policy = policy
 	w.handlers = map[string]jobHandler{
 		"echo":          echoHandler,
-		"studio.render": studioRenderHandler,
+		"studio.render": w.studioRenderHandler,
 	}
 	return w, nil
 }
@@ -357,6 +450,7 @@ func (w *worker) buildRegistration() registration {
 		GPUs:         w.gpus,
 		Capabilities: w.capabilities(),
 		Engine:       w.engine,
+		Policy:       w.policy,
 	}
 }
 
@@ -396,6 +490,14 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 	}
 	wf, run := act.Execution.WorkflowId, act.Execution.RunId
 	fmt.Fprintf(out, "claimed job %s (type %s)\n", wf, act.Type.Name)
+
+	// Sharing policy: decline (fail back) a job this machine isn't allowed to run,
+	// so an eligible worker can take it. Enforced once, here, at claim.
+	if reason := w.policy.reject(act.Type.Name, act.Input); reason != "" {
+		_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "fail"), map[string]any{"cause": "share policy: " + reason, "identity": w.identity}, nil)
+		fmt.Fprintf(out, "  → declined (share policy: %s)\n", reason)
+		return nil
+	}
 
 	h, ok := w.handlers[act.Type.Name]
 	if !ok {
@@ -617,13 +719,17 @@ func echoHandler(_ context.Context, input json.RawMessage) (any, error) {
 }
 
 // studioRenderHandler POSTs the job payload to the local ComfyUI /prompt endpoint
-// and polls /history/{id} until the prompt completes, returning the output file
-// paths. The payload is the ComfyUI prompt graph (input.prompt) — the same body
-// studio.hanzo.ai submits. GPU work happens entirely on the local studio server;
-// this handler only drives it.
-func studioRenderHandler(ctx context.Context, input json.RawMessage) (any, error) {
+// and polls /history/{id} until the prompt completes. The GPU work happens entirely
+// on the LOCAL studio server (127.0.0.1:8188); this handler drives it, then uploads
+// the finished outputs to the org's cloud studio gallery (POST /upload/output),
+// authorized by the user's IAM token — so the render lands in orgs/{org}/output
+// (S3-mirrored to the gallery) with no S3/rclone credentials ever on this box.
+// The payload is the ComfyUI prompt graph (input.prompt) — the same body
+// studio.hanzo.ai submits; input.uploadUrl (optional) overrides the gallery target.
+func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage) (any, error) {
 	var req struct {
-		Prompt json.RawMessage `json:"prompt"`
+		Prompt    json.RawMessage `json:"prompt"`
+		UploadURL string          `json:"uploadUrl"`
 	}
 	if err := json.Unmarshal(input, &req); err != nil || len(req.Prompt) == 0 {
 		return nil, fmt.Errorf("studio.render: input needs a `prompt` graph")
@@ -670,10 +776,116 @@ func studioRenderHandler(ctx context.Context, input json.RawMessage) (any, error
 			continue
 		}
 		if entry, ok := hist[pr.PromptID]; ok {
-			return map[string]any{"promptId": pr.PromptID, "outputs": collectOutputs(entry)}, nil
+			outputs := collectOutputs(entry)
+			gallery, uerr := w.uploadOutputs(ctx, outputs, req.UploadURL)
+			if uerr != nil {
+				return nil, fmt.Errorf("studio.render: prompt %s rendered but gallery upload failed: %w", pr.PromptID, uerr)
+			}
+			return map[string]any{"promptId": pr.PromptID, "outputs": outputs, "gallery": gallery}, nil
 		}
 	}
 	return nil, fmt.Errorf("studio.render: prompt %s did not complete within the deadline", pr.PromptID)
+}
+
+// uploadOutputs fetches each finished render from the LOCAL studio (GET /view) and
+// POSTs it to the org studio's /upload/output with the user's IAM bearer. The remote
+// studio derives the org from the token and writes to orgs/{org}/output — persisted
+// to the gallery by its PVC + S3 mirror. Returns the stored gallery paths. base is
+// resolved from (in order) the per-job uploadUrl, then w.studioUploadURL.
+func (w *worker) uploadOutputs(ctx context.Context, outputs []string, uploadURL string) ([]string, error) {
+	if len(outputs) == 0 {
+		return nil, nil
+	}
+	tok, err := w.env.ensureToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	base := strings.TrimRight(firstNonEmpty(uploadURL, w.studioUploadURL), "/")
+	if base == "" {
+		return nil, fmt.Errorf("no studio upload URL configured")
+	}
+	stored := make([]string, 0, len(outputs))
+	for _, o := range outputs {
+		sub, name := filepath.Split(o)
+		sub = strings.Trim(sub, "/")
+		data, err := w.fetchLocalOutput(ctx, name, sub)
+		if err != nil {
+			return stored, fmt.Errorf("fetch %s: %w", o, err)
+		}
+		path, err := w.postGalleryOutput(ctx, base, tok, name, sub, data)
+		if err != nil {
+			return stored, fmt.Errorf("upload %s: %w", o, err)
+		}
+		stored = append(stored, path)
+	}
+	return stored, nil
+}
+
+// fetchLocalOutput reads one finished output image from the local studio's /view.
+func (w *worker) fetchLocalOutput(ctx context.Context, name, subfolder string) ([]byte, error) {
+	q := url.Values{"filename": {name}, "type": {"output"}}
+	if subfolder != "" {
+		q.Set("subfolder", subfolder)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, localComfyUI+"/view?"+q.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<20))
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("GET /view HTTP %d: %s", resp.StatusCode, serverMessage(body))
+	}
+	return body, nil
+}
+
+// postGalleryOutput multipart-POSTs one output to <base>/upload/output with the
+// user's IAM bearer and returns the stored "subfolder/name" gallery path.
+func (w *worker) postGalleryOutput(ctx context.Context, base, tok, name, subfolder string, data []byte) (string, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("image", name)
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(data); err != nil {
+		return "", err
+	}
+	_ = mw.WriteField("type", "output")
+	_ = mw.WriteField("subfolder", subfolder)
+	_ = mw.WriteField("overwrite", "true")
+	if err := mw.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/upload/output", &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("POST /upload/output HTTP %d: %s", resp.StatusCode, serverMessage(raw))
+	}
+	var out struct {
+		Name      string `json:"name"`
+		Subfolder string `json:"subfolder"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || out.Name == "" {
+		// Upload succeeded (2xx) but the body was unexpected; fall back to the sent name.
+		return filepath.Join(subfolder, name), nil
+	}
+	return filepath.Join(out.Subfolder, out.Name), nil
 }
 
 // collectOutputs pulls the output image/file names out of a ComfyUI history entry.
