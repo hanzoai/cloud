@@ -21,7 +21,13 @@ func TestValidateIAMSingleReplica(t *testing.T) {
 		{"iam enabled, 1 replica -> ok", []string{"iam"}, 1, false},
 		{"iam enabled, replicas unset -> ok", []string{"iam"}, 0, false},
 		{"iam disabled, 5 replicas -> ok", []string{"kmssvc", "o11y"}, 5, false},
-		{"all enabled (empty list) is iam-enabled, 4 replicas -> refuse", nil, 4, true},
+		// IAM is a STAGED subsystem (stagedSubsystems["iam"]): the empty-Enable
+		// "mount everything" default deliberately does NOT mount it (booting the
+		// IAM embed under mount-all corrupts the shared Beego global and crashes
+		// the `ai` subsystem — see config.go). So an empty list is iam-DISABLED,
+		// and >1 replica is allowed. The guard only fires when iam is EXPLICITLY
+		// enabled (the cases above), which is the sole way IAM ever runs.
+		{"empty list is iam-staged/disabled, 4 replicas -> ok", nil, 4, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/hanzoai/cloud/role"
 )
 
 // Config is the cloud binary's startup configuration. Drives which
@@ -73,6 +75,12 @@ type Config struct {
 
 	// DataDir is the on-disk data root.
 	DataDir string
+
+	// Role is the HA role of this process (CLOUD_ROLE): the single Writer that
+	// owns the RWO stores (default) or a read-only Reader replica. Resolved and
+	// validated in Serve; defaults to Writer so an unset variable is byte-identical
+	// to today's single-pod deployment.
+	Role role.Role
 
 	// ListenAddr is the public HTTP listener (default :8080).
 	ListenAddr string
@@ -226,6 +234,8 @@ func LoadConfig() *Config {
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Env:              getenv("CLOUD_ENV", ""),
+		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
+
 		Replicas:         getenvInt("CLOUD_REPLICAS", 0),
 		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
