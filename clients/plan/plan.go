@@ -27,6 +27,7 @@ package plan
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -143,6 +144,40 @@ func dispatch(c *zip.Ctx, route string, params map[string]string) error {
 		})
 	}
 	return c.Bytes(resp.Status, withContentType(c, resp.Body))
+}
+
+// Entitlements resolves the canonical entitlement block for a plan id from the
+// @hanzo/plans catalog (the single source of truth). It runs the bundle's
+// "entitlements" route on the shared goja host and returns the parsed, namespaced
+// `entitlements` map (e.g. "world.api_rate_limit", "ai.tokens_per_min"). This is
+// the one Go seam other subsystems use to read plan entitlements without importing
+// the catalog data or reimplementing the fromLegacy derivation. Tenant is the
+// public "hanzo" catalog (plan entitlements are tenant-independent metadata).
+//
+// It errors if the plans subsystem is not mounted or the plan id is unknown, so
+// callers can fail closed rather than silently granting a default tier.
+func Entitlements(ctx context.Context, id string) (map[string]any, error) {
+	if host == nil {
+		return nil, fmt.Errorf("plan.Entitlements: plans not mounted")
+	}
+	resp, err := host.Dispatch(ctx, goja.Request{
+		Route:  "entitlements",
+		Params: map[string]string{"id": id},
+		Tenant: "hanzo",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("plan.Entitlements(%q): dispatch: %w", id, err)
+	}
+	if resp.Status != http.StatusOK {
+		return nil, fmt.Errorf("plan.Entitlements(%q): status %d", id, resp.Status)
+	}
+	var out struct {
+		Entitlements map[string]any `json:"entitlements"`
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, fmt.Errorf("plan.Entitlements(%q): decode: %w", id, err)
+	}
+	return out.Entitlements, nil
 }
 
 // withContentType sets application/json and returns the bytes unchanged.
