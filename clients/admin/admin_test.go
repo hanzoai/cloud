@@ -150,6 +150,15 @@ func TestGate_AllowsGlobalAdmin(t *testing.T) {
 	if env.Data.Owner != "admin" || env.Data.Email != "z@hanzo.ai" || !env.Data.IsGlobalAdmin {
 		t.Errorf("me identity wrong: %+v", env.Data)
 	}
+	// SuperAdmin canonicalization: the new isSuperAdmin key MUST be present and
+	// equal to the deprecated isGlobalAdmin alias — the console may read either
+	// during the rename migration and must see the same truth.
+	if !env.Data.IsSuperAdmin {
+		t.Errorf("me: isSuperAdmin must be true for a global admin: %+v", env.Data)
+	}
+	if env.Data.IsSuperAdmin != env.Data.IsGlobalAdmin {
+		t.Errorf("me: isSuperAdmin (%v) must equal back-compat isGlobalAdmin (%v)", env.Data.IsSuperAdmin, env.Data.IsGlobalAdmin)
+	}
 }
 
 // fakeIAM stands in for the IAM management surface. It records whether the
@@ -366,6 +375,14 @@ func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	// owner "hanzo" != adminOrg "admin" → not a global admin.
 	if u.IsGlobalAdmin {
 		t.Errorf("user owner=hanzo must not be flagged global admin")
+	}
+	// SuperAdmin canonicalization: the new key mirrors the same derivation, so a
+	// non-admin-org user is NOT a super admin under either key, and they agree.
+	if u.IsSuperAdmin {
+		t.Errorf("user owner=hanzo must not be flagged super admin")
+	}
+	if u.IsSuperAdmin != u.IsGlobalAdmin {
+		t.Errorf("user: isSuperAdmin (%v) must equal back-compat isGlobalAdmin (%v)", u.IsSuperAdmin, u.IsGlobalAdmin)
 	}
 }
 
