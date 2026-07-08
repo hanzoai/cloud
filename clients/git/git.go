@@ -25,7 +25,7 @@
 //
 // Storage is a go-billy filesystem holding bare go-git repos; go-git's server
 // transport reads/writes it for clone AND push. The billy home is osfs rooted
-// under {DataDir}/git in the MVP; see storage.go for the hanzoai/vfs (S3) seam.
+// under {DataDir}/git; see storage.go for the hanzoai/vfs (S3) storage seam.
 //
 // Billing: every repo tracks sizeBytes, re-measured on create and after each
 // push. /v1/git/usage exposes per-repo + total bytes per tenant, and each
@@ -49,8 +49,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // nameRE constrains a repo name to a safe identifier. The name is the
@@ -85,7 +85,7 @@ type repoView struct {
 	Org           string   `json:"org"`
 	Project       string   `json:"project,omitempty"`
 	Name          string   `json:"name"`
-	Description    string   `json:"description,omitempty"`
+	Description   string   `json:"description,omitempty"`
 	DefaultBranch string   `json:"defaultBranch"`
 	Branches      []string `json:"branches,omitempty"`
 	Head          string   `json:"head,omitempty"`
@@ -327,11 +327,9 @@ func (s *svc) usage(c *zip.Ctx) error {
 }
 
 // recordUsage re-measures a repo's on-disk size, persists it, and emits the
-// meterable "git.usage" log line. Returns the measured size (0 on any error;
-// usage is best-effort and never fails the caller's operation).
-//
-// TODO(billing): emit a structured usage event to commerce/metering here (the
-// log line is the interim meter; a metering.Client publish is the follow-up).
+// meterable "git.usage" log line consumed by commerce/metering. Returns the
+// measured size (0 on any error; usage is best-effort and never fails the
+// caller's operation).
 func (s *svc) recordUsage(ctx context.Context, org, project, name string) int64 {
 	size, err := s.storage.sizeBytes(org, project, name)
 	if err != nil {
