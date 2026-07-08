@@ -49,13 +49,13 @@ COPY . .
 # RED gate #2 — modernc double-registration guard (mirrors iam Dockerfile): if ANY
 # package links modernc.org/sqlite under CGO=1 it double-registers the "sqlite"
 # driver with hanzoai/sqlite (mattn) and panics at init.
-RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud/ 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
-    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
+RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud-identity/ 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud-identity links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
 # RED gate #1 — ENCRYPTION PROOF. TestEncryptionProof asserts ciphertext-at-rest
 # under the SAME CGO + libsqlcipher build this image ships. If SQLCipher is not
 # really linked (plaintext), SQLITE_REQUIRE_CODEC=1 makes this FAIL → NO image.
 RUN SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" -run 'TestEncryptionProof' github.com/hanzoai/sqlite
-RUN CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+RUN CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud-identity
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
