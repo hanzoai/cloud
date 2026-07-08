@@ -84,6 +84,56 @@ func TestPlans_ResolveProducesLicenseFeatures(t *testing.T) {
 	}
 }
 
+// TestEntitlements_WorldTiers exercises the exported Entitlements seam against the
+// REAL embedded @hanzo/plans module, proving the bumped catalog serves the World
+// tiers with the new world.model_api gate through the Go/goja path (not just node).
+func TestEntitlements_WorldTiers(t *testing.T) {
+	prev := host
+	host = newHost(t)
+	defer func() { host.Close(); host = prev }()
+
+	ctx := context.Background()
+
+	// world-pro: model API granted.
+	pro, err := Entitlements(ctx, "world-pro")
+	if err != nil {
+		t.Fatalf("Entitlements(world-pro): %v", err)
+	}
+	if pro["world.model_api"] != true {
+		t.Fatalf("world-pro world.model_api = %v, want true", pro["world.model_api"])
+	}
+
+	// world-free: model API denied (key absent -> fail closed).
+	free, err := Entitlements(ctx, "world-free")
+	if err != nil {
+		t.Fatalf("Entitlements(world-free): %v", err)
+	}
+	if _, present := free["world.model_api"]; present {
+		t.Fatalf("world-free must not carry world.model_api, got %v", free["world.model_api"])
+	}
+
+	// world-enterprise: new contact tier, unlimited API rate.
+	ent, err := Entitlements(ctx, "world-enterprise")
+	if err != nil {
+		t.Fatalf("Entitlements(world-enterprise): %v", err)
+	}
+	if ent["world.api_rate_limit"] != float64(-1) {
+		t.Fatalf("world-enterprise world.api_rate_limit = %v, want -1", ent["world.api_rate_limit"])
+	}
+	if ent["world.model_api"] != true {
+		t.Fatalf("world-enterprise world.model_api = %v, want true", ent["world.model_api"])
+	}
+}
+
+func TestEntitlements_UnknownPlanErrors(t *testing.T) {
+	prev := host
+	host = newHost(t)
+	defer func() { host.Close(); host = prev }()
+	if _, err := Entitlements(context.Background(), "does-not-exist"); err == nil {
+		t.Fatal("expected error for unknown plan id")
+	}
+}
+
 func TestPlans_Resolve404(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
