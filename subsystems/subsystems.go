@@ -162,6 +162,17 @@ import (
 	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
+	// The configurable custody / accounts / wallets / keys / sign surface
+	// (HIP-0106): ONE seam over three orthogonal signing backends selected per
+	// wallet — KMS single-sig in-process, MPC m-of-n + treasury named-signer
+	// delegated to the deployed luxfi/mpc ring over its internal threshold API.
+	// KMS custody is always available; mpc/treasury fail closed until the ring
+	// address (CLOUD_WALLETS_MPC_ADDR) + the KMS-resolved internal API key
+	// (CLOUD_WALLETS_MPC_API_KEY_REF) are both wired. Order 127 binds
+	// /v1/wallets/* ahead of the AI /v1/* catch-all. This blank import is what
+	// registers the subsystem — without it the init() never runs and /v1/wallets
+	// is unrouted (404), the seam the finance/treasury anchor binds through.
+	_ "github.com/hanzoai/cloud/clients/wallets" // order 127 — /v1/wallets/* (accounts/wallets/custody/keys/sign; KMS + luxfi/mpc ring)
 	// The native treasury: the platform's OWN double-entry reserve fund, one layer
 	// ABOVE the per-org commerce credit ledger. A revenue-share policy accrues a %
 	// of net platform revenue INTO the fund; the referral/affiliate/author payouts
