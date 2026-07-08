@@ -31,6 +31,12 @@ var (
 	ErrLeaseSteal = errors.New("controlplane: assign over a live lease")
 	// ErrForgedRelease rejects releasing a lease not held by the named holder.
 	ErrForgedRelease = errors.New("controlplane: release of a lease not held by the named holder")
+	// ErrUnauthorizedRelease rejects releasing a LIVE (not-proven-dead) holder's
+	// lease. A proposer-written release of a live holder would strand it and free
+	// the shard for a second writer (the release+assign sibling of the forged-
+	// release double-write). Only a proven-dead holder's lease is releasable in
+	// increment-1; authenticated self-release is increment-2.
+	ErrUnauthorizedRelease = errors.New("controlplane: release of a live (not-proven-dead) holder's lease")
 	// ErrEmptyReassignTarget rejects a reassign with an empty or self target.
 	ErrEmptyReassignTarget = errors.New("controlplane: shard-writer reassign has empty or self target")
 )
@@ -85,6 +91,13 @@ func CheckInvariants(pre *PlacementState, b *PlacementBlock) error {
 			cur, held := pre.Leases[op.Resource]
 			if held && cur.Holder != op.Holder {
 				return fmt.Errorf("%w: op[%d] resource=%q holder=%q current=%q", ErrForgedRelease, i, op.Resource, op.Holder, cur.Holder)
+			}
+			// A LIVE holder's lease is immutable: releasing it would strand the
+			// holder and free the shard for a second live writer (release+assign
+			// sibling of the forged-release double-write). Only a proven-dead
+			// holder's lease is releasable in increment-1.
+			if held && cur.Holder == op.Holder && !isProvenDead(pre, op.Holder) {
+				return fmt.Errorf("%w: op[%d] resource=%q holder=%q", ErrUnauthorizedRelease, i, op.Resource, op.Holder)
 			}
 
 		case OpSetMembership:
