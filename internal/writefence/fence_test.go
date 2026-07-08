@@ -214,3 +214,32 @@ func TestEpochSourceDrivesPush(t *testing.T) {
 		t.Fatalf("got epoch %d, want 7", gotEpoch)
 	}
 }
+
+// TestMirrorKeyInjective_NoCrossShardAliasing — regression for a HIGH red-team
+// finding: a slash-joined mirror key is not injective, so two logically
+// distinct shards whose (plugin,shard) split differently around a '/' collide
+// on one object, letting a push framed as one shard overwrite another's
+// epoch/writer/payload. Real shard scopes carry '/' (vfs replica.DBPath yields
+// "projects/site"), so this is reachable. The length-prefixed key must keep the
+// two records fully independent.
+func TestMirrorKeyInjective_NoCrossShardAliasing(t *testing.T) {
+	// The classic collision pair: "kms/tenant-a"+"secrets" vs "kms"+"tenant-a/secrets".
+	if k1, k2 := mirrorKey("kms/tenant-a", "secrets"), mirrorKey("kms", "tenant-a/secrets"); k1 == k2 {
+		t.Fatalf("mirrorKey not injective: %q collides across distinct shards", k1)
+	}
+
+	f := New(newFakeStore())
+	mustPush(t, f, "kms/tenant-a", "secrets", "writer-A", 5, "payload-A")
+	// If the keys aliased, this push (lower-per-shard but a different shard)
+	// would be seen as epoch 9 on the SAME record and clobber writer-A.
+	mustPush(t, f, "kms", "tenant-a/secrets", "writer-B", 9, "payload-B")
+
+	eA, wA, pA := latest(t, f, "kms/tenant-a", "secrets")
+	eB, wB, pB := latest(t, f, "kms", "tenant-a/secrets")
+	if eA != 5 || wA != "writer-A" || pA != "payload-A" {
+		t.Fatalf("shard A corrupted by aliasing: epoch=%d writer=%q payload=%q", eA, wA, pA)
+	}
+	if eB != 9 || wB != "writer-B" || pB != "payload-B" {
+		t.Fatalf("shard B wrong: epoch=%d writer=%q payload=%q", eB, wB, pB)
+	}
+}

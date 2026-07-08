@@ -153,8 +153,16 @@ func New(store ConditionalStore) *Fence {
 // mirrorKey is the canonical fenced object for (plugin, shard). One key per
 // shard: the header (epoch + writer) and the payload live in the same
 // object, so admission and append are a single atomic write.
+//
+// The (plugin, shard) pair is LENGTH-PREFIXED, not slash-joined: a bare
+// "writefence/"+plugin+"/"+shard is not injective — mirrorKey("kms/a","s")
+// would collide with mirrorKey("kms","a/s"), letting a push framed as one
+// shard silently overwrite another's epoch/writer/payload record. Real shard
+// scopes carry '/' (vfs replica.DBPath yields "projects/site", "users/dave"),
+// so this is reachable, not theoretical. The `%d:` byte-length prefix makes
+// the boundary unambiguous regardless of any '/' inside either field.
 func mirrorKey(plugin, shard string) string {
-	return "writefence/" + plugin + "/" + shard
+	return fmt.Sprintf("writefence/%d:%s/%d:%s", len(plugin), plugin, len(shard), shard)
 }
 
 // header is the small, fixed-layout prefix carried in front of the payload:
