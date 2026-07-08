@@ -10,7 +10,7 @@ import (
 )
 
 // TestIAMEmbedBehindMiddlewareChain locks the auth-critical contract for the
-// embedded IAM surface (clients/iamsvc): the /v1/iam/*, /.well-known/*, and
+// embedded IAM surface (clients/iam): the /v1/iam/*, /.well-known/*, and
 // /login/oauth/* paths pass through cloud's real request pipeline untouched for
 // UNAUTHENTICATED callers.
 //

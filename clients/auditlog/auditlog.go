@@ -55,14 +55,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("auditlog.Mount: nil deps.Logger")
 	}
-	s := &svc{store: deps.Audit, log: deps.Logger.New("subsystem", "auditlog")}
+	s := &svc{store: deps.Audit, log: deps.Logger.New("subsystem", "audit")}
 	app.Get("/v1/audit", s.list)
 	s.log.Info("org-scoped audit surface mounted", "prefix", "/v1/audit", "store", s.store != nil)
 	return nil
 }
 
 func init() {
-	cloud.Register("auditlog", 144, cloud.Typed(Mount))
+	cloud.Register("audit", 144, cloud.Typed(Mount))
 }
 
 // list answers GET /v1/audit — the caller's OWN org audit trail, newest first.
