@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"archive/tar"
@@ -33,7 +33,7 @@ const (
 // prefix and serves them publicly. The S3 connection itself comes from the ONE
 // shared access path (clients/s3admin, the SAME S3_ADMIN_* credentials the
 // /v1/s3 file-manager and the whole cloud binary use); blobStore adds only the
-// projectsvc-specific bucket + public URL bases on top.
+// projects-specific bucket + public URL bases on top.
 type blobStore struct {
 	admin     s3admin.Admin
 	bucket    string
@@ -280,7 +280,7 @@ func (p *peekReader) Read(b []byte) (int, error) {
 
 func isGzip(head []byte) bool { return len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b }
 
-// ---- env helper (local to projectsvc; mirror provisioningsvc conventions) ----
+// ---- env helper (local to projects; mirror provisioningsvc conventions) ----
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {

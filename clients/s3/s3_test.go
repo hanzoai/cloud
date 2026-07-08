@@ -62,7 +62,7 @@ func newApp(t *testing.T, creds bool) *zip.App {
 		DataDir:   t.TempDir(),
 		// Enable both subsystems under test. (Empty Enable = all-on, but naming
 		// them keeps the harness explicit and fast.)
-		Enable: []string{"s3svc", "provisioning"},
+		Enable: []string{"s3", "provisioning"},
 	}
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: deps.Logger})
@@ -146,8 +146,9 @@ func TestHealthFailClosedWithoutCreds(t *testing.T) {
 // subsystem's, NOT serve.go's generic GET /v1/<name>/health (which would be a
 // fake 200). Proven by: it 503s without creds AND returns 200 WITH creds carrying
 // the s3-specific "presign" field. (serve.go's generic route is not mounted in
-// this MountAll-only harness, but the "s3svc" name guarantees it would park at
-// /v1/s3svc/health in production — this asserts our route owns /v1/s3/health.)
+// this MountAll-only harness; in production the s3 subsystem registers with
+// cloud.HealthOwner, so Serve skips the generic route entirely and this real
+// probe owns /v1/s3/health.)
 func TestHealthOwnedByS3NotGenericLiveness(t *testing.T) {
 	app := newApp(t, true)
 	resp := do(t, app, "GET", "/v1/s3/health", "", "", false)

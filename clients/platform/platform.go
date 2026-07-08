@@ -6,10 +6,10 @@
 //
 // Relationship to the sibling subsystems:
 //
-//   - clients/paassvc  (/v1/paas)     — the ADMIN fleet drift board: observes +
+//   - clients/paas  (/v1/paas)     — the ADMIN fleet drift board: observes +
 //     deploys SYSTEM Service CRs across the platform namespaces, global-admin
 //     only. It answers "what is the fleet running, and roll a tag."
-//   - clients/projectsvc (/v1/projects) — per-org STATIC sites (S3 hosting).
+//   - clients/projects (/v1/projects) — per-org STATIC sites (S3 hosting).
 //   - clients/platform (/v1/platform)  — THIS: per-org CONTAINER apps. Users
 //     create projects + applications, build them (arcd BuildKit) and deploy them
 //     (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).
@@ -179,19 +179,13 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/releases", s.listReleases)
 }
 
-// Registered as "platformsvc" (not "platform") so serve.go's generic
-// GET /v1/<name>/health lands at the unrouted /v1/platformsvc/health and does
-// NOT shadow the real fail-closed probe at /v1/platform/health (same convention
-// as paassvc/mlsvc/kmssvc). Order 124 binds the /v1/platform family before the
-// projectsvc (125) neighbours and well before the AI /v1/* catch-all (150).
+// Registered as id "platform" with cloud.HealthOwner: it serves its OWN
+// fail-closed probe at /v1/platform/health, and cloud.HealthOwner makes serve.go
+// skip the generic GET /v1/<name>/health so the always-ok route never shadows it
+// (same flag as kms/paas/s3). Order 124 binds the /v1/platform family before the
+// projects (125) neighbours and well before the AI /v1/* catch-all (150).
 func init() {
-	cloud.Register("platformsvc", 124, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("platform.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("platform", 124, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // ── tenancy ──────────────────────────────────────────────────────────────────
@@ -851,7 +845,7 @@ func getenv(key, dflt string) string {
 	return dflt
 }
 
-// Shutdown closes the platform store. Idempotent. Mirrors the projectsvc/paassvc
+// Shutdown closes the platform store. Idempotent. Mirrors the projects/paas
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
 	if mounted == nil || mounted.store == nil {

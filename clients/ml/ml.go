@@ -1,4 +1,4 @@
-// Package mlsvc mounts the Hanzo Cloud /v1/ml/* and /v1/train/* surfaces: a
+// Package ml mounts the Hanzo Cloud /v1/ml/* and /v1/train/* surfaces: a
 // thin, tenant-scoped bridge that turns three Kubeflow-family CustomResources
 // into a small REST API. No ML logic is reimplemented here — the operators
 // (kserve, trainer, katib) own reconciliation; this subsystem only translates
@@ -117,7 +117,7 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 var orgRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$`)
 
 // projectRE constrains the org SUB-SCOPE (X-Project-Id) that suffixes the tenant
-// namespace to a DNS-1123 label — the SAME slug shape projectsvc enforces — so the
+// namespace to a DNS-1123 label — the SAME slug shape projects enforces — so the
 // (org, project) -> namespace map stays injective (no lossy fold) and the suffix is
 // always a valid label segment. A non-conforming project (e.g. an opaque id) is
 // REFUSED, never folded; the default project adds no suffix, so this gates only the
@@ -193,9 +193,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Delete("/v1/train/experiments/:name", s.del(expKind))
 	app.Get("/v1/train/experiments/:name/trials", s.trials)
 
-	// Real-probe health (the generic auto-health from serve.go lands at the
-	// harmless, unrouted /v1/mlsvc/health for the registered subsystem name;
-	// these two report ACTUAL k8s reachability + CRD presence).
+	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
+	// serve.go skips its generic auto-health and these two own the probes,
+	// reporting ACTUAL k8s reachability + CRD presence.
 	app.Get("/v1/ml/health", s.health("ml", isvcGVR))
 	app.Get("/v1/train/health", s.health("train", trainjobGVR, experimentGVR))
 
@@ -203,20 +203,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// Registered under the name "mlsvc" (not "ml"/"train") on purpose: serve.go
-// auto-mounts a generic GET /v1/<name>/health BEFORE MountAll, and zip/fiber is
-// first-match-wins, so a name of "ml" would shadow our real-probe /v1/ml/health.
-// "mlsvc" keeps the generic liveness at the unrouted /v1/mlsvc/health and lets
-// the real probes own /v1/ml/health and /v1/train/health. Order 130 binds the
-// /v1/ml and /v1/train families before the AI subsystem's /v1/* catch-all (150).
+// Registered under the clean id "ml" with cloud.HealthOwner: it serves its OWN
+// real probes at /v1/ml/health and /v1/train/health, and cloud.HealthOwner makes
+// serve.go skip the generic GET /v1/<name>/health so the always-ok route never
+// shadows them (same flag as kms/paas/s3). Order 130 binds the /v1/ml and
+// /v1/train families before the AI subsystem's /v1/* catch-all (150).
 func init() {
-	cloud.Register("mlsvc", 130, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("ml.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("ml", 130, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // ── CRUD (generic across the three kinds) ────────────────────────────────────
@@ -633,7 +626,7 @@ func newDynamic() (dynamic.Interface, error) {
 		cfg.BearerToken = ""
 		cfg.BearerTokenFile = tokenFile
 	}
-	cfg.UserAgent = "hanzo-cloud-mlsvc"
+	cfg.UserAgent = "hanzo-cloud-ml"
 	return dynamic.NewForConfig(cfg)
 }
 

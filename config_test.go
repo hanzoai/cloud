@@ -23,7 +23,7 @@ func TestEnabled_StagedSubsystemsExcludedFromMountAll(t *testing.T) {
 		t.Error("iam must NOT be enabled under the empty (mount-all) default — it is staged and requires explicit CLOUD_ENABLE")
 	}
 	// Non-staged subsystems still mount under the empty default.
-	for _, name := range []string{"ai", "kmssvc", "commerce", "treasury", "admin", "base", "o11y"} {
+	for _, name := range []string{"ai", "kms", "commerce", "treasury", "admin", "base", "o11y"} {
 		if !c.Enabled(name) {
 			t.Errorf("non-staged subsystem %q must be enabled under the empty (mount-all) default", name)
 		}

@@ -302,18 +302,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.RegisterWithShutdown("agents", 127, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("agents.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(ctx context.Context) error {
-		// Graceful teardown: stop the scheduler (drain in-flight runs) and close
-		// the store. Bounded by the caller's shutdown deadline so a stuck run
-		// can't hang SIGTERM.
-		return Shutdown(ctx)
-	})
+	// Shutdown does the graceful teardown: stop the scheduler (drain in-flight
+	// runs) and close the store, bounded by the caller's shutdown deadline so a
+	// stuck run can't hang SIGTERM.
+	cloud.RegisterWithShutdown("agents", 127, cloud.Typed(Mount), Shutdown)
 }
 
 // ---- handlers ----

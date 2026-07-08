@@ -197,13 +197,7 @@ func buildProxy(p Plugin) (http.Handler, error) {
 }
 
 func init() {
-	cloud.Register("plugins", 900, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("plugin.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("plugins", 900, cloud.Typed(Mount))
 }
 
 // Shutdown releases every mounted goa service pool. Idempotent.

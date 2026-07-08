@@ -146,13 +146,7 @@ func (s *svc) routes(app *zip.App) {
 }
 
 func init() {
-	cloud.Register("do", 123, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return errors.New("do.Mount: app is not *zip.App")
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("do", 123, cloud.Typed(Mount))
 }
 
 // ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──

@@ -119,11 +119,5 @@ func firstNonEmpty(vals ...string) string {
 func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 
 func init() {
-	cloud.Register("bot", 143, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("bot.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("bot", 143, cloud.Typed(Mount))
 }
