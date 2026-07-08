@@ -171,13 +171,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("prompts", 126, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("prompts.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("prompts", 126, cloud.Typed(Mount))
 }
 
 // ---- handlers ----

@@ -16,9 +16,9 @@
 // traversal can escape that prefix into another project or org. See resolveKey +
 // its exhaustive test.
 //
-// The resolver (slug → {org,bucket,prefix,status}) is the projectsvc store,
-// injected via SetResolver at mount. sites does NOT import projectsvc (projectsvc
-// imports cloud, cloud imports sites — importing projectsvc here would form a
+// The resolver (slug → {org,bucket,prefix,status}) is the projects store,
+// injected via SetResolver at mount. sites does NOT import projects (projects
+// imports cloud, cloud imports sites — importing projects here would form a
 // cycle); the store implements the tiny Resolver interface and registers itself.
 package sites
 
@@ -39,7 +39,7 @@ import (
 	"github.com/hanzoai/cloud/clients/s3admin"
 )
 
-// slugRE is the subdomain-label grammar. It is byte-identical to projectsvc's
+// slugRE is the subdomain-label grammar. It is byte-identical to projects's
 // slug grammar (the slug IS the subdomain), so a label that could never be a
 // project slug is rejected before any store lookup — the injection/traversal
 // guard at the host boundary. A label with a dot, slash, uppercase, or leading/
@@ -59,7 +59,7 @@ type Site struct {
 }
 
 // Resolver maps a validated subdomain slug to its authoritative Site. It is the
-// projectsvc store (the ONE source of project truth). found=false ⇒ no such
+// projects store (the ONE source of project truth). found=false ⇒ no such
 // published subdomain (honest 404); err ⇒ a real store failure (honest 500).
 type Resolver interface {
 	Resolve(ctx context.Context, slug string) (Site, bool, error)
@@ -70,7 +70,7 @@ var (
 	resolver   Resolver
 )
 
-// SetResolver installs the slug→Site resolver. projectsvc.Mount calls this once
+// SetResolver installs the slug→Site resolver. projects.Mount calls this once
 // with its store. Until it is set, every site request is an honest 404 (the
 // projects subsystem is not mounted), never a crash.
 func SetResolver(r Resolver) {
@@ -330,7 +330,7 @@ func objectKey(prefix, rel string) string {
 func contentType(key string) string { return mime.TypeByExtension(path.Ext(key)) }
 
 // CacheControlFor is the ONE canonical cache policy by asset class, used both when
-// WRITING an object at deploy (projectsvc/blob.go) and when SERVING one here, so a
+// WRITING an object at deploy (projects/blob.go) and when SERVING one here, so a
 // site's TTL is identical on the site-server path and the direct-S3 path.
 //
 //   - HTML documents  → short browser TTL + long shared-cache TTL: a redeploy is

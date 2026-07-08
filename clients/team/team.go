@@ -117,13 +117,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.RegisterWithShutdown("team", 138, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("team.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(context.Context) error { return Shutdown() })
+	cloud.RegisterWithShutdown("team", 138, cloud.Typed(Mount),
+		func(context.Context) error { return Shutdown() })
 }
 
 // Shutdown releases the team stores (account DB + every cached per-workspace docs

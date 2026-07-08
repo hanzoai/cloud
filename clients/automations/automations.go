@@ -162,15 +162,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 func init() {
 	// Order 148: after integrations (137), BEFORE ai (150) so /v1/automations/* wins
 	// over ai's /v1/* catch-all. RegisterWithShutdown so the store closes on stop.
-	cloud.RegisterWithShutdown("automations", 148, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("automations.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(ctx context.Context) error {
-		return Shutdown(ctx)
-	})
+	cloud.RegisterWithShutdown("automations", 148, cloud.Typed(Mount), Shutdown)
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.

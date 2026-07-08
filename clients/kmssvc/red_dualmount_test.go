@@ -24,7 +24,7 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 	cfg := &cloud.Config{
 		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
 		DataDir:         t.TempDir(),
-		Enable:          []string{"kmssvc", "admin"}, // both, so order 10 + 146 co-exist
+		Enable:          []string{"kms", "admin"}, // both, so order 10 + 146 co-exist
 		KMSMasterKeyRef: mk,
 	}
 	deps := cloud.BuildDeps(cfg)

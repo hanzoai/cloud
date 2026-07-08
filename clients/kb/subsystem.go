@@ -65,13 +65,7 @@ func init() {
 	// Order 130: after the framework (129) so its DocType store is mounted first
 	// (the connectors call framework.Ingest into it), and before the AI /v1/*
 	// catch-all (150) so /v1/kb/* resolves here.
-	cloud.Register("kb", 130, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("kb.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("kb", 130, cloud.Typed(Mount))
 }
 
 // searchBody is the POST /v1/kb/search request. `query` is the natural-language
