@@ -282,7 +282,18 @@ func (s *svc) putSecret(ctx *zip.Ctx) error {
 	if req.Value == "" {
 		return zip.ErrBadRequest("'value' is required")
 	}
-	env := envOr(req.Env)
+	// env is a first-class component of the storage key
+	// (kms/secrets/{path}/{env}/{name}); it can never be aliased. A silent
+	// "default" would commit this write to a bucket that project/env/path
+	// readers (the kms-operator, cluster syncs) never resolve — the exact split
+	// that let an IAM z-password land in env=default while prod kept serving the
+	// stale value. Writes fail loud; reads/deletes keep the envOr compat default
+	// (a read/delete can't plant a value another reader later trusts, and legacy
+	// readers that omit env must keep working).
+	env := strings.TrimSpace(req.Env)
+	if env == "" {
+		return zip.ErrBadRequest(`'env' is required — there is no default. A silent default would split this write from the project/env/path record that readers resolve.`)
+	}
 	if !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
