@@ -57,7 +57,11 @@ import (
 	"github.com/hanzoai/cloud/types"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 	luxlog "github.com/luxfi/log"
-	badger "github.com/luxfi/zapdb"
+	// zapdb is the canonical Lux embedded KV engine (github.com/luxfi/zapdb). Its
+	// Go package is still named `badger` (it is a hardened Badger fork), so we
+	// alias it to zapdb to keep call sites self-documenting: this is ZapDB, NOT
+	// raw dgraph-io/badger. There is no dgraph-io/badger anywhere in cloud.
+	zapdb "github.com/luxfi/zapdb"
 )
 
 // masterKeyLen is the AES-256 KEK size store.Seal/Open require (32 bytes).
@@ -100,7 +104,7 @@ const (
 //
 // The zero value is not usable; construct with New.
 type Client struct {
-	db        *badger.DB // held so Close can release the KV (SecretStore does not expose it)
+	db        *zapdb.DB // held so Close can release the KV (SecretStore does not expose it)
 	store     *kmsstore.SecretStore
 	masterKey []byte // 32-byte KEK; nil ⇒ health-only fail-closed mode
 	mpcAddr   string // MPC daemon address; "" ⇒ Sign fails closed
@@ -118,6 +122,19 @@ type Config struct {
 	MasterKeyB64 string // base64 of the 32-byte master key (CLOUD_KMS_MASTER_KEY_REF)
 	MPCAddr      string // MPC daemon host:port(,...) — CLOUD_KMS_MPC_ADDR
 	MPCVaultID   string // MPC vault id — CLOUD_KMS_MPC_VAULT_ID
+
+	// ReadOnly opens the store in reader mode: READ-ONLY, with the ZapDB lock
+	// guard BYPASSED so it coexists with the writer's replication stream without
+	// ever taking the exclusive write lock. Set by the reader HA role. The store
+	// must already be hydrated on disk (restored from S3/vfs via zapdb-replicate);
+	// a reader with no restored store fails closed rather than serving nothing.
+	//
+	// FRESHNESS CAVEAT: ZapDB (a Badger fork) is single-process for live writes —
+	// a read-only handle sees the snapshot present at open time, not increments a
+	// separate restore process applies afterward. Readers therefore periodically
+	// re-hydrate + reopen (or proxy writes-sensitive reads to the writer). This is
+	// acceptable for slowly-changing secrets; see the reader deployment notes.
+	ReadOnly bool
 }
 
 // New opens the embedded KMS store under cfg.DataDir and returns the in-process
@@ -154,28 +171,46 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	// Why in-memory for the fresh health-only case (no store yet): a disk-backed
 	// zapdb opened WITHOUT a key writes a PLAINTEXT KEYREGISTRY. If the operator
 	// then injects the real key on the next boot, zapdb's registry sanity check
-	// rejects the now-mismatched registry and badger.Open fails PERMANENTLY —
+	// rejects the now-mismatched registry and zapdb.Open fails PERMANENTLY —
 	// bricking KMS until the data dir is wiped. Health-only mode can serve no
 	// secret op anyway (every Get/Put fails closed without the key), so there is
 	// nothing to persist; an ephemeral in-memory KV lets health/metadata work while
 	// leaving the on-disk dir untouched, so the first KEYED boot opens a clean
 	// encrypted store. No unencrypted secret store is ever written to disk.
-	var opts badger.Options
+	var opts zapdb.Options
 	switch {
+	case keyErr == nil && cfg.ReadOnly:
+		// Reader HA role: open the hydrated on-disk store READ-ONLY, bypassing the
+		// lock guard so it never contends with the writer (which owns the RWO PVC)
+		// or a co-located restore process. No exclusive write lock is ever taken —
+		// this is what lets N readers run without violating the single-writer
+		// invariant. The store must already exist (restored from the replication
+		// stream); refuse to serve if it does not, rather than open an empty store.
+		if !storeExistsOnDisk(dbDir) {
+			return nil, fmt.Errorf("kms.New: reader mode but no restored store at %s — hydrate via zapdb-replicate restore before serving KMS reads", dbDir)
+		}
+		opts = zapdb.DefaultOptions(dbDir).WithLogger(nil).
+			WithEncryptionKey(masterKey).WithIndexCacheSize(16 << 20).
+			WithReadOnly(true)
+		opts.BypassLockGuard = true
 	case keyErr == nil:
 		if err := os.MkdirAll(dbDir, 0o700); err != nil {
 			return nil, fmt.Errorf("kms.New: create store dir: %w", err)
 		}
-		opts = badger.DefaultOptions(dbDir).WithLogger(nil).
+		opts = zapdb.DefaultOptions(dbDir).WithLogger(nil).
 			WithEncryptionKey(masterKey).WithIndexCacheSize(16 << 20)
+	case cfg.ReadOnly:
+		// Reader with no master key: cannot decrypt the store at rest. Fail closed
+		// (health-only) rather than pretend to serve secrets.
+		return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)
 	case storeExistsOnDisk(dbDir):
 		// An encrypted store is present but no key was supplied: do not silently
 		// open a fresh in-memory store and pretend the on-disk secrets are gone.
 		return nil, fmt.Errorf("kms.New: encrypted store present at %s but no master key configured: %w", dbDir, keyErr)
 	default:
-		opts = badger.DefaultOptions("").WithLogger(nil).WithInMemory(true)
+		opts = zapdb.DefaultOptions("").WithLogger(nil).WithInMemory(true)
 	}
-	db, err := badger.Open(opts)
+	db, err := zapdb.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("kms.New: open store %s: %w", dbDir, err)
 	}
