@@ -68,17 +68,20 @@ func TestRSM_FailSecureOnInvalidOps(t *testing.T) {
 // TestRSM_DeterministicConvergence — two independent RSMs applying the same
 // op sequence reach byte-identical state.
 func TestRSM_DeterministicConvergence(t *testing.T) {
-	opSeq := [][]PlacementOp{
-		{assignOp("a", "n0")},
-		{assignOp("b", "n1")},
-		{{Kind: OpReleaseLease, Resource: "a", Holder: "n0"}},
-	}
 	build := func() *PlacementRSM {
 		r := NewPlacementRSM(NewMemControlDB())
-		for _, ops := range opSeq {
-			if err := r.Apply(extend(r, ops)); err != nil {
-				t.Fatalf("apply: %v", err)
-			}
+		if err := r.Apply(extend(r, []PlacementOp{assignOp("a", "n0")})); err != nil {
+			t.Fatalf("apply a: %v", err)
+		}
+		if err := r.Apply(extend(r, []PlacementOp{assignOp("b", "n1")})); err != nil {
+			t.Fatalf("apply b: %v", err)
+		}
+		// Out-of-band failure detector marks n0 dead, so its lease becomes
+		// releasable (increment-1: a LIVE holder's lease is immutable). Both RSMs
+		// apply the same out-of-band fact, so they still converge byte-for-byte.
+		r.State().ProvenDead["n0"] = true
+		if err := r.Apply(extend(r, []PlacementOp{{Kind: OpReleaseLease, Resource: "a", Holder: "n0"}})); err != nil {
+			t.Fatalf("apply release: %v", err)
 		}
 		return r
 	}
