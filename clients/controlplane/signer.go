@@ -111,6 +111,14 @@ func (s *Signer) zshare(rc RoundContext) []byte {
 	return expandBytes(zshareBytes, "cp-share-z", s.share.secret[:], rc.NonceID[:])
 }
 
+// CommitPoP authenticates this voter's Round1 z-share commitment with its
+// identity proof-of-possession, so peers can attribute the commitment to a
+// distinct registered sender. The ALL-Round1 barrier counts only authenticated
+// commitments, so a single node cannot forge a quorum of them (anti-rush).
+func (s *Signer) CommitPoP(rc RoundContext, zcommit []byte) []byte {
+	return signPoP(s.share.idKey, round1TBS(rc.SessionID, rc.NonceID, s.share.Index, zcommit))
+}
+
 // Commit runs the REAL Round1 (binding the canonical, non-grindable shared
 // nonce to the session) and returns this voter's SignRound1 plus a binding
 // commitment to the z-share it will reveal. The commitment is the
