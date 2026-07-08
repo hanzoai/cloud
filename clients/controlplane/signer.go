@@ -22,6 +22,12 @@ const (
 )
 
 func init() {
+	// mustHarnessOnly fires FIRST, at package-import time — before the line
+	// below ever runs. Merely importing this package registers a forgeable
+	// global PartialZVerifier into luxfi/pulsar's process-wide registry; that
+	// must be impossible outside a go-test harness, so the guard sits ahead of
+	// the registration itself, not just ahead of Cluster/Signer construction.
+	mustHarnessOnly("package import (RegisterPartialZVerifier)")
 	// The REAL PulsarRoundSigner.Round2 calls pulsarlib.VerifyZPartial, which
 	// delegates the zero-knowledge correctness check to a registered
 	// PartialZVerifier and FAILS CLOSED if none is set. The sound lattice ZK
@@ -84,7 +90,10 @@ type Signer struct {
 }
 
 // NewSigner builds a voter's signer over the shared background nonce pool.
+// Fail-closed: refuses outside a go-test harness while the crypto is stub
+// (mustHarnessOnly) — see containment.go.
 func NewSigner(share Share, pool qpulsar.NonceCertPool, threshold, vsetSize int) *Signer {
+	mustHarnessOnly("NewSigner")
 	return &Signer{share: share, pool: pool, threshold: threshold, vsetSize: vsetSize}
 }
 
@@ -205,18 +214,28 @@ func expandBytes(n int, tag string, parts ...[]byte) []byte {
 // passes the PUBLISHED QuasarCert.Verify triple-gate (BLS + Corona +
 // MLDSARollup present, signer count consistent).
 //
+// Compose returns selfComposedCert, not a bare *quasar.QuasarCert — the typed
+// seam that makes verifyOwnCertStructure's input provably local (see driver.go).
+//
 // STUB BOUNDARY (increment 2+): the real composer runs the Corona / Magnetar /
 // BLS threshold ceremonies over the same round digest and calls
 // quasar.ComposePolaris over the four real legs; verification then moves from
-// the structural QuasarCert.Verify to the cryptographic VerifyWithRealKeys.
+// the structural QuasarCert.Verify to the cryptographic VerifyWithRealKeys —
+// the real composer must keep returning selfComposedCert so that move is the
+// ONLY thing that changes at the driver.go call site.
 type CertComposer interface {
-	Compose(rc RoundContext, cc pulsarlib.ConsensusCert) (*quasar.QuasarCert, error)
+	Compose(rc RoundContext, cc pulsarlib.ConsensusCert) (selfComposedCert, error)
 }
 
 type stubComposer struct{}
 
-// NewStubComposer returns the increment-1 stub composer.
-func NewStubComposer() CertComposer { return stubComposer{} }
+// NewStubComposer returns the increment-1 stub composer. Fail-closed: refuses
+// outside a go-test harness while the crypto is stub (mustHarnessOnly) — see
+// containment.go.
+func NewStubComposer() CertComposer {
+	mustHarnessOnly("NewStubComposer")
+	return stubComposer{}
+}
 
 func legBytes(tag string, digest quasar.RoundDigest, extra ...[]byte) []byte {
 	h := sha256.New()
@@ -232,7 +251,7 @@ func legBytes(tag string, digest quasar.RoundDigest, extra ...[]byte) []byte {
 // digest cannot be presented for another (the legs differ). Deterministic in
 // (digest, aggregated Pulsar leg, signer bitmap): all honest voters compose
 // byte-identical certs.
-func (stubComposer) Compose(rc RoundContext, cc pulsarlib.ConsensusCert) (*quasar.QuasarCert, error) {
+func (stubComposer) Compose(rc RoundContext, cc pulsarlib.ConsensusCert) (selfComposedCert, error) {
 	validators := bitmapPopcount(cc.SignerBitmap)
 	cert := &quasar.QuasarCert{
 		BLS:         legBytes("cp-bls", rc.Digest, cc.SignerBitmap),
@@ -244,7 +263,7 @@ func (stubComposer) Compose(rc RoundContext, cc pulsarlib.ConsensusCert) (*quasa
 		Finality:    time.Unix(int64(rc.Height), 0).UTC(), // deterministic, not wall-clock
 		Validators:  validators,
 	}
-	return cert, nil
+	return newSelfComposedCert(cert), nil
 }
 
 // bitmapPopcount counts set bits in a signer bitmap (= distinct signers).
