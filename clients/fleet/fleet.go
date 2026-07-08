@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/principal"
-	kms "github.com/hanzoai/cloud/clients/mpcseal"
+	kms "github.com/hanzoai/cloud/clients/mpc"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

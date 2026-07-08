@@ -8,7 +8,7 @@
 //   - github.com/hanzoai/plans (the service repo's Go embed module) ships
 //     goja/bundle.js — the ESM-free port of entitlements.mjs + the /v1/plans
 //     route table — plus the embedded *.json catalog (plans.Data()).
-//   - This wrapper loads that bundle into a goja runtime (clients/gojahost),
+//   - This wrapper loads that bundle into a goja runtime (clients/goja),
 //     injects the catalog as globalThis.__PLANS_DATA__, and registers thin zip
 //     handlers that call globalThis.handle({route, params, tenant}). The
 //     entitlement transforms (fromLegacy/toLicenseFeatures/resolvePlan) run in
@@ -31,14 +31,14 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/goja"
 	"github.com/hanzoai/cloud/clients/principal"
 	hplans "github.com/hanzoai/plans"
 	"github.com/zap-proto/zip"
 )
 
 // host is the process-global goja host for the plans bundle. nil before Mount.
-var host *gojahost.Host
+var host *goja.Host
 
 // Mount registers the /v1/plans/* surface on app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -60,7 +60,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("plan.Mount: load catalog: %w", err)
 	}
 
-	h, err := gojahost.New(gojahost.Config{
+	h, err := goja.New(goja.Config{
 		Name:    "plans",
 		Bundle:  bundle,
 		Globals: map[string]any{"__PLANS_DATA__": data},
@@ -131,7 +131,7 @@ func dispatch(c *zip.Ctx, route string, params map[string]string) error {
 	if org, ok := principal.Tenant(c); ok {
 		tenant = org
 	}
-	resp, err := host.Dispatch(c.Context(), gojahost.Request{
+	resp, err := host.Dispatch(c.Context(), goja.Request{
 		Route:  route,
 		Params: params,
 		Tenant: tenant,
