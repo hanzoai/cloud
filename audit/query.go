@@ -18,15 +18,16 @@ import (
 // and compared against the RFC3339Nano ts column lexicographically (RFC3339 is
 // order-preserving as text, so a string range is a correct time range).
 type Filter struct {
-	Org      string    // actor_org exact match (tenant scope)
-	Sub      string    // actor_sub exact match (a specific user)
-	Action   string    // action exact match
-	Resource string    // res_type exact match
-	Result   string    // outcome result: success|deny|error
-	Since    time.Time // ts >= Since (UTC)
-	Until    time.Time // ts <= Until (UTC)
-	Limit    int       // max rows (default 100, cap 1000)
-	Offset   int       // pagination offset
+	Org        string    // actor_org exact match (tenant scope)
+	Sub        string    // actor_sub exact match (a specific user)
+	Action     string    // action exact match
+	Resource   string    // res_type exact match
+	ResourceID string    // res_id exact match (a specific resource instance)
+	Result     string    // outcome result: success|deny|error
+	Since      time.Time // ts >= Since (UTC)
+	Until      time.Time // ts <= Until (UTC)
+	Limit      int       // max rows (default 100, cap 1000)
+	Offset     int       // pagination offset
 }
 
 // Query returns records matching f, newest first, and the total count matching
@@ -92,6 +93,9 @@ func (f Filter) build() (string, []any) {
 	}
 	if f.Resource != "" {
 		add("res_type = ?", f.Resource)
+	}
+	if f.ResourceID != "" {
+		add("res_id = ?", f.ResourceID)
 	}
 	if f.Result != "" {
 		add("result = ?", f.Result)

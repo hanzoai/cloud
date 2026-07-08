@@ -72,6 +72,7 @@ import (
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
+	_ "github.com/hanzoai/cloud/clients/auditlog"  // order 144 — /v1/audit (org-scoped audit trail; per-org twin of /v1/admin/audit)
 	_ "github.com/hanzoai/cloud/clients/bot"       // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
 	_ "github.com/hanzoai/cloud/clients/eval"      // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/exec"      // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
@@ -244,6 +245,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/tasksvc"   // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
+	_ "github.com/hanzoai/cloud/clients/usage"     // order 131 — /v1/usage/summary (org-scoped unified footprint: cost roll-up + LLM totals)
 	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
 
 	// Networking control plane: tenant-scoped facade over Hanzo Zero Trust
