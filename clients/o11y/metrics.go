@@ -16,8 +16,8 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// metricsIngest pins the ONE in-process native metrics receiver for the life of
-// the process (a package ref the GC won't collect), mirroring embeddedRuntime.
+// metricsIngest holds the native metrics receiver for the process life: write-only
+// (a deliberate keepalive; nothing reads it), mirroring embeddedRuntime.
 var metricsIngest *zapmetricreceiver.Receiver
 
 // startNativeMetricsIngest starts o11y-native datastore metrics ingest in-process:
