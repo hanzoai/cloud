@@ -13,7 +13,7 @@ require (
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.31.18
 	github.com/hanzoai/notify v1.6.18
-	github.com/hanzoai/plans v1.3.1-0.20260708203949-82f76155f1ff
+	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/signoz-otel-collector v0.144.6
