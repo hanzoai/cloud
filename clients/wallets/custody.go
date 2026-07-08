@@ -14,7 +14,7 @@
 //     DELEGATE over HTTP to the DEPLOYED luxfi/mpc cluster (mpcclient.go), a
 //     thin typed REST client. cloud is a faithful CLIENT of the real service —
 //     it never imports github.com/luxfi/mpc (that drags chi/Postgres/HSM/
-//     webauthn into the binary). Exactly the clients/mpcseal precedent. When the
+//     webauthn into the binary). Exactly the clients/mpc precedent. When the
 //     cluster is not configured these backends fail CLOSED (ErrMPCNotConfigured);
 //     a signature is NEVER fabricated.
 //
