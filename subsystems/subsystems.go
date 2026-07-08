@@ -68,7 +68,8 @@ import (
 	// is the enable-list gate — do NOT add "iam" to the live --enable until IAM
 	// config is present + the fold is verified (staged cutover from the standalone
 	// iam pod). See clients/iamsvc.
-	_ "github.com/hanzoai/cloud/clients/iamsvc" // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
+	_ "github.com/hanzoai/cloud/clients/iamsvc"  // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
+	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
