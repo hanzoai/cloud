@@ -6,7 +6,7 @@ package wallets
 // seam — the exact wire contract luxfi/mpc's own /sign handler documents for a
 // custody adapter. cloud speaks the ring's real HTTP protocol WITHOUT importing
 // github.com/luxfi/mpc (which would drag chi/Postgres/HSM/webauthn into the hot
-// binary): the clients/mpcseal precedent applied to signing.
+// binary): the clients/mpc precedent applied to signing.
 //
 // SURFACE. The internal API is the raw t-of-n threshold primitive; org_id is the
 // tenant scope on every call (no vault indirection — vaults/treasury-governance

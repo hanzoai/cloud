@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/goja"
 	hplans "github.com/hanzoai/plans"
 	hpricing "github.com/hanzoai/pricing"
 )
@@ -13,7 +13,7 @@ import (
 // newHost loads the REAL @hanzo/pricing goja bundle + embedded catalogs, so
 // this exercises the actual server.mjs handler port + sync.mjs markup port
 // running in goja (Express dropped).
-func newHost(t *testing.T) *gojahost.Host {
+func newHost(t *testing.T) *goja.Host {
 	t.Helper()
 	bundle, err := hpricing.Bundle()
 	if err != nil {
@@ -31,7 +31,7 @@ func newHost(t *testing.T) *gojahost.Host {
 	if err != nil {
 		t.Fatalf("plans.Data: %v", err)
 	}
-	h, err := gojahost.New(gojahost.Config{
+	h, err := goja.New(goja.Config{
 		Name:   "pricing",
 		Bundle: bundle,
 		Globals: map[string]any{
@@ -42,7 +42,7 @@ func newHost(t *testing.T) *gojahost.Host {
 		},
 	})
 	if err != nil {
-		t.Fatalf("gojahost.New: %v", err)
+		t.Fatalf("goja.New: %v", err)
 	}
 	return h
 }
@@ -50,7 +50,7 @@ func newHost(t *testing.T) *gojahost.Host {
 func TestPricing_Summary(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "summary"})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "summary"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestPricing_Summary(t *testing.T) {
 func TestPricing_PublicStripsInternal(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "pricing"})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "pricing"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestPricing_PublicStripsInternal(t *testing.T) {
 func TestPricing_Model404(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "model", Params: map[string]string{"name": "no-such-model"}})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "model", Params: map[string]string{"name": "no-such-model"}})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestPricing_Model404(t *testing.T) {
 func TestPricing_SubscriptionsFromPlans(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "subscriptions"})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "subscriptions"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}

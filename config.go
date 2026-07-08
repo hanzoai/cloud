@@ -19,7 +19,7 @@ type Config struct {
 
 	// Replicas is the app-tier replica count the operator injects (CLOUD_REPLICAS,
 	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It exists to
-	// enforce ONE contract: embedded IAM (clients/iamsvc) uses Beego's
+	// enforce ONE contract: embedded IAM (clients/iam) uses Beego's
 	// process-local "memory" session store, so an iam-enabled cloud MUST run at a
 	// single replica or login/authorize sessions are lost across replicas.
 	// Validate refuses to boot iam-enabled above 1; the helm chart pins replicas=1
@@ -480,7 +480,7 @@ func (c *Config) Validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("data-dir is required")
 	}
-	// Embedded IAM (clients/iamsvc) uses Beego's process-local "memory" session
+	// Embedded IAM (clients/iam) uses Beego's process-local "memory" session
 	// store, so a horizontally scaled app tier would mint a login/authorize
 	// session on one replica and fail to find it on the next. Refuse to boot an
 	// iam-enabled cloud above a single replica. CLOUD_REPLICAS=0 (unset) is the

@@ -38,7 +38,7 @@ var embeddedTasks *tasksengine.Embedded
 
 // EmbeddedTasks returns the ONE in-process tasks engine, or nil until
 // wireDurableIngest has run (or if it failed to start). The Tasks HTTP/UI surface
-// (clients/tasksvc, mounted at /v1/tasks/*) serves on THIS shared engine — there is
+// (clients/tasks, mounted at /v1/tasks/*) serves on THIS shared engine — there is
 // exactly one engine per process, shared by ai's durable ingest AND the Tasks
 // product surface, never a second Embed. The surface resolves it lazily (per
 // request) because subsystem Mount runs during MountAll, before wireDurableIngest.

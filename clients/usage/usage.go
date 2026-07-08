@@ -79,7 +79,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("usagesvc", 131, cloud.Typed(Mount))
+	cloud.Register("usage", 131, cloud.Typed(Mount))
 }
 
 // summary answers GET /v1/usage/summary. ?range=24h|7d|30d|custom (+ ?start/?end
