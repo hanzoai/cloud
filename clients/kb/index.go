@@ -104,7 +104,7 @@ func (x *indexer) enabled() bool { return x.embedKey != "" && x.vectorURL != "" 
 // collection is the org's PHYSICAL vector namespace. The "kb_" prefix keeps KB's
 // collections disjoint from any other vector use of the same org slug. The org is
 // run through provisioning.SanitizeOrg — the codebase's ONE org-slug normalizer,
-// shared with S3/KMS/projectsvc — so the PHYSICAL namespace is INJECTIVE in the
+// shared with S3/KMS/projects — so the PHYSICAL namespace is INJECTIVE in the
 // owner: distinct owners that would otherwise fold onto one Qdrant collection ("a b"
 // vs "a_b") get a hash-suffixed slug and stay distinct, and an unsafe-rune org folds
 // to "" (which yields the sentinel "kb_" namespace that indexing/search both use

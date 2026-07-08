@@ -23,7 +23,7 @@ package cloud
 // data plane always required of per-project scope.
 //
 // DEPENDENCY INVERSION (why a resolver, not an import). The project registries
-// (clients/projectsvc, clients/platform) import THIS package, so cloud must not
+// (clients/projects, clients/platform) import THIS package, so cloud must not
 // import them. Each registry registers a TenantScopeResolver at its Mount —
 // exactly like sites.SetResolver — and the boundary consults the registered set
 // per request. With no registry mounted, nothing is ever "foreign", so the guard

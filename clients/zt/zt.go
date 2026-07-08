@@ -80,13 +80,7 @@ func (s *svc) routes(app *zip.App) {
 }
 
 func init() {
-	cloud.Register("zt", 134, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("zt.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("zt", 134, cloud.Typed(Mount))
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the

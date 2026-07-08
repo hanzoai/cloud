@@ -157,13 +157,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("observe", 44, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("observe.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("observe", 44, cloud.Typed(Mount))
 }
 
 // Shutdown releases the settings store. Idempotent.
