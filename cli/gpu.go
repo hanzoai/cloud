@@ -25,6 +25,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -730,11 +731,19 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 	var req struct {
 		Prompt    json.RawMessage `json:"prompt"`
 		UploadURL string          `json:"uploadUrl"`
+		Org       string          `json:"org"`
+		Inputs    []inputImage    `json:"inputs"`
 	}
 	if err := json.Unmarshal(input, &req); err != nil || len(req.Prompt) == 0 {
 		return nil, fmt.Errorf("studio.render: input needs a `prompt` graph")
 	}
 	cl := &http.Client{Timeout: 60 * time.Second}
+	// Materialize any uploaded inputs (they live in orgs/{org}/input on the cloud
+	// pod, which this worker cannot read) into the LOCAL studio input dir via its
+	// own /upload/image, so LoadImage resolves them before we render.
+	if err := w.materializeInputs(ctx, cl, req.Inputs); err != nil {
+		return nil, fmt.Errorf("studio.render: staging inputs: %w", err)
+	}
 	body, _ := json.Marshal(map[string]any{"prompt": req.Prompt})
 	post, err := http.NewRequestWithContext(ctx, http.MethodPost, localComfyUI+"/prompt", bytes.NewReader(body))
 	if err != nil {
@@ -777,7 +786,7 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		}
 		if entry, ok := hist[pr.PromptID]; ok {
 			outputs := collectOutputs(entry)
-			gallery, uerr := w.uploadOutputs(ctx, outputs, req.UploadURL)
+			gallery, uerr := w.uploadOutputs(ctx, outputs, req.UploadURL, req.Org)
 			if uerr != nil {
 				return nil, fmt.Errorf("studio.render: prompt %s rendered but gallery upload failed: %w", pr.PromptID, uerr)
 			}
@@ -789,10 +798,12 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 
 // uploadOutputs fetches each finished render from the LOCAL studio (GET /view) and
 // POSTs it to the org studio's /upload/output with the user's IAM bearer. The remote
-// studio derives the org from the token and writes to orgs/{org}/output — persisted
-// to the gallery by its PVC + S3 mirror. Returns the stored gallery paths. base is
-// resolved from (in order) the per-job uploadUrl, then w.studioUploadURL.
-func (w *worker) uploadOutputs(ctx context.Context, outputs []string, uploadURL string) ([]string, error) {
+// studio writes to orgs/{org}/output for the ACTIVE org — persisted to the gallery.
+// org is the job's active org (from the browser's org switcher); it is forwarded as
+// the studio_active_org cookie so a worker whose token home-org differs from the
+// active org still lands the output in the right gallery. Returns the stored gallery
+// paths. base is resolved from (in order) the per-job uploadUrl, then w.studioUploadURL.
+func (w *worker) uploadOutputs(ctx context.Context, outputs []string, uploadURL, org string) ([]string, error) {
 	if len(outputs) == 0 {
 		return nil, nil
 	}
@@ -812,7 +823,7 @@ func (w *worker) uploadOutputs(ctx context.Context, outputs []string, uploadURL 
 		if err != nil {
 			return stored, fmt.Errorf("fetch %s: %w", o, err)
 		}
-		path, err := w.postGalleryOutput(ctx, base, tok, name, sub, data)
+		path, err := w.postGalleryOutput(ctx, base, tok, org, name, sub, data)
 		if err != nil {
 			return stored, fmt.Errorf("upload %s: %w", o, err)
 		}
@@ -844,8 +855,10 @@ func (w *worker) fetchLocalOutput(ctx context.Context, name, subfolder string) (
 }
 
 // postGalleryOutput multipart-POSTs one output to <base>/upload/output with the
-// user's IAM bearer and returns the stored "subfolder/name" gallery path.
-func (w *worker) postGalleryOutput(ctx context.Context, base, tok, name, subfolder string, data []byte) (string, error) {
+// user's IAM bearer and returns the stored "subfolder/name" gallery path. When org
+// is set it rides as the studio_active_org cookie so the studio writes into that
+// org's gallery even if the worker's token home-org differs.
+func (w *worker) postGalleryOutput(ctx context.Context, base, tok, org, name, subfolder string, data []byte) (string, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	part, err := mw.CreateFormFile("image", name)
@@ -868,6 +881,9 @@ func (w *worker) postGalleryOutput(ctx context.Context, base, tok, name, subfold
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Accept", "application/json")
+	if org != "" {
+		req.Header.Set("Cookie", "studio_active_org="+org)
+	}
 	resp, err := w.http.Do(req)
 	if err != nil {
 		return "", err
@@ -886,6 +902,60 @@ func (w *worker) postGalleryOutput(ctx context.Context, base, tok, name, subfold
 		return filepath.Join(subfolder, name), nil
 	}
 	return filepath.Join(out.Subfolder, out.Name), nil
+}
+
+// inputImage is one uploaded input shipped with the job: a base64 blob plus the
+// input-dir-relative location it must occupy on this worker so LoadImage finds it.
+type inputImage struct {
+	Name      string `json:"name"`
+	Subfolder string `json:"subfolder"`
+	Data      string `json:"data"` // base64
+}
+
+// materializeInputs writes each shipped input into the LOCAL studio's input dir by
+// POSTing it to the studio's own /upload/image (loopback, auth-bypassed). This is
+// how an uploaded photo — which lives in orgs/{org}/input on the dispatching pod,
+// unreadable by this worker — becomes resolvable by LoadImage before the render.
+func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs []inputImage) error {
+	for _, in := range inputs {
+		if in.Name == "" || in.Data == "" {
+			continue
+		}
+		data, err := base64.StdEncoding.DecodeString(in.Data)
+		if err != nil {
+			return fmt.Errorf("decode input %q: %w", in.Name, err)
+		}
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		part, err := mw.CreateFormFile("image", in.Name)
+		if err != nil {
+			return err
+		}
+		if _, err := part.Write(data); err != nil {
+			return err
+		}
+		_ = mw.WriteField("type", "input")
+		_ = mw.WriteField("subfolder", in.Subfolder)
+		_ = mw.WriteField("overwrite", "true")
+		if err := mw.Close(); err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, localComfyUI+"/upload/image", &buf)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		resp, err := cl.Do(req)
+		if err != nil {
+			return fmt.Errorf("stage input %q: %w", in.Name, err)
+		}
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("stage input %q: HTTP %d: %s", in.Name, resp.StatusCode, serverMessage(raw))
+		}
+	}
+	return nil
 }
 
 // collectOutputs pulls the output image/file names out of a ComfyUI history entry.
