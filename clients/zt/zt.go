@@ -57,7 +57,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("zt.Mount: nil deps.Logger")
 	}
-	s := &svc{cl: newClient(), log: deps.Logger.New("subsystem", "zt")}
+	s := &svc{cl: newClient(), log: deps.Logger.New("subsystem", "zero-trust")}
 	s.routes(app)
 
 	if !s.cl.configured() {
@@ -80,7 +80,7 @@ func (s *svc) routes(app *zip.App) {
 }
 
 func init() {
-	cloud.Register("zt", 134, cloud.Typed(Mount))
+	cloud.Register("zero-trust", 134, cloud.Typed(Mount))
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
