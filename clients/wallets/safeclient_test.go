@@ -28,7 +28,9 @@ func TestSafeCustody(t *testing.T) {
 		jwtSecret   = "shared-mpc-jwt-secret"
 		mpcEOA      = "0x00112233445566778899aabbccddeeff00112233"
 		safeAddr    = "0xaabbccddeeff00112233445566778899aabbccdd"
-		ringWallet  = "wal_stub"
+		vaultID     = "vault_stub"
+		dbWalletID  = "dbwal_stub" // db.Wallet primary key (the Safe deploy handle)
+		ringWallet  = "wal_stub"   // internal threshold-key id (the sign handle)
 		smartWallet = "sw_stub"
 		safeTxHash  = "0x" + "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
 		sigR        = "0x1111111111111111111111111111111111111111111111111111111111111111"
@@ -75,19 +77,22 @@ func TestSafeCustody(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 		}
 		switch {
-		// ── :9800 internal threshold API (static bearer) ──
-		case r.URL.Path == "/keygen":
-			if r.Header.Get("Authorization") != "Bearer "+internalKey {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+		// ── :8081 product API: vault + wallet create (ring JWT) ──
+		case r.URL.Path == "/v1/vaults":
+			if verifyRingJWT(w, r.Header.Get("Authorization")) != "acme" {
 				return
 			}
-			if body["org_id"] != "acme" {
-				http.Error(w, "bad org_id", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": vaultID, "name": body["name"]})
+		case r.URL.Path == "/v1/vaults/"+vaultID+"/wallets":
+			if verifyRingJWT(w, r.Header.Get("Authorization")) != "acme" {
 				return
 			}
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"wallet_id": ringWallet, "result_type": "success", "evm_address": mpcEOA,
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": dbWalletID, "walletId": ringWallet, "evmAddress": mpcEOA, "keyType": "secp256k1",
 			})
+		// ── :9800 internal threshold API (static bearer) — owner-sign ──
 		case r.URL.Path == "/sign":
 			if r.Header.Get("Authorization") != "Bearer "+internalKey {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -99,8 +104,8 @@ func TestSafeCustody(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"signature": stubSig, "status": "success"})
 
-		// ── :8081 product API (ring JWT) ──
-		case r.URL.Path == "/v1/wallets/"+ringWallet+"/smart-wallet":
+		// ── :8081 product API: Safe deploy/propose (ring JWT) ──
+		case r.URL.Path == "/v1/wallets/"+dbWalletID+"/smart-wallet":
 			if verifyRingJWT(w, r.Header.Get("Authorization")) != "acme" {
 				return
 			}

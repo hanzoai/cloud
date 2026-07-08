@@ -115,9 +115,50 @@ type SafeTxResult struct {
 	S          string `json:"s"`
 }
 
+// mpcWallet mirrors the ring's db.Wallet JSON (the subset cloud consumes). ID is
+// the DB primary key — the handle the Safe deploy route resolves (orm.Get); it is
+// DISTINCT from WalletID, the internal threshold-key id used to threshold-sign.
+type mpcWallet struct {
+	ID         string `json:"id"`         // db.Wallet primary key — the Safe deploy handle
+	WalletID   string `json:"walletId"`   // internal threshold-key id — the sign handle
+	EVMAddress string `json:"evmAddress"` // the MPC EOA (the Safe owner)
+}
+
+// createVault creates a ring vault (the wallet's parent scope on the product API)
+// and returns its id. The ring's Safe surface is vault-scoped: a wallet that a Safe
+// can be deployed for MUST be created under a vault (POST /v1/vaults/{id}/wallets),
+// which is the ONLY create path that persists a db.Wallet row AND returns its id.
+func (c *safeClient) createVault(ctx context.Context, org, name string) (string, error) {
+	var v struct {
+		ID string `json:"id"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/v1/vaults", org, map[string]any{"name": name}, &v); err != nil {
+		return "", err
+	}
+	if v.ID == "" {
+		return "", fmt.Errorf("safe: create vault returned no id")
+	}
+	return v.ID, nil
+}
+
+// createWallet threshold-keygens a secp256k1 MPC wallet under vaultID and returns
+// its db id (the Safe deploy handle), internal WalletID (the sign handle), and EOA.
+func (c *safeClient) createWallet(ctx context.Context, org, vaultID, name string) (*mpcWallet, error) {
+	body := map[string]any{"name": name, "key_type": "secp256k1", "protocol": "cggmp21"}
+	var wl mpcWallet
+	if err := c.do(ctx, http.MethodPost, "/v1/vaults/"+vaultID+"/wallets", org, body, &wl); err != nil {
+		return nil, err
+	}
+	if wl.ID == "" || wl.WalletID == "" || wl.EVMAddress == "" {
+		return nil, fmt.Errorf("safe: create wallet returned an incomplete wallet (id/walletId/evmAddress)")
+	}
+	return &wl, nil
+}
+
 // deploySafe deploys a counterfactual Safe on chain, owned by the MPC EOA. The
 // ring guarantees the MPC EOA is always an owner and returns the CREATE2-predicted
 // contract address. threshold is the Safe m-of-n (default 1 = the single MPC EOA).
+// walletID is the db.Wallet PRIMARY KEY (mpcWallet.ID), not the internal WalletID.
 func (c *safeClient) deploySafe(ctx context.Context, org, walletID, chain string, owners []string, threshold int) (*safeWallet, error) {
 	if walletID == "" {
 		return nil, fmt.Errorf("safe: deploy requires the ring MPC wallet id")

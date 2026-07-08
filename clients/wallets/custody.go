@@ -322,15 +322,29 @@ func (s safeCustody) Provision(ctx context.Context, w *Wallet) (string, error) {
 	if !s.mpc.configured() || !s.safe.configured() {
 		return "", ErrMPCNotConfigured
 	}
-	walletID, mpcEOA, err := s.mpc.keygen(ctx, w.Org, "")
+	// The ring's Safe surface is VAULT-scoped and resolves the owner wallet by its
+	// db primary key, so the MPC wallet must be created through the :8081 product
+	// API (vault → wallet), which persists the db.Wallet row the deploy needs —
+	// NOT the :9800 internal keygen (which mints a threshold key with no db.Wallet,
+	// so deploy 404s "wallet not found"). One vault per Safe wallet, named for it.
+	name := "hanzo-safe-" + w.ID
+	vaultID, err := s.safe.createVault(ctx, w.Org, name)
 	if err != nil {
 		return "", err
 	}
-	sw, err := s.safe.deploySafe(ctx, w.Org, walletID, safeChain(w.Chain), []string{mpcEOA}, 1)
+	wl, err := s.safe.createWallet(ctx, w.Org, vaultID, name)
 	if err != nil {
 		return "", err
 	}
-	w.KeyRef = walletID + "|" + sw.ID
+	sw, err := s.safe.deploySafe(ctx, w.Org, wl.ID, safeChain(w.Chain), []string{wl.EVMAddress}, 1)
+	if err != nil {
+		return "", err
+	}
+	// KeyRef = <internal threshold-key id> | <smart-wallet id>. The FIRST is the
+	// owner-sign handle (:9800 sign); the SECOND is the Safe-tx propose handle
+	// (:8081). The db.Wallet primary key (wl.ID) is only needed for the one-time
+	// deploy above, so it is not retained.
+	w.KeyRef = wl.WalletID + "|" + sw.ID
 	return sw.ContractAddress, nil
 }
 
