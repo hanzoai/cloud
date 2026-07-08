@@ -293,6 +293,77 @@ func TestSanitizeIdentity(t *testing.T) {
 
 // A nil validator (unconfigured) must still STRIP a forged admin header — the
 // sanitizer never fails open to admin, even with no JWKS wired.
+// TestSanitizeIdentity_StampsUserName proves the validated IAM username is stamped
+// as X-User-Name, DISTINCT from X-User-Id (the JWT subject). The direct-Bearer hk-
+// mint depends on this split: IAM's user-key ops parse <owner>/<username>, while
+// X-User-Id is a UUID subject that fails that lookup. Both must be present and
+// distinct on the direct path.
+func TestSanitizeIdentity_StampsUserName(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+
+	c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, time.Now().Add(time.Hour))
+	c.Subject = "2d4d67ab-30f1-474e-b81f-f60461852259" // the JWT subject: a UUID
+	c.Name = "z"                                        // the IAM username
+	tok := signWith(t, key, c)
+
+	var gotName, gotID, gotOrg string
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/probe", func(cx *zip.Ctx) error {
+		gotName = cx.Header("X-User-Name")
+		gotID = cx.User()
+		gotOrg = cx.Org()
+		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+	probe(t, app, bearer(tok))
+
+	if gotID != "2d4d67ab-30f1-474e-b81f-f60461852259" {
+		t.Fatalf("X-User-Id: want the subject UUID, got %q", gotID)
+	}
+	if gotName != "z" {
+		t.Fatalf("X-User-Name: want the IAM username \"z\", got %q", gotName)
+	}
+	if gotOrg != "hanzo" {
+		t.Fatalf("X-Org-Id: want owner \"hanzo\", got %q", gotOrg)
+	}
+}
+
+// TestSanitizeIdentity_UserNameForgeryStripped proves a client-forged X-User-Name is
+// deleted on ingress and only the validated claim's username survives — it is an
+// authority header, not client input.
+func TestSanitizeIdentity_UserNameForgeryStripped(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+
+	c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, time.Now().Add(time.Hour))
+	c.Name = "z"
+	tok := signWith(t, key, c)
+
+	var gotName string
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/probe", func(cx *zip.Ctx) error {
+		gotName = cx.Header("X-User-Name")
+		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+	probe(t, app, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+tok)
+		r.Header.Set("X-User-Name", "victim-admin") // forged — must be overwritten
+	})
+	if gotName != "z" {
+		t.Fatalf("X-User-Name: forged value survived (got %q) — want the validated username \"z\"", gotName)
+	}
+}
+
 func TestSanitizeIdentity_NilValidatorStillStripsAdmin(t *testing.T) {
 	app, got := newIdentityApp(t, nil)
 	probe(t, app, func(r *http.Request) {
