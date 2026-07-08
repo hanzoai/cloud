@@ -182,6 +182,18 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			if id := claims.userID(); id != "" {
 				req.Header.Set("X-User-Id", id)
 			}
+			// X-User-Name is the IAM USERNAME (the `name` half of <owner>/<name>),
+			// stamped DISTINCT from X-User-Id (the UUID subject). The gateway path
+			// historically minted X-User-Id==name so <owner>/X-User-Id resolved; the
+			// in-binary direct-Bearer path stamps X-User-Id==sub (a UUID), which broke
+			// IAM's mint-user-keys/get-user (owner/uuid → "password or code is
+			// incorrect"). resolveCaller prefers this header for the owner/name key and
+			// falls back to X-User-Id, so both paths mint keys correctly. Like every
+			// authorityHeader it is stripped on ingress (line ~97) and re-injected here
+			// ONLY from validated claims — never a client value.
+			if uname := claims.username(); uname != "" {
+				req.Header.Set("X-User-Name", uname)
+			}
 			if claims.Email != "" {
 				req.Header.Set("X-User-Email", claims.Email)
 			}
