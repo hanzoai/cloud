@@ -227,6 +227,17 @@ func initSessions() error {
 // IAM_DATABASE_URL is respected; only the default is filled in. Idempotent.
 func isolateDatabase(dataDir string) {
 	if _, ok := os.LookupEnv("IAM_DATABASE_URL"); ok {
+		return // operator override always respected
+	}
+	// Only isolate when a SIBLING subsystem (ai) has claimed the shared
+	// `dataSourceName` env — that is the co-residence collision this guards. When
+	// IAM is the SOLE sqlite consumer (identity role, CLOUD_ENABLE=iam), leave the
+	// DSN to IAM's own resolution so the SQLCipher enveloped path
+	// (orgIsolation=sqlite) keys and ENCRYPTS the store. Forcing a plaintext
+	// `file:` DSN here would make the CGO+SQLCipher identity build open its global
+	// DB UNENCRYPTED — the catastrophic plaintext-at-rest the encryption gate
+	// exists to prevent. No sibling → no override.
+	if _, shared := os.LookupEnv("dataSourceName"); !shared {
 		return
 	}
 	_ = os.Setenv("IAM_DATABASE_URL", defaultIAMDatabaseURL(dataDir))

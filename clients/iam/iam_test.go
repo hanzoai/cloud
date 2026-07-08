@@ -145,6 +145,17 @@ func TestIsolateDatabase(t *testing.T) {
 	if os.Getenv("IAM_DATABASE_URL") != override {
 		t.Errorf("isolateDatabase clobbered operator override: got %q, want %q", os.Getenv("IAM_DATABASE_URL"), override)
 	}
+
+	// (4): SOLE-consumer (identity role) — no sibling has claimed dataSourceName,
+	// so isolateDatabase must NOT force a plaintext DSN. Overriding here would make
+	// the CGO+SQLCipher identity build open its global store UNENCRYPTED. IAM keeps
+	// its own (enveloped, orgIsolation=sqlite) resolution.
+	os.Unsetenv("dataSourceName")
+	os.Unsetenv("IAM_DATABASE_URL")
+	isolateDatabase(dataDir)
+	if v, ok := os.LookupEnv("IAM_DATABASE_URL"); ok {
+		t.Errorf("isolateDatabase set IAM_DATABASE_URL=%q with no sibling dataSourceName — would bypass IAM's encrypted enveloped DSN (plaintext-at-rest risk)", v)
+	}
 }
 
 // TestInitSessionsIdempotent proves the session-manager hook is safe to call more
