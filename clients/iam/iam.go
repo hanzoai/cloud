@@ -175,7 +175,15 @@ func initSessions() error {
 		CookieName:              s.SessionName,
 		EnableSetCookie:         s.SessionAutoSetCookie,
 		Gclifetime:              s.SessionGCMaxLifetime,
-		Secure:                  web.BConfig.Listen.EnableHTTPS,
+		// Secure is PINNED true, not derived from Listen.EnableHTTPS. The binary
+		// listens plain :8000 behind the TLS-terminating ingress, so EnableHTTPS is
+		// false and the derived value would ship a non-Secure session cookie — and
+		// the embed console's identity bridge (middleware_identity.sessionAccessToken)
+		// turns that opaque sid into a money bearer (hk- mint, balance/top-up). A
+		// non-Secure cookie is capturable off any plaintext leg and replayable, so it
+		// MUST be Secure. The deployed edge is always HTTPS; a plain-HTTP local embed
+		// is not a supported prod topology. (RED H2.)
+		Secure:                  true,
 		CookieLifeTime:          s.SessionCookieLifeTime,
 		ProviderConfig:          filepath.ToSlash(s.SessionProviderConfig),
 		DisableHTTPOnly:         s.SessionDisableHTTPOnly,
