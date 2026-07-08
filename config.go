@@ -241,8 +241,8 @@ func LoadConfig() *Config {
 		Env:              getenv("CLOUD_ENV", ""),
 		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
-		Replicas:         getenvInt("CLOUD_REPLICAS", 0),
-		Domain:           getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
+		Replicas: getenvInt("CLOUD_REPLICAS", 0),
+		Domain:   getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
 		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
 		AdminOrg:        getenv("IAM_ADMIN_ORG", "admin"),
