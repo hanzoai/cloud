@@ -44,6 +44,7 @@ func newSvc(t *testing.T, custody map[Kind]Custody, def Kind) (*svc, *zip.App) {
 	app.Get("/v1/wallets/:id", s.getWallet)
 	app.Post("/v1/wallets/:id/keys", s.rotateKeys)
 	app.Post("/v1/wallets/:id/sign", s.sign)
+	app.Post("/v1/wallets/:id/safe-tx", s.proposeSafeTx)
 	return s, app
 }
 
