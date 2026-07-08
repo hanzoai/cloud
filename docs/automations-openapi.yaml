@@ -32,7 +32,7 @@ security:
 
 tags:
   - name: system
-    description: Health and piece catalogue.
+    description: Health and connector catalogue.
   - name: flows
     description: Author, version, and control automation flows.
   - name: runs
@@ -61,11 +61,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
-  /v1/automations/pieces:
+  /v1/automations/connectors:
     get:
       tags: [system]
-      operationId: listPieces
-      summary: Browse the connector (piece) catalogue.
+      operationId: listConnectors
+      summary: Browse the connector catalogue.
       description: >-
         Returns the go:embed'd catalogue (`catalog/catalog.json`) — the full set
         of connectors with their actions, triggers, auth descriptor, and props.
@@ -73,18 +73,37 @@ paths:
         - name: search
           in: query
           required: false
-          description: Case-insensitive substring filter over piece name/displayName.
+          description: Case-insensitive substring filter over connector name/displayName.
           schema:
             type: string
         - name: category
           in: query
           required: false
-          description: Filter to a single piece category (e.g. `DEVELOPER_TOOLS`).
+          description: Filter to a single connector category (e.g. `DEVELOPER_TOOLS`).
           schema:
             type: string
       responses:
         "200":
           description: The connector catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalog"
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /v1/automations/pieces:
+    get:
+      tags: [system]
+      operationId: listPiecesAlias
+      deprecated: true
+      summary: Back-compat alias of GET /v1/automations/connectors.
+      description: >-
+        Retired path. "pieces" was the ActivePieces term; use
+        `/v1/automations/connectors`. This alias returns the identical body and is
+        kept so live clients do not break (HIP-0125).
+      responses:
+        "200":
+          description: The connector catalogue (identical to /connectors).
           content:
             application/json:
               schema:
@@ -674,20 +693,20 @@ components:
         description:
           type: string
 
-    PieceAuth:
+    ConnectorAuth:
       type: object
       required: [type, required]
       properties:
         type:
           type: string
           description: >-
-            The credential a piece needs — OAUTH2 | SECRET_TEXT | CUSTOM_AUTH |
+            The credential a connector needs — OAUTH2 | SECRET_TEXT | CUSTOM_AUTH |
             BASIC_AUTH | NONE.
           enum: [OAUTH2, SECRET_TEXT, CUSTOM_AUTH, BASIC_AUTH, NONE]
         required:
           type: boolean
 
-    PieceAction:
+    ConnectorAction:
       type: object
       required: [name, displayName, description, props]
       properties:
@@ -702,7 +721,7 @@ components:
           items:
             $ref: "#/components/schemas/PropSpec"
 
-    PieceTrigger:
+    ConnectorTrigger:
       type: object
       required: [name, displayName, description, strategy, props]
       properties:
@@ -719,13 +738,13 @@ components:
           items:
             $ref: "#/components/schemas/PropSpec"
 
-    PieceMetadata:
+    ConnectorMetadata:
       type: object
       required: [name, displayName, version, auth, actions, triggers]
       properties:
         name:
           type: string
-          description: npm package name, e.g. `@activepieces/piece-github`.
+          description: Stable connector id, e.g. `github`.
         displayName:
           type: string
         description:
@@ -739,29 +758,29 @@ components:
           items:
             type: string
         auth:
-          $ref: "#/components/schemas/PieceAuth"
+          $ref: "#/components/schemas/ConnectorAuth"
         actions:
           type: array
           items:
-            $ref: "#/components/schemas/PieceAction"
+            $ref: "#/components/schemas/ConnectorAction"
         triggers:
           type: array
           items:
-            $ref: "#/components/schemas/PieceTrigger"
+            $ref: "#/components/schemas/ConnectorTrigger"
 
     Catalog:
       type: object
-      required: [pieceCount, pieces]
+      required: [connectorCount, connectors]
       properties:
         generatedFrom:
           type: string
           example: hanzoai/auto
-        pieceCount:
+        connectorCount:
           type: integer
-        pieces:
+        connectors:
           type: array
           items:
-            $ref: "#/components/schemas/PieceMetadata"
+            $ref: "#/components/schemas/ConnectorMetadata"
 
     CreateFlowRequest:
       type: object
