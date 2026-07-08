@@ -1,13 +1,36 @@
-# clients/o11y — embedded o11y (query + ingest)
+# clients/o11y — embedded o11y (scoped reads + query + ingest)
 
 cloud embeds the o11y subsystem in-process against the shared ClickHouse
-`datastore` (cluster `insights`). Two halves, one datastore:
+`datastore` (cluster `insights`). Three planes, one datastore:
+
+- **Scoped read plane** — `scope.go` + `logs.go` + `metricsread.go` + `status.go`
+  + `productmap.go` + `vmquery.go`. The org-scoped, tenant-isolated
+  `/v1/o11y/{logs,metrics,status}` (order **69**, before the wildcard at 70 so
+  Fiber gives it precedence). The ONE owner of these three routes — folded in from
+  the retired `clients/observe` so nothing was lost:
+  - **logs**: two views over ONE store. A validated SuperAdmin (`c.IsAdmin()`, ==
+    `owner==admin` after SanitizeIdentity) sees the raw infra stdout stream
+    (`signoz_logs`, `resources_string['app']=<workload>`); every other org sees its
+    OWN request stream derived from org-tagged spans
+    (`signoz_traces`, `attributes_string['hanzo.org']=<org>`).
+  - **metrics**: REAL per-org RED (rate/errors/p50/p95) from org-tagged request
+    spans + the org's LLM usage from `hanzo.cloud_usage`. A SuperAdmin sees the
+    whole-product RED (no org predicate); usage is always the caller's own org.
+  - **status**: a live in-cluster health probe (allowlisted host — SSRF boundary)
+    fused with VM `up{service}` inventory.
+  - **Tenant isolation**: org is `principal.Tenant(c)`, bound as a positional
+    ClickHouse parameter (never interpolated); the product is shape-validated
+    (DNS-1123) then alias-mapped (console slug → workload) then allowlisted
+    (`knownServices`) — a malformed slug is a 400, an unbacked one is honest-empty.
+    Reuses the shared `aiobject.DatastoreQuery` (ONE datastore client).
 
 - **Query / control plane** — `embed.go` + `o11y.go`. Constructs the SigNoz
-  query runtime (`community.NewServer`) and serves `/v1/o11y/*` from this binary
-  (dashboards, alerts, querier). Falls back to reverse-proxying a standalone
+  query runtime (`community.NewServer`) and serves the rest of `/v1/o11y/*` from
+  this binary (dashboards, alerts, querier) via the wildcard (order 70) +
+  `o11y.SetHandler` (order 71). Falls back to reverse-proxying a standalone
   o11y Deployment when disabled/failed. READS ClickHouse via clickhouse-go
-  **v2.44.0** (upstream).
+  **v2.44.0** (upstream). `/v1/settings/:product` is NOT here — it is console
+  product config, split out to `clients/settings`.
 
 - **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
   that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
