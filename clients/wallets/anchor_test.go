@@ -1,6 +1,7 @@
 package wallets
 
 import (
+	"math/big"
 	"strings"
 	"testing"
 
@@ -48,5 +49,37 @@ func TestRecoverableSig_NoMatch(t *testing.T) {
 	full, _ := crypto.Sign(digest, priv)
 	if _, err := recoverableSig(digest, full[:64], "0x0000000000000000000000000000000000000001"); err == nil {
 		t.Fatal("expected error for a signature that recovers to a different address")
+	}
+}
+
+// TestRecoverableSig_LowSNormalization proves a HIGH-S ring signature is
+// canonicalized to EIP-2 low-S AND still recovers to the signer (the fix for the
+// anchor's "invalid sender" — geth rejects s > N/2).
+func TestRecoverableSig_LowSNormalization(t *testing.T) {
+	for i := 0; i < 8; i++ {
+		priv, _ := crypto.GenerateKey()
+		addr := crypto.PubkeyToAddress(priv.PublicKey).Hex()
+		digest := crypto.Keccak256([]byte{byte(i), 'l', 'o', 'w', 's'})
+		full, _ := crypto.Sign(digest, priv) // low-S 65-byte
+		// Force HIGH-S: s' = N - s (the equivalent upper-half scalar).
+		s := new(big.Int).SetBytes(full[32:64])
+		s.Sub(secp256k1N, s)
+		high := make([]byte, 64)
+		copy(high[:32], full[:32])
+		s.FillBytes(high[32:64])
+		if new(big.Int).SetBytes(high[32:64]).Cmp(secp256k1HalfN) <= 0 {
+			t.Fatal("test setup: expected high-S")
+		}
+		got, err := recoverableSig(digest, high, addr)
+		if err != nil {
+			t.Fatalf("recoverableSig(high-S): %v", err)
+		}
+		if new(big.Int).SetBytes(got[32:64]).Cmp(secp256k1HalfN) > 0 {
+			t.Fatal("output is still high-S — not normalized")
+		}
+		pub, _ := crypto.SigToPub(digest, got)
+		if !strings.EqualFold(crypto.PubkeyToAddress(*pub).Hex(), addr) {
+			t.Fatalf("normalized sig recovers to %s, want %s", crypto.PubkeyToAddress(*pub).Hex(), addr)
+		}
 	}
 }
