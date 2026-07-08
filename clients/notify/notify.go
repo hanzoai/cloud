@@ -112,13 +112,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("notify", subsystemOrder, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("notify.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	// cloud.HealthOwner: notify serves its own /v1/notify/health (Mount), so
+	// Serve skips the generic always-ok route rather than shadowing it.
+	cloud.Register("notify", subsystemOrder, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // health mirrors notifyd's GET /v1/notify/health body verbatim so probes and

@@ -69,7 +69,7 @@ func baseCfg(t *testing.T, masterKey string) *cloud.Config {
 		Domain:          "api.hanzo.ai",
 		IAMIssuer:       "https://hanzo.id",
 		DataDir:         t.TempDir(),
-		Enable:          []string{"kmssvc"},
+		Enable:          []string{"kms"},
 		KMSMasterKeyRef: masterKey,
 	}
 }
@@ -152,7 +152,7 @@ func TestSecretNotStoredInPlaintext(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &cloud.Config{
 		Brand: "hanzo", Domain: "api.hanzo.ai", IAMIssuer: "https://hanzo.id",
-		DataDir: dir, Enable: []string{"kmssvc"}, KMSMasterKeyRef: masterKeyB64(t),
+		DataDir: dir, Enable: []string{"kms"}, KMSMasterKeyRef: masterKeyB64(t),
 	}
 	_, deps := newApp(t, cfg)
 

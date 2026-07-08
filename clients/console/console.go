@@ -126,20 +126,14 @@ func (s *svc) routes(app *zip.App) {
 	app.Delete("/v1/commerce/*", s.commerceData)
 }
 
-// init registers the subsystem. Registered as "consolesvc" (not "console") so
-// serve.go's generic GET /v1/<name>/health lands at the unrouted
-// /v1/consolesvc/health and does NOT shadow the real fail-closed probe at
-// /v1/console/health (same convention as platformsvc/paassvc/kmssvc). Order 122
-// binds the /v1/console family well before the AI /v1/* catch-all (150); it shares
-// no path prefix with another subsystem, so the order only needs to precede 150.
+// init registers the subsystem under the clean id "console" with cloud.HealthOwner:
+// it serves its OWN fail-closed probe at /v1/console/health, and cloud.HealthOwner
+// makes serve.go skip the generic GET /v1/<name>/health so the always-ok route
+// never shadows it (same flag as kms/paas/s3). Order 122 binds the /v1/console
+// family well before the AI /v1/* catch-all (150); it shares no path prefix with
+// another subsystem, so the order only needs to precede 150.
 func init() {
-	cloud.Register("consolesvc", 122, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("console.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("console", 122, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // ── caller resolution (the tenancy boundary) ─────────────────────────────────

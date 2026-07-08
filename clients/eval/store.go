@@ -110,7 +110,7 @@ type DatasetRun struct {
 
 // Store is the eval metastore over one SQLite file ({DataDir}/evals.db). Tenancy
 // is the org column; MaxOpenConns(1) serializes writes against the file lock
-// (same discipline as prompts/projectsvc).
+// (same discipline as prompts/projects).
 type Store struct {
 	db *sql.DB
 }

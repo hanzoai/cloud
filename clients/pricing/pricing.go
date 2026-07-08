@@ -472,13 +472,9 @@ func fetchJSON(ctx context.Context, url string) (any, error) {
 }
 
 func init() {
-	cloud.Register("pricing", 112, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("pricing.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	// cloud.HealthOwner: pricing serves its own /v1/pricing/health (Mount), so
+	// Serve skips the generic always-ok route rather than shadowing it.
+	cloud.Register("pricing", 112, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // Shutdown drops the goja host and closes the catalog overlay store. Idempotent.

@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"bytes"

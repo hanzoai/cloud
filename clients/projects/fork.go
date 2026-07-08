@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ type forkReq struct {
 
 // fork creates a real Project seeded from a starter-kit template. It reads the
 // ONE embedded gallery catalog (templates.Get — no catalog copy here), maps the
-// template's freeform framework label to the projectsvc build-hint enum, and then
+// template's freeform framework label to the projects build-hint enum, and then
 // funnels through the SAME createProject path POST /v1/projects uses — so slug
 // validation, org scoping, ID minting, and conflict handling are not duplicated.
 // Returns 201 with the created project.
@@ -64,7 +64,7 @@ func (s *svc) fork(c *zip.Ctx) error {
 }
 
 // mapFramework maps a template's freeform framework label (e.g. "Next.js 14.2 +
-// TS", "React 18 + Vite", "HTML/Gulp") to the closed projectsvc build-hint enum
+// TS", "React 18 + Vite", "HTML/Gulp") to the closed projects build-hint enum
 // (see `frameworks`). The label is a human display string from the gallery, so
 // the match is by recognizable token, most-specific first:
 //

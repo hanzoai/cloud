@@ -55,7 +55,6 @@
 package iamsvc
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -199,11 +198,5 @@ func initSessions() error {
 // identity authority and most subsystems depend on deps.IAM at request time, so
 // it mounts before them (the HIP-0106 iam=50 slot).
 func init() {
-	cloud.Register("iam", 50, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("iamsvc.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("iam", 50, cloud.Typed(Mount))
 }

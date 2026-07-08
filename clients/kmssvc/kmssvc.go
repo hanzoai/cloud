@@ -17,7 +17,7 @@
 // ORG SCOPING — {org} must equal the caller's validated org (c.Org()); a global
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
 // as /orgs/{org}{subpath}, so one org can never address another org's records.
-// This mirrors clients/paassvc and clients/admin.
+// This mirrors clients/paas and clients/admin.
 package kmssvc
 
 import (
@@ -131,25 +131,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// init registers the subsystem. Registered as "kmssvc" (not "kms") for the same
-// reason clients/paassvc uses "paassvc": serve.go auto-mounts a generic
-// GET /v1/<name>/health BEFORE MountAll and zip is first-match-wins, so a name of
-// "kms" would shadow the real fail-closed /v1/kms/health with a fake 200. The
-// name "kmssvc" parks the generic liveness at the unrouted /v1/kmssvc/health and
-// lets the real probe own /v1/kms/health. The /v1/kms API prefix is independent
-// of the internal subsystem name (paassvc → /v1/paas). Enable with
-// --enable=kmssvc, or leave --enable empty for the default all-on bundle.
+// init registers the subsystem under the clean id "kms". It serves its OWN
+// fail-closed GET /v1/kms/health (Mount), so it registers with cloud.HealthOwner:
+// Serve's generic liveness loop skips a HealthOwner, so the always-ok route never
+// shadows the real probe with a fake 200. (This replaces the former "kmssvc" id
+// kludge, which existed only to park the generic route at an unrouted path.)
+// Enable with --enable=kms, or leave --enable empty for the default all-on bundle.
 //
 // Order 10 is KMS's reserved slot: it mounts before every dependent subsystem so
 // deps.KMS is a live in-process client by the time authz/commerce/ai mount.
 func init() {
-	cloud.Register("kmssvc", 10, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("kms.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("kms", 10, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // guard wraps a secrets handler with the org-scope gate. Fail-closed: a request

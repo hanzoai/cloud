@@ -62,13 +62,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("auditlog", 144, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("auditlog.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("auditlog", 144, cloud.Typed(Mount))
 }
 
 // list answers GET /v1/audit — the caller's OWN org audit trail, newest first.

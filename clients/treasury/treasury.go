@@ -135,13 +135,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// their own accounts; the reserve fund + revenue-share + house mutations are
 	// locked to global-admin under /v1/admin/treasury* (the console admin-proxy
 	// convention, enveloped).
-	app.Get("/v1/finance/treasury", s.myTreasury)           // per-org: reserve transparency + policy
-	app.Get("/v1/finance/accounts", s.myAccounts)           // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	app.Get("/v1/admin/treasury", s.adminReport)            // global-admin: report + journal + anchor
-	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy) // global-admin: set revenue-share %
-	app.Post("/v1/admin/treasury/sweep", s.adminSweep)      // global-admin: accrue revenue-share
-	app.Post("/v1/admin/treasury/seed", s.adminSeed)        // global-admin: inject reserve capital
-	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
+	app.Get("/v1/finance/treasury", s.myTreasury)                 // per-org: reserve transparency + policy
+	app.Get("/v1/finance/accounts", s.myAccounts)                 // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	app.Get("/v1/admin/treasury", s.adminReport)                  // global-admin: report + journal + anchor
+	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)       // global-admin: set revenue-share %
+	app.Post("/v1/admin/treasury/sweep", s.adminSweep)            // global-admin: accrue revenue-share
+	app.Post("/v1/admin/treasury/seed", s.adminSeed)              // global-admin: inject reserve capital
+	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)          // global-admin: anchor ledger root on Hanzo L1
 	app.Post("/v1/admin/treasury/bind-anchor", s.adminBindAnchor) // global-admin: bind the reserve MPC wallet as the anchor signer
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
@@ -154,13 +154,7 @@ func init() {
 	// loops call treasury.Reserve at REQUEST time, long after every Mount ran, so
 	// the mounted singleton is always set). Routes are specific (/v1/finance/*,
 	// /v1/admin/treasury*) so they bind ahead of the AI /v1/* catch-all (150).
-	cloud.RegisterWithShutdown("treasury", 146, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("treasury.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(context.Context) error { return Shutdown() })
+	cloud.RegisterWithShutdown("treasury", 146, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
 }
 
 // ── the backed-payout seam (the ONE helper the 3 growth loops call) ──────────
