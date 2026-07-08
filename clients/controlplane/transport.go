@@ -35,6 +35,12 @@ type Message struct {
 	// in Round2 (MsgRound1 only). The orchestration-layer anti-rush lock: the
 	// share revealed in Round2 must open this commitment.
 	Commit []byte
+	// CommitSig is the sender's proof-of-possession over its Round1 commitment
+	// (MsgRound1 only), binding From to (session, nonce, party, commit). Round1
+	// commitments are authenticated exactly as Round2 legs are, so a single node
+	// cannot forge other nodes' commitments to fake the ALL-Round1 barrier
+	// (red_exploits_test #3).
+	CommitSig []byte
 }
 
 // Transport is the abstract message layer. The ceremony is defined entirely

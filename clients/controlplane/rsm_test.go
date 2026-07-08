@@ -7,41 +7,53 @@ import (
 	"testing"
 )
 
+// extend builds a block at the RSM's next height that correctly extends its
+// current applied state — i.e. carries the ParentRoot the chain-extension gate
+// now requires. Tests that exercise ordering/policy (not the parent-root gate
+// itself) use this so their blocks are well-formed extensions.
+func extend(r *PlacementRSM, ops []PlacementOp) *PlacementBlock {
+	var parent [32]byte
+	copy(parent[:], r.StateHash())
+	return &PlacementBlock{Height: r.Height() + 1, ParentRoot: parent, Ops: ops}
+}
+
 // TestRSM_ContiguousOrderingEnforced — the RSM applies strictly one height at a
 // time: no gaps, no replays.
 func TestRSM_ContiguousOrderingEnforced(t *testing.T) {
 	rsm := NewPlacementRSM(NewMemControlDB())
-	b1 := &PlacementBlock{Height: 1, Ops: []PlacementOp{assignOp("s", "a")}}
+	b1 := extend(rsm, []PlacementOp{assignOp("s", "a")})
 	if err := rsm.Apply(b1); err != nil {
 		t.Fatalf("apply height 1: %v", err)
 	}
 	if rsm.Height() != 1 {
 		t.Fatalf("height = %d, want 1", rsm.Height())
 	}
-	// Replay height 1 -> refused.
+	// Replay height 1 -> refused (height gate).
 	if err := rsm.Apply(b1); err == nil {
 		t.Fatal("replay of height 1 must be refused")
 	}
-	// Gap to height 3 -> refused.
+	// Gap to height 3 -> refused (height gate).
 	if err := rsm.Apply(&PlacementBlock{Height: 3, Ops: []PlacementOp{assignOp("t", "b")}}); err == nil {
 		t.Fatal("gap to height 3 must be refused")
 	}
-	// Contiguous height 2 -> admitted.
-	if err := rsm.Apply(&PlacementBlock{Height: 2, Ops: []PlacementOp{assignOp("t", "b")}}); err != nil {
+	// Contiguous height 2 that extends current state -> admitted.
+	if err := rsm.Apply(extend(rsm, []PlacementOp{assignOp("t", "b")})); err != nil {
 		t.Fatalf("apply height 2: %v", err)
 	}
 }
 
 // TestRSM_FailSecureOnInvalidOps — even reaching Apply, a block whose ops
 // violate an invariant is refused and leaves state untouched (defense in depth:
-// the policy gate is re-run at apply, not trusted from consensus).
+// the policy gate is re-run at apply, not trusted from consensus). The block is
+// a valid chain extension (correct ParentRoot) so it is the OP gate, not the
+// parent-root gate, that rejects it.
 func TestRSM_FailSecureOnInvalidOps(t *testing.T) {
 	rsm := NewPlacementRSM(NewMemControlDB())
-	if err := rsm.Apply(&PlacementBlock{Height: 1, Ops: []PlacementOp{assignOp("shard-X", "cloud-1")}}); err != nil {
+	if err := rsm.Apply(extend(rsm, []PlacementOp{assignOp("shard-X", "cloud-1")})); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 	pre := rsm.StateHash()
-	bad := &PlacementBlock{Height: 2, Ops: []PlacementOp{{Kind: OpReassignShardWriter, Resource: "shard-X", From: "cloud-1", To: "cloud-2"}}}
+	bad := extend(rsm, []PlacementOp{{Kind: OpReassignShardWriter, Resource: "shard-X", From: "cloud-1", To: "cloud-2"}})
 	if err := rsm.Apply(bad); err == nil {
 		t.Fatal("apply of invariant-violating block must fail")
 	}
@@ -54,25 +66,24 @@ func TestRSM_FailSecureOnInvalidOps(t *testing.T) {
 }
 
 // TestRSM_DeterministicConvergence — two independent RSMs applying the same
-// block sequence reach byte-identical state.
+// op sequence reach byte-identical state.
 func TestRSM_DeterministicConvergence(t *testing.T) {
-	seq := []*PlacementBlock{
-		{Height: 1, Ops: []PlacementOp{assignOp("a", "n0")}},
-		{Height: 2, Ops: []PlacementOp{assignOp("b", "n1")}},
-		{Height: 3, Ops: []PlacementOp{{Kind: OpReleaseLease, Resource: "a", Holder: "n0"}}},
+	opSeq := [][]PlacementOp{
+		{assignOp("a", "n0")},
+		{assignOp("b", "n1")},
+		{{Kind: OpReleaseLease, Resource: "a", Holder: "n0"}},
 	}
-	r1 := NewPlacementRSM(NewMemControlDB())
-	r2 := NewPlacementRSM(NewMemControlDB())
-	for _, b := range seq {
-		if err := r1.Apply(b); err != nil {
-			t.Fatalf("r1 apply height %d: %v", b.Height, err)
+	build := func() *PlacementRSM {
+		r := NewPlacementRSM(NewMemControlDB())
+		for _, ops := range opSeq {
+			if err := r.Apply(extend(r, ops)); err != nil {
+				t.Fatalf("apply: %v", err)
+			}
 		}
+		return r
 	}
-	for _, b := range seq {
-		if err := r2.Apply(b); err != nil {
-			t.Fatalf("r2 apply height %d: %v", b.Height, err)
-		}
-	}
+	r1 := build()
+	r2 := build()
 	if !bytes.Equal(r1.StateHash(), r2.StateHash()) {
 		t.Fatal("independent RSMs diverged on the same sequence")
 	}

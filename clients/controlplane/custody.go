@@ -145,6 +145,22 @@ func partialTBS(p pulsar.Partial) []byte {
 	return h.Sum(nil)
 }
 
+// round1TBS is the to-be-signed preimage for a Round1 commitment's proof-of-
+// possession: session, nonce, party, and the z-share commitment. Binding the
+// commitment to the sender's party means a node cannot stamp another node's
+// identity onto a forged commitment to inflate the anti-rush barrier.
+func round1TBS(sid, nid [32]byte, partyID uint32, commit []byte) []byte {
+	h := sha256.New()
+	h.Write([]byte("cp-round1-pop"))
+	h.Write(sid[:])
+	h.Write(nid[:])
+	var idx [4]byte
+	binary.BigEndian.PutUint32(idx[:], partyID)
+	h.Write(idx[:])
+	h.Write(commit)
+	return h.Sum(nil)
+}
+
 // signPoP produces a proof-of-possession over a leg using the pod's identity
 // key. Stub: HMAC-SHA256 under idKey. Real: ML-DSA identity signature.
 func signPoP(idKey [32]byte, tbs []byte) []byte {
