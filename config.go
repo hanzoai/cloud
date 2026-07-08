@@ -213,9 +213,14 @@ type Config struct {
 	// form consensus with). Env PEERS (comma-separated). Empty ⇒ unset.
 	Peers []string
 
-	// Role is this instance's control-plane role: "voter" (participates in
-	// consensus) or "data" (data-plane only). Env ROLE. Empty ⇒ unset.
-	Role string
+	// ControlPlaneRole is this instance's control-plane role: "voter"
+	// (participates in consensus) or "data" (data-plane only). Env ROLE.
+	// Empty ⇒ unset. NAMED ControlPlaneRole (not Role) to avoid colliding with
+	// the HA Role field above (role.Role, CLOUD_ROLE): #160 (writer/reader HA
+	// split) and #163 (Stage-0 control plane) each added a `Role` to this struct
+	// on separate branches, which broke the build on merge. This one is the inert
+	// Stage-0 string — read but consumed by nothing until the engine is wired.
+	ControlPlaneRole string
 
 	// ControlPlaneQuorum is the number of voter nodes required to form a
 	// control-plane quorum. Env CONTROL_PLANE_QUORUM. 0 ⇒ unset.
@@ -274,7 +279,7 @@ func LoadConfig() *Config {
 		// Read but UNUSED: no subsystem consumes these until the engine is wired.
 		NodeID:             getenv("NODE_ID", ""),
 		Peers:              splitTrim(getenv("PEERS", "")),
-		Role:               getenv("ROLE", ""),
+		ControlPlaneRole:   getenv("ROLE", ""),
 		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
