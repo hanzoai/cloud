@@ -47,20 +47,26 @@ func NewMinioConditionalStore(client *minio.Client, bucket string) *MinioConditi
 	return &MinioConditionalStore{Client: client, Bucket: bucket}
 }
 
-// Get implements ConditionalStore.
+// Get implements ConditionalStore. The ETag and the bytes come from ONE GET
+// response: obj.Stat() reads the header of the same request io.ReadAll drains,
+// so the returned version is guaranteed consistent with the returned data. (A
+// separate StatObject + GetObject would be two round trips whose ETag and body
+// could straddle a concurrent write — not unsound here since a stale version
+// only makes the subsequent PutIfVersion CAS fail and retry, but this closes
+// the window rather than relying on the CAS to absorb it.)
 func (s *MinioConditionalStore) Get(ctx context.Context, key string) ([]byte, string, error) {
-	info, err := s.Client.StatObject(ctx, s.Bucket, key, minio.StatObjectOptions{})
+	obj, err := s.Client.GetObject(ctx, s.Bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("writefence: get %s/%s: %w", s.Bucket, key, err)
+	}
+	defer obj.Close()
+	info, err := obj.Stat()
 	if err != nil {
 		if isNoSuchKey(err) {
 			return nil, "", ErrNotFound
 		}
 		return nil, "", fmt.Errorf("writefence: stat %s/%s: %w", s.Bucket, key, err)
 	}
-	obj, err := s.Client.GetObject(ctx, s.Bucket, key, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, "", fmt.Errorf("writefence: get %s/%s: %w", s.Bucket, key, err)
-	}
-	defer obj.Close()
 	data, err := io.ReadAll(obj)
 	if err != nil {
 		return nil, "", fmt.Errorf("writefence: read %s/%s: %w", s.Bucket, key, err)
