@@ -348,7 +348,7 @@ func LoadConfig() *Config {
 // pod and cloud runs iam-less exactly as it does in production today (pickIAMClient
 // falls back to the remote/disabled IAM client — see build.go). ONE activation
 // mechanism (the enable-list), ONE place.
-var stagedSubsystems = map[string]bool{"iam": true}
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
