@@ -129,13 +129,7 @@ func init() {
 	// dependency (it owns its own store + fans out to commerce over HTTP); its
 	// routes are all specific (/v1/referrals*, /v1/admin/referrals*) so they bind
 	// ahead of the catch-all regardless.
-	cloud.Register("referrals", 149, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("referrals.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("referrals", 149, cloud.Typed(Mount))
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────

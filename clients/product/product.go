@@ -359,11 +359,5 @@ func orNow(s string) string {
 }
 
 func init() {
-	cloud.Register("product", 145, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("product.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("product", 145, cloud.Typed(Mount))
 }

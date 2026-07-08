@@ -165,13 +165,7 @@ func init() {
 	// over HTTP); its routes are all specific (/v1/authors*, /v1/admin/authors*), so
 	// they bind ahead of the catch-all regardless. The static /sweep + /deploys/record
 	// bind before the /:id/* param routes (distinct segment counts).
-	cloud.RegisterWithShutdown("authors", 143, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("authors.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(context.Context) error { return Shutdown() })
+	cloud.RegisterWithShutdown("authors", 143, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────

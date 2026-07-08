@@ -81,13 +81,7 @@ func (s *svc) routes(app *zip.App) {
 }
 
 func init() {
-	cloud.Register("graph", 135, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("graph.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("graph", 135, cloud.Typed(Mount))
 }
 
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
