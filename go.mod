@@ -20,9 +20,13 @@ require (
 	github.com/hanzoai/sqlite v0.1.5
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
+	github.com/luxfi/bft v0.1.5
 	github.com/luxfi/log v1.4.3
+	github.com/luxfi/p2p v1.21.1
+	github.com/luxfi/validators v1.2.0
 	github.com/luxfi/zapdb v1.10.0
 	github.com/minio/minio-go/v7 v7.0.100
+	github.com/nats-io/nats.go v1.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
@@ -86,11 +90,8 @@ require (
 	github.com/kevinburke/twilio-go v0.0.0-20240716172313-813590983ccc // indirect
 	github.com/leodido/go-syslog/v4 v4.3.0 // indirect
 	github.com/leodido/ragel-machinery v0.0.0-20190525184631-5f46317e436b // indirect
-	github.com/luxfi/bft v0.1.5 // indirect
 	github.com/luxfi/constants v1.5.8 // indirect
-	github.com/luxfi/p2p v1.21.1 // indirect
 	github.com/luxfi/sampler v1.1.0 // indirect
-	github.com/luxfi/validators v1.2.0 // indirect
 	github.com/luxfi/version v1.0.1 // indirect
 	github.com/luxfi/warp v1.19.3 // indirect
 	github.com/luxwallet/connect/go v0.1.3 // indirect
@@ -99,7 +100,6 @@ require (
 	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/nats-io/jwt/v2 v2.8.1 // indirect
-	github.com/nats-io/nats.go v1.50.0 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729 // indirect
 	github.com/open-telemetry/opamp-go v0.22.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal v0.144.0 // indirect
@@ -550,7 +550,7 @@ require (
 	github.com/luxfi/cache v1.2.1 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
-	github.com/luxfi/consensus v1.25.15 // indirect
+	github.com/luxfi/consensus v1.25.15
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/corona v0.7.6 // indirect
 	github.com/luxfi/crypto v1.19.21
