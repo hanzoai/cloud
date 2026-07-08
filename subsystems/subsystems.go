@@ -78,10 +78,10 @@ import (
 	_ "github.com/hanzoai/cloud/clients/bot"       // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
 	_ "github.com/hanzoai/cloud/clients/eval"      // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/exec"      // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
-	_ "github.com/hanzoai/cloud/clients/observe"   // order 44 — /v1/o11y/{logs,metrics,status} (scoped) + /v1/settings/* (console product-detail data plane, #59)
 	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/settings"  // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
 	_ "github.com/hanzoai/cloud/clients/world"     // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
 
@@ -311,10 +311,19 @@ import (
 	// only, fail-closed.
 	_ "github.com/hanzoai/cloud/clients/admin" // order 146 — /v1/admin/*
 
-	// Installs the o11y runtime handler (reverse proxy to the dedicated o11y
-	// Deployment) so hanzoai/o11y's /v1/o11y/* surface serves real telemetry
-	// instead of the "runtime not initialized" 503.
-	_ "github.com/hanzoai/cloud/clients/o11y" // order 71 — installs o11y.SetHandler
+	// The EMBEDDED o11y runtime — the single owner of the whole /v1/o11y surface.
+	// clients/o11y both (a) mounts the org-scoped, tenant-isolated
+	// /v1/o11y/{logs,metrics,status} reads (order 69) that query the shared
+	// ClickHouse `datastore` IN-PROCESS per-org (logs.go/metricsread.go/status.go —
+	// folded in from the retired clients/observe so nothing was lost), and (b)
+	// installs the SigNoz-fork runtime handler via o11y.SetHandler (order 71) for the
+	// hanzoai/o11y wildcard (order 70), constructing that runtime IN-PROCESS over the
+	// datastore (embed.go) so the standalone o11y Deployment can retire — with a
+	// reverse-proxy fallback ONLY when the embed is disabled (no DSN). It also embeds
+	// the OTLP ingest collector (order 72, opt-in) that folds the standalone
+	// otel-collector. The scoped reads (69) register BEFORE the wildcard (70) so
+	// Fiber gives the tenant-scoped handlers precedence over the runtime proxy.
+	_ "github.com/hanzoai/cloud/clients/o11y" // order 69 scoped reads + 71 runtime handler + 72 OTLP ingest
 	// The console SPA is go:embed'd and served at "/" by webui.go's
 	// mountConsole, called directly from Serve AFTER every /v1/* route mounts
 	// (so real API routes always win; unmatched paths fall back to the SPA).
