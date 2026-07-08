@@ -26,9 +26,10 @@ func NewPlacementRSM(db ControlDB) *PlacementRSM {
 
 // Apply admits one certified block. It enforces, in order:
 //
-//  1. Contiguous height — the first block is height 1 and each subsequent block
-//     is exactly one higher. Gaps and replays are refused (deterministic total
-//     order; no double-apply).
+//  1. Contiguous chain extension — the block sits at exactly the next height AND
+//     its ParentRoot commits to the current applied state. Gaps, replays, and
+//     blocks that do not extend local state are refused (deterministic total
+//     order; no double-apply; no fork at the apply boundary — red_exploits #4).
 //  2. The policy invariant gate — the SAME CheckInvariants an honest voter ran
 //     before signing, re-run here fail-secure so a block that somehow carried a
 //     valid cert over invalid ops still never mutates state.
@@ -44,6 +45,15 @@ func (r *PlacementRSM) Apply(b *PlacementBlock) error {
 	}
 	if b.Height != r.height+1 {
 		return fmt.Errorf("controlplane: out-of-order apply height=%d, want %d", b.Height, r.height+1)
+	}
+	// Chain-extension gate: the block must commit to THIS RSM's current state.
+	// OnProposal checks this too, but Apply is the LAST gate and the one a future
+	// recovery/gossip path will feed, so it must not trust height alone — a block
+	// that does not extend local state must never mutate it (red_exploits #4).
+	var parent [32]byte
+	copy(parent[:], r.state.Snapshot())
+	if b.ParentRoot != parent {
+		return fmt.Errorf("controlplane: apply parent-root mismatch height=%d (block does not extend local state)", b.Height)
 	}
 	if err := CheckInvariants(r.state, b); err != nil {
 		return err // fail-secure: reject invalid ops even under a valid cert
