@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	luxlog "github.com/luxfi/log"
-	badger "github.com/luxfi/zapdb"
+	zapdb "github.com/luxfi/zapdb"
 )
 
 func rrKey(t *testing.T, fill byte) string {
@@ -194,12 +194,12 @@ func TestRR5_PlaintextStoreThenKeyedBrick(t *testing.T) {
 	if err := os.MkdirAll(dbDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	pdb, err := badger.Open(badger.DefaultOptions(dbDir).WithLogger(nil))
+	pdb, err := zapdb.Open(zapdb.DefaultOptions(dbDir).WithLogger(nil))
 	if err != nil {
 		t.Fatalf("open plaintext store: %v", err)
 	}
 	// write something so it's a real store with a MANIFEST + KEYREGISTRY.
-	_ = pdb.Update(func(txn *badger.Txn) error { return txn.Set([]byte("k"), []byte("v")) })
+	_ = pdb.Update(func(txn *zapdb.Txn) error { return txn.Set([]byte("k"), []byte("v")) })
 	pdb.Close()
 	if !fileExists(filepath.Join(dbDir, "MANIFEST")) {
 		t.Fatal("expected plaintext store MANIFEST")
