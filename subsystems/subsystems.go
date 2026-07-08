@@ -80,6 +80,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
 	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
 	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
+	_ "github.com/hanzoai/cloud/clients/world"     // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
 
 	// S3 object-storage DATA plane: the org-scoped /v1/s3 file manager (buckets +
 	// objects) over the shared SeaweedFS S3 gateway. Order 118 (< provisioning's
