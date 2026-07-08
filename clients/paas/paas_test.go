@@ -1,4 +1,4 @@
-package paassvc
+package paas
 
 import (
 	"reflect"

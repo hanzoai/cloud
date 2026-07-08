@@ -1,6 +1,6 @@
 // Package s3admin is the ONE shared S3 access path for the unified cloud binary.
 //
-// Every subsystem that touches the shared object store — clients/projectsvc (the
+// Every subsystem that touches the shared object store — clients/projects (the
 // deploy blob store) and clients/s3 (the /v1/s3 file-manager control plane) —
 // builds its *minio.Client here, from the SAME admin credentials
 // (S3_ADMIN_*). There is no second S3 client construction anywhere in the
@@ -14,7 +14,7 @@
 // a network call — so the signed host is the browser-routable one.
 //
 // This package depends on nothing but minio-go: it is a leaf, so both
-// projectsvc and the s3 subsystem import it without any import cycle.
+// projects and the s3 subsystem import it without any import cycle.
 package s3admin
 
 import (
@@ -48,7 +48,7 @@ type Admin struct {
 }
 
 // New reads the shared S3 admin configuration from the environment. It mirrors
-// the exact variables clients/projectsvc/blob.go already consumes, so the two
+// the exact variables clients/projects/blob.go already consumes, so the two
 // subsystems resolve identical credentials and endpoint with no drift.
 //
 //	S3_ADMIN_ENDPOINT      internal admin host:port (default s3.hanzo.svc:9000)

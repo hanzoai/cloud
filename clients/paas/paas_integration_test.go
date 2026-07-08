@@ -4,7 +4,7 @@
 // it is gated behind the `paasintegration` build tag AND requires PAAS_IT=1, so
 // `go test ./...` never touches a cluster. Run explicitly:
 //
-//	PAAS_IT=1 go test -tags paasintegration -run TestIntegration ./clients/paassvc/ -v
+//	PAAS_IT=1 go test -tags paasintegration -run TestIntegration ./clients/paas/ -v
 //
 // It proves the end-to-end deploy path the standalone platform's deploy-executor
 // implemented, now native in cloud:
@@ -13,7 +13,7 @@
 //   - an IDEMPOTENT same-image merge-patch on a low-risk service (pricing) proves
 //     the write path reaches the operator WITHOUT changing what runs (same tag =
 //     no rollout). It never mutates a tag, so it cannot perturb live state.
-package paassvc
+package paas
 
 import (
 	"context"

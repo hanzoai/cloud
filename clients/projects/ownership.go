@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func (s *Store) ProjectOwnership(ctx context.Context, org, idOrSlug string) (min
 
 // projectScopeResolver adapts the projects Store to cloud.TenantScopeResolver so
 // the identity trust boundary can refuse a cross-org X-Project-Id WITHOUT cloud
-// importing this package (projectsvc imports cloud). Registered once at Mount,
+// importing this package (projects imports cloud). Registered once at Mount,
 // exactly like sites.SetResolver.
 type projectScopeResolver struct{ store *Store }
 
