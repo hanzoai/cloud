@@ -27,6 +27,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.2.0
+	github.com/zap-proto/zap2pb v0.2.0
 	github.com/zap-proto/zip v1.2.1
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
