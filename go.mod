@@ -552,7 +552,7 @@ require (
 	github.com/luxfi/cache v1.2.1 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
-	github.com/luxfi/consensus v1.35.30
+	github.com/luxfi/consensus v1.35.32
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/corona v0.10.3 // indirect
 	github.com/luxfi/crypto v1.19.26
