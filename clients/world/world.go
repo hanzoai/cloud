@@ -120,6 +120,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/world/pipeline", s.getPipeline)
 	app.Put("/v1/world/pipeline", s.putPipeline)
 	app.Get("/v1/world/stream", s.stream)
+	app.Get("/v1/world/limits", s.getLimits)
 
 	log.Info("world surface mounted", "brand", deps.Brand,
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))
