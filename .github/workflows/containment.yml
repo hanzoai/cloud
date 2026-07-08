@@ -59,7 +59,12 @@ jobs:
           # NOTE: exclusions are plain substring matches on the path (not
           # anchored to a leading "./") so this is robust across grep
           # implementations that format recursive-search paths differently.
-          if grep -RnE -- '-tags[= ]*["'"'"']?[A-Za-z0-9_, ]*\bcontrolplane\b' \
+          # char class includes `!` so a build-constraint negation form
+          # (`-tags '!x,controlplane'`) cannot slip the grep. (Belt only: the
+          # positive-proof step below is the syntax-agnostic guarantee — the
+          # package has zero untagged files, so importing it into serve code
+          # fails the untagged `go build ./...` regardless of any -tags syntax.)
+          if grep -RnE -- '-tags[= ]*["'"'"']?[!A-Za-z0-9_, ]*\bcontrolplane\b' \
                --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
                . 2>/dev/null \
                | grep -v '\.git/' \
