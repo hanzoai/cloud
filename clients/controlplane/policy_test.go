@@ -28,16 +28,20 @@ func TestPolicy_ShardReassign_Unauthorized(t *testing.T) {
 	}
 }
 
-// TestPolicy_ShardReassign_WithRelease — a reassign authorized by a lease-release
-// of the predecessor in the same block is admitted.
-func TestPolicy_ShardReassign_WithRelease(t *testing.T) {
-	pre := shardState("shard-X", "cloud-1")
+// TestPolicy_ShardReassign_SameBlockReleaseDoesNotAuthorize — a proposer-written
+// same-block lease-release does NOT authorize displacing a LIVE writer. A release
+// carries no authorization from the departing holder, so treating it as consent
+// is a forged-handoff double-write (red_exploits_test #1). Only proven death
+// displaces a live writer in increment-1; authenticated graceful handoff is
+// increment-2.
+func TestPolicy_ShardReassign_SameBlockReleaseDoesNotAuthorize(t *testing.T) {
+	pre := shardState("shard-X", "cloud-1") // cloud-1 is the LIVE writer
 	b := &PlacementBlock{Ops: []PlacementOp{
 		{Kind: OpReleaseLease, Resource: "shard-X", Holder: "cloud-1", LeaseID: "cloud-1:writer"},
 		{Kind: OpReassignShardWriter, Resource: "shard-X", From: "cloud-1", To: "cloud-2"},
 	}}
-	if err := CheckInvariants(pre, b); err != nil {
-		t.Fatalf("release+reassign should be admitted, got %v", err)
+	if err := CheckInvariants(pre, b); !errors.Is(err, ErrShardReassignUnauthorized) {
+		t.Fatalf("a same-block release must NOT authorize displacing a live writer; want ErrShardReassignUnauthorized, got %v", err)
 	}
 }
 
