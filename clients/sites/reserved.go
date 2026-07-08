@@ -12,9 +12,9 @@ import (
 //
 //   - serve time (Server.siteSlug): a reserved host falls through to the normal
 //     API/console pipeline instead of the site server;
-//   - create time (projectsvc.createProject): a project can never be created with a
+//   - create time (projects.createProject): a project can never be created with a
 //     reserved slug;
-//   - bind time (projectsvc Store.BindHost): the global site_hosts table can never
+//   - bind time (projects Store.BindHost): the global site_hosts table can never
 //     physically contain a reserved host, whatever the caller.
 //
 // Because create AND bind both reject, `site_hosts` can NEVER hold a reserved host,

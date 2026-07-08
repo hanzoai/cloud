@@ -27,15 +27,14 @@
 // health-only: /v1/s3/health is an honest 503 and every op returns 503. It never
 // fabricates a bucket or object list.
 //
-// ROUTE ORDERING — registered as "s3svc" (not "s3") at order 118 (< provisioning's
-// 120). Two reasons, both load-bearing: (1) serve.go pre-mounts a generic
-// GET /v1/<name>/health for every enabled subsystem BEFORE MountAll; a name of
-// "s3" would shadow the real fail-closed /v1/s3/health with a fake 200 (the same
-// reason clients/kms uses "kmssvc"). (2) Fiber v3 matches routes by an ORDERED
-// scan and takes the first match, so the static GET /v1/s3/buckets and
-// GET /v1/s3/health must register BEFORE provisioning's GET /v1/s3/:name (order
-// 120) to win — hence order 118. The internal name "s3svc" is independent of the
-// /v1/s3 API prefix (like provisioning "provisioning" → /v1/<kind>).
+// ROUTE ORDERING — registered as id "s3" with cloud.HealthOwner, at order 118
+// (< provisioning's 120). Two independent concerns: (1) health — this subsystem
+// serves its OWN fail-closed /v1/s3/health (Mount); cloud.HealthOwner makes Serve
+// skip the generic always-ok /v1/<name>/health so it never shadows the real probe
+// with a fake 200 (the same flag clients/kms and clients/paas use). (2) routing —
+// Fiber v3 matches routes by an ORDERED scan and takes the first match, so the
+// static GET /v1/s3/buckets and GET /v1/s3/health must register BEFORE
+// provisioning's GET /v1/s3/:name (order 120) to win — hence order 118.
 //
 // RESIDUAL RISKS THIS SUBSYSTEM RIDES (documented after adversarial review; not
 // fixable inside the subsystem, escalated to the platform):
@@ -155,17 +154,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// init registers the subsystem. Name "s3svc" + order 118 — see the package doc
-// for why both are load-bearing (health-shadow avoidance + first-match routing
-// ahead of provisioning's /v1/s3/:name).
+// init registers the subsystem under the clean id "s3" with cloud.HealthOwner:
+// it serves its OWN fail-closed /v1/s3/health (Mount), and Serve's generic
+// liveness loop skips a HealthOwner so the always-ok route never shadows it.
+// Order 118 stays load-bearing — its static /v1/s3/buckets + /v1/s3/health must
+// register BEFORE provisioning's /v1/s3/:name (order 120) to win zip's first-match
+// scan (see the package doc).
 func init() {
-	cloud.Register("s3svc", 118, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("s3.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("s3", 118, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // guard wraps a handler with the org gate + fail-closed check, and is the ONE

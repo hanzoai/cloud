@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	return resp.StatusCode, b
 }
 
-// TestMapFramework pins the template-label → projectsvc-enum mapping against the
+// TestMapFramework pins the template-label → projects-enum mapping against the
 // real gallery labels (see catalog.json). Vite wins over React (it is a build
 // step); Next.js is its own hint; bare HTML/* is "static". Every result must be a
 // valid `frameworks` key so createProject never rejects a forked project.

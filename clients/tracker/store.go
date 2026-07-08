@@ -11,7 +11,7 @@ import (
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest; !cgo → pure-Go modernc). Importing modernc directly would
 	// double-register "sqlite" under CGO and panic at init. Blank import registers
-	// the driver — the SAME one clients/projectsvc, clients/crm and clients/agents use.
+	// the driver — the SAME one clients/projects, clients/crm and clients/agents use.
 	_ "github.com/hanzoai/sqlite"
 )
 

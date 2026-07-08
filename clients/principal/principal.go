@@ -63,7 +63,7 @@ func IsDefaultProject(project string) bool {
 //
 // Subsystems that resolve the plain org key use Tenant (which composes this).
 // Subsystems that derive their own PHYSICAL namespace from a route param or a
-// normalized slug — KMS (route :org), S3 / provisioning / projectsvc (DNS slug
+// normalized slug — KMS (route :org), S3 / provisioning / projects (DNS slug
 // + admin bucket), ML (k8s namespace) — call Validated FIRST, then apply their
 // own normalization, so the principal gate is never skipped.
 func Validated(c *zip.Ctx) bool {

@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"context"
@@ -40,7 +40,7 @@ var (
 // console.hanzo.ai (the Projects module): tenant isolation is the org column,
 // enforced at the query layer, and the gateway-minted X-Org-Id selects the
 // tenant. Repo fields are flat columns here; the HTTP surface nests them under
-// "repo" (see projectsvc.go). It never stores a secret.
+// "repo" (see projects.go). It never stores a secret.
 type Project struct {
 	ID            string
 	Org           string

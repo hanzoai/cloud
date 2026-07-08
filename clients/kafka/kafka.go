@@ -113,13 +113,7 @@ func shutdown(_ context.Context) error {
 }
 
 func init() {
-	cloud.RegisterWithShutdown("kafka", order, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("kafka.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, shutdown)
+	cloud.RegisterWithShutdown("kafka", order, cloud.Typed(Mount), shutdown)
 }
 
 func envBool(k string) bool {

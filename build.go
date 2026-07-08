@@ -8,6 +8,7 @@ import (
 
 	"github.com/hanzoai/commerce/metering"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/kms"
@@ -67,15 +68,19 @@ func BuildDeps(cfg *Config) Deps {
 
 	// For each subsystem: enabled → leave nil (Mount fills it); not
 	// enabled + endpoint → RPC client; not enabled + no endpoint →
-	// disabled stub.
-	deps.IAM = pickIAMClient(cfg, logger)
+	// disabled stub. The plain co-resident-or-RPC-or-disabled clients share
+	// ONE resolver (pick); KMS/AI/VFS keep bespoke pickers because their
+	// construction genuinely differs (embedded store / gateway preference /
+	// S3-admin backend). O11y's disabled stub is a no-op (telemetry going
+	// nowhere is normal), not fail-closed.
+	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, logger)
-	deps.Base = pickBaseClient(cfg, logger)
-	deps.Commerce = pickCommerceClient(cfg, logger)
+	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
+	deps.Commerce = pick(cfg, logger, "commerce", "Commerce", cfg.CommerceZAPAddr, clients.CommerceRPCAt, clients.DisabledCommerce)
 	deps.AI = pickAIClient(cfg, logger)
-	deps.O11y = pickO11yClient(cfg, logger)
+	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
-	deps.MQ = pickMQClient(cfg, logger)
+	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -116,33 +121,39 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 	return m
 }
 
-// pickIAMClient returns the canonical IAMClient for this process.
-// nil = enabled here, Mount will fill it. RPC = remote endpoint
-// configured. Disabled = not enabled, no endpoint.
-func pickIAMClient(cfg *Config, log luxlog.Logger) IAMClient {
-	if cfg.Enabled("iam") {
-		return nil
+// pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
+// by every co-resident-capable dependency: enabled in THIS process → zero value
+// (nil) so the subsystem's own Mount installs the in-process client; not enabled
+// but a ZAP endpoint is configured → an RPC client at that endpoint; neither →
+// the fail-closed/no-op disabled stub. name is the enable-list id; label is the
+// deps.<X> log tag; rpc/disabled are the client's typed constructors. This is the
+// ONE implementation of that rule — KMS/AI/VFS opt out with bespoke pickers only
+// because their construction genuinely differs.
+func pick[T any](cfg *Config, log luxlog.Logger, name, label, zapAddr string, rpc func(string) T, disabled func() T) T {
+	if cfg.Enabled(name) {
+		var zero T // enabled here → Mount fills deps.<label>
+		return zero
 	}
-	if cfg.IAMZAPAddr != "" {
-		log.Info("deps.IAM → ZAP RPC", "addr", cfg.IAMZAPAddr)
-		return clients.IAMRPCAt(cfg.IAMZAPAddr)
+	if zapAddr != "" {
+		log.Info("deps."+label+" → ZAP RPC", "addr", zapAddr)
+		return rpc(zapAddr)
 	}
-	return clients.DisabledIAM()
+	return disabled()
 }
 
 // pickKMSClient resolves deps.KMS. When the kms subsystem is co-resident
-// (Enabled("kmssvc")) it returns the IN-PROCESS Client backed by the embedded
+// (Enabled("kms")) it returns the IN-PROCESS Client backed by the embedded
 // luxfi/kms SecretStore under CLOUD_DATA_DIR — no external RPC. A store-open
 // failure is NOT fatal to the whole binary: it falls back to the disabled stub
 // (fail-closed) and logs, so a bad data dir degrades KMS rather than crashing
 // every subsystem. Absent co-residency the legacy ZAP-RPC + disabled fallbacks
 // apply (out-of-process KMS, or not wired).
 //
-// The internal subsystem name is "kmssvc" (see clients/kmssvc.init — it avoids the
-// serve.go generic-health shadow on /v1/kms/health); the client gate keys on the
-// same name so "enabled" is one concept.
+// The subsystem id is "kms" (clients/kmssvc registers it with cloud.HealthOwner
+// so the generic liveness route never shadows its real /v1/kms/health); this
+// gate keys on the same id so "enabled" is one concept.
 func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
-	if cfg.Enabled("kmssvc") {
+	if cfg.Enabled("kms") {
 		c, err := kms.New(kms.Config{
 			DataDir:      cfg.DataDir,
 			MasterKeyB64: cfg.KMSMasterKeyRef,
@@ -165,28 +176,6 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 		return clients.KMSRPCAt(cfg.KMSZAPAddr)
 	}
 	return clients.DisabledKMS()
-}
-
-func pickBaseClient(cfg *Config, log luxlog.Logger) BaseClient {
-	if cfg.Enabled("base") {
-		return nil
-	}
-	if cfg.BaseZAPAddr != "" {
-		log.Info("deps.Base → ZAP RPC", "addr", cfg.BaseZAPAddr)
-		return clients.BaseRPCAt(cfg.BaseZAPAddr)
-	}
-	return clients.DisabledBase()
-}
-
-func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
-	if cfg.Enabled("commerce") {
-		return nil
-	}
-	if cfg.CommerceZAPAddr != "" {
-		log.Info("deps.Commerce → ZAP RPC", "addr", cfg.CommerceZAPAddr)
-		return clients.CommerceRPCAt(cfg.CommerceZAPAddr)
-	}
-	return clients.DisabledCommerce()
 }
 
 // pickAIClient resolves deps.AI — the client the agents subsystem runs chat
@@ -253,19 +242,6 @@ func aiM2MTokenURL(cfg *Config) string {
 	return ""
 }
 
-func pickO11yClient(cfg *Config, log luxlog.Logger) O11yClient {
-	if cfg.Enabled("o11y") {
-		return nil
-	}
-	if cfg.O11yZAPAddr != "" {
-		log.Info("deps.O11y → ZAP RPC", "addr", cfg.O11yZAPAddr)
-		return clients.O11yRPCAt(cfg.O11yZAPAddr)
-	}
-	// O11y disabled-stub is no-op (not fail-closed) — telemetry
-	// going nowhere is a normal mode.
-	return clients.DisabledO11y()
-}
-
 func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// deps.VFS must NEVER be nil (R-7): files.go and any other VFS consumer call
 	// s.vfs.Put/Get/Delete unconditionally, so a nil here is a per-request 500
@@ -297,17 +273,6 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	return clients.DisabledVFS()
 }
 
-func pickMQClient(cfg *Config, log luxlog.Logger) MQClient {
-	if cfg.Enabled("mq") {
-		return nil
-	}
-	if cfg.MQZAPAddr != "" {
-		log.Info("deps.MQ → ZAP RPC", "addr", cfg.MQZAPAddr)
-		return clients.MQRPCAt(cfg.MQZAPAddr)
-	}
-	return clients.DisabledMQ()
-}
-
 func pickPaymentsClient(cfg *Config, log luxlog.Logger) PaymentsClient {
 	if cfg.PaymentsZAPAddr != "" {
 		log.Info("deps.Payments → ZAP RPC", "addr", cfg.PaymentsZAPAddr)
@@ -324,11 +289,31 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 	return clients.DisabledVault()
 }
 
-// MountFunc is the canonical signature every subsystem exposes per
-// HIP-0106. Each Hanzo Go service ships a top-level `Mount` symbol
-// matching this signature; cmd/cloud/main.go imports the package and
-// calls it.
-type MountFunc func(app any, deps Deps) error // app is *zip.App; using any here to avoid an import cycle in pkg/cloud
+// MountFunc is the registry's mount contract. The registry stores one function
+// type, and the external subsystem modules (hanzoai/ai, authz, base, commerce,
+// metrics, o11y, licensing) register their mount with `app any` — so `any` is
+// the load-bearing wire type here, not a shortcut: retyping it to *zip.App would
+// break those pinned modules at compile time (a func(any,…) literal is not
+// assignable to a func(*zip.App,…) parameter). The concrete value is always a
+// *zip.App; in-repo subsystems recover it via Typed instead of hand-writing the
+// assertion (see Typed).
+type MountFunc func(app any, deps Deps) error
+
+// Typed adapts a strongly-typed subsystem Mount — func(*zip.App, Deps) error,
+// the signature every in-repo subsystem already exports — into the registry's
+// MountFunc. It performs the *zip.App recovery in ONE place, fail-closed with a
+// clear error, so no subsystem repeats the `a, ok := app.(*zip.App)` boilerplate.
+// The concrete value MountAll passes is always a *zip.App, so the assertion is
+// total in practice; it stays as a defensive, self-documenting guard.
+func Typed(mount func(*zip.App, Deps) error) MountFunc {
+	return func(app any, deps Deps) error {
+		a, ok := app.(*zip.App)
+		if !ok {
+			return fmt.Errorf("cloud.Mount: app is %T, want *zip.App", app)
+		}
+		return mount(a, deps)
+	}
+}
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
 // goroutines, open DB handles) on graceful shutdown. It must be idempotent and
@@ -344,24 +329,51 @@ type MountSpec struct {
 	Order    int
 	Mount    MountFunc
 	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
+
+	// OwnsHealth marks a subsystem that serves its OWN GET /v1/<name>/health
+	// (a real, fail-closed probe). Serve's generic liveness loop skips these so
+	// its always-ok route never shadows the subsystem's real probe. Set via the
+	// HealthOwner option at registration.
+	OwnsHealth bool
 }
+
+// Option customizes a MountSpec at registration. It keeps Register's common
+// path a two-liner while letting a subsystem opt into behavior (e.g. HealthOwner)
+// without a wider signature — one registration entry point, extended by options.
+type Option func(*MountSpec)
+
+// HealthOwner declares that the subsystem serves its own /v1/<name>/health, so
+// Serve's generic liveness route must not shadow it. This replaces the old
+// "<name>svc" id kludge (which parked the generic route at an unrouted path):
+// the id is now the clean route name and the health policy is an explicit flag.
+func HealthOwner(s *MountSpec) { s.OwnsHealth = true }
 
 // Registry is the in-process subsystem registry. Subsystems register via
 // init() functions in their respective packages OR cmd/cloud/main.go can
 // explicitly enumerate them. Either pattern works.
 var Registry []MountSpec
 
-// Register adds a subsystem to the in-process registry.
-func Register(name string, order int, mount MountFunc) {
-	Registry = append(Registry, MountSpec{Name: name, Order: order, Mount: mount})
+// Register adds a subsystem to the in-process registry. Trailing opts customize
+// the spec (e.g. cloud.HealthOwner for a subsystem that serves its own health).
+func Register(name string, order int, mount MountFunc, opts ...Option) {
+	spec := MountSpec{Name: name, Order: order, Mount: mount}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	Registry = append(Registry, spec)
 }
 
 // RegisterWithShutdown adds a subsystem that owns process-lifetime resources: a
 // background worker (e.g. the agents scheduler) or a DB handle that must be
 // flushed. shutdown is invoked by ShutdownAll on graceful stop. This is the ONE
 // way a subsystem gets a teardown — Register stays the zero-teardown default.
-func RegisterWithShutdown(name string, order int, mount MountFunc, shutdown ShutdownFunc) {
-	Registry = append(Registry, MountSpec{Name: name, Order: order, Mount: mount, Shutdown: shutdown})
+// Trailing opts customize the spec, exactly as for Register.
+func RegisterWithShutdown(name string, order int, mount MountFunc, shutdown ShutdownFunc, opts ...Option) {
+	spec := MountSpec{Name: name, Order: order, Mount: mount, Shutdown: shutdown}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	Registry = append(Registry, spec)
 }
 
 // ShutdownAll tears down every ENABLED subsystem that registered a ShutdownFunc,
@@ -383,8 +395,9 @@ func ShutdownAll(ctx context.Context, cfg *Config) error {
 }
 
 // MountAll iterates the registry in order and calls Mount() on each
-// enabled subsystem.
-func MountAll(app any, cfg *Config, deps Deps) error {
+// enabled subsystem. app is the concrete *zip.App from Serve; the registry's
+// MountFunc accepts it as `any` and in-repo subsystems recover it via Typed.
+func MountAll(app *zip.App, cfg *Config, deps Deps) error {
 	// Sort registry by order — bubble sort, registry is tiny.
 	for i := 0; i < len(Registry); i++ {
 		for j := i + 1; j < len(Registry); j++ {

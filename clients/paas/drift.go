@@ -1,4 +1,4 @@
-// Package paassvc mounts the native, in-process Hanzo PaaS control plane at
+// Package paas mounts the native, in-process Hanzo PaaS control plane at
 // /v1/paas/*: the "one and only one way to deploy" made native to the cloud
 // binary. It is the Go port of the standalone Dokploy-based platform's
 // build→deploy lifecycle (pkg/platform/src/services/ci/deploy-executor.ts +
@@ -19,7 +19,7 @@
 // disagree about what "drift" means (one way to compute drift, period). The
 // cluster reader (paas.go) owns observing the tags; this file only interprets
 // them.
-package paassvc
+package paas
 
 import "regexp"
 

@@ -100,7 +100,7 @@ func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 		JWTAudiences:    []string{"hanzo-console"},
 		AdminOrg:        "admin",
 		DataDir:         t.TempDir(),
-		Enable:          []string{"kmssvc"},
+		Enable:          []string{"kms"},
 		KMSMasterKeyRef: masterKeyB64(t),
 	}
 }

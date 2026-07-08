@@ -106,9 +106,10 @@ func TestBadRangeIs400(t *testing.T) {
 
 // TestHealthOwnedByAnalyticsHonest: /v1/analytics/health is the analytics
 // subsystem's REAL probe (service=analytics, datastore bool), NOT serve.go's
-// generic GET /v1/<name>/health fake-200 (which never mounts here because we
-// register as "analyticssvc"). With the datastore down it 503s honestly. Health
-// needs no principal — liveness must be probe-able.
+// generic GET /v1/<name>/health fake-200 (which never mounts here, and in
+// production is skipped because we register with cloud.HealthOwner). With the
+// datastore down it 503s honestly. Health needs no principal — liveness must be
+// probe-able.
 func TestHealthOwnedByAnalyticsHonest(t *testing.T) {
 	app := mountApp(t)
 	code, body := do(t, app, http.MethodGet, "/v1/analytics/health", "", "")

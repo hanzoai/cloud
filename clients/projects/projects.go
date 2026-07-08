@@ -1,4 +1,4 @@
-// Package projectsvc is the Hanzo Cloud projects control plane: the ONE
+// Package projects is the Hanzo Cloud projects control plane: the ONE
 // org-scoped store of buildable/deployable sites, shared by every surface that
 // shows a user's projects.
 //
@@ -28,7 +28,7 @@
 // bucket public-read, and records a live URL. The hanzoai/static container
 // (the static-app image) serves the same bucket behind the gateway for a pretty
 // host; GitHub export is an optional second step that never blocks going live.
-package projectsvc
+package projects
 
 import (
 	"errors"
@@ -137,22 +137,22 @@ func toDeploymentView(d Deployment) deploymentView {
 // Mount wires the projects surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("projectsvc.Mount: nil zip.App")
+		return fmt.Errorf("projects.Mount: nil zip.App")
 	}
 	log := deps.Logger
 	if log == nil {
-		return fmt.Errorf("projectsvc.Mount: nil deps.Logger")
+		return fmt.Errorf("projects.Mount: nil deps.Logger")
 	}
 	log = log.New("subsystem", "projects")
 	if deps.DataDir == "" {
-		return fmt.Errorf("projectsvc.Mount: empty DataDir")
+		return fmt.Errorf("projects.Mount: empty DataDir")
 	}
 	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("projectsvc.Mount: data dir: %w", err)
+		return fmt.Errorf("projects.Mount: data dir: %w", err)
 	}
 	store, err := openStore(filepath.Join(deps.DataDir, "projects.db"))
 	if err != nil {
-		return fmt.Errorf("projectsvc.Mount: open store: %w", err)
+		return fmt.Errorf("projects.Mount: open store: %w", err)
 	}
 
 	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log}
@@ -168,7 +168,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// Register the store as a project-ownership resolver for the identity trust
 	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
 	// refused before any subsystem reads it. Same inversion as sites.SetResolver —
-	// cloud does not import projectsvc.
+	// cloud does not import projects.
 	cloud.RegisterTenantScopeResolver(projectScopeResolver{store: store})
 
 	app.Post("/v1/projects", s.create)
@@ -188,13 +188,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.Register("projects", 125, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("projectsvc.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("projects", 125, cloud.Typed(Mount))
 }
 
 // ---- handlers ----
