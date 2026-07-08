@@ -27,9 +27,12 @@ package cloud
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
 
 import (
+	"context"
+	"net/url"
 	"strings"
 	"unicode"
 
+	"github.com/hanzoai/beego/v2/server/web"
 	"github.com/zap-proto/zip"
 )
 
@@ -289,6 +292,29 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 			}
 		}
 	}
+	// EMBED first-party bridge (last resort, cookie path). The go:embed console
+	// (console.hanzo.ai → this binary) authenticates against its OWN in-process
+	// IAM, which sets an OPAQUE, httpOnly session id (never a bearer) and stores
+	// the user's IAM-minted access-token JWT SERVER-SIDE against that session. The
+	// console's Next BFF token-minting routes are stripped by the static export, so
+	// a browser request carries only the session cookie. Resolve it to that
+	// server-stored JWT so the embed uses the SAME validated-JWT identity path as
+	// every other client. Binds identity to the VALIDATED session: the client only
+	// SELECTS which server-minted token to check (via an unguessable, httpOnly sid);
+	// v.validate below still independently verifies sig/iss/aud/exp, and the session
+	// never asserts identity itself. No-op on gateway-fronted binaries (a bearer is
+	// already present, so this is never reached) and on binaries with no in-process
+	// IAM session manager (web.GlobalSessions == nil).
+	//
+	// GATED SAME-ORIGIN (RED H3): the session cookie is ambient — a cross-site or
+	// sibling-subdomain request would carry it and could drive the victim's own
+	// (correctly-scoped) money action via a state-changing GET the SameSite=Lax cookie
+	// still rides. So the bridge fires ONLY for a same-origin request. The Bearer/JWT
+	// -cookie paths above are unaffected (a token is not ambient). Non-browser and
+	// gateway-fronted callers use a bearer and never reach here.
+	if tok == "" && sessionBridgeSameOrigin(c) {
+		tok = sessionAccessToken(c)
+	}
 	if tok == "" || isAPIKey(tok) {
 		return nil
 	}
@@ -297,4 +323,57 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 		return nil
 	}
 	return claims
+}
+
+// sessionAccessToken returns the IAM access-token JWT the in-process IAM stored
+// server-side for the caller's first-party session, or "" when there is no
+// session manager, no session cookie, no session, or no stored token. The token
+// is NOT trusted here — validatedPrincipal feeds it back through v.validate — so
+// this only maps an opaque, httpOnly session id to the server-minted JWT bound to
+// it. The session cookie name and store are the SAME ones clients/iamsvc wired
+// into Beego's global session manager (web.BConfig.WebConfig.Session).
+func sessionAccessToken(c *zip.Ctx) string {
+	mgr := web.GlobalSessions
+	if mgr == nil {
+		return ""
+	}
+	name := web.BConfig.WebConfig.Session.SessionName
+	if name == "" {
+		return ""
+	}
+	sid := c.Fiber().Cookies(name)
+	if sid == "" {
+		return ""
+	}
+	store, err := mgr.GetSessionStore(sid)
+	if err != nil || store == nil {
+		return ""
+	}
+	tok, _ := store.Get(context.Background(), "accessToken").(string)
+	return tok
+}
+
+// sessionBridgeSameOrigin reports whether the request may use the ambient-cookie
+// session bridge (RED H3). A legitimate embed request is same-origin (the SPA calls
+// its OWN host); a cross-site OR sibling-subdomain (same-site) request that merely
+// rides the victim's session cookie is refused, so the bridge can never be a CSRF
+// vector even on a state-changing GET. Prefers Sec-Fetch-Site (browser-set,
+// JS-unforgeable); falls back to an Origin/Referer host==Host check when it is absent
+// (a modern browser always sends Sec-Fetch-Site, so the fallback is only for exotic
+// clients — which, lacking the httpOnly cookie, can't reach the bridge anyway).
+func sessionBridgeSameOrigin(c *zip.Ctx) bool {
+	if sfs := c.Header("Sec-Fetch-Site"); sfs != "" {
+		return sfs == "same-origin" || sfs == "none"
+	}
+	host := c.Fiber().Hostname()
+	for _, h := range []string{c.Header("Origin"), c.Header("Referer")} {
+		if h == "" {
+			continue
+		}
+		u, err := url.Parse(h)
+		if err != nil || !strings.EqualFold(u.Host, host) {
+			return false
+		}
+	}
+	return true
 }

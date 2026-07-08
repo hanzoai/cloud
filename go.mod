@@ -11,7 +11,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
-	github.com/hanzoai/iam v1.31.17
+	github.com/hanzoai/iam v1.31.18
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/plans v1.2.0
 	github.com/hanzoai/pricing v1.3.0
@@ -362,7 +362,7 @@ require (
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/drswork/go-twitter v0.0.0-20221107160839-dea1b6ed53d7 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.9.1 // indirect
+	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/elimity-com/scim v0.0.0-20230426070224-941a5eac92f3 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -548,7 +548,7 @@ require (
 	github.com/line/line-bot-sdk-go v7.8.0+incompatible // indirect
 	github.com/lithammer/shortuuid v3.0.0+incompatible // indirect
 	github.com/lor00x/goldap v0.0.0-20180618054307-a546dffdd1a3 // indirect
-	github.com/lufia/plan9stats v0.0.0-20251013123823-9fd1530e3ec3 // indirect
+	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
 	github.com/luxfi/age v1.6.0
@@ -656,7 +656,7 @@ require (
 	github.com/russellhaering/gosaml2 v0.11.0 // indirect
 	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/sagikazarmark/locafero v0.4.0 // indirect
+	github.com/sagikazarmark/locafero v0.9.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/sashabaranov/go-openai v1.32.0
@@ -673,7 +673,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0 // indirect
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/shirou/gopsutil/v4 v4.25.12 // indirect
+	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
@@ -685,7 +685,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.19.0 // indirect
+	github.com/spf13/viper v1.20.1 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/square/square-go-sdk/v3 v3.0.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
@@ -707,7 +707,7 @@ require (
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/thanhpk/randstr v1.0.4 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
-	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
