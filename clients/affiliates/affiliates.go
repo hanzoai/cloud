@@ -151,13 +151,7 @@ func init() {
 	// routes are all specific (/v1/affiliates*, /v1/admin/affiliates*), so they bind
 	// ahead of the catch-all regardless. The static /sweep binds before the /:id/*
 	// param routes (distinct segment counts).
-	cloud.Register("affiliates", 144, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("affiliates.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("affiliates", 144, cloud.Typed(Mount))
 }
 
 // ── customer surface ─────────────────────────────────────────────────────────

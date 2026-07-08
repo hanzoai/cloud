@@ -281,15 +281,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 func init() {
 	// Order 137: after security (136), before functions/AI (150). Registered WITH
 	// a shutdown so the per-org store is closed on graceful stop.
-	cloud.RegisterWithShutdown("integrations", 137, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("integrations.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(ctx context.Context) error {
-		return Shutdown(ctx)
-	})
+	cloud.RegisterWithShutdown("integrations", 137, cloud.Typed(Mount), Shutdown)
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
