@@ -142,7 +142,7 @@ func (v *Voter) OnProposal(b *PlacementBlock) error {
 	v.r1self = r1
 	v.committed[v.Index] = zcommit
 	v.accepted = true
-	v.bus.Broadcast(Message{Kind: MsgRound1, Height: b.Height, Round: b.Round, From: v.Node, R1: r1, Commit: zcommit})
+	v.bus.Broadcast(Message{Kind: MsgRound1, Height: b.Height, Round: b.Round, From: v.Node, R1: r1, Commit: zcommit, CommitSig: v.signer.CommitPoP(rc, zcommit)})
 	return nil
 }
 
@@ -178,8 +178,13 @@ func (v *Voter) collectRound1() {
 	for _, m := range v.pending {
 		switch {
 		case m.Kind == MsgRound1 && v.sessionMatch(m.R1.SessionID, m.R1.NonceID):
+			// Authenticate the commitment to its claimed sender (proof-of-
+			// possession) before counting it toward the barrier — otherwise one
+			// node forges a quorum of spoofed commitments and defeats
+			// commit-before-reveal (red_exploits_test #3).
 			if idx, ok := v.reg.IndexOf(m.From); ok {
-				if _, seen := v.committed[idx]; !seen && len(m.Commit) > 0 {
+				if _, seen := v.committed[idx]; !seen && len(m.Commit) > 0 &&
+					v.reg.VerifyPoP(m.From, round1TBS(m.R1.SessionID, m.R1.NonceID, idx, m.Commit), m.CommitSig) {
 					v.committed[idx] = m.Commit
 				}
 			}

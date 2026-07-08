@@ -18,15 +18,17 @@ const (
 	// re-grant of an identical lease is allowed; granting over a different
 	// live holder is refused by the invariant check.
 	OpAssignLease PlacementKind = iota + 1
-	// OpReleaseLease releases Holder's lease on Resource. Required before a
-	// live shard writer can be reassigned.
+	// OpReleaseLease releases Holder's lease on Resource — a holder
+	// relinquishing its own lease. It does NOT by itself authorize displacing a
+	// live writer (policy.go).
 	OpReleaseLease
-	// OpReassignShardWriter moves the write lease on a secret shard from From
-	// to To. The security-critical op: valid only with a matching release of
-	// From in the same block, or a proven-dead From (policy.go).
+	// OpReassignShardWriter moves the write lease on a secret shard from From to
+	// To. The security-critical op: in increment-1 it is valid ONLY when From is
+	// proven dead by out-of-band evidence (policy.go). Authenticated graceful
+	// handoff is increment-2.
 	OpReassignShardWriter
-	// OpSetMembership adds (Member=true) or removes (Member=false) Node from
-	// the control-plane voter set. Removal marks the node proven-dead.
+	// OpSetMembership adds (Member=true) or removes (Member=false) Node from the
+	// control-plane voter set. Removal does NOT mark the node proven-dead.
 	OpSetMembership
 )
 
@@ -246,10 +248,12 @@ func (s *PlacementState) apply(b *PlacementBlock) {
 			s.ShardWriter[op.Resource] = op.To
 			s.Leases[op.Resource] = Lease{Holder: op.To, LeaseID: op.To + ":writer"}
 		case OpSetMembership:
+			// Removal does NOT mark the node proven-dead: proof of death is
+			// out-of-band failure-detector evidence, never an evidence-free
+			// eviction (which would manufacture shard-reassign authorization —
+			// red_exploits_test #2). Re-adding a node clears any stale flag.
 			s.Membership[op.Node] = op.Member
-			if !op.Member {
-				s.ProvenDead[op.Node] = true
-			} else {
+			if op.Member {
 				delete(s.ProvenDead, op.Node)
 			}
 		}
