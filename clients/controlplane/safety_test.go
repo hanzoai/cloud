@@ -78,6 +78,24 @@ func TestSafety_Equivocation_MajorityCommitsMinorityCannot(t *testing.T) {
 	}
 }
 
+// TestSafety_QuorumParametersAreByzantineSafe — the quorum arithmetic satisfies
+// the byzantine bounds (N≥3f+1, quorum≥2f+1, 2q>N+f) across sizes, and a
+// hand-picked unsafe triple is refused fail-closed (the guard behind the no-fork
+// property).
+func TestSafety_QuorumParametersAreByzantineSafe(t *testing.T) {
+	for _, n := range []int{4, 7, 10, 13, 16} {
+		if err := checkQuorumSafety(n, bftQuorum(n), bftFaultTolerance(n)); err != nil {
+			t.Fatalf("N=%d q=%d f=%d: %v", n, bftQuorum(n), bftFaultTolerance(n), err)
+		}
+	}
+	if err := checkQuorumSafety(7, 4, 2); err == nil {
+		t.Fatal("quorum=4 (N=7,f=2) must be refused: quorum<2f+1 and 2q=8<=N+f=9")
+	}
+	if err := checkQuorumSafety(7, 5, 3); err == nil {
+		t.Fatal("f=3 (N=7) must be refused: N<3f+1")
+	}
+}
+
 // TestSafety_OnePodOneShare — the registry refuses a node a second share
 // (one-pod-two-shares) and refuses two nodes the same share slot.
 func TestSafety_OnePodOneShare(t *testing.T) {
