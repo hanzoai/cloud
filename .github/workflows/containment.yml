@@ -1,0 +1,87 @@
+name: containment
+
+# Guards the Stage-1 byzantine ceremony containment (clients/controlplane,
+# build tag `controlplane`). Its increment-1 crypto is stub/forgeable BY
+# DESIGN (SHA256-of-public-inputs commitments, symmetric-HMAC
+# proof-of-possession, seed-derived threshold shares — see
+# clients/controlplane/doc.go) and MUST NEVER reach a release/serve binary.
+# Two independent checks; either one failing blocks the PR:
+#
+#   1. grep  — no build/release invocation anywhere in the repo (Dockerfile,
+#      Makefile, shell scripts, any workflow) may pass a `-tags` value
+#      containing `controlplane` to go build/vet/run/install. The package's
+#      own `//go:build controlplane` tag declarations (clients/controlplane/*)
+#      are the thing being guarded, not a violation, and are excluded by path.
+#   2. build — `go build ./...` (no tag — exactly what the Dockerfile and
+#      Makefile run) must not link clients/controlplane into any cmd/ main,
+#      and `go build ./clients/controlplane/...` with no tag must match zero
+#      buildable packages (proves the tag still gates every file in it).
+#
+# Runtime belt-and-suspenders (defense in depth, not a substitute for this):
+# clients/controlplane/containment.go fail-closed panics if its stub crypto is
+# ever constructed outside a go-test binary (testing.Testing()==false) — see
+# TestContainment_NonHarnessProcessRefuses in containment_test.go.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  controlplane-containment:
+    runs-on: [hanzo-build-linux-amd64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: grep — no build/release path may set -tags controlplane
+        run: |
+          set -euo pipefail
+          if grep -RnE -- '-tags[= ]*["'"'"']?[A-Za-z0-9_, ]*\bcontrolplane\b' \
+               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.claude --exclude-dir=vendor \
+               . 2>/dev/null \
+               | grep -vE '^\./clients/controlplane/' \
+               | grep -v '^\./\.github/workflows/containment\.yml:'; then
+            echo "::error::found a build/release invocation passing -tags controlplane — clients/controlplane's stub crypto must never enter a release/serve binary (see clients/controlplane/doc.go)"
+            exit 1
+          fi
+          echo "OK: no build/release path sets -tags controlplane"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: go env for private modules (matches Dockerfile — zap-proto is direct+authenticated)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+          {
+            echo "GOPRIVATE=github.com/zap-proto/*"
+            echo "GONOSUMDB=github.com/zap-proto/*"
+            echo "GOSUMDB=off"
+            echo "GOPROXY=https://proxy.golang.org,direct"
+          } >> "$GITHUB_ENV"
+
+      - name: positive proof — clients/controlplane is unreachable from the default build
+        run: |
+          set -euo pipefail
+
+          go build ./...
+
+          for m in $(go list ./cmd/...); do
+            if go list -deps "$m" | grep -qx 'github.com/hanzoai/cloud/clients/controlplane'; then
+              echo "::error::$m links clients/controlplane into a real binary — containment breach"
+              exit 1
+            fi
+          done
+
+          out="$(go build ./clients/controlplane/... 2>&1 || true)"
+          if ! printf '%s' "$out" | grep -q 'matched no packages'; then
+            echo "::error::clients/controlplane built successfully WITHOUT -tags controlplane (containment breach): $out"
+            exit 1
+          fi
+
+          echo "OK: containment holds — clients/controlplane has zero buildable files by default and is linked into no cmd/ binary"
