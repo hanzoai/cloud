@@ -497,7 +497,6 @@ require (
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/hashicorp/memberlist v0.5.4 // indirect
 	github.com/henomis/lingoose v0.1.0 // indirect
 	github.com/hhrutter/lzw v1.0.0 // indirect
@@ -578,7 +577,6 @@ require (
 	github.com/luxfi/threshold v1.12.1 // indirect
 	github.com/luxfi/zap v1.2.0 // indirect
 	github.com/magefile/mage v1.17.1 // indirect
-	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/markbates/going v1.0.0 // indirect
 	github.com/markbates/goth v1.82.0 // indirect
@@ -657,7 +655,6 @@ require (
 	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
-	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/sashabaranov/go-openai v1.32.0
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
@@ -802,7 +799,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzoai/ai v1.802.0
+	github.com/hanzoai/ai v1.802.1-0.20260708185316-0321c35877f0
 	github.com/hanzoai/authz v1.10.4
 	github.com/hanzoai/base v1.4.6
 	github.com/hanzoai/commerce v1.42.29
