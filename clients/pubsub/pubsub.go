@@ -36,8 +36,7 @@ import (
 // pubsub-before-kafka mount sequence.
 const order = 5
 
-// srv holds the running embedded server so Shutdown can stop it. Set once by
-// Mount; a package ref also keeps it off the GC's radar for the process life.
+// srv holds the running embedded server so shutdown can stop it. Set once by Mount.
 var srv *psembed.Server
 
 // Mount starts the embedded PubSub server when CLOUD_PUBSUB_ENABLED is set,
