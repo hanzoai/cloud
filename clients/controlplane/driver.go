@@ -4,6 +4,7 @@ package controlplane
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -18,6 +19,14 @@ type Committed struct {
 	Block *PlacementBlock
 	Cert  *quasar.QuasarCert
 }
+
+// errExternalCertVerifyNotImplemented is VerifyExternalCert's fail-closed
+// return today: the cryptographic quasar verify it must call (VerifyUnderPolicy
+// / VerifyWithRealKeys) does not exist yet in this package (increment-2). A
+// missing implementation must never present as "verified"; erroring is the
+// only safe default for a not-yet-built cryptographic gate.
+var errExternalCertVerifyNotImplemented = errors.New(
+	"controlplane: external-cert cryptographic verification is not implemented (increment-2); refusing to admit via the structural check")
 
 // Voter is one pod's full ceremony participation: a single share (one signer),
 // a policy gate, an independent verifier, and its own replicated state machine.
@@ -267,17 +276,56 @@ func (v *Voter) collectRound2() {
 	v.pending = keep
 }
 
+// selfComposedCert is the typed seam between CertComposer.Compose (the ONLY
+// producer in this package) and verifyOwnCertStructure (its ONLY consumer).
+// The wrapped field is unexported and there is no exported constructor other
+// than newSelfComposedCert, called only from a CertComposer.Compose
+// implementation in THIS package. An externally-received cert — bytes off the
+// wire on a future recovery/light-client/gossip path, deserialized into a
+// bare *quasar.QuasarCert — has NO way to become one of these: it would have
+// to be re-wrapped by code inside this package, and no such code exists or may
+// be added without also satisfying CertComposer (i.e. without re-running the
+// real ceremony). This makes "an external cert reached the structural check"
+// a type error, not a code-review discipline — see
+// TestExternalCert_MustNotAdmitThroughStructuralCheck (external_cert_test.go)
+// which locks the invariant from a black-box (exported-surface-only) vantage.
+type selfComposedCert struct {
+	cert *quasar.QuasarCert
+}
+
+func newSelfComposedCert(cert *quasar.QuasarCert) selfComposedCert {
+	return selfComposedCert{cert: cert}
+}
+
 // verifyOwnCertStructure is the structural well-formedness gate for a cert the
-// voter COMPOSED ITSELF (never a peer's). The published QuasarCert.Verify
-// confirms the triple (BLS+Corona+MLDSARollup) is present and the signer count
-// is consistent — it does NOT verify signatures. This is sound HERE only because
+// voter COMPOSED ITSELF (never a peer's — enforced by the selfComposedCert
+// type, not just by convention). The published QuasarCert.Verify confirms the
+// triple (BLS+Corona+MLDSARollup) is present and the signer count is
+// consistent — it does NOT verify signatures. This is sound HERE only because
 // every leg was already cryptographically gated in ingestLeg and the cert is
 // locally composed. An EXTERNALLY-received cert (a future recovery/light-client
 // path) MUST NOT be accepted through this structural check — it must go through
-// the cryptographic quasar verify (VerifyWithRealKeys / VerifyUnderPolicy),
-// increment-2. Accepting an external cert here would be forgeable (red_exploits #8).
-func verifyOwnCertStructure(cert *quasar.QuasarCert, voters []string) bool {
-	return cert.Verify(voters)
+// VerifyExternalCert, which routes to the cryptographic quasar verify
+// (VerifyWithRealKeys / VerifyUnderPolicy), increment-2. Accepting an external
+// cert here would be forgeable (red_exploits #8) — and is now also a type
+// error, since VerifyExternalCert's caller only ever holds a bare
+// *quasar.QuasarCert, never a selfComposedCert.
+func verifyOwnCertStructure(sc selfComposedCert, voters []string) bool {
+	return sc.cert != nil && sc.cert.Verify(voters)
+}
+
+// VerifyExternalCert is the ONLY seam a future external-cert path (recovery,
+// light-client, gossip — none exist yet in this package, see doc.go
+// increment-2) may call to admit a cert this process did not compose itself.
+// It is intentionally UNIMPLEMENTED today rather than silently falling back to
+// verifyOwnCertStructure: it always fails closed. Increment-2 real
+// implementation MUST route to the cryptographic
+// github.com/luxfi/consensus/protocol/quasar VerifyUnderPolicy /
+// VerifyWithRealKeys — never QuasarCert.Verify (the structural check), and
+// must never construct a selfComposedCert from the input (that type's zero
+// exported constructor is exactly what prevents this).
+func VerifyExternalCert(cert *quasar.QuasarCert, voters []string) error {
+	return errExternalCertVerifyNotImplemented
 }
 
 // tryFinalize aggregates the collected legs via the real Pulsar Finalize
@@ -303,20 +351,21 @@ func (v *Voter) tryFinalize() bool {
 	if err != nil {
 		return false
 	}
-	cert, err := v.composer.Compose(v.rc, cc)
+	sc, err := v.composer.Compose(v.rc, cc)
 	if err != nil {
 		return false
 	}
 	// Structural well-formedness of the SELF-COMPOSED cert (NOT a cryptographic
 	// verify — see verifyOwnCertStructure). Sound only because every leg was
-	// already gated in ingestLeg and this cert is locally composed; an external
-	// cert must never be accepted this way (red_exploits #8, increment-2).
-	if !verifyOwnCertStructure(cert, v.voters) {
+	// already gated in ingestLeg and this cert is locally composed; the
+	// selfComposedCert type is what makes "an external cert reached this check"
+	// impossible to even construct, not just disallowed by convention.
+	if !verifyOwnCertStructure(sc, v.voters) {
 		return false
 	}
 	if err := v.rsm.Apply(v.block); err != nil {
 		return false // fail-secure: invariant/ordering/persistence gate
 	}
-	v.finalized = &Committed{Block: v.block, Cert: cert}
+	v.finalized = &Committed{Block: v.block, Cert: sc.cert}
 	return true
 }
