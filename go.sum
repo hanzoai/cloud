@@ -1183,6 +1183,8 @@ github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 h1:2VTzZjLZBgl62/EtslC
 github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542/go.mod h1:Ow0tF8D4Kplbc8s8sSb3V2oUCygFHVp8gC3Dn6U4MNI=
 github.com/hanzoai/ai v1.800.10-0.20260707194923-8e65b8c3b4cf h1:WsMNxmk2rhKQV4R9zYUHB6shIN20hoWlQJoMvJe7sHc=
 github.com/hanzoai/ai v1.800.10-0.20260707194923-8e65b8c3b4cf/go.mod h1:1XjluW+MNDR06UqpUQoVBbWhIv/bxDzUPDt5tqE7oUk=
+github.com/hanzoai/ai v1.802.0 h1:HOJpMuBnQECqeg03CBSAt6pfpJ3PBsH2pBiDjFPPD0Y=
+github.com/hanzoai/ai v1.802.0/go.mod h1:1XjluW+MNDR06UqpUQoVBbWhIv/bxDzUPDt5tqE7oUk=
 github.com/hanzoai/authz v1.10.4 h1:sDAr5pnGakkFV8klY/aKHwWGROpFTS/xvSos0xr4NYs=
 github.com/hanzoai/authz v1.10.4/go.mod h1:9wf6n6BvrvxRULUtL3yc+vmprwwvAGZLGJoMHhiQSK4=
 github.com/hanzoai/authzstore v0.1.1 h1:4GsvB+bKs+gFtfKDMoYq/C7KxJAHrXLwtwdSutTakbo=
