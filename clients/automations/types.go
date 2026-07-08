@@ -173,7 +173,7 @@ type FlowRun struct {
 // "Connector" is the ONE Hanzo term for an external-service integration a flow
 // step invokes (Slack/GitHub/Stripe/…). The pre-rename name "piece" (ActivePieces
 // jargon) is retired on this surface; the /v1/automations/pieces path survives only
-// as a back-compat alias (see automations.go). See HIP-0125.
+// as a back-compat alias (see automations.go). See HIP-0126.
 
 // Catalog is the browse catalogue served at GET /v1/automations/connectors. It is
 // the go:embed'd catalog/catalog.json, seeded with the Tier-A connectors and later
