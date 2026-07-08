@@ -115,6 +115,38 @@
 // TestSafety_RogueAndForgedLegs_Rejected must then forge a correctly-derived leg,
 // not a bit-flipped one).
 //
+// # Containment (closed)
+//
+// Three independent controls now hold this package out of any real write path
+// while its crypto is stub, on top of the build-tag isolation described above:
+//
+//  1. CI guard — .github/workflows/containment.yml runs on every PR: a grep
+//     failing the build if any Dockerfile/Makefile/script/workflow anywhere in
+//     the repo passes `-tags controlplane` to go build/vet/run, PLUS a positive
+//     proof that `go build ./...` (no tag) links clients/controlplane into no
+//     cmd/ main and that `go build ./clients/controlplane/...` (no tag) still
+//     matches zero buildable packages.
+//  2. Runtime fail-closed assert — containment.go's mustHarnessOnly panics the
+//     instant this package's stub crypto is touched (package-import-time for
+//     the PartialZVerifier registration in signer.go's init, construction-time
+//     for NewSigner/NewStubComposer) UNLESS ProductionBCCSigningReady() is true
+//     (hardcoded false; flips only when increment-2's real crypto replaces the
+//     stubs) OR the calling binary is a go-test harness (testing.Testing() —
+//     the Go toolchain's own signal, not a flag or env var this package reads,
+//     so a `go build`/`go run` serve binary can never satisfy it). Proven by a
+//     real subprocess in TestContainment_NonHarnessProcessRefuses
+//     (containment_test.go), not just in-process logic.
+//  3. External-cert seam — CertComposer.Compose returns selfComposedCert (an
+//     unexported wrapper only Compose can produce), and verifyOwnCertStructure
+//     accepts ONLY that type — never a bare *quasar.QuasarCert. An externally-
+//     received cert (deserialized off the wire on a future recovery/light-
+//     client/gossip path) has no way to become a selfComposedCert; the ONLY
+//     exported seam for such a cert is VerifyExternalCert (driver.go), which is
+//     intentionally unimplemented and fails closed today rather than silently
+//     falling back to the structural check. Locked from a black-box vantage
+//     (exported-surface-only) by TestExternalCert_MustNotAdmitThroughStructuralCheck
+//     (external_cert_test.go).
+//
 // # Increment-2 security work (before this guards a real KMS shard lease)
 //
 //   - Real distributed DKG across pods (not in-process, not seed-derived shares)
@@ -127,11 +159,12 @@
 //   - RSM-level authorization re-verification (thread the registry into Apply so
 //     a future recovery path re-checks displacement authorization, not just
 //     ordering + invariants).
-//   - External-cert cryptographic verification (VerifyUnderPolicy /
-//     VerifyWithRealKeys) before any recovery/light-client path accepts a peer's
-//     cert — never the structural check.
-//   - A CI guard failing any release built `-tags controlplane`, plus a runtime
-//     assertion that ProductionBCCSigningReady() is true if this path is ever
-//     compiled into a serving binary. (Containment is total today: the package
-//     does not exist in the default build.)
+//   - VerifyExternalCert's real implementation: route to the cryptographic
+//     quasar VerifyUnderPolicy / VerifyWithRealKeys — never QuasarCert.Verify —
+//     the moment any recovery/light-client/gossip path needs to accept a peer's
+//     cert. The seam and its fail-closed default already exist (see above); only
+//     the crypto call is missing.
+//   - Flip ProductionBCCSigningReady() to true in the SAME change that deletes
+//     the stub types it currently guards (acceptBindingsOnly, stubSignatureCore,
+//     stubComposer) — never independently of them.
 package controlplane
