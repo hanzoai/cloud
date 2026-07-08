@@ -76,10 +76,9 @@ const (
 // never starves another; independent of the durable engine's own worker concurrency.
 var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 
-// catalogJSON is the go:embed'd Tier-A connector catalogue served at
-// /v1/automations/connectors (and its /pieces back-compat alias). A separate agent
-// later OVERWRITES this file with the full 700+ connector set at the SAME schema;
-// the Catalog unmarshal here is the contract.
+// catalogJSON is the go:embed'd connector catalogue served at
+// /v1/automations/connectors (and its /pieces back-compat alias). The Catalog
+// unmarshal here is the wire contract — a schema mismatch is a build-time fault.
 //
 //go:embed catalog/catalog.json
 var catalogJSON []byte
