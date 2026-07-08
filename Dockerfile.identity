@@ -1,0 +1,81 @@
+# hanzoai/cloud — IDENTITY-ROLE variant (HIP-0106 one-artifact/two-role split).
+#
+# The DEFAULT Dockerfile builds CGO=0 (pure-Go modernc sqlite, PLAINTEXT) for the
+# multi-replica APP-ROLE front door. That build MUST NEVER run the identity role:
+# the embedded IAM subsystem (clients/iam) keeps a per-org ENCRYPTED SQLite store
+# (orgIsolation=sqlite, SQLCipher) and a pure-Go build SILENTLY SHIPS PLAINTEXT.
+#
+# This variant is CGO=1 + system libsqlcipher, replicating hanzoai/iam's proven
+# recipe: the libsqlite3 tag + libsqlcipher symlink + -DSQLITE_HAS_CODEC, the
+# modernc double-registration guard, and the TestEncryptionProof gate baked into
+# the build — so a build that fails to link REAL SQLCipher produces NO image
+# (RED gate #1: an unencrypted identity store is catastrophic).
+#
+# No console stage: the identity role serves /v1/iam/* (+ oauth/oidc/jwks/login),
+# NOT the console SPA. webui/dist keeps its committed fallback shell so //go:embed
+# has a dir to bake; the identity role never serves it to users.
+#
+# ── Go build stage (CGO=1 + SQLCipher) ───────────────────────────────────────
+# alpine3.22 MATCHES the runtime base so the libsqlcipher soname the binary links
+# is the SAME one present at runtime. ECR Public mirror avoids Docker Hub 429s.
+FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22 AS build
+RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev pkgconfig binutils
+RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
+# mattn/go-sqlite3's `libsqlite3` tag hard-codes `-lsqlite3`, but alpine's
+# sqlcipher-dev ships ONLY libsqlcipher (no libsqlite3.so). Symlink so the link
+# resolves -lsqlite3 to libsqlcipher — REAL encryption. Do NOT `apk add sqlite-dev`
+# (a plaintext libsqlite3 would silently disable encryption; the gate below catches it).
+RUN set -eux; \
+    SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)"; \
+    test -n "$SC"; \
+    ln -sf "$SC" /usr/lib/libsqlite3.so; \
+    ln -sf "$SC" /usr/lib/libsqlite3.so.0
+# Codec + URI keying for SQLCipher, on top of alpine's sqlcipher.pc include/lib.
+ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" \
+    CGO_LDFLAGS="-lsqlcipher" \
+    GOPRIVATE=github.com/zap-proto/* \
+    GONOSUMDB=github.com/zap-proto/* \
+    GOSUMDB=off \
+    GOPROXY=https://proxy.golang.org,direct \
+    GOFLAGS=-mod=mod
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    go mod download
+COPY . .
+# RED gate #2 — modernc double-registration guard (mirrors iam Dockerfile): if ANY
+# package links modernc.org/sqlite under CGO=1 it double-registers the "sqlite"
+# driver with hanzoai/sqlite (mattn) and panics at init.
+RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud/ 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+    [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
+# RED gate #1 — ENCRYPTION PROOF. TestEncryptionProof asserts ciphertext-at-rest
+# under the SAME CGO + libsqlcipher build this image ships. If SQLCipher is not
+# really linked (plaintext), SQLITE_REQUIRE_CODEC=1 makes this FAIL → NO image.
+RUN SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" -run 'TestEncryptionProof' github.com/hanzoai/sqlite
+RUN CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+# Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
+RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
+    ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
+
+# ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
+FROM public.ecr.aws/docker/library/alpine:3.22
+ARG REVISION=unknown
+LABEL org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="https://github.com/hanzoai/cloud"
+# Runtime needs libsqlcipher (the codec the binary links). It must NOT also carry
+# a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
+# plaintext sqlite and silently no-op PRAGMA key. sqlcipher-libs ships
+# /usr/lib/libsqlcipher.so.0; alias libsqlite3.so.0 to it so sqlite3_* binds there.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs \
+    && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
+    && test -n "$SC" \
+    && ln -sf "$SC" /usr/lib/libsqlite3.so.0
+COPY --from=build /etc/passwd /etc/passwd
+COPY --from=build /etc/group /etc/group
+COPY --from=build /cloud /cloud
+EXPOSE 8000 9090 9653
+USER 65532:65532
+ENTRYPOINT ["/cloud"]
