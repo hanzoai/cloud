@@ -69,7 +69,7 @@ type topupConfig struct {
 }
 
 func loadTopupConfig() topupConfig {
-	chainID := int64(36900)
+	chainID := int64(36963)
 	if v := strings.TrimSpace(os.Getenv("HANZO_CHAIN_ID")); v != "" {
 		if n, ok := new(big.Int).SetString(v, 10); ok {
 			chainID = n.Int64()
