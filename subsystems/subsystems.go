@@ -32,14 +32,14 @@ package subsystems
 // injected by the operator via a K8s Secret env; absent it the subsystem serves
 // fail-closed health-only.
 //
-// IAM is embedded in-process (clients/iamsvc mounts /v1/iam/* + /.well-known/* +
+// IAM is embedded in-process (clients/iam mounts /v1/iam/* + /.well-known/* +
 // /login/oauth/* + /_/iam/* + /cas/* + /scim/* by wrapping IAM's own Beego
 // handler via iamserver.Init — the LAST binary-consolidation piece). It is the
 // identity authority (order 50, mounts before its dependents). ACTIVATION IS
 // STAGED: the operator adds "iam" to the deployment's --enable only AFTER IAM's
 // config (Beego app.conf + env + KMS signing keys) is present in the cloud
 // runtime and the fold is verified; until then hanzo.id is served by the
-// standalone iam pod via ingress. See clients/iamsvc.
+// standalone iam pod via ingress. See clients/iam.
 import (
 	_ "github.com/hanzoai/ai"        // order 150
 	_ "github.com/hanzoai/authz"     // order 70
@@ -68,8 +68,8 @@ import (
 	// SuperAdmin owner=="admin", argon2id hashing) are IAM's, unchanged. Activation
 	// is the enable-list gate — do NOT add "iam" to the live --enable until IAM
 	// config is present + the fold is verified (staged cutover from the standalone
-	// iam pod). See clients/iamsvc.
-	_ "github.com/hanzoai/cloud/clients/iamsvc"  // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
+	// iam pod). See clients/iam.
+	_ "github.com/hanzoai/cloud/clients/iam"  // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
 	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
@@ -94,7 +94,7 @@ import (
 	// RESOURCE lifecycle at /v1/s3 + /v1/s3/:name) — both derive a tenant's physical
 	// bucket name identically (provisioning.PhysicalName) so a provisioned bucket is
 	// browsable here.
-	_ "github.com/hanzoai/cloud/clients/s3" // order 118 — /v1/s3/buckets/*,/v1/s3/health
+	_ "github.com/hanzoai/cloud/clients/storage" // order 118 — /v1/s3/buckets/*,/v1/s3/health
 
 	// Provisioning control plane: creates logical resources (sql, vector,
 	// datastore, kv, search, s3, docdb) inside the live shared backends.
@@ -224,7 +224,7 @@ import (
 	// mounts a thin control-plane subsystem (order 130): POST /v1/kb/search (the RAG
 	// retrieval entry point) and /v1/kb/connectors/* (Slack/GitHub/Google OAuth that
 	// ingest external docs INTO the same store + index; tokens in KMS, never plaintext).
-	_ "github.com/hanzoai/cloud/clients/kb" // order 130 — "kb" framework module + hooks + /v1/kb/*
+	_ "github.com/hanzoai/cloud/clients/knowledge" // order 130 — "kb" framework module + hooks + /v1/kb/*
 
 	// Team control plane (HIP-0106, task #45): the native-Go port of hanzo team-go
 	// into the cloud binary — the SPA READ PLANE + bots-as-members. Mounts the
@@ -241,7 +241,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
-	_ "github.com/hanzoai/cloud/clients/tasksvc"   // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
+	_ "github.com/hanzoai/cloud/clients/tasks"   // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
 	_ "github.com/hanzoai/cloud/clients/usage"     // order 131 — /v1/usage/summary (org-scoped unified footprint: cost roll-up + LLM totals)
 	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)

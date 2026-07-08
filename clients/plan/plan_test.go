@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/gojahost"
+	"github.com/hanzoai/cloud/clients/goja"
 	hplans "github.com/hanzoai/plans"
 )
 
 // newHost loads the REAL @hanzo/plans goja bundle + embedded catalog, so this
 // test exercises the actual entitlements.mjs port running in goja.
-func newHost(t *testing.T) *gojahost.Host {
+func newHost(t *testing.T) *goja.Host {
 	t.Helper()
 	bundle, err := hplans.Bundle()
 	if err != nil {
@@ -21,13 +21,13 @@ func newHost(t *testing.T) *gojahost.Host {
 	if err != nil {
 		t.Fatalf("Data: %v", err)
 	}
-	h, err := gojahost.New(gojahost.Config{
+	h, err := goja.New(goja.Config{
 		Name:    "plans",
 		Bundle:  bundle,
 		Globals: map[string]any{"__PLANS_DATA__": data},
 	})
 	if err != nil {
-		t.Fatalf("gojahost.New: %v", err)
+		t.Fatalf("goja.New: %v", err)
 	}
 	return h
 }
@@ -35,7 +35,7 @@ func newHost(t *testing.T) *gojahost.Host {
 func TestPlans_Vocab(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "vocab", Tenant: "hanzo"})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "vocab", Tenant: "hanzo"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestPlans_Vocab(t *testing.T) {
 func TestPlans_ResolveProducesLicenseFeatures(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "resolve", Tenant: "hanzo", Params: map[string]string{"id": "pro"}})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "resolve", Tenant: "hanzo", Params: map[string]string{"id": "pro"}})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestPlans_ResolveProducesLicenseFeatures(t *testing.T) {
 func TestPlans_Resolve404(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "resolve", Tenant: "hanzo", Params: map[string]string{"id": "does-not-exist"}})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "resolve", Tenant: "hanzo", Params: map[string]string{"id": "does-not-exist"}})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestPlans_TenantScopingFallsBackToHanzo(t *testing.T) {
 	h := newHost(t)
 	defer h.Close()
 	// A reseller with no overrides sees the hanzo default catalog.
-	resp, err := h.Dispatch(context.Background(), gojahost.Request{Route: "subscriptions", Tenant: "acme-reseller"})
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "subscriptions", Tenant: "acme-reseller"})
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
