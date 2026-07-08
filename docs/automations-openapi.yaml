@@ -100,7 +100,7 @@ paths:
       description: >-
         Retired path. "pieces" was the ActivePieces term; use
         `/v1/automations/connectors`. This alias returns the identical body and is
-        kept so live clients do not break (HIP-0125).
+        kept so live clients do not break (HIP-0126).
       responses:
         "200":
           description: The connector catalogue (identical to /connectors).

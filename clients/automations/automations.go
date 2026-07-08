@@ -134,7 +134,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/automations/connectors", s.connectors)
 	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same
 	// body) so live clients pinned to it keep working. "pieces" is the retired
-	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0125).
+	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
 	app.Get("/v1/automations/pieces", s.connectors)
 
 	app.Get("/v1/automations/flows", s.listFlows)
