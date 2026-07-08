@@ -146,36 +146,44 @@ func (c *safeClient) createVault(ctx context.Context, org, name string) (string,
 func (c *safeClient) createWallet(ctx context.Context, org, vaultID, name string) (*mpcWallet, error) {
 	body := map[string]any{"name": name, "key_type": "secp256k1", "protocol": "cggmp21"}
 	var wl mpcWallet
-	// Bounded retry on "vault not found": the ring commits the vault AFTER it
-	// writes the createVault 201 response, so a back-to-back createWallet (cloud
-	// fires them microseconds apart on one keep-alive conn) can race the commit
-	// and read-miss the just-created vault. A slower client (curl) never sees it.
-	// Retry the 404 with short backoff; every OTHER error fails fast.
-	var lastErr error
-	for attempt := 0; attempt < 6; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
-			}
-		}
-		wl = mpcWallet{}
-		lastErr = c.do(ctx, http.MethodPost, "/v1/vaults/"+vaultID+"/wallets", org, body, &wl)
-		if lastErr == nil {
-			break
-		}
-		if !strings.Contains(strings.ToLower(lastErr.Error()), "vault not found") {
-			return nil, lastErr // not the race — fail fast
-		}
-	}
-	if lastErr != nil {
-		return nil, lastErr
+	// Read-after-write race: the ring commits the vault AFTER it writes the
+	// createVault 201, so this back-to-back createWallet can read-miss it.
+	if err := c.doRetryNotFound(ctx, http.MethodPost, "/v1/vaults/"+vaultID+"/wallets", org, body, &wl, "vault not found"); err != nil {
+		return nil, err
 	}
 	if wl.ID == "" || wl.WalletID == "" || wl.EVMAddress == "" {
 		return nil, fmt.Errorf("safe: create wallet returned an incomplete wallet (id/walletId/evmAddress)")
 	}
 	return &wl, nil
+}
+
+// doRetryNotFound wraps do() with a bounded retry on the ring's read-after-write
+// race: it commits a newly-created record (vault, wallet) AFTER writing the 201
+// response, so cloud's back-to-back next call — fired microseconds apart on one
+// keep-alive connection — can 404 on the just-created record. A slower client
+// (curl, separate processes) never observes the gap, which is why manual repro
+// succeeds. Retry ONLY that specific "<record> not found" 404 with short linear
+// backoff (ctx-aware); every other error fails fast. do() unmarshals into out
+// only on 2xx, so out is untouched across the retried 404s.
+func (c *safeClient) doRetryNotFound(ctx context.Context, method, path, org string, reqBody, out any, notFound string) error {
+	var lastErr error
+	for attempt := 0; attempt < 6; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
+			}
+		}
+		lastErr = c.do(ctx, method, path, org, reqBody, out)
+		if lastErr == nil {
+			return nil
+		}
+		if !strings.Contains(strings.ToLower(lastErr.Error()), notFound) {
+			return lastErr // not the race — fail fast
+		}
+	}
+	return lastErr
 }
 
 // deploySafe deploys a counterfactual Safe on chain, owned by the MPC EOA. The
@@ -199,7 +207,9 @@ func (c *safeClient) deploySafe(ctx context.Context, org, walletID, chain string
 		"threshold":   threshold,
 	}
 	var sw safeWallet
-	if err := c.do(ctx, http.MethodPost, fmt.Sprintf(pathDeploySmartWallet, walletID), org, body, &sw); err != nil {
+	// Same read-after-write race one step later: the ring commits the db.Wallet
+	// (createWallet) AFTER its 201, so this deploy can 404 "wallet not found" on it.
+	if err := c.doRetryNotFound(ctx, http.MethodPost, fmt.Sprintf(pathDeploySmartWallet, walletID), org, body, &sw, "wallet not found"); err != nil {
 		return nil, err
 	}
 	if sw.ID == "" || sw.ContractAddress == "" {
