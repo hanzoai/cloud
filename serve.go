@@ -111,7 +111,7 @@ func Serve(enable []string) error {
 	// from OUR S3 and returns HERE, never entering the authenticated/billed API
 	// pipeline. A published site is a PUBLIC artifact: no IAM JWT, no balance gate.
 	// For every other Host this middleware calls Continue() and the pipeline below
-	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projectsvc store,
+	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projects store,
 	// injected at its Mount via sites.SetResolver; until then a site host 404s
 	// honestly. Tenant isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
@@ -161,8 +161,12 @@ func Serve(enable []string) error {
 	// HIP-0106 liveness contract: every enabled subsystem answers
 	// GET /v1/<name>/health uniformly, registered at the compose root before
 	// MountAll so it precedes subsystem /v1/<n>/* wildcards.
+	//
+	// A subsystem that owns its health (OwnsHealth, e.g. kms/paas/s3) serves its
+	// OWN fail-closed /v1/<name>/health in Mount; skip it here so this always-ok
+	// route never shadows the real probe.
 	for _, spec := range Registry {
-		if !cfg.Enabled(spec.Name) {
+		if !cfg.Enabled(spec.Name) || spec.OwnsHealth {
 			continue
 		}
 		name := spec.Name
