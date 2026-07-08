@@ -1,6 +1,7 @@
 package automations
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -14,7 +15,7 @@ func TestOrgGating403(t *testing.T) {
 	gated := []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/automations/pieces"},
+		{http.MethodGet, "/v1/automations/connectors"},
 		{http.MethodGet, "/v1/automations/flows"},
 		{http.MethodPost, "/v1/automations/flows"},
 		{http.MethodGet, "/v1/automations/flows/x"},
@@ -29,34 +30,41 @@ func TestOrgGating403(t *testing.T) {
 	}
 }
 
-// TestPiecesCatalog: the /pieces endpoint returns the full piece catalogue and,
-// within it, the Tier-A executable connectors (core/slack/github/google_*). The
-// count is not pinned to the seed — the full 701-piece catalogue is embedded — so
-// the invariant is PieceCount==len(Pieces) and every Tier-A connector is present.
-func TestPiecesCatalog(t *testing.T) {
+// TestConnectorsCatalog: the /connectors endpoint returns the full connector
+// catalogue and, within it, the Tier-A executable connectors (core/slack/github/
+// google_*). The count is not pinned to the seed — the full catalogue is embedded
+// — so the invariant is ConnectorCount==len(Connectors) and every Tier-A connector
+// is present. The retired /pieces path is proven a byte-identical alias.
+func TestConnectorsCatalog(t *testing.T) {
 	app := newApp(t)
-	r := req(t, app, http.MethodGet, "/v1/automations/pieces", "acme", nil)
+	r := req(t, app, http.MethodGet, "/v1/automations/connectors", "acme", nil)
 	if r.Code != http.StatusOK {
-		t.Fatalf("pieces want 200, got %d (%s)", r.Code, r.Body)
+		t.Fatalf("connectors want 200, got %d (%s)", r.Code, r.Body)
 	}
 	var cat Catalog
 	if err := json.Unmarshal(r.Body, &cat); err != nil {
-		t.Fatalf("pieces body: %v (%s)", err, r.Body)
+		t.Fatalf("connectors body: %v (%s)", err, r.Body)
 	}
-	if cat.PieceCount != len(cat.Pieces) || len(cat.Pieces) < 5 {
-		t.Fatalf("catalogue inconsistent/too small: count=%d len=%d", cat.PieceCount, len(cat.Pieces))
+	if cat.ConnectorCount != len(cat.Connectors) || len(cat.Connectors) < 5 {
+		t.Fatalf("catalogue inconsistent/too small: count=%d len=%d", cat.ConnectorCount, len(cat.Connectors))
 	}
-	byName := map[string]PieceMetadata{}
-	for _, p := range cat.Pieces {
+	byName := map[string]ConnectorMetadata{}
+	for _, p := range cat.Connectors {
 		byName[p.Name] = p
 	}
 	for _, want := range []string{"core", "slack", "github", "google_sheets", "google_drive"} {
 		if _, ok := byName[want]; !ok {
-			t.Fatalf("catalogue missing %q: %+v", want, cat.Pieces)
+			t.Fatalf("catalogue missing %q: %+v", want, cat.Connectors)
 		}
 	}
 	if byName["slack"].Auth.Type != "bot_token" || !byName["slack"].Auth.Required {
 		t.Fatalf("slack auth descriptor wrong: %+v", byName["slack"].Auth)
+	}
+
+	// Back-compat: the retired /pieces path is a pure alias — same 200, same body.
+	alias := req(t, app, http.MethodGet, "/v1/automations/pieces", "acme", nil)
+	if alias.Code != http.StatusOK || !bytes.Equal(alias.Body, r.Body) {
+		t.Fatalf("/pieces alias must mirror /connectors: code=%d bodyEqual=%v", alias.Code, bytes.Equal(alias.Body, r.Body))
 	}
 }
 
