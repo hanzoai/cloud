@@ -70,10 +70,17 @@ var errNotConfigured = errors.New("iam confidential client not configured")
 var errNotFound = errors.New("not found")
 
 type svc struct {
-	iam   *iamClient
-	log   luxlog.Logger
-	brand string
+	iam      *iamClient
+	log      luxlog.Logger
+	brand    string
+	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
+	writesRL *rateLimiter // per-IP abuse cap on the money-write routes (ratelimit.go)
 }
+
+// keysWriteRatePerMin caps money-write frequency per client IP (mint/rotate/revoke
+// key, wallet top-up). Generous enough for real UI bursts, tight enough to blunt
+// brute-force / enumeration when a caller reaches cloud directly (gateway bypassed).
+const keysWriteRatePerMin = 30
 
 // Mount wires the /v1/console surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -88,6 +95,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log:   deps.Logger.New("subsystem", "console"),
 		brand: deps.Brand,
 	}
+	s.csrfKey = loadCSRFKey(s.log)
+	s.writesRL = newRateLimiter(keysWriteRatePerMin)
 	s.routes(app)
 	s.log.Info("console standalone surface mounted",
 		"prefix", "/v1/console", "iam", s.iam.base, "configured", s.iam.configured(), "brand", deps.Brand)
@@ -97,33 +106,39 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes is the ONE place the surface is wired — shared by Mount (real IAM) and the
 // test (an httptest fake IAM injected via s.iam.base).
 func (s *svc) routes(app *zip.App) {
+	// GET /v1/console/csrf issues the anti-CSRF token the embedded SPA echoes as
+	// X-CSRF-Token on every money write (csrf.go). Safe (read-only), same-origin.
+	app.Get("/v1/console/csrf", s.issueCSRFToken)
+	// Reads are open; every state-changing WRITE is wrapped: requireCSRF blocks a
+	// cross-site ambient-cookie forgery, and (for the abuse-sensitive key/topup ops)
+	// rateLimit caps per-IP frequency now that cloud is reachable off-gateway.
 	app.Get("/v1/console/keys", s.getKey)
-	app.Post("/v1/console/keys", s.mintKey)
-	app.Delete("/v1/console/keys", s.revokeKey)
-	app.Post("/v1/console/onboard", s.onboard)
+	app.Post("/v1/console/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.mintKey)))
+	app.Delete("/v1/console/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.revokeKey)))
+	app.Post("/v1/console/onboard", s.requireCSRF(s.onboard))
 	// The remaining standalone console server routes, ported native (task #41):
 	// waitlist join (session-bound email), embed-status (entitlement + reachability
 	// probe), and the HUSD wallet top-up (on-chain verify → commerce credit).
 	app.Post("/v1/console/waitlist", s.waitlistJoin)
 	app.Get("/v1/console/embed-status", s.embedStatus)
-	app.Post("/v1/console/topup/wallet", s.walletTopup)
+	app.Post("/v1/console/topup/wallet", s.rateLimit(s.writesRL, s.requireCSRF(s.walletTopup)))
 	app.Get("/v1/console/health", s.health)
 	// Per-tenant billing DATA bridge (task #41 BFF catch-all sweep) — the canonical
 	// /v1/billing/* the statically-exported console calls, forwarded to commerce with
 	// the admin service token and SCOPED to the validated caller's own subject
 	// (billing.go). GET+POST only, mirroring app/billing/v1/[...path]/route.ts.
 	app.Get("/v1/billing/*", s.billingData)
-	app.Post("/v1/billing/*", s.billingData)
+	app.Post("/v1/billing/*", s.requireCSRF(s.billingData))
 	// Per-tenant STORE DATA bridge (task #41 BFF catch-all sweep) — the canonical
 	// /v1/commerce/* the statically-exported console calls, forwarded to commerce's
 	// bare store surface /v1/<kind> with the admin service token and SCOPED to the
 	// validated caller's own org (commerce.go). Full CRUD, mirroring the five method
 	// exports of app/commerce/[...path]/route.ts.
 	app.Get("/v1/commerce/*", s.commerceData)
-	app.Post("/v1/commerce/*", s.commerceData)
-	app.Put("/v1/commerce/*", s.commerceData)
-	app.Patch("/v1/commerce/*", s.commerceData)
-	app.Delete("/v1/commerce/*", s.commerceData)
+	app.Post("/v1/commerce/*", s.requireCSRF(s.commerceData))
+	app.Put("/v1/commerce/*", s.requireCSRF(s.commerceData))
+	app.Patch("/v1/commerce/*", s.requireCSRF(s.commerceData))
+	app.Delete("/v1/commerce/*", s.requireCSRF(s.commerceData))
 }
 
 // init registers the subsystem under the clean id "console" with cloud.HealthOwner:
