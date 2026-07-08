@@ -79,9 +79,8 @@ const dsnEnvVar = "CLOUD_OTLP_INGEST_DSN"
 // the same o11y filter as the data already in ClickHouse. Overridable.
 const defaultEnvironment = "production"
 
-// embeddedIngest pins the ONE in-process ingest collector for the life of the
-// process (a package ref the GC won't collect), mirroring embed.go's
-// embeddedRuntime. Shutdown() signals Run() to return.
+// embeddedIngest holds the in-process ingest collector so shutdownIngest can
+// reach it, mirroring embed.go's embeddedRuntime. Shutdown() signals Run() to return.
 var embeddedIngest *otelcol.Collector
 
 func init() {
