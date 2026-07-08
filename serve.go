@@ -11,6 +11,8 @@ import (
 
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/storagelock"
+	"github.com/hanzoai/cloud/role"
+	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -45,7 +47,27 @@ func Serve(enable []string) error {
 		return fmt.Errorf("storage lockdown: %w", err)
 	}
 
+	// HA role. Unset CLOUD_ROLE ⇒ Writer ⇒ byte-identical to the single-pod
+	// deployment. Fail CLOSED on an explicitly-invalid role rather than guess: a
+	// wrong guess either demotes the real writer or risks a second writer opening
+	// the RWO stores. This gates KMS into read-only reader mode (pickKMSClient);
+	// see the Red Handoff for the reader subsystems still to be gated.
+	resolvedRole, roleErr := role.FromEnv()
+	if roleErr != nil {
+		return fmt.Errorf("ha role: %w", roleErr)
+	}
+	cfg.Role = resolvedRole
+
 	deps := BuildDeps(cfg)
+
+	// Surface the resolved role and the writer-pin backing it. The pin is
+	// SingleWriter today (k8s StatefulSet replicas:1 guarantees one writer);
+	// consensus (Quasar) election is stubbed (writerpin.ConsensusPin) and NOT yet
+	// gating store opens — logged here so operators see the real posture.
+	deps.Logger.Info("HA role resolved",
+		"role", cfg.Role.String(),
+		"writer_pin", writerpin.Resolve().Kind(),
+		"kms_read_only", cfg.Role.IsReader())
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
 	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
@@ -73,6 +95,15 @@ func Serve(enable []string) error {
 	app.Use(TracingMiddleware())
 
 	app.Use(middleware.Logger(deps.Logger))
+
+	// Read-replica write guard (fail-closed). On a Reader, refuse mutating verbs
+	// at the boundary so a mis-routed write can never silently persist to the
+	// reader's ephemeral store and vanish on restart. ONE place gates EVERY store
+	// (KMS + audit + tasks + per-tenant SQLite), not just KMS's read-only open.
+	// No-op on a Writer (the default), so unset CLOUD_ROLE is byte-identical.
+	if cfg.Role.IsReader() {
+		app.Use(ReaderGuard())
+	}
 
 	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
 	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a

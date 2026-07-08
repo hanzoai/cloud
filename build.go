@@ -148,6 +148,10 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 			MasterKeyB64: cfg.KMSMasterKeyRef,
 			MPCAddr:      cfg.KMSMPCAddr,
 			MPCVaultID:   cfg.KMSMPCVaultID,
+			// Reader HA role opens the KMS store READ-ONLY (BypassLockGuard) off a
+			// restored replica — never the exclusive write lock. Writer (default)
+			// opens writable exactly as before.
+			ReadOnly: cfg.Role.IsReader(),
 		}, log)
 		if err != nil {
 			log.Error("deps.KMS: embedded KMS unavailable, failing closed", "err", err)
