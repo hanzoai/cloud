@@ -115,7 +115,7 @@ type fieldView struct {
 	Key    string `json:"key"`
 	Label  string `json:"label"`
 	Type   string `json:"type"`
-	Value  string `json:"value"`         // non-secret value; "" for secret (masked)
+	Value  string `json:"value"` // non-secret value; "" for secret (masked)
 	Secret bool   `json:"secret"`
 	Set    bool   `json:"set,omitempty"` // secret only: whether a value is stored
 }
@@ -176,15 +176,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 func init() {
 	// Order 138: after integrations (137), before the AI /v1/* catch-all (150).
-	cloud.RegisterWithShutdown("settings", 138, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("settings.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(ctx context.Context) error {
-		return Shutdown(ctx)
-	})
+	cloud.RegisterWithShutdown("settings", 138, cloud.Typed(Mount), Shutdown)
 }
 
 // Shutdown closes the store. Idempotent.

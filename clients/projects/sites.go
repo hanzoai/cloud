@@ -1,4 +1,4 @@
-package projectsvc
+package projects
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 // siteResolver adapts the projects Store to the sites.Resolver contract, so the
 // public site server (clients/sites, installed at the compose root) resolves a
 // `<slug>.hanzo.app` request to its authoritative tenant + S3 location through
-// the ONE project store. projectsvc imports sites (not the reverse) — sites stays
+// the ONE project store. projects imports sites (not the reverse) — sites stays
 // a leaf that cloud's serve.go can wire without an import cycle.
 type siteResolver struct{ store *Store }
 

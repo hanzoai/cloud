@@ -7,7 +7,7 @@ package clients
 // VFSClient seam; an adapter+crypto is needless complexity for small avatars).
 //
 // It reuses the ONE shared S3 construction (s3admin.Admin — the SAME endpoint +
-// S3_ADMIN_* credentials clients/s3 and clients/projectsvc use; no second client
+// S3_ADMIN_* credentials clients/s3 and clients/projects use; no second client
 // setup, DRY). Everything lands in ONE bucket keyed by the caller-opaque key the
 // consumer supplies; tenant isolation is UPSTREAM in that key
 // (clients/team/files.go builds team/blobs/<verified-org>/<ws>/<blobId> via

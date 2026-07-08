@@ -51,10 +51,11 @@ import (
 	_ "github.com/hanzoai/vfs"       // order 20
 
 	// Embedded KMS secrets plane (HIP-0106): mounts /v1/kms/* backed by the
-	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as
-	// "kmssvc" (order 10) so the real /v1/kms/health probe is not shadowed by the
-	// generic liveness route; secret ops fail closed until the operator injects
-	// CLOUD_KMS_MASTER_KEY_REF.
+	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as id "kms"
+	// (order 10) with cloud.HealthOwner, so its real /v1/kms/health probe is not
+	// shadowed by the generic liveness route; secret ops fail closed until the
+	// operator injects CLOUD_KMS_MASTER_KEY_REF. (The package dir stays clients/kmssvc
+	// so its name doesn't collide with the clients/kms library it embeds.)
 	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
 	_ "github.com/hanzoai/cloud/clients/pubsub" // order 5 — embedded NATS :4222 + JetStream
 	_ "github.com/hanzoai/cloud/clients/kafka"  // order 6 — embedded Kafka adaptor :9092
@@ -87,11 +88,11 @@ import (
 	// S3 object-storage DATA plane: the org-scoped /v1/s3 file manager (buckets +
 	// objects) over the shared SeaweedFS S3 gateway. Order 118 (< provisioning's
 	// 120) so its static /v1/s3/buckets + /v1/s3/health register BEFORE
-	// provisioning's /v1/s3/:name and win Fiber's first-match scan; registered as
-	// "s3svc" so the generic health route does not shadow the real fail-closed
-	// /v1/s3/health. It COMPLEMENTS provisioning (which owns the s3 RESOURCE
-	// lifecycle at /v1/s3 + /v1/s3/:name) — both derive a tenant's physical bucket
-	// name identically (provisioning.PhysicalName) so a provisioned bucket is
+	// provisioning's /v1/s3/:name and win Fiber's first-match scan; registered with
+	// cloud.HealthOwner so the generic health route does not shadow the real
+	// fail-closed /v1/s3/health. It COMPLEMENTS provisioning (which owns the s3
+	// RESOURCE lifecycle at /v1/s3 + /v1/s3/:name) — both derive a tenant's physical
+	// bucket name identically (provisioning.PhysicalName) so a provisioned bucket is
 	// browsable here.
 	_ "github.com/hanzoai/cloud/clients/s3" // order 118 — /v1/s3/buckets/*,/v1/s3/health
 
@@ -127,7 +128,7 @@ import (
 	// Projects control plane: the ONE org-scoped store of buildable/deployable
 	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
 	// the deploy pipeline (artifact/git → OUR S3 → live URL).
-	_ "github.com/hanzoai/cloud/clients/projectsvc" // order 125 — /v1/projects/*
+	_ "github.com/hanzoai/cloud/clients/projects" // order 125 — /v1/projects/*
 
 	// Tracker control plane: the native-Go, per-org issue tracker (projects +
 	// issues) on SQLite — the durable replacement for the Huly/Svelte hanzo.team
@@ -141,17 +142,17 @@ import (
 	// declared/running/drift board and deploys by merge-patching a CR's
 	// `.spec.image` (the operator reconciles the rollout) — the ONE deploy path.
 	// Global-admin only; the user-facing view lives in console.
-	_ "github.com/hanzoai/cloud/clients/paassvc" // order 128 — /v1/paas/*
+	_ "github.com/hanzoai/cloud/clients/paas" // order 128 — /v1/paas/*
 
 	// Platform (PaaS) control plane — PER-ORG, user-facing: the native Go port of
 	// the standalone Dokploy (platform.hanzo.ai) tRPC backend. Users create
 	// projects + applications, build them (arcd BuildKit) and deploy them
 	// (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).
-	// Complements paassvc (admin fleet board) and projectsvc (static sites): this
+	// Complements paas (admin fleet board) and projects (static sites): this
 	// is the container-app PaaS. Every route is org-scoped by the validated
 	// X-Org-Id and the deploy namespace is DERIVED from it (tenant-<org>), never
 	// taken from the request — the cross-tenant isolation boundary. Order 124
-	// binds /v1/platform/* before projectsvc (125) and the AI catch-all (150).
+	// binds /v1/platform/* before projects (125) and the AI catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/platform" // order 124 — /v1/platform/*
 
 	// Product control planes: per-org, Base/SQLite-backed application surfaces

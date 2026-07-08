@@ -127,13 +127,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func init() {
-	cloud.RegisterWithShutdown("world", 142, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("world.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, func(context.Context) error {
+	cloud.RegisterWithShutdown("world", 142, cloud.Typed(Mount), func(context.Context) error {
 		return Shutdown()
 	})
 }

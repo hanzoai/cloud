@@ -7,18 +7,18 @@
 // (@librechat/agents tools/search). The only self-hostable, key-less-to-a-SaaS
 // providers it accepts are:
 //   - search provider  "searxng"   → GET  {searxngInstanceUrl}/search?q=&format=json
-//                                     ← {results:[{url,title,content,img_src?}]}
+//     ← {results:[{url,title,content,img_src?}]}
 //   - scraper provider "firecrawl" → POST {firecrawlApiUrl}/{version}/scrape
-//                                     body {url,formats} ← {success,data:{markdown,metadata}}
+//     body {url,formats} ← {success,data:{markdown,metadata}}
 //     (reranker is optional; we omit it — provider+scraper is sufficient.)
 //
 // This subsystem serves BOTH contracts under /v1/websearch, backed by Hanzo's
 // own services — never a third-party search API:
 //   - GET  /v1/websearch/search        SearXNG-shaped. Proxied to a Hanzo-operated
-//                                       metasearch instance (WEBSEARCH_UPSTREAM).
+//     metasearch instance (WEBSEARCH_UPSTREAM).
 //   - POST /v1/websearch/v1/scrape      Firecrawl-shaped. Backed by Hanzo Crawl
 //     (also /v1/websearch/scrape)       (crawl.hanzo.svc, Crawl4AI): fetch the URL,
-//                                       return {success,data:{markdown,metadata}}.
+//     return {success,data:{markdown,metadata}}.
 //
 // The chat server calls these SERVER-SIDE in-cluster, so point
 // searxngInstanceUrl / firecrawlApiUrl at this surface (public api.hanzo.ai/v1
@@ -33,6 +33,7 @@
 //     neither is refused.
 //   - SCRAPE (/v1/websearch/*/scrape) requires the shared key as a Bearer (the chat
 //     server path only; the console surfaces scrape read-only, does not drive it).
+//
 // An unset key 503s and any missing/mismatched key 401s on the key path; a request
 // with a validated principal never needs the key. So neither surface is ever an
 // open proxy, and the signed-in console user reaches search without the shared key.
@@ -121,6 +122,7 @@ func newSearchProxy(rawURL string) (http.Handler, error) {
 //   - key unset          → 503 (surface not configured; never "open to all").
 //   - X-API-Key missing   → 401 (constant-time compare of "" vs want fails).
 //   - X-API-Key mismatch  → 401.
+//
 // The LibreChat searxng client sends the configured searxngApiKey as X-API-Key
 // (universe chat configmap wires searxngApiKey=${WEBSEARCH_API_KEY}), so the
 // real caller is unaffected; only anonymous callers are turned away.
@@ -171,6 +173,7 @@ type crawlRequest struct {
 //   - Crawl4AI ≤ ~0.5 / the older mirror: a bare JSON string.
 //   - Crawl4AI 0.8.x (the deployed hanzoai/crawl:0.0.1 = 0.8.6) and 0.9.x: an
 //     OBJECT {raw_markdown, fit_markdown, markdown_with_citations, ...}.
+//
 // A plain `string` field errors the whole json.Decode on the object form, so
 // crawl() failed and every scrape returned {success:false}. This unmarshaler
 // accepts either: a string verbatim, or the object's fit_markdown (the
@@ -356,11 +359,5 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 func init() {
 	// Order 141: before hanzoai/ai (150) so /v1/websearch/* wins over ai's
 	// /v1/* catch-all; sits next to exec (140).
-	cloud.Register("websearch", 141, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("websearch.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
+	cloud.Register("websearch", 141, cloud.Typed(Mount))
 }

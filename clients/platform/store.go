@@ -126,7 +126,7 @@ type Build struct {
 // Store is the platform metadata database. ONE SQLite file
 // ({DataDir}/platform.db) holds every org's records; tenancy is the org column.
 // MaxOpenConns(1) serializes writes against the file lock without busy retries,
-// matching projectsvc/provisioning.
+// matching projects/provisioning.
 type Store struct {
 	db *sql.DB
 }
