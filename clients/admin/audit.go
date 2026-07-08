@@ -25,33 +25,6 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// auditRow is one record in the operator's audit table (AuditRow). The JSON tags
-// are the operator contract. It is cloud's OWN record shape — richer than the IAM
-// Record it supersedes: it carries the outcome, the validated auth context, and
-// the hash-chain linkage so the console can show integrity per row.
-type auditRow struct {
-	Seq        uint64 `json:"seq"`
-	Time       string `json:"time"`
-	Org        string `json:"org"`
-	Sub        string `json:"sub"`
-	Email      string `json:"email,omitempty"`
-	Action     string `json:"action"`
-	Resource   string `json:"resource"`
-	ResourceID string `json:"resourceId,omitempty"`
-	Method     string `json:"method,omitempty"`
-	Path       string `json:"path,omitempty"`
-	Result     string `json:"result"`
-	Status     int    `json:"status"`
-	Reason     string `json:"reason,omitempty"`
-	SourceIP   string `json:"sourceIp,omitempty"`
-	UserAgent  string `json:"userAgent,omitempty"`
-	RequestID  string `json:"requestId,omitempty"`
-	IsAdmin    bool   `json:"isAdmin"`
-	Auth       string `json:"authMethod,omitempty"`
-	Hash       string `json:"hash"`
-	PrevHash   string `json:"prevHash"`
-}
-
 // audit answers GET /v1/admin/audit from cloud's local tamper-evident store when
 // configured, else falls back to the IAM get-records proxy (federated view).
 // Filters: org, sub, action, resource, result, since, until, pageSize, p (page).
@@ -70,9 +43,9 @@ func (s *svc) audit(c *zip.Ctx) error {
 		return fail(c, err.Error())
 	}
 
-	out := make([]auditRow, 0, len(rows))
+	out := make([]audit.Wire, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toAuditRow(r))
+		out = append(out, r.ToWire())
 	}
 
 	// Attach the live integrity summary so the console can badge the trail as
@@ -112,11 +85,12 @@ func (s *svc) auditVerify(c *zip.Ctx) error {
 // drive Limit/Offset. Unknown/blank params are simply not applied.
 func auditFilterFromQuery(c *zip.Ctx) audit.Filter {
 	f := audit.Filter{
-		Org:      strings.TrimSpace(c.Query("org")),
-		Sub:      strings.TrimSpace(c.Query("sub")),
-		Action:   strings.TrimSpace(c.Query("action")),
-		Resource: strings.TrimSpace(c.Query("resource")),
-		Result:   strings.TrimSpace(c.Query("result")),
+		Org:        strings.TrimSpace(c.Query("org")),
+		Sub:        strings.TrimSpace(c.Query("sub")),
+		Action:     strings.TrimSpace(c.Query("action")),
+		Resource:   strings.TrimSpace(c.Query("resource")),
+		ResourceID: strings.TrimSpace(c.Query("resourceId")),
+		Result:     strings.TrimSpace(c.Query("result")),
 	}
 	if v := strings.TrimSpace(c.Query("since")); v != "" {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
@@ -141,32 +115,6 @@ func auditFilterFromQuery(c *zip.Ctx) audit.Filter {
 		}
 	}
 	return f
-}
-
-// toAuditRow maps a stored audit.Record to the operator wire row.
-func toAuditRow(r audit.Record) auditRow {
-	return auditRow{
-		Seq:        r.Seq,
-		Time:       r.Time.UTC().Format(time.RFC3339Nano),
-		Org:        r.Actor.Org,
-		Sub:        r.Actor.Sub,
-		Email:      r.Actor.Email,
-		Action:     r.Action,
-		Resource:   r.Resource.Type,
-		ResourceID: r.Resource.ID,
-		Method:     r.Method,
-		Path:       r.Path,
-		Result:     r.Outcome.Result,
-		Status:     r.Outcome.Status,
-		Reason:     r.Outcome.Reason,
-		SourceIP:   r.SourceIP,
-		UserAgent:  r.UserAgent,
-		RequestID:  r.RequestID,
-		IsAdmin:    r.Auth.IsAdmin,
-		Auth:       r.Auth.Method,
-		Hash:       r.Hash,
-		PrevHash:   r.PrevHash,
-	}
 }
 
 // auditFromIAM is the legacy federated view: when cloud has no local audit store,
