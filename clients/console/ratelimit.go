@@ -82,30 +82,31 @@ func (r *rateLimiter) allow(key string) bool {
 	return true
 }
 
-// clientIP resolves the caller's IP for rate keying: the FIRST hop of
-// X-Forwarded-For (the original client, as set by hanzoai/ingress), else the socket
-// peer. A forgeable XFF only lets an attacker SPREAD their own budget across keys, not
-// consume another client's — the limiter is a coarse abuse cap, not an authz control.
-func clientIP(c *zip.Ctx) string {
-	if xff := strings.TrimSpace(c.Header("X-Forwarded-For")); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			xff = xff[:i]
-		}
-		if ip := strings.TrimSpace(xff); ip != "" {
-			return ip
-		}
+// rateKey resolves the un-spoofable key to limit on. These are all POST-AUTH money-
+// write routes, so the primary key is the VALIDATED principal (X-Org-Id/X-User-Id,
+// minted by SanitizeIdentity from a verified JWT — a caller cannot forge it). This is
+// deliberately NOT X-Forwarded-For: the limiter exists for the OFF-GATEWAY path where
+// nothing trusted stamps XFF, so keying on a client-settable XFF would let an attacker
+// send a fresh value per request and reset the bucket at will (RED). An unauthenticated
+// request (which the handler 403s anyway) has no principal, so it falls back to the
+// SOCKET peer address (c.Fiber().IP() — the L4 RemoteAddr, the real attacker on the
+// direct-to-pod path), never a header.
+func rateKey(c *zip.Ctx) string {
+	if uid := strings.TrimSpace(c.User()); uid != "" {
+		return "p:" + strings.TrimSpace(c.Org()) + "/" + uid
 	}
 	ip := c.Fiber().IP()
 	if host, _, err := net.SplitHostPort(ip); err == nil {
-		return host
+		ip = host
 	}
-	return ip
+	return "a:" + ip
 }
 
-// rateLimit wraps a handler, refusing 429 when the caller's IP exceeds rl.
+// rateLimit wraps a handler, refusing 429 when the caller (validated principal, else
+// socket peer) exceeds rl.
 func (s *svc) rateLimit(rl *rateLimiter, next zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if !rl.allow(clientIP(c)) {
+		if !rl.allow(rateKey(c)) {
 			return zip.Errorf(429, "rate limit exceeded; retry shortly")
 		}
 		return next(c)
