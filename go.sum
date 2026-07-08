@@ -1237,10 +1237,6 @@ github.com/hanzoai/notify v1.6.18 h1:YLIKheJSMhGqRuo7NRsMicHjAWSVFV6j6ZGqm2H+IBM
 github.com/hanzoai/notify v1.6.18/go.mod h1:O8OZj1cfUAIY39ROTPpiaVH8jv947VNfAGor2AZ/ebQ=
 github.com/hanzoai/notify2 v1.6.3 h1:E0yE3mhwpCPLYAY7AAKJIzf+XL2yXcyxXD7/tK9giLs=
 github.com/hanzoai/notify2 v1.6.3/go.mod h1:tF4lEPIr2J42/gpHjyWnpJey5545bLfRei6pxbVuFzc=
-github.com/hanzoai/o11y v1.5.0 h1:opG2lSZtXuNlBRtTTeHK3eqmjmQm2cy/jTj5y9audNc=
-github.com/hanzoai/o11y v1.5.0/go.mod h1:ZqqrB5meLVG6QNnadSdHdY2T/JXNkQJYqsCxWMV5868=
-github.com/hanzoai/o11y v1.5.1-0.20260707211719-b1f3b1acd5f6 h1:3P/VZZ55NABDMfxzqhdJ0XMKSrTjZGiM7rC3+CdBrjQ=
-github.com/hanzoai/o11y v1.5.1-0.20260707211719-b1f3b1acd5f6/go.mod h1:emoybmDMjQCHD7VOW26cnMoSbIEh6fbVaaf51ZZafME=
 github.com/hanzoai/o11y v1.5.1-0.20260707212652-0ab53eb74656 h1:xY0LfVy+8pZGtG/15rqG/cRYM70rBvPCF+RdHU65wIM=
 github.com/hanzoai/o11y v1.5.1-0.20260707212652-0ab53eb74656/go.mod h1:emoybmDMjQCHD7VOW26cnMoSbIEh6fbVaaf51ZZafME=
 github.com/hanzoai/orm v0.5.2 h1:0jbIGUDPENI1n47sT/IiXy9KBWdSHmiYuc5kV2lLgKo=
@@ -1255,8 +1251,6 @@ github.com/hanzoai/pricing v1.3.0 h1:98qL2eLajNNxyY/NtPvJigZA8RAtOG4gnMp8dIoaqbM
 github.com/hanzoai/pricing v1.3.0/go.mod h1:mLUbI3BM+rGGGI0T69ZCNtmNyjPw41IIEvc1H2dsFcw=
 github.com/hanzoai/pubsub v1.0.0 h1:q/yBpQTHIDlpgui3wnfXgnosaHlNzlJJSjpUXw/9mmM=
 github.com/hanzoai/pubsub v1.0.0/go.mod h1:iF1YzmexLuwoXTEe2PrlKWeMDYl8n5SGDsbF/+f5mgA=
-github.com/hanzoai/pubsub-go v1.0.0 h1:nUZ4jK+MFlFQ5qTMri/Yffnqs/R5avI99SfZ9e3t6Cs=
-github.com/hanzoai/pubsub-go v1.0.0/go.mod h1:ZHWDgSLsYHK4TiitzNwGc7Cn+oApKyMp0uK8cU7jwpg=
 github.com/hanzoai/pubsub-go v1.0.1-0.20260513042624-1b25bdfe16a6 h1:3n1OhMquvkAb6jVFl3t819+dGOAK4QrX0aN+903OAbU=
 github.com/hanzoai/pubsub-go v1.0.1-0.20260513042624-1b25bdfe16a6/go.mod h1:18E+ko7z8kBNUlph5+KIAUFrqxt9PRo5BROlIO3AZxI=
 github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2AQc=
@@ -1812,7 +1806,6 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8m
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f h1:KUppIJq7/+SVif2QVs3tOP0zanoHgBEVAwHxUSIzRqU=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
-github.com/nats-io/jwt v1.2.2 h1:w3GMTO969dFg+UOKTmmyuu7IGdusK+7Ytlt//OYH/uU=
 github.com/nats-io/jwt v1.2.2/go.mod h1:/xX356yQA6LuXI9xWW7mZNpxgF2mBmGecH+Fj34sP5Q=
 github.com/nats-io/jwt/v2 v2.0.3/go.mod h1:VRP+deawSXyhNjXmxPCHskrR6Mq50BqpEI5SEcNiGlY=
 github.com/nats-io/jwt/v2 v2.8.1 h1:V0xpGuD/N8Mi+fQNDynXohVvp7ZztevW5io8CUWlPmU=
