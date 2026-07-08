@@ -15,10 +15,9 @@ import (
 
 // The world PIPELINE store is the durable, per-(org,project) config for the news
 // data plane: the RSS feed URLs to poll plus the region/keyword/source filters
-// applied to the merged result. It is the metastore twin of the observe settings
-// store (clients/observe/store.go) and follows the same discipline — Hanzo
-// Base/SQLite, MaxOpenConns(1) to serialize writes against the file lock, one
-// file for every org.
+// applied to the merged result. It is the metastore twin of the settings store
+// (clients/settings/store.go) and follows the same discipline — Hanzo Base/SQLite,
+// MaxOpenConns(1) to serialize writes against the file lock, one file for every org.
 //
 // Tenant isolation is the (org, project) COMPOSITE PRIMARY KEY and a mandatory
 // `WHERE org=? AND project=?` on EVERY statement. The org value is the validated

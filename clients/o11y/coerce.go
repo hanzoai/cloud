@@ -21,38 +21,16 @@ func asString(v any) string {
 	return ""
 }
 
-func asUint64(v any) uint64 {
-	switch n := v.(type) {
-	case uint64:
-		return n
-	case uint32:
-		return uint64(n)
-	case uint16:
-		return uint64(n)
-	case uint8:
-		return uint64(n)
-	case uint:
-		return uint64(n)
-	case int64:
-		if n >= 0 {
-			return uint64(n)
-		}
-	case int32:
-		if n >= 0 {
-			return uint64(n)
-		}
-	case int:
-		if n >= 0 {
-			return uint64(n)
-		}
+func asFloat(v any) float64 {
+	switch f := v.(type) {
 	case float64:
-		if n >= 0 {
-			return uint64(n)
+		return f
+	case *float64:
+		if f != nil {
+			return *f
 		}
-	case *uint64:
-		if n != nil {
-			return *n
-		}
+	case float32:
+		return float64(f)
 	}
 	return 0
 }

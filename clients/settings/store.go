@@ -7,35 +7,48 @@ import (
 	"fmt"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
-	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
-	// !cgo → pure-Go modernc). Blank import registers the driver — same as
-	// clients/eval and clients/integrations.
+	// "sqlite" database/sql name under both cgo and pure-Go build tags). Blank
+	// import registers the driver; importing modernc directly would double-register.
 	_ "github.com/hanzoai/sqlite"
 )
 
-// The settings STORE is one SQLite file ({DataDir}/settings.db) holding every
-// org's per-product configuration DOCUMENT. Tenancy is the composite primary key
-// (org, product); EVERY query carries `WHERE org=? AND product=?`, so one org can
-// never read or overwrite another's config. Secret VALUES are NEVER stored here —
-// only the non-secret config values plus a per-secret "is set" marker; the secret
-// material lives in KMS (see settings.go). The org column is the trust boundary at
-// the query layer.
+// The settings STORE is the durable, per-org config half of the console
+// product-detail surface: one JSON config document per (org, product). It follows
+// the eval-store discipline — Hanzo Base/SQLite, MaxOpenConns(1) to serialize
+// writes against the file lock, one file for every org.
+//
+// Tenant isolation is the (org, product) COMPOSITE PRIMARY KEY and a mandatory
+// `WHERE org=? AND product=?` on EVERY statement. The org value is c.Org() exactly
+// as SanitizeIdentity minted it from the validated owner claim (HIP-0026) — never
+// normalized (casing/trimming collapses distinct owners into one bucket) and never
+// a client-supplied header.
+//
+// SECRETS NEVER LAND HERE. A settings field whose key is secret-shaped has its
+// VALUE written to KMS at orgs/{org}/settings/{product}/{key}; this table stores
+// only the non-secret JSON plus the list of secret key NAMES (so the read path
+// knows which fields are set-but-masked). A plaintext secret can never reach this
+// file — the handler routes secret writes to KMS or fails closed.
 
-// Record is one org's persisted settings for one product.
-type Record struct {
-	Org       string
-	Product   string
-	Doc       string // opaque JSON config document (non-secret values + secret markers)
-	UpdatedAt int64
+var errNotFound = errors.New("settings: not found")
+
+// Settings is the persisted per-(org,product) config record. Config is the
+// non-secret JSON document; SecretKeys names the fields whose values live in KMS.
+type Settings struct {
+	Org        string
+	Product    string
+	Config     string   // opaque non-secret JSON object, stored verbatim (bounded at the edge)
+	SecretKeys []string // names of secret fields (values in KMS, never here)
+	CreatedAt  int64
+	UpdatedAt  int64
 }
 
-// Store is the settings metastore over one SQLite file. MaxOpenConns(1)
-// serializes writes against the file lock (same discipline as eval/integrations).
-type Store struct {
+// SettingsStore is the settings metastore over one SQLite file
+// ({DataDir}/settings.db). Tenancy is the (org, product) key.
+type SettingsStore struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
+func openSettingsStore(path string) (*SettingsStore, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
@@ -51,7 +64,7 @@ func openStore(path string) (*Store, error) {
 			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
 		}
 	}
-	s := &Store{db: db}
+	s := &SettingsStore{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -59,15 +72,18 @@ func openStore(path string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) migrate() error {
+func (s *SettingsStore) migrate() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS settings (
-  org        TEXT NOT NULL,
-  product    TEXT NOT NULL,
-  doc        TEXT NOT NULL DEFAULT '{}',
-  updated_at INTEGER NOT NULL,
+  org         TEXT NOT NULL,
+  product     TEXT NOT NULL,
+  config      TEXT NOT NULL DEFAULT '{}',
+  secret_keys TEXT NOT NULL DEFAULT '[]',
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
   PRIMARY KEY (org, product)
-);`
+);
+CREATE INDEX IF NOT EXISTS ix_settings_org ON settings(org, updated_at);`
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
@@ -75,33 +91,61 @@ CREATE TABLE IF NOT EXISTS settings (
 }
 
 // Close closes the underlying database.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *SettingsStore) Close() error { return s.db.Close() }
 
-// Get returns the persisted record for (org, product). found=false (nil error)
-// when there is no row. Tenant isolation: the WHERE always binds org AND product.
-func (s *Store) Get(ctx context.Context, org, product string) (Record, bool, error) {
+// Get returns the persisted settings for (org, product), or errNotFound when the
+// org has never written config for that product (the caller then serves the
+// product defaults merged with an empty override).
+func (s *SettingsStore) Get(ctx context.Context, org, product string) (Settings, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT org, product, doc, updated_at FROM settings WHERE org=? AND product=?`, org, product)
-	var r Record
-	err := row.Scan(&r.Org, &r.Product, &r.Doc, &r.UpdatedAt)
+		`SELECT org, product, config, secret_keys, created_at, updated_at
+		   FROM settings WHERE org=? AND product=?`, org, product)
+	var st Settings
+	var secretKeys string
+	err := row.Scan(&st.Org, &st.Product, &st.Config, &secretKeys, &st.CreatedAt, &st.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Record{}, false, nil
+		return Settings{}, errNotFound
 	}
 	if err != nil {
-		return Record{}, false, fmt.Errorf("get settings: %w", err)
+		return Settings{}, fmt.Errorf("get settings: %w", err)
 	}
-	return r, true, nil
+	st.SecretKeys = decodeStrList(secretKeys)
+	return st, nil
 }
 
-// Put upserts the config document for (org, product). The org is stamped from the
-// validated principal by the caller; this never trusts a client-supplied org.
-func (s *Store) Put(ctx context.Context, org, product, doc string, updatedAt int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO settings (org, product, doc, updated_at) VALUES (?,?,?,?)
-		 ON CONFLICT(org, product) DO UPDATE SET doc=excluded.doc, updated_at=excluded.updated_at`,
-		org, product, doc, updatedAt)
+// Put upserts the non-secret config document + secret-key list for (org, product).
+// It is idempotent on the composite key. The write NEVER carries secret values —
+// those are already in KMS by the time this is called (see the handler).
+func (s *SettingsStore) Put(ctx context.Context, st Settings) (Settings, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("put settings: %w", err)
+		return Settings{}, fmt.Errorf("begin: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback() }()
+
+	var createdAt int64
+	row := tx.QueryRowContext(ctx, `SELECT created_at FROM settings WHERE org=? AND product=?`, st.Org, st.Product)
+	switch err := row.Scan(&createdAt); {
+	case errors.Is(err, sql.ErrNoRows):
+		st.CreatedAt = st.UpdatedAt
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO settings (org, product, config, secret_keys, created_at, updated_at)
+			 VALUES (?,?,?,?,?,?)`,
+			st.Org, st.Product, st.Config, encodeStrList(st.SecretKeys), st.CreatedAt, st.UpdatedAt); err != nil {
+			return Settings{}, fmt.Errorf("insert settings: %w", err)
+		}
+	case err != nil:
+		return Settings{}, fmt.Errorf("lookup settings: %w", err)
+	default:
+		st.CreatedAt = createdAt
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE settings SET config=?, secret_keys=?, updated_at=? WHERE org=? AND product=?`,
+			st.Config, encodeStrList(st.SecretKeys), st.UpdatedAt, st.Org, st.Product); err != nil {
+			return Settings{}, fmt.Errorf("update settings: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Settings{}, fmt.Errorf("commit: %w", err)
+	}
+	return st, nil
 }
