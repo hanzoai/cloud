@@ -17,7 +17,7 @@ require (
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/signoz-otel-collector v0.144.6
-	github.com/hanzoai/sqlite v0.1.5
+	github.com/hanzoai/sqlite v0.2.3
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
@@ -76,6 +76,7 @@ require (
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hanzoai/clickhouse-go-mock v0.14.1 // indirect
+	github.com/hanzoai/commerce/thirdparty/ethereum v1.40.0 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
@@ -478,7 +479,7 @@ require (
 	github.com/hanzoai/kv-go/v9 v9.18.0 // indirect
 	github.com/hanzoai/ldapserver v1.2.1 // indirect
 	github.com/hanzoai/notify2 v1.6.3 // indirect
-	github.com/hanzoai/orm v0.5.2 // indirect
+	github.com/hanzoai/orm v0.6.1 // indirect
 	github.com/hanzoai/oss v1.8.5 // indirect
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.0.1-0.20260513042624-1b25bdfe16a6 // indirect
@@ -570,7 +571,7 @@ require (
 	github.com/luxfi/math v1.4.1 // indirect
 	github.com/luxfi/math/big v0.1.0 // indirect
 	github.com/luxfi/mdns v0.1.1 // indirect
-	github.com/luxfi/metric v1.5.8 // indirect
+	github.com/luxfi/metric v1.7.0 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
 	github.com/luxfi/pq v1.1.0 // indirect
 	github.com/luxfi/pulsar v1.9.0
@@ -801,11 +802,11 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzoai/ai v1.802.1-0.20260708185316-0321c35877f0
 	github.com/hanzoai/authz v1.10.4
-	github.com/hanzoai/base v1.4.6
-	github.com/hanzoai/commerce v1.42.29
+	github.com/hanzoai/base v1.5.7
+	github.com/hanzoai/commerce v1.46.40
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
-	github.com/hanzoai/o11y v1.5.1-0.20260707212652-0ab53eb74656
+	github.com/hanzoai/o11y v1.5.1
 	github.com/hanzoai/vfs v0.6.2
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
@@ -840,7 +841,7 @@ replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-2026012609
 // tags (cgo → mattn+SQLCipher, hence this go-sqlite3 pin; !cgo → pure-Go
 // modernc). Every cloud store imports the fork, never modernc directly, so the
 // "sqlite" driver is registered exactly once.
-replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.16
+replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.47
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 
