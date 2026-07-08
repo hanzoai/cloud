@@ -8,10 +8,17 @@ package wallets
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
 	"github.com/luxfi/crypto"
+)
+
+// secp256k1N is the curve order; secp256k1HalfN is N/2, the EIP-2 low-S ceiling.
+var (
+	secp256k1N     = crypto.S256().Params().N
+	secp256k1HalfN = new(big.Int).Rsh(secp256k1N, 1)
 )
 
 const (
@@ -109,15 +116,30 @@ func (s *svc) ensureReserveWallet(ctx context.Context, org, chain string) (*Wall
 // signing (tx.WithSignature) needs it. Fails closed if neither v recovers to addr.
 func recoverableSig(hash, sig []byte, addr string) ([]byte, error) {
 	if len(sig) == 65 {
-		return sig, nil // already recoverable
+		sig = sig[:64] // re-derive v AFTER low-S normalization below
 	}
 	if len(sig) != 64 {
 		return nil, fmt.Errorf("wallets: unexpected signature length %d (want 64 or 65)", len(sig))
 	}
+	// EIP-2 low-S: go-ethereum (luxfi/geth) REJECTS a tx whose signature has
+	// s > N/2 (ValidateSignatureValues homestead=true) — the node returns
+	// "invalid sender". The luxfi/mpc threshold signer is not low-S-normalized, so
+	// canonicalize here: if s is in the upper half, replace it with N-s (the
+	// equivalent low-S point). The recovery parity flips with s, but that is
+	// absorbed by the v search below, which re-derives the recovery id against the
+	// (now low-S) signature.
+	r := new(big.Int).SetBytes(sig[:32])
+	s := new(big.Int).SetBytes(sig[32:64])
+	if s.Cmp(secp256k1HalfN) > 0 {
+		s.Sub(secp256k1N, s)
+	}
+	norm := make([]byte, 64)
+	r.FillBytes(norm[:32])
+	s.FillBytes(norm[32:64])
 	want := strings.ToLower(strings.TrimPrefix(addr, "0x"))
 	for v := byte(0); v < 2; v++ {
 		full := make([]byte, 65)
-		copy(full, sig)
+		copy(full, norm)
 		full[64] = v
 		pub, err := crypto.SigToPub(hash, full)
 		if err != nil {
