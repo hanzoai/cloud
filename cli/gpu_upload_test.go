@@ -42,7 +42,7 @@ func TestUploadOutputsIntegration(t *testing.T) {
 		out = subfolder + "/" + file
 	}
 
-	gallery, err := w.uploadOutputs(ctx, []string{out}, uploadURL)
+	gallery, err := w.uploadOutputs(ctx, []string{out}, uploadURL, "karma")
 	if err != nil {
 		t.Fatalf("uploadOutputs(%q -> %s): %v", out, uploadURL, err)
 	}
