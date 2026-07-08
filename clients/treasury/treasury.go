@@ -142,6 +142,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/admin/treasury/sweep", s.adminSweep)      // global-admin: accrue revenue-share
 	app.Post("/v1/admin/treasury/seed", s.adminSeed)        // global-admin: inject reserve capital
 	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)    // global-admin: anchor ledger root on Hanzo L1
+	app.Post("/v1/admin/treasury/bind-anchor", s.adminBindAnchor) // global-admin: bind the reserve MPC wallet as the anchor signer
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
 	return nil
