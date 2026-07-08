@@ -23,15 +23,11 @@ import (
 // (upload-pack / receive-pack) reads and writes, so clone AND push operate
 // directly on tenant storage with no shell-out to the `git` binary.
 //
-// TODO(vfs): back billy with github.com/hanzoai/vfs so repo objects land in
-// S3/SeaweedFS (content-addressed, encrypted) instead of the local data dir.
-// The MVP uses osfs because hanzoai/vfs's FS type (Create/Open(ctx)/Lookup over
+// It is backed by osfs, not hanzoai/vfs: vfs.FS (Create/Open(ctx)/Lookup over
 // *Inode/*File) does not implement the go-billy Filesystem surface go-git's
 // dotgit layer requires (Chroot, Root, TempFile, Rename, Symlink/Readlink,
-// Lstat, MkdirAll, plus billy.File Lock/Truncate/Seek). Wiring a faithful
-// billy adapter over vfs.FS is the follow-up; until then osfs keeps the MVP
-// REAL and testable against a filesystem root that an operator can point at a
-// FUSE-mounted VFS or an S3-backed volume.
+// Lstat, MkdirAll, plus billy.File Lock/Truncate/Seek). osfs is pointed at a
+// data-dir root an operator can back with a FUSE-mounted VFS or an S3-backed volume.
 type storage struct {
 	rootDir string
 	fs      billy.Filesystem // osfs rooted at rootDir; the billy home for all repos
