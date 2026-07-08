@@ -48,3 +48,27 @@ func TestEnabled_StagedSubsystemActivatesWhenNamed(t *testing.T) {
 		t.Error("commerce is not in the explicit Enable list; it must be disabled")
 	}
 }
+
+// TestEnabled_StagedActivatesAdditively proves the additive lever: EnableStaged
+// turns a staged subsystem on WITHOUT collapsing the non-staged default into an
+// allowlist. With an empty Enable and EnableStaged=["iam"], iam is on AND every
+// non-staged subsystem stays on (the faithful "prod default + iam" shape) — while
+// a sibling staged subsystem the deployment did NOT name stays off.
+func TestEnabled_StagedActivatesAdditively(t *testing.T) {
+	c := &cloud.Config{EnableStaged: []string{"iam"}}
+
+	if !c.Enabled("iam") {
+		t.Error("iam must be enabled via the additive EnableStaged lever")
+	}
+	// The non-staged default is undisturbed: everything else is still on.
+	for _, name := range []string{"ai", "commerce", "billing", "console", "kms"} {
+		if !c.Enabled(name) {
+			t.Errorf("%s must stay enabled (EnableStaged must not collapse the default to an allowlist)", name)
+		}
+	}
+	// A staged subsystem NOT named stays off — additive activation never widens
+	// beyond what was asked.
+	if c.Enabled("ingress") {
+		t.Error("ingress was not named in EnableStaged; it must stay disabled")
+	}
+}
