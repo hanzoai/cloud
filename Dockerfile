@@ -27,7 +27,7 @@
 # console — a missing/broken build:embed is a build ERROR, never a silent degrade
 # to the placeholder shell. The one escape hatch is --build-arg ALLOW_PLACEHOLDER=1
 # (pure-Go dev image with no Node console), which is NEVER set for prod.
-FROM public.ecr.aws/docker/library/node:24-alpine AS console
+FROM public.ecr.aws/docker/library/node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS console
 ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
 ARG CONSOLE_REF=main
 RUN apk add --no-cache git
@@ -87,7 +87,7 @@ RUN mkdir -p /out; \
 # differently, produces NO image. alpine3.22 MATCHES the runtime base so the
 # libsqlcipher soname the binary links is the SAME one present at runtime. ECR
 # Public mirror avoids Docker Hub's 429 rate-limit on shared CI runners.
-FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22 AS build
+FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
 RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev pkgconfig binutils
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 # mattn/go-sqlite3's `libsqlite3` tag hard-codes `-lsqlite3`, but alpine's
@@ -102,16 +102,18 @@ RUN set -eux; \
 WORKDIR /src
 # hanzoai/* and luxfi/* are PUBLIC and resolve via the IMMUTABLE public proxy +
 # sumdb — go.sum pins those canonical hashes, so a force-re-pointed tag can never
-# break the build. Only zap-proto/* stays first-party-direct (GOPRIVATE) —
-# authenticated git via gh_token. The committed go.sum is the single source of
-# truth. CGO_CFLAGS/LDFLAGS enable the SQLCipher codec + URI keying.
+# break the build. GOSUMDB stays ON (a money image must not blanket-disable the
+# checksum database); only zap-proto/* is exempt (first-party-direct via GOPRIVATE,
+# authenticated git over gh_token). -mod=readonly means the committed go.sum is the
+# SOLE source of truth: any drift (a needed hash not present) FAILS the build
+# instead of being silently re-recorded. CGO_CFLAGS/LDFLAGS enable the SQLCipher
+# codec + URI keying.
 ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" \
     CGO_LDFLAGS="-lsqlcipher" \
     GOPRIVATE=github.com/zap-proto/* \
     GONOSUMDB=github.com/zap-proto/* \
-    GOSUMDB=off \
     GOPROXY=https://proxy.golang.org,direct \
-    GOFLAGS=-mod=mod
+    GOFLAGS=-mod=readonly
 COPY go.mod go.sum ./
 RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
@@ -141,7 +143,7 @@ RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL:
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
 
 # ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
-FROM public.ecr.aws/docker/library/alpine:3.22
+FROM public.ecr.aws/docker/library/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.source="https://github.com/hanzoai/cloud"
