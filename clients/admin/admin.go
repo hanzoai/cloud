@@ -9,14 +9,26 @@
 // the /v1 envelope { status, msg, data, data2 } the operator's transport
 // decodes (get<T> reads data; getList<T> reads data + data2 total).
 //
-// SECURITY — every route is GLOBAL-ADMIN ONLY, fail-closed. The gate is the
-// SAME predicate the rest of cloud uses: c.IsAdmin(), which after SanitizeIdentity
-// (serve.go) is true ONLY for a JWT-validated principal whose org is the admin org
-// (owner == AdminOrg — IAM's IsGlobalAdmin), matching the gateway's admin-guard.
-// No principal → 403; a tenant-admin (owner != AdminOrg) → 403; a forged
-// X-User-IsAdmin never survives ingress. admin adds no service credential to
-// the IAM fan-out — it replays the caller's own cookie/bearer, so it can never
-// read more than the caller already could, and IAM re-checks IsGlobalAdmin too.
+// SECURITY — TWO tiers off ONE identity predicate, both fail-closed. The cockpit is a
+// single pane for a SuperAdmin (owner == AdminOrg — c.IsAdmin(), the SANITIZED
+// X-User-IsAdmin, true ONLY for a JWT-validated principal whose org IS the admin org,
+// matching the gateway's admin-guard) AND for an org admin (any other validated admin
+// caller). The predicate is enforced in ONE place — resolveScope/scopedOrgs (scope.go):
+//
+//   - PLATFORM routes (roles/applications/audit/products/finance/compute/o11y/revenue +
+//     the launch/release/flags/access control plane) are SuperAdmin ONLY (s.guard).
+//     No principal → 403; an org admin → 403; a forged X-User-IsAdmin never survives
+//     ingress (SanitizeIdentity strips it).
+//   - ORG-SCOPED routes (me/overview/orgs/users/usage/analytics/bases) are s.guardScoped:
+//     a SuperAdmin sees EVERY tenant; any other validated admin caller is HARD-limited to
+//     their OWN org subtree. The cross-tenant boundary — the escalation line — cannot be
+//     crossed by a non-super caller for ANY input, because their org is the sanitized,
+//     un-forgeable c.Org() and every read folds over scopedOrgs.
+//
+// admin adds no service credential to the IAM fan-out — it replays the caller's own
+// cookie/bearer, so it can never read more than the caller already could, and IAM
+// re-checks authority on every call (a non-super caller replaying to a cross-tenant IAM
+// read is refused by IAM too — defense in depth).
 //
 // Panels with no in-binary feed yet (the Usage & Costs timeseries + per-product
 // breakdown live in insights/datastore; the product/workload registry + infra
@@ -74,15 +86,22 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		auditStore: deps.Audit,
 	}
 
-	app.Get("/v1/admin/me", s.guard(s.me))
-	app.Get("/v1/admin/overview", s.guard(s.overview))
-	app.Get("/v1/admin/orgs", s.guard(s.orgs))
-	app.Get("/v1/admin/users", s.guard(s.users))
+	// Org-scoped panels — guardScoped: a SuperAdmin OR any validated admin caller
+	// pinned to an org. The HANDLER scopes the data (scopedOrgs / resolveScope) so a
+	// non-super caller is HARD-limited to their own org subtree — cross-tenant reads
+	// are impossible. Same panels, both tiers, scoped by the ONE predicate.
+	app.Get("/v1/admin/me", s.guardScoped(s.me))
+	app.Get("/v1/admin/overview", s.guardScoped(s.overview))
+	app.Get("/v1/admin/orgs", s.guardScoped(s.orgs))
+	app.Get("/v1/admin/users", s.guardScoped(s.users))
+	app.Get("/v1/admin/usage", s.guardScoped(s.usage))
+	// Platform reads — SuperAdmin only (cross-tenant by nature): roles/apps catalog,
+	// the fleet audit trail, workload registry, SaaS profitability, compute fleet,
+	// system health.
 	app.Get("/v1/admin/roles", s.guard(s.roles))
 	app.Get("/v1/admin/applications", s.guard(s.applications))
 	app.Get("/v1/admin/audit", s.guard(s.audit))
 	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
-	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Get("/v1/admin/compute", s.guard(s.compute))
@@ -99,9 +118,22 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
 	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
 
-	// Fleet revenue aggregate + native SaaS analytics (retention/growth/churn).
+	// Fleet revenue aggregate — SuperAdmin only (cross-tenant profitability).
 	app.Get("/v1/admin/revenue", s.guard(s.revenue))
-	app.Get("/v1/admin/analytics", s.guard(s.analytics))
+	// Product analytics — org-scoped (SuperAdmin: all-orgs SaaS analytics; org admin:
+	// their own org's usage/active/spend).
+	app.Get("/v1/admin/analytics", s.guardScoped(s.analytics))
+
+	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
+	app.Get("/v1/admin/bases", s.guardScoped(s.bases))
+
+	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
+	// Flipping public_signup / waitlist_open / rollout %, and granting waitlist
+	// access, are PLATFORM sudo; an org admin never sees or touches them (s.guard,
+	// super-only, like every mutating fleet action). flags.go + waitlist.go.
+	app.Get("/v1/admin/flags", s.guard(s.flags))
+	app.Get("/v1/admin/waitlist", s.guard(s.waitlist))
+	app.Post("/v1/admin/waitlist/boost", s.guard(s.waitlistBoost))
 
 	logger.Info("admin surface mounted",
 		"prefix", "/v1/admin",
@@ -123,6 +155,36 @@ func (s *svc) guard(h func(*zip.Ctx) error) zip.Handler {
 			return zip.ErrForbidden("global admin required")
 		}
 		return h(c)
+	}
+}
+
+// guardScoped is the gate for the ORG-SCOPED panels (me/overview/orgs/users/usage/
+// analytics/bases). It admits a SuperAdmin (c.IsAdmin()) OR any VALIDATED admin caller
+// pinned to an org, and the handler then scopes every read to resolveScope(c) — so a
+// non-super caller passes the gate but the DATA layer hard-limits them to their own org
+// subtree. Cross-tenant reads are impossible for a non-super caller regardless of input.
+//
+// The non-super admission requires c.User() (X-User-Id) non-empty, which SanitizeIdentity
+// sets ONLY for a validated principal — so an anonymous caller who forged X-Org-Id (the
+// documented Phase-1 residual restores a client X-Org-Id for the data path) is REFUSED
+// here: no validated principal, no X-User-Id, no admission. A validated non-super
+// principal's X-Org-Id is PINNED by the boundary to their own owner, never client-chosen.
+//
+// The org-ADMIN-vs-member distinction (should a non-admin org member reach the cockpit?)
+// is enforced at the console BFF getAdminGate, which reads IAM's isAdmin claim; cloud
+// cannot see that claim without a trusted org-admin header from SanitizeIdentity (a
+// follow-up trust-boundary change). The cross-tenant boundary — the escalation line — is
+// fully enforced HERE regardless, because a non-super caller can only ever read their own
+// org's data.
+func (s *svc) guardScoped(h func(*zip.Ctx) error) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if c.IsAdmin() {
+			return h(c)
+		}
+		if strings.TrimSpace(c.User()) != "" && strings.TrimSpace(c.Org()) != "" {
+			return h(c)
+		}
+		return zip.ErrForbidden("admin required")
 	}
 }
 
@@ -169,18 +231,22 @@ func fail(c *zip.Ctx, msg string) error {
 // is a global admin, so the fields come from the sanitized identity headers —
 // authoritative and never client-forgeable.
 func (s *svc) me(c *zip.Ctx) error {
-	owner := s.adminOrg
-	if o := strings.TrimSpace(c.Org()); o != "" {
-		owner = o
+	sc := s.resolveScope(c)
+	owner := strings.TrimSpace(c.Org())
+	if owner == "" && sc.super {
+		owner = s.adminOrg
 	}
 	name := strings.TrimSpace(c.User())
+	// IsGlobalAdmin reflects the REAL scope: true only for a SuperAdmin (owner ==
+	// admin org). An org admin gets false + their own org, so the cockpit renders the
+	// scoped (own-subtree) view and hides the platform-sudo panels.
 	return ok(c, adminMe{
 		Owner:         owner,
 		Name:          name,
 		Email:         strings.TrimSpace(c.UserEmail()),
 		DisplayName:   name,
-		IsSuperAdmin:  true,
-		IsGlobalAdmin: true, // back-compat alias; same value as isSuperAdmin
+		IsSuperAdmin:  sc.super,
+		IsGlobalAdmin: sc.super, // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
 	})
 }
 
@@ -189,7 +255,7 @@ func (s *svc) me(c *zip.Ctx) error {
 func (s *svc) orgs(c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
-	orgs, err := s.listOrgs(ctx, cr)
+	orgs, err := s.scopedOrgs(ctx, c, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -217,8 +283,15 @@ func (s *svc) orgs(c *zip.Ctx) error {
 func (s *svc) users(c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
+	sc := s.resolveScope(c)
 	q := url.Values{}
-	if owner := strings.TrimSpace(c.Query("org")); owner != "" {
+	if !sc.super {
+		// A scoped caller lists ONLY their own org's users — the client ?org= is
+		// ignored, the owner hard-pinned to the sanitized org subtree.
+		if len(sc.orgs) > 0 {
+			q.Set("owner", sc.orgs[0])
+		}
+	} else if owner := strings.TrimSpace(c.Query("org")); owner != "" {
 		q.Set("owner", owner)
 	}
 	if p := strings.TrimSpace(c.Query("p")); p != "" {
@@ -330,15 +403,24 @@ func iamAuditQuery(c *zip.Ctx) url.Values {
 func (s *svc) usage(c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
+	sc := s.resolveScope(c)
 	org := strings.TrimSpace(c.Query("org"))
+	if !sc.super {
+		// A scoped caller reads ONLY their own org's usage — the client ?org= is
+		// ignored, the org hard-pinned to the sanitized subtree.
+		org = ""
+		if len(sc.orgs) > 0 {
+			org = sc.orgs[0]
+		}
+	}
 
 	var spend int64
-	if org != "" {
-		r, err := s.commerce.usageRollup(ctx, org, orgSubject(org))
-		if err == nil {
+	switch {
+	case org != "":
+		if r, err := s.commerce.usageRollup(ctx, org, orgSubject(org)); err == nil {
 			spend = r.ConsumedCents
 		}
-	} else {
+	case sc.super:
 		// Fleet: sum month-to-date consumption across every org.
 		orgs, err := s.listOrgs(ctx, cr)
 		if err == nil {
@@ -378,7 +460,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 	var sources []sourceStatus
 	orgCount, userCount, spend, credits := 0, 0, int64(0), int64(0)
 
-	orgs, orgErr := s.listOrgs(ctx, cr)
+	orgs, orgErr := s.scopedOrgs(ctx, c, cr)
 	sources = append(sources, srcOf("iam", orgErr, len(orgs), now))
 	if orgErr == nil {
 		orgCount = len(orgs)
