@@ -69,7 +69,7 @@ tasksvc, templates, visor, websearch, zt.
 | **node**, **bootnode**, **nchain** | Chain/P2P daemons (luxfi substrate) — not app surfaces. |
 | **functions** (fission fork) | FaaS control plane / k8s operator; cloud carries the `clients/functions` facade, the executor fleet stays out. |
 | **hsm**, **mpc**, **ldapserver** | Specialized crypto/identity infra — isolation is the point. |
-| **o11y storage** (o11y-foundry, otel-collector, signoz) | Telemetry storage/query backend; cloud mounts only the `o11y` facade + reverse proxy. |
+| **o11y storage** (o11y-foundry, otel-collector, o11y query/store) | Telemetry storage/query backend; cloud mounts only the `o11y` facade + reverse proxy. |
 
 ## Method (for each mount wave)
 

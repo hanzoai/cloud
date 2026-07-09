@@ -18,7 +18,7 @@ import (
 // supplies an org, a raw query, or a PromQL/SQL fragment. They are registered
 // BEFORE the hanzoai/o11y wildcard (`app.All("/v1/o11y/*")`, order 70) so Fiber's
 // in-order match gives these specific routes precedence; the wildcard proxy
-// (o11y.go) is left to serve only the genuine SigNoz runtime UI/query API and is
+// (o11y.go) is left to serve only the genuine o11y runtime UI/query API and is
 // principal-gated, so there is no un-scoped path to product telemetry.
 //
 // This is the ONE owner of /v1/o11y/{logs,metrics,status}. It supersedes the former
