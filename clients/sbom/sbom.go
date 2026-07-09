@@ -45,6 +45,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
@@ -53,8 +54,13 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// ddlTimeout bounds the one-shot table bootstrap on Mount.
+// ddlTimeout bounds the best-effort table bootstrap on Mount.
 const ddlTimeout = 10 * time.Second
+
+// createDatabase makes the target database idempotently. Analytics already reads
+// hanzo.cloud_usage so it usually exists, but this keeps ensureTable robust on a
+// fresh warehouse and is cheap when the DB is already present.
+const createDatabase = `CREATE DATABASE IF NOT EXISTS hanzo`
 
 // createTable is the GLOBAL, cross-tenant SBOM store. ReplacingMergeTree(ingested_at)
 // dedupes a re-ingest by the component identity in ORDER BY, keeping the latest.
@@ -88,17 +94,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log = log.New("subsystem", "sbom")
 	s := &svc{log: log}
 
-	// Bootstrap the global table idempotently when the datastore is connected. If
-	// it is not, skip honestly — the data endpoints return 503 (mirrors analytics).
-	if aiobject.DatastoreEnabled() {
-		ctx, cancel := context.WithTimeout(context.Background(), ddlTimeout)
-		defer cancel()
-		if err := aiobject.DatastoreExec(ctx, createTable); err != nil {
-			return fmt.Errorf("sbom.Mount: bootstrap %s: %w", sbomTable, err)
-		}
-		log.Info("sbom table ready", "table", sbomTable)
+	// Best-effort bootstrap: create the global table now IF the datastore is
+	// already connected at boot. It usually is NOT — ai/object.InitDatastore
+	// connects ASYNCHRONOUSLY and flips DatastoreEnabled AFTER Mount returns, so a
+	// Mount-time attempt is skipped/failed here far more often than not. That is
+	// fine and NON-FATAL: ensureTable on the request path (below) is the real
+	// guarantee, (re)creating the table on the first request that finds the store
+	// ready. Failing Mount here would wrongly abort the whole subsystem.
+	ctx, cancel := context.WithTimeout(context.Background(), ddlTimeout)
+	defer cancel()
+	if err := ensureTable(ctx); err != nil {
+		log.Warn("datastore not ready at mount; sbom table will be created lazily on first request", "err", err)
 	} else {
-		log.Warn("datastore not connected; skipping sbom DDL (endpoints will 503)")
+		log.Info("sbom table ready", "table", sbomTable)
 	}
 
 	// Health is a static route registered BEFORE the greedy resolve wildcard so it
@@ -121,6 +129,41 @@ func requireDatastore() error {
 	if !aiobject.DatastoreEnabled() {
 		return zip.Errorf(http.StatusServiceUnavailable, "sbom store unavailable: datastore (ClickHouse) not connected")
 	}
+	return nil
+}
+
+// tableMu guards the lazy, idempotent bootstrap of the global SBOM table. We latch
+// ONLY success: a failed DDL (store still connecting) leaves tableReady false so a
+// later request retries — sync.Once is wrong here because it would cache the
+// failure forever.
+var (
+	tableMu    sync.Mutex
+	tableReady bool
+)
+
+// ensureTable creates hanzo.sbom_component exactly once successfully, then becomes
+// a cheap bool read. It exists because the datastore connects ASYNCHRONOUSLY: at
+// Mount time DatastoreEnabled() is usually false, so the DDL was skipped and never
+// retried — the init-order bug that 502'd resolve/ingest on a missing table in
+// prod. Callers invoke it AFTER requireDatastore() passes; it (re)creates the
+// database and table on the first request that finds the store ready. A transient
+// error is returned, never latched, so the next call re-attempts.
+func ensureTable(ctx context.Context) error {
+	tableMu.Lock()
+	defer tableMu.Unlock()
+	if tableReady {
+		return nil
+	}
+	if !aiobject.DatastoreEnabled() {
+		return fmt.Errorf("datastore not connected")
+	}
+	if err := aiobject.DatastoreExec(ctx, createDatabase); err != nil {
+		return fmt.Errorf("ensure database: %w", err)
+	}
+	if err := aiobject.DatastoreExec(ctx, createTable); err != nil {
+		return fmt.Errorf("ensure %s: %w", sbomTable, err)
+	}
+	tableReady = true
 	return nil
 }
 
@@ -149,6 +192,9 @@ func (s *svc) ingest(c *zip.Ctx) error {
 	}
 	if err := requireDatastore(); err != nil {
 		return err
+	}
+	if err := ensureTable(c.Context()); err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
 	}
 
 	if stmt, args := insertBatch(in, comps); stmt != "" {
@@ -179,6 +225,9 @@ func (s *svc) resolve(c *zip.Ctx) error {
 	}
 	if err := requireDatastore(); err != nil {
 		return err
+	}
+	if err := ensureTable(c.Context()); err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "sbom store initializing: %v", err)
 	}
 
 	// component identity is the ORDER BY, so FINAL dedupes; type,name is the stable
