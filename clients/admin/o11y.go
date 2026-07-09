@@ -23,9 +23,9 @@ package admin
 //
 // Signals, each from its canonical table in the one datastore:
 //   - LLM usage  → hanzo.cloud_usage         : requests, tokens, cost, errors, top orgs, top models
-//   - Traces     → signoz_traces.distributed_signoz_index_v3 : request count, latency p50/p95/p99,
+//   - Traces     → o11y_traces.distributed_o11y_index_v3 : request count, latency p50/p95/p99,
 //                                                              error rate, top services
-//   - Logs       → signoz_logs.distributed_logs_v2 : fleet log volume + volume-over-time
+//   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
 //   - LLM gens   → langfuse.observations      : generations + cost (fleet-wide; honest-empty today)
 //
 // GLOBAL-ADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
@@ -50,11 +50,11 @@ import (
 )
 
 // Fully-qualified datastore tables. admin only READS these — the ZAP collector
-// (signoz_*), the ai ledger (hanzo.cloud_usage), and Langfuse own their writes.
+// (o11y_*), the ai ledger (hanzo.cloud_usage), and Langfuse own their writes.
 const (
 	o11yUsageTable   = "hanzo.cloud_usage"
-	o11yTraceTable   = "signoz_traces.distributed_signoz_index_v3"
-	o11yLogTable     = "signoz_logs.distributed_logs_v2"
+	o11yTraceTable   = "o11y_traces.distributed_o11y_index_v3"
+	o11yLogTable     = "o11y_logs.distributed_logs_v2"
 	o11yLangfuseObs  = "langfuse.observations"
 	o11yTopN         = 10
 	o11yServiceLimit = 12
@@ -86,7 +86,7 @@ type o11yTotals struct {
 	Errors           int64 `json:"errors"`
 	Orgs             int64 `json:"orgs"`
 	Models           int64 `json:"models"`
-	// Traces (signoz_index_v3), all services.
+	// Traces (o11y_index_v3), all services.
 	TraceCount     int64   `json:"traceCount"`
 	LatencyP50Ms   float64 `json:"latencyP50Ms"`
 	LatencyP95Ms   float64 `json:"latencyP95Ms"`

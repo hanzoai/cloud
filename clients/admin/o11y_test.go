@@ -47,13 +47,13 @@ func TestO11ySQL_ReadsCanonicalTables(t *testing.T) {
 		wantQMarks       int
 	}{
 		{"usageTotals", o11yUsageTotalsSQL(), "hanzo.cloud_usage", 1},
-		{"traceTotals", o11yTraceTotalsSQL(), "signoz_traces.distributed_signoz_index_v3", 1},
-		{"logVolume", o11yLogVolumeSQL(), "signoz_logs.distributed_logs_v2", 1},
+		{"traceTotals", o11yTraceTotalsSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
+		{"logVolume", o11yLogVolumeSQL(), "o11y_logs.distributed_logs_v2", 1},
 		{"usageSeries", o11yUsageSeriesSQL("1 HOUR"), "hanzo.cloud_usage", 1},
-		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "signoz_logs.distributed_logs_v2", 1},
+		{"logSeries", o11yLogSeriesSQL("1 HOUR"), "o11y_logs.distributed_logs_v2", 1},
 		{"topOrgs", o11yTopOrgsSQL(), "hanzo.cloud_usage", 1},
 		{"topModels", o11yTopModelsSQL(), "hanzo.cloud_usage", 1},
-		{"topServices", o11yTopServicesSQL(), "signoz_traces.distributed_signoz_index_v3", 1},
+		{"topServices", o11yTopServicesSQL(), "o11y_traces.distributed_o11y_index_v3", 1},
 		{"llm", o11yLLMSQL(), "langfuse.observations", 1},
 	}
 	for _, c := range cases {
