@@ -55,6 +55,7 @@ import (
 	// shadowed by the generic liveness route; secret ops fail closed until the
 	// operator injects CLOUD_KMS_MASTER_KEY_REF. (The package dir stays clients/kmssvc
 	// so its name doesn't collide with the clients/kms library it embeds.)
+	_ "github.com/hanzoai/cloud/clients/featureflags" // order 9 — Insights feature-flag evaluation seam (no routes; the hot value plane clients/admin + subsystems read)
 	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
 	_ "github.com/hanzoai/cloud/clients/pubsub" // order 5 — embedded NATS :4222 + JetStream
 	_ "github.com/hanzoai/cloud/clients/kafka"  // order 6 — embedded Kafka adaptor :9092

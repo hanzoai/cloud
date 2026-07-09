@@ -81,14 +81,14 @@ type analyticsData struct {
 	ChurnRatePct float64       `json:"churnRatePct"`
 
 	// Revenue analytics.
-	MRRCents      int64    `json:"mrrCents"`
-	Revenue       []seriesPoint `json:"revenue"`
-	ARPUCents     int64    `json:"arpuCents"`
-	LTVCents      *int64   `json:"ltvCents"` // null until churn is observed
-	NRRPct        *float64 `json:"nrrPct"`   // null — needs MRR history
+	MRRCents  int64         `json:"mrrCents"`
+	Revenue   []seriesPoint `json:"revenue"`
+	ARPUCents int64         `json:"arpuCents"`
+	LTVCents  *int64        `json:"ltvCents"` // null until churn is observed
+	NRRPct    *float64      `json:"nrrPct"`   // null — needs MRR history
 
 	// Usage analytics.
-	Usage        []seriesPoint  `json:"usage"`
+	Usage        []seriesPoint    `json:"usage"`
 	TopCustomers []analyticsSlice `json:"topCustomers"`
 
 	// Transparency: which metrics are backed by real data vs honest-empty. A
@@ -154,7 +154,10 @@ func (s *svc) analytics(c *zip.Ctx) error {
 
 	var sources []sourceStatus
 
-	orgs, err := s.listOrgs(ctx, cr)
+	// Scoped fan-in: a SuperAdmin gets every org (all-orgs SaaS analytics); an org
+	// admin gets ONLY their own subtree (their org's usage/active/spend), never
+	// another tenant's — the ONE tenant-scope predicate (scope.go).
+	orgs, err := s.scopedOrgs(ctx, c, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
