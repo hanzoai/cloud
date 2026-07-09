@@ -40,6 +40,13 @@ func TestBrandForHost(t *testing.T) {
 		"api.zoo.ngo":         "zoo",
 		"chat.zoo.ngo":        "zoo",
 		"api.pars.network":    "pars",
+		// AltDomains: the real cloud console surfaces run on <brand>.cloud /
+		// <brand>.network — a Host there must brand as Lux/Zoo, never Hanzo.
+		"console.lux.cloud":   "lux",
+		"console.zoo.cloud":   "zoo",
+		"foo.zoo.network":     "zoo",
+		"console.hanzo.cloud": "hanzo",
+		"app.hanzo.app":       "hanzo",
 	}
 	for host, want := range match {
 		if got, ok := BrandForHostOK(host); !ok || got != want {

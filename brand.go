@@ -24,8 +24,16 @@ type BrandInfo struct {
 	// IAMIssuer is the OIDC issuer (JWKS source) for this brand — the value the
 	// JWT `iss` claim must equal and whose /v1/iam/.well-known/jwks signs tokens.
 	IAMIssuer string
-	// Domain is the brand's primary marketing/site domain (for response scoping).
+	// Domain is the brand's primary marketing/site domain (for response scoping
+	// and base-URL derivation, e.g. api.<Domain>).
 	Domain string
+	// AltDomains are additional registrable domains that ALSO belong to this
+	// brand, used ONLY for hostname→brand white-label detection (BrandForHostOK).
+	// A brand's real serving surfaces span more than its marketing domain — the
+	// cloud console runs on <brand>.cloud hosts (console.lux.cloud,
+	// console.zoo.cloud), and a request Host there must brand as Lux/Zoo, never
+	// fall through to Hanzo. Base-URL/issuer scoping still uses the primary Domain.
+	AltDomains []string
 }
 
 // brands is the brand→IAM registry. Keys are the canonical brand IDs accepted
@@ -41,10 +49,10 @@ type BrandInfo struct {
 // every principal — global admin would 403 platform-wide (fail-secure, but
 // broken). lux/zoo/pars already correctly point at their own .id issuers.
 var brands = map[string]BrandInfo{
-	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai"},
-	"lux":      {ID: "lux", IAMIssuer: "https://lux.id", Domain: "lux.network"},
-	"zoo":      {ID: "zoo", IAMIssuer: "https://zoo.id", Domain: "zoo.ngo"},
-	"pars":     {ID: "pars", IAMIssuer: "https://pars.id", Domain: "pars.network"},
+	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}},
+	"lux":      {ID: "lux", IAMIssuer: "https://lux.id", Domain: "lux.network", AltDomains: []string{"lux.cloud"}},
+	"zoo":      {ID: "zoo", IAMIssuer: "https://zoo.id", Domain: "zoo.ngo", AltDomains: []string{"zoo.network", "zoo.cloud"}},
+	"pars":     {ID: "pars", IAMIssuer: "https://pars.id", Domain: "pars.network", AltDomains: []string{"pars.ai"}},
 	"bootnode": {ID: "bootnode", IAMIssuer: "https://id.bootno.de", Domain: "bootno.de"},
 }
 
@@ -80,9 +88,14 @@ func BrandForHostOK(host string) (string, bool) {
 	}
 	best, bestLen := "", -1
 	for id, b := range brands {
-		d := strings.ToLower(b.Domain)
-		if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > bestLen {
-			best, bestLen = id, len(d)
+		for _, d := range append([]string{b.Domain}, b.AltDomains...) {
+			d = strings.ToLower(d)
+			if d == "" {
+				continue
+			}
+			if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > bestLen {
+				best, bestLen = id, len(d)
+			}
 		}
 	}
 	return best, best != ""
