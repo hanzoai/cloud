@@ -126,6 +126,15 @@ type Config struct {
 	// reserved; these add to them. Env CLOUD_SITES_RESERVED (comma-separated).
 	SitesReserved []string
 
+	// SitesSelfDomains are OUR OWN registrable domains (hanzo.ai, hanzo.app, …).
+	// The site edge serves a BOUND CUSTOM domain (a customer's own apex pointed at
+	// this edge) from that project's S3 prefix — but only for hosts NOT at/under a
+	// self domain, so the api/console path never does a per-request binding lookup
+	// and a customer binding can never shadow a real Hanzo host. Defaults to the
+	// apex plus the registrable domain of the deployment's own Domain (api.hanzo.ai
+	// → hanzo.ai). Env CLOUD_SITES_SELF_DOMAINS (comma-separated) overrides.
+	SitesSelfDomains []string
+
 	// Endpoints for out-of-process subsystems (payments, vault). Empty
 	// means the subsystem is disabled OR the deployment expects a default
 	// service-discovery resolution.
@@ -237,6 +246,7 @@ func LoadConfig() *Config {
 		ReadBufferSize:   getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
 		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
+		SitesSelfDomains: splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Env:              getenv("CLOUD_ENV", ""),
 		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
@@ -326,7 +336,50 @@ func LoadConfig() *Config {
 			cfg.ZAPWebOrigins = append(cfg.ZAPWebOrigins, s)
 		}
 	}
+	// Self domains default (after flag parse so a --domain override is honored): the
+	// sites apex plus the registrable domain of the deployment's own Domain
+	// (api.hanzo.ai → hanzo.ai). An explicit CLOUD_SITES_SELF_DOMAINS wins.
+	if len(cfg.SitesSelfDomains) == 0 {
+		cfg.SitesSelfDomains = defaultSelfDomains(cfg.SitesApex, cfg.Domain)
+	}
 	return cfg
+}
+
+// defaultSelfDomains derives OUR self domains from the sites apex and the primary
+// Domain: the apex itself plus the registrable (last-two-label) domain of each, so
+// hanzo.app + api.hanzo.ai yields {hanzo.app, hanzo.ai}. Deduped, order-stable.
+func defaultSelfDomains(apex, domain string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(d string) {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d == "" || seen[d] {
+			return
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	add(apex)
+	add(registrableDomain(apex))
+	add(registrableDomain(domain))
+	return out
+}
+
+// registrableDomain returns the last two dot-separated labels of a host (a
+// pragmatic "registrable domain" without a public-suffix list): api.hanzo.ai →
+// hanzo.ai, hanzo.app → hanzo.app. A host with fewer than two labels is returned
+// unchanged. This is only used to seed the self-domain exclusion set; it never
+// gates tenant isolation (which is the S3-prefix boundary in clients/sites).
+func registrableDomain(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	parts := strings.Split(strings.Trim(host, "."), ".")
+	if len(parts) < 2 {
+		return host
+	}
+	return parts[len(parts)-2] + "." + parts[len(parts)-1]
 }
 
 // stagedSubsystems require EXPLICIT enablement: they are deliberately NOT part of
