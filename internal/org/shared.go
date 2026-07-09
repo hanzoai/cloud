@@ -5,22 +5,28 @@
 
 package org
 
-// The Replicator, single-writer election (Rendezvous/HRW), Store/DB interfaces,
-// and DBPath were PROMOTED out of this package into the shared HA-SQLite substrate
-// hanzoai/vfs/replica, so EVERY Hanzo service adopts ONE implementation (one and one
-// way). cloud re-exports them here as aliases so this package's own API (membership,
-// cipher, vfsstore) is unchanged, while the logic lives in exactly one place.
+// Two orthogonal substrates, re-exported here as aliases so this package's own API
+// (membership, cipher, vfsstore) is unchanged while each concern lives in exactly
+// ONE place (one and one way):
+//
+//   - single-writer election (Rendezvous/HRW: Member, Owner, IsOwner, Replicas) →
+//     github.com/hanzoai/ha. It decides WHO writes; pure Go, no storage.
+//   - per-org SQLite replication (Replicator, Store, DB, DBPath) →
+//     github.com/hanzoai/vfs/replica. It decides HOW state ships to the object store.
 //
 // cloud-SPECIFIC pieces that stay in this package: membership.go (the live IAM
-// membership source + polling) and cipher.go (the KMS-master per-org envelope
-// encryption — it already satisfies replica.Cipher). vfsstore.go implements the
-// replica.Store over cloud's deps.VFS.
+// membership Source + polling, the input to election) and cipher.go (the KMS-master
+// per-org envelope encryption — it satisfies replica.Cipher). vfsstore.go implements
+// the replica.Store over cloud's deps.VFS.
 
-import "github.com/hanzoai/vfs/replica"
+import (
+	"github.com/hanzoai/ha"
+	"github.com/hanzoai/vfs/replica"
+)
 
 type (
 	// Member is one replica in the live membership set (HRW election input).
-	Member = replica.Member
+	Member = ha.Member
 	// Replicator binds one per-org SQLite to its object-store slot.
 	Replicator = replica.Replicator
 	// Store is the object-store surface (satisfied by vfsstore.go over deps.VFS).
@@ -37,11 +43,11 @@ var (
 	// WithEncryption seals every pushed snapshot with the org's per-org key.
 	WithEncryption = replica.WithEncryption
 	// Owner returns the single writer for orgID (HRW), fail-closed on empty.
-	Owner = replica.Owner
+	Owner = ha.Owner
 	// IsOwner reports whether selfID owns the writer for orgID.
-	IsOwner = replica.IsOwner
+	IsOwner = ha.IsOwner
 	// Replicas returns the owner then ordered failover successors.
-	Replicas = replica.Replicas
+	Replicas = ha.Replicas
 	// DBPath is the canonical object-store location of an org's SQLite DB.
 	DBPath = replica.DBPath
 )

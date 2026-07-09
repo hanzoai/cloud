@@ -1225,6 +1225,8 @@ github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1 h1:uQGUlQsmBvZmfU
 github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1/go.mod h1:zJr4NZygb2gyqkQpZ2Yf/UzbOhIhVfLCj8ST925KPrI=
 github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUjXU=
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
+github.com/hanzoai/ha v0.1.0 h1:d9kSSELTr+da/yJNJlkVBCgGy8crq+kph5FRdnws2Fg=
+github.com/hanzoai/ha v0.1.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
 github.com/hanzoai/iam v1.31.18 h1:4MjoFBdH3b6XTGIyn+KRGSdJkOCf2Sdj38kU+NrF5XI=
 github.com/hanzoai/iam v1.31.18/go.mod h1:Pc6N6JQUoaYZumoc4sj9ql07zvanonb7Bc5WukKegio=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
