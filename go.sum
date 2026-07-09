@@ -1227,6 +1227,8 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.1.0 h1:d9kSSELTr+da/yJNJlkVBCgGy8crq+kph5FRdnws2Fg=
 github.com/hanzoai/ha v0.1.0/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
+github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
+github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
 github.com/hanzoai/iam v1.31.18 h1:4MjoFBdH3b6XTGIyn+KRGSdJkOCf2Sdj38kU+NrF5XI=
 github.com/hanzoai/iam v1.31.18/go.mod h1:Pc6N6JQUoaYZumoc4sj9ql07zvanonb7Bc5WukKegio=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
@@ -1277,6 +1279,8 @@ github.com/hanzoai/tasks v1.49.0 h1:M/Sp5XKhIgzRhBYsJdkr9dgsGIWPDfD1CfFpIUGGbUU=
 github.com/hanzoai/tasks v1.49.0/go.mod h1:DfBjEr4ONXo3W2GAmJQd2qwP0zAccD705PxC4xj1KOU=
 github.com/hanzoai/vfs v0.6.2 h1:eTAIYbTpa6Twj+NRnGAtT4EBXL3aCP6CHOLm6uHoEmw=
 github.com/hanzoai/vfs v0.6.2/go.mod h1:NyQJ+POT174+iJj6fxncG748FjMgUfaVpSgaH00vOMU=
+github.com/hanzoai/vfs v0.6.4 h1:7T1b/ONc2/3RhYwIAYB8MYAjXbP5fqnqsK2gZ3yQOSU=
+github.com/hanzoai/vfs v0.6.4/go.mod h1:NyQJ+POT174+iJj6fxncG748FjMgUfaVpSgaH00vOMU=
 github.com/hanzoai/xorm v1.1.6 h1:z8B3alP39taTGLA4BonBa+7RHIOMmjYjxF3N9gpzh84=
 github.com/hanzoai/xorm v1.1.6/go.mod h1:wso0cQDDuzgjJwNOj3AXCftkKF3uOoUowKp5A7ol0zc=
 github.com/hashicorp/consul/api v1.10.1/go.mod h1:XjsvQN+RJGWI2TWy1/kqaE16HrR2J/FWgkYjdZQsX9M=
