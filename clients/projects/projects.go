@@ -182,6 +182,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/projects/:slug/deployments", s.listDeployments)
 	app.Get("/v1/projects/:slug/deployments/:id", s.getDeployment)
 	app.Post("/v1/projects/:slug/deployments/:id/complete", s.completeDeployment)
+	app.Get("/v1/projects/:slug/domains", s.listDomains)
+	app.Post("/v1/projects/:slug/domains", s.setDomains)
+
+	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
+	// S3-backed part of the platform (container apps live at /v1/platform/projects,
+	// clients/platform); this is the SAME engine as /v1/projects, exposed under the
+	// platform namespace so a user's one flow is: create a site → upload a zip (or
+	// tar.gz) → bind a custom domain → live. Org/project scope is the IAM-minted
+	// X-Org-Id, exactly as the /v1/projects surface. hanzo.app's upload UI posts a
+	// zip to POST /v1/platform/sites/:slug/deploy.
+	app.Post("/v1/platform/sites", s.create)
+	app.Get("/v1/platform/sites", s.list)
+	app.Get("/v1/platform/sites/:slug", s.get)
+	app.Patch("/v1/platform/sites/:slug", s.update)
+	app.Delete("/v1/platform/sites/:slug", s.del)
+	app.Post("/v1/platform/sites/:slug/deploy", s.deploy)
+	app.Get("/v1/platform/sites/:slug/deployments", s.listDeployments)
+	app.Get("/v1/platform/sites/:slug/deployments/:id", s.getDeployment)
+	app.Get("/v1/platform/sites/:slug/domains", s.listDomains)
+	app.Post("/v1/platform/sites/:slug/domains", s.setDomains)
 
 	log.Info("projects mounted", "bucket", s.blob.bucket, "s3", s.blob.configured(), "brand", deps.Brand)
 	return nil
