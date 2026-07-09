@@ -10,7 +10,7 @@
 // datastore. This file adds the WRITE side: a real OpenTelemetry Collector,
 // constructed IN-PROCESS, that accepts OTLP (gRPC :4317, HTTP :4318) and writes
 // spans + logs into the SAME ClickHouse the embedded query runtime reads
-// (signoz_traces / signoz_logs on the `insights` cluster). Consumers — cloud
+// (o11y_traces / o11y_logs on the `insights` cluster). Consumers — cloud
 // itself, console-worker, and third-party OTel SDKs — point at cloud instead of
 // the standalone otel-collector Service, so the standalone Deployment can retire.
 //
@@ -61,8 +61,8 @@ import (
 
 	resourceprocessor "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor"
 
-	chlogs "github.com/hanzoai/signoz-otel-collector/exporter/clickhouselogsexporter"
-	chtraces "github.com/hanzoai/signoz-otel-collector/exporter/clickhousetracesexporter"
+	chlogs "github.com/hanzoai/otel-collector/exporter/clickhouselogsexporter"
+	chtraces "github.com/hanzoai/otel-collector/exporter/clickhousetracesexporter"
 
 	"github.com/hanzoai/cloud"
 )
