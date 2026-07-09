@@ -80,7 +80,7 @@ require (
 	github.com/hanzoai/clickhouse-go-mock v0.14.1 // indirect
 	github.com/hanzoai/commerce/thirdparty/ethereum v1.40.0 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
-	github.com/hanzoai/ha v0.1.0
+	github.com/hanzoai/ha v0.1.1
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
@@ -207,7 +207,7 @@ require (
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
-	modernc.org/sqlite v1.51.0 // indirect
+	modernc.org/sqlite v1.51.0
 )
 
 require (
@@ -810,7 +810,7 @@ require (
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
 	github.com/hanzoai/o11y v1.5.4
-	github.com/hanzoai/vfs v0.6.2
+	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
