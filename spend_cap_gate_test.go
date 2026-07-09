@@ -122,7 +122,7 @@ func TestDenyResource_SpendCapDistinct402(t *testing.T) {
 func rateApp(t *testing.T, m *metering.Client) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{})
-	app.Use(ScopeRateLimit(m))
+	app.Use(ScopeRateLimit(m, nil))
 	app.Post("/v1/agent/run", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})

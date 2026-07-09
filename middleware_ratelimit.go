@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/gatewaypolicy"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce/metering"
 	"github.com/zap-proto/zip"
@@ -43,15 +44,20 @@ const rateScopeKeyLocal = "cloud.rateScopeKey"
 // config fetch is amortized far below the request rate.
 const rateConfigTTL = 5 * time.Second
 
-// ScopeRateLimit returns the per-scope rate-limit middleware. It is a no-op
-// passthrough when metering (commerce) is unconfigured, so an unwired deployment
-// is never blocked — mirroring BillingGate.
-func ScopeRateLimit(m *metering.Client) zip.Handler {
-	if !billingEnabled(m) {
+// ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
+// authenticated tenant from TWO config sources, most-restrictive-wins:
+//   - commerce spend-alert RateLimitRpm (the plan-configured ceiling), and
+//   - the /v1/gateway per-org OrgRPM (gp), the runtime-mutable operator override.
+//
+// It is a no-op passthrough only when BOTH are absent (no commerce AND no policy
+// store), so an unwired deployment is never blocked — mirroring BillingGate.
+func ScopeRateLimit(m *metering.Client, gp *gatewaypolicy.Store) zip.Handler {
+	if !billingEnabled(m) && gp == nil {
 		return func(c *zip.Ctx) error { return c.Next() }
 	}
 	rl := &scopeRateLimiter{
 		m:       m,
+		gp:      gp,
 		ttl:     rateConfigTTL,
 		cache:   map[string]scopeCacheEntry{},
 		buckets: map[int]zip.Handler{},
@@ -66,6 +72,7 @@ type scopeCacheEntry struct {
 
 type scopeRateLimiter struct {
 	m   *metering.Client
+	gp  *gatewaypolicy.Store // /v1/gateway per-org OrgRPM override (nil-safe).
 	ttl time.Duration
 
 	mu      sync.Mutex
@@ -86,6 +93,14 @@ func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
 	service := canonicalService(c.Path())
 
 	key, rpm := bindingRateRule(rl.rulesFor(c.Context(), org), org, project, service)
+
+	// The /v1/gateway per-org OrgRPM is the runtime operator override. It binds
+	// when set and tighter than (or in the absence of) any commerce rule —
+	// most-restrictive-wins, in an org-scoped bucket namespace distinct from the
+	// commerce scope keys so the two never share a bucket. gp is nil-safe.
+	if orpm := rl.gp.OrgRPM(org); orpm > 0 && (rpm <= 0 || orpm < rpm) {
+		key, rpm = "gwpolicy|"+org, orpm
+	}
 	if rpm <= 0 {
 		return c.Next() // no rate limit configured for this scope.
 	}
@@ -159,6 +174,9 @@ func (rl *scopeRateLimiter) bucketFor(rpm int) zip.Handler {
 // commerce blip neither blocks traffic nor hammers commerce. The fetch runs on a
 // bounded background context so a client disconnect can't poison the cache.
 func (rl *scopeRateLimiter) rulesFor(reqCtx context.Context, org string) []metering.ScopeRule {
+	if !billingEnabled(rl.m) {
+		return nil // no commerce configured — only the /v1/gateway OrgRPM applies.
+	}
 	rl.mu.Lock()
 	e, ok := rl.cache[org]
 	rl.mu.Unlock()
