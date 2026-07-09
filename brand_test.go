@@ -29,6 +29,39 @@ func TestBrandFor(t *testing.T) {
 	}
 }
 
+func TestBrandForHost(t *testing.T) {
+	match := map[string]string{
+		"api.hanzo.ai":        "hanzo",
+		"hanzo.ai":            "hanzo",
+		"api.lux.network":     "lux",
+		"lux.network":         "lux",
+		"API.LUX.NETWORK":     "lux", // case-insensitive
+		"api.lux.network:443": "lux", // port stripped
+		"api.zoo.ngo":         "zoo",
+		"chat.zoo.ngo":        "zoo",
+		"api.pars.network":    "pars",
+	}
+	for host, want := range match {
+		if got, ok := BrandForHostOK(host); !ok || got != want {
+			t.Errorf("BrandForHostOK(%q) = %q,%v; want %q,true", host, got, ok, want)
+		}
+		if got := BrandForHost(host); got != want {
+			t.Errorf("BrandForHost(%q) = %q; want %q", host, got, want)
+		}
+	}
+	// No brand domain matches → not ok, and BrandForHost defaults to hanzo. The
+	// caller (agentskills) uses the not-ok signal to fall back to the DEPLOYMENT
+	// brand instead of blindly emitting Hanzo on a non-hanzo pod.
+	for _, host := range []string{"example.com", "localhost", "", "10.0.0.1"} {
+		if _, ok := BrandForHostOK(host); ok {
+			t.Errorf("BrandForHostOK(%q) matched a brand, want no match", host)
+		}
+		if got := BrandForHost(host); got != DefaultBrand {
+			t.Errorf("BrandForHost(%q) = %q, want %q", host, got, DefaultBrand)
+		}
+	}
+}
+
 // TestLoadConfig_IssuerDerivedFromBrand asserts that when CLOUD_IAM_ISSUER is
 // unset, the issuer is derived from CLOUD_BRAND — so a non-hanzo brand does not
 // silently validate against iam.hanzo.ai.
