@@ -14,13 +14,13 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/o11y/pkg/community"
+	o11yrt "github.com/hanzoai/o11y/pkg/o11y"
 	o11yapp "github.com/hanzoai/o11y/pkg/query-service/app"
-	signozrt "github.com/hanzoai/o11y/pkg/signoz"
 )
 
 // embeddedDSN is the enable signal AND the ClickHouse (Hanzo Datastore) target for
 // the in-process runtime. It reads the SAME operator knob the standalone o11y pod
-// sets — the flat, canonical O11Y_DATASTORE_DSN (which signoz config maps onto
+// sets — the flat, canonical O11Y_DATASTORE_DSN (which o11y config maps onto
 // telemetrystore.datastore.dsn and gives precedence) — falling back to the
 // structured O11Y_TELEMETRYSTORE_DATASTORE_DSN. Set (prod CR) ⇒ construct the
 // runtime in-process; empty (local dev / tests, no ClickHouse) ⇒ buildEmbeddedHandler
@@ -36,13 +36,13 @@ func embeddedDSN() string {
 // dashboards, alerts — served through cloud's HTTP stack instead of a second
 // Deployment.
 var (
-	embeddedRuntime *signozrt.SigNoz
+	embeddedRuntime *o11yrt.O11y
 	embeddedServer  *o11yapp.Server
 )
 
 // buildEmbeddedHandler constructs the o11y runtime IN-PROCESS and returns its
 // public HTTP handler via the ONE shared builder — community.NewServer — the
-// EXACT construction the standalone o11y cmd/community server runs (signoz.New
+// EXACT construction the standalone o11y cmd/community server runs (o11y.New
 // with its provider factories → app.NewServer → server.PublicHandler). Because
 // it is the same code, the embed cannot drift from the running pod: identity is
 // resolved by the IdentN resolver's iamidentn provider (default-enabled) from the
@@ -72,7 +72,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 
 	// o11y's sqlstore (sqlite, control-plane metadata) and Prometheus active-query
 	// tracker need a writable dir. Cloud's container is distroless (no /tmp), so pin
-	// both under cloud's data root and create it eagerly so signoz.New's migrations
+	// both under cloud's data root and create it eagerly so o11y.New's migrations
 	// don't fail on a missing parent. The standalone pod used an emptyDir at
 	// /var/lib/o11y — this is the in-process equivalent, owned by cloud.
 	dataDir := filepath.Join(firstNonEmpty(deps.DataDir, "/var/lib/cloud"), "o11y")
@@ -85,7 +85,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 
 	// community.NewConfig + community.NewServer are the ONE construction shared with
 	// the standalone binary — config from env (env:, applying the O11Y_DATASTORE_DSN
-	// alias), the SigNoz provider set (iamidentn identity, iamauthz authz, ClickHouse
+	// alias), the o11y provider set (iamidentn identity, iamauthz authz, ClickHouse
 	// telemetrystore, sqlite sqlstore), and the app server. One bootstrap, one way.
 	cfg, err := community.NewConfig(ctx, slog.Default(), nil)
 	if err != nil {
@@ -116,7 +116,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 //   - the sqlite control-plane store and Prometheus active-query tracker are
 //     pinned under cloud's writable data root (the distroless image has no /tmp);
 //   - the runtime's own OTel self-metrics Prometheus pull reader is turned OFF.
-//     Its SigNoz default binds 0.0.0.0:9090, which collides with cloud's health
+//     The o11y runtime default binds 0.0.0.0:9090, which collides with cloud's health
 //     listener (CLOUD_HEALTH_LISTEN=:9090) and crash-loops the whole process — the
 //     one listener the standalone pod never contended for. Cloud owns process-level
 //     observability (it exports its own OTel telemetry), so activating the embed can

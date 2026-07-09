@@ -58,7 +58,7 @@ func TestWriteIngestConfig(t *testing.T) {
 // traces and logs pipelines — via otelcol's DryRun, which unmarshals the config,
 // validates every component, and builds the full pipeline graph.
 //
-// The signoz ClickHouse exporters dial the datastore eagerly when the graph is
+// The o11y ClickHouse exporters dial the datastore eagerly when the graph is
 // built, so DryRun reaches — and only fails at — that dial (this hermetic test
 // has no live ClickHouse). Any OTHER error means genuine config/factory drift
 // (an unmapped key, a bad pipeline, an invalid component config) and fails the

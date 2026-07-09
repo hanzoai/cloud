@@ -639,7 +639,7 @@ func (s *svc) run(c *zip.Ctx) error {
 // recorded error-status Run and a nil error.
 func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
 	// Root span per run — the whole trace (balance gate → step → LLM call)
-	// nests under it, shipped over ZAP to o11y (SigNoz).
+	// nests under it, shipped over ZAP to o11y.
 	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
 	span.SetAttributes(

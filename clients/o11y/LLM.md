@@ -24,7 +24,7 @@ cloud embeds the o11y subsystem in-process against the shared ClickHouse
     (`knownServices`) — a malformed slug is a 400, an unbacked one is honest-empty.
     Reuses the shared `aiobject.DatastoreQuery` (ONE datastore client).
 
-- **Query / control plane** — `embed.go` + `o11y.go`. Constructs the SigNoz
+- **Query / control plane** — `embed.go` + `o11y.go`. Constructs the o11y
   query runtime (`community.NewServer`) and serves the rest of `/v1/o11y/*` from
   this binary (dashboards, alerts, querier) via the wildcard (order 70) +
   `o11y.SetHandler` (order 71). Falls back to reverse-proxying a standalone
