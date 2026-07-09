@@ -12,7 +12,7 @@ import (
 
 // metricsread.go serves GET /v1/o11y/metrics — REAL per-org RED (rate / errors /
 // latency) for a product, plus the org's LLM usage. The RED series come from
-// org-tagged request spans in signoz_traces (attributes_string['hanzo.org']), which
+// org-tagged request spans in o11y_traces (attributes_string['hanzo.org']), which
 // the cloud TracingMiddleware already stamps — so this is genuine per-tenant data,
 // not VictoriaMetrics infra metrics (those carry no org label). Usage comes from the
 // hanzo.cloud_usage ledger (organization=<org>).
@@ -106,13 +106,13 @@ func redSeries(ctx context.Context, q metricsQuery, resp *metricsResponse) error
 	routePrefix := "/v1/" + q.svc.ID
 	sql := "SELECT toStartOfInterval(timestamp, toIntervalSecond(?)) AS bucket, " +
 		"count() AS reqs, " +
-		// response_status_code is LowCardinality(String) in signoz; coerce before the
+		// response_status_code is LowCardinality(String) in o11y; coerce before the
 		// numeric compare (a raw >= 500 raises NO_COMMON_TYPE). status_code is the
 		// numeric span status (2 = ERROR).
 		"countIf(toInt32OrZero(response_status_code) >= 500 OR status_code = 2) AS errs, " +
 		"quantile(0.5)(duration_nano) AS p50, " +
 		"quantile(0.95)(duration_nano) AS p95 " +
-		"FROM signoz_traces.distributed_signoz_index_v3 " +
+		"FROM o11y_traces.distributed_o11y_index_v3 " +
 		"WHERE (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?) " +
 		"AND timestamp > now64() - toIntervalSecond(?)"
 	args := []any{q.stepSec, routePrefix, routePrefix + "/", q.svc.App, q.rangeSec}
