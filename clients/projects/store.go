@@ -437,6 +437,27 @@ func (s *Store) ResolveHost(ctx context.Context, host string) (Project, error) {
 	return p, nil
 }
 
+// ListHostsForProject returns every public host bound to (org, slug), oldest
+// first. It powers GET .../domains so a console/user can see which hostnames the
+// site serves — its `<slug>.hanzo.app` subdomain plus any bound custom domains.
+func (s *Store) ListHostsForProject(ctx context.Context, org, slug string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT host FROM site_hosts WHERE org=? AND slug=? ORDER BY created_at ASC, host ASC`, org, slug)
+	if err != nil {
+		return nil, fmt.Errorf("list hosts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, fmt.Errorf("scan host: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 // prefixCols qualifies each projectCols name with a table alias (for JOINs).
 func prefixCols(alias string) string {
 	parts := strings.Split(projectCols, ",")
