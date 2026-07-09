@@ -61,8 +61,13 @@ func OrgHasUnsafeRune(s string) bool {
 }
 
 // cookieTokenNames are the session-cookie names that may carry an IAM access
-// token (mirrors iamauth.CookieToken).
-var cookieTokenNames = []string{"iam_access_token", "access_token", "hanzo_token"}
+// token (mirrors iamauth.CookieToken). hanzo_iam_token is the cookie the ai
+// (casibase) layer SETS after login (ai/controllers/account.go iamTokenCookieName)
+// — it MUST be read here too, or the embedded console (whose browser holds only
+// that httpOnly cookie, no Authorization header) resolves to no principal and
+// every org-scoped /v1 endpoint (agents/gpus/machines/platform/orgs/…) 403s
+// "X-Org-Id required". The JWT is present in the browser; this reads the right name.
+var cookieTokenNames = []string{"hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
 
 // authorityHeaders are the identity/authority headers the gateway mints and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
