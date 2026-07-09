@@ -78,6 +78,7 @@ require (
 	github.com/hanzoai/clickhouse-go-mock v0.14.1 // indirect
 	github.com/hanzoai/commerce/thirdparty/ethereum v1.40.0 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
+	github.com/hanzoai/ha v0.1.0
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/huandu/go-clone v1.7.3 // indirect
