@@ -2,6 +2,7 @@ package projects
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -136,13 +137,131 @@ func walkTarGz(r io.Reader) (*site, error) {
 		}
 		out.files[clean] = data
 	}
+	return finalizeSite(out)
+}
+
+// walkArtifact parses a deploy artifact in EITHER zip or tar(.gz) form into the
+// normalized site map. ZIP is what a browser file-upload naturally produces;
+// tar.gz is what the CLI/builder ships. One deploy contract (index.html at the
+// root, the same size/traversal guards, the same single-wrapper normalization),
+// two container formats — the caller never has to know which it received.
+func walkArtifact(raw []byte) (*site, error) {
+	if isZip(raw) {
+		return walkZip(raw)
+	}
+	return walkTarGz(bytes.NewReader(raw))
+}
+
+// isZip reports whether raw begins with a ZIP local-file/central-directory/EOCD
+// signature ("PK\x03\x04", "PK\x05\x06", or "PK\x07\x08"). A POSIX tar has no
+// leading magic (its "ustar" marker sits at offset 257) and gzip starts 0x1f 0x8b,
+// so anything that is not a ZIP falls through to the tar(.gz) walker.
+func isZip(raw []byte) bool {
+	return len(raw) >= 4 && raw[0] == 'P' && raw[1] == 'K' &&
+		(raw[2] == 0x03 || raw[2] == 0x05 || raw[2] == 0x07)
+}
+
+// walkZip parses a ZIP archive into the normalized path→bytes map, enforcing the
+// SAME guards as walkTarGz (path traversal, per-file + total budgets, file count)
+// and finalizing with the same contract (single-wrapper strip + index.html at
+// root). The declared uncompressed size is advisory (a crafted header can lie),
+// so the real cap is enforced on the bytes actually read via LimitReader.
+func walkZip(raw []byte) (*site, error) {
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("zip: %w", err)
+	}
+	out := &site{files: make(map[string][]byte)}
+	for _, f := range zr.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		clean, ok := safeRel(f.Name)
+		if !ok {
+			return nil, fmt.Errorf("unsafe path in artifact: %q", f.Name)
+		}
+		if clean == "" {
+			continue
+		}
+		if f.UncompressedSize64 > maxFileBytes {
+			return nil, fmt.Errorf("file %q exceeds %d bytes", clean, maxFileBytes)
+		}
+		if len(out.files) >= maxFiles {
+			return nil, fmt.Errorf("artifact exceeds %d files", maxFiles)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("open %q: %w", clean, err)
+		}
+		data, err := io.ReadAll(io.LimitReader(rc, maxFileBytes+1))
+		_ = rc.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read %q: %w", clean, err)
+		}
+		if int64(len(data)) > maxFileBytes {
+			return nil, fmt.Errorf("file %q exceeds %d bytes", clean, maxFileBytes)
+		}
+		out.bytes += int64(len(data))
+		if out.bytes > maxTotalBytes {
+			return nil, fmt.Errorf("artifact exceeds %d bytes total", maxTotalBytes)
+		}
+		out.files[clean] = data
+	}
+	return finalizeSite(out)
+}
+
+// finalizeSite normalizes a freshly-walked artifact and enforces the deploy
+// contract, shared by every container format so the contract is identical: it
+// strips a single wrapping top-level directory when present (a zip/tar made from
+// a project FOLDER), then requires a non-empty artifact with index.html at the
+// root. One finalize step; the format walkers only produce the raw file map.
+func finalizeSite(out *site) (*site, error) {
 	if len(out.files) == 0 {
 		return nil, errors.New("artifact contains no files")
 	}
+	stripSingleRoot(out)
 	if _, ok := out.files["index.html"]; !ok {
 		return nil, errors.New("artifact missing index.html at root")
 	}
 	return out, nil
+}
+
+// stripSingleRoot removes a single common top-level directory prefix IFF every
+// file lives under it AND that directory holds index.html — the natural shape of
+// a zip made by compressing a project folder (e.g. "dist/index.html" →
+// "index.html"). If files already sit at the root, if there are multiple
+// top-level entries, or if the wrapper has no index.html, nothing is stripped and
+// the artifact is used verbatim (an honest "missing index.html" follows when it
+// truly has none).
+func stripSingleRoot(out *site) {
+	if _, ok := out.files["index.html"]; ok {
+		return // already rooted — never strip
+	}
+	root := ""
+	for name := range out.files {
+		i := strings.IndexByte(name, '/')
+		if i < 0 {
+			return // a root-level file that isn't index.html — not a single wrapper
+		}
+		top := name[:i]
+		if root == "" {
+			root = top
+		} else if top != root {
+			return // more than one top-level directory — nothing to strip
+		}
+	}
+	if root == "" {
+		return
+	}
+	prefix := root + "/"
+	if _, ok := out.files[prefix+"index.html"]; !ok {
+		return // the single wrapper has no index.html — don't strip
+	}
+	stripped := make(map[string][]byte, len(out.files))
+	for name, data := range out.files {
+		stripped[strings.TrimPrefix(name, prefix)] = data
+	}
+	out.files = stripped
 }
 
 // uploadSite replaces the project's live prefix with the artifact's files:

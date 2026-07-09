@@ -1,11 +1,12 @@
 package projects
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -41,11 +42,13 @@ func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
 
 // deploy ships a project live. Two modes, one endpoint:
 //
-//   - Artifact (default): the request body is a tar or tar.gz of the BUILT site
-//     (must contain index.html at the root). The handler unpacks it to OUR S3
-//     under "<org>/<slug>/", marks the bucket public-read, and records a "live"
-//     deployment. This is the builder's one-click deploy (small artifacts,
-//     bounded by the app/gateway BodyLimit) — no CI round-trip needed.
+//   - Artifact (default): the request body is a zip OR tar(.gz) of the BUILT site
+//     (must contain index.html at the root, or a single wrapper directory that
+//     does). It arrives as either a multipart file upload (a browser <input
+//     type=file>) or the raw request body (a curl one-liner). The handler unpacks
+//     it to OUR S3 under "<org>/<slug>/", marks the bucket public-read, and
+//     records a "live" deployment. This is the builder/console one-click deploy
+//     (small artifacts, bounded by the app/gateway BodyLimit) — no CI round-trip.
 //
 //   - Git (Content-Type: application/json, {"source":"git", ...}): records a
 //     "queued" deployment and returns 202. CI (the reusable build workflow)
@@ -114,11 +117,11 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 	if !s.blob.configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
-	raw := c.Body()
-	if len(raw) == 0 {
-		return zip.ErrBadRequest("empty artifact; send a tar or tar.gz of the built site")
+	raw, err := readArtifactBody(c)
+	if err != nil {
+		return err
 	}
-	st, err := walkTarGz(bytes.NewReader(raw))
+	st, err := walkArtifact(raw)
 	if err != nil {
 		return zip.ErrBadRequest("invalid artifact: " + err.Error())
 	}
@@ -163,6 +166,56 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 		return zip.Errorf(http.StatusInternalServerError, "finalize project: %v", err)
 	}
 	return c.JSON(http.StatusOK, toDeploymentView(d))
+}
+
+// artifactFields are the multipart form field names an upload may use for the
+// site archive, tried in order. "file" is the conventional default; the others
+// are accepted so a client that names the part "artifact"/"site"/"zip" still works.
+var artifactFields = []string{"file", "artifact", "site", "zip"}
+
+// readArtifactBody returns the deploy artifact bytes from EITHER a multipart file
+// upload (a browser <input type=file> — the field named in artifactFields) or the
+// raw request body (a curl one-liner streaming the archive directly). Both paths
+// are bounded by maxTotalBytes (and the framework BodyLimit). Multipart is what a
+// browser upload posts; raw body is the CLI/API path. One deploy endpoint, both
+// ergonomics; the format (zip vs tar.gz) is sniffed later by walkArtifact.
+func readArtifactBody(c *zip.Ctx) ([]byte, error) {
+	if strings.Contains(strings.ToLower(c.Header("Content-Type")), "multipart/form-data") {
+		var fh *multipart.FileHeader
+		for _, field := range artifactFields {
+			if f, err := c.Fiber().FormFile(field); err == nil && f != nil {
+				fh = f
+				break
+			}
+		}
+		if fh == nil {
+			return nil, zip.ErrBadRequest("multipart upload has no file part (expected field 'file')")
+		}
+		if fh.Size > maxTotalBytes {
+			return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "artifact exceeds %d bytes", maxTotalBytes)
+		}
+		f, err := fh.Open()
+		if err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "open upload: %v", err)
+		}
+		defer func() { _ = f.Close() }()
+		data, err := io.ReadAll(io.LimitReader(f, maxTotalBytes+1))
+		if err != nil {
+			return nil, zip.Errorf(http.StatusBadRequest, "read upload: %v", err)
+		}
+		if int64(len(data)) > maxTotalBytes {
+			return nil, zip.Errorf(http.StatusRequestEntityTooLarge, "artifact exceeds %d bytes", maxTotalBytes)
+		}
+		if len(data) == 0 {
+			return nil, zip.ErrBadRequest("empty upload; attach a zip or tar.gz of the built site")
+		}
+		return data, nil
+	}
+	raw := c.Body()
+	if len(raw) == 0 {
+		return nil, zip.ErrBadRequest("empty artifact; send a zip or tar.gz of the built site")
+	}
+	return raw, nil
 }
 
 type completeReq struct {
