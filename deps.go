@@ -14,6 +14,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/gatewaypolicy"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -90,6 +91,16 @@ type Deps struct {
 	// middleware a no-op and the query endpoint fall back to the IAM proxy (an
 	// unconfigured deployment is never blocked). See audit/ and audit_middleware.go.
 	Audit *audit.Recorder
+
+	// GatewayPolicy is the runtime-mutable edge-policy store (the /v1/gateway
+	// config plane): CORS allowlist + pre-auth per-IP flood cap (platform scope)
+	// and the authenticated per-org rate ceiling. BuildDeps constructs it once,
+	// layered over the static env/flag defaults; the EdgeCORS/EdgeRateLimit
+	// middleware read its PLATFORM policy live and ScopeRateLimit reads its
+	// per-org OrgRPM, and the clients/gatewaysvc subsystem serves GET/PUT over the
+	// SAME store. Never nil — New always returns a working (static-only on store
+	// error) *Store, so the edge is never blocked. See clients/gatewaypolicy.
+	GatewayPolicy *gatewaypolicy.Store
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
