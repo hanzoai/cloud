@@ -3,6 +3,7 @@ package projects
 import (
 	"errors"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -10,6 +11,27 @@ import (
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
+
+// operatorOrgsFromEnv builds the set of orgs allowed to bind custom domains
+// (besides a global admin): CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) when
+// set, else the deployment's own brand org (sanitized). The brand org is the
+// platform operator, which manages customer domains until DNS-ownership
+// verification is wired here.
+func operatorOrgsFromEnv(brand string) map[string]bool {
+	out := map[string]bool{}
+	if raw := strings.TrimSpace(os.Getenv("CLOUD_PLATFORM_OPERATOR_ORGS")); raw != "" {
+		for _, o := range strings.Split(raw, ",") {
+			if o := sanitizeOrg(o); o != "" {
+				out[o] = true
+			}
+		}
+		return out
+	}
+	if b := sanitizeOrg(brand); b != "" {
+		out[b] = true
+	}
+	return out
+}
 
 // hostnameRE validates a public FQDN a caller may bind as a custom domain: one or
 // more DNS labels then a TLD, lowercase. It rejects schemes, ports, paths, and
@@ -24,13 +46,15 @@ type setDomainsReq struct {
 // setDomains binds one or more CUSTOM public hostnames to this org's static site,
 // so the site edge (clients/sites) serves them from the site's S3 prefix once the
 // hostname is pointed at this edge. Binding a host you do not own would let you
-// shadow it at the edge, so a custom host requires a global admin today — the same
-// trust the operator uses to seed a customer's apex. DNS-ownership verification
-// (the challenge/verify the /v1/platform apps path already implements) is the
-// planned path for a tenant to self-bind; until it is wired here this stays
-// admin-gated, and it never fabricates ownership. First-come + reserved-label
-// guards are enforced by the store (BindHost); binds are idempotent for the same
-// (org, slug), so a redeploy or a repeat call is safe.
+// shadow it at the edge, so a custom host requires EITHER a global admin OR the
+// platform-operator org (the brand's own org — it manages customer DNS).
+// DNS-ownership verification (the challenge/verify the /v1/platform apps path
+// already implements) is the planned path for any tenant to self-bind; until it
+// is wired here binding is operator/admin-gated and never fabricates ownership. A
+// bound domain is inert until its owner points DNS at this edge, so the real gate
+// is DNS control. First-come + reserved-label guards are enforced by the store
+// (BindHost); binds are idempotent for the same (org, slug), so a redeploy or a
+// repeat call is safe.
 func (s *svc) setDomains(c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
@@ -50,7 +74,7 @@ func (s *svc) setDomains(c *zip.Ctx) error {
 	if len(body.Domains) == 0 {
 		return zip.ErrBadRequest("no domains to bind")
 	}
-	admin := c.IsAdmin()
+	authorized := c.IsAdmin() || s.operatorOrgs[org]
 	now := time.Now().Unix()
 	bound := make([]string, 0, len(body.Domains))
 	for _, d := range body.Domains {
@@ -61,9 +85,9 @@ func (s *svc) setDomains(c *zip.Ctx) error {
 		if !hostnameRE.MatchString(host) {
 			return zip.ErrBadRequest("invalid domain: " + d)
 		}
-		if !admin {
+		if !authorized {
 			return zip.Errorf(http.StatusForbidden,
-				"binding custom domain %q requires ownership verification; only a global admin may bind it today", host)
+				"binding custom domain %q requires ownership verification; a global admin or the platform-operator org may bind it today", host)
 		}
 		if err := s.store.BindHost(c.Context(), host, org, p.Slug, now); err != nil {
 			switch {

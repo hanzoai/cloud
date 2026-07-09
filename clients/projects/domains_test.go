@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestOperatorOrgsFromEnv(t *testing.T) {
+	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "")
+	got := operatorOrgsFromEnv("hanzo")
+	if !got["hanzo"] || len(got) != 1 {
+		t.Fatalf("default operator orgs = %v, want {hanzo}", got)
+	}
+	t.Setenv("CLOUD_PLATFORM_OPERATOR_ORGS", "hanzo, yadota ,Acme")
+	got = operatorOrgsFromEnv("ignored-when-env-set")
+	for _, o := range []string{"hanzo", "yadota", "acme"} {
+		if !got[o] {
+			t.Errorf("operator org %q missing from %v", o, got)
+		}
+	}
+}
+
 func TestHostnameRE(t *testing.T) {
 	valid := []string{"yadota.tech", "www.yadota.tech", "example.com", "a.b.c.example.org", "my-site.co.uk"}
 	for _, h := range valid {
