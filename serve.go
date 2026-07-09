@@ -115,7 +115,7 @@ func Serve(enable []string) error {
 	// injected at its Mount via sites.SetResolver; until then a site host 404s
 	// honestly. Tenant isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
-	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved}, deps.Logger).Middleware())
+	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains}, deps.Logger).Middleware())
 
 	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
 	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
