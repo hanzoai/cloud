@@ -12,8 +12,8 @@ import (
 
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mount builds a zip app with admin mounted against the given upstream bases,
@@ -38,15 +38,20 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.do
 		adminOrg: "admin",
 	}
-	app.Get("/v1/admin/me", s.guard(s.me))
-	app.Get("/v1/admin/overview", s.guard(s.overview))
-	app.Get("/v1/admin/orgs", s.guard(s.orgs))
-	app.Get("/v1/admin/users", s.guard(s.users))
+	// Mirror the REAL Mount (admin.go): org-scoped panels behind guardScoped, the
+	// platform control plane behind guard (super-only), so the harness stays
+	// authoritative for the two-tier gate.
+	app.Get("/v1/admin/me", s.guardScoped(s.me))
+	app.Get("/v1/admin/overview", s.guardScoped(s.overview))
+	app.Get("/v1/admin/orgs", s.guardScoped(s.orgs))
+	app.Get("/v1/admin/users", s.guardScoped(s.users))
+	app.Get("/v1/admin/usage", s.guardScoped(s.usage))
+	app.Get("/v1/admin/analytics", s.guardScoped(s.analytics))
+	app.Get("/v1/admin/bases", s.guardScoped(s.bases))
 	app.Get("/v1/admin/roles", s.guard(s.roles))
 	app.Get("/v1/admin/applications", s.guard(s.applications))
 	app.Get("/v1/admin/audit", s.guard(s.audit))
 	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
-	app.Get("/v1/admin/usage", s.guard(s.usage))
 	app.Get("/v1/admin/products", s.guard(s.products))
 	app.Get("/v1/admin/finance", s.guard(s.finance))
 	app.Post("/v1/admin/sync", s.guard(s.sync))
@@ -56,7 +61,9 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
 	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
 	app.Get("/v1/admin/revenue", s.guard(s.revenue))
-	app.Get("/v1/admin/analytics", s.guard(s.analytics))
+	app.Get("/v1/admin/flags", s.guard(s.flags))
+	app.Get("/v1/admin/waitlist", s.guard(s.waitlist))
+	app.Post("/v1/admin/waitlist/boost", s.guard(s.waitlistBoost))
 	fa := app.Fiber()
 
 	return func(method, path string, hdr map[string]string) (*http.Response, []byte) {
@@ -74,18 +81,28 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 	}, s, fa
 }
 
-// adminRoutes is every mounted /v1/admin route + its method — the full god-mode
-// surface the gate must fail-close on for a non-global-admin.
-var adminRoutes = []struct{ method, path string }{
+type adminRoute struct{ method, path string }
+
+// scopedAdminRoutes are the ORG-SCOPED panels (guardScoped): a SuperAdmin OR a validated
+// org admin is admitted, and the handler scopes the data. A caller with NO validated
+// principal (anonymous, or an org header but no X-User-Id) is still refused.
+var scopedAdminRoutes = []adminRoute{
 	{"GET", "/v1/admin/me"},
 	{"GET", "/v1/admin/overview"},
 	{"GET", "/v1/admin/orgs"},
 	{"GET", "/v1/admin/users"},
+	{"GET", "/v1/admin/usage"},
+	{"GET", "/v1/admin/analytics"},
+	{"GET", "/v1/admin/bases"},
+}
+
+// platformAdminRoutes are SuperAdmin ONLY (s.guard) — the cross-tenant platform reads +
+// the launch/release/flags/access control plane. A non-super caller is ALWAYS 403.
+var platformAdminRoutes = []adminRoute{
 	{"GET", "/v1/admin/roles"},
 	{"GET", "/v1/admin/applications"},
 	{"GET", "/v1/admin/audit"},
 	{"GET", "/v1/admin/audit/verify"},
-	{"GET", "/v1/admin/usage"},
 	{"GET", "/v1/admin/products"},
 	{"GET", "/v1/admin/finance"},
 	{"POST", "/v1/admin/sync"},
@@ -95,8 +112,14 @@ var adminRoutes = []struct{ method, path string }{
 	{"POST", "/v1/admin/customers/acme/suspend"},
 	{"POST", "/v1/admin/customers/acme/reactivate"},
 	{"GET", "/v1/admin/revenue"},
-	{"GET", "/v1/admin/analytics"},
+	{"GET", "/v1/admin/flags"},
+	{"GET", "/v1/admin/waitlist"},
+	{"POST", "/v1/admin/waitlist/boost"},
 }
+
+// adminRoutes is the full surface (both tiers) — the fail-closed gate test denies an
+// unauthenticated caller on EVERY one.
+var adminRoutes = append(append([]adminRoute{}, scopedAdminRoutes...), platformAdminRoutes...)
 
 // TestGate_DeniesEveryRoute proves the non-negotiable: EVERY /v1/admin/* route is
 // global-admin only, fail-closed. An anonymous caller and a tenant-admin (whose
@@ -109,20 +132,34 @@ func TestGate_DeniesEveryRoute(t *testing.T) {
 	// Upstreams point nowhere reachable; the gate must reject BEFORE any call.
 	do := mount(t, "http://127.0.0.1:0", "http://127.0.0.1:0", "http://127.0.0.1:0")
 
-	cases := []struct {
+	// NO validated principal ⇒ denied on EVERY route (platform + scoped). guardScoped
+	// requires a sanitized X-User-Id, which an anonymous caller lacks — and a client
+	// that merely forges X-Org-Id (the documented Phase-1 residual) still has no
+	// X-User-Id, so it is refused here and can never reach a scoped read.
+	noPrincipal := []struct {
 		name string
 		hdr  map[string]string
 	}{
 		{"anonymous", nil},
-		{"tenant-admin (owner set, not global-admin)", map[string]string{"X-Org-Id": "acme"}},
-		{"tenant-user with email but no admin", map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/bob", "X-User-Email": "bob@acme.test"}},
+		{"forged X-Org-Id, no validated user", map[string]string{"X-Org-Id": "victim"}},
 	}
-	for _, tc := range cases {
+	for _, tc := range noPrincipal {
 		for _, r := range adminRoutes {
 			resp, body := do(r.method, r.path, tc.hdr)
 			if resp.StatusCode != http.StatusForbidden {
 				t.Errorf("%s %s [%s]: got %d, want 403 (body=%s)", r.method, r.path, tc.name, resp.StatusCode, body)
 			}
+		}
+	}
+
+	// A VALIDATED non-super org admin (X-User-Id + pinned X-Org-Id, NO X-User-IsAdmin)
+	// is denied on every PLATFORM route (super-only). The org-scoped routes admit them
+	// but hard-scope the data — proven in scope_test.go.
+	orgAdmin := map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/bob", "X-User-Email": "bob@acme.test"}
+	for _, r := range platformAdminRoutes {
+		resp, body := do(r.method, r.path, orgAdmin)
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s [org-admin on platform route]: got %d, want 403 (body=%s)", r.method, r.path, resp.StatusCode, body)
 		}
 	}
 }
