@@ -1,0 +1,20 @@
+{
+  "base_url": "https://api.zoo.ngo",
+  "brand": "zoo",
+  "generated_by": "openapi/skills.py",
+  "issuer": "https://zoo.id",
+  "schema": "hanzo.agent-skills/v1",
+  "scope": "master",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read ai models: List available models, Retrieve a model.",
+      "name": "ai_models",
+      "path": "ai_models/SKILL.md",
+      "service": "ai",
+      "sha256": "77794bf89159caea339b6c0cc46b1f115b215bf378e1be1904f38267fb87039d",
+      "version": "8.0.0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}

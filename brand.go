@@ -65,6 +65,37 @@ func IssuerForBrand(id string) string {
 	return BrandFor(id).IAMIssuer
 }
 
+// BrandForHostOK resolves a request Host to a brand id from the same `brands`
+// registry, mirroring the hostname→brand semantics of platform.ts's
+// getWhiteLabelBrand: a Host at or under a brand's Domain (api.lux.network,
+// lux.network) is that brand. The port is stripped and the compare is
+// case-insensitive; the longest matching Domain wins so a nested brand domain is
+// never shadowed by a shorter one. ok is false when NO brand domain matches, so
+// the caller can choose its own fallback (the deployment brand) rather than
+// silently emitting Hanzo branding on, say, a Zoo pod hit with an odd Host.
+func BrandForHostOK(host string) (string, bool) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	best, bestLen := "", -1
+	for id, b := range brands {
+		d := strings.ToLower(b.Domain)
+		if (host == d || strings.HasSuffix(host, "."+d)) && len(d) > bestLen {
+			best, bestLen = id, len(d)
+		}
+	}
+	return best, best != ""
+}
+
+// BrandForHost is BrandForHostOK with the Hanzo default for an unmatched Host.
+func BrandForHost(host string) string {
+	if b, ok := BrandForHostOK(host); ok {
+		return b
+	}
+	return DefaultBrand
+}
+
 // BrandIssuers returns the OIDC issuer of every configured white-label brand. The
 // in-binary identity validator (auth_identity.go) trusts a token whose `iss` is
 // any of these, so ONE cloud binary validates hanzo AND lux/zoo/pars tokens. One
