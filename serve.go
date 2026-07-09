@@ -117,6 +117,22 @@ func Serve(enable []string) error {
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
 	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains}, deps.Logger).Middleware())
 
+	// Edge policy — the "gateway role" cloud absorbs to serve the public
+	// api.hanzo.ai edge directly (no KrakenD gateway hop). Runs BEFORE identity by
+	// design:
+	//   - EdgeCORS answers the browser OPTIONS preflight (which carries no
+	//     credentials) and short-circuits it, so a preflight never reaches auth.
+	//     No-op unless CLOUD_CORS_ORIGINS is set (the shared ingress owns CORS on
+	//     the recommended rollout — enabling both would double the ACAO header).
+	//   - EdgeRateLimit caps an ANONYMOUS per-IP flood before the JWKS/validate/
+	//     downstream work it would trigger — the one gap ScopeRateLimit (which keys
+	//     on the validated tenant, below) structurally can't see. Keyed on the
+	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
+	//     exempt, matching the standalone gateway's public-only scope. See
+	//     middleware_edge.go.
+	app.Use(EdgeCORS(deps.GatewayPolicy))
+	app.Use(EdgeRateLimit(deps.GatewayPolicy))
+
 	// Identity trust boundary. Runs before BillingGate (which reads c.User()/
 	// c.Org()) and every subsystem, so a downstream c.IsAdmin()/c.Org()/c.User()
 	// reflects a VALIDATED IAM principal — never a raw client header. This makes
@@ -146,9 +162,12 @@ func Serve(enable []string) error {
 	// Per-scope rate limit (issue #70). Runs AFTER identity (needs the validated
 	// principal to key on org/project/service) and AFTER audit (so a 429 is
 	// recorded), and BEFORE BillingGate so an over-rate request is rejected before
-	// any balance/spend-cap work. No-op when metering is unconfigured; fail-open
-	// when commerce is unreachable — a rate-limit outage never blocks paid traffic.
-	app.Use(ScopeRateLimit(deps.Metering))
+	// any balance/spend-cap work. Fail-open when commerce is unreachable — a
+	// rate-limit outage never blocks paid traffic. Also honors the /v1/gateway
+	// per-org OrgRPM (deps.GatewayPolicy): the runtime-mutable per-org ceiling,
+	// most-restrictive-wins with any commerce-configured limit. No-op only when
+	// BOTH sources are absent.
+	app.Use(ScopeRateLimit(deps.Metering, deps.GatewayPolicy))
 
 	// Billing gate. Sits at the (future) Auth position — after identity is
 	// established by Recover/RequestID/Logger and before any subsystem mounts —
@@ -267,6 +286,11 @@ func Serve(enable []string) error {
 	// serialized writer and the SQLite file is flushed cleanly.
 	if auditRec != nil {
 		_ = auditRec.Close()
+	}
+	// Close the runtime edge-policy store (owned here, shared by the edge
+	// middleware + the /v1/gateway subsystem) so its SQLite WAL flushes cleanly.
+	if deps.GatewayPolicy != nil {
+		_ = deps.GatewayPolicy.Close()
 	}
 	return app.ShutdownWithContext(shutdownCtx)
 }

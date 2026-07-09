@@ -93,6 +93,29 @@ type Config struct {
 	// Empty == same-origin only. Set via CLOUD_ZAP_WEB_ORIGINS (comma-sep).
 	ZAPWebOrigins []string
 
+	// Edge policy (middleware_edge.go) — the "gateway role" cloud absorbs when it
+	// serves the public api.hanzo.ai edge directly, no KrakenD hop.
+	//
+	// CORSOrigins is the browser-CORS allowlist for the /v1 edge. Each entry is an
+	// exact origin ("https://hanzo.ai"), a bare host ("hanzo.ai"), or a host
+	// wildcard ("*.hanzo.ai" = apex + any subdomain). EMPTY ⇒ CORS is OWNED
+	// ELSEWHERE (the shared Traefik ingress `cors-allow-all` fronting api.hanzo.ai)
+	// and cloud emits NO CORS headers — set CLOUD_CORS_ORIGINS only on a direct
+	// DO-LB→cloud edge, so exactly one layer answers CORS (never both → duplicate
+	// ACAO breaks the browser). Reads CLOUD_CORS_ORIGINS, then GATEWAY_CORS_ORIGINS
+	// (shared with the gateway so both trust boundaries agree on one list).
+	CORSOrigins []string
+
+	// EdgeRateEnabled turns on the per-client-IP edge flood cap that runs BEFORE
+	// identity (CLOUD_EDGE_RATELIMIT, default true — the gateway enforced this, so
+	// dropping it silently would drop a protection). EdgeRatePerIP requests per
+	// EdgeRateWindowSec seconds are allowed per public client IP (leftmost
+	// X-Forwarded-For); in-cluster direct callers carry no XFF and are exempt.
+	// Defaults 100/1s mirror the gateway service-tier client_max_rate (strategy:ip).
+	EdgeRateEnabled   bool
+	EdgeRatePerIP     int
+	EdgeRateWindowSec int
+
 	// HealthListenAddr is the health/metrics listener (default :9090).
 	HealthListenAddr string
 
@@ -342,6 +365,14 @@ func LoadConfig() *Config {
 	if len(cfg.SitesSelfDomains) == 0 {
 		cfg.SitesSelfDomains = defaultSelfDomains(cfg.SitesApex, cfg.Domain)
 	}
+
+	// Edge policy (middleware_edge.go). CORS default OFF (ingress owns it on the
+	// recommended rollout — see Config.CORSOrigins); the per-IP flood cap default
+	// ON at gateway-parity 100/1s so a protection is never dropped silently.
+	cfg.CORSOrigins = splitTrim(getenv("CLOUD_CORS_ORIGINS", os.Getenv("GATEWAY_CORS_ORIGINS")))
+	cfg.EdgeRateEnabled = getenvBoolDefault("CLOUD_EDGE_RATELIMIT", true)
+	cfg.EdgeRatePerIP = getenvInt("CLOUD_EDGE_RATELIMIT_PER_IP", 100)
+	cfg.EdgeRateWindowSec = getenvInt("CLOUD_EDGE_RATELIMIT_WINDOW_SEC", 1)
 	return cfg
 }
 
@@ -501,6 +532,21 @@ func splitTrim(s string) []string {
 // billing flags read consistently across products.
 func getenvBool(key string) bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "true", "1", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// getenvBoolDefault reads a boolean env var with an explicit default: dflt when
+// unset/blank, else true for true/1/yes and false for false/0/no (matching
+// getenvBool's truthy set). Lets a protection default ON while staying operator-
+// disableable (CLOUD_EDGE_RATELIMIT=false), which getenvBool (default-false) can't.
+func getenvBoolDefault(key string, dflt bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "":
+		return dflt
 	case "true", "1", "yes":
 		return true
 	default:
