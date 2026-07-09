@@ -74,6 +74,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log:      deps.Logger.New("subsystem", "usage"),
 	}
 	app.Get("/v1/usage/summary", s.summary)
+	// Analytics entitlement surface (clients/usage/entitlement.go).
+	//   - /access echoes any plan's resolved AnalyticsAccess (always 200, free floor
+	//     on error) so dashboards self-configure against the live @hanzo/plans catalog.
+	//   - the rich read is entitlement-gated (access.Datastore); basic own-org usage
+	//     stays at /summary above, UNGATED.
+	app.Get("/v1/usage/analytics/access", s.analyticsAccess)
+	app.Get("/v1/usage/analytics", s.analytics)
 	s.log.Info("usage summary surface mounted", "prefix", "/v1/usage", "commerce", s.commerce.configured())
 	return nil
 }
@@ -123,6 +130,173 @@ func (s *svc) summary(c *zip.Ctx) error {
 		LLM:      llm,
 		Sources:  Sources{Commerce: spend.Available, Warehouse: warehouseOK},
 	})
+}
+
+// analyticsAccess serves GET /v1/usage/analytics/access?plan=<id> — the
+// machine-readable entitlement echo. It returns the resolved AnalyticsAccess for the
+// requested plan (empty plan → free floor) so the console self-configures which
+// analytics controls to show against the LIVE catalog instead of hardcoding tiers.
+// Always 200 with the fail-closed floor on a resolution error, so a catalog blip
+// never breaks the client. Read-only public contract — no tenant data here.
+func (s *svc) analyticsAccess(c *zip.Ctx) error {
+	planID := strings.TrimSpace(c.Query("plan"))
+	access, err := ResolveAnalyticsAccess(c.Context(), planID)
+	if err != nil {
+		s.log.Warn("analytics access resolve failed; serving free floor", "plan", planID, "err", err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"plan": planID,
+		"access": map[string]any{
+			"datastore":     access.Datastore,
+			"retentionDays": access.RetentionDays,
+			"export":        access.Export,
+		},
+	})
+}
+
+// analytics answers GET /v1/usage/analytics — the entitlement-GATED rich per-org
+// lens (per-provider breakdown; BYO/fee once those columns land) over the SAME
+// hanzo.cloud_usage ledger /v1/usage/summary and /v1/analytics/* read. This is the
+// PAID surface; basic own-org usage stays UNGATED at /v1/usage/summary.
+//
+// INTERIM (mirrors clients/world/entitlement.go): no org→plan resolver exists in
+// cloud yet — the subscription lookup is owned by the billing plane and the gateway
+// principal carries no plan claim — so the caller passes ?plan=<id> and the gate
+// resolves THAT plan's access. When the org→plan resolver lands, swap the ?plan=
+// line below for the resolved caller-org plan; the gate + clamp logic is unchanged.
+func (s *svc) analytics(c *zip.Ctx) error {
+	// Org from the VALIDATED bearer owner claim ONLY (never a client header). A caller
+	// can only ever read its OWN org; no principal → 401 (fail closed).
+	org, ok := principal.Tenant(c)
+	if !ok {
+		return zip.ErrUnauthorized("sign in to view analytics")
+	}
+
+	planID := strings.TrimSpace(c.Query("plan")) // INTERIM: org→plan resolver replaces this line.
+	access, err := ResolveAnalyticsAccess(c.Context(), planID)
+	if err != nil {
+		// Fail closed to the free floor (Datastore=false) while logging the degradation.
+		s.log.Warn("analytics access resolve failed; failing closed to free floor", "org", org, "plan", planID, "err", err)
+	}
+
+	// GATE: the rich analytics/datastore surface is a paid entitlement. Unknown plan
+	// / catalog blip → free floor → Datastore=false → 402, never above.
+	if !access.Datastore {
+		return zip.Errorf(http.StatusPaymentRequired, "analytics datastore is a paid feature — upgrade at console.hanzo.ai")
+	}
+
+	rangeLabel := strings.TrimSpace(c.Query("range"))
+	now := time.Now()
+	start, end, _, werr := aiobject.ResolveCloudUsageWindow(rangeLabel, c.Query("start"), c.Query("end"), now)
+	if werr != nil {
+		return zip.ErrBadRequest(werr.Error())
+	}
+	if rangeLabel == "" {
+		rangeLabel = "24h"
+	}
+	// Clamp the window to the plan's retention entitlement: a tenant may never read
+	// older than access.RetentionDays, even with a custom ?start.
+	if floor := now.Add(-time.Duration(access.RetentionDays) * 24 * time.Hour); start.Before(floor) {
+		start = floor
+	}
+
+	providers := s.buildAnalyticsBlock(c.Context(), org, start, end)
+
+	// Per-tenant analytics must never be cached by the browser or an intermediary.
+	c.SetHeader("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, AnalyticsView{
+		Scope:         Scope{Org: org},
+		Plan:          planID,
+		Range:         rangeLabel,
+		Start:         start.UTC().Format(time.RFC3339),
+		End:           end.UTC().Format(time.RFC3339),
+		RetentionDays: access.RetentionDays,
+		Export:        access.Export,
+		Providers:     providers,
+	})
+}
+
+// AnalyticsView is the entitlement-gated rich read: the per-provider breakdown of
+// the org's LLM usage over the retention-clamped window, plus the plan's retention
+// + export decision so the console renders the right controls.
+type AnalyticsView struct {
+	Scope         Scope             `json:"scope"`
+	Plan          string            `json:"plan"`
+	Range         string            `json:"range"`
+	Start         string            `json:"start"`
+	End           string            `json:"end"`
+	RetentionDays int               `json:"retentionDays"`
+	Export        bool              `json:"export"`
+	Providers     ProviderBreakdown `json:"providers"`
+}
+
+// ProviderBreakdown is the per-provider roll-up. Available=false is honest-empty
+// (the datastore is not connected) — never fabricated, exactly like the summary's
+// LLM block.
+type ProviderBreakdown struct {
+	Available bool          `json:"available"`
+	Items     []ProviderRow `json:"items"`
+	Source    string        `json:"source"`
+}
+
+// ProviderRow is one provider's windowed totals. BYO/fee/account columns land with
+// the hanzoai/ai metering-write branch; see buildAnalyticsBlock for the one-line
+// projection extension.
+type ProviderRow struct {
+	Provider  string `json:"provider"`
+	Requests  int64  `json:"requests"`
+	Tokens    int64  `json:"tokens"`
+	CostCents int64  `json:"costCents"`
+}
+
+// buildAnalyticsBlock reads the org's per-provider warehouse totals over [start,end).
+// It mirrors buildLLMBlock's proven degradation contract EXACTLY: honest-empty
+// (Available=false) when the datastore is not connected or a query blips, so the
+// gated read never 5xxs on a warehouse outage. Org is bound POSITIONALLY (never
+// interpolated) — a caller can never read another org's usage.
+func (s *svc) buildAnalyticsBlock(ctx context.Context, org string, start, end time.Time) ProviderBreakdown {
+	empty := ProviderBreakdown{Available: false, Items: []ProviderRow{}, Source: llmTable}
+	if !aiobject.DatastoreEnabled() {
+		return empty
+	}
+	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
+		s.log.Debug("cloud_usage ensure failed; analytics honest-empty", "err", err)
+		return empty
+	}
+	// Per-provider aggregate over the ONE hanzo.cloud_usage ledger — the same table
+	// and the same `provider` column clients/analytics groups its top-models read by
+	// (buildTopModels). The BYO/fee/account breakdown lands with the hanzoai/ai
+	// metering-write branch; when those columns exist, extend this projection with
+	// `, sum(byo_tokens) AS byo_tokens, sum(fee_cents) AS fee_cents` and add the
+	// matching ProviderRow fields — a one-line projection, NOT a second datastore.
+	sql := "SELECT provider, count() AS requests, sum(total_tokens) AS tokens, " +
+		"sum(cost_cents) AS cost_cents FROM " + llmTable +
+		" WHERE timestamp >= ? AND timestamp < ? AND organization = ? " +
+		"GROUP BY provider ORDER BY tokens DESC"
+	rows, err := aiobject.DatastoreQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
+	if err != nil {
+		s.log.Debug("cloud_usage per-provider query failed; analytics honest-empty", "org", org, "err", err)
+		return empty
+	}
+	out := ProviderBreakdown{Available: true, Items: make([]ProviderRow, 0, len(rows)), Source: llmTable}
+	for _, r := range rows {
+		out.Items = append(out.Items, ProviderRow{
+			Provider:  aString(r["provider"]),
+			Requests:  aInt64(r["requests"]),
+			Tokens:    aInt64(r["tokens"]),
+			CostCents: aInt64(r["cost_cents"]),
+		})
+	}
+	return out
+}
+
+// aString coerces a ClickHouse string cell to string across the driver/JSON
+// transports (mirrors aInt64 in query.go). Non-string → "".
+func aString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }
 
 // buildSpendBlock reads the commerce rollup + ledger for org and rolls them into
