@@ -87,6 +87,24 @@ RUN mkdir -p /out; \
 # differently, produces NO image. alpine3.22 MATCHES the runtime base so the
 # libsqlcipher soname the binary links is the SAME one present at runtime. ECR
 # Public mirror avoids Docker Hub's 429 rate-limit on shared CI runners.
+# ---- agent-skills stage: regenerate the FULL /.well-known/agent-skills catalog
+# from the hanzoai/openapi SOT (skills.py) and carry it into the Go embed path
+# BEFORE `go build`, the SAME way the console bundle is produced. The committed
+# catalog is only the tiny `ai` fallback; prod must embed the full set. FAIL-HARD:
+# if the clone/generation can't produce the master index, the image is not built.
+FROM public.ecr.aws/docker/library/python:3.12-alpine AS skills
+ARG OPENAPI_REPO=https://github.com/hanzoai/openapi.git
+ARG OPENAPI_REF=main
+RUN apk add --no-cache git && pip install --no-cache-dir pyyaml
+WORKDIR /openapi
+RUN --mount=type=secret,id=gh_token \
+    if [ -s /run/secrets/gh_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    git clone --depth 1 --branch "${OPENAPI_REF}" "${OPENAPI_REPO}" . && \
+    python3 skills.py --no-services --out /catalog && \
+    test -s /catalog/hanzo/index.json
+
 FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
 RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev pkgconfig binutils
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
@@ -124,6 +142,9 @@ COPY . .
 # Drop the console static bundle into the embed path BEFORE `go build`, so
 # //go:embed all:webui/dist bakes it into the binary (same-origin console).
 COPY --from=console /out/ /src/webui/dist/
+# Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
+# bakes the complete set (all services × brands), not the committed `ai` fallback.
+COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
 # "sqlite" driver is registered twice (mattn + modernc) → panic at init.
 RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \

@@ -9,6 +9,8 @@ DOCKER_TAG      ?= dev
 LDFLAGS         ?= -s -w
 # Path to a hanzoai/console checkout used to build the embedded console bundle.
 CONSOLE_DIR    ?= ../console
+# Path to a hanzoai/openapi checkout — the SOT the agent-skills catalog is generated from.
+OPENAPI_DIR    ?= ../openapi
 
 # The shipped binary is pure Go (Dockerfile: CGO_ENABLED=0 → scratch). Default all
 # build/test targets to that mode so `make build`/`make test` exercise exactly
@@ -22,7 +24,7 @@ CONSOLE_DIR    ?= ../console
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
 CGO_ENABLED     ?= 0
 
-.PHONY: help webui build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help webui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -37,6 +39,13 @@ webui: ## Build the real console static bundle into webui/dist (go:embed source)
 	find webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name assets -exec rm -rf {} +
 	cp -r "$(CONSOLE_DIR)/out/." webui/dist/
 	@echo ">> embedded real console bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
+
+agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
+	@test -f "$(OPENAPI_DIR)/skills.py" || { echo "openapi checkout not found at $(OPENAPI_DIR) — set OPENAPI_DIR=<path> or clone hanzoai/openapi"; exit 1; }
+	# skills.py rewrites the whole catalog dir; the .gitignore keeps only the tiny
+	# `ai` fallback tracked, so the full set is embedded at build but never committed.
+	python3 "$(OPENAPI_DIR)/skills.py" --no-services --out clients/agentskills/catalog
+	@echo ">> embedded FULL agent-skills catalog ($$(jq -r .skill_count clients/agentskills/catalog/hanzo/index.json) skills/brand)"
 
 build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui/dist holds — run `webui` first for the real console).
 	@mkdir -p bin

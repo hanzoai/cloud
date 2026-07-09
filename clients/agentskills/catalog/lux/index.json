@@ -1,0 +1,20 @@
+{
+  "base_url": "https://api.lux.network",
+  "brand": "lux",
+  "generated_by": "openapi/skills.py",
+  "issuer": "https://lux.id",
+  "schema": "hanzo.agent-skills/v1",
+  "scope": "master",
+  "skill_count": 1,
+  "skills": [
+    {
+      "description": "Read ai models: List available models, Retrieve a model.",
+      "name": "ai_models",
+      "path": "ai_models/SKILL.md",
+      "service": "ai",
+      "sha256": "a070600b01900974e51d147e03cc39f0fb140cdbe45fd7804a64e8d630a3bc79",
+      "version": "8.0.0"
+    }
+  ],
+  "spec_version": "8.0.0"
+}
