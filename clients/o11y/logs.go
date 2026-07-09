@@ -11,7 +11,7 @@ import (
 )
 
 // The scoped logs read serves GET /v1/o11y/logs — a live, org-scoped log stream for
-// a product. Application/infra logs live in the SigNoz ClickHouse on the SAME
+// a product. Application/infra logs live in the o11y ClickHouse on the SAME
 // datastore ClickHouse server the shared ai/object client already owns, so this
 // reuses aiobject.DatastoreQuery (ONE datastore client, ONE KMS-injected cred
 // namespace) rather than opening a second connection.
@@ -19,11 +19,11 @@ import (
 // TWO honest tenant views over ONE store:
 //
 //   - ADMIN (validated SuperAdmin, c.IsAdmin()): the product's raw infra log stream
-//     from signoz_logs.distributed_logs_v2, filtered resources_string['app']=<workload>.
+//     from o11y_logs.distributed_logs_v2, filtered resources_string['app']=<workload>.
 //     These stdout lines carry NO org label, so ONLY the platform operator may see
 //     them — the Hanzo-staff infra view.
 //   - EVERY OTHER org: its OWN request log stream, derived from org-tagged spans in
-//     signoz_traces (attributes_string['hanzo.org']=<org>), scoped to the product's
+//     o11y_traces (attributes_string['hanzo.org']=<org>), scoped to the product's
 //     routes/service. A tenant can NEVER see another tenant's rows (org bound as a
 //     positional parameter, never interpolated) and can NEVER see the unattributed
 //     infra stream (that path is gated on admin).
@@ -100,11 +100,11 @@ func viewFor(admin bool) string {
 	return "request"
 }
 
-// infraLogs reads the product's raw stdout stream from signoz_logs. Admin-only:
+// infraLogs reads the product's raw stdout stream from o11y_logs. Admin-only:
 // these lines are unattributed to any tenant, so the caller has already been gated
 // on admin. app is bound as a positional parameter.
 func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit int) ([]logLine, error) {
-	q := "SELECT timestamp, severity_text, body FROM signoz_logs.distributed_logs_v2 WHERE resources_string['app'] = ?"
+	q := "SELECT timestamp, severity_text, body FROM o11y_logs.distributed_logs_v2 WHERE resources_string['app'] = ?"
 	args := []any{app}
 	if sinceNs > 0 {
 		q += " AND timestamp > ?"
@@ -134,17 +134,17 @@ func infraLogs(ctx context.Context, app string, sinceNs int64, windowSec, limit 
 	return out, nil
 }
 
-// requestLogs derives a per-org request log from org-tagged spans in signoz_traces.
+// requestLogs derives a per-org request log from org-tagged spans in o11y_traces.
 // org is bound as a positional parameter (never interpolated) and is the FIRST,
 // mandatory predicate — a tenant sees only its own requests. The product scope is a
 // route prefix (/v1/<product>/…) OR the product's own serviceName (separately
 // deployed products), so it works for both cloud-fused and standalone products.
 func requestLogs(ctx context.Context, org string, svc service, sinceNs int64, windowSec, limit int) ([]logLine, error) {
 	routePrefix := "/v1/" + svc.ID
-	// response_status_code is LowCardinality(String) in signoz — coerce to Int in SQL
+	// response_status_code is LowCardinality(String) in o11y — coerce to Int in SQL
 	// so the row read gets a number (asInt64 on a string yields 0).
 	q := "SELECT timestamp, name, httpRoute, toInt32OrZero(response_status_code) AS http_status, status_code, duration_nano " +
-		"FROM signoz_traces.distributed_signoz_index_v3 WHERE attributes_string['hanzo.org'] = ? " +
+		"FROM o11y_traces.distributed_o11y_index_v3 WHERE attributes_string['hanzo.org'] = ? " +
 		"AND (httpRoute = ? OR startsWith(httpRoute, ?) OR serviceName = ?)"
 	args := []any{org, routePrefix, routePrefix + "/", svc.App}
 	if sinceNs > 0 {
@@ -226,7 +226,7 @@ func nsToRFC3339(ns int64) string {
 	return time.Unix(0, ns).UTC().Format(time.RFC3339)
 }
 
-// normalizeSeverity uppercases a signoz severity_text, defaulting empty to INFO.
+// normalizeSeverity uppercases an o11y severity_text, defaulting empty to INFO.
 func normalizeSeverity(s string) string {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	if s == "" {

@@ -317,7 +317,7 @@ import (
 	// /v1/o11y/{logs,metrics,status} reads (order 69) that query the shared
 	// ClickHouse `datastore` IN-PROCESS per-org (logs.go/metricsread.go/status.go —
 	// folded in from the retired clients/observe so nothing was lost), and (b)
-	// installs the SigNoz-fork runtime handler via o11y.SetHandler (order 71) for the
+	// installs the o11y runtime handler via o11y.SetHandler (order 71) for the
 	// hanzoai/o11y wildcard (order 70), constructing that runtime IN-PROCESS over the
 	// datastore (embed.go) so the standalone o11y Deployment can retire — with a
 	// reverse-proxy fallback ONLY when the embed is disabled (no DSN). It also embeds
