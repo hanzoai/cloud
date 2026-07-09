@@ -51,10 +51,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.23.3
 )
 
-require (
-	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
-	github.com/hanzoai/signoz-otel-collector v0.144.6 // indirect
-)
+require github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
@@ -806,7 +803,7 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzoai/ai v1.803.1-0.20260709063011-e1c4cde0195e
+	github.com/hanzoai/ai v1.804.0
 	github.com/hanzoai/authz v1.10.4
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/commerce v1.46.40
