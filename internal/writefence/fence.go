@@ -11,8 +11,9 @@
 // allowed to push" decision is TWO comment-only, non-atomic things layered on
 // top of an unconditional object overwrite:
 //
-//   - replica.IsOwner(orgID, selfID, members) — a PURE, LOCAL computation over
-//     whatever membership view the caller happens to hold. Two processes with
+//   - ha.IsOwner(orgID, selfID, members) (github.com/hanzoai/ha) — a PURE, LOCAL
+//     computation over whatever membership view the caller happens to hold. Two
+//     processes with
 //     different (stale) membership views can both compute themselves as owner.
 //   - the K8s deployment shape (StatefulSet replicas:1 + Recreate — see
 //     role.Role's doc comment) — a coarse, non-epoch-aware "there should only
