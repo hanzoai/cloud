@@ -8,11 +8,13 @@
 package sbom
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -116,4 +118,54 @@ func TestHealthLiveness(t *testing.T) {
 	if h["datastore"] != false {
 		t.Fatalf("health datastore want false when disconnected, got %v", h["datastore"])
 	}
+}
+
+// TestEnsureTableRetriesOnDisconnectedDatastore is the regression guard for the
+// init-order bug: the datastore connects AFTER Mount, so ensureTable must lazily
+// (re)create the table on a later request and must NEVER latch a failure. With the
+// store disconnected (the harness default) it returns an error, does not panic,
+// leaves tableReady false, and a second call re-attempts (retryable) rather than
+// caching the failure. Safe to call repeatedly.
+func TestEnsureTableRetriesOnDisconnectedDatastore(t *testing.T) {
+	// The harness never connects a datastore, so DatastoreEnabled() is false.
+	tableMu.Lock()
+	tableReady = false
+	tableMu.Unlock()
+
+	if err := ensureTable(context.Background()); err == nil {
+		t.Fatal("ensureTable want error when datastore disconnected, got nil")
+	}
+
+	tableMu.Lock()
+	ready := tableReady
+	tableMu.Unlock()
+	if ready {
+		t.Fatal("ensureTable must NOT latch tableReady on failure (would 'succeed' against a missing table forever)")
+	}
+
+	// Retryable and safe to call repeatedly: each call re-attempts, again errors,
+	// never panics.
+	for i := 0; i < 3; i++ {
+		if err := ensureTable(context.Background()); err == nil {
+			t.Fatalf("ensureTable retry %d want error (retryable), got nil", i)
+		}
+	}
+}
+
+// TestEnsureTableConcurrentSafe proves ensureTable is race-free under concurrent
+// callers (every request path calls it). Run with -race to exercise the mutex.
+func TestEnsureTableConcurrentSafe(t *testing.T) {
+	tableMu.Lock()
+	tableReady = false
+	tableMu.Unlock()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = ensureTable(context.Background())
+		}()
+	}
+	wg.Wait()
 }
