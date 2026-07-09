@@ -137,6 +137,25 @@ func (c *iamClient) getUserRaw(ctx context.Context, cr creds, id string) (map[st
 	return user, nil
 }
 
+// getOrg fetches ONE organization row (GET /v1/iam/get-organization?id=owner/name)
+// as the typed iamOrg subset the scoped read panels fold over. Replays the caller's
+// own credential, so IAM authorizes the read as the same validated principal — a
+// non-super caller can only ever read their OWN org this way (the second line of the
+// tenant-scope defense). Best-effort by design: the scoped-orgs fan-in tolerates an
+// error and falls back to a name-only row.
+func (c *iamClient) getOrg(ctx context.Context, cr creds, id string) (iamOrg, error) {
+	q := url.Values{"id": {id}}
+	env, err := c.get(ctx, cr, "/v1/iam/get-organization", q)
+	if err != nil {
+		return iamOrg{}, err
+	}
+	var org iamOrg
+	if err := json.Unmarshal(env.Data, &org); err != nil {
+		return iamOrg{}, fmt.Errorf("iam get-organization decode: %w", err)
+	}
+	return org, nil
+}
+
 // updateUserRaw writes a full user object back (POST /v1/iam/update-user?id=
 // owner/name). The caller's replayed credential is a VALIDATED global admin, whom
 // IAM's CheckPermissionForUpdateUser admits to set privileged fields (isForbidden)
