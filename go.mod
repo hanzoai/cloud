@@ -13,10 +13,10 @@ require (
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
 	github.com/hanzoai/iam v1.31.18
 	github.com/hanzoai/notify v1.6.18
+	github.com/hanzoai/otel-collector v0.144.8
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
-	github.com/hanzoai/signoz-otel-collector v0.144.6
 	github.com/hanzoai/sqlite v0.2.3
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
@@ -49,6 +49,11 @@ require (
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
 	sigs.k8s.io/controller-runtime v0.23.3
+)
+
+require (
+	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
+	github.com/hanzoai/signoz-otel-collector v0.144.6 // indirect
 )
 
 require (
@@ -313,7 +318,7 @@ require (
 	github.com/buger/goterm v1.0.4 // indirect
 	github.com/bwmarrin/discordgo v0.28.1 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
-	github.com/bytedance/sonic v1.15.0 // indirect
+	github.com/bytedance/sonic v1.15.2 // indirect
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/caarlos0/go-reddit/v3 v3.0.1 // indirect
 	github.com/carapace-sh/carapace-shlex v1.0.1 // indirect
@@ -807,7 +812,7 @@ require (
 	github.com/hanzoai/commerce v1.46.40
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
-	github.com/hanzoai/o11y v1.5.2
+	github.com/hanzoai/o11y v1.5.4
 	github.com/hanzoai/vfs v0.6.2
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
