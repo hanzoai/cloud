@@ -94,6 +94,12 @@ func currentResolver() Resolver {
 type Config struct {
 	Apex     string
 	Reserved []string
+	// SelfDomains are the registrable domains of OUR OWN infrastructure (e.g.
+	// hanzo.ai, hanzo.app). A Host at or under any of them is never a customer
+	// custom-domain candidate, so the high-traffic api/console path is never
+	// subjected to a per-request binding lookup, and a customer binding can never
+	// shadow a real Hanzo host. The apex is always treated as self.
+	SelfDomains []string
 }
 
 // Server is the host-routed public site edge. It holds the S3 access path
@@ -101,9 +107,10 @@ type Config struct {
 // reserved-label policy is the package-level shared source (reserved.go), so
 // serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
-	apex  string
-	admin s3admin.Admin
-	log   luxlog.Logger
+	apex        string
+	selfDomains []string // OUR own registrable domains — never custom-domain candidates
+	admin       s3admin.Admin
+	log         luxlog.Logger
 }
 
 // New builds the Server from Config. An empty apex defaults to hanzo.app.
@@ -116,20 +123,111 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		apex = "hanzo.app"
 	}
 	SetReservedExtra(cfg.Reserved)
-	return &Server{apex: apex, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	// The apex is always self; add the operator-supplied self domains (deduped,
+	// normalized). This is the exclusion set the custom-domain branch consults.
+	self := []string{apex}
+	seen := map[string]bool{apex: true}
+	for _, d := range cfg.SelfDomains {
+		d = strings.ToLower(strings.TrimSpace(d))
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		self = append(self, d)
+	}
+	return &Server{apex: apex, selfDomains: self, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
-// Middleware is the host-router. For a site host it serves the request and
-// returns (terminal — the API pipeline is never entered). For every other host
-// it calls Continue() so the normal /v1 + console pipeline runs unchanged.
+// Middleware is the host-router. Three outcomes, in order:
+//
+//  1. `<slug>.<apex>` (e.g. maxpower.hanzo.app) → serve the slug's site (terminal).
+//  2. a bound CUSTOM domain (e.g. yadota.tech, a customer's own apex pointed at
+//     this edge) → serve that project's site from its S3 prefix (terminal). Only
+//     an external host (not one of OUR self domains) with a LIVE binding qualifies.
+//  3. anything else — our API/console hosts, or an unbound external host routed
+//     here — → Continue(), so the normal /v1 + console pipeline runs unchanged.
+//
+// A published site (either shape) is a PUBLIC artifact: it returns HERE, never
+// entering the authenticated/billed API pipeline.
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
-		slug, ok := s.siteSlug(c.Fiber().Hostname())
-		if !ok {
-			return c.Continue()
+		raw := c.Fiber().Hostname()
+		if slug, ok := s.siteSlug(raw); ok {
+			return s.serve(c, slug)
 		}
-		return s.serve(c, slug)
+		if host := hostOnly(raw); s.customCandidate(host) {
+			if site, ok := s.resolveLive(c.Context(), host); ok {
+				return s.serveCustom(c, site)
+			}
+		}
+		return c.Continue()
 	}
+}
+
+// hostOnly lowercases a Host header value and strips any :port.
+func hostOnly(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return host
+}
+
+// customCandidate reports whether a Host is eligible to be a bound CUSTOM domain.
+// It excludes anything at or under one of OUR self domains (hanzo.ai / hanzo.app /
+// …), the empty/bare host, and any host without a dot (never a public FQDN).
+// Excluding self hosts keeps the api/console path free of any per-request binding
+// lookup and makes it structurally impossible for a customer binding to shadow a
+// real Hanzo host — only genuinely external domains reach the binding resolver.
+func (s *Server) customCandidate(host string) bool {
+	if host == "" || !strings.Contains(host, ".") {
+		return false
+	}
+	for _, d := range s.selfDomains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return false
+		}
+	}
+	return true
+}
+
+// resolveLive resolves a key (a subdomain slug OR a full custom host) to a LIVE
+// Site via the current resolver. A missing resolver, a resolve error, an unbound
+// key, or a non-live status all report ok=false — the caller then falls through
+// (custom path) or renders an honest 404 (slug path).
+func (s *Server) resolveLive(ctx context.Context, key string) (Site, bool) {
+	r := currentResolver()
+	if r == nil {
+		return Site{}, false
+	}
+	site, found, err := r.Resolve(ctx, key)
+	if err != nil {
+		s.log.Error("resolve failed", "key", key, "err", err)
+		return Site{}, false
+	}
+	if !found || site.Status != "live" {
+		return Site{}, false
+	}
+	return site, true
+}
+
+// serveCustom serves a resolved custom-domain Site. It shares the object-serving
+// core (streamSite) with the slug path; only the method + storage guards are
+// re-applied here (the slug path applies them in serve).
+func (s *Server) serveCustom(c *zip.Ctx, site Site) error {
+	c.SetHeader("X-Hanzo-Site", site.Slug)
+	if m := c.Method(); m != http.MethodGet && m != http.MethodHead {
+		c.SetHeader("Allow", "GET, HEAD")
+		return s.errorPage(c, http.StatusMethodNotAllowed, "method not allowed")
+	}
+	if !s.admin.Configured() {
+		return s.errorPage(c, http.StatusServiceUnavailable, "storage not configured")
+	}
+	cli, err := s.admin.Client()
+	if err != nil {
+		return s.errorPage(c, http.StatusServiceUnavailable, "storage not configured")
+	}
+	return s.streamSite(c, cli, site)
 }
 
 // siteSlug extracts the site slug from a Host, or reports that this is not a site
@@ -189,6 +287,16 @@ func (s *Server) serve(c *zip.Ctx, slug string) error {
 		return s.errorPage(c, http.StatusServiceUnavailable, "storage not configured")
 	}
 
+	return s.streamSite(c, cli, site)
+}
+
+// streamSite streams the requested path from a resolved site's S3 prefix. It is
+// the shared object-serving core for BOTH the `<slug>.hanzo.app` path (serve) and
+// the custom-domain path (serveCustom). Tenant containment — every object key is
+// rooted-clean under site.Prefix — lives in objectKey/resolveKey; this function
+// only chooses the candidate keys, streams the first hit, and falls back to the
+// site's own 404.
+func (s *Server) streamSite(c *zip.Ctx, cli *minio.Client, site Site) error {
 	// The cache tag lets Cloudflare purge exactly this site's assets on redeploy.
 	// It is derived from server-owned values (Org+Slug), never the request.
 	c.SetHeader("Cache-Tag", CacheTag(site.Org, site.Slug))
