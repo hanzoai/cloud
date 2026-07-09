@@ -65,6 +65,13 @@ type svc struct {
 	blob  *blobStore
 	cf    *sites.Purger
 	log   luxlog.Logger
+	// operatorOrgs may bind CUSTOM domains to their sites in addition to a global
+	// admin — the platform operator (the deployment's own brand org) manages
+	// customer domains until per-tenant DNS-ownership verification is wired here.
+	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
+	// brand org (hanzo). A bound domain only SERVES once its owner points DNS at
+	// this edge, so binding without DNS control is inert — the real gate is DNS.
+	operatorOrgs map[string]bool
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -155,7 +162,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("projects.Mount: open store: %w", err)
 	}
 
-	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log}
+	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log,
+		operatorOrgs: operatorOrgsFromEnv(deps.Brand)}
 	mounted = s
 
 	// Inject the store as the site server's slug→project resolver. This is what
