@@ -4,11 +4,12 @@
 // It has two faces, both backed by the SAME embedded luxfi/kms library:
 //
 //	KMSClient  — the in-process cloud.KMSClient (GetSecret/PutSecret/Sign) other
-//	             subsystems call via deps.KMS. No RPC, no external DB. Built once
-//	             in build.go's pickKMSClient and reused by Mount.
+//	             subsystems call via deps.KMS. No RPC, no external DB. Built once by
+//	             the factory this package registers (init, mount.go), filled into
+//	             deps.KMS by build.go's BuildDeps before MountAll, and reused by Mount.
 //	/v1/kms/*  — the secrets-manager REST surface the KMS console (kms.hanzo.ai)
 //	             calls, mounted onto cloud's Fiber app: JWT-gated, org-scoped
-//	             secrets CRUD + a real health probe + the SPA admin config.
+//	             secrets CRUD + a real health probe + the SPA admin config (mount.go).
 //
 // STORAGE — luxfi/kms's SecretStore is an embedded ZapDB (github.com/luxfi/zapdb)
 // KV opened UNDER CLOUD_DATA_DIR/kms (the RWO PVC where per-tenant SQLite lives),
@@ -36,13 +37,17 @@
 // clear error whenever the MPC backend is not configured (CLOUD_KMS_MPC_ADDR /
 // CLOUD_KMS_MPC_VAULT_ID unset). A signature is NEVER fabricated.
 //
-// SECURITY — the REST surface (clients/kms) reuses cloud's ONE auth boundary
+// SECURITY — the REST surface (mount.go) reuses cloud's ONE auth boundary
 // (SanitizeIdentity in serve.go establishes the validated principal; handlers
-// read c.Org()/c.IsAdmin()) rather than a parallel JWT stack. This package is the
-// cloud-free CLIENT core (the types.KMSClient impl + sealed store access); it
-// imports NO cloud package so build.go's BuildDeps can construct it without an
-// import cycle (cloud → clients/kms → cloud/types only). The Fiber routes
-// that expose it live in the clients/kms subsystem, which imports this package.
+// read c.Org()/c.IsAdmin()) rather than a parallel JWT stack.
+//
+// LAYERING — the library face (Client/New here in kms.go) is the cloud-free CLIENT
+// core: the types.KMSClient impl + sealed store access, importing only cloud/types.
+// The REST face (mount.go) imports cloud to mount /v1/kms/* and register the
+// subsystem. build.go does NOT import this package; it receives the embedded-client
+// constructor via cloud.RegisterKMSClientFactory (init, mount.go), so deps.KMS is
+// built by BuildDeps before MountAll with no cloud⇄kms import cycle — the same
+// inversion cloud already uses to mount every subsystem it never imports.
 package kms
 
 import (

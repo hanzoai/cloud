@@ -3,7 +3,7 @@ package cloud
 // ScopeRateLimit — the ONE per-scope request-rate limiter (issue #70). It caps
 // requests/min per (org, project, service) scope using the rate limit a tenant
 // configures on its spend-alert rows (RateLimitRpm). It is DISTINCT from the
-// per-IP pre-auth limiters (clients/kmssvc login, clients/crm intake): those
+// per-IP pre-auth limiters (clients/kms login, clients/crm intake): those
 // throttle anonymous abuse by IP BEFORE identity; this throttles an authenticated
 // tenant's own configured ceiling per scope, keyed off the VALIDATED principal.
 //

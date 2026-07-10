@@ -1,10 +1,10 @@
-package kmssvc_test
+package kms_test
 
-// RED: dual-mount precedence. With BOTH kmssvc (order 10, mounts FIRST, registers
+// RED: dual-mount precedence. With BOTH kms (order 10, mounts FIRST, registers
 // PUBLIC /v1/kms/config) AND admin (order 146, registers GATED /v1/admin/{orgs,
 // users,...}) enabled, prove kms's order-10 public config does NOT shadow the
 // admin gate, and admin's routes still require global-admin (403 without it).
-// This is the real production topology; the kmssvc-only harness cannot see it.
+// This is the real production topology; the kms-only harness cannot see it.
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
-	// Pull in the full subsystem bundle so BOTH kmssvc (order 10) and admin
+	// Pull in the full subsystem bundle so BOTH kms (order 10) and admin
 	// (order 146) init()-register — the real production topology.
 	_ "github.com/hanzoai/cloud/subsystems"
 )

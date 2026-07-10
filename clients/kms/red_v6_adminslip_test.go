@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // RED RE-VERIFY (2nd cycle) of the fix commit 829b6ed5 — decouple V6 machine-aud
 // from global admin. This file FOCUS-FIRES the one surface the fix newly introduces:
@@ -7,7 +7,7 @@ package kmssvc_test
 // AND the owner's machine aud could "slip" back to global admin (because the static
 // member is what let it validate), the fix would have a hole.
 //
-// The end-to-end oracle is crisp because kmssvc.guard() (kmssvc.go:162) grants a
+// The end-to-end oracle is crisp because svc.guard() (mount.go) grants a
 // GLOBAL admin cross-org reads:  `if !ctx.IsAdmin() && ctx.Org() != org → 403`.
 //   - a REAL global admin reading the victim's path  → 200 (cross-org allowed)
 //   - a machine principal DENIED admin (org-pinned)  → 403 (cross-org denied)
@@ -16,7 +16,7 @@ package kmssvc_test
 //
 // Harness (e2eCfg): AdminOrg="admin", static allowlist JWTAudiences=["hanzo-console"].
 // Reuses mintRed / getWithBearer / getBearerHdr / sealPlatformSecret from the e2e +
-// red_v6_adversarial files (same kmssvc_test package).
+// red_v6_adversarial files (same kms_test package).
 
 import (
 	"crypto/rand"
