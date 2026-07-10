@@ -124,10 +124,11 @@ func New(cfg Config) (*Host, error) {
 // otherwise. tenant MUST be a validated principal's org (the caller resolves it,
 // e.g. via clients/principal.Tenant) — the binding does not itself authenticate.
 func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Response, error) {
-	db, err := h.stores.get(ctx, tenant)
+	db, release, err := h.stores.acquire(ctx, tenant)
 	if err != nil {
 		return nil, err
 	}
+	defer release() // unpin the pooled DB so it can be idle-evicted after the request
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("gojabase[%s]: begin: %w", h.name, err)
@@ -254,12 +255,16 @@ func normalize(v any) any {
 // newID returns a collision-resistant id: 'c' + 32 hex chars of crypto/rand
 // (128 bits). Mirrors the shape of the cuid()s the original Prisma models used
 // closely enough for external references while being cryptographically unique.
-func newID() string {
+//
+// A crypto/rand failure is unrecoverable and MUST NOT degrade to a predictable
+// time/zero id (that would let two rows collide, or be guessed — e.g. a sign
+// recipient token). It returns an error instead; goja surfaces that as a thrown
+// JS Error, which fails the dispatch closed (the per-request transaction rolls
+// back). It is exposed to the bundle as globalThis.__newId().
+func newID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand failure is unrecoverable; fall back to a time-seeded value
-		// rather than panic inside a JS call.
-		return "c" + fmt.Sprintf("%016x%016x", time.Now().UnixNano(), time.Now().UnixNano())
+		return "", fmt.Errorf("gojabase: crypto/rand unavailable: %w", err)
 	}
-	return "c" + hex.EncodeToString(b[:])
+	return "c" + hex.EncodeToString(b[:]), nil
 }

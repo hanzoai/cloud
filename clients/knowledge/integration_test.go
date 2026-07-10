@@ -48,9 +48,9 @@ func (fakeAI) ChatCompletion(context.Context, *cloud.ChatRequest) (*cloud.ChatRe
 	return &cloud.ChatResponse{Content: "x"}, nil
 }
 
-func (f fakeAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
-	out := make([][]float32, len(inputs))
-	for i := range inputs {
+func (f fakeAI) Embed(_ context.Context, req *cloud.EmbedRequest) ([][]float32, error) {
+	out := make([][]float32, len(req.Inputs))
+	for i := range req.Inputs {
 		v := make([]float32, f.dims)
 		for j := range v {
 			v[j] = 0.1
