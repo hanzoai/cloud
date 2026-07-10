@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 )
 
@@ -29,10 +30,10 @@ func RunOnBehalf(ctx context.Context, org, userSub, ref, input string) (Run, err
 	if mounted == nil {
 		return Run{}, fmt.Errorf("agents: not mounted")
 	}
-	return mounted.runOnBehalf(ctx, org, userSub, ref, input)
+	return runOnBehalf(mounted, ctx, org, userSub, ref, input)
 }
 
-func (s *svc) runOnBehalf(ctx context.Context, org, userSub, ref, input string) (Run, error) {
+func runOnBehalf(s *cloud.Service[state], ctx context.Context, org, userSub, ref, input string) (Run, error) {
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
 		return Run{}, fmt.Errorf("agents: invalid org")
@@ -40,10 +41,10 @@ func (s *svc) runOnBehalf(ctx context.Context, org, userSub, ref, input string) 
 	if len(input) > maxInput {
 		return Run{}, fmt.Errorf("agents: input too large")
 	}
-	if s.ai == nil {
+	if s.State.ai == nil {
 		return Run{}, fmt.Errorf("agents: inference is not configured on this deployment")
 	}
-	a, err := s.store.Resolve(ctx, org, strings.TrimSpace(ref))
+	a, err := s.State.store.Resolve(ctx, org, strings.TrimSpace(ref))
 	if err != nil {
 		return Run{}, err // errNotFound or a real DB error — caller replies generically
 	}
@@ -53,5 +54,5 @@ func (s *svc) runOnBehalf(ctx context.Context, org, userSub, ref, input string) 
 	// client IP is empty (no socket).
 	actor := billingActor(org, userSub)
 	reqID, _ := genID("obh")
-	return s.runAgent(ctx, a, input, actor, reqID, "")
+	return runAgent(s, ctx, a, input, actor, reqID, "")
 }
