@@ -174,6 +174,14 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id", s.getDeployment)
 	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", s.deploymentLogs)
 
+	// Vercel-style release flows (preview.go), all reusing the ONE deploy mechanic
+	// (deployTagCore → applyLive; write the Service CR, the operator reconciles):
+	// a per-branch preview target with its OWN slug + host, promote an already-built
+	// tag/deployment to prod, and rollback to a prior image. Org-scoped like the rest.
+	app.Post("/v1/platform/projects/:project/apps/:app/preview", s.preview)
+	app.Post("/v1/platform/projects/:project/apps/:app/promote", s.promote)
+	app.Post("/v1/platform/projects/:project/apps/:app/rollback", s.rollback)
+
 	// custom domains + org-subtree hosts (domains.go): list, add (subtree active /
 	// custom pending-with-challenge), verify a custom claim's DNS, remove.
 	app.Get("/v1/platform/projects/:project/apps/:app/domains", s.listDomains)
