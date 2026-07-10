@@ -45,7 +45,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce/metering"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -89,16 +88,19 @@ const (
 	statusRunning = "running"
 )
 
-type svc struct {
+// state is bots' own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	// bill is the shared per-org gate+meter (reuses deps.Metering, the ONE
 	// commerce client the agents/provisioning/ml subsystems use). Nil/!Enabled()
 	// makes Gate allow and Meter a no-op, so an unconfigured deployment launches
-	// bots without billing rather than failing closed on a missing ledger.
+	// bots without billing rather than failing closed on a missing ledger. It stays
+	// here (not Base.Bill) because its provider label is meterKind ("bot"), which
+	// diverges from the subsystem name ("bots") — Base.Bill would attribute to the
+	// wrong product.
 	bill *cloud.ResourceMeter
 	// gateway is the browser-facing bot VNC gateway base (no trailing slash) that
 	// every returned sessionUrl is derived from.
 	gateway string
-	log     luxlog.Logger
 }
 
 // runReq is the boot-a-computer-using-agent body — the exact shape the CLI
@@ -120,7 +122,9 @@ type runView struct {
 	SessionURL string `json:"sessionUrl"`
 }
 
-// Mount wires the bots surface onto app per HIP-0106.
+// Mount wires the bots surface onto app per HIP-0106. Constructs the value directly
+// (cloud.NewBase) because the metered launch fee uses a meter keyed to meterKind
+// ("bot"), not the subsystem name — so it lives in State, built from Deps here.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("bots.Mount: nil zip.App")
@@ -128,15 +132,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("bots.Mount: nil deps.Logger")
 	}
-	s := &svc{
-		bill:    cloud.NewResourceMeter(deps, meterKind),
-		gateway: gatewayBase(),
-		log:     deps.Logger.New("subsystem", "bots"),
+	s := &cloud.Service[state]{
+		Base:  cloud.NewBase(deps, "bots"),
+		State: state{bill: cloud.NewResourceMeter(deps, meterKind), gateway: gatewayBase()},
 	}
-	app.Post("/v1/bots/run", s.run)
-	s.log.Info("bots surface mounted", "gateway", s.gateway,
-		"billing", s.bill.Enabled(), "brand", deps.Brand)
+	routes(app, s)
+	s.Log.Info("bots surface mounted", "gateway", s.State.gateway,
+		"billing", s.State.bill.Enabled(), "brand", deps.Brand)
 	return nil
+}
+
+// routes registers the bots surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/bots/run", cloud.Handle(s, run))
 }
 
 func init() {
@@ -150,7 +158,7 @@ func init() {
 // flat per-run fee against the caller's OWN org, mints the run id, and returns
 // the live VNC session descriptor. Every 200 reflects an authorized, metered
 // launch — an unfunded org gets 402 and no session, an unreachable commerce 503.
-func (s *svc) run(c *zip.Ctx) error {
+func run(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -191,7 +199,7 @@ func (s *svc) run(c *zip.Ctx) error {
 	// enforced on a bot launch exactly as on the request edge. fee<=0 or
 	// unconfigured billing makes this a no-op (allow).
 	fee := cloud.ResourceFeeCents(botFeeEnvPrefix, meterKind)
-	if gateErr := s.bill.Gate(c.Context(), org, principal.Project(c), meterKind, fee); gateErr != nil {
+	if gateErr := s.State.bill.Gate(c.Context(), org, principal.Project(c), meterKind, fee); gateErr != nil {
 		return cloud.DenyResource(c, gateErr)
 	}
 
@@ -199,20 +207,20 @@ func (s *svc) run(c *zip.Ctx) error {
 	// the commerce ledger debit (product=bot, the surface as the billed unit, the
 	// acting principal for the audit trail) — fire-and-forget, exactly like the
 	// agents run fee. GPU/surface ride the log line for operator visibility.
-	s.bill.MeterUsage(org, meterKind, metering.Usage{
+	s.State.bill.MeterUsage(org, meterKind, metering.Usage{
 		AmountCents: fee,
 		Model:       surface,
 		Actor:       billingActor(org, c.User()),
 		RequestID:   c.RequestID(),
 		ClientIP:    cloud.ClientIP(c),
 	})
-	s.log.Info("bot launched", "org", org, "run", runID,
+	s.Log.Info("bot launched", "org", org, "run", runID,
 		"surface", surface, "gpu", body.GPU)
 
 	return c.JSON(http.StatusOK, runView{
 		RunID:      runID,
 		Status:     statusRunning,
-		SessionURL: s.sessionURL(runID),
+		SessionURL: sessionURL(s, runID),
 	})
 }
 
@@ -220,8 +228,8 @@ func (s *svc) run(c *zip.Ctx) error {
 // gateway base + the node's VNC path. One id per run — the run id IS the node id
 // the bot machine for this run registers under, so the tunnel is addressable by
 // exactly the id the client holds.
-func (s *svc) sessionURL(runID string) string {
-	return s.gateway + "/vnc?" + url.Values{"nodeId": {runID}}.Encode()
+func sessionURL(s *cloud.Service[state], runID string) string {
+	return s.State.gateway + "/vnc?" + url.Values{"nodeId": {runID}}.Encode()
 }
 
 // validateSurface normalizes the requested sandbox. Empty defaults to desktop
