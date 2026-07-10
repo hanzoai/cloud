@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -55,8 +56,8 @@ type grantAfter struct {
 // to read — never a fabricated list).
 //
 //	GET /v1/admin/grants
-func (s *svc) grants(c *zip.Ctx) error {
-	if s.auditStore == nil {
+func grants(s *cloud.Service[state], c *zip.Ctx) error {
+	if s.State.auditStore == nil {
 		return c.JSON(200, map[string]any{
 			"status": "ok",
 			"msg":    "grant history is unavailable (no local audit store configured on this deployment)",
@@ -80,7 +81,7 @@ func (s *svc) grants(c *zip.Ctx) error {
 		Limit:    limit,
 	}
 
-	rows, total, err := s.auditStore.Query(c.Context(), f)
+	rows, total, err := s.State.auditStore.Query(c.Context(), f)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -144,7 +145,7 @@ type issueGrantRequest struct {
 // ONE credit-write path (validate + deposit trial/prepaid + audit).
 //
 //	POST /v1/admin/grants  { org, amountCents, currency?, reason?, source? }
-func (s *svc) issueGrant(c *zip.Ctx) error {
+func issueGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	var body issueGrantRequest
 	if err := c.Bind(&body); err != nil {
 		return fail(c, "invalid request body")
@@ -153,7 +154,7 @@ func (s *svc) issueGrant(c *zip.Ctx) error {
 	if org == "" {
 		return fail(c, "org is required")
 	}
-	return s.applyGrant(c, org, creditRequest{
+	return applyGrant(s, c, org, creditRequest{
 		AmountCents: body.AmountCents,
 		Currency:    body.Currency,
 		Reason:      body.Reason,

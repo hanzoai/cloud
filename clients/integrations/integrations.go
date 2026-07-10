@@ -52,7 +52,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -162,19 +161,19 @@ func register(p *Provider) {
 	registry[p.ID] = p
 }
 
-// svc is the mounted subsystem. mounted is the in-process seam other subsystems
-// (the bridge) reach through the package funcs at the bottom of this file.
-type svc struct {
+// state is integrations' own data; shared deps live in the embedded cloud.Base —
+// logger (s.Log), deployment domain (s.Domain, e.g. api.hanzo.ai — builds the
+// redirect_uri). mounted is the in-process seam other subsystems (the bridge) reach
+// through the package funcs at the bottom of this file.
+type state struct {
 	store      *Store
-	kms        *kms.Client // type-asserted from deps.KMS; nil ⇒ secret ops fail closed
-	domain     string      // deps.Domain, e.g. api.hanzo.ai — builds the redirect_uri
+	kms        *kms.Client // concrete client type-asserted from deps.KMS; nil ⇒ secret ops fail closed
 	consoleURL string      // where the callback 302s the user back to
 	stateKey   []byte      // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
-	log        luxlog.Logger
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // ── HTTP response shapes (the published contract) ──────────────────────────────
 
@@ -197,7 +196,10 @@ type connectionView struct {
 
 // ── Mount / lifecycle ──────────────────────────────────────────────────────────
 
-// Mount wires /v1/integrations/* onto app.
+// Mount wires /v1/integrations/* onto app. Complex flavour: it publishes the
+// package global `mounted` (the in-process token-custody seam) and pairs with a
+// Shutdown, so it constructs the cloud.Service value directly (cloud.NewBase +
+// &cloud.Service[state]{…}) rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("integrations.Mount: nil zip.App")
@@ -205,7 +207,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("integrations.Mount: nil deps.Logger")
 	}
-	log := deps.Logger.New("subsystem", "integrations")
 	if deps.DataDir == "" {
 		return fmt.Errorf("integrations.Mount: empty DataDir")
 	}
@@ -234,49 +235,54 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		}
 	}
 
-	s := &svc{
-		store:      store,
-		kms:        kc,
-		domain:     strings.TrimSpace(deps.Domain),
-		consoleURL: consoleURL(),
-		stateKey:   resolveStateKey(os.Getenv(stateKeyEnv), log),
-		providers:  providers,
-		log:        log,
+	b := cloud.NewBase(deps, "integrations")
+	s := &cloud.Service[state]{
+		Base: b,
+		State: state{
+			store:      store,
+			kms:        kc,
+			consoleURL: consoleURL(),
+			stateKey:   resolveStateKey(os.Getenv(stateKeyEnv), b.Log),
+			providers:  providers,
+		},
 	}
 	mounted = s
 
-	app.Get("/v1/integrations", s.list)
-	// Slack agent bridge (clients/integrations/slack_events.go + slack_link.go).
-	// These LITERAL paths are registered BEFORE the /:provider wildcards so they
-	// win under Fiber's registration-order matching and a later `:provider`-shaped
-	// change can never shadow them (same discipline as clients/agents' static-
-	// before-:ref rule). They are PUBLIC at the JWT layer — reached like
-	// /:provider/callback (IdentityMiddleware only POPULATES a principal, never
-	// rejects; DefaultPrice returns 0 so BillingGate passes through) — because
-	// their auth is done INSIDE the handler: HMAC-SHA256 over the raw body for the
-	// events/commands webhooks, and signed __Host- cookie + state for the link legs.
-	// They must NOT be placed behind any principal/tenant gate.
-	app.Post("/v1/integrations/slack/events", s.slackEvents)
-	app.Post("/v1/integrations/slack/commands", s.slackCommands)
-	app.Get("/v1/integrations/slack/link", s.slackLink)
-	app.Get("/v1/integrations/slack/link/slack", s.slackLinkSlack)
-	app.Get("/v1/integrations/slack/link/callback", s.slackLinkCallback)
-	app.Get("/v1/integrations/:provider", s.get)
-	app.Post("/v1/integrations/:provider/connect", s.connect)
-	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
-	// above), so this single generic route serves every provider's OAuth callback.
-	app.Get("/v1/integrations/:provider/callback", s.callback)
-	app.Post("/v1/integrations/:provider/disconnect", s.disconnect)
+	routes(app, s)
 
-	log.Info(
+	b.Log.Info(
 		"integrations mounted",
-		"providers", len(s.providers),
-		"kmsReady", s.kmsReady(),
-		"domain", s.domain,
-		"console", s.consoleURL,
+		"providers", len(s.State.providers),
+		"kmsReady", kmsReady(s),
+		"domain", s.Domain,
+		"console", s.State.consoleURL,
 		"brand", deps.Brand,
 	)
 	return nil
+}
+
+// routes registers the integrations surface on app. The LITERAL slack bridge paths
+// are registered BEFORE the /:provider wildcards so they win under the router's
+// registration-order matching and a later `:provider`-shaped change can never
+// shadow them (same discipline as clients/agents' static-before-:ref rule). They
+// are PUBLIC at the JWT layer — reached like /:provider/callback (IdentityMiddleware
+// only POPULATES a principal, never rejects; DefaultPrice returns 0 so BillingGate
+// passes through) — because their auth is done INSIDE the handler: HMAC-SHA256 over
+// the raw body for the events/commands webhooks, and signed __Host- cookie + state
+// for the link legs. They must NOT be placed behind any principal/tenant gate.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/integrations", cloud.Handle(s, list))
+	app.Post("/v1/integrations/slack/events", cloud.Handle(s, slackEvents))
+	app.Post("/v1/integrations/slack/commands", cloud.Handle(s, slackCommands))
+	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
+	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
+	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
+	app.Get("/v1/integrations/:provider", cloud.Handle(s, get))
+	app.Post("/v1/integrations/:provider/connect", cloud.Handle(s, connect))
+	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
+	// in Mount), so this single generic route serves every provider's OAuth callback.
+	app.Get("/v1/integrations/:provider/callback", cloud.Handle(s, callback))
+	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
 }
 
 func init() {
@@ -291,16 +297,16 @@ func Shutdown(_ context.Context) error {
 		return nil
 	}
 	var err error
-	if mounted.store != nil {
-		err = mounted.store.Close()
+	if mounted.State.store != nil {
+		err = mounted.State.store.Close()
 	}
 	mounted = nil
 	return err
 }
 
 // snapshotRegistry copies the global registry into a per-mount map so a mounted
-// svc reads a stable set (and a test can construct one deterministically) without
-// aliasing package state.
+// service reads a stable set (and a test can construct one deterministically)
+// without aliasing package state.
 func snapshotRegistry() map[string]*Provider {
 	out := make(map[string]*Provider, len(registry))
 	for id, p := range registry {
@@ -314,7 +320,7 @@ func snapshotRegistry() map[string]*Provider {
 // list returns every registered provider with this org's connection status.
 // Org-authed: a caller with no validated principal is 403 (the status is per-org,
 // so an org is required).
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
@@ -322,10 +328,10 @@ func (s *svc) list(c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	ids := s.sortedProviderIDs()
+	ids := sortedProviderIDs(s)
 	out := make([]providerView, 0, len(ids))
 	for _, id := range ids {
-		v, err := s.providerView(c.Context(), org, s.providers[id])
+		v, err := providerViewFor(s, c.Context(), org, s.State.providers[id])
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 		}
@@ -335,7 +341,7 @@ func (s *svc) list(c *zip.Ctx) error {
 }
 
 // get returns one provider (404 for an unknown id) with this org's status.
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
@@ -343,11 +349,11 @@ func (s *svc) get(c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.providers[providerParam(c)]
+	p, ok := s.State.providers[providerParam(c)]
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
-	v, err := s.providerView(c.Context(), org, p)
+	v, err := providerViewFor(s, c.Context(), org, p)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
@@ -359,7 +365,7 @@ func (s *svc) get(c *zip.Ctx) error {
 // Fail-closed order: no principal → 403; unknown provider → 404; not configured
 // → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
 // rather than dead-end at the callback).
-func (s *svc) connect(c *zip.Ctx) error {
+func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required to connect an integration")
@@ -367,34 +373,34 @@ func (s *svc) connect(c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.providers[providerParam(c)]
+	p, ok := s.State.providers[providerParam(c)]
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
 	if !p.Configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
 	}
-	if !s.kmsReady() {
+	if !kmsReady(s) {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
 
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
-	if _, err := s.store.GCNonces(c.Context(), staleNonceCutoff()); err != nil {
-		s.log.Warn("nonce gc", "err", err)
+	if _, err := s.State.store.GCNonces(c.Context(), staleNonceCutoff()); err != nil {
+		s.Log.Warn("nonce gc", "err", err)
 	}
 
 	nonce, err := genToken()
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	if err := s.store.PutNonce(c.Context(), nonce, org, p.ID); err != nil {
+	if err := s.State.store.PutNonce(c.Context(), nonce, org, p.ID); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "nonce: %v", err)
 	}
-	state, err := s.sign(org, p.ID, nonce)
+	state, err := sign(s, org, p.ID, nonce)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "state: %v", err)
 	}
-	authorizeURL, err := p.Authorize(p.Creds(), s.redirectURI(p), state)
+	authorizeURL, err := p.Authorize(p.Creds(), redirectURI(s, p), state)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
 	}
@@ -404,48 +410,48 @@ func (s *svc) connect(c *zip.Ctx) error {
 // callback is the PUBLIC, state-authed OAuth return. It ALWAYS 302s the user back
 // to the console (success or a labeled failure) — never a raw JSON dead-end. The
 // org comes ONLY from the signed, single-use state; no header is trusted here.
-func (s *svc) callback(c *zip.Ctx) error {
+func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	pid := providerParam(c)
-	p, ok := s.providers[pid]
+	p, ok := s.State.providers[pid]
 	if !ok {
-		return s.failRedirect(c, pid, "unknown provider")
+		return failRedirect(s, c, pid, "unknown provider")
 	}
 
-	payload, err := s.verify(c.Query("state"), p.ID)
+	payload, err := verify(s, c.Query("state"), p.ID)
 	if err != nil {
-		return s.failRedirect(c, p.ID, "invalid state")
+		return failRedirect(s, c, p.ID, "invalid state")
 	}
 	// Consume the single-use nonce, bound to (org,provider). Burned BEFORE the
 	// exchange so one state = one attempt: a replay (or a slow-flow retry) finds
 	// zero rows and fails here, never double-exchanging.
-	consumed, err := s.store.ConsumeNonce(c.Context(), payload.Nonce, payload.Org, p.ID)
+	consumed, err := s.State.store.ConsumeNonce(c.Context(), payload.Nonce, payload.Org, p.ID)
 	if err != nil {
-		return s.failRedirect(c, p.ID, "state error")
+		return failRedirect(s, c, p.ID, "state error")
 	}
 	if !consumed {
-		return s.failRedirect(c, p.ID, "state already used or expired")
+		return failRedirect(s, c, p.ID, "state already used or expired")
 	}
 	if e := strings.TrimSpace(c.Query("error")); e != "" {
-		return s.failRedirect(c, p.ID, "authorization denied")
+		return failRedirect(s, c, p.ID, "authorization denied")
 	}
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
-		return s.failRedirect(c, p.ID, "missing authorization code")
+		return failRedirect(s, c, p.ID, "missing authorization code")
 	}
 	if len(code) > maxCodeLen {
-		return s.failRedirect(c, p.ID, "authorization code too large")
+		return failRedirect(s, c, p.ID, "authorization code too large")
 	}
 	if !p.Configured() {
-		return s.failRedirect(c, p.ID, "provider not configured")
+		return failRedirect(s, c, p.ID, "provider not configured")
 	}
-	if !s.kmsReady() {
-		return s.failRedirect(c, p.ID, "secret store unavailable")
+	if !kmsReady(s) {
+		return failRedirect(s, c, p.ID, "secret store unavailable")
 	}
 
-	res, err := p.Exchange(c.Context(), p.Creds(), s.redirectURI(p), code)
+	res, err := p.Exchange(c.Context(), p.Creds(), redirectURI(s, p), code)
 	if err != nil || res == nil {
-		s.log.Warn("oauth exchange failed", "provider", p.ID, "org", payload.Org, "err", err)
-		return s.failRedirect(c, p.ID, "token exchange failed")
+		s.Log.Warn("oauth exchange failed", "provider", p.ID, "org", payload.Org, "err", err)
+		return failRedirect(s, c, p.ID, "token exchange failed")
 	}
 	// Harden the provider-supplied NON-secret metadata at the framework ingest
 	// boundary — ONE place, every provider — before it is logged, stored, or
@@ -460,9 +466,9 @@ func (s *svc) callback(c *zip.Ctx) error {
 	// connection row, so a KMS failure leaves NO half-connected state advertising a
 	// token that was never stored.
 	for name, value := range res.Tokens {
-		if err := s.kmsPut(payload.Org, p.ID, name, []byte(value)); err != nil {
-			s.log.Warn("kms seal failed", "provider", p.ID, "org", payload.Org, "secret", name, "err", err)
-			return s.failRedirect(c, p.ID, "secret custody failed")
+		if err := kmsPut(s, payload.Org, p.ID, name, []byte(value)); err != nil {
+			s.Log.Warn("kms seal failed", "provider", p.ID, "org", payload.Org, "secret", name, "err", err)
+			return failRedirect(s, c, p.ID, "secret custody failed")
 		}
 	}
 	conn := Connection{
@@ -473,18 +479,18 @@ func (s *svc) callback(c *zip.Ctx) error {
 		BotUserID:    res.BotUserID,
 		Scopes:       res.Scopes,
 	}
-	if err := s.store.Upsert(c.Context(), conn); err != nil {
-		s.log.Warn("connection upsert failed", "provider", p.ID, "org", payload.Org, "err", err)
-		return s.failRedirect(c, p.ID, "persist failed")
+	if err := s.State.store.Upsert(c.Context(), conn); err != nil {
+		s.Log.Warn("connection upsert failed", "provider", p.ID, "org", payload.Org, "err", err)
+		return failRedirect(s, c, p.ID, "persist failed")
 	}
-	s.log.Info("integration connected", "provider", p.ID, "org", payload.Org, "account", res.AccountLabel, "externalId", res.ExternalID)
-	return s.successRedirect(c, p.ID, res.AccountLabel)
+	s.Log.Info("integration connected", "provider", p.ID, "org", payload.Org, "account", res.AccountLabel, "externalId", res.ExternalID)
+	return successRedirect(s, c, p.ID, res.AccountLabel)
 }
 
 // disconnect revokes (best-effort) and forgets an org's connection: it deletes
 // every custodied KMS secret and the connection row. Idempotent — disconnecting a
 // provider that was never connected still returns {disconnected:true}.
-func (s *svc) disconnect(c *zip.Ctx) error {
+func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required to disconnect an integration")
@@ -492,34 +498,34 @@ func (s *svc) disconnect(c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.providers[providerParam(c)]
+	p, ok := s.State.providers[providerParam(c)]
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
 
-	_, found, err := s.store.Get(c.Context(), org, p.ID)
+	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	}
 
 	// Best-effort provider-side revoke using the primary custodied secret. Never
 	// fails the disconnect: local forgetting is authoritative for the tenant.
-	if found && p.Revoke != nil && len(p.Secrets) > 0 && s.kmsReady() && p.Configured() {
-		if tok, gerr := s.kmsGet(org, p.ID, p.Secrets[0]); gerr == nil {
+	if found && p.Revoke != nil && len(p.Secrets) > 0 && kmsReady(s) && p.Configured() {
+		if tok, gerr := kmsGet(s, org, p.ID, p.Secrets[0]); gerr == nil {
 			if rerr := p.Revoke(c.Context(), p.Creds(), string(tok)); rerr != nil {
-				s.log.Warn("provider revoke failed (continuing)", "provider", p.ID, "org", org, "err", rerr)
+				s.Log.Warn("provider revoke failed (continuing)", "provider", p.ID, "org", org, "err", rerr)
 			}
 		}
 	}
 	// Delete every custodied secret from KMS (ignore not-found — idempotent).
-	if s.kms != nil {
+	if s.State.kms != nil {
 		for _, name := range p.Secrets {
-			if derr := s.kmsDelete(org, p.ID, name); derr != nil {
-				s.log.Warn("kms delete failed (continuing)", "provider", p.ID, "org", org, "secret", name, "err", derr)
+			if derr := kmsDelete(s, org, p.ID, name); derr != nil {
+				s.Log.Warn("kms delete failed (continuing)", "provider", p.ID, "org", org, "secret", name, "err", derr)
 			}
 		}
 	}
-	if _, derr := s.store.Delete(c.Context(), org, p.ID); derr != nil {
+	if _, derr := s.State.store.Delete(c.Context(), org, p.ID); derr != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", derr)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"disconnected": true})
@@ -527,14 +533,15 @@ func (s *svc) disconnect(c *zip.Ctx) error {
 
 // ── view + redirect builders ───────────────────────────────────────────────────
 
-// providerView renders a provider's card for an org, folding in the org's live
-// connection status.
-func (s *svc) providerView(ctx context.Context, org string, p *Provider) (providerView, error) {
+// providerViewFor renders a provider's card for an org, folding in the org's live
+// connection status. (Named …For, not providerView, because Go forbids a func and
+// the providerView TYPE sharing an identifier — same deviation as ConnectionFor.)
+func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p *Provider) (providerView, error) {
 	v := providerView{
 		ID: p.ID, Name: p.Name, Description: p.Description, Category: p.Category,
 		Available: p.Configured(),
 	}
-	conn, found, err := s.store.Get(ctx, org, p.ID)
+	conn, found, err := s.State.store.Get(ctx, org, p.ID)
 	if err != nil {
 		return providerView{}, err
 	}
@@ -550,9 +557,9 @@ func (s *svc) providerView(ctx context.Context, org string, p *Provider) (provid
 	return v, nil
 }
 
-func (s *svc) sortedProviderIDs() []string {
-	ids := make([]string, 0, len(s.providers))
-	for id := range s.providers {
+func sortedProviderIDs(s *cloud.Service[state]) []string {
+	ids := make([]string, 0, len(s.State.providers))
+	for id := range s.State.providers {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
@@ -560,13 +567,13 @@ func (s *svc) sortedProviderIDs() []string {
 }
 
 // successRedirect 302s to {console}/integrations?connected={provider}&account=<label>.
-func (s *svc) successRedirect(c *zip.Ctx, provider, account string) error {
-	return redirect(c, consoleRedirectURL(s.consoleURL, "connected", provider, "account", account))
+func successRedirect(s *cloud.Service[state], c *zip.Ctx, provider, account string) error {
+	return redirect(c, consoleRedirectURL(s.State.consoleURL, "connected", provider, "account", account))
 }
 
 // failRedirect 302s to {console}/integrations?error={provider}&reason=<short msg>.
-func (s *svc) failRedirect(c *zip.Ctx, provider, reason string) error {
-	return redirect(c, consoleRedirectURL(s.consoleURL, "error", provider, "reason", reason))
+func failRedirect(s *cloud.Service[state], c *zip.Ctx, provider, reason string) error {
+	return redirect(c, consoleRedirectURL(s.State.consoleURL, "error", provider, "reason", reason))
 }
 
 // consoleRedirectURL builds the ONE console-return URL shape both redirects use:
@@ -590,13 +597,13 @@ func redirect(c *zip.Ctx, loc string) error {
 // redirectURI is the operator-facing OAuth redirect the provider posts back to.
 // Built from the deployment domain + the provider's RedirectPath (asserted equal
 // to the generic callback path at Mount).
-func (s *svc) redirectURI(p *Provider) string {
-	return "https://" + s.domain + p.RedirectPath
+func redirectURI(s *cloud.Service[state], p *Provider) string {
+	return "https://" + s.Domain + p.RedirectPath
 }
 
 // ── KMS custody (per-org, sealed) ──────────────────────────────────────────────
 
-func (s *svc) kmsReady() bool { return s.kms != nil && s.kms.Ready() }
+func kmsReady(s *cloud.Service[state]) bool { return s.State.kms != nil && s.State.kms.Ready() }
 
 // kmsPath is the per-org, per-provider KMS namespace: /orgs/{org}/integrations/{provider}.
 // org is validOrg-checked at every entry point, so it can never smuggle path
@@ -605,23 +612,23 @@ func kmsPath(org, provider string) string {
 	return "/orgs/" + org + "/integrations/" + provider
 }
 
-func (s *svc) kmsPut(org, provider, name string, value []byte) error {
-	return s.kms.Put(kmsPath(org, provider), name, kmsEnv, value)
+func kmsPut(s *cloud.Service[state], org, provider, name string, value []byte) error {
+	return s.State.kms.Put(kmsPath(org, provider), name, kmsEnv, value)
 }
 
-func (s *svc) kmsGet(org, provider, name string) ([]byte, error) {
-	return s.kms.Get(kmsPath(org, provider), name, kmsEnv)
+func kmsGet(s *cloud.Service[state], org, provider, name string) ([]byte, error) {
+	return s.State.kms.Get(kmsPath(org, provider), name, kmsEnv)
 }
 
-func (s *svc) kmsDelete(org, provider, name string) error {
-	err := s.kms.Delete(kmsPath(org, provider), name, kmsEnv)
+func kmsDelete(s *cloud.Service[state], org, provider, name string) error {
+	err := s.State.kms.Delete(kmsPath(org, provider), name, kmsEnv)
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return nil // idempotent — deleting an absent secret is not an error
 	}
 	return err
 }
 
-// ── in-process seam (mirror agents `var mounted *svc`) ─────────────────────────
+// ── in-process seam (mirror agents `var mounted *cloud.Service`) ───────────────
 //
 // Token custody lives ONLY here; the bridge (af3999a) never touches KMS directly.
 // Every func is nil-safe against an unmounted subsystem.
@@ -633,27 +640,27 @@ func TokenFor(ctx context.Context, org, provider, name string) ([]byte, error) {
 	if mounted == nil {
 		return nil, fmt.Errorf("integrations: not mounted")
 	}
-	return mounted.tokenFor(ctx, org, provider, name)
+	return tokenFor(mounted, ctx, org, provider, name)
 }
 
-func (s *svc) tokenFor(ctx context.Context, org, provider, name string) ([]byte, error) {
+func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name string) ([]byte, error) {
 	if !validOrg(org) {
 		return nil, fmt.Errorf("integrations: invalid org")
 	}
-	if _, ok := s.providers[provider]; !ok {
+	if _, ok := s.State.providers[provider]; !ok {
 		return nil, fmt.Errorf("integrations: unknown provider %q", provider)
 	}
-	_, found, err := s.store.Get(ctx, org, provider)
+	_, found, err := s.State.store.Get(ctx, org, provider)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
 		return nil, fmt.Errorf("integrations: %s not connected for org", provider)
 	}
-	if !s.kmsReady() {
+	if !kmsReady(s) {
 		return nil, kms.ErrMasterKeyMissing
 	}
-	return s.kmsGet(org, provider, name)
+	return kmsGet(s, org, provider, name)
 }
 
 // OrgForExternalID resolves a provider account id (Slack team_id / GitHub
@@ -663,7 +670,7 @@ func OrgForExternalID(provider, externalID string) (string, bool) {
 	if mounted == nil {
 		return "", false
 	}
-	org, ok, err := mounted.store.ResolveOrgByExternalID(context.Background(), provider, externalID)
+	org, ok, err := mounted.State.store.ResolveOrgByExternalID(context.Background(), provider, externalID)
 	if err != nil || !ok {
 		return "", false
 	}
@@ -681,7 +688,7 @@ func ConnectionFor(org, provider string) (Connection, bool) {
 	if mounted == nil {
 		return Connection{}, false
 	}
-	conn, ok, err := mounted.store.Get(context.Background(), org, provider)
+	conn, ok, err := mounted.State.store.Get(context.Background(), org, provider)
 	if err != nil || !ok {
 		return Connection{}, false
 	}

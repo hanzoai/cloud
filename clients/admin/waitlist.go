@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -44,7 +45,7 @@ func waitlistConfig() (base, secret string, ok bool) {
 
 // waitlistProxy issues a server-authed request to the waitlist engine and returns its
 // raw JSON body + status. Bounded read; Bearer secret; never forwards a client header.
-func (s *svc) waitlistProxy(ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
+func waitlistProxy(s *cloud.Service[state], ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -73,7 +74,7 @@ func (s *svc) waitlistProxy(ctx context.Context, method, target, secret string, 
 // waitlist answers GET /v1/admin/waitlist — the leaderboard/list for one waitlist,
 // proxied from the engine (GET /v1/waitlist/list?waitlist=&page=&pageSize=). Honest
 // "not configured" empty when the engine is absent on this deployment (never fabricated).
-func (s *svc) waitlist(c *zip.Ctx) error {
+func waitlist(s *cloud.Service[state], c *zip.Ctx) error {
 	base, secret, configured := waitlistConfig()
 	if !configured {
 		return c.JSON(200, map[string]any{"status": "ok", "msg": "the waitlist engine is not configured on this deployment", "data": map[string]any{}, "data2": 0})
@@ -88,7 +89,7 @@ func (s *svc) waitlist(c *zip.Ctx) error {
 	if len(q) > 0 {
 		target += "?" + q.Encode()
 	}
-	raw, code, err := s.waitlistProxy(c.Context(), http.MethodGet, target, secret, nil)
+	raw, code, err := waitlistProxy(s, c.Context(), http.MethodGet, target, secret, nil)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -111,7 +112,7 @@ type waitlistBoostRequest struct {
 // move them up toward the access cutoff. It funnels through the engine's verified grant
 // seam (POST /v1/waitlist/award, source="grant" — the one path that honors an explicit
 // points amount) and audits the grant to cloud's tamper-evident trail.
-func (s *svc) waitlistBoost(c *zip.Ctx) error {
+func waitlistBoost(s *cloud.Service[state], c *zip.Ctx) error {
 	base, secret, configured := waitlistConfig()
 	if !configured {
 		return fail(c, "the waitlist engine is not configured on this deployment")
@@ -138,7 +139,7 @@ func (s *svc) waitlistBoost(c *zip.Ctx) error {
 		payload["refCode"] = body.RefCode
 	}
 	enc, _ := json.Marshal(payload)
-	raw, code, err := s.waitlistProxy(c.Context(), http.MethodPost, base+"/v1/waitlist/award", secret, enc)
+	raw, code, err := waitlistProxy(s, c.Context(), http.MethodPost, base+"/v1/waitlist/award", secret, enc)
 
 	target := body.Email
 	if target == "" {
@@ -148,7 +149,7 @@ func (s *svc) waitlistBoost(c *zip.Ctx) error {
 	if err != nil || code/100 != 2 {
 		result = "error"
 	}
-	s.emitAudit(c, "admin.waitlist.grant", "waitlist", body.Waitlist,
+	emitAudit(s, c, "admin.waitlist.grant", "waitlist", body.Waitlist,
 		map[string]any{"target": target},
 		map[string]any{"points": body.Points, "reason": body.Reason, "source": "grant"},
 		audit.Outcome{Result: result, Status: code})
