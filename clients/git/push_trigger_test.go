@@ -16,7 +16,7 @@ import (
 )
 
 // A real push to refs/heads/main fires cloud.OnGitPush exactly once, with the
-// tenant, repo, branch, tip commit, and the repo's canonical clone URL — the
+// org, repo, branch, tip commit, and the repo's canonical clone URL — the
 // event the platform push builder resolves an app from.
 func TestPushFiresBuildTrigger(t *testing.T) {
 	var mu sync.Mutex

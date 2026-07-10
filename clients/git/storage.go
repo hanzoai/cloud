@@ -17,11 +17,11 @@ import (
 	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
-// storage is the billy-backed home for every tenant's bare repositories. Each
+// storage is the billy-backed home for every org's bare repositories. Each
 // repo lives at rootDir/<org>/<project>/<name>.git as a bare go-git repo on a
 // go-billy filesystem; the same billy FS is what the go-git server transport
 // (upload-pack / receive-pack) reads and writes, so clone AND push operate
-// directly on tenant storage with no shell-out to the `git` binary.
+// directly on org storage with no shell-out to the `git` binary.
 //
 // It is backed by osfs, not hanzoai/vfs: vfs.FS (Create/Open(ctx)/Lookup over
 // *Inode/*File) does not implement the go-billy Filesystem surface go-git's

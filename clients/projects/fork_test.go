@@ -38,7 +38,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestForkFrameworkMappingAndOverrides(t *testing.T) {
 }
 
 // TestForkOrgScopingAndErrors covers the boundary rejections: no org → 403,
-// missing slug → 400, unknown template → 404, and cross-tenant isolation (a fork
+// missing slug → 400, unknown template → 404, and cross-org isolation (a fork
 // lands in the caller's org only; a duplicate in the same org → 409).
 func TestForkOrgScopingAndErrors(t *testing.T) {
 	app := mountApp(t)
@@ -193,7 +193,7 @@ func TestForkOrgScopingAndErrors(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "maxpower", map[string]any{"slug": "brainwave"}); code != http.StatusConflict {
 		t.Fatalf("dup fork want 409, got %d", code)
 	}
-	// A DIFFERENT org can fork the same template (same slug, different tenant).
+	// A DIFFERENT org can fork the same template (same slug, different org).
 	if code, _ := do(t, app, http.MethodPost, "/v1/projects/fork", "acme", map[string]any{"slug": "brainwave"}); code != http.StatusCreated {
 		t.Fatalf("acme fork same template want 201, got %d", code)
 	}
