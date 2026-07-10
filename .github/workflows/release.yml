@@ -125,7 +125,10 @@ jobs:
           # layer's cache key moves with console HEAD (otherwise a static `main` freezes
           # the embed on a persistent BuildKit and new console work never ships). Fail
           # loud if it can't be resolved — a blank ref would silently re-freeze the embed.
-          console_sha="$(git ls-remote "https://x-access-token:${GH_PAT}@github.com/hanzoai/console.git" main | cut -f1)"
+          # Use `gh api` (GH_PAT), NOT `git ls-remote`: actions/checkout installs a global
+          # git extraheader carrying THIS repo's GITHUB_TOKEN, which overrides URL creds and
+          # 404s on the cross-repo hanzoai/console clone. gh honors GH_PAT and sidesteps it.
+          console_sha="$(GH_TOKEN="$GH_PAT" gh api repos/hanzoai/console/commits/main --jq '.sha')"
           if [ -z "${console_sha}" ]; then
             echo "::error::could not resolve hanzoai/console main HEAD — refusing to build a stale embed"
             exit 1
