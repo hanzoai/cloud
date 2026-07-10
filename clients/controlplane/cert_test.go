@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/luxfi/consensus/config"
 	"github.com/luxfi/consensus/protocol/quasar"
 	"github.com/luxfi/crypto/mldsa"
 	pulsar "github.com/luxfi/pulsar/pkg/pulsar"
@@ -288,5 +289,204 @@ func TestControlPlaneCert_PopContextSigRejected(t *testing.T) {
 	}
 	if err := VerifyControlPlaneCert(pos, keys, quorum, cert); !errors.Is(err, quasar.ErrQCSigInvalid) {
 		t.Fatalf("pop-context sig accepted as cert sig (R4 broken): want ErrQCSigInvalid, got %v", err)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// RED finding 1 (two-threshold self-guard) + finding 3 (raw-craft verify-side
+// tests). These build malicious certs by hand — bypassing the honest composer —
+// and drive them STRAIGHT at VerifyControlPlaneCert, locking the BFT-floor and
+// weighted-Merkle gates black-box rather than trusting only the audited library.
+// ----------------------------------------------------------------------------
+
+// certRecordFor builds one signer record for `node`, using an explicit public
+// key / weight / signature so a test can stuff a wrong key or an inflated
+// weight. The Merkle proof is for the node's real committed leaf; a mismatched
+// key/weight therefore reconstructs a leaf that is NOT under the root.
+func certRecordFor(t *testing.T, vset *quasar.WeightedValidatorSet, node pulsar.NodeID, pub *mldsa.PublicKey, weight uint64, sig []byte) quasar.QuorumSignerRecord {
+	t.Helper()
+	leaves := vset.Leaves()
+	idx := -1
+	for i := range leaves {
+		var id pulsar.NodeID
+		copy(id[:], leaves[i].ValidatorID[:])
+		if id == node {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatalf("node %x not in validator set", node[:8])
+	}
+	proof, err := vset.InclusionProof(idx)
+	if err != nil {
+		t.Fatalf("inclusion proof: %v", err)
+	}
+	return quasar.QuorumSignerRecord{
+		ValidatorID:  node,
+		PublicKey:    pub.Bytes(),
+		VotingWeight: weight,
+		Scheme:       quasar.QuorumSchemeMLDSA65,
+		ParamSetID:   mldsa65ParamByte,
+		KeyVersion:   0,
+		MerklePath:   proof,
+		Signature:    sig,
+	}
+}
+
+// wrapRawWQC wraps a hand-built WeightedQuorumCert into a ConsensusCert with a
+// correct control-plane header, so the verifier reaches the leg's predicate.
+func wrapRawWQC(t *testing.T, pos certPosition, vset *quasar.WeightedValidatorSet, wqc *quasar.WeightedQuorumCert) *quasar.ConsensusCert {
+	t.Helper()
+	b, err := wqc.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal wqc: %v", err)
+	}
+	p := config.StrictPQProfile
+	return &quasar.ConsensusCert{
+		Version:          controlPlaneCertVersion,
+		Profile:          byte(p.ProfileID),
+		ChainID:          pos.ChainID,
+		Epoch:            pos.Epoch,
+		Height:           pos.Height,
+		Round:            pos.Round,
+		BlockHash:        pos.BlockHash,
+		ValidatorSetRoot: vset.Root(),
+		PolicyID:         controlPlanePolicyID,
+		RequiredLegsRoot: quasar.HashRequiredLegs(controlPlanePolicy{quorumWeight: 4}.RequiredLegs()),
+		AggregateWeight:  wqc.AggregateWeight,
+		Evidence: []quasar.LegEvidence{{
+			Leg:     quasar.LegSpec{Kind: quasar.LegPulsarMLDSA, ParamSetID: mldsa65ParamByte},
+			Mode:    quasar.EvidenceWeightedSigSet,
+			Payload: b,
+		}},
+	}
+}
+
+// rawWQC builds a WeightedQuorumCert over the given records at a claimed
+// threshold, straight from the shipped builder.
+func rawWQC(t *testing.T, pos certPosition, vset *quasar.WeightedValidatorSet, threshold uint64, records []quasar.QuorumSignerRecord) *quasar.WeightedQuorumCert {
+	t.Helper()
+	wqc, err := quasar.BuildWeightedQuorumCert(quasar.QuorumCertParams{
+		ChainID:          pos.ChainID,
+		Epoch:            pos.Epoch,
+		Height:           pos.Height,
+		Round:            pos.Round,
+		ValueHash:        pos.BlockHash,
+		QCType:           controlPlaneQCType,
+		ValidatorSetRoot: vset.Root(),
+		QuorumThreshold:  threshold,
+	}, records)
+	if err != nil {
+		t.Fatalf("build raw wqc: %v", err)
+	}
+	return wqc
+}
+
+// TestControlPlaneCert_UnsafeFloorRejected — the two-threshold self-guard (RED
+// finding 1): the wallet-custody t=3 can neither compose nor verify a cert for
+// N=5 (the BFT floor is 4). This is the exact trap inc-1 fell into (cluster.go
+// wiring the Pulsar threshold = the quorum), now impossible in the cert core.
+func TestControlPlaneCert_UnsafeFloorRejected(t *testing.T) {
+	keys, privs, order := certTestPods(t, 5)
+	pos := certTestPosition()
+
+	// Compose with t=3 (the wallet-custody threshold) must be refused.
+	sigs3 := signQuorum(t, pos, keys, privs, order, 3, 3)
+	if _, err := ComposeControlPlaneCert(pos, keys, sigs3, 3); !errors.Is(err, ErrUnsafeCertFloor) {
+		t.Fatalf("compose t=3 for N=5: want ErrUnsafeCertFloor, got %v", err)
+	}
+
+	// A genuine 4-of-5 cert cannot be VERIFIED with a mis-wired floor of 3.
+	sigs4 := signQuorum(t, pos, keys, privs, order, 4, 4)
+	cert, err := ComposeControlPlaneCert(pos, keys, sigs4, 4)
+	if err != nil {
+		t.Fatalf("compose: %v", err)
+	}
+	if err := VerifyControlPlaneCert(pos, keys, 3, cert); !errors.Is(err, ErrUnsafeCertFloor) {
+		t.Fatalf("verify at floor 3: want ErrUnsafeCertFloor, got %v", err)
+	}
+}
+
+// TestControlPlaneCert_RawSubQuorumRejected — a hand-built, internally-consistent
+// 3-of-5 cert (3 valid signatures over the threshold-3 message) is rejected by
+// the verifier's mandatory BFT floor: 3 < policy floor 4.
+func TestControlPlaneCert_RawSubQuorumRejected(t *testing.T) {
+	keys, privs, order := certTestPods(t, 5)
+	pos := certTestPosition()
+	vset, err := buildValidatorSet(pos.Epoch, keys)
+	if err != nil {
+		t.Fatalf("vset: %v", err)
+	}
+	msg, err := CertSigningMessage(pos, keys, 3)
+	if err != nil {
+		t.Fatalf("msg: %v", err)
+	}
+	var records []quasar.QuorumSignerRecord
+	for i := 0; i < 3; i++ {
+		node := order[i]
+		sig, err := privs[node].SignCtxDeterministic(msg, certContext)
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		records = append(records, certRecordFor(t, vset, node, keys[node], 1, sig))
+	}
+	cert := wrapRawWQC(t, pos, vset, rawWQC(t, pos, vset, 3, records))
+	if err := VerifyControlPlaneCert(pos, keys, 4, cert); !errors.Is(err, quasar.ErrQCThresholdBelowFloor) {
+		t.Fatalf("raw sub-quorum cert: want ErrQCThresholdBelowFloor, got %v", err)
+	}
+}
+
+// TestControlPlaneCert_RawAttackerKeyStuffed — a record for a legitimate
+// validator id carrying an ATTACKER public key + attacker signature is rejected
+// at the weighted-Merkle inclusion gate (the reconstructed leaf is not in the
+// committed tree), even though the signature is valid under the attacker key.
+func TestControlPlaneCert_RawAttackerKeyStuffed(t *testing.T) {
+	keys, privs, order := certTestPods(t, 5)
+	pos := certTestPosition()
+	vset, _ := buildValidatorSet(pos.Epoch, keys)
+	msg, _ := CertSigningMessage(pos, keys, 4)
+
+	var records []quasar.QuorumSignerRecord
+	for i := 0; i < 3; i++ {
+		node := order[i]
+		sig, _ := privs[node].SignCtxDeterministic(msg, certContext)
+		records = append(records, certRecordFor(t, vset, node, keys[node], 1, sig))
+	}
+	attacker, err := mldsa.GenerateKey(rand.Reader, mldsa.MLDSA65)
+	if err != nil {
+		t.Fatalf("attacker keygen: %v", err)
+	}
+	badNode := order[3] // a real validator id, but an attacker key stuffed in
+	badSig, _ := attacker.SignCtxDeterministic(msg, certContext)
+	records = append(records, certRecordFor(t, vset, badNode, attacker.PublicKey, 1, badSig))
+
+	cert := wrapRawWQC(t, pos, vset, rawWQC(t, pos, vset, 4, records))
+	if err := VerifyControlPlaneCert(pos, keys, 4, cert); !errors.Is(err, quasar.ErrQCMerkleInclusion) {
+		t.Fatalf("attacker-key stuffing: want ErrQCMerkleInclusion, got %v", err)
+	}
+}
+
+// TestControlPlaneCert_RawWeightInflated — a cert whose inner AggregateWeight is
+// inflated above the true sum of signer weights is rejected by the weight
+// recomputation gate.
+func TestControlPlaneCert_RawWeightInflated(t *testing.T) {
+	keys, privs, order := certTestPods(t, 5)
+	pos := certTestPosition()
+	vset, _ := buildValidatorSet(pos.Epoch, keys)
+	msg, _ := CertSigningMessage(pos, keys, 4)
+
+	var records []quasar.QuorumSignerRecord
+	for i := 0; i < 4; i++ {
+		node := order[i]
+		sig, _ := privs[node].SignCtxDeterministic(msg, certContext)
+		records = append(records, certRecordFor(t, vset, node, keys[node], 1, sig))
+	}
+	wqc := rawWQC(t, pos, vset, 4, records)
+	wqc.AggregateWeight += 100 // lie about the total signer weight
+
+	cert := wrapRawWQC(t, pos, vset, wqc)
+	if err := VerifyControlPlaneCert(pos, keys, 4, cert); !errors.Is(err, quasar.ErrQCAggregateWeight) {
+		t.Fatalf("weight inflation: want ErrQCAggregateWeight, got %v", err)
 	}
 }
