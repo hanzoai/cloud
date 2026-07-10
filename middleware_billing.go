@@ -3,7 +3,7 @@ package cloud
 // Billing gate — the ONE place the unified cloud binary enforces
 // pay-for-everything on the request edge.
 //
-// It wraps the canonical metering client (github.com/hanzoai/commerce/metering),
+// It wraps the canonical metering client (github.com/hanzoai/cloud/clients/commerce/metering),
 // the single billing source of truth shared by every Hanzo product. That client
 // is net/http-based, so its own Middleware can't drop into zip (Fiber v3); but
 // its CLIENT CORE — New + Authorize + Record — is transport-agnostic and
@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/zap-proto/zip"
 )
 
