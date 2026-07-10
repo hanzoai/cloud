@@ -3,6 +3,7 @@
 package controlplane
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -12,6 +13,12 @@ import (
 	"github.com/luxfi/crypto/mldsa"
 	pulsar "github.com/luxfi/pulsar/pkg/pulsar"
 )
+
+// rekeyContext is the FIPS 204 §5.2 domain-separation context for a key-rotation
+// authorization signature. DISTINCT from popContext and certContext so a
+// rotation authorization can never be cross-protocol-confused with a leg PoP or
+// a cert signature.
+var rekeyContext = []byte("hanzo/controlplane/rekey/v1")
 
 // Share is a sealed per-pod signing share. Exactly one is issued per pod.
 //
@@ -94,6 +101,20 @@ var (
 	// node with no verifiable identity could neither authenticate its own legs
 	// nor have them attributed, so it must never enter the registry.
 	errMissingIdentityKey = errors.New("controlplane: share has no ML-DSA identity key")
+	// ErrIdentityKeyConflict is the FIRST-WRITER-WINS guard (RED R1): a node
+	// already bound to one ML-DSA identity key may NOT be re-registered under a
+	// DIFFERENT key. A silent overwrite would be a rogue-key swap — an attacker
+	// re-registering a live validator with its own key would then have its forged
+	// legs and cert signatures accepted, since the whole cert's rogue-key
+	// resistance rests on idVerifier being the trusted key source. Idempotent
+	// re-registration of the IDENTICAL key is allowed; a sanctioned rotation goes
+	// through Rekey (self-authorized under the current key).
+	ErrIdentityKeyConflict = errors.New("controlplane: node already bound to a different identity key (first-writer-wins; rotate via an authorized Rekey)")
+	// ErrRekeyUnknownNode rejects a rotation of a node with no registered key.
+	ErrRekeyUnknownNode = errors.New("controlplane: rekey of a node with no registered identity key")
+	// ErrRekeyUnauthorized rejects a rotation whose authorization signature does
+	// not verify under the node's CURRENT registered key.
+	ErrRekeyUnauthorized = errors.New("controlplane: rekey authorization does not verify under the current identity key")
 )
 
 // ValidatorRegistry pins the bijection party-index <-> node and holds each
@@ -129,10 +150,57 @@ func (r *ValidatorRegistry) Register(s Share) error {
 	if idx, ok := r.byNode[s.Node]; ok && idx != s.Index {
 		return fmt.Errorf("%w: node holds index %d, tried %d", ErrNodeHasShare, idx, s.Index)
 	}
+	// First-writer-wins on the identity key (RED R1): a node already bound to a
+	// key may not be silently re-bound to a DIFFERENT one. Idempotent
+	// re-registration of the identical key is fine (crash-restart / re-sync).
+	if cur, ok := r.idVerifier[s.Node]; ok && !pubKeyEqual(cur, s.idKey.PublicKey) {
+		return fmt.Errorf("%w: node %x", ErrIdentityKeyConflict, s.Node[:8])
+	}
 	r.byIndex[s.Index] = s.Node
 	r.byNode[s.Node] = s.Index
 	r.idVerifier[s.Node] = s.idKey.PublicKey
 	return nil
+}
+
+// rekeyTBS is the to-be-signed preimage authorizing a key rotation: bound to the
+// node and the NEW public key. Only the holder of the node's CURRENT secret key
+// can produce a signature over it, so a rotation is self-authorized.
+func rekeyTBS(node pulsar.NodeID, newPub *mldsa.PublicKey) []byte {
+	h := sha256.New()
+	h.Write([]byte("cp-rekey-tbs-v1"))
+	h.Write(node[:])
+	h.Write(newPub.Bytes())
+	return h.Sum(nil)
+}
+
+// Rekey rotates a bound node's identity key to newPub, authorized by authSig — a
+// signature under the node's CURRENT registered key over rekeyTBS(node, newPub).
+// This is the ONLY sanctioned way to change a bound key (Register is
+// first-writer-wins); it is the registry action a consensus-ordered
+// OpRekeyValidator applies. Self-authorized: an attacker without the current
+// secret key cannot forge the authorization, so it cannot rotate a validator's
+// key. Refuses an unknown node, a nil key, or an unauthorized signature.
+func (r *ValidatorRegistry) Rekey(node pulsar.NodeID, newPub *mldsa.PublicKey, authSig []byte) error {
+	if newPub == nil {
+		return errMissingIdentityKey
+	}
+	cur, ok := r.idVerifier[node]
+	if !ok {
+		return fmt.Errorf("%w: %x", ErrRekeyUnknownNode, node[:8])
+	}
+	if !cur.VerifySignatureCtx(rekeyTBS(node, newPub), authSig, rekeyContext) {
+		return ErrRekeyUnauthorized
+	}
+	r.idVerifier[node] = newPub
+	return nil
+}
+
+// pubKeyEqual reports whether two ML-DSA public keys are byte-identical.
+func pubKeyEqual(a, b *mldsa.PublicKey) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return bytes.Equal(a.Bytes(), b.Bytes())
 }
 
 // Size is the number of registered voters.
