@@ -392,7 +392,7 @@ func (f *fakeTasks) Enabled() bool { return true }
 func TestSessionsControlAuthzAndForward(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
 	ft := &fakeTasks{}
-	mounted.tasks = ft // inject an enabled durable-execution backend for this test
+	mounted.State.tasks = ft // inject an enabled durable-execution backend for this test
 
 	// A task-backed session forwards control to the tasks engine.
 	backed := register(t, app, "acme", map[string]any{
@@ -546,7 +546,7 @@ func TestBusFanoutOrgFilterAndOverrun(t *testing.T) {
 // subscriber — the exact path the SSE/ZAP stream handler consumes.
 func TestPublishReachesSubscriber(t *testing.T) {
 	app := mountApp(t, &fakeAI{content: "x"})
-	ch, cancel := mounted.bus.subscribe("acme")
+	ch, cancel := mounted.State.bus.subscribe("acme")
 	defer cancel()
 	root := register(t, app, "acme", map[string]any{"agent": "dev"})
 	select {
