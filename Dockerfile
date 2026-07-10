@@ -118,12 +118,12 @@ RUN --mount=type=secret,id=gh_token \
     test -s /catalog/hanzo/index.json
 
 FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
-# CIPHER-FORMAT FREEZE (internal/cek depends on this). The data-plane stores are
+# CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
 # SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
 # is frozen by pinning sqlcipher-dev to an EXACT version. A repo bump then fails
 # the build LOUDLY (never a silent prod brick); on such a failure, bump the pin
-# AND confirm internal/cek's frozen-fixture test still opens (format unchanged)
+# AND confirm cek's frozen-fixture test still opens (format unchanged)
 # before shipping. A MAJOR bump (4.x → 5.x) changes the default format and would
 # orphan existing encrypted stores — migrate/rewrap them first.
 RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r0 pkgconfig binutils
@@ -190,7 +190,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
-      -tags "libsqlite3 sqlite_fts5" ./internal/cek
+      -tags "libsqlite3 sqlite_fts5" ./cek
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud

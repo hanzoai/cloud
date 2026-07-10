@@ -12,7 +12,7 @@ import (
 
 	// The ONE Hanzo SQLite driver (see store.go). Blank-imported here too so this
 	// file's sql.Open("sqlite", …) is self-documenting about its driver dependency.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
