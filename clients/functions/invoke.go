@@ -18,7 +18,7 @@ import (
 )
 
 // execClient delegates function execution to the sandboxed code executor. This
-// binary NEVER runs tenant code in-process (mirrors clients/exec): it POSTs the
+// binary NEVER runs org code in-process (mirrors clients/exec): it POSTs the
 // function's runtime + source + input to CODE_EXEC_UPSTREAM with the KMS-sourced
 // service key on X-API-Key. When the upstream is unset, invoke fails closed —
 // no execution, no fabricated output.
@@ -26,7 +26,7 @@ import (
 // The upstream + key are the SAME operator-set, KMS-synced env the exec
 // subsystem uses (CODE_EXEC_UPSTREAM / CODE_EXEC_API_KEY), so there is one
 // sandbox and one service credential across the binary. The target URL is
-// operator-controlled (never derived from tenant input), so invoke cannot be
+// operator-controlled (never derived from org input), so invoke cannot be
 // steered at internal hosts (no SSRF from the function name or payload).
 type execClient struct {
 	upstream string
@@ -147,7 +147,7 @@ var errExecUnconfigured = errors.New("code execution runtime not configured")
 // invoke runs a function and records a REAL invocation. Fail-closed when the
 // sandbox is unconfigured (503, nothing recorded, nothing fabricated).
 func (s *svc) invoke(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -177,7 +177,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// compute runs: an unfunded org — or, in the default fail-closed posture, an
 	// unreachable commerce — gets 402/503 and nothing executes (no free compute).
 	// Scoped to THIS caller's org (the same slug that owns the function), so the
-	// charge can never target another tenant. fee is computed once and reused by
+	// charge can never target another org. fee is computed once and reused by
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
 	if err := s.bill.Gate(c.Context(), org, principal.Project(c), "invoke", fee); err != nil {
@@ -211,7 +211,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 		s.log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
 	}
 	// Debit the caller's org ledger when the sandbox ACTUALLY executed — real
-	// compute was consumed even if the tenant's own code exited non-zero (that
+	// compute was consumed even if the org's own code exited non-zero (that
 	// is a successful invocation of a failing program, not a billing failure).
 	// A transport failure (runErr != nil: sandbox unreachable/timeout) ran no
 	// billable compute, so it is NOT charged. Per-org, env-attributed, async

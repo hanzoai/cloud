@@ -267,7 +267,7 @@ func Shutdown() error {
 //
 // Fails closed: an unvalidated or org-less request gets no tenant, so the caller
 // returns 403 — never a fake success, never another org's data.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // ── HTTP shapes (the contract the FE port consumes) ──────────────────────────
 

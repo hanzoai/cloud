@@ -140,7 +140,7 @@ func init() {
 // total credit earned. It ALSO opportunistically runs the qualify check for the
 // caller's own pending referees, so the referrer's page is self-updating.
 func (s *svc) myReferrals(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view referrals")
 	}
@@ -200,7 +200,7 @@ type claimRequest struct {
 // supplied); the referrer is resolved from the code. Idempotent (one per referee,
 // first-touch wins), self-referral blocked, unknown code rejected.
 func (s *svc) claim(c *zip.Ctx) error {
-	refereeOrg, ok := principal.Tenant(c)
+	refereeOrg, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to claim a referral")
 	}

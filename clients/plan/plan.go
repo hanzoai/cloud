@@ -129,7 +129,7 @@ func dispatch(c *zip.Ctx, route string, params map[string]string) error {
 	// anonymous or client-forged X-Org-Id falls back to the public "hanzo" default
 	// (never another reseller's catalog).
 	tenant := "hanzo"
-	if org, ok := principal.Tenant(c); ok {
+	if org, ok := principal.Org(c); ok {
 		tenant = org
 	}
 	resp, err := host.Dispatch(c.Context(), goja.Request{
