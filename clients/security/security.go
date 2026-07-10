@@ -171,7 +171,7 @@ func toFindingView(f StoredFinding) findingView {
 
 // health is fail-open: the subsystem has no external dependency, so it reports
 // ok whenever the store opened. Registered before the generic liveness route so
-// the real probe is not shadowed (mirrors s3svc/kmssvc).
+// the real probe is not shadowed (mirrors s3svc/kms).
 func (s *svc) health(c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"status": "ok", "rules": detect.RuleCount()})
 }

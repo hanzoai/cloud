@@ -180,8 +180,10 @@ func TestVector6_SignNeverFabricates(t *testing.T) {
 	}
 
 	// MPC "configured" (addr+vault set) but co-hosting is out of scope: still nil sig.
-	c2, _ := New(Config{DataDir: t.TempDir(), MasterKeyB64: randB64Key(t),
-		MPCAddr: "mpc.internal:9000", MPCVaultID: "v1"}, log)
+	c2, _ := New(Config{
+		DataDir: t.TempDir(), MasterKeyB64: randB64Key(t),
+		MPCAddr: "mpc.internal:9000", MPCVaultID: "v1",
+	}, log)
 	defer c2.Close()
 	if !c2.SigningConfigured() {
 		t.Fatal("expected SigningConfigured true with addr+vault set")

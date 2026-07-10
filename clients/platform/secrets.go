@@ -34,7 +34,7 @@
 // Everything is org-scoped: the KMS coordinate, the auth identity, the KMSSecret
 // CR, and the managed Secret all live under the VALIDATED tenant, never a request
 // value — the same cross-tenant boundary as the rest of /v1/platform, enforced at
-// cloud's ONE auth boundary (SanitizeIdentity + the kmssvc org-scope guard).
+// cloud's ONE auth boundary (SanitizeIdentity + the kms org-scope guard).
 package platform
 
 import (
@@ -71,11 +71,11 @@ var kmsSecretsGVR = schema.GroupVersionResource{Group: "secrets.lux.network", Ve
 //
 // PER-TENANT SCOPING is enforced at cloud's ONE auth boundary, not by hope. The
 // operator authenticates as a per-tenant IAM machine identity (owner=<org>) via
-// /v1/kms/auth/login (kmssvc login broker → IAM client_credentials). cloud's KMS
-// guard (clients/kmssvc.guard) admits a read of /orgs/<org>/… ONLY when the
+// /v1/kms/auth/login (kms login broker → IAM client_credentials). cloud's KMS
+// guard (clients/kms.guard) admits a read of /orgs/<org>/… ONLY when the
 // VALIDATED principal's owner == that org (SanitizeIdentity derives owner from the
 // token, ignoring any client X-Org-Id). So tenant-A's credential can never read
-// tenant-B's path: the guard answers 403 (proven in kmssvc cross-tenant tests).
+// tenant-B's path: the guard answers 403 (proven in kms cross-tenant tests).
 // credsSecret is therefore a PER-TENANT name in the tenant namespace — never a
 // shared platform-wide reader, which would be a cross-tenant hole.
 //
@@ -115,13 +115,13 @@ func managedSecretName(appSlug string) string { return appSlug + "-env" }
 //	orgs/<org>/platform/<app>/<KEY>  →  path=/orgs/<org>/platform/<app>, name=<KEY>, env=default
 //
 // The /orgs/<org> prefix is DELIBERATE and load-bearing: it is the EXACT store
-// path cloud's org-scoped /v1/kms read surface addresses (kmssvc.orgPath folds
+// path cloud's org-scoped /v1/kms read surface addresses (kms.orgPath folds
 // :org into /orgs/{org}), so the kms-operator — reading /v1/kms/orgs/<org>/secrets/
 // platform/<app>/<KEY> — resolves the very record cloud sealed. Seal path and read
 // path are one coordinate; drift between them was why the sync was inert.
 //
 // It is INJECTIVE in (org, app, key): the org is the validated IAM owner used
-// verbatim (matching kmssvc's case-sensitive guard), the app slug (slugRE) and the
+// verbatim (matching kms's case-sensitive guard), the app slug (slugRE) and the
 // key (envKeyRE) contain no '/' or '@', so two distinct (org,app,key) triples never
 // collide on one record and one tenant can never address another's secret.
 func kmsSecretRef(org, appSlug, key string) string {
