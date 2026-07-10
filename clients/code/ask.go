@@ -12,7 +12,7 @@ import (
 // existing in-process chat path (deps.AI) behind an interface so /ask is testable
 // without a live model.
 type Synthesizer interface {
-	Synthesize(ctx context.Context, prompt string) (string, error)
+	Synthesize(ctx context.Context, org, project, prompt string) (string, error)
 	Enabled() bool
 }
 
@@ -33,11 +33,11 @@ func newSynth(ai cloud.AIClient, model string) *aiSynth {
 
 func (a *aiSynth) Enabled() bool { return a.ai != nil }
 
-func (a *aiSynth) Synthesize(ctx context.Context, prompt string) (string, error) {
+func (a *aiSynth) Synthesize(ctx context.Context, org, project, prompt string) (string, error) {
 	if a.ai == nil {
 		return "", fmt.Errorf("synth: no AI client")
 	}
-	resp, err := a.ai.ChatCompletion(ctx, &cloud.ChatRequest{Model: a.model, Prompt: prompt})
+	resp, err := a.ai.ChatCompletion(ctx, &cloud.ChatRequest{Model: a.model, Prompt: prompt, Org: org, Project: project})
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +86,7 @@ func (e *engine) ask(ctx context.Context, synth Synthesizer, repo, question stri
 		ans.Degraded = true
 		return ans, nil
 	}
-	out, err := synth.Synthesize(ctx, buildAskPrompt(question, bundle.Spans))
+	out, err := synth.Synthesize(ctx, e.org, e.project, buildAskPrompt(question, bundle.Spans))
 	if err != nil {
 		ans.Degraded = true // synthesis outage: return grounding, not a 5xx
 		return ans, nil

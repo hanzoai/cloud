@@ -47,14 +47,8 @@ func (f *fakeAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*typ
 	return &types.ChatResponse{Content: f.content}, nil
 }
 
-// Embed satisfies the AIClient interface; the agent-run tests exercise chat, not
-// embeddings, so it returns one deterministic 1-dim vector per input.
-func (f *fakeAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
-	out := make([][]float32, len(inputs))
-	for i := range inputs {
-		out[i] = []float32{0.1}
-	}
-	return out, nil
+func (f *fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
+	return nil, nil
 }
 
 func TestCreateGetListDelete(t *testing.T) {
