@@ -28,12 +28,12 @@ a rewrite, not a mount — see visor.
 
 Embedded modules (blank-imported, `Mount` via `init()`): **ai, authz, base,
 commerce, licensing, metrics, o11y, vfs** — plus the in-process **KMS** secrets
-plane (`clients/kmssvc`) and the ONE in-process **tasks durable engine**
+plane (`clients/kms`) and the ONE in-process **tasks durable engine**
 (`durable.go`, shared — see Wave 1).
 
 37 native `clients/*` subsystems already carry their product surface in-process:
 admin, agents, analytics, bot, cms, console, crm, do, erp, eval, exec, framework,
-functions, git, graph, help, kms, kmssvc, ml, o11y, paassvc, plan, platform,
+functions, git, graph, help, kms, ml, o11y, paassvc, plan, platform,
 plugin, pricing, product, projectsvc, prompt(s), provisioning, s3, security,
 tasksvc, templates, visor, websearch, zt.
 
@@ -62,7 +62,7 @@ tasksvc, templates, visor, websearch, zt.
 |---|---|
 | **iam** (`hanzoai/iam`) | Identity control plane; isolated blast radius by design (subsystems.go: "iam → iam.hanzo.ai, isolated control plane"). The binary CONSUMES it (JWT validation), never hosts it. |
 | **gateway** (`hanzoai/gateway/v2`), **ingress** | The edge — they route *to* this binary. Traefik/krakend substrate; fusing the edge into the app defeats the tier separation. |
-| **kms** (`luxfi/kms`, EMBEDDED) | KMS is now embedded in this binary (`clients/kms` store + `kmssvc` `/v1/kms`, fail-closed) — the standalone KMS Deployment is collapsed into cloud. Only the MPC signing ring (`luxfi/mpc`) stays a separate node set, the root of trust. |
+| **kms** (`luxfi/kms`, EMBEDDED) | KMS is now embedded in this binary (`clients/kms` store + `/v1/kms`, fail-closed) — the standalone KMS Deployment is collapsed into cloud. Only the MPC signing ring (`luxfi/mpc`) stays a separate node set, the root of trust. |
 | **registry** (`hanzoai/registry`) | OCI distribution data plane (S3-backed fleet registry); a Docker registry protocol server, not a `/v1` control surface. |
 | **s3** (`hanzoai/s3`, SeaweedFS) | Object-storage data plane. Cloud already carries the control/browse facade (`clients/s3` + provisioning); the store is a separate fleet. |
 | **docdb** (`hanzoai/docdb`, FerretDB) | MongoDB-wire DB data plane over Postgres; provisioned via `clients/provisioning`, never hosted in-proc. |

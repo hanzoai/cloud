@@ -1,11 +1,11 @@
-// Package kms is the Fiber-facing subsystem that exposes the embedded luxfi/kms
-// secrets-manager as /v1/kms/* on the unified Hanzo Cloud binary (HIP-0106).
+// mount.go exposes the embedded luxfi/kms secrets-manager as /v1/kms/* on the
+// unified Hanzo Cloud binary (HIP-0106) — the REST face of this package.
 //
 // It re-declares luxfi/kms's REST surface (cmd/kms is package main with no
 // mountable handler) on cloud's Fiber app, backed by the SAME embedded
-// SecretStore the in-process cloud.KMSClient uses (clients/kms.Client,
-// built in build.go and handed through deps.KMS), and gated by cloud's ONE auth
-// boundary (SanitizeIdentity → c.Org()/c.IsAdmin()) — never a parallel JWT stack.
+// SecretStore the in-process cloud.KMSClient uses (Client, this package, handed
+// through deps.KMS), and gated by cloud's ONE auth boundary (SanitizeIdentity →
+// c.Org()/c.IsAdmin()) — never a parallel JWT stack.
 //
 //	GET    /v1/kms/health                 — real probe (503 in health-only mode); public
 //	GET    /v1/kms/config                 — SPA runtime config;                    public
@@ -18,7 +18,7 @@
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
 // as /orgs/{org}{subpath}, so one org can never address another org's records.
 // This mirrors clients/paas and clients/admin.
-package kmssvc
+package kms
 
 import (
 	"encoding/json"
@@ -29,8 +29,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/principal"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
@@ -45,7 +45,7 @@ import (
 // cloud is NOT a token issuer, so with no IAM to broker to there is no way to mint
 // a validatable bearer.
 type svc struct {
-	kms         *kms.Client
+	kms         *Client
 	iamTokenURL string
 }
 
@@ -59,10 +59,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "kms")
 
-	// deps.KMS is the in-process kms.Client (build.go pickKMSClient) when kms
-	// is co-resident. Anything else (RPC/disabled stub) means secrets are served
-	// elsewhere, so the REST surface mounts health/config only.
-	kc, _ := deps.KMS.(*kms.Client)
+	// deps.KMS is the in-process Client (built by the factory this package
+	// registers, filled by build.go's BuildDeps) when kms is co-resident. Anything
+	// else (RPC/disabled stub) means secrets are served elsewhere, so the REST
+	// surface mounts health/config only.
+	kc, _ := deps.KMS.(*Client)
 	// tokenURL is IAM's client_credentials endpoint the login broker exchanges a
 	// per-tenant machine credential at. It MUST be reachable FROM INSIDE THE CLUSTER:
 	// the broker runs in-cluster and the public issuer host (e.g. https://hanzo.id) is
@@ -121,7 +122,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/kms/orgs/:org/secrets", s.guard(s.putSecret))
 	app.Delete("/v1/kms/orgs/:org/secrets/*", s.guard(s.deleteSecret))
 
-	log.Info("kms subsystem mounted",
+	log.Info(
+		"kms subsystem mounted",
 		"prefix", "/v1/kms",
 		"ready", kc.Ready(),
 		"signing", kc.SigningConfigured(),
@@ -131,17 +133,45 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// init registers the subsystem under the clean id "kms". It serves its OWN
-// fail-closed GET /v1/kms/health (Mount), so it registers with cloud.HealthOwner:
-// Serve's generic liveness loop skips a HealthOwner, so the always-ok route never
-// shadows the real probe with a fake 200. (This replaces the former "kmssvc" id
-// kludge, which existed only to park the generic route at an unrouted path.)
-// Enable with --enable=kms, or leave --enable empty for the default all-on bundle.
+// init wires this package into cloud twice, both under the clean id "kms":
 //
-// Order 10 is KMS's reserved slot: it mounts before every dependent subsystem so
-// deps.KMS is a live in-process client by the time authz/commerce/ai mount.
+//   - cloud.Register mounts the /v1/kms/* subsystem at order 10 — KMS's reserved
+//     slot: it mounts before every dependent subsystem so deps.KMS is a live
+//     in-process client by the time authz/commerce/ai mount. It serves its OWN
+//     fail-closed GET /v1/kms/health (Mount), so it registers with
+//     cloud.HealthOwner: Serve's generic liveness loop skips a HealthOwner, so the
+//     always-ok route never shadows the real probe with a fake 200.
+//   - cloud.RegisterKMSClientFactory hands build.go's BuildDeps the embedded-client
+//     constructor so deps.KMS is filled BEFORE MountAll WITHOUT cloud importing this
+//     package — the inversion that lets the KMS library (Client, New) and its REST
+//     surface share one package with no cloud⇄kms import cycle.
+//
+// Enable with --enable=kms, or leave --enable empty for the default all-on bundle.
 func init() {
 	cloud.Register("kms", 10, cloud.Typed(Mount), cloud.HealthOwner)
+	cloud.RegisterKMSClientFactory(newEmbeddedClient)
+}
+
+// newEmbeddedClient builds the in-process embedded KMS client from cloud Config.
+// Registered as cloud's KMS client factory (init) so BuildDeps can populate
+// deps.KMS before MountAll. A store-open failure returns the error; build.go then
+// fails closed to the disabled stub rather than crashing the binary.
+func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, error) {
+	c, err := New(Config{
+		DataDir:      cfg.DataDir,
+		MasterKeyB64: cfg.KMSMasterKeyRef,
+		MPCAddr:      cfg.KMSMPCAddr,
+		MPCVaultID:   cfg.KMSMPCVaultID,
+		// Reader HA role opens the KMS store READ-ONLY (BypassLockGuard) off a
+		// restored replica — never the exclusive write lock. Writer (default) opens
+		// writable exactly as before.
+		ReadOnly: cfg.Role.IsReader(),
+	}, log)
+	if err != nil {
+		return nil, err
+	}
+	log.Info("deps.KMS → in-process (embedded luxfi/kms)", "ready", c.Ready(), "signing", c.SigningConfigured())
+	return c, nil
 }
 
 // guard wraps a secrets handler with the org-scope gate. Fail-closed: a request
@@ -170,7 +200,7 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 			return zip.ErrForbidden("caller may only access its own org's secrets")
 		}
 		if !s.kms.Ready() {
-			return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
 		}
 		return h(ctx)
 	}
@@ -191,7 +221,7 @@ func (s *svc) health(ctx *zip.Ctx) error {
 	res["signing"] = s.kms.SigningConfigured()
 	if !s.kms.Ready() {
 		res["status"], res["ready"] = "degraded", false
-		res["error"] = kms.ErrMasterKeyMissing.Error()
+		res["error"] = ErrMasterKeyMissing.Error()
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["ready"] = true
@@ -234,7 +264,7 @@ func (s *svc) listSecrets(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
 	sub := ctx.Query("path")
-	if !kms.ValidSubpath(sub) {
+	if !ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	metas, err := s.kms.List(orgPath(org, sub), env)
@@ -258,7 +288,7 @@ func (s *svc) getSecret(ctx *zip.Ctx) error {
 	}
 	val, err := s.kms.Get(path, name, env)
 	if err != nil {
-		if errors.Is(err, kms.ErrSecretNotFound) {
+		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -297,7 +327,7 @@ func (s *svc) putSecret(ctx *zip.Ctx) error {
 	if !validEnv(env) {
 		return zip.ErrBadRequest("'env' must not contain '/', control characters, or exceed 63 bytes")
 	}
-	if !kms.ValidSubpath(req.Path) {
+	if !ValidSubpath(req.Path) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	path := orgPath(org, req.Path)
@@ -319,7 +349,7 @@ func (s *svc) deleteSecret(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("secret name is required and must be a clean '/'-separated path")
 	}
 	if err := s.kms.Delete(path, name, env); err != nil {
-		if errors.Is(err, kms.ErrSecretNotFound) {
+		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
@@ -353,12 +383,12 @@ func validOrg(org string) bool {
 	return true
 }
 
-// The key-shape validators live in ONE place — clients/kms — so the HTTP
-// boundary and the in-process store methods enforce identically (DRY). The
-// subsystem reuses kms.ValidSegment / ValidSubpath here to return a specific
-// 400 early, before the request reaches the store.
-func validName(s string) bool { return kms.ValidSegment(s, kms.MaxNameLen) }
-func validEnv(s string) bool  { return kms.ValidSegment(s, kms.MaxEnvLen) }
+// The key-shape validators live in ONE place — this package — so the HTTP
+// boundary and the in-process store methods enforce identically (DRY). The REST
+// handlers reuse ValidSegment / ValidSubpath here to return a specific 400 early,
+// before the request reaches the store.
+func validName(s string) bool { return ValidSegment(s, MaxNameLen) }
+func validEnv(s string) bool  { return ValidSegment(s, MaxEnvLen) }
 
 // orgPath folds an org + an optional relative subpath into the store path,
 // namespacing every org under /orgs/{org}. "" subpath → /orgs/{org}.
@@ -383,20 +413,17 @@ func targetOf(org, sub string) (path, name string, ok bool) {
 	} else {
 		name = sub
 	}
-	if !validName(name) || !kms.ValidSubpath(subpath) {
+	if !validName(name) || !ValidSubpath(subpath) {
 		return "", "", false
 	}
 	return orgPath(org, subpath), name, true
 }
 
-// envOr returns env or the "default" environment when empty.
+// envOr returns env or the "default" environment when empty. defaultEnv is
+// defined in kms.go (the library face) — the ONE place the fallback lives.
 func envOr(env string) string {
 	if e := strings.TrimSpace(env); e != "" {
 		return e
 	}
 	return defaultEnv
 }
-
-// defaultEnv is the secret environment used when a request omits ?env=, matching
-// luxfi/kms's REST default.
-const defaultEnv = "default"
