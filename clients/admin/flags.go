@@ -15,11 +15,12 @@ package admin
 // the native Insights UI (the one-and-one-way flag surface), surfaced in the cockpit.
 
 import (
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/featureflags"
 	"github.com/zap-proto/zip"
 )
 
 // flags answers GET /v1/admin/flags — the platform control-plane read board.
-func (s *svc) flags(c *zip.Ctx) error {
+func flags(s *cloud.Service[state], c *zip.Ctx) error {
 	return ok(c, featureflags.Board())
 }
