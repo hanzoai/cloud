@@ -19,8 +19,8 @@ import (
 // matches the pushed ref, reusing the ONE build-launch core (startGitBuild). It is
 // the registered cloud.PushBuilder. A push that maps to no app is the common case
 // and returns nil; an error is returned only for a store read the caller may log.
-func (s *svc) buildFromPush(ctx context.Context, ev cloud.GitPushEvent) error {
-	apps, err := s.store.ListAllApplications(ctx, ev.Org)
+func buildFromPush(s *cloud.Service[state], ctx context.Context, ev cloud.GitPushEvent) error {
+	apps, err := s.State.store.ListAllApplications(ctx, ev.Org)
 	if err != nil {
 		return err
 	}
@@ -36,26 +36,26 @@ func (s *svc) buildFromPush(ctx context.Context, ev cloud.GitPushEvent) error {
 		}
 		n++
 		now := time.Now().Unix()
-		version, verr := s.store.NextVersion(ctx, a.ID)
+		version, verr := s.State.store.NextVersion(ctx, a.ID)
 		if verr != nil {
-			s.log.Warn("push build: version alloc failed", "org", ev.Org, "app", a.Slug, "err", verr)
+			s.Log.Warn("push build: version alloc failed", "org", ev.Org, "app", a.Slug, "err", verr)
 			continue
 		}
 		depID, derr := genID("dep")
 		if derr != nil {
-			s.log.Warn("push build: rng failed", "org", ev.Org, "app", a.Slug, "err", derr)
+			s.Log.Warn("push build: rng failed", "org", ev.Org, "app", a.Slug, "err", derr)
 			continue
 		}
-		_, jobName, _, berr := s.startGitBuild(ctx, ev.Org, a, depID, version, now, ev.Commit, s.k8s.ready())
+		_, jobName, _, berr := startGitBuild(s, ctx, ev.Org, a, depID, version, now, ev.Commit, s.State.k8s.ready())
 		if berr != nil {
-			s.log.Warn("push build failed", "org", ev.Org, "app", a.Slug, "err", berr)
+			s.Log.Warn("push build failed", "org", ev.Org, "app", a.Slug, "err", berr)
 			continue
 		}
-		s.log.Info("build launched (git push)", "org", ev.Org, "app", a.Slug, "job", jobName,
+		s.Log.Info("build launched (git push)", "org", ev.Org, "app", a.Slug, "job", jobName,
 			"repo", ev.Repo, "branch", ev.Branch, "commit", shortTag(ev.Commit))
 	}
 	if n == 0 {
-		s.log.Debug("git push: no app tracks this repo+branch", "org", ev.Org, "repo", ev.Repo, "branch", ev.Branch)
+		s.Log.Debug("git push: no app tracks this repo+branch", "org", ev.Org, "repo", ev.Repo, "branch", ev.Branch)
 	}
 	return nil
 }

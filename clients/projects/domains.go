@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
@@ -55,12 +56,12 @@ type setDomainsReq struct {
 // is DNS control. First-come + reserved-label guards are enforced by the store
 // (BindHost); binds are idempotent for the same (org, slug), so a redeploy or a
 // repeat call is safe.
-func (s *svc) setDomains(c *zip.Ctx) error {
+func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -74,7 +75,7 @@ func (s *svc) setDomains(c *zip.Ctx) error {
 	if len(body.Domains) == 0 {
 		return zip.ErrBadRequest("no domains to bind")
 	}
-	authorized := c.IsAdmin() || s.operatorOrgs[org]
+	authorized := c.IsAdmin() || s.State.operatorOrgs[org]
 	now := time.Now().Unix()
 	bound := make([]string, 0, len(body.Domains))
 	for _, d := range body.Domains {
@@ -89,7 +90,7 @@ func (s *svc) setDomains(c *zip.Ctx) error {
 			return zip.Errorf(http.StatusForbidden,
 				"binding custom domain %q requires ownership verification; a global admin or the platform-operator org may bind it today", host)
 		}
-		if err := s.store.BindHost(c.Context(), host, org, p.Slug, now); err != nil {
+		if err := s.State.store.BindHost(c.Context(), host, org, p.Slug, now); err != nil {
 			switch {
 			case errors.Is(err, errHostTaken):
 				return zip.ErrConflict("domain " + host + " is already bound to another site")
@@ -102,28 +103,28 @@ func (s *svc) setDomains(c *zip.Ctx) error {
 		bound = append(bound, host)
 	}
 	// Purge the edge so the newly-bound host serves the current content immediately.
-	if err := s.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); err != nil {
-		s.log.Warn("cloudflare purge failed after domain bind (continuing)", "org", org, "slug", p.Slug, "err", err)
+	if err := s.State.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); err != nil {
+		s.Log.Warn("cloudflare purge failed after domain bind (continuing)", "org", org, "slug", p.Slug, "err", err)
 	}
-	hosts, _ := s.store.ListHostsForProject(c.Context(), org, p.Slug)
+	hosts, _ := s.State.store.ListHostsForProject(c.Context(), org, p.Slug)
 	return c.JSON(http.StatusOK, map[string]any{"slug": p.Slug, "org": org, "bound": bound, "domains": hosts})
 }
 
 // listDomains returns every public host bound to this site — its hanzo.app
 // subdomain plus any bound custom domains.
-func (s *svc) listDomains(c *zip.Ctx) error {
+func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	hosts, err := s.store.ListHostsForProject(c.Context(), org, p.Slug)
+	hosts, err := s.State.store.ListHostsForProject(c.Context(), org, p.Slug)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list domains: %v", err)
 	}

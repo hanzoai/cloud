@@ -63,24 +63,30 @@ var catalog = sync.OnceValues(func() ([]Template, error) {
 	return out, nil
 })
 
-type svc struct{}
+// state is templates' own data: none — the catalog is embedded reference content
+// decoded once into a package-level OnceValues; shared deps live in cloud.Base.
+type state struct{}
 
 // Mount registers the read-only templates surface. No store, no DataDir — the
-// catalog is embedded reference content.
+// catalog is embedded reference content, validated once in build.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("templates.Mount: nil zip.App")
-	}
+	return cloud.Mount(app, deps, "templates", build, routes)
+}
+
+// build validates the embedded gallery once, failing the mount closed on a
+// malformed catalog. The state is empty; the catalog lives in the package OnceValues.
+func build(b cloud.Base) (state, error) {
 	if _, err := catalog(); err != nil {
-		return err
+		return state{}, err
 	}
-	s := &svc{}
-	app.Get("/v1/templates", s.list)
-	app.Get("/v1/templates/:slug", s.get)
-	if deps.Logger != nil {
-		deps.Logger.New("subsystem", "templates").Info("templates mounted", "brand", deps.Brand)
-	}
-	return nil
+	b.Log.Info("templates gallery", "prefix", "/v1/templates", "brand", b.Brand)
+	return state{}, nil
+}
+
+// routes registers the read-only templates surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/templates", cloud.Handle(s, list))
+	app.Get("/v1/templates/:slug", cloud.Handle(s, get))
 }
 
 // List returns the validated starter-kit catalog (the SAME slice the HTTP GET
@@ -105,7 +111,7 @@ func Get(slug string) (Template, bool) {
 	return Template{}, false
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	cat, err := catalog()
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "templates: %v", err)
@@ -113,7 +119,7 @@ func (s *svc) list(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": cat})
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, err := catalog(); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "templates: %v", err)
 	}
