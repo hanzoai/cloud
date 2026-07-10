@@ -40,12 +40,12 @@ func buildMinutesCents(startUnix, endUnix, feePerMinuteCents int64) int64 {
 // meter is a no-op), so it never blocks reconciliation. b.CreatedAt is the build
 // record's birth — the Job launches immediately after — so the span is honest
 // wall-clock compute, never the reconcile poll interval or the failure deadline.
-func (s *svc) meterBuild(b Build, endUnix int64) {
+func meterBuild(s *cloud.Service[state], b Build, endUnix int64) {
 	cents := buildMinutesCents(b.CreatedAt, endUnix, cloud.ResourceFeeCents(buildMinuteFeeEnvPrefix, "build"))
 	if cents <= 0 {
 		return
 	}
-	s.bill.MeterUsage(b.Org, "build", metering.Usage{
+	s.Bill.MeterUsage(b.Org, "build", metering.Usage{
 		Model:       "build", // the billed unit: wall-clock build minutes.
 		AmountCents: cents,
 	})
