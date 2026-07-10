@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -23,9 +24,9 @@ func runnerApp(t *testing.T) *zip.App {
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
-	s := &svc{store: store, k8s: fakeK8s(), log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: fakeK8s(), sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s.routes(app)
+	routes(app, s)
 	return app
 }
 
