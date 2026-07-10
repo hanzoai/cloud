@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -30,15 +31,15 @@ import (
 // Filters: org, sub, action, resource, result, since, until, pageSize, p (page).
 // The response is the /v1 list envelope { data:[rows], data2:total } the
 // operator decodes, with the current chain integrity summary attached.
-func (s *svc) audit(c *zip.Ctx) error {
+func auditRecords(s *cloud.Service[state], c *zip.Ctx) error {
 	// No local store configured → preserve the legacy federated IAM view so the
 	// endpoint never regresses to empty.
-	if s.auditStore == nil {
-		return s.auditFromIAM(c)
+	if s.State.auditStore == nil {
+		return auditFromIAM(s, c)
 	}
 
 	f := auditFilterFromQuery(c)
-	rows, total, err := s.auditStore.Query(c.Context(), f)
+	rows, total, err := s.State.auditStore.Query(c.Context(), f)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -50,7 +51,7 @@ func (s *svc) audit(c *zip.Ctx) error {
 
 	// Attach the live integrity summary so the console can badge the trail as
 	// verified. Best-effort: a verify error must not fail the listing.
-	integrity, ivErr := s.auditStore.Verify(c.Context())
+	integrity, ivErr := s.State.auditStore.Verify(c.Context())
 	var integrityPayload any
 	if ivErr == nil {
 		integrityPayload = integrity
@@ -69,11 +70,11 @@ func (s *svc) audit(c *zip.Ctx) error {
 // walks the whole hash chain and returns the integrity result (ok, count, head,
 // and the seq where the chain first breaks if tampered). Global-admin gated like
 // every admin route.
-func (s *svc) auditVerify(c *zip.Ctx) error {
-	if s.auditStore == nil {
+func auditVerify(s *cloud.Service[state], c *zip.Ctx) error {
+	if s.State.auditStore == nil {
 		return fail(c, "audit store not configured")
 	}
-	integrity, err := s.auditStore.Verify(c.Context())
+	integrity, err := s.State.auditStore.Verify(c.Context())
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -120,9 +121,9 @@ func auditFilterFromQuery(c *zip.Ctx) audit.Filter {
 // auditFromIAM is the legacy federated view: when cloud has no local audit store,
 // forward the IAM get-records read verbatim (the prior behavior), so the endpoint
 // still surfaces IAM's own audit trail rather than an empty list.
-func (s *svc) auditFromIAM(c *zip.Ctx) error {
+func auditFromIAM(s *cloud.Service[state], c *zip.Ctx) error {
 	q := iamAuditQuery(c)
-	res, err := s.iam.getList(c.Context(), callerCreds(c), "/v1/iam/get-records", q)
+	res, err := s.State.iam.getList(c.Context(), callerCreds(c), "/v1/iam/get-records", q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
