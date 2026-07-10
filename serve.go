@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/internal/cek"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/writerpin"
@@ -112,6 +113,16 @@ func Serve(specs []MountSpec, enable []string) error {
 	// linked or no sink/endpoint is configured. clients/o11y installs the concrete
 	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
 	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
+
+	// Data-plane encryption posture (cek). On an encryption-capable build a
+	// missing/invalid CLOUD_KMS_MASTER_KEY_REF makes the FIRST store open fail
+	// closed (MountAll aborts) — the same fail-closed stance as the KMS store; we
+	// surface it here so the posture is never silent.
+	if cek.Encrypting() {
+		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
+	} else {
+		deps.Logger.Warn("data-plane encryption OFF (pure-Go dev build, or missing key on a capable build → store opens fail closed)")
+	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
 	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
