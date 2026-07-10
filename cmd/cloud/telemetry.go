@@ -39,6 +39,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/o11y"
 	"github.com/hanzoai/cloud/zaptrace"
 )
@@ -90,18 +91,23 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 	)
 	otel.SetTracerProvider(tp)
 
-	// Composition-root ownership: cloud installs the ONE tracer provider (ZAP),
-	// so retire the OTLP-exporter env before any subsystem boots. An embedded
-	// subsystem — notably hanzoai/ai's object.InitTelemetry, invoked during
-	// ai.Bootstrap at mount — reads OTEL_EXPORTER_OTLP_*ENDPOINT and, if set,
-	// installs a SECOND, competing OTLP tracer provider. That second provider
-	// forks the trace path: it wins the global slot for any tracer created
-	// afterward (the ai GenAI tracer), stranding those spans on OTLP(:4318) while
-	// this ZAP provider owns the rest — the exact split that left receiver="zap"
-	// at zero. Clearing it here guarantees exactly one provider (ZAP) and one
-	// wire, deterministically, regardless of CR env drift. In the fused binary
-	// OTLP is only ever the collector's interop RECEIVER, never cloud's exporter;
-	// standalone cmd/aid (no ZAP endpoint) is unaffected and keeps its OTLP path.
+	// Composition-root ownership: cloud installs the ONE tracer provider (wired to
+	// the o11y in-process trace sink) and DECLARES it to the embedded hanzoai/ai
+	// module so ai emits every gen_ai span through THIS provider instead of forking
+	// its own. Without this, ai's object.InitTelemetry (invoked during ai.Bootstrap
+	// at mount) finds no exporter endpoint — in-process mode sets none and we clear
+	// the OTLP env just below — and DISABLES its emit. That is exactly why the
+	// gen_ai plane was dark: cloud's own /v1/* request spans reached o11y_traces but
+	// every LLM call's gen_ai span was gated off. One provider, one wire, one signal.
+	aiobject.AdoptHostTracerProvider()
+
+	// Defense in depth for the same one-provider invariant: retire the OTLP-exporter
+	// env so no OTel-instrumented library auto-configures a SECOND, competing OTLP
+	// provider that would win the global slot for tracers created afterward and split
+	// the wire. ai already rides this provider via the adopt above; this stops any
+	// other subsystem from forking one, deterministically, regardless of CR env drift.
+	// In the fused binary OTLP is only ever the collector's interop RECEIVER, never
+	// cloud's exporter; standalone cmd/aid (never calls the adopt) keeps its OTLP path.
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
@@ -123,4 +129,3 @@ func firstNonEmptyEnv(keys ...string) string {
 	}
 	return ""
 }
-

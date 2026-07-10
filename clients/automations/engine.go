@@ -149,7 +149,7 @@ func RecordRunStartActivity(ctx context.Context, in RunStartInput) error {
 	if mounted == nil {
 		return nil
 	}
-	return mounted.recordRunStart(ctx, in)
+	return recordRunStart(mounted, ctx, in)
 }
 
 // RecordRunEndActivity records a run's terminal status so listRuns reflects it
@@ -158,7 +158,7 @@ func RecordRunEndActivity(ctx context.Context, in RunEndInput) error {
 	if mounted == nil {
 		return nil
 	}
-	return mounted.recordRunEnd(ctx, in)
+	return recordRunEnd(mounted, ctx, in)
 }
 
 // ExecuteStepActivity is the side-effecting body of ONE step. It is THE isolation

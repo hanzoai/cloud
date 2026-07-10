@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -85,12 +86,12 @@ type releaseView struct {
 // An environment is not a standalone record — it is the Application.Environment
 // scope — so this is list-only; a new environment appears the moment an app
 // targets it (create an app with that environment via POST .../apps).
-func (s *svc) listEnvironments(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listEnvironments(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	apps, err := s.store.ListAllApplications(c.Context(), org)
+	apps, err := s.State.store.ListAllApplications(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
@@ -144,16 +145,16 @@ func (s *svc) listEnvironments(c *zip.Ctx) error {
 // (source repo/image) plus the status/timing of its latest deployment run. One
 // pipeline per app — a pipeline is created by creating an app, so this is
 // list-only.
-func (s *svc) listPipelines(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listPipelines(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	apps, err := s.store.ListAllApplications(c.Context(), org)
+	apps, err := s.State.store.ListAllApplications(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
-	deps, err := s.store.ListDeploymentsByOrg(c.Context(), org)
+	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
@@ -189,20 +190,20 @@ func (s *svc) listPipelines(c *zip.Ctx) error {
 // joined to their app (source repo) and deployment (commit). Builds are triggered
 // by deploying a git-source app (POST .../deploy) — the ONE build trigger — so
 // this is list-only. Real records or an honest empty list; never fabricated.
-func (s *svc) listBuilds(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listBuilds(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	builds, err := s.store.ListBuildsByOrg(c.Context(), org)
+	builds, err := s.State.store.ListBuildsByOrg(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list builds: %v", err)
 	}
-	appByID, err := s.appIndex(c, org)
+	appByID, err := appIndex(s, c, org)
 	if err != nil {
 		return err
 	}
-	depByID, err := s.deploymentIndex(c, org)
+	depByID, err := deploymentIndex(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -236,16 +237,16 @@ func (s *svc) listBuilds(c *zip.Ctx) error {
 // actually applied to the cluster (status deploying|live), i.e. a released image
 // tag on an app/environment. A release is created by a successful deploy — the
 // ONE deploy path — so this is list-only. Real deployment history only.
-func (s *svc) listReleases(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listReleases(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	deps, err := s.store.ListDeploymentsByOrg(c.Context(), org)
+	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
-	appByID, err := s.appIndex(c, org)
+	appByID, err := appIndex(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -274,8 +275,8 @@ func (s *svc) listReleases(c *zip.Ctx) error {
 
 // ── join indexes (all org-scoped) ────────────────────────────────────────────
 
-func (s *svc) appIndex(c *zip.Ctx, org string) (map[string]Application, error) {
-	apps, err := s.store.ListAllApplications(c.Context(), org)
+func appIndex(s *cloud.Service[state], c *zip.Ctx, org string) (map[string]Application, error) {
+	apps, err := s.State.store.ListAllApplications(c.Context(), org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
@@ -286,8 +287,8 @@ func (s *svc) appIndex(c *zip.Ctx, org string) (map[string]Application, error) {
 	return m, nil
 }
 
-func (s *svc) deploymentIndex(c *zip.Ctx, org string) (map[string]Deployment, error) {
-	deps, err := s.store.ListDeploymentsByOrg(c.Context(), org)
+func deploymentIndex(s *cloud.Service[state], c *zip.Ctx, org string) (map[string]Deployment, error) {
+	deps, err := s.State.store.ListDeploymentsByOrg(c.Context(), org)
 	if err != nil {
 		return nil, zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
