@@ -59,7 +59,6 @@ import (
 	"github.com/hanzoai/cloud/clients/treasury/formance"
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
 	"github.com/hanzoai/cloud/clients/treasury/ledger/sqlstore"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -77,17 +76,17 @@ const (
 	maxJournalLimit = 1000
 )
 
-type svc struct {
+// state is treasury's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store      *sqlstore.Store // native store: policy config always, journal when native backend
 	record     ledger.Backend  // the ledger of record — native (default) or Formance
-	log        luxlog.Logger
 	auditStore *audit.Recorder // best-effort debit/policy audit; nil disables it
 	anchor     *anchorer       // Hanzo L1 anchor (Phase 2); nil-safe
 }
 
 // mounted is the process singleton the Reserve helper resolves. Set at Mount; nil
 // when the subsystem is not linked/enabled, which makes Reserve a passthrough.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires the treasury surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -121,12 +120,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		record = ledger.New(store)
 		log.Info("treasury ledger of record: native (Base/SQLite) — set FORMANCE_LEDGER_URL for Formance")
 	}
-	s := &svc{
-		store:      store,
-		record:     record,
-		log:        log,
-		auditStore: deps.Audit,
-		anchor:     newAnchorer(deps, log),
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "treasury"),
+		State: state{
+			store:      store,
+			record:     record,
+			auditStore: deps.Audit,
+			anchor:     newAnchorer(deps, log),
+		},
 	}
 	mounted = s
 
@@ -135,16 +136,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// their own accounts; the reserve fund + revenue-share + house mutations are
 	// locked to global-admin under /v1/admin/treasury* (the console admin-proxy
 	// convention, enveloped).
-	app.Get("/v1/finance/treasury", s.myTreasury)                 // per-org: reserve transparency + policy
-	app.Get("/v1/finance/accounts", s.myAccounts)                 // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	app.Get("/v1/admin/treasury", s.adminReport)                  // global-admin: report + journal + anchor
-	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)       // global-admin: set revenue-share %
-	app.Post("/v1/admin/treasury/sweep", s.adminSweep)            // global-admin: accrue revenue-share
-	app.Post("/v1/admin/treasury/seed", s.adminSeed)              // global-admin: inject reserve capital
-	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)          // global-admin: anchor ledger root on Hanzo L1
-	app.Post("/v1/admin/treasury/bind-anchor", s.adminBindAnchor) // global-admin: bind the reserve MPC wallet as the anchor signer
+	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))                 // per-org: reserve transparency + policy
+	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))                 // per-org: own ledger accounts (admin: ?org=/?scope=house)
+	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))                  // global-admin: report + journal + anchor
+	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))       // global-admin: set revenue-share %
+	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))            // global-admin: accrue revenue-share
+	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))              // global-admin: inject reserve capital
+	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))          // global-admin: anchor ledger root on Hanzo L1
+	app.Post("/v1/admin/treasury/bind-anchor", cloud.Handle(s, adminBindAnchor)) // global-admin: bind the reserve MPC wallet as the anchor signer
 
-	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.anchor.configured())
+	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
 	return nil
 }
 
@@ -179,12 +180,12 @@ func Reserve(ctx context.Context, program, ref, memo string, amountCents int64) 
 	if s == nil {
 		return true, "", nil // unmounted → passthrough (backward-safe)
 	}
-	entry, backed, created, err := s.record.DebitReserve(ctx, program, ref, memo, amountCents, time.Now().Unix())
+	entry, backed, created, err := s.State.record.DebitReserve(ctx, program, ref, memo, amountCents, time.Now().Unix())
 	if err != nil {
 		return false, "", err
 	}
 	if backed && created {
-		s.emitAudit(ctx, "treasury.debit", program, entry.ID, map[string]any{
+		emitAudit(s,ctx, "treasury.debit", program, entry.ID, map[string]any{
 			"program": program, "ref": ref, "amountCents": amountCents, "entryId": entry.ID,
 		})
 	}
@@ -201,7 +202,7 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 	if s == nil {
 		return 0, false
 	}
-	bal, err := s.record.ReserveCents(ctx)
+	bal, err := s.State.record.ReserveCents(ctx)
 	if err != nil {
 		return 0, true
 	}
@@ -215,11 +216,11 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 // partner/author can see the pool that backs their payouts is solvent — not per-org
 // money (that is the customer's commerce balance at /v1/billing/balance). Policy is
 // read-only here; only global-admin sets it.
-func (s *svc) myTreasury(c *zip.Ctx) error {
+func myTreasury(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
 	}
-	rep, err := s.record.Snapshot(c.Context())
+	rep, err := s.State.record.Snapshot(c.Context())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
@@ -240,7 +241,7 @@ type accountView struct {
 // specific tenant) — the ONLY way to cross the tenant boundary, and only for admins.
 // Honest empty until a tenant has ledger postings (the commerce→ledger projection is
 // the rebrand/datastore agents' concurrent work; this contract is stable for them).
-func (s *svc) myAccounts(c *zip.Ctx) error {
+func myAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 	tenant, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view accounts")
@@ -257,7 +258,7 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 			}
 		}
 	}
-	balances, err := s.record.AccountsWithPrefix(c.Context(), prefix)
+	balances, err := s.State.record.AccountsWithPrefix(c.Context(), prefix)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "accounts: %v", err)
 	}
@@ -280,23 +281,23 @@ func (s *svc) myAccounts(c *zip.Ctx) error {
 
 // adminReport answers GET /v1/admin/treasury — the full fund report, the recent
 // journal (double-entry postings), and the Hanzo L1 anchor status. Global-admin only.
-func (s *svc) adminReport(c *zip.Ctx) error {
+func adminReport(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	rep, err := s.record.Snapshot(ctx)
+	rep, err := s.State.record.Snapshot(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "treasury snapshot: %v", err)
 	}
-	entries, err := s.record.Entries(ctx, journalLimitOf(c))
+	entries, err := s.State.record.Entries(ctx, journalLimitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "journal: %v", err)
 	}
 	return adminOK(c, map[string]any{
 		"report":  rep,
 		"journal": entries,
-		"anchor":  s.anchor.status(ctx, s.record),
+		"anchor":  s.State.anchor.status(ctx, s.State.record),
 	})
 }
 
@@ -306,7 +307,7 @@ type policyRequest struct {
 }
 
 // adminSetPolicy sets the revenue-share basis points (0–10000). Global-admin only.
-func (s *svc) adminSetPolicy(c *zip.Ctx) error {
+func adminSetPolicy(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -314,11 +315,11 @@ func (s *svc) adminSetPolicy(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	pol, err := s.record.SetPolicy(c.Context(), body.RevenueShareBps, time.Now().Unix())
+	pol, err := s.State.record.SetPolicy(c.Context(), body.RevenueShareBps, time.Now().Unix())
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	s.emitAudit(c.Context(), "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
+	emitAudit(s,c.Context(), "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
 	return adminOK(c, map[string]any{"policy": pol})
 }
 
@@ -333,7 +334,7 @@ type sweepRequest struct {
 
 // adminSweep posts the revenue-share accrual for a period (revenue → fund),
 // idempotent per period. Global-admin only.
-func (s *svc) adminSweep(c *zip.Ctx) error {
+func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -348,16 +349,16 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 	if body.RevenueCents < 0 {
 		return zip.ErrBadRequest("revenueCents must be >= 0")
 	}
-	entry, created, err := s.record.Accrue(c.Context(), period, body.RevenueCents, time.Now().Unix())
+	entry, created, err := s.State.record.Accrue(c.Context(), period, body.RevenueCents, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
 	}
 	if created {
-		s.emitAudit(c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
+		emitAudit(s,c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
 			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.AmountCents,
 		})
 	}
-	reserve, _ := s.record.ReserveCents(c.Context())
+	reserve, _ := s.State.record.ReserveCents(c.Context())
 	return adminOK(c, map[string]any{
 		"period":       period,
 		"revenueCents": body.RevenueCents,
@@ -378,7 +379,7 @@ type seedRequest struct {
 
 // adminSeed injects bootstrap capital into the reserve fund so backed payouts can
 // begin before the first revenue-share sweep. Global-admin only.
-func (s *svc) adminSeed(c *zip.Ctx) error {
+func adminSeed(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -397,16 +398,16 @@ func (s *svc) adminSeed(c *zip.Ctx) error {
 	if memo == "" {
 		memo = "reserve capital injection"
 	}
-	entry, created, err := s.record.Seed(c.Context(), ref, memo, body.AmountCents, time.Now().Unix())
+	entry, created, err := s.State.record.Seed(c.Context(), ref, memo, body.AmountCents, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
 	}
 	if created {
-		s.emitAudit(c.Context(), "treasury.seed", "", entry.ID, map[string]any{
+		emitAudit(s,c.Context(), "treasury.seed", "", entry.ID, map[string]any{
 			"amountCents": body.AmountCents, "ref": ref, "entryId": entry.ID,
 		})
 	}
-	reserve, _ := s.record.ReserveCents(c.Context())
+	reserve, _ := s.State.record.ReserveCents(c.Context())
 	return adminOK(c, map[string]any{"entry": entry, "created": created, "reserveCents": reserve})
 }
 
@@ -423,8 +424,8 @@ func adminOK(c *zip.Ctx, data any) error {
 // emitAudit records a treasury money action in cloud's tamper-evident trail.
 // Best-effort; a nil store is a no-op. The actor is the treasury engine (a system
 // action, not a user).
-func (s *svc) emitAudit(ctx context.Context, action, program, resourceID string, after map[string]any) {
-	if s.auditStore == nil {
+func emitAudit(s *cloud.Service[state], ctx context.Context, action, program, resourceID string, after map[string]any) {
+	if s.State.auditStore == nil {
 		return
 	}
 	rec := audit.Record{
@@ -435,8 +436,8 @@ func (s *svc) emitAudit(ctx context.Context, action, program, resourceID string,
 		Outcome:  audit.Outcome{Result: "success", Status: 200},
 		After:    audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.auditStore.Append(ctx, rec); err != nil {
-		s.log.Error("treasury: audit emit failed", "action", action, "err", err)
+	if _, err := s.State.auditStore.Append(ctx, rec); err != nil {
+		s.Log.Error("treasury: audit emit failed", "action", action, "err", err)
 	}
 }
 
@@ -461,10 +462,10 @@ func journalLimitOf(c *zip.Ctx) int {
 
 // Shutdown closes the treasury store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
