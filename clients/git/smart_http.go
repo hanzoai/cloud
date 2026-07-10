@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/pktline"
 	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -192,6 +194,12 @@ func (s *svc) receivePack(c *zip.Ctx) error {
 	// a metering miss must never fail the push the client already committed.
 	s.recordUsage(context.WithoutCancel(c.Context()), org, project, name)
 
+	// git-push-to-deploy: trigger a build for every branch ref this push advanced.
+	// Best-effort by contract — the push already landed, so a build-trigger failure
+	// is logged, never surfaced to the client (build.go OnGitPush is a no-op when
+	// the platform subsystem is not co-resident).
+	s.firePushBuilds(context.WithoutCancel(c.Context()), org, project, name, req)
+
 	var buf bytes.Buffer
 	if report != nil {
 		if encErr := report.Encode(&buf); encErr != nil {
@@ -201,6 +209,27 @@ func (s *svc) receivePack(c *zip.Ctx) error {
 	c.SetHeader("Content-Type", "application/x-git-receive-pack-result")
 	c.SetHeader("Cache-Control", "no-cache")
 	return c.Bytes(http.StatusOK, buf.Bytes())
+}
+
+// firePushBuilds triggers a platform build for every branch ref this push
+// advanced (created or updated). Tags and deletes are ignored. Best-effort and
+// non-fatal: the push has already landed, so a trigger failure is logged, never
+// surfaced to the client. The build resolves the target app from the repo's
+// canonical clone URL + branch (clients/platform/push.go).
+func (s *svc) firePushBuilds(ctx context.Context, org, project, name string, req *packp.ReferenceUpdateRequest) {
+	cloneURL := s.cloneURL(org, name)
+	for _, cmd := range req.Commands {
+		if cmd == nil || !cmd.Name.IsBranch() || cmd.New == plumbing.ZeroHash {
+			continue // only branch refs that were created/updated, never deletes/tags
+		}
+		ev := cloud.GitPushEvent{
+			Org: org, Project: project, Repo: name,
+			Branch: cmd.Name.Short(), Commit: cmd.New.String(), CloneURL: cloneURL,
+		}
+		if err := cloud.OnGitPush(ctx, ev); err != nil {
+			s.log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", ev.Branch, "err", err)
+		}
+	}
 }
 
 // ---- session helpers ----
