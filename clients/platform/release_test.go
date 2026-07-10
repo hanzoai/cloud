@@ -10,12 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func testSvc() *svc { return &svc{log: luxlog.New("test")} }
+func testSvc() *cloud.Service[state] {
+	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
+}
 
 // nextVersion is the pure floor: max(floor, git…, container…) + 1 PATCH, never a
 // major/minor jump; unparseable tags ignored; a pushed container tag that outruns the
@@ -202,7 +205,7 @@ func TestComputeReleaseVersion(t *testing.T) {
 	defer srv.Close()
 	defer swapAPIBase(srv.URL)()
 
-	got, err := testSvc().computeReleaseVersion(context.Background(), releaseRepoSlug)
+	got, err := computeReleaseVersion(testSvc(), context.Background(), releaseRepoSlug)
 	if err != nil {
 		t.Fatalf("computeReleaseVersion: %v", err)
 	}
@@ -229,7 +232,7 @@ func TestTagRelease_RefPath(t *testing.T) {
 	defer swapAPIBase(srv.URL)()
 
 	sha := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-	if err := testSvc().tagRelease(context.Background(), releaseRepoSlug, sha, "v1.786.44"); err != nil {
+	if err := tagRelease(testSvc(), context.Background(), releaseRepoSlug, sha, "v1.786.44"); err != nil {
 		t.Fatalf("tagRelease: %v", err)
 	}
 	if gotBody["ref"] != "refs/tags/v1.786.44" || gotBody["sha"] != sha {
@@ -257,7 +260,7 @@ func TestNotifyUniverse_Payload(t *testing.T) {
 	defer swapAPIBase(srv.URL)()
 
 	img := "ghcr.io/hanzoai/cloud:v1.786.44"
-	if err := testSvc().notifyUniverse(context.Background(), img, "deadbeef"); err != nil {
+	if err := notifyUniverse(testSvc(), context.Background(), img, "deadbeef"); err != nil {
 		t.Fatalf("notifyUniverse: %v", err)
 	}
 	if got["event_type"] != "image-update" {
@@ -275,10 +278,10 @@ func TestReleaseSeams_FailClosedWithoutTokens(t *testing.T) {
 	t.Setenv("GH_PAT", "")
 	t.Setenv("UNIVERSE_DISPATCH_TOKEN", "")
 	s := testSvc()
-	if err := s.tagRelease(context.Background(), releaseRepoSlug, "sha", "v1.0.0"); err == nil {
+	if err := tagRelease(s, context.Background(), releaseRepoSlug, "sha", "v1.0.0"); err == nil {
 		t.Fatal("tagRelease with no GH_PAT: want fail-closed error")
 	}
-	if err := s.notifyUniverse(context.Background(), "img", "sha"); err == nil {
+	if err := notifyUniverse(s, context.Background(), "img", "sha"); err == nil {
 		t.Fatal("notifyUniverse with no token: want fail-closed error")
 	}
 }
