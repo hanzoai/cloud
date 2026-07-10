@@ -9,6 +9,8 @@ require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
+	github.com/digitorus/pdf v0.1.2
+	github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/commerce/metering v0.1.4
@@ -19,6 +21,7 @@ require (
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
+	github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97
 	github.com/hanzoai/sqlite v0.2.3
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
@@ -52,6 +55,12 @@ require (
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
 	sigs.k8s.io/controller-runtime v0.23.3
+)
+
+require (
+	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
+	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
+	github.com/mattetti/filebuffer v1.0.1 // indirect
 )
 
 require (
@@ -635,7 +644,7 @@ require (
 	github.com/oschwald/maxminddb-golang v1.13.0 // indirect
 	github.com/pariz/gountries v0.1.6 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
-	github.com/pdfcpu/pdfcpu v0.11.0 // indirect
+	github.com/pdfcpu/pdfcpu v0.11.0
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/petar-dambovaliev/aho-corasick v0.0.0-20240411101913-e07a1f0e8eb4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect

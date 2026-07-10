@@ -669,6 +669,15 @@ github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819 h1:1LiSa7N
 github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819/go.mod h1:qb0Ofa71d3oXARQf633h2tNaeBxLsVxuDp+jcsVO2+4=
 github.com/digitalocean/godo v1.197.0 h1:9n0i/E+iX7BWFyWqNyNhBoxFPwfBEIe3rhnDFxK/lvs=
 github.com/digitalocean/godo v1.197.0/go.mod h1:xQsWpVCCbkDrWisHA72hPzPlnC+4W5w/McZY5ij9uvU=
+github.com/digitorus/pdf v0.1.2 h1:RjYEJNbiV6Kcn8QzRi6pwHuOaSieUUrg4EZo4b7KuIQ=
+github.com/digitorus/pdf v0.1.2/go.mod h1:05fDDJhPswBRM7GTfqCxNiDyeNcN0f+IobfOAl5pdXw=
+github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74 h1:MANiCuBLkFQNNVgIuGLU+mWxViMgaYCud1W2lZHmJvM=
+github.com/digitorus/pdfsign v0.0.0-20260407063256-85ede6424a74/go.mod h1:pNHrs2ezOb+shtypKo7bpK9acMy96Bhsp8Abeqd0Euo=
+github.com/digitorus/pkcs7 v0.0.0-20230713084857-e76b763bdc49/go.mod h1:SKVExuS+vpu2l9IoOc0RwqE7NYnb0JlcFHFnEJkVDzc=
+github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 h1:ge14PCmCvPjpMQMIAH7uKg0lrtNSOdpYsRXlwk3QbaE=
+github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352/go.mod h1:SKVExuS+vpu2l9IoOc0RwqE7NYnb0JlcFHFnEJkVDzc=
+github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 h1:lxmTCgmHE1GUYL7P0MlNa00M67axePTq+9nBSGddR8I=
+github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7/go.mod h1:GvWntX9qiTlOud0WkQ6ewFm0LPy5JUR1Xo0Ngbd1w6Y=
 github.com/disintegration/imaging v1.6.2 h1:w1LecBlG2Lnp8B3jk5zSuNqd7b4DXhcjwek1ei82L+c=
 github.com/disintegration/imaging v1.6.2/go.mod h1:44/5580QXChDfwIclfc/PCwrr44amcmDAg8hxG0Ewe4=
 github.com/diskfs/go-diskfs v1.9.1 h1:g/UCTC5jZFomhtH4DyF9fG1eRHGgDIjSd1hSjEErXn0=
@@ -1283,6 +1292,8 @@ github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2
 github.com/hanzoai/search-go v0.36.0/go.mod h1:jdcYUdG6exMfRfJvilWhaNdAR8XWQRPvZtuRxQBzn34=
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible h1:xmFYu3gTLpu78mIx6z0bgpYy3MVdMAEFFeKs2YPybVo=
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible/go.mod h1:HTKx0R5LWWt7H1eG4pCpNS4PVO6tZIUVVZN/80sHz9o=
+github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97 h1:/E85zLVOQuxeH1KK0m65OesldQRgpU06cDEKo7DqGLM=
+github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97/go.mod h1:pL+4Kwh+W2AsMaU0QUF/OJoe9eV/CWHhO07Z5KV2SOg=
 github.com/hanzoai/sqlite v0.2.3 h1:X9AmaAro1hCsYY/ykI/nD5wiTCPpHhtBkUqe+PfSzuM=
 github.com/hanzoai/sqlite v0.2.3/go.mod h1:jhU6OMiNmNmjFHOgfIskse/RImYEe7rUTm6+rMKMRzg=
 github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5VDk=
@@ -1714,6 +1725,8 @@ github.com/markbates/goth v1.82.0 h1:8j/c34AjBSTNzO7zTsOyP5IYCQCMBTRBHAbBt/PI0bQ
 github.com/markbates/goth v1.82.0/go.mod h1:/DRlcq0pyqkKToyZjsL2KgiA1zbF1HIjE7u2uC79rUk=
 github.com/mattermost/xml-roundtrip-validator v0.1.0 h1:RXbVD2UAl7A7nOTR4u7E3ILa4IbtvKBHw64LDsmu9hU=
 github.com/mattermost/xml-roundtrip-validator v0.1.0/go.mod h1:qccnGMcpgwcNaBnxqpJpWWUiPNr5H3O8eDgGV9gT5To=
+github.com/mattetti/filebuffer v1.0.1 h1:gG7pyfnSIZCxdoKq+cPa8T0hhYtD9NxCdI4D7PTjRLM=
+github.com/mattetti/filebuffer v1.0.1/go.mod h1:YdMURNDOttIiruleeVr6f56OrMc+MydEnTcXwtkxNVs=
 github.com/mattn/go-colorable v0.0.9/go.mod h1:9vuHe8Xs5qXnSaW/c/ABM9alt+Vo+STaOChaDxuIBZU=
 github.com/mattn/go-colorable v0.1.4/go.mod h1:U0ppj6V5qS13XJ6of8GYAs25YV2eR4EVcfRqFIhoBtE=
 github.com/mattn/go-colorable v0.1.6/go.mod h1:u6P/XSegPjTcexA+o6vUJrdnUu04hMope9wVRipJSqc=
