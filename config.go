@@ -456,7 +456,7 @@ func registrableDomain(host string) string {
 // remote/disabled client — see build.go). Activate by ADDING "commerce" to
 // CLOUD_ENABLE explicitly. Phase 2 flips the default (drops this entry) once the
 // in-process path is validated in prod.
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true, "captable": true, "sign": true}
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true, "captable": true, "sign": true, "dataroom": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
