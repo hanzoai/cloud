@@ -23,47 +23,47 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 	return do
 }
 
-// mountSvc is mount but also returns the underlying svc (so finance tests can swap
+// mountSvc is mount but also returns the underlying cloud.Service[state] (so finance tests can swap
 // in a fake DigitalOcean client, and the cockpit tests can attach an audit store)
 // AND the raw fiber app (so tests that need a request BODY can drive it directly —
 // the returned `do` sends a nil body). The handlers read s.* live at request time,
 // so an override before issuing a request takes effect.
-func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *svc, *fiber.App) {
+func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[state], *fiber.App) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &svc{
+	s := &cloud.Service[state]{State: state{
 		iam:      newIAMClient(iamURL),
 		commerce: newCommerceClient(commerceURL, "test-token"),
 		health:   newHealthClient(healthURL),
-		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.do
+		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.State.do
 		adminOrg: "admin",
-	}
+	}}
 	// Mirror the REAL Mount (admin.go): org-scoped panels behind guardScoped, the
 	// platform control plane behind guard (super-only), so the harness stays
 	// authoritative for the two-tier gate.
-	app.Get("/v1/admin/me", s.guardScoped(s.me))
-	app.Get("/v1/admin/overview", s.guardScoped(s.overview))
-	app.Get("/v1/admin/orgs", s.guardScoped(s.orgs))
-	app.Get("/v1/admin/users", s.guardScoped(s.users))
-	app.Get("/v1/admin/usage", s.guardScoped(s.usage))
-	app.Get("/v1/admin/analytics", s.guardScoped(s.analytics))
-	app.Get("/v1/admin/bases", s.guardScoped(s.bases))
-	app.Get("/v1/admin/roles", s.guard(s.roles))
-	app.Get("/v1/admin/applications", s.guard(s.applications))
-	app.Get("/v1/admin/audit", s.guard(s.audit))
-	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
-	app.Get("/v1/admin/products", s.guard(s.products))
-	app.Get("/v1/admin/finance", s.guard(s.finance))
-	app.Post("/v1/admin/sync", s.guard(s.sync))
-	app.Get("/v1/admin/customers", s.guard(s.customers))
-	app.Get("/v1/admin/customers/:org", s.guard(s.customerDetail))
-	app.Post("/v1/admin/customers/:org/credit", s.guard(s.grantCredit))
-	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
-	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
-	app.Get("/v1/admin/revenue", s.guard(s.revenue))
-	app.Get("/v1/admin/flags", s.guard(s.flags))
-	app.Get("/v1/admin/waitlist", s.guard(s.waitlist))
-	app.Post("/v1/admin/waitlist/boost", s.guard(s.waitlistBoost))
+	app.Get("/v1/admin/me", guardScoped(s, me))
+	app.Get("/v1/admin/overview", guardScoped(s, overview))
+	app.Get("/v1/admin/orgs", guardScoped(s, orgs))
+	app.Get("/v1/admin/users", guardScoped(s, users))
+	app.Get("/v1/admin/usage", guardScoped(s, usage))
+	app.Get("/v1/admin/analytics", guardScoped(s, analytics))
+	app.Get("/v1/admin/bases", guardScoped(s, bases))
+	app.Get("/v1/admin/roles", guard(s, roles))
+	app.Get("/v1/admin/applications", guard(s, applications))
+	app.Get("/v1/admin/audit", guard(s, auditRecords))
+	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
+	app.Get("/v1/admin/products", guard(s, products))
+	app.Get("/v1/admin/finance", guard(s, finance))
+	app.Post("/v1/admin/sync", guard(s, syncNow))
+	app.Get("/v1/admin/customers", guard(s, customers))
+	app.Get("/v1/admin/customers/:org", guard(s, customerDetail))
+	app.Post("/v1/admin/customers/:org/credit", guard(s, grantCredit))
+	app.Post("/v1/admin/customers/:org/suspend", guard(s, suspendCustomer))
+	app.Post("/v1/admin/customers/:org/reactivate", guard(s, reactivateCustomer))
+	app.Get("/v1/admin/revenue", guard(s, revenue))
+	app.Get("/v1/admin/flags", guard(s, flags))
+	app.Get("/v1/admin/waitlist", guard(s, waitlist))
+	app.Post("/v1/admin/waitlist/boost", guard(s, waitlistBoost))
 	fa := app.Fiber()
 
 	return func(method, path string, hdr map[string]string) (*http.Response, []byte) {
