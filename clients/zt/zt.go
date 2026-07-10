@@ -112,7 +112,11 @@ func (s *svc) listNetworks(c *zip.Ctx) error {
 	}
 	routers, err := s.orgRouters(c, org)
 	if err != nil {
-		return err
+		// ZT controller unreachable / unconfigured (ZT_CLIENT_ID/SECRET optional) —
+		// degrade this READ to an honest-EMPTY list (200) instead of 503-ing the
+		// Networks page. Writes stay fail-closed.
+		s.log.Warn("zt controller unreachable; returning empty network list", "org", org, "err", err)
+		return c.JSON(http.StatusOK, map[string]any{"networks": []networkView{}})
 	}
 	out := make([]networkView, 0, 1)
 	if nv := networkFromRouters(org, routers); nv != nil {
@@ -170,7 +174,10 @@ func (s *svc) listEdgeNodes(c *zip.Ctx) error {
 	}
 	routers, err := s.orgRouters(c, org)
 	if err != nil {
-		return err
+		// Same graceful fold as listNetworks — an unreachable/unconfigured ZT controller
+		// yields an honest-EMPTY edge-node list (200), never a 503 page error.
+		s.log.Warn("zt controller unreachable; returning empty edge-node list", "org", org, "err", err)
+		return c.JSON(http.StatusOK, map[string]any{"nodes": []edgeNodeView{}})
 	}
 	out := make([]edgeNodeView, 0, len(routers))
 	for _, r := range routers {
