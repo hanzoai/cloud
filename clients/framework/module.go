@@ -61,6 +61,12 @@ func registeredModules() []string {
 	return out
 }
 
+// RegisteredModules returns the sorted set of registered content-module names.
+// Exported so the composition root's link-guard test can assert the app lanes
+// (cms/erp/help) are compiled into the binary — their fixtures and hooks register
+// from a package init(), so a missing blank import silently empties this set.
+func RegisteredModules() []string { return registeredModules() }
+
 // resetModules clears the registry. TEST-ONLY, mirroring resetHooks — keeps
 // install tests independent of process-global registrations.
 func resetModules() {

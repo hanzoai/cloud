@@ -88,8 +88,13 @@ func TestDepGatedSubsystemsFailClosed(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
-		if resp.StatusCode < 500 {
-			t.Errorf("GET %s = %d, want >=500 (fail-closed; deps disabled)", path, resp.StatusCode)
+		// Fail-closed = never a 2xx/3xx success while deps are disabled. A
+		// dep-gated subsystem may reject with 4xx (deny) or 5xx (unavailable);
+		// both are closed. (o11y denies 403; ai returns 5xx.) In prod, serve.go's
+		// generic health route — installed before MountAll — answers /health 200;
+		// this harness omits it deliberately to probe the mounted handler itself.
+		if resp.StatusCode < 400 {
+			t.Errorf("GET %s = %d, want >=400 (fail-closed: a dep-disabled subsystem must not serve 2xx)", path, resp.StatusCode)
 		}
 	}
 }
