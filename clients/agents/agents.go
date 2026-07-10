@@ -307,13 +307,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// Shutdown does the graceful teardown: stop the scheduler (drain in-flight
-	// runs) and close the store, bounded by the caller's shutdown deadline so a
-	// stuck run can't hang SIGTERM.
-	cloud.RegisterWithShutdown("agents", 127, cloud.Typed(Mount), Shutdown)
-}
-
 // ---- handlers ----
 
 type createReq struct {

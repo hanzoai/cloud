@@ -17,9 +17,10 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
-	// Pull in the full subsystem bundle so BOTH kms (order 10) and admin
-	// (order 146) init()-register — the real production topology.
-	_ "github.com/hanzoai/cloud/subsystems"
+	// Mount kms (first tier) + admin (last tier) via their composition-root specs
+	// — the real dual-mount topology, no init()-registry.
+	"github.com/hanzoai/cloud/clients/admin"
+	"github.com/hanzoai/cloud/clients/kms"
 )
 
 func newDualApp(t *testing.T, mk string) *zip.App {
@@ -35,7 +36,11 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
+	specs := []cloud.MountSpec{
+		{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true},
+		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
+	}
+	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	return app

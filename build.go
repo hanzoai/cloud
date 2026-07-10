@@ -446,14 +446,13 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 	return clients.DisabledVault()
 }
 
-// MountFunc is the registry's mount contract. The registry stores one function
-// type, and the external subsystem modules (hanzoai/ai, authz, base, commerce,
-// metrics, o11y, licensing) register their mount with `app any` — so `any` is
-// the load-bearing wire type here, not a shortcut: retyping it to *zip.App would
-// break those pinned modules at compile time (a func(any,…) literal is not
-// assignable to a func(*zip.App,…) parameter). The concrete value is always a
-// *zip.App; in-repo subsystems recover it via Typed instead of hand-writing the
-// assertion (see Typed).
+// MountFunc is a subsystem's mount contract. app is `any`, not *zip.App, and that
+// is load-bearing: some external modules expose Mount as func(any, Deps) error
+// (e.g. hanzoai/licensing), which subsystems.Wire references DIRECTLY — a
+// func(any,…) value is not assignable to a func(*zip.App,…) parameter, so
+// narrowing the type would break them at compile time. The concrete value is
+// always a *zip.App; strongly-typed Mounts (func(*zip.App, Deps) error, what every
+// in-repo subsystem exports) are adapted by Typed, which recovers it in ONE place.
 type MountFunc func(app any, deps Deps) error
 
 // Typed adapts a strongly-typed subsystem Mount — func(*zip.App, Deps) error,
@@ -478,69 +477,30 @@ func Typed(mount func(*zip.App, Deps) error) MountFunc {
 // deadline so a slow teardown is cut off rather than hanging SIGTERM.
 type ShutdownFunc func(ctx context.Context) error
 
-// MountSpec describes one subsystem registered for mounting. The Order
-// is used when ordering matters for inter-subsystem deps (e.g. iam
-// before authz before commerce).
+// MountSpec describes one subsystem to mount. There is NO Order field: the slice
+// position in subsystems.Wire() IS the mount order — the composition root lists
+// subsystems in the exact sequence they mount (and, reversed, tear down), so order
+// is data read top-to-bottom in one file, not ints scattered across the tree.
 type MountSpec struct {
 	Name     string
-	Order    int
 	Mount    MountFunc
 	Shutdown ShutdownFunc // optional; nil means the subsystem has nothing to tear down.
 
 	// OwnsHealth marks a subsystem that serves its OWN GET /v1/<name>/health
 	// (a real, fail-closed probe). Serve's generic liveness loop skips these so
-	// its always-ok route never shadows the subsystem's real probe. Set via the
-	// HealthOwner option at registration.
+	// its always-ok route never shadows the subsystem's real probe.
 	OwnsHealth bool
 }
 
-// Option customizes a MountSpec at registration. It keeps Register's common
-// path a two-liner while letting a subsystem opt into behavior (e.g. HealthOwner)
-// without a wider signature — one registration entry point, extended by options.
-type Option func(*MountSpec)
-
-// HealthOwner declares that the subsystem serves its own /v1/<name>/health, so
-// Serve's generic liveness route must not shadow it. This replaces the old
-// "<name>svc" id kludge (which parked the generic route at an unrouted path):
-// the id is now the clean route name and the health policy is an explicit flag.
-func HealthOwner(s *MountSpec) { s.OwnsHealth = true }
-
-// Registry is the in-process subsystem registry. Subsystems register via
-// init() functions in their respective packages OR cmd/cloud/main.go can
-// explicitly enumerate them. Either pattern works.
-var Registry []MountSpec
-
-// Register adds a subsystem to the in-process registry. Trailing opts customize
-// the spec (e.g. cloud.HealthOwner for a subsystem that serves its own health).
-func Register(name string, order int, mount MountFunc, opts ...Option) {
-	spec := MountSpec{Name: name, Order: order, Mount: mount}
-	for _, opt := range opts {
-		opt(&spec)
-	}
-	Registry = append(Registry, spec)
-}
-
-// RegisterWithShutdown adds a subsystem that owns process-lifetime resources: a
-// background worker (e.g. the agents scheduler) or a DB handle that must be
-// flushed. shutdown is invoked by ShutdownAll on graceful stop. This is the ONE
-// way a subsystem gets a teardown — Register stays the zero-teardown default.
-// Trailing opts customize the spec, exactly as for Register.
-func RegisterWithShutdown(name string, order int, mount MountFunc, shutdown ShutdownFunc, opts ...Option) {
-	spec := MountSpec{Name: name, Order: order, Mount: mount, Shutdown: shutdown}
-	for _, opt := range opts {
-		opt(&spec)
-	}
-	Registry = append(Registry, spec)
-}
-
-// ShutdownAll tears down every ENABLED subsystem that registered a ShutdownFunc,
-// in REVERSE mount order (a dependency is torn down after its dependents), best
+// ShutdownAll tears down every ENABLED subsystem that has a ShutdownFunc, in
+// REVERSE mount order (a dependency is torn down after its dependents), best
 // effort: a failure is collected and the rest still run, so one stuck subsystem
-// can't strand another's flush. Serve calls this inside the shutdown deadline.
-func ShutdownAll(ctx context.Context, cfg *Config) error {
+// can't strand another's flush. specs is the SAME slice MountAll mounted
+// (subsystems.Wire()); Serve calls this inside the shutdown deadline.
+func ShutdownAll(ctx context.Context, specs []MountSpec, cfg *Config) error {
 	var firstErr error
-	for i := len(Registry) - 1; i >= 0; i-- {
-		spec := Registry[i]
+	for i := len(specs) - 1; i >= 0; i-- {
+		spec := specs[i]
 		if spec.Shutdown == nil || !cfg.Enabled(spec.Name) {
 			continue
 		}
@@ -551,21 +511,13 @@ func ShutdownAll(ctx context.Context, cfg *Config) error {
 	return firstErr
 }
 
-// MountAll iterates the registry in order and calls Mount() on each
-// enabled subsystem. app is the concrete *zip.App from Serve; the registry's
-// MountFunc accepts it as `any` and in-repo subsystems recover it via Typed.
-func MountAll(app *zip.App, cfg *Config, deps Deps) error {
-	// Sort registry by order — bubble sort, registry is tiny.
-	for i := 0; i < len(Registry); i++ {
-		for j := i + 1; j < len(Registry); j++ {
-			if Registry[j].Order < Registry[i].Order {
-				Registry[i], Registry[j] = Registry[j], Registry[i]
-			}
-		}
-	}
-
+// MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
+// the composition root's (subsystems.Wire()); MountAll does NOT sort. app is the
+// concrete *zip.App from Serve; the MountFunc accepts it as `any` and in-repo
+// subsystems recover it via Typed.
+func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
-	for _, spec := range Registry {
+	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) {
 			logger.Debug("subsystem disabled", "name", spec.Name)
 			continue

@@ -27,8 +27,9 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	// Importing clients/kms as kms also runs its init(), registering the kms
-	// subsystem + client factory into cloud.Registry.
+	// clients/kms: its init() registers the in-process KMS client factory
+	// (RegisterKMSClientFactory) BuildDeps needs; it also exports Mount (the
+	// subsystem spec below) + the *kms.Client type these tests assert on.
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
@@ -45,6 +46,13 @@ func masterKeyB64(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(k)
 }
 
+// mountSpecs is the kms subsystem's composition-root entry, built locally so these
+// tests mount exactly kms (the same spec subsystems.Wire() carries) without linking
+// the whole bundle. cfg.Enable still gates it, exactly as in production.
+func mountSpecs() []cloud.MountSpec {
+	return []cloud.MountSpec{{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true}}
+}
+
 // newApp wires BuildDeps + the canonical middleware + MountAll for the kms
 // subsystem, exactly like main()'s path. Returns the app and the built deps (so
 // tests can reach the in-process KMSClient directly).
@@ -55,7 +63,7 @@ func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
+	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	return app, deps

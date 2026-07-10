@@ -149,9 +149,3 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		"upstream", upstream(), "prefixes", strings.Join(prefixes, ","))
 	return nil
 }
-
-func init() {
-	// Order 140: before hanzoai/ai (150) so the specific /v1/exec, /v1/upload,
-	// /v1/download, /v1/files paths take precedence over ai's /v1/* catch-all.
-	cloud.Register("exec", 140, cloud.Typed(Mount))
-}

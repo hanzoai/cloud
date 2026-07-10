@@ -25,6 +25,10 @@ import (
 // surface) and every `hanzo <svc>` subcommand share it; no boot logic is
 // duplicated per entrypoint.
 //
+// specs is the composition root's subsystem list (subsystems.Wire()), threaded
+// in by the caller so cloud never imports subsystems (which would cycle). Serve
+// mounts it in slice order and tears it down in reverse.
+//
 // enable==nil ⇒ honor cfg.Enable from flags/env (cloud mode; empty = all).
 // enable!=nil ⇒ force exactly that set (single-service mode), overriding
 // --enable so `hanzo kms` is unambiguous.
@@ -33,7 +37,7 @@ import (
 // every enabled subsystem) before MountAll, runs the canonical middleware
 // pipeline (Recover → RequestID → Logger), and shuts down gracefully on
 // SIGINT/SIGTERM.
-func Serve(enable []string) error {
+func Serve(specs []MountSpec, enable []string) error {
 	cfg := LoadConfig()
 	if enable != nil {
 		cfg.Enable = enable
@@ -227,7 +231,7 @@ func Serve(enable []string) error {
 	// A subsystem that owns its health (OwnsHealth, e.g. kms/paas/s3) serves its
 	// OWN fail-closed /v1/<name>/health in Mount; skip it here so this always-ok
 	// route never shadows the real probe.
-	for _, spec := range Registry {
+	for _, spec := range specs {
 		if !cfg.Enabled(spec.Name) || spec.OwnsHealth {
 			continue
 		}
@@ -237,7 +241,7 @@ func Serve(enable []string) error {
 		})
 	}
 
-	if err := MountAll(app, cfg, deps); err != nil {
+	if err := MountAll(app, specs, cfg, deps); err != nil {
 		return fmt.Errorf("mount: %w", err)
 	}
 
@@ -326,7 +330,7 @@ func Serve(enable []string) error {
 	// e.g. the agents scheduler drains its in-flight runs (so a scheduled run's
 	// InsertRun + debit land) and closes its store. Best-effort: a teardown error
 	// is logged, not fatal, so one subsystem can't strand shutdown.
-	if err := ShutdownAll(shutdownCtx, cfg); err != nil {
+	if err := ShutdownAll(shutdownCtx, specs, cfg); err != nil {
 		deps.Logger.Warn("subsystem shutdown", "err", err)
 	}
 	// Close the audit store last so any in-flight append has drained through the

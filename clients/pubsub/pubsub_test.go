@@ -41,7 +41,7 @@ func TestMountEnabledServesAndShutsDown(t *testing.T) {
 	if srv.ClientURL() == "" {
 		t.Fatal("empty client URL")
 	}
-	if err := shutdown(context.Background()); err != nil {
+	if err := Shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
 	if srv != nil {
