@@ -38,6 +38,7 @@ import (
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -72,7 +73,7 @@ type computeLeaf struct {
 
 // compute answers GET /v1/admin/compute. ?kind=<kind> and ?org= narrow the
 // aggregate; ?range=24h|7d|30d bounds it (default 30d). Global-admin only.
-func (s *svc) compute(c *zip.Ctx) error {
+func compute(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).

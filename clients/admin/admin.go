@@ -16,10 +16,10 @@
 // caller). The predicate is enforced in ONE place — resolveScope/scopedOrgs (scope.go):
 //
 //   - PLATFORM routes (roles/applications/audit/products/finance/compute/o11y/revenue +
-//     the launch/release/flags/access control plane) are SuperAdmin ONLY (s.guard).
+//     the launch/release/flags/access control plane) are SuperAdmin ONLY (guard).
 //     No principal → 403; an org admin → 403; a forged X-User-IsAdmin never survives
 //     ingress (SanitizeIdentity strips it).
-//   - ORG-SCOPED routes (me/overview/orgs/users/usage/analytics/bases) are s.guardScoped:
+//   - ORG-SCOPED routes (me/overview/orgs/users/usage/analytics/bases) are guardScoped:
 //     a SuperAdmin sees EVERY tenant; any other validated admin caller is HARD-limited to
 //     their OWN org subtree. The cross-tenant boundary — the escalation line — cannot be
 //     crossed by a non-super caller for ANY input, because their org is the sanitized,
@@ -52,8 +52,11 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// svc holds the resolved upstream clients + the admin org for this deployment.
-type svc struct {
+// state is admin's own data: the resolved upstream clients + the admin org for
+// this deployment. admin holds NO Base shared deps (it fans out over HTTP replaying
+// the caller's own creds); the embedded cloud.Base carries only the mount-time
+// logger (s.Log), used for the mount line.
+type state struct {
 	iam      *iamClient
 	commerce *commerceClient
 	health   *healthClient
@@ -67,94 +70,106 @@ type svc struct {
 
 // Mount registers the /v1/admin/* surface on app. Every handler gates on
 // c.IsAdmin() first (global-admin only), then aggregates real upstream data.
+//
+// Complex flavour: the state is built from Deps fields NOT on cloud.Base
+// (deps.Audit, deps.IAMIssuer), so it constructs the cloud.Service value directly
+// (cloud.NewBase + &cloud.Service[state]{…}) rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("admin.Mount: nil zip.App")
 	}
-	logger := deps.Logger
-	if logger == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("admin.Mount: nil deps.Logger")
 	}
-	logger = logger.New("subsystem", "admin")
-
-	s := &svc{
-		iam:        newIAMClient(iamBase(deps)),
-		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		health:     newHealthClient(o11yHealthURL()),
-		do:         newDOClient(doTokenFromEnv()),
-		adminOrg:   adminOrgOf(deps),
-		auditStore: deps.Audit,
+	b := cloud.NewBase(deps, "admin")
+	s := &cloud.Service[state]{
+		Base: b,
+		State: state{
+			iam:        newIAMClient(iamBase(deps)),
+			commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+			health:     newHealthClient(o11yHealthURL()),
+			do:         newDOClient(doTokenFromEnv()),
+			adminOrg:   adminOrgOf(deps),
+			auditStore: deps.Audit,
+		},
 	}
 
-	// Org-scoped panels — guardScoped: a SuperAdmin OR any validated admin caller
-	// pinned to an org. The HANDLER scopes the data (scopedOrgs / resolveScope) so a
-	// non-super caller is HARD-limited to their own org subtree — cross-tenant reads
-	// are impossible. Same panels, both tiers, scoped by the ONE predicate.
-	app.Get("/v1/admin/me", s.guardScoped(s.me))
-	app.Get("/v1/admin/overview", s.guardScoped(s.overview))
-	app.Get("/v1/admin/orgs", s.guardScoped(s.orgs))
-	app.Get("/v1/admin/users", s.guardScoped(s.users))
-	app.Get("/v1/admin/usage", s.guardScoped(s.usage))
+	routes(app, s)
+
+	b.Log.Info("admin surface mounted",
+		"prefix", "/v1/admin",
+		"iam", s.State.iam.configured(),
+		"commerce", s.State.commerce.configured(),
+		"digitalocean", s.State.do.configured(),
+		"adminOrg", s.State.adminOrg,
+	)
+	return nil
+}
+
+// routes registers the /v1/admin/* surface on app, threading the ONE service value
+// through the two-tier gate: org-scoped panels behind guardScoped (a SuperAdmin OR
+// a validated admin caller pinned to an org — the HANDLER then scopes the data via
+// scopedOrgs / resolveScope, so a non-super caller is HARD-limited to their own org
+// subtree), the platform control plane behind guard (SuperAdmin only).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	// Org-scoped panels — guardScoped. Same panels, both tiers, scoped by the ONE
+	// predicate; cross-tenant reads are impossible for a non-super caller.
+	app.Get("/v1/admin/me", guardScoped(s, me))
+	app.Get("/v1/admin/overview", guardScoped(s, overview))
+	app.Get("/v1/admin/orgs", guardScoped(s, orgs))
+	app.Get("/v1/admin/users", guardScoped(s, users))
+	app.Get("/v1/admin/usage", guardScoped(s, usage))
 	// Platform reads — SuperAdmin only (cross-tenant by nature): roles/apps catalog,
 	// the fleet audit trail, workload registry, SaaS profitability, compute fleet,
 	// system health.
-	app.Get("/v1/admin/roles", s.guard(s.roles))
-	app.Get("/v1/admin/applications", s.guard(s.applications))
-	app.Get("/v1/admin/audit", s.guard(s.audit))
-	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
-	app.Get("/v1/admin/products", s.guard(s.products))
-	app.Get("/v1/admin/finance", s.guard(s.finance))
-	app.Get("/v1/admin/compute", s.guard(s.compute))
-	app.Get("/v1/admin/o11y", s.guard(s.o11y))
-	app.Post("/v1/admin/sync", s.guard(s.sync))
+	app.Get("/v1/admin/roles", guard(s, roles))
+	app.Get("/v1/admin/applications", guard(s, applications))
+	app.Get("/v1/admin/audit", guard(s, auditRecords))
+	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
+	app.Get("/v1/admin/products", guard(s, products))
+	app.Get("/v1/admin/finance", guard(s, finance))
+	app.Get("/v1/admin/compute", guard(s, compute))
+	app.Get("/v1/admin/o11y", guard(s, o11y))
+	app.Post("/v1/admin/sync", guard(s, syncNow))
 
 	// Customer management — the operator cockpit. List (static) precedes the :org
 	// param route; the write actions are POST (distinct method), so none collide.
-	app.Get("/v1/admin/customers", s.guard(s.customers))
-	app.Get("/v1/admin/customers/:org", s.guard(s.customerDetail))
-	app.Post("/v1/admin/customers/:org/credit", s.guard(s.grantCredit))
-	app.Get("/v1/admin/grants", s.guard(s.grants))
-	app.Post("/v1/admin/grants", s.guard(s.issueGrant))
-	app.Post("/v1/admin/customers/:org/suspend", s.guard(s.suspendCustomer))
-	app.Post("/v1/admin/customers/:org/reactivate", s.guard(s.reactivateCustomer))
+	app.Get("/v1/admin/customers", guard(s, customers))
+	app.Get("/v1/admin/customers/:org", guard(s, customerDetail))
+	app.Post("/v1/admin/customers/:org/credit", guard(s, grantCredit))
+	app.Get("/v1/admin/grants", guard(s, grants))
+	app.Post("/v1/admin/grants", guard(s, issueGrant))
+	app.Post("/v1/admin/customers/:org/suspend", guard(s, suspendCustomer))
+	app.Post("/v1/admin/customers/:org/reactivate", guard(s, reactivateCustomer))
 
 	// Fleet revenue aggregate — SuperAdmin only (cross-tenant profitability).
-	app.Get("/v1/admin/revenue", s.guard(s.revenue))
+	app.Get("/v1/admin/revenue", guard(s, revenue))
 	// Product analytics — org-scoped (SuperAdmin: all-orgs SaaS analytics; org admin:
 	// their own org's usage/active/spend).
-	app.Get("/v1/admin/analytics", s.guardScoped(s.analytics))
+	app.Get("/v1/admin/analytics", guardScoped(s, analytics))
 
 	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
-	app.Get("/v1/admin/bases", s.guardScoped(s.bases))
+	app.Get("/v1/admin/bases", guardScoped(s, bases))
 
 	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
 	// Flipping public_signup / waitlist_open / rollout %, and granting waitlist
-	// access, are PLATFORM sudo; an org admin never sees or touches them (s.guard,
+	// access, are PLATFORM sudo; an org admin never sees or touches them (guard,
 	// super-only, like every mutating fleet action). flags.go + waitlist.go.
-	app.Get("/v1/admin/flags", s.guard(s.flags))
-	app.Get("/v1/admin/waitlist", s.guard(s.waitlist))
-	app.Post("/v1/admin/waitlist/boost", s.guard(s.waitlistBoost))
-
-	logger.Info("admin surface mounted",
-		"prefix", "/v1/admin",
-		"iam", s.iam.configured(),
-		"commerce", s.commerce.configured(),
-		"digitalocean", s.do.configured(),
-		"adminOrg", s.adminOrg,
-	)
-	return nil
+	app.Get("/v1/admin/flags", guard(s, flags))
+	app.Get("/v1/admin/waitlist", guard(s, waitlist))
+	app.Post("/v1/admin/waitlist/boost", guard(s, waitlistBoost))
 }
 
 // guard wraps a handler with the global-admin gate. Fail-closed: any request
 // whose validated identity is not a global admin (X-User-IsAdmin != "true",
 // which SanitizeIdentity sets only for owner == AdminOrg) is refused 403 before
 // the handler — no upstream is touched, no data leaks.
-func (s *svc) guard(h func(*zip.Ctx) error) zip.Handler {
+func guard(s *cloud.Service[state], h func(*cloud.Service[state], *zip.Ctx) error) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
 			return zip.ErrForbidden("global admin required")
 		}
-		return h(c)
+		return h(s, c)
 	}
 }
 
@@ -176,13 +191,13 @@ func (s *svc) guard(h func(*zip.Ctx) error) zip.Handler {
 // follow-up trust-boundary change). The cross-tenant boundary — the escalation line — is
 // fully enforced HERE regardless, because a non-super caller can only ever read their own
 // org's data.
-func (s *svc) guardScoped(h func(*zip.Ctx) error) zip.Handler {
+func guardScoped(s *cloud.Service[state], h func(*cloud.Service[state], *zip.Ctx) error) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if c.IsAdmin() {
-			return h(c)
+			return h(s, c)
 		}
 		if strings.TrimSpace(c.User()) != "" && strings.TrimSpace(c.Org()) != "" {
-			return h(c)
+			return h(s, c)
 		}
 		return zip.ErrForbidden("admin required")
 	}
@@ -230,11 +245,11 @@ func fail(c *zip.Ctx, msg string) error {
 // me answers with the validated operator identity. The gate already proved this
 // is a global admin, so the fields come from the sanitized identity headers —
 // authoritative and never client-forgeable.
-func (s *svc) me(c *zip.Ctx) error {
-	sc := s.resolveScope(c)
+func me(s *cloud.Service[state], c *zip.Ctx) error {
+	sc := resolveScope(s, c)
 	owner := strings.TrimSpace(c.Org())
 	if owner == "" && sc.super {
-		owner = s.adminOrg
+		owner = s.State.adminOrg
 	}
 	name := strings.TrimSpace(c.User())
 	// IsGlobalAdmin reflects the REAL scope: true only for a SuperAdmin (owner ==
@@ -252,17 +267,17 @@ func (s *svc) me(c *zip.Ctx) error {
 
 // ── /v1/admin/orgs — tenant directory (OrgRow[]) ─────────────────────────────
 
-func (s *svc) orgs(c *zip.Ctx) error {
+func orgs(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
-	orgs, err := s.scopedOrgs(ctx, c, cr)
+	orgs, err := scopedOrgs(s, ctx, c, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
 	rows := make([]orgRow, 0, len(orgs))
 	for _, o := range orgs {
-		users := s.orgUserCount(ctx, cr, o.Name)
-		spend, credits := s.orgMoney(ctx, o.Name)
+		users := orgUserCount(s, ctx, cr, o.Name)
+		spend, credits := orgMoney(s, ctx, o.Name)
 		rows = append(rows, orgRow{
 			Org:          o.Name,
 			Display:      display(o.DisplayName, o.Name),
@@ -280,10 +295,10 @@ func (s *svc) orgs(c *zip.Ctx) error {
 
 // ── /v1/admin/users — cross-org directory (OperatorUser[]) ───────────────────
 
-func (s *svc) users(c *zip.Ctx) error {
+func users(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
-	sc := s.resolveScope(c)
+	sc := resolveScope(s, c)
 	q := url.Values{}
 	if !sc.super {
 		// A scoped caller lists ONLY their own org's users — the client ?org= is
@@ -305,7 +320,7 @@ func (s *svc) users(c *zip.Ctx) error {
 		q.Set("field", "name")
 		q.Set("value", term)
 	}
-	res, err := s.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -323,8 +338,8 @@ func (s *svc) users(c *zip.Ctx) error {
 			Email:         u.Email,
 			DisplayName:   u.DisplayName,
 			IsAdmin:       u.IsAdmin,
-			IsSuperAdmin:  u.Owner == s.adminOrg,
-			IsGlobalAdmin: u.Owner == s.adminOrg, // back-compat alias; same fact
+			IsSuperAdmin:  u.Owner == s.State.adminOrg,
+			IsGlobalAdmin: u.Owner == s.State.adminOrg, // back-compat alias; same fact
 			Tag:           u.Tag,
 			Created:       u.CreatedTime,
 			LastSignin:    u.LastSigninTime,
@@ -340,22 +355,22 @@ func (s *svc) users(c *zip.Ctx) error {
 
 // ── /v1/admin/roles and /applications — verbatim IAM passthrough ─────────────
 
-func (s *svc) roles(c *zip.Ctx) error {
-	return s.iamPassthrough(c, "/v1/iam/get-roles")
+func roles(s *cloud.Service[state], c *zip.Ctx) error {
+	return iamPassthrough(s, c, "/v1/iam/get-roles")
 }
 
-func (s *svc) applications(c *zip.Ctx) error {
-	return s.iamPassthrough(c, "/v1/iam/get-applications")
+func applications(s *cloud.Service[state], c *zip.Ctx) error {
+	return iamPassthrough(s, c, "/v1/iam/get-applications")
 }
 
 // iamPassthrough forwards a paginated IAM read verbatim (the operator decodes
 // Role / Application as the raw IAM wire shape). `owner` defaults to the admin
 // org, which owns the platform applications.
-func (s *svc) iamPassthrough(c *zip.Ctx, path string) error {
+func iamPassthrough(s *cloud.Service[state], c *zip.Ctx, path string) error {
 	q := url.Values{}
 	owner := strings.TrimSpace(c.Query("owner"))
 	if owner == "" {
-		owner = s.adminOrg
+		owner = s.State.adminOrg
 	}
 	q.Set("owner", owner)
 	if p := strings.TrimSpace(c.Query("p")); p != "" {
@@ -364,7 +379,7 @@ func (s *svc) iamPassthrough(c *zip.Ctx, path string) error {
 	if ps := strings.TrimSpace(c.Query("pageSize")); ps != "" {
 		q.Set("pageSize", ps)
 	}
-	res, err := s.iam.getList(c.Context(), callerCreds(c), path, q)
+	res, err := s.State.iam.getList(c.Context(), callerCreds(c), path, q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -400,10 +415,10 @@ func iamAuditQuery(c *zip.Ctx) url.Values {
 // (they live in insights/datastore, owned separately); admin returns the
 // honest empty series/byProduct rather than fabricating a trend — the operator
 // renders that as an empty chart, never a fake line.
-func (s *svc) usage(c *zip.Ctx) error {
+func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
-	sc := s.resolveScope(c)
+	sc := resolveScope(s, c)
 	org := strings.TrimSpace(c.Query("org"))
 	if !sc.super {
 		// A scoped caller reads ONLY their own org's usage — the client ?org= is
@@ -417,15 +432,15 @@ func (s *svc) usage(c *zip.Ctx) error {
 	var spend int64
 	switch {
 	case org != "":
-		if r, err := s.commerce.usageRollup(ctx, org, orgSubject(org)); err == nil {
+		if r, err := s.State.commerce.usageRollup(ctx, org, orgSubject(org)); err == nil {
 			spend = r.ConsumedCents
 		}
 	case sc.super:
 		// Fleet: sum month-to-date consumption across every org.
-		orgs, err := s.listOrgs(ctx, cr)
+		orgs, err := listOrgs(s, ctx, cr)
 		if err == nil {
 			for _, o := range orgs {
-				if r, e := s.commerce.usageRollup(ctx, o.Name, orgSubject(o.Name)); e == nil {
+				if r, e := s.State.commerce.usageRollup(ctx, o.Name, orgSubject(o.Name)); e == nil {
 					spend += r.ConsumedCents
 				}
 			}
@@ -446,13 +461,13 @@ func (s *svc) usage(c *zip.Ctx) error {
 // NOT an in-binary source. admin exposes the gated endpoint and returns the
 // real empty registry until that feed is wired — it never fabricates workload
 // rows. The operator renders an empty table, not fake products.
-func (s *svc) products(c *zip.Ctx) error {
+func products(s *cloud.Service[state], c *zip.Ctx) error {
 	return okList(c, []productRow{}, 0)
 }
 
 // ── /v1/admin/overview — Platform Overview tiles (OverviewData) ───────────────
 
-func (s *svc) overview(c *zip.Ctx) error {
+func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -460,13 +475,13 @@ func (s *svc) overview(c *zip.Ctx) error {
 	var sources []sourceStatus
 	orgCount, userCount, spend, credits := 0, 0, int64(0), int64(0)
 
-	orgs, orgErr := s.scopedOrgs(ctx, c, cr)
+	orgs, orgErr := scopedOrgs(s, ctx, c, cr)
 	sources = append(sources, srcOf("iam", orgErr, len(orgs), now))
 	if orgErr == nil {
 		orgCount = len(orgs)
 		for _, o := range orgs {
-			userCount += s.orgUserCount(ctx, cr, o.Name)
-			sp, cr2 := s.orgMoney(ctx, o.Name)
+			userCount += orgUserCount(s, ctx, cr, o.Name)
+			sp, cr2 := orgMoney(s, ctx, o.Name)
 			spend += sp
 			credits += cr2
 		}
@@ -475,12 +490,12 @@ func (s *svc) overview(c *zip.Ctx) error {
 	// Commerce freshness: probe one org's rollup so the tile reflects a real read.
 	commerceRows := 0
 	var commerceErr error
-	if s.commerce.configured() {
-		probe := s.adminOrg
+	if s.State.commerce.configured() {
+		probe := s.State.adminOrg
 		if len(orgs) > 0 {
 			probe = orgs[0].Name
 		}
-		if _, err := s.commerce.usageRollup(ctx, probe, orgSubject(probe)); err != nil {
+		if _, err := s.State.commerce.usageRollup(ctx, probe, orgSubject(probe)); err != nil {
 			commerceErr = err
 		} else {
 			commerceRows = 1
@@ -492,7 +507,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 
 	// o11y System Health.
 	o11yRows := 0
-	oOK, oErr := s.health.ok(ctx)
+	oOK, oErr := s.State.health.ok(ctx)
 	if oOK {
 		o11yRows = 1
 	}
@@ -518,7 +533,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 // every read (there is no cached fleet snapshot in-binary), so there is no batch
 // job to kick — the button simply re-reads. We acknowledge honestly with
 // { started: true } so the UI re-fetches the (freshly-computed) overview.
-func (s *svc) sync(c *zip.Ctx) error {
+func syncNow(s *cloud.Service[state], c *zip.Ctx) error {
 	return ok(c, map[string]bool{"started": true})
 }
 
@@ -526,10 +541,10 @@ func (s *svc) sync(c *zip.Ctx) error {
 
 // listOrgs reads the org directory (owner = admin org) as the typed shape the
 // overview/orgs/usage aggregators fold over.
-func (s *svc) listOrgs(ctx context.Context, cr creds) ([]iamOrg, error) {
+func listOrgs(s *cloud.Service[state], ctx context.Context, cr creds) ([]iamOrg, error) {
 	q := url.Values{}
-	q.Set("owner", s.adminOrg)
-	res, err := s.iam.getList(ctx, cr, "/v1/iam/get-organizations", q)
+	q.Set("owner", s.State.adminOrg)
+	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-organizations", q)
 	if err != nil {
 		return nil, err
 	}
@@ -544,12 +559,12 @@ func (s *svc) listOrgs(ctx context.Context, cr creds) ([]iamOrg, error) {
 
 // orgUserCount returns the member count for one org from the IAM list total
 // (data2). Best-effort: an error yields 0 rather than failing the whole row.
-func (s *svc) orgUserCount(ctx context.Context, cr creds, org string) int {
+func orgUserCount(s *cloud.Service[state], ctx context.Context, cr creds, org string) int {
 	q := url.Values{}
 	q.Set("owner", org)
 	q.Set("p", "1")
 	q.Set("pageSize", "1")
-	res, err := s.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
 	if err != nil {
 		return 0
 	}
@@ -558,13 +573,13 @@ func (s *svc) orgUserCount(ctx context.Context, cr creds, org string) int {
 
 // orgMoney returns (spendCents, creditsCents) for one org from commerce.
 // Best-effort: unreachable/unconfigured commerce yields zeros.
-func (s *svc) orgMoney(ctx context.Context, org string) (int64, int64) {
+func orgMoney(s *cloud.Service[state], ctx context.Context, org string) (int64, int64) {
 	subj := orgSubject(org)
 	var spend, credits int64
-	if r, err := s.commerce.usageRollup(ctx, org, subj); err == nil {
+	if r, err := s.State.commerce.usageRollup(ctx, org, subj); err == nil {
 		spend = r.ConsumedCents
 	}
-	if c, err := s.commerce.creditsCents(ctx, org, subj); err == nil {
+	if c, err := s.State.commerce.creditsCents(ctx, org, subj); err == nil {
 		credits = c
 	}
 	return spend, credits

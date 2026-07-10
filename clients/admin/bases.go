@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -61,7 +62,7 @@ func baseAdminConfig() (base, token string, ok bool) {
 // baseProxy issues a server-authed GET to the Base admin surface and returns its raw JSON
 // body + status. Bounded read; Bearer token only when configured; never forwards a client
 // header.
-func (s *svc) baseProxy(ctx context.Context, target, token string) (json.RawMessage, int, error) {
+func baseProxy(s *cloud.Service[state], ctx context.Context, target, token string) (json.RawMessage, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("base request: %w", err)
@@ -84,8 +85,8 @@ func (s *svc) baseProxy(ctx context.Context, target, token string) (json.RawMess
 
 // bases answers GET /v1/admin/bases — the scoped Base-instance list. Honest empty when the
 // engine is unconfigured; scope-filtered for a non-super caller.
-func (s *svc) bases(c *zip.Ctx) error {
-	sc := s.resolveScope(c)
+func bases(s *cloud.Service[state], c *zip.Ctx) error {
+	sc := resolveScope(s, c)
 	base, token, ok := baseAdminConfig()
 	if !ok {
 		return c.JSON(200, map[string]any{
@@ -103,7 +104,7 @@ func (s *svc) bases(c *zip.Ctx) error {
 	if enc := q.Encode(); enc != "" {
 		target += "?" + enc
 	}
-	raw, code, err := s.baseProxy(c.Context(), target, token)
+	raw, code, err := baseProxy(s, c.Context(), target, token)
 	if err != nil {
 		return fail(c, err.Error())
 	}
