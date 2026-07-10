@@ -1,4 +1,4 @@
-package gatewaysvc
+package gateway
 
 import (
 	"encoding/json"
