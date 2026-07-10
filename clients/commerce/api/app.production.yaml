@@ -1,0 +1,14 @@
+service: api
+
+runtime: go122
+instance_class: F4
+
+automatic_scaling:
+  min_idle_instances: 1
+  max_idle_instances: automatic
+  max_concurrent_requests: 80
+
+handlers:
+- url: /.*
+  script: auto
+  secure: always

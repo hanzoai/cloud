@@ -14,7 +14,7 @@ import (
 	zap "github.com/zap-proto/go"
 	zaprpc "github.com/zap-proto/go/rpc"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 

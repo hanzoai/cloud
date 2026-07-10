@@ -1,0 +1,71 @@
+node_modules
+/.cake_task_cache
+/sdk
+npm-debug.log
+.datastore.bin
+_export
+package-lock.json
+config/env.go
+
+config.json
+config/production/bulkloader_helper.pyc
+static/css/dash.css
+static/js/dash.js
+static/css/theme.css
+static/js/analytics/analytics.js
+static/js/analytics/bundle.js
+static/js/analytics/native.js
+static/js/analytics/snippet.js
+static/js/api.js
+static/js/mailinglist.js
+vendor/
+
+*.sql3
+*.csv
+*.pyc
+*.test
+*.sql3-journal
+*.idea
+*.bak
+*.orig
+*.coverprofile
+*.min.js
+
+_export
+**/*.coverprofile.*
+.ipynb_checkpoints/
+/commerce
+/commerced
+/sbom-scan
+/commerce_data/
+nohup.out
+
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+QWEN.md
+
+# Pay UI build artifact. The canonical pay UI source of truth is
+# github.com/hanzoai/pay — Dockerfile pay-build stage clones it at
+# PAY_VERSION and copies the built dist/ here before the Go build. Only
+# .gitkeep is tracked so go:embed resolves on a fresh clone.
+checkout/ui/dist/*
+!checkout/ui/dist/.gitkeep
+
+# Billing admin UI build artifact. The canonical source of truth is
+# github.com/hanzoai/billing — Dockerfile billing-build stage clones it
+# at BILLING_VERSION, runs `pnpm build`, and copies out/ here before
+# the Go build. Only .gitkeep is tracked so go:embed resolves on a
+# fresh clone.
+billing/ui/dist/*
+!billing/ui/dist/.gitkeep
+
+# hanzoai/plans is the SOT; scripts/fetch-plans.sh refreshes these at build.
+# BUT the two files below are go:embed'd (api/billing/plans.go), so they MUST be
+# committed: a Go module cannot embed a gitignored file, and cloud consumes
+# commerce AS A LIBRARY (the unified binary) where the module zip is all there is
+# — omitting them broke every downstream build from v1.42.30 (0de841321) on. The
+# rest of plans/ stays fetched/untracked.
+api/billing/plans/*
+!api/billing/plans/dns.json
+!api/billing/plans/subscription.json

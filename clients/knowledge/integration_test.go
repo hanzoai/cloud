@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -36,6 +37,27 @@ type fakeVector struct {
 	upserts   map[string][]map[string]any // collection → payloads upserted
 	server    *httptest.Server
 	embedDims int
+}
+
+// fakeAI is a deterministic in-test AIClient: Embed returns one embedDims-vector
+// per input, so the KB index path is exercised offline through the SAME deps.AI
+// seam production uses — no HTTP embed endpoint.
+type fakeAI struct{ dims int }
+
+func (fakeAI) ChatCompletion(context.Context, *cloud.ChatRequest) (*cloud.ChatResponse, error) {
+	return &cloud.ChatResponse{Content: "x"}, nil
+}
+
+func (f fakeAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
+	out := make([][]float32, len(inputs))
+	for i := range inputs {
+		v := make([]float32, f.dims)
+		for j := range v {
+			v[j] = 0.1
+		}
+		out[i] = v
+	}
+	return out, nil
 }
 
 func newFakeVector(t *testing.T) *fakeVector {
@@ -144,9 +166,10 @@ func (fv *fakeVector) handleSearch(w http.ResponseWriter, r *http.Request, col s
 func resetIndexer(t *testing.T, base string) {
 	t.Helper()
 	t.Setenv("vectorEndpoint", base)
-	t.Setenv("CLOUD_AI_BASE_URL", base+"/v1")
-	t.Setenv("CLOUD_AI_API_KEY", "test-key") // enables the index
 	t.Setenv("KB_EMBED_DIMS", "8")
+	// Embeddings run through the shared AI client (deps.AI), not an HTTP endpoint —
+	// inject a deterministic fake so the index path is exercised offline.
+	kbAI = fakeAI{dims: 8}
 	// Rebuild the singleton against this env (tests share the process).
 	idxOnce = sync.Once{}
 	idx = nil

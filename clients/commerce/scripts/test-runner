@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+files=()
+for file in $(find ./test -name "*_test.go"); do
+    file=$(echo $(dirname $file) | cut -c 3-)
+    files+=" $file"
+done
+
+i=0
+pkgs=()
+for file in $(echo "${files[@]}" | tr ' ' '\n' | sort -u); do
+  if [ $(($i % $BUILDKITE_PARALLEL_JOB_COUNT)) -eq $BUILDKITE_PARALLEL_JOB ]; then
+    pkgs+=" $file"
+  fi
+  ((i=i+1))
+done
+
+make test-ci batch="${pkgs[@]}"

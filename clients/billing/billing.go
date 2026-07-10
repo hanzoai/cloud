@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -68,7 +69,7 @@ func newCommerceProxy(base, token string) *commerceProxy {
 	return &commerceProxy{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 15 * time.Second},
+		http:  commerceinproc.Client(15 * time.Second),
 	}
 }
 
@@ -142,7 +143,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // build constructs the billing state: the commerce S2S proxy from its env
 // (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env).
 func build(b cloud.Base) (state, error) {
-	cp := newCommerceProxy(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	cp := newCommerceProxy(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	b.Log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", cp.configured())
 	return state{commerce: cp}, nil
 }
