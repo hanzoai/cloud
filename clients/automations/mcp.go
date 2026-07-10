@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -25,7 +26,7 @@ type mcpRequest struct {
 
 // mcp is the single JSON-RPC endpoint. Org-gated at the top: no validated principal
 // → 403, so a client-forged X-Org-Id with no bearer can never reach a tool.
-func (s *svc) mcp(c *zip.Ctx) error {
+func mcp(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
@@ -49,7 +50,7 @@ func (s *svc) mcp(c *zip.Ctx) error {
 	case "tools/list":
 		return c.JSON(http.StatusOK, mcpResultObj(req.ID, map[string]any{"tools": mcpTools()}))
 	case "tools/call":
-		return s.mcpToolCall(c, org, req)
+		return mcpToolCall(s, c, org, req)
 	default:
 		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32601, "method not found: "+req.Method))
 	}
@@ -59,7 +60,7 @@ func (s *svc) mcp(c *zip.Ctx) error {
 // the Token closure are pinned to the VALIDATED org — a caller can never invoke a
 // tool against another tenant's credentials. One metered unit + one audit record per
 // call.
-func (s *svc) mcpToolCall(c *zip.Ctx, org string, req mcpRequest) error {
+func mcpToolCall(s *cloud.Service[state], c *zip.Ctx, org string, req mcpRequest) error {
 	var p struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -98,11 +99,11 @@ func (s *svc) mcpToolCall(c *zip.Ctx, org string, req mcpRequest) error {
 	// billed as a successful unit.
 	out, err := act.Run(ctx, rc)
 	if err != nil {
-		s.auditEvent(c, org, "automations.mcp.call", p.Name, "error", http.StatusFailedDependency)
+		auditEvent(s, c, org, "automations.mcp.call", p.Name, "error", http.StatusFailedDependency)
 		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32000, err.Error()))
 	}
-	s.meterUnit(org, c)
-	s.auditEvent(c, org, "automations.mcp.call", p.Name, "ok", http.StatusOK)
+	meterUnit(s, org, c)
+	auditEvent(s, c, org, "automations.mcp.call", p.Name, "ok", http.StatusOK)
 
 	text, _ := json.Marshal(out)
 	return c.JSON(http.StatusOK, mcpResultObj(req.ID, map[string]any{
