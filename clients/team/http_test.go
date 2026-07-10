@@ -131,7 +131,7 @@ func TestAuthStartRedirectURIFallsBackToHost(t *testing.T) {
 func TestSelectWorkspaceHTTP(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
@@ -199,8 +199,8 @@ func TestSelectWorkspaceCrossTenantBlocked(t *testing.T) {
 	ctx := context.Background()
 	const acctA = "aaaaaaaa-0000-4000-8000-00000000000a"
 	const acctB = "bbbbbbbb-0000-4000-8000-00000000000b"
-	wsA, _ := mounted.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	if _, err := mounted.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob"); err != nil {
+	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
+	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob"); err != nil {
 		t.Fatal(err)
 	}
 
