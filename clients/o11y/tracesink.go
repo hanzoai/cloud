@@ -188,7 +188,11 @@ func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error
 	if err != nil {
 		return nil, fmt.Errorf("create chtraces exporter: %w", err)
 	}
+	// CreateTraces already opened the ClickHouse conn + spawned the writer's
+	// background goroutine; a failed Start must release them, not leak on the
+	// fail-soft path (Shutdown is safe to call after a failed Start).
 	if err := exp.Start(ctx, nopHost{}); err != nil {
+		_ = exp.Shutdown(ctx)
 		return nil, fmt.Errorf("start chtraces exporter: %w", err)
 	}
 	return exp, nil
