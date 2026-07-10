@@ -579,7 +579,7 @@ require (
 	github.com/luxfi/pq v1.1.0 // indirect
 	github.com/luxfi/pulsar v1.9.0
 	github.com/luxfi/threshold v1.12.1 // indirect
-	github.com/luxfi/zap v1.2.0 // indirect
+	github.com/luxfi/zap v1.2.1
 	github.com/magefile/mage v1.17.1 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/markbates/going v1.0.0 // indirect
