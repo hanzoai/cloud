@@ -1,20 +1,14 @@
 package code
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"sort"
-	"strings"
-	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 // Embedder turns text into vectors for the semantic tier. It is an interface so
-// the subsystem wires the real gateway client while tests inject a deterministic
+// the subsystem wires the real AI client while tests inject a deterministic
 // offline embedder — the semantic tier is fully testable without a live model.
 type Embedder interface {
 	// Embed returns one vector per input, aligned by index. A disabled embedder
@@ -23,44 +17,34 @@ type Embedder interface {
 	Enabled() bool
 }
 
-// gatewayEmbedder calls the Hanzo AI gateway's OpenAI-compatible /embeddings,
-// the SAME endpoint + env (CLOUD_AI_BASE_URL / CLOUD_AI_API_KEY) clients/knowledge
-// uses, so index and query share one model and dimensions always match. An empty
-// key disables the tier (honest degrade, never a fabricated vector).
-type gatewayEmbedder struct {
-	base  string
-	key   string
+// aiEmbedder routes embeddings through the shared cloud.AIClient (deps.AI) — the
+// SAME org/project-aligned, metered, observed path chat runs through. There is
+// deliberately NO embed-specific key or endpoint: one AI identity, one way. The
+// gateway owns model routing; model is CLOUD_EMBED_MODEL (default bge-m3, the
+// 1024-dim BAAI embedder the gateway serves).
+type aiEmbedder struct {
+	ai    cloud.AIClient
 	model string
-	http  *http.Client
 }
 
-func newEmbedder() *gatewayEmbedder {
-	// The semantic tier resolves a DEDICATED embeddings provider (CLOUD_EMBED_*)
-	// so it can target a first-party embedding endpoint — e.g. DigitalOcean GenAI
-	// (bge-m3 @1024-dim) — WITHOUT repointing the chat/synth AIClient, which
-	// shares CLOUD_AI_*. Dedicated vars win; each falls back to the shared
-	// CLOUD_AI_* so an un-split deployment keeps working. The same three vars
-	// drive clients/knowledge — one embed config, both semantic subsystems.
-	base := strings.TrimRight(getenv("CLOUD_EMBED_BASE_URL", getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1")), "/")
-	if !strings.HasSuffix(base, "/v1") {
-		base += "/v1"
+func newEmbedder(ai cloud.AIClient, model string) *aiEmbedder {
+	if model == "" {
+		model = getenv("CLOUD_EMBED_MODEL", "bge-m3")
 	}
-	return &gatewayEmbedder{
-		base:  base,
-		key:   getenv("CLOUD_EMBED_API_KEY", os.Getenv("CLOUD_AI_API_KEY")),
-		model: getenv("CLOUD_EMBED_MODEL", getenv("CODE_EMBED_MODEL", "text-embedding-3-small")),
-		http:  &http.Client{Timeout: 30 * time.Second},
-	}
+	return &aiEmbedder{ai: ai, model: model}
 }
 
-func (e *gatewayEmbedder) Enabled() bool { return e.key != "" }
+// Enabled mirrors the synthesizer (a non-nil AI client). The disabled stub errors
+// at call time, so indexing degrades to lexical + symbolic rather than
+// fabricating vectors.
+func (e *aiEmbedder) Enabled() bool { return e.ai != nil }
 
 // embedBatch bounds one request so a large index call fans out over several
 // round-trips rather than one oversized body.
 const embedBatch = 64
 
-func (e *gatewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	if !e.Enabled() || len(texts) == 0 {
+func (e *aiEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	if e.ai == nil || len(texts) == 0 {
 		return nil, nil
 	}
 	out := make([][]float32, 0, len(texts))
@@ -69,7 +53,7 @@ func (e *gatewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float3
 		if end > len(texts) {
 			end = len(texts)
 		}
-		vecs, err := e.embedOne(ctx, texts[start:end])
+		vecs, err := e.ai.Embed(ctx, e.model, texts[start:end])
 		if err != nil {
 			return nil, err
 		}
@@ -78,57 +62,9 @@ func (e *gatewayEmbedder) Embed(ctx context.Context, texts []string) ([][]float3
 	return out, nil
 }
 
-func (e *gatewayEmbedder) embedOne(ctx context.Context, texts []string) ([][]float32, error) {
-	reqBody, _ := json.Marshal(map[string]any{"model": e.model, "input": texts})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.base+"/embeddings", bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+e.key)
-
-	resp, err := e.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("embeddings status %d: %s", resp.StatusCode, truncate(raw, 200))
-	}
-	var decoded struct {
-		Data []struct {
-			Index     int       `json:"index"`
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil, fmt.Errorf("decode embeddings: %w", err)
-	}
-	if len(decoded.Data) != len(texts) {
-		return nil, fmt.Errorf("embeddings: got %d vectors for %d inputs", len(decoded.Data), len(texts))
-	}
-	sort.Slice(decoded.Data, func(i, j int) bool { return decoded.Data[i].Index < decoded.Data[j].Index })
-	vecs := make([][]float32, len(decoded.Data))
-	for i, d := range decoded.Data {
-		vecs[i] = d.Embedding
-	}
-	return vecs, nil
-}
-
 func getenv(key, dflt string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
 	return dflt
-}
-
-func truncate(b []byte, n int) string {
-	if len(b) > n {
-		return string(b[:n])
-	}
-	return string(b)
 }
