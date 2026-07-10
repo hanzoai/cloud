@@ -1,0 +1,2 @@
+dist/ is populated by the Vite build in Dockerfile stage `checkout-build`. Local
+development just needs this directory to exist so go:embed does not fail.
