@@ -211,7 +211,7 @@ func (s *svc) admin(c *zip.Ctx) (string, error) {
 	if !c.IsAdmin() {
 		return "", zip.ErrForbidden("ingress edge config requires SuperAdmin")
 	}
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return "", zip.ErrForbidden("a validated principal is required")
 	}

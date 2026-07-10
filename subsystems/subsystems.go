@@ -86,7 +86,7 @@ import (
 
 	// Embedded commerce plane (HIP-0106): the commerce library (clients/commerce)
 	// mounts its own gin handler (commerce.Embed) at /v1/commerce/* + /_/commerce/*
-	// in-process so cloud serves the checkout/tenant/billing surface ITSELF instead of
+	// in-process so cloud serves the checkout/billing surface ITSELF instead of
 	// proxying to a remote commerce pod, AND registers the in-process cloud.Commerce-
 	// Client (real entitlement resolution). ONE package owns the library + its
 	// subsystem + its client, self-registered via cloud's inversion hooks (the
@@ -123,7 +123,7 @@ import (
 	// provisioning's /v1/s3/:name and win Fiber's first-match scan; registered with
 	// cloud.HealthOwner so the generic health route does not shadow the real
 	// fail-closed /v1/s3/health. It COMPLEMENTS provisioning (which owns the s3
-	// RESOURCE lifecycle at /v1/s3 + /v1/s3/:name) — both derive a tenant's physical
+	// RESOURCE lifecycle at /v1/s3 + /v1/s3/:name) — both derive an org's physical
 	// bucket name identically (provisioning.PhysicalName) so a provisioned bucket is
 	// browsable here.
 	_ "github.com/hanzoai/cloud/clients/storage" // order 118 — /v1/s3/buckets/*,/v1/s3/health
@@ -134,10 +134,10 @@ import (
 
 	// DigitalOcean-native infra plane: the org-scoped /v1/vpcs + /v1/load-balancers
 	// surface over the digitalocean/godo SDK (DO is Hanzo's EXCLUSIVE cloud venue).
-	// DO is a single account, so tenant isolation is a name prefix — a resource's
+	// DO is a single account, so org isolation is a name prefix — a resource's
 	// physical DO name is "o"<orgHash>-<friendly> (provisioning.BucketName, the SAME
 	// org-hash convention S3 uses); list/get/delete filter to the caller's prefix so
-	// no tenant sees another's. Fails closed (503) without DO_API_TOKEN. Backs the
+	// no org sees another's. Fails closed (503) without DO_API_TOKEN. Backs the
 	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
 	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
 
@@ -186,7 +186,7 @@ import (
 	// Complements paas (admin fleet board) and projects (static sites): this
 	// is the container-app PaaS. Every route is org-scoped by the validated
 	// X-Org-Id and the deploy namespace is DERIVED from it (tenant-<org>), never
-	// taken from the request — the cross-tenant isolation boundary. Order 124
+	// taken from the request — the cross-org isolation boundary. Order 124
 	// binds /v1/platform/* before projects (125) and the AI catch-all (150). It
 	// ALSO owns the top-level container-serverless one-shot POST /v1/run (run.go):
 	// a single call that create-or-updates an image app and deploys it via the SAME
@@ -206,16 +206,16 @@ import (
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
 	// captable: the Captable,Inc app folded in-process (HIP-0106, epic #96 pilot).
 	// Hosts the tRPC business logic as a goja bundle (github.com/hanzoai/captable)
-	// over per-tenant Base/SQLite via the REUSABLE clients/gojabase RW-Base binding
+	// over per-org Base/SQLite via the REUSABLE clients/gojabase RW-Base binding
 	// (which esign #100 + dataroom #101 reuse). STAGED (config.stagedSubsystems):
 	// mounts ONLY when the operator names "captable" in CLOUD_ENABLE, so the
 	// standalone captable service keeps authority until the phase-2 cutover.
 	_ "github.com/hanzoai/cloud/clients/captable"   // order 133 — /v1/captable/* (cap table on Base via goja)
-	_ "github.com/hanzoai/cloud/clients/dataroom"   // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-tenant Base, STAGED behind CLOUD_ENABLE)
+	_ "github.com/hanzoai/cloud/clients/dataroom"   // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-org Base, STAGED behind CLOUD_ENABLE)
 	// Hanzo Sign (HIP-0106, task #100): the e-signature product (Documenso fork)
 	// folded in-process via the SAME reusable gojabase RW-Base host captable
 	// pilots — the server-side domain runs as an ESM-free goja bundle
-	// (github.com/hanzoai/sign) backed by per-tenant Base/SQLite, with the PDF/PKI
+	// (github.com/hanzoai/sign) backed by per-org Base/SQLite, with the PDF/PKI
 	// seal implemented as Go host-functions injected via gojabase Config.HostFns.
 	// STAGED (config.stagedSubsystems): mounts /v1/sign/* ONLY when the operator
 	// names "sign" in CLOUD_ENABLE, so linking it changes nothing until the
@@ -246,7 +246,7 @@ import (
 	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
 	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
 	// on — ONE engine + ONE generic UI renders every business app. Per-org on
-	// Base/SQLite, org derived ONCE via principal.Tenant (no Frappe/Python
+	// Base/SQLite, org derived ONCE via principal.Org (no Frappe/Python
 	// runtime dep). Order 129 binds /v1/framework/* before the AI /v1/* catch-all.
 	_ "github.com/hanzoai/cloud/clients/framework" // order 129 — /v1/framework/* (DocType engine)
 
@@ -290,7 +290,7 @@ import (
 	// the bots read routes (/v1/team/bots, /v1/team/bots/sync). Bots-as-members are
 	// sourced IN-PROCESS from the canonical agents registry (agents.ListForOrg) and
 	// projected as workspace Employees — no IAM-SA HTTP hop. Every data path derives
-	// its org from a VERIFIED token claim / principal.Tenant, never a client header.
+	// its org from a VERIFIED token claim / principal.Org, never a client header.
 	// Order 138 binds /v1/team/* before the AI /v1/* catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
 
@@ -304,7 +304,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/usage"     // order 131 — /v1/usage/summary (org-scoped unified footprint: cost roll-up + LLM totals)
 	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
 
-	// Networking control plane: tenant-scoped facade over Hanzo Zero Trust
+	// Networking control plane: org-scoped facade over Hanzo Zero Trust
 	// (hanzoai/zt, an OpenZiti fabric). Fronts the controller's Edge Management API
 	// and serves the console's Networks/ServiceMesh/Edge pages: /v1/networks (the
 	// org's overlay, projected from its edge-routers), /v1/mesh/services (ZT edge
@@ -357,7 +357,7 @@ import (
 	// serves the HIP-0300 MCP tool surface (/v1/automations/mcp) that /v1/agents calls.
 	_ "github.com/hanzoai/cloud/clients/automations" // order 148 — /v1/automations/*
 
-	// ML/Train control plane: tenant-scoped k8s bridge fronting the kubeflow
+	// ML/Train control plane: org-scoped k8s bridge fronting the kubeflow
 	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
 	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
 
@@ -370,7 +370,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/admin" // order 146 — /v1/admin/*
 
 	// The EMBEDDED o11y runtime — the single owner of the whole /v1/o11y surface.
-	// clients/o11y both (a) mounts the org-scoped, tenant-isolated
+	// clients/o11y both (a) mounts the org-scoped, org-isolated
 	// /v1/o11y/{logs,metrics,status} reads (order 69) that query the shared
 	// ClickHouse `datastore` IN-PROCESS per-org (logs.go/metricsread.go/status.go —
 	// folded in from the retired clients/observe so nothing was lost), and (b)
@@ -380,7 +380,7 @@ import (
 	// reverse-proxy fallback ONLY when the embed is disabled (no DSN). It also embeds
 	// the OTLP ingest collector (order 72, opt-in) that folds the standalone
 	// otel-collector. The scoped reads (69) register BEFORE the wildcard (70) so
-	// Fiber gives the tenant-scoped handlers precedence over the runtime proxy.
+	// Fiber gives the org-scoped handlers precedence over the runtime proxy.
 	_ "github.com/hanzoai/cloud/clients/o11y" // order 69 scoped reads + 71 runtime handler + 72 OTLP ingest
 	// The console SPA is go:embed'd and served at "/" by webui.go's
 	// mountConsole, called directly from Serve AFTER every /v1/* route mounts

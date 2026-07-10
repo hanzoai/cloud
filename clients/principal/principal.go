@@ -1,5 +1,5 @@
 // Package principal is the ONE place the cloud data plane turns a request into a
-// tenant. Every subsystem that reads or writes per-org data resolves its tenant
+// org. Every subsystem that reads or writes per-org data resolves its org
 // through here, so the trust decision lives once and can never drift between six
 // hand-rolled copies.
 //
@@ -16,7 +16,7 @@
 // client's raw X-Org-Id for data scoping while leaving X-User-Id EMPTY. So a
 // request that presents an org but NO validated user is exactly the forge: an
 // off-gateway caller sending `X-Org-Id: victim` with no credential, trying to
-// read/write/delete another tenant's data.
+// read/write/delete another org's data.
 //
 // THE GATE. X-User-Id is set ONLY by the middleware, ONLY from a credential it
 // verified (a JWT bearer or session cookie — an opaque hk-/sk- API key does NOT
@@ -35,7 +35,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// MaxOrgLen bounds the tenant key. The org is the validated IAM owner claim — a
+// MaxOrgLen bounds the org key. The org is the validated IAM owner claim — a
 // short DNS-ish label — so anything longer is malformed or hostile and is
 // rejected before it can become a storage key or namespace.
 const MaxOrgLen = 128
@@ -61,7 +61,7 @@ func IsDefaultProject(project string) bool {
 // predicate that separates a gateway-minted identity from a client-forged
 // X-Org-Id on the bearer-less path.
 //
-// Subsystems that resolve the plain org key use Tenant (which composes this).
+// Subsystems that resolve the plain org key use Org (which composes this).
 // Subsystems that derive their own PHYSICAL namespace from a route param or a
 // normalized slug — KMS (route :org), S3 / provisioning / projects (DNS slug
 // + admin bucket), ML (k8s namespace) — call Validated FIRST, then apply their
@@ -70,7 +70,7 @@ func Validated(c *zip.Ctx) bool {
 	return strings.TrimSpace(c.User()) != ""
 }
 
-// Tenant resolves the caller's org — the tenant-isolation KEY — for the common
+// Org resolves the caller's org — the org-isolation KEY — for the common
 // verbatim case (crm, prompts, agents, functions, git, eval). It returns
 // ("", false), and the caller MUST answer 403, unless BOTH hold:
 //
@@ -81,16 +81,16 @@ func Validated(c *zip.Ctx) bool {
 //
 // The org is used VERBATIM — only trimmed, NEVER lowercased or truncated —
 // because folding collapses DISTINCT owners ("acme" / "ACME" / a 32-char prefix)
-// into one bucket, itself a cross-tenant break. The returned value is CLONED:
+// into one bucket, itself a cross-org break. The returned value is CLONED:
 // c.Org() is a zero-copy view into the reused fasthttp request buffer, and the
-// tenant key is retained past the request (DB rows, telemetry, async meters), so
+// org key is retained past the request (DB rows, telemetry, async meters), so
 // it must be a stable owned copy that cannot mutate to unrelated bytes.
 //
 // There is deliberately NO magic "admin" bucket here: a subsystem whose admin
 // operates on per-org data carries an explicit org, so an empty org is a true
 // 403. Subsystems that DO want an admin bucket (S3, provisioning) gate on
 // Validated and add that fallback themselves.
-func Tenant(c *zip.Ctx) (string, bool) {
+func Org(c *zip.Ctx) (string, bool) {
 	if !Validated(c) {
 		return "", false // no validated principal — the restored X-Org-Id is untrusted
 	}
@@ -112,13 +112,13 @@ func Tenant(c *zip.Ctx) (string, bool) {
 // The header is present iff a NON-default project is in scope, so an empty header
 // resolves to DefaultProject — this is the backward-compatibility guarantee:
 // existing single-project callers see "default" and keyed surfaces keep today's
-// keys. The returned value is CLONED for the same reason Tenant clones: c.Org() /
+// keys. The returned value is CLONED for the same reason Org clones: c.Org() /
 // c.Header() are zero-copy views into the reused fasthttp request buffer, and the
 // project is retained past the request as a storage-key / namespace component, so
 // it must be a stable owned copy that cannot mutate to unrelated bytes.
 //
-// Unlike Tenant, Project does not gate on Validated: it is a scope NARROWING, not
-// an authority. Every consumer AND-s it with the org resolved through Tenant (which
+// Unlike Org, Project does not gate on Validated: it is a scope NARROWING, not
+// an authority. Every consumer AND-s it with the org resolved through Org (which
 // does gate), so an unvalidated request is already refused at the org boundary
 // before the project is ever used — the project can only ever narrow the caller's
 // OWN org.

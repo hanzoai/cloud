@@ -251,7 +251,7 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 // ---- git-push-to-deploy ----
 
 // GitPushEvent describes a push that just landed on the embedded git server: the
-// tenant, the repo, the branch that moved, and its new tip commit. CloneURL is the
+// org, the repo, the branch that moved, and its new tip commit. CloneURL is the
 // canonical clone URL of that repo (https://<host>/v1/git/<org>/<repo>.git) — the
 // exact value an Application's RepoURL carries — so the builder can resolve which
 // app (if any) tracks this branch and needs a rebuild.
@@ -289,7 +289,7 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) error {
 }
 
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
-// entitlements/licensing tier calls (GetTenantConfig, CheckEntitlement). When the
+// entitlements/licensing tier calls (GetOrgConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS
 // client via the factory clients/commerce registers in init() — a direct Go call
 // that reads the embedded commerce datastore + the @hanzo/plans vocabulary, no

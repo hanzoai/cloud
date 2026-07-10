@@ -11,14 +11,14 @@ package cloud
 // runs as middleware; resource billing runs INSIDE a create handler, where the
 // caller's org has already been resolved to the exact slug that namespaces the
 // backend resource — so the balance check and the debit are guaranteed to target
-// that one tenant, never a default, never another tenant.
+// that one org, never a default, never another org.
 //
 // Multitenancy contract (the whole point):
 //   - org is the caller's resolved org slug (the value that namespaces the
 //     resource). It is sent to commerce as BOTH the user identity AND the
-//     X-IAM-Org-Id tenant header, OVERRIDING the metering client's default org —
-//     so an unfunded tenant can never provision on another tenant's balance, and
-//     a funded tenant's spend lands only on its own ledger.
+//     X-IAM-Org-Id org header, OVERRIDING the metering client's default org —
+//     so an unfunded org can never provision on another org's balance, and
+//     a funded org's spend lands only on its own ledger.
 //   - Fail-closed: a non-positive balance is 402; a commerce that cannot be
 //     reached is 503 (unless the client was built fail-open). No free
 //     provisioning on a billing outage for a priced resource.
@@ -88,7 +88,7 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // costCents<=0 means the kind is free → no gate (mirrors BillingGate's price==0
 // short-circuit). org MUST be the caller's resolved slug; it is sent as the
 // commerce user AND X-Org-Id so the CALLER's ledger is checked, overriding
-// the client default org — the anti-cross-tenant property. The balance check
+// the client default org — the anti-cross-org property. The balance check
 // honors ctx (a client disconnect/timeout cancels it).
 //
 // costCents is forwarded as AuthInput.AmountCents so the gate enforces
@@ -139,7 +139,7 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 
 // MeterUsage is the general-purpose per-org debit: it records the caller-built
 // usage event after forcing the per-org billing invariants that make the debit
-// land on the CALLER's ledger and never another tenant's:
+// land on the CALLER's ledger and never another org's:
 //
 //   - u.User and u.Org are OVERWRITTEN to the caller's org slug (the per-org
 //     prepaid billing key + the X-Org-Id namespace) — a caller can never bill

@@ -26,7 +26,7 @@ type mcpRequest struct {
 // mcp is the single JSON-RPC endpoint. Org-gated at the top: no validated principal
 // → 403, so a client-forged X-Org-Id with no bearer can never reach a tool.
 func (s *svc) mcp(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
