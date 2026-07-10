@@ -698,15 +698,52 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// param, computed by buildImageRef from the validated tenant) and appears as
 	// its own fixed argv element, so a client can never override --output/--opt to
 	// push to another tenant's repo.
-	command := []any{
-		"buildctl-daemonless.sh", "build",
-		"--frontend=dockerfile.v0",
-		"--opt", "context=" + buildCtx,
-		"--opt", "filename=" + dockerfile,
-		"--output", "type=image,name=" + image + ",push=true",
+	command := buildFrontendCmd(buildCtx, dockerfile, image)
+	job := k.buildJobSpec(jobName, org, a.Slug, command)
+	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
+		return "", err
 	}
+	return jobName, nil
+}
 
-	job := &unstructured.Unstructured{Object: map[string]any{
+// packFrontendImage is hanzoai/pack — the one canonical zero-config packer, a
+// BuildKit gateway frontend that detects any project (Go, Node, Python, Rust,
+// static, …) and emits a runnable OCI image. It is the default builder; a
+// Dockerfile is the explicit escape hatch.
+const packFrontendImage = "ghcr.io/hanzoai/pack:latest"
+
+// platformBuildOrg labels fabric-owned (non-tenant) builds — the /v1/runner
+// direct builds share this pool for the concurrency cap.
+const platformBuildOrg = "platform"
+
+// buildFrontendCmd is the ONE way a build chooses its BuildKit frontend: an
+// explicit Dockerfile uses dockerfile.v0; otherwise hanzoai/pack detects and
+// builds with zero config. The output image is FORCED here as its own argv
+// element, so a caller can never redirect --output to another repo.
+func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
+	cmd := []any{"buildctl-daemonless.sh", "build"}
+	if strings.TrimSpace(dockerfile) != "" {
+		cmd = append(cmd,
+			"--frontend=dockerfile.v0",
+			"--opt", "context="+buildCtx,
+			"--opt", "filename="+dockerfile,
+		)
+	} else {
+		cmd = append(cmd,
+			"--frontend=gateway.v0",
+			"--opt", "source="+packFrontendImage,
+			"--opt", "context="+buildCtx,
+		)
+	}
+	return append(cmd, "--output", "type=image,name="+image+",push=true")
+}
+
+// buildJobSpec is the shared moby/buildkit Job (arcd model): privileged buildkit
+// on the CI runner pool, pushing to GHCR via the kaniko-ghcr pull secret. Both
+// the tenant build (launchBuildJob) and the direct build (launchDirectBuild)
+// construct their Job through here — one spec, one place.
+func (k *k8sClient) buildJobSpec(jobName, org, app string, command []any) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
 		"metadata": map[string]any{
@@ -715,7 +752,7 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 			"labels": map[string]any{
 				"hanzo.ai/org":         org,
 				"hanzo.ai/managed-by":  "platform",
-				"hanzo.ai/application": a.Slug,
+				"hanzo.ai/application": app,
 				"hanzo.ai/build":       "true",
 			},
 		},
@@ -749,6 +786,37 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 			},
 		},
 	}}
+}
+
+// launchDirectBuild launches a privileged /v1/runner build. It takes explicit
+// (repo, ref, image, dockerfile) rather than a tenant Application, validates
+// them at this single choke point (validateBuildInputs), and launches the same
+// moby/buildkit Job with the caller's forced output image. Frontend defaults to
+// hanzoai/pack; a non-empty dockerfile is the escape hatch. buildID is the
+// idempotency key: a retry of the same build collides on the Job name (409)
+// rather than spawning a duplicate.
+func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, dockerfile, buildID string) (string, error) {
+	if err := k.ready(); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(ref) == "" {
+		ref = "main"
+	}
+	cleanURL, cleanDockerfile, cleanRef, err := validateBuildInputs(repoURL, dockerfile, ref)
+	if err != nil {
+		return "", fmt.Errorf("invalid build input: %w", err)
+	}
+	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
+	if err != nil {
+		return "", fmt.Errorf("count active builds: %w", err)
+	}
+	if active >= k.limits.maxConcurrentBuilds() {
+		return "", errTooManyBuilds
+	}
+	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
+	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
+	command := buildFrontendCmd(buildCtx, cleanDockerfile, image)
+	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
