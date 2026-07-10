@@ -8,7 +8,7 @@ package cloud
 // SanitizeIdentity resolved anonymous, and the /v1/kms guard 403'd it, so the sync
 // silently stayed pending. These are white-box unit tests of validate() itself;
 // the end-to-end proof through SanitizeIdentity + the real guard lives in
-// clients/kmssvc (v6_aud_e2e_test.go). Reuses the jwksServer/signWith/tokenClaims
+// clients/kms (v6_aud_e2e_test.go). Reuses the jwksServer/signWith/tokenClaims
 // helpers from middleware_identity_test.go (same package).
 
 import (
