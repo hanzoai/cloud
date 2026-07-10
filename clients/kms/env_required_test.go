@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // Regression coverage for the one-way env contract on the embedded KMS write
 // surface. env is a first-class component of the storage key

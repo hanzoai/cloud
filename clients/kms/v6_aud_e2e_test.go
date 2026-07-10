@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // V6 END-TO-END (the activation blocker). A REAL, RSA-signed client_credentials-
 // style bearer — owner=<org>, aud=<org>-platform-kms (the tenant's own IAM
@@ -106,7 +106,7 @@ func e2eCfg(t *testing.T, jwksURL string) *cloud.Config {
 }
 
 // newAppWithIdentity wires the REAL identity boundary (cloud.IdentityMiddleware) in
-// front of the REAL kmssvc routes — the production pipeline minus the gateway. It
+// front of the REAL /v1/kms routes — the production pipeline minus the gateway. It
 // deliberately does NOT reuse kms_test's newApp (which omits identity so its
 // header-injection tests work); here validation must actually run.
 func newAppWithIdentity(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
