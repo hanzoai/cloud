@@ -285,12 +285,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
 }
 
-func init() {
-	// Order 137: after security (136), before functions/AI (150). Registered WITH
-	// a shutdown so the per-org store is closed on graceful stop.
-	cloud.RegisterWithShutdown("integrations", 137, cloud.Typed(Mount), Shutdown)
-}
-
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {

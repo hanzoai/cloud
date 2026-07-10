@@ -252,10 +252,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	}
 }
 
-func init() {
-	cloud.Register("provisioning", 120, cloud.Typed(Mount))
-}
-
 // create provisions a new resource of kind for the caller's org. Two strategies
 // share one preamble (auth, name validation, billing gate, dedup): the shared-
 // logical kinds create a resource inside a live shared backend; the dedicated

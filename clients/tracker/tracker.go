@@ -134,10 +134,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Delete("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, deleteIssue))
 }
 
-func init() {
-	cloud.Register("tracker", 129, cloud.Typed(Mount))
-}
-
 // ---- HTTP response shapes (the published contract) ----
 
 type projectView struct {

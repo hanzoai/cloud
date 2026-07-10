@@ -129,7 +129,3 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	return c.JSON(http.StatusOK, t)
 }
-
-func init() {
-	cloud.Register("templates", 129, cloud.Typed(Mount))
-}

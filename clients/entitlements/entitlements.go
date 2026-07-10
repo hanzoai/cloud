@@ -102,14 +102,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// Order 139: after settings (138), before exec (140) and the AI /v1/* catch-all
-	// (150). The /v1/orgs/:org/entitlements prefix shares no path with another
-	// subsystem, so the order only needs to precede 150. RegisterWithShutdown so the
-	// store closes on graceful stop.
-	cloud.RegisterWithShutdown("entitlements", 139, cloud.Typed(Mount), Shutdown)
-}
-
 // Shutdown releases the entitlements store. Idempotent.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {

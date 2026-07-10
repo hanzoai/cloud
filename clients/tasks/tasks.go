@@ -134,10 +134,3 @@ func gate(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
-
-func init() {
-	// Order 147: before hanzoai/ai (150) so /v1/tasks/* wins over ai's /v1/*
-	// catch-all. No ShutdownFunc — the shared engine's lifecycle is owned by
-	// durable.go/Serve, not this consuming surface.
-	cloud.Register("tasks", 147, cloud.Typed(Mount))
-}

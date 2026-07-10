@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -108,16 +107,6 @@ func Shutdown() error {
 	err := mounted.State.store.Close()
 	mounted = nil
 	return err
-}
-
-func init() {
-	// cloud.HealthOwner: security serves its own /v1/security/health (Mount), which
-	// reports the live detection-rule count — the generic always-ok route would
-	// shadow it and drop that field, so Serve skips the generic one.
-	cloud.RegisterWithShutdown("security", 136, cloud.Typed(Mount),
-		func(ctx context.Context) error { return Shutdown() },
-		cloud.HealthOwner,
-	)
 }
 
 // ---- request/response shapes ----
