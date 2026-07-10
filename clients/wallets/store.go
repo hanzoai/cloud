@@ -15,6 +15,7 @@ import (
 
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags),
 	// identical to every other clients/* store.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -24,7 +25,7 @@ type store struct {
 
 // openStore opens (creating + migrating) wallets.db at path.
 func openStore(path string) (*store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

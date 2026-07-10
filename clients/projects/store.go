@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/sites"
+	"github.com/hanzoai/cloud/internal/cek"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
@@ -97,7 +98,7 @@ type Store struct {
 }
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

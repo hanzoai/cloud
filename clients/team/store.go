@@ -13,6 +13,7 @@ import (
 	// encrypted at rest; !cgo → pure-Go modernc). Importing modernc directly would
 	// double-register "sqlite" under CGO and panic at init. Blank import registers
 	// the driver — the SAME one clients/tracker, clients/crm and clients/agents use.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -66,7 +67,7 @@ func (s *docStore) db(org, workspace string) (*sql.DB, error) {
 	}
 	journal := env("SQLITE_JOURNAL_MODE", "WAL") // DELETE/TRUNCATE on FUSE/S3 mounts
 	path := filepath.Join(dir, seg(workspace)+".db")
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, err
 	}

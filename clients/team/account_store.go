@@ -12,6 +12,7 @@ import (
 
 	// The ONE Hanzo SQLite driver (see store.go). Blank-imported here too so this
 	// file's sql.Open("sqlite", …) is self-documenting about its driver dependency.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -55,7 +56,7 @@ type member struct {
 }
 
 func openAccountStore(path string) (*accountStore, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
