@@ -189,14 +189,8 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[stri
 	return c.Bytes(resp.Status, resp.Body)
 }
 
-func init() {
-	// Order 133: binds /v1/captable/* before the AI /v1/* catch-all (150) and
-	// after the shared infra tier. NOT staged — mounts under the mount-all default.
-	cloud.RegisterWithShutdown("captable", 133, cloud.Typed(Mount), shutdown)
-}
-
 // shutdown closes the per-tenant stores + the goja engine. Idempotent.
-func shutdown(context.Context) error {
+func Shutdown(context.Context) error {
 	if mounted == nil || mounted.State.host == nil {
 		return nil
 	}

@@ -142,10 +142,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Delete("/v1/load-balancers/:id", cloud.Handle(s, deleteLB))
 }
 
-func init() {
-	cloud.Register("do", 123, cloud.Typed(Mount))
-}
-
 // ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──
 
 type vpcView struct {

@@ -149,15 +149,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// Order 146 — alongside the admin surface (clients/admin is 146), after the
-	// growth loops (referrals 149 etc. are LATER, but ordering is irrelevant: the
-	// loops call treasury.Reserve at REQUEST time, long after every Mount ran, so
-	// the mounted singleton is always set). Routes are specific (/v1/finance/*,
-	// /v1/admin/treasury*) so they bind ahead of the AI /v1/* catch-all (150).
-	cloud.RegisterWithShutdown("treasury", 146, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
-}
-
 // ── the backed-payout seam (the ONE helper the 3 growth loops call) ──────────
 
 // Reserve backs a payout of amountCents (minor units) for `program` against the
@@ -185,7 +176,7 @@ func Reserve(ctx context.Context, program, ref, memo string, amountCents int64) 
 		return false, "", err
 	}
 	if backed && created {
-		emitAudit(s,ctx, "treasury.debit", program, entry.ID, map[string]any{
+		emitAudit(s, ctx, "treasury.debit", program, entry.ID, map[string]any{
 			"program": program, "ref": ref, "amountCents": amountCents, "entryId": entry.ID,
 		})
 	}
@@ -319,7 +310,7 @@ func adminSetPolicy(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	emitAudit(s,c.Context(), "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
+	emitAudit(s, c.Context(), "treasury.policy", "", "", map[string]any{"revenueShareBps": pol.RevenueShareBps})
 	return adminOK(c, map[string]any{"policy": pol})
 }
 
@@ -354,7 +345,7 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "sweep: %v", err)
 	}
 	if created {
-		emitAudit(s,c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
+		emitAudit(s, c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
 			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.AmountCents,
 		})
 	}
@@ -403,7 +394,7 @@ func adminSeed(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "seed: %v", err)
 	}
 	if created {
-		emitAudit(s,c.Context(), "treasury.seed", "", entry.ID, map[string]any{
+		emitAudit(s, c.Context(), "treasury.seed", "", entry.ID, map[string]any{
 			"amountCents": body.AmountCents, "ref": ref, "entryId": entry.ID,
 		})
 	}

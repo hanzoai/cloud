@@ -77,7 +77,9 @@ type state struct {
 // per-org file ({DataDir}/orgs/{orgSlug}/git.db) once via the shared cache. git
 // is org-scoped (not project-scoped) so /v1/git/usage stays a single org-wide
 // rollup across every project sub-scope.
-func storeFor(s *cloud.Service[state], org string) (*Store, error) { return s.State.stores.For(org, "") }
+func storeFor(s *cloud.Service[state], org string) (*Store, error) {
+	return s.State.stores.For(org, "")
+}
 
 // mounted is the active service so Shutdown can release the store.
 var mounted *cloud.Service[state]
@@ -170,10 +172,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
 	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
-}
-
-func init() {
-	cloud.Register("git", 132, cloud.Typed(Mount))
 }
 
 // ---- control-plane handlers ----

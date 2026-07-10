@@ -1,384 +1,255 @@
-// Package subsystems is the single source of truth for which Hanzo cloud
-// subsystems are linked into a binary.
+// Package subsystems is the composition root: the single, explicit list of which
+// Hanzo cloud subsystems are linked into the binary AND the order they mount in.
 //
-// Blank-importing this package pulls every subsystem into the build graph;
-// each one registers a cloud.MountSpec into cloud.Registry from its own
-// init(). Registration is unconditional — a plain `go build ./cmd/cloud`
-// (no build tags) links and mounts the full set. There is no //go:build
-// gate on any subsystem.
+// Wire() returns []cloud.MountSpec in mount order (slice position == order). There
+// is no init()-registry and no order-int: adding, removing, or reordering a
+// subsystem is a one-line edit to Wire(), read top-to-bottom. cmd/cloud and
+// cmd/hanzo both call Wire() and thread the slice into cloud.Serve — the set is
+// defined ONCE, here.
 //
-// Both entrypoints — cmd/cloud (the full fused surface) and cmd/hanzo (the
-// subcommand dispatcher) — blank-import THIS package and nothing else. The
-// subsystem set is therefore defined ONCE, here; adding or removing a
-// subsystem is a one-line change in one file, never duplicated per binary.
+// (This package must NOT live in package cloud: the subsystems import cloud for
+// Deps + Typed, so a root-package bundle would form an import cycle. As a sibling
+// subpackage it composes them without one.)
 //
-// (This package must NOT live in the root `cloud` package: the subsystems
-// import `cloud` for Deps + Register, so a root-package bundle would form an
-// import cycle. As a sibling subpackage it composes them without one.)
+// HIP-0106: the unified cloud binary is the APPLICATION layer plus the embedded KMS
+// secrets plane and the embedded IAM identity plane ("one Go binary embeds IAM +
+// KMS + o11y"). The edge/infra tier (mcp, gateway, ingress-edge) runs as its own
+// deployments for blast-radius isolation; several application folds (iam, base,
+// commerce, captable, dataroom, sign, ingress) are STAGED — linked here but mounted
+// only when the operator names them in CLOUD_ENABLE.
+//
+// Ordering provenance: order-int ascending; ties in the exact order the
+// pre-refactor init()-registry mounted them, captured empirically from origin/main
+// @c504d2b (68 self-registering specs) and frozen by TestWireOrderMatchesFrozen
+// (wire_test.go). ai (@150) and the hanzoai/o11y module wildcard (@70) are NOT in
+// that dump: on their wave-2 tags (ai v1.805.2, o11y v1.5.12) they no longer
+// self-register, so origin/main currently DROPS them (a latent regression this
+// composition root fixes). They are wired back at their order-int slots — o11y-ext
+// kept adjacent to the in-repo o11y read-plane (@69); ai as the last /v1/* catch-all
+// before plugins (@900). Do not re-sort; edit positions deliberately.
 package subsystems
 
-// The unified `cloud` binary is the APPLICATION layer plus the embedded KMS
-// secrets plane and the embedded IAM identity plane (HIP-0106 "all Go embeds in
-// cloud" — "one Go binary embeds IAM + KMS + o11y"). The remaining
-// infrastructure/edge subsystems run as their own deployments, NOT fused in:
-//   - mcp   → its own deployment             — tool surface
-//   - gateway, ingress → the edge            — they route *to* this binary
-//   - amqp  → removed (unused)
-// Keeping those separate preserves blast-radius isolation and independent
-// scaling for the security/edge tier.
-//
-// KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by its own
-// in-process luxfi/kms SecretStore, replacing the legacy Infisical fork). Its master key is
-// injected by the operator via a K8s Secret env; absent it the subsystem serves
-// fail-closed health-only.
-//
-// IAM is embedded in-process (clients/iam mounts /v1/iam/* + /.well-known/* +
-// /login/oauth/* + /_/iam/* + /cas/* + /scim/* by wrapping IAM's own Beego
-// handler via iamserver.Init — the LAST binary-consolidation piece). It is the
-// identity authority (order 50, mounts before its dependents). ACTIVATION IS
-// STAGED: the operator adds "iam" to the deployment's --enable only AFTER IAM's
-// config (Beego app.conf + env + KMS signing keys) is present in the cloud
-// runtime and the fold is verified; until then hanzo.id is served by the
-// standalone iam pod via ingress. See clients/iam.
 import (
-	_ "github.com/hanzoai/ai"        // order 150
-	_ "github.com/hanzoai/authz"     // order 70
-	_ "github.com/hanzoai/licensing" // order 110
-	_ "github.com/hanzoai/metrics"   // order 40
-	_ "github.com/hanzoai/o11y"      // order 70
-	_ "github.com/hanzoai/vfs"       // order 20
+	"context"
+	"fmt"
 
-	// Embedded KMS secrets plane (HIP-0106): mounts /v1/kms/* backed by the
-	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as id "kms"
-	// (order 10) with cloud.HealthOwner, so its real /v1/kms/health probe is not
-	// shadowed by the generic liveness route; secret ops fail closed until the
-	// operator injects CLOUD_KMS_MASTER_KEY_REF. One package holds both the KMS
-	// library (the in-process cloud.KMSClient) and this /v1/kms/* REST surface; it
-	// registers the client factory build.go calls, so cloud never imports it back.
-	_ "github.com/hanzoai/cloud/clients/featureflags" // order 9 — Insights feature-flag evaluation seam (no routes; the hot value plane clients/admin + subsystems read)
-	_ "github.com/hanzoai/cloud/clients/kafka"        // order 6 — embedded Kafka adaptor :9092
-	_ "github.com/hanzoai/cloud/clients/kms"          // order 10 — /v1/kms/*
-	_ "github.com/hanzoai/cloud/clients/pubsub"       // order 5 — embedded NATS :4222 + JetStream
+	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
 
-	// Embedded Base app engine + viral waitlist (HIP-0106 base fold): mounts
-	// /v1/waitlist/* (join/status/boost/referrals/points) served in-process off
-	// base.New() over the durable cloud PVC — the in-binary replacement for the
-	// standalone superbase pod. STAGED + fail-closed: no-op unless CLOUD_BASE_EMBED=1.
-	_ "github.com/hanzoai/cloud/clients/base" // order 60 — /v1/waitlist/*
+	// External subsystem modules. As of the atomic wave-2 bump they NO LONGER
+	// self-register (no cloud.Register in their init) — the composition root wires
+	// each one explicitly below, so removing an entry here is the ONLY way to drop it.
+	"github.com/hanzoai/ai"
+	"github.com/hanzoai/authz"
+	"github.com/hanzoai/licensing"
+	"github.com/hanzoai/metrics"
+	o11ymod "github.com/hanzoai/o11y"
 
-	// Agent Skills Discovery (/.well-known/agent-skills/*): serves the catalogue
-	// generated by hanzoai/openapi's skills.py, white-labeled by Host. Order 8 —
-	// before IAM's /.well-known/* wildcard (50) and the console catch-all.
-	_ "github.com/hanzoai/cloud/clients/agentskills" // order 8 — /.well-known/agent-skills/*
-
-	// Embedded IAM identity plane (HIP-0106, the LAST binary-consolidation piece):
-	// wraps IAM's own Beego handler (iamserver.Init) and mounts /v1/iam/* (API +
-	// OAuth + OIDC + login), /.well-known/* (root OIDC/JWKS), /login/oauth/*,
-	// /_/iam/*, /cas/*, /scim/*. Order 50 — the identity authority, mounts before
-	// dependents. Auth semantics (authorize clientId org-resolution, JWT audiences,
-	// SuperAdmin owner=="admin", argon2id hashing) are IAM's, unchanged. Activation
-	// is the enable-list gate — do NOT add "iam" to the live --enable until IAM
-	// config is present + the fold is verified (staged cutover from the standalone
-	// iam pod). See clients/iam.
-	_ "github.com/hanzoai/cloud/clients/iam"     // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
-	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
-
-	// Embedded commerce plane (HIP-0106): the commerce library (clients/commerce)
-	// mounts its own gin handler (commerce.Embed) at /v1/commerce/* + /_/commerce/*
-	// in-process so cloud serves the checkout/billing surface ITSELF instead of
-	// proxying to a remote commerce pod, AND registers the in-process cloud.Commerce-
-	// Client (real entitlement resolution). ONE package owns the library + its
-	// subsystem + its client, self-registered via cloud's inversion hooks (the
-	// clients/kms pattern; the retired thin -svc mount wrapper is absorbed here, cf.
-	// #241 gatewaysvc → gateway) — cloud never imports it, so no cloud⇄commerce cycle.
-	// Order 100 — after kms/iam/base + the billing/licensing tier. Activation is the
-	// enable-list gate. See clients/commerce (mount.go + client.go).
-	_ "github.com/hanzoai/cloud/clients/commerce" // order 100 — /v1/commerce/*, /_/commerce/* + deps.Commerce factory
-
-	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
-	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
-	_ "github.com/hanzoai/cloud/clients/auditlog"     // order 144 — /v1/audit (org-scoped audit trail; per-org twin of /v1/admin/audit)
-	_ "github.com/hanzoai/cloud/clients/bot"          // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
-	_ "github.com/hanzoai/cloud/clients/bots"         // order 143 — POST /v1/bots/run (launch a computer-using agent, gate+meter, return VNC session)
-	_ "github.com/hanzoai/cloud/clients/entitlements" // order 139 — /v1/orgs/:org/entitlements (per-org product enablement; commerce-gated adds; console paid-product sidebar)
-	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
-	_ "github.com/hanzoai/cloud/clients/gateway"      // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
-	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
-	_ "github.com/hanzoai/cloud/clients/pricing"      // order 112 — /v1/pricing/*
-	_ "github.com/hanzoai/cloud/clients/settings"     // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
-	_ "github.com/hanzoai/cloud/clients/websearch"    // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
-	_ "github.com/hanzoai/cloud/clients/world"        // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
-
-	// S3 object-storage DATA plane: the org-scoped /v1/s3 file manager (buckets +
-	// objects) over the shared SeaweedFS S3 gateway. Order 118 (< provisioning's
-	// 120) so its static /v1/s3/buckets + /v1/s3/health register BEFORE
-	// provisioning's /v1/s3/:name and win Fiber's first-match scan; registered with
-	// cloud.HealthOwner so the generic health route does not shadow the real
-	// fail-closed /v1/s3/health. It COMPLEMENTS provisioning (which owns the s3
-	// RESOURCE lifecycle at /v1/s3 + /v1/s3/:name) — both derive an org's physical
-	// bucket name identically (provisioning.PhysicalName) so a provisioned bucket is
-	// browsable here.
-	_ "github.com/hanzoai/cloud/clients/storage" // order 118 — /v1/s3/buckets/*,/v1/s3/health
-
-	// Provisioning control plane: creates logical resources (sql, vector,
-	// datastore, kv, search, s3, docdb) inside the live shared backends.
-	_ "github.com/hanzoai/cloud/clients/provisioning" // order 120 — /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb
-
-	// DigitalOcean-native infra plane: the org-scoped /v1/vpcs + /v1/load-balancers
-	// surface over the digitalocean/godo SDK (DO is Hanzo's EXCLUSIVE cloud venue).
-	// DO is a single account, so org isolation is a name prefix — a resource's
-	// physical DO name is "o"<orgHash>-<friendly> (provisioning.BucketName, the SAME
-	// org-hash convention S3 uses); list/get/delete filter to the caller's prefix so
-	// no org sees another's. Fails closed (503) without DO_API_TOKEN. Backs the
-	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
-	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
-
-	// Account self-service surface: the native Go port of console's two NON-proxy
-	// server routes (app/keys + app/onboard) plus the money/store data bridges the
-	// statically-exported console needs — re-homed onto their REAL domains (there is NO
-	// /v1/console API namespace; "console" is just the FE name). Registers TWO subsystems:
-	// `account` (order 48) for the SPECIFIC self-service routes — /v1/iam/{keys,onboard}
-	// (which must win over the IAM /v1/iam/* wildcard at 50), /v1/csrf, /v1/embed-status,
-	// /v1/commerce/topup/wallet — and `account-bridge` (order 122) for the CATCH-ALL
-	// /v1/billing/* + /v1/commerce/* data bridges (after clients/billing at 121 + the
-	// commerce embed at 100). See clients/account.
-	_ "github.com/hanzoai/cloud/clients/account" // order 48 (self-service) + 122 (data bridges)
-
-	// Customer-facing, org-scoped billing READS: /v1/billing/{usage,balance}. On the
-	// console host the ingress sends /v1/* to cloud-api directly (the Next BFF is only
-	// at "/"), so the console's billing calls land here; this proxies the caller's OWN
-	// org ledger from commerce (org = validated owner claim; the all-orgs god view stays
-	// admin-only in clients/admin). Without it every product overview + o11y usage panel
-	// 403s ("Access required").
-	_ "github.com/hanzoai/cloud/clients/billing" // order 121 — /v1/billing/{usage,balance} (customer, org-scoped)
-
-	// Projects control plane: the ONE org-scoped store of buildable/deployable
-	// sites, shared by hanzo.app (builder) and console.hanzo.ai (Projects), plus
-	// the deploy pipeline (artifact/git → OUR S3 → live URL).
-	_ "github.com/hanzoai/cloud/clients/projects" // order 125 — /v1/projects/*
-
-	// Tracker control plane: the native-Go, per-org issue tracker (projects +
-	// issues) on SQLite — the durable replacement for the Huly/Svelte hanzo.team
-	// tracker whose upstream reactive-batching render race left issue lists
-	// rendering zero rows. Native @hanzo/gui over this one store sidesteps that
-	// entire class of bug (rows come back as plain JSON and render deterministically).
-	_ "github.com/hanzoai/cloud/clients/tracker" // order 129 — /v1/tracker/*
-
-	// PaaS control plane: the native, in-process port of the standalone Dokploy
-	// platform's deploy lifecycle. Reads the operator `Service` CR fleet as the
-	// declared/running/drift board and deploys by merge-patching a CR's
-	// `.spec.image` (the operator reconciles the rollout) — the ONE deploy path.
-	// Global-admin only; the user-facing view lives in console.
-	_ "github.com/hanzoai/cloud/clients/paas" // order 128 — /v1/paas/*
-
-	// Platform (PaaS) control plane — PER-ORG, user-facing: the native Go port of
-	// the standalone Dokploy (platform.hanzo.ai) tRPC backend. Users create
-	// projects + applications, build them (arcd BuildKit) and deploy them
-	// (operator hanzo.ai/v1 Service CR into their OWN tenant-<org> namespace).
-	// Complements paas (admin fleet board) and projects (static sites): this
-	// is the container-app PaaS. Every route is org-scoped by the validated
-	// X-Org-Id and the deploy namespace is DERIVED from it (tenant-<org>), never
-	// taken from the request — the cross-org isolation boundary. Order 124
-	// binds /v1/platform/* before projects (125) and the AI catch-all (150). It
-	// ALSO owns the top-level container-serverless one-shot POST /v1/run (run.go):
-	// a single call that create-or-updates an image app and deploys it via the SAME
-	// Service-CR writer, so there is no parallel deploy path — one machinery, two
-	// entry points. Mounted by THIS blank import; no separate subsystem needed.
-	_ "github.com/hanzoai/cloud/clients/platform" // order 124 — /v1/platform/*, /v1/run
-
-	// Product control planes: per-org, Base/SQLite-backed application surfaces
-	// mounted natively in the cloud binary (the "all products in the cloud
-	// binary" thesis). Each is org-scoped by the gateway-minted X-Org-Id.
-	// clients/prompts is the red-approved, versioned prompt library and the ONE
-	// owner of /v1/prompts/* (it supersedes the earlier clients/prompt facade).
-	_ "github.com/hanzoai/cloud/clients/affiliates" // order 144 — /v1/affiliates/* + /v1/admin/affiliates* (partner-commission loop: ongoing commission via the commerce ledger)
-	_ "github.com/hanzoai/cloud/clients/agents"     // order 127 — /v1/agents/*
-	_ "github.com/hanzoai/cloud/clients/analytics"  // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
-	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
-	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
-	// captable: the Captable,Inc app folded in-process (HIP-0106, epic #96 pilot).
-	// Hosts the tRPC business logic as a goja bundle (github.com/hanzoai/captable)
-	// over per-org Base/SQLite via the REUSABLE clients/gojabase RW-Base binding
-	// (which sign #100 + dataroom #101 reuse). NOT staged: mounts under the
-	// mount-all default. There is no standalone Captable,Inc/dataroom pod in the
-	// fleet, and the standalone esign pod holds no org data, so the one binary
-	// is authoritative from first write — nothing to migrate (see each leaf).
-	_ "github.com/hanzoai/cloud/clients/captable" // order 133 — /v1/captable/* (cap table on Base via goja)
-	_ "github.com/hanzoai/cloud/clients/dataroom" // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-org Base)
-	// Hanzo Sign (HIP-0106, task #100): the e-signature product (Documenso fork)
-	// folded in-process via the SAME reusable gojabase RW-Base host captable
-	// pilots — the server-side domain runs as an ESM-free goja bundle
-	// (github.com/hanzoai/sign) backed by per-org Base/SQLite, with the PDF/PKI
-	// seal implemented as Go host-functions injected via gojabase Config.HostFns.
-	// NOT staged: mounts /v1/sign/* under the mount-all default.
-	_ "github.com/hanzoai/cloud/clients/referrals" // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
-	_ "github.com/hanzoai/cloud/clients/sign"      // order 145 — /v1/sign/* (documents/recipients/fields/sign/complete/audit)
-	// The configurable custody / accounts / wallets / keys / sign surface
-	// (HIP-0106): ONE seam over three orthogonal signing backends selected per
-	// wallet — KMS single-sig in-process, MPC m-of-n + treasury named-signer
-	// delegated to the deployed luxfi/mpc ring over its internal threshold API.
-	// KMS custody is always available; mpc/treasury fail closed until the ring
-	// address (CLOUD_WALLETS_MPC_ADDR) + the KMS-resolved internal API key
-	// (CLOUD_WALLETS_MPC_API_KEY_REF) are both wired. Order 127 binds
-	// /v1/wallets/* ahead of the AI /v1/* catch-all. This blank import is what
-	// registers the subsystem — without it the init() never runs and /v1/wallets
-	// is unrouted (404), the seam the finance/treasury anchor binds through.
-	_ "github.com/hanzoai/cloud/clients/wallets" // order 127 — /v1/wallets/* (accounts/wallets/custody/keys/sign; KMS + luxfi/mpc ring)
-	// The native treasury: the platform's OWN double-entry reserve fund, one layer
-	// ABOVE the per-org commerce credit ledger. A revenue-share policy accrues a %
-	// of net platform revenue INTO the fund; the referral/affiliate/author payouts
-	// DEBIT the fund (treasury.Reserve) so every payout is backed by funded capital,
-	// never unbounded minting. The double-entry engine (clients/treasury/ledger) is
-	// store-agnostic and cloud-decoupled — the seed of the native hanzoai/finance
-	// central ledger (the Go replacement for the Formance stack). Order 146 (with the
-	// admin surface); its routes are specific so they bind ahead of the AI catch-all.
-	_ "github.com/hanzoai/cloud/clients/treasury" // order 146 — /v1/finance/* + /v1/admin/finance/* (scope-aware finance engine: reserve fund + backed payouts, native/Formance ledger of record, Hanzo L1 anchored)
-	// The Hanzo Framework: a metadata-driven DocType engine (Frappe's DocType/
-	// metadata core, rebuilt native in Go on Base). It is the FOUNDATION that
-	// CMS content-types, ERPNext DocTypes, and Helpdesk become "just DocTypes"
-	// on — ONE engine + ONE generic UI renders every business app. Per-org on
-	// Base/SQLite, org derived ONCE via principal.Org (no Frappe/Python
-	// runtime dep). Order 129 binds /v1/framework/* before the AI /v1/* catch-all.
-	_ "github.com/hanzoai/cloud/clients/framework" // order 129 — /v1/framework/* (DocType engine)
-
-	// The CMS app lane: DocType fixtures (Page/Post/Article/Media/Navigation/
-	// Author, module "cms") registered with the framework at init. It mounts NO
-	// HTTP surface of its own — CMS content IS documents on /v1/framework/*,
-	// installed per-org via /v1/framework/modules/cms/install. First lane on the
-	// engine; ERP/Helpdesk register the same way.
-	_ "github.com/hanzoai/cloud/clients/cms" // (no order) — registers the "cms" framework module
-
-	// The ERP app lane: ERPNext-core DocType fixtures (item/warehouse/sales-order/
-	// sales-invoice/stock-entry/journal-entry/…, module "erp") + native-Go business
-	// hooks (line/document totals, GL posting on invoice/journal/payment submit,
-	// stock ledger on stock-entry submit, double-entry gates) registered with the
-	// framework at init. No HTTP surface of its own — ERP IS documents on
-	// /v1/framework/*, installed per-org via /v1/framework/modules/erp/install.
-	_ "github.com/hanzoai/cloud/clients/erp" // (no order) — registers the "erp" framework module + hooks
-
-	// The Help Center app lane: Frappe Helpdesk-core DocType fixtures (hd-ticket/
-	// hd-agent/hd-team/hd-sla/hd-canned-response, module "help") registered with the
-	// framework at init. Pure fixtures (no hooks); installed per-org via
-	// /v1/framework/modules/help/install. Third lane on the engine.
-	_ "github.com/hanzoai/cloud/clients/help" // (no order) — registers the "help" framework module
-
-	// The Knowledge Base + unified AI-memory app lane: DocType fixtures (kb-page
-	// wiki tree via a self-Link `parent`, kb-memory agent memory, kb-source ingested
-	// docs, kb-connector connection metadata; module "kb") registered with the
-	// framework at init, PLUS an after_save hook that upserts every knowledge write
-	// to the org's vector namespace (index.go) — human wiki + AI memory are ONE
-	// per-org knowledge store, indexed once. Unlike the pure-fixture lanes it also
-	// mounts a thin control-plane subsystem (order 130): POST /v1/kb/search (the RAG
-	// retrieval entry point) and /v1/kb/connectors/* (Slack/GitHub/Google OAuth that
-	// ingest external docs INTO the same store + index; tokens in KMS, never plaintext).
-	_ "github.com/hanzoai/cloud/clients/knowledge" // order 130 — "kb" framework module + hooks + /v1/kb/*
-
-	// Team control plane (HIP-0106, task #45): the native-Go port of hanzo team-go
-	// into the cloud binary — the SPA READ PLANE + bots-as-members. Mounts the
-	// account API (/v1/team/account, JSON-RPC login + workspace selection over the
-	// IAM OAuth bridge), the transactor data-plane WebSocket (/v1/team/transactor/
-	// :token, ZAP-envelope frames over zip's wsx, serverVersion pinned 0.6.0), and
-	// the bots read routes (/v1/team/bots, /v1/team/bots/sync). Bots-as-members are
-	// sourced IN-PROCESS from the canonical agents registry (agents.ListForOrg) and
-	// projected as workspace Employees — no IAM-SA HTTP hop. Every data path derives
-	// its org from a VERIFIED token claim / principal.Org, never a client header.
-	// Order 138 binds /v1/team/* before the AI /v1/* catch-all (150).
-	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
-
-	_ "github.com/hanzoai/cloud/clients/code"      // order 134 — /v1/code/* (SOTA hybrid code-intelligence: FTS5-trigram lexical + go/parser & lexical symbols + embedded-vector semantic, RRF-fused, per-org SQLite)
-	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
-	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
-	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
-	_ "github.com/hanzoai/cloud/clients/sbom"      // order 137 — /v1/sbom/* (GLOBAL SBOM datastore on ClickHouse: CI ingest by image digest, console resolve by digest/ref)
-	_ "github.com/hanzoai/cloud/clients/tasks"     // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
-	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
-	_ "github.com/hanzoai/cloud/clients/usage"     // order 131 — /v1/usage/summary (org-scoped unified footprint: cost roll-up + LLM totals)
-	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
-
-	// Networking control plane: org-scoped facade over Hanzo Zero Trust
-	// (hanzoai/zt, an OpenZiti fabric). Fronts the controller's Edge Management API
-	// and serves the console's Networks/ServiceMesh/Edge pages: /v1/networks (the
-	// org's overlay, projected from its edge-routers), /v1/mesh/services (ZT edge
-	// services) and /v1/edge/nodes (ZT edge-routers + real online status). Every
-	// resource is org-scoped by the "org-<org>" role attribute (the ONE tenancy
-	// convention ZT expresses natively), so a caller only ever sees their own
-	// footprint. Fails closed (503) without ZT_CLIENT_ID/ZT_CLIENT_SECRET.
-	_ "github.com/hanzoai/cloud/clients/zt" // order 134 — /v1/networks/*,/v1/mesh/services,/v1/edge/nodes (networking → Hanzo Zero Trust)
-
-	// Chain-data control plane: principal-gated facade over the Lux chain-data plane
-	// (luxfi/indexer explorer REST + luxfi/graph GraphQL). Serves the console's
-	// Indexer and Oracles pages: /v1/indexers (the deployment's per-network indexing
-	// status — chain/network/height/health from the indexer's /health + latest block)
-	// and /v1/oracles (on-chain price feeds from the graph's O-Chain PriceFeed
-	// registry). Chain data is a public ledger scoped per brand (each brand's cloud is
-	// wired to its OWN indexer/graph), so the tenancy boundary is principal-gating (no
-	// unauth read); honest 502 when an upstream is unreachable, never a fabricated row.
-	_ "github.com/hanzoai/cloud/clients/graph" // order 135 — /v1/indexers,/v1/oracles (chain data → luxfi indexer + graph)
-
-	// Security control plane: the native code-security surface — a dependency-free
-	// in-process secrets scanner (pattern + Shannon-entropy) over caller-submitted
-	// source, org-scoped findings persisted under DataDir, one metered unit per
-	// scan, audit-emitting. The first Semgrep-class capability shipped natively;
-	// findings store the redacted preview + SHA-256 fingerprint, NEVER the secret.
-	_ "github.com/hanzoai/cloud/clients/security" // order 136 — /v1/security/*
-
-	// Connectors control plane: the generic, provider-agnostic OAuth connector
-	// framework. One registry, N providers (Slack live; GitHub scaffolded;
-	// Google/Salesforce plug into the SAME registry later). Per-org customer tokens
-	// go to KMS custody; the callback is state-authed (HMAC + single-use nonce), the
-	// org derived ONLY from the signed state. Uses the GENERIC
-	// /v1/integrations/{provider}/callback — it MUST NOT mount any /v1/slack/* route
-	// (team-go owns /v1/slack/*). Order 137 binds after security (136), before the
-	// AI /v1/* catch-all (150).
-	_ "github.com/hanzoai/cloud/clients/integrations" // order 137 — /v1/integrations/*
-
-	// Notify send surface (HIP-0106 fold of the standalone notifyd): mounts the
-	// native /v1/notify/send OTP path in-process. Reuses notifyd's OWN public
-	// provider packages (github.com/hanzoai/notify/service/*); the async Temporal
-	// notify-send queue plane is intentionally NOT folded.
-	_ "github.com/hanzoai/cloud/clients/notify" // order 139 — /v1/notify/send (+ /sms,/email,/health)
-
-	// Connectors+Automations engine (HIP-0106, task #51): the /v1/automations/*
-	// surface — org-scoped flows that run durably on the ONE shared in-process tasks
-	// engine, invoking Tier-A connectors whose per-org credentials are custodied by
-	// clients/integrations (KMS-sealed, reached ONLY via integrations.TokenFor). ONE
-	// SQLite file, org column on every table; the durable activity's sole credential
-	// scope is the VALIDATED FlowRunInput.Owner. Order 148 binds after integrations
-	// (137) and BEFORE the AI /v1/* catch-all (150) so /v1/automations/* wins. Also
-	// serves the HIP-0300 MCP tool surface (/v1/automations/mcp) that /v1/agents calls.
-	_ "github.com/hanzoai/cloud/clients/automations" // order 148 — /v1/automations/*
-
-	// ML/Train control plane: org-scoped k8s bridge fronting the kubeflow
-	// forks (kserve InferenceService, trainer TrainJob, katib Experiment).
-	_ "github.com/hanzoai/cloud/clients/ml" // order 130 — /v1/ml/*,/v1/train/*
-
-	// Console Search/Vector product panels (browser-facing read surface).
-	_ "github.com/hanzoai/cloud/clients/product" // order 145 — /v1/search-docs/*, /v1/vector/*
-
-	// God-mode admin surface for the Hanzo Admin Console (admin.hanzo.ai). Fans
-	// out to IAM (identity), commerce (billing) and o11y (health); global-admin
-	// only, fail-closed.
-	_ "github.com/hanzoai/cloud/clients/admin" // order 146 — /v1/admin/*
-
-	// The EMBEDDED o11y runtime — the single owner of the whole /v1/o11y surface.
-	// clients/o11y both (a) mounts the org-scoped, org-isolated
-	// /v1/o11y/{logs,metrics,status} reads (order 69) that query the shared
-	// ClickHouse `datastore` IN-PROCESS per-org (logs.go/metricsread.go/status.go —
-	// folded in from the retired clients/observe so nothing was lost), and (b)
-	// installs the o11y runtime handler via o11y.SetHandler (order 71) for the
-	// hanzoai/o11y wildcard (order 70), constructing that runtime IN-PROCESS over the
-	// datastore (embed.go) so the standalone o11y Deployment can retire — with a
-	// reverse-proxy fallback ONLY when the embed is disabled (no DSN). It also embeds
-	// the OTLP ingest collector (order 72, opt-in) that folds the standalone
-	// otel-collector. The scoped reads (69) register BEFORE the wildcard (70) so
-	// Fiber gives the org-scoped handlers precedence over the runtime proxy.
-	_ "github.com/hanzoai/cloud/clients/o11y" // order 69 scoped reads + 71 runtime handler + 72 OTLP ingest
-	// The console SPA is go:embed'd and served at "/" by webui.go's
-	// mountConsole, called directly from Serve AFTER every /v1/* route mounts
-	// (so real API routes always win; unmatched paths fall back to the SPA).
-	// That is the "one binary" endgame — the unified cloud binary IS the
-	// frontend too (Hanzo V8: Open Edition). It needs no import here; it is
-	// wired in Serve, not registered as a subsystem.
+	// In-repo subsystem packages (clients/*). Each exports a Mount (and, where it
+	// owns process-lifetime resources, a Shutdown); Wire references them directly.
+	"github.com/hanzoai/cloud/clients/account"
+	"github.com/hanzoai/cloud/clients/admin"
+	"github.com/hanzoai/cloud/clients/affiliates"
+	"github.com/hanzoai/cloud/clients/agents"
+	"github.com/hanzoai/cloud/clients/agentskills"
+	"github.com/hanzoai/cloud/clients/analytics"
+	"github.com/hanzoai/cloud/clients/auditlog"
+	"github.com/hanzoai/cloud/clients/authors"
+	"github.com/hanzoai/cloud/clients/automations"
+	"github.com/hanzoai/cloud/clients/base"
+	"github.com/hanzoai/cloud/clients/billing"
+	"github.com/hanzoai/cloud/clients/bot"
+	"github.com/hanzoai/cloud/clients/bots"
+	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/clients/code"
+	"github.com/hanzoai/cloud/clients/commerce"
+	"github.com/hanzoai/cloud/clients/crm"
+	"github.com/hanzoai/cloud/clients/dataroom"
+	"github.com/hanzoai/cloud/clients/do"
+	"github.com/hanzoai/cloud/clients/entitlements"
+	"github.com/hanzoai/cloud/clients/eval"
+	"github.com/hanzoai/cloud/clients/exec"
+	"github.com/hanzoai/cloud/clients/featureflags"
+	"github.com/hanzoai/cloud/clients/framework"
+	"github.com/hanzoai/cloud/clients/functions"
+	"github.com/hanzoai/cloud/clients/gateway"
+	"github.com/hanzoai/cloud/clients/git"
+	"github.com/hanzoai/cloud/clients/graph"
+	"github.com/hanzoai/cloud/clients/iam"
+	"github.com/hanzoai/cloud/clients/ingress"
+	"github.com/hanzoai/cloud/clients/integrations"
+	"github.com/hanzoai/cloud/clients/kafka"
+	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/clients/knowledge"
+	"github.com/hanzoai/cloud/clients/ml"
+	"github.com/hanzoai/cloud/clients/notify"
+	"github.com/hanzoai/cloud/clients/o11y"
+	"github.com/hanzoai/cloud/clients/paas"
+	"github.com/hanzoai/cloud/clients/plan"
+	"github.com/hanzoai/cloud/clients/platform"
+	"github.com/hanzoai/cloud/clients/plugin"
+	"github.com/hanzoai/cloud/clients/pricing"
+	"github.com/hanzoai/cloud/clients/product"
+	"github.com/hanzoai/cloud/clients/projects"
+	"github.com/hanzoai/cloud/clients/prompts"
+	"github.com/hanzoai/cloud/clients/provisioning"
+	"github.com/hanzoai/cloud/clients/pubsub"
+	"github.com/hanzoai/cloud/clients/referrals"
+	"github.com/hanzoai/cloud/clients/sbom"
+	"github.com/hanzoai/cloud/clients/security"
+	"github.com/hanzoai/cloud/clients/settings"
+	"github.com/hanzoai/cloud/clients/sign"
+	"github.com/hanzoai/cloud/clients/storage"
+	"github.com/hanzoai/cloud/clients/tasks"
+	"github.com/hanzoai/cloud/clients/team"
+	"github.com/hanzoai/cloud/clients/templates"
+	"github.com/hanzoai/cloud/clients/tracker"
+	"github.com/hanzoai/cloud/clients/treasury"
+	"github.com/hanzoai/cloud/clients/usage"
+	"github.com/hanzoai/cloud/clients/visor"
+	"github.com/hanzoai/cloud/clients/wallets"
+	"github.com/hanzoai/cloud/clients/websearch"
+	"github.com/hanzoai/cloud/clients/world"
+	"github.com/hanzoai/cloud/clients/zt"
 )
+
+// Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
+// slice position IS the order (cloud.MountAll iterates it as-given; cloud.ShutdownAll
+// walks it in reverse). Enablement is a separate axis: cloud.Serve mounts only the
+// specs cfg.Enabled(name) admits, so a STAGED subsystem is linked but inert until named.
+func Wire() []cloud.MountSpec {
+	return []cloud.MountSpec{
+		// embedded NATS :4222 + JetStream.
+		{Name: "pubsub", Mount: cloud.Typed(pubsub.Mount), Shutdown: pubsub.Shutdown},
+		// embedded Kafka adaptor :9092.
+		{Name: "kafka", Mount: cloud.Typed(kafka.Mount), Shutdown: kafka.Shutdown},
+		// /.well-known/agent-skills/* — before IAM's /.well-known/* wildcard (50).
+		{Name: "agentskills", Mount: cloud.Typed(agentskills.Mount)},
+		// Insights feature-flag evaluation seam (no routes; a hot value plane).
+		{Name: "featureflags", Mount: cloud.Typed(featureflags.Mount)},
+		// Embedded KMS secrets plane /v1/kms/*. OwnsHealth: serves its own fail-closed
+		// /v1/kms/health (the generic always-ok route must not shadow it). Fails closed
+		// until the operator injects CLOUD_KMS_MASTER_KEY_REF. (Its in-process client
+		// factory is registered separately via cloud.RegisterKMSClientFactory.)
+		{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true},
+		// hanzoai/metrics — native o11y. It declares its OWN narrow metrics.Deps (no
+		// hanzoai/cloud import), so Typed cannot adapt it; mountMetrics builds that Deps
+		// from cloud.Deps and calls metrics.Mount explicitly.
+		{Name: "metrics", Mount: mountMetrics},
+		// Embedded runtime edge (/v1/ingress/*). STAGED — edge listeners stay off unless
+		// the operator names "ingress" in CLOUD_ENABLE.
+		{Name: "ingress", Mount: cloud.Typed(ingress.Mount), Shutdown: ingress.Shutdown},
+		// SPECIFIC self-service routes (/v1/iam/{keys,onboard}, /v1/csrf, /v1/embed-status,
+		// /v1/commerce/topup/wallet). MUST mount before the IAM /v1/iam/* wildcard (50) so
+		// they win Fiber's first-match scan (framework-guaranteed since zip v1.3.0).
+		{Name: "account", Mount: cloud.Typed(account.MountAccount)},
+		// Embedded IAM identity plane (/v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*,
+		// /cas/*, /scim/*) — the identity authority, mounts before its dependents. STAGED:
+		// the operator adds "iam" to --enable only after IAM config + the fold are verified.
+		{Name: "iam", Mount: cloud.Typed(iam.Mount)},
+		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
+		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
+		{Name: "base", Mount: cloud.Typed(base.Mount), OwnsHealth: true},
+		// In-repo o11y READ plane + the runtime-handler install (o11y.SetHandler). Every
+		// specific /v1/o11y/* route registers INSIDE this one mount, hence BEFORE the
+		// hanzoai/o11y module wildcard (70) — Fiber's in-order match gives them precedence.
+		// OwnsHealth: the module's order-70 co-entry below owns the single /v1/o11y/health.
+		{Name: "o11y", Mount: o11y.MountO11y, Shutdown: o11y.ShutdownO11y, OwnsHealth: true},
+		// hanzoai/o11y module wildcard /v1/o11y/* — co-owner of the ONE o11y concept with
+		// the in-repo entry above (same name), delegated to via o11y.SetHandler.
+		{Name: "o11y", Mount: cloud.Typed(o11ymod.Mount)},
+		{Name: "authz", Mount: cloud.Typed(authz.Mount)},
+		// Embedded commerce plane /v1/commerce/*, /_/commerce/*. (Its in-process
+		// CommerceClient factory is registered separately via RegisterCommerceClientFactory.)
+		{Name: "commerce", Mount: cloud.Typed(commerce.MountFromDeps)},
+		// hanzoai/licensing. Its Mount is func(any, cloud.Deps) error — a MountFunc
+		// already — so Wire references it DIRECTLY, not through Typed.
+		{Name: "licensing", Mount: licensing.Mount},
+		{Name: "plans", Mount: cloud.Typed(plan.Mount), OwnsHealth: true},
+		{Name: "pricing", Mount: cloud.Typed(pricing.Mount), OwnsHealth: true},
+		// /v1/s3/buckets/* + /v1/s3/health. Mounts BEFORE provisioning (120) so its static
+		// routes win over provisioning's /v1/s3/:name. OwnsHealth (real fail-closed probe).
+		{Name: "storage", Mount: cloud.Typed(storage.Mount), OwnsHealth: true},
+		// Provisioning control plane: /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb.
+		{Name: "provisioning", Mount: cloud.Typed(provisioning.Mount)},
+		{Name: "billing", Mount: cloud.Typed(billing.Mount)},
+		// CATCH-ALL /v1/billing/* + /v1/commerce/* data bridges — AFTER clients/billing
+		// (121) + the commerce embed (100). Same clients/account package as "account" (48).
+		{Name: "account-bridge", Mount: cloud.Typed(account.MountBridge)},
+		{Name: "do", Mount: cloud.Typed(do.Mount)},
+		{Name: "platform", Mount: cloud.Typed(platform.Mount), OwnsHealth: true},
+		{Name: "projects", Mount: cloud.Typed(projects.Mount)},
+		{Name: "prompts", Mount: cloud.Typed(prompts.Mount)},
+		{Name: "agents", Mount: cloud.Typed(agents.Mount), Shutdown: agents.Shutdown},
+		{Name: "wallets", Mount: cloud.Typed(wallets.Mount), Shutdown: ctxShutdown(wallets.Shutdown)},
+		{Name: "paas", Mount: cloud.Typed(paas.Mount), OwnsHealth: true},
+		{Name: "functions", Mount: cloud.Typed(functions.Mount)},
+		{Name: "tracker", Mount: cloud.Typed(tracker.Mount)},
+		{Name: "templates", Mount: cloud.Typed(templates.Mount)},
+		{Name: "framework", Mount: cloud.Typed(framework.Mount), Shutdown: ctxShutdown(framework.Shutdown)},
+		{Name: "knowledge", Mount: cloud.Typed(knowledge.Mount)},
+		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
+		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
+		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
+		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
+		{Name: "git", Mount: cloud.Typed(git.Mount)},
+		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
+		// Cap table on Base via goja. STAGED behind CLOUD_ENABLE.
+		{Name: "captable", Mount: cloud.Typed(captable.Mount), Shutdown: captable.Shutdown},
+		{Name: "code", Mount: cloud.Typed(code.Mount), Shutdown: code.Shutdown},
+		{Name: "zero-trust", Mount: cloud.Typed(zt.Mount)},
+		// Data rooms via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
+		{Name: "dataroom", Mount: cloud.Typed(dataroom.Mount), Shutdown: dataroom.Shutdown, OwnsHealth: true},
+		{Name: "graph", Mount: cloud.Typed(graph.Mount)},
+		{Name: "security", Mount: cloud.Typed(security.Mount), Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
+		{Name: "integrations", Mount: cloud.Typed(integrations.Mount), Shutdown: integrations.Shutdown},
+		{Name: "sbom", Mount: cloud.Typed(sbom.Mount), OwnsHealth: true},
+		{Name: "team", Mount: cloud.Typed(team.Mount), Shutdown: ctxShutdown(team.Shutdown)},
+		{Name: "settings", Mount: cloud.Typed(settings.Mount), Shutdown: settings.Shutdown},
+		{Name: "notify", Mount: cloud.Typed(notify.Mount), OwnsHealth: true},
+		{Name: "gateway", Mount: cloud.Typed(gateway.Mount)},
+		{Name: "entitlements", Mount: cloud.Typed(entitlements.Mount), Shutdown: entitlements.Shutdown},
+		{Name: "exec", Mount: cloud.Typed(exec.Mount)},
+		{Name: "websearch", Mount: cloud.Typed(websearch.Mount)},
+		{Name: "world", Mount: cloud.Typed(world.Mount), Shutdown: ctxShutdown(world.Shutdown)},
+		{Name: "bot", Mount: cloud.Typed(bot.Mount)},
+		{Name: "authors", Mount: cloud.Typed(authors.Mount), Shutdown: ctxShutdown(authors.Shutdown)},
+		{Name: "bots", Mount: cloud.Typed(bots.Mount)},
+		{Name: "audit", Mount: cloud.Typed(auditlog.Mount)},
+		{Name: "affiliates", Mount: cloud.Typed(affiliates.Mount)},
+		// Hanzo Sign (e-signature) via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
+		{Name: "sign", Mount: cloud.Typed(sign.Mount), Shutdown: sign.Shutdown, OwnsHealth: true},
+		{Name: "product", Mount: cloud.Typed(product.Mount)},
+		{Name: "evals", Mount: cloud.Typed(eval.Mount)},
+		{Name: "treasury", Mount: cloud.Typed(treasury.Mount), Shutdown: ctxShutdown(treasury.Shutdown)},
+		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
+		{Name: "tasks", Mount: cloud.Typed(tasks.Mount)},
+		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
+		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
+		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
+		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
+		{Name: "ai", Mount: cloud.Typed(ai.Mount)},
+		// Runtime wasm/proxy plugins — mounts dead last.
+		{Name: "plugins", Mount: cloud.Typed(plugin.Mount)},
+	}
+}
+
+// mountMetrics adapts hanzoai/metrics into a cloud.MountFunc. Unlike the other
+// externals, metrics declares its OWN narrow Deps (Logger, DataDir, Brand) and does
+// not import hanzoai/cloud, so cloud.Typed cannot bridge it: the composition root
+// builds metrics.Deps from cloud.Deps and calls metrics.Mount explicitly here.
+func mountMetrics(app any, deps cloud.Deps) error {
+	a, ok := app.(*zip.App)
+	if !ok {
+		return fmt.Errorf("metrics.Mount: app is %T, want *zip.App", app)
+	}
+	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
+}
+
+// ctxShutdown adapts a subsystem's zero-arg Shutdown() error to the
+// cloud.ShutdownFunc(ctx) signature. Several subsystems expose the simpler form
+// (their teardown ignores the deadline); this bridges the impedance mismatch in ONE
+// place so the Wire entries stay declarative — no inline closures.
+func ctxShutdown(f func() error) cloud.ShutdownFunc {
+	return func(context.Context) error { return f() }
+}

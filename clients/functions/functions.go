@@ -75,7 +75,9 @@ var mounted *cloud.Service[state]
 
 // storeFor resolves the caller's org-scoped functions store, opening the per-org
 // file ({DataDir}/orgs/{orgSlug}/functions.db) once via the shared cache.
-func storeFor(s *cloud.Service[state], org string) (*Store, error) { return s.State.stores.For(org, "") }
+func storeFor(s *cloud.Service[state], org string) (*Store, error) {
+	return s.State.stores.For(org, "")
+}
 
 // ---- HTTP response shapes (console functions.ts contract) ----
 
@@ -199,10 +201,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/functions/:name/invocations", cloud.Handle(s, invocations))
 	app.Get("/v1/functions/:name/logs", cloud.Handle(s, logs))
 	app.Post("/v1/functions/:name/invoke", cloud.Handle(s, invoke))
-}
-
-func init() {
-	cloud.Register("functions", 128, cloud.Typed(Mount))
 }
 
 // ---- handlers ----

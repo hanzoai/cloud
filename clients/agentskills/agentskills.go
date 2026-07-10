@@ -127,8 +127,3 @@ func (h *handler) serveFile(c *zip.Ctx, name, contentType string) error {
 	c.SetHeader("Cache-Control", "public, max-age=300")
 	return c.Bytes(200, b)
 }
-
-func init() {
-	// Order 8: before IAM (50, /.well-known/* wildcard) and the console catch-all.
-	cloud.Register("agentskills", 8, cloud.Typed(Mount))
-}

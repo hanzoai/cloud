@@ -164,7 +164,7 @@ func mountFailClosed(app *zip.App) {
 // — the ONE place the whole-Deps bag is narrowed to the values commerce uses. It
 // also carries the PCI scope-guard warnings (Payments / Vault presence) that belong
 // with Deps, keeping Mount itself off the wide dependency surface.
-func mountFromDeps(app *zip.App, deps cloud.Deps) error {
+func MountFromDeps(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("commerce.Mount: nil deps.Logger")
 	}
@@ -189,7 +189,6 @@ func init() {
 	// calls. cloud never imports this package: both hooks are the same inversion
 	// clients/kms uses, so the commerce library + its subsystem live in ONE package
 	// with no cloud⇄commerce import cycle. Exactly one registration each.
-	cloud.Register("commerce", 100, cloud.Typed(mountFromDeps))
 	cloud.RegisterCommerceClientFactory(func(cfg *cloud.Config, _ luxlog.Logger) cloud.CommerceClient {
 		return InProcessClient(cfg.Brand)
 	})

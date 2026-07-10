@@ -6,12 +6,12 @@
 // http.Handler, then app.Mount(prefix, h)":
 //
 //   - wasm  — a polyglot service (Rust/WASM, or Python/TS via goa) loaded
-//             in-process through github.com/hanzoai/goa (wazero/gpython/goja,
-//             pure Go, CGO_ENABLED=0). Drop a .wasm + manifest entry → mounted.
+//     in-process through github.com/hanzoai/goa (wazero/gpython/goja,
+//     pure Go, CGO_ENABLED=0). Drop a .wasm + manifest entry → mounted.
 //   - proxy — a standalone server (e.g. the beego apps ai, vm) reached over a
-//             pluggable transport. The "zap" transport is registered by the ZAP
-//             client when available; until then proxying uses plain HTTP. Either
-//             way cloud never recompiles to point at a service.
+//     pluggable transport. The "zap" transport is registered by the ZAP
+//     client when available; until then proxying uses plain HTTP. Either
+//     way cloud never recompiles to point at a service.
 //
 // The manifest path comes from CLOUD_PLUGINS (a JSON file); if unset, pluginsvc
 // mounts nothing. Adding a service = edit the manifest + drop a .wasm or
@@ -194,10 +194,6 @@ func buildProxy(p Plugin) (http.Handler, error) {
 		h = http.StripPrefix(p.Prefix, rp)
 	}
 	return h, nil
-}
-
-func init() {
-	cloud.Register("plugins", 900, cloud.Typed(Mount))
 }
 
 // Shutdown releases every mounted goa service pool. Idempotent.

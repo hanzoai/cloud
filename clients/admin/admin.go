@@ -643,10 +643,3 @@ func adminOrgOf(_ cloud.Deps) string {
 	}
 	return "admin"
 }
-
-func init() {
-	// Order 146: after productsvc (145); the admin surface has no ordering
-	// dependency (it fans out over HTTP), placed adjacent to the other console
-	// read facades.
-	cloud.Register("admin", 146, cloud.Typed(Mount))
-}

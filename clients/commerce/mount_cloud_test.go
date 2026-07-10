@@ -9,33 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
-
-// TestCommerceRegisteredAtOrder100 proves the subsystem wired itself into cloud's
-// registry via init() — name "commerce", order 100 (after kms=10/iam=50/base=60 and
-// the billing/licensing tier). This guards the one-line blank import in subsystems.go
-// (clients/commerce) that pulls this package's init() into the cloud build.
-func TestCommerceRegisteredAtOrder100(t *testing.T) {
-	var found *cloud.MountSpec
-	for i := range cloud.Registry {
-		if cloud.Registry[i].Name == "commerce" {
-			found = &cloud.Registry[i]
-			break
-		}
-	}
-	if found == nil {
-		t.Fatal("commerce not registered in cloud.Registry")
-	}
-	if found.Order != 100 {
-		t.Fatalf("commerce registry order = %d, want 100", found.Order)
-	}
-	if found.Mount == nil {
-		t.Fatal("commerce registry Mount is nil")
-	}
-}
 
 // TestCommerceMount_HealthAndGinSurface boots Mount on a fresh zip.App and proves
 // both (a) the native /_/commerce/healthz route answers 200 (independent of the gin

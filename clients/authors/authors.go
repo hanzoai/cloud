@@ -162,15 +162,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/authors/:id/payout", cloud.Handle(s, adminPayout))
 }
 
-func init() {
-	// Order 143: a free slot before clients/affiliates (144) and the AI /v1/* catch-all
-	// (150). No ordering dependency (it owns its own store + fans out to commerce/IAM
-	// over HTTP); its routes are all specific (/v1/authors*, /v1/admin/authors*), so
-	// they bind ahead of the catch-all regardless. The static /sweep + /deploys/record
-	// bind before the /:id/* param routes (distinct segment counts).
-	cloud.RegisterWithShutdown("authors", 143, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
-}
-
 // ── customer surface ─────────────────────────────────────────────────────────
 
 // myAuthors answers GET /v1/authors for the validated caller. If the org has not
