@@ -38,31 +38,30 @@ import (
 	"github.com/hanzoai/cloud/clients/gojabase"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
-	luxlog "github.com/luxfi/log"
 )
 
 // maxBody caps a request body. Cap-table payloads are small structured records;
 // anything larger is malformed or hostile.
 const maxBody = 1 << 20 // 1 MiB
 
-type svc struct {
+// state is captable's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	host *gojabase.Host
-	log  luxlog.Logger
 }
 
 // mounted is the active service so Shutdown can release the per-tenant stores.
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires the /v1/captable/* surface onto app per HIP-0106.
+// Mount wires the /v1/captable/* surface onto app per HIP-0106. Constructs the
+// value directly (cloud.NewBase) — this subsystem keeps a package global for the
+// Shutdown hook and opens a per-tenant goja host from deps.DataDir.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("captable.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("captable.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "captable")
 	if deps.DataDir == "" {
 		return fmt.Errorf("captable.Mount: empty DataDir")
 	}
@@ -81,54 +80,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("captable.Mount: gojabase host: %w", err)
 	}
-	s := &svc{host: host, log: log}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "captable"), State: state{host: host}}
 	mounted = s
+	routes(app, s)
 
-	// Route table → bundle route names. GET reads carry no body; mutations do.
-	// company
-	app.Get("/v1/captable/company", s.route("company.get", nil, false))
-	app.Put("/v1/captable/company", s.route("company.update", nil, true))
-	// stakeholders
-	app.Get("/v1/captable/stakeholders", s.route("stakeholders.list", nil, false))
-	app.Post("/v1/captable/stakeholders", s.route("stakeholders.add", nil, true))
-	app.Patch("/v1/captable/stakeholders/:id", s.routeID("stakeholders.update", true))
-	app.Delete("/v1/captable/stakeholders/:id", s.routeID("stakeholders.delete", false))
-	// share classes
-	app.Get("/v1/captable/share-classes", s.route("shareClasses.list", nil, false))
-	app.Post("/v1/captable/share-classes", s.route("shareClasses.create", nil, true))
-	app.Patch("/v1/captable/share-classes/:id", s.routeID("shareClasses.update", true))
-	// equity plans
-	app.Get("/v1/captable/equity-plans", s.route("equityPlans.list", nil, false))
-	app.Post("/v1/captable/equity-plans", s.route("equityPlans.create", nil, true))
-	// shares (issuance + transfer). /shares/transfer registers before /shares/:id
-	// (different methods anyway) so it can never be shadowed.
-	app.Get("/v1/captable/shares", s.route("shares.list", nil, false))
-	app.Post("/v1/captable/shares", s.route("shares.add", nil, true))
-	app.Post("/v1/captable/shares/transfer", s.route("shares.transfer", nil, true))
-	app.Delete("/v1/captable/shares/:id", s.routeID("shares.delete", false))
-	// options
-	app.Get("/v1/captable/options", s.route("options.list", nil, false))
-	app.Post("/v1/captable/options", s.route("options.add", nil, true))
-	app.Delete("/v1/captable/options/:id", s.routeID("options.delete", false))
-	// SAFEs
-	app.Get("/v1/captable/safes", s.route("safes.list", nil, false))
-	app.Post("/v1/captable/safes", s.route("safes.create", nil, true))
-	app.Delete("/v1/captable/safes/:id", s.routeID("safes.delete", false))
-	// convertible notes
-	app.Get("/v1/captable/convertibles", s.route("convertibles.list", nil, false))
-	app.Post("/v1/captable/convertibles", s.route("convertibles.create", nil, true))
-	app.Delete("/v1/captable/convertibles/:id", s.routeID("convertibles.delete", false))
-	// rounds + investments
-	app.Get("/v1/captable/rounds", s.route("rounds.list", nil, false))
-	app.Post("/v1/captable/rounds", s.route("rounds.create", nil, true))
-	app.Get("/v1/captable/rounds/:id", s.routeID("rounds.get", false))
-	app.Post("/v1/captable/rounds/:id/close", s.routeID("rounds.close", true))
-	app.Post("/v1/captable/rounds/:id/investments", s.routeID("rounds.investments.add", true))
-	app.Get("/v1/captable/investments", s.route("rounds.investments.list", nil, false))
-	// computed cap table
-	app.Get("/v1/captable/summary", s.route("captable", nil, false))
-
-	log.Info("captable mounted in-process (goja + per-tenant Base)",
+	s.Log.Info("captable mounted in-process (goja + per-tenant Base)",
 		"prefix", "/v1/captable",
 		"version", hcaptable.Version,
 		"brand", deps.Brand,
@@ -137,24 +93,71 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
+// routes wires the /v1/captable/* route table → bundle route names. GET reads
+// carry no body; mutations do.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	// company
+	app.Get("/v1/captable/company", route(s, "company.get", nil, false))
+	app.Put("/v1/captable/company", route(s, "company.update", nil, true))
+	// stakeholders
+	app.Get("/v1/captable/stakeholders", route(s, "stakeholders.list", nil, false))
+	app.Post("/v1/captable/stakeholders", route(s, "stakeholders.add", nil, true))
+	app.Patch("/v1/captable/stakeholders/:id", routeID(s, "stakeholders.update", true))
+	app.Delete("/v1/captable/stakeholders/:id", routeID(s, "stakeholders.delete", false))
+	// share classes
+	app.Get("/v1/captable/share-classes", route(s, "shareClasses.list", nil, false))
+	app.Post("/v1/captable/share-classes", route(s, "shareClasses.create", nil, true))
+	app.Patch("/v1/captable/share-classes/:id", routeID(s, "shareClasses.update", true))
+	// equity plans
+	app.Get("/v1/captable/equity-plans", route(s, "equityPlans.list", nil, false))
+	app.Post("/v1/captable/equity-plans", route(s, "equityPlans.create", nil, true))
+	// shares (issuance + transfer). /shares/transfer registers before /shares/:id
+	// (different methods anyway) so it can never be shadowed.
+	app.Get("/v1/captable/shares", route(s, "shares.list", nil, false))
+	app.Post("/v1/captable/shares", route(s, "shares.add", nil, true))
+	app.Post("/v1/captable/shares/transfer", route(s, "shares.transfer", nil, true))
+	app.Delete("/v1/captable/shares/:id", routeID(s, "shares.delete", false))
+	// options
+	app.Get("/v1/captable/options", route(s, "options.list", nil, false))
+	app.Post("/v1/captable/options", route(s, "options.add", nil, true))
+	app.Delete("/v1/captable/options/:id", routeID(s, "options.delete", false))
+	// SAFEs
+	app.Get("/v1/captable/safes", route(s, "safes.list", nil, false))
+	app.Post("/v1/captable/safes", route(s, "safes.create", nil, true))
+	app.Delete("/v1/captable/safes/:id", routeID(s, "safes.delete", false))
+	// convertible notes
+	app.Get("/v1/captable/convertibles", route(s, "convertibles.list", nil, false))
+	app.Post("/v1/captable/convertibles", route(s, "convertibles.create", nil, true))
+	app.Delete("/v1/captable/convertibles/:id", routeID(s, "convertibles.delete", false))
+	// rounds + investments
+	app.Get("/v1/captable/rounds", route(s, "rounds.list", nil, false))
+	app.Post("/v1/captable/rounds", route(s, "rounds.create", nil, true))
+	app.Get("/v1/captable/rounds/:id", routeID(s, "rounds.get", false))
+	app.Post("/v1/captable/rounds/:id/close", routeID(s, "rounds.close", true))
+	app.Post("/v1/captable/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
+	app.Get("/v1/captable/investments", route(s, "rounds.investments.list", nil, false))
+	// computed cap table
+	app.Get("/v1/captable/summary", route(s, "captable", nil, false))
+}
+
 // route builds a zip handler that dispatches a fixed bundle route. readBody
 // controls whether the JSON request body is decoded and passed as req.body.
-func (s *svc) route(name string, params map[string]string, readBody bool) zip.Handler {
+func route(s *cloud.Service[state], name string, params map[string]string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
-		return s.dispatch(c, name, params, readBody)
+		return dispatch(s, c, name, params, readBody)
 	}
 }
 
 // routeID is route with the :id path param threaded into params.
-func (s *svc) routeID(name string, readBody bool) zip.Handler {
+func routeID(s *cloud.Service[state], name string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
-		return s.dispatch(c, name, map[string]string{"id": c.Param("id")}, readBody)
+		return dispatch(s, c, name, map[string]string{"id": c.Param("id")}, readBody)
 	}
 }
 
 // dispatch resolves the tenant, decodes the body, runs the bundle route on the
 // tenant's Base store (one transaction per request), and writes {status, body}.
-func (s *svc) dispatch(c *zip.Ctx, route string, params map[string]string, readBody bool) error {
+func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -171,13 +174,13 @@ func (s *svc) dispatch(c *zip.Ctx, route string, params map[string]string, readB
 			}
 		}
 	}
-	resp, err := s.host.Dispatch(c.Context(), org, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{
 		Route:  route,
 		Params: params,
 		Body:   body,
 	})
 	if err != nil {
-		s.log.Error("captable dispatch failed", "route", route, "err", err)
+		s.Log.Error("captable dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "captable dispatch failed")
 	}
 	c.SetHeader("Content-Type", "application/json")
@@ -193,10 +196,10 @@ func init() {
 
 // shutdown closes the per-tenant stores + the goja engine. Idempotent.
 func shutdown(context.Context) error {
-	if mounted == nil || mounted.host == nil {
+	if mounted == nil || mounted.State.host == nil {
 		return nil
 	}
-	err := mounted.host.Close()
+	err := mounted.State.host.Close()
 	mounted = nil
 	return err
 }

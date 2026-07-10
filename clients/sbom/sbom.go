@@ -78,45 +78,41 @@ const createTable = `CREATE TABLE IF NOT EXISTS hanzo.sbom_component (
 ) ENGINE = ReplacingMergeTree(ingested_at)
 ORDER BY (image_digest, component_name, component_version, purl)`
 
-type svc struct {
-	log luxlog.Logger
-}
+// state is sbom's own data: none — the global store rides the SAME shared
+// ClickHouse client the ai subsystem opens. Shared deps live in cloud.Base.
+type state struct{}
 
 // Mount wires the SBOM surface onto app and bootstraps the global table.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("sbom.Mount: nil zip.App")
-	}
-	log := deps.Logger
-	if log == nil {
-		return fmt.Errorf("sbom.Mount: nil deps.Logger")
-	}
-	log = log.New("subsystem", "sbom")
-	s := &svc{log: log}
+	return cloud.Mount(app, deps, "sbom", build, routes)
+}
 
-	// Best-effort bootstrap: create the global table now IF the datastore is
-	// already connected at boot. It usually is NOT — ai/object.InitDatastore
-	// connects ASYNCHRONOUSLY and flips DatastoreEnabled AFTER Mount returns, so a
-	// Mount-time attempt is skipped/failed here far more often than not. That is
-	// fine and NON-FATAL: ensureTable on the request path (below) is the real
-	// guarantee, (re)creating the table on the first request that finds the store
-	// ready. Failing Mount here would wrongly abort the whole subsystem.
+// build best-effort bootstraps the global table: create it now IF the datastore is
+// already connected at boot. It usually is NOT — ai/object.InitDatastore connects
+// ASYNCHRONOUSLY and flips DatastoreEnabled AFTER Mount returns, so a Mount-time
+// attempt is skipped/failed here far more often than not. That is fine and
+// NON-FATAL: ensureTable on the request path is the real guarantee, (re)creating the
+// table on the first request that finds the store ready. Failing the mount here
+// would wrongly abort the whole subsystem.
+func build(b cloud.Base) (state, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ddlTimeout)
 	defer cancel()
 	if err := ensureTable(ctx); err != nil {
-		log.Warn("datastore not ready at mount; sbom table will be created lazily on first request", "err", err)
+		b.Log.Warn("datastore not ready at mount; sbom table will be created lazily on first request", "err", err)
 	} else {
-		log.Info("sbom table ready", "table", sbomTable)
+		b.Log.Info("sbom table ready", "table", sbomTable)
 	}
+	b.Log.Info("sbom surface", "table", sbomTable, "brand", b.Brand)
+	return state{}, nil
+}
 
-	// Health is a static route registered BEFORE the greedy resolve wildcard so it
-	// is never captured by it. Health is not JWT-gated (liveness must be probe-able).
-	app.Get("/v1/sbom/health", s.health)
-	app.Post("/v1/sbom", s.ingest)
-	app.Get("/v1/sbom/*", s.resolve)
-
-	log.Info("sbom mounted", "table", sbomTable, "brand", deps.Brand)
-	return nil
+// routes registers the SBOM surface. Health is a static route registered BEFORE the
+// greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
+// (liveness must be probe-able).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/sbom/health", cloud.Handle(s, health))
+	app.Post("/v1/sbom", cloud.Handle(s, ingest))
+	app.Get("/v1/sbom/*", cloud.Handle(s, resolve))
 }
 
 func init() {
@@ -174,7 +170,7 @@ func ensureTable(ctx context.Context) error {
 // check, which the build fleet / CI carries. Re-ingest is idempotent: rows share
 // the (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the
 // latest by ingested_at (and resolve reads FINAL).
-func (s *svc) ingest(c *zip.Ctx) error {
+func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -202,7 +198,7 @@ func (s *svc) ingest(c *zip.Ctx) error {
 			return zip.Errorf(http.StatusBadGateway, "sbom insert: %v", err)
 		}
 	}
-	s.log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
+	s.Log.Info("sbom ingested", "imageDigest", in.ImageDigest, "components", len(comps), "sourceRepo", in.SourceRepo)
 	return c.JSON(http.StatusCreated, map[string]any{
 		"imageDigest":    in.ImageDigest,
 		"componentCount": len(comps),
@@ -215,7 +211,7 @@ func (s *svc) ingest(c *zip.Ctx) error {
 // carries the (possibly slash-bearing, possibly percent-encoded) ref; we decode it
 // and bind it to BOTH columns. FINAL collapses ReplacingMergeTree duplicates from
 // repeated ingests. 404 when nothing matches (honest empty, never fabricated).
-func (s *svc) resolve(c *zip.Ctx) error {
+func resolve(s *cloud.Service[state], c *zip.Ctx) error {
 	ref := strings.Trim(strings.TrimSpace(c.Fiber().Params("*")), "/")
 	if dec, err := url.PathUnescape(ref); err == nil {
 		ref = dec
@@ -246,10 +242,10 @@ func (s *svc) resolve(c *zip.Ctx) error {
 		// CycloneDX SBOM to the image digest; if this ref is a real image we haven't
 		// materialized yet, pull the attached artifact, persist it, and re-read. A
 		// pull failure is NON-FATAL — we fall through to the honest 404.
-		if view, perr := s.pullAndStore(c.Context(), ref); perr == nil && view != nil {
+		if view, perr := pullAndStore(s, c.Context(), ref); perr == nil && view != nil {
 			return c.JSON(http.StatusOK, *view)
 		} else if perr != nil {
-			s.log.Debug("sbom pull-on-miss failed", "ref", ref, "err", perr)
+			s.Log.Debug("sbom pull-on-miss failed", "ref", ref, "err", perr)
 		}
 		return zip.ErrNotFound("no SBOM for " + ref)
 	}
@@ -264,7 +260,7 @@ func (s *svc) resolve(c *zip.Ctx) error {
 // materializer behind resolve's pull-on-miss and the deploy-time prefetch. A bare
 // `sha256:…` digest (no repo) is not pullable → returns an error the caller treats
 // as a miss.
-func (s *svc) pullAndStore(ctx context.Context, ref string) (*SbomView, error) {
+func pullAndStore(s *cloud.Service[state], ctx context.Context, ref string) (*SbomView, error) {
 	res, err := pullSBOM(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -275,7 +271,7 @@ func (s *svc) pullAndStore(ctx context.Context, ref string) (*SbomView, error) {
 			return nil, fmt.Errorf("persist pulled sbom: %w", err)
 		}
 	}
-	s.log.Info("sbom pulled from registry", "imageRef", res.Ref, "imageDigest", res.Digest, "components", len(res.Components))
+	s.Log.Info("sbom pulled from registry", "imageRef", res.Ref, "imageDigest", res.Digest, "components", len(res.Components))
 
 	// Re-read through FINAL so the response is byte-identical to a cache hit
 	// (deduped, ordered, capped) rather than echoing the just-parsed slice.
@@ -309,7 +305,10 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 		log = luxlog.Noop()
 	}
 	log = log.New("subsystem", "sbom")
-	s := &svc{log: log}
+	// Prefetch runs OUTSIDE Mount (no Deps), and pullAndStore only reads s.Log — so
+	// a minimal Base carrying just the logger is the faithful analog of the old
+	// per-package service value that held only the logger.
+	s := &cloud.Service[state]{Base: cloud.Base{Log: log}}
 
 	if err := requireDatastore(); err != nil {
 		log.Debug("sbom prefetch skipped: datastore not ready", "ref", ref, "err", err)
@@ -326,7 +325,7 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 	if err == nil && len(rows) > 0 {
 		return
 	}
-	if _, err := s.pullAndStore(ctx, ref); err != nil {
+	if _, err := pullAndStore(s, ctx, ref); err != nil {
 		log.Debug("sbom prefetch pull failed", "ref", ref, "err", err)
 	}
 }
@@ -336,7 +335,7 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 // health is a pure liveness probe: the service is up; datastore reflects whether
 // the ClickHouse store is connected. Not JWT-gated, always 200 (a disconnected
 // datastore is degraded-but-alive; the data endpoints report that as 503).
-func (s *svc) health(c *zip.Ctx) error {
+func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"service":   "sbom",
 		"status":    "ok",

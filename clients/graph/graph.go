@@ -37,47 +37,38 @@
 package graph
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-type svc struct {
-	cl    *client
-	log   luxlog.Logger
-	brand string // deps.Brand — the chain family surfaced (fallback when the indexer omits chain_name)
-	env   string // deps.Env  — the network tier (mainnet|testnet|devnet) reported as an indexer's `network`
+// state is graph's own data: the chain-data upstream client. The shared deps live
+// in the embedded cloud.Base — brand (s.Brand) is the chain family surfaced and env
+// (s.Env) is the network tier reported as an indexer's `network`.
+type state struct {
+	cl *client
 }
 
 // Mount wires the chain-data surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("graph.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("graph.Mount: nil deps.Logger")
-	}
-	s := &svc{
-		cl:    newClient(),
-		log:   deps.Logger.New("subsystem", "graph"),
-		brand: deps.Brand,
-		env:   deps.Env,
-	}
-	s.routes(app)
-	s.log.Info("graph chain-data surface mounted",
-		"indexer", s.cl.indexer, "graph", s.cl.graph, "brand", deps.Brand, "env", deps.Env)
-	return nil
+	return cloud.Mount(app, deps, "graph", build, routes)
 }
 
-// routes is the ONE place the surface is wired — shared by Mount (real upstreams) and
-// the test (an httptest fake).
-func (s *svc) routes(app *zip.App) {
-	app.Get("/v1/indexers", s.listIndexers)
-	app.Get("/v1/oracles", s.listOracles)
+// build dials the chain-data upstreams (INDEXER_URL / GRAPH_URL from env) and
+// records the informative mount line.
+func build(b cloud.Base) (state, error) {
+	st := state{cl: newClient()}
+	b.Log.Info("graph chain-data surface mounted",
+		"indexer", st.cl.indexer, "graph", st.cl.graph, "brand", b.Brand, "env", b.Env)
+	return st, nil
+}
+
+// routes is the ONE place the surface is wired.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/indexers", cloud.Handle(s, listIndexers))
+	app.Get("/v1/oracles", cloud.Handle(s, listOracles))
 }
 
 func init() {
@@ -89,7 +80,7 @@ func init() {
 // caller reads nothing. The org itself is not a filter key here (a ledger is public
 // within a brand); it is the proof-of-auth gate, checked in ONE place before any
 // handler touches an upstream.
-func (s *svc) gate(c *zip.Ctx) error {
+func gate(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -104,21 +95,21 @@ func (s *svc) gate(c *zip.Ctx) error {
 // the indexer is entirely unreachable does it surface an honest 502 (the console's
 // "unavailable" card). No chain HEAD is exposed by the indexer REST, so `lag` is
 // honestly omitted rather than fabricated.
-func (s *svc) listIndexers(c *zip.Ctx) error {
-	if err := s.gate(c); err != nil {
+func listIndexers(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := gate(s, c); err != nil {
 		return err
 	}
-	health, hErr := s.cl.health(c)
-	block, bErr := s.cl.latestBlock(c)
+	health, hErr := s.State.cl.health(c)
+	block, bErr := s.State.cl.latestBlock(c)
 	if hErr != nil && bErr != nil {
 		// Indexer unreachable in any form — degrade to an honest-EMPTY list (200), not a
 		// 502 that surfaces as a console error on the page for every org without a chain
 		// indexer deployed. Same graceful fold as visor/clusters; an empty list is honest
 		// (no indexers), never a fabricated row.
-		s.log.Warn("indexer unreachable; returning empty indexer list", "err", bErr)
+		s.Log.Warn("indexer unreachable; returning empty indexer list", "err", bErr)
 		return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{}})
 	}
-	iv := toIndexerView(health, block, s.brand, s.env)
+	iv := toIndexerView(health, block, s.Brand, s.Env)
 	return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{iv}})
 }
 
@@ -128,14 +119,14 @@ func (s *svc) listIndexers(c *zip.Ctx) error {
 // PriceFeed registry (a REAL registry — the graph's oracle resolver). A reachable
 // graph with no feeds returns an honest empty list; an unreachable graph surfaces an
 // honest 502. No feed is ever fabricated.
-func (s *svc) listOracles(c *zip.Ctx) error {
-	if err := s.gate(c); err != nil {
+func listOracles(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := gate(s, c); err != nil {
 		return err
 	}
-	feeds, err := s.cl.priceFeeds(c)
+	feeds, err := s.State.cl.priceFeeds(c)
 	if err != nil {
 		// Price-feed oracle unreachable — honest-EMPTY (200), not a 502 page error.
-		s.log.Warn("oracle price feeds unreachable; returning empty oracle list", "err", err)
+		s.Log.Warn("oracle price feeds unreachable; returning empty oracle list", "err", err)
 		return c.JSON(http.StatusOK, map[string]any{"oracles": []oracleView{}})
 	}
 	out := make([]oracleView, 0, len(feeds))
