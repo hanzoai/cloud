@@ -56,7 +56,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/fleet"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -133,15 +132,17 @@ var projectRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 //
 // This is the create/submission fee. A TrainJob's ongoing GPU-hour cost
 // (hanzoai/pricing infrastructure.compute centsPerHour) is billed by REUSING
-// s.bill.Meter with a runtime-derived amount from a future usage watcher — never
+// s.State.bill.Meter with a runtime-derived amount from a future usage watcher — never
 // fabricated here.
 const computeFeeEnvPrefix = "CLOUD_COMPUTE_FEE_CENTS"
 
-type svc struct {
+// state is ml's own data; shared deps live in the embedded cloud.Base. The billing
+// meter is kept here (not in Base.Bill) because its commerce product label is
+// "compute", NOT the subsystem name "ml".
+type state struct {
 	dyn     dynamic.Interface // in-cluster (home) client; nil when unresolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health
 	hc      *http.Client      // predictor data-plane client (inference latency)
-	log     luxlog.Logger
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
 	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
 	bill *cloud.ResourceMeter
@@ -151,7 +152,9 @@ type svc struct {
 	fleet *fleet.Registry
 }
 
-// Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106.
+// Mount wires the /v1/ml/* and /v1/train/* surfaces onto app per HIP-0106. The
+// "compute"-product meter, the k8s client bring-up and the shared fleet registry
+// make this a direct construction (cloud.NewBase), not cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("ml.Mount: nil zip.App")
@@ -159,47 +162,49 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("ml.Mount: nil deps.Logger")
 	}
-	log := deps.Logger.New("subsystem", "ml")
 
-	s := &svc{log: log, hc: &http.Client{Timeout: predictTimeout}, bill: cloud.NewResourceMeter(deps, "compute")}
+	s := &cloud.Service[state]{
+		Base:  cloud.NewBase(deps, "ml"),
+		State: state{hc: &http.Client{Timeout: predictTimeout}, bill: cloud.NewResourceMeter(deps, "compute")},
+	}
 	if dyn, err := newDynamic(); err != nil {
-		s.initErr = err.Error()
-		log.Warn("kubernetes client unavailable; ml/train endpoints will fail closed", "err", err)
+		s.State.initErr = err.Error()
+		s.Log.Warn("kubernetes client unavailable; ml/train endpoints will fail closed", "err", err)
 	} else {
-		s.dyn = dyn
+		s.State.dyn = dyn
 	}
 	// Shared BYO-cluster registry (registration surface is the visor fleet at
 	// /v1/clusters; ml only READS it to federate serving onto the org's cluster).
-	s.fleet = fleet.New(deps.Brand, log)
+	s.State.fleet = fleet.New(deps.Brand, s.Log)
 
 	// Models (kserve InferenceService).
-	app.Get("/v1/ml/models", s.list(modelKind))
-	app.Post("/v1/ml/models", s.create(modelKind))
-	app.Get("/v1/ml/models/:name", s.get(modelKind))
-	app.Patch("/v1/ml/models/:name", s.patch(modelKind))
-	app.Delete("/v1/ml/models/:name", s.del(modelKind))
-	app.Post("/v1/ml/models/:name/predict", s.predict)
+	app.Get("/v1/ml/models", list(s, modelKind))
+	app.Post("/v1/ml/models", create(s, modelKind))
+	app.Get("/v1/ml/models/:name", get(s, modelKind))
+	app.Patch("/v1/ml/models/:name", patch(s, modelKind))
+	app.Delete("/v1/ml/models/:name", del(s, modelKind))
+	app.Post("/v1/ml/models/:name/predict", cloud.Handle(s, predict))
 
 	// Training jobs (trainer TrainJob).
-	app.Get("/v1/train/jobs", s.list(jobKind))
-	app.Post("/v1/train/jobs", s.create(jobKind))
-	app.Get("/v1/train/jobs/:name", s.get(jobKind))
-	app.Delete("/v1/train/jobs/:name", s.del(jobKind))
+	app.Get("/v1/train/jobs", list(s, jobKind))
+	app.Post("/v1/train/jobs", create(s, jobKind))
+	app.Get("/v1/train/jobs/:name", get(s, jobKind))
+	app.Delete("/v1/train/jobs/:name", del(s, jobKind))
 
 	// Experiments + trials (katib).
-	app.Get("/v1/train/experiments", s.list(expKind))
-	app.Post("/v1/train/experiments", s.create(expKind))
-	app.Get("/v1/train/experiments/:name", s.get(expKind))
-	app.Delete("/v1/train/experiments/:name", s.del(expKind))
-	app.Get("/v1/train/experiments/:name/trials", s.trials)
+	app.Get("/v1/train/experiments", list(s, expKind))
+	app.Post("/v1/train/experiments", create(s, expKind))
+	app.Get("/v1/train/experiments/:name", get(s, expKind))
+	app.Delete("/v1/train/experiments/:name", del(s, expKind))
+	app.Get("/v1/train/experiments/:name/trials", cloud.Handle(s, trials))
 
 	// Real-probe health. The subsystem registers with cloud.HealthOwner, so
 	// serve.go skips its generic auto-health and these two own the probes,
 	// reporting ACTUAL k8s reachability + CRD presence.
-	app.Get("/v1/ml/health", s.health("ml", isvcGVR))
-	app.Get("/v1/train/health", s.health("train", trainjobGVR, experimentGVR))
+	app.Get("/v1/ml/health", health(s, "ml", isvcGVR))
+	app.Get("/v1/train/health", health(s, "train", trainjobGVR, experimentGVR))
 
-	log.Info("ml/train surface mounted", "k8s", s.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.bill.Enabled())
+	s.Log.Info("ml/train surface mounted", "k8s", s.State.dyn != nil, "brand", deps.Brand, "env", deps.Env, "billing", s.State.bill.Enabled())
 	return nil
 }
 
@@ -214,32 +219,32 @@ func init() {
 
 // ── CRUD (generic across the three kinds) ────────────────────────────────────
 
-func (s *svc) list(k resourceKind) zip.Handler {
+func list(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if err := s.ready(); err != nil {
+		if err := ready(s); err != nil {
 			return err
 		}
-		ns, _, _, err := s.tenant(c)
+		ns, _, _, err := tenant(s, c)
 		if err != nil {
 			return err
 		}
-		ul, err := s.dyn.Resource(k.gvr).Namespace(ns).List(c.Context(), metav1.ListOptions{})
+		ul, err := s.State.dyn.Resource(k.gvr).Namespace(ns).List(c.Context(), metav1.ListOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) { // tenant namespace not created yet
 				return c.JSON(http.StatusOK, map[string]any{"items": []any{}})
 			}
-			return s.k8sErr(c, k, "list", err)
+			return k8sErr(s, c, k, "list", err)
 		}
 		return c.JSON(http.StatusOK, map[string]any{"items": viewList(ul.Items)})
 	}
 }
 
-func (s *svc) create(k resourceKind) zip.Handler {
+func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if err := s.ready(); err != nil {
+		if err := ready(s); err != nil {
 			return err
 		}
-		ns, org, project, err := s.tenant(c)
+		ns, org, project, err := tenant(s, c)
 		if err != nil {
 			return err
 		}
@@ -271,11 +276,11 @@ func (s *svc) create(k resourceKind) zip.Handler {
 		// so billing can never target another tenant. fee is reused by the
 		// post-success debit; fee==0 or unconfigured billing makes this a no-op.
 		fee := cloud.ResourceFeeCents(computeFeeEnvPrefix, k.kind)
-		if err := s.bill.Gate(c.Context(), org, project, k.kind, fee); err != nil {
+		if err := s.State.bill.Gate(c.Context(), org, project, k.kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
-		if err := s.ensureNamespace(c.Context(), ns, org, project); err != nil {
+		if err := ensureNamespace(s, c.Context(), ns, org, project); err != nil {
 			return zip.Errorf(http.StatusBadGateway, "ensure tenant namespace: %v", err)
 		}
 		obj := &unstructured.Unstructured{Object: map[string]any{
@@ -288,7 +293,7 @@ func (s *svc) create(k resourceKind) zip.Handler {
 			},
 			"spec": spec,
 		}}
-		out, err := s.dyn.Resource(k.gvr).Namespace(ns).Create(c.Context(), obj, metav1.CreateOptions{})
+		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Create(c.Context(), obj, metav1.CreateOptions{})
 		if err != nil {
 			switch {
 			case apierrors.IsAlreadyExists(err):
@@ -296,43 +301,43 @@ func (s *svc) create(k resourceKind) zip.Handler {
 			case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 				return zip.Errorf(http.StatusUnprocessableEntity, "%s rejected by kubernetes: %v", k.kind, err)
 			default:
-				return s.k8sErr(c, k, "create", err)
+				return k8sErr(s, c, k, "create", err)
 			}
 		}
 		// Resource created — debit the caller's org ledger for the compute
 		// submission (per-org, env-attributed, async best-effort). Ongoing
-		// GPU-hour cost reuses s.bill.Meter from a future runtime usage watcher.
-		s.bill.Meter(org, project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+		// GPU-hour cost reuses s.State.bill.Meter from a future runtime usage watcher.
+		s.State.bill.Meter(org, project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
 		return c.JSON(http.StatusCreated, view(out, true))
 	}
 }
 
-func (s *svc) get(k resourceKind) zip.Handler {
+func get(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if err := s.ready(); err != nil {
+		if err := ready(s); err != nil {
 			return err
 		}
-		ns, _, _, err := s.tenant(c)
+		ns, _, _, err := tenant(s, c)
 		if err != nil {
 			return err
 		}
-		out, err := s.dyn.Resource(k.gvr).Namespace(ns).Get(c.Context(), reqName(c), metav1.GetOptions{})
+		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Get(c.Context(), reqName(c), metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return zip.ErrNotFound(k.kind + " not found")
 			}
-			return s.k8sErr(c, k, "get", err)
+			return k8sErr(s, c, k, "get", err)
 		}
 		return c.JSON(http.StatusOK, view(out, true))
 	}
 }
 
-func (s *svc) patch(k resourceKind) zip.Handler {
+func patch(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if err := s.ready(); err != nil {
+		if err := ready(s); err != nil {
 			return err
 		}
-		ns, _, _, err := s.tenant(c)
+		ns, _, _, err := tenant(s, c)
 		if err != nil {
 			return err
 		}
@@ -340,7 +345,7 @@ func (s *svc) patch(k resourceKind) zip.Handler {
 		if len(body) == 0 {
 			return zip.ErrBadRequest("empty patch body (send a JSON merge patch)")
 		}
-		out, err := s.dyn.Resource(k.gvr).Namespace(ns).Patch(c.Context(), reqName(c), k8stypes.MergePatchType, body, metav1.PatchOptions{})
+		out, err := s.State.dyn.Resource(k.gvr).Namespace(ns).Patch(c.Context(), reqName(c), k8stypes.MergePatchType, body, metav1.PatchOptions{})
 		if err != nil {
 			switch {
 			case apierrors.IsNotFound(err):
@@ -348,27 +353,27 @@ func (s *svc) patch(k resourceKind) zip.Handler {
 			case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 				return zip.Errorf(http.StatusUnprocessableEntity, "patch rejected by kubernetes: %v", err)
 			default:
-				return s.k8sErr(c, k, "patch", err)
+				return k8sErr(s, c, k, "patch", err)
 			}
 		}
 		return c.JSON(http.StatusOK, view(out, true))
 	}
 }
 
-func (s *svc) del(k resourceKind) zip.Handler {
+func del(s *cloud.Service[state], k resourceKind) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if err := s.ready(); err != nil {
+		if err := ready(s); err != nil {
 			return err
 		}
-		ns, _, _, err := s.tenant(c)
+		ns, _, _, err := tenant(s, c)
 		if err != nil {
 			return err
 		}
-		if err := s.dyn.Resource(k.gvr).Namespace(ns).Delete(c.Context(), reqName(c), metav1.DeleteOptions{}); err != nil {
+		if err := s.State.dyn.Resource(k.gvr).Namespace(ns).Delete(c.Context(), reqName(c), metav1.DeleteOptions{}); err != nil {
 			if apierrors.IsNotFound(err) {
 				return zip.ErrNotFound(k.kind + " not found")
 			}
-			return s.k8sErr(c, k, "delete", err)
+			return k8sErr(s, c, k, "delete", err)
 		}
 		return c.NoContent(http.StatusNoContent)
 	}
@@ -380,21 +385,21 @@ func (s *svc) del(k resourceKind) zip.Handler {
 // model name defaults to the InferenceService name (kserve's single-model
 // convention) and may be overridden with ?model=. The predictor's status + body
 // are returned verbatim so a model-side error surfaces honestly.
-func (s *svc) predict(c *zip.Ctx) error {
-	if err := s.ready(); err != nil {
+func predict(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
 		return err
 	}
-	ns, _, _, err := s.tenant(c)
+	ns, _, _, err := tenant(s, c)
 	if err != nil {
 		return err
 	}
 	name := reqName(c)
-	obj, err := s.dyn.Resource(isvcGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+	obj, err := s.State.dyn.Resource(isvcGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("model not found")
 		}
-		return s.k8sErr(c, modelKind, "get", err)
+		return k8sErr(s, c, modelKind, "get", err)
 	}
 	addr := internalURL(obj)
 	if addr == "" {
@@ -415,7 +420,7 @@ func (s *svc) predict(c *zip.Ctx) error {
 	}
 	req.Header.Set("Content-Type", ct)
 	req.Header.Set("Accept", "application/json")
-	resp, err := s.hc.Do(req)
+	resp, err := s.State.hc.Do(req)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "predict: model data plane unreachable: %v", err)
 	}
@@ -430,26 +435,26 @@ func (s *svc) predict(c *zip.Ctx) error {
 // trials lists the katib Trials owned by an experiment in the caller's tenant
 // namespace. The experiment is fetched first so a cross-tenant or missing name
 // is a clean 404 rather than an empty list.
-func (s *svc) trials(c *zip.Ctx) error {
-	if err := s.ready(); err != nil {
+func trials(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
 		return err
 	}
-	ns, _, _, err := s.tenant(c)
+	ns, _, _, err := tenant(s, c)
 	if err != nil {
 		return err
 	}
 	name := reqName(c)
-	if _, err := s.dyn.Resource(experimentGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{}); err != nil {
+	if _, err := s.State.dyn.Resource(experimentGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{}); err != nil {
 		if apierrors.IsNotFound(err) {
 			return zip.ErrNotFound("experiment not found")
 		}
-		return s.k8sErr(c, expKind, "get", err)
+		return k8sErr(s, c, expKind, "get", err)
 	}
-	ul, err := s.dyn.Resource(trialGVR).Namespace(ns).List(c.Context(), metav1.ListOptions{
+	ul, err := s.State.dyn.Resource(trialGVR).Namespace(ns).List(c.Context(), metav1.ListOptions{
 		LabelSelector: katibExpLabel + "=" + name,
 	})
 	if err != nil {
-		return s.k8sErr(c, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
+		return k8sErr(s, c, resourceKind{trialGVR, "kubeflow.org/v1beta1", "Trial"}, "list", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"experiment": name, "items": viewList(ul.Items)})
 }
@@ -457,15 +462,15 @@ func (s *svc) trials(c *zip.Ctx) error {
 // health is a REAL probe: it verifies the API server is reachable and that the
 // subsystem's CRDs are served, and reports the actual state. 200 only when
 // everything is ok; 503 + the real reason otherwise (never status-theater).
-func (s *svc) health(name string, gvrs ...schema.GroupVersionResource) zip.Handler {
+func health(s *cloud.Service[state], name string, gvrs ...schema.GroupVersionResource) zip.Handler {
 	return func(c *zip.Ctx) error {
 		res := map[string]any{"service": name, "status": "ok"}
-		if s.dyn == nil {
-			res["status"], res["k8s"], res["error"] = "degraded", false, s.initErr
+		if s.State.dyn == nil {
+			res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 			return c.JSON(http.StatusServiceUnavailable, res)
 		}
 		ctx := c.Context()
-		if _, err := s.dyn.Resource(nsGVR).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
+		if _, err := s.State.dyn.Resource(nsGVR).List(ctx, metav1.ListOptions{Limit: 1}); err != nil {
 			res["status"], res["k8s"], res["error"] = "degraded", false, err.Error()
 			return c.JSON(http.StatusServiceUnavailable, res)
 		}
@@ -473,7 +478,7 @@ func (s *svc) health(name string, gvrs ...schema.GroupVersionResource) zip.Handl
 		crds := map[string]bool{}
 		allOK := true
 		for _, g := range gvrs {
-			_, err := s.dyn.Resource(g).Namespace(metav1.NamespaceDefault).List(ctx, metav1.ListOptions{Limit: 1})
+			_, err := s.State.dyn.Resource(g).Namespace(metav1.NamespaceDefault).List(ctx, metav1.ListOptions{Limit: 1})
 			crds[g.Resource] = err == nil
 			if err != nil {
 				allOK = false
@@ -494,7 +499,7 @@ func (s *svc) health(name string, gvrs ...schema.GroupVersionResource) zip.Handl
 // gateway-minted identity. Pure mapping lives in tenantNS for testability. The
 // returned project is the validated sub-scope (DefaultProject for a single-project
 // caller) — used for resource labels and the BYO-cluster federation shard.
-func (s *svc) tenant(c *zip.Ctx) (ns, org, project string, err error) {
+func tenant(s *cloud.Service[state], c *zip.Ctx) (ns, org, project string, err error) {
 	if !principal.Validated(c) {
 		// No validated principal — the restored X-Org-Id is a forge. Refuse before
 		// mapping to a per-org k8s namespace (provisions/reads ML resources).
@@ -538,8 +543,8 @@ func tenantNS(rawOrg, rawProject string, isAdmin bool) (ns, org, project string,
 
 // ensureNamespace idempotently creates the tenant namespace before the first
 // resource lands in it.
-func (s *svc) ensureNamespace(ctx context.Context, ns, org, project string) error {
-	if _, err := s.dyn.Resource(nsGVR).Get(ctx, ns, metav1.GetOptions{}); err == nil {
+func ensureNamespace(s *cloud.Service[state], ctx context.Context, ns, org, project string) error {
+	if _, err := s.State.dyn.Resource(nsGVR).Get(ctx, ns, metav1.GetOptions{}); err == nil {
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		return err
@@ -556,15 +561,15 @@ func (s *svc) ensureNamespace(ctx context.Context, ns, org, project string) erro
 			"labels": labels,
 		},
 	}}
-	if _, err := s.dyn.Resource(nsGVR).Create(ctx, obj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+	if _, err := s.State.dyn.Resource(nsGVR).Create(ctx, obj, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil
 }
 
-func (s *svc) ready() error {
-	if s.dyn == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "ml: kubernetes client not configured: %s", s.initErr)
+func ready(s *cloud.Service[state]) error {
+	if s.State.dyn == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "ml: kubernetes client not configured: %s", s.State.initErr)
 	}
 	return nil
 }
@@ -572,8 +577,8 @@ func (s *svc) ready() error {
 // k8sErr maps a raw API error to an honest gateway-level error. RBAC denials
 // name the missing access so the operator knows exactly what to grant the
 // cloud-api service account.
-func (s *svc) k8sErr(c *zip.Ctx, k resourceKind, op string, err error) error {
-	s.log.Error("k8s op failed", "op", op, "kind", k.kind, "resource", k.gvr.Resource, "err", err)
+func k8sErr(s *cloud.Service[state], c *zip.Ctx, k resourceKind, op string, err error) error {
+	s.Log.Error("k8s op failed", "op", op, "kind", k.kind, "resource", k.gvr.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
 			"%s %s: kubernetes RBAC denied (cloud-api service account needs %s on %s.%s): %v",
@@ -595,11 +600,11 @@ const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
 // ml's side) or the home in-cluster client when the shard has no attached cluster.
 // The ONE federation seam — handlers resolve their client through here so a BYO
 // cluster transparently becomes the org+project's ML compute plane.
-func (s *svc) dynForOrg(org, project string) dynamic.Interface {
-	if d := s.fleet.DynForOrg(org, project); d != nil {
+func dynForOrg(s *cloud.Service[state], org, project string) dynamic.Interface {
+	if d := s.State.fleet.DynForOrg(org, project); d != nil {
 		return d
 	}
-	return s.dyn
+	return s.State.dyn
 }
 
 // newDynamic builds the dynamic client. In-cluster it authenticates as the
