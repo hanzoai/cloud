@@ -14,6 +14,14 @@
 // Module boundary: the JS bundle + catalog data live in the service repos
 // (hanzoai/plans, hanzoai/pricing) and are passed in by the caller. This
 // package carries zero service logic — only the engine plumbing.
+//
+// READ-WRITE variant: this package hosts bundles with a read-only catalog
+// injected once at New (plans/pricing). Subsystems that need PERSISTENCE — a
+// bundle that reads AND writes per-tenant Base/SQLite (captable #97, esign #100,
+// dataroom #101) — use the sibling clients/gojabase, which builds on THIS engine
+// (via DispatchWith) and injects a tenant-bound __db bridge per request. Reach
+// for gojabase when your bundle stores data; reach for goja directly only for a
+// read-only bundle.
 package goja
 
 import (
@@ -37,6 +45,15 @@ type Request struct {
 	Params map[string]string `json:"params,omitempty"`
 	Query  map[string]string `json:"query,omitempty"`
 	Tenant string            `json:"tenant,omitempty"`
+
+	// OrgID is the validated tenant for read-WRITE subsystems (captable). It is
+	// passed to handle as req.orgId; the bundle uses it to scope every row.
+	// Read-only bundles (plans/pricing) ignore it and read Tenant instead.
+	OrgID string `json:"orgId,omitempty"`
+	// Body is the decoded request body for mutations, passed to handle as
+	// req.body. nil for reads. Whatever json.Unmarshal produced (map/slice/scalar)
+	// is converted to a JS value by goja.
+	Body any `json:"body,omitempty"`
 }
 
 // Response is what globalThis.handle returns: an HTTP status + an opaque body
@@ -157,8 +174,22 @@ func (h *Host) ensure(s *slot) error {
 }
 
 // Dispatch calls globalThis.handle(req) on a pooled runtime and returns the
-// JS-side {status, body}. ctx cancellation interrupts the call.
+// JS-side {status, body}. ctx cancellation interrupts the call. Read-only
+// bundles (plans/pricing) use this; their globals are the catalog injected once
+// at New.
 func (h *Host) Dispatch(ctx context.Context, req Request) (*Response, error) {
+	return h.DispatchWith(ctx, req, nil)
+}
+
+// DispatchWith is Dispatch plus a set of per-call NATIVE globals installed on the
+// runtime immediately before handle() runs (left in place until the next
+// dispatch on that slot overwrites them). This is the read-WRITE extension of
+// the read-only plan/pricing pattern: clients/gojabase passes a tenant-bound
+// __db bridge (+ __newId/__now) here so a bundle's SQL calls hit the right
+// per-tenant Base. The slot is held exclusively for the whole call (withSlot
+// serializes it), so installing globals on the shared runtime is race-free, and
+// values are plain Go funcs/maps that goja converts to callable JS.
+func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[string]any) (*Response, error) {
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
@@ -173,6 +204,14 @@ func (h *Host) Dispatch(ctx context.Context, req Request) (*Response, error) {
 	err := h.withSlot(func(s *slot) error {
 		if err := h.ensure(s); err != nil {
 			return err
+		}
+		// Install per-dispatch native globals (e.g. __db) AFTER the bundle has
+		// loaded (ensure) and BEFORE handle runs. The bundle references them only
+		// when handle is called, so this ordering is correct.
+		for k, v := range hostGlobals {
+			if err := s.vm.Set(k, v); err != nil {
+				return fmt.Errorf("gojahost[%s]: set host global %s: %w", h.name, k, err)
+			}
 		}
 		fn, ok := goja.AssertFunction(s.vm.Get("handle"))
 		if !ok {
@@ -195,6 +234,8 @@ func (h *Host) Dispatch(ctx context.Context, req Request) (*Response, error) {
 			"params": toAnyMap(req.Params),
 			"query":  toAnyMap(req.Query),
 			"tenant": req.Tenant,
+			"orgId":  req.OrgID,
+			"body":   req.Body,
 		})
 		out, callErr := fn(goja.Undefined(), arg)
 		if callErr != nil {
