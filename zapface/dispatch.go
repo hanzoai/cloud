@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gofiber/fiber/v3/middleware/adaptor"
+	"github.com/zap-proto/fiber/v3/middleware/adaptor"
 	zaprpc "github.com/zap-proto/go/rpc"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 )
 
 // dispatcher replays a decoded ZAP call as an in-process HTTP request against
