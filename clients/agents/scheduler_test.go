@@ -44,13 +44,13 @@ func (c *countingAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*t
 
 func (c *countingAI) count() int32 { return atomic.LoadInt32(&c.calls) }
 
-// schedSvc builds an svc + scheduler with NO billing (gate allows) and the given
+// schedSvc builds a Service + scheduler with NO billing (gate allows) and the given
 // AI, seeded with the supplied agents. Returns the scheduler for direct tick().
 func schedSvc(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {
 	t.Helper()
-	s := &svc{store: testStore(t), ai: ai, log: luxlog.New("test")}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: testStore(t), ai: ai}}
 	for _, a := range seed {
-		if err := s.store.Create(context.Background(), a); err != nil {
+		if err := s.State.store.Create(context.Background(), a); err != nil {
 			t.Fatalf("seed %s/%s: %v", a.Org, a.Name, err)
 		}
 	}
@@ -102,10 +102,10 @@ func TestSchedulerRecordsRun(t *testing.T) {
 	ctx := context.Background()
 	sc.tick(ctx, at(t, "2026-07-01 12:00"))
 	if !waitFor(func() bool {
-		runs, _ := sc.svc.store.ListRuns(ctx, "acme", "cron", 10)
+		runs, _ := sc.s.State.store.ListRuns(ctx, "acme", "cron", 10)
 		return len(runs) == 1 && runs[0].Status == "ok"
 	}) {
-		runs, _ := sc.svc.store.ListRuns(ctx, "acme", "cron", 10)
+		runs, _ := sc.s.State.store.ListRuns(ctx, "acme", "cron", 10)
 		t.Fatalf("scheduled run not recorded: %+v", runs)
 	}
 }
@@ -181,13 +181,15 @@ func TestSchedulerBillsScheduledRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	s := &svc{
-		store: testStore(t),
-		ai:    &countingAI{},
-		log:   luxlog.New("test"),
-		bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+	s := &cloud.Service[state]{
+		Base: cloud.Base{Log: luxlog.New("test")},
+		State: state{
+			store: testStore(t),
+			ai:    &countingAI{},
+			bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+		},
 	}
-	if err := s.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+	if err := s.State.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	sc := newScheduler(s, luxlog.New("test"))
@@ -223,13 +225,15 @@ func TestSchedulerGatesUnfundedRun(t *testing.T) {
 	bs := &billServer{available: 0}
 	m, _ := metering.New(metering.Config{BaseURL: bs.start(t), Token: "t", Org: "hanzo"})
 	ai := &countingAI{}
-	s := &svc{
-		store: testStore(t),
-		ai:    ai,
-		log:   luxlog.New("test"),
-		bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+	s := &cloud.Service[state]{
+		Base: cloud.Base{Log: luxlog.New("test")},
+		State: state{
+			store: testStore(t),
+			ai:    ai,
+			bill:  cloud.NewResourceMeter(cloud.Deps{Metering: m, Logger: luxlog.New("test")}, meterKind),
+		},
 	}
-	if err := s.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
+	if err := s.State.store.Create(context.Background(), longRunning("acme", "cron", "* * * * *")); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	sc := newScheduler(s, luxlog.New("test"))
