@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
