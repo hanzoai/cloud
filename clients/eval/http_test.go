@@ -42,6 +42,7 @@ func mountApp(t *testing.T) (*zip.App, *service) {
 	app.Post("/v1/evals/scores", s.createScore)
 	app.Get("/v1/evals/scores", s.listScores)
 	app.Get("/v1/evals/traces", s.listTraces)
+	app.Get("/v1/evals/metrics", s.metricsBoard)
 	app.Post("/v1/evals/runs", s.runHandler)
 	app.Get("/v1/evals/runs", s.listRuns)
 	return app, s
