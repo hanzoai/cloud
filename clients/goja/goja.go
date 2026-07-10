@@ -255,12 +255,23 @@ func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[st
 		if !ok {
 			return fmt.Errorf("gojahost[%s]: handle(%s) returned %T, want object", h.name, req.Route, exported)
 		}
-		status := 200
+		// Fail closed: a response with no EXPLICIT, valid numeric status must NOT
+		// be treated as success. gojabase's per-request transaction commits iff
+		// status < 400, so a defaulted 200 would silently PERSIST a bundle that
+		// forgot to set a status — on a boundary whose safety IS the status gate.
+		// Default 500 (which rolls the transaction back); only a bundle-provided
+		// status in the valid HTTP range [100,599] overrides it.
+		status := 500
 		if sv, ok := m["status"]; ok {
-			if f, ok := sv.(int64); ok {
-				status = int(f)
-			} else if f, ok := sv.(float64); ok {
-				status = int(f)
+			switch f := sv.(type) {
+			case int64:
+				if f >= 100 && f <= 599 {
+					status = int(f)
+				}
+			case float64:
+				if f >= 100 && f <= 599 {
+					status = int(f)
+				}
 			}
 		}
 		bodyBytes, mErr := json.Marshal(m["body"])

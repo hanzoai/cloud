@@ -58,9 +58,12 @@ issues SQL against it — column names are the coupling, so keep them in sync.
 
 ## Guarantees
 
-- **Per-tenant isolation** — one SQLite file per org (`{DataDir}/{Name}/{slug}.db`),
-  opened lazily, migrated once, cached. `slugify` contains any path tricks to a
-  single filename segment, so a tenant key can never traverse the data tree.
+- **Per-tenant isolation** — one SQLite file per org
+  (`{DataDir}/{Name}/{TenantSegment}.db`), opened lazily, migrated once, pooled
+  (LRU-capped + idle-evicted). `TenantSegment` is an **injective**, traversal-safe
+  encoding (lowercased unpadded base32 of the raw org bytes), so DISTINCT orgs —
+  including case/separator variants like `Acme`/`acme` and `a b`/`a_b` — NEVER
+  share a file, and the `[a-z2-7]` segment can never traverse the data tree.
 - **Atomicity** — each `Dispatch` runs `handle` inside ONE transaction that
   **commits iff** the response status `< 400` and `handle` did not throw;
   otherwise it **rolls back**. Multi-statement mutations (e.g. a share transfer:
@@ -69,14 +72,15 @@ issues SQL against it — column names are the coupling, so keep them in sync.
 - **No JS-visible transaction API** — the per-request transaction removes the
   need for one; bundles just call `query`/`exec`.
 
-## Leaf wiring (register + stage)
+## Leaf wiring (register)
 
-Register the leaf and blank-import it in `subsystems/subsystems.go`, staged
-behind `CLOUD_ENABLE` while the standalone service keeps authority:
+Register the leaf and blank-import it in `subsystems/subsystems.go`. It mounts
+under the mount-all default (empty `CLOUD_ENABLE`) — the captable/sign/dataroom
+folds are NOT staged (their standalone apps are retired/empty, so the one binary
+is authoritative from first write):
 
 ```go
 func init() { cloud.RegisterWithShutdown("captable", 133, cloud.Typed(Mount), shutdown) }
-// + add "captable" to config.stagedSubsystems
 ```
 
 See `clients/captable` for the complete reference leaf (schema, seed, routes).
