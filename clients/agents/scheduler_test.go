@@ -44,14 +44,8 @@ func (c *countingAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*t
 
 func (c *countingAI) count() int32 { return atomic.LoadInt32(&c.calls) }
 
-// Embed satisfies the AIClient interface; the scheduler tests count chat runs, not
-// embeddings, so it returns one deterministic 1-dim vector per input.
-func (c *countingAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
-	out := make([][]float32, len(inputs))
-	for i := range inputs {
-		out[i] = []float32{0.1}
-	}
-	return out, nil
+func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
+	return nil, nil
 }
 
 // schedSvc builds a Service + scheduler with NO billing (gate allows) and the given
