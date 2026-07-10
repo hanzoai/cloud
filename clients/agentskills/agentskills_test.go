@@ -17,7 +17,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/gofiber/fiber/v3"
+	"github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )

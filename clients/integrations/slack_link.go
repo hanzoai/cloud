@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofiber/fiber/v3"
+	"github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/zap-proto/zip"
 )
