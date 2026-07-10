@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 )
 
 // commerce is the narrow money seam the affiliate loop needs: read a referred
@@ -50,7 +52,7 @@ func newCommerceClient(base, token string) *httpCommerce {
 	return &httpCommerce{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 15 * time.Second},
+		http:  commerceinproc.Client(15 * time.Second),
 	}
 }
 
