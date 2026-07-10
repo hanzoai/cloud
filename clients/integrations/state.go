@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -79,7 +80,7 @@ func resolveStateKey(b64 string, log luxlog.Logger) []byte {
 // sign builds the state token: base64url(payload) + "." + base64url(HMAC(payload)).
 // The MAC covers the base64url payload STRING exactly as it appears on the wire,
 // so verify recomputes over the same bytes without a decode ambiguity.
-func (s *svc) sign(org, provider, nonce string) (string, error) {
+func sign(s *cloud.Service[state], org, provider, nonce string) (string, error) {
 	raw, err := json.Marshal(statePayload{
 		Org: org, Provider: provider, Nonce: nonce,
 		Exp: time.Now().Add(stateTTL).Unix(),
@@ -88,14 +89,14 @@ func (s *svc) sign(org, provider, nonce string) (string, error) {
 		return "", err
 	}
 	payloadB64 := base64.URLEncoding.EncodeToString(raw)
-	return payloadB64 + "." + base64.URLEncoding.EncodeToString(s.mac(payloadB64)), nil
+	return payloadB64 + "." + base64.URLEncoding.EncodeToString(mac(s, payloadB64)), nil
 }
 
 // verify authenticates a state token for the route's provider and returns the
 // bound payload. Order: constant-time MAC check FIRST (so a tampered payload is
 // rejected before it is ever parsed), then decode, then exp/provider/org checks.
 // Every failure returns errBadState (no distinguishing oracle).
-func (s *svc) verify(token, provider string) (statePayload, error) {
+func verify(s *cloud.Service[state], token, provider string) (statePayload, error) {
 	// Bound the token before any work: a well-formed state is ~160 bytes, so a
 	// multi-KB token is hostile. Rejecting first stops an attacker forcing a large
 	// base64 allocation (the MAC-half decode) on every forged callback.
@@ -111,7 +112,7 @@ func (s *svc) verify(token, provider string) (statePayload, error) {
 	if err != nil {
 		return statePayload{}, errBadState
 	}
-	if !hmac.Equal(gotMAC, s.mac(payloadB64)) {
+	if !hmac.Equal(gotMAC, mac(s, payloadB64)) {
 		return statePayload{}, errBadState
 	}
 	raw, err := base64.URLEncoding.DecodeString(payloadB64)
@@ -135,8 +136,8 @@ func (s *svc) verify(token, provider string) (statePayload, error) {
 }
 
 // mac computes HMAC-SHA256 over the payload string with the signing key.
-func (s *svc) mac(payloadB64 string) []byte {
-	h := hmac.New(sha256.New, s.stateKey)
+func mac(s *cloud.Service[state], payloadB64 string) []byte {
+	h := hmac.New(sha256.New, s.State.stateKey)
 	h.Write([]byte(payloadB64))
 	return h.Sum(nil)
 }
