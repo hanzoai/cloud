@@ -43,7 +43,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
-	luxlog "github.com/luxfi/log"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,40 +90,41 @@ var imageRepoRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]*[a-z0-9]$`)
 
 const userAgent = "hanzo-cloud-paas"
 
-type svc struct {
+// state is paas's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	dyn     dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	initErr string            // why dyn is nil, surfaced by health + ready()
-	log     luxlog.Logger
 }
 
 // Mount wires the /v1/paas/* surface onto app. Every handler gates on
 // c.IsAdmin() first (global-admin only), then reads/patches the operator Service
 // CRs.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("paas.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("paas.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "paas")
+	return cloud.Mount(app, deps, "paas", build, routes)
+}
 
-	s := &svc{log: log}
+// build resolves the in-process k8s dynamic client (fail-closed: when no kubeconfig
+// resolves the subsystem still mounts and every endpoint 503s honestly).
+func build(b cloud.Base) (state, error) {
+	var st state
 	if dyn, err := newDynamic(); err != nil {
-		s.initErr = err.Error()
-		log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
+		st.initErr = err.Error()
+		b.Log.Warn("kubernetes client unavailable; /v1/paas endpoints will fail closed", "err", err)
 	} else {
-		s.dyn = dyn
+		st.dyn = dyn
 	}
+	b.Log.Info("paas control plane mounted",
+		"prefix", "/v1/paas", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
+	return st, nil
+}
 
-	app.Get("/v1/paas/apps", s.guard(s.listApps))
-	app.Get("/v1/paas/apps/:app", s.guard(s.getApp))
-	app.Post("/v1/paas/apps/:app/deploy", s.guard(s.deploy))
-	app.Get("/v1/paas/health", s.health)
-
-	log.Info("paas control plane mounted",
-		"prefix", "/v1/paas", "k8s", s.dyn != nil, "brand", deps.Brand, "env", deps.Env)
-	return nil
+// routes registers the /v1/paas/* surface. Every mutating/observing route is behind
+// the global-admin guard; the health probe is public (real k8s reachability).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/paas/apps", guard(s, cloud.Handle(s, listApps)))
+	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
+	app.Post("/v1/paas/apps/:app/deploy", guard(s, cloud.Handle(s, deploy)))
+	app.Get("/v1/paas/health", cloud.Handle(s, health))
 }
 
 // Registered under the clean id "paas". It serves its OWN /v1/paas/health (a real
@@ -141,7 +141,7 @@ func init() {
 // guard wraps a handler with the global-admin gate. Fail-closed: any request whose
 // validated identity is not a global admin is refused 403 before the handler — no
 // cluster object is read or mutated, matching clients/admin.guard.
-func (s *svc) guard(h zip.Handler) zip.Handler {
+func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
 			return zip.ErrForbidden("global admin required")
@@ -176,11 +176,11 @@ type AppView struct {
 // listApps returns the whole fleet's drift board, ordered deterministically
 // (org, app, env). Optional narrowing filters mirror the platform board:
 // ?env=, ?health=, ?drift=1 (only rows that are actually drifting), ?org=.
-func (s *svc) listApps(c *zip.Ctx) error {
-	if err := s.ready(); err != nil {
+func listApps(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
 		return err
 	}
-	views, err := s.observeFleet(c.Context())
+	views, err := observeFleet(s, c.Context())
 	if err != nil {
 		return err
 	}
@@ -225,8 +225,8 @@ func (s *svc) listApps(c *zip.Ctx) error {
 // getApp returns one service row by CR name. Scans the platform namespaces in
 // env order (main→test→dev) and returns the first match, so the bare app name
 // resolves to production by default.
-func (s *svc) getApp(c *zip.Ctx) error {
-	if err := s.ready(); err != nil {
+func getApp(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
 		return err
 	}
 	name := reqApp(c)
@@ -234,15 +234,15 @@ func (s *svc) getApp(c *zip.Ctx) error {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	for _, ns := range scanOrder() {
-		obj, err := s.dyn.Resource(servicesGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+		obj, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return s.k8sErr("get", err)
+			return k8sErr(s, "get", err)
 		}
 		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], s.runningTagOf(c.Context(), ns, name, repository)))
+		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
 	}
 	return zip.ErrNotFound("service not found in the platform namespaces")
 }
@@ -250,21 +250,21 @@ func (s *svc) getApp(c *zip.Ctx) error {
 // observeFleet lists every Service CR across the scanned namespaces and maps each
 // to an AppView. A namespace that does not exist / is empty is skipped, never
 // fatal (the fleet board must still render the reachable namespaces).
-func (s *svc) observeFleet(ctx context.Context) ([]AppView, error) {
+func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, error) {
 	var views []AppView
 	for _, ns := range scanOrder() {
-		list, err := s.dyn.Resource(servicesGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		list, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return nil, s.k8sErr("list", err)
+			return nil, k8sErr(s, "list", err)
 		}
 		// Running state: one Deployment list per namespace, indexed by name — the
 		// running-tag source (inventory.ts). Best-effort: a Deployment RBAC/list
 		// error leaves runningTag empty (an honest unknown) rather than failing the
 		// whole board, so the declared/health/phase columns still render.
-		running := s.runningTagsIn(ctx, ns)
+		running := runningTagsIn(s, ctx, ns)
 		env := nsEnv[ns]
 		for i := range list.Items {
 			cr := &list.Items[i]
@@ -290,8 +290,8 @@ func (s *svc) observeFleet(ctx context.Context) ([]AppView, error) {
 // rolling restart) — this is the exact contract deploy-executor.ts implemented,
 // now native. Content-Type is JSON merge-patch (application/merge-patch+json),
 // which the operator CRD accepts; the dynamic client's MergePatchType sets it.
-func (s *svc) deploy(c *zip.Ctx) error {
-	if err := s.ready(); err != nil {
+func deploy(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
 		return err
 	}
 	name := reqApp(c)
@@ -325,7 +325,7 @@ func (s *svc) deploy(c *zip.Ctx) error {
 			return zip.ErrBadRequest("'namespace' must be a platform namespace (hanzo|hanzo-testnet|hanzo-devnet)")
 		}
 	} else {
-		resolved, err := s.resolveNamespace(c.Context(), name)
+		resolved, err := resolveNamespace(s, c.Context(), name)
 		if err != nil {
 			return err
 		}
@@ -344,7 +344,7 @@ func (s *svc) deploy(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "encode patch: %v", err)
 	}
 
-	out, err := s.dyn.Resource(servicesGVR).Namespace(ns).
+	out, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).
 		Patch(c.Context(), name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		switch {
@@ -353,11 +353,11 @@ func (s *svc) deploy(c *zip.Ctx) error {
 		case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
 			return zip.Errorf(http.StatusUnprocessableEntity, "patch rejected by kubernetes: %v", err)
 		default:
-			return s.k8sErr("patch", err)
+			return k8sErr(s, "patch", err)
 		}
 	}
 
-	s.log.Info("deployed via Service CR patch",
+	s.Log.Info("deployed via Service CR patch",
 		"app", name, "namespace", ns, "tag", tag, "repository", repo,
 		"actor", c.User(), "requestID", c.RequestID())
 
@@ -365,7 +365,7 @@ func (s *svc) deploy(c *zip.Ctx) error {
 	// repository to keep the CR's existing value) so the running-tag container
 	// match uses the real declared repo.
 	effRepo, _, _ := unstructured.NestedString(out.Object, "spec", "image", "repository")
-	view := observeCR(out, ns, nsEnv[ns], s.runningTagOf(c.Context(), ns, name, effRepo))
+	view := observeCR(out, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, effRepo))
 	return c.JSON(http.StatusOK, map[string]any{
 		"rolledOut": true,
 		"target":    ns + "/" + name,
@@ -377,12 +377,12 @@ func (s *svc) deploy(c *zip.Ctx) error {
 // resolveNamespace finds the platform namespace a Service CR lives in, scanning
 // in env order (main→test→dev) so a bare deploy targets production. Returns a
 // clean 404 when the CR exists in none of them.
-func (s *svc) resolveNamespace(ctx context.Context, name string) (string, error) {
+func resolveNamespace(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
 	for _, ns := range scanOrder() {
-		if _, err := s.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if _, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
 			return ns, nil
 		} else if !apierrors.IsNotFound(err) {
-			return "", s.k8sErr("get", err)
+			return "", k8sErr(s, "get", err)
 		}
 	}
 	return "", zip.ErrNotFound("service " + name + " not found in the platform namespaces")
@@ -394,13 +394,13 @@ func (s *svc) resolveNamespace(ctx context.Context, name string) (string, error)
 // Service CRD is served, and reports the actual state. 200 only when everything is
 // ok; 503 + the real reason otherwise (never status-theater). Not admin-gated —
 // liveness must be probe-able by the platform/operator without a JWT.
-func (s *svc) health(c *zip.Ctx) error {
+func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "paas", "status": "ok"}
-	if s.dyn == nil {
-		res["status"], res["k8s"], res["error"] = "degraded", false, s.initErr
+	if s.State.dyn == nil {
+		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.dyn.Resource(servicesGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
 		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
@@ -410,9 +410,9 @@ func (s *svc) health(c *zip.Ctx) error {
 
 // ── k8s plumbing ────────────────────────────────────────────────────────────
 
-func (s *svc) ready() error {
-	if s.dyn == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", s.initErr)
+func ready(s *cloud.Service[state]) error {
+	if s.State.dyn == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "paas: kubernetes client not configured: %s", s.State.initErr)
 	}
 	return nil
 }
@@ -420,8 +420,8 @@ func (s *svc) ready() error {
 // k8sErr maps a raw API error to an honest gateway-level error. RBAC denials name
 // the missing access so the operator knows exactly what to grant the cloud service
 // account (get/list/patch on services.hanzo.ai). Mirrors ml.k8sErr.
-func (s *svc) k8sErr(op string, err error) error {
-	s.log.Error("k8s op failed", "op", op, "resource", servicesGVR.Resource, "err", err)
+func k8sErr(s *cloud.Service[state], op string, err error) error {
+	s.Log.Error("k8s op failed", "op", op, "resource", servicesGVR.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
 			"%s services: kubernetes RBAC denied (cloud service account needs %s on services.hanzo.ai): %v",
@@ -562,11 +562,11 @@ func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string
 // later matches against the CR's declared repo, in runningTagOf; here we index by
 // name and keep the first container's tag as the default). Best-effort: any list
 // error yields an empty map so the board still renders declared/health/phase.
-func (s *svc) runningTagsIn(ctx context.Context, namespace string) map[string]string {
+func runningTagsIn(s *cloud.Service[state], ctx context.Context, namespace string) map[string]string {
 	out := map[string]string{}
-	list, err := s.dyn.Resource(deploymentsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	list, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		s.log.Warn("list deployments for running tag failed; running tag will be empty",
+		s.Log.Warn("list deployments for running tag failed; running tag will be empty",
 			"namespace", namespace, "err", err)
 		return out
 	}
@@ -581,8 +581,8 @@ func (s *svc) runningTagsIn(ctx context.Context, namespace string) map[string]st
 // whose image repo equals the CR's declared repo (so a sidecar like replicate/otel
 // is never mistaken for the app), falling back to the first container. Mirrors
 // inventory.ts runningTagFromDeployment. Best-effort: any error → "".
-func (s *svc) runningTagOf(ctx context.Context, namespace, name, declaredRepository string) string {
-	d, err := s.dyn.Resource(deploymentsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+func runningTagOf(s *cloud.Service[state], ctx context.Context, namespace, name, declaredRepository string) string {
+	d, err := s.State.dyn.Resource(deploymentsGVR).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
