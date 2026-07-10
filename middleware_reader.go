@@ -11,7 +11,7 @@ import (
 // at the app boundary, so correctness never rides on gateway routing.
 //
 // A Reader opens the KMS store read-only and hydrates audit / durable tasks /
-// per-tenant SQLite from the replication stream into an EPHEMERAL dir. A write
+// per-org SQLite from the replication stream into an EPHEMERAL dir. A write
 // that reached a reader — a mis-route, a rollout race — would persist to that
 // ephemeral dir, answer 2xx, then VANISH on the next restart: silent data loss,
 // and UNAUDITED (the audit chain is writer-only). ONE guard gates ALL stores at

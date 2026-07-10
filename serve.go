@@ -109,7 +109,7 @@ func Serve(enable []string) error {
 	// Read-replica write guard (fail-closed). On a Reader, refuse mutating verbs
 	// at the boundary so a mis-routed write can never silently persist to the
 	// reader's ephemeral store and vanish on restart. ONE place gates EVERY store
-	// (KMS + audit + tasks + per-tenant SQLite), not just KMS's read-only open.
+	// (KMS + audit + tasks + per-org SQLite), not just KMS's read-only open.
 	// No-op on a Writer (the default), so unset CLOUD_ROLE is byte-identical.
 	if cfg.Role.IsReader() {
 		app.Use(ReaderGuard())
@@ -123,7 +123,7 @@ func Serve(enable []string) error {
 	// For every other Host this middleware calls Continue() and the pipeline below
 	// runs unchanged. The slug→{org,bucket,prefix} resolver is the projects store,
 	// injected at its Mount via sites.SetResolver; until then a site host 404s
-	// honestly. Tenant isolation (org+prefix come only from the store keyed by the
+	// honestly. Org isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
 	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains}, deps.Logger).Middleware())
 
@@ -136,7 +136,7 @@ func Serve(enable []string) error {
 	//     the recommended rollout — enabling both would double the ACAO header).
 	//   - EdgeRateLimit caps an ANONYMOUS per-IP flood before the JWKS/validate/
 	//     downstream work it would trigger — the one gap ScopeRateLimit (which keys
-	//     on the validated tenant, below) structurally can't see. Keyed on the
+	//     on the validated org, below) structurally can't see. Keyed on the
 	//     public client IP; in-cluster direct callers (no X-Forwarded-For) are
 	//     exempt, matching the standalone gateway's public-only scope. See
 	//     middleware_edge.go.

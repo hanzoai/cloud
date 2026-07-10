@@ -33,7 +33,7 @@ import (
 //     (Latency.Available=false, nil percentiles) while every ledger metric still
 //     renders — a latency miss never fails the board (the ledger is the core).
 //
-// TENANT ISOLATION: org is the validated tenant (principal.Tenant), bound as a
+// TENANT ISOLATION: org is the validated tenant (principal.Org), bound as a
 // positional ClickHouse parameter (never interpolated), the FIRST predicate on
 // every query. A validated platform SuperAdmin (c.IsAdmin()) runs AllOrgs — the
 // board then aggregates every org with no org predicate — mirroring the o11y RED

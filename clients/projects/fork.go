@@ -25,7 +25,7 @@ type forkReq struct {
 // validation, org scoping, ID minting, and conflict handling are not duplicated.
 // Returns 201 with the created project.
 func (s *svc) fork(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

@@ -45,7 +45,7 @@ type Config struct {
 	// AdminOrg is the IAM org slug whose members are GLOBAL admins (IAM's
 	// IsGlobalAdmin: owner == AdminOrg). The in-binary identity sanitizer grants
 	// admin authority — the c.IsAdmin() that gates /v1/admin/* writes, the
-	// /v1/pricing/sync trigger, and the literal "admin" tenant bucket — ONLY to a
+	// /v1/pricing/sync trigger, and the literal "admin" org bucket — ONLY to a
 	// validated principal from this org, never to a raw header. Env IAM_ADMIN_ORG
 	// (default "admin"), matching the gateway's admin-guard.
 	AdminOrg string
@@ -147,7 +147,7 @@ type Config struct {
 	// SitesApex is the zone whose subdomains are PUBLIC published-site hosts
 	// (`<slug>.<apex>`, default hanzo.app). The site host-router (clients/sites)
 	// serves the root path space for these hosts from OUR S3, ahead of the API
-	// pipeline, so a published site is a public artifact — never a tenant API call.
+	// pipeline, so a published site is a public artifact — never an org API call.
 	// Env CLOUD_SITES_APEX.
 	SitesApex string
 
@@ -411,7 +411,7 @@ func defaultSelfDomains(apex, domain string) []string {
 // pragmatic "registrable domain" without a public-suffix list): api.hanzo.ai →
 // hanzo.ai, hanzo.app → hanzo.app. A host with fewer than two labels is returned
 // unchanged. This is only used to seed the self-domain exclusion set; it never
-// gates tenant isolation (which is the S3-prefix boundary in clients/sites).
+// gates org isolation (which is the S3-prefix boundary in clients/sites).
 func registrableDomain(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if i := strings.IndexByte(host, ':'); i >= 0 {
@@ -451,7 +451,7 @@ func registrableDomain(host string) string {
 // (task #105) because it owns the money path: the cutover keeps the authoritative
 // stores in place (balances/deposits/credits live in the shared Hanzo SQL via
 // SQL_URL, analytics in DATASTORE_URL, blobs in S3) and migrates only the per-org
-// merchant SQLite + tenant base into the cloud data dir, so the in-process app
+// merchant SQLite + org base into the cloud data dir, so the in-process app
 // reads the SAME stores as the standalone pod did — no money is copied or split.
 // The cloud pod carries commerce's backend seam (SQL_URL/DATASTORE_URL/KV_URL/
 // S3_*/SQUARE_*/HUSD_*/IAM_*/COMMERCE_EDGE_AUTH) exactly as the standalone CR did;

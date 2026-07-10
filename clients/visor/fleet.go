@@ -10,7 +10,7 @@
 //
 // Registration is written by the CLI over the public tasks surface
 // (POST /v1/tasks/namespaces/fleet/activities + heartbeat) — this subsystem only
-// READS, and only ever the caller's own tenant (principal.Tenant → org shard).
+// READS, and only ever the caller's own tenant (principal.Org → org shard).
 package visor
 
 import (
@@ -152,7 +152,7 @@ func byoStatus(lastHeartbeat string, now time.Time) string {
 // below; this is the canonical list a fleet-specific view (or the CLI's `status`)
 // reads.
 func (s *svc) listFleetWorkers(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
