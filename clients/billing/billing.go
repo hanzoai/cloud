@@ -179,7 +179,7 @@ func init() {
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
-// {user,userId,customerId} AND clients/console's billingData: pinning ALL of them is what
+// {user,userId,customerId} AND clients/account's billingData: pinning ALL of them is what
 // scopes EVERY endpoint no matter which one it filters on — usage/balance/gpu-eligibility
 // read `user`, portal/payment-methods requires `customerId`. Change all three in lockstep.
 var billingSubjectKeys = []string{"user", "userId", "customerId"}
@@ -335,7 +335,7 @@ func (s *svc) gpuCharge(c *zip.Ctx) error {
 // pinSubjectBody overwrites every commerce billing-subject key on a top-level JSON object
 // with subject (the caller's OWN org), so a POST body can NEVER act on another tenant's
 // wallet. The keys mirror commerce's edge-auth billing-subject set {user,userId,customerId}
-// (kept identical to clients/console's scopedBillingBody), so whichever param commerce reads
+// (kept identical to clients/account's scopedBillingBody), so whichever param commerce reads
 // is the caller's. A non-object/empty body starts fresh with only the pinned subject (commerce
 // then 400s on the missing amount — honest), so the subject can never be omitted. Non-subject
 // fields (amountCents/currency/requestId/tag) are preserved verbatim.

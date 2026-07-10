@@ -19,7 +19,7 @@
 // sourced from KMS by the deployment), never a NEXT_PUBLIC value and never the
 // browser. When they are unset the subsystem is honestly "not configured" (501),
 // exactly as identity.ts's mintConfigured() gate behaved — no fabricated key/org.
-package console
+package account
 
 import (
 	"context"
@@ -140,7 +140,7 @@ type userKey struct {
 }
 
 // getUserKey reads a user's CURRENT `hk-` key AUTHORITATIVELY from IAM (get-user).
-// The session claim can lag a freshly-minted key (it returns '') — so GET /keys
+// The session claim can lag a freshly-minted key (it returns ”) — so GET /keys
 // must read IAM, not the claim (the "key never listed" bug identity.ts documents).
 // `id` is the `<owner>/<name>` composite IAM parses.
 func (c *iamClient) getUserKey(ctx context.Context, id string) (userKey, error) {

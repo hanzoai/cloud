@@ -14,8 +14,8 @@ import (
 // Waitlist connector. Name="waitlist", AuthType="none": it custodies nothing — it
 // is the server-to-server bridge to the Hanzo Base waitlist plugin's
 // POST /v1/waitlist/award seam. The deployment sources WAITLIST_URL and
-// WAITLIST_AWARD_SECRET from KMS into the process env (the same pattern
-// clients/console/waitlist.go uses to read WAITLIST_URL). It fails closed when
+// WAITLIST_AWARD_SECRET from KMS into the process env (the same WAITLIST_URL env
+// convention clients/base's waitlist plugin reads). It fails closed when
 // either is unset — a points award is never silently dropped, and the secret is
 // never a client claim.
 //

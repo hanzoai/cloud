@@ -1,46 +1,53 @@
-// Package console mounts the console's OWN standalone server surface natively in
-// the unified cloud binary at /v1/console/* (HIP-0106). It is the Go port of the
-// two console Next server routes that hold NO backend-proxy role but DO privileged
-// IAM work on the signed-in user's behalf — app/keys/route.ts and
-// app/onboard/route.ts — so console can drop those Node server handlers and be
-// statically exported (task #41, "True 1-binary FE": the console SPA is go:embed'd
-// and every dynamic call terminates at THIS binary's /v1, no separate Node origin).
+// Package account mounts the signed-in caller's OWN account self-service surface
+// natively in the unified cloud binary — the Go port of the console's two NON-proxy
+// Next server routes (app/keys + app/onboard) plus the money/store data bridges the
+// statically-exported console needs (task #41, "True 1-binary FE"). It replaces the
+// retired /v1/console/* namespace: "console" is just the cloud FE name, so there is NO
+// /v1/console API domain — every route lives on its REAL domain.
 //
-// WHY THESE (and not the pure passthrough proxies). console's PURE BFF reverse-
-// proxies — app/cloud, app/ai, app/commerce, whose only server work is minting a
-// user Bearer — vanish in the one-binary model: the SPA calls the canonical /v1/*
-// on its own origin and the already-mounted subsystems answer. The routes ported
-// HERE are the ones that do REAL server work a static SPA cannot: `keys`/`onboard`
-// run privileged IAM logic as the confidential `hanzo-console` client; `waitlist`/
-// `embed-status`/`topup` do server-side verification; and the /v1/billing/* bridge
-// (billing.go) injects the commerce SERVICE token and pins the caller's own billing
-// subject SERVER-SIDE (a passthrough would leak cross-tenant ledgers). Each has no
-// pure-proxy equivalent, so it must be ported for the static export to be complete.
+// WHY THESE ROUTES (and not the pure passthrough proxies). The console's PURE BFF
+// reverse-proxies — app/cloud, app/ai — vanish in the one-binary model: the SPA calls
+// the canonical /v1/* on its own origin and the already-mounted subsystems answer. The
+// routes ported HERE do REAL server work a static SPA cannot: keys/onboard run
+// privileged IAM logic as the confidential `hanzo-console` client; embed-status/topup
+// do server-side verification; and the billing/commerce bridges inject the commerce
+// SERVICE token and pin the caller's own subject SERVER-SIDE (a passthrough would leak
+// cross-tenant ledgers). Each has no pure-proxy equivalent, so it must be ported.
 //
-// SURFACE (every route requires a VALIDATED principal — a gateway-minted, IAM-
-// verified X-User-Id; a client-forged X-Org-Id on the bearer-less path is refused):
+// SURFACE — each route on its REAL domain (every one requires a VALIDATED principal — a
+// gateway-minted, IAM-verified X-User-Id; a client-forged X-Org-Id on the bearer-less
+// path is refused):
 //
-//	GET    /v1/console/keys      — whether the caller has an `hk-` key (+ prefix/mtime); no secret.
-//	POST   /v1/console/keys      — mint/rotate the key; returns { accessKey } ONCE.
-//	DELETE /v1/console/keys      — revoke the key.
-//	POST   /v1/console/onboard   — create the caller's org (+ move them in on first run).
-//	GET    /v1/console/health    — real IAM-configured probe (fail-closed when unwired).
-//	GET    /v1/billing/*         — per-tenant billing read (balance/usage/invoices/…),
-//	POST   /v1/billing/*           forwarded to commerce with the service token, SCOPED
-//	                              to the validated caller's own subject (billing.go).
-//	GET    /v1/commerce/*        — per-tenant STORE (products/orders/customers/…),
-//	…      /v1/commerce/*          forwarded to commerce's bare /v1/<kind> with the
-//	                              service token, SCOPED to the validated caller's own
-//	                              org; full CRUD, store-heads only (commerce.go).
+//	GET    /v1/iam/keys              — whether the caller has an `hk-` key (+ prefix/mtime); no secret.
+//	POST   /v1/iam/keys              — mint/rotate the key; returns { accessKey } ONCE.
+//	DELETE /v1/iam/keys              — revoke the key.
+//	POST   /v1/iam/onboard           — create the caller's org (+ move them in on first run).
+//	GET    /v1/csrf                  — mint the anti-CSRF token the SPA echoes on money writes (csrf.go).
+//	GET    /v1/embed-status          — brand-app embed entitlement + reachability probe (embed.go).
+//	POST   /v1/commerce/topup/wallet — HUSD on-chain verify → commerce credit (topup.go).
+//	GET    /v1/billing/*             — per-tenant billing read, SCOPED to the validated caller (billing.go).
+//	…      /v1/commerce/*            — per-tenant STORE CRUD, SCOPED to the validated caller's org (commerce.go).
+//
+// TWO SUBSYSTEM REGISTRATIONS FROM ONE PACKAGE. A route-ordering constraint forces the
+// split (Fiber matches by registration order — the earliest-mounted route wins):
+//   - `account` (order 48) mounts the SPECIFIC self-service routes. keys/onboard MUST
+//     win over clients/iam's /v1/iam/* WILDCARD (order 50), and topup MUST win over the
+//     commerce embed (order 100) + the /v1/commerce/* bridge — so they mount EARLY.
+//   - `account-bridge` (order 122) mounts the CATCH-ALL data bridges. /v1/billing/* must
+//     sit AFTER clients/billing's specific routes (order 121) and /v1/commerce/* after
+//     the commerce embed (order 100) — so they mount LATE.
+//
+// Both share one svc type + the process-wide CSRF key (csrf.go), so a token minted at
+// /v1/csrf verifies on the /v1/billing|commerce writes.
 //
 // TENANCY. The caller is resolved from the VALIDATED identity headers ONLY
-// (principal.Validated / c.Org() / c.User()), the same trust boundary every
-// mutating subsystem uses. The IAM id targeted is DERIVED as `<owner>/<name>` from
-// those validated claims — never taken from the request body/query — so a caller
-// can only ever mint/revoke their OWN key and onboard THEMSELVES; there is no path
-// to name a third-party subject. When the confidential client is unwired the surface
-// is honestly "not configured" (501), never a fabricated key or org.
-package console
+// (principal.Validated / c.Org() / c.User()), the same trust boundary every mutating
+// subsystem uses. The IAM id targeted is DERIVED as `<owner>/<name>` from those
+// validated claims — never taken from the request body/query — so a caller can only ever
+// mint/revoke their OWN key and onboard THEMSELVES; there is no path to name a
+// third-party subject. When the confidential client is unwired the surface is honestly
+// "not configured" (501), never a fabricated key or org.
+package account
 
 import (
 	"encoding/base64"
@@ -82,58 +89,86 @@ type svc struct {
 // brute-force / enumeration when a caller reaches cloud directly (gateway bypassed).
 const keysWriteRatePerMin = 30
 
-// Mount wires the /v1/console surface onto app per HIP-0106.
-func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("console.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("console.Mount: nil deps.Logger")
-	}
+// newSvc builds the shared service value. Both subsystem Mounts construct one; the CSRF
+// key is the process-wide singleton (csrf.go) so account (order 48) and account-bridge
+// (order 122) verify each other's tokens.
+func newSvc(deps cloud.Deps) *svc {
 	s := &svc{
 		iam:   newIAMClient(),
-		log:   deps.Logger.New("subsystem", "console"),
+		log:   deps.Logger.New("subsystem", "account"),
 		brand: deps.Brand,
 	}
-	s.csrfKey = loadCSRFKey(s.log)
+	s.csrfKey = sharedCSRFKey(s.log)
 	s.writesRL = newRateLimiter(keysWriteRatePerMin)
-	s.routes(app)
-	s.log.Info("console standalone surface mounted",
-		"prefix", "/v1/console", "iam", s.iam.base, "configured", s.iam.configured(), "brand", deps.Brand)
+	return s
+}
+
+// MountAccount wires the SPECIFIC self-service routes (order 48) — the ones that must
+// win over the IAM /v1/iam/* wildcard (50) and the commerce embed (100).
+func MountAccount(app *zip.App, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("account.MountAccount: nil zip.App")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("account.MountAccount: nil deps.Logger")
+	}
+	s := newSvc(deps)
+	s.routesAccount(app)
+	s.log.Info("account self-service surface mounted",
+		"iam", s.iam.base, "configured", s.iam.configured(), "brand", deps.Brand)
 	return nil
 }
 
-// routes is the ONE place the surface is wired — shared by Mount (real IAM) and the
-// test (an httptest fake IAM injected via s.iam.base).
-func (s *svc) routes(app *zip.App) {
-	// GET /v1/console/csrf issues the anti-CSRF token the embedded SPA echoes as
-	// X-CSRF-Token on every money write (csrf.go). Safe (read-only), same-origin.
-	app.Get("/v1/console/csrf", s.issueCSRFToken)
+// MountBridge wires the CATCH-ALL data bridges (order 122) — the /v1/billing/* and
+// /v1/commerce/* proxies that must sit AFTER clients/billing (121) + the commerce embed.
+func MountBridge(app *zip.App, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("account.MountBridge: nil zip.App")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("account.MountBridge: nil deps.Logger")
+	}
+	s := newSvc(deps)
+	s.routesBridge(app)
+	s.log.Info("account data bridges mounted", "prefixes", "/v1/billing/*,/v1/commerce/*", "brand", deps.Brand)
+	return nil
+}
+
+// routesAccount wires the specific self-service routes (order 48).
+func (s *svc) routesAccount(app *zip.App) {
+	// GET /v1/csrf issues the anti-CSRF token the embedded SPA echoes as X-CSRF-Token on
+	// every money write (csrf.go). Safe (read-only), same-origin.
+	app.Get("/v1/csrf", s.issueCSRFToken)
+	// The caller's own `hk-` Cloud API key — IAM self-service. These SPECIFIC routes MUST
+	// register before clients/iam's /v1/iam/* wildcard (order 50 > 48) so Fiber's
+	// first-match scan hits the native handler, not the wildcard (TestIAMKeysBeatsWildcard).
 	// Reads are open; every state-changing WRITE is wrapped: requireCSRF blocks a
-	// cross-site ambient-cookie forgery, and (for the abuse-sensitive key/topup ops)
-	// rateLimit caps per-IP frequency now that cloud is reachable off-gateway.
-	app.Get("/v1/console/keys", s.getKey)
-	app.Post("/v1/console/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.mintKey)))
-	app.Delete("/v1/console/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.revokeKey)))
-	app.Post("/v1/console/onboard", s.requireCSRF(s.onboard))
-	// The remaining standalone console server routes, ported native (task #41):
-	// waitlist join (session-bound email), embed-status (entitlement + reachability
-	// probe), and the HUSD wallet top-up (on-chain verify → commerce credit).
-	app.Post("/v1/console/waitlist", s.waitlistJoin)
-	app.Get("/v1/console/embed-status", s.embedStatus)
-	app.Post("/v1/console/topup/wallet", s.rateLimit(s.writesRL, s.requireCSRF(s.walletTopup)))
-	app.Get("/v1/console/health", s.health)
-	// Per-tenant billing DATA bridge (task #41 BFF catch-all sweep) — the canonical
-	// /v1/billing/* the statically-exported console calls, forwarded to commerce with
-	// the admin service token and SCOPED to the validated caller's own subject
-	// (billing.go). GET+POST only, mirroring app/billing/v1/[...path]/route.ts.
+	// cross-site ambient-cookie forgery, and rateLimit caps per-IP frequency (cloud is
+	// reachable off-gateway).
+	app.Get("/v1/iam/keys", s.getKey)
+	app.Post("/v1/iam/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.mintKey)))
+	app.Delete("/v1/iam/keys", s.rateLimit(s.writesRL, s.requireCSRF(s.revokeKey)))
+	app.Post("/v1/iam/onboard", s.requireCSRF(s.onboard))
+	// Console module embed-entitlement + reachability probe (embed.go).
+	app.Get("/v1/embed-status", s.embedStatus)
+	// HUSD wallet top-up (on-chain verify → commerce credit). A SPECIFIC commerce route
+	// that must beat the /v1/commerce/* bridge (122) AND the commerce embed (100) — so it
+	// mounts here at 48, ahead of both.
+	app.Post("/v1/commerce/topup/wallet", s.rateLimit(s.writesRL, s.requireCSRF(s.walletTopup)))
+}
+
+// routesBridge wires the per-tenant catch-all data bridges (order 122).
+func (s *svc) routesBridge(app *zip.App) {
+	// Per-tenant billing DATA bridge — the canonical /v1/billing/* the statically-exported
+	// console calls, forwarded to commerce with the admin service token and SCOPED to the
+	// validated caller's own subject (billing.go). Registered AFTER clients/billing's
+	// specific routes (121 < 122) so those win and this catches the rest. GET+POST only.
 	app.Get("/v1/billing/*", s.billingData)
 	app.Post("/v1/billing/*", s.requireCSRF(s.billingData))
-	// Per-tenant STORE DATA bridge (task #41 BFF catch-all sweep) — the canonical
-	// /v1/commerce/* the statically-exported console calls, forwarded to commerce's
-	// bare store surface /v1/<kind> with the admin service token and SCOPED to the
-	// validated caller's own org (commerce.go). Full CRUD, mirroring the five method
-	// exports of app/commerce/[...path]/route.ts.
+	// Per-tenant STORE DATA bridge — the canonical /v1/commerce/* the console calls,
+	// forwarded to commerce's bare store surface /v1/<kind> with the admin service token
+	// and SCOPED to the validated caller's own org (commerce.go). Registered AFTER the
+	// commerce embed (100 < 122) so the embed wins when enabled. Full CRUD.
 	app.Get("/v1/commerce/*", s.commerceData)
 	app.Post("/v1/commerce/*", s.requireCSRF(s.commerceData))
 	app.Put("/v1/commerce/*", s.requireCSRF(s.commerceData))
@@ -141,14 +176,14 @@ func (s *svc) routes(app *zip.App) {
 	app.Delete("/v1/commerce/*", s.requireCSRF(s.commerceData))
 }
 
-// init registers the subsystem under the clean id "console" with cloud.HealthOwner:
-// it serves its OWN fail-closed probe at /v1/console/health, and cloud.HealthOwner
-// makes serve.go skip the generic GET /v1/<name>/health so the always-ok route
-// never shadows it (same flag as kms/paas/s3). Order 122 binds the /v1/console
-// family well before the AI /v1/* catch-all (150); it shares no path prefix with
-// another subsystem, so the order only needs to precede 150.
+// init registers the two subsystems. The ordering constraint forces the split (see the
+// package doc): the SPECIFIC self-service routes (account, 48) must win over the IAM (50)
+// + commerce (100) wildcards, while the CATCH-ALL data bridges (account-bridge, 122) must
+// sit AFTER clients/billing (121) + the commerce embed. Neither owns its own health probe
+// — the generic /v1/<name>/health liveness route covers both.
 func init() {
-	cloud.Register("console", 122, cloud.Typed(Mount), cloud.HealthOwner)
+	cloud.Register("account", 48, cloud.Typed(MountAccount))
+	cloud.Register("account-bridge", 122, cloud.Typed(MountBridge))
 }
 
 // ── caller resolution (the tenancy boundary) ─────────────────────────────────
@@ -440,22 +475,6 @@ func (s *svc) buildOrg(c *zip.Ctx, slug, displayName string, personal bool, sour
 	org.Languages = src.Languages
 	org.DefaultAvatar = src.DefaultAvatar
 	return org
-}
-
-// ── health ───────────────────────────────────────────────────────────────────
-
-// health is a REAL probe: 200 when the confidential IAM client is wired; 503 with
-// the honest reason otherwise (the console still runs — its own in-browser IAM SDK
-// handles login — but the key/onboard surface is inert until the client is
-// provisioned). Not admin-gated: liveness must be probe-able without a JWT.
-func (s *svc) health(c *zip.Ctx) error {
-	res := map[string]any{"service": "console", "status": "ok", "iam": s.iam.configured()}
-	if !s.iam.configured() {
-		res["status"] = "degraded"
-		res["error"] = "IAM confidential client (IAM_MINT_CLIENT_ID/SECRET) not configured"
-		return c.JSON(http.StatusServiceUnavailable, res)
-	}
-	return c.JSON(http.StatusOK, res)
 }
 
 // ── shared helpers ────────────────────────────────────────────────────────────
