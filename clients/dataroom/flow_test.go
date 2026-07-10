@@ -282,3 +282,44 @@ func TestDataroomFullFlow(t *testing.T) {
 		t.Fatalf("other org must see zero datarooms, got %v", m["datarooms"])
 	}
 }
+
+// TestDataroomDenyListEnforced proves M6: a link's deny_list is ENFORCED and WINS
+// over the allow_list — an address admitted by the allow list is still refused if
+// it is on the deny list.
+func TestDataroomDenyListEnforced(t *testing.T) {
+	app, _ := mountFlowApp(t)
+	const org = "acme"
+
+	code, m := jsonReq(t, app, http.MethodPost, "/v1/dataroom/datarooms", org, map[string]any{"name": "DR"})
+	roomID := str(m, "dataroom", "id")
+	if code != 200 || roomID == "" {
+		t.Fatalf("create room: %d %v", code, m)
+	}
+	// Allow the whole @acme.com domain, but deny one specific address on it.
+	code, m = jsonReq(t, app, http.MethodPost, "/v1/dataroom/links", org, map[string]any{
+		"dataroomId":     roomID,
+		"emailProtected": true,
+		"allowList":      []string{"@acme.com"},
+		"denyList":       []string{"banned@acme.com"},
+	})
+	linkID := str(m, "link", "id")
+	if code != 200 || linkID == "" {
+		t.Fatalf("create link: %d %v", code, m)
+	}
+	// The deny list is surfaced back to the admin (write path is now readable).
+	if dl, _ := m["link"].(map[string]any)["denyList"].([]any); len(dl) != 1 {
+		t.Fatalf("denyList not surfaced on the link: %v", m["link"])
+	}
+
+	// An allowed, non-denied address authenticates.
+	if code, _ = jsonReq(t, app, http.MethodPost, "/v1/dataroom/view/"+linkID+"/authenticate", "",
+		map[string]any{"email": "ok@acme.com"}); code != 200 {
+		t.Fatalf("allowed viewer want 200, got %d", code)
+	}
+	// The denied address is on the allow list (by domain) yet MUST be refused —
+	// deny wins over allow.
+	if code, _ = jsonReq(t, app, http.MethodPost, "/v1/dataroom/view/"+linkID+"/authenticate", "",
+		map[string]any{"email": "banned@acme.com"}); code != http.StatusForbidden {
+		t.Fatalf("denied viewer want 403 (deny wins), got %d", code)
+	}
+}
