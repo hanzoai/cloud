@@ -206,16 +206,8 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params 
 	return c.Bytes(resp.Status, resp.Body)
 }
 
-func init() {
-	// Order 145 — a per-org product control plane, mounted before hanzoai/ai's
-	// /v1/* catch-all (150). NOT staged — mounts under the mount-all default.
-	// cloud.HealthOwner: sign serves its OWN /v1/sign/health in Mount, so the
-	// generic liveness route never shadows it.
-	cloud.RegisterWithShutdown("sign", 145, cloud.Typed(Mount), shutdown, cloud.HealthOwner)
-}
-
 // shutdown closes the per-tenant stores + the goja engine. Idempotent.
-func shutdown(context.Context) error {
+func Shutdown(context.Context) error {
 	if mounted == nil || mounted.State.host == nil {
 		return nil
 	}

@@ -126,14 +126,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/referrals/sweep", cloud.Handle(s, adminSweep))
 }
 
-func init() {
-	// Order 149: a free slot just before the AI /v1/* catch-all (150). No ordering
-	// dependency (it owns its own store + fans out to commerce over HTTP); its
-	// routes are all specific (/v1/referrals*, /v1/admin/referrals*) so they bind
-	// ahead of the catch-all regardless.
-	cloud.Register("referrals", 149, cloud.Typed(Mount))
-}
-
 // ── customer surface ─────────────────────────────────────────────────────────
 
 // myReferrals answers GET /v1/referrals for the validated caller: their stable

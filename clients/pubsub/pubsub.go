@@ -85,16 +85,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // shutdown stops the embedded server on graceful cloud shutdown. Idempotent.
-func shutdown(_ context.Context) error {
+func Shutdown(_ context.Context) error {
 	if srv != nil {
 		srv.Shutdown()
 		srv = nil
 	}
 	return nil
-}
-
-func init() {
-	cloud.RegisterWithShutdown("pubsub", order, cloud.Typed(Mount), shutdown)
 }
 
 func envBool(k string) bool {

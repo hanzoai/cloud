@@ -100,10 +100,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 }
 
-func init() {
-	cloud.Register("analytics", 132, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 // tenant resolves the org — the tenant-isolation KEY — for a request, and refuses
