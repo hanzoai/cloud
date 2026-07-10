@@ -16,9 +16,10 @@ import (
 	"time"
 
 	fiber "github.com/gofiber/fiber/v3"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountWithStore builds a zip app with admin's audit routes wired to a real audit
@@ -35,9 +36,9 @@ func mountWithStore(t *testing.T) (*audit.Recorder, func(method, path string, hd
 	t.Cleanup(func() { _ = rec.Close() })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &svc{adminOrg: "admin", auditStore: rec}
-	app.Get("/v1/admin/audit", s.guard(s.audit))
-	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
+	s := &cloud.Service[state]{State: state{adminOrg: "admin", auditStore: rec}}
+	app.Get("/v1/admin/audit", guard(s, auditRecords))
+	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
 	fa := app.Fiber()
 
 	do := func(method, p string, hdr map[string]string) (*http.Response, []byte) {
@@ -210,8 +211,8 @@ func TestAdminAudit_DeniedWithoutGlobalAdmin(t *testing.T) {
 // verify endpoint reports "not configured" rather than panicking.
 func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &svc{adminOrg: "admin"} // no auditStore
-	app.Get("/v1/admin/audit/verify", s.guard(s.auditVerify))
+	s := &cloud.Service[state]{State: state{adminOrg: "admin"}} // no auditStore
+	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
 	req := httptest.NewRequest("GET", "/v1/admin/audit/verify", nil)
 	for k, v := range globalAdmin {
 		req.Header.Set(k, v)

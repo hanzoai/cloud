@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud"
 )
 
 // scopeIAM is a fake IAM serving the org directory + single-org + users reads. It RECORDS
@@ -177,12 +179,12 @@ func TestScope_PlatformRouteDeniesOrgAdminButScopedAdmits(t *testing.T) {
 // parent-org field yet, so the subtree is the singleton. When IAM adds the parent link,
 // this test changes (and descendants becomes the BFS) — nothing else does.
 func TestScope_DescendantsSingletonToday(t *testing.T) {
-	s := &svc{adminOrg: "admin"}
-	got := s.descendants("maxpower")
+	s := &cloud.Service[state]{State: state{adminOrg: "admin"}}
+	got := descendants(s, "maxpower")
 	if len(got) != 1 || got[0] != "maxpower" {
 		t.Fatalf("descendants(maxpower) = %v, want [maxpower] (IAM has no parent-org field yet)", got)
 	}
-	if s.descendants("") != nil {
+	if descendants(s, "") != nil {
 		t.Fatalf("descendants(\"\") must be nil")
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -145,7 +146,7 @@ func (ca custActivity) activeSince(cut time.Time) bool {
 
 // ── handler ──────────────────────────────────────────────────────────────────
 
-func (s *svc) analytics(c *zip.Ctx) error {
+func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	now := time.Now().UTC()
@@ -157,13 +158,13 @@ func (s *svc) analytics(c *zip.Ctx) error {
 	// Scoped fan-in: a SuperAdmin gets every org (all-orgs SaaS analytics); an org
 	// admin gets ONLY their own subtree (their org's usage/active/spend), never
 	// another tenant's — the ONE tenant-scope predicate (scope.go).
-	orgs, err := s.scopedOrgs(ctx, c, cr)
+	orgs, err := scopedOrgs(s, ctx, c, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
 	sources = append(sources, srcOf("iam", nil, len(orgs), now.Format(time.RFC3339)))
 
-	acts, ledgerOK := s.fleetActivity(ctx, orgs)
+	acts, ledgerOK := fleetActivity(s, ctx, orgs)
 	ledgerRows := 0
 	for _, a := range acts {
 		ledgerRows += len(a.Usage)
@@ -175,7 +176,7 @@ func (s *svc) analytics(c *zip.Ctx) error {
 	sources = append(sources, srcOf("commerce-ledger", ledgerErr, ledgerRows, now.Format(time.RFC3339)))
 
 	// MRR from subscriptions (point-in-time), fanned out like the money reads.
-	mrr := s.fleetMRR(ctx, orgs)
+	mrr := fleetMRR(s, ctx, orgs)
 
 	data := computeAnalytics(analyticsInput{
 		acts:     acts,
@@ -511,7 +512,7 @@ func activeWithin(acts []custActivity, cut time.Time) int {
 // false if ANY org's ledger read failed (the caller marks the source degraded and
 // flags the ledger-backed metrics as not-fully-computed). Fanned out concurrently
 // with a bound, like the customer list.
-func (s *svc) fleetActivity(ctx context.Context, orgs []iamOrg) ([]custActivity, bool) {
+func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) ([]custActivity, bool) {
 	acts := make([]custActivity, len(orgs))
 	oks := make([]bool, len(orgs))
 	sem := make(chan struct{}, maxCustomerConcurrency)
@@ -527,7 +528,7 @@ func (s *svc) fleetActivity(ctx context.Context, orgs []iamOrg) ([]custActivity,
 				ca.Created = t.UTC()
 				ca.HasCreated = true
 			}
-			rows, err := s.commerce.transactions(ctx, o.Name, orgSubject(o.Name), 2000)
+			rows, err := s.State.commerce.transactions(ctx, o.Name, orgSubject(o.Name), 2000)
 			oks[i] = err == nil
 			for _, r := range rows {
 				if strings.ToLower(r.Type) != "withdraw" {
@@ -559,7 +560,7 @@ func (s *svc) fleetActivity(ctx context.Context, orgs []iamOrg) ([]custActivity,
 }
 
 // fleetMRR sums each org's active-subscription MRR concurrently.
-func (s *svc) fleetMRR(ctx context.Context, orgs []iamOrg) int64 {
+func fleetMRR(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) int64 {
 	vals := make([]int64, len(orgs))
 	sem := make(chan struct{}, maxCustomerConcurrency)
 	var wg sync.WaitGroup
@@ -569,7 +570,7 @@ func (s *svc) fleetMRR(ctx context.Context, orgs []iamOrg) int64 {
 		go func(i int, o iamOrg) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if sum, err := s.commerce.subscriptionSummary(ctx, o.Name, orgSubject(o.Name)); err == nil {
+			if sum, err := s.State.commerce.subscriptionSummary(ctx, o.Name, orgSubject(o.Name)); err == nil {
 				vals[i] = sum.MRR
 			}
 		}(i, o)
