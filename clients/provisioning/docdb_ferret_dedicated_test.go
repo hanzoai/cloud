@@ -114,7 +114,7 @@ func TestDedicated_DocdbIsFerretOnSQL(t *testing.T) {
 	}
 
 	// Persisted as a dedicated docdb "provisioning" row.
-	r, err := s.store.Get(context.Background(), "acme", "docdb", "events")
+	r, err := s.State.store.Get(context.Background(), "acme", "docdb", "events")
 	if err != nil {
 		t.Fatalf("get row: %v", err)
 	}
