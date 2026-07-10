@@ -463,7 +463,7 @@ func registrableDomain(host string) string {
 // from staging so the mount-all default serves them from the one binary — retiring
 // their standalone Postgres/Next pods. iam and ingress STAY staged (the IAM embed
 // corrupts its own bootstrap under mount-all; iam is served by the standalone pod).
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
