@@ -2,13 +2,18 @@ package code
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
+
+	"github.com/hanzoai/cloud"
 )
 
-func newStore(t *testing.T, name string) *Store {
+func newStore(t *testing.T, org string) *Store {
 	t.Helper()
-	st, err := openStore(filepath.Join(t.TempDir(), name))
+	db, err := cloud.TenantDB(t.TempDir(), org, "", "code")
+	if err != nil {
+		t.Fatalf("TenantDB: %v", err)
+	}
+	st, err := openStore(db)
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
@@ -53,12 +58,20 @@ func TestStoreLexicalAndSymbol(t *testing.T) {
 // code. This is the tenant boundary — one SQLite file per org.
 func TestStoreIsolation(t *testing.T) {
 	dir := t.TempDir()
-	a, err := openStore(filepath.Join(dir, "a.db"))
+	adb, err := cloud.TenantDB(dir, "orgA", "", "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := openStore(adb)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = a.Close() }()
-	b, err := openStore(filepath.Join(dir, "b.db"))
+	bdb, err := cloud.TenantDB(dir, "orgB", "", "code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := openStore(bdb)
 	if err != nil {
 		t.Fatal(err)
 	}
