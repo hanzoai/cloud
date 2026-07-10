@@ -60,7 +60,14 @@ const maxScopeRowsPerOrg = 200
 // different org resolves to a different namespace AND a different subject). Empty
 // only when no org is resolvable (unauthenticated).
 func billingSubject(c *gin.Context) string {
-	return strings.TrimSpace(middleware.GetOrganization(c).Name)
+	// GetOrganizationOK, never MustGet: the S2S metering path (ScopeRules /
+	// authorize probes) can reach a spend-alert handler with no resolvable org,
+	// and a MustGet-panic there surfaces as a recovered 500 on the money path.
+	// No org → empty subject; every caller already treats "" as "nothing to read".
+	if org, ok := middleware.GetOrganizationOK(c); ok {
+		return strings.TrimSpace(org.Name)
+	}
+	return ""
 }
 
 // ownsAlert reports whether the caller may mutate this row: its owner (the org)
@@ -112,7 +119,14 @@ func spendAlertView(db *datastore.Datastore, test bool, a *spendalert.SpendAlert
 //
 //	GET /v1/billing/spend-alerts
 func ListSpendAlerts(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		// No resolvable org (e.g. an S2S metering ScopeRules probe whose X-Org-Id
+		// does not resolve to a commerce org): no org means no per-scope caps, so
+		// return empty rather than MustGet-panic → a recovered 500 on the gate.
+		c.JSON(200, []gin.H{})
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	test := org.TestMode()
 
