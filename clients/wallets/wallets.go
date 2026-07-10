@@ -46,28 +46,30 @@ const (
 	envSafeJWTRef     = "CLOUD_WALLETS_MPC_JWT_SECRET_REF" // KMS ref of the ring's MPC_JWT_SECRET (HS256); NEVER a plaintext value
 )
 
-type svc struct {
+// state is wallets's own data; shared deps live in the embedded cloud.Base,
+// reached as s.Log.
+type state struct {
 	store          *store
 	custody        map[Kind]Custody
 	defaultCustody Kind
-	log            luxlog.Logger
 	audit          *audit.Recorder // best-effort; nil disables it
 }
 
 // mounted is the process singleton the finance seam resolves. nil when the
 // subsystem is not linked/enabled, which makes WalletForLedgerAccount a no-op.
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires the wallets surface onto app per HIP-0106.
+// Mount wires the wallets surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted, the finance seam singleton) so it constructs
+// the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("wallets.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("wallets.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "wallets")
+	log := deps.Logger.New("subsystem", "wallets")
 	if deps.DataDir == "" {
 		return fmt.Errorf("wallets.Mount: empty DataDir")
 	}
@@ -85,29 +87,31 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		def = KindKMS
 	}
 
-	s := &svc{
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "wallets"), State: state{
 		store:          st,
 		custody:        custody,
 		defaultCustody: def,
-		log:            log,
 		audit:          deps.Audit,
-	}
+	}}
 	mounted = s
-
-	// Static /v1/wallets/accounts routes register BEFORE the /v1/wallets/:id
-	// param route so the static segment wins the match.
-	app.Post("/v1/wallets/accounts", s.createAccount)
-	app.Get("/v1/wallets/accounts", s.listAccounts)
-	app.Post("/v1/wallets", s.createWallet)
-	app.Get("/v1/wallets", s.listWallets)
-	app.Get("/v1/wallets/:id", s.getWallet)
-	app.Post("/v1/wallets/:id/keys", s.rotateKeys)
-	app.Post("/v1/wallets/:id/sign", s.sign)
-	app.Post("/v1/wallets/:id/safe-tx", s.proposeSafeTx)
+	routes(app, s)
 
 	_, mpcOK := custody[KindMPC]
 	log.Info("wallets mounted", "brand", deps.Brand, "defaultCustody", def, "mpcConfigured", mpcOK)
 	return nil
+}
+
+// routes registers the wallets surface. Static /v1/wallets/accounts routes
+// register BEFORE the /v1/wallets/:id param route so the static segment wins.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/wallets/accounts", cloud.Handle(s, createAccount))
+	app.Get("/v1/wallets/accounts", cloud.Handle(s, listAccounts))
+	app.Post("/v1/wallets", cloud.Handle(s, createWallet))
+	app.Get("/v1/wallets", cloud.Handle(s, listWallets))
+	app.Get("/v1/wallets/:id", cloud.Handle(s, getWallet))
+	app.Post("/v1/wallets/:id/keys", cloud.Handle(s, rotateKeys))
+	app.Post("/v1/wallets/:id/sign", cloud.Handle(s, sign))
+	app.Post("/v1/wallets/:id/safe-tx", cloud.Handle(s, proposeSafeTx))
 }
 
 // buildCustody assembles the available custody backends. KMS is always present
@@ -184,8 +188,8 @@ func loadSafeJWTSecret(deps cloud.Deps, log luxlog.Logger) []byte {
 // custodyFor resolves the backend for a kind. Missing mpc/treasury ⇒ fail closed
 // (ErrMPCNotConfigured, 503-mappable); an unrecognized kind ⇒ ErrUnknownCustody
 // (400-mappable). This is the config-selects-backend resolver.
-func (s *svc) custodyFor(kind Kind) (Custody, error) {
-	if c, ok := s.custody[kind]; ok {
+func custodyFor(s *cloud.Service[state], kind Kind) (Custody, error) {
+	if c, ok := s.State.custody[kind]; ok {
 		return c, nil
 	}
 	switch kind {
@@ -206,7 +210,7 @@ func init() {
 
 // ── account handlers ─────────────────────────────────────────────────────────
 
-func (s *svc) createAccount(c *zip.Ctx) error {
+func createAccount(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
@@ -222,19 +226,19 @@ func (s *svc) createAccount(c *zip.Ctx) error {
 		return zip.ErrBadRequest("name is required")
 	}
 	a := &Account{ID: newID("acct"), Org: org, Name: name, CreatedAt: time.Now().Unix()}
-	if err := s.store.createAccount(c.Context(), a); err != nil {
+	if err := s.State.store.createAccount(c.Context(), a); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "create account: %v", err)
 	}
-	s.emitAudit(c.Context(), org, c.User(), "wallets.account.create", a.ID, map[string]any{"name": name})
+	emitAudit(s, c.Context(), org, c.User(), "wallets.account.create", a.ID, map[string]any{"name": name})
 	return c.JSON(http.StatusOK, a)
 }
 
-func (s *svc) listAccounts(c *zip.Ctx) error {
+func listAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	accounts, err := s.store.listAccounts(c.Context(), org)
+	accounts, err := s.State.store.listAccounts(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list accounts: %v", err)
 	}
@@ -243,7 +247,7 @@ func (s *svc) listAccounts(c *zip.Ctx) error {
 
 // ── wallet handlers ──────────────────────────────────────────────────────────
 
-func (s *svc) createWallet(c *zip.Ctx) error {
+func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
@@ -262,7 +266,7 @@ func (s *svc) createWallet(c *zip.Ctx) error {
 	if accountID == "" {
 		return zip.ErrBadRequest("accountId is required")
 	}
-	if _, found, err := s.store.getAccount(c.Context(), org, accountID); err != nil {
+	if _, found, err := s.State.store.getAccount(c.Context(), org, accountID); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get account: %v", err)
 	} else if !found {
 		return zip.ErrNotFound("account not found")
@@ -270,9 +274,9 @@ func (s *svc) createWallet(c *zip.Ctx) error {
 
 	kind := Kind(strings.TrimSpace(body.Custody))
 	if kind == "" {
-		kind = s.defaultCustody
+		kind = s.State.defaultCustody
 	}
-	cust, err := s.custodyFor(kind)
+	cust, err := custodyFor(s, kind)
 	if err != nil {
 		return custodyHTTPError(err)
 	}
@@ -299,32 +303,32 @@ func (s *svc) createWallet(c *zip.Ctx) error {
 		return custodyHTTPError(err)
 	}
 	w.Address = address
-	if err := s.store.createWallet(c.Context(), w); err != nil {
+	if err := s.State.store.createWallet(c.Context(), w); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "create wallet: %v", err)
 	}
-	s.emitAudit(c.Context(), org, c.User(), "wallets.wallet.create", w.ID,
+	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.create", w.ID,
 		map[string]any{"custody": string(kind), "tier": string(tier), "chain": w.Chain, "address": address})
 	return c.JSON(http.StatusOK, w)
 }
 
-func (s *svc) listWallets(c *zip.Ctx) error {
+func listWallets(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	wallets, err := s.store.listWallets(c.Context(), org)
+	wallets, err := s.State.store.listWallets(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list wallets: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"wallets": wallets})
 }
 
-func (s *svc) getWallet(c *zip.Ctx) error {
+func getWallet(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	w, found, err := s.store.getWallet(c.Context(), org, idParam(c))
+	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
@@ -334,19 +338,19 @@ func (s *svc) getWallet(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, w)
 }
 
-func (s *svc) rotateKeys(c *zip.Ctx) error {
+func rotateKeys(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	w, found, err := s.store.getWallet(c.Context(), org, idParam(c))
+	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
 	if !found {
 		return zip.ErrNotFound("wallet not found")
 	}
-	cust, err := s.custodyFor(w.Custody)
+	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
 		return custodyHTTPError(err)
 	}
@@ -355,19 +359,19 @@ func (s *svc) rotateKeys(c *zip.Ctx) error {
 		return custodyHTTPError(err)
 	}
 	w.Address = address
-	if err := s.store.updateWalletKey(c.Context(), org, w.ID, w.Address, w.KeyRef); err != nil {
+	if err := s.State.store.updateWalletKey(c.Context(), org, w.ID, w.Address, w.KeyRef); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist rotation: %v", err)
 	}
-	s.emitAudit(c.Context(), org, c.User(), "wallets.wallet.rotate", w.ID, map[string]any{"address": address})
+	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.rotate", w.ID, map[string]any{"address": address})
 	return c.JSON(http.StatusOK, w)
 }
 
-func (s *svc) sign(c *zip.Ctx) error {
+func sign(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	w, found, err := s.store.getWallet(c.Context(), org, idParam(c))
+	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
@@ -385,7 +389,7 @@ func (s *svc) sign(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrBadRequest(err.Error())
 	}
-	cust, err := s.custodyFor(w.Custody)
+	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
 		return custodyHTTPError(err)
 	}
@@ -393,7 +397,7 @@ func (s *svc) sign(c *zip.Ctx) error {
 	if err != nil {
 		return custodyHTTPError(err)
 	}
-	s.emitAudit(c.Context(), org, c.User(), "wallets.wallet.sign", w.ID,
+	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.sign", w.ID,
 		map[string]any{"digest": "0x" + hex.EncodeToString(digest)})
 	return c.JSON(http.StatusOK, map[string]any{
 		"walletId":  w.ID,
@@ -408,19 +412,19 @@ func (s *svc) sign(c *zip.Ctx) error {
 // implement safeProposer (only safeCustody does); any other custody ⇒ 400. The
 // ring computes the EIP-712 Safe-tx hash (bound to the Safe contract + chainId)
 // and returns it with the threshold (r,s) its MPC produced — the owner approval.
-func (s *svc) proposeSafeTx(c *zip.Ctx) error {
+func proposeSafeTx(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	w, found, err := s.store.getWallet(c.Context(), org, idParam(c))
+	w, found, err := s.State.store.getWallet(c.Context(), org, idParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get wallet: %v", err)
 	}
 	if !found {
 		return zip.ErrNotFound("wallet not found")
 	}
-	cust, err := s.custodyFor(w.Custody)
+	cust, err := custodyFor(s, w.Custody)
 	if err != nil {
 		return custodyHTTPError(err)
 	}
@@ -445,7 +449,7 @@ func (s *svc) proposeSafeTx(c *zip.Ctx) error {
 	if err != nil {
 		return custodyHTTPError(err)
 	}
-	s.emitAudit(c.Context(), org, c.User(), "wallets.wallet.safe_tx", w.ID,
+	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.safe_tx", w.ID,
 		map[string]any{"to": body.To, "chainId": body.ChainID, "safeTxHash": res.SafeTxHash})
 	return c.JSON(http.StatusOK, map[string]any{
 		"walletId":    w.ID,
@@ -466,7 +470,7 @@ func WalletForLedgerAccount(ctx context.Context, org, ledgerAccount string) (add
 	if s == nil || strings.TrimSpace(org) == "" || strings.TrimSpace(ledgerAccount) == "" {
 		return "", false
 	}
-	w, found, err := s.store.walletForFinanceAccount(ctx, org, ledgerAccount)
+	w, found, err := s.State.store.walletForFinanceAccount(ctx, org, ledgerAccount)
 	if err != nil || !found {
 		return "", false
 	}
@@ -533,8 +537,8 @@ func newID(prefix string) string {
 
 // emitAudit records a wallet action in cloud's tamper-evident trail. Best-effort;
 // a nil store is a no-op. Never records key material — only ids and names.
-func (s *svc) emitAudit(ctx context.Context, org, sub, action, resourceID string, after map[string]any) {
-	if s.audit == nil {
+func emitAudit(s *cloud.Service[state], ctx context.Context, org, sub, action, resourceID string, after map[string]any) {
+	if s.State.audit == nil {
 		return
 	}
 	if sub == "" {
@@ -548,8 +552,8 @@ func (s *svc) emitAudit(ctx context.Context, org, sub, action, resourceID string
 		Outcome:  audit.Outcome{Result: "success", Status: 200},
 		After:    audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.audit.Append(ctx, rec); err != nil {
-		s.log.Error("wallets: audit emit failed", "action", action, "err", err)
+	if _, err := s.State.audit.Append(ctx, rec); err != nil {
+		s.Log.Error("wallets: audit emit failed", "action", action, "err", err)
 	}
 }
 
@@ -563,10 +567,10 @@ func mustJSON(v any) json.RawMessage {
 
 // Shutdown closes the store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
