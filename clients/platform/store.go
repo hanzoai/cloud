@@ -58,6 +58,8 @@ type Application struct {
 	Dockerfile    string
 	Port          int
 	Replicas      int
+	MinScale      int // container-serverless autoscaling floor (0 ⇒ no HPA, fixed Replicas). Set by /v1/run.
+	MaxScale      int // container-serverless autoscaling ceiling (0 ⇒ no HPA). Set by /v1/run.
 	EnvJSON       string
 	DomainsJSON   string
 	Status        string
@@ -187,6 +189,8 @@ CREATE TABLE IF NOT EXISTS platform_apps (
   dockerfile     TEXT NOT NULL DEFAULT '',
   port           INTEGER NOT NULL DEFAULT 8080,
   replicas       INTEGER NOT NULL DEFAULT 1,
+  min_scale      INTEGER NOT NULL DEFAULT 0,
+  max_scale      INTEGER NOT NULL DEFAULT 0,
   env_json       TEXT NOT NULL DEFAULT '[]',
   domains_json   TEXT NOT NULL DEFAULT '[]',
   status         TEXT NOT NULL DEFAULT 'draft',
@@ -244,6 +248,17 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Forward-only additive columns for the /v1/run autoscaling bounds. Idempotent:
+	// a fresh DB already has them (CREATE TABLE above) so ADD COLUMN reports a
+	// duplicate, which is the success case here — never a schema-fork.
+	for _, alter := range []string{
+		`ALTER TABLE platform_apps ADD COLUMN min_scale INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE platform_apps ADD COLUMN max_scale INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("migrate scale: %w", err)
+		}
 	}
 	return nil
 }
@@ -381,24 +396,24 @@ func (s *Store) DeleteProject(ctx context.Context, org, slug string) (Project, [
 
 // ── applications ─────────────────────────────────────────────────────────────
 
-const appCols = `id,org,project_id,slug,name,description,environment,source,repo_url,repo_branch,repo_provider,image_repo,image_tag,build_type,dockerfile,port,replicas,env_json,domains_json,status,namespace,current_deploy,created_at,updated_at`
+const appCols = `id,org,project_id,slug,name,description,environment,source,repo_url,repo_branch,repo_provider,image_repo,image_tag,build_type,dockerfile,port,replicas,env_json,domains_json,status,namespace,current_deploy,created_at,updated_at,min_scale,max_scale`
 
 func scanApp(sc interface{ Scan(...any) error }) (Application, error) {
 	var a Application
 	err := sc.Scan(&a.ID, &a.Org, &a.ProjectID, &a.Slug, &a.Name, &a.Description, &a.Environment,
 		&a.Source, &a.RepoURL, &a.RepoBranch, &a.RepoProvider, &a.ImageRepo, &a.ImageTag,
 		&a.BuildType, &a.Dockerfile, &a.Port, &a.Replicas, &a.EnvJSON, &a.DomainsJSON,
-		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt)
+		&a.Status, &a.Namespace, &a.CurrentDeploy, &a.CreatedAt, &a.UpdatedAt, &a.MinScale, &a.MaxScale)
 	return a, err
 }
 
 func (s *Store) CreateApplication(ctx context.Context, a Application) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_apps (`+appCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO platform_apps (`+appCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.Org, a.ProjectID, a.Slug, a.Name, a.Description, a.Environment,
 		a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider, a.ImageRepo, a.ImageTag,
 		a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.EnvJSON, a.DomainsJSON,
-		a.Status, a.Namespace, a.CurrentDeploy, a.CreatedAt, a.UpdatedAt)
+		a.Status, a.Namespace, a.CurrentDeploy, a.CreatedAt, a.UpdatedAt, a.MinScale, a.MaxScale)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -500,10 +515,10 @@ func listAppsTx(ctx context.Context, tx *sql.Tx, org, projectID string) ([]Appli
 // are immutable and form the tenancy/identity key.
 func (s *Store) UpdateApplication(ctx context.Context, a Application) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE platform_apps SET name=?,description=?,environment=?,source=?,repo_url=?,repo_branch=?,repo_provider=?,image_repo=?,image_tag=?,build_type=?,dockerfile=?,port=?,replicas=?,env_json=?,domains_json=?,status=?,namespace=?,current_deploy=?,updated_at=?
+		`UPDATE platform_apps SET name=?,description=?,environment=?,source=?,repo_url=?,repo_branch=?,repo_provider=?,image_repo=?,image_tag=?,build_type=?,dockerfile=?,port=?,replicas=?,min_scale=?,max_scale=?,env_json=?,domains_json=?,status=?,namespace=?,current_deploy=?,updated_at=?
 		 WHERE org=? AND id=?`,
 		a.Name, a.Description, a.Environment, a.Source, a.RepoURL, a.RepoBranch, a.RepoProvider,
-		a.ImageRepo, a.ImageTag, a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.EnvJSON, a.DomainsJSON,
+		a.ImageRepo, a.ImageTag, a.BuildType, a.Dockerfile, a.Port, a.Replicas, a.MinScale, a.MaxScale, a.EnvJSON, a.DomainsJSON,
 		a.Status, a.Namespace, a.CurrentDeploy, a.UpdatedAt, a.Org, a.ID)
 	if err != nil {
 		return fmt.Errorf("update app: %w", err)
