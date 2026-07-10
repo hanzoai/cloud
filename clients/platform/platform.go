@@ -190,6 +190,11 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/pipelines", s.listPipelines)
 	app.Get("/v1/builds", s.listBuilds)
 	app.Get("/v1/releases", s.listReleases)
+
+	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
+	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
+	// git-push-to-deploy hook, and cloud's own self-release all POST here.
+	app.Post("/v1/runner", s.runnerBuild)
 }
 
 // Registered as id "platform" with cloud.HealthOwner: it serves its OWN
