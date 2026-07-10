@@ -220,7 +220,7 @@ func rawDispatch(c *zip.Ctx, route string, params map[string]string) (int, json.
 	// Public catalog: only a VALIDATED principal selects its org overlay; an
 	// anonymous or client-forged X-Org-Id falls back to the public "hanzo" default.
 	tenant := "hanzo"
-	if org, ok := principal.Tenant(c); ok {
+	if org, ok := principal.Org(c); ok {
 		tenant = org
 	}
 	resp, err := host.Dispatch(c.Context(), goja.Request{Route: route, Params: params, Tenant: tenant})
@@ -234,7 +234,7 @@ func rawDispatch(c *zip.Ctx, route string, params map[string]string) (int, json.
 // a VALIDATED principal; an anonymous or client-forged X-Org-Id yields "" (the
 // public, non-org view) so it cannot peek another org's enablement overlay.
 func trustedOrg(c *zip.Ctx) string {
-	if org, ok := principal.Tenant(c); ok {
+	if org, ok := principal.Org(c); ok {
 		return org
 	}
 	return ""

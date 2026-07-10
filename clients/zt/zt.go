@@ -24,7 +24,7 @@
 // Service Mesh to ZT edge services, and Edge to ZT edge-routers — the three ZT
 // concepts the three console pages need.
 //
-// TENANT ISOLATION. The org (principal.Tenant, the validated IAM owner) selects the
+// TENANT ISOLATION. The org (principal.Org, the validated IAM owner) selects the
 // "org-<org>" role attribute; the client lists the controller's resources and this
 // subsystem filters to that role, so a caller can only ever read their OWN tenant's
 // ZT footprint. The org is taken from the validated identity, never a client field.
@@ -84,7 +84,7 @@ func init() {
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
-// validated IAM owner claim (principal.Tenant). It selects the "org-<org>" role
+// validated IAM owner claim (principal.Org). It selects the "org-<org>" role
 // attribute this client filters ZT resources by, so a caller can never read another
 // tenant's networking. gate() also enforces the fail-closed 503 when ZT is
 // unconfigured, in ONE place, before any handler touches the controller.
@@ -96,7 +96,7 @@ func (s *svc) gate(c *zip.Ctx) (string, error) {
 		// "not available yet" state.
 		return "", zip.Errorf(http.StatusServiceUnavailable, "networking is not configured on this deployment")
 	}
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return "", zip.ErrForbidden("X-Org-Id required")
 	}

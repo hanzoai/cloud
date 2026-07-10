@@ -40,7 +40,7 @@ func signaturePNG(t *testing.T) string {
 }
 
 // mountApp builds a zip.App with the sign subsystem mounted and NO identity
-// middleware — so X-Org-Id/X-User-Id headers are trusted verbatim (principal.Tenant
+// middleware — so X-Org-Id/X-User-Id headers are trusted verbatim (principal.Org
 // gates on c.User()). This is the same trusted-header harness the other Base-backed
 // subsystems (captable) use for their end-to-end wire proofs.
 func mountApp(t *testing.T) *zip.App {

@@ -1,6 +1,6 @@
 // Package functions mounts the Hanzo Cloud /v1/functions surface: a per-org
 // serverless function registry. Every function belongs to exactly one org (the
-// gateway-minted X-Org-Id, HIP-0026); tenant isolation is the org column,
+// gateway-minted X-Org-Id, HIP-0026); org isolation is the org column,
 // enforced on every query. The registry stores a function's runtime, source,
 // resource limits, and the NAMES of the secrets it mounts — never a secret
 // value (values live in KMS by reference, the Secret-Manager principle).
@@ -20,7 +20,7 @@
 //	POST   /v1/functions/:name/invoke       run the function {input} -> Invocation
 //
 // Invoke delegates to the sandboxed code executor (CODE_EXEC_UPSTREAM) — this
-// binary NEVER runs tenant code in-process. When the sandbox is not configured
+// binary NEVER runs org code in-process. When the sandbox is not configured
 // invoke fails closed (503) and fabricates nothing. Every metric the Overview
 // shows is DERIVED from real invocation rows; there is no invented rollup.
 package functions
@@ -66,7 +66,7 @@ const (
 const invokeFeeEnvPrefix = "CLOUD_FUNCTION_FEE_CENTS"
 
 type svc struct {
-	stores *cloud.TenantStore[*Store] // per-org functions DBs, opened once each
+	stores *cloud.OrgStore[*Store] // per-org functions DBs, opened once each
 	exec   *execClient
 	log    luxlog.Logger
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
@@ -178,7 +178,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("functions.Mount: empty DataDir")
 	}
 	s := &svc{
-		stores: cloud.NewTenantStore(deps.DataDir, "functions", openStore),
+		stores: cloud.NewOrgStore(deps.DataDir, "functions", openStore),
 		exec:   newExecClient(),
 		log:    log,
 		bill:   cloud.NewResourceMeter(deps, "functions"),
@@ -223,7 +223,7 @@ type createReq struct {
 }
 
 func (s *svc) create(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -285,7 +285,7 @@ func (s *svc) create(c *zip.Ctx) error {
 }
 
 func (s *svc) list(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -310,7 +310,7 @@ func (s *svc) list(c *zip.Ctx) error {
 }
 
 func (s *svc) get(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -341,7 +341,7 @@ func (s *svc) get(c *zip.Ctx) error {
 }
 
 func (s *svc) del(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -360,7 +360,7 @@ func (s *svc) del(c *zip.Ctx) error {
 }
 
 func (s *svc) invocations(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -383,7 +383,7 @@ func (s *svc) invocations(c *zip.Ctx) error {
 }
 
 func (s *svc) logs(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -407,7 +407,7 @@ func (s *svc) logs(c *zip.Ctx) error {
 }
 
 func (s *svc) triggers(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -429,7 +429,7 @@ func (s *svc) triggers(c *zip.Ctx) error {
 func (s *svc) deployments(c *zip.Ctx) error {
 	// Each function's current record IS its live deployment; return them as the
 	// deployment inventory (console normalizes this as a function list).
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -456,7 +456,7 @@ type secretView struct {
 
 func (s *svc) secrets(c *zip.Ctx) error {
 	// NAMES only — values are NEVER read or returned (Secret-Manager principle).
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -498,16 +498,16 @@ func toInvViews(invs []Invocation) []invocationView {
 
 func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 
-// tenant resolves the org — the tenant isolation KEY. It uses c.Org() EXACTLY
+// org resolves the org — the org isolation KEY. It uses c.Org() EXACTLY
 // as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
 // never lowercased/stripped/truncated. Normalizing would collapse distinct
-// owners into one bucket — a cross-tenant break (Red HIGH-1). Reject only empty
+// owners into one bucket — a cross-org break (Red HIGH-1). Reject only empty
 // or pathologically long. No magic "admin" bucket.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // sanitizeNs normalizes the function NAMESPACE — a cosmetic grouping/display
-// field the caller supplies, NOT the tenant isolation key (that is the org).
-// Lossy normalization here is safe: the namespace never gates cross-tenant
+// field the caller supplies, NOT the org isolation key (that is the org).
+// Lossy normalization here is safe: the namespace never gates cross-org
 // access (every query is already scoped by the exact org column).
 func sanitizeNs(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))

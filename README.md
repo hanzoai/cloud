@@ -15,7 +15,7 @@ docker run -p 8080:8080 ghcr.io/hanzoai/cloud:latest
 
 ## What this is
 
-`hanzoai/cloud` is one Go binary that mounts every Hanzo subsystem (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, ...) into a single multi-tenant process. Same artifact serves `api.hanzo.ai`, `api.osage.cloud`, `api.lux.cloud`, `api.zoo.cloud`, and every white-label reseller. Brand, enabled subsystems, and tenant scope are deployment configuration.
+`hanzoai/cloud` is one Go binary that mounts every Hanzo subsystem (iam, kms, base, gateway, ai, commerce, vfs, mq, dns, amqp, mcp, o11y, ...) into a single multi-org process. Same artifact serves `api.hanzo.ai`, `api.osage.cloud`, `api.lux.cloud`, `api.zoo.cloud`, and every white-label reseller. Brand, enabled subsystems, and org scope are deployment configuration.
 
 ## `hanzo` — cloud control CLI
 
@@ -61,7 +61,7 @@ Implements:
 ## Architecture
 
 ```
-                 api.{tenant}.{brand}
+                 api.{org}.{brand}
                           |
                    hanzoai/cloud (one Go binary)
                           |
@@ -69,7 +69,7 @@ Implements:
    |    iam   |   base   |   kms    |    ai    | gateway  | ...
    |  Mount() |  Mount() |  Mount() |  Mount() |  Mount() |
    +----------+----------+----------+----------+----------+
-   per-tenant SQLite (HIP-0302)   |   Hanzo IAM JWKS (HIP-0026)
+   per-org SQLite (HIP-0302)   |   Hanzo IAM JWKS (HIP-0026)
    replicate -> S3 (HIP-0107)     |   ZAP inter-subsystem RPC
 ```
 
@@ -88,7 +88,7 @@ Per [HIP-0106](https://github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-unified-h
 ## Subsystems mounted
 
 - `iam` — identity & access
-- `base` — per-tenant SQLite + extension runtimes (per HIP-0105)
+- `base` — per-org SQLite + extension runtimes (per HIP-0105)
 - `kms` — secrets
 - `commerce` — checkout, billing, pricing, invoicing (light router; NOT in PCI-DSS scope)
 - `ai` — LLM control plane / RAG / model hub / MCP management (was hanzoai/cloud pre-rename)

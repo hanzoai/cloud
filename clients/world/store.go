@@ -21,7 +21,7 @@ import (
 //
 // Tenant isolation is the (org, project) COMPOSITE PRIMARY KEY and a mandatory
 // `WHERE org=? AND project=?` on EVERY statement. The org value is the validated
-// owner claim (principal.Tenant, HIP-0026) — never normalized (casing/trimming
+// owner claim (principal.Org, HIP-0026) — never normalized (casing/trimming
 // collapses distinct owners into one bucket) and never a client-supplied header.
 // The project is principal.Project — the org sub-scope — bound the same way.
 

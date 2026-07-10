@@ -177,7 +177,7 @@ func init() {
 // deploys, accrued/pending/paid, payouts). For an APPROVED author it ALSO
 // opportunistically runs the accrual sweep, so the dashboard is self-updating.
 func (s *svc) myAuthors(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view your author program")
 	}
@@ -250,7 +250,7 @@ type connectRequest struct {
 // verified) when present, else the supplied login (verified later per-repo) — and
 // mints a stable verify code for the file method.
 func (s *svc) connect(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to connect GitHub")
 	}
@@ -313,7 +313,7 @@ type verifyRepoRequest struct {
 // hanzo.json on the default branch carrying the author's verify code. The author must
 // have connected first.
 func (s *svc) verifyRepo(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to verify a repo")
 	}
@@ -405,7 +405,7 @@ type recordDeployRequest struct {
 // can fire this unconditionally. A self-deploy is recorded (provenance) but excluded
 // from accrual by the sweep.
 func (s *svc) recordDeploy(c *zip.Ctx) error {
-	deployingOrg, ok := principal.Tenant(c)
+	deployingOrg, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to record a deploy")
 	}

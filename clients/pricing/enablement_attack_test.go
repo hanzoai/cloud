@@ -11,7 +11,7 @@ package pricing
 // while leaving X-User-Id empty (see middleware_identity.go PHASE-1 RESIDUAL and
 // clients/principal.Validated).
 //
-// The read path resolves its tenant through principal.Tenant (via trustedOrg),
+// The read path resolves its tenant through principal.Org (via trustedOrg),
 // which refuses that forge. The WRITE path (opt-in/opt-out) keys on the raw
 // c.Org() and only checks org != "", so it does NOT.
 
