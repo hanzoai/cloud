@@ -56,6 +56,13 @@ type Site struct {
 	Bucket string
 	Prefix string
 	Status string
+	// CrossOriginIsolation, when true, makes the site server emit the cross-origin
+	// isolation headers (COOP/COEP on documents, CORP on assets) so a multithreaded
+	// Unity/Unreal/Godot WebGL build can use SharedArrayBuffer. It is OPT-IN per
+	// site — isolation blocks embedding third-party cross-origin content, so it is
+	// NEVER global. Server-owned like every other field: the resolver sets it (from
+	// the project's declared WebGL game-engine framework), never the request.
+	CrossOriginIsolation bool
 }
 
 // Resolver maps a validated subdomain slug to its authoritative Site. It is the
@@ -327,7 +334,7 @@ func (s *Server) streamSite(c *zip.Ctx, cli *minio.Client, site Site) error {
 		if ct == "" {
 			ct = "application/octet-stream"
 		}
-		return s.streamObject(c, obj, info.Size, ct, cc, http.StatusOK)
+		return s.streamObject(c, site, obj, info.Size, ct, cc, http.StatusOK)
 	}
 	return s.notFound(c, cli, site)
 }
@@ -374,10 +381,15 @@ func (s *Server) open(ctx context.Context, cli *minio.Client, bucket, key string
 // Content-Length is set from info.Size (SendStream's size arg). fasthttp CLOSES the
 // object after the body is written (it implements io.Closer) — so we must NOT Close
 // it here (that would truncate the stream); the response writer owns the close.
-func (s *Server) streamObject(c *zip.Ctx, obj *minio.Object, size int64, contentType, cacheControl string, status int) error {
+func (s *Server) streamObject(c *zip.Ctx, site Site, obj *minio.Object, size int64, contentType, cacheControl string, status int) error {
 	c.SetHeader("Content-Type", contentType)
 	if cacheControl != "" {
 		c.SetHeader("Cache-Control", cacheControl)
+	}
+	// Opt-in cross-origin isolation, decided by object role from the content type
+	// just set (documents vs subresources). No-op unless the site enabled it.
+	for _, h := range crossOriginIsolation(site.CrossOriginIsolation, contentType) {
+		c.SetHeader(h[0], h[1])
 	}
 	c.Status(status)
 	return c.Fiber().SendStream(obj, int(size))
@@ -389,7 +401,7 @@ func (s *Server) streamObject(c *zip.Ctx, obj *minio.Object, size int64, content
 func (s *Server) notFound(c *zip.Ctx, cli *minio.Client, site Site) error {
 	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
 	if ok {
-		return s.streamObject(c, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
+		return s.streamObject(c, site, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
 	}
 	return s.errorPage(c, http.StatusNotFound, "page not found")
 }
@@ -461,6 +473,33 @@ func gameAssetType(ext string) string {
 	default:
 		return ""
 	}
+}
+
+// crossOriginIsolation is the ONE cross-origin-isolation policy by object role,
+// mirroring contentType/CacheControlFor: a pure function keyed off the object's
+// content type. It returns nil (no headers) unless the site opted in — isolation
+// blocks a page from embedding third-party cross-origin content, so it is NEVER
+// global, only for sites the resolver marked (a declared WebGL game engine).
+//
+//   - The DOCUMENT that spawns the workers (text/html) carries
+//     Cross-Origin-Opener-Policy: same-origin + Cross-Origin-Embedder-Policy:
+//     require-corp — the exact pair a browser requires before it grants the page a
+//     crossOriginIsolated context (the gate that re-enables SharedArrayBuffer).
+//   - every OTHER object is a subresource (.js/.wasm/.data/...) that a require-corp
+//     document loads only if it is same-origin, so it carries
+//     Cross-Origin-Resource-Policy: same-origin. Assets are same-origin here (one
+//     S3 prefix, one host), so this makes them loadable rather than blocked.
+func crossOriginIsolation(enabled bool, contentType string) [][2]string {
+	if !enabled {
+		return nil
+	}
+	if strings.HasPrefix(contentType, "text/html") {
+		return [][2]string{
+			{"Cross-Origin-Opener-Policy", "same-origin"},
+			{"Cross-Origin-Embedder-Policy", "require-corp"},
+		}
+	}
+	return [][2]string{{"Cross-Origin-Resource-Policy", "same-origin"}}
 }
 
 // CacheControlFor is the ONE canonical cache policy by asset class, used both when
