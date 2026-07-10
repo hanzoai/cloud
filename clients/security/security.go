@@ -186,7 +186,7 @@ func (s *svc) listRules(c *zip.Ctx) error {
 // redacted findings, meters one unit, emits an audit event, and returns the
 // scan summary. The raw content is scanned in memory and never stored.
 func (s *svc) submitScan(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -264,7 +264,7 @@ func (s *svc) submitScan(c *zip.Ctx) error {
 }
 
 func (s *svc) listScans(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -281,7 +281,7 @@ func (s *svc) listScans(c *zip.Ctx) error {
 }
 
 func (s *svc) getScan(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -306,7 +306,7 @@ func (s *svc) getScan(c *zip.Ctx) error {
 }
 
 func (s *svc) listFindings(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -327,7 +327,7 @@ func (s *svc) listFindings(c *zip.Ctx) error {
 }
 
 func (s *svc) getFinding(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

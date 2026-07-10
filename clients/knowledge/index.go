@@ -245,7 +245,7 @@ type hit struct {
 }
 
 // searchReq is a parsed, org-scoped retrieval query. org is set by the handler from
-// principal.Tenant — NEVER from a client field — so a caller can only ever search
+// principal.Org — NEVER from a client field — so a caller can only ever search
 // its OWN knowledge.
 type searchReq struct {
 	org      string
