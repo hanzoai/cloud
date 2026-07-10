@@ -1,0 +1,59 @@
+# Hanzo Commerce - Prometheus Configuration
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'commerce'
+    environment: '${ENV:-staging}'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files (optional)
+# rule_files:
+#   - "rules/*.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Commerce API metrics
+  - job_name: 'commerce'
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - 'commerce:8001'
+          - 'commerce-blue:8001'
+          - 'commerce-green:8001'
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: 'commerce-(\w+):.*'
+        target_label: deployment_color
+        replacement: '${1}'
+
+  # Redis metrics (via redis_exporter if deployed)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # ClickHouse metrics
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+
+  # Nginx metrics (via nginx_exporter if deployed)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+
+  # Node exporter (host metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

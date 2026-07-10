@@ -14,7 +14,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )

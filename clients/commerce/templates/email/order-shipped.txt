@@ -1,0 +1,33 @@
+
+
+ Your order has shipped!
+
+ View this email in your browser ({{archive}})
+
+ 
+** YOUR ORDER HAS SHIPPED!
+------------------------------------------------------------
+
+Hooray! This email is to confirm that we've shipped your order!.\
+
+Do not hesitate to reach out to us with any questions regarding your order at {{customer_service_email}}.
+
+ 
+
+============================================================
+
+ ** (http://www.twitter.com/)
+
+ ** (http://www.facebook.com)
+
+ ** (http://mailchimp.com)
+
+ _Copyright © {{current_year}} {{list:company}}, All rights reserved._
+
+OUR MAILING ADDRESS IS:
+{{listaddresshtml}}
+
+Want to change how you receive these emails?
+You can ** update your preferences ({{updateprofile}})
+
+

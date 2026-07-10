@@ -1,0 +1,167 @@
+# Hanzo Commerce - DigitalOcean App Platform Specification
+# Deploy with: doctl apps create --spec deploy/digitalocean/app-spec.yml
+#
+# This configuration deploys Commerce to DigitalOcean App Platform with:
+# - Managed ClickHouse (via external component)
+# - Managed Redis
+# - Auto-scaling
+# - Zero-downtime deployments
+
+name: hanzo-commerce
+region: nyc
+
+# ==============================================================================
+# SERVICES
+# ==============================================================================
+
+services:
+  # Main Commerce API
+  - name: commerce
+    # Build from Dockerfile
+    dockerfile_path: deploy/Dockerfile
+    source_dir: /
+
+    # Git source
+    github:
+      repo: hanzoai/commerce
+      branch: main
+      deploy_on_push: true
+
+    # Instance configuration
+    instance_count: 2
+    instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM
+
+    # HTTP configuration
+    http_port: 8001
+
+    # Health check
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 15
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    # Auto-scaling
+    autoscaling:
+      min_instance_count: 2
+      max_instance_count: 10
+      metrics:
+        - type: CPU
+          percent: 75
+
+    # Routes
+    routes:
+      - path: /
+
+    # Environment variables
+    envs:
+      - key: ENV
+        value: production
+      - key: COMMERCE_DEV
+        value: "false"
+      - key: PORT
+        value: "8001"
+      # Secrets from App Platform
+      - key: COMMERCE_SECRET
+        type: SECRET
+        scope: RUN_TIME
+      - key: STRIPE_SECRET_KEY
+        type: SECRET
+        scope: RUN_TIME
+      - key: STRIPE_WEBHOOK_SECRET
+        type: SECRET
+        scope: RUN_TIME
+      - key: SENDGRID_API_KEY
+        type: SECRET
+        scope: RUN_TIME
+      - key: IAM_API_KEY
+        type: SECRET
+        scope: RUN_TIME
+      # Redis connection (from managed database)
+      - key: REDIS_URL
+        scope: RUN_TIME
+        value: ${redis.REDIS_URL}
+      # ClickHouse connection (external)
+      - key: CLICKHOUSE_URL
+        type: SECRET
+        scope: RUN_TIME
+      - key: COMMERCE_DATASTORE
+        type: SECRET
+        scope: RUN_TIME
+
+    # Logging
+    log_destinations:
+      - name: commerce-logs
+        papertrail:
+          endpoint: logs.papertrailapp.com:12345  # Update with your endpoint
+
+# ==============================================================================
+# DATABASES
+# ==============================================================================
+
+databases:
+  # Managed Redis
+  - name: redis
+    engine: REDIS
+    version: "7"
+    size: db-s-1vcpu-1gb
+    num_nodes: 1
+
+# ==============================================================================
+# STATIC SITES (Optional - for documentation)
+# ==============================================================================
+
+# Uncomment if you want to serve docs
+# static_sites:
+#   - name: docs
+#     github:
+#       repo: hanzoai/commerce
+#       branch: main
+#       deploy_on_push: true
+#     source_dir: /docs
+#     routes:
+#       - path: /docs
+
+# ==============================================================================
+# JOBS (Optional - for scheduled tasks)
+# ==============================================================================
+
+# Uncomment for scheduled jobs
+# jobs:
+#   - name: analytics-aggregation
+#     dockerfile_path: deploy/Dockerfile
+#     source_dir: /
+#     github:
+#       repo: hanzoai/commerce
+#       branch: main
+#     instance_count: 1
+#     instance_size_slug: basic-xxs
+#     kind: PRE_DEPLOY
+#     run_command: /app/commerce migrate
+
+# ==============================================================================
+# ALERTS
+# ==============================================================================
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+  - rule: CPU_UTILIZATION
+    value: 90
+    window: FIVE_MINUTES
+  - rule: MEM_UTILIZATION
+    value: 90
+    window: FIVE_MINUTES
+
+# ==============================================================================
+# DOMAINS
+# ==============================================================================
+
+# Uncomment and configure for custom domains
+# domains:
+#   - domain: commerce.hanzo.ai
+#     type: PRIMARY
+#   - domain: api.commerce.hanzo.ai
+#     type: ALIAS
