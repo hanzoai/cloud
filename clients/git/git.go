@@ -39,7 +39,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -69,11 +68,17 @@ const defaultBranchName = "main"
 const maxBody = 256 << 20 // 256 MiB
 
 type svc struct {
-	store   *Store
+	stores  *cloud.TenantStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
 	log     luxlog.Logger
 	domain  string // for cloneUrl construction
 }
+
+// storeFor resolves the caller's org-scoped repo-metadata store, opening the
+// per-org file ({DataDir}/orgs/{orgSlug}/git.db) once via the shared cache. git
+// is org-scoped (not project-scoped) so /v1/git/usage stays a single org-wide
+// rollup across every project sub-scope.
+func (s *svc) storeFor(org string) (*Store, error) { return s.stores.For(org, "") }
 
 // mounted is the active service so Shutdown can release the store.
 var mounted *svc
@@ -132,19 +137,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("git.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("git.Mount: data dir: %w", err)
-	}
-	store, err := openStore(filepath.Join(deps.DataDir, "git.db"))
-	if err != nil {
-		return fmt.Errorf("git.Mount: open store: %w", err)
-	}
 	st, err := newStorage(filepath.Join(deps.DataDir, "git"))
 	if err != nil {
-		_ = store.Close()
 		return fmt.Errorf("git.Mount: open storage: %w", err)
 	}
-	s := &svc{store: store, storage: st, log: log, domain: deps.Domain}
+	s := &svc{
+		stores:  cloud.NewTenantStore(deps.DataDir, "git", openStore),
+		storage: st,
+		log:     log,
+		domain:  deps.Domain,
+	}
 	mounted = s
 
 	// Control plane (JSON). Static /repos + /usage register before the
@@ -182,6 +184,10 @@ func (s *svc) create(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	var body createReq
 	if err := c.Bind(&body); err != nil {
 		return err
@@ -214,7 +220,7 @@ func (s *svc) create(c *zip.Ctx) error {
 		Description: strings.TrimSpace(body.Description), DefaultBranch: defaultBranchName,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.Create(c.Context(), r); err != nil {
+	if err := store.Create(c.Context(), r); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("repo name already exists in this scope")
 		}
@@ -222,7 +228,7 @@ func (s *svc) create(c *zip.Ctx) error {
 	}
 	if err := s.storage.initBare(org, project, name, defaultBranchName); err != nil {
 		// Roll back the metadata row so a failed init never leaves a phantom repo.
-		_, _ = s.store.Delete(c.Context(), org, project, name)
+		_, _ = store.Delete(c.Context(), org, project, name)
 		return zip.Errorf(http.StatusInternalServerError, "init repo: %v", err)
 	}
 	// Record initial storage size (billing hook: an empty bare repo is a few KiB).
@@ -235,7 +241,11 @@ func (s *svc) list(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org, projectScope(c))
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(c.Context(), org, projectScope(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -251,9 +261,13 @@ func (s *svc) get(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	name := normalizeName(c.Param("name"))
 	project := projectScope(c)
-	r, err := s.store.Get(c.Context(), org, project, name)
+	r, err := store.Get(c.Context(), org, project, name)
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("repo not found")
 	}
@@ -269,9 +283,13 @@ func (s *svc) del(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	name := normalizeName(c.Param("name"))
 	project := projectScope(c)
-	deleted, err := s.store.Delete(c.Context(), org, project, name)
+	deleted, err := store.Delete(c.Context(), org, project, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -308,7 +326,11 @@ func (s *svc) usage(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.ListOrg(c.Context(), org)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.ListOrg(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
 	}
@@ -330,7 +352,12 @@ func (s *svc) recordUsage(ctx context.Context, org, project, name string) int64 
 		s.log.Warn("measure repo size failed", "org", org, "project", project, "repo", name, "err", err)
 		return 0
 	}
-	if err := s.store.SetSize(ctx, org, project, name, size, time.Now().Unix()); err != nil {
+	store, err := s.storeFor(org)
+	if err != nil {
+		s.log.Warn("record repo size failed (open store)", "org", org, "project", project, "repo", name, "err", err)
+		return size
+	}
+	if err := store.SetSize(ctx, org, project, name, size, time.Now().Unix()); err != nil {
 		s.log.Warn("record repo size failed", "org", org, "project", project, "repo", name, "err", err)
 	}
 	s.log.Info("git.usage", "org", org, "project", project, "repo", name, "bytes", size)
@@ -411,12 +438,12 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown closes the git store. Idempotent.
+// Shutdown closes every open per-org git store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.stores.CloseAll()
 	mounted = nil
 	return err
 }

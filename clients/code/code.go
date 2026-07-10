@@ -32,16 +32,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/cloud/clients/provisioning"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -70,8 +66,10 @@ type service struct {
 	synth   Synthesizer
 	log     luxlog.Logger
 
-	mu     sync.Mutex
-	stores map[string]*Store // sanitized slug → open store
+	// stores is the shared per-tenant SQLite cache: one org-scoped code.db per
+	// org, opened once via cloud.TenantDB. dataDir is retained only so the
+	// physical path convention stays inspectable (tests) — the cache owns opens.
+	stores *cloud.TenantStore[*Store]
 }
 
 var mounted *service
@@ -87,15 +85,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("code.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(filepath.Join(deps.DataDir, "orgs"), 0o755); err != nil {
-		return fmt.Errorf("code.Mount: data dir: %w", err)
-	}
 	s := &service{
 		dataDir: deps.DataDir,
 		embed:   newEmbedder(),
 		synth:   newSynth(deps.AI, deps.AIDefaultModel),
 		log:     deps.Logger.New("subsystem", "code"),
-		stores:  map[string]*Store{},
+		stores:  cloud.NewTenantStore(deps.DataDir, "code", openStore),
 	}
 	mounted = s
 
@@ -119,46 +114,18 @@ func shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.closeAll()
+	err := mounted.stores.CloseAll()
 	mounted = nil
 	return err
 }
 
-// closeAll releases every open per-org store handle.
-func (s *service) closeAll() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var firstErr error
-	for _, st := range s.stores {
-		if err := st.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	s.stores = map[string]*Store{}
-	return firstErr
-}
-
-// storeFor lazily opens (and caches) the org's SQLite file. The physical path is
-// {DataDir}/orgs/{SanitizeOrg(org)}/code.db — provisioning.SanitizeOrg is the
-// codebase's ONE org-slug normalizer (shared with S3/KMS/knowledge), INJECTIVE in
-// the owner so two distinct orgs never fold onto one file.
+// storeFor lazily opens (and caches) the org's SQLite file through the shared
+// cloud.TenantStore cache. The physical path is {DataDir}/orgs/{orgSlug}/code.db
+// (org-scoped; code carries no project axis), where orgSlug = cloud.SanitizeOrg,
+// the codebase's ONE injective org-slug normalizer (shared with S3/KMS/knowledge),
+// so two distinct orgs never fold onto one file.
 func (s *service) storeFor(org string) (*Store, error) {
-	slug := provisioning.SanitizeOrg(org)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if st, ok := s.stores[slug]; ok {
-		return st, nil
-	}
-	dir := filepath.Join(s.dataDir, "orgs", slug)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("org dir: %w", err)
-	}
-	st, err := openStore(filepath.Join(dir, "code.db"))
-	if err != nil {
-		return nil, err
-	}
-	s.stores[slug] = st
-	return st, nil
+	return s.stores.For(org, "")
 }
 
 func (s *service) engineFor(org string) (*engine, error) {
