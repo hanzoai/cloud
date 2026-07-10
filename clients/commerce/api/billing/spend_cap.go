@@ -147,7 +147,15 @@ type authorizeResult struct {
 //
 //	GET /v1/billing/spend-alerts/authorize?user=&project=&service=&amount=&pv=
 func AuthorizeSpendCap(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		// No resolvable org → no org-scoped caps or account to enforce; allow
+		// rather than MustGet-panic (→ a recovered 500 on the metering gate). A
+		// genuine customer request always carries a resolved org; this only covers
+		// the no-org anomaly (an S2S probe whose X-Org-Id does not resolve).
+		c.JSON(200, authorizeResult{Allow: true})
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	test := org.TestMode()
 

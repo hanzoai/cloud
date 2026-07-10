@@ -157,6 +157,39 @@ func TestBillingAccount_ProjectBinding_DedicatedFunding(t *testing.T) {
 	}
 }
 
+// A metering probe (ScopeRules / authorize) whose X-Org-Id does not resolve to a
+// commerce org reaches these handlers with NO "organization" context key. They
+// MUST NOT MustGet-panic (which surfaces as a recovered 500 on the money path) —
+// they return a safe default (allow / empty). Regression for the live panic
+// "key organization does not exist" seen on the metering gate.
+func TestBillingAccount_NoOrg_NoPanic(t *testing.T) {
+	tc := ae.NewContext()
+	defer tc.Close()
+	gin.SetMode(gin.TestMode)
+
+	// AuthorizeSpendCap with no resolvable org → allow, no panic.
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/billing/spend-alerts/authorize?amount=100", nil)
+	AuthorizeSpendCap(c)
+	if w.Code != 200 {
+		t.Fatalf("no-org AuthorizeSpendCap status = %d, want 200", w.Code)
+	}
+	var v authorizeResult
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || !v.Allow {
+		t.Fatalf("no-org authorize = %+v (err %v), want allow", v, err)
+	}
+
+	// ListSpendAlerts with no resolvable org → empty list, no panic.
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodGet, "/v1/billing/spend-alerts", nil)
+	ListSpendAlerts(c2)
+	if w2.Code != 200 {
+		t.Fatalf("no-org ListSpendAlerts status = %d, want 200", w2.Code)
+	}
+}
+
 // An org that has provisioned NO billing account is byte-preserved: debits carry
 // AccountId "" (the org-wide pool), resolveAccountId returns "", and the account
 // layer never denies — existing behavior is unchanged until an account exists.
