@@ -20,6 +20,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -28,7 +29,7 @@ import (
 
 const itService = "pricing" // low-risk service CLAUDE.md already validated
 
-func itClient(t *testing.T) *svc {
+func itClient(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	if os.Getenv("PAAS_IT") != "1" {
 		t.Skip("set PAAS_IT=1 to run the live-cluster integration probe")
@@ -37,7 +38,10 @@ func itClient(t *testing.T) *svc {
 	if err != nil {
 		t.Fatalf("newDynamic (needs a live KUBECONFIG): %v", err)
 	}
-	return &svc{dyn: dyn, log: luxlog.New("paas-it")}
+	return &cloud.Service[state]{
+		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("paas-it")}, "paas"),
+		State: state{dyn: dyn},
+	}
 }
 
 // TestIntegrationObserveFleet lists the real fleet and asserts the board is
@@ -45,7 +49,7 @@ func itClient(t *testing.T) *svc {
 // verdict). It is READ-ONLY.
 func TestIntegrationObserveFleet(t *testing.T) {
 	s := itClient(t)
-	views, err := s.observeFleet(context.Background())
+	views, err := observeFleet(s, context.Background())
 	if err != nil {
 		t.Fatalf("observeFleet: %v", err)
 	}
@@ -87,7 +91,7 @@ func TestIntegrationIdempotentDeploy(t *testing.T) {
 	s := itClient(t)
 	ctx := context.Background()
 
-	before, err := s.dyn.Resource(servicesGVR).Namespace("hanzo").Get(ctx, itService, metav1.GetOptions{})
+	before, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").Get(ctx, itService, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get %s before: %v", itService, err)
 	}
@@ -101,7 +105,7 @@ func TestIntegrationIdempotentDeploy(t *testing.T) {
 
 	// Same-image merge-patch (the identical body the deploy handler builds).
 	patch := []byte(`{"spec":{"image":{"tag":"` + tag + `","repository":"` + repo + `","pullPolicy":"Always"}}}`)
-	after, err := s.dyn.Resource(servicesGVR).Namespace("hanzo").
+	after, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").
 		Patch(ctx, itService, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		t.Fatalf("idempotent patch: %v", err)
