@@ -1,0 +1,279 @@
+{
+  "attempt": 1,
+  "body": {
+    "status": 200,
+    "message": "Successful",
+    "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812",
+    "resource": {
+      "options": {
+        "resourceLocation": null,
+        "resource": {
+          "warehouseId": 25,
+          "warehouseExternalId": null,
+          "warehouseRegion": "LAX"
+        }
+      },
+      "externalId": null,
+      "orderNo": null,
+      "id": 250053812,
+      "transactionId": "1487094186",
+      "expectedDate": "2017-02-14T09:43:06-08:00",
+      "commerceName": null,
+      "lastUpdatedDate": "2017-02-14T09:43:06-08:00",
+      "status": "processed",
+      "vendorId": null,
+      "vendorExternalId": null,
+      "items": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812/items?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 1,
+          "previous": null,
+          "next": null,
+          "items": [
+            {
+              "resourceLocation": null,
+              "resource": {
+                "sku": "686696998137",
+                "quantity": 1,
+                "productId": 5751372,
+                "productExternalId": null,
+                "orderId": 250053812,
+                "orderExternalId": null,
+                "expected": 1,
+                "pending": 1,
+                "good": 0,
+                "inReview": 0,
+                "damaged": 0
+              }
+            }
+          ]
+        }
+      },
+      "holds": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812/holds?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 0,
+          "previous": null,
+          "next": null,
+          "items": []
+        }
+      },
+      "trackings": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812/trackings?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 0,
+          "previous": null,
+          "next": null,
+          "items": []
+        }
+      },
+      "labels": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812/labels?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 1,
+          "previous": null,
+          "next": null,
+          "items": [
+            {
+              "resourceLocation": "https://api.shipwire.com/api/v3/returns/250053812/labels/1695792",
+              "resource": {
+                "id": 1695792,
+                "orderId": 250053812,
+                "orderExternalId": null
+              }
+            }
+          ]
+        }
+      },
+      "routing": {
+        "resourceLocation": null,
+        "resource": {
+          "warehouseId": 25,
+          "warehouseExternalId": null,
+          "warehouseName": "Redlands, CA",
+          "originLongitude": 34.0816,
+          "originLatitude": -117.228,
+          "warehouseRegion": "LAX"
+        }
+      },
+      "events": {
+        "resourceLocation": null,
+        "resource": {
+          "createdDate": "2017-02-14T09:43:06-08:00",
+          "pickedUpDate": null,
+          "submittedDate": null,
+          "processedDate": "2017-02-14T09:43:06-08:00",
+          "completedDate": null,
+          "expectedDate": "2017-02-14T09:43:06-08:00",
+          "deliveredDate": null,
+          "cancelledDate": null,
+          "returnedDate": null,
+          "lastManualUpdateDate": null
+        }
+      },
+      "documents": null,
+      "originalOrder": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881",
+        "resource": {
+          "externalId": null,
+          "orderNo": "3630115",
+          "commerceName": "shipwire",
+          "processAfterDate": "2017-02-01T16:30:00-08:00",
+          "lastUpdatedDate": "2017-02-02T15:12:22-08:00",
+          "status": "delivered",
+          "vendorId": null,
+          "vendorExternalId": null,
+          "purchaseOrderId": null,
+          "purchaseOrderExternalId": null,
+          "purchaseOrderNo": null,
+          "id": 247102881,
+          "transactionId": "1485909916-024489-2",
+          "needsReview": 0,
+          "vendorName": null,
+          "holds": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/holds?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          },
+          "items": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/items?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          },
+          "trackings": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/trackings?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          },
+          "returns": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/returns?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          },
+          "options": {
+            "resourceLocation": null,
+            "resource": {
+              "warehouseId": null,
+              "warehouseExternalId": null,
+              "warehouseRegion": null,
+              "warehouseArea": null,
+              "serviceLevelCode": "2D",
+              "carrierCode": "FDX 2D",
+              "thirdPartyCarrierCodeRequested": null,
+              "billingType": null,
+              "carrierAccountNumber": null,
+              "sameDay": "NOT REQUESTED",
+              "forceDuplicate": 0,
+              "forceAddress": 0,
+              "testOrder": 0,
+              "channelName": null,
+              "referrer": ""
+            }
+          },
+          "shipFrom": {
+            "resourceLocation": null,
+            "resource": {
+              "company": "Stoned Audio"
+            }
+          },
+          "shipTo": {
+            "resourceLocation": null,
+            "resource": {
+              "email": "dev@hanzo.ai",
+              "name": "Tim Messer",
+              "company": null,
+              "address1": "405 SOUTHWEST BLVD STE 200",
+              "address2": null,
+              "address3": null,
+              "city": "KANSAS CITY",
+              "state": "MO",
+              "postalCode": "64108",
+              "country": "US",
+              "phone": "650-561-4800",
+              "isCommercial": 1,
+              "isPoBox": 0
+            }
+          },
+          "commercialInvoice": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/commercialInvoice"
+          },
+          "packingList": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/packingList"
+          },
+          "shippingLabel": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/shippingLabel"
+          },
+          "routing": {
+            "resourceLocation": null,
+            "resource": {
+              "warehouseId": 25,
+              "warehouseExternalId": null,
+              "warehouseName": "Redlands, CA",
+              "physicalWarehouseId": null,
+              "originLongitude": 34.0816,
+              "originLatitude": -117.228,
+              "destinationLongitude": "-94.5868",
+              "destinationLatitude": "39.0837"
+            }
+          },
+          "events": {
+            "resourceLocation": null,
+            "resource": {
+              "createdDate": "2017-02-01T13:28:58-08:00",
+              "pickedUpDate": null,
+              "submittedDate": "2017-02-01T14:15:53-08:00",
+              "processedDate": "2017-02-01T14:06:24-08:00",
+              "completedDate": "2017-02-02T15:12:22-08:00",
+              "expectedSubmittedDate": "2017-02-01T14:15:53-08:00",
+              "expectedCompletedDate": "2017-02-02T15:12:22-08:00",
+              "expectedDate": "2017-02-06T00:00:00-08:00",
+              "cancelledDate": null,
+              "returnedDate": null,
+              "lastManualUpdateDate": "2017-02-01T13:28:58-08:00"
+            }
+          },
+          "pricing": {
+            "resourceLocation": null,
+            "resource": {
+              "shipping": 55.37,
+              "packaging": 1.85,
+              "insurance": 0,
+              "handling": 55.5,
+              "total": 112.72
+            }
+          },
+          "shipwireAnywhere": {
+            "resourceLocation": null,
+            "resource": {
+              "status": null
+            }
+          },
+          "pricingEstimate": {
+            "resourceLocation": null,
+            "resource": {
+              "total": 57.22,
+              "insurance": 0,
+              "shipping": 57.22,
+              "packaging": 1.85,
+              "handling": 0
+            }
+          },
+          "freightSummary": {
+            "resourceLocation": null,
+            "resource": {
+              "totalWeight": "21.64",
+              "weightUnit": "LB",
+              "measurementType": "estimated"
+            }
+          },
+          "splitOrders": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/splitOrders?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          },
+          "pieces": {
+            "resourceLocation": "https://api.shipwire.com/api/v3/orders/247102881/pieces?accessToken=bbf55df9f724cff0e6619d1ff78f90e5&offset=0&limit=20"
+          }
+        }
+      }
+    }
+  },
+  "timestamp": "2017-02-14T09:43:12-08:00",
+  "topic": "return.created",
+  "uniqueEventID": "0787ba6389d50000",
+  "webhookSubscriptionID": 44442
+}

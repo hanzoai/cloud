@@ -7,7 +7,7 @@
 //   - the edge middleware (package cloud, middleware_edge.go / middleware_ratelimit.go)
 //     reads the effective policy live, per request, so an operator's change takes
 //     effect without a redeploy;
-//   - the /v1/gateway HTTP subsystem (clients/gatewaysvc) serves GET/PUT over the
+//   - the /v1/gateway HTTP subsystem (clients/gateway) serves GET/PUT over the
 //     SAME store, IAM-scoped.
 //
 // SCOPES. There are two, keyed by org in one encrypted per-tenant SQLite file:

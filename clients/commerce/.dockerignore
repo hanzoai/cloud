@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+.dockerignore
+*.md
+LICENSE
+node_modules
+app/*/node_modules
+deploy/
+sdk/

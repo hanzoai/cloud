@@ -4,7 +4,7 @@ import (
 	luxlog "github.com/luxfi/log"
 	zaprpc "github.com/zap-proto/go/rpc"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/wsx"
 )

@@ -70,11 +70,6 @@ const (
 	// here at cutover.
 	o11yIngestRoute = "/v1/o11y/ingestion"
 
-	// o11yIngestOrder mounts this subsystem BEFORE the hanzoai/o11y wildcard
-	// (app.All("/v1/o11y/*"), order 70) so Fiber binds the specific POST ahead of the
-	// proxy — the same rule scope.go uses at order 69.
-	o11yIngestOrder = 68
-
 	// o11yBlobThresholdEnv overrides the inline-body size cap (bytes). A body larger
 	// than this overflows to object storage; the row keeps only the blob ref.
 	o11yBlobThresholdEnv = "CLOUD_O11Y_INGEST_BLOB_BYTES"
@@ -209,26 +204,15 @@ func blobThreshold() int {
 // flush/close it, mirroring embed.go's embeddedRuntime and ingest.go's embeddedIngest.
 var eventIngestSink eventSink
 
-func init() {
-	// Order 68: BEFORE the hanzoai/o11y wildcard (app.All("/v1/o11y/*"), order 70) so
-	// Fiber's in-order match binds POST /v1/o11y/ingestion ahead of the proxy — the
-	// SAME constraint scope.go documents for /v1/o11y/{logs,metrics,status} at 69.
-	// RegisterWithShutdown so the Datastore connection closes on graceful stop.
-	cloud.RegisterWithShutdown("o11y-event-ingest", o11yIngestOrder, mountEventIngest, shutdownEventIngest)
-}
-
-// mountEventIngest registers POST /v1/o11y/ingestion. No feature flag: it mounts
-// whenever its Datastore dependency is available. Fail-soft at every branch — a
-// missing DSN or a Datastore construction error logs and returns nil, leaving the
-// write path unmounted (the retired console-worker is already gone, so "unmounted"
-// is inert — no double-write).
-func mountEventIngest(app any, deps cloud.Deps) error {
+// mountEventIngest registers POST /v1/o11y/ingestion. Called by mountO11y (o11y.go)
+// inside the one order-69 `o11y` mount, so this specific POST binds BEFORE the
+// hanzoai/o11y wildcard (app.All("/v1/o11y/*"), order 70) — the SAME constraint the
+// scoped reads use. No feature flag: it mounts whenever its Datastore dependency is
+// available. Fail-soft at every branch — a missing DSN or a Datastore construction
+// error logs and returns nil, leaving the write path unmounted (the retired
+// console-worker is already gone, so "unmounted" is inert — no double-write).
+func mountEventIngest(a *zip.App, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-event-ingest")
-
-	a, ok := app.(*zip.App)
-	if !ok {
-		return fmt.Errorf("o11y-event-ingest: app is %T, want *zip.App", app)
-	}
 
 	dsn := embeddedDSN()
 	if dsn == "" {

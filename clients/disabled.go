@@ -73,6 +73,10 @@ func (disabledAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*type
 	return nil, &disabledErr{"ai"}
 }
 
+func (disabledAI) Embed(_ context.Context, _ string, _ []string) ([][]float32, error) {
+	return nil, &disabledErr{"ai"}
+}
+
 type disabledO11y struct{}
 
 func (disabledO11y) Counter(_ string, _ ...string) types.Counter { return noopCounter{} }

@@ -1,0 +1,27 @@
+
+
+ Please confirm your email address.
+
+ View this email in your browser ({{archive}})
+
+ 
+** THANK YOU FOR JOINING {{organization.name}}!
+------------------------------------------------------------
+
+You have successfully registered to {{organization.name}}. Don't forget to add our social media profiles!
+
+Do not hesitate to reach out to us with any comments, questions or suggestions that you might have.
+
+ 
+
+============================================================
+
+ ** (http://www.twitter.com/)
+
+ ** (http://www.facebook.com)
+
+ ** (http://mailchimp.com)
+
+ _Copyright © {{currentyear}} {{company}}, All rights reserved._
+
+

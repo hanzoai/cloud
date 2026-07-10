@@ -1,16 +1,38 @@
-// Package o11y initializes the o11y subsystem's runtime handler in the
-// unified cloud binary.
+// Package o11y is the ONE owner of the cloud binary's observability plane —
+// registered as a SINGLE `o11y` subsystem (this file's init) that internally
+// mounts, in the load-bearing order, every part of the concept:
 //
-// hanzoai/o11y registers the /v1/o11y/* route surface (order 70) but delegates
-// every request to a handler installed via o11y.SetHandler. The standalone o11y
-// cmd/server constructs the full runtime in-process and installs its own
-// PublicHandler. The cloud binary now does the SAME thing: it constructs that
-// runtime IN-PROCESS (embed.go — telemetry stores over the ClickHouse datastore,
-// sqlstore, querier, rule manager, dashboards, alerts) and installs
-// server.PublicHandler, so /v1/o11y/* is served by THIS binary and the standalone
-// o11y Deployment can retire.
+//	READ/SERVE plane (specific /v1/o11y/* routes, registered BEFORE the
+//	hanzoai/o11y wildcard so Fiber's in-order match gives them precedence):
+//	  - tenant-scoped reads  /v1/o11y/{logs,metrics,status}   (scope.go)
+//	  - SuperAdmin VM proxy  /v1/o11y/vm/{query,query_range}   (vmproxy.go)
+//	  - flat builder query   /v1/o11y/{query,query_range}      (query.go)
+//	  - LLM-obs event ingest POST /v1/o11y/ingestion           (event_ingest.go)
+//	RUNTIME handler the hanzoai/o11y wildcard (order 70) delegates to via
+//	  o11y.SetHandler — the in-process runtime (embed.go) or a reverse-proxy
+//	  fallback (this file).
+//	WRITE plane (opt-in, order-independent):
+//	  - OTLP ingest collector (ingest.go)
+//	  - in-process trace sink (tracesink.go)
 //
-// One way, two backings (this file's Register callback):
+// Decomplection (one and one way): these were five separately-registered
+// subsystems (o11yscope 69, o11y-runtime 71, o11y-event-ingest 68,
+// o11y-otlp-ingest 72, o11y-trace-inproc 73) whose names leaked FIVE public
+// concepts into the registry (five config toggles, five /v1/<name>/health
+// routes). The k8s-style ordering was an internal impl detail. They now collapse
+// to ONE registration of the name `o11y` (order 69): mountO11y performs the
+// ordered sub-mounts in-process, so the PUBLIC concept is a single `o11y`.
+// Behavior is preserved EXACTLY — every route registers at the same point
+// relative to the order-70 wildcard as before (all inside the one order-69
+// mount, so all before 70).
+//
+// Co-ownership: the upstream github.com/hanzoai/o11y module ALSO registers the
+// name `o11y` (order 70, the wildcard route surface) from its own init. The two
+// entries are co-owners of ONE public concept; this order-69 entry opts out of
+// the generic HIP-0106 health route (cloud.HealthOwner) so /v1/o11y/health is
+// registered EXACTLY once, by the module's order-70 co-entry.
+//
+// One way, two backings (mountRuntime):
 //   - PRIMARY: the in-process runtime (buildEmbeddedHandler), enabled by
 //     O11Y_TELEMETRYSTORE_DATASTORE_DSN. Serves telemetry from cloud itself.
 //   - FALLBACK: a reverse proxy to a still-running o11y Deployment, used only when
@@ -23,6 +45,8 @@
 package o11y
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -103,42 +127,101 @@ func isHealthPath(p string) bool {
 		strings.HasSuffix(p, "/api/v2/livez")
 }
 
-func init() {
-	// Order 71: after o11y.Mount (70) installs the route surface. Ordering is not
-	// strictly required (the handler is resolved per-request) but keeps the runtime
-	// install adjacent to its routes. Runs during MountAll — before Listen — so the
-	// handler is in place before the first request.
-	//
-	// ONE way, two backings: prefer the in-process runtime (embed.go) that serves
-	// /v1/o11y/* from THIS binary against the ClickHouse datastore, so the standalone
-	// o11y Deployment can retire. Fall back to reverse-proxying that Deployment when
-	// the embed is disabled (no DSN) or fails to init — fail-soft, zero downtime.
-	cloud.Register("o11y-runtime", 71, func(_ any, deps cloud.Deps) error {
-		log := deps.Logger.New("subsystem", "o11y-runtime")
+// runtimeHandler is the gated o11y runtime handler (the in-process runtime, or the
+// reverse-proxy fallback) — the SAME handler the hanzoai/o11y wildcard delegates to
+// via o11y.SetHandler. It is pinned here so the flat builder-query routes (query.go)
+// can delegate to it directly. Set by mountRuntime; read PER-REQUEST (never at
+// registration), so it is always in place by the time the first request lands.
+var runtimeHandler http.Handler
 
-		if h, err := buildEmbeddedHandler(deps); err != nil {
-			log.Warn("embedded o11y init failed; falling back to reverse proxy", "err", err)
-		} else if h != nil {
-			o11y.SetHandler(gate(h))
-			// Runtime (and its ONE datastore connection) is live; start native
-			// metrics ingest — opt-in, fail-soft (metrics.go).
-			startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
-			log.Info("o11y runtime handler installed (in-process runtime)")
-			return nil
-		}
+// mountRuntime installs the runtime handler the order-70 wildcard delegates to.
+// ONE way, two backings: prefer the in-process runtime (embed.go) that serves
+// /v1/o11y/* from THIS binary against the ClickHouse datastore, so the standalone
+// o11y Deployment can retire; fall back to reverse-proxying that Deployment when the
+// embed is disabled (no DSN) or fails to init — fail-soft, zero downtime. Ordering is
+// not strictly required (the handler is resolved per-request); it runs inside the one
+// order-69 mount, before Listen, so the handler is in place before the first request.
+func mountRuntime(deps cloud.Deps) error {
+	log := deps.Logger.New("subsystem", "o11y-runtime")
 
-		// Fallback: reverse-proxy the standalone o11y Deployment.
-		h, err := newHandler(upstream())
-		if err != nil {
-			return err
-		}
-		o11y.SetHandler(gate(h))
-		log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
+	if h, err := buildEmbeddedHandler(deps); err != nil {
+		log.Warn("embedded o11y init failed; falling back to reverse proxy", "err", err)
+	} else if h != nil {
+		gh := gate(h)
+		runtimeHandler = gh
+		o11y.SetHandler(gh)
+		// Runtime (and its ONE datastore connection) is live; start native
+		// metrics ingest — opt-in, fail-soft (metrics.go).
+		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
+		log.Info("o11y runtime handler installed (in-process runtime)")
 		return nil
-	})
+	}
+
+	// Fallback: reverse-proxy the standalone o11y Deployment.
+	h, err := newHandler(upstream())
+	if err != nil {
+		return err
+	}
+	gh := gate(h)
+	runtimeHandler = gh
+	o11y.SetHandler(gh)
+	log.Info("o11y runtime handler installed (reverse proxy fallback)", "upstream", upstream())
+	return nil
 }
 
-// Mount is a no-op kept for symmetry with other subsystems; the handler is
-// installed in init via cloud.Register. It satisfies callers that look for a
-// Mount(app, deps) entrypoint.
-func Mount(_ *zip.App, _ cloud.Deps) error { return nil }
+// mountO11y is the ONE mount for the whole observability concept. It performs the
+// ordered sub-mounts in-process so the public registry carries a single `o11y`
+// name. Every cloud-native /v1/o11y/* route is registered here — inside this one
+// order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
+// in-order match gives the specific routes precedence over the runtime proxy.
+func mountO11y(app any, deps cloud.Deps) error {
+	a, ok := app.(*zip.App)
+	if !ok {
+		return fmt.Errorf("o11y.Mount: app is %T, want *zip.App", app)
+	}
+	// READ/SERVE plane — specific routes before the wildcard.
+	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
+		return err
+	}
+	mountScope(a) // GET logs/metrics/status + vm/{query,query_range} + flat builder query
+	// RUNTIME handler the wildcard delegates to (embed or proxy fallback).
+	if err := mountRuntime(deps); err != nil {
+		return err
+	}
+	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
+	if err := mountIngest(deps); err != nil { // OTLP collector (:4317/:4318)
+		return err
+	}
+	if err := mountTraceSink(deps); err != nil { // in-process trace sink
+		return err
+	}
+	return nil
+}
+
+// shutdownO11y tears down the write-plane resources that hold process-lifetime
+// connections, in REVERSE mount order — trace sink, OTLP collector, event-ingest
+// Datastore — so buffered spans/logs/rows flush before exit. Best-effort: the
+// first error is returned but every teardown still runs. Idempotent and nil-safe.
+func shutdownO11y(ctx context.Context) error {
+	var firstErr error
+	if err := shutdownTraceSink(ctx); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := shutdownIngest(ctx); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	if err := shutdownEventIngest(ctx); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
+}
+
+func init() {
+	// ONE public concept. Order 69 (< the hanzoai/o11y wildcard at 70) so every
+	// specific /v1/o11y/* route mountO11y registers wins Fiber's in-order match.
+	// HealthOwner: the module's order-70 co-registration of the same `o11y` name
+	// already carries the generic /v1/o11y/health, so this entry opts out to keep
+	// exactly one health route (never a duplicate). RegisterWithShutdown so the
+	// write-plane Datastore/collector connections flush on graceful stop.
+	cloud.RegisterWithShutdown("o11y", 69, mountO11y, shutdownO11y, cloud.HealthOwner)
+}

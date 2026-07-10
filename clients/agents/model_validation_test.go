@@ -23,6 +23,16 @@ func (c *catalogAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*ty
 
 func (c *catalogAI) Models(_ context.Context) ([]string, error) { return c.ids, nil }
 
+// Embed satisfies the AIClient interface; the model-validation tests exercise the
+// catalog + chat, not embeddings, so it returns one deterministic 1-dim vector per input.
+func (c *catalogAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
+	out := make([][]float32, len(inputs))
+	for i := range inputs {
+		out[i] = []float32{0.1}
+	}
+	return out, nil
+}
+
 // TestHTTPCreateModelValidation proves agent-create rejects a model outside the
 // gateway's served catalog with a clean 400 (instead of the customer's reported
 // run-time 502 for e.g. claude-sonnet-4-5), accepts a catalog model, and — when
