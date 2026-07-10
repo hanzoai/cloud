@@ -67,7 +67,7 @@ func fakeK8s() *k8sClient {
 	// SelfSubjectAccessReview readiness probe (waitForTenantRBAC) resolves
 	// allowed=true on the first call, so the deploy fast path is exercised with no
 	// wait. Tests of the async-RBAC race prepend their own SSAR reactor to override
-	// this default (see tenant_rbac_test.go).
+	// this default (see org_rbac_test.go).
 	allowSSAR(dyn, func() bool { return true })
 	return &k8sClient{dyn: dyn, imagePrefix: defaultBuildImagePrefix, buildNS: "hanzo", limits: testLimits(), kmsSync: newKMSSyncConfig()}
 }

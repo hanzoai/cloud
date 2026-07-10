@@ -12,7 +12,7 @@ import (
 
 // Store is one org's code index over a single SQLite file
 // ({DataDir}/orgs/{slug}/code.db). Because every org gets its OWN file, the
-// tenant boundary is PHYSICAL — a query in one org's store can never reach
+// org boundary is PHYSICAL — a query in one org's store can never reach
 // another org's rows. Within the file rows are scoped by repo. MaxOpenConns(1)
 // serializes writes against the file lock (the prompts/eval/projects discipline).
 type Store struct {
@@ -21,9 +21,9 @@ type Store struct {
 
 var errNotFound = errors.New("code: not found")
 
-// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB — into
+// openStore wraps an org DB — already opened + pragma'd by cloud.OrgDB — into
 // the per-org code index store, running its migration. It is the open func the
-// shared cloud.TenantStore cache calls once per org file.
+// shared cloud.OrgStore cache calls once per org file.
 func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
@@ -34,7 +34,7 @@ func openStore(db *sql.DB) (*Store, error) {
 }
 
 // migrate creates the five index tiers this store composes. There is NO org
-// column: the file IS the tenant. The FTS tables carry chunk_id UNINDEXED so a
+// column: the file IS the org. The FTS tables carry chunk_id UNINDEXED so a
 // hit joins back to chunks, and their rowid is set to chunks.id so a re-index of
 // a file can delete exactly the stale FTS rows.
 func (s *Store) migrate() error {

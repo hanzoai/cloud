@@ -13,9 +13,9 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// The tenant gate fails closed: a forged X-Org-Id with NO validated principal
+// The org gate fails closed: a forged X-Org-Id with NO validated principal
 // (no X-User-Id, as an off-gateway attacker would send) is refused on EVERY
-// route. This is the cross-tenant boundary.
+// route. This is the cross-org boundary.
 func TestPrincipalGateForbidden(t *testing.T) {
 	app, _ := newTestApp(t)
 	forged := func(method, path string, body any) int {

@@ -192,7 +192,7 @@ func listRules(s *cloud.Service[state], c *zip.Ctx) error {
 // redacted findings, meters one unit, emits an audit event, and returns the
 // scan summary. The raw content is scanned in memory and never stored.
 func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -270,7 +270,7 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listScans(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -287,7 +287,7 @@ func listScans(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func getScan(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -312,7 +312,7 @@ func getScan(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listFindings(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -333,7 +333,7 @@ func listFindings(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func getFinding(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

@@ -23,7 +23,7 @@
 // admin reserve mutations); this lane adds the six commerce-projected reads.
 //
 // TENANT ISOLATION. Identical to the /v1/billing/* reads: the org is the VALIDATED IAM
-// owner (principal.Tenant), the commerce billing subject is PINNED server-side to it on
+// owner (principal.Org), the commerce billing subject is PINNED server-side to it on
 // every subject key, and NO client-supplied subject/org is forwarded — so a caller
 // reads ONLY its OWN org's wallet and can never widen scope.
 //
@@ -418,7 +418,7 @@ func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
 // financeCaller resolves the caller's OWN org from the validated principal — the ONE
 // tenant gate every finance read shares.
 func financeCaller(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
-	return principal.Tenant(c)
+	return principal.Org(c)
 }
 
 // financeSubject builds the commerce query with every billing-subject key PINNED to org

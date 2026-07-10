@@ -21,9 +21,9 @@ import (
 // A ROW EXISTS iff the product is enabled for that org. Enabling inserts the row;
 // disabling deletes it. GET is the SELECT of every product for the org.
 //
-// Tenant isolation is the (org, product) COMPOSITE PRIMARY KEY and a mandatory
+// Org isolation is the (org, product) COMPOSITE PRIMARY KEY and a mandatory
 // `WHERE org=?` on EVERY statement. The org value is the VALIDATED owner claim
-// (principal.Tenant / the :org param a super admin targets) — never normalized
+// (principal.Org / the :org param a super admin targets) — never normalized
 // (casing/trimming collapses distinct owners into one bucket) and never a
 // client-supplied body field.
 //
@@ -33,7 +33,7 @@ import (
 // the visibility toggle, entitlement is the billing gate.
 
 // Store is the entitlements metastore over one SQLite file
-// ({DataDir}/entitlements.db). Tenancy is the (org, product) key.
+// ({DataDir}/entitlements.db). Org-scoping is the (org, product) key.
 type Store struct {
 	db *sql.DB
 }

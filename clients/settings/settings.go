@@ -14,7 +14,7 @@
 //	PUT /v1/settings/:product   org config (write)                 -> settingsView
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request. The org is
-// principal.Tenant(c) — the value SanitizeIdentity minted from the VALIDATED bearer
+// principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED bearer
 // owner (HIP-0026) — and is NEVER read from a query param, body, or client header.
 // It is the mandatory predicate on every store statement. The client chooses a
 // PRODUCT (validated against a slug shape); it never supplies the org.
@@ -129,7 +129,7 @@ func Shutdown(_ context.Context) error {
 
 // tenant resolves the org — the tenant-isolation KEY — for a VALIDATED principal
 // only. Fails closed (caller answers 403) for an unvalidated or org-less request.
-func (s *service) tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func (s *service) tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // requireProductParam reads + validates the :product path segment against productRE.
 func requireProductParam(c *zip.Ctx) (string, error) {

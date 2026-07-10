@@ -63,7 +63,7 @@ func newTestService(t *testing.T) *service {
 		embed:   fakeEmbedder{dims: 64, enabled: true},
 		synth:   fakeSynth{enabled: true},
 		log:     luxlog.New("test"),
-		stores:  cloud.NewTenantStore(dataDir, "code", openStore),
+		stores:  cloud.NewOrgStore(dataDir, "code", openStore),
 	}
 	t.Cleanup(func() { _ = s.stores.CloseAll() })
 	return s
@@ -82,7 +82,7 @@ func newTestApp(t *testing.T) (*zip.App, *service) {
 }
 
 // doAuth runs a request carrying a VALIDATED principal (X-User-Id set, as
-// SanitizeIdentity would from a verified token) so the tenant gate is satisfied.
+// SanitizeIdentity would from a verified token) so the org gate is satisfied.
 func doAuth(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader

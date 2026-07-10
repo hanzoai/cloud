@@ -21,14 +21,14 @@ package cloud
 //   - JWT validate + strip/re-mint identity headers  → SanitizeIdentity
 //     (middleware_identity.go / auth_identity.go). The gateway's auth/validator
 //     is redundant with it; EdgeCORS/EdgeRateLimit run AROUND it, never re-do it.
-//   - Authenticated per-tenant rate ceiling            → ScopeRateLimit
+//   - Authenticated per-org rate ceiling            → ScopeRateLimit
 //     (middleware_ratelimit.go), keyed on the VALIDATED principal, now also
 //     honoring the /v1/gateway per-org OrgRPM.
 //   - Balance / spend-cap quota                        → BillingGate.
 //
 // EdgeRateLimit fills the ONE gap those post-auth gates leave: an ANONYMOUS flood
 // (no valid JWT ⇒ no org to key on) is invisible to ScopeRateLimit, which keys on
-// the validated tenant. It must be throttled by client IP at the very edge —
+// the validated org. It must be throttled by client IP at the very edge —
 // before the JWKS fetch / signature verify / downstream work the request would
 // otherwise trigger. That is exactly, and only, what the gateway's IP-strategy
 // router rate limit did.
@@ -195,7 +195,7 @@ func (m *originMatcher) allowed(origin string) bool {
 // ClientIP) with opportunistic eviction of expired windows so the map stays bounded
 // even at the edge's high IP cardinality (why this is not the zip token-bucket
 // primitive that ScopeRateLimit reuses: that primitive never evicts, which is fine
-// for a bounded per-tenant keyspace but would grow without bound keyed on raw IPs).
+// for a bounded per-org keyspace but would grow without bound keyed on raw IPs).
 //
 // SCOPE = public edge only. A request with NO X-Forwarded-For is an IN-CLUSTER
 // direct caller (console BFF, sibling service hitting cloud.svc:8000) — it never
