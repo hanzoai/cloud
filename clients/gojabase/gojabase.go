@@ -76,13 +76,22 @@ type Config struct {
 	// captable seeds the tenant's company row). It runs outside the per-request
 	// transaction. May be nil.
 	OnOpen func(ctx context.Context, tenant string, db *sql.DB) error
+	// HostFns are OPTIONAL extra native host globals injected onto the runtime on
+	// every Dispatch, ALONGSIDE __db/__newId/__now — for capabilities goja cannot
+	// provide that a subsystem implements in Go (e.g. esign injects __pdf =
+	// { stamp, sign } for PDF rendering + x509/PKCS#7 signing). Values are Go
+	// funcs or map[string]any of Go funcs (goja exposes them as callable JS). They
+	// are process-global (set once at New), not per-tenant; the binding stays
+	// domain-free. May be nil. A key MUST NOT collide with __db/__newId/__now.
+	HostFns map[string]any
 }
 
 // Host is a compiled bundle + its per-tenant Base stores. Safe for concurrent use.
 type Host struct {
-	name   string
-	engine *goja.Host
-	stores *stores
+	name    string
+	engine  *goja.Host
+	stores  *stores
+	hostFns map[string]any
 }
 
 // New compiles the bundle (via clients/goja) and prepares the per-tenant store
@@ -102,9 +111,10 @@ func New(cfg Config) (*Host, error) {
 		return nil, err
 	}
 	return &Host{
-		name:   cfg.Name,
-		engine: engine,
-		stores: newStores(cfg.Name, cfg.DataDir, cfg.Schema, cfg.OnOpen),
+		name:    cfg.Name,
+		engine:  engine,
+		stores:  newStores(cfg.Name, cfg.DataDir, cfg.Schema, cfg.OnOpen),
+		hostFns: cfg.HostFns,
 	}, nil
 }
 
@@ -133,6 +143,11 @@ func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Respo
 		"__db":    newBridge(ctx, tx),
 		"__newId": newID,
 		"__now":   func() int64 { return time.Now().UnixMilli() },
+	}
+	// Extra Go-backed host capabilities (e.g. esign's __pdf). Injected after the
+	// reserved db/newId/now globals; a subsystem must not shadow those.
+	for k, v := range h.hostFns {
+		globals[k] = v
 	}
 	resp, err := h.engine.DispatchWith(ctx, goja.Request{
 		Route:  req.Route,
