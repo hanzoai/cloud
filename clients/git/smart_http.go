@@ -55,7 +55,11 @@ func (s *svc) infoRefs(c *zip.Ctx) error {
 	if service != svcUploadPack && service != svcReceivePack {
 		return zip.ErrBadRequest("service must be git-upload-pack or git-receive-pack")
 	}
-	if _, err := s.store.Get(c.Context(), org, project, name); err != nil {
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	if _, err := store.Get(c.Context(), org, project, name); err != nil {
 		return zip.ErrNotFound("repo not found")
 	}
 
@@ -101,7 +105,11 @@ func (s *svc) uploadPack(c *zip.Ctx) error {
 	if p := c.Param("org"); p != "" && p != org {
 		return zip.ErrForbidden("org path does not match authenticated tenant")
 	}
-	if _, err := s.store.Get(c.Context(), org, project, name); err != nil {
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	if _, err := store.Get(c.Context(), org, project, name); err != nil {
 		return zip.ErrNotFound("repo not found")
 	}
 
@@ -151,7 +159,11 @@ func (s *svc) receivePack(c *zip.Ctx) error {
 	if p := c.Param("org"); p != "" && p != org {
 		return zip.ErrForbidden("org path does not match authenticated tenant")
 	}
-	if _, err := s.store.Get(c.Context(), org, project, name); err != nil {
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	if _, err := store.Get(c.Context(), org, project, name); err != nil {
 		return zip.ErrNotFound("repo not found")
 	}
 
