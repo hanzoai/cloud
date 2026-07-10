@@ -1,0 +1,8 @@
+--ignore-dir=.sdk
+--ignore-dir=_export
+--ignore-dir=static/vendor
+--ignore-dir=static/frontend/js/vendor
+--ignore-dir=static/appui/js/plugins
+--ignore-dir=static/appui/js/vendor
+--ignore-dir=static/js
+--ignore-dir=thirdparty/ethereum/go-ethereum/crypto/btcec

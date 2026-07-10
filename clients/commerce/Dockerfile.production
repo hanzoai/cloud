@@ -1,0 +1,93 @@
+# Hanzo Commerce - Production Build
+# Multi-stage build for minimal production image
+
+# Build stage
+FROM golang:1.26.4-alpine AS builder
+
+# Install build dependencies (curl needed by scripts/fetch-plans.sh below)
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev curl
+
+WORKDIR /build
+
+# Private hanzoai/* Go modules resolve via authenticated git, NOT the public
+# proxy (which cannot serve private repos). GOPRIVATE skips proxy.golang.org +
+# sumdb for them; the git credential is the BuildKit `gh_token` secret — the ONE
+# secret both build paths supply (hanzoai/ci reusable + platform BuildKit Job).
+ENV GOPRIVATE=github.com/hanzoai/*
+
+# Copy ALL source first
+COPY . .
+
+# Remove local replace directives and use pseudo-version for production build.
+# --mount=type=secret,id=gh_token authenticates `go mod tidy` to private
+# hanzoai/* repos. The credential is written to an in-layer GIT_CONFIG_GLOBAL
+# that is deleted within the SAME RUN, so no token is ever baked into any layer.
+RUN --mount=type=secret,id=gh_token \
+    export GIT_CONFIG_GLOBAL=/tmp/gitconfig && \
+    if [ -s /run/secrets/gh_token ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    sed -i '/replace.*\.\.\/datastore-go/d' go.mod && \
+    sed -i '/replace.*\.\/replace/d' go.mod && \
+    sed -i 's|github.com/hanzoai/datastore-go v0.0.0|github.com/hanzoai/datastore-go v0.0.0-20260120034535-2235a0b544a2|g' go.mod && \
+    cat go.mod && \
+    rm -f go.sum && \
+    go mod tidy && \
+    rm -f /tmp/gitconfig
+
+# Hydrate @hanzo/plans (public npm, no auth) — api/billing/plans.go go:embed's
+# plans/{dns,subscription}.json at compile time, and that dir is gitignored, so
+# the build MUST fetch it before `go build` (same contract as test.yml CI).
+RUN sh scripts/fetch-plans.sh
+
+# Build the binary - build the WHOLE cmd/commerce PACKAGE (not just main.go):
+# boot is split across sibling files (legacy.go's bootLegacy + cloud_stub.go's
+# bootCloud under //go:build !cloud), so a single-file build leaves them
+# undefined. Default tags = the legacy Gin boot the deployment runs
+# (COMMERCE_MODE unset); `-tags cloud` is a separate, opt-in variant.
+RUN CGO_ENABLED=0 go build \
+    -ldflags="-s -w" \
+    -o /build/commerce \
+    ./cmd/commerce
+
+# Production stage
+FROM alpine:3.19
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata curl wget
+
+# Create non-root user
+RUN addgroup -S hanzo && adduser -S hanzo -G hanzo
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /build/commerce /app/commerce
+
+# Copy templates and static assets. Runtime reads only /app/templates/* (see
+# util/template: cwd+"/templates/..."), which includes templates/analytics — the
+# stale COPY of a now-removed top-level analytics/templates dir was dropped.
+COPY --from=builder /build/templates /app/templates
+COPY --from=builder /build/api/templates /app/api/templates
+
+# Create data directories
+RUN mkdir -p /app/data /app/logs && \
+    chown -R hanzo:hanzo /app
+
+USER hanzo
+
+# Expose default port
+EXPOSE 8000
+
+# Environment variables
+ENV COMMERCE_DIR=/app/data
+ENV COMMERCE_DEV=false
+ENV COMMERCE_PORT=8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD wget -q --spider http://localhost:8000/healthz || exit 1
+
+# Default command
+ENTRYPOINT ["/app/commerce"]
+CMD ["serve", "0.0.0.0:8000"]
