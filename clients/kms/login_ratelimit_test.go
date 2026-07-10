@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // V1: the public /v1/kms/auth/login broker is unauthenticated and fans out to IAM,
 // so it is rate-limited PER SOURCE IP to blunt credential-stuffing-through-cloud and
