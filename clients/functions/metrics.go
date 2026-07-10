@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -98,12 +99,12 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) metricsVi
 	return metricsView{Series: series, Status: st, CostCents: nil}
 }
 
-func (s *svc) metrics(c *zip.Ctx) error {
+func metrics(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
