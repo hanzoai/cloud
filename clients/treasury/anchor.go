@@ -157,23 +157,23 @@ func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
 // root to Hanzo L1. Global-admin only. When the chain path is wired it signs +
 // submits the anchor tx and records it; otherwise it returns the root that WOULD be
 // committed plus the exact remaining step (honest, records nothing false).
-func (s *svc) adminAnchor(c *zip.Ctx) error {
+func adminAnchor(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	if s.anchor.configured() {
-		rec, err := s.anchor.submit(ctx, s.record)
+	if s.State.anchor.configured() {
+		rec, err := s.State.anchor.submit(ctx, s.State.record)
 		if err != nil {
-			s.log.Error("treasury: anchor submit failed", "err", err)
-			st := s.anchor.status(ctx, s.record)
+			s.Log.Error("treasury: anchor submit failed", "err", err)
+			st := s.State.anchor.status(ctx, s.State.record)
 			st.Status = "error"
 			st.Note = "submit: " + err.Error()
 			return adminOK(c, map[string]any{"anchor": st})
 		}
-		s.emitAudit(ctx, "treasury.anchor", "", rec.TxHash, map[string]any{
-			"root": rec.Root, "txHash": rec.TxHash, "block": rec.Block, "chainId": s.anchor.chainID,
+		emitAudit(s, ctx, "treasury.anchor", "", rec.TxHash, map[string]any{
+			"root": rec.Root, "txHash": rec.TxHash, "block": rec.Block, "chainId": s.State.anchor.chainID,
 		})
 	}
-	return adminOK(c, map[string]any{"anchor": s.anchor.status(ctx, s.record)})
+	return adminOK(c, map[string]any{"anchor": s.State.anchor.status(ctx, s.State.record)})
 }
