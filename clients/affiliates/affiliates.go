@@ -149,15 +149,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/affiliates/:id/payout", cloud.Handle(s, adminPayout))
 }
 
-func init() {
-	// Order 144: a free slot before the AI /v1/* catch-all (150). No ordering
-	// dependency (it owns its own store + fans out to commerce over HTTP); its
-	// routes are all specific (/v1/affiliates*, /v1/admin/affiliates*), so they bind
-	// ahead of the catch-all regardless. The static /sweep binds before the /:id/*
-	// param routes (distinct segment counts).
-	cloud.Register("affiliates", 144, cloud.Typed(Mount))
-}
-
 // ── customer surface ─────────────────────────────────────────────────────────
 
 // myAffiliates answers GET /v1/affiliates for the validated caller. If the org is

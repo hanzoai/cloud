@@ -76,7 +76,7 @@ type state struct {
 	engine  *Engine
 	edge    *Edge // nil in app role
 	edgeCfg edgeConfig
-	role    string // "edge" | "app" (derived, for /v1/ingress/status)
+	role    string     // "edge" | "app" (derived, for /v1/ingress/status)
 	mu      sync.Mutex // serializes reload compiles
 }
 
@@ -159,20 +159,6 @@ func Shutdown(ctx context.Context) error {
 	}
 	mounted = nil
 	return err
-}
-
-func init() {
-	// Order 42: a specific /v1/ingress/* prefix, mounted well before the AI /v1/*
-	// catch-all (150). STAGED (config.stagedSubsystems) — mounts ONLY when the
-	// operator names "ingress" in CLOUD_ENABLE, so linking it changes nothing in a
-	// running deployment until deliberately activated.
-	cloud.RegisterWithShutdown("ingress", 42, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("ingress.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, Shutdown)
 }
 
 // mountRoutes registers the /v1/ingress control-plane surface. routes/services/

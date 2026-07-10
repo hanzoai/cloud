@@ -416,9 +416,3 @@ func firstNonEmpty(vals ...string) string {
 	}
 	return ""
 }
-
-func init() {
-	// Order 9: an early in-process read seam (no routes); set before the consuming
-	// subsystems (console 122, admin 146) serve requests.
-	cloud.Register("featureflags", 9, cloud.Typed(Mount))
-}

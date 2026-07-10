@@ -77,10 +77,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/edge/nodes", cloud.Handle(s, listEdgeNodes))
 }
 
-func init() {
-	cloud.Register("zero-trust", 134, cloud.Typed(Mount))
-}
-
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
 // validated IAM owner claim (principal.Org). It selects the "org-<org>" role
 // attribute this client filters ZT resources by, so a caller can never read another

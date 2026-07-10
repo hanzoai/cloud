@@ -147,13 +147,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/bots/run", cloud.Handle(s, run))
 }
 
-func init() {
-	// Order 143 — bind /v1/bots/run before the AI subsystem's /v1/* catch-all
-	// (150). No shutdown: this orchestrator owns no store or background worker
-	// (the durable record of a launch is the commerce ledger debit).
-	cloud.Register("bots", 143, cloud.Typed(Mount))
-}
-
 // run launches a computer-using bot: it authenticates the caller, gates+meters a
 // flat per-run fee against the caller's OWN org, mints the run id, and returns
 // the live VNC session descriptor. Every 200 reflects an authorized, metered
