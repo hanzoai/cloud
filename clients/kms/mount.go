@@ -35,21 +35,26 @@ import (
 	"github.com/zap-proto/zip/middleware"
 )
 
-// svc holds the embedded KMS client the routes serve from. A nil client means
-// KMS is not co-resident in this process (secrets served out-of-process or
-// disabled); the subsystem then mounts only the honest fail-closed health/config
-// so the binary never pretends to host secrets it cannot.
+// state is kms's own data; shared deps live in the embedded cloud.Base. It holds
+// the CONCRETE embedded *Client the routes serve from — distinct from Base.KMS,
+// the KMSClient interface — plus the IAM token-broker URL.
+//
+// A nil kms means KMS is not co-resident in this process (secrets served
+// out-of-process or disabled); the subsystem then mounts only the honest
+// fail-closed health/config so the binary never pretends to host secrets it cannot.
 //
 // iamTokenURL is the IAM client_credentials endpoint the /v1/kms/auth/login broker
 // exchanges a caller's clientId/clientSecret at. Empty ⇒ login fails closed (503):
 // cloud is NOT a token issuer, so with no IAM to broker to there is no way to mint
 // a validatable bearer.
-type svc struct {
+type state struct {
 	kms         *Client
 	iamTokenURL string
 }
 
-// Mount wires /v1/kms/* onto app.
+// Mount wires /v1/kms/* onto app. The concrete-client cast (deps.KMS → *Client),
+// deps.IAMIssuer and the conditional (health-only) route set make this a direct
+// construction (cloud.NewBase), not cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("kms.Mount: nil zip.App")
@@ -57,7 +62,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("kms.Mount: nil deps.Logger")
 	}
-	log := deps.Logger.New("subsystem", "kms")
 
 	// deps.KMS is the in-process Client (built by the factory this package
 	// registers, filled by build.go's BuildDeps) when kms is co-resident. Anything
@@ -85,9 +89,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			tokenURL = iss + "/v1/iam/oauth/token"
 		}
 	}
-	s := &svc{kms: kc, iamTokenURL: tokenURL}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{kms: kc, iamTokenURL: tokenURL}}
 
-	app.Get("/v1/kms/health", s.health)
+	app.Get("/v1/kms/health", cloud.Handle(s, health))
 	app.Get("/v1/kms/config", configHandler(deps))
 	// The login broker is PUBLIC (it IS the credential exchange) and independent of
 	// the local store: the kms-operator POSTs its per-tenant clientId/clientSecret
@@ -110,19 +114,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		Limit:  loginRateLimit,
 		Window: loginRateWindow,
 		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
-	})).Post("/login", s.login)
+	})).Post("/login", cloud.Handle(s, login))
 
 	if kc == nil {
-		log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")
+		s.Log.Warn("kms REST mounted health-only: no in-process KMS client (secrets served out-of-process or disabled)")
 		return nil
 	}
 
-	app.Get("/v1/kms/orgs/:org/secrets", s.guard(s.listSecrets))
-	app.Get("/v1/kms/orgs/:org/secrets/*", s.guard(s.getSecret))
-	app.Post("/v1/kms/orgs/:org/secrets", s.guard(s.putSecret))
-	app.Delete("/v1/kms/orgs/:org/secrets/*", s.guard(s.deleteSecret))
+	app.Get("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, listSecrets)))
+	app.Get("/v1/kms/orgs/:org/secrets/*", guard(s, cloud.Handle(s, getSecret)))
+	app.Post("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, putSecret)))
+	app.Delete("/v1/kms/orgs/:org/secrets/*", guard(s, cloud.Handle(s, deleteSecret)))
 
-	log.Info(
+	s.Log.Info(
 		"kms subsystem mounted",
 		"prefix", "/v1/kms",
 		"ready", kc.Ready(),
@@ -183,7 +187,7 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 // X-Org-Id is the raw owner claim), and it keeps the authz check and the store
 // path in lockstep — orgPath folds :org into /orgs/{org} verbatim, so a
 // case-insensitive authz check would let org "Acme" reach org "acme"'s namespace.
-func (s *svc) guard(h zip.Handler) zip.Handler {
+func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {
 		org := reqOrg(ctx)
 		if !validOrg(org) {
@@ -199,7 +203,7 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 		if !ctx.IsAdmin() && ctx.Org() != org {
 			return zip.ErrForbidden("caller may only access its own org's secrets")
 		}
-		if !s.kms.Ready() {
+		if !s.State.kms.Ready() {
 			return zip.Errorf(http.StatusServiceUnavailable, "%s", ErrMasterKeyMissing.Error())
 		}
 		return h(ctx)
@@ -211,15 +215,15 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 // health is a REAL probe: 200 only when the store is open AND a master key is
 // configured; 503 + the honest reason in health-only mode. Not JWT-gated —
 // liveness must be probe-able by the platform without a token.
-func (s *svc) health(ctx *zip.Ctx) error {
+func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 	res := map[string]any{"service": "kms", "status": "ok"}
-	if s.kms == nil {
+	if s.State.kms == nil {
 		res["status"], res["ready"] = "degraded", false
 		res["error"] = "no in-process KMS client (secrets served out-of-process or disabled)"
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
-	res["signing"] = s.kms.SigningConfigured()
-	if !s.kms.Ready() {
+	res["signing"] = s.State.kms.SigningConfigured()
+	if !s.State.kms.Ready() {
 		res["status"], res["ready"] = "degraded", false
 		res["error"] = ErrMasterKeyMissing.Error()
 		return ctx.JSON(http.StatusServiceUnavailable, res)
@@ -257,7 +261,7 @@ type secretPutRequest struct {
 
 // listSecrets returns the metadata (no ciphertext) of the org's secrets at a
 // path/env. ?path= narrows to a subpath; ?env= selects the environment.
-func (s *svc) listSecrets(ctx *zip.Ctx) error {
+func listSecrets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	env := envOr(ctx.Query("env"))
 	if !validEnv(env) {
@@ -267,7 +271,7 @@ func (s *svc) listSecrets(ctx *zip.Ctx) error {
 	if !ValidSubpath(sub) {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
-	metas, err := s.kms.List(orgPath(org, sub), env)
+	metas, err := s.State.kms.List(orgPath(org, sub), env)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
@@ -276,7 +280,7 @@ func (s *svc) listSecrets(ctx *zip.Ctx) error {
 
 // getSecret reads one secret value. The trailing wildcard is the sub-path + name
 // under the org; ?env= selects the environment. Returns the opened plaintext.
-func (s *svc) getSecret(ctx *zip.Ctx) error {
+func getSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	env := envOr(ctx.Query("env"))
 	if !validEnv(env) {
@@ -286,7 +290,7 @@ func (s *svc) getSecret(ctx *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("secret name is required and must be a clean '/'-separated path")
 	}
-	val, err := s.kms.Get(path, name, env)
+	val, err := s.State.kms.Get(path, name, env)
 	if err != nil {
 		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
@@ -299,7 +303,7 @@ func (s *svc) getSecret(ctx *zip.Ctx) error {
 // putSecret seals + upserts a secret. Body: {path?, name, env?, value}. The value
 // is sealed under a fresh per-secret DEK (master-key-wrapped) before storage —
 // plaintext never touches disk.
-func (s *svc) putSecret(ctx *zip.Ctx) error {
+func putSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	var req secretPutRequest
 	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
@@ -331,14 +335,14 @@ func (s *svc) putSecret(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("'path' must be '/'-separated non-empty segments without '.', '..', or control characters")
 	}
 	path := orgPath(org, req.Path)
-	if err := s.kms.Put(path, name, env, []byte(req.Value)); err != nil {
+	if err := s.State.kms.Put(path, name, env, []byte(req.Value)); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "%v", err)
 	}
 	return ctx.JSON(http.StatusOK, map[string]any{"stored": true, "name": name, "env": env})
 }
 
 // deleteSecret removes one secret. The trailing wildcard is the sub-path + name.
-func (s *svc) deleteSecret(ctx *zip.Ctx) error {
+func deleteSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	env := envOr(ctx.Query("env"))
 	if !validEnv(env) {
@@ -348,7 +352,7 @@ func (s *svc) deleteSecret(ctx *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("secret name is required and must be a clean '/'-separated path")
 	}
-	if err := s.kms.Delete(path, name, env); err != nil {
+	if err := s.State.kms.Delete(path, name, env); err != nil {
 		if errors.Is(err, ErrSecretNotFound) {
 			return zip.ErrNotFound("secret not found")
 		}
