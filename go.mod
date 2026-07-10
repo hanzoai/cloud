@@ -57,6 +57,7 @@ require (
 require (
 	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
+	github.com/hanzoai/captable v0.0.0-20260710092459-3cc625ee446f
 	github.com/luxfi/keys v1.2.2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )
