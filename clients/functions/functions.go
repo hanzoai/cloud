@@ -30,8 +30,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -68,15 +66,19 @@ const (
 const invokeFeeEnvPrefix = "CLOUD_FUNCTION_FEE_CENTS"
 
 type svc struct {
-	store *Store
-	exec  *execClient
-	log   luxlog.Logger
+	stores *cloud.TenantStore[*Store] // per-org functions DBs, opened once each
+	exec   *execClient
+	log    luxlog.Logger
 	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
 	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
 	bill *cloud.ResourceMeter
 }
 
 var mounted *svc
+
+// storeFor resolves the caller's org-scoped functions store, opening the per-org
+// file ({DataDir}/orgs/{orgSlug}/functions.db) once via the shared cache.
+func (s *svc) storeFor(org string) (*Store, error) { return s.stores.For(org, "") }
 
 // ---- HTTP response shapes (console functions.ts contract) ----
 
@@ -175,14 +177,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("functions.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("functions.Mount: data dir: %w", err)
+	s := &svc{
+		stores: cloud.NewTenantStore(deps.DataDir, "functions", openStore),
+		exec:   newExecClient(),
+		log:    log,
+		bill:   cloud.NewResourceMeter(deps, "functions"),
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "functions.db"))
-	if err != nil {
-		return fmt.Errorf("functions.Mount: open store: %w", err)
-	}
-	s := &svc{store: store, exec: newExecClient(), log: log, bill: cloud.NewResourceMeter(deps, "functions")}
 	mounted = s
 
 	// Static sub-routes before the :name param route so a real function can
@@ -226,6 +226,10 @@ func (s *svc) create(c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
 	var body createReq
 	if err := c.Bind(&body); err != nil {
@@ -273,7 +277,7 @@ func (s *svc) create(c *zip.Ctx) error {
 		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(body.EnvNames),
 		Status: "ready", LastDeployAt: now,
 	}
-	saved, err := s.store.Upsert(c.Context(), f)
+	saved, err := store.Upsert(c.Context(), f)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
@@ -285,14 +289,18 @@ func (s *svc) list(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	since := time.Now().Unix() - window7d
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
-		st, err := s.store.StatsSince(c.Context(), org, f.Name, since)
+		st, err := store.StatsSince(c.Context(), org, f.Name, since)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
 		}
@@ -306,8 +314,12 @@ func (s *svc) get(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	name := nameParam(c)
-	f, err := s.store.Get(c.Context(), org, name)
+	f, err := store.Get(c.Context(), org, name)
 	if err == errNotFound {
 		return zip.ErrNotFound("function not found")
 	}
@@ -315,8 +327,8 @@ func (s *svc) get(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 	since := time.Now().Unix() - window7d
-	st, _ := s.store.StatsSince(c.Context(), org, name, since)
-	invs, err := s.store.ListInvocations(c.Context(), org, name, 20)
+	st, _ := store.StatsSince(c.Context(), org, name, since)
+	invs, err := store.ListInvocations(c.Context(), org, name, 20)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
 	}
@@ -333,7 +345,11 @@ func (s *svc) del(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	deleted, err := s.store.Delete(c.Context(), org, nameParam(c))
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	deleted, err := store.Delete(c.Context(), org, nameParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -348,6 +364,10 @@ func (s *svc) invocations(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	name := nameParam(c)
 	limit := 100
 	if q := strings.TrimSpace(c.Query("limit")); q != "" {
@@ -355,7 +375,7 @@ func (s *svc) invocations(c *zip.Ctx) error {
 			limit = n
 		}
 	}
-	invs, err := s.store.ListInvocations(c.Context(), org, name, limit)
+	invs, err := store.ListInvocations(c.Context(), org, name, limit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
 	}
@@ -367,7 +387,11 @@ func (s *svc) logs(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	invs, err := s.store.ListInvocations(c.Context(), org, nameParam(c), 1)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	invs, err := store.ListInvocations(c.Context(), org, nameParam(c), 1)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "logs: %v", err)
 	}
@@ -387,7 +411,11 @@ func (s *svc) triggers(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "triggers: %v", err)
 	}
@@ -405,7 +433,11 @@ func (s *svc) deployments(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "deployments: %v", err)
 	}
@@ -428,7 +460,11 @@ func (s *svc) secrets(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "secrets: %v", err)
 	}
@@ -538,12 +574,12 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown closes the functions store. Idempotent.
+// Shutdown closes every open per-org functions store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.stores.CloseAll()
 	mounted = nil
 	return err
 }

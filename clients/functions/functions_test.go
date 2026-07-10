@@ -2,14 +2,19 @@ package functions
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := openStore(filepath.Join(t.TempDir(), "functions.db"))
+	db, err := cloud.TenantDB(t.TempDir(), "test", "", "functions")
+	if err != nil {
+		t.Fatalf("TenantDB: %v", err)
+	}
+	s, err := openStore(db)
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}

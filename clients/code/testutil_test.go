@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -56,14 +57,15 @@ func (f fakeSynth) Synthesize(_ context.Context, prompt string) (string, error) 
 
 func newTestService(t *testing.T) *service {
 	t.Helper()
+	dataDir := t.TempDir()
 	s := &service{
-		dataDir: t.TempDir(),
+		dataDir: dataDir,
 		embed:   fakeEmbedder{dims: 64, enabled: true},
 		synth:   fakeSynth{enabled: true},
 		log:     luxlog.New("test"),
-		stores:  map[string]*Store{},
+		stores:  cloud.NewTenantStore(dataDir, "code", openStore),
 	}
-	t.Cleanup(func() { _ = s.closeAll() })
+	t.Cleanup(func() { _ = s.stores.CloseAll() })
 	return s
 }
 

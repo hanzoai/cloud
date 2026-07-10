@@ -7,13 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver.
-	_ "github.com/hanzoai/sqlite"
 )
 
 var (
@@ -56,28 +49,18 @@ type Invocation struct {
 	CreatedAt    int64
 }
 
-// Store is the functions database. ONE SQLite file ({DataDir}/functions.db)
-// holds every org's records; tenancy is the org column.
+// Store is one org's functions database — ONE SQLite file per org at
+// {DataDir}/orgs/{orgSlug}/functions.db (opened via cloud.TenantDB). functions is
+// org-scoped (it carries no project axis); tenancy is PHYSICAL, with the org
+// column retained as defense-in-depth.
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
-	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB —
+// into the functions store, running its migration. It is the open func the shared
+// cloud.TenantStore cache calls once per org file.
+func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
