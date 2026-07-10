@@ -180,6 +180,50 @@ func Entitlements(ctx context.Context, id string) (map[string]any, error) {
 	return out.Entitlements, nil
 }
 
+// LicenseEntitlement resolves BOTH the canonical entitlement block AND the flat
+// license-feature list for a plan id from the @hanzo/plans catalog (the single
+// source of truth). It runs the bundle's "entitlements" route on the shared goja
+// host — the SAME route /v1/plans/entitlements/:id serves — and returns the parsed
+// `entitlements` map plus the `license_features` list the bundle's toLicenseFeatures
+// transform produces. It is the seam the commerce entitlement resolver
+// (commerce.CheckEntitlement) uses to map a subscription's plan tier to the flat
+// features a signed license carries, WITHOUT reimplementing the vocabulary in Go
+// (the entitlement transforms stay in one place — the JS bundle).
+//
+// found reports whether the plan id exists in the catalog. A 404 from the bundle is
+// (nil, nil, false, nil): a real "unknown plan", NOT a machinery error — so a caller
+// scanning several subscriptions can skip an unknown tier and keep going. ANY other
+// failure (plans subsystem not mounted, dispatch error, non-200/404 status, decode
+// error) returns a non-nil error so the money-path caller FAILS CLOSED rather than
+// treating an unresolved plan as "grants nothing".
+func LicenseEntitlement(ctx context.Context, id string) (entitlements map[string]any, features []string, found bool, err error) {
+	if host == nil {
+		return nil, nil, false, fmt.Errorf("plan.LicenseEntitlement: plans not mounted")
+	}
+	resp, err := host.Dispatch(ctx, goja.Request{
+		Route:  "entitlements",
+		Params: map[string]string{"id": id},
+		Tenant: "hanzo",
+	})
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("plan.LicenseEntitlement(%q): dispatch: %w", id, err)
+	}
+	if resp.Status == http.StatusNotFound {
+		return nil, nil, false, nil
+	}
+	if resp.Status != http.StatusOK {
+		return nil, nil, false, fmt.Errorf("plan.LicenseEntitlement(%q): status %d", id, resp.Status)
+	}
+	var out struct {
+		Entitlements    map[string]any `json:"entitlements"`
+		LicenseFeatures []string       `json:"license_features"`
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, nil, false, fmt.Errorf("plan.LicenseEntitlement(%q): decode: %w", id, err)
+	}
+	return out.Entitlements, out.LicenseFeatures, true, nil
+}
+
 // withContentType sets application/json and returns the bytes unchanged.
 func withContentType(c *zip.Ctx, b []byte) []byte {
 	c.SetHeader("Content-Type", "application/json")
