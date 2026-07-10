@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // RED adversarial tests — attacking the embedded KMS org-scope + envelope.
 // These are PROOF-OF-BREACH probes; a PASS here means the attack was BLOCKED,

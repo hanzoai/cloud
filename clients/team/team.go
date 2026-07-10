@@ -67,7 +67,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// (and no dev escape hatch), the subsystem serves HEALTH-ONLY: every /v1/team
 	// route is guarded to 503 and NO token is ever decoded/accepted, so a forged
 	// token cannot be used — while Mount still SUCCEEDS so the cloud binary and all
-	// other subsystems stay up (mirrors clients/kmssvc; erroring here would fail the
+	// other subsystems stay up (mirrors clients/kms; erroring here would fail the
 	// whole MountAll). /v1/team/health (serve.go's uniform contract) is unaffected.
 	degraded := resolveSecret(&cfg, log)
 

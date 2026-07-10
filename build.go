@@ -12,7 +12,6 @@ import (
 
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/gatewaypolicy"
-	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/s3admin"
 )
 
@@ -49,7 +48,8 @@ import (
 // when no endpoint is configured.
 func BuildDeps(cfg *Config) Deps {
 	logger := luxlog.New("cloud")
-	logger.Info("building deps",
+	logger.Info(
+		"building deps",
 		"brand", cfg.Brand,
 		"domain", cfg.Domain,
 		"iam_issuer", cfg.IAMIssuer,
@@ -176,26 +176,26 @@ func pick[T any](cfg *Config, log luxlog.Logger, name, label, zapAddr string, rp
 // every subsystem. Absent co-residency the legacy ZAP-RPC + disabled fallbacks
 // apply (out-of-process KMS, or not wired).
 //
-// The subsystem id is "kms" (clients/kmssvc registers it with cloud.HealthOwner
-// so the generic liveness route never shadows its real /v1/kms/health); this
-// gate keys on the same id so "enabled" is one concept.
+// The subsystem id is "kms" (clients/kms registers it with cloud.HealthOwner so
+// the generic liveness route never shadows its real /v1/kms/health, and registers
+// the client factory this gate calls); this gate keys on the same id so "enabled"
+// is one concept.
 func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 	if cfg.Enabled("kms") {
-		c, err := kms.New(kms.Config{
-			DataDir:      cfg.DataDir,
-			MasterKeyB64: cfg.KMSMasterKeyRef,
-			MPCAddr:      cfg.KMSMPCAddr,
-			MPCVaultID:   cfg.KMSMPCVaultID,
-			// Reader HA role opens the KMS store READ-ONLY (BypassLockGuard) off a
-			// restored replica — never the exclusive write lock. Writer (default)
-			// opens writable exactly as before.
-			ReadOnly: cfg.Role.IsReader(),
-		}, log)
+		// The embedded-client constructor is registered by clients/kms in init()
+		// (RegisterKMSClientFactory). cloud never imports clients/kms, so the KMS
+		// library and its /v1/kms subsystem live in one package with no cloud⇄kms
+		// import cycle. Absent the registration (clients/kms not linked into this
+		// binary) KMS fails closed rather than pretending to host secrets.
+		if kmsClientFactory == nil {
+			log.Error("deps.KMS: kms enabled but no client factory registered (clients/kms not linked); failing closed")
+			return clients.DisabledKMS()
+		}
+		c, err := kmsClientFactory(cfg, log)
 		if err != nil {
 			log.Error("deps.KMS: embedded KMS unavailable, failing closed", "err", err)
 			return clients.DisabledKMS()
 		}
-		log.Info("deps.KMS → in-process (embedded luxfi/kms)", "ready", c.Ready(), "signing", c.SigningConfigured())
 		return c
 	}
 	if cfg.KMSZAPAddr != "" {
@@ -203,6 +203,20 @@ func pickKMSClient(cfg *Config, log luxlog.Logger) KMSClient {
 		return clients.KMSRPCAt(cfg.KMSZAPAddr)
 	}
 	return clients.DisabledKMS()
+}
+
+// kmsClientFactory constructs the embedded in-process KMS client from cloud
+// Config. clients/kms registers it in init(); pickKMSClient calls it so cloud
+// depends on the KMSClient interface + this hook, never the concrete kms package
+// — the same inversion the subsystem Registry already uses (cloud mounts every
+// subsystem it never imports). Exactly one registration.
+var kmsClientFactory func(cfg *Config, log luxlog.Logger) (KMSClient, error)
+
+// RegisterKMSClientFactory installs the embedded-KMS constructor. clients/kms
+// calls this from its init(); it is the ONE inversion point that lets the KMS
+// library and its /v1/kms subsystem share one package with no cloud⇄kms cycle.
+func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient, error)) {
+	kmsClientFactory = f
 }
 
 // pickAIClient resolves deps.AI — the client the agents subsystem runs chat
@@ -250,7 +264,7 @@ func pickAIClient(cfg *Config, log luxlog.Logger) AIClient {
 // error 1006 — so minting against the PUBLIC issuer URL fails and every
 // POST /v1/agents/:ref/run 502s (root-caused 2026-07-04: in-cluster POST to
 // https://hanzo.id/v1/iam/oauth/token → 403/1006, while http://iam.hanzo.svc/... → 200).
-// This mirrors the KMS login-broker resolution (clients/kmssvc) exactly — one
+// This mirrors the KMS login-broker resolution (clients/kms) exactly — one
 // split-horizon policy, no drift. Prefer, in order: an explicit override
 // (CLOUD_AI_IAM_TOKEN_URL), the in-cluster IAM service base (IAM_URL — already
 // wired to http://iam.hanzo.svc for JWKS), then the public issuer as a last resort
