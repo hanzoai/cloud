@@ -15,7 +15,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
-	github.com/hanzoai/iam v1.31.19
+	github.com/hanzoai/iam v1.31.20-0.20260710102550-31a798fbcec2
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v0.144.8
 	github.com/hanzoai/plans v1.4.0
@@ -486,7 +486,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/authzstore v0.1.1 // indirect
-	github.com/hanzoai/beego/v2 v2.3.10
+	github.com/hanzoai/beego/v2 v2.4.1-0.20260710093857-0ad99bdf8b90
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect

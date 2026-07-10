@@ -120,6 +120,17 @@ func main() {
 	// k8s, config) routes to the cobra cloud-control CLI with the full args
 	// (including the verb) so cobra can parse subcommands + flags. cobra prints
 	// its own errors, so just translate to a non-zero exit.
+	//
+	// A control verb emits ZERO server-init chatter — its stdout/stderr stay
+	// clean and pipeable. The two historical noise sources were dependency
+	// package init() side effects that fire on IMPORT, i.e. before this branch
+	// runs, so they cannot be gated here; they are fixed at their source to be
+	// lazy / server-only instead. A control verb links that graph but triggers
+	// neither:
+	//   - the IAM registry-token signing key is resolved on first mint (a server
+	//     path), not in controllers' package init (iam.EnsureRegistrySigningKey);
+	//   - beego's conf/app.conf global-config probe is silent when the default
+	//     file is absent (the CLI case), loud only on a present-but-broken file.
 	if cli.IsControlVerb(sub) {
 		if err := cli.Execute(os.Args[1:]); err != nil {
 			os.Exit(1)
