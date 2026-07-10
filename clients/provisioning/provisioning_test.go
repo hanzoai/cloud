@@ -53,9 +53,9 @@ func (m *mockProv) Create(_ context.Context, _, _, pw string) (string, string, i
 
 func (m *mockProv) Drop(_ context.Context, _, _ string) error { m.dropped++; return nil }
 
-// newTestSvc builds a svc with a temp store, KMS-degraded secrets (no env),
+// newTestSvc builds a provisioning Service with a temp store, KMS-degraded secrets (no env),
 // and a mock provisioner under each given kind.
-func newTestSvc(t *testing.T, kinds ...string) (*svc, *mockProv) {
+func newTestSvc(t *testing.T, kinds ...string) (*cloud.Service[state], *mockProv) {
 	t.Helper()
 	// Force KMS degrade so secret persistence is hermetic and never dials.
 	t.Setenv("CLOUD_KMS_NODES", "")
@@ -66,7 +66,7 @@ func newTestSvc(t *testing.T, kinds ...string) (*svc, *mockProv) {
 	for _, k := range kinds {
 		reg[k] = mp
 	}
-	return &svc{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: reg, log: log}, mp
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: reg}}, mp
 }
 
 func TestStore_InsertGetListDelete(t *testing.T) {
@@ -396,7 +396,7 @@ func TestGenToken(t *testing.T) {
 func TestCreateOrgGate(t *testing.T) {
 	s, mp := newTestSvc(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/sql", s.create("sql"))
+	app.Post("/v1/sql", create(s, "sql"))
 
 	req, _ := http.NewRequest("POST", "/v1/sql", strings.NewReader(`{"name":"orders"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -423,9 +423,9 @@ func TestCreateOrgGate(t *testing.T) {
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 	s, mp := newTestSvc(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/sql", s.create("sql"))
-	app.Delete("/v1/sql/:name", s.drop("sql"))
-	app.Get("/v1/sql", s.list("sql"))
+	app.Post("/v1/sql", create(s, "sql"))
+	app.Delete("/v1/sql/:name", drop(s, "sql"))
+	app.Get("/v1/sql", list(s, "sql"))
 
 	for _, tc := range []struct{ method, path, body string }{
 		{"POST", "/v1/sql", `{"name":"orders"}`},
@@ -465,7 +465,7 @@ func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 	orch := newFakeOrch()
 	s := newDedicatedSvc(t, orch)
-	if s.sec.Enabled() {
+	if s.State.sec.Enabled() {
 		t.Fatal("precondition: KMS must be degraded for this test")
 	}
 
@@ -495,7 +495,7 @@ func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 	}
 
 	// ...but NOTHING is persisted in plaintext.
-	row, err := s.store.Get(context.Background(), "acme", "datastore", "cache")
+	row, err := s.State.store.Get(context.Background(), "acme", "datastore", "cache")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

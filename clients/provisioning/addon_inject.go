@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -59,23 +60,23 @@ func addonsSecretName(instance string) string { return instance + "-addons" }
 // add-on on the same instance never clobbers the first. No-op when the request
 // is not instance-bound (instance == "") — the pre-instance-binding behavior, so
 // every existing provision is unchanged.
-func (s *svc) injectAddonURL(ctx context.Context, org, instance, kind, dsn string) error {
+func injectAddonURL(s *cloud.Service[state], ctx context.Context, org, instance, kind, dsn string) error {
 	if instance == "" {
 		return nil
 	}
 	ns := tenantNamespace(org)
-	return s.orch.PatchAddonSecret(ctx, ns, addonsSecretName(instance), org, addonKey(kind), dsn)
+	return s.State.orch.PatchAddonSecret(ctx, ns, addonsSecretName(instance), org, addonKey(kind), dsn)
 }
 
 // removeAddonURL deletes the <KIND>_URL key from the instance's addons Secret so
 // the instance reverts to Base. Idempotent: a missing Secret/key is success.
 // No-op when the resource is not instance-bound.
-func (s *svc) removeAddonURL(ctx context.Context, org, instance, kind string) error {
+func removeAddonURL(s *cloud.Service[state], ctx context.Context, org, instance, kind string) error {
 	if instance == "" {
 		return nil
 	}
 	ns := tenantNamespace(org)
-	return s.orch.RemoveAddonSecretKey(ctx, ns, addonsSecretName(instance), addonKey(kind))
+	return s.State.orch.RemoveAddonSecretKey(ctx, ns, addonsSecretName(instance), addonKey(kind))
 }
 
 // ----- k8sOrchestrator addon impls ------------------------------------------
