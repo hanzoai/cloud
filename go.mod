@@ -812,13 +812,13 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzoai/ai v1.804.1-0.20260710044347-e7d31f95e0a9
+	github.com/hanzoai/ai v1.804.1
 	github.com/hanzoai/authz v1.10.4
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/commerce v1.46.40
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
-	github.com/hanzoai/o11y v1.5.4
+	github.com/hanzoai/o11y v1.5.5
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
