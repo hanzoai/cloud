@@ -65,9 +65,9 @@ func (b *billServer) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-// newBilledSvc builds a provisioning svc with a mock provisioner and a real
+// newBilledSvc builds a provisioning Service with a mock provisioner and a real
 // metering client pointed at commerceURL (default org "hanzo").
-func newBilledSvc(t *testing.T, commerceURL string, kinds ...string) (*svc, *mockProv) {
+func newBilledSvc(t *testing.T, commerceURL string, kinds ...string) (*cloud.Service[state], *mockProv) {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -81,20 +81,21 @@ func newBilledSvc(t *testing.T, commerceURL string, kinds ...string) (*svc, *moc
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	s := &svc{
-		store: newTestStore(t),
-		sec:   openSecrets("hanzo", log),
-		reg:   reg,
-		log:   log,
-		bill:  cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "provisioning"),
+	s := &cloud.Service[state]{
+		Base: cloud.Base{Log: log, Bill: cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "provisioning")},
+		State: state{
+			store: newTestStore(t),
+			sec:   openSecrets("hanzo", log),
+			reg:   reg,
+		},
 	}
 	return s, mp
 }
 
-func postCreate(t *testing.T, s *svc, kind, org, name string) *http.Response {
+func postCreate(t *testing.T, s *cloud.Service[state], kind, org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/"+kind, s.create(kind))
+	app.Post("/v1/"+kind, create(s, kind))
 	req, _ := http.NewRequest("POST", "/v1/"+kind, strings.NewReader(`{"name":"`+name+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
