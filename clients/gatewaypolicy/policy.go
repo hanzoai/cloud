@@ -18,10 +18,13 @@
 //     BEFORE identity). Only a SuperAdmin may write it. It is layered over the
 //     static boot defaults (env/flags), so an un-provisioned deployment behaves
 //     exactly as the static config until an operator PUTs an override.
-//   - PER-ORG policy — a tenant's own row, holding OrgRPM (its authenticated rate
-//     ceiling). An org admin writes its own; a SuperAdmin may write any.
+//   - PER-ORG policy — a tenant's own row, holding its self-service edge config:
+//     OrgRPM (authenticated rate ceiling), CacheTTLSec + CachePaths (edge-cache
+//     TTL, default and per-path), and Methods (accepted-method allowlist). An org
+//     admin writes its own; a SuperAdmin may write any. An unset field inherits the
+//     platform default, then the static default.
 //
-// Fail-soft: every resolver (Platform/OrgRPM) returns the static/platform default
+// Fail-soft: every resolver (Platform/OrgRPM/CacheTTL/Methods) returns the static/platform default
 // on any store error, so a policy-store outage never takes the edge down. Writes
 // fail loud (an unavailable store returns an error to the PUT handler).
 package gatewaypolicy
@@ -33,6 +36,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,12 +53,66 @@ type Policy struct {
 	PerIPRPM    int      `json:"per_ip_rpm,omitempty"`   // EdgeRateLimit: requests per WindowSec per client IP.
 	WindowSec   int      `json:"window_sec,omitempty"`   // EdgeRateLimit window, seconds.
 
-	// Per-org scope — consumed post-identity by ScopeRateLimit.
-	OrgRPM int `json:"org_rpm,omitempty"` // authenticated per-org ceiling, requests/min.
+	// Per-org scope — a tenant's OWN edge config (self-service). An org's own row
+	// wins; an unset field inherits the platform default, then the static default.
+	OrgRPM      int            `json:"org_rpm,omitempty"`       // authenticated per-org ceiling, requests/min (ScopeRateLimit).
+	CacheTTLSec int            `json:"cache_ttl_sec,omitempty"` // default edge-cache TTL for this org's responses, seconds (0 = no cache).
+	CachePaths  map[string]int `json:"cache_paths,omitempty"`   // per-path-prefix TTL overrides; the longest matching prefix wins over CacheTTLSec.
+	Methods     []string       `json:"methods,omitempty"`       // allowlist of HTTP methods the edge accepts (empty = all).
 
 	// Metadata (server-stamped; ignored on input).
 	UpdatedAt int64  `json:"updated_at,omitempty"`
 	UpdatedBy string `json:"updated_by,omitempty"`
+}
+
+// MaxCacheTTLSec bounds a cache TTL (7 days) so a fat-fingered PUT can't pin a
+// stale edge response indefinitely.
+const MaxCacheTTLSec = 7 * 24 * 60 * 60
+
+// canonicalMethods is the set of HTTP methods an org may allow at the edge.
+var canonicalMethods = map[string]bool{
+	"GET": true, "HEAD": true, "POST": true, "PUT": true,
+	"PATCH": true, "DELETE": true, "OPTIONS": true,
+}
+
+// Normalize canonicalizes free-form input in place (methods → upper-case, trimmed)
+// so a config round-trips in one stable shape. Applied at the write boundary,
+// before Validate.
+func (p *Policy) Normalize() {
+	for i, m := range p.Methods {
+		p.Methods[i] = strings.ToUpper(strings.TrimSpace(m))
+	}
+}
+
+// Validate checks structural bounds on the client-settable fields, returning a
+// human-readable error for a 400. It is the ONE validation gate shared by every
+// writer, so the store never persists an incoherent policy.
+func (p Policy) Validate() error {
+	if p.PerIPRPM < 0 || p.WindowSec < 0 || p.OrgRPM < 0 {
+		return fmt.Errorf("rate fields must be non-negative")
+	}
+	if p.CacheTTLSec < 0 || p.CacheTTLSec > MaxCacheTTLSec {
+		return fmt.Errorf("cache_ttl_sec must be in [0, %d]", MaxCacheTTLSec)
+	}
+	for path, ttl := range p.CachePaths {
+		if path == "" || path[0] != '/' {
+			return fmt.Errorf("cache_paths key %q must be a path starting with /", path)
+		}
+		if ttl < 0 || ttl > MaxCacheTTLSec {
+			return fmt.Errorf("cache_paths[%q] must be in [0, %d]", path, MaxCacheTTLSec)
+		}
+	}
+	for _, m := range p.Methods {
+		if !canonicalMethods[m] {
+			return fmt.Errorf("methods: unknown HTTP method %q", m)
+		}
+	}
+	for _, o := range p.CORSOrigins {
+		if strings.TrimSpace(o) == "" {
+			return fmt.Errorf("cors_origins must not contain empty entries")
+		}
+	}
+	return nil
 }
 
 // merge overlays the non-zero fields of over onto base and returns the result.
@@ -73,6 +131,15 @@ func merge(base, over Policy) Policy {
 	}
 	if over.OrgRPM > 0 {
 		out.OrgRPM = over.OrgRPM
+	}
+	if over.CacheTTLSec > 0 {
+		out.CacheTTLSec = over.CacheTTLSec
+	}
+	if len(over.CachePaths) > 0 {
+		out.CachePaths = over.CachePaths
+	}
+	if len(over.Methods) > 0 {
+		out.Methods = over.Methods
 	}
 	if over.UpdatedAt > 0 {
 		out.UpdatedAt = over.UpdatedAt
@@ -211,12 +278,15 @@ func (s *Store) PutPlatform(ctx context.Context, p Policy) (Policy, error) {
 	return s.Put(ctx, s.adminOrg, p)
 }
 
-// Effective returns the read-back view for org: the platform policy (CORS +
-// per-IP) with the org's own OrgRPM overlaid. This is what GET /v1/gateway/config
-// returns — an org sees the platform edge policy in force plus its own ceiling.
+// Effective returns the read-back view for org: the platform edge policy (CORS +
+// per-IP + window) with the org's OWN per-org config (rate ceiling, cache TTL /
+// per-path overrides, method allowlist) overlaid. This is what
+// GET /v1/gateway/config returns — a tenant sees the platform edge policy in force
+// plus its own configuration.
 func (s *Store) Effective(org string) Policy {
 	p := s.Platform()
-	p.OrgRPM = s.OrgRPM(org)
+	eo := s.effectiveOrg(org)
+	p.OrgRPM, p.CacheTTLSec, p.CachePaths, p.Methods = eo.OrgRPM, eo.CacheTTLSec, eo.CachePaths, eo.Methods
 	return p
 }
 
@@ -242,25 +312,71 @@ func (s *Store) Platform() Policy {
 	})
 }
 
+// effectiveOrg resolves org's per-org edge config — its own row overlaid on the
+// platform per-org defaults — cached under key=org with a short TTL, fail-open to
+// the platform defaults. Every per-org resolver (OrgRPM / CacheTTL / Methods) and
+// the Effective read-back share this ONE value, so an org has exactly one resolved
+// config and one cache entry.
+func (s *Store) effectiveOrg(org string) Policy {
+	if s == nil || org == "" {
+		return Policy{}
+	}
+	return s.resolve(org, func() Policy {
+		plat := s.Platform()
+		base := Policy{OrgRPM: plat.OrgRPM, CacheTTLSec: plat.CacheTTLSec, CachePaths: plat.CachePaths, Methods: plat.Methods}
+		row, ok, err := s.Get(context.Background(), org)
+		if err != nil || !ok {
+			return base
+		}
+		return merge(base, Policy{OrgRPM: row.OrgRPM, CacheTTLSec: row.CacheTTLSec, CachePaths: row.CachePaths, Methods: row.Methods})
+	})
+}
+
 // OrgRPM returns the authenticated per-org rate ceiling (requests/min) for org: the
 // org's own row wins, else the platform default's OrgRPM, else 0 (no policy limit).
 // Cached with a short TTL, fail-open (0). Called per-request by ScopeRateLimit
 // (post-identity).
 func (s *Store) OrgRPM(org string) int {
-	if s == nil || org == "" {
+	return s.effectiveOrg(org).OrgRPM
+}
+
+// CacheTTL returns the edge-cache TTL (seconds) for org+path: the org's own
+// longest-matching cache_paths prefix wins, else its default CacheTTLSec, else the
+// platform default, else 0 (no caching). Cached with a short TTL, fail-open (0).
+// The edge cache middleware reads this live, per request, so an operator's PUT
+// takes effect without a redeploy (mirrors OrgRPM / Platform).
+func (s *Store) CacheTTL(org, path string) int {
+	if s == nil {
 		return 0
 	}
-	return s.resolve(org, func() Policy {
-		plat := s.Platform()
-		row, ok, err := s.Get(context.Background(), org)
-		if err != nil || !ok {
-			return Policy{OrgRPM: plat.OrgRPM}
+	p := s.effectiveOrg(org)
+	if ttl, ok := longestPrefixTTL(p.CachePaths, path); ok {
+		return ttl
+	}
+	return p.CacheTTLSec
+}
+
+// Methods returns the allowlist of HTTP methods the edge accepts for org (nil =
+// all allowed): the org's own list wins, else the platform default. Fail-open
+// (nil). The edge method-guard reads this live.
+func (s *Store) Methods(org string) []string {
+	if s == nil {
+		return nil
+	}
+	return s.effectiveOrg(org).Methods
+}
+
+// longestPrefixTTL returns the TTL of the longest path-prefix in m that prefixes
+// path (found=false when none match), so a specific "/v1/models" override wins
+// over a broader "/v1".
+func longestPrefixTTL(m map[string]int, path string) (int, bool) {
+	best, bestLen, found := 0, -1, false
+	for prefix, ttl := range m {
+		if len(prefix) > bestLen && strings.HasPrefix(path, prefix) {
+			best, bestLen, found = ttl, len(prefix), true
 		}
-		if row.OrgRPM > 0 {
-			return Policy{OrgRPM: row.OrgRPM}
-		}
-		return Policy{OrgRPM: plat.OrgRPM}
-	}).OrgRPM
+	}
+	return best, found
 }
 
 // resolve returns the cached policy for key, recomputing via load on a miss/expiry.

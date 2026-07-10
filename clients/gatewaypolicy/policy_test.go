@@ -103,6 +103,86 @@ func TestPerOrgOrgRPM(t *testing.T) {
 	}
 }
 
+// TestPerOrgCacheMethodsResolvers: the per-org cache/method knobs round-trip and
+// resolve — default vs longest-prefix cache TTL, method allowlist — and a distinct
+// org inherits neither (isolation).
+func TestPerOrgCacheMethodsResolvers(t *testing.T) {
+	s, err := New(t.TempDir(), "admin", staticDefaults())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+
+	if _, err := s.Put(context.Background(), "acme", Policy{
+		CacheTTLSec: 30,
+		CachePaths:  map[string]int{"/v1": 60, "/v1/models": 300},
+		Methods:     []string{"GET", "POST"},
+	}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	if got := s.CacheTTL("acme", "/other"); got != 30 {
+		t.Fatalf("default CacheTTL = %d, want 30", got)
+	}
+	if got := s.CacheTTL("acme", "/v1/health"); got != 60 {
+		t.Fatalf("prefix /v1 CacheTTL = %d, want 60", got)
+	}
+	if got := s.CacheTTL("acme", "/v1/models/x"); got != 300 {
+		t.Fatalf("longest-prefix CacheTTL = %d, want 300", got)
+	}
+	if got := s.Methods("acme"); len(got) != 2 || got[0] != "GET" {
+		t.Fatalf("Methods(acme) = %v, want [GET POST]", got)
+	}
+
+	// Isolation: another org inherits neither acme's cache nor its methods.
+	if got := s.CacheTTL("globex", "/v1/models/x"); got != 0 {
+		t.Fatalf("CacheTTL(globex) = %d, want 0", got)
+	}
+	if got := s.Methods("globex"); got != nil {
+		t.Fatalf("Methods(globex) = %v, want nil", got)
+	}
+}
+
+// TestPlatformDefaultsPerOrgKnobs: a platform-row default (cache/methods) applies
+// to any org with no own row, and an org's own row still wins over it.
+func TestPlatformDefaultsPerOrgKnobs(t *testing.T) {
+	s, err := New(t.TempDir(), "admin", staticDefaults())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer s.Close()
+
+	if _, err := s.PutPlatform(context.Background(), Policy{CacheTTLSec: 15, Methods: []string{"GET"}}); err != nil {
+		t.Fatalf("PutPlatform: %v", err)
+	}
+	if got := s.CacheTTL("nobody", "/x"); got != 15 {
+		t.Fatalf("platform-default CacheTTL(nobody) = %d, want 15", got)
+	}
+	if _, err := s.Put(context.Background(), "acme", Policy{CacheTTLSec: 99}); err != nil {
+		t.Fatalf("Put acme: %v", err)
+	}
+	if got := s.CacheTTL("acme", "/x"); got != 99 {
+		t.Fatalf("own-row CacheTTL(acme) = %d, want 99 (wins over platform default)", got)
+	}
+}
+
+// TestValidate: structural bounds are enforced, and a coherent config passes.
+func TestValidate(t *testing.T) {
+	for name, p := range map[string]Policy{
+		"ttl over max":   {CacheTTLSec: MaxCacheTTLSec + 1},
+		"unknown method": {Methods: []string{"TRACE"}},
+		"bad path key":   {CachePaths: map[string]int{"v1": 10}},
+		"negative rate":  {OrgRPM: -1},
+	} {
+		if err := p.Validate(); err == nil {
+			t.Fatalf("%s must be rejected", name)
+		}
+	}
+	if err := (Policy{OrgRPM: 60, CacheTTLSec: 30, CachePaths: map[string]int{"/v1": 5}, Methods: []string{"GET"}}).Validate(); err != nil {
+		t.Fatalf("valid config must pass, got %v", err)
+	}
+}
+
 // TestPersistAcrossReopen: a written policy survives a store reopen (real SQLite).
 func TestPersistAcrossReopen(t *testing.T) {
 	dir := t.TempDir()
