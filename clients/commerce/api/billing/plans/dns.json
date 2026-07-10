@@ -1,0 +1,72 @@
+[
+  {
+    "id": "dns-free",
+    "name": "DNS Free",
+    "description": "Get started with Hanzo DNS or Cloudflare. 2 zones, 50 records per zone, 10K queries/day.",
+    "priceMonthly": 0,
+    "priceAnnual": 0,
+    "category": "dns",
+    "features": [
+      "2 DNS zones",
+      "50 records per zone",
+      "10,000 queries/day",
+      "Hanzo DNS or Cloudflare (user choice)",
+      "Standard DNS record types",
+      "API access"
+    ],
+    "limits": {
+      "zones": 2,
+      "recordsPerZone": 50,
+      "queriesPerDay": 10000
+    }
+  },
+  {
+    "id": "dns-pro",
+    "name": "DNS Pro",
+    "description": "For production workloads. 25 zones, 500 records, 1M queries/day with DNSSEC and analytics.",
+    "priceMonthly": 5,
+    "priceAnnual": 4,
+    "category": "dns",
+    "popular": true,
+    "features": [
+      "25 DNS zones",
+      "500 records per zone",
+      "1,000,000 queries/day",
+      "DNSSEC",
+      "Advanced routing (geo, weighted, failover)",
+      "Query analytics dashboard",
+      "All standard DNS record types",
+      "Email support"
+    ],
+    "limits": {
+      "zones": 25,
+      "recordsPerZone": 500,
+      "queriesPerDay": 1000000
+    }
+  },
+  {
+    "id": "dns-enterprise",
+    "name": "DNS Enterprise",
+    "description": "Unlimited DNS infrastructure. Dedicated nameservers, SLA, and priority support.",
+    "priceMonthly": 25,
+    "priceAnnual": 20,
+    "category": "dns",
+    "features": [
+      "Unlimited DNS zones",
+      "Unlimited records per zone",
+      "Unlimited queries",
+      "DNSSEC",
+      "Advanced routing (geo, weighted, failover)",
+      "Query analytics dashboard",
+      "Dedicated nameservers",
+      "99.999% SLA",
+      "Priority support",
+      "Custom TTL policies"
+    ],
+    "limits": {
+      "zones": -1,
+      "recordsPerZone": -1,
+      "queriesPerDay": -1
+    }
+  }
+]

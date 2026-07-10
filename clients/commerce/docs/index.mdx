@@ -1,0 +1,264 @@
+---
+title: Hanzo Commerce
+description: Headless e-commerce platform providing product management, checkout, subscriptions, and payment processing for AI-powered applications.
+---
+
+# Hanzo Commerce
+
+Hanzo Commerce is a headless e-commerce platform providing product management, checkout, subscriptions, and payment processing for AI-powered applications.
+
+## Features
+
+- **Product Catalog**: Flexible product and variant management
+- **Checkout API**: Customizable checkout flows
+- **Subscriptions**: Recurring billing and usage-based pricing
+- **Multi-Currency**: Global currency support
+- **Tax Automation**: Automatic tax calculation
+- **Webhooks**: Real-time event notifications
+
+## Architecture
+
+```
++---------------------------------------------------------------+
+|                     HANZO COMMERCE                             |
++---------------------------------------------------------------+
+|                                                                |
+|  +-----------------------+  +-------------------------------+  |
+|  |      Catalog          |  |         Orders                |  |
+|  |  +------+  +-------+  |  |  +--------+  +-------------+  |  |
+|  |  |Product|  |Variant|  |  |  | Cart  |  | Checkout    |  |  |
+|  |  +------+  +-------+  |  |  +--------+  +-------------+  |  |
+|  +-----------------------+  +-------------------------------+  |
+|                                                                |
+|  +-----------------------+  +-------------------------------+  |
+|  |     Payments          |  |       Subscriptions           |  |
+|  |  +------+  +-------+  |  |  +--------+  +-------------+  |  |
+|  |  |Stripe|  | Crypto|  |  |  | Plans  |  | Metering    |  |  |
+|  |  +------+  +-------+  |  |  +--------+  +-------------+  |  |
+|  +-----------------------+  +-------------------------------+  |
+|                                                                |
++---------------------------------------------------------------+
+```
+
+## Endpoints
+
+| Environment | URL |
+|-------------|-----|
+| Production | `https://commerce.hanzo.ai` |
+| Storefront | `https://store.hanzo.ai` |
+| Staging | `https://stg.commerce.hanzo.ai` |
+
+## Quick Start
+
+### 1. Install SDK
+
+```typescript
+import { HanzoCommerce } from '@hanzo/commerce'
+
+const commerce = new HanzoCommerce({
+  apiKey: process.env.HANZO_COMMERCE_KEY
+})
+```
+
+### 2. Create Product
+
+```typescript
+const product = await commerce.products.create({
+  name: 'AI API Credits',
+  description: 'Credits for AI inference',
+  price: 10.00,
+  currency: 'USD',
+  type: 'digital'
+})
+```
+
+### 3. Create Checkout
+
+```typescript
+const checkout = await commerce.checkouts.create({
+  items: [
+    { productId: product.id, quantity: 10 }
+  ],
+  successUrl: 'https://myapp.com/success',
+  cancelUrl: 'https://myapp.com/cancel'
+})
+
+// Redirect to checkout
+window.location.href = checkout.url
+```
+
+## Products
+
+### Product Types
+
+| Type | Description |
+|------|-------------|
+| `physical` | Shippable goods |
+| `digital` | Digital downloads |
+| `subscription` | Recurring billing |
+| `credits` | Usage-based credits |
+
+### Create Product with Variants
+
+```typescript
+const product = await commerce.products.create({
+  name: 'API Plan',
+  type: 'subscription',
+  variants: [
+    { name: 'Starter', price: 29, interval: 'month' },
+    { name: 'Pro', price: 99, interval: 'month' },
+    { name: 'Enterprise', price: 299, interval: 'month' }
+  ]
+})
+```
+
+## Subscriptions
+
+### Create Subscription
+
+```typescript
+const subscription = await commerce.subscriptions.create({
+  customerId: 'cus_123',
+  priceId: 'price_pro_monthly',
+  paymentMethod: 'pm_xxx'
+})
+```
+
+### Usage-Based Billing
+
+```typescript
+// Report usage
+await commerce.usage.record({
+  subscriptionId: 'sub_123',
+  metric: 'api_calls',
+  quantity: 1000
+})
+
+// Get usage
+const usage = await commerce.usage.get({
+  subscriptionId: 'sub_123',
+  startDate: '2024-01-01',
+  endDate: '2024-01-31'
+})
+```
+
+## Payments
+
+### Supported Providers
+
+| Provider | Types |
+|----------|-------|
+| Stripe | Cards, ACH, SEPA |
+| Crypto | BTC, ETH, USDC |
+| Apple Pay | iOS |
+| Google Pay | Android |
+
+### Process Payment
+
+```typescript
+const payment = await commerce.payments.create({
+  amount: 100.00,
+  currency: 'USD',
+  paymentMethod: 'pm_xxx',
+  customerId: 'cus_123'
+})
+```
+
+### Crypto Payments
+
+```typescript
+const payment = await commerce.crypto.createPayment({
+  amount: 100.00,
+  currency: 'USDC',
+  network: 'ethereum'
+})
+
+// Returns payment address
+console.log(payment.address)
+```
+
+## Webhooks
+
+### Configure Webhook
+
+```typescript
+await commerce.webhooks.create({
+  url: 'https://myapp.com/webhooks/commerce',
+  events: [
+    'checkout.completed',
+    'subscription.created',
+    'payment.succeeded'
+  ]
+})
+```
+
+### Webhook Events
+
+| Event | Description |
+|-------|-------------|
+| `checkout.completed` | Checkout finished |
+| `order.created` | New order placed |
+| `payment.succeeded` | Payment successful |
+| `payment.failed` | Payment failed |
+| `subscription.created` | New subscription |
+| `subscription.cancelled` | Subscription cancelled |
+| `invoice.paid` | Invoice payment received |
+
+## API Reference
+
+### Products
+
+- `POST /products` - Create product
+- `GET /products` - List products
+- `GET /products/:id` - Get product
+- `PATCH /products/:id` - Update product
+- `DELETE /products/:id` - Delete product
+
+### Checkouts
+
+- `POST /checkouts` - Create checkout session
+- `GET /checkouts/:id` - Get checkout status
+
+### Subscriptions
+
+- `POST /subscriptions` - Create subscription
+- `GET /subscriptions/:id` - Get subscription
+- `PATCH /subscriptions/:id` - Update subscription
+- `DELETE /subscriptions/:id` - Cancel subscription
+
+### Usage
+
+- `POST /usage` - Record usage
+- `GET /usage` - Get usage summary
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# API
+COMMERCE_API_URL=https://commerce.hanzo.ai
+
+# Stripe
+STRIPE_SECRET_KEY=sk_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+
+# Crypto
+CRYPTO_WALLET_ADDRESS=0x...
+CRYPTO_NETWORK=ethereum
+
+# Tax
+TAX_PROVIDER=taxjar
+TAXJAR_API_KEY=xxx
+```
+
+## Docker Deployment
+
+```bash
+docker run -d \
+  --name hanzo-commerce \
+  -p 8080:8080 \
+  -e STRIPE_SECRET_KEY=sk_xxx \
+  -e DATABASE_URL=postgres://... \
+  hanzoai/commerce:latest
+```

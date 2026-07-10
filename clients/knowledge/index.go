@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/provisioning"
 )
 
@@ -45,9 +46,8 @@ import (
 type indexer struct {
 	vectorURL  string // Qdrant REST base, e.g. http://vector.hanzo.svc.cluster.local:6333
 	vectorKey  string // Qdrant api-key header (empty ⇒ unauthenticated in-cluster)
-	embedURL   string // gateway /v1 root, e.g. https://api.hanzo.ai/v1
-	embedKey   string // gateway bearer (CLOUD_AI_API_KEY); empty ⇒ index disabled
-	embedModel string // embedding model — SAME for index + query
+	ai         cloud.AIClient // shared AI client — embeddings go the ONE org/project-aligned, metered path
+	embedModel string         // embedding model — SAME for index + query
 	dims       int    // embedding dimension the collection is created with
 	http       *http.Client
 
@@ -58,6 +58,7 @@ type indexer struct {
 var (
 	idxOnce sync.Once
 	idx     *indexer
+	kbAI    cloud.AIClient // set once in Mount; the AI client the lazy index() embeds through
 )
 
 // getenv returns the env value for key, or dflt when unset/empty.
@@ -84,9 +85,8 @@ func index() *indexer {
 		idx = &indexer{
 			vectorURL:   strings.TrimRight(getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
 			vectorKey:   os.Getenv("vectorApiKey"),
-			embedURL:    strings.TrimRight(getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"), "/"),
-			embedKey:    os.Getenv("CLOUD_AI_API_KEY"),
-			embedModel:  getenv("KB_EMBED_MODEL", "text-embedding-3-small"),
+			ai:          kbAI,
+			embedModel:  getenv("CLOUD_EMBED_MODEL", "bge-m3"),
 			dims:        dims,
 			http:        &http.Client{Timeout: 20 * time.Second},
 			ensuredOrgs: map[string]bool{},
@@ -99,7 +99,7 @@ func index() *indexer {
 // When disabled, indexing is a silent no-op and search returns empty — an
 // un-provisioned deployment degrades to a pure DocType store with an honest empty
 // retrieval, never a crash and never a fabricated result.
-func (x *indexer) enabled() bool { return x.embedKey != "" && x.vectorURL != "" }
+func (x *indexer) enabled() bool { return x.ai != nil && x.vectorURL != "" }
 
 // collection is the org's PHYSICAL vector namespace. The "kb_" prefix keeps KB's
 // collections disjoint from any other vector use of the same org slug. The org is
@@ -376,43 +376,23 @@ func (x *indexer) ensureCollection(ctx context.Context, org string) error {
 	return nil
 }
 
-// embed calls the gateway's OpenAI-compatible /embeddings for a single input and
-// returns the float32 vector. The bearer is the KMS-injected AI virtual key — never
-// logged. A non-2xx or an empty data array is an error (the caller decides whether
-// that fails open at index time or empty at query time).
+// embed returns the float32 vector for a single input through the shared
+// cloud.AIClient (deps.AI) — the SAME org/project-aligned, metered, observed path
+// chat and clients/code run through. There is no embed-specific key or endpoint.
+// An empty vector is an error (the caller decides whether that fails open at
+// index time or empty at query time).
 func (x *indexer) embed(ctx context.Context, text string) ([]float32, error) {
-	reqBody, _ := json.Marshal(map[string]any{"model": x.embedModel, "input": text})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, x.embedURL+"/embeddings", bytes.NewReader(reqBody))
+	if x.ai == nil {
+		return nil, fmt.Errorf("kb: embeddings disabled (no AI client)")
+	}
+	vecs, err := x.ai.Embed(ctx, x.embedModel, []string{text})
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+x.embedKey)
-
-	resp, err := x.http.Do(req)
-	if err != nil {
-		return nil, err
+	if len(vecs) == 0 || len(vecs[0]) == 0 {
+		return nil, fmt.Errorf("kb: embeddings: empty vector")
 	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("embeddings status %d: %s", resp.StatusCode, truncate(raw, 200))
-	}
-	var out struct {
-		Data []struct {
-			Embedding []float32 `json:"embedding"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("decode embeddings: %w", err)
-	}
-	if len(out.Data) == 0 || len(out.Data[0].Embedding) == 0 {
-		return nil, fmt.Errorf("embeddings: empty vector")
-	}
-	return out.Data[0].Embedding, nil
+	return vecs[0], nil
 }
 
 // qdrant performs one Qdrant REST call. body is JSON-encoded when non-nil; when out
