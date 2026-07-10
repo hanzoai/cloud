@@ -109,7 +109,7 @@ var authorityHeaders = []string{
 // a validated principal and only after passing the cross-org guard. Unlike
 // authorityHeaders they are not minted from the token; they must merely be proven
 // non-foreign to the validated org.
-var subScopeHeaders = []string{"X-Project-Id", "X-App-Id"}
+var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id"}
 
 // SanitizeIdentity returns the identity-trust-boundary middleware.
 //
@@ -164,6 +164,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		}
 		cliProject := strings.TrimSpace(string(req.Header.Peek("X-Project-Id")))
 		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
+		cliBillingAccount := strings.TrimSpace(string(req.Header.Peek("X-Billing-Account-Id")))
 		for _, h := range authorityHeaders {
 			req.Header.Del(h)
 		}
@@ -226,7 +227,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				effOrg = owner
 				req.Header.Set("X-Org-Id", owner)
 			}
-			sanitizeSubScopes(c, effOrg, cliProject, cliApp)
+			sanitizeSubScopes(c, effOrg, cliProject, cliApp, cliBillingAccount)
 			return c.Continue()
 		}
 
@@ -270,7 +271,7 @@ func IdentityMiddleware(cfg *Config) zip.Handler {
 //
 // With no effective org (an unsafe/absent owner) NOTHING is re-injected: an
 // org-less request carries no scope.
-func sanitizeSubScopes(c *zip.Ctx, org, project, app string) {
+func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	if org == "" {
 		return
 	}
@@ -280,6 +281,14 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app string) {
 	}
 	if app != "" {
 		req.Header.Set("X-App-Id", app)
+	}
+	// X-Billing-Account-Id is an ATTRIBUTION hint only: the debit account is always
+	// resolved SERVER-SIDE by commerce from the org's ProjectBinding (never trusted
+	// from this header), so a mislabelled account can only ever misattribute the
+	// caller's OWN spend within its own org — it can never redirect spend to another
+	// tenant's account. Forwarded as-is on the validated path, dropped when anonymous.
+	if billingAccount != "" {
+		req.Header.Set("X-Billing-Account-Id", billingAccount)
 	}
 }
 
