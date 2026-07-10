@@ -46,6 +46,13 @@ var defaultGitProviderHosts = []string{"github.com", "gitlab.com", "bitbucket.or
 // apexes) for a self-hosted git provider, else the built-in set applies.
 var gitProviderHosts = resolveGitHosts()
 
+// selfGitHost is the cloud's OWN embedded-git apex (deps.Domain). The cloud
+// serves its repos there (clients/git), so its own clone URLs are ALWAYS a
+// trusted build source and git-push-to-deploy works with no extra config. Set
+// once at platform Mount; an orthogonal trust from the external-provider
+// allowlist above.
+var selfGitHost string
+
 func resolveGitHosts() []string {
 	raw := strings.TrimSpace(getenv("CLOUD_PLATFORM_GIT_HOSTS", ""))
 	if raw == "" {
@@ -117,9 +124,12 @@ func validateRepoURL(raw string) (string, error) {
 	return s, nil
 }
 
-// hostAllowed reports whether host exactly matches, or is a subdomain of, an
-// allowlisted git provider apex.
+// hostAllowed reports whether host exactly matches, or is a subdomain of, the
+// cloud's own embedded-git apex or an allowlisted external git provider apex.
 func hostAllowed(host string) bool {
+	if selfGitHost != "" && (host == selfGitHost || strings.HasSuffix(host, "."+selfGitHost)) {
+		return true
+	}
 	for _, allowed := range gitProviderHosts {
 		if host == allowed || strings.HasSuffix(host, "."+allowed) {
 			return true
