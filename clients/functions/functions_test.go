@@ -108,7 +108,7 @@ func TestStatsSinceDerivation(t *testing.T) {
 		t.Fatalf("derived stats wrong: %+v", st)
 	}
 	// toView folds these into REAL rollups; success rate = 2/3.
-	v := (&svc{}).toView(Function{Name: "f", Namespace: "default"}, st)
+	v := toView(&cloud.Service[state]{}, Function{Name: "f", Namespace: "default"}, st)
 	if v.Invocations7d == nil || *v.Invocations7d != 3 {
 		t.Fatalf("invocations7d should be 3, got %v", v.Invocations7d)
 	}
@@ -123,7 +123,7 @@ func TestStatsSinceDerivation(t *testing.T) {
 // toView must OMIT metrics (nil → "—" in UI) when there are zero invocations —
 // never fabricate a 0% success rate.
 func TestToViewNoInvocationsOmitsMetrics(t *testing.T) {
-	v := (&svc{}).toView(Function{Name: "f", Namespace: "default"}, InvStats{})
+	v := toView(&cloud.Service[state]{}, Function{Name: "f", Namespace: "default"}, InvStats{})
 	if v.Invocations7d != nil || v.SuccessRate != nil || v.AvgDurationMs != nil || v.Errors7d != nil {
 		t.Fatalf("metrics must be nil when no invocations, got %+v", v)
 	}
