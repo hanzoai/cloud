@@ -69,10 +69,10 @@ func (b *billServer) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-// newBilledSvc builds an s3 svc with S3 admin credentials present (so guard does
+// newBilledSvc builds an s3 Service with S3 admin credentials present (so guard does
 // not 503 on Configured()) and a metering client pointed at commerceURL (default
 // org "hanzo"; empty ⇒ !Enabled()).
-func newBilledSvc(t *testing.T, commerceURL string) *svc {
+func newBilledSvc(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
@@ -82,18 +82,19 @@ func newBilledSvc(t *testing.T, commerceURL string) *svc {
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return &svc{
-		admin: s3admin.New(),
-		bill:  cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "s3"),
+	deps := cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}
+	return &cloud.Service[state]{
+		Base:  cloud.NewBase(deps, "storage"),
+		State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")},
 	}
 }
 
 // callGuard runs a guarded handler stub for org through the real guard. The stub
 // records whether it ran and returns hErr (nil ⇒ success path).
-func callGuard(t *testing.T, s *svc, org string, hErr error) (status int, ran *int32) {
+func callGuard(t *testing.T, s *cloud.Service[state], org string, hErr error) (status int, ran *int32) {
 	t.Helper()
 	var calls int32
-	h := s.guard(func(c *zip.Ctx) error {
+	h := guard(s, func(c *zip.Ctx) error {
 		atomic.AddInt32(&calls, 1)
 		if hErr != nil {
 			return hErr
