@@ -56,6 +56,7 @@ var frozen = []struct {
 	{"templates", false, false},      // was order 129
 	{"framework", false, true},       // was order 129
 	{"knowledge", false, false},      // was order 130
+	{"content", false, true},         // new: marketing content loop (after knowledge)
 	{"ml", true, false},              // was order 130
 	{"usage", false, false},          // was order 131
 	{"crm", false, false},            // was order 131
