@@ -1,4 +1,4 @@
-// Package gatewaysvc is the /v1/gateway subsystem: the RUNTIME config plane for
+// Package gateway is the /v1/gateway subsystem: the RUNTIME config plane for
 // the cloud edge ("gateway role"). It serves GET/PUT over the SAME
 // gatewaypolicy.Store the EdgeCORS/EdgeRateLimit middleware and ScopeRateLimit
 // read live, so an operator retunes the CORS allowlist, the pre-auth per-IP flood
@@ -23,7 +23,7 @@
 // does not open or close it (serve.go closes it once at shutdown), so there is one
 // store, one source of truth. Per-PROJECT rate scoping is NOT duplicated here — it
 // remains ScopeRateLimit's commerce-configured domain (per (org,project,service)).
-package gatewaysvc
+package gateway
 
 import (
 	"encoding/json"
@@ -46,13 +46,13 @@ var mounted *svc
 // Mount wires /v1/gateway/config onto app over the shared policy store.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("gatewaysvc.Mount: nil zip.App")
+		return fmt.Errorf("gateway.Mount: nil zip.App")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("gatewaysvc.Mount: nil deps.Logger")
+		return fmt.Errorf("gateway.Mount: nil deps.Logger")
 	}
 	if deps.GatewayPolicy == nil {
-		return fmt.Errorf("gatewaysvc.Mount: nil deps.GatewayPolicy")
+		return fmt.Errorf("gateway.Mount: nil deps.GatewayPolicy")
 	}
 	s := &svc{store: deps.GatewayPolicy, log: deps.Logger.New("subsystem", "gateway")}
 	mounted = s
@@ -70,7 +70,7 @@ func init() {
 	cloud.Register("gateway", 139, func(app any, deps cloud.Deps) error {
 		a, ok := app.(*zip.App)
 		if !ok {
-			return fmt.Errorf("gatewaysvc.Mount: app is %T, want *zip.App", app)
+			return fmt.Errorf("gateway.Mount: app is %T, want *zip.App", app)
 		}
 		return Mount(a, deps)
 	})
