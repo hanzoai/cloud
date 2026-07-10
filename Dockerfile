@@ -183,6 +183,14 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
+# RED gate — cek FROZEN-FORMAT guard, run INSIDE the image under the pinned Alpine
+# libsqlcipher: opens the committed encrypted fixture and reads its canary row. A
+# sqlcipher-dev pin/base bump that changes the on-disk format fails the IMAGE build
+# HERE (not only Go CI) → a silent prod brick of existing stores becomes a red build.
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -run TestFrozenFixtureOpens \
+      -tags "libsqlite3 sqlite_fts5" ./internal/cek
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
