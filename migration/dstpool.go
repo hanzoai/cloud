@@ -18,6 +18,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hanzoai/cloud/internal/cek"
 )
 
 // dstPool owns the open destination SQLite handles, one per
@@ -66,7 +68,7 @@ func (p *dstPool) get(ctx context.Context, org, user string, t TableInfo) (*dstH
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 		}
-		db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+		db, err := cek.Open(path)
 		if err != nil {
 			return nil, fmt.Errorf("open %s: %w", path, err)
 		}

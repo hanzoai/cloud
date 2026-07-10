@@ -22,6 +22,7 @@ import (
 	_ "github.com/hanzoai/sqlite"
 
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
+	"github.com/hanzoai/cloud/internal/cek"
 )
 
 // Store is the SQLite-backed ledger persistence. ONE file holds the whole chart of
@@ -34,7 +35,7 @@ type Store struct {
 
 // Open opens (creating + migrating) the ledger database at path.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}

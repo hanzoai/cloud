@@ -39,6 +39,7 @@ import (
 	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
 	// modernc directly instead would double-register "sqlite" under CGO and
 	// panic at init. Blank import registers the driver.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -111,7 +112,7 @@ type CheckpointFunc func(cp Checkpoint)
 // the file lock — the same single-writer discipline pricing/provisioning use,
 // here doubling as the chain's serialization guarantee.
 func Open(path string, mirror Mirror) (*Recorder, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("audit: open sqlite %q: %w", path, err)
 	}
