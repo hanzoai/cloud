@@ -130,3 +130,96 @@ func TestPut_EmptyBodyRejected(t *testing.T) {
 		t.Fatalf("empty policy must be 400, got %d", code)
 	}
 }
+
+// getPolicy GETs the effective config for the given identity and decodes it.
+func getPolicy(t *testing.T, app *zip.App, hdr map[string]string) gatewaypolicy.Policy {
+	t.Helper()
+	code, body := call(t, app, http.MethodGet, "/v1/gateway/config", "", hdr)
+	if code != 200 {
+		t.Fatalf("GET: %d (%s)", code, body)
+	}
+	var p gatewaypolicy.Policy
+	if err := json.Unmarshal([]byte(body), &p); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	return p
+}
+
+// TestPerOrg_CacheRateCORS_RoundTripAndIsolation is the crux of the per-org edge
+// config: an org PUTs cache TTL (default + per-path) + rate + method allowlist, and
+// GET round-trips them merged onto the platform CORS. A second org sets its own and
+// sees ONLY its own — the per-org rows are isolated, and the first org is untouched.
+func TestPerOrg_CacheRateCORS_RoundTripAndIsolation(t *testing.T) {
+	app, _ := mountApp(t)
+
+	// Platform CORS (SuperAdmin) — the shared, org-independent edge knob every
+	// tenant sees in its effective view.
+	if code, body := call(t, app, http.MethodPut, "/v1/gateway/config",
+		`{"cors_origins":["https://acme.example"]}`, superAdmin("admin")); code != 200 {
+		t.Fatalf("platform CORS write: got %d (%s)", code, body)
+	}
+
+	// acme sets its full per-org config: rate + default/per-path cache + methods.
+	acmeCfg := `{"org_rpm":120,"cache_ttl_sec":30,"cache_paths":{"/v1/models":300},"methods":["get","post"]}`
+	if code, body := call(t, app, http.MethodPut, "/v1/gateway/config", acmeCfg, orgAdmin("acme")); code != 200 {
+		t.Fatalf("acme per-org write: got %d (%s)", code, body)
+	}
+
+	// GET(acme) round-trips cache + rate + methods, plus the platform CORS.
+	acme := getPolicy(t, app, orgAdmin("acme"))
+	if acme.OrgRPM != 120 {
+		t.Fatalf("acme OrgRPM = %d, want 120", acme.OrgRPM)
+	}
+	if acme.CacheTTLSec != 30 {
+		t.Fatalf("acme CacheTTLSec = %d, want 30", acme.CacheTTLSec)
+	}
+	if acme.CachePaths["/v1/models"] != 300 {
+		t.Fatalf("acme CachePaths = %v, want /v1/models:300", acme.CachePaths)
+	}
+	if len(acme.Methods) != 2 || acme.Methods[0] != "GET" || acme.Methods[1] != "POST" {
+		t.Fatalf("acme Methods = %v, want [GET POST] (normalized)", acme.Methods)
+	}
+	if len(acme.CORSOrigins) != 1 || acme.CORSOrigins[0] != "https://acme.example" {
+		t.Fatalf("acme CORS = %v, want the platform CORS", acme.CORSOrigins)
+	}
+
+	// globex sets a DIFFERENT config; GET(globex) sees only its own per-org values,
+	// never acme's cache_paths/methods — but the same platform CORS.
+	if code, body := call(t, app, http.MethodPut, "/v1/gateway/config",
+		`{"org_rpm":10,"cache_ttl_sec":5}`, orgAdmin("globex")); code != 200 {
+		t.Fatalf("globex per-org write: got %d (%s)", code, body)
+	}
+	globex := getPolicy(t, app, orgAdmin("globex"))
+	if globex.OrgRPM != 10 || globex.CacheTTLSec != 5 {
+		t.Fatalf("globex config = OrgRPM %d / CacheTTLSec %d, want 10/5", globex.OrgRPM, globex.CacheTTLSec)
+	}
+	if len(globex.CachePaths) != 0 {
+		t.Fatalf("globex must NOT inherit acme's cache_paths, got %v", globex.CachePaths)
+	}
+	if len(globex.Methods) != 0 {
+		t.Fatalf("globex must NOT inherit acme's methods, got %v", globex.Methods)
+	}
+	if len(globex.CORSOrigins) != 1 || globex.CORSOrigins[0] != "https://acme.example" {
+		t.Fatalf("globex CORS = %v, want the shared platform CORS", globex.CORSOrigins)
+	}
+
+	// acme is unchanged by globex's write — isolation is symmetric.
+	if acme2 := getPolicy(t, app, orgAdmin("acme")); acme2.OrgRPM != 120 || acme2.CacheTTLSec != 30 || len(acme2.Methods) != 2 {
+		t.Fatalf("acme mutated by globex write: %+v", acme2)
+	}
+}
+
+// TestPut_ValidatesPerOrgConfig: a structurally invalid per-org body is a 400, not
+// a silently-dropped field.
+func TestPut_ValidatesPerOrgConfig(t *testing.T) {
+	app, _ := mountApp(t)
+	for _, body := range []string{
+		`{"methods":["TRACE"]}`,        // unknown HTTP method
+		`{"cache_paths":{"v1":10}}`,    // path without leading /
+		`{"cache_ttl_sec":9999999999}`, // over MaxCacheTTLSec
+	} {
+		if code, _ := call(t, app, http.MethodPut, "/v1/gateway/config", body, orgAdmin("acme")); code != 400 {
+			t.Fatalf("invalid body %s must be 400, got %d", body, code)
+		}
+	}
+}
