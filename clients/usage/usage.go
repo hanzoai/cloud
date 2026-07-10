@@ -46,7 +46,6 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -56,33 +55,38 @@ import (
 // unbounded read.
 const maxLedgerRows = 1000
 
-type svc struct {
+// state is the usage subsystem's own data: the commerce S2S reader. The shared
+// deps (logger, billing, brand) live in the embedded cloud.Base, reached as
+// s.Log / s.Bill — never re-plumbed here.
+type state struct {
 	commerce *commerceReader
-	log      luxlog.Logger
 }
 
-// Mount wires the usage surface onto app per HIP-0106.
+// Mount wires the usage surface onto app per HIP-0106 — one line over the generic
+// subsystem entrypoint: build the state, register the routes.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("usage.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("usage.Mount: nil deps.Logger")
-	}
-	s := &svc{
-		commerce: newCommerceReader(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		log:      deps.Logger.New("subsystem", "usage"),
-	}
-	app.Get("/v1/usage/summary", s.summary)
-	// Analytics entitlement surface (clients/usage/entitlement.go).
-	//   - /access echoes any plan's resolved AnalyticsAccess (always 200, free floor
-	//     on error) so dashboards self-configure against the live @hanzo/plans catalog.
-	//   - the rich read is entitlement-gated (access.Datastore); basic own-org usage
-	//     stays at /summary above, UNGATED.
-	app.Get("/v1/usage/analytics/access", s.analyticsAccess)
-	app.Get("/v1/usage/analytics", s.analytics)
-	s.log.Info("usage summary surface mounted", "prefix", "/v1/usage", "commerce", s.commerce.configured())
-	return nil
+	return cloud.Mount(app, deps, "usage", build, routes)
+}
+
+// build constructs the usage state: the commerce S2S reader from its env
+// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env,
+// never hard-coded).
+func build(b cloud.Base) (state, error) {
+	cr := newCommerceReader(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	b.Log.Info("usage summary surface", "prefix", "/v1/usage", "commerce", cr.configured())
+	return state{commerce: cr}, nil
+}
+
+// routes registers the usage surface.
+//   - /summary — basic own-org usage roll-up, UNGATED.
+//   - /analytics/access echoes a plan's resolved AnalyticsAccess (always 200, free
+//     floor on error) so dashboards self-configure against the live @hanzo/plans
+//     catalog.
+//   - /analytics is the rich per-org read, entitlement-gated (access.Datastore).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/usage/summary", cloud.Handle(s, summary))
+	app.Get("/v1/usage/analytics/access", cloud.Handle(s, analyticsAccess))
+	app.Get("/v1/usage/analytics", cloud.Handle(s, analytics))
 }
 
 func init() {
@@ -93,7 +97,7 @@ func init() {
 // for custom) bounds the window — the SAME grammar as /v1/analytics/* (one window
 // grammar, no drift). Composes commerce spend + warehouse LLM totals, each
 // degrading independently to honest zeros.
-func (s *svc) summary(c *zip.Ctx) error {
+func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	// principal.Tenant requires a VALIDATED principal (c.User() set only for a
 	// verified bearer) and returns the trusted, minted X-Org-Id — refusing a forged
 	// header on the no-principal path. This is the "org from validated bearer ONLY"
@@ -113,10 +117,10 @@ func (s *svc) summary(c *zip.Ctx) error {
 	ctx := c.Context()
 
 	// ── Spend (commerce) ── best-effort; unconfigured/unreachable → honest zeros.
-	spend := s.buildSpendBlock(ctx, org, start, end, interval)
+	spend := buildSpendBlock(s, ctx, org, start, end, interval)
 
 	// ── LLM totals (warehouse) ── honest-empty when the datastore is not connected.
-	llm, warehouseOK := s.buildLLMBlock(ctx, org, start, end)
+	llm, warehouseOK := buildLLMBlock(s, ctx, org, start, end)
 
 	// Per-tenant money must never be cached by the browser or an intermediary.
 	c.SetHeader("Cache-Control", "no-store")
@@ -138,11 +142,11 @@ func (s *svc) summary(c *zip.Ctx) error {
 // analytics controls to show against the LIVE catalog instead of hardcoding tiers.
 // Always 200 with the fail-closed floor on a resolution error, so a catalog blip
 // never breaks the client. Read-only public contract — no tenant data here.
-func (s *svc) analyticsAccess(c *zip.Ctx) error {
+func analyticsAccess(s *cloud.Service[state], c *zip.Ctx) error {
 	planID := strings.TrimSpace(c.Query("plan"))
 	access, err := ResolveAnalyticsAccess(c.Context(), planID)
 	if err != nil {
-		s.log.Warn("analytics access resolve failed; serving free floor", "plan", planID, "err", err)
+		s.Log.Warn("analytics access resolve failed; serving free floor", "plan", planID, "err", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"plan": planID,
@@ -164,7 +168,7 @@ func (s *svc) analyticsAccess(c *zip.Ctx) error {
 // principal carries no plan claim — so the caller passes ?plan=<id> and the gate
 // resolves THAT plan's access. When the org→plan resolver lands, swap the ?plan=
 // line below for the resolved caller-org plan; the gate + clamp logic is unchanged.
-func (s *svc) analytics(c *zip.Ctx) error {
+func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 	// Org from the VALIDATED bearer owner claim ONLY (never a client header). A caller
 	// can only ever read its OWN org; no principal → 401 (fail closed).
 	org, ok := principal.Tenant(c)
@@ -176,7 +180,7 @@ func (s *svc) analytics(c *zip.Ctx) error {
 	access, err := ResolveAnalyticsAccess(c.Context(), planID)
 	if err != nil {
 		// Fail closed to the free floor (Datastore=false) while logging the degradation.
-		s.log.Warn("analytics access resolve failed; failing closed to free floor", "org", org, "plan", planID, "err", err)
+		s.Log.Warn("analytics access resolve failed; failing closed to free floor", "org", org, "plan", planID, "err", err)
 	}
 
 	// GATE: the rich analytics/datastore surface is a paid entitlement. Unknown plan
@@ -200,7 +204,7 @@ func (s *svc) analytics(c *zip.Ctx) error {
 		start = floor
 	}
 
-	providers := s.buildAnalyticsBlock(c.Context(), org, start, end)
+	providers := buildAnalyticsBlock(s, c.Context(), org, start, end)
 
 	// Per-tenant analytics must never be cached by the browser or an intermediary.
 	c.SetHeader("Cache-Control", "no-store")
@@ -254,13 +258,13 @@ type ProviderRow struct {
 // (Available=false) when the datastore is not connected or a query blips, so the
 // gated read never 5xxs on a warehouse outage. Org is bound POSITIONALLY (never
 // interpolated) — a caller can never read another org's usage.
-func (s *svc) buildAnalyticsBlock(ctx context.Context, org string, start, end time.Time) ProviderBreakdown {
+func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time) ProviderBreakdown {
 	empty := ProviderBreakdown{Available: false, Items: []ProviderRow{}, Source: llmTable}
 	if !aiobject.DatastoreEnabled() {
 		return empty
 	}
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
-		s.log.Debug("cloud_usage ensure failed; analytics honest-empty", "err", err)
+		s.Log.Debug("cloud_usage ensure failed; analytics honest-empty", "err", err)
 		return empty
 	}
 	// Per-provider aggregate over the ONE hanzo.cloud_usage ledger — the same table
@@ -275,7 +279,7 @@ func (s *svc) buildAnalyticsBlock(ctx context.Context, org string, start, end ti
 		"GROUP BY provider ORDER BY tokens DESC"
 	rows, err := aiobject.DatastoreQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {
-		s.log.Debug("cloud_usage per-provider query failed; analytics honest-empty", "org", org, "err", err)
+		s.Log.Debug("cloud_usage per-provider query failed; analytics honest-empty", "org", org, "err", err)
 		return empty
 	}
 	out := ProviderBreakdown{Available: true, Items: make([]ProviderRow, 0, len(rows)), Source: llmTable}
@@ -302,20 +306,20 @@ func aString(v any) string {
 // buildSpendBlock reads the commerce rollup + ledger for org and rolls them into
 // the cost roll-up. A commerce error is logged and degrades to honest zeros
 // (Available=false) rather than failing the whole summary.
-func (s *svc) buildSpendBlock(ctx context.Context, org string, start, end time.Time, interval string) Spend {
-	if !s.commerce.configured() {
+func buildSpendBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time, interval string) Spend {
+	if !s.State.commerce.configured() {
 		return buildSpend(false, rollupWire{}, nil, start, end, interval)
 	}
-	roll, rerr := s.commerce.rollup(ctx, org)
+	roll, rerr := s.State.commerce.rollup(ctx, org)
 	if rerr != nil {
-		s.log.Warn("commerce rollup read failed; spend honest-empty", "org", org, "err", rerr)
+		s.Log.Warn("commerce rollup read failed; spend honest-empty", "org", org, "err", rerr)
 		return buildSpend(false, rollupWire{}, nil, start, end, interval)
 	}
-	txns, terr := s.commerce.transactions(ctx, org, maxLedgerRows)
+	txns, terr := s.State.commerce.transactions(ctx, org, maxLedgerRows)
 	if terr != nil {
 		// The rollup (authoritative totals + wallet) succeeded; only the breakdown
 		// failed. Keep the totals, empty breakdown — still honest, still Available.
-		s.log.Warn("commerce ledger read failed; spend breakdown empty", "org", org, "err", terr)
+		s.Log.Warn("commerce ledger read failed; spend breakdown empty", "org", org, "err", terr)
 		txns = nil
 	}
 	return buildSpend(true, roll, txns, start, end, interval)
@@ -324,14 +328,14 @@ func (s *svc) buildSpendBlock(ctx context.Context, org string, start, end time.T
 // buildLLMBlock reads the org's warehouse LLM totals. Returns (honest-empty, false)
 // when the datastore is not connected; (totals, true) otherwise. A query error also
 // degrades to honest-empty so the summary never 5xxs on a warehouse blip.
-func (s *svc) buildLLMBlock(ctx context.Context, org string, start, end time.Time) (LLM, bool) {
+func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, start, end time.Time) (LLM, bool) {
 	if !aiobject.DatastoreEnabled() {
 		return buildLLM(false, nil), false
 	}
 	// Ensure the ai-owned ledger table exists (idempotent) so a fresh warehouse
 	// yields honest zeros, not an error.
 	if err := aiobject.EnsureCloudUsageTable(ctx); err != nil {
-		s.log.Debug("cloud_usage ensure failed; llm honest-empty", "err", err)
+		s.Log.Debug("cloud_usage ensure failed; llm honest-empty", "err", err)
 		return buildLLM(false, nil), false
 	}
 	// Org bound POSITIONALLY (never interpolated) — a hostile slug can't escape SQL,
@@ -342,7 +346,7 @@ func (s *svc) buildLLMBlock(ctx context.Context, org string, start, end time.Tim
 		"FROM " + llmTable + " WHERE timestamp >= ? AND timestamp < ? AND organization = ?"
 	rows, err := aiobject.DatastoreQuery(ctx, sql, tsLiteral(start), tsLiteral(end), org)
 	if err != nil {
-		s.log.Debug("cloud_usage query failed; llm honest-empty", "org", org, "err", err)
+		s.Log.Debug("cloud_usage query failed; llm honest-empty", "org", org, "err", err)
 		return buildLLM(false, nil), false
 	}
 	var row map[string]any
