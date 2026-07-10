@@ -31,6 +31,7 @@ require (
 	github.com/vulcand/oxy/v2 v2.0.0-00010101000000-000000000000
 	github.com/zap-proto/go v1.3.0
 	github.com/zap-proto/http v0.2.0
+	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zap2pb v0.2.0
 	github.com/zap-proto/zip v1.2.1
 	go.opentelemetry.io/collector/component v1.54.0
@@ -826,7 +827,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.70.0
 	golang.org/x/crypto v0.53.0
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.56.0
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
