@@ -83,7 +83,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// tenant-scoped. Without VFS sign cannot store documents, so serve health-only
 	// (cloud stays up) rather than write PDFs into the tenant DB.
 	if deps.VFS == nil {
-		log.Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/sign/health only")
+		deps.Logger.Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/sign/health only")
 		return nil
 	}
 
