@@ -489,35 +489,6 @@ func TestOnboard_Unauthenticated_403(t *testing.T) {
 
 // ── route ordering: the native /v1/iam surface beats clients/iam's wildcard ───
 
-// TestRegisteredOrders guards the ordering invariant the whole redistribution rests on:
-// the SPECIFIC self-service routes (`account`) MUST register before clients/iam's
-// /v1/iam/* wildcard (order 50) so /v1/iam/keys + /v1/iam/onboard win Fiber's first-match
-// scan; the CATCH-ALL data bridges (`account-bridge`) MUST register after
-// clients/billing (121) + the commerce embed (100).
-func TestRegisteredOrders(t *testing.T) {
-	orders := map[string]int{}
-	present := map[string]bool{}
-	for i := range cloud.Registry {
-		orders[cloud.Registry[i].Name] = cloud.Registry[i].Order
-		present[cloud.Registry[i].Name] = true
-	}
-	if !present["account"] {
-		t.Fatal("account subsystem not registered (init did not run)")
-	}
-	if !present["account-bridge"] {
-		t.Fatal("account-bridge subsystem not registered (init did not run)")
-	}
-	if orders["account"] != 48 {
-		t.Fatalf("account order = %d, want 48", orders["account"])
-	}
-	if orders["account"] >= 50 {
-		t.Fatalf("account order %d must be < 50 (the clients/iam /v1/iam/* wildcard slot) so /v1/iam/keys wins", orders["account"])
-	}
-	if orders["account-bridge"] != 122 {
-		t.Fatalf("account-bridge order = %d, want 122 (after billing=121 / commerce=100)", orders["account-bridge"])
-	}
-}
-
 // TestIAMKeysBeatsWildcard proves the ACTUAL route-match precedence: with the account
 // self-service routes mounted FIRST (order 48) and clients/iam's /v1/iam/* WILDCARD
 // mounted AFTER (order 50) — the exact production mount order — a request to /v1/iam/keys

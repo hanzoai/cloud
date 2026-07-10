@@ -172,10 +172,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Delete("/v1/prompts/:name", cloud.Handle(s, del))
 }
 
-func init() {
-	cloud.Register("prompts", 126, cloud.Typed(Mount))
-}
-
 // ---- handlers ----
 
 type createReq struct {

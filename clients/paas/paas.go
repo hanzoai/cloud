@@ -127,17 +127,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/health", cloud.Handle(s, health))
 }
 
-// Registered under the clean id "paas". It serves its OWN /v1/paas/health (a real
-// k8s-reachability probe) in Mount, so it registers with cloud.HealthOwner:
-// Serve's generic liveness loop skips a HealthOwner, so the always-ok route never
-// shadows the real probe. (This replaces the former "paas" id kludge, which
-// existed only to park the generic route at an unrouted path.) Order 128 binds the
-// /v1/paas family before the projects (125) neighbours and well before the AI
-// /v1/* catch-all (150); it has no ordering dependency (self-contained k8s client).
-func init() {
-	cloud.Register("paas", 128, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // guard wraps a handler with the global-admin gate. Fail-closed: any request whose
 // validated identity is not a global admin is refused 403 before the handler — no
 // cluster object is read or mutated, matching clients/admin.guard.

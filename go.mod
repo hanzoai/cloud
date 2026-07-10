@@ -828,10 +828,10 @@ require (
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
 	github.com/hanzoai/ai v1.805.2
-	github.com/hanzoai/authz v1.10.4
+	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
-	github.com/hanzoai/licensing v0.1.1
-	github.com/hanzoai/metrics v0.4.1
+	github.com/hanzoai/licensing v0.1.3
+	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.12
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect

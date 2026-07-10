@@ -16,19 +16,19 @@ import (
 
 	"github.com/hanzoai/cloud"
 
-	// Every subsystem registers into cloud.Registry via init(); the set is
-	// defined ONCE in the subsystems bundle (one source of truth, shared with
-	// cmd/hanzo). Blank-importing it populates the registry cloud.Serve mounts.
-	// It also links clients/o11y, whose init() registers the telemetry bootstrap
-	// cloud.Serve runs (cloud.RegisterTelemetryInstaller).
-	_ "github.com/hanzoai/cloud/subsystems"
+	// The subsystem set is defined ONCE in the subsystems bundle (shared with
+	// cmd/hanzo). subsystems.Wire() returns it in mount order; main threads that
+	// slice into cloud.Serve — the composition root, no init()-registry. Linking
+	// subsystems also links clients/o11y, whose init() registers the telemetry
+	// bootstrap cloud.Serve runs (cloud.RegisterTelemetryInstaller).
+	"github.com/hanzoai/cloud/subsystems"
 )
 
 func main() {
 	// Telemetry is bootstrapped inside cloud.Serve (one site, every entrypoint —
 	// cmd/cloud AND every `hanzo <svc>`), so main() is just the full-surface
 	// entrypoint. nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
-	if err := cloud.Serve(nil); err != nil {
+	if err := cloud.Serve(subsystems.Wire(), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
 		os.Exit(1)
 	}

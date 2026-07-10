@@ -172,9 +172,9 @@ func initSessions() error {
 	}
 	s := web.BConfig.WebConfig.Session
 	mgr, err := session.NewManager(s.SessionProvider, &session.ManagerConfig{
-		CookieName:              s.SessionName,
-		EnableSetCookie:         s.SessionAutoSetCookie,
-		Gclifetime:              s.SessionGCMaxLifetime,
+		CookieName:      s.SessionName,
+		EnableSetCookie: s.SessionAutoSetCookie,
+		Gclifetime:      s.SessionGCMaxLifetime,
 		// Secure is PINNED true, not derived from Listen.EnableHTTPS. The binary
 		// listens plain :8000 behind the TLS-terminating ingress, so EnableHTTPS is
 		// false and the derived value would ship a non-Secure session cookie — and
@@ -200,11 +200,4 @@ func initSessions() error {
 	web.GlobalSessions = mgr
 	go mgr.GC()
 	return nil
-}
-
-// init registers IAM with cloud's subsystem registry at order 50 — IAM is the
-// identity authority and most subsystems depend on deps.IAM at request time, so
-// it mounts before them (the HIP-0106 iam=50 slot).
-func init() {
-	cloud.Register("iam", 50, cloud.Typed(Mount))
 }
