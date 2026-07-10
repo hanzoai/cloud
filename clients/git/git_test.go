@@ -29,7 +29,7 @@ import (
 
 var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
 
-// asOrg carries the tenant identity a go-git client sends. Tests run
+// asOrg carries the org identity a go-git client sends. Tests run
 // sequentially, so a single guarded value + a globally-installed
 // header-injecting http transport reproduces the gateway's X-Org-Id header on
 // every git request without a per-call Client hook (the v5.19.1 Clone/Push
@@ -53,7 +53,7 @@ func (h *headerRT) RoundTrip(req *http.Request) (*http.Response, error) {
 	asOrg.Unlock()
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	return h.base.RoundTrip(req)
 }
@@ -86,7 +86,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
@@ -111,7 +111,7 @@ func liveServer(t *testing.T, app *zip.App) string {
 }
 
 // TestControlPlaneCRUDAndIsolation proves repo create/list/get/delete and
-// per-tenant isolation through the JSON control plane.
+// per-org isolation through the JSON control plane.
 func TestControlPlaneCRUDAndIsolation(t *testing.T) {
 	app := mountApp(t)
 
@@ -314,7 +314,7 @@ func TestClonePushRoundTrip(t *testing.T) {
 		t.Fatalf("expected metered bytes after push, got %d", usage.TotalBytes)
 	}
 
-	// 5) Cross-tenant guard: beta cannot clone acme's repo.
+	// 5) Cross-org guard: beta cannot clone acme's repo.
 	asTenant("beta")
 	if _, err := gogit.Clone(memory.NewStorage(), memfs.New(), &gogit.CloneOptions{URL: cloneURL}); err == nil {
 		t.Fatalf("beta clone of acme repo must fail, got nil error")

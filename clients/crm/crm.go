@@ -162,7 +162,7 @@ func init() {
 // claim (HIP-0026): never lowercased, stripped, or truncated (normalizing would
 // collapse DISTINCT owners into one bucket — a cross-tenant break). Reject only
 // empty or pathologically long; never transform. Mirrors clients/prompts.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }
 

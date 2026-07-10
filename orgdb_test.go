@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// createT + insert/count helpers exercise a resolved *sql.DB as a real tenant
+// createT + insert/count helpers exercise a resolved *sql.DB as a real org
 // file so the isolation proofs are behavioral, not just path-string checks.
 func createMarkerTable(t *testing.T, db *sql.DB) {
 	t.Helper()
@@ -39,7 +39,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	dir := "/data"
 
 	// org-scoped: {DataDir}/orgs/{org}/{subsystem}.db
-	got, err := tenantDBPath(dir, "acme", "", "git")
+	got, err := orgDBPath(dir, "acme", "", "git")
 	if err != nil {
 		t.Fatalf("org-scoped path: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// project-scoped nests under projects/{project}
-	got, err = tenantDBPath(dir, "acme", "web", "tracker")
+	got, err = orgDBPath(dir, "acme", "web", "tracker")
 	if err != nil {
 		t.Fatalf("project-scoped path: %v", err)
 	}
@@ -57,38 +57,38 @@ func TestTenantDBPathConvention(t *testing.T) {
 	}
 
 	// the default project is a real, nested segment (not folded into org scope)
-	got, _ = tenantDBPath(dir, "acme", "default", "tracker")
+	got, _ = orgDBPath(dir, "acme", "default", "tracker")
 	if want := filepath.Join(dir, "orgs", "acme", "projects", "default", "tracker.db"); got != want {
 		t.Fatalf("default-project path = %q, want %q", got, want)
 	}
 
 	// fail-closed: empty/unsafe org, unsafe project, empty subsystem all error —
-	// NEVER a silent fall-through to some other tenant's file.
-	if _, err := tenantDBPath(dir, "", "", "git"); err == nil {
+	// NEVER a silent fall-through to some other org's file.
+	if _, err := orgDBPath(dir, "", "", "git"); err == nil {
 		t.Fatal("empty org must error")
 	}
-	if _, err := tenantDBPath(dir, "bad org", "", "git"); err == nil {
+	if _, err := orgDBPath(dir, "bad org", "", "git"); err == nil {
 		t.Fatal("org with a space (unsafe rune) must error")
 	}
-	if _, err := tenantDBPath(dir, "acme", "bad project", "tracker"); err == nil {
+	if _, err := orgDBPath(dir, "acme", "bad project", "tracker"); err == nil {
 		t.Fatal("project with a space (unsafe rune) must error")
 	}
-	if _, err := tenantDBPath(dir, "acme", "", ""); err == nil {
+	if _, err := orgDBPath(dir, "acme", "", ""); err == nil {
 		t.Fatal("empty subsystem must error")
 	}
 }
 
 // TestTenantDBOrgIsolation proves two different orgs resolve to two different
-// files with NO cross-read — the physical tenant boundary.
+// files with NO cross-read — the physical org boundary.
 func TestTenantDBOrgIsolation(t *testing.T) {
 	dir := t.TempDir()
 
-	a, err := TenantDB(dir, "orga", "", "widget")
+	a, err := OrgDB(dir, "orga", "", "widget")
 	if err != nil {
 		t.Fatalf("open orgA: %v", err)
 	}
 	defer func() { _ = a.Close() }()
-	b, err := TenantDB(dir, "orgb", "", "widget")
+	b, err := OrgDB(dir, "orgb", "", "widget")
 	if err != nil {
 		t.Fatalf("open orgB: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 	insertMarker(t, a, "secretA")
 
 	if n := countMarker(t, b, "secretA"); n != 0 {
-		t.Fatalf("orgB saw orgA's row (cross-tenant leak): count=%d", n)
+		t.Fatalf("orgB saw orgA's row (cross-org leak): count=%d", n)
 	}
 	if n := countMarker(t, a, "secretA"); n != 1 {
 		t.Fatalf("orgA cannot see its own row: count=%d", n)
@@ -124,12 +124,12 @@ func TestTenantDBOrgIsolation(t *testing.T) {
 func TestTenantDBProjectIsolation(t *testing.T) {
 	dir := t.TempDir()
 
-	alpha, err := TenantDB(dir, "acme", "alpha", "tracker")
+	alpha, err := OrgDB(dir, "acme", "alpha", "tracker")
 	if err != nil {
 		t.Fatalf("open alpha: %v", err)
 	}
 	defer func() { _ = alpha.Close() }()
-	beta, err := TenantDB(dir, "acme", "beta", "tracker")
+	beta, err := OrgDB(dir, "acme", "beta", "tracker")
 	if err != nil {
 		t.Fatalf("open beta: %v", err)
 	}
@@ -155,12 +155,12 @@ func TestTenantDBProjectIsolation(t *testing.T) {
 	}
 }
 
-// TestTenantStoreCachesAndIsolates proves the shared cache opens each tenant
+// TestTenantStoreCachesAndIsolates proves the shared cache opens each org
 // file exactly once and keys distinct (org, project) scopes to distinct handles.
 func TestTenantStoreCachesAndIsolates(t *testing.T) {
 	dir := t.TempDir()
 	opened := 0
-	cache := NewTenantStore(dir, "widget", func(db *sql.DB) (*sql.DB, error) {
+	cache := NewOrgStore(dir, "widget", func(db *sql.DB) (*sql.DB, error) {
 		opened++
 		return db, nil
 	})
@@ -175,10 +175,10 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 		t.Fatalf("For orgA (2): %v", err)
 	}
 	if a1 != a2 {
-		t.Fatal("same tenant must return the SAME cached handle")
+		t.Fatal("same org must return the SAME cached handle")
 	}
 	if opened != 1 {
-		t.Fatalf("open called %d times for one tenant, want 1", opened)
+		t.Fatalf("open called %d times for one org, want 1", opened)
 	}
 
 	b, err := cache.For("orgb", "")
@@ -198,13 +198,13 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 		t.Fatal("project scope must resolve to a distinct handle from org scope")
 	}
 	if opened != 3 {
-		t.Fatalf("open called %d times for 3 distinct tenants, want 3", opened)
+		t.Fatalf("open called %d times for 3 distinct orgs, want 3", opened)
 	}
 }
 
-// TestSanitizeOrgInjectiveAndSafe locks the properties TenantDB relies on: a
+// TestSanitizeOrgInjectiveAndSafe locks the properties OrgDB relies on: a
 // clean DNS label is the identity, case-only siblings do NOT fold onto one slug
-// (a case-insensitive-filesystem cross-tenant break), and unsafe-rune orgs are
+// (a case-insensitive-filesystem cross-org break), and unsafe-rune orgs are
 // refused.
 func TestSanitizeOrgInjectiveAndSafe(t *testing.T) {
 	if got := SanitizeOrg("acme"); got != "acme" {
@@ -218,7 +218,7 @@ func TestSanitizeOrgInjectiveAndSafe(t *testing.T) {
 	}
 	// "Acme" and "acme" are DISTINCT owners and must NOT share a slug.
 	if SanitizeOrg("Acme") == SanitizeOrg("acme") {
-		t.Fatal("case-only siblings folded onto one slug (cross-tenant break)")
+		t.Fatal("case-only siblings folded onto one slug (cross-org break)")
 	}
 	// Folded (non-identity) output carries the disambiguation suffix.
 	if got := SanitizeOrg("Acme"); got == "acme" || got == "Acme" {

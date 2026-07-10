@@ -164,7 +164,7 @@ func init() {
 // affiliate it ALSO opportunistically runs the accrual sweep over its own referred
 // orgs, so the dashboard is self-updating (bounded, best-effort).
 func (s *svc) myAffiliates(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view your affiliate program")
 	}
@@ -227,7 +227,7 @@ type applyRequest struct {
 // Idempotent (one affiliate per org, first apply wins). A malformed vanity code is
 // refused up front.
 func (s *svc) apply(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to apply as an affiliate")
 	}
@@ -274,7 +274,7 @@ type attributeRequest struct {
 // (approved affiliates only). Idempotent (one per referred org, first-touch wins),
 // self-attribution blocked, unknown code rejected.
 func (s *svc) attribute(c *zip.Ctx) error {
-	referredOrg, ok := principal.Tenant(c)
+	referredOrg, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to record an affiliate")
 	}
