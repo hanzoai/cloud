@@ -39,6 +39,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -46,6 +47,16 @@ import (
 
 	"github.com/hanzoai/cloud/clients/goja"
 )
+
+// BlobStore is the ONE object-storage seam a bundle uses to persist large binary
+// payloads OUTSIDE its per-tenant SQLite (e.g. sign's PDFs — a 32 MiB base64 blob
+// in a TEXT column would bloat the tenant DB and get copied on every read). The
+// cloud VFS/S3 data plane (deps.VFS) satisfies it, exactly as clients/dataroom
+// already uses it for document bytes. Keys are opaque; gojabase tenant-scopes them.
+type BlobStore interface {
+	Put(ctx context.Context, key string, payload []byte) error
+	Get(ctx context.Context, key string) ([]byte, error)
+}
 
 // Response mirrors the JS-side {status, body} (reused from clients/goja).
 type Response = goja.Response
@@ -82,8 +93,16 @@ type Config struct {
 	// { stamp, sign } for PDF rendering + x509/PKCS#7 signing). Values are Go
 	// funcs or map[string]any of Go funcs (goja exposes them as callable JS). They
 	// are process-global (set once at New), not per-tenant; the binding stays
-	// domain-free. May be nil. A key MUST NOT collide with __db/__newId/__now.
+	// domain-free. May be nil. A key MUST NOT collide with __db/__newId/__now/__blob.
 	HostFns map[string]any
+	// Blob is the OPTIONAL object-storage seam (see BlobStore). When set, gojabase
+	// injects globalThis.__blob = { put(key, b64), get(key) -> b64 } on every
+	// Dispatch, bound to the tenant: keys are prefixed with {Name}/{TenantSegment}
+	// so a bundle can NEVER address another tenant's blob. Payloads cross as base64
+	// strings (goja-friendly); gojabase decodes/encodes at the boundary so the
+	// bundle never handles raw bytes. nil ⇒ no __blob is injected. This is the ONE
+	// way a bundle keeps big binaries out of its per-tenant SQLite.
+	Blob BlobStore
 }
 
 // Host is a compiled bundle + its per-tenant Base stores. Safe for concurrent use.
@@ -92,6 +111,7 @@ type Host struct {
 	engine  *goja.Host
 	stores  *stores
 	hostFns map[string]any
+	blob    BlobStore
 }
 
 // New compiles the bundle (via clients/goja) and prepares the per-tenant store
@@ -115,6 +135,7 @@ func New(cfg Config) (*Host, error) {
 		engine:  engine,
 		stores:  newStores(cfg.Name, cfg.DataDir, cfg.Schema, cfg.OnOpen),
 		hostFns: cfg.HostFns,
+		blob:    cfg.Blob,
 	}, nil
 }
 
@@ -145,8 +166,14 @@ func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Respo
 		"__newId": newID,
 		"__now":   func() int64 { return time.Now().UnixMilli() },
 	}
+	// Tenant-bound object-storage seam (e.g. sign's PDFs). Keys are namespaced to
+	// {Name}/{TenantSegment} inside the bridge, so a bundle can only ever reach its
+	// OWN tenant's blobs — the same injective TenantSegment the per-tenant DB uses.
+	if h.blob != nil {
+		globals["__blob"] = h.blobBridge(ctx, tenant)
+	}
 	// Extra Go-backed host capabilities (e.g. esign's __pdf). Injected after the
-	// reserved db/newId/now globals; a subsystem must not shadow those.
+	// reserved db/newId/now/blob globals; a subsystem must not shadow those.
 	for k, v := range h.hostFns {
 		globals[k] = v
 	}
@@ -193,6 +220,31 @@ func newBridge(ctx context.Context, q execQuerier) map[string]any {
 		},
 		"exec": func(query string, args []any) (map[string]any, error) {
 			return bridgeExec(ctx, q, query, args)
+		},
+	}
+}
+
+// blobBridge builds the __blob object (put/get over base64) bound to ctx + the
+// tenant. Keys are namespaced to {name}/{TenantSegment(tenant)}/ so a bundle can
+// only ever address its OWN tenant's objects — cross-tenant isolation is a host
+// property, using the same injective encoding the per-tenant DB file uses. The
+// bundle handles base64 strings only; gojabase decodes/encodes at the boundary.
+func (h *Host) blobBridge(ctx context.Context, tenant string) map[string]any {
+	prefix := h.name + "/" + TenantSegment(tenant) + "/"
+	return map[string]any{
+		"put": func(key, b64 string) error {
+			raw, err := base64.StdEncoding.DecodeString(b64)
+			if err != nil {
+				return fmt.Errorf("gojabase[%s]: __blob.put: bad base64: %w", h.name, err)
+			}
+			return h.blob.Put(ctx, prefix+key, raw)
+		},
+		"get": func(key string) (string, error) {
+			raw, err := h.blob.Get(ctx, prefix+key)
+			if err != nil {
+				return "", fmt.Errorf("gojabase[%s]: __blob.get: %w", h.name, err)
+			}
+			return base64.StdEncoding.EncodeToString(raw), nil
 		},
 	}
 }
