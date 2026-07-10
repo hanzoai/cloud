@@ -80,10 +80,6 @@ func (s *svc) routes(app *zip.App) {
 	app.Get("/v1/oracles", s.listOracles)
 }
 
-func init() {
-	cloud.Register("graph", 135, cloud.Typed(Mount))
-}
-
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
 // validated IAM principal MUST be present (principal.Org), so an unauthenticated
 // caller reads nothing. The org itself is not a filter key here (a ledger is public

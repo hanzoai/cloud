@@ -43,8 +43,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -137,13 +137,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s.log.Info("bots surface mounted", "gateway", s.gateway,
 		"billing", s.bill.Enabled(), "brand", deps.Brand)
 	return nil
-}
-
-func init() {
-	// Order 143 — bind /v1/bots/run before the AI subsystem's /v1/* catch-all
-	// (150). No shutdown: this orchestrator owns no store or background worker
-	// (the durable record of a launch is the commerce ledger debit).
-	cloud.Register("bots", 143, cloud.Typed(Mount))
 }
 
 // run launches a computer-using bot: it authenticates the caller, gates+meters a

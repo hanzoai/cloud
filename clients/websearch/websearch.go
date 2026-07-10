@@ -324,9 +324,3 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		"crawl", crawlEndpoint())
 	return nil
 }
-
-func init() {
-	// Order 141: before hanzoai/ai (150) so /v1/websearch/* wins over ai's
-	// /v1/* catch-all; sits next to exec (140).
-	cloud.Register("websearch", 141, cloud.Typed(Mount))
-}

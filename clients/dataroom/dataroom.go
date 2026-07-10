@@ -406,16 +406,8 @@ func randKey() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-func init() {
-	// Order 134 (after captable's 133, before the AI /v1/* catch-all at 150 and the
-	// node-service tier). cloud.HealthOwner: dataroom serves its OWN
-	// /v1/dataroom/health so the generic liveness route never shadows it. NOT
-	// staged — mounts under the mount-all default.
-	hcloud.RegisterWithShutdown("dataroom", 134, hcloud.Typed(Mount), shutdown, hcloud.HealthOwner)
-}
-
 // shutdown closes the per-tenant stores + the goja engine + the link index.
-func shutdown(context.Context) error {
+func Shutdown(context.Context) error {
 	if mounted == nil {
 		return nil
 	}

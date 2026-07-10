@@ -102,10 +102,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("analytics", 132, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 // tenant resolves the org — the tenant-isolation KEY — for a request, and refuses

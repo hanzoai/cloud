@@ -203,15 +203,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// Registered under the clean id "ml" with cloud.HealthOwner: it serves its OWN
-// real probes at /v1/ml/health and /v1/train/health, and cloud.HealthOwner makes
-// serve.go skip the generic GET /v1/<name>/health so the always-ok route never
-// shadows them (same flag as kms/paas/s3). Order 130 binds the /v1/ml and
-// /v1/train families before the AI subsystem's /v1/* catch-all (150).
-func init() {
-	cloud.Register("ml", 130, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // ── CRUD (generic across the three kinds) ────────────────────────────────────
 
 func (s *svc) list(k resourceKind) zip.Handler {

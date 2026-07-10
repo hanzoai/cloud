@@ -11,13 +11,13 @@
 // serve this process; the same artifact is every standalone service AND
 // the fused cloud control plane.
 //
-// Design — one mechanism, not many. Every Hanzo subsystem registers a
-// cloud.MountSpec{Name, Order, Mount} into cloud.Registry via init() at
-// package load (kms order 10, iam 50, gateway 80, commerce 100, …). A
-// subcommand is therefore just a *selection* over that registry:
+// Design — one mechanism, not many. The subsystem set is the explicit list
+// subsystems.Wire() returns — []cloud.MountSpec in mount order (kms first-tier,
+// iam 50, commerce 100, …, ai last), no init()-registry. A subcommand is just a
+// *selection* over that slice:
 //
-//   - `hanzo <svc>`  ⇒ cloud.Serve([]string{svc}); MountAll mounts only it.
-//   - `hanzo cloud`  ⇒ cloud.Serve(nil); cfg.Enable per --enable (empty = all).
+//   - `hanzo <svc>`  ⇒ cloud.Serve(specs, []string{svc}); MountAll mounts only it.
+//   - `hanzo cloud`  ⇒ cloud.Serve(specs, nil); cfg.Enable per --enable (empty = all).
 //
 // Both paths run the identical compose root (BuildDeps → zip.App → health
 // contract → MountAll → graceful Listen) — that body lives once in cloud.Serve
@@ -73,18 +73,17 @@ import (
 	// server (login UI, all routes, LDAP/RADIUS). `hanzo iam` calls Run().
 	"github.com/hanzoai/iam/iamserver"
 
-	// Every subsystem registers into cloud.Registry via init(); the set is
-	// defined ONCE in the subsystems bundle (shared with cmd/cloud), so the
-	// dispatcher and the full-surface binary mount an identical set. Inert at
-	// load — see THE BEEGO CRUX.
-	_ "github.com/hanzoai/cloud/subsystems"
+	// The subsystem set is defined ONCE in the subsystems bundle (shared with
+	// cmd/cloud). subsystems.Wire() returns it in mount order; main threads that
+	// slice through dispatch/usage/Serve. Inert at load — see THE BEEGO CRUX.
+	"github.com/hanzoai/cloud/subsystems"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
 // nonRegistrySubcommands are the dispatch targets that do NOT correspond to
-// a single cloud.Registry entry: the full fused surface, the standalone IAM
+// a single Wire() subsystem entry: the full fused surface, the standalone IAM
 // boot, and the datastore (a ClickHouse C++ fork with no Go serve target —
 // see the datastore case in dispatch()). Listed in --help alongside the
 // registry-backed subcommands.
@@ -102,14 +101,18 @@ func main() {
 	// Share the build version with the CLI (User-Agent, `hanzo version`).
 	cli.Version = version
 
+	// The composition root's subsystem list, threaded through usage + dispatch +
+	// Serve. Defined ONCE (subsystems.Wire()); cloud never imports it (cycle).
+	specs := subsystems.Wire()
+
 	if len(os.Args) < 2 {
-		usage(os.Stdout)
+		usage(os.Stdout, specs)
 		return
 	}
 	sub := os.Args[1]
 	switch sub {
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		usage(os.Stdout, specs)
 		return
 	case "version", "--version", "-v":
 		fmt.Printf("hanzo %s\n", version)
@@ -143,18 +146,18 @@ func main() {
 	// `hanzo kms --listen=:9000` → the kms serve path parses `--listen=:9000`.
 	os.Args = append(os.Args[:1], os.Args[2:]...)
 
-	if err := dispatch(sub); err != nil {
+	if err := dispatch(sub, specs); err != nil {
 		fmt.Fprintf(os.Stderr, "hanzo %s: %v\n", sub, err)
 		os.Exit(1)
 	}
 }
 
 // dispatch routes a subcommand to its serve entrypoint.
-func dispatch(sub string) error {
+func dispatch(sub string, specs []cloud.MountSpec) error {
 	switch sub {
 	case "cloud":
 		// Full fused surface: --enable governs the set (empty = all).
-		return cloud.Serve(nil)
+		return cloud.Serve(specs, nil)
 
 	case "iam":
 		// Standalone IAM = the body of iamd's main(). Full Beego server:
@@ -188,17 +191,17 @@ func dispatch(sub string) error {
 	default:
 		// Registry-backed single-service mode: serve exactly `sub`.
 		// Validate it is a known subsystem before booting anything.
-		if !registryHas(sub) {
-			usage(os.Stderr)
+		if !registryHas(specs, sub) {
+			usage(os.Stderr, specs)
 			return fmt.Errorf("unknown subcommand %q", sub)
 		}
-		return cloud.Serve([]string{sub})
+		return cloud.Serve(specs, []string{sub})
 	}
 }
 
 // registryHas reports whether name is a registered subsystem.
-func registryHas(name string) bool {
-	for _, spec := range cloud.Registry {
+func registryHas(specs []cloud.MountSpec, name string) bool {
+	for _, spec := range specs {
 		if spec.Name == name {
 			return true
 		}
@@ -207,8 +210,8 @@ func registryHas(name string) bool {
 }
 
 // usage prints the subcommand list: the non-registry targets (cloud, iam,
-// datastore) plus every subsystem registered into cloud.Registry, sorted.
-func usage(w *os.File) {
+// datastore) plus every subsystem in the composition root (Wire()), sorted.
+func usage(w *os.File, specs []cloud.MountSpec) {
 	fmt.Fprintf(w, "hanzo %s — the unified Hanzo Go binary\n\n", version)
 	fmt.Fprintf(w, "Usage:\n  hanzo <command> [flags]\n\n")
 
@@ -231,7 +234,7 @@ func usage(w *os.File) {
 	for name, desc := range nonRegistrySubcommands {
 		seen[name] = desc
 	}
-	for _, spec := range cloud.Registry {
+	for _, spec := range specs {
 		if _, ok := seen[spec.Name]; !ok {
 			seen[spec.Name] = fmt.Sprintf("serve the %s subsystem standalone", spec.Name)
 		}

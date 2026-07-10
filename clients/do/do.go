@@ -145,10 +145,6 @@ func (s *svc) routes(app *zip.App) {
 	app.Delete("/v1/load-balancers/:id", s.deleteLB)
 }
 
-func init() {
-	cloud.Register("do", 123, cloud.Typed(Mount))
-}
-
 // ── request/response shapes (console VpcModule / LoadBalancerModule contract) ──
 
 type vpcView struct {

@@ -171,10 +171,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("git", 132, cloud.Typed(Mount))
-}
-
 // ---- control-plane handlers ----
 
 type createReq struct {

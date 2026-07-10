@@ -37,8 +37,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -201,10 +201,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	log.Info("functions mounted", "exec", s.exec.configured(), "brand", deps.Brand, "billing", s.bill.Enabled())
 	return nil
-}
-
-func init() {
-	cloud.Register("functions", 128, cloud.Typed(Mount))
 }
 
 // ---- handlers ----

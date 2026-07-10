@@ -1,7 +1,6 @@
 package team
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -114,11 +113,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = &svc{accounts: accounts, trans: trans}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil
-}
-
-func init() {
-	cloud.RegisterWithShutdown("team", 138, cloud.Typed(Mount),
-		func(context.Context) error { return Shutdown() })
 }
 
 // Shutdown releases the team stores (account DB + every cached per-workspace docs

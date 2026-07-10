@@ -39,9 +39,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
@@ -299,13 +299,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log.Info("agents mounted", "ai", s.ai != nil, "billing", s.bill.Enabled(),
 		"scheduler", s.sched != nil, "brand", deps.Brand)
 	return nil
-}
-
-func init() {
-	// Shutdown does the graceful teardown: stop the scheduler (drain in-flight
-	// runs) and close the store, bounded by the caller's shutdown deadline so a
-	// stuck run can't hang SIGTERM.
-	cloud.RegisterWithShutdown("agents", 127, cloud.Typed(Mount), Shutdown)
 }
 
 // ---- handlers ----
