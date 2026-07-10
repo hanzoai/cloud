@@ -1,0 +1,483 @@
+{
+  "attempt": 1,
+  "body": {
+    "status": 200,
+    "message": "Successful",
+    "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082",
+    "resource": {
+      "externalId": null,
+      "orderNo": "830002",
+      "commerceName": "Shipwire",
+      "processAfterDate": "2017-02-14T01:30:00-08:00",
+      "lastUpdatedDate": "2017-02-13T23:06:02-08:00",
+      "status": "held",
+      "vendorId": null,
+      "vendorExternalId": null,
+      "purchaseOrderId": null,
+      "purchaseOrderExternalId": null,
+      "purchaseOrderNo": null,
+      "id": 249954082,
+      "transactionId": "1487055962-952052-1",
+      "needsReview": 0,
+      "vendorName": null,
+      "holds": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/holds?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 1,
+          "previous": null,
+          "next": null,
+          "items": [
+            {
+              "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/holds/1607380332",
+              "resource": {
+                "id": 1607380332,
+                "orderId": 249954082,
+                "externalOrderId": null,
+                "type": "customer",
+                "subType": "backorder",
+                "description": "Insufficient stock",
+                "appliedDate": "2017-02-13T23:06:03-08:00",
+                "clearedDate": null
+              }
+            }
+          ]
+        }
+      },
+      "items": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/items?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 1,
+          "previous": null,
+          "next": null,
+          "items": [
+            {
+              "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/items/351373992",
+              "resource": {
+                "sku": "686696998137",
+                "quantity": 2,
+                "commercialInvoiceValue": 0,
+                "serialNumbers": {
+                  "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/items/351373992/serialNumbers?offset=0&limit=20",
+                  "resource": {
+                    "offset": 0,
+                    "total": 0,
+                    "previous": null,
+                    "next": null,
+                    "items": []
+                  }
+                },
+                "id": 351373992,
+                "productId": 5751372,
+                "productExternalId": null,
+                "orderId": 249954082,
+                "orderExternalId": null,
+                "ordered": 2,
+                "backordered": 2,
+                "reserved": 0,
+                "shipping": 0,
+                "shipped": 0
+              }
+            }
+          ]
+        }
+      },
+      "trackings": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/trackings?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 0,
+          "previous": null,
+          "next": null,
+          "items": []
+        }
+      },
+      "returns": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/returns?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 0,
+          "previous": null,
+          "next": null,
+          "items": []
+        }
+      },
+      "options": {
+        "resourceLocation": null,
+        "resource": {
+          "warehouseId": 25,
+          "warehouseExternalId": null,
+          "warehouseRegion": "LAX",
+          "warehouseArea": null,
+          "serviceLevelCode": null,
+          "carrierCode": "DHLGM LP",
+          "thirdPartyCarrierCodeRequested": null,
+          "billingType": null,
+          "carrierAccountNumber": null,
+          "sameDay": "NOT REQUESTED",
+          "forceDuplicate": 1,
+          "forceAddress": 0,
+          "testOrder": 0,
+          "channelName": null,
+          "referrer": ""
+        }
+      },
+      "shipFrom": {
+        "resourceLocation": null,
+        "resource": {
+          "company": "Stoned Audio"
+        }
+      },
+      "shipTo": {
+        "resourceLocation": null,
+        "resource": {
+          "email": "dev@hanzo.ai",
+          "name": "David Tai",
+          "company": "",
+          "address1": "10512 BOND ST",
+          "address2": null,
+          "address3": null,
+          "city": "OVERLAND PARK",
+          "state": "KS",
+          "postalCode": "66214",
+          "country": "US",
+          "phone": "650-561-4800",
+          "isCommercial": 0,
+          "isPoBox": 0
+        }
+      },
+      "commercialInvoice": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/commercialInvoice",
+        "resource": {
+          "shippingValue": null,
+          "insuranceValue": null,
+          "additionalValue": null,
+          "documentLocation": "https://api.shipwire.com/api/v3/orders/249954082/commercialInvoice"
+        }
+      },
+      "packingList": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/packingList",
+        "resource": {
+          "message1": {
+            "resourceLocation": null,
+            "resource": {
+              "document": null,
+              "header": null,
+              "location": null,
+              "body": null
+            }
+          },
+          "message2": {
+            "resourceLocation": null,
+            "resource": {
+              "document": null,
+              "header": null,
+              "location": null,
+              "body": null
+            }
+          },
+          "message3": {
+            "resourceLocation": null,
+            "resource": {
+              "document": null,
+              "header": null,
+              "location": null,
+              "body": null
+            }
+          },
+          "other": {
+            "resourceLocation": null,
+            "resource": {
+              "document": null,
+              "header": null,
+              "location": null,
+              "body": null
+            }
+          },
+          "documentLocation": "https://api.shipwire.com/api/v3/orders/249954082/packingList"
+        }
+      },
+      "shippingLabel": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/shippingLabel",
+        "resource": {
+          "orderId": 249954082,
+          "externalId": null,
+          "warehouseId": 25,
+          "warehouseExternalId": null,
+          "vendorId": null,
+          "vendorExternalId": null,
+          "documentLocation": "https://api.shipwire.com/api/v3/orders/249954082/shippingLabel"
+        }
+      },
+      "routing": {
+        "resourceLocation": null,
+        "resource": {
+          "warehouseId": 25,
+          "warehouseExternalId": null,
+          "warehouseName": "Redlands, CA",
+          "physicalWarehouseId": null,
+          "originLongitude": 34.0816,
+          "originLatitude": -117.228,
+          "destinationLongitude": "-94.7209",
+          "destinationLatitude": "38.9649"
+        }
+      },
+      "events": {
+        "resourceLocation": null,
+        "resource": {
+          "createdDate": "2017-02-13T23:06:02-08:00",
+          "pickedUpDate": null,
+          "submittedDate": null,
+          "processedDate": null,
+          "completedDate": null,
+          "expectedSubmittedDate": "2017-02-14T23:06:50-08:00",
+          "expectedCompletedDate": "2017-02-14T23:06:50-08:00",
+          "expectedDate": "2017-03-08T00:00:00-08:00",
+          "cancelledDate": null,
+          "returnedDate": null,
+          "lastManualUpdateDate": "2017-02-13T23:06:02-08:00"
+        }
+      },
+      "pricing": {
+        "resourceLocation": null,
+        "resource": {
+          "shipping": 0,
+          "packaging": 0,
+          "insurance": 0,
+          "handling": 0,
+          "total": 0
+        }
+      },
+      "shipwireAnywhere": {
+        "resourceLocation": null,
+        "resource": {
+          "status": null
+        }
+      },
+      "pricingEstimate": {
+        "resourceLocation": null,
+        "resource": {
+          "total": 8.85,
+          "insurance": 0.75,
+          "shipping": 8.1,
+          "packaging": 0.48,
+          "handling": 0
+        }
+      },
+      "freightSummary": {
+        "resourceLocation": null,
+        "resource": {
+          "totalWeight": "0.00",
+          "weightUnit": null,
+          "measurementType": null
+        }
+      },
+      "splitOrders": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/splitOrders?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 0,
+          "previous": null,
+          "next": null,
+          "items": []
+        }
+      },
+      "pieces": {
+        "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/pieces?offset=0&limit=20",
+        "resource": {
+          "offset": 0,
+          "total": 2,
+          "previous": null,
+          "next": null,
+          "items": [
+            {
+              "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/pieces/3835047272",
+              "resource": {
+                "id": 3835047272,
+                "dimensions": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "length": "7.3",
+                    "lengthUnit": "IN",
+                    "width": "5.0",
+                    "widthUnit": "IN",
+                    "height": "1.8",
+                    "heightUnit": "IN",
+                    "weight": "0.70",
+                    "weightUnit": "LB",
+                    "weightType": "total"
+                  }
+                },
+                "subweights": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "offset": 0,
+                    "total": 3,
+                    "previous": null,
+                    "next": null,
+                    "items": [
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0,
+                          "units": "LB",
+                          "type": "voidFill"
+                        }
+                      },
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0.05,
+                          "units": "LB",
+                          "type": "packaging"
+                        }
+                      },
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0.65,
+                          "units": "LB",
+                          "type": "products"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "contents": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "offset": 0,
+                    "total": 1,
+                    "previous": null,
+                    "next": null,
+                    "items": [
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "sku": "686696998137",
+                          "retailerSku": null,
+                          "quantity": 1,
+                          "retailerLineNo": null,
+                          "unitOfMeasure": "EA"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "trackings": {
+                  "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/pieces/3835047272/trackings?offset=0&limit=20",
+                  "resource": {
+                    "offset": 0,
+                    "total": 0,
+                    "previous": null,
+                    "next": null,
+                    "items": []
+                  }
+                },
+                "serialShippingContainerCode": null,
+                "serialNumbers": [],
+                "packageLevel": null,
+                "childPiecesIds": []
+              }
+            },
+            {
+              "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/pieces/3835047282",
+              "resource": {
+                "id": 3835047282,
+                "dimensions": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "length": "7.3",
+                    "lengthUnit": "IN",
+                    "width": "5.0",
+                    "widthUnit": "IN",
+                    "height": "1.8",
+                    "heightUnit": "IN",
+                    "weight": "0.70",
+                    "weightUnit": "LB",
+                    "weightType": "total"
+                  }
+                },
+                "subweights": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "offset": 0,
+                    "total": 3,
+                    "previous": null,
+                    "next": null,
+                    "items": [
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0,
+                          "units": "LB",
+                          "type": "voidFill"
+                        }
+                      },
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0.05,
+                          "units": "LB",
+                          "type": "packaging"
+                        }
+                      },
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "amount": 0.65,
+                          "units": "LB",
+                          "type": "products"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "contents": {
+                  "resourceLocation": null,
+                  "resource": {
+                    "offset": 0,
+                    "total": 1,
+                    "previous": null,
+                    "next": null,
+                    "items": [
+                      {
+                        "resourceLocation": null,
+                        "resource": {
+                          "sku": "686696998137",
+                          "retailerSku": null,
+                          "quantity": 1,
+                          "retailerLineNo": null,
+                          "unitOfMeasure": "EA"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "trackings": {
+                  "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/pieces/3835047282/trackings?offset=0&limit=20",
+                  "resource": {
+                    "offset": 0,
+                    "total": 0,
+                    "previous": null,
+                    "next": null,
+                    "items": []
+                  }
+                },
+                "serialShippingContainerCode": null,
+                "serialNumbers": [],
+                "packageLevel": null,
+                "childPiecesIds": []
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "timestamp": "2017-02-13T23:06:50-08:00",
+  "topic": "order.updated",
+  "uniqueEventID": "07872d6e205d3000",
+  "webhookSubscriptionID": 44032
+}
