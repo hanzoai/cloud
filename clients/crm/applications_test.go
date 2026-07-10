@@ -24,6 +24,8 @@ func (f fakeAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.
 	return &types.ChatResponse{Content: f.reply}, nil
 }
 
+func (fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) { return nil, nil }
+
 // goodScreen is a realistic model reply (wrapped in prose to exercise extraction).
 const goodScreen = `Sure, here is the screen:
 {"score": 88, "tier1_backed": "yes", "summary": "Strong seed-stage AI infra team.\nClear fit for the credits program.", "suggested_credits": 150000, "draft_reply": "Hi Jane — thanks for applying to the Hanzo Startup Program. Your tier-1 backing and use case look like a strong fit; we'd love to set up onboarding and discuss credits."}`
