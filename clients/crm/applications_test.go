@@ -56,7 +56,7 @@ func fullApplication() map[string]any {
 // fields in metadata, tier-1 detected, and a CRM Company+Contact projection.
 func TestApplyCreatesRecords(t *testing.T) {
 	app := mountApp(t)
-	mounted.screenSync = true // run screen inline; no goroutine leak
+	mounted.State.screenSync = true // run screen inline; no goroutine leak
 
 	code, body := do(t, app, http.MethodPost, "/v1/crm/applications", "", fullApplication())
 	if code != http.StatusCreated {
@@ -116,7 +116,7 @@ func TestApplyCreatesRecords(t *testing.T) {
 // stored).
 func TestApplyHoneypot(t *testing.T) {
 	app := mountApp(t)
-	mounted.screenSync = true
+	mounted.State.screenSync = true
 	body := fullApplication()
 	body["hp"] = "http://spam.example"
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/applications", "", body); code != http.StatusOK {
@@ -135,7 +135,7 @@ func TestApplyHoneypot(t *testing.T) {
 // TestApplyValidation covers the intake rejections.
 func TestApplyValidation(t *testing.T) {
 	app := mountApp(t)
-	mounted.screenSync = true
+	mounted.State.screenSync = true
 
 	cases := []struct {
 		name string
@@ -158,7 +158,7 @@ func TestApplyValidation(t *testing.T) {
 // rather than duplicates.
 func TestApplyIdempotent(t *testing.T) {
 	app := mountApp(t)
-	mounted.screenSync = true
+	mounted.State.screenSync = true
 
 	first := fullApplication()
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/applications", "", first); code != http.StatusCreated {
@@ -186,8 +186,8 @@ func TestApplyIdempotent(t *testing.T) {
 // fake gateway: submit → the application is scored and moves applied→screened.
 func TestApplyScreenEndToEnd(t *testing.T) {
 	app := mountApp(t)
-	mounted.ai = fakeAI{reply: goodScreen}
-	mounted.screenSync = true
+	mounted.State.ai = fakeAI{reply: goodScreen}
+	mounted.State.screenSync = true
 
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/applications", "", fullApplication()); code != http.StatusCreated {
 		t.Fatalf("apply want 201, got %d", code)
@@ -223,8 +223,8 @@ func TestApplyScreenEndToEnd(t *testing.T) {
 // screen is marked failed and the application stays at applied.
 func TestScreenNonFatal(t *testing.T) {
 	app := mountApp(t)
-	mounted.ai = fakeAI{err: errors.New("gateway unavailable")}
-	mounted.screenSync = true
+	mounted.State.ai = fakeAI{err: errors.New("gateway unavailable")}
+	mounted.State.screenSync = true
 
 	if code, _ := do(t, app, http.MethodPost, "/v1/crm/applications", "", fullApplication()); code != http.StatusCreated {
 		t.Fatalf("apply want 201, got %d", code)
@@ -249,8 +249,8 @@ func TestScreenNonFatal(t *testing.T) {
 // skip, require a reason to reject, and reject with reason.
 func TestPatchStageMachine(t *testing.T) {
 	app := mountApp(t)
-	mounted.ai = nil // no auto-advance; keep it at applied
-	mounted.screenSync = true
+	mounted.State.ai = nil // no auto-advance; keep it at applied
+	mounted.State.screenSync = true
 
 	_, body := do(t, app, http.MethodPost, "/v1/crm/applications", "", fullApplication())
 	var created struct{ ID string }
