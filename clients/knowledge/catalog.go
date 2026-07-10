@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -53,7 +54,7 @@ type catalogEntry struct {
 // piece connector, sorted by provider for a stable listing. `configured` reports
 // whether the deployment has OAuth credentials for it (so the console shows Connect vs
 // a "not configured" hint). No secret is ever returned; this is metadata only.
-func (s *svc) listCatalog(c *zip.Ctx) error {
+func listCatalog(s *cloud.Service[state], c *zip.Ctx) error {
 	// A valid principal is required (the catalog is only served to authenticated
 	// callers), though the catalog content itself is org-independent.
 	if _, ok := principal.Tenant(c); !ok {

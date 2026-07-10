@@ -44,7 +44,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -83,18 +82,20 @@ var orgRunLimiter = newConcurrencyLimiter(maxConcurrentPerOrg)
 //go:embed catalog/catalog.json
 var catalogJSON []byte
 
-type svc struct {
+// state is automations' own data; shared deps (per-org billing meter, logger) live
+// in the embedded cloud.Base, reached as s.Bill / s.Log.
+type state struct {
 	store   *Store
-	bill    *cloud.ResourceMeter
 	audit   *audit.Recorder
 	catalog Catalog
-	log     luxlog.Logger
 }
 
 // mounted is the active service so Shutdown can release the store.
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires /v1/automations/* onto app per HIP-0106.
+// Mount wires /v1/automations/* onto app per HIP-0106. Complex flavour: it keeps a
+// package global (mounted) for Shutdown and the engine's run hooks, so it constructs
+// the Service value directly.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("automations.Mount: nil zip.App")
@@ -102,7 +103,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("automations.Mount: nil deps.Logger")
 	}
-	log := deps.Logger.New("subsystem", "automations")
 	if deps.DataDir == "" {
 		return fmt.Errorf("automations.Mount: empty DataDir")
 	}
@@ -122,41 +122,46 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("automations.Mount: catalog: %w", err)
 	}
 
-	s := &svc{
+	b := cloud.NewBase(deps, "automations")
+	s := &cloud.Service[state]{Base: b, State: state{
 		store:   store,
-		bill:    cloud.NewResourceMeter(deps, "automations"),
 		audit:   deps.Audit,
 		catalog: catalog,
-		log:     log,
-	}
+	}}
 	mounted = s
 
-	app.Get("/v1/automations/connectors", s.connectors)
+	routes(app, s)
+
+	b.Log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
+	return nil
+}
+
+// routes registers the automations surface: the connector catalog, flow CRUD +
+// versioning + lifecycle, run history, and the MCP endpoint.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/automations/connectors", cloud.Handle(s, connectors))
 	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same
 	// body) so live clients pinned to it keep working. "pieces" is the retired
 	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
-	app.Get("/v1/automations/pieces", s.connectors)
+	app.Get("/v1/automations/pieces", cloud.Handle(s, connectors))
 
-	app.Get("/v1/automations/flows", s.listFlows)
-	app.Post("/v1/automations/flows", s.createFlow)
-	app.Get("/v1/automations/flows/:id", s.getFlow)
-	app.Patch("/v1/automations/flows/:id", s.updateFlow)
-	app.Delete("/v1/automations/flows/:id", s.deleteFlow)
-	app.Get("/v1/automations/flows/:id/versions", s.listVersions)
-	app.Post("/v1/automations/flows/:id/versions", s.createVersion)
-	app.Post("/v1/automations/flows/:id/operations", s.applyOperation)
-	app.Post("/v1/automations/flows/:id/run", s.runFlow)
-	app.Post("/v1/automations/flows/:id/enable", s.enableFlow)
-	app.Post("/v1/automations/flows/:id/disable", s.disableFlow)
+	app.Get("/v1/automations/flows", cloud.Handle(s, listFlows))
+	app.Post("/v1/automations/flows", cloud.Handle(s, createFlow))
+	app.Get("/v1/automations/flows/:id", cloud.Handle(s, getFlow))
+	app.Patch("/v1/automations/flows/:id", cloud.Handle(s, updateFlow))
+	app.Delete("/v1/automations/flows/:id", cloud.Handle(s, deleteFlow))
+	app.Get("/v1/automations/flows/:id/versions", cloud.Handle(s, listVersions))
+	app.Post("/v1/automations/flows/:id/versions", cloud.Handle(s, createVersion))
+	app.Post("/v1/automations/flows/:id/operations", cloud.Handle(s, applyOperation))
+	app.Post("/v1/automations/flows/:id/run", cloud.Handle(s, runFlow))
+	app.Post("/v1/automations/flows/:id/enable", cloud.Handle(s, enableFlow))
+	app.Post("/v1/automations/flows/:id/disable", cloud.Handle(s, disableFlow))
 
-	app.Get("/v1/automations/runs", s.listRuns)
-	app.Get("/v1/automations/runs/:id", s.getRun)
-	app.Post("/v1/automations/runs/:id/resume", s.resumeRun)
+	app.Get("/v1/automations/runs", cloud.Handle(s, listRuns))
+	app.Get("/v1/automations/runs/:id", cloud.Handle(s, getRun))
+	app.Post("/v1/automations/runs/:id/resume", cloud.Handle(s, resumeRun))
 
-	app.Post("/v1/automations/mcp", s.mcp)
-
-	log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
-	return nil
+	app.Post("/v1/automations/mcp", cloud.Handle(s, mcp))
 }
 
 func init() {
@@ -171,8 +176,8 @@ func Shutdown(_ context.Context) error {
 		return nil
 	}
 	var err error
-	if mounted.store != nil {
-		err = mounted.store.Close()
+	if mounted.State.store != nil {
+		err = mounted.State.store.Close()
 	}
 	mounted = nil
 	return err
@@ -180,11 +185,11 @@ func Shutdown(_ context.Context) error {
 
 // ── connectors ────────────────────────────────────────────────────────────────────
 
-func (s *svc) connectors(c *zip.Ctx) error {
+func connectors(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := principal.Tenant(c); !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	return c.JSON(http.StatusOK, s.catalog)
+	return c.JSON(http.StatusOK, s.State.catalog)
 }
 
 // ── flows ─────────────────────────────────────────────────────────────────────
@@ -202,8 +207,8 @@ type createFlowReq struct {
 	Trigger     *FlowTrigger `json:"trigger"`
 }
 
-func (s *svc) createFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func createFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -227,7 +232,7 @@ func (s *svc) createFlow(c *zip.Ctx) error {
 		ID: flowID, Org: org, ExternalID: clip(body.ExternalID), FolderID: clip(body.FolderID),
 		Status: FlowDisabled, Created: now, Updated: now,
 	}
-	if _, err := s.store.CreateFlow(c.Context(), f); err != nil {
+	if _, err := s.State.store.CreateFlow(c.Context(), f); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "create flow: %v", err)
 	}
 	v := FlowVersion{
@@ -235,36 +240,36 @@ func (s *svc) createFlow(c *zip.Ctx) error {
 		Trigger: body.Trigger, Valid: body.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
-	saved, err := s.store.CreateVersion(c.Context(), v)
+	saved, err := s.State.store.CreateVersion(c.Context(), v)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
 	return c.JSON(http.StatusCreated, populatedFlow{Flow: f, Version: &saved})
 }
 
-func (s *svc) listFlows(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listFlows(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	rows, err := s.store.ListFlows(c.Context(), org, limitOf(c))
+	rows, err := s.State.store.ListFlows(c.Context(), org, limitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": rows})
 }
 
-func (s *svc) getFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func getFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	f, err := s.store.GetFlow(c.Context(), org, idParam(c))
+	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
 	out := populatedFlow{Flow: f}
-	if v, verr := s.store.LatestVersion(c.Context(), org, f.ID); verr == nil {
+	if v, verr := s.State.store.LatestVersion(c.Context(), org, f.ID); verr == nil {
 		out.Version = &v
 	}
 	return c.JSON(http.StatusOK, out)
@@ -277,12 +282,12 @@ type patchFlowReq struct {
 	Metadata           json.RawMessage `json:"metadata"`
 }
 
-func (s *svc) updateFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func updateFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	f, err := s.store.GetFlow(c.Context(), org, idParam(c))
+	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
@@ -301,7 +306,7 @@ func (s *svc) updateFlow(c *zip.Ctx) error {
 		// LOW-3: a published version must be an EXISTING version OF THIS FLOW in THIS
 		// org — never an unvalidated (possibly cross-tenant / dangling) id. Empty clears it.
 		if pv != "" {
-			ver, verr := s.store.GetVersion(c.Context(), org, pv)
+			ver, verr := s.State.store.GetVersion(c.Context(), org, pv)
 			if verr != nil || ver.FlowID != f.ID {
 				return zip.Errorf(http.StatusUnprocessableEntity, "publishedVersionId must name a version of this flow")
 			}
@@ -312,19 +317,19 @@ func (s *svc) updateFlow(c *zip.Ctx) error {
 		f.Metadata = body.Metadata
 	}
 	f.Updated = time.Now().UnixMilli()
-	saved, err := s.store.UpdateFlow(c.Context(), f)
+	saved, err := s.State.store.UpdateFlow(c.Context(), f)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
 	return c.JSON(http.StatusOK, saved)
 }
 
-func (s *svc) deleteFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func deleteFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	deleted, err := s.store.DeleteFlow(c.Context(), org, idParam(c))
+	deleted, err := s.State.store.DeleteFlow(c.Context(), org, idParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -336,12 +341,12 @@ func (s *svc) deleteFlow(c *zip.Ctx) error {
 
 // ── versions ──────────────────────────────────────────────────────────────────
 
-func (s *svc) listVersions(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listVersions(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	rows, err := s.store.ListVersions(c.Context(), org, idParam(c), limitOf(c))
+	rows, err := s.State.store.ListVersions(c.Context(), org, idParam(c), limitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list versions: %v", err)
 	}
@@ -353,8 +358,8 @@ type createVersionReq struct {
 	Trigger     *FlowTrigger `json:"trigger"`
 }
 
-func (s *svc) createVersion(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func createVersion(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -376,7 +381,7 @@ func (s *svc) createVersion(c *zip.Ctx) error {
 		Trigger: body.Trigger, Valid: body.Trigger != nil, State: VersionDraft,
 		SchemaVersion: LatestFlowSchemaVersion, Created: now, Updated: now,
 	}
-	saved, err := s.store.CreateVersion(c.Context(), v)
+	saved, err := s.State.store.CreateVersion(c.Context(), v)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
@@ -385,8 +390,8 @@ func (s *svc) createVersion(c *zip.Ctx) error {
 
 // applyOperation applies a FlowOperation. CHANGE_STATUS is flow-scoped (routes to
 // enable/disable); every other op mutates the flow's latest version's step tree.
-func (s *svc) applyOperation(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func applyOperation(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -402,12 +407,12 @@ func (s *svc) applyOperation(c *zip.Ctx) error {
 			return zip.ErrBadRequest("decode CHANGE_STATUS")
 		}
 		if r.Status == FlowEnabled {
-			return s.setEnabled(c, org, flowID, true)
+			return setEnabled(s, c, org, flowID, true)
 		}
-		return s.setEnabled(c, org, flowID, false)
+		return setEnabled(s, c, org, flowID, false)
 	}
 
-	v, err := s.store.LatestVersion(c.Context(), org, flowID)
+	v, err := s.State.store.LatestVersion(c.Context(), org, flowID)
 	if err != nil {
 		return mapStoreErr(err, "flow has no version")
 	}
@@ -421,7 +426,7 @@ func (s *svc) applyOperation(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
 	updated.Updated = time.Now().UnixMilli()
-	saved, err := s.store.UpdateVersion(c.Context(), *updated)
+	saved, err := s.State.store.UpdateVersion(c.Context(), *updated)
 	if err != nil {
 		return mapStoreErr(err, "version not found")
 	}
@@ -432,25 +437,25 @@ func (s *svc) applyOperation(c *zip.Ctx) error {
 
 // runVersion resolves the version a run executes: the published version if set,
 // else the latest.
-func (s *svc) runVersion(ctx context.Context, org string, f Flow) (FlowVersion, error) {
+func runVersion(s *cloud.Service[state], ctx context.Context, org string, f Flow) (FlowVersion, error) {
 	if f.PublishedVersionID != "" {
-		if v, err := s.store.GetVersion(ctx, org, f.PublishedVersionID); err == nil {
+		if v, err := s.State.store.GetVersion(ctx, org, f.PublishedVersionID); err == nil {
 			return v, nil
 		}
 	}
-	return s.store.LatestVersion(ctx, org, f.ID)
+	return s.State.store.LatestVersion(ctx, org, f.ID)
 }
 
-func (s *svc) runFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	f, err := s.store.GetFlow(c.Context(), org, idParam(c))
+	f, err := s.State.store.GetFlow(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
-	v, err := s.runVersion(c.Context(), org, f)
+	v, err := runVersion(s, c.Context(), org, f)
 	if err != nil {
 		return mapStoreErr(err, "flow has no runnable version")
 	}
@@ -483,18 +488,18 @@ func (s *svc) runFlow(c *zip.Ctx) error {
 	// audit here: the durable run-start activity is the SINGLE owner of run
 	// bookkeeping and bills the run exactly once (MED-1), so the manual path never
 	// double-records. CreateRunIfAbsent leaves metered=0 for the activity to claim.
-	if _, err := s.store.CreateRunIfAbsent(c.Context(), run); err != nil {
+	if _, err := s.State.store.CreateRunIfAbsent(c.Context(), run); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist run: %v", err)
 	}
 	return c.JSON(http.StatusCreated, run)
 }
 
-func (s *svc) listRuns(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listRuns(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	rows, err := s.store.ListRuns(c.Context(), org, clip(c.Query("flowId")), limitOf(c))
+	rows, err := s.State.store.ListRuns(c.Context(), org, clip(c.Query("flowId")), limitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list runs: %v", err)
 	}
@@ -503,12 +508,12 @@ func (s *svc) listRuns(c *zip.Ctx) error {
 
 // getRun returns a run, refreshing a non-terminal status from the engine (scoped to
 // the org's namespace) so the caller sees live progress.
-func (s *svc) getRun(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func getRun(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	run, err := s.store.GetRun(c.Context(), org, idParam(c))
+	run, err := s.State.store.GetRun(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapStoreErr(err, "run not found")
 	}
@@ -518,7 +523,7 @@ func (s *svc) getRun(c *zip.Ctx) error {
 			if terminal(st) {
 				finish = time.Now().UnixMilli()
 			}
-			if uerr := s.store.UpdateRunStatus(c.Context(), org, run.ID, st, finish, time.Now().UnixMilli()); uerr == nil {
+			if uerr := s.State.store.UpdateRunStatus(c.Context(), org, run.ID, st, finish, time.Now().UnixMilli()); uerr == nil {
 				run.Status, run.FinishTime = st, finish
 			}
 		}
@@ -526,12 +531,12 @@ func (s *svc) getRun(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, run)
 }
 
-func (s *svc) resumeRun(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	run, err := s.store.GetRun(c.Context(), org, idParam(c))
+	run, err := s.State.store.GetRun(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapStoreErr(err, "run not found")
 	}
@@ -549,38 +554,38 @@ func (s *svc) resumeRun(c *zip.Ctx) error {
 	if err := signalResume(c.Context(), org, run.WorkflowID, payload); err != nil {
 		return engineErr(err)
 	}
-	s.auditEvent(c, org, "automations.run.resume", run.ID, "ok", http.StatusOK)
+	auditEvent(s, c, org, "automations.run.resume", run.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, map[string]any{"resumed": true})
 }
 
 // ── enable / disable ──────────────────────────────────────────────────────────
 
-func (s *svc) enableFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func enableFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	return s.setEnabled(c, org, idParam(c), true)
+	return setEnabled(s, c, org, idParam(c), true)
 }
 
-func (s *svc) disableFlow(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func disableFlow(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	return s.setEnabled(c, org, idParam(c), false)
+	return setEnabled(s, c, org, idParam(c), false)
 }
 
 // setEnabled flips a flow's status and wires its POLLING schedule to the engine
 // (CreateSchedule on enable, DeleteSchedule on disable). Non-POLLING flows are a
 // pure status flip — no engine needed. A POLLING enable requires the engine (503 if
 // not ready). Shared by /enable, /disable, and the CHANGE_STATUS operation.
-func (s *svc) setEnabled(c *zip.Ctx, org, flowID string, enable bool) error {
-	f, err := s.store.GetFlow(c.Context(), org, flowID)
+func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable bool) error {
+	f, err := s.State.store.GetFlow(c.Context(), org, flowID)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
-	v, verr := s.runVersion(c.Context(), org, f)
+	v, verr := runVersion(s, c.Context(), org, f)
 	cron, polling := pollingCron(v, verr)
 
 	if enable {
@@ -589,7 +594,7 @@ func (s *svc) setEnabled(c *zip.Ctx, org, flowID string, enable bool) error {
 		f.Status = FlowDisabled
 	}
 	f.Updated = time.Now().UnixMilli()
-	saved, err := s.store.UpdateFlow(c.Context(), f)
+	saved, err := s.State.store.UpdateFlow(c.Context(), f)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
@@ -604,7 +609,7 @@ func (s *svc) setEnabled(c *zip.Ctx, org, flowID string, enable bool) error {
 		} else {
 			// Best-effort: local status is authoritative; a schedule-delete failure is logged.
 			if serr := disableSchedule(c.Context(), org, scheduleID); serr != nil {
-				s.log.Warn("schedule delete failed (continuing)", "flow", flowID, "err", serr)
+				s.Log.Warn("schedule delete failed (continuing)", "flow", flowID, "err", serr)
 			}
 		}
 	}
@@ -612,7 +617,7 @@ func (s *svc) setEnabled(c *zip.Ctx, org, flowID string, enable bool) error {
 	if enable {
 		action = "automations.flow.enable"
 	}
-	s.auditEvent(c, org, action, f.ID, "ok", http.StatusOK)
+	auditEvent(s, c, org, action, f.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, saved)
 }
 
@@ -639,15 +644,15 @@ func pollingCron(v FlowVersion, verr error) (string, bool) {
 // exists (idempotent by run id) and meters+audits ONLY the caller that wins the
 // metered-flag claim — so a run is billed at most once no matter how many paths race
 // to record it. mounted-nil-safe via the activity wrapper.
-func (s *svc) recordRunStart(ctx context.Context, in RunStartInput) error {
+func recordRunStart(s *cloud.Service[state], ctx context.Context, in RunStartInput) error {
 	now := time.Now().UnixMilli()
-	if _, err := s.store.CreateRunIfAbsent(ctx, FlowRun{
+	if _, err := s.State.store.CreateRunIfAbsent(ctx, FlowRun{
 		ID: in.RunID, Org: in.Owner, FlowID: in.FlowID, FlowVersionID: in.FlowVersionID,
 		WorkflowID: in.RunID, Status: RunRunning, StartTime: now, Created: now, Updated: now,
 	}); err != nil {
 		return err
 	}
-	won, err := s.store.ClaimMeter(ctx, in.Owner, in.RunID)
+	won, err := s.State.store.ClaimMeter(ctx, in.Owner, in.RunID)
 	if err != nil {
 		return err
 	}
@@ -656,35 +661,35 @@ func (s *svc) recordRunStart(ctx context.Context, in RunStartInput) error {
 	}
 	// meter + audit fire together, behind the SAME won-guard, so the audit trail's
 	// count of automations.flow.run records is an exact proxy for the meter count.
-	s.meterRun(in.Owner)
-	s.auditRun(ctx, in.Owner, in.FlowID, in.RunID)
+	meterRun(s, in.Owner)
+	auditRun(s, ctx, in.Owner, in.FlowID, in.RunID)
 	return nil
 }
 
 // recordRunEnd records a run's terminal status so listRuns reflects it without a
 // getRun refresh. Best-effort.
-func (s *svc) recordRunEnd(ctx context.Context, in RunEndInput) error {
+func recordRunEnd(s *cloud.Service[state], ctx context.Context, in RunEndInput) error {
 	now := time.Now().UnixMilli()
-	return s.store.UpdateRunStatus(ctx, in.Owner, in.RunID, FlowRunStatus(in.Status), now, now)
+	return s.State.store.UpdateRunStatus(ctx, in.Owner, in.RunID, FlowRunStatus(in.Status), now, now)
 }
 
 // ── billing + audit ───────────────────────────────────────────────────────────
 
 // meterUnit records one metered unit for an HTTP caller's org. Nil/disabled meter → no-op.
-func (s *svc) meterUnit(org string, c *zip.Ctx) {
-	s.bill.Meter(org, principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+func meterUnit(s *cloud.Service[state], org string, c *zip.Ctx) {
+	s.Bill.Meter(org, principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 
 // meterRun records one metered unit for a flow run from the durable path (no HTTP
 // context). Nil/disabled meter → no-op.
-func (s *svc) meterRun(org string) {
-	s.bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+func meterRun(s *cloud.Service[state], org string) {
+	s.Bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
 }
 
 // auditEvent appends one tamper-evident audit record for an HTTP action. result is
 // "ok"|"error"; status is the HTTP status. Nil recorder → no-op.
-func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID, result string, status int) {
-	if s.audit == nil {
+func auditEvent(s *cloud.Service[state], c *zip.Ctx, org, action, resourceID, result string, status int) {
+	if s.State.audit == nil {
 		return
 	}
 	rec := audit.Record{
@@ -698,15 +703,15 @@ func (s *svc) auditEvent(c *zip.Ctx, org, action, resourceID, result string, sta
 		SourceIP:  cloud.ClientIP(c),
 		RequestID: c.RequestID(),
 	}
-	if _, err := s.audit.Append(c.Context(), rec); err != nil {
-		s.log.Warn("audit append failed", "err", err, "action", action)
+	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+		s.Log.Warn("audit append failed", "err", err, "action", action)
 	}
 }
 
 // auditRun appends the flow-run audit record from the durable path (no HTTP context,
 // so no actor sub/email/ip). Nil recorder → no-op.
-func (s *svc) auditRun(ctx context.Context, org, flowID, runID string) {
-	if s.audit == nil {
+func auditRun(s *cloud.Service[state], ctx context.Context, org, flowID, runID string) {
+	if s.State.audit == nil {
 		return
 	}
 	rec := audit.Record{
@@ -716,8 +721,8 @@ func (s *svc) auditRun(ctx context.Context, org, flowID, runID string) {
 		Auth:     audit.AuthContext{Method: "durable"},
 		Outcome:  audit.Outcome{Result: "ok", Status: http.StatusCreated},
 	}
-	if _, err := s.audit.Append(ctx, rec); err != nil {
-		s.log.Warn("audit append failed", "err", err, "action", "automations.flow.run", "run", runID)
+	if _, err := s.State.audit.Append(ctx, rec); err != nil {
+		s.Log.Warn("audit append failed", "err", err, "action", "automations.flow.run", "run", runID)
 	}
 }
 
@@ -725,7 +730,7 @@ func (s *svc) auditRun(ctx context.Context, org, flowID, runID string) {
 
 // tenant resolves the caller's org, additionally validOrg-checking it because the
 // org is folded into per-org engine namespaces + store keys.
-func (s *svc) tenant(c *zip.Ctx) (string, bool) {
+func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 	org, ok := principal.Tenant(c)
 	if !ok || !validOrg(org) {
 		return "", false

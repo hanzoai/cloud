@@ -119,7 +119,7 @@ func pngBytes(tail string) []byte {
 func TestFilesFrontStorageRoundTrip(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +159,8 @@ func TestFilesCrossOrgDenied(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA, acctB = "aaaaaaaa-0000-4000-8000-00000000000a", "bbbbbbbb-0000-4000-8000-00000000000b"
-	wsA, _ := mounted.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	wsB, _ := mounted.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
 	authA := bearerFor(t, acctA, "org-a")
 	authB := bearerFor(t, acctB, "org-b")
 
@@ -197,8 +197,8 @@ func TestFilesMembershipRequired(t *testing.T) {
 	ctx := context.Background()
 	const org = "acme"
 	const acctA, acctB = "aaaaaaaa-1111-4111-8111-00000000000a", "bbbbbbbb-1111-4111-8111-00000000000b"
-	wsA, _ := mounted.accounts.EnsureWorkspace(ctx, org, acctA, "Alice")
-	wsB, _ := mounted.accounts.EnsureWorkspace(ctx, org, acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, org, acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, org, acctB, "Bob")
 	authA := bearerFor(t, acctA, org)
 	authB := bearerFor(t, acctB, org)
 
@@ -235,7 +235,7 @@ func TestFilesMembershipRequired(t *testing.T) {
 func TestFilesDelete(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, _ := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, _ := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
 	auth := bearerFor(t, acct, org)
 
 	blobID := uuid.NewString()
@@ -266,8 +266,8 @@ func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 	app := mountTeam(t)
 	ctx := context.Background()
 	const acctA, acctB = "aaaaaaaa-2222-4222-8222-00000000000a", "bbbbbbbb-2222-4222-8222-00000000000b"
-	wsA, _ := mounted.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
-	wsB, _ := mounted.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
+	wsA, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-a", acctA, "Alice")
+	wsB, _ := mounted.State.accounts.EnsureWorkspace(ctx, "org-b", acctB, "Bob")
 	authA := bearerFor(t, acctA, "org-a")
 	authB := bearerFor(t, acctB, "org-b")
 
@@ -300,7 +300,7 @@ func TestFilesDeleteCrossTenantDenied(t *testing.T) {
 func TestFilesFailClosedWhenVFSDisabled(t *testing.T) {
 	app := mountTeamVFS(t, clients.DisabledVFS())
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, err := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, err := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func bearerForOtherOrg(t *testing.T) (map[string]string, string) {
 func TestFilesContentTypeAllowList(t *testing.T) {
 	app := mountTeam(t)
 	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
-	ws, _ := mounted.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
+	ws, _ := mounted.State.accounts.EnsureWorkspace(context.Background(), org, acct, "Ada")
 	auth := bearerFor(t, acct, org)
 
 	// A real PNG → inline image/png (byte-derived), nosniff, NO attachment.

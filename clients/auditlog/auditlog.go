@@ -36,18 +36,18 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-type svc struct {
+// state is auditlog's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store *audit.Recorder
-	log   luxlog.Logger
 }
 
 // Mount wires the org-scoped audit surface onto app per HIP-0106. The store is the
 // SAME *audit.Recorder Serve builds and the AuditTrail middleware writes (handed
-// through deps.Audit) — this subsystem opens NO second store.
+// through deps.Audit, which is NOT in Base) — this subsystem opens NO second store.
+// Constructs the value directly (cloud.NewBase) since the store comes from Deps.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("auditlog.Mount: nil zip.App")
@@ -55,10 +55,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("auditlog.Mount: nil deps.Logger")
 	}
-	s := &svc{store: deps.Audit, log: deps.Logger.New("subsystem", "audit")}
-	app.Get("/v1/audit", s.list)
-	s.log.Info("org-scoped audit surface mounted", "prefix", "/v1/audit", "store", s.store != nil)
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "audit"), State: state{store: deps.Audit}}
+	routes(app, s)
+	s.Log.Info("org-scoped audit surface mounted", "prefix", "/v1/audit", "store", s.State.store != nil)
 	return nil
+}
+
+// routes registers the org-scoped audit surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/audit", cloud.Handle(s, list))
 }
 
 func init() {
@@ -71,23 +76,23 @@ func init() {
 // until (RFC3339), pageSize (default 100, cap 1000), p (1-based page). Response is
 // the /v1 list envelope { data:[audit.Wire], data2:total } the console decodes —
 // the SAME shape /v1/admin/audit returns, so ONE console adapter reads either.
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		// A customer's OWN audit trail — an absent identity is a true "not signed
 		// in" (401), never a 403 "not authorized for this surface".
 		return zip.ErrUnauthorized("sign in to view the audit trail")
 	}
-	if s.store == nil {
+	if s.State.store == nil {
 		// No local tamper-evident store wired. Fail closed with an honest 501 rather
 		// than the admin view's IAM-proxy fallback (that is a fleet-operator concern).
 		return zip.Errorf(http.StatusNotImplemented, "audit trail is not configured")
 	}
 
 	f := orgFilterFromQuery(c, org)
-	rows, total, err := s.store.Query(c.Context(), f)
+	rows, total, err := s.State.store.Query(c.Context(), f)
 	if err != nil {
-		s.log.Warn("org audit query failed", "org", org, "err", err)
+		s.Log.Warn("org audit query failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "audit query failed")
 	}
 

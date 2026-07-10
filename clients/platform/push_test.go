@@ -8,11 +8,11 @@ import (
 )
 
 // seedGitApp writes a project + one git-source app tracking repoURL@branch.
-func seedGitApp(t *testing.T, s *svc, org, slug, repoURL, branch string) Application {
+func seedGitApp(t *testing.T, s *cloud.Service[state], org, slug, repoURL, branch string) Application {
 	t.Helper()
 	ctx := context.Background()
 	proj := Project{ID: "proj_" + org + "_" + slug, Org: org, Slug: slug, Name: slug, CreatedAt: 1, UpdatedAt: 1}
-	if err := s.store.CreateProject(ctx, proj); err != nil {
+	if err := s.State.store.CreateProject(ctx, proj); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
 	a := Application{
@@ -21,16 +21,16 @@ func seedGitApp(t *testing.T, s *svc, org, slug, repoURL, branch string) Applica
 		BuildType: "pack", Port: 3000, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
 		Status: "created", Namespace: tenantNamespace(org), CreatedAt: 1, UpdatedAt: 1,
 	}
-	if err := s.store.CreateApplication(ctx, a); err != nil {
+	if err := s.State.store.CreateApplication(ctx, a); err != nil {
 		t.Fatalf("seed app: %v", err)
 	}
 	return a
 }
 
-// pushSvc mounts an svc over a ready fake cluster (no HTTP routes needed —
+// pushSvc mounts a Service over a ready fake cluster (no HTTP routes needed —
 // buildFromPush is called directly) and trusts the embedded-git apex as a build
 // source, exactly as platform.Mount does from deps.Domain.
-func pushSvc(t *testing.T) *svc {
+func pushSvc(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	_, s := mountSvcK8s(t, fakeK8s())
 	prev := selfGitHost
@@ -49,18 +49,18 @@ func TestBuildFromPush_LaunchesMatchingApp(t *testing.T) {
 
 	// CloneURL carries the ".git" suffix; the app RepoURL does not — sameRepo must
 	// still match after normalization.
-	err := s.buildFromPush(ctx, mkPushEvent("acme", "site", "main", "deadbeefcafe", clone))
+	err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "main", "deadbeefcafe", clone))
 	if err != nil {
 		t.Fatalf("buildFromPush: %v", err)
 	}
-	got, err := s.store.GetApplicationByID(ctx, "acme", a.ID)
+	got, err := s.State.store.GetApplicationByID(ctx, "acme", a.ID)
 	if err != nil {
 		t.Fatalf("reload app: %v", err)
 	}
 	if got.Status != "building" {
 		t.Fatalf("app status: want building, got %q", got.Status)
 	}
-	deps, err := s.store.ListDeployments(ctx, "acme", a.ID)
+	deps, err := s.State.store.ListDeployments(ctx, "acme", a.ID)
 	if err != nil {
 		t.Fatalf("list deployments: %v", err)
 	}
@@ -76,14 +76,14 @@ func TestBuildFromPush_NoMatchIsNoop(t *testing.T) {
 	a := seedGitApp(t, s, "acme", "site", "https://git.hanzo.ai/v1/git/acme/site", "main")
 
 	// Right repo, wrong branch.
-	if err := s.buildFromPush(ctx, mkPushEvent("acme", "site", "feature", "abc123", "https://git.hanzo.ai/v1/git/acme/site.git")); err != nil {
+	if err := buildFromPush(s, ctx, mkPushEvent("acme", "site", "feature", "abc123", "https://git.hanzo.ai/v1/git/acme/site.git")); err != nil {
 		t.Fatalf("buildFromPush (wrong branch): %v", err)
 	}
 	// Right branch, different repo.
-	if err := s.buildFromPush(ctx, mkPushEvent("acme", "other", "main", "abc123", "https://git.hanzo.ai/v1/git/acme/other.git")); err != nil {
+	if err := buildFromPush(s, ctx, mkPushEvent("acme", "other", "main", "abc123", "https://git.hanzo.ai/v1/git/acme/other.git")); err != nil {
 		t.Fatalf("buildFromPush (other repo): %v", err)
 	}
-	deps, err := s.store.ListDeployments(ctx, "acme", a.ID)
+	deps, err := s.State.store.ListDeployments(ctx, "acme", a.ID)
 	if err != nil {
 		t.Fatalf("list deployments: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 	ctx := context.Background()
 	s := pushSvc(t)
 	proj := Project{ID: "proj_acme_api", Org: "acme", Slug: "api", Name: "api", CreatedAt: 1, UpdatedAt: 1}
-	if err := s.store.CreateProject(ctx, proj); err != nil {
+	if err := s.State.store.CreateProject(ctx, proj); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
 	img := Application{
@@ -105,13 +105,13 @@ func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 		Source: "image", RepoURL: "https://git.hanzo.ai/v1/git/acme/api", ImageRepo: "ghcr.io/hanzoai/api", ImageTag: "1",
 		EnvJSON: "[]", DomainsJSON: "[]", Status: "live", CreatedAt: 1, UpdatedAt: 1,
 	}
-	if err := s.store.CreateApplication(ctx, img); err != nil {
+	if err := s.State.store.CreateApplication(ctx, img); err != nil {
 		t.Fatalf("seed image app: %v", err)
 	}
-	if err := s.buildFromPush(ctx, mkPushEvent("acme", "api", "main", "abc123", "https://git.hanzo.ai/v1/git/acme/api.git")); err != nil {
+	if err := buildFromPush(s, ctx, mkPushEvent("acme", "api", "main", "abc123", "https://git.hanzo.ai/v1/git/acme/api.git")); err != nil {
 		t.Fatalf("buildFromPush: %v", err)
 	}
-	deps, err := s.store.ListDeployments(ctx, "acme", img.ID)
+	deps, err := s.State.store.ListDeployments(ctx, "acme", img.ID)
 	if err != nil {
 		t.Fatalf("list deployments: %v", err)
 	}

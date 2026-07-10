@@ -37,7 +37,7 @@ type Session struct {
 	// hanzoai/tasks — NOT by a bespoke scheduler here. A root session maps to a
 	// tasks workflow (ExecuteWorkflow); a subagent maps to a child workflow keyed
 	// by the same RootID. When these are set, control (pause/resume/stop/message)
-	// forwards to the tasks Signal/Cancel API (see svc.tasks). Empty = a surface
+	// forwards to the tasks Signal/Cancel API (see State.tasks). Empty = a surface
 	// that consumes control from the event stream instead (today's @hanzo/dev).
 	TaskWorkflowID string
 	TaskRunID      string

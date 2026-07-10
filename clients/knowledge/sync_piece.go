@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/knowledge/notion"
 )
 
@@ -120,12 +121,12 @@ type pieceRunResult struct {
 // pieceSync runs a long-tail provider's piece through the auto engine and files each
 // returned record as a kb-source. org is the validated tenant; token is this org's
 // OAuth access token (from KMS). Returns the count ingested and a resume cursor.
-func (s *svc) pieceSync(ctx context.Context, org, provider, token string) (int, string, error) {
+func pieceSync(s *cloud.Service[state], ctx context.Context, org, provider, token string) (int, string, error) {
 	conn, ok := pieceConnectors[provider]
 	if !ok {
 		return 0, "", fmt.Errorf("unknown provider %q", provider)
 	}
-	out, err := s.runPiece(ctx, org, conn.piece, conn.action, conn.auth(token), conn.props(""))
+	out, err := runPiece(s, ctx, org, conn.piece, conn.action, conn.auth(token), conn.props(""))
 	if err != nil {
 		return 0, "", err
 	}
@@ -156,7 +157,7 @@ func (s *svc) pieceSync(ctx context.Context, org, provider, token string) (int, 
 // The credential is sent as `auth` in the body; the engine's runner hands it to the
 // piece and touches nothing else. A 5xx/timeout is an infrastructure error; an
 // ok:false body is a piece-level failure surfaced to the caller.
-func (s *svc) runPiece(ctx context.Context, org, piece, action string, auth any, props map[string]any) (pieceRunResult, error) {
+func runPiece(s *cloud.Service[state], ctx context.Context, org, piece, action string, auth any, props map[string]any) (pieceRunResult, error) {
 	secret := pieceRunSecret()
 	if secret == "" {
 		// Fail closed: without the secret the engine will refuse (403), so surface a
