@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/luxfi/crypto"
 )
 
@@ -40,13 +41,13 @@ func TreasuryAnchorSigner(ctx context.Context, org, chain string) (address strin
 	if s == nil || strings.TrimSpace(org) == "" {
 		return "", nil, false
 	}
-	cust, has := s.custody[KindTreasury]
+	cust, has := s.State.custody[KindTreasury]
 	if !has {
 		return "", nil, false
 	}
-	w, err := s.ensureReserveWallet(ctx, org, chain)
+	w, err := ensureReserveWallet(s, ctx, org, chain)
 	if err != nil {
-		s.log.Warn("wallets: treasury anchor signer provision failed", "org", org, "err", err)
+		s.Log.Warn("wallets: treasury anchor signer provision failed", "org", org, "err", err)
 		return "", nil, false
 	}
 	addr := w.Address
@@ -64,8 +65,8 @@ func TreasuryAnchorSigner(ctx context.Context, org, chain string) (address strin
 // ensureReserveWallet resolves the org's reserve-anchor treasury wallet, creating
 // it (account + wallet) on first call. Idempotent: a repeat call returns the
 // existing wallet (matched by name) rather than minting a new ring key.
-func (s *svc) ensureReserveWallet(ctx context.Context, org, chain string) (*Wallet, error) {
-	ws, err := s.store.listWallets(ctx, org)
+func ensureReserveWallet(s *cloud.Service[state], ctx context.Context, org, chain string) (*Wallet, error) {
+	ws, err := s.State.store.listWallets(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func (s *svc) ensureReserveWallet(ctx context.Context, org, chain string) (*Wall
 			return &w, nil
 		}
 	}
-	accts, err := s.store.listAccounts(ctx, org)
+	accts, err := s.State.store.listAccounts(ctx, org)
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +89,12 @@ func (s *svc) ensureReserveWallet(ctx context.Context, org, chain string) (*Wall
 	}
 	if acctID == "" {
 		a := &Account{ID: newID("acct"), Org: org, Name: reserveAccountName, CreatedAt: time.Now().Unix()}
-		if err := s.store.createAccount(ctx, a); err != nil {
+		if err := s.State.store.createAccount(ctx, a); err != nil {
 			return nil, err
 		}
 		acctID = a.ID
 	}
-	cust := s.custody[KindTreasury]
+	cust := s.State.custody[KindTreasury]
 	w := &Wallet{
 		ID: newID("wal"), Org: org, AccountID: acctID, Name: reserveWalletName,
 		Custody: KindTreasury, Tier: TierCold, Chain: chain, CreatedAt: time.Now().Unix(),
@@ -103,10 +104,10 @@ func (s *svc) ensureReserveWallet(ctx context.Context, org, chain string) (*Wall
 		return nil, err
 	}
 	w.Address = addr
-	if err := s.store.createWallet(ctx, w); err != nil {
+	if err := s.State.store.createWallet(ctx, w); err != nil {
 		return nil, err
 	}
-	s.log.Info("wallets: provisioned reserve treasury anchor wallet", "org", org, "address", addr)
+	s.Log.Info("wallets: provisioned reserve treasury anchor wallet", "org", org, "address", addr)
 	return w, nil
 }
 
