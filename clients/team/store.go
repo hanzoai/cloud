@@ -13,7 +13,7 @@ import (
 	// encrypted at rest; !cgo → pure-Go modernc). Importing modernc directly would
 	// double-register "sqlite" under CGO and panic at init. Blank import registers
 	// the driver — the SAME one clients/tracker, clients/crm and clients/agents use.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
