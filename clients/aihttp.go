@@ -1,8 +1,13 @@
 package clients
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -33,6 +38,9 @@ var aiTracer = otel.Tracer("hanzo.ai/cloud")
 // code, and the gateway already owns model resolution across its served set.
 type httpAI struct {
 	client       *openai.Client
+	http         *http.Client // authenticated transport (static-key header or M2M oauth2), reused for /embeddings
+	baseURL      string       // gateway /v1 root
+	apiKey       string       // static bearer; "" when M2M (the http transport injects the Bearer)
 	defaultModel string
 }
 
@@ -51,9 +59,16 @@ const aiHTTPTimeout = 120 * time.Second
 // go-openai client's Authorization header. Callers log the base URL and default
 // model, never the key.
 func AIHTTPAt(baseURL, apiKey, defaultModel string) types.AIClient {
+	base := strings.TrimRight(baseURL, "/")
 	cfg := openai.DefaultConfig(apiKey)
-	cfg.BaseURL = strings.TrimRight(baseURL, "/")
-	return &httpAI{client: openai.NewClientWithConfig(cfg), defaultModel: defaultModel}
+	cfg.BaseURL = base
+	return &httpAI{
+		client:       openai.NewClientWithConfig(cfg),
+		http:         &http.Client{Timeout: aiHTTPTimeout},
+		baseURL:      base,
+		apiKey:       apiKey,
+		defaultModel: defaultModel,
+	}
 }
 
 // AIHTTPM2M returns a types.AIClient that authenticates to the gateway with an
@@ -82,10 +97,17 @@ func AIHTTPM2M(baseURL, tokenURL, clientID, clientSecret, defaultModel string) t
 		// auth — matches the proven client_credentials call.
 		AuthStyle: oauth2.AuthStyleInParams,
 	}
-	cfg := openai.DefaultConfig("") // empty authToken → go-openai adds no header
-	cfg.BaseURL = strings.TrimRight(baseURL, "/")
-	cfg.HTTPClient = cc.Client(context.Background()) // caches + auto-refreshes
-	return &httpAI{client: openai.NewClientWithConfig(cfg), defaultModel: defaultModel}
+	base := strings.TrimRight(baseURL, "/")
+	authed := cc.Client(context.Background()) // caches + auto-refreshes the M2M token
+	cfg := openai.DefaultConfig("")           // empty authToken → go-openai adds no header
+	cfg.BaseURL = base
+	cfg.HTTPClient = authed
+	return &httpAI{
+		client:       openai.NewClientWithConfig(cfg),
+		http:         authed, // same authed transport → /embeddings inherits the M2M Bearer
+		baseURL:      base,
+		defaultModel: defaultModel,
+	}
 }
 
 // ChatCompletion maps a types.ChatRequest to a single user-message chat
@@ -133,6 +155,86 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices", model)
 	}
 	return &types.ChatResponse{Content: resp.Choices[0].Message.Content}, nil
+}
+
+// Embed returns one vector per input from the gateway's OpenAI-compatible
+// /embeddings, authenticated by the SAME credential as ChatCompletion — so the
+// semantic tier bills and meters through the ONE org/project-aligned path, never
+// a static side-channel key. It emits a gen_ai client span (OTel semantic
+// conventions) exactly like chat, so embeddings are observable end to end. The
+// raw POST reuses a.http (the static-key or M2M-authenticated transport); go-
+// openai's typed embeddings path is bypassed because its EmbeddingModel enum
+// rejects gateway-served models like "bge-m3".
+func (a *httpAI) Embed(ctx context.Context, model string, inputs []string) ([][]float32, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil, fmt.Errorf("cloud: embed: empty model")
+	}
+
+	ctx, span := aiTracer.Start(ctx, "embeddings "+model, trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("gen_ai.system", "hanzo"),
+		attribute.String("gen_ai.operation.name", "embeddings"),
+		attribute.String("gen_ai.request.model", model),
+		attribute.Int("gen_ai.request.input_count", len(inputs)),
+	)
+
+	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
+	defer cancel()
+
+	body, _ := json.Marshal(map[string]any{"model": model, "input": inputs})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/embeddings", bytes.NewReader(body))
+	if err != nil {
+		span.RecordError(err)
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if a.apiKey != "" { // M2M leaves this empty; its transport injects the Bearer
+		req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	}
+
+	resp, err := a.http.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "embeddings transport failed")
+		return nil, fmt.Errorf("cloud: embeddings (model %q): %w", model, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode/100 != 2 {
+		span.SetStatus(codes.Error, "embeddings non-2xx")
+		trunc := raw
+		if len(trunc) > 200 {
+			trunc = trunc[:200]
+		}
+		return nil, fmt.Errorf("cloud: embeddings (model %q): status %d: %s", model, resp.StatusCode, string(trunc))
+	}
+	var decoded struct {
+		Data []struct {
+			Index     int       `json:"index"`
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, fmt.Errorf("cloud: embeddings decode: %w", err)
+	}
+	if len(decoded.Data) != len(inputs) {
+		return nil, fmt.Errorf("cloud: embeddings: got %d vectors for %d inputs", len(decoded.Data), len(inputs))
+	}
+	sort.Slice(decoded.Data, func(i, j int) bool { return decoded.Data[i].Index < decoded.Data[j].Index })
+	out := make([][]float32, len(decoded.Data))
+	for i, d := range decoded.Data {
+		out[i] = d.Embedding
+	}
+	span.SetAttributes(attribute.Int("gen_ai.response.embeddings_count", len(out)))
+	return out, nil
 }
 
 // Models implements types.ModelLister: it returns the ids of the models this
