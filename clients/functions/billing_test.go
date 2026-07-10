@@ -85,29 +85,30 @@ func (s *sandbox) start(t *testing.T) string {
 }
 func (s *sandbox) ran() int32 { return atomic.LoadInt32(&s.calls) }
 
-// newBilledSvc builds a functions svc with a store, an exec client pointed at
+// newBilledSvc builds a functions service with a store, an exec client pointed at
 // execUpstream (empty ⇒ unconfigured), and a metering client pointed at
 // commerceURL (default org "hanzo"; empty ⇒ !Enabled()).
-func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *svc {
+func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *cloud.Service[state] {
 	t.Helper()
 	log := luxlog.New("module", "fnbilltest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return &svc{
-		stores: cloud.NewTenantStore(t.TempDir(), "functions", openStore),
-		exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
-		log:    log,
-		bill:   cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
+	return &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
+		State: state{
+			stores: cloud.NewTenantStore(t.TempDir(), "functions", openStore),
+			exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
+		},
 	}
 }
 
 // seedFn inserts a ready function directly into the org's per-org store — the
-// SAME file s.invoke resolves through the shared cache, so the handler sees it.
-func seedFn(t *testing.T, s *svc, org, name string) {
+// SAME file the invoke handler resolves through the shared cache, so it sees it.
+func seedFn(t *testing.T, s *cloud.Service[state], org, name string) {
 	t.Helper()
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		t.Fatalf("seed fn store: %v", err)
 	}
@@ -118,11 +119,11 @@ func seedFn(t *testing.T, s *svc, org, name string) {
 	}
 }
 
-// invoke fires POST /v1/functions/:name/invoke for org through the real handler.
-func invoke(t *testing.T, s *svc, org, name string) *http.Response {
+// fireInvoke fires POST /v1/functions/:name/invoke for org through the real handler.
+func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/functions/:name/invoke", s.invoke)
+	app.Post("/v1/functions/:name/invoke", cloud.Handle(s, invoke))
 	req := httptest.NewRequest("POST", "/v1/functions/"+name+"/invoke", bytes.NewReader([]byte(`{"input":"x"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
@@ -143,7 +144,7 @@ func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
 	s := newBilledSvc(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
-	resp := invoke(t, s, "acme", "resize")
+	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode != http.StatusPaymentRequired {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 402", resp.StatusCode, body)
@@ -164,7 +165,7 @@ func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
 	s := newBilledSvc(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
-	resp := invoke(t, s, "acme", "resize")
+	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 200", resp.StatusCode, body)
@@ -209,7 +210,7 @@ func TestInvoke_TransportFailureNotBilled(t *testing.T) {
 	s := newBilledSvc(t, bs.start(t), "http://127.0.0.1:1")
 	seedFn(t, s, "acme", "resize")
 
-	resp := invoke(t, s, "acme", "resize")
+	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode != http.StatusBadGateway {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 502 (transport failure)", resp.StatusCode, body)
@@ -229,7 +230,7 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 	s := newBilledSvc(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
-	resp := invoke(t, s, "acme", "resize")
+	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 200 (free fee is un-gated)", resp.StatusCode, body)
@@ -250,7 +251,7 @@ func TestInvoke_BillingUnconfiguredNoop(t *testing.T) {
 	s := newBilledSvc(t, "", sb.start(t)) // empty commerce URL ⇒ !Enabled()
 	seedFn(t, s, "acme", "resize")
 
-	resp := invoke(t, s, "acme", "resize")
+	resp := fireInvoke(t, s, "acme", "resize")
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("status = %d body=%s, want 200", resp.StatusCode, body)
