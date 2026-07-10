@@ -42,7 +42,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -72,65 +71,67 @@ var priorities = map[string]bool{
 	"none": true, "urgent": true, "high": true, "medium": true, "low": true,
 }
 
-type svc struct {
+// state is tracker's own data; shared deps (logger, billing meter) live in the
+// embedded cloud.Base, reached as s.Log / s.Bill.
+//
+// The bill meter is the shared per-org resource gate+meter. A project tracker is
+// FREE by default (charging per issue is the wrong product), so the create fee
+// defaults to 0 → Gate is a pass-through and Meter a no-op; the seam is wired
+// uniformly with every other subsystem and ops can price it per deployment via
+// CLOUD_TRACKER_FEE_CENTS[_PROJECT|_ISSUE].
+type state struct {
 	stores *cloud.TenantStore[*Store] // per-(org,project) tracker DBs, opened once each
-	log    luxlog.Logger
-	// bill is the shared per-org resource gate+meter. A project tracker is FREE
-	// by default (charging per issue is the wrong product), so the create fee
-	// defaults to 0 → Gate is a pass-through and Meter a no-op; the seam is wired
-	// uniformly with every other subsystem and ops can price it per deployment via
-	// CLOUD_TRACKER_FEE_CENTS[_PROJECT|_ISSUE].
-	bill *cloud.ResourceMeter
 }
 
 // mounted is the active service so Shutdown can release the stores.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // storeFor resolves the caller's project-scoped tracker store, opening the
 // per-(org,project) file ({DataDir}/orgs/{orgSlug}/projects/{projectSlug}/
 // tracker.db) once via the shared cache. tracker is project-scoped: the IAM
 // project (principal.Project, "default" when none is selected) is the physical
 // tenant boundary — the tracker's own KEY-based projects are rows WITHIN it.
-func (s *svc) storeFor(c *zip.Ctx, org string) (*Store, error) {
-	return s.stores.For(org, principal.Project(c))
+func storeFor(s *cloud.Service[state], c *zip.Ctx, org string) (*Store, error) {
+	return s.State.stores.For(org, principal.Project(c))
 }
 
-// Mount wires the tracker surface onto app per HIP-0106.
+// Mount wires the tracker surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted) so Shutdown can close every per-tenant store,
+// so it constructs the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("tracker.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("tracker.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "tracker")
 	if deps.DataDir == "" {
 		return fmt.Errorf("tracker.Mount: empty DataDir")
 	}
-	s := &svc{
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "tracker"), State: state{
 		stores: cloud.NewTenantStore(deps.DataDir, "tracker", openStore),
-		log:    log,
-		bill:   cloud.NewResourceMeter(deps, "tracker"),
-	}
+	}}
 	mounted = s
-
-	// Literal routes register before their :param siblings so Fiber's first-match
-	// scan resolves the collection endpoints before the detail ones.
-	app.Post("/v1/tracker/projects", s.createProject)
-	app.Get("/v1/tracker/projects", s.listProjects)
-	app.Get("/v1/tracker/projects/:key", s.getProject)
-	app.Patch("/v1/tracker/projects/:key", s.updateProject)
-	app.Delete("/v1/tracker/projects/:key", s.deleteProject)
-
-	app.Post("/v1/tracker/projects/:key/issues", s.createIssue)
-	app.Get("/v1/tracker/projects/:key/issues", s.listIssues)
-	app.Get("/v1/tracker/projects/:key/issues/:num", s.getIssue)
-	app.Patch("/v1/tracker/projects/:key/issues/:num", s.updateIssue)
-	app.Delete("/v1/tracker/projects/:key/issues/:num", s.deleteIssue)
-
-	log.Info("tracker mounted", "brand", deps.Brand)
+	routes(app, s)
+	s.Log.Info("tracker mounted", "brand", s.Brand)
 	return nil
+}
+
+// routes registers the tracker surface. Literal routes register before their
+// :param siblings so Fiber's first-match scan resolves the collection endpoints
+// before the detail ones.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/tracker/projects", cloud.Handle(s, createProject))
+	app.Get("/v1/tracker/projects", cloud.Handle(s, listProjects))
+	app.Get("/v1/tracker/projects/:key", cloud.Handle(s, getProject))
+	app.Patch("/v1/tracker/projects/:key", cloud.Handle(s, updateProject))
+	app.Delete("/v1/tracker/projects/:key", cloud.Handle(s, deleteProject))
+
+	app.Post("/v1/tracker/projects/:key/issues", cloud.Handle(s, createIssue))
+	app.Get("/v1/tracker/projects/:key/issues", cloud.Handle(s, listIssues))
+	app.Get("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, getIssue))
+	app.Patch("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, updateIssue))
+	app.Delete("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, deleteIssue))
 }
 
 func init() {
@@ -192,12 +193,12 @@ type createProjectReq struct {
 	Description string `json:"description"`
 }
 
-func (s *svc) createProject(c *zip.Ctx) error {
+func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -223,7 +224,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 
 	kind := "project"
 	fee := createFeeCents(kind)
-	if err := s.bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -239,16 +240,16 @@ func (s *svc) createProject(c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
-func (s *svc) listProjects(c *zip.Ctx) error {
+func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -263,12 +264,12 @@ func (s *svc) listProjects(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-func (s *svc) getProject(c *zip.Ctx) error {
+func getProject(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -287,12 +288,12 @@ type updateProjectReq struct {
 	Description *string `json:"description"`
 }
 
-func (s *svc) updateProject(c *zip.Ctx) error {
+func updateProject(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -331,12 +332,12 @@ func (s *svc) updateProject(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toProjectView(p))
 }
 
-func (s *svc) deleteProject(c *zip.Ctx) error {
+func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -354,7 +355,7 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 
 // project resolves the caller's project by :key from the given per-tenant store,
 // or answers the right HTTP error.
-func (s *svc) project(c *zip.Ctx, store *Store, org string) (Project, error) {
+func project(s *cloud.Service[state], c *zip.Ctx, store *Store, org string) (Project, error) {
 	p, err := store.GetProject(c.Context(), org, keyParam(c))
 	if errors.Is(err, errNotFound) {
 		return Project{}, zip.ErrNotFound("project not found")
@@ -374,16 +375,16 @@ type createIssueReq struct {
 	Labels      []string `json:"labels"`
 }
 
-func (s *svc) createIssue(c *zip.Ctx) error {
+func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	p, err := s.project(c, store, org)
+	p, err := project(s, c, store, org)
 	if err != nil {
 		return err
 	}
@@ -418,7 +419,7 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 
 	kind := "issue"
 	fee := createFeeCents(kind)
-	if err := s.bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -436,20 +437,20 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
 }
 
-func (s *svc) listIssues(c *zip.Ctx) error {
+func listIssues(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	p, err := s.project(c, store, org)
+	p, err := project(s, c, store, org)
 	if err != nil {
 		return err
 	}
@@ -468,16 +469,16 @@ func (s *svc) listIssues(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-func (s *svc) getIssue(c *zip.Ctx) error {
+func getIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	p, err := s.project(c, store, org)
+	p, err := project(s, c, store, org)
 	if err != nil {
 		return err
 	}
@@ -504,16 +505,16 @@ type updateIssueReq struct {
 	Labels      *[]string `json:"labels"`
 }
 
-func (s *svc) updateIssue(c *zip.Ctx) error {
+func updateIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	p, err := s.project(c, store, org)
+	p, err := project(s, c, store, org)
 	if err != nil {
 		return err
 	}
@@ -584,16 +585,16 @@ func (s *svc) updateIssue(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toIssueView(p.Key, i))
 }
 
-func (s *svc) deleteIssue(c *zip.Ctx) error {
+func deleteIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(c, org)
+	store, err := storeFor(s, c, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	p, err := s.project(c, store, org)
+	p, err := project(s, c, store, org)
 	if err != nil {
 		return err
 	}
@@ -742,7 +743,7 @@ func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.stores.CloseAll()
+	err := mounted.State.stores.CloseAll()
 	mounted = nil
 	return err
 }

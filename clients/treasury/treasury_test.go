@@ -18,7 +18,7 @@ import (
 
 // mount builds a treasury app on a fresh store and installs it as the process
 // singleton (so the Reserve helper resolves it), cleaning both up.
-func mount(t *testing.T) (*zip.App, *svc) {
+func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
 	store, err := sqlstore.Open(t.TempDir() + "/treasury.db")
 	if err != nil {
@@ -26,22 +26,24 @@ func mount(t *testing.T) (*zip.App, *svc) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	log := luxlog.New("test")
-	s := &svc{
-		store:  store,
-		record: ledger.New(store),
-		log:    log,
-		anchor: newAnchorer(cloud.Deps{}, log),
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{Logger: log}, "treasury"),
+		State: state{
+			store:  store,
+			record: ledger.New(store),
+			anchor: newAnchorer(cloud.Deps{}, log),
+		},
 	}
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	app.Get("/v1/finance/treasury", s.myTreasury)
-	app.Get("/v1/finance/accounts", s.myAccounts)
-	app.Get("/v1/admin/treasury", s.adminReport)
-	app.Post("/v1/admin/treasury/policy", s.adminSetPolicy)
-	app.Post("/v1/admin/treasury/sweep", s.adminSweep)
-	app.Post("/v1/admin/treasury/seed", s.adminSeed)
-	app.Post("/v1/admin/treasury/anchor", s.adminAnchor)
+	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))
+	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))
+	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))
+	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))
+	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))
+	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))
+	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))
 	return app, s
 }
 
@@ -145,7 +147,7 @@ func TestSeed_FundsReserve(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("seed = %d (%s)", code, body)
 	}
-	if bal, _ := s.record.ReserveCents(context.Background()); bal != 10_000 {
+	if bal, _ := s.State.record.ReserveCents(context.Background()); bal != 10_000 {
 		t.Fatalf("reserve = %d, want 10000", bal)
 	}
 }
@@ -166,7 +168,7 @@ func TestSweep_AccruesRevenueShare_Idempotent(t *testing.T) {
 	if d2["created"].(bool) {
 		t.Fatal("re-sweep same period must be idempotent (created=false)")
 	}
-	if bal, _ := s.record.ReserveCents(context.Background()); bal != 20_000 {
+	if bal, _ := s.State.record.ReserveCents(context.Background()); bal != 20_000 {
 		t.Fatalf("reserve double-accrued: %d, want 20000", bal)
 	}
 }
@@ -262,7 +264,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	_, s := mount(t) // installs mounted
 	ctx := context.Background()
 	// Fund $50 via seed.
-	if _, _, err := s.record.Seed(ctx, "seed:test", "cap", 5_000, 1); err != nil {
+	if _, _, err := s.State.record.Seed(ctx, "seed:test", "cap", 5_000, 1); err != nil {
 		t.Fatal(err)
 	}
 	// Backed: $30 payout debits the fund.
@@ -270,7 +272,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if err != nil || !backed || id == "" {
 		t.Fatalf("backed reserve: backed=%v id=%q err=%v", backed, id, err)
 	}
-	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.State.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("reserve after backed payout = %d, want 2000", bal)
 	}
 	// Blocked: $50 > remaining $20 → not backed, fund intact.
@@ -281,7 +283,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if backed2 {
 		t.Fatal("insufficient reserve must NOT back the payout")
 	}
-	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.State.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("blocked payout altered fund: %d, want 2000", bal)
 	}
 	// Idempotent replay of the backed ref: no second debit.
@@ -289,7 +291,7 @@ func TestReserve_EnforcedAgainstFund(t *testing.T) {
 	if err != nil || !backed3 {
 		t.Fatalf("replay: backed=%v err=%v", backed3, err)
 	}
-	if bal, _ := s.record.ReserveCents(ctx); bal != 2_000 {
+	if bal, _ := s.State.record.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("replay double-charged fund: %d, want 2000", bal)
 	}
 }

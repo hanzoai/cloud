@@ -12,7 +12,7 @@ package kms
 // would validate (that requires IAM's signing key). So login BROKERS: it exchanges
 // the caller's credential at IAM's client_credentials endpoint and returns IAM's
 // own JWT verbatim. The returned token's `owner` claim scopes it to exactly one
-// org, and cloud's org-scope guard (svc.guard) re-checks that owner against the
+// org, and cloud's org-scope guard (guard) re-checks that owner against the
 // URL :org on every secret read. This endpoint therefore grants NOTHING beyond
 // IAM's already-public client_credentials grant — it is a thin, stateless relay.
 //
@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,8 +104,8 @@ type loginResponse struct {
 // credential → 401; an IAM outage → 502. It NEVER logs or echoes the secret, and
 // its error bodies carry no IAM internals (no credential-validity oracle beyond
 // what IAM's own endpoint already exposes).
-func (s *svc) login(ctx *zip.Ctx) error {
-	if s.iamTokenURL == "" {
+func login(s *cloud.Service[state], ctx *zip.Ctx) error {
+	if s.State.iamTokenURL == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "kms login unavailable: no IAM issuer configured")
 	}
 	body := ctx.Body()
@@ -124,7 +125,7 @@ func (s *svc) login(ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("credentials malformed")
 	}
 
-	tok, expiresIn, status := s.brokerIAMToken(ctx.Context(), cid, csec)
+	tok, expiresIn, status := brokerIAMToken(s, ctx.Context(), cid, csec)
 	if status != http.StatusOK {
 		// One clean status, no upstream detail. 401 = auth failed; 502 = IAM down.
 		return zip.Errorf(status, "kms login failed")
@@ -137,13 +138,13 @@ func (s *svc) login(ctx *zip.Ctx) error {
 // IAM (bad/unknown credential) maps to 401; a 5xx or transport failure maps to 502
 // (upstream). hanzo.id (Casdoor) expects the credential in the form body, matching
 // cloud's own proven client_credentials call (clients/aihttp AuthStyleInParams).
-func (s *svc) brokerIAMToken(ctx context.Context, clientID, clientSecret string) (token string, expiresIn int64, status int) {
+func brokerIAMToken(s *cloud.Service[state], ctx context.Context, clientID, clientSecret string) (token string, expiresIn int64, status int) {
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {clientID},
 		"client_secret": {clientSecret},
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.iamTokenURL, strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.State.iamTokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", 0, http.StatusBadGateway
 	}
