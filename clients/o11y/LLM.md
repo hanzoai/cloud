@@ -65,3 +65,33 @@ for metrics; cloud takes traces+logs.
 `cmd/cloud/telemetry.go` prefers ZAP (canonical cross-service wire). When no ZAP
 endpoint is set but an OTLP endpoint is, it ships spans over OTLP-HTTP — the path
 to LOOP BACK to this in-process ingest at `localhost:4318` once cutover happens.
+
+## cloud's own spans → in-process trace sink (`tracesink.go`)
+
+The dogfood: cloud's OWN spans (service + ai GenAI/LLM-obs) reach the embedded
+ClickHouse trace store WITHOUT a socket, via the ZAP locality-adaptive **Router**
+(`github.com/luxfi/zap` v1.2.1: `Router`/`InProcessInterface`/`Destination`/
+`Payload`). One Send API, Cost-table routing — not a caller branch.
+
+- `Router` (this pkg, exported) carries a Cost-0 `InProcessInterface`. cmd/cloud's
+  tracer provider installs an exporter (`NewTraceExporter`) whose `otlptrace.Client`
+  `Send`s every batch to `TraceDest` ("hanzo.o11y.traces"). When this sink is
+  mounted the Router delivers the LIVE `[]*tracepb.ResourceSpans` by value (zero
+  ZAP-wire serialize, zero socket, no second collector hop); else `ErrNoRoute` and
+  the producer falls back to the ZAP wire client.
+- The handler bridges SDK-exporter proto spans → collector pdata (one in-memory
+  OTLP round-trip — the pdata proto pkg differs but the OTLP wire is identical) and
+  writes via the REAL `chtraces` exporter (`ConsumeTraces`), the one writer that
+  produces the `o11y_index_v3` schema the query plane reads. The pdata→SpanV3
+  conversion is unexported, so the sink reuses the exporter as a `consumer.Traces`
+  rather than duplicating ~90 lines of schema-coupled conversion.
+- **OPT-IN + fail-soft.** Mounts (order 73) only when `O11Y_TRACES_ZAP_INPROCESS`
+  is truthy AND a datastore DSN is set (`TraceInprocEnabled()` is the ONE gate both
+  the sink and the producer read). Any construction error leaves cloud's spans on
+  the wire — activating it can never take cloud down. Shutdown deregisters the
+  handler then flushes the exporter's sending queue.
+- Boot window: the provider installs early (initTelemetry) but the sink registers
+  at mount (order 73); spans in between take the wire fallback, else surface
+  ErrNoRoute (visible, never a silent plaintext downgrade). Steady state is
+  in-process. A P2 ZAP `NodeInterface` for traces slots behind the same Send call
+  site with no producer change.
