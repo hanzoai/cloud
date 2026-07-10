@@ -203,19 +203,19 @@ func TestSlackDedupeIdempotency(t *testing.T) {
 	newApp(t, newKMS(t)) // mounts the store (table created in migrate); sets `mounted`
 	ctx := context.Background()
 
-	fresh, err := mounted.store.MarkSlackEvent(ctx, "Ev-1")
+	fresh, err := mounted.State.store.MarkSlackEvent(ctx, "Ev-1")
 	if err != nil || !fresh {
 		t.Fatalf("first sighting must be fresh (err=%v fresh=%v)", err, fresh)
 	}
-	again, err := mounted.store.MarkSlackEvent(ctx, "Ev-1")
+	again, err := mounted.State.store.MarkSlackEvent(ctx, "Ev-1")
 	if err != nil || again {
 		t.Fatalf("a Slack retry of the same event_id must be a duplicate (err=%v again=%v)", err, again)
 	}
 	// A different id is fresh; an empty key is non-dedupable (always fresh).
-	if f, _ := mounted.store.MarkSlackEvent(ctx, "Ev-2"); !f {
+	if f, _ := mounted.State.store.MarkSlackEvent(ctx, "Ev-2"); !f {
 		t.Fatal("a distinct event_id must be fresh")
 	}
-	if f, _ := mounted.store.MarkSlackEvent(ctx, ""); !f {
+	if f, _ := mounted.State.store.MarkSlackEvent(ctx, ""); !f {
 		t.Fatal("an empty key must be non-dedupable (fresh)")
 	}
 }
@@ -361,7 +361,7 @@ func TestSlackLinkLeg1SetsCookieAndRedirects(t *testing.T) {
 	slackLinkConfiguredEnv(t)
 	app := newApp(t, newKMS(t))
 
-	entry, _ := signSlackLink(mounted.stateKey, "TACME", "Uacme", 0)
+	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
 	resp, err := app.Fiber().Test(rq)
 	if err != nil {
@@ -420,7 +420,7 @@ func TestSlackLinkTransplantRejected(t *testing.T) {
 
 	app := newApp(t, newKMS(t))
 
-	ss, _ := signSlackSubject(mounted.stateKey, "nonce-A", 0)
+	ss, _ := signSlackSubject(mounted.State.stateKey, "nonce-A", 0)
 
 	// (a) No init cookie at all → refused.
 	res := req(t, app, http.MethodGet, "/v1/integrations/slack/link/slack?code=c&state="+url.QueryEscape(ss), "", nil)
@@ -476,7 +476,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 	// pairing directly: sign the slack-signin state over a known nonce and present
 	// the matching init cookie.
 	const nonce = "leg2-nonce"
-	ss, _ := signSlackSubject(mounted.stateKey, nonce, 0)
+	ss, _ := signSlackSubject(mounted.State.stateKey, nonce, 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link/slack?code=usercode-acme&state="+url.QueryEscape(ss), nil)
 	rq.Header.Set("Cookie", slackInitCookie+"="+nonce)
 	resp, err := app.Fiber().Test(rq)
@@ -496,7 +496,7 @@ func TestSlackLinkLeg2Continuity(t *testing.T) {
 		t.Fatalf("leg2 must set the __Host- link cookie, got %v", resp.Header.Values("Set-Cookie"))
 	}
 	// The link cookie must carry the Slack-VERIFIED (team,user) from the exchange.
-	team, user, _, vok := verifySlackLink(mounted.stateKey, linkVal, 0)
+	team, user, _, vok := verifySlackLink(mounted.State.stateKey, linkVal, 0)
 	if !vok || team != "TACME" || user != "Uacme" {
 		t.Fatalf("link cookie must bind the Slack-verified (team,user), got team=%q user=%q ok=%v", team, user, vok)
 	}
@@ -520,7 +520,7 @@ func TestSlackRoutePrecedence(t *testing.T) {
 
 	// GET /v1/integrations/slack/link must hit slackLink (302 to Slack sign-in),
 	// NOT the /:provider GET handler (which would 200 a provider JSON view / 403).
-	entry, _ := signSlackLink(mounted.stateKey, "TACME", "Uacme", 0)
+	entry, _ := signSlackLink(mounted.State.stateKey, "TACME", "Uacme", 0)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/integrations/slack/link?state="+url.QueryEscape(entry), nil)
 	resp, err := app.Fiber().Test(rq)
 	if err != nil {
@@ -589,7 +589,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	authCh := make(chan string, 2)
 	stubSlackBridge(t, authCh)
 	app := newApp(t, newKMS(t))
-	mounted.slackBridgeReady()
+	slackBridgeReady(mounted)
 
 	// Swap in a cap-1 limiter, then saturate it so the next handler acquire sheds.
 	saved := slackLim
@@ -610,7 +610,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	}
 	// The dedupe key was NOT burned: marking it now must be FRESH — else a later
 	// retry would be deduped away and the message lost forever.
-	if fresh, err := mounted.store.MarkSlackEvent(context.Background(), "EvShed"); err != nil || !fresh {
+	if fresh, err := mounted.State.store.MarkSlackEvent(context.Background(), "EvShed"); err != nil || !fresh {
 		t.Fatalf("shed must NOT record the event_id (fresh=%v err=%v)", fresh, err)
 	}
 	// And no reply was posted (the turn never ran).
@@ -628,7 +628,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	slackConfiguredEnv(t)
 	newApp(t, newKMS(t))
-	mounted.slackBridgeReady()
+	slackBridgeReady(mounted)
 
 	saved := slackLim
 	slackLim = newOrgLimiter(1, 1)
@@ -640,7 +640,7 @@ func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	if !slackLim.acquire(org) {
 		t.Fatal("precondition: acquire the single slot")
 	}
-	mounted.slackSpawn(org, func() { panic("boom in a slack turn") })
+	slackSpawn(mounted, org, func() { panic("boom in a slack turn") })
 
 	// The recovered goroutine must release its slot; poll until a fresh acquire
 	// succeeds. Reaching here at all proves the panic did not crash the process.
