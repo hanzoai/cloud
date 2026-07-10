@@ -133,10 +133,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("tracker", 129, cloud.Typed(Mount))
-}
-
 // ---- HTTP response shapes (the published contract) ----
 
 type projectView struct {

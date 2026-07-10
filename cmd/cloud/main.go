@@ -17,10 +17,10 @@ import (
 
 	"github.com/hanzoai/cloud"
 
-	// Every subsystem registers into cloud.Registry via init(); the set is
-	// defined ONCE in the subsystems bundle (one source of truth, shared with
-	// cmd/hanzo). Blank-importing it populates the registry cloud.Serve mounts.
-	_ "github.com/hanzoai/cloud/subsystems"
+	// The subsystem set is defined ONCE in the subsystems bundle (shared with
+	// cmd/hanzo). subsystems.Wire() returns it in mount order; main threads that
+	// slice into cloud.Serve — the composition root, no init()-registry.
+	"github.com/hanzoai/cloud/subsystems"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	defer shutdown(ctx)
 
 	// nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
-	if err := cloud.Serve(nil); err != nil {
+	if err := cloud.Serve(subsystems.Wire(), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
 		os.Exit(1)
 	}

@@ -215,15 +215,6 @@ func (s *svc) routes(app *zip.App) {
 	app.Post("/v1/runner", s.runnerBuild)
 }
 
-// Registered as id "platform" with cloud.HealthOwner: it serves its OWN
-// fail-closed probe at /v1/platform/health, and cloud.HealthOwner makes serve.go
-// skip the generic GET /v1/<name>/health so the always-ok route never shadows it
-// (same flag as kms/paas/s3). Order 124 binds the /v1/platform family before the
-// projects (125) neighbours and well before the AI /v1/* catch-all (150).
-func init() {
-	cloud.Register("platform", 124, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // ── tenancy ──────────────────────────────────────────────────────────────────
 
 // tenant resolves the org for a request from the VALIDATED identity.

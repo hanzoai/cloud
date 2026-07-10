@@ -50,9 +50,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/types"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
-	luxlog "github.com/luxfi/log"
 )
 
 const (
@@ -149,10 +149,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	log.Info("crm mounted", "brand", deps.Brand)
 	return nil
-}
-
-func init() {
-	cloud.Register("crm", 131, cloud.Typed(Mount))
 }
 
 // ---- shared helpers ----

@@ -174,10 +174,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("billing", 121, cloud.Typed(Mount))
-}
-
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
 // {user,userId,customerId} AND clients/account's billingData: pinning ALL of them is what

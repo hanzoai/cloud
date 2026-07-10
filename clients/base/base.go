@@ -158,11 +158,3 @@ func buildMux(app core.App) (http.Handler, error) {
 	}
 	return handler, nil
 }
-
-func init() {
-	// Order 60 (matching the long-reserved base slot): the embedded base app +
-	// waitlist bind /v1/waitlist/* well before hanzoai/ai's /v1/* catch-all (150).
-	// cloud.HealthOwner: base serves its OWN /v1/base/health in Mount (above), so
-	// the generic liveness route never shadows it and it answers even embed-off.
-	cloud.Register("base", 60, cloud.Typed(Mount), cloud.HealthOwner)
-}

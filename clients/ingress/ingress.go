@@ -161,20 +161,6 @@ func Shutdown(ctx context.Context) error {
 	return err
 }
 
-func init() {
-	// Order 42: a specific /v1/ingress/* prefix, mounted well before the AI /v1/*
-	// catch-all (150). STAGED (config.stagedSubsystems) — mounts ONLY when the
-	// operator names "ingress" in CLOUD_ENABLE, so linking it changes nothing in a
-	// running deployment until deliberately activated.
-	cloud.RegisterWithShutdown("ingress", 42, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("ingress.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	}, Shutdown)
-}
-
 // mountRoutes registers the /v1/ingress control-plane surface. routes/services/
 // middlewares share uniform CRUD (list/get/delete keyed by kind); create+update
 // share one handler per kind (POST and PUT both land there).

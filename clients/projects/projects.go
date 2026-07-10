@@ -220,10 +220,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("projects", 125, cloud.Typed(Mount))
-}
-
 // ---- handlers ----
 
 type createReq struct {

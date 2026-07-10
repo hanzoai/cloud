@@ -230,12 +230,6 @@ func withContentType(c *zip.Ctx, b []byte) []byte {
 	return b
 }
 
-func init() {
-	// cloud.HealthOwner: plan serves its own /v1/plans/health (Mount), so
-	// Serve skips the generic always-ok route rather than shadowing it.
-	cloud.Register("plans", 111, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // Shutdown drops the goja host. Idempotent.
 func Shutdown(context.Context) error {
 	if host == nil {

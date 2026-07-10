@@ -148,7 +148,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 //
 // Enable with --enable=kms, or leave --enable empty for the default all-on bundle.
 func init() {
-	cloud.Register("kms", 10, cloud.Typed(Mount), cloud.HealthOwner)
 	cloud.RegisterKMSClientFactory(newEmbeddedClient)
 }
 

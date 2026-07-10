@@ -159,12 +159,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// Order 148: after integrations (137), BEFORE ai (150) so /v1/automations/* wins
-	// over ai's /v1/* catch-all. RegisterWithShutdown so the store closes on stop.
-	cloud.RegisterWithShutdown("automations", 148, cloud.Typed(Mount), Shutdown)
-}
-
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {

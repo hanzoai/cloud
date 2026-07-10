@@ -111,12 +111,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// cloud.HealthOwner: notify serves its own /v1/notify/health (Mount), so
-	// Serve skips the generic always-ok route rather than shadowing it.
-	cloud.Register("notify", subsystemOrder, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // health mirrors notifyd's GET /v1/notify/health body verbatim so probes and
 // clients that keyed on it keep working unchanged.
 func (s *service) health(c *zip.Ctx) error {

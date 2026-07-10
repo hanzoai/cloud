@@ -42,8 +42,8 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -125,17 +125,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log.Info("paas control plane mounted",
 		"prefix", "/v1/paas", "k8s", s.dyn != nil, "brand", deps.Brand, "env", deps.Env)
 	return nil
-}
-
-// Registered under the clean id "paas". It serves its OWN /v1/paas/health (a real
-// k8s-reachability probe) in Mount, so it registers with cloud.HealthOwner:
-// Serve's generic liveness loop skips a HealthOwner, so the always-ok route never
-// shadows the real probe. (This replaces the former "paas" id kludge, which
-// existed only to park the generic route at an unrouted path.) Order 128 binds the
-// /v1/paas family before the projects (125) neighbours and well before the AI
-// /v1/* catch-all (150); it has no ordering dependency (self-contained k8s client).
-func init() {
-	cloud.Register("paas", 128, cloud.Typed(Mount), cloud.HealthOwner)
 }
 
 // guard wraps a handler with the global-admin gate. Fail-closed: any request whose

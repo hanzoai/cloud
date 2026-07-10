@@ -30,8 +30,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // nameRE constrains a prompt name to a safe identifier. The name is the
@@ -168,10 +168,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	log.Info("prompts mounted", "brand", deps.Brand)
 	return nil
-}
-
-func init() {
-	cloud.Register("prompts", 126, cloud.Typed(Mount))
 }
 
 // ---- handlers ----

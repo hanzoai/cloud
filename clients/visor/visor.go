@@ -133,10 +133,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("visor", 133, cloud.Typed(Mount))
-}
-
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
 // validated IAM owner claim (principal.Org). It is what this client sends to
 // Visor as ?owner, so a caller can never read or mutate another tenant's compute.

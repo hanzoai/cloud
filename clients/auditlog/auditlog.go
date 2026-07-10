@@ -61,10 +61,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("audit", 144, cloud.Typed(Mount))
-}
-
 // list answers GET /v1/audit — the caller's OWN org audit trail, newest first.
 // Filters (all optional, applied on top of the pinned org): sub (a user in the
 // org), action, resource (type), resourceId, result (success|deny|error), since,
