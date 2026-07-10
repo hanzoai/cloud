@@ -34,6 +34,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/zap-proto/zip"
 )
@@ -77,8 +78,8 @@ type customerTxn struct {
 	Time     string `json:"time"`
 }
 
-// customerDetail is GET /v1/admin/customers/:org.
-type customerDetail struct {
+// customerDetailData is the GET /v1/admin/customers/:org payload.
+type customerDetailData struct {
 	Org          string         `json:"org"`
 	Display      string         `json:"display"`
 	OwnerEmail   string         `json:"ownerEmail"`
@@ -100,10 +101,10 @@ type customerDetail struct {
 // latency low without hammering IAM/commerce.
 const maxCustomerConcurrency = 8
 
-func (s *svc) customers(c *zip.Ctx) error {
+func customers(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
-	orgs, err := s.listOrgs(ctx, cr)
+	orgs, err := listOrgs(s, ctx, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -117,7 +118,7 @@ func (s *svc) customers(c *zip.Ctx) error {
 		go func(i int, o iamOrg) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			rows[i] = s.enrichCustomer(ctx, cr, o)
+			rows[i] = enrichCustomer(s, ctx, cr, o)
 		}(i, o)
 	}
 	wg.Wait()
@@ -129,11 +130,11 @@ func (s *svc) customers(c *zip.Ctx) error {
 // enrichCustomer folds one org's real IAM + commerce reads into a customer row.
 // Each read is best-effort: an upstream miss degrades that field to its honest
 // zero/empty (never a fabricated value), so one flaky org never fails the fleet.
-func (s *svc) enrichCustomer(ctx context.Context, cr creds, o iamOrg) customerRow {
+func enrichCustomer(s *cloud.Service[state], ctx context.Context, cr creds, o iamOrg) customerRow {
 	subj := orgSubject(o.Name)
-	users, _ := s.orgUsers(ctx, cr, o.Name)
-	spend, credits := s.orgMoney(ctx, o.Name)
-	sub, _ := s.commerce.subscriptionSummary(ctx, o.Name, subj)
+	users, _ := orgUsers(s, ctx, cr, o.Name)
+	spend, credits := orgMoney(s, ctx, o.Name)
+	sub, _ := s.State.commerce.subscriptionSummary(ctx, o.Name, subj)
 
 	return customerRow{
 		Org:          o.Name,
@@ -152,7 +153,7 @@ func (s *svc) enrichCustomer(ctx context.Context, cr creds, o iamOrg) customerRo
 
 // ── GET /v1/admin/customers/:org — one customer's detail ─────────────────────
 
-func (s *svc) customerDetail(c *zip.Ctx) error {
+func customerDetail(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	org := customerOrgParam(c)
@@ -160,7 +161,7 @@ func (s *svc) customerDetail(c *zip.Ctx) error {
 		return fail(c, "org is required")
 	}
 
-	o, err := s.findOrg(ctx, cr, org)
+	o, err := findOrg(s, ctx, cr, org)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -169,10 +170,10 @@ func (s *svc) customerDetail(c *zip.Ctx) error {
 	}
 
 	subj := orgSubject(org)
-	users, _ := s.orgUsers(ctx, cr, org)
-	spend, credits := s.orgMoney(ctx, org)
-	sub, _ := s.commerce.subscriptionSummary(ctx, org, subj)
-	txns, _ := s.commerce.transactions(ctx, org, subj, 50)
+	users, _ := orgUsers(s, ctx, cr, org)
+	spend, credits := orgMoney(s, ctx, org)
+	sub, _ := s.State.commerce.subscriptionSummary(ctx, org, subj)
+	txns, _ := s.State.commerce.transactions(ctx, org, subj, 50)
 
 	rows := make([]customerUser, 0, len(users))
 	apiKeys := 0
@@ -204,7 +205,7 @@ func (s *svc) customerDetail(c *zip.Ctx) error {
 		})
 	}
 
-	return ok(c, customerDetail{
+	return ok(c, customerDetailData{
 		Org:          org,
 		Display:      display(o.DisplayName, org),
 		OwnerEmail:   ownerEmail(users),
@@ -257,7 +258,7 @@ func grantTag(source string) (tag, normalized string) {
 // deliberate (two grants), and the cap keeps a typo from minting a fortune.
 const maxGrantCents int64 = 100 * 100 * 1000
 
-func (s *svc) grantCredit(c *zip.Ctx) error {
+func grantCredit(s *cloud.Service[state], c *zip.Ctx) error {
 	org := customerOrgParam(c)
 	if org == "" {
 		return fail(c, "org is required")
@@ -266,14 +267,14 @@ func (s *svc) grantCredit(c *zip.Ctx) error {
 	if err := c.Bind(&req); err != nil {
 		return fail(c, "invalid request body")
 	}
-	return s.applyGrant(c, org, req)
+	return applyGrant(s, c, org, req)
 }
 
 // applyGrant is the ONE credit-write core shared by POST /v1/admin/customers/:org/credit
 // (org from the path) and POST /v1/admin/grants (org from the body): validate the
 // amount + target org, deposit into the org's commerce ledger (trial vs prepaid by
 // source), and record the tamper-evident audit row. One path, one way to grant.
-func (s *svc) applyGrant(c *zip.Ctx, org string, req creditRequest) error {
+func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditRequest) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	if req.AmountCents <= 0 {
@@ -288,7 +289,7 @@ func (s *svc) applyGrant(c *zip.Ctx, org string, req creditRequest) error {
 	}
 
 	// Validate the target is a REAL org (never mint an orphan wallet on a typo).
-	o, err := s.findOrg(ctx, cr, org)
+	o, err := findOrg(s, ctx, cr, org)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -297,23 +298,23 @@ func (s *svc) applyGrant(c *zip.Ctx, org string, req creditRequest) error {
 	}
 
 	subj := orgSubject(org)
-	before, _ := s.commerce.creditsCents(ctx, org, subj)
+	before, _ := s.State.commerce.creditsCents(ctx, org, subj)
 
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	res, derr := s.commerce.deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
+	res, derr := s.State.commerce.deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
-		s.emitAudit(c, "admin.customer.credit", "credit", org,
+		emitAudit(s, c, "admin.customer.credit", "credit", org,
 			map[string]any{"balanceCents": before},
 			map[string]any{"amountCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "error": derr.Error()},
 			audit.Outcome{Result: "error", Status: 200, Reason: "grant failed"})
 		return fail(c, "grant failed: "+derr.Error())
 	}
 
-	after, _ := s.commerce.creditsCents(ctx, org, subj)
-	s.emitAudit(c, "admin.customer.credit", "credit", org,
+	after, _ := s.State.commerce.creditsCents(ctx, org, subj)
+	emitAudit(s, c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
 		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TransactionID},
 		audit.Outcome{Result: "success", Status: 200})
@@ -330,8 +331,8 @@ func (s *svc) applyGrant(c *zip.Ctx, org string, req creditRequest) error {
 
 // ── POST /v1/admin/customers/:org/{suspend,reactivate} — access control ──────
 
-func (s *svc) suspendCustomer(c *zip.Ctx) error    { return s.setForbidden(c, true) }
-func (s *svc) reactivateCustomer(c *zip.Ctx) error { return s.setForbidden(c, false) }
+func suspendCustomer(s *cloud.Service[state], c *zip.Ctx) error    { return setForbidden(s, c, true) }
+func reactivateCustomer(s *cloud.Service[state], c *zip.Ctx) error { return setForbidden(s, c, false) }
 
 // setForbidden flips IAM `isForbidden` on every member of the org — suspend
 // (forbidden=true) cuts login + token issuance; reactivate restores it. Each
@@ -340,7 +341,7 @@ func (s *svc) reactivateCustomer(c *zip.Ctx) error { return s.setForbidden(c, fa
 // authorizes it. Best-effort per user with an aggregated result: a partial failure
 // is reported honestly (affected vs failed), never masked as a clean success. The
 // action is recorded with a redacted before/after user tally.
-func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
+func setForbidden(s *cloud.Service[state], c *zip.Ctx, forbidden bool) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	org := customerOrgParam(c)
@@ -348,7 +349,7 @@ func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
 		return fail(c, "org is required")
 	}
 
-	o, err := s.findOrg(ctx, cr, org)
+	o, err := findOrg(s, ctx, cr, org)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -356,7 +357,7 @@ func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
 		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
 	}
 
-	users, err := s.orgUsers(ctx, cr, org)
+	users, err := orgUsers(s, ctx, cr, org)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -371,13 +372,13 @@ func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
 	var affected, failed []string
 	for _, u := range users {
 		id := u.Owner + "/" + u.Name
-		full, gerr := s.iam.getUserRaw(ctx, cr, id)
+		full, gerr := s.State.iam.getUserRaw(ctx, cr, id)
 		if gerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
 		full["isForbidden"] = forbidden
-		if uerr := s.iam.updateUserRaw(ctx, cr, id, full); uerr != nil {
+		if uerr := s.State.iam.updateUserRaw(ctx, cr, id, full); uerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
@@ -394,7 +395,7 @@ func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
 		result = "error"
 		reason = fmt.Sprintf("%d user(s) not updated", len(failed))
 	}
-	s.emitAudit(c, action, "customer", org,
+	emitAudit(s, c, action, "customer", org,
 		map[string]any{"suspended": beforeForbidden == len(users) && len(users) > 0, "forbiddenUsers": beforeForbidden, "totalUsers": len(users)},
 		map[string]any{"suspended": forbidden, "affected": affected, "failed": failed},
 		audit.Outcome{Result: result, Status: 200, Reason: reason})
@@ -413,12 +414,12 @@ func (s *svc) setForbidden(c *zip.Ctx, forbidden bool) error {
 // customer surface folds over. It is the ONE IAM read that yields the user count,
 // the owner email, the suspend status, and the API-key presence — so a customer
 // row costs a single get-users call, not four.
-func (s *svc) orgUsers(ctx context.Context, cr creds, org string) ([]iamUser, error) {
+func orgUsers(s *cloud.Service[state], ctx context.Context, cr creds, org string) ([]iamUser, error) {
 	q := url.Values{}
 	q.Set("owner", org)
 	q.Set("p", "1")
 	q.Set("pageSize", "200")
-	res, err := s.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
 	if err != nil {
 		return nil, err
 	}
@@ -434,8 +435,8 @@ func (s *svc) orgUsers(ctx context.Context, cr creds, org string) ([]iamUser, er
 // findOrg returns the IAM org by slug (nil, nil when it does not exist) so a
 // management action can validate its target before acting — never credit or
 // suspend an org that isn't real.
-func (s *svc) findOrg(ctx context.Context, cr creds, org string) (*iamOrg, error) {
-	orgs, err := s.listOrgs(ctx, cr)
+func findOrg(s *cloud.Service[state], ctx context.Context, cr creds, org string) (*iamOrg, error) {
+	orgs, err := listOrgs(s, ctx, cr)
 	if err != nil {
 		return nil, err
 	}
@@ -521,8 +522,8 @@ func grantNote(c *zip.Ctx, reason string) string {
 // Best-effort: the audit MIDDLEWARE is the AU-5 fail-closed authority for the
 // request; a failure here is logged loud, never silent, and never double-fails the
 // response. A nil store (unconfigured deployment) is a no-op, like the middleware.
-func (s *svc) emitAudit(c *zip.Ctx, action, resType, resID string, before, after any, outcome audit.Outcome) {
-	if s.auditStore == nil {
+func emitAudit(s *cloud.Service[state], c *zip.Ctx, action, resType, resID string, before, after any, outcome audit.Outcome) {
+	if s.State.auditStore == nil {
 		return
 	}
 	rec := audit.Record{
@@ -538,7 +539,7 @@ func (s *svc) emitAudit(c *zip.Ctx, action, resType, resID string, before, after
 		Before:    audit.Redact(mustJSON(before)),
 		After:     audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.auditStore.Append(c.Context(), rec); err != nil {
+	if _, err := s.State.auditStore.Append(c.Context(), rec); err != nil {
 		c.Log().Error("admin: audit emit failed (request-level record still applies)",
 			"action", action, "resource", resType, "id", resID, "err", err)
 	}
