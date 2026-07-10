@@ -10,6 +10,7 @@ import (
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
 	// !cgo → pure-Go modernc). Same driver clients/settings and clients/eval use.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -39,7 +40,7 @@ type Store struct {
 var ErrHostTaken = errors.New("host already claimed by another route")
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
