@@ -1,16 +1,16 @@
-package console
+package account
 
 import "testing"
 
 func TestSlugifyOrg(t *testing.T) {
 	cases := map[string]string{
-		"Acme Rockets":     "acme-rockets",
+		"Acme Rockets":      "acme-rockets",
 		"  Hello, World!  ": "hello-world",
-		"UPPER_case-123":   "upper-case-123",
-		"多 bytes 混":        "bytes", // non-ASCII runes act as separators (slug is ASCII)
-		"---":              "",
-		"":                 "",
-		"a.b.c":            "a-b-c",
+		"UPPER_case-123":    "upper-case-123",
+		"多 bytes 混":         "bytes", // non-ASCII runes act as separators (slug is ASCII)
+		"---":               "",
+		"":                  "",
+		"a.b.c":             "a-b-c",
 	}
 	for in, want := range cases {
 		if got := slugifyOrg(in); got != want {
