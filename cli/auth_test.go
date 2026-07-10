@@ -61,9 +61,9 @@ func TestPasswordGrant(t *testing.T) {
 			t.Errorf("bad form: %v", r.Form)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": makeJWT(map[string]any{"email": "z@hanzo.ai"}),
-			"token_type":   "Bearer",
-			"expires_in":   3600,
+			"access_token":  makeJWT(map[string]any{"email": "z@hanzo.ai"}),
+			"token_type":    "Bearer",
+			"expires_in":    3600,
 			"refresh_token": "r",
 		})
 	}))
