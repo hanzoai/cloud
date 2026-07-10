@@ -207,6 +207,46 @@ func AuthorizeSpendCap(c *gin.Context) {
 			res.WarnPct = pct
 		}
 	}
+	// Account-level funding cap + freeze (GCP-style billing accounts) — layered on
+	// top of the per-scope caps, most-restrictive-wins. The account funding this
+	// request's project is resolved SERVER-SIDE from the org's binding/default
+	// (never a client header): a frozen account (Enabled=false) hard-denies, and an
+	// account whose calendar-month spend would exceed LimitCents hard-denies. FAIL
+	// CLOSED if the funding topology can't be read — an unreadable account cannot be
+	// proven unfrozen/under-cap. The org axis is always validated, so this cannot be
+	// spoofed or evaded by a forged project.
+	if b, berr := loadBudget(db); berr != nil {
+		log.Error("spend-cap: load budget failed, failing CLOSED: %v", berr, c)
+		c.JSON(200, authorizeResult{Allow: false, Reason: "billing_account"})
+		return
+	} else if acctID := b.accountFor(reqProject); acctID != "" {
+		if acct := b.accounts[acctID]; acct != nil {
+			if !acct.Enabled {
+				c.JSON(200, authorizeResult{Allow: false, Reason: "account_frozen"})
+				return
+			}
+			if acct.LimitCents > 0 {
+				spent, serr := accountSpentCents(db, test, acctID)
+				if serr != nil {
+					log.Error("spend-cap: account spend agg failed, failing CLOSED: %v", serr, c)
+					c.JSON(200, authorizeResult{Allow: false, Reason: "billing_account", CapCents: acct.LimitCents})
+					return
+				}
+				if !employee.WithinLimit(currency.Cents(spent), currency.Cents(amount), currency.Cents(acct.LimitCents)) {
+					// Most-restrictive-wins: take over the verdict when nothing has
+					// blocked yet, or when this account cap is tighter than the
+					// scope cap that did.
+					if res.Allow || acct.LimitCents < res.CapCents {
+						res.Allow = false
+						res.Reason = "billing_account"
+						res.CapCents = acct.LimitCents
+						res.SpentCents = spent
+					}
+				}
+			}
+		}
+	}
+
 	if !res.Allow {
 		res.WarnPct = 0 // a deny carries no warn.
 	}

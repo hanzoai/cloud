@@ -384,7 +384,9 @@ func (q *Query) ById(id string, dst interface{}) (iface.Key, bool, error) {
 		"company", "employee", "quote", "quote-message", "approval",
 		"gift-card", "gift-card-redemption", "exchange", "idempotency-key",
 		"product-option", "product-option-value", "product-category",
-		"product-tag", "product-type", "return-reason", "refund-reason":
+		"product-tag", "product-type", "return-reason", "refund-reason",
+		// GCP-style billing accounts + project→account bindings (hashid-keyed only).
+		"billing-account", "project-binding":
 		// These kinds are always identified by hashid-encoded keys only.
 		// If the key decode already failed, return not-found rather than error.
 		return nil, false, nil
