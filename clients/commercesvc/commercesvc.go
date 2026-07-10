@@ -14,7 +14,7 @@
 // clients/kms re-exposes the embedded KMS store.
 //
 // The package lives at clients/commercesvc (NOT clients/commerce) so its name does
-// not collide with the upstream github.com/hanzoai/commerce library it embeds —
+// not collide with the upstream github.com/hanzoai/cloud/clients/commerce library it embeds —
 // mirroring the clients/kmssvc-vs-clients/kms convention.
 //
 // PCI SCOPE. Commerce is a LIGHT ROUTER, NOT in PCI-DSS scope: it handles tokens +
@@ -43,8 +43,8 @@ import (
 	"path/filepath"
 
 	"github.com/hanzoai/cloud"
-	commerce "github.com/hanzoai/commerce"
-	api "github.com/hanzoai/commerce/api/api"
+	commerce "github.com/hanzoai/cloud/clients/commerce"
+	api "github.com/hanzoai/cloud/clients/commerce/api/api"
 	"github.com/zap-proto/zip"
 )
 
