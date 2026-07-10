@@ -456,7 +456,14 @@ func registrableDomain(host string) string {
 // remote/disabled client — see build.go). Activate by ADDING "commerce" to
 // CLOUD_ENABLE explicitly. Phase 2 flips the default (drops this entry) once the
 // in-process path is validated in prod.
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true, "captable": true, "sign": true, "dataroom": true}
+//
+// PHASE 2 (task #96): commerce, captable, sign, dataroom are now folded in-process
+// and validated on the cloud-unified-canary (v1.786.167: all four "mounted
+// in-process", /v1/{commerce,captable,sign,dataroom}/health 200). They are dropped
+// from staging so the mount-all default serves them from the one binary — retiring
+// their standalone Postgres/Next pods. iam and ingress STAY staged (the IAM embed
+// corrupts its own bootstrap under mount-all; iam is served by the standalone pod).
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
