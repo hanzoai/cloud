@@ -418,7 +418,7 @@ func resolveKey(reqPath string) string {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p
 	}
-	clean := path.Clean(p)          // e.g. "/../../a" → "/a", "/a/./b" → "/a/b"
+	clean := path.Clean(p) // e.g. "/../../a" → "/a", "/a/./b" → "/a/b"
 	rel := strings.TrimPrefix(clean, "/")
 	if rel == "." {
 		return ""
@@ -434,8 +434,34 @@ func objectKey(prefix, rel string) string {
 	return prefix + "/" + rel
 }
 
-// contentType maps a key to a MIME type by extension.
-func contentType(key string) string { return mime.TypeByExtension(path.Ext(key)) }
+// contentType maps a key to a MIME type by extension. The standard library table
+// misses the binary asset extensions game engines emit (Unity/Emscripten/Godot):
+// .wasm may resolve to the wrong type (WebAssembly.instantiateStreaming REQUIRES
+// application/wasm), and .data/.mem/.unityweb/.pck resolve to "" — leaving the
+// Content-Type header empty and breaking the loader's streaming fetch.
+// gameAssetType pins those; everything else uses the stdlib table.
+func contentType(key string) string {
+	if ct := gameAssetType(path.Ext(key)); ct != "" {
+		return ct
+	}
+	return mime.TypeByExtension(path.Ext(key))
+}
+
+// gameAssetType returns the correct MIME for web-game engine binary assets the
+// stdlib omits or mis-types, or "" to defer to the stdlib table. One place, one
+// map — so a WebGL/WASM build served from a site loads with the types its loader
+// requires. (.symbols.json / .json.gz resolve via their final .json/.gz extension
+// and need no entry here.)
+func gameAssetType(ext string) string {
+	switch strings.ToLower(ext) {
+	case ".wasm":
+		return "application/wasm"
+	case ".data", ".mem", ".unityweb", ".pck": // Unity/Emscripten payloads, Godot pack
+		return "application/octet-stream"
+	default:
+		return ""
+	}
+}
 
 // CacheControlFor is the ONE canonical cache policy by asset class, used both when
 // WRITING an object at deploy (projects/blob.go) and when SERVING one here, so a
