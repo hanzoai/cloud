@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/digitalocean/godo"
-	"github.com/gofiber/fiber/v3"
+	"github.com/zap-proto/fiber/v3"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/zap-proto/zip"
