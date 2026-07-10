@@ -19,7 +19,7 @@ import (
 //
 // ISOLATION: org is the ONLY tenant key and is used VERBATIM (Store.List filters
 // WHERE org=?), so a caller for org A can never enumerate org B's agents. The
-// caller MUST pass an org it already validated (principal.Tenant / a verified
+// caller MUST pass an org it already validated (principal.Org / a verified
 // token claim), never a raw client header. Fails closed (nil, error) when the
 // agents subsystem is not mounted or the org is empty/oversized.
 func ListForOrg(ctx context.Context, org string) ([]Agent, error) {

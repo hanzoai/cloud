@@ -20,7 +20,7 @@ import (
 // to four classes (2xx/3xx/4xx/5xx); `org` is the VALIDATED IAM owner claim, NOT a
 // client-chosen string — so a caller cannot inflate cardinality with arbitrary
 // values (an unauthenticated request folds to a single "-" bucket). Cardinality is
-// therefore bounded by real tenants × products, the same envelope the eval
+// therefore bounded by real orgs × products, the same envelope the eval
 // per-org limiter reasons about.
 //
 // The registry is private and self-contained (no global default registry), so the

@@ -15,16 +15,16 @@ import (
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest + FTS5; !cgo → pure-Go modernc, FTS5 incl. the trigram
 	// tokenizer). Importing modernc/mattn directly would double-register "sqlite"
-	// under CGO and panic at init. TenantDB is the SOLE place cloud opens a tenant
+	// under CGO and panic at init. OrgDB is the SOLE place cloud opens an org
 	// SQLite file, so this blank import lives HERE, once — a subsystem that resolves
-	// its store through TenantDB / TenantStore never imports the driver itself.
+	// its store through OrgDB / OrgStore never imports the driver itself.
 	_ "github.com/hanzoai/sqlite"
 )
 
-// TenantDB is the ONE way any cloud subsystem opens a per-tenant SQLite file
-// (HIP-0302 physical tenant isolation). It resolves the path, creates the
+// OrgDB is the ONE way any cloud subsystem opens a per-org SQLite file
+// (HIP-0302 physical org isolation). It resolves the path, creates the
 // parent directory 0700, opens via the sole "sqlite" driver, and applies the
-// single-writer + WAL pragmas every tenant store shares. The caller owns
+// single-writer + WAL pragmas every org store shares. The caller owns
 // migration (its schema is its own) and Close.
 //
 // Path convention — scope is chosen by project:
@@ -32,58 +32,58 @@ import (
 //	project != ""  →  {DataDir}/orgs/{orgSlug}/projects/{projectSlug}/{subsystem}.db
 //	project == ""  →  {DataDir}/orgs/{orgSlug}/{subsystem}.db
 //
-// org and project MUST be the VALIDATED principal values (principal.Tenant and,
+// org and project MUST be the VALIDATED principal values (principal.Org and,
 // when project-scoped, principal.Project) — never a raw request body/header.
-// TenantDB folds each through SanitizeOrg, the ONE injective tenant slugger, so
-// two distinct tenants can never share a file (case-fold on a case-insensitive
+// OrgDB folds each through SanitizeOrg, the ONE injective org slugger, so
+// two distinct orgs can never share a file (case-fold on a case-insensitive
 // filesystem, or a "-"/"." fold, would otherwise collapse them) and no segment
 // can traverse out of DataDir. An org (or, when project-scoped, a project) that
 // SanitizeOrg refuses is an error — never a silent fall-through to another
-// tenant's file.
-func TenantDB(dataDir, org, project, subsystem string) (*sql.DB, error) {
-	path, err := tenantDBPath(dataDir, org, project, subsystem)
+// org's file.
+func OrgDB(dataDir, org, project, subsystem string) (*sql.DB, error) {
+	path, err := orgDBPath(dataDir, org, project, subsystem)
 	if err != nil {
 		return nil, err
 	}
-	return openTenantDB(path)
+	return openOrgDB(path)
 }
 
-// tenantDBPath builds the on-disk path for a tenant DB, folding org and (when
+// orgDBPath builds the on-disk path for an org DB, folding org and (when
 // project-scoped) project through the injective SanitizeOrg slugger and failing
 // closed on any input that does not yield a safe, non-empty segment.
-func tenantDBPath(dataDir, org, project, subsystem string) (string, error) {
+func orgDBPath(dataDir, org, project, subsystem string) (string, error) {
 	if dataDir == "" {
-		return "", fmt.Errorf("cloud: TenantDB empty dataDir")
+		return "", fmt.Errorf("cloud: OrgDB empty dataDir")
 	}
 	if subsystem == "" {
-		return "", fmt.Errorf("cloud: TenantDB empty subsystem")
+		return "", fmt.Errorf("cloud: OrgDB empty subsystem")
 	}
 	orgSlug := SanitizeOrg(org)
 	if orgSlug == "" {
-		return "", fmt.Errorf("cloud: TenantDB invalid org %q", org)
+		return "", fmt.Errorf("cloud: OrgDB invalid org %q", org)
 	}
 	dir := filepath.Join(dataDir, "orgs", orgSlug)
 	if project != "" {
 		projSlug := SanitizeOrg(project)
 		if projSlug == "" {
-			return "", fmt.Errorf("cloud: TenantDB invalid project %q", project)
+			return "", fmt.Errorf("cloud: OrgDB invalid project %q", project)
 		}
 		dir = filepath.Join(dir, "projects", projSlug)
 	}
 	return filepath.Join(dir, subsystem+".db"), nil
 }
 
-// openTenantDB creates the parent dir 0700 and opens the SQLite file with the
-// single-writer + WAL pragmas shared by every tenant store. MaxOpenConns(1)
+// openOrgDB creates the parent dir 0700 and opens the SQLite file with the
+// single-writer + WAL pragmas shared by every org store. MaxOpenConns(1)
 // serializes writes against the file lock (and makes a read-modify-write such as
 // tracker's per-project issue-number allocation a safe transaction).
-func openTenantDB(path string) (*sql.DB, error) {
+func openOrgDB(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, fmt.Errorf("cloud: TenantDB mkdir: %w", err)
+		return nil, fmt.Errorf("cloud: OrgDB mkdir: %w", err)
 	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, fmt.Errorf("cloud: TenantDB open %q: %w", path, err)
+		return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
 	for _, pragma := range []string{
@@ -93,20 +93,20 @@ func openTenantDB(path string) (*sql.DB, error) {
 	} {
 		if _, err := db.Exec(pragma); err != nil {
 			_ = db.Close()
-			return nil, fmt.Errorf("cloud: TenantDB pragma %q: %w", pragma, err)
+			return nil, fmt.Errorf("cloud: OrgDB pragma %q: %w", pragma, err)
 		}
 	}
 	return db, nil
 }
 
-// TenantStore is the lazily-opened, cached set of per-tenant stores of type T
-// for one subsystem, each keyed by its resolved DB path so a tenant's SQLite
+// OrgStore is the lazily-opened, cached set of per-org stores of type T
+// for one subsystem, each keyed by its resolved DB path so an org's SQLite
 // file is opened (and migrated) exactly once. It is the caching layer over
-// TenantDB: every open routes through the same path resolver and pragmas, so
-// there is ONE way a subsystem opens its tenant DBs and ONE hand-rolled map is
+// OrgDB: every open routes through the same path resolver and pragmas, so
+// there is ONE way a subsystem opens its org DBs and ONE hand-rolled map is
 // replaced by this shared value. T is the subsystem's own store handle (it owns
 // its schema via the open func's migration); T must Close its DB.
-type TenantStore[T io.Closer] struct {
+type OrgStore[T io.Closer] struct {
 	dataDir   string
 	subsystem string
 	open      func(*sql.DB) (T, error)
@@ -115,12 +115,12 @@ type TenantStore[T io.Closer] struct {
 	byPath map[string]T
 }
 
-// NewTenantStore builds a per-tenant store cache for subsystem under dataDir.
-// open wraps a freshly-opened *sql.DB (already pragma'd by TenantDB) into the
-// subsystem's store handle, running its migration; it is called once per tenant
+// NewOrgStore builds a per-org store cache for subsystem under dataDir.
+// open wraps a freshly-opened *sql.DB (already pragma'd by OrgDB) into the
+// subsystem's store handle, running its migration; it is called once per org
 // file.
-func NewTenantStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, error)) *TenantStore[T] {
-	return &TenantStore[T]{
+func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, error)) *OrgStore[T] {
+	return &OrgStore[T]{
 		dataDir:   dataDir,
 		subsystem: subsystem,
 		open:      open,
@@ -133,9 +133,9 @@ func NewTenantStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (
 // pass principal.Project(c) for a project-scoped one. Isolation is PHYSICAL: a
 // distinct (org[, project]) resolves to a distinct file, so a query in one can
 // never reach another's rows.
-func (c *TenantStore[T]) For(org, project string) (T, error) {
+func (c *OrgStore[T]) For(org, project string) (T, error) {
 	var zero T
-	path, err := tenantDBPath(c.dataDir, org, project, c.subsystem)
+	path, err := orgDBPath(c.dataDir, org, project, c.subsystem)
 	if err != nil {
 		return zero, err
 	}
@@ -144,7 +144,7 @@ func (c *TenantStore[T]) For(org, project string) (T, error) {
 	if st, ok := c.byPath[path]; ok {
 		return st, nil
 	}
-	db, err := openTenantDB(path)
+	db, err := openOrgDB(path)
 	if err != nil {
 		return zero, err
 	}
@@ -157,9 +157,9 @@ func (c *TenantStore[T]) For(org, project string) (T, error) {
 	return st, nil
 }
 
-// CloseAll closes every open per-tenant store. Idempotent; returns the first
+// CloseAll closes every open per-org store. Idempotent; returns the first
 // close error, if any.
-func (c *TenantStore[T]) CloseAll() error {
+func (c *OrgStore[T]) CloseAll() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var first error
@@ -180,14 +180,14 @@ func (c *TenantStore[T]) CloseAll() error {
 // disambiguated with "-" + the first 16 hex of SHA-256(raw owner). Without the
 // suffix the fold was lossy — ToLower + every non-[a-z0-9-]→"-" + a 32-char
 // truncation collapse distinct owners (`Acme`/`acme`, `team.a`/`team-a`) onto one
-// slug, and since the whole tenant→bucket/DB/namespace hashes THIS slug, that was
-// a cross-tenant collision.
+// slug, and since the whole org→bucket/DB/namespace hashes THIS slug, that was
+// a cross-org collision.
 //
-// This is the ONE org-slug normalizer for the cloud tenant layer; it lives in
+// This is the ONE org-slug normalizer for the cloud org layer; it lives in
 // the root package beside OrgHasUnsafeRune (the identity-middleware twin) and
-// TenantDB (which folds every tenant DB path through it). provisioning.SanitizeOrg
+// OrgDB (which folds every org DB path through it). provisioning.SanitizeOrg
 // (shared with S3/KMS/knowledge) delegates here, so the slug is byte-identical
-// across every physical namespace a tenant touches.
+// across every physical namespace an org touches.
 //
 // The identity fast-path is withheld from a clean slug that ITSELF looks like a
 // suffixed output (`<label>-<16 lowercase hex>`): such a slug is ambiguous with a
@@ -195,7 +195,7 @@ func (c *TenantStore[T]) CloseAll() error {
 // org literally named "foo-<sha256(Foo)[:8]>" would alias non-slug owner "Foo".
 func SanitizeOrg(s string) string {
 	// Reject at the boundary — an empty org, or one carrying any whitespace /
-	// control / zero-width-format rune, is a NON-INJECTIVE tenant identifier:
+	// control / zero-width-format rune, is a NON-INJECTIVE org identifier:
 	// strings.TrimSpace (here or upstream) and fasthttp's header-value OWS trim
 	// silently collapse "acme " onto "acme", so distinct IAM orgs would fold onto
 	// one physical namespace/bucket/DB. Refusing (→ "", which every caller gates
