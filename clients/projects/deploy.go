@@ -57,7 +57,7 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 //     then calls .../deployments/:id/complete to flip it live. This is the
 //     "link repo → build (CI, never local) → deploy" path for large sites.
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -233,7 +233,7 @@ type completeReq struct {
 // org-scoped like every other route; CI authenticates with an org-scoped token
 // through the gateway, so the X-Org-Id binds the call to the right tenant.
 func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -291,7 +291,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -314,7 +314,7 @@ func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func getDeployment(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

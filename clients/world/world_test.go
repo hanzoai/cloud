@@ -160,7 +160,7 @@ func TestGetNews_MergesNormalizesAndFilters(t *testing.T) {
 
 func TestNews_NoValidatedPrincipal_403(t *testing.T) {
 	app, _ := mountWorld(t)
-	// X-Org-Id present but NO X-User-Id — the anonymous-forge path principal.Tenant
+	// X-Org-Id present but NO X-User-Id — the anonymous-forge path principal.Org
 	// must refuse.
 	code, body := do(t, app, http.MethodGet, "/v1/world/news", "victim", "", "", nil)
 	if code != http.StatusForbidden {

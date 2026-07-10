@@ -42,7 +42,7 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 	}
 	if org != "" {
 		rq.Header.Set("X-Org-Id", org)
-		rq.Header.Set("X-User-Id", "u_"+org) // validated principal (principal.Tenant gates on it)
+		rq.Header.Set("X-User-Id", "u_"+org) // validated principal (principal.Org gates on it)
 	}
 	resp, err := app.Fiber().Test(rq)
 	if err != nil {

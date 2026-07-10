@@ -7,7 +7,7 @@
 //   - cloud.EmbeddedTasks   — the ONE shared in-process durable engine. A flow runs
 //     as a durable workflow in the OWNER's namespace (engine.go).
 //   - clients/principal     — the ONE tenant gate. Every data handler resolves the
-//     org from principal.Tenant; a client-forged X-Org-Id with no bearer is refused.
+//     org from principal.Org; a client-forged X-Org-Id with no bearer is refused.
 //
 // Surface (all under /v1/automations/*, all org-gated except the compose-root
 // generic GET /v1/automations/health):
@@ -186,7 +186,7 @@ func Shutdown(_ context.Context) error {
 // ── connectors ────────────────────────────────────────────────────────────────────
 
 func connectors(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Tenant(c); !ok {
+	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
 	return c.JSON(http.StatusOK, s.State.catalog)
@@ -731,7 +731,7 @@ func auditRun(s *cloud.Service[state], ctx context.Context, org, flowID, runID s
 // tenant resolves the caller's org, additionally validOrg-checking it because the
 // org is folded into per-org engine namespaces + store keys.
 func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok || !validOrg(org) {
 		return "", false
 	}

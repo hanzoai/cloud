@@ -4,7 +4,7 @@ package cloud
 // through the zip/fiber stack against a real RSA-signed JWKS (httptest), so the
 // whole path runs end-to-end: header strip -> token extract -> JWKS verify ->
 // re-mint. The crux assertions: a raw X-User-IsAdmin never grants admin, and an
-// ORG admin can never escalate to the GLOBAL-admin authority or another tenant.
+// ORG admin can never escalate to the GLOBAL-admin authority or another org.
 
 import (
 	"crypto/rand"
@@ -133,8 +133,8 @@ func TestSanitizeIdentity(t *testing.T) {
 	// Owners whose IAM name carries whitespace — the RED CRIT-2 residual vector.
 	// The whitespace rides in the JWT `owner` claim (JSON-preserved, so it is
 	// transport-independent, unlike a header which fasthttp OWS-trims), so a
-	// fold-sibling org "acme " / "ac me" would previously collapse onto tenant
-	// "acme". The middleware must refuse to grant tenancy from it.
+	// fold-sibling org "acme " / "ac me" would previously collapse onto org
+	// "acme". The middleware must refuse to grant org-scoping from it.
 	trailWSOwner := signWith(t, key, tokenClaims("hanzo-console", "acme ", "sneak@acme.io", false, future))
 	internalWSOwner := signWith(t, key, tokenClaims("hanzo-console", "ac me", "sneak@acme.io", false, future))
 
@@ -175,10 +175,10 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg:   "maxpower",
 		},
 		{
-			name: "ORG admin cannot escalate to global admin nor cross tenant",
+			name: "ORG admin cannot escalate to global admin nor cross org",
 			mutate: func(r *http.Request) {
 				r.Header.Set("Authorization", "Bearer "+orgAdmin)
-				r.Header.Set("X-Org-Id", "victim") // attempt to read another tenant
+				r.Header.Set("X-Org-Id", "victim") // attempt to read another org
 			},
 			wantAdmin: false,  // isAdmin bool true, but owner != adminOrg
 			wantOrg:   "acme", // pinned to their own org, never "victim"
@@ -219,7 +219,7 @@ func TestSanitizeIdentity(t *testing.T) {
 		{
 			// V6 residual close: a KMS-sync MACHINE principal (aud=<owner>-platform-kms)
 			// in the admin org with isAdmin=true VALIDATES (V6 accepts the machine aud)
-			// but is DENIED global admin — pinned to its own org, never cross-tenant. So
+			// but is DENIED global admin — pinned to its own org, never cross-org. So
 			// the machine-audience widening cannot be leveraged into an admin bypass.
 			name:      "admin-org machine principal is denied global admin (V6 decoupling)",
 			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
@@ -237,8 +237,8 @@ func TestSanitizeIdentity(t *testing.T) {
 		},
 		{
 			// RED CRIT-2 residual: a validated principal whose org name is a
-			// whitespace fold-sibling of a real org grants NO tenancy — it must not
-			// collapse onto tenant "acme".
+			// whitespace fold-sibling of a real org grants NO org-scoping — it must not
+			// collapse onto org "acme".
 			name:      "trailing-whitespace owner grants no org (injective boundary)",
 			mutate:    bearer(trailWSOwner),
 			wantAdmin: false,
@@ -476,7 +476,7 @@ func TestIdentityValidator(t *testing.T) {
 //   - isAdmin is REQUIRED: a NON-admin sitting in the admin org gets nothing, so
 //     the gate is never "owner == adminOrg" alone.
 //   - owner is REQUIRED: an admin of ANY OTHER org gets nothing, so an org-admin of
-//     one tenant can never reach the global (all-tenants) admin surface — only the
+//     one org can never reach the global (all-orgs) admin surface — only the
 //     operator org's admins do. This is what keeps global-admin the operator's, and
 //     what "isAdmin required" keeps from being every operator-org user.
 func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
@@ -503,11 +503,11 @@ func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 		// gate is not "owner==adminOrg" alone (a normal operator-org user is not global).
 		{"non-admin in the admin org is not global admin", "admin", "svc@hanzo.ai", false, false},
 		// An ADMIN of a DIFFERENT org is NOT a global admin: proves owner==adminOrg is
-		// REQUIRED — an org-admin of one tenant never reaches the all-tenants surface.
+		// REQUIRED — an org-admin of one org never reaches the all-orgs surface.
 		{"admin of another org is not global admin", "globex", "boss@globex.io", true, false},
 		// A normal user of another org: not elevated.
 		{"normal user of another org is not global admin", "globex", "joe@globex.io", false, false},
-		// A cross-org admin of yet another tenant: not elevated.
+		// A cross-org admin of yet another org: not elevated.
 		{"cross-org admin is not global admin", "acme", "dave@acme.io", true, false},
 	}
 	for _, tc := range cases {
