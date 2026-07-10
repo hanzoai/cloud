@@ -1,4 +1,4 @@
-package kmssvc
+package kms
 
 // login.go — the /v1/kms/auth/login broker.
 //
@@ -12,7 +12,7 @@ package kmssvc
 // would validate (that requires IAM's signing key). So login BROKERS: it exchanges
 // the caller's credential at IAM's client_credentials endpoint and returns IAM's
 // own JWT verbatim. The returned token's `owner` claim scopes it to exactly one
-// org, and cloud's org-scope guard (kmssvc.guard) re-checks that owner against the
+// org, and cloud's org-scope guard (svc.guard) re-checks that owner against the
 // URL :org on every secret read. This endpoint therefore grants NOTHING beyond
 // IAM's already-public client_credentials grant — it is a thin, stateless relay.
 //

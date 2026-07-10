@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // Integration tests for the embedded KMS subsystem, exercised through the REAL
 // orchestrator path (BuildDeps → the init()-registered MountSpec → the zip/Fiber
@@ -27,12 +27,11 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	// Importing clients/kms as kms also runs its init(), registering the kms
+	// subsystem + client factory into cloud.Registry.
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
-
-	// Register the kms subsystem (init) into cloud.Registry.
-	_ "github.com/hanzoai/cloud/clients/kmssvc"
 )
 
 // masterKeyB64 returns a fresh random 32-byte master key, base64-encoded as the
@@ -46,7 +45,7 @@ func masterKeyB64(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(k)
 }
 
-// newApp wires BuildDeps + the canonical middleware + MountAll for the kmssvc
+// newApp wires BuildDeps + the canonical middleware + MountAll for the kms
 // subsystem, exactly like main()'s path. Returns the app and the built deps (so
 // tests can reach the in-process KMSClient directly).
 func newApp(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) {
@@ -118,7 +117,7 @@ func TestKMSClientRoundtrip(t *testing.T) {
 
 	kc := deps.KMS
 	if kc == nil {
-		t.Fatal("deps.KMS is nil; expected in-process client when kmssvc enabled")
+		t.Fatal("deps.KMS is nil; expected in-process client when kms enabled")
 	}
 	if _, ok := kc.(*kms.Client); !ok {
 		t.Fatalf("deps.KMS is %T, want *kms.Client (in-process)", kc)
