@@ -44,6 +44,10 @@ func (c *countingAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*t
 
 func (c *countingAI) count() int32 { return atomic.LoadInt32(&c.calls) }
 
+func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
+	return nil, nil
+}
+
 // schedSvc builds an svc + scheduler with NO billing (gate allows) and the given
 // AI, seeded with the supplied agents. Returns the scheduler for direct tick().
 func schedSvc(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {
