@@ -46,10 +46,14 @@ var (
 // with its provider factories → app.NewServer → server.PublicHandler). Because
 // it is the same code, the embed cannot drift from the running pod: identity is
 // resolved by the IdentN resolver's iamidentn provider (default-enabled) from the
-// gateway-injected Hanzo IAM session headers (X-Org-Id/X-User-Id/X-User-Email),
-// authorization by iamauthz (Hanzo IAM Casbin). This is the SAME auth model as the
-// running o11y pod — gateway-header traffic authenticates (200), NOT the native-JWT
-// 401 of the retired v1.3.x line. The telemetry backend (ClickHouse `datastore`
+// gateway-injected Hanzo IAM session headers (X-Org-Id/X-User-Id/X-User-Email).
+// Authorization is edge-trusted (O11Y_AUTHZ_PROVIDER=local, set in
+// applyEmbedEnvDefaults): the gateway already validated the Hanzo IAM session and
+// the sharder gates cross-org, so the org-scoped user is authorized locally rather
+// than round-tripping back out to an external IAM Casbin enforcer (iamauthz) the
+// one-binary carries no credentials for — same enforced policy, tuples in-process
+// (o11y/pkg/authz/localauthz). Gateway-header traffic authenticates (200), NOT the
+// native-JWT 401 of the retired v1.3.x line. The telemetry backend (ClickHouse `datastore`
 // StatefulSet, cluster `insights`) is untouched: the embedded runtime connects to
 // it over ClickHouse-native :9000; only the query/dashboards/alerts control plane
 // moves in-process.
@@ -126,6 +130,14 @@ func applyEmbedEnvDefaults(dataDir string) {
 	setenvDefault("O11Y_SQLSTORE_SQLITE_PATH", filepath.Join(dataDir, "o11y.db"))
 	setenvDefault("O11Y_PROMETHEUS_ACTIVE__QUERY__TRACKER_PATH", dataDir)
 	setenvDefault("O11Y_INSTRUMENTATION_METRICS_ENABLED", "false")
+	// Edge-trusted authorization: the gateway already validated the Hanzo IAM
+	// session and injected trusted identity headers, and o11y's sharder gates
+	// cross-org — so authorize the org-scoped user locally instead of round-tripping
+	// back out to an external IAM Casbin enforcer (iamauthz) that the one-binary
+	// carries no credentials for and that adds a synchronous failure mode to every
+	// telemetry read. Same enforced policy, tuples kept in-process. See
+	// o11y/pkg/authz/localauthz. Operator-overridable like every other embed default.
+	setenvDefault("O11Y_AUTHZ_PROVIDER", "local")
 }
 
 // firstNonEmpty returns the first non-empty string, else "".
