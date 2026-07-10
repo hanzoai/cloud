@@ -112,6 +112,7 @@ type Telemetry interface {
 	RecordScore(ctx context.Context, sc ScoreEvent) error
 	ListScores(ctx context.Context, f ScoreFilter) ([]ScoreEvent, error)
 	ListTraces(ctx context.Context, f TraceFilter) ([]Trace, error)
+	Metrics(ctx context.Context, f MetricsFilter) (Board, error)
 	Close() error
 }
 
@@ -520,4 +521,44 @@ func getenvDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// asInt64 — restored: metrics.go consumes it; #217 removed it with the
+// observations read path it previously also served.
+func asInt64(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int32:
+		return int64(n)
+	case int16:
+		return int64(n)
+	case int8:
+		return int64(n)
+	case int:
+		return int64(n)
+	case uint64:
+		return int64(n)
+	case uint32:
+		return int64(n)
+	case uint16:
+		return int64(n)
+	case uint8:
+		return int64(n)
+	case uint:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case float32:
+		return int64(n)
+	case *uint64:
+		if n != nil {
+			return int64(*n)
+		}
+	case *int64:
+		if n != nil {
+			return *n
+		}
+	}
+	return 0
 }
