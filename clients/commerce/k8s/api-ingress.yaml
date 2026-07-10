@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: commerce-api
+  namespace: hanzo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: hanzo
+  tls:
+    - hosts:
+        - api.commerce.hanzo.ai
+      secretName: commerce-api-tls
+  rules:
+    - host: api.commerce.hanzo.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: commerce
+                port:
+                  number: 8001
