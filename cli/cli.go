@@ -8,7 +8,7 @@
 //	hanzo apps  list|get      the platform apps board (declared/running/drift)
 //	hanzo deploy              drive a platform redeploy (rolling, zero-downtime)
 //	hanzo clusters …          provision/list/select dedicated DOKS clusters
-//	hanzo build               enqueue a platform-native (arcd) build
+//	hanzo build               enqueue a platform-native build (runner fabric)
 //	hanzo k8s …               current deploy target helpers
 //	hanzo config …            ~/.hanzo/config preferences
 //
@@ -59,7 +59,7 @@ var controlCommands = map[string]string{
 	"apps":     "list/get the platform apps board (declared/running/drift)",
 	"deploy":   "drive a platform redeploy (rolling restart, zero-downtime)",
 	"clusters": "provision/list/select dedicated DOKS clusters",
-	"build":    "enqueue a platform-native (arcd) build",
+	"build":    "enqueue a platform-native build (runner fabric)",
 	"k8s":      "deploy-target helpers (current target)",
 	"config":   "view/edit ~/.hanzo/config preferences",
 	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
@@ -303,7 +303,7 @@ func (e *Env) platformToken(flagVal string) string {
 }
 
 // buildToken resolves the platform build-enqueue token (a distinct credential
-// from the service token — see /v1/arcd/enqueue).
+// from the service token — see /v1/runner).
 func (e *Env) buildToken(flagVal string) string {
 	return firstNonEmpty(
 		flagVal,

@@ -14,10 +14,12 @@ import (
 // IAM token, landing it in orgs/{org}/output (the gallery, S3-mirrored).
 //
 // It is a live integration test, skipped unless the box is wired for it:
-//   HANZO_TOKEN=<iam bearer> \
-//   HANZO_UPLOAD_IT_FILE=<name of a file the local studio serves at /view?type=output> \
-//   HANZO_STUDIO_UPLOAD_URL=<org studio base, e.g. https://studio.hanzo.ai> \
-//   go test ./cli -run TestUploadOutputsIntegration -v
+//
+//	HANZO_TOKEN=<iam bearer> \
+//	HANZO_UPLOAD_IT_FILE=<name of a file the local studio serves at /view?type=output> \
+//	HANZO_STUDIO_UPLOAD_URL=<org studio base, e.g. https://studio.hanzo.ai> \
+//	go test ./cli -run TestUploadOutputsIntegration -v
+//
 // The local studio is assumed at localComfyUI (127.0.0.1:8188).
 func TestUploadOutputsIntegration(t *testing.T) {
 	tok := os.Getenv("HANZO_TOKEN")

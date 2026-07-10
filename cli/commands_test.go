@@ -136,7 +136,7 @@ func TestBuildCommandValidation(t *testing.T) {
 
 func TestBuildCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/arcd/enqueue" {
+		if r.URL.Path != "/v1/runner" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer bt" {
