@@ -58,6 +58,11 @@ var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 var frameworks = map[string]bool{
 	"static": true, "vite": true, "next": true, "react": true,
 	"astro": true, "svelte": true, "vue": true, "remix": true, "nuxt": true,
+	// WebGL/WASM game engines. Declaring one is also the per-site opt-in for
+	// cross-origin isolation (see crossOriginIsolated in sites.go): their
+	// multithreaded builds need SharedArrayBuffer, so the site server serves them
+	// with COOP/COEP.
+	"unity": true, "unreal": true, "godot": true,
 }
 
 type svc struct {
