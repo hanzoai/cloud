@@ -16,7 +16,7 @@
 //   - PER-ORG policy (OrgRPM, the authenticated ceiling; CacheTTLSec + CachePaths,
 //     the edge-cache TTL; Methods, the accepted-method allowlist) — a tenant's own
 //     row of self-service edge config. An org admin writes its own (org from
-//     principal.Tenant, never a raw header); a SuperAdmin may target any tenant with
+//     principal.Org, never a raw header); a SuperAdmin may target any tenant with
 //     ?org=<slug>.
 //
 // The store is owned by BuildDeps (deps.GatewayPolicy) and shared; this subsystem
@@ -86,7 +86,7 @@ func init() {
 // CORS + per-IP cap in force, plus the caller's own OrgRPM ceiling. A SuperAdmin
 // may inspect a specific tenant with ?org=<slug>.
 func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -104,7 +104,7 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 // the caller's own org (or, for a SuperAdmin, ?org=<slug>). The body is validated
 // (Validate) and metadata is server-stamped, never client-supplied.
 func put(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}

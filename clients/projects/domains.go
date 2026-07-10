@@ -50,14 +50,14 @@ type setDomainsReq struct {
 // shadow it at the edge, so a custom host requires EITHER a global admin OR the
 // platform-operator org (the brand's own org — it manages customer DNS).
 // DNS-ownership verification (the challenge/verify the /v1/platform apps path
-// already implements) is the planned path for any tenant to self-bind; until it
+// already implements) is the planned path for any org to self-bind; until it
 // is wired here binding is operator/admin-gated and never fabricates ownership. A
 // bound domain is inert until its owner points DNS at this edge, so the real gate
 // is DNS control. First-come + reserved-label guards are enforced by the store
 // (BindHost); binds are idempotent for the same (org, slug), so a redeploy or a
 // repeat call is safe.
 func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -113,7 +113,7 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 // listDomains returns every public host bound to this site — its hanzo.app
 // subdomain plus any bound custom domains.
 func listDomains(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

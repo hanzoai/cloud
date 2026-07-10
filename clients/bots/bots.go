@@ -17,7 +17,7 @@
 //     at the bot VNC gateway for that run.
 //
 // Tenant isolation is the gateway-minted X-Org-Id (HIP-0026), resolved via
-// principal.Tenant and NEVER read from the request body — so one tenant can
+// principal.Org and NEVER read from the request body — so one tenant can
 // never launch, or bill, a bot against another's org.
 //
 // Surface (org-scoped; the CLI `hanzo bot run` calls it):
@@ -159,7 +159,7 @@ func init() {
 // the live VNC session descriptor. Every 200 reflects an authorized, metered
 // launch — an unfunded org gets 402 and no session, an unreachable commerce 503.
 func run(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

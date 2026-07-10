@@ -100,7 +100,7 @@ func buildMetrics(invs []Invocation, spec metricsRange, now time.Time) metricsVi
 }
 
 func metrics(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
