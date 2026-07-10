@@ -35,14 +35,20 @@ type gatewayEmbedder struct {
 }
 
 func newEmbedder() *gatewayEmbedder {
-	base := strings.TrimRight(getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"), "/")
+	// The semantic tier resolves a DEDICATED embeddings provider (CLOUD_EMBED_*)
+	// so it can target a first-party embedding endpoint — e.g. DigitalOcean GenAI
+	// (bge-m3 @1024-dim) — WITHOUT repointing the chat/synth AIClient, which
+	// shares CLOUD_AI_*. Dedicated vars win; each falls back to the shared
+	// CLOUD_AI_* so an un-split deployment keeps working. The same three vars
+	// drive clients/knowledge — one embed config, both semantic subsystems.
+	base := strings.TrimRight(getenv("CLOUD_EMBED_BASE_URL", getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1")), "/")
 	if !strings.HasSuffix(base, "/v1") {
 		base += "/v1"
 	}
 	return &gatewayEmbedder{
 		base:  base,
-		key:   os.Getenv("CLOUD_AI_API_KEY"),
-		model: getenv("CODE_EMBED_MODEL", "text-embedding-3-small"),
+		key:   getenv("CLOUD_EMBED_API_KEY", os.Getenv("CLOUD_AI_API_KEY")),
+		model: getenv("CLOUD_EMBED_MODEL", getenv("CODE_EMBED_MODEL", "text-embedding-3-small")),
 		http:  &http.Client{Timeout: 30 * time.Second},
 	}
 }
