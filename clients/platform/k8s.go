@@ -456,6 +456,18 @@ func serviceCR(ns, org, project string, a Application, image string) *unstructur
 	if ing := ingressSpec(domainList(a.DomainsJSON)); ing != nil {
 		spec["ingress"] = ing
 	}
+	// Container-serverless autoscaling: the /v1/run path sets MaxScale>0 to declare an
+	// HPA over [MinScale,MaxScale]. The operator makes autoscaling.minReplicas the
+	// authoritative floor and passes None for Deployment.spec.replicas when enabled
+	// (crs/gateway.yaml), so the two never fight. MaxScale==0 (the app-deploy path)
+	// omits the block entirely and keeps the fixed-replicas behavior unchanged.
+	if a.MaxScale > 0 {
+		spec["autoscaling"] = map[string]any{
+			"enabled":     true,
+			"minReplicas": int64(max1(a.MinScale)),
+			"maxReplicas": int64(a.MaxScale),
+		}
+	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "hanzo.ai/v1",
 		"kind":       "Service",
