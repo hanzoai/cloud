@@ -58,7 +58,7 @@ import (
 // public listener, plus the ops health listener, shutting down gracefully on
 // SIGINT/SIGTERM. It opens no stores and never returns until shutdown or a bind
 // error. Serve dispatches here when CLOUD_ROLE=reader, BEFORE BuildDeps, so a
-// reader never opens the KMS/audit/per-tenant stores.
+// reader never opens the KMS/audit/per-org stores.
 func serveReaderProxy(cfg *Config) error {
 	log := luxlog.New("cloud").New("subsystem", "reader")
 

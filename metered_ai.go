@@ -10,7 +10,7 @@ package cloud
 //
 // It reuses the SAME commerce path (ResourceMeter over Deps.Metering) and per-org
 // invariants as every other Hanzo surface — the debit is forced onto the caller's
-// org, never a default or another tenant. When billing is unconfigured the wrapper
+// org, never a default or another org. When billing is unconfigured the wrapper
 // is a transparent pass-through (ResourceMeter.Enabled()==false → Gate allows,
 // Meter no-ops), so a dev/un-provisioned deployment is never blocked.
 

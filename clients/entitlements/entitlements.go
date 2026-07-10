@@ -10,7 +10,7 @@
 //
 // TWO AUTHORITIES, NEVER BRAIDED.
 //   - ENABLEMENT (this store): which products the org has toggled on. The org's
-//     intent. Durable per-tenant SQLite ({DataDir}/entitlements.db), (org,product) key.
+//     intent. Durable per-org SQLite ({DataDir}/entitlements.db), (org,product) key.
 //   - ENTITLEMENT (commerce): which products the org's plan/subscription grants.
 //     The billing truth. Read via deps.Commerce.CheckEntitlement at WRITE time.
 //
@@ -25,7 +25,7 @@
 // minted only for owner==AdminOrg by SanitizeIdentity — never client-forgeable), who
 // may act on any org. A bearer-less forge (X-Org-Id restored, no X-User-Id) fails the
 // principal.Validated gate → 403. There is no path a caller reads or writes another
-// tenant's entitlements.
+// org's entitlements.
 package entitlements
 
 import (
@@ -56,8 +56,8 @@ const (
 // settings subsystem's :product guard (DRY: one product-id shape across cloud).
 var productRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
 
-// orgRE constrains the :org path segment: a DNS-1123-ish tenant label. It is the
-// tenant-isolation boundary folded into the store key, validated strictly at the
+// orgRE constrains the :org path segment: a DNS-1123-ish org label. It is the
+// org-isolation boundary folded into the store key, validated strictly at the
 // edge — the same shape clients/kms enforces.
 var orgRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$`)
 
@@ -123,7 +123,7 @@ func Shutdown(_ context.Context) error {
 	return err
 }
 
-// ── tenant gate ────────────────────────────────────────────────────────────────
+// ── org gate ────────────────────────────────────────────────────────────────
 
 // resolveOrg validates the :org param and reconciles it with the caller's
 // validated principal. It returns the authoritative org key and whether the
@@ -147,7 +147,7 @@ func (s *service) resolveOrg(c *zip.Ctx) (org string, superAdmin bool, err error
 		return org, true, nil
 	}
 	// Non-super-admin: may only touch its OWN org. c.Org() is the validated owner
-	// claim; a mismatch with :org is a cross-tenant attempt.
+	// claim; a mismatch with :org is a cross-org attempt.
 	if strings.TrimSpace(c.Org()) != org {
 		return "", false, zip.ErrForbidden("caller may only access its own org's entitlements")
 	}

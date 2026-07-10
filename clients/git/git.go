@@ -3,16 +3,16 @@
 // push code into.
 //
 // A repo is the Git LAYER (source code, buildable/deployable) that lives UNDER
-// an IAM project. It is NOT the IAM project itself: `project` is a tenancy
+// an IAM project. It is NOT the IAM project itself: `project` is org-scoping
 // CONTEXT (org → project → env); a repo is scoped BY that context. Every repo
 // belongs to exactly one org (the gateway-minted X-Org-Id, HIP-0026) and an
 // optional project sub-scope (X-Project-Id), enforced on every query, so one
-// tenant can never read, clone, push to, or delete another's repos.
+// org can never read, clone, push to, or delete another's repos.
 //
 // Surface:
 //
 //	POST   /v1/git/repos            create a bare repo            -> repoView (201)
-//	GET    /v1/git/repos            list the tenant's repos       -> {data:[repoView]}
+//	GET    /v1/git/repos            list the org's repos       -> {data:[repoView]}
 //	GET    /v1/git/repos/:name      repo detail (branches, HEAD)  -> repoView
 //	DELETE /v1/git/repos/:name      delete + purge storage        -> 204
 //	GET    /v1/git/usage            per-repo + total bytes        -> usageView
@@ -28,7 +28,7 @@
 // under {DataDir}/git; see storage.go for the hanzoai/vfs (S3) storage seam.
 //
 // Billing: every repo tracks sizeBytes, re-measured on create and after each
-// push. /v1/git/usage exposes per-repo + total bytes per tenant, and each
+// push. /v1/git/usage exposes per-repo + total bytes per org, and each
 // measurement emits a "git.usage" log line a metering consumer can bill on.
 package git
 
@@ -52,7 +52,7 @@ import (
 )
 
 // nameRE constrains a repo name to a safe identifier. The name is the
-// tenant-unique handle AND the URL path segment AND the storage path segment,
+// org-unique handle AND the URL path segment AND the storage path segment,
 // so this is the injection/traversal guard at the boundary. A trailing ".git"
 // is stripped before matching (clients clone "<name>.git").
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -69,7 +69,7 @@ const maxBody = 256 << 20 // 256 MiB
 // state is git's own data; shared deps live in the embedded cloud.Base (the
 // clone-URL host is s.Domain).
 type state struct {
-	stores  *cloud.TenantStore[*Store] // per-org repo-metadata DBs, opened once each
+	stores  *cloud.OrgStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
 }
 
@@ -140,7 +140,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "git")
 	s := &cloud.Service[state]{Base: b, State: state{
-		stores:  cloud.NewTenantStore(deps.DataDir, "git", openStore),
+		stores:  cloud.NewOrgStore(deps.DataDir, "git", openStore),
 		storage: st,
 	}}
 	mounted = s
@@ -185,7 +185,7 @@ type createReq struct {
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -253,7 +253,7 @@ func provision(s *cloud.Service[state], ctx context.Context, store *Store, r Rep
 }
 
 func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -273,7 +273,7 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -295,7 +295,7 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -338,7 +338,7 @@ type usageView struct {
 // per-tenant number commerce/o11y meter on. Org-wide (across every project) so
 // a billing consumer sees the whole tenant footprint in one call.
 func usage(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -428,11 +428,11 @@ func repoNameParam(c *zip.Ctx) (string, error) {
 	return name, nil
 }
 
-// tenant resolves the org — the tenant isolation KEY — from the gateway-minted
+// org resolves the org — the org isolation KEY — from the gateway-minted
 // X-Org-Id (HIP-0026), never lowercased or transformed (normalizing would
 // collapse distinct owners into one bucket). Empty org is a true 403; there is
-// no magic bucket. Mirrors clients/prompts.tenant.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+// no magic bucket. Mirrors clients/prompts.org.
+func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // projectScope resolves the optional X-Project-Id sub-scope. Empty is valid
 // (an org-level repo). Validated to a safe identifier; an invalid header is

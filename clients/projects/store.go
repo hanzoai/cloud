@@ -37,9 +37,9 @@ var (
 
 // Project is the org-scoped, canonical record of a buildable/deployable site.
 // It is the SAME record whether read from hanzo.app (the builder) or
-// console.hanzo.ai (the Projects module): tenant isolation is the org column,
+// console.hanzo.ai (the Projects module): org isolation is the org column,
 // enforced at the query layer, and the gateway-minted X-Org-Id selects the
-// tenant. Repo fields are flat columns here; the HTTP surface nests them under
+// org. Repo fields are flat columns here; the HTTP surface nests them under
 // "repo" (see projects.go). It never stores a secret.
 type Project struct {
 	ID            string
@@ -90,7 +90,7 @@ type Deployment struct {
 }
 
 // Store is the projects metadata database. ONE SQLite file
-// ({DataDir}/projects.db) holds every org's records; tenancy is the org column.
+// ({DataDir}/projects.db) holds every org's records; org-scoping is the org column.
 // MaxOpenConns(1) serializes writes against the file lock without busy retries.
 type Store struct {
 	db *sql.DB
@@ -166,7 +166,7 @@ CREATE INDEX IF NOT EXISTS ix_deployments_project_created ON deployments(project
 -- host (the subdomain slug for <slug>.hanzo.app; a full custom domain later) to
 -- exactly one project (org, slug). Project slugs are only org-unique, so this
 -- separate table is what makes a bare subdomain resolve deterministically to one
--- tenant — the authoritative binding the site server keys on. First-come wins;
+-- org — the authoritative binding the site server keys on. First-come wins;
 -- the PK enforces one owner per host.
 CREATE TABLE IF NOT EXISTS site_hosts (
   host        TEXT PRIMARY KEY,
@@ -374,7 +374,7 @@ func (s *Store) GetDeployment(ctx context.Context, org, projectID, id string) (D
 // BindHost claims the global public host for (org, slug), first-come. It is
 // idempotent for the SAME owner (a re-deploy just refreshes updated_at). If host
 // is already bound to a DIFFERENT project it returns errHostTaken WITHOUT
-// overwriting — a losing bind must never hijack another tenant's live subdomain.
+// overwriting — a losing bind must never hijack another org's live subdomain.
 func (s *Store) BindHost(ctx context.Context, host, org, slug string, now int64) error {
 	// A reserved label may never enter site_hosts, whatever the caller — the
 	// storage invariant that makes the serve-time reserved gate a mere backstop.

@@ -39,7 +39,7 @@ func doAdmin(t *testing.T, app *zip.App, method, path string, body any) (int, []
 // TestRed_NoAdminBucketConfusion is the REGRESSION GUARD for Red HIGH-1's
 // admin-bucket corollary. There is no longer a magic "admin" storage bucket: a
 // global admin with no selected org is REFUSED (403) rather than dropped into a
-// shared bucket, and "Admin"/"admin" are DISTINCT exact tenants (no case-fold).
+// shared bucket, and "Admin"/"admin" are DISTINCT exact orgs (no case-fold).
 func TestRed_NoAdminBucketConfusion(t *testing.T) {
 	app := mountApp(t)
 

@@ -60,7 +60,7 @@ func (disabledBase) Open(_ context.Context, _, _ string) (types.DBHandle, error)
 
 type disabledCommerce struct{}
 
-func (disabledCommerce) GetTenantConfig(_ context.Context, _ string) (*types.TenantConfig, error) {
+func (disabledCommerce) GetOrgConfig(_ context.Context, _ string) (*types.OrgConfig, error) {
 	return nil, &disabledErr{"commerce"}
 }
 func (disabledCommerce) CheckEntitlement(_ context.Context, _, _ string) (*types.LicenseEntitlement, error) {

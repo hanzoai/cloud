@@ -10,9 +10,9 @@ import (
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := cloud.TenantDB(t.TempDir(), "test", "", "functions")
+	db, err := cloud.OrgDB(t.TempDir(), "test", "", "functions")
 	if err != nil {
-		t.Fatalf("TenantDB: %v", err)
+		t.Fatalf("OrgDB: %v", err)
 	}
 	s, err := openStore(db)
 	if err != nil {

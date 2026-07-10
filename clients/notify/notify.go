@@ -30,7 +30,7 @@
 // and trusted a raw X-Org-Id header. Mounted here, /v1/notify/send is reachable via
 // the public gateway (api.hanzo.ai forwards every path to cloud), so — like
 // clients/auto did when it folded the auto engine — this gates on a VALIDATED
-// principal and derives the org from principal.Tenant (the identity middleware's
+// principal and derives the org from principal.Org (the identity middleware's
 // trusted, gateway-minted X-Org-Id), never from a client-supplied header. An
 // unauthenticated caller gets 401; a signed-in caller can only send scoped to their
 // OWN org.
@@ -133,7 +133,7 @@ func (s *service) handleSend(pinnedChannel string) zip.Handler {
 		if !principal.Validated(c) {
 			return zip.ErrUnauthorized("notify: authentication required")
 		}
-		org, ok := principal.Tenant(c)
+		org, ok := principal.Org(c)
 		if !ok || org == "" {
 			return zip.ErrUnauthorized("notify: org scope required")
 		}

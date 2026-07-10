@@ -13,7 +13,7 @@
 // SECURITY — the two-way crux RED verifies:
 //   - Global state is GLOBAL-ADMIN only (c.IsAdmin()). A customer/org-admin can
 //     never flip an item's off/beta/ga.
-//   - Self opt-in is scoped to the VALIDATED caller org (principal.Tenant — a
+//   - Self opt-in is scoped to the VALIDATED caller org (principal.Org — a
 //     gateway-minted principal, NOT a raw client X-Org-Id, which SanitizeIdentity
 //     restores on the bearer-less path) — so a user can only ever enable their OWN
 //     org, and only for a BETA item: the store's OptIn refuses `ga` (already on)
@@ -148,7 +148,7 @@ func enablementView(c *zip.Ctx) error {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
 	}
 	// Resolve the tenant through the SAME validated-principal gate the pricing
-	// catalog read plane uses (trustedOrg → principal.Tenant): an unvalidated
+	// catalog read plane uses (trustedOrg → principal.Org): an unvalidated
 	// caller (no gateway-minted principal) resolves to "" and simply sees the
 	// public (ga) items as effective with no opt-in affordance — never another
 	// org's beta state via a restored client X-Org-Id.
@@ -185,7 +185,7 @@ type optBody struct {
 }
 
 // enablementOptIn answers POST /v1/enablement/optin — opt the caller's OWN org into
-// a beta item. The subject is the VALIDATED caller org (principal.Tenant), and
+// a beta item. The subject is the VALIDATED caller org (principal.Org), and
 // the store refuses anything not in beta, so this can neither target another org nor
 // bypass an `off`. Requires an authenticated principal with an org.
 func enablementOptIn(c *zip.Ctx) error {
@@ -201,14 +201,14 @@ func enablementOpt(c *zip.Ctx, in bool) error {
 	if cat == nil {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
 	}
-	// Resolve the subject through principal.Tenant — a VALIDATED principal only
+	// Resolve the subject through principal.Org — a VALIDATED principal only
 	// (X-User-Id present, gateway-minted). A raw c.Org() would trust a client
 	// X-Org-Id that SanitizeIdentity restores on the bearer-less direct-to-pod
 	// path (see clients/principal.Validated) — i.e. an off-gateway caller sending
 	// `X-Org-Id: victim` with no credential could opt an org it does not own into
 	// (or out of) a beta. Keying on the validated tenant closes that cross-tenant
 	// write: a caller can only ever opt in THEIR OWN validated org. (RED MEDIUM.)
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to manage beta features")
 	}

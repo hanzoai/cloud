@@ -10,9 +10,9 @@ import (
 
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
-	db, err := cloud.TenantDB(t.TempDir(), "test", "default", "tracker")
+	db, err := cloud.OrgDB(t.TempDir(), "test", "default", "tracker")
 	if err != nil {
-		t.Fatalf("TenantDB: %v", err)
+		t.Fatalf("OrgDB: %v", err)
 	}
 	s, err := openStore(db)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestProjectCRUDAndTenantIsolation(t *testing.T) {
 	if err != nil || got.Name != "Engineering" {
 		t.Fatalf("get: %+v err=%v", got, err)
 	}
-	// Cross-tenant isolation: another org cannot see it.
+	// Cross-org isolation: another org cannot see it.
 	if _, err := s.GetProject(ctx, "acme", "ENG"); !errors.Is(err, errNotFound) {
 		t.Fatalf("expected notFound for other org, got %v", err)
 	}
@@ -119,9 +119,9 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 		t.Fatalf("status update not applied: %+v", got)
 	}
 
-	// Cross-tenant isolation on issues.
+	// Cross-org isolation on issues.
 	if _, err := s.GetIssue(ctx, "acme", pid, 1); !errors.Is(err, errNotFound) {
-		t.Fatalf("expected notFound cross-tenant, got %v", err)
+		t.Fatalf("expected notFound cross-org, got %v", err)
 	}
 
 	// Delete one issue.

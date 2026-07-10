@@ -26,7 +26,7 @@
 // subsystem), and the bundle persists only that key via __db. View-analytics events
 // (page-by-page tracking) are Base rows in the tenant DB.
 //
-// AUTH. Admin routes require a validated cloud principal (principal.Tenant → org);
+// AUTH. Admin routes require a validated cloud principal (principal.Org → org);
 // public viewer routes carry no principal and resolve their org from the link index
 // (a link id → org routing table — the one cross-tenant piece). Tenant isolation is
 // the per-org SQLite file gojabase selects from that org.
@@ -175,7 +175,7 @@ func adminParam(s *hcloud.Service[state], route, param string, readBody bool) zi
 }
 
 func adminDispatch(s *hcloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -213,7 +213,7 @@ func viewer(s *hcloud.Service[state], route string, readBody bool) zip.Handler {
 // seam, then records the metadata row via the bundle. The file is the raw request
 // body; ?name= names it, Content-Type carries the mime type, ?numPages= is optional.
 func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -255,7 +255,7 @@ func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
 
 // adminDownload streams a document's bytes to an authenticated owner.
 func adminDownload(s *hcloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -317,7 +317,7 @@ func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *gojabase.Response) e
 // createLink dispatches links.create and, on success, records the new link id in
 // the cross-tenant index so a public viewer can resolve it to this org.
 func createLink(s *hcloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
