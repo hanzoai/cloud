@@ -9,7 +9,11 @@ package o11y
 // follows.
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -48,4 +52,33 @@ func promLabel(s string) string {
 		"{", "",
 		"}", "",
 	).Replace(s)
+}
+
+// queryRaw forwards a SERVER-built VM read (the caller has ALREADY allowlisted the
+// PromQL and validated any range args — see vmproxy.go) to the given VM API path and
+// returns VM's response status + body VERBATIM. apiPath is "api/v1/query" or
+// "api/v1/query_range"; params carries the query string (query, plus start/end/step for
+// a range). This backs the SuperAdmin VM proxy: VM's native Prometheus envelope is
+// returned unchanged so the console's parseInstant/parseRange work as-is. An empty base
+// (VM un-wired) is a clean error, never a fabricated envelope — the honest-empty contract.
+func (c *vmClient) queryRaw(ctx context.Context, apiPath string, params url.Values) (int, []byte, error) {
+	if c.base == "" {
+		return 0, nil, fmt.Errorf("O11Y_VM_URL not set")
+	}
+	u := c.base + "/" + apiPath + "?" + params.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return 0, nil, err
+	}
+	return resp.StatusCode, body, nil
 }
