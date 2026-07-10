@@ -17,6 +17,8 @@ import (
 	"context"
 	"hash/fnv"
 	"sync"
+
+	"github.com/hanzoai/cloud/clients/sbom"
 )
 
 // appMutex serializes the apply→finalize critical section per application.
@@ -77,6 +79,14 @@ func (s *svc) applyLive(ctx context.Context, org, project string, app Applicatio
 	if e != nil {
 		s.log.Warn("applyLive: finalize live failed (continuing)", "org", org, "app", app.Slug, "err", e)
 		return false, false, nil
+	}
+	if adv {
+		// Deploy-time SBOM prefetch: this image is now live, so pull its attached
+		// CycloneDX SBOM from the registry and materialize components into the global
+		// datastore ahead of the console asking. Best-effort and detached — a
+		// registry miss/failure must never affect the deploy. Own context: the
+		// deploy's ctx is about to end.
+		go sbom.Prefetch(context.WithoutCancel(ctx), s.log, image)
 	}
 	return adv, false, nil
 }
