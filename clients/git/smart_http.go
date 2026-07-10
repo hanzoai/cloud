@@ -37,7 +37,7 @@ const (
 // selected by the ?service= query param; both upload-pack (fetch) and
 // receive-pack (push) advertise here.
 func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -47,11 +47,11 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	project := projectScope(c)
 
-	// The org path segment must match the authenticated tenant. A caller may
+	// The org path segment must match the authenticated org. A caller may
 	// only reach their own org's namespace, never another's, even if they craft
 	// a different :org in the URL (Red: path-vs-identity confusion).
 	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated tenant")
+		return zip.ErrForbidden("org path does not match authenticated org")
 	}
 
 	service := c.Query("service")
@@ -96,7 +96,7 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 // the client's wants/haves, runs the upload-pack session, and streams the
 // packfile response.
 func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -106,7 +106,7 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	project := projectScope(c)
 	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated tenant")
+		return zip.ErrForbidden("org path does not match authenticated org")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -150,7 +150,7 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 // ref-update commands + packfile, applies them to the storer, records the new
 // storage size (billing hook), and returns the report-status.
 func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -160,7 +160,7 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	project := projectScope(c)
 	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated tenant")
+		return zip.ErrForbidden("org path does not match authenticated org")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -191,7 +191,7 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Push landed (or partially landed with a report): re-measure and record the
-	// tenant's storage size so commerce/o11y meter the new bytes. Best-effort —
+	// org's storage size so commerce/o11y meter the new bytes. Best-effort —
 	// a metering miss must never fail the push the client already committed.
 	recordUsage(s, context.WithoutCancel(c.Context()), org, project, name)
 

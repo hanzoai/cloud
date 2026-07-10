@@ -9,9 +9,9 @@ import (
 
 func newStore(t *testing.T, org string) *Store {
 	t.Helper()
-	db, err := cloud.TenantDB(t.TempDir(), org, "", "code")
+	db, err := cloud.OrgDB(t.TempDir(), org, "", "code")
 	if err != nil {
-		t.Fatalf("TenantDB: %v", err)
+		t.Fatalf("OrgDB: %v", err)
 	}
 	st, err := openStore(db)
 	if err != nil {
@@ -55,10 +55,10 @@ func TestStoreLexicalAndSymbol(t *testing.T) {
 }
 
 // Two org files are physically separate: a search in one never sees the other's
-// code. This is the tenant boundary — one SQLite file per org.
+// code. This is the org boundary — one SQLite file per org.
 func TestStoreIsolation(t *testing.T) {
 	dir := t.TempDir()
-	adb, err := cloud.TenantDB(dir, "orgA", "", "code")
+	adb, err := cloud.OrgDB(dir, "orgA", "", "code")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestStoreIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = a.Close() }()
-	bdb, err := cloud.TenantDB(dir, "orgB", "", "code")
+	bdb, err := cloud.OrgDB(dir, "orgB", "", "code")
 	if err != nil {
 		t.Fatal(err)
 	}

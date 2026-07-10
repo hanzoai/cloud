@@ -20,7 +20,7 @@
 //	POST   /v1/integrations/:provider/disconnect revoke + forget (org-authed)         -> {disconnected:true}
 //
 // TENANT ISOLATION. connect/list/get/disconnect derive the org from
-// principal.Tenant (a VALIDATED principal — a client-forged X-Org-Id with no
+// principal.Org (a VALIDATED principal — a client-forged X-Org-Id with no
 // bearer is refused 403). The callback is Slack/GitHub-initiated and therefore
 // UNAUTHENTICATED, so its org is taken ONLY from the HMAC-signed, single-use
 // state — never a header (see state.go). Every org that reaches KMS or the store
@@ -321,7 +321,7 @@ func snapshotRegistry() map[string]*Provider {
 // Org-authed: a caller with no validated principal is 403 (the status is per-org,
 // so an org is required).
 func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -342,7 +342,7 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 
 // get returns one provider (404 for an unknown id) with this org's status.
 func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -366,7 +366,7 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 // → 503; KMS not ready → 503 (the flow WILL need to seal a token, so refuse now
 // rather than dead-end at the callback).
 func connect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required to connect an integration")
 	}
@@ -491,7 +491,7 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 // every custodied KMS secret and the connection row. Idempotent — disconnecting a
 // provider that was never connected still returns {disconnected:true}.
 func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required to disconnect an integration")
 	}

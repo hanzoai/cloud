@@ -18,7 +18,7 @@
 // lists) for the per-kind counts — one screen, this one authoritative money source.
 //
 // TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim
-// (principal.Tenant — the trusted X-Org-Id the identity middleware minted from the
+// (principal.Org — the trusted X-Org-Id the identity middleware minted from the
 // caller's verified bearer, HIP-0026; NEVER a client header) AND a validated
 // principal is required (c.User() set only for a verified bearer). The commerce
 // subject is pinned server-side to that org; the warehouse query binds it
@@ -99,11 +99,11 @@ func init() {
 // grammar, no drift). Composes commerce spend + warehouse LLM totals, each
 // degrading independently to honest zeros.
 func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	// principal.Tenant requires a VALIDATED principal (c.User() set only for a
+	// principal.Org requires a VALIDATED principal (c.User() set only for a
 	// verified bearer) and returns the trusted, minted X-Org-Id — refusing a forged
 	// header on the no-principal path. This is the "org from validated bearer ONLY"
 	// contract.
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view usage")
 	}
@@ -172,7 +172,7 @@ func analyticsAccess(s *cloud.Service[state], c *zip.Ctx) error {
 func analytics(s *cloud.Service[state], c *zip.Ctx) error {
 	// Org from the VALIDATED bearer owner claim ONLY (never a client header). A caller
 	// can only ever read its OWN org; no principal → 401 (fail closed).
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view analytics")
 	}
