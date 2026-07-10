@@ -45,6 +45,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -72,7 +73,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env,
 // never hard-coded).
 func build(b cloud.Base) (state, error) {
-	cr := newCommerceReader(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	cr := newCommerceReader(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	b.Log.Info("usage summary surface", "prefix", "/v1/usage", "commerce", cr.configured())
 	return state{commerce: cr}, nil
 }
@@ -380,7 +381,7 @@ func newCommerceReader(base, token string) *commerceReader {
 	return &commerceReader{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 15 * time.Second},
+		http:  commerceinproc.Client(15 * time.Second),
 	}
 }
 
