@@ -207,6 +207,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get("/v1/evals/traces", s.listTraces)
 
+	// AI observability dashboard (the native Langfuse home): per-org / per-project
+	// counts, cost, tokens, error & success rate, and latency percentiles over a
+	// window — aggregated from the SAME cloud_usage ledger + GenAI spans.
+	app.Get("/v1/evals/metrics", s.metricsBoard)
+
 	app.Post("/v1/evals/runs", s.runHandler)
 	app.Get("/v1/evals/runs", s.listRuns)
 
