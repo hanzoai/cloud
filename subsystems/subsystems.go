@@ -43,7 +43,6 @@ package subsystems
 import (
 	_ "github.com/hanzoai/ai"        // order 150
 	_ "github.com/hanzoai/authz"     // order 70
-	_ "github.com/hanzoai/commerce"  // order 100
 	_ "github.com/hanzoai/licensing" // order 110
 	_ "github.com/hanzoai/metrics"   // order 40
 	_ "github.com/hanzoai/o11y"      // order 70
@@ -84,6 +83,16 @@ import (
 	// iam pod). See clients/iam.
 	_ "github.com/hanzoai/cloud/clients/iam"     // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
 	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
+
+	// Embedded commerce plane (HIP-0106, task #89 phase 1): wraps hanzoai/commerce's
+	// gin handler (commerce.Embed) and mounts /v1/commerce/* + /_/commerce/* in-process
+	// so cloud serves the checkout/tenant/billing surface ITSELF instead of proxying to
+	// a remote commerce pod. Order 100 — after kms/iam/base + the billing/licensing tier.
+	// The leaf lives in-repo (clients/commercesvc) so the upstream commerce.Mount that
+	// imports cloud stays behind //go:build cloud and never compiles into cloud's plain
+	// build — no cloud⇄commerce import cycle. Activation is the enable-list gate. See
+	// clients/commercesvc.
+	_ "github.com/hanzoai/cloud/clients/commercesvc" // order 100 — /v1/commerce/*, /_/commerce/*
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
