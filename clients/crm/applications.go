@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -67,8 +68,8 @@ type applyRequest struct {
 
 // intakeOrg returns the org that owns the Startup Program pipeline. It is the
 // deployment brand (white-labels to zoo/lux), defaulting to "hanzo".
-func (s *svc) intakeOrg() string {
-	if b := strings.TrimSpace(s.brand); b != "" {
+func intakeOrg(s *cloud.Service[state]) string {
+	if b := strings.TrimSpace(s.Brand); b != "" {
 		return b
 	}
 	return "hanzo"
@@ -88,7 +89,7 @@ func actor(c *zip.Ctx) string {
 // honeypot hits, dedups on (email, company), writes the Application (+ a
 // best-effort CRM Company/Contact for sales visibility), and kicks off the AI
 // screen. It NEVER calls tenant(): the org is the fixed program org.
-func (s *svc) apply(c *zip.Ctx) error {
+func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	if body := c.Body(); len(body) > maxIntakeBody {
 		return zip.ErrBadRequest("application too large")
 	}
@@ -116,25 +117,25 @@ func (s *svc) apply(c *zip.Ctx) error {
 		return zip.ErrBadRequest("a valid email is required")
 	}
 
-	org := s.intakeOrg()
+	org := intakeOrg(s)
 	now := time.Now().Unix()
 	tier1, matched := detectTier1(req.Tier1Investors, req.Investors)
 	meta := buildMetadata(req, matched)
 
 	// Idempotent-ish: a resubmission of the same (email, company) refreshes the
 	// existing record rather than duplicating the lead.
-	existing, err := s.store.FindApplicationByEmailCompany(c.Context(), org, email, company)
+	existing, err := s.State.store.FindApplicationByEmailCompany(c.Context(), org, email, company)
 	if err == nil {
 		existing.Company, existing.Website = company, clip(req.Website)
 		existing.ContactName, existing.Email, existing.Role = name, email, clip(req.Role)
 		existing.Tier1 = tier1
 		existing.Metadata = meta
 		existing.UpdatedAt = now
-		saved, uerr := s.store.UpdateApplication(c.Context(), existing)
+		saved, uerr := s.State.store.UpdateApplication(c.Context(), existing)
 		if uerr != nil {
 			return mapErr(uerr, "application not found")
 		}
-		s.screenLater(org, saved.ID)
+		screenLater(s, org, saved.ID)
 		return c.JSON(http.StatusOK, map[string]any{"id": saved.ID, "stage": saved.Stage, "status": "received"})
 	}
 
@@ -151,13 +152,13 @@ func (s *svc) apply(c *zip.Ctx) error {
 		CreatedAt: now, UpdatedAt: now,
 	}
 	// Best-effort CRM projection so the lead also shows in the standard CRM tabs.
-	app.CompanyID, app.ContactID = s.projectToCRM(c.Context(), org, app, req)
+	app.CompanyID, app.ContactID = projectToCRM(s, c.Context(), org, app, req)
 
-	saved, cerr := s.store.CreateApplication(c.Context(), app)
+	saved, cerr := s.State.store.CreateApplication(c.Context(), app)
 	if cerr != nil {
 		return mapErr(cerr, "")
 	}
-	s.screenLater(org, saved.ID)
+	screenLater(s, org, saved.ID)
 	return c.JSON(http.StatusCreated, map[string]any{"id": saved.ID, "stage": saved.Stage, "status": "received"})
 }
 
@@ -165,7 +166,7 @@ func (s *svc) apply(c *zip.Ctx) error {
 // the startup also appears in the org's standard CRM. Best-effort: any failure
 // is non-fatal (the Application remains the source of truth) and returns empty
 // ids. Reuses the same store + referential-integrity rules as the CRM handlers.
-func (s *svc) projectToCRM(ctx context.Context, org string, app Application, req applyRequest) (companyID, contactID string) {
+func projectToCRM(s *cloud.Service[state], ctx context.Context, org string, app Application, req applyRequest) (companyID, contactID string) {
 	now := time.Now().Unix()
 	cid, err := genID("comp")
 	if err != nil {
@@ -176,8 +177,8 @@ func (s *svc) projectToCRM(ctx context.Context, org string, app Application, req
 		Employees: parseIntField(req.TeamSize), Currency: "USD",
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if _, err := s.store.CreateCompany(ctx, comp); err != nil {
-		s.log.Warn("startup intake: company projection failed", "err", err)
+	if _, err := s.State.store.CreateCompany(ctx, comp); err != nil {
+		s.Log.Warn("startup intake: company projection failed", "err", err)
 		return "", ""
 	}
 	companyID = cid
@@ -191,8 +192,8 @@ func (s *svc) projectToCRM(ctx context.Context, org string, app Application, req
 		ID: ctid, Org: org, FirstName: first, LastName: last, Email: app.Email,
 		JobTitle: app.Role, CompanyID: companyID, CreatedAt: now, UpdatedAt: now,
 	}
-	if _, err := s.store.CreateContact(ctx, ct); err != nil {
-		s.log.Warn("startup intake: contact projection failed", "err", err)
+	if _, err := s.State.store.CreateContact(ctx, ct); err != nil {
+		s.Log.Warn("startup intake: contact projection failed", "err", err)
 		return companyID, ""
 	}
 	return companyID, ctid
@@ -226,7 +227,7 @@ func buildMetadata(req applyRequest, tier1Matched []string) map[string]any {
 
 // ---- staff read/write ----
 
-func (s *svc) listApplications(c *zip.Ctx) error {
+func listApplications(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -235,19 +236,19 @@ func (s *svc) listApplications(c *zip.Ctx) error {
 	if stage != "" && !validStages[stage] {
 		return zip.ErrBadRequest("unknown stage")
 	}
-	rows, err := s.store.ListApplications(c.Context(), org, stage, limitOf(c))
+	rows, err := s.State.store.ListApplications(c.Context(), org, stage, limitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": rows})
 }
 
-func (s *svc) getApplication(c *zip.Ctx) error {
+func getApplication(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	app, err := s.store.GetApplication(c.Context(), org, idParam(c))
+	app, err := s.State.store.GetApplication(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapErr(err, "application not found")
 	}
@@ -262,7 +263,7 @@ type patchApplicationReq struct {
 	Note   string `json:"note"`
 }
 
-func (s *svc) patchApplication(c *zip.Ctx) error {
+func patchApplication(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -271,7 +272,7 @@ func (s *svc) patchApplication(c *zip.Ctx) error {
 	if err := c.Bind(&req); err != nil {
 		return zip.ErrBadRequest("invalid JSON")
 	}
-	app, err := s.store.GetApplication(c.Context(), org, idParam(c))
+	app, err := s.State.store.GetApplication(c.Context(), org, idParam(c))
 	if err != nil {
 		return mapErr(err, "application not found")
 	}
@@ -299,7 +300,7 @@ func (s *svc) patchApplication(c *zip.Ctx) error {
 		})
 	}
 	app.UpdatedAt = time.Now().Unix()
-	saved, uerr := s.store.UpdateApplication(c.Context(), app)
+	saved, uerr := s.State.store.UpdateApplication(c.Context(), app)
 	if uerr != nil {
 		return mapErr(uerr, "application not found")
 	}
@@ -352,48 +353,48 @@ func stageIndex(stage string) int {
 // screenLater schedules the AI screen. In production it runs detached (a public
 // form must not block on a 60s model call); tests set screenSync to run inline
 // for deterministic assertions. The screen logic is identical either way.
-func (s *svc) screenLater(org, id string) {
-	if s.screenSync {
-		s.runScreen(context.Background(), org, id)
+func screenLater(s *cloud.Service[state], org, id string) {
+	if s.State.screenSync {
+		runScreen(s, context.Background(), org, id)
 		return
 	}
-	go s.runScreen(context.Background(), org, id)
+	go runScreen(s, context.Background(), org, id)
 }
 
 // runScreen calls the LLM gateway to score one application and stores the result.
 // Non-fatal by construction: a nil AI client, a gateway error, or an unparseable
 // response marks the screen `failed` and leaves the application untouched at
 // `applied`. On success it stores the screen and auto-advances applied→screened.
-func (s *svc) runScreen(ctx context.Context, org, id string) {
-	app, err := s.store.GetApplication(ctx, org, id)
+func runScreen(s *cloud.Service[state], ctx context.Context, org, id string) {
+	app, err := s.State.store.GetApplication(ctx, org, id)
 	if err != nil {
-		s.log.Warn("screen: load failed", "id", id, "err", err)
+		s.Log.Warn("screen: load failed", "id", id, "err", err)
 		return
 	}
 	now := time.Now().Unix()
 
-	if s.ai == nil {
+	if s.State.ai == nil {
 		app.Screen = ScreenResult{Status: "failed", Error: "ai gateway not configured", ScreenedAt: now}
-		s.saveScreen(ctx, app)
+		saveScreen(s, ctx, app)
 		return
 	}
 
 	cctx, cancel := context.WithTimeout(ctx, screenTimeout)
 	defer cancel()
-	resp, aerr := s.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.defaultModel, Prompt: screenPrompt(app)})
+	resp, aerr := s.State.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.State.defaultModel, Prompt: screenPrompt(app)})
 	if aerr != nil {
-		app.Screen = ScreenResult{Status: "failed", Error: aerr.Error(), Model: s.defaultModel, ScreenedAt: now}
-		s.saveScreen(ctx, app)
+		app.Screen = ScreenResult{Status: "failed", Error: aerr.Error(), Model: s.State.defaultModel, ScreenedAt: now}
+		saveScreen(s, ctx, app)
 		return
 	}
 	screen, perr := parseScreen(resp.Content)
 	if perr != nil {
-		app.Screen = ScreenResult{Status: "failed", Error: "unparseable screen: " + perr.Error(), Model: s.defaultModel, ScreenedAt: now}
-		s.saveScreen(ctx, app)
+		app.Screen = ScreenResult{Status: "failed", Error: "unparseable screen: " + perr.Error(), Model: s.State.defaultModel, ScreenedAt: now}
+		saveScreen(s, ctx, app)
 		return
 	}
 	screen.Status = "done"
-	screen.Model = s.defaultModel
+	screen.Model = s.State.defaultModel
 	screen.ScreenedAt = now
 	app.Screen = screen
 
@@ -404,13 +405,13 @@ func (s *svc) runScreen(ctx context.Context, org, id string) {
 		})
 		app.Stage = StageScreened
 	}
-	s.saveScreen(ctx, app)
+	saveScreen(s, ctx, app)
 }
 
-func (s *svc) saveScreen(ctx context.Context, app Application) {
+func saveScreen(s *cloud.Service[state], ctx context.Context, app Application) {
 	app.UpdatedAt = time.Now().Unix()
-	if _, err := s.store.UpdateApplication(ctx, app); err != nil {
-		s.log.Warn("screen: save failed", "id", app.ID, "err", err)
+	if _, err := s.State.store.UpdateApplication(ctx, app); err != nil {
+		s.Log.Warn("screen: save failed", "id", app.ID, "err", err)
 	}
 }
 
