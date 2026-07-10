@@ -345,9 +345,20 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	user.DELETE("/payment-methods/:id", DetachPaymentMethod)
 	user.POST("/customers/:id/default-payment-method", SetDefaultPaymentMethod)
 
-	// Billing accounts (org-wrapper)
+	// Billing accounts (GCP-style funding entities, SEPARATE from the org — each
+	// funds 1..N projects, dedicated or shared). CRUD is org-owner self-service: a
+	// limit is a self-imposed budget, not a money mint, so it needs no platform bar
+	// (mirrors spend-alerts). Freeze (Enabled=false) is a platform control, not
+	// exposed here. Project bindings live UNDER an account (/:id/projects) so the
+	// route tree has no static-vs-param conflict with /accounts/:id.
 	user.GET("/accounts", ListBillingAccounts)
 	user.POST("/accounts", CreateBillingAccount)
+	user.GET("/accounts/:id", GetBillingAccount)
+	user.PATCH("/accounts/:id", UpdateBillingAccount)
+	user.DELETE("/accounts/:id", DeleteBillingAccount)
+	user.GET("/accounts/:id/projects", ListAccountProjects)
+	user.PUT("/accounts/:id/projects/:project", BindAccountProject)
+	user.DELETE("/accounts/:id/projects/:project", UnbindAccountProject)
 	user.GET("/accounts/:id/members", ListAccountMembers)
 	user.POST("/accounts/:id/members", AddAccountMember)
 	user.PATCH("/accounts/:id/members/:memberId", UpdateMemberRole)
