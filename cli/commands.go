@@ -365,7 +365,7 @@ func printTarget(w io.Writer, t *Target) {
 }
 
 // ---------------------------------------------------------------------------
-// build — platform-native (arcd) build enqueue.
+// build — platform-native build (runner fabric) enqueue.
 // ---------------------------------------------------------------------------
 
 func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
@@ -373,8 +373,8 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	var buildToken string
 	cmd := &cobra.Command{
 		Use:   "build <repo>",
-		Short: "Enqueue a platform-native (arcd) build (no GitHub builders)",
-		Long: "Enqueue a build on the platform's native CI fabric (arcd). Builds and pushes\n" +
+		Short: "Enqueue a platform-native build on the runner fabric (no GitHub builders)",
+		Long: "Enqueue a build on the platform's native runner fabric. Builds and pushes\n" +
 			"the named image at a SHA; on completion the platform patches the operator\n" +
 			"Service CR (build-job → deploy). Requires a live registered runner for the\n" +
 			"target pool (409 otherwise).",
