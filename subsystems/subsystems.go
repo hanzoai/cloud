@@ -98,6 +98,7 @@ import (
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
 	_ "github.com/hanzoai/cloud/clients/auditlog"     // order 144 — /v1/audit (org-scoped audit trail; per-org twin of /v1/admin/audit)
 	_ "github.com/hanzoai/cloud/clients/bot"          // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
+	_ "github.com/hanzoai/cloud/clients/bots"         // order 143 — POST /v1/bots/run (launch a computer-using agent, gate+meter, return VNC session)
 	_ "github.com/hanzoai/cloud/clients/entitlements" // order 139 — /v1/orgs/:org/entitlements (per-org product enablement; commerce-gated adds; console paid-product sidebar)
 	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
