@@ -104,16 +104,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // shutdown stops the embedded broker on graceful cloud shutdown. Idempotent.
-func shutdown(_ context.Context) error {
+func Shutdown(_ context.Context) error {
 	if broker != nil {
 		broker.Shutdown()
 		broker = nil
 	}
 	return nil
-}
-
-func init() {
-	cloud.RegisterWithShutdown("kafka", order, cloud.Typed(Mount), shutdown)
 }
 
 func envBool(k string) bool {

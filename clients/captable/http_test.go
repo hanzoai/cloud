@@ -25,7 +25,7 @@ func mountApp(t *testing.T) *zip.App {
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	t.Cleanup(func() { _ = shutdown(nil) })
+	t.Cleanup(func() { _ = Shutdown(nil) })
 	return app
 }
 

@@ -164,12 +164,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/automations/mcp", cloud.Handle(s, mcp))
 }
 
-func init() {
-	// Order 148: after integrations (137), BEFORE ai (150) so /v1/automations/* wins
-	// over ai's /v1/* catch-all. RegisterWithShutdown so the store closes on stop.
-	cloud.RegisterWithShutdown("automations", 148, cloud.Typed(Mount), Shutdown)
-}
-
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {

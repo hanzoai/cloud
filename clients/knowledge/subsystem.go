@@ -62,13 +62,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	}
 }
 
-func init() {
-	// Order 130: after the framework (129) so its DocType store is mounted first
-	// (the connectors call framework.Ingest into it), and before the AI /v1/*
-	// catch-all (150) so /v1/kb/* resolves here.
-	cloud.Register("knowledge", 130, cloud.Typed(Mount))
-}
-
 // searchBody is the POST /v1/kb/search request. `query` is the natural-language
 // question; `limit` bounds hits (default 10, max 50); `project` optionally narrows
 // to a project scope; `doctypes` optionally restricts to a subset of the indexed

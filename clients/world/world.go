@@ -27,7 +27,6 @@
 package world
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -125,12 +124,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log.Info("world surface mounted", "brand", deps.Brand,
 		"ai", s.ai != nil, "kms", s.kms != nil, "allowlisted_hosts", len(s.rssAllow))
 	return nil
-}
-
-func init() {
-	cloud.RegisterWithShutdown("world", 142, cloud.Typed(Mount), func(context.Context) error {
-		return Shutdown()
-	})
 }
 
 // Shutdown closes the SSE bus (unblocking every open stream) and the pipeline
