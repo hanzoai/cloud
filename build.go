@@ -219,6 +219,46 @@ func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient,
 	kmsClientFactory = f
 }
 
+// ---- git-push-to-deploy ----
+
+// GitPushEvent describes a push that just landed on the embedded git server: the
+// tenant, the repo, the branch that moved, and its new tip commit. CloneURL is the
+// canonical clone URL of that repo (https://<host>/v1/git/<org>/<repo>.git) — the
+// exact value an Application's RepoURL carries — so the builder can resolve which
+// app (if any) tracks this branch and needs a rebuild.
+type GitPushEvent struct {
+	Org      string
+	Project  string
+	Repo     string
+	Branch   string
+	Commit   string
+	CloneURL string
+}
+
+// pushBuilder is the registered git-push-to-deploy trigger. clients/platform
+// installs it in Mount; clients/git calls OnGitPush after a push lands. The
+// inversion keeps git⇄platform decoupled — git never imports platform — exactly
+// like kmsClientFactory and the subsystem Registry. Exactly one registration.
+var pushBuilder func(ctx context.Context, ev GitPushEvent) error
+
+// RegisterPushBuilder installs the git-push-to-deploy trigger. clients/platform
+// calls this from its Mount when co-resident; it is the ONE inversion point that
+// lets the embedded git server launch a platform build with no git⇄platform cycle.
+func RegisterPushBuilder(f func(ctx context.Context, ev GitPushEvent) error) {
+	pushBuilder = f
+}
+
+// OnGitPush fires the registered push-to-deploy trigger for a landed push. It is a
+// no-op when no builder is registered (git server running without the platform
+// subsystem co-resident). Best-effort by contract: the caller must never fail the
+// push the client already committed just because a build could not be triggered.
+func OnGitPush(ctx context.Context, ev GitPushEvent) error {
+	if pushBuilder == nil {
+		return nil
+	}
+	return pushBuilder(ctx, ev)
+}
+
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetTenantConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce"), clients/commercesvc
