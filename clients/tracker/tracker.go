@@ -35,7 +35,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -74,8 +73,8 @@ var priorities = map[string]bool{
 }
 
 type svc struct {
-	store *Store
-	log   luxlog.Logger
+	stores *cloud.TenantStore[*Store] // per-(org,project) tracker DBs, opened once each
+	log    luxlog.Logger
 	// bill is the shared per-org resource gate+meter. A project tracker is FREE
 	// by default (charging per issue is the wrong product), so the create fee
 	// defaults to 0 → Gate is a pass-through and Meter a no-op; the seam is wired
@@ -84,8 +83,17 @@ type svc struct {
 	bill *cloud.ResourceMeter
 }
 
-// mounted is the active service so Shutdown can release the store.
+// mounted is the active service so Shutdown can release the stores.
 var mounted *svc
+
+// storeFor resolves the caller's project-scoped tracker store, opening the
+// per-(org,project) file ({DataDir}/orgs/{orgSlug}/projects/{projectSlug}/
+// tracker.db) once via the shared cache. tracker is project-scoped: the IAM
+// project (principal.Project, "default" when none is selected) is the physical
+// tenant boundary — the tracker's own KEY-based projects are rows WITHIN it.
+func (s *svc) storeFor(c *zip.Ctx, org string) (*Store, error) {
+	return s.stores.For(org, principal.Project(c))
+}
 
 // Mount wires the tracker surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -100,14 +108,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("tracker.Mount: empty DataDir")
 	}
-	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
-		return fmt.Errorf("tracker.Mount: data dir: %w", err)
+	s := &svc{
+		stores: cloud.NewTenantStore(deps.DataDir, "tracker", openStore),
+		log:    log,
+		bill:   cloud.NewResourceMeter(deps, "tracker"),
 	}
-	store, err := openStore(filepath.Join(deps.DataDir, "tracker.db"))
-	if err != nil {
-		return fmt.Errorf("tracker.Mount: open store: %w", err)
-	}
-	s := &svc{store: store, log: log, bill: cloud.NewResourceMeter(deps, "tracker")}
 	mounted = s
 
 	// Literal routes register before their :param siblings so Fiber's first-match
@@ -192,6 +197,10 @@ func (s *svc) createProject(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	var body createProjectReq
 	if err := c.Bind(&body); err != nil {
 		return err
@@ -224,7 +233,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 	}
 	now := time.Now().Unix()
 	p := Project{ID: id, Org: org, Key: key, Name: name, Description: desc, CreatedAt: now, UpdatedAt: now}
-	if err := s.store.CreateProject(c.Context(), p); err != nil {
+	if err := store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("project key already exists in this org")
 		}
@@ -239,7 +248,11 @@ func (s *svc) listProjects(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.ListProjects(c.Context(), org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	rows, err := store.ListProjects(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -255,7 +268,11 @@ func (s *svc) getProject(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, keyParam(c))
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := store.GetProject(c.Context(), org, keyParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -275,7 +292,11 @@ func (s *svc) updateProject(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, keyParam(c))
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := store.GetProject(c.Context(), org, keyParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -301,7 +322,7 @@ func (s *svc) updateProject(c *zip.Ctx) error {
 		p.Description = d
 	}
 	p.UpdatedAt = time.Now().Unix()
-	if err := s.store.UpdateProject(c.Context(), p); err != nil {
+	if err := store.UpdateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("project not found")
 		}
@@ -315,7 +336,11 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	deleted, err := s.store.DeleteProject(c.Context(), org, keyParam(c))
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	deleted, err := store.DeleteProject(c.Context(), org, keyParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -327,9 +352,10 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 
 // ---- issue handlers ----
 
-// project resolves the caller's project by :key or answers the right HTTP error.
-func (s *svc) project(c *zip.Ctx, org string) (Project, error) {
-	p, err := s.store.GetProject(c.Context(), org, keyParam(c))
+// project resolves the caller's project by :key from the given per-tenant store,
+// or answers the right HTTP error.
+func (s *svc) project(c *zip.Ctx, store *Store, org string) (Project, error) {
+	p, err := store.GetProject(c.Context(), org, keyParam(c))
 	if errors.Is(err, errNotFound) {
 		return Project{}, zip.ErrNotFound("project not found")
 	}
@@ -353,7 +379,11 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.project(c, org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := s.project(c, store, org)
 	if err != nil {
 		return err
 	}
@@ -402,7 +432,7 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 		Title: title, Description: desc, Status: status, Priority: priority,
 		Assignee: assignee, Labels: labels, CreatedAt: now, UpdatedAt: now,
 	}
-	created, err := s.store.CreateIssue(c.Context(), i)
+	created, err := store.CreateIssue(c.Context(), i)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
@@ -415,7 +445,11 @@ func (s *svc) listIssues(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.project(c, org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := s.project(c, store, org)
 	if err != nil {
 		return err
 	}
@@ -423,7 +457,7 @@ func (s *svc) listIssues(c *zip.Ctx) error {
 	if status != "" && !statuses[status] {
 		return zip.ErrBadRequest("unknown status filter")
 	}
-	rows, err := s.store.ListIssues(c.Context(), org, p.ID, status)
+	rows, err := store.ListIssues(c.Context(), org, p.ID, status)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -439,7 +473,11 @@ func (s *svc) getIssue(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.project(c, org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := s.project(c, store, org)
 	if err != nil {
 		return err
 	}
@@ -447,7 +485,7 @@ func (s *svc) getIssue(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	i, err := s.store.GetIssue(c.Context(), org, p.ID, num)
+	i, err := store.GetIssue(c.Context(), org, p.ID, num)
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("issue not found")
 	}
@@ -471,7 +509,11 @@ func (s *svc) updateIssue(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.project(c, org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := s.project(c, store, org)
 	if err != nil {
 		return err
 	}
@@ -479,7 +521,7 @@ func (s *svc) updateIssue(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	i, err := s.store.GetIssue(c.Context(), org, p.ID, num)
+	i, err := store.GetIssue(c.Context(), org, p.ID, num)
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("issue not found")
 	}
@@ -533,7 +575,7 @@ func (s *svc) updateIssue(c *zip.Ctx) error {
 		i.Labels = lb
 	}
 	i.UpdatedAt = time.Now().Unix()
-	if err := s.store.UpdateIssue(c.Context(), i); err != nil {
+	if err := store.UpdateIssue(c.Context(), i); err != nil {
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("issue not found")
 		}
@@ -547,7 +589,11 @@ func (s *svc) deleteIssue(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.project(c, org)
+	store, err := s.storeFor(c, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
+	p, err := s.project(c, store, org)
 	if err != nil {
 		return err
 	}
@@ -555,7 +601,7 @@ func (s *svc) deleteIssue(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	deleted, err := s.store.DeleteIssue(c.Context(), org, p.ID, num)
+	deleted, err := store.DeleteIssue(c.Context(), org, p.ID, num)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -691,12 +737,12 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown closes the tracker store. Idempotent.
+// Shutdown closes every open per-(org,project) tracker store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.stores.CloseAll()
 	mounted = nil
 	return err
 }

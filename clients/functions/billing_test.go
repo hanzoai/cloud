@@ -96,17 +96,22 @@ func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *svc {
 		t.Fatalf("metering.New: %v", err)
 	}
 	return &svc{
-		store: testStore(t),
-		exec:  &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
-		log:   log,
-		bill:  cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
+		stores: cloud.NewTenantStore(t.TempDir(), "functions", openStore),
+		exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
+		log:    log,
+		bill:   cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
 	}
 }
 
-// seedFn inserts a ready function directly into the store for the org.
+// seedFn inserts a ready function directly into the org's per-org store — the
+// SAME file s.invoke resolves through the shared cache, so the handler sees it.
 func seedFn(t *testing.T, s *svc, org, name string) {
 	t.Helper()
-	if _, err := s.store.Upsert(context.Background(), Function{
+	store, err := s.storeFor(org)
+	if err != nil {
+		t.Fatalf("seed fn store: %v", err)
+	}
+	if _, err := store.Upsert(context.Background(), Function{
 		Org: org, Name: name, Runtime: "python", Code: "print(1)", TimeoutSec: 30, MemoryLimit: "256Mi", Status: "ready",
 	}); err != nil {
 		t.Fatalf("seed fn: %v", err)

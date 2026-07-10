@@ -6,13 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
-	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
-	// encrypted at rest; !cgo → pure-Go modernc). Importing modernc directly would
-	// double-register "sqlite" under CGO and panic at init. Blank import registers
-	// the driver — the SAME one clients/projects, clients/crm and clients/agents use.
-	_ "github.com/hanzoai/sqlite"
 )
 
 // errConflict is returned when (org,key) or (project,number) already exists;
@@ -55,30 +48,20 @@ type Issue struct {
 	UpdatedAt   int64
 }
 
-// Store is the tracker database. ONE SQLite file ({DataDir}/tracker.db) holds
-// every org's records; tenancy is the org column. MaxOpenConns(1) serializes
-// writes against the file lock (and makes the CreateIssue number allocation a
-// safe read-modify-write inside one transaction).
+// Store is one (org, project)'s tracker database — ONE SQLite file per project
+// at {DataDir}/orgs/{orgSlug}/projects/{projectSlug}/tracker.db (opened via
+// cloud.TenantDB). tracker is project-scoped: the physical boundary is the IAM
+// project, with the org column retained as defense-in-depth. MaxOpenConns(1)
+// serializes writes against the file lock (and makes the CreateIssue number
+// allocation a safe read-modify-write inside one transaction).
 type Store struct {
 	db *sql.DB
 }
 
-func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
-	}
-	db.SetMaxOpenConns(1)
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA foreign_keys=ON",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
-		}
-	}
+// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB —
+// into the tracker store, running its migration. It is the open func the shared
+// cloud.TenantStore cache calls once per project file.
+func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
