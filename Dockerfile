@@ -118,13 +118,15 @@ RUN --mount=type=secret,id=gh_token \
     test -s /catalog/hanzo/index.json
 
 FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
-# CIPHER-FORMAT FREEZE (internal/cek depends on this): the digest-pinned Alpine
-# base fixes the sqlcipher-dev version, hence the SQLCipher on-disk format
-# (cipher_compatibility) the data-plane stores are written with. An at-open
-# compat pin is infeasible (mattn keys via URI before any pragma), so this pin is
-# the control. Bumping the base across a libsqlcipher MAJOR can change the default
-# format and orphan existing encrypted stores — migrate/rewrap them before doing so.
-RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev pkgconfig binutils
+# CIPHER-FORMAT FREEZE (internal/cek depends on this). The data-plane stores are
+# SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
+# compat pin is infeasible (mattn keys via URI before any pragma), so the format
+# is frozen by pinning sqlcipher-dev to an EXACT version. A repo bump then fails
+# the build LOUDLY (never a silent prod brick); on such a failure, bump the pin
+# AND confirm internal/cek's frozen-fixture test still opens (format unchanged)
+# before shipping. A MAJOR bump (4.x → 5.x) changes the default format and would
+# orphan existing encrypted stores — migrate/rewrap them first.
+RUN apk add --no-cache ca-certificates tzdata git gcc musl-dev sqlcipher-dev=4.6.1-r0 pkgconfig binutils
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 # mattn/go-sqlite3's `libsqlite3` tag hard-codes `-lsqlite3`, but alpine's
 # sqlcipher-dev ships ONLY libsqlcipher (no libsqlite3.so). Symlink so the link

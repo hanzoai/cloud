@@ -13,6 +13,16 @@
 // KMS-injected master key; the pre-migration plaintext copy is shredded once the
 // encrypted store is proven readable. A lifted file is useless without the key.
 //
+// SCOPE / NON-GOALS. cek provides CONFIDENTIALITY at rest against the read-only
+// exposure above (no master key ⇒ no plaintext). It is NOT integrity,
+// authenticity, or anti-rollback against a PV-WRITE (node-compromise) adversary
+// who can modify the volume: the per-file id lives in the (unauthenticated) .dek
+// sidecar, so such an adversary could swap two of OUR OWN {db,.dek} pairs or
+// replay an old snapshot. That is outside the stated model and is deliberately
+// NOT defended here (a logical-id+epoch binding would add complexity for an
+// out-of-model threat); revisit only if tenant-isolation-under-node-compromise
+// is scoped in.
+//
 // ENVELOPE (the primitives live in github.com/hanzoai/sqlite/cek.go and are
 // reused verbatim — one crypto implementation, KAT-gated there):
 //
