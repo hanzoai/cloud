@@ -96,13 +96,9 @@ func (s *svc) deploy(c *zip.Ctx) error {
 	clusterErr := s.k8s.ready()
 
 	now := time.Now().Unix()
-	version, err := s.store.NextVersion(c.Context(), a.ID)
+	depID, version, err := s.nextDeployment(c.Context(), a.ID)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "version: %v", err)
-	}
-	depID, err := genID("dep")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
 	}
 
 	switch a.Source {
@@ -115,50 +111,81 @@ func (s *svc) deploy(c *zip.Ctx) error {
 	}
 }
 
-// deployImage applies the operator Service CR with the requested image tag and
-// lands the deployment "deploying" (the operator finishes the rollout async).
+// nextDeployment allocates the (id, version) for a new deployment of app appID —
+// the next monotonic per-app version plus a fresh deployment id. ONE place, shared
+// by the deploy handler and the preview/promote/rollback flows (preview.go).
+func (s *svc) nextDeployment(ctx context.Context, appID string) (string, int, error) {
+	version, err := s.store.NextVersion(ctx, appID)
+	if err != nil {
+		return "", 0, fmt.Errorf("version: %w", err)
+	}
+	depID, err := genID("dep")
+	if err != nil {
+		return "", 0, fmt.Errorf("rng: %w", err)
+	}
+	return depID, version, nil
+}
+
+// deployImage resolves the image-source app's target tag and hands off to the ONE
+// image-deploy core (deployTagCore), mapping its (deployment, status) result onto
+// the /deploy response — 202 + the deployment view on success, the honest status +
+// message on failure.
 func (s *svc) deployImage(c *zip.Ctx, org, project string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) error {
-	// (L1) Bound concurrent in-flight deploys for this org: applyLive below may park
-	// up to ~45s in waitForTenantRBAC on a cold-start / wedged operator, so a cap
-	// prevents one org piling up held request goroutines (mirrors the git build cap).
-	// Over-cap is a retryable THROTTLE, not a deploy failure — refuse with 429 BEFORE
-	// recording any attempt, since nothing was tried cluster-side.
+	tag := firstNonEmpty(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
+	image := a.ImageRepo + ":" + tag
+	d, status, err := s.deployTagCore(c.Context(), org, project, a, depID, version, now, image, tag, "image", "", clusterErr)
+	if err != nil {
+		return zip.Errorf(status, "%s", err.Error())
+	}
+	s.log.Info("deployed (image)", "org", org, "app", a.Slug, "ns", tenantNamespace(org), "image", image,
+		"actor", c.User(), "requestID", c.RequestID())
+	return c.JSON(status, toDeploymentView(d))
+}
+
+// deployTagCore is the ctx-only core that deploys an ALREADY-BUILT image ref
+// (repo:tag) to app a as one new versioned deployment, through the ONE CR writer
+// (applyLive). It is the shared mechanic behind the image deploy (deployImage) AND
+// the Vercel-style flows in preview.go (preview / promote / rollback), so none of
+// them duplicate the deploy gate, the deployment record, or the Service-CR write.
+//
+// It bounds concurrent in-flight deploys per org (the L1 gate) BEFORE recording
+// anything — over-cap is a retryable 429, never a recorded attempt — then inserts
+// the "deploying" deployment and applies the Service CR + finalizes live as ONE
+// per-app-serialized, version-monotonic step (RED LOW-1). Every failure is recorded
+// in its honest terminal state (failDeploymentCtx) and returned as a (deployment,
+// HTTP status, error) triple the HTTP caller maps to its own surface. source/commit
+// are stamped onto the row so the history reflects what was deployed (image | git,
+// and the git ref when rolling back a built commit).
+func (s *svc) deployTagCore(ctx context.Context, org, project string, a Application, depID string, version int, now int64, image, tag, source, commit string, clusterErr error) (Deployment, int, error) {
 	if !s.deployGate.acquire(org, s.k8s.limits.maxConcurrentDeploys()) {
-		return zip.Errorf(http.StatusTooManyRequests, "too many concurrent deploys for this org; retry shortly")
+		return Deployment{}, http.StatusTooManyRequests, fmt.Errorf("too many concurrent deploys for this org; retry shortly")
 	}
 	defer s.deployGate.release(org)
 
-	tag := firstNonEmpty(strings.TrimSpace(body.Tag), a.ImageTag, "latest")
-	image := a.ImageRepo + ":" + tag
-
 	d := Deployment{
 		ID: depID, Org: org, ApplicationID: a.ID, Version: version, Status: "deploying",
-		Source: "image", Image: image, CreatedAt: now, UpdatedAt: now,
+		Source: source, Commit: commit, Image: image, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.InsertDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
+	if err := s.store.InsertDeployment(ctx, d); err != nil {
+		return Deployment{}, http.StatusInternalServerError, fmt.Errorf("persist deployment: %v", err)
 	}
-
 	if clusterErr != nil {
-		return s.failDeployment(c, &d, a, http.StatusServiceUnavailable, "cluster unavailable: "+clusterErr.Error())
+		msg := "cluster unavailable: " + clusterErr.Error()
+		s.failDeploymentCtx(ctx, &d, a, http.StatusServiceUnavailable, msg)
+		return d, http.StatusServiceUnavailable, fmt.Errorf("deploy failed: %s", msg)
 	}
-
-	// Write the CR and advance the app to live as ONE per-app-serialized,
-	// version-monotonic step (shared with the git build reconciler): the CR write
-	// is jointly ordered with the live finalize under a per-app lock so two
-	// concurrent deploys can never leave the live Service CR image lagging the
-	// recorded live version (RED LOW-1). The operator reconciles the rollout.
-	advanced, superseded, err := s.applyLive(c.Context(), org, project, a, d, tag, image, time.Now().Unix())
+	advanced, superseded, err := s.applyLive(ctx, org, project, a, d, tag, image, time.Now().Unix())
 	if err != nil {
-		return s.failDeployment(c, &d, a, deployErrStatus(err), "apply Service CR: "+err.Error())
+		status := deployErrStatus(err)
+		msg := "apply Service CR: " + err.Error()
+		s.failDeploymentCtx(ctx, &d, a, status, msg)
+		return d, status, fmt.Errorf("deploy failed: %s", msg)
 	}
 	if superseded || !advanced {
 		s.log.Info("deploy superseded by a newer concurrent deploy (app already at a newer version)",
 			"org", org, "app", a.Slug, "version", version)
 	}
-	s.log.Info("deployed (image)", "org", org, "app", a.Slug, "ns", tenantNamespace(org), "image", image,
-		"actor", c.User(), "requestID", c.RequestID())
-	return c.JSON(http.StatusAccepted, toDeploymentView(d))
+	return d, http.StatusAccepted, nil
 }
 
 // deployGit is the HTTP deploy for a git-source app: it maps the shared build
