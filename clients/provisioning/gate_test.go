@@ -61,7 +61,7 @@ func TestCreate_DedicatedFailsClosedWithoutCluster(t *testing.T) {
 			if !strings.Contains(string(body), "no cluster client") {
 				t.Fatalf("%s body %s missing honest cluster-unavailable reason", kind, body)
 			}
-			rows, err := s.store.List(context.Background(), "acme", kind)
+			rows, err := s.State.store.List(context.Background(), "acme", kind)
 			if err != nil {
 				t.Fatalf("list: %v", err)
 			}
