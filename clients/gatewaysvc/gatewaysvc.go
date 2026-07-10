@@ -32,18 +32,19 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gatewaypolicy"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-type svc struct {
+// state is gatewaysvc's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store *gatewaypolicy.Store
-	log   luxlog.Logger
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires /v1/gateway/config onto app over the shared policy store.
+// Mount wires /v1/gateway/config onto app over the shared policy store. The store
+// is owned by deps (not a Base dep), so this constructs the Service value directly
+// via cloud.NewBase rather than cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("gatewaysvc.Mount: nil zip.App")
@@ -54,14 +55,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.GatewayPolicy == nil {
 		return fmt.Errorf("gatewaysvc.Mount: nil deps.GatewayPolicy")
 	}
-	s := &svc{store: deps.GatewayPolicy, log: deps.Logger.New("subsystem", "gateway")}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "gateway"), State: state{store: deps.GatewayPolicy}}
 	mounted = s
 
-	app.Get("/v1/gateway/config", s.get)
-	app.Put("/v1/gateway/config", s.put)
+	routes(app, s)
 
-	s.log.Info("gateway config plane mounted", "prefix", "/v1/gateway")
+	s.Log.Info("gateway config plane mounted", "prefix", "/v1/gateway")
 	return nil
+}
+
+// routes registers the gateway config plane.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/gateway/config", cloud.Handle(s, get))
+	app.Put("/v1/gateway/config", cloud.Handle(s, put))
 }
 
 func init() {
@@ -79,7 +85,7 @@ func init() {
 // get returns the EFFECTIVE edge policy the caller is subject to: the platform
 // CORS + per-IP cap in force, plus the caller's own OrgRPM ceiling. A SuperAdmin
 // may inspect a specific tenant with ?org=<slug>.
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
@@ -89,7 +95,7 @@ func (s *svc) get(c *zip.Ctx) error {
 			org = q
 		}
 	}
-	return c.JSON(200, s.store.Effective(org))
+	return c.JSON(200, s.State.store.Effective(org))
 }
 
 // put writes a policy scope. A body carrying any PLATFORM field (cors_origins,
@@ -97,7 +103,7 @@ func (s *svc) get(c *zip.Ctx) error {
 // it is a per-org write (org_rpm, cache_ttl_sec, cache_paths, methods) scoped to
 // the caller's own org (or, for a SuperAdmin, ?org=<slug>). The body is validated
 // (Validate) and metadata is server-stamped, never client-supplied.
-func (s *svc) put(c *zip.Ctx) error {
+func put(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
@@ -117,12 +123,12 @@ func (s *svc) put(c *zip.Ctx) error {
 		if err := in.Validate(); err != nil {
 			return zip.ErrBadRequest(err.Error())
 		}
-		saved, err := s.store.PutPlatform(c.Context(), in)
+		saved, err := s.State.store.PutPlatform(c.Context(), in)
 		if err != nil {
-			s.log.Warn("gateway platform policy write failed", "err", err)
+			s.Log.Warn("gateway platform policy write failed", "err", err)
 			return zip.Errorf(503, "policy store unavailable")
 		}
-		s.log.Info("gateway platform policy updated", "by", in.UpdatedBy,
+		s.Log.Info("gateway platform policy updated", "by", in.UpdatedBy,
 			"cors", len(saved.CORSOrigins), "per_ip_rpm", saved.PerIPRPM, "window_sec", saved.WindowSec)
 		return c.JSON(200, saved)
 	}
@@ -150,12 +156,12 @@ func (s *svc) put(c *zip.Ctx) error {
 			target = q // SuperAdmin sets a specific tenant's config.
 		}
 	}
-	saved, err := s.store.Put(c.Context(), target, orgCfg)
+	saved, err := s.State.store.Put(c.Context(), target, orgCfg)
 	if err != nil {
-		s.log.Warn("gateway org policy write failed", "org", target, "err", err)
+		s.Log.Warn("gateway org policy write failed", "org", target, "err", err)
 		return zip.Errorf(503, "policy store unavailable")
 	}
-	s.log.Info("gateway org policy updated", "org", target, "by", orgCfg.UpdatedBy,
+	s.Log.Info("gateway org policy updated", "org", target, "by", orgCfg.UpdatedBy,
 		"org_rpm", saved.OrgRPM, "cache_ttl_sec", saved.CacheTTLSec, "methods", len(saved.Methods))
-	return c.JSON(200, s.store.Effective(target))
+	return c.JSON(200, s.State.store.Effective(target))
 }
