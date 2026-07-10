@@ -88,6 +88,44 @@ func TestSealSecretEnv_BlanksAndSeals(t *testing.T) {
 	}
 }
 
+// TestSealSecretEnv_PreservesEmptySecret proves the write-only-secret contract: a
+// secret re-submitted with an EMPTY value (as the masked read echoes it) is KEPT,
+// never resealed to empty (which would wipe the KMS value) — the setEnv round-trip
+// is a no-op for untouched secrets. It also needs no KMS (no plaintext persisted).
+func TestSealSecretEnv_PreservesEmptySecret(t *testing.T) {
+	kms := newFakeKMS()
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms}}
+	// Seed an already-sealed secret, as a prior create/setEnv would have.
+	ref := kmsSecretRef("maxpower", "api", "DB_PASSWORD")
+	if err := kms.PutSecret(context.Background(), ref, []byte("hunter2")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Re-submit the masked set: the kept secret carries an empty value; a plain var
+	// is edited alongside it.
+	out, err := sealSecretEnv(s, context.Background(), "maxpower", "api", []EnvVarJSON{
+		{Key: "PUBLIC", Value: "changed", Secret: false},
+		{Key: "DB_PASSWORD", Value: "", Secret: true},
+	})
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if len(out) != 2 || out[1].Key != "DB_PASSWORD" || out[1].Value != "" || !out[1].Secret {
+		t.Fatalf("kept secret must stay in the set, blanked+secret: %+v", out)
+	}
+	// The sealed value is UNTOUCHED — not wiped to empty.
+	got, err := kms.GetSecret(context.Background(), ref)
+	if err != nil || string(got) != "hunter2" {
+		t.Fatalf("empty submission must PRESERVE the sealed value, got %q err=%v", got, err)
+	}
+
+	// Keeping a secret needs no KMS at all (nothing to seal) — must not fail closed.
+	sNoKMS := &cloud.Service[state]{Base: cloud.Base{KMS: nil}}
+	if _, err := sealSecretEnv(sNoKMS, context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "", Secret: true}}); err != nil {
+		t.Fatalf("keeping an empty secret must not require KMS: %v", err)
+	}
+}
+
 // TestSealSecretEnv_FailsClosed proves a secret with no KMS (nil client or a KMS
 // error) refuses the whole set — never a plaintext fallback.
 func TestSealSecretEnv_FailsClosed(t *testing.T) {
@@ -251,6 +289,77 @@ func TestEnsureTenantKMSAuth_ProvisionFailureStaysPending(t *testing.T) {
 	ensureTenantKMSAuth(s, context.Background(), "maxpower")
 	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
 		t.Fatal("provisioner failure must leave no creds Secret (fail-closed)")
+	}
+}
+
+// TestKMSOrgIdentity_ReadsProvisionedCredential proves the concrete tenantKMSIdentity
+// resolves a tenant's owner=<org> credential from its org-scoped KMS coordinate, and
+// fails closed (an error, never a fabricated credential) when it is not provisioned.
+func TestKMSOrgIdentity_ReadsProvisionedCredential(t *testing.T) {
+	kms := newFakeKMS()
+	id := newKMSOrgIdentity(kms)
+	if id == nil {
+		t.Fatal("newKMSOrgIdentity(kms) must return a provider when KMS is wired")
+	}
+	ctx := context.Background()
+
+	// Unprovisioned → fail closed (no fabricated identity).
+	if _, _, err := id.EnsureOrgIdentity(ctx, "maxpower"); err == nil {
+		t.Fatal("unprovisioned credential must error, never a fabricated identity")
+	}
+
+	// Provision the org's <org>-platform-kms credential into KMS, then it resolves.
+	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientId"), []byte("maxpower-platform-kms"))
+	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientSecret"), []byte("s3cr3t"))
+	cid, csec, err := id.EnsureOrgIdentity(ctx, "maxpower")
+	if err != nil {
+		t.Fatalf("provisioned credential must resolve: %v", err)
+	}
+	if cid != "maxpower-platform-kms" || csec != "s3cr3t" {
+		t.Fatalf("resolved wrong credential: id=%q secret=%q", cid, csec)
+	}
+
+	// A nil KMS plane yields a TRUE nil interface so the nil short-circuit still holds.
+	if newKMSOrgIdentity(nil) != nil {
+		t.Fatal("newKMSOrgIdentity(nil) must be a nil interface, not a typed-nil box")
+	}
+}
+
+// TestEnsureTenantKMSAuth_ProceedsWithKMSIdentity is the money test for the Mount
+// wiring: with the CONCRETE KMS-backed identity provider set (as Mount now does via
+// newKMSOrgIdentity(deps.KMS)) and the org's credential provisioned in KMS,
+// ensureTenantKMSAuth reaches the mint path and projects the per-tenant creds Secret
+// — instead of the nil short-circuit that left secret env permanently pending.
+func TestEnsureTenantKMSAuth_ProceedsWithKMSIdentity(t *testing.T) {
+	k := fakeK8s()
+	kms := newFakeKMS()
+	ctx := context.Background()
+	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientId"), []byte("maxpower-platform-kms"))
+	_ = kms.PutSecret(ctx, kmsAuthRef("maxpower", "clientSecret"), []byte("s3cr3t"))
+
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms)}}
+	ensureTenantKMSAuth(s, ctx, "maxpower")
+
+	sec, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(ctx, "platform-kms-auth", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("mint path not reached — creds Secret not projected (nil short-circuit still active?): %v", err)
+	}
+	sd, _, _ := unstructured.NestedStringMap(sec.Object, "stringData")
+	if sd["clientId"] != "maxpower-platform-kms" || sd["clientSecret"] != "s3cr3t" {
+		t.Fatalf("creds Secret must carry the org's provisioned identity, got %v", sd)
+	}
+}
+
+// TestEnsureTenantKMSAuth_KMSIdentityUnprovisionedStaysPending proves the wired
+// provider stays fail-closed when the org's credential is NOT in KMS: no creds Secret
+// is projected (operator cannot authenticate → sync pending), never a shared reader.
+func TestEnsureTenantKMSAuth_KMSIdentityUnprovisionedStaysPending(t *testing.T) {
+	k := fakeK8s()
+	kms := newFakeKMS() // no credential sealed for the org
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: kms, Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: newKMSOrgIdentity(kms)}}
+	ensureTenantKMSAuth(s, context.Background(), "maxpower")
+	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
+		t.Fatal("unprovisioned KMS credential must leave no creds Secret (fail-closed pending)")
 	}
 }
 

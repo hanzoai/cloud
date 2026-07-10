@@ -1,0 +1,5 @@
+Embed target for github.com/hanzoai/billing (Next.js static export).
+The Dockerfile billing-build stage clones that repo at BILLING_VERSION,
+runs `pnpm build`, and overlays the resulting out/ bundle here before
+the Go build. Only this file is tracked so go:embed resolves on a fresh
+clone; every other artifact is rebuilt in CI.
