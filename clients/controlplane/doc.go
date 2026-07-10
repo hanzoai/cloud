@@ -88,8 +88,11 @@
 //	              four real threshold legs (BLS/Pulsar/Corona/Magnetar).
 //	              (Verification likewise moves from the structural
 //	              QuasarCert.Verify to the cryptographic VerifyWithRealKeys.)
-//	ShareCustody  seam in custody.go. Stub: in-memory sealed shares. Real
-//	              drop-in: KMS-sealed per-pod share custody (KMSSecret CRD).
+//	ShareCustody  seam in custody.go. The per-pod IDENTITY key is now a REAL
+//	              random ML-DSA-65 keypair with asymmetric PoP verify (seam a,
+//	              landed). Still stub: it is in-memory (not KMS-sealed) and the
+//	              z-share is seed-derived. Real drop-in: KMS-sealed per-pod share
+//	              custody (KMSSecret CRD) + write-fence — seam b.
 //	Transport     seam in transport.go. Stub: in-memory broadcast bus. Real
 //	              drop-in: ZAP messaging.
 //	ControlDB     seam in placement.go. Stub: in-memory map. Real drop-in:
@@ -108,12 +111,16 @@
 // and the apply-boundary fork gate (now ParentRoot-checked); the self-composed
 // cert check is documented structural-only.
 //
-// CLASS-B CAVEAT (must internalize): in the stub every signing secret is derived
-// from a PUBLIC cluster seed, so an attacker can reconstruct any voter's leg. The
-// byzantine-safety tests are therefore only MEANINGFUL once real crypto lands —
-// the two skipped TestRed_B_* cases document this and MUST go green then (and
-// TestSafety_RogueAndForgedLegs_Rejected must then forge a correctly-derived leg,
-// not a bit-flipped one).
+// CLASS-B — PoP DISCHARGED (seam a): the per-pod IDENTITY key is now a fresh
+// random ML-DSA-65 keypair (custody.go), never seed-derived, so proof-of-
+// possession is unforgeable. The byzantine-safety tests are therefore now
+// MEANINGFUL and GREEN: the two TestRed_B_* cases are un-skipped and assert the
+// closed defence, and TestSafety_RogueAndForgedLegs_Rejected forges a
+// correctly-derived leg (a valid ML-DSA signature under an attacker-generated
+// key, not a bit-flip) and still rejects it. RESIDUAL (closes in seam c): the
+// z-share / threshold-signing material is still seed-derived, so the cert crypto
+// (SignatureCore / composer) stays stub and ProductionBCCSigningReady() stays
+// false until the real cert lands.
 //
 // # Containment (closed)
 //
@@ -150,8 +157,10 @@
 // # Increment-2 security work (before this guards a real KMS shard lease)
 //
 //   - Real distributed DKG across pods (not in-process, not seed-derived shares)
-//   - asymmetric ML-DSA identity keys, so leg/commit proof-of-possession is
-//     unforgeable and the byzantine-safety suite regains meaning.
+//   - [DONE — seam a] asymmetric ML-DSA-65 identity keys
+//     (github.com/luxfi/crypto/mldsa), so leg/commit proof-of-possession is
+//     unforgeable and the byzantine-safety suite regains meaning (the two
+//     TestRed_B_* cases are un-skipped and green).
 //   - Authenticated graceful handoff (holder self-resignation) and a KMS
 //     write-fence: reassigning a LIVE writer requires proof its prior lease epoch
 //     was revoked at the data plane FIRST (fence-before-reassign), tied to the
