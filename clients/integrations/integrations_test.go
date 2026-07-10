@@ -527,10 +527,10 @@ func TestIntegrationsGithubScaffoldCallbackFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("nonce: %v", err)
 	}
-	if err := mounted.store.PutNonce(ctx, nonce, "acme", "github"); err != nil {
+	if err := mounted.State.store.PutNonce(ctx, nonce, "acme", "github"); err != nil {
 		t.Fatalf("put nonce: %v", err)
 	}
-	state, err := mounted.sign("acme", "github", nonce)
+	state, err := sign(mounted, "acme", "github", nonce)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

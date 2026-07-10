@@ -13,6 +13,7 @@ import (
 	"time"
 
 	fiber "github.com/gofiber/fiber/v3"
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 )
 
@@ -23,7 +24,7 @@ import (
 type cockpitFakes struct {
 	iam      *httptest.Server
 	commerce *httptest.Server
-	svc      *svc
+	service  *cloud.Service[state]
 	do       func(method, path string, hdr map[string]string, body string) (*http.Response, []byte)
 
 	mu          sync.Mutex
@@ -74,7 +75,10 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		},
 	}
 	// users per org (owner/name): forbidden read live from f.forbidden.
-	type u struct{ owner, name, email, key string; admin bool }
+	type u struct {
+		owner, name, email, key string
+		admin                   bool
+	}
 	users := map[string][]u{
 		"acme":   {{"acme", "anna", "anna@acme.test", "hk-anna-secret", true}, {"acme", "bob", "bob@acme.test", "", false}},
 		"globex": {{"globex", "gwen", "gwen@globex.test", "hk-gwen-secret", true}},
@@ -194,7 +198,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 	}))
 
 	_, s, fa := mountSvc(t, f.iam.URL, f.commerce.URL, "")
-	f.svc = s
+	f.service = s
 	f.do = func(method, path string, hdr map[string]string, body string) (*http.Response, []byte) {
 		t.Helper()
 		var rdr io.Reader
@@ -262,7 +266,7 @@ func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 		t.Fatalf("SECRET LEAK: the access key value appears in the customer detail response")
 	}
 	var env struct {
-		Data customerDetail `json:"data"`
+		Data customerDetailData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -303,7 +307,7 @@ func TestGrantCredit_DepositLandsAndAudited(t *testing.T) {
 		t.Fatalf("audit open: %v", err)
 	}
 	defer rec.Close()
-	f.svc.auditStore = rec
+	f.service.State.auditStore = rec
 
 	resp, body := f.do("POST", "/v1/admin/customers/acme/credit", adminHdr(), `{"amountCents":5000,"reason":"support comp"}`)
 	if resp.StatusCode != 200 {
@@ -386,7 +390,7 @@ func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 	f := newCockpitFakes(t)
 	rec, _ := audit.Open(":memory:", nil)
 	defer rec.Close()
-	f.svc.auditStore = rec
+	f.service.State.auditStore = rec
 
 	// Suspend acme.
 	resp, body := f.do("POST", "/v1/admin/customers/acme/suspend", adminHdr(), "")
@@ -402,7 +406,9 @@ func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 
 	// A re-list shows acme suspended (all users forbidden).
 	_, lb := f.do("GET", "/v1/admin/customers", adminHdr(), "")
-	var env struct{ Data []customerRow `json:"data"` }
+	var env struct {
+		Data []customerRow `json:"data"`
+	}
 	_ = json.Unmarshal(lb, &env)
 	for _, c := range env.Data {
 		if c.Org == "acme" && c.Status != "suspended" {
