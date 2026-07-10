@@ -1,0 +1,82 @@
+# `clients/gojabase` — the reusable read-write-Base goja host
+
+`gojabase` is the **one-and-only-one-way** to run a Hanzo subsystem's
+self-contained JS/TS business logic (a goja bundle exposing `globalThis.handle`)
+in-process **with persistence over per-tenant Base/SQLite**. It is the
+storage-bearing sibling of [`clients/goja`](../goja) (the pure JS engine that
+`plans`/`pricing` use with a read-only catalog).
+
+captable (#97) is the pilot. **esign (#100) and dataroom (#101) reuse this
+package unchanged** — it carries ZERO domain logic (no cap table, no signatures,
+no rooms), only the engine + the Base bridge.
+
+## What a subsystem provides
+
+```go
+host, err := gojabase.New(gojabase.Config{
+    Name:    "captable",          // names the goja host AND the data subdir
+    Bundle:  bundleBytes,         // the go:embed'd bundle (globalThis.handle)
+    Schema:  schemaDDL,           // per-tenant SQLite DDL (CREATE TABLE IF NOT EXISTS …)
+    DataDir: deps.DataDir,        // files land at {DataDir}/{Name}/{tenantSlug}.db
+    OnOpen:  seedRow,             // optional per-tenant seed, run once after migrate
+})
+```
+
+Then, in each zip route handler, resolve the tenant from the **validated**
+principal and dispatch:
+
+```go
+org, ok := principal.Tenant(c)          // gojabase does NOT authenticate; the leaf does
+if !ok { return zip.ErrForbidden("X-Org-Id required") }
+resp, err := host.Dispatch(c.Context(), org, gojabase.Request{
+    Route:  "stakeholders.add",
+    Params: map[string]string{"id": c.Param("id")},
+    Body:   decodedJSONBody,             // any (map / slice / scalar), or nil for reads
+})
+c.SetHeader("Content-Type", "application/json")
+return c.Bytes(resp.Status, resp.Body)   // resp is {Status int, Body json.RawMessage}
+```
+
+## What the bundle sees (the host contract)
+
+gojabase injects these native globals onto the runtime **per dispatch**, bound to
+the tenant's DB + a per-request transaction:
+
+```
+globalThis.__db.query(sql, args)  -> row objects           (SELECT; TEXT→string)
+globalThis.__db.exec(sql, args)   -> { changes, lastId }    (INSERT/UPDATE/DELETE)
+globalThis.__newId()              -> collision-resistant id (crypto/rand, 128-bit)
+globalThis.__now()                -> unix milliseconds
+
+globalThis.handle({ route, params, query, orgId, body }) -> { status, body }
+```
+
+`orgId` is the tenant passed to `Dispatch` — the bundle uses it to scope rows
+(defence in depth on top of the per-tenant file). `args` is a positional array
+bound to `?` placeholders. The Go host owns the schema (migrations); the bundle
+issues SQL against it — column names are the coupling, so keep them in sync.
+
+## Guarantees
+
+- **Per-tenant isolation** — one SQLite file per org (`{DataDir}/{Name}/{slug}.db`),
+  opened lazily, migrated once, cached. `slugify` contains any path tricks to a
+  single filename segment, so a tenant key can never traverse the data tree.
+- **Atomicity** — each `Dispatch` runs `handle` inside ONE transaction that
+  **commits iff** the response status `< 400` and `handle` did not throw;
+  otherwise it **rolls back**. Multi-statement mutations (e.g. a share transfer:
+  shrink source + insert target) are all-or-nothing for free, and a validation
+  400 leaves the DB untouched. `MaxOpenConns(1)` serializes writes per tenant.
+- **No JS-visible transaction API** — the per-request transaction removes the
+  need for one; bundles just call `query`/`exec`.
+
+## Leaf wiring (register + stage)
+
+Register the leaf and blank-import it in `subsystems/subsystems.go`, staged
+behind `CLOUD_ENABLE` while the standalone service keeps authority:
+
+```go
+func init() { cloud.RegisterWithShutdown("captable", 133, cloud.Typed(Mount), shutdown) }
+// + add "captable" to config.stagedSubsystems
+```
+
+See `clients/captable` for the complete reference leaf (schema, seed, routes).
