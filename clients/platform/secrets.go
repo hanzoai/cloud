@@ -174,11 +174,25 @@ func parseEnv(envJSON string) []EnvVarJSON {
 // NOTHING is stored — a plaintext secret never lands in the DB as a fallback. The
 // returned error never contains a secret value (only the key name), so a 4xx/5xx
 // body cannot leak the plaintext.
+//
+// Secrets are WRITE-ONLY: toAppView masks a secret's value to "" on read, so a
+// client that edits env re-submits kept secrets with an EMPTY value. An empty
+// secret value therefore means "keep the already-sealed value" — it is PRESERVED,
+// never re-sealed to empty (which would wipe the KMS secret). Only a non-empty
+// value seals (and so requires KMS). This makes the masked-read → setEnv round-trip
+// a no-op for untouched secrets instead of a data-loss footgun.
 func (s *svc) sealSecretEnv(ctx context.Context, org, appSlug string, env []EnvVarJSON) ([]EnvVarJSON, error) {
 	out := make([]EnvVarJSON, 0, len(env))
 	for _, e := range env {
 		if !e.Secret {
 			out = append(out, e)
+			continue
+		}
+		if e.Value == "" {
+			// Write-only secret kept as-is: the value already lives in KMS (masked to
+			// "" on read). Preserve it — do NOT reseal (an empty reseal would wipe it),
+			// and do NOT require KMS (no plaintext is being persisted here).
+			out = append(out, EnvVarJSON{Key: e.Key, Value: "", Secret: true})
 			continue
 		}
 		if s.kms == nil {
