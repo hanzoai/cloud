@@ -1,0 +1,21 @@
+Hanzo Commerce
+Copyright (c) 2024 Hanzo AI, Inc.
+
+Hanzo Commerce is original software developed by Hanzo AI, Inc. It bundles the
+following vendored third-party components, whose copyright notices are retained
+in their respective source files:
+
+This product includes software from btcd/btcec (https://github.com/btcsuite/btcd), licensed under ISC:
+
+    Copyright (c) 2013-2022 The btcsuite developers
+    Copyright (c) 2015-2022 The Decred developers
+    Copyright (c) 2011 ThePiachu. All rights reserved.
+    Copyright (c) 2013-2016 Dave Collins
+
+This product includes software from the Go standard library (https://github.com/golang/go), licensed under the BSD 3-Clause License:
+
+    Copyright (c) 2010 The Go Authors. All rights reserved.
+
+This product includes software from go-ethereum (https://github.com/ethereum/go-ethereum), licensed under LGPL-3.0:
+
+    Copyright 2017 The go-ethereum Authors
