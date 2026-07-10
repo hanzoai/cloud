@@ -1,4 +1,4 @@
-package console
+package account
 
 import (
 	"encoding/json"
@@ -109,7 +109,7 @@ var alice = map[string]string{"X-User-Id": "alice", "X-Org-Id": "acme"}
 func TestTopup_NotConfigured_501(t *testing.T) {
 	setTopupEnv(t, "", "", "http://rpc.invalid", "http://commerce.invalid")
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
 	if code != http.StatusNotImplemented {
 		t.Fatalf("HUSD unconfigured: want 501, got %d", code)
 	}
@@ -120,7 +120,7 @@ func TestTopup_RequiresValidatedPrincipal(t *testing.T) {
 	com := &fakeCommerce{}
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", nil, `{"txHash":"`+tTxHash+`"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", nil, `{"txHash":"`+tTxHash+`"}`)
 	if code != http.StatusForbidden {
 		t.Fatalf("no principal: want 403, got %d", code)
 	}
@@ -131,7 +131,7 @@ func TestTopup_BadTxHash_400(t *testing.T) {
 	com := &fakeCommerce{}
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice, `{"txHash":"0xnothex"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice, `{"txHash":"0xnothex"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("bad txHash: want 400, got %d", code)
 	}
@@ -143,7 +143,7 @@ func TestTopup_HappyPath_VerifiesAndCredits(t *testing.T) {
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
 
-	code, body := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice,
+	code, body := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
 		`{"txHash":"`+tTxHash+`","fromAddress":"`+tSender+`"}`)
 	if code != http.StatusOK {
 		t.Fatalf("topup: want 200, got %d (%s)", code, body)
@@ -180,7 +180,7 @@ func TestTopup_IDOR_CreditsCallerNotBodyUserId(t *testing.T) {
 
 	// The body tries to credit "victim/root"; the handler MUST ignore it and credit
 	// the validated caller (acme/alice).
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice,
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
 		`{"txHash":"`+tTxHash+`","userId":"victim/root"}`)
 	if code != http.StatusOK {
 		t.Fatalf("topup: want 200, got %d", code)
@@ -195,7 +195,7 @@ func TestTopup_NotMined_400(t *testing.T) {
 	com := &fakeCommerce{}
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("not mined: want 400, got %d", code)
 	}
@@ -209,7 +209,7 @@ func TestTopup_FailedTx_400(t *testing.T) {
 	com := &fakeCommerce{}
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("failed tx: want 400, got %d", code)
 	}
@@ -221,7 +221,7 @@ func TestTopup_NoTransferToTreasury_400(t *testing.T) {
 	com := &fakeCommerce{}
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice, `{"txHash":"`+tTxHash+`"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("non-treasury transfer: want 400, got %d", code)
 	}
@@ -233,7 +233,7 @@ func TestTopup_SenderMismatch_400(t *testing.T) {
 	setTopupEnv(t, tHusd, tTreasury, rpc.server(t).URL, com.server(t).URL)
 	app := mountBrand(t, "hanzo")
 	// Claims a different fromAddress than the on-chain sender → rejected.
-	code, _ := callH(t, app, http.MethodPost, "/v1/console/topup/wallet", alice,
+	code, _ := callH(t, app, http.MethodPost, "/v1/commerce/topup/wallet", alice,
 		`{"txHash":"`+tTxHash+`","fromAddress":"`+tOther+`"}`)
 	if code != http.StatusBadRequest {
 		t.Fatalf("sender mismatch: want 400, got %d", code)

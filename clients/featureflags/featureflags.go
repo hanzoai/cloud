@@ -16,7 +16,7 @@
 // TOKEN unset) OR unreachable, evaluation degrades to the env fallback -> literal
 // default — exactly today's behavior, zero regression. No secret is read here; the
 // project token is injected from KMS into the process env by the deployment (the same
-// pattern clients/console/waitlist.go uses for WAITLIST_URL), never hardcoded.
+// WAITLIST_URL env convention clients/base's waitlist plugin reads), never hardcoded.
 package featureflags
 
 import (

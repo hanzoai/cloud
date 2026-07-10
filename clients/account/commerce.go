@@ -34,7 +34,7 @@
 // this bridge can NOT tunnel to /v1/billing (its own subject-scoped bridge), /v1/checkout
 // (the money path), or /v1/_/commerce/tenants (tenant admin) — mirroring console's
 // proxy-allow.ts allowCommerceSurface.
-package console
+package account
 
 import (
 	"net/http"
