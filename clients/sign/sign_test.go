@@ -279,3 +279,31 @@ func TestTenantIsolation(t *testing.T) {
 		t.Fatalf("bogus token want 401, got %d", code)
 	}
 }
+
+// TestSignerProductionGate proves M9: a production env REFUSES to boot with a
+// self-signed cert (which would seal legal documents with an untrusted seal) and
+// requires the KMS-custodied CLOUD_SIGN_CERT_PEM/KEY_PEM; dev envs still self-sign.
+func TestSignerProductionGate(t *testing.T) {
+	// dev/unset env → self-signed is allowed (zero-config dev default).
+	for _, env := range []string{"", "devnet", "testnet"} {
+		if _, err := newSigner(t.TempDir(), env); err != nil {
+			t.Fatalf("dev env %q should self-sign, got %v", env, err)
+		}
+	}
+	// production-like env WITHOUT a KMS cert → refuse to boot.
+	for _, env := range []string{"production", "prod", "mainnet", "main", "live"} {
+		if _, err := newSigner(t.TempDir(), env); err == nil {
+			t.Fatalf("env %q must refuse a self-signed signing cert", env)
+		}
+	}
+	// production WITH a KMS-custodied cert (base64 PEM) → boots.
+	_, certPEM, keyPEM, err := generateSelfSigned()
+	if err != nil {
+		t.Fatalf("generate test pair: %v", err)
+	}
+	t.Setenv("CLOUD_SIGN_CERT_PEM", base64.StdEncoding.EncodeToString(certPEM))
+	t.Setenv("CLOUD_SIGN_KEY_PEM", base64.StdEncoding.EncodeToString(keyPEM))
+	if _, err := newSigner(t.TempDir(), "production"); err != nil {
+		t.Fatalf("production with a KMS cert should boot, got %v", err)
+	}
+}

@@ -153,7 +153,7 @@ func (rm *ResourceMeter) Meter(org, project, kind string, amountCents int64, req
 // richly. Like Meter it is fire-and-forget on a background context and a no-op
 // when billing is unconfigured or AmountCents<=0. kind is for the failure log.
 func (rm *ResourceMeter) MeterUsage(org, kind string, u metering.Usage) {
-	if !rm.Enabled() || u.AmountCents <= 0 {
+	if !rm.Enabled() || (u.AmountCents <= 0 && u.AmountMicros <= 0) {
 		return
 	}
 	u.User = org // per-ORG billing: ledger keyed on the org slug.

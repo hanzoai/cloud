@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud/role"
 )
@@ -81,6 +82,30 @@ type Config struct {
 	// validated in Serve; defaults to Writer so an unset variable is byte-identical
 	// to today's single-pod deployment.
 	Role role.Role
+
+	// WriterURL is the base URL of the single writer (CLOUD_WRITER_URL, e.g.
+	// http://cloud-writer.hanzo.svc:8000). A Reader forwards EVERY request here —
+	// it opens no stores and is a transparent, always-ready edge that absorbs the
+	// writer's rollout gap (see reader_proxy.go). Required when Role==Reader;
+	// ignored by a Writer.
+	WriterURL string
+
+	// ReaderRetryBudget bounds how long a Reader retries a request the writer
+	// could not yet accept (connection refused / no ready endpoint) during a
+	// writer roll, before returning 502. Dial-only retry (the request never
+	// reached the writer) keeps a non-idempotent POST safe. CLOUD_READER_RETRY_BUDGET
+	// (Go duration, default 25s).
+	ReaderRetryBudget time.Duration
+
+	// WriterLease, when true (CLOUD_WRITER_LEASE), makes a Writer take an
+	// exclusive fcntl lease on {DataDir}/.writer.lock BEFORE opening the RWO
+	// stores and release it LAST at shutdown (after every store is closed). This
+	// serializes a surge/overlap roll (RollingUpdate maxUnavailable:1 +
+	// same-node podAffinity) so the new writer opens the exclusive-lock ZapDB/
+	// audit stores only after the old one released them — never a double-open.
+	// Default OFF, so an unset variable is byte-identical to today's Recreate
+	// single-writer (which never overlaps and needs no lease).
+	WriterLease bool
 
 	// ListenAddr is the public HTTP listener (default :8080).
 	ListenAddr string
@@ -288,15 +313,18 @@ func LoadConfig() *Config {
 		Replicas: getenvInt("CLOUD_REPLICAS", 0),
 		Domain:   getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
 		// IAMIssuer left empty here; resolved from Brand below unless pinned.
-		IAMIssuer:       getenv("CLOUD_IAM_ISSUER", ""),
-		AdminOrg:        getenv("IAM_ADMIN_ORG", "admin"),
-		JWKSURL:         getenv("CLOUD_JWKS_URL", ""),
-		KMSMasterKeyRef: getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
-		KMSMPCAddr:      getenv("CLOUD_KMS_MPC_ADDR", ""),
-		KMSMPCVaultID:   getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
-		DataDir:         getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
-		PaymentsZAPAddr: getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
-		VaultZAPAddr:    getenv("CLOUD_VAULT_ZAP_ADDR", ""),
+		IAMIssuer:         getenv("CLOUD_IAM_ISSUER", ""),
+		AdminOrg:          getenv("IAM_ADMIN_ORG", "admin"),
+		JWKSURL:           getenv("CLOUD_JWKS_URL", ""),
+		KMSMasterKeyRef:   getenv("CLOUD_KMS_MASTER_KEY_REF", ""),
+		KMSMPCAddr:        getenv("CLOUD_KMS_MPC_ADDR", ""),
+		KMSMPCVaultID:     getenv("CLOUD_KMS_MPC_VAULT_ID", ""),
+		DataDir:           getenv("CLOUD_DATA_DIR", "/var/lib/cloud"),
+		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
+		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
+		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
+		PaymentsZAPAddr:   getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
+		VaultZAPAddr:      getenv("CLOUD_VAULT_ZAP_ADDR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
 		CommerceHTTPURL:      getenv("CLOUD_COMMERCE_HTTP_URL", ""),
 		CommerceServiceToken: getenv("COMMERCE_SERVICE_TOKEN", ""),
@@ -581,6 +609,21 @@ func getenvBoolDefault(key string, dflt bool) bool {
 	default:
 		return false
 	}
+}
+
+// getenvDuration reads key as a Go duration (e.g. "25s", "1m"), returning dflt
+// when unset, blank, or unparseable (a malformed override can never silently
+// zero a timeout).
+func getenvDuration(key string, dflt time.Duration) time.Duration {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return dflt
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return dflt
+	}
+	return d
 }
 
 // getenvInt reads key as a base-10 int, returning dflt when unset, blank, or

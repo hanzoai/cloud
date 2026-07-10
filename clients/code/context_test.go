@@ -12,7 +12,7 @@ func seededEngine(t *testing.T, repo string) *engine {
 	if err != nil {
 		t.Fatalf("storeFor: %v", err)
 	}
-	if _, err := s.indexRepo(context.Background(), st, repo, []fileInput{
+	if _, err := s.indexRepo(context.Background(), "acme", "", st, repo, []fileInput{
 		{Path: "greeter.go", Content: goFixture},
 	}, false); err != nil {
 		t.Fatalf("indexRepo: %v", err)

@@ -436,7 +436,13 @@ type Usage struct {
 	Org         string `json:"-"`               // routed via X-Org-Id, not the body.
 	Currency    string `json:"currency,omitempty"`
 	AmountCents int64  `json:"amount"`
-	Model       string `json:"model,omitempty"`
+	// AmountMicros is the debit in micro-USD (1e6 = $1), carrying sub-cent
+	// precision so a tiny per-call inference cost meters EXACTLY instead of
+	// rounding to zero (and slipping through unbilled). Commerce prefers it over
+	// AmountCents (usage.go: effMicros); when set, AmountCents may be 0. Zero/absent
+	// → commerce falls back to AmountCents*10000.
+	AmountMicros int64  `json:"amountMicros,omitempty"`
+	Model        string `json:"model,omitempty"`
 	Provider    string `json:"provider,omitempty"`
 	// Project and Service attribute this debit to a scope so commerce records the
 	// dimensions the per-scope spend cap sums over (issue #70). Empty = the
@@ -473,7 +479,7 @@ type RecordResult struct {
 // Provider is the service name doing the metering when no model/provider is
 // natural (e.g. "search", "functions"); set it on Usage.Provider.
 func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
-	if !c.Enabled() || u.AmountCents <= 0 {
+	if !c.Enabled() || (u.AmountCents <= 0 && u.AmountMicros <= 0) {
 		return nil, nil
 	}
 	if strings.TrimSpace(u.User) == "" {
