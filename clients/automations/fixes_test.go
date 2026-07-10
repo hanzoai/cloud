@@ -105,16 +105,16 @@ func TestRunStartBookkeepingIdempotent(t *testing.T) {
 	ctx := context.Background()
 	in := RunStartInput{RunID: "r1", Owner: "acme", FlowID: "f1", FlowVersionID: "v1"}
 
-	if err := mounted.recordRunStart(ctx, in); err != nil {
+	if err := recordRunStart(mounted, ctx, in); err != nil {
 		t.Fatalf("recordRunStart 1: %v", err)
 	}
-	if err := mounted.recordRunStart(ctx, in); err != nil {
+	if err := recordRunStart(mounted, ctx, in); err != nil {
 		t.Fatalf("recordRunStart 2 (retry): %v", err)
 	}
 	if n := auditCount(t, rec, "acme", "automations.flow.run"); n != 1 {
 		t.Fatalf("recordRunStart double-billed: %d flow.run records, want 1", n)
 	}
-	runs, _ := mounted.store.ListRuns(ctx, "acme", "", 10)
+	runs, _ := mounted.State.store.ListRuns(ctx, "acme", "", 10)
 	if len(runs) != 1 || runs[0].ID != "r1" {
 		t.Fatalf("want exactly one run row r1, got %+v", runs)
 	}
@@ -212,7 +212,7 @@ func TestFlowStepCapRejected(t *testing.T) {
 func TestResumePayloadBounded(t *testing.T) {
 	app := newApp(t)
 	ctx := context.Background()
-	if _, err := mounted.store.CreateRun(ctx, FlowRun{ID: "r1", Org: "acme", FlowID: "f1", WorkflowID: "r1", Status: RunPaused, Created: 1, Updated: 1}); err != nil {
+	if _, err := mounted.State.store.CreateRun(ctx, FlowRun{ID: "r1", Org: "acme", FlowID: "f1", WorkflowID: "r1", Status: RunPaused, Created: 1, Updated: 1}); err != nil {
 		t.Fatalf("seed run: %v", err)
 	}
 	body := `{"note":"` + strings.Repeat("x", maxResumePayload+1) + `"}`
