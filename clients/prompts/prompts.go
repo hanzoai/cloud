@@ -336,7 +336,7 @@ func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 // "admin" bucket: a global admin operating on per-org data carries an explicit
 // org (SanitizeIdentity sets X-Org-Id on the admin path), so an empty org is a
 // true 403, never a bucket a real org named "admin"/"Admin" could land in.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // cleanList trims, drops empties, caps each element, and de-dups a taxonomy
 // slice so labels/tags stay tidy identifiers.

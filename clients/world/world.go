@@ -13,7 +13,7 @@
 //	GET /v1/world/stream     SSE live refresh (ZAP-native)         -> event: news
 //
 // TENANT ISOLATION is enforced SERVER-SIDE on every request. The (org, project)
-// tuple is principal.Tenant + principal.Project (the values SanitizeIdentity minted
+// tuple is principal.Org + principal.Project (the values SanitizeIdentity minted
 // from the VALIDATED bearer, HIP-0026) — never a query param, body, or client
 // header. Every store statement carries `WHERE org=? AND project=?`; the SSE bus
 // filters on org and the stream loop drops other projects. A request with no

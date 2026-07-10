@@ -24,7 +24,7 @@
 //     bearer/cookie, likewise VERIFIED. Every account-store query filters by org;
 //     selectWorkspace resolves the workspace scoped to (org, slug) so a foreign
 //     tenant's slug is unresolvable.
-//   - bots read routes: org = principal.Tenant(c) — the value the identity
+//   - bots read routes: org = principal.Org(c) — the value the identity
 //     middleware minted from the VALIDATED IAM owner claim (HIP-0026) — and never
 //     a client X-Org-Id.
 //

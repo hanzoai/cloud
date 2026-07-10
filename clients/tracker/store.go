@@ -17,7 +17,7 @@ var (
 
 // Project is an org-scoped issue tracker project (a Linear "team"). Its Key is
 // the org-unique, uppercase handle that both routes the URL (/v1/tracker/
-// projects/:key) AND prefixes every issue identifier (KEY-<number>). Tenant
+// projects/:key) AND prefixes every issue identifier (KEY-<number>). Org
 // isolation is the org column, filtered on every query.
 type Project struct {
 	ID          string
@@ -50,7 +50,7 @@ type Issue struct {
 
 // Store is one (org, project)'s tracker database — ONE SQLite file per project
 // at {DataDir}/orgs/{orgSlug}/projects/{projectSlug}/tracker.db (opened via
-// cloud.TenantDB). tracker is project-scoped: the physical boundary is the IAM
+// cloud.OrgDB). tracker is project-scoped: the physical boundary is the IAM
 // project, with the org column retained as defense-in-depth. MaxOpenConns(1)
 // serializes writes against the file lock (and makes the CreateIssue number
 // allocation a safe read-modify-write inside one transaction).
@@ -58,9 +58,9 @@ type Store struct {
 	db *sql.DB
 }
 
-// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB —
+// openStore wraps an org DB — already opened + pragma'd by cloud.OrgDB —
 // into the tracker store, running its migration. It is the open func the shared
-// cloud.TenantStore cache calls once per project file.
+// cloud.OrgStore cache calls once per project file.
 func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {

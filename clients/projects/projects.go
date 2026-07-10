@@ -5,7 +5,7 @@
 // Why it exists: hanzo.app (the builder) and console.hanzo.ai (the Projects
 // module) must show the SAME projects for the same org. They do, because both
 // call this one /v1/projects surface through the gateway, which mints the
-// tenant (X-Org-Id) from the validated IAM JWT (HIP-0111). There is no second
+// org (X-Org-Id) from the validated IAM JWT (HIP-0111). There is no second
 // copy of project state anywhere — this SQLite-backed store is the source of
 // truth; the builder keeps only per-project working state (chat, draft files)
 // in Hanzo Base.
@@ -72,7 +72,7 @@ type state struct {
 	cf    *sites.Purger
 	// operatorOrgs may bind CUSTOM domains to their sites in addition to a global
 	// admin — the platform operator (the deployment's own brand org) manages
-	// customer domains until per-tenant DNS-ownership verification is wired here.
+	// customer domains until per-org DNS-ownership verification is wired here.
 	// Env CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) overrides; default is the
 	// brand org (hanzo). A bound domain only SERVES once its owner points DNS at
 	// this edge, so binding without DNS control is inert — the real gate is DNS.
@@ -179,7 +179,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// Inject the store as the site server's slug→project resolver. This is what
 	// lights up `<slug>.hanzo.app` (host-routed at the compose root, ahead of the
 	// API pipeline) — it resolves the validated subdomain to its authoritative
-	// tenant + S3 prefix through THIS store. Set once at mount; the site middleware
+	// org + S3 prefix through THIS store. Set once at mount; the site middleware
 	// reads it per request.
 	sites.SetResolver(siteResolver{store: store})
 
@@ -187,7 +187,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// boundary (cloud.SanitizeIdentity), so a forged cross-org X-Project-Id is
 	// refused before any subsystem reads it. Same inversion as sites.SetResolver —
 	// cloud does not import projects.
-	cloud.RegisterTenantScopeResolver(projectScopeResolver{store: store})
+	cloud.RegisterOrgScopeResolver(projectScopeResolver{store: store})
 
 	routes(app, s)
 
@@ -248,7 +248,7 @@ type createReq struct {
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -314,7 +314,7 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 }
 
 func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -330,7 +330,7 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -356,7 +356,7 @@ type updateReq struct {
 }
 
 func update(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -417,7 +417,7 @@ func update(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func del(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -453,12 +453,12 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 
 func slugParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("slug"))) }
 
-// tenant resolves the org for a request. Empty org is allowed only for admins
+// org resolves the org for a request. Empty org is allowed only for admins
 // (bucketed under the literal "admin" org), matching the provisioning control
 // plane. The gateway strips client-supplied identity headers and sets X-Org-Id
 // / X-User-IsAdmin only on the JWT-validated path (HIP-0026), so neither is
 // spoofable from the edge.
-func tenant(c *zip.Ctx) (string, bool) {
+func org(c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable data path
 	}
