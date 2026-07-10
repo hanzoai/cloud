@@ -92,14 +92,39 @@ type LicenseEntitlement struct {
 	ExpiresUnix int64
 }
 
-// ChatRequest mirrors the AI subsystem's chat-completion request.
+// ChatRequest mirrors the AI subsystem's chat-completion request. Org and Project
+// are the billing SCOPE — who this inference is metered against. The metering
+// decorator wrapping deps.AI reads them to authorize the org's balance/budget
+// before the call and debit its billing account after, so no inference runs
+// unattributed. Empty Org denotes an internal/system call with no customer to bill
+// (executed, recorded unattributed) — a customer path always sets it.
 type ChatRequest struct {
-	Model  string
-	Prompt string
+	Model   string
+	Prompt  string
+	Org     string
+	Project string
 }
 
-// ChatResponse mirrors the AI subsystem's chat-completion response.
-type ChatResponse struct{ Content string }
+// ChatResponse mirrors the AI subsystem's chat-completion response. The token
+// counts are surfaced so the metering decorator debits the EXACT inference cost
+// rather than an estimate; they are zero when the gateway omits usage.
+type ChatResponse struct {
+	Content          string
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+}
+
+// EmbedRequest is the embeddings call. Inputs are embedded in order; the result is
+// one vector per input, aligned by index. Org and Project are the billing SCOPE,
+// identical in meaning to ChatRequest's, so embeddings meter and observe through
+// the same org/project-aligned path.
+type EmbedRequest struct {
+	Model   string
+	Inputs  []string
+	Org     string
+	Project string
+}
 
 // Counter / Timing / Span are the canonical o11y handles.
 type Counter interface{ Inc(n int64) }
@@ -176,11 +201,11 @@ type CommerceClient interface {
 type AIClient interface {
 	ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
 	// Embed returns one vector per input text, aligned by index, from the SAME
-	// gateway + credential as ChatCompletion. Embeddings therefore authenticate
-	// and meter through the ONE org/project-aligned path — never a static
-	// side-channel key. model is the embeddings model id (e.g. "bge-m3");
-	// an empty inputs slice returns (nil, nil).
-	Embed(ctx context.Context, model string, inputs []string) ([][]float32, error)
+	// gateway + credential as ChatCompletion. Embeddings therefore authenticate,
+	// meter, and observe through the ONE org/project-aligned path — never a static
+	// side-channel key. The EmbedRequest carries the billing scope (Org/Project)
+	// exactly like ChatRequest; an empty Inputs slice returns (nil, nil).
+	Embed(ctx context.Context, req *EmbedRequest) ([][]float32, error)
 }
 
 // ModelLister is an OPTIONAL capability an AIClient may ALSO implement: it

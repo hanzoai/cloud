@@ -47,6 +47,10 @@ func (f *fakeAI) ChatCompletion(_ context.Context, req *types.ChatRequest) (*typ
 	return &types.ChatResponse{Content: f.content}, nil
 }
 
+func (f *fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
+	return nil, nil
+}
+
 func TestCreateGetListDelete(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
