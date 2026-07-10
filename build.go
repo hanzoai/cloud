@@ -77,7 +77,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps.IAM = pick(cfg, logger, "iam", "IAM", cfg.IAMZAPAddr, clients.IAMRPCAt, clients.DisabledIAM)
 	deps.KMS = pickKMSClient(cfg, logger)
 	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
-	deps.Commerce = pick(cfg, logger, "commerce", "Commerce", cfg.CommerceZAPAddr, clients.CommerceRPCAt, clients.DisabledCommerce)
+	deps.Commerce = pickCommerceClient(cfg, logger)
 	deps.AI = pickAIClient(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
@@ -217,6 +217,29 @@ var kmsClientFactory func(cfg *Config, log luxlog.Logger) (KMSClient, error)
 // library and its /v1/kms subsystem share one package with no cloud⇄kms cycle.
 func RegisterKMSClientFactory(f func(cfg *Config, log luxlog.Logger) (KMSClient, error)) {
 	kmsClientFactory = f
+}
+
+// pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
+// entitlements/licensing tier calls (GetTenantConfig, CheckEntitlement). When the
+// commerce subsystem is co-resident (Enabled("commerce"), clients/commercesvc
+// mounted) it returns the IN-PROCESS client via CommerceInProcess: a direct Go
+// method call, no network hop — the HIP-0106 co-resident default. Absent co-residency
+// the legacy ZAP-RPC + disabled fallbacks apply (out-of-process commerce, or not
+// wired), so the remote proxy seam (CLOUD_COMMERCE_ZAP_ADDR) is unchanged. The
+// in-process client is trivial (org + brand for tenant config; entitlement resolution
+// fail-closed pending commerce exporting it) so it lives in clients directly — no
+// factory inversion is needed, unlike KMS whose store construction lives in
+// clients/kms.
+func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
+	if cfg.Enabled("commerce") {
+		log.Info("deps.Commerce → in-process (embedded commerce)", "brand", cfg.Brand)
+		return clients.CommerceInProcess(clients.LocalCommerce(cfg.Brand))
+	}
+	if cfg.CommerceZAPAddr != "" {
+		log.Info("deps.Commerce → ZAP RPC", "addr", cfg.CommerceZAPAddr)
+		return clients.CommerceRPCAt(cfg.CommerceZAPAddr)
+	}
+	return clients.DisabledCommerce()
 }
 
 // pickAIClient resolves deps.AI — the client the agents subsystem runs chat

@@ -432,7 +432,20 @@ func registrableDomain(host string) string {
 // pod and cloud runs iam-less exactly as it does in production today (pickIAMClient
 // falls back to the remote/disabled IAM client — see build.go). ONE activation
 // mechanism (the enable-list), ONE place.
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
+//
+// "commerce" is staged (task #89 phase 1) because clients/commercesvc.Mount boots
+// the WHOLE commerce runtime in-process (commerce.Embed: per-org SQLite, hooks,
+// cron) and moves the /v1/commerce/* authority INTO the cloud pod. Under the
+// mount-all default that cutover would happen automatically on the next deploy,
+// silently switching every white-label deployment off its standalone commerce pod —
+// a prod operational change, not a code no-op. Until the operator opts in AND the
+// fold is verified per deployment, commerce stays served by the standalone commerce
+// pod and cloud reaches it over the CLOUD_COMMERCE_HTTP_URL / CLOUD_COMMERCE_ZAP_ADDR
+// seam exactly as in production today (pickCommerceClient falls back to the
+// remote/disabled client — see build.go). Activate by ADDING "commerce" to
+// CLOUD_ENABLE explicitly. Phase 2 flips the default (drops this entry) once the
+// in-process path is validated in prod.
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
