@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/hanzoai/sqlite" // ONE Hanzo driver (registers "sqlite"); its !cgo backend is modernc — never import modernc directly
 )
 
 // openDB opens a per-org SQLite at path with the SAME durability profile the HA
