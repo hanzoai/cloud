@@ -177,6 +177,12 @@ var kinds = map[string]int{
 	// of ONE org→treasury settlement window (metered usage swept back on chain).
 	"husd-cursor":     282,
 	"husd-settlement": 283,
+
+	// GCP-style billing: a funding account separate from the org that funds 1..N
+	// projects (models/billingaccount), and the project→account link
+	// (models/projectbinding). Balance/spend derive from Transaction.AccountId.
+	"billing-account": 284,
+	"project-binding": 285,
 }
 
 var kindsReversed = make(map[int]string)
