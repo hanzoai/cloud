@@ -85,7 +85,7 @@ func do(t *testing.T, app *zip.App, method, path, org string) (int, []byte) {
 	req := httptest.NewRequest(method, path, nil)
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		// A validated principal: principal.Tenant requires a non-empty X-User-Id,
+		// A validated principal: principal.Org requires a non-empty X-User-Id,
 		// which the gateway sets ONLY from a verified credential. Inject it directly
 		// (empty org → no user → the 403 path).
 		req.Header.Set("X-User-Id", "u-"+org)
