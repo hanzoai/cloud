@@ -72,8 +72,8 @@ func (f *fakeCommerce) depositCount() int {
 }
 
 // mount builds an affiliates app backed by a fresh store + the injected fake
-// commerce, returning the app, the svc, and the fake for assertions.
-func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce) {
+// commerce, returning the app, the service, and the fake for assertions.
+func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	t.Helper()
 	store, err := openStore(t.TempDir() + "/affiliates.db")
 	if err != nil {
@@ -81,21 +81,16 @@ func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	fc := newFakeCommerce()
-	s := &svc{
-		store:    store,
-		commerce: fc,
-		log:      luxlog.New("test"),
-		linkBase: "https://hanzo.ai",
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "affiliates"),
+		State: state{
+			store:    store,
+			commerce: fc,
+			linkBase: "https://hanzo.ai",
+		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/affiliates", s.myAffiliates)
-	app.Post("/v1/affiliates/apply", s.apply)
-	app.Post("/v1/affiliates/attribute", s.attribute)
-	app.Get("/v1/admin/affiliates", s.adminList)
-	app.Post("/v1/admin/affiliates/sweep", s.adminSweep)
-	app.Post("/v1/admin/affiliates/:id/approve", s.adminApprove)
-	app.Post("/v1/admin/affiliates/:id/suspend", s.adminSuspend)
-	app.Post("/v1/admin/affiliates/:id/payout", s.adminPayout)
+	routes(app, s)
 	return app, s, fc
 }
 
@@ -143,7 +138,7 @@ func envData(t *testing.T, body []byte) map[string]json.RawMessage {
 
 // applyAndApprove applies for `org` (optional requested code) and staff-approves it
 // with `approveCode`, returning the affiliate id and its minted code.
-func applyAndApprove(t *testing.T, app *zip.App, s *svc, org, requestedCode, approveCode string) (id, code string) {
+func applyAndApprove(t *testing.T, app *zip.App, s *cloud.Service[state], org, requestedCode, approveCode string) (id, code string) {
 	t.Helper()
 	code2, body := req(t, app, http.MethodPost, "/v1/affiliates/apply", org, false, map[string]any{"requestedCode": requestedCode})
 	if code2 != http.StatusCreated {
@@ -160,7 +155,7 @@ func applyAndApprove(t *testing.T, app *zip.App, s *svc, org, requestedCode, app
 	if st != http.StatusOK {
 		t.Fatalf("approve(%s) want 200, got %d (%s)", org, st, ab)
 	}
-	a, err := s.store.GetByID(context.Background(), ar.ID)
+	a, err := s.State.store.GetByID(context.Background(), ar.ID)
 	if err != nil {
 		t.Fatalf("GetByID after approve: %v", err)
 	}
@@ -264,7 +259,7 @@ func TestApproveMintsCodeAndVanityUniqueness(t *testing.T) {
 	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliates/"+b.ID+"/approve", "admin", true, map[string]any{"code": "launch-b"}); st != http.StatusOK {
 		t.Fatalf("override approve want 200, got %d (%s)", st, body)
 	}
-	bAff, _ := s.store.GetByID(ctx, b.ID)
+	bAff, _ := s.State.store.GetByID(ctx, b.ID)
 	if bAff.Code != "launch-b" || bAff.Status != StatusApproved {
 		t.Fatalf("orgB after override: code=%q status=%q", bAff.Code, bAff.Status)
 	}
@@ -325,7 +320,7 @@ func TestAttributeSelfUnknownAndIdempotent(t *testing.T) {
 	// orgB tries a DIFFERENT affiliate's code → still bound to the FIRST (orgA).
 	_, codeC := applyAndApprove(t, app, s, "orgC", "cee", "")
 	req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgB", false, map[string]any{"code": codeC})
-	edge, err := s.store.getReferralByReferred(ctx, "orgB")
+	edge, err := s.State.store.getReferralByReferred(ctx, "orgB")
 	if err != nil {
 		t.Fatalf("getReferralByReferred: %v", err)
 	}
@@ -366,7 +361,7 @@ func TestSweepAccruesSpendTimesRateIdempotent(t *testing.T) {
 	if got := sweptAccrued(t, body); got != 1 {
 		t.Fatalf("accrual sweep accrued=%d, want 1", got)
 	}
-	a, _ := s.store.GetByID(ctx, idA)
+	a, _ := s.State.store.GetByID(ctx, idA)
 	const wantCommission = 10000 * defaultRateBps / bpsDenom // = 2000
 	if a.AccruedCents != wantCommission {
 		t.Fatalf("accrued = %d, want %d (spend×rate)", a.AccruedCents, wantCommission)
@@ -377,7 +372,7 @@ func TestSweepAccruesSpendTimesRateIdempotent(t *testing.T) {
 
 	// IDEMPOTENT: a re-sweep in the SAME period accrues nothing more.
 	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
-	a2, _ := s.store.GetByID(ctx, idA)
+	a2, _ := s.State.store.GetByID(ctx, idA)
 	if a2.AccruedCents != wantCommission {
 		t.Fatalf("double-accrual! accrued = %d, want %d", a2.AccruedCents, wantCommission)
 	}
@@ -454,7 +449,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	if fc.depositCount() != 1 {
 		t.Fatalf("deposit count = %d, want 1 (one grant)", fc.depositCount())
 	}
-	a, _ := s.store.GetByID(ctx, idA)
+	a, _ := s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 1200 || a.PendingCents() != 800 {
 		t.Fatalf("after credits payout: paid=%d pending=%d (want 1200/800)", a.PaidCents, a.PendingCents())
 	}
@@ -481,7 +476,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	if fc.bal("orgA") != 1200 {
 		t.Fatalf("cash payout moved the wallet: bal = %d, want 1200", fc.bal("orgA"))
 	}
-	a, _ = s.store.GetByID(ctx, idA)
+	a, _ = s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 2000 || a.PendingCents() != 0 {
 		t.Fatalf("after cash payout: paid=%d pending=%d (want 2000/0)", a.PaidCents, a.PendingCents())
 	}
