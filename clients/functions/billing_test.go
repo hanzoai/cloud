@@ -96,7 +96,7 @@ func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *svc {
 		t.Fatalf("metering.New: %v", err)
 	}
 	return &svc{
-		stores: cloud.NewTenantStore(t.TempDir(), "functions", openStore),
+		stores: cloud.NewOrgStore(t.TempDir(), "functions", openStore),
 		exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
 		log:    log,
 		bill:   cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
@@ -127,7 +127,7 @@ func invoke(t *testing.T, s *svc, org, name string) *http.Response {
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {

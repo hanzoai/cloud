@@ -34,7 +34,7 @@
 //	DELETE /v1/bots/:id                            terminate a bot (unbind+delete) -> 204
 //	POST   /v1/bots/:id/:action                   stop|pause|message the bot      -> action result
 //
-// The tenant (principal.Tenant) is passed to Visor as ?owner=<org>, so a caller
+// The tenant (principal.Org) is passed to Visor as ?owner=<org>, so a caller
 // can only ever read or mutate their OWN tenant's compute; the org is taken from
 // the validated IAM owner claim, never a client field.
 package visor
@@ -138,9 +138,9 @@ func init() {
 }
 
 // tenant resolves the org — the tenant-isolation KEY, taken verbatim from the
-// validated IAM owner claim (principal.Tenant). It is what this client sends to
+// validated IAM owner claim (principal.Org). It is what this client sends to
 // Visor as ?owner, so a caller can never read or mutate another tenant's compute.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // project resolves the org SUB-SCOPE (principal.Project) that shards the BYO fleet
 // registry within an org. The default project keeps the legacy org-only shard, so

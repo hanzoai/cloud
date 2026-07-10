@@ -21,7 +21,7 @@ package cloud
 //
 // ADMIN IS GLOBAL-ADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
 // bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
-// surfaces (global catalog writes, the literal "admin" tenant bucket) mean
+// surfaces (global catalog writes, the literal "admin" org bucket) mean
 // GLOBAL admin. So the admin authority here is granted ONLY to a validated
 // principal whose org IS the admin org (owner == adminOrg — IAM's IsGlobalAdmin),
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
@@ -38,11 +38,11 @@ import (
 
 // OrgHasUnsafeRune reports whether s carries any whitespace, control, or
 // zero-width/format rune — the class that defeats the injectivity of the
-// org→tenant map. strings.TrimSpace (and fasthttp's own header-value OWS
+// org→org map. strings.TrimSpace (and fasthttp's own header-value OWS
 // trimming) silently drop such runes at the edges, so two DISTINCT IAM org
 // names ("acme" vs "acme ", or an NBSP/ZWSP variant) would collapse onto ONE
-// tenant-<slug> namespace / image ref — a cross-tenant fold. The identity trust
-// boundary REFUSES to grant tenancy from an org bearing one of these (fail
+// org-<slug> namespace / image ref — a cross-org fold. The identity trust
+// boundary REFUSES to grant org-scoping from an org bearing one of these (fail
 // secure) instead of folding it, so distinct raw names never collide and no
 // namespace is ever derived from an invisible-character identifier.
 //
@@ -80,10 +80,10 @@ var cookieTokenNames = []string{"hanzo_iam_token", "iam_access_token", "access_t
 // sanitized — but as sub-scopes, in a separate pass (sanitizeSubScopes, keyed on
 // subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
 // is RE-INJECTED for a validated principal only when it is not a cross-org claim
-// (projectIsForeign — tenant_scope.go refuses a project REGISTERED to a DIFFERENT
+// (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT
 // org), and both are dropped on the anonymous path. This IS the "project-
 // membership check UNDER the validated org" the data plane always required: a
-// service must never derive tenant scope from a raw X-Project-Id, and after this
+// service must never derive org scope from a raw X-Project-Id, and after this
 // pass a surviving X-Project-Id is either the caller's OWN registered project or
 // an unregistered free-form label that can only ever scope the caller's own org
 // (every consumer AND-s it with the validated org). The native evals subsystem,
@@ -100,8 +100,6 @@ var authorityHeaders = []string{
 	"X-User-Role",
 	"X-User-Roles",
 	"X-User-Name",
-	"X-Tenant-Id",
-	"X-Tenant-ID",
 	"X-Org",
 }
 
@@ -133,7 +131,7 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id"}
 // bearer, the client X-Org-Id is passed through for DATA scoping. cloud's data
 // plane has no session of its own yet ("Auth stays gateway-owned in Phase 1")
 // and the console browser data path depends on this header. So a direct-to-pod
-// caller can still SELECT a tenant for DATA reads. Closing that needs the data
+// caller can still SELECT an org for DATA reads. Closing that needs the data
 // path to carry a bearer universally OR the NetworkPolicy locked to gateway-only
 // (which would break console's legitimate direct in-cluster BFF) — Phase-2. The
 // ADMIN boundary (this fix's P0) is closed on every path regardless, because
@@ -158,7 +156,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		// for the sub-scopes), then delete every authority header AND every sub-scope
 		// header, so nothing a client sent survives as identity OR scope. A client
 		// org bearing a whitespace/control/format rune is refused here (not trimmed):
-		// trimming would collapse "acme " onto "acme", and the injective tenant
+		// trimming would collapse "acme " onto "acme", and the injective org
 		// boundary must never fold two distinct org identifiers into one.
 		cliOrg := string(req.Header.Peek("X-Org-Id"))
 		if OrgHasUnsafeRune(cliOrg) {
@@ -176,9 +174,9 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 		if claims := validatedPrincipal(c, v); claims != nil {
 			// The org is taken verbatim from the validated principal and validated,
 			// never trimmed: a whitespace/control/format-bearing owner is a
-			// non-injective tenant identifier (TrimSpace / transport OWS-trim would
-			// collapse "acme " onto "acme"), so it grants NO tenancy — the request
-			// resolves org-less and every tenant() gate fails closed with 403,
+			// non-injective org identifier (TrimSpace / transport OWS-trim would
+			// collapse "acme " onto "acme"), so it grants NO org-scoping — the request
+			// resolves org-less and every org() gate fails closed with 403,
 			// rather than folding two IAM orgs onto one namespace.
 			owner := claims.Owner
 			if OrgHasUnsafeRune(owner) {
@@ -213,7 +211,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				// MACHINE principal (audience <owner>-platform-kms) is EXCLUDED here even
 				// if it carries isAdmin=true: V6 accepts the machine audience for data
 				// scope, but the machine path must never grant global admin, or an
-				// admin-org machine token could read every tenant. It falls through to the
+				// admin-org machine token could read every org. It falls through to the
 				// owner-scoped case below (org-scoped, no admin) — the audience widening
 				// stays decoupled from admin inside cloud, not reliant on IAM's behavior.
 				req.Header.Set("X-User-IsAdmin", "true")

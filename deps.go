@@ -3,7 +3,7 @@
 // One Go binary mounts every Hanzo-native subsystem (iam, base, kms,
 // commerce, ai, gateway, o11y, vfs, mq, dns, amqp, mcp, ...) via the
 // canonical Mount(app *zip.App, deps cloud.Deps) error contract. Brand,
-// enabled subsystems, and tenant scope are deployment configuration; the
+// enabled subsystems, and org scope are deployment configuration; the
 // binary is the same artifact across every white-label deployment.
 //
 // Per HIP-0106 — github.com/hanzoai/HIPs/blob/main/HIPs/hip-0106-unified-hanzo-cloud-binary.md.
@@ -49,7 +49,7 @@ type Deps struct {
 	// {IAMIssuer}/v1/iam/.well-known/jwks (HIP-0111). One issuer per deployment.
 	IAMIssuer string
 
-	// DataDir is the per-deployment data root. Per-tenant SQLite files
+	// DataDir is the per-deployment data root. Per-org SQLite files
 	// land at {DataDir}/orgs/{orgSlug}/{service}.db per HIP-0302.
 	DataDir string
 
@@ -131,7 +131,6 @@ type Claims = types.Claims
 type User = types.User
 type Org = types.Org
 type DBHandle = types.DBHandle
-type TenantConfig = types.TenantConfig
 type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse

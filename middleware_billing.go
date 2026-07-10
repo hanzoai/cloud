@@ -201,7 +201,7 @@ func canonicalService(path string) string {
 //     falling back to the bare sub only when org is absent. Prepaid balance is
 //     per-org (one credit covers the whole org); keying it on "{org}/{sub}"
 //     would query an empty per-user ledger and 402 a fully funded org.
-//   - Org is the tenant namespace (X-Org-Id) commerce resolves the ledger in.
+//   - Org is the org namespace (X-Org-Id) commerce resolves the ledger in.
 //
 // The full "{org}/{sub}" actor identity belongs on the usage audit trail, not
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it

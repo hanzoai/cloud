@@ -8,7 +8,7 @@ import (
 )
 
 // TestSiteHostBindingIsFirstComeAndTenantSafe proves the global subdomain
-// namespace is safe against cross-tenant hijack. Two orgs may both own a project
+// namespace is safe against cross-org hijack. Two orgs may both own a project
 // slugged "maxpower" (org-scoped uniqueness — see TestProjectCRUD), so the public
 // host `maxpower.hanzo.app` must resolve to exactly ONE of them, deterministically,
 // and the loser must never be able to steal or read the winner's binding.
@@ -75,7 +75,7 @@ func TestSiteHostBindingIsFirstComeAndTenantSafe(t *testing.T) {
 
 // TestSiteResolverAdapter checks the sites.Resolver adapter: an unbound slug is a
 // clean not-found (false, nil), and a bound one yields the authoritative Site with
-// the tenant-bounded prefix — never derived from anything but the store.
+// the org-bounded prefix — never derived from anything but the store.
 func TestSiteResolverAdapter(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
