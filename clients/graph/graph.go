@@ -28,7 +28,7 @@
 // networks are always the caller's brand's — exactly as the console's Networks proxy
 // scopes networks per brand. Within a brand a ledger is public, so there is no per-org
 // private row to leak; the ONE tenancy boundary that applies is principal-gating:
-// every route requires a validated IAM principal (principal.Tenant → 403 without one),
+// every route requires a validated IAM principal (principal.Org → 403 without one),
 // so an unauthenticated caller reads nothing.
 //
 // HONEST FAILURE. Absent a reachable upstream the handler returns an honest 502 (the
@@ -76,12 +76,12 @@ func init() {
 }
 
 // gate enforces the ONE tenancy boundary that applies to public chain data: a
-// validated IAM principal MUST be present (principal.Tenant), so an unauthenticated
+// validated IAM principal MUST be present (principal.Org), so an unauthenticated
 // caller reads nothing. The org itself is not a filter key here (a ledger is public
 // within a brand); it is the proof-of-auth gate, checked in ONE place before any
 // handler touches an upstream.
 func gate(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, ok := principal.Tenant(c); !ok {
+	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	return nil

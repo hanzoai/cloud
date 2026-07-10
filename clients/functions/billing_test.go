@@ -98,7 +98,7 @@ func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *cloud.Service
 	return &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "functions"),
 		State: state{
-			stores: cloud.NewTenantStore(t.TempDir(), "functions", openStore),
+			stores: cloud.NewOrgStore(t.TempDir(), "functions", openStore),
 			exec:   &execClient{upstream: execUpstream, apiKey: "k", http: &http.Client{}},
 		},
 	}
@@ -128,7 +128,7 @@ func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.R
 	req.Header.Set("Content-Type", "application/json")
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
