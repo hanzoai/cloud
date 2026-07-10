@@ -43,7 +43,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -65,11 +64,12 @@ var frameworks = map[string]bool{
 	"unity": true, "unreal": true, "godot": true,
 }
 
-type svc struct {
+// state is projects' own data; the shared logger lives in the embedded cloud.Base,
+// reached as s.Log.
+type state struct {
 	store *Store
 	blob  *blobStore
 	cf    *sites.Purger
-	log   luxlog.Logger
 	// operatorOrgs may bind CUSTOM domains to their sites in addition to a global
 	// admin — the platform operator (the deployment's own brand org) manages
 	// customer domains until per-tenant DNS-ownership verification is wired here.
@@ -81,7 +81,7 @@ type svc struct {
 
 // mounted is the active service so Shutdown can release the store. The unified
 // binary mounts one projects surface.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes (the published contract) ----
 
@@ -146,16 +146,16 @@ func toDeploymentView(d Deployment) deploymentView {
 	}
 }
 
-// Mount wires the projects surface onto app per HIP-0106.
+// Mount wires the projects surface onto app per HIP-0106. Complex flavour: it keeps
+// a package global (mounted) for Shutdown and registers cross-package resolvers, so
+// it constructs the Service value directly rather than through cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("projects.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("projects.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "projects")
 	if deps.DataDir == "" {
 		return fmt.Errorf("projects.Mount: empty DataDir")
 	}
@@ -167,8 +167,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("projects.Mount: open store: %w", err)
 	}
 
-	s := &svc{store: store, blob: openBlobStore(), cf: sites.NewPurger(log), log: log,
-		operatorOrgs: operatorOrgsFromEnv(deps.Brand)}
+	b := cloud.NewBase(deps, "projects")
+	s := &cloud.Service[state]{Base: b, State: state{
+		store:        store,
+		blob:         openBlobStore(),
+		cf:           sites.NewPurger(b.Log),
+		operatorOrgs: operatorOrgsFromEnv(deps.Brand),
+	}}
 	mounted = s
 
 	// Inject the store as the site server's slug→project resolver. This is what
@@ -184,19 +189,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// cloud does not import projects.
 	cloud.RegisterTenantScopeResolver(projectScopeResolver{store: store})
 
-	app.Post("/v1/projects", s.create)
-	app.Post("/v1/projects/fork", s.fork)
-	app.Get("/v1/projects", s.list)
-	app.Get("/v1/projects/:slug", s.get)
-	app.Patch("/v1/projects/:slug", s.update)
-	app.Delete("/v1/projects/:slug", s.del)
+	routes(app, s)
 
-	app.Post("/v1/projects/:slug/deploy", s.deploy)
-	app.Get("/v1/projects/:slug/deployments", s.listDeployments)
-	app.Get("/v1/projects/:slug/deployments/:id", s.getDeployment)
-	app.Post("/v1/projects/:slug/deployments/:id/complete", s.completeDeployment)
-	app.Get("/v1/projects/:slug/domains", s.listDomains)
-	app.Post("/v1/projects/:slug/domains", s.setDomains)
+	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(), "brand", deps.Brand)
+	return nil
+}
+
+// routes registers the projects surface and the mirrored /v1/platform/sites surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/projects", cloud.Handle(s, create))
+	app.Post("/v1/projects/fork", cloud.Handle(s, fork))
+	app.Get("/v1/projects", cloud.Handle(s, list))
+	app.Get("/v1/projects/:slug", cloud.Handle(s, get))
+	app.Patch("/v1/projects/:slug", cloud.Handle(s, update))
+	app.Delete("/v1/projects/:slug", cloud.Handle(s, del))
+
+	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
+	app.Get("/v1/projects/:slug/deployments", cloud.Handle(s, listDeployments))
+	app.Get("/v1/projects/:slug/deployments/:id", cloud.Handle(s, getDeployment))
+	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
+	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
+	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
 
 	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
 	// S3-backed part of the platform (container apps live at /v1/platform/projects,
@@ -205,19 +218,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// tar.gz) → bind a custom domain → live. Org/project scope is the IAM-minted
 	// X-Org-Id, exactly as the /v1/projects surface. hanzo.app's upload UI posts a
 	// zip to POST /v1/platform/sites/:slug/deploy.
-	app.Post("/v1/platform/sites", s.create)
-	app.Get("/v1/platform/sites", s.list)
-	app.Get("/v1/platform/sites/:slug", s.get)
-	app.Patch("/v1/platform/sites/:slug", s.update)
-	app.Delete("/v1/platform/sites/:slug", s.del)
-	app.Post("/v1/platform/sites/:slug/deploy", s.deploy)
-	app.Get("/v1/platform/sites/:slug/deployments", s.listDeployments)
-	app.Get("/v1/platform/sites/:slug/deployments/:id", s.getDeployment)
-	app.Get("/v1/platform/sites/:slug/domains", s.listDomains)
-	app.Post("/v1/platform/sites/:slug/domains", s.setDomains)
-
-	log.Info("projects mounted", "bucket", s.blob.bucket, "s3", s.blob.configured(), "brand", deps.Brand)
-	return nil
+	app.Post("/v1/platform/sites", cloud.Handle(s, create))
+	app.Get("/v1/platform/sites", cloud.Handle(s, list))
+	app.Get("/v1/platform/sites/:slug", cloud.Handle(s, get))
+	app.Patch("/v1/platform/sites/:slug", cloud.Handle(s, update))
+	app.Delete("/v1/platform/sites/:slug", cloud.Handle(s, del))
+	app.Post("/v1/platform/sites/:slug/deploy", cloud.Handle(s, deploy))
+	app.Get("/v1/platform/sites/:slug/deployments", cloud.Handle(s, listDeployments))
+	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
+	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
+	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
 }
 
 func init() {
@@ -237,7 +247,7 @@ type createReq struct {
 	} `json:"repo"`
 }
 
-func (s *svc) create(c *zip.Ctx) error {
+func create(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -246,14 +256,14 @@ func (s *svc) create(c *zip.Ctx) error {
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	return s.createProject(c, org, body)
+	return createProject(s, c, org, body)
 }
 
 // createProject is the ONE path that validates a createReq and persists a
 // Project. Both POST /v1/projects and POST /v1/projects/fork funnel through here,
 // so slug/framework validation, ID minting, and conflict mapping live in exactly
 // one place. It returns 201 with the project view on success.
-func (s *svc) createProject(c *zip.Ctx, org string, body createReq) error {
+func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createReq) error {
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		return zip.ErrBadRequest("name is required")
@@ -289,12 +299,12 @@ func (s *svc) createProject(c *zip.Ctx, org string, body createReq) error {
 		ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: strings.TrimSpace(body.Repo.Branch),
 		RepoProvider: providerFromURL(body.Repo.URL), Framework: framework,
-		Status: "draft", Bucket: s.blob.bucket, CreatedAt: now, UpdatedAt: now,
+		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 	}
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
 	}
-	if err := s.store.CreateProject(c.Context(), p); err != nil {
+	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("project slug already exists in this org")
 		}
@@ -303,12 +313,12 @@ func (s *svc) createProject(c *zip.Ctx, org string, body createReq) error {
 	return c.JSON(http.StatusCreated, toProjectView(p))
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.ListProjects(c.Context(), org)
+	rows, err := s.State.store.ListProjects(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -319,12 +329,12 @@ func (s *svc) list(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -345,12 +355,12 @@ type updateReq struct {
 	} `json:"repo"`
 }
 
-func (s *svc) update(c *zip.Ctx) error {
+func update(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -397,7 +407,7 @@ func (s *svc) update(c *zip.Ctx) error {
 		}
 	}
 	p.UpdatedAt = time.Now().Unix()
-	if err := s.store.UpdateProject(c.Context(), p); err != nil {
+	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("project not found")
 		}
@@ -406,13 +416,13 @@ func (s *svc) update(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toProjectView(p))
 }
 
-func (s *svc) del(c *zip.Ctx) error {
+func del(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	slug := slugParam(c)
-	p, deleted, err := s.store.DeleteProject(c.Context(), org, slug)
+	p, deleted, err := s.State.store.DeleteProject(c.Context(), org, slug)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -420,21 +430,21 @@ func (s *svc) del(c *zip.Ctx) error {
 		return zip.ErrNotFound("project not found")
 	}
 	// Release the public subdomain binding so the slug is free to reclaim.
-	if uErr := s.store.UnbindHost(c.Context(), p.Slug, org, p.Slug); uErr != nil {
-		s.log.Warn("unbind host failed (continuing)", "org", org, "slug", p.Slug, "err", uErr)
+	if uErr := s.State.store.UnbindHost(c.Context(), p.Slug, org, p.Slug); uErr != nil {
+		s.Log.Warn("unbind host failed (continuing)", "org", org, "slug", p.Slug, "err", uErr)
 	}
 	// Best-effort purge of the live site; metadata is already gone, so a purge
 	// failure must not resurrect the project — log and continue.
-	if s.blob.configured() {
-		if cli, cErr := s.blob.client(); cErr == nil {
-			if pErr := purgePrefix(c.Context(), cli, s.blob.bucket, sitePrefix(org, p.Slug)); pErr != nil {
-				s.log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "err", pErr)
+	if s.State.blob.configured() {
+		if cli, cErr := s.State.blob.client(); cErr == nil {
+			if pErr := purgePrefix(c.Context(), cli, s.State.blob.bucket, sitePrefix(org, p.Slug)); pErr != nil {
+				s.Log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "err", pErr)
 			}
 		}
 	}
 	// Purge the Cloudflare edge so the deleted site stops serving from cache.
-	if pErr := s.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); pErr != nil {
-		s.log.Warn("cloudflare purge failed on delete (continuing)", "org", org, "slug", p.Slug, "err", pErr)
+	if pErr := s.State.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); pErr != nil {
+		s.Log.Warn("cloudflare purge failed on delete (continuing)", "org", org, "slug", p.Slug, "err", pErr)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -523,10 +533,10 @@ func providerFromURL(raw string) string {
 // Shutdown closes the projects store. Idempotent. Mirrors the provisioning
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
