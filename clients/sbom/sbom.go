@@ -242,9 +242,93 @@ func (s *svc) resolve(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "sbom query: %v", err)
 	}
 	if len(rows) == 0 {
+		// Pull-on-miss: the registry is the source of truth. CI `cosign attach`es the
+		// CycloneDX SBOM to the image digest; if this ref is a real image we haven't
+		// materialized yet, pull the attached artifact, persist it, and re-read. A
+		// pull failure is NON-FATAL — we fall through to the honest 404.
+		if view, perr := s.pullAndStore(c.Context(), ref); perr == nil && view != nil {
+			return c.JSON(http.StatusOK, *view)
+		} else if perr != nil {
+			s.log.Debug("sbom pull-on-miss failed", "ref", ref, "err", perr)
+		}
 		return zip.ErrNotFound("no SBOM for " + ref)
 	}
 	return c.JSON(http.StatusOK, buildView(rows))
+}
+
+// ── registry pull-on-miss (materialize) ──────────────────────────────────────
+
+// pullAndStore fetches the SBOM `cosign attach`ed to ref's image digest from the
+// registry, upserts its components into hanzo.sbom_component (reusing the SAME
+// INSERT the CI POST path uses), and returns the resolved view. It is the lazy
+// materializer behind resolve's pull-on-miss and the deploy-time prefetch. A bare
+// `sha256:…` digest (no repo) is not pullable → returns an error the caller treats
+// as a miss.
+func (s *svc) pullAndStore(ctx context.Context, ref string) (*SbomView, error) {
+	res, err := pullSBOM(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	in := SbomIngest{ImageDigest: res.Digest, ImageRef: res.Ref, Format: "cyclonedx"}
+	if stmt, args := insertBatch(in, res.Components); stmt != "" {
+		if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
+			return nil, fmt.Errorf("persist pulled sbom: %w", err)
+		}
+	}
+	s.log.Info("sbom pulled from registry", "imageRef", res.Ref, "imageDigest", res.Digest, "components", len(res.Components))
+
+	// Re-read through FINAL so the response is byte-identical to a cache hit
+	// (deduped, ordered, capped) rather than echoing the just-parsed slice.
+	q := "SELECT image_digest, image_ref, source_repo, git_sha, " +
+		"component_name, component_version, component_type, purl, license, ingested_at " +
+		"FROM " + sbomTable + " FINAL WHERE image_digest = ? OR image_ref = ? " +
+		"ORDER BY component_type, component_name LIMIT " + fmt.Sprint(maxComponents+1)
+	rows, err := aiobject.DatastoreQuery(ctx, q, res.Digest, res.Ref)
+	if err != nil {
+		return nil, fmt.Errorf("reread pulled sbom: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("pulled sbom for %s not visible after insert", res.Digest)
+	}
+	view := buildView(rows)
+	return &view, nil
+}
+
+// Prefetch materializes the SBOM for a deployed image ref if it is not already in
+// the datastore, on a deploy-digest signal from the platform. It is the deploy-time
+// trigger: idempotent (a hit is a no-op), best-effort (a miss/pull-failure logs and
+// returns, never blocks a deploy), and safe to call from a goroutine. Exported so
+// clients/platform can fire it after a deployment goes live WITHOUT this package
+// importing platform (dependency points platform → sbom, one direction).
+func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return
+	}
+	if log == nil {
+		log = luxlog.Noop()
+	}
+	log = log.New("subsystem", "sbom")
+	s := &svc{log: log}
+
+	if err := requireDatastore(); err != nil {
+		log.Debug("sbom prefetch skipped: datastore not ready", "ref", ref, "err", err)
+		return
+	}
+	if err := ensureTable(ctx); err != nil {
+		log.Debug("sbom prefetch skipped: table not ready", "ref", ref, "err", err)
+		return
+	}
+	// Already materialized? Cheap existence check keyed by ref (a tag ref maps to the
+	// same rows once resolved). Skip the network pull on a hit.
+	rows, err := aiobject.DatastoreQuery(ctx,
+		"SELECT 1 FROM "+sbomTable+" WHERE image_ref = ? LIMIT 1", ref)
+	if err == nil && len(rows) > 0 {
+		return
+	}
+	if _, err := s.pullAndStore(ctx, ref); err != nil {
+		log.Debug("sbom prefetch pull failed", "ref", ref, "err", err)
+	}
 }
 
 // ── GET /v1/sbom/health — liveness ───────────────────────────────────────────
