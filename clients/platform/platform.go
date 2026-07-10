@@ -121,6 +121,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 	s.routes(app)
 
+	// The cloud's own embedded-git apex is a trusted build source (clients/git
+	// serves repos at this host), so a self-hosted-git app builds with no env.
+	selfGitHost = strings.ToLower(strings.TrimSpace(deps.Domain))
+
+	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
+	// triggers a build for every app tracking that repo+branch. Inverted so git
+	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
+	cloud.RegisterPushBuilder(s.buildFromPush)
+
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
 	// "building" deployments from the store, so it resumes across a cloud restart.

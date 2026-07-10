@@ -18,6 +18,7 @@
 package platform
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -160,72 +161,98 @@ func (s *svc) deployImage(c *zip.Ctx, org, project string, a Application, depID 
 	return c.JSON(http.StatusAccepted, toDeploymentView(d))
 }
 
-// deployGit creates a build record, launches an in-cluster BuildKit Job, and
-// lands the deployment "building". Completion (apply CR with the built image) is
-// the phase-2 watcher.
+// deployGit is the HTTP deploy for a git-source app: it maps the shared build
+// core (startGitBuild) onto the /v1/platform/.../deploy response — 202 + the
+// deployment view on success, the honest status + message on failure.
 func (s *svc) deployGit(c *zip.Ctx, org string, a Application, depID string, version int, now int64, body deployReq, clusterErr error) error {
-	if strings.TrimSpace(a.RepoURL) == "" {
-		return zip.ErrBadRequest("git application has no repo URL")
+	d, jobName, status, err := s.startGitBuild(c.Context(), org, a, depID, version, now, body.Commit, clusterErr)
+	if err != nil {
+		return zip.Errorf(status, "%s", err.Error())
 	}
-	ref := firstNonEmpty(strings.TrimSpace(body.Commit), a.RepoBranch, "main")
+	s.log.Info("build launched (git)", "org", org, "app", a.Slug, "job", jobName, "image", d.Image,
+		"actor", c.User(), "requestID", c.RequestID())
+	return c.JSON(status, toDeploymentView(d))
+}
+
+// startGitBuild is the ctx-only core of a git deploy: persist the build +
+// deployment "building", launch the in-cluster BuildKit Job, and flip the app to
+// "building". The phase-2 reconciler applies the Service CR once the Job succeeds.
+//
+// It is the ONE build-launch path — shared by the HTTP deploy (deployGit) and the
+// git-push-to-deploy trigger (buildFromPush in push.go). No *zip.Ctx: every failure
+// is recorded in its honest terminal state via failDeploymentCtx and returned as a
+// pre-formatted (message, HTTP status) pair the caller maps to its own surface.
+func (s *svc) startGitBuild(ctx context.Context, org string, a Application, depID string, version int, now int64, commit string, clusterErr error) (Deployment, string, int, error) {
+	if strings.TrimSpace(a.RepoURL) == "" {
+		return Deployment{}, "", http.StatusBadRequest, fmt.Errorf("git application has no repo URL")
+	}
+	ref := firstNonEmpty(strings.TrimSpace(commit), a.RepoBranch, "main")
 	image := s.k8s.buildImageRef(org, a.Slug, shortTag(ref))
 
 	bldID, err := genID("bld")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("rng: %v", err)
 	}
 	b := Build{ID: bldID, Org: org, ApplicationID: a.ID, DeploymentID: depID, Status: "queued", Image: image, CreatedAt: now, UpdatedAt: now}
-	if err := s.store.InsertBuild(c.Context(), b); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist build: %v", err)
+	if err := s.store.InsertBuild(ctx, b); err != nil {
+		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("persist build: %v", err)
 	}
 	d := Deployment{
 		ID: depID, Org: org, ApplicationID: a.ID, Version: version, Status: "building",
 		Source: "git", Commit: ref, Image: image, BuildID: bldID, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.InsertDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
+	if err := s.store.InsertDeployment(ctx, d); err != nil {
+		return Deployment{}, "", http.StatusInternalServerError, fmt.Errorf("persist deployment: %v", err)
 	}
 
 	if clusterErr != nil {
-		b.Status = "failed"
-		b.UpdatedAt = time.Now().Unix()
-		_ = s.store.UpdateBuild(c.Context(), b)
-		return s.failDeployment(c, &d, a, http.StatusServiceUnavailable, "cluster unavailable: "+clusterErr.Error())
+		b.Status, b.UpdatedAt = "failed", time.Now().Unix()
+		_ = s.store.UpdateBuild(ctx, b)
+		msg := "cluster unavailable: " + clusterErr.Error()
+		s.failDeploymentCtx(ctx, &d, a, http.StatusServiceUnavailable, msg)
+		return d, "", http.StatusServiceUnavailable, fmt.Errorf("deploy failed: %s", msg)
 	}
 
-	jobName, err := s.k8s.launchBuildJob(c.Context(), org, a, image, ref, bldID)
+	jobName, err := s.k8s.launchBuildJob(ctx, org, a, image, ref, bldID)
 	if err != nil {
-		b.Status = "failed"
-		b.UpdatedAt = time.Now().Unix()
-		_ = s.store.UpdateBuild(c.Context(), b)
-		return s.failDeployment(c, &d, a, deployErrStatus(err), "launch build job: "+err.Error())
+		b.Status, b.UpdatedAt = "failed", time.Now().Unix()
+		_ = s.store.UpdateBuild(ctx, b)
+		status := deployErrStatus(err)
+		msg := "launch build job: " + err.Error()
+		s.failDeploymentCtx(ctx, &d, a, status, msg)
+		return d, "", status, fmt.Errorf("deploy failed: %s", msg)
 	}
 
 	b.Status, b.JobName, b.LogsRef, b.UpdatedAt = "building", jobName, "job/"+jobName, time.Now().Unix()
-	if err := s.store.UpdateBuild(c.Context(), b); err != nil {
+	if err := s.store.UpdateBuild(ctx, b); err != nil {
 		s.log.Warn("update build failed (continuing)", "build", b.ID, "err", err)
 	}
 	a.Status, a.Namespace, a.UpdatedAt = "building", tenantNamespace(org), time.Now().Unix()
-	if err := s.store.UpdateApplication(c.Context(), a); err != nil {
+	if err := s.store.UpdateApplication(ctx, a); err != nil {
 		s.log.Warn("finalize app failed (continuing)", "app", a.Slug, "err", err)
 	}
-	s.log.Info("build launched (git)", "org", org, "app", a.Slug, "job", jobName, "image", image,
-		"actor", c.User(), "requestID", c.RequestID())
-	return c.JSON(http.StatusAccepted, toDeploymentView(d))
+	return d, jobName, http.StatusAccepted, nil
 }
 
 // failDeployment records the honest failure on the deployment + app and returns
 // the mapped HTTP error. No fabricated success ever reaches the caller.
 func (s *svc) failDeployment(c *zip.Ctx, d *Deployment, a Application, status int, msg string) error {
+	s.failDeploymentCtx(c.Context(), d, a, status, msg)
+	return zip.Errorf(status, "deploy failed: %s", msg)
+}
+
+// failDeploymentCtx is the ctx-only store write behind failDeployment: it flips the
+// deployment + app to "error" with the reason. Shared so the push trigger records
+// the same honest failure state without an HTTP context.
+func (s *svc) failDeploymentCtx(ctx context.Context, d *Deployment, a Application, status int, msg string) {
 	d.Status = "error"
 	d.Message = msg
 	d.UpdatedAt = time.Now().Unix()
-	_ = s.store.UpdateDeployment(c.Context(), *d)
+	_ = s.store.UpdateDeployment(ctx, *d)
 	a.Status = "error"
 	a.UpdatedAt = time.Now().Unix()
-	_ = s.store.UpdateApplication(c.Context(), a)
+	_ = s.store.UpdateApplication(ctx, a)
 	s.log.Error("deploy failed", "org", d.Org, "app", a.Slug, "status", status, "reason", msg)
-	return zip.Errorf(status, "deploy failed: %s", msg)
 }
 
 // deployErrStatus maps a cluster/build error to an honest HTTP status. A tenant
