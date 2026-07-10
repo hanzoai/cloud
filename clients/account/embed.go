@@ -1,5 +1,5 @@
 // embed.go ports console's app/embed-status/route.ts into the unified binary at
-// GET /v1/console/embed-status (task #41). It answers ONE question for the console's
+// GET /v1/embed-status (task #41). It answers ONE question for the console's
 // data-product modules (Content Studio / ERP / Help Center): is this brand's shared
 // embedded app provisioned and reachable, so the module can decide embed-vs-provision
 // panel? A cross-origin browser can't read another origin's status (SOP + CORS), so
@@ -18,7 +18,7 @@
 //     {cms,erp,help}. There is NO client-controlled host in the target at all — a
 //     forged Host header can never steer this into probing an arbitrary origin
 //     (strictly tighter than route.ts, which clamped a client Host).
-package console
+package account
 
 import (
 	"context"
@@ -85,7 +85,7 @@ type embedStatusResp struct {
 // Mount uses the real, time-boxed probe.
 var reachProbe = liveReachProbe
 
-// embedStatus is GET /v1/console/embed-status?app=cms|erp|help. Mirrors
+// embedStatus is GET /v1/embed-status?app=cms|erp|help. Mirrors
 // GET app/embed-status/route.ts.
 func (s *svc) embedStatus(c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, false) // validated; a customer org (owner set) is fine
