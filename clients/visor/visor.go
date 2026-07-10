@@ -49,13 +49,15 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/fleet"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-type svc struct {
-	cl  *client
-	log luxlog.Logger
+// state is visor's own data; the shared deps (logger, brand) live in the embedded
+// cloud.Base (reached as s.Log / s.Brand). bill is KEPT here on purpose: it is the
+// "compute"-provider meter (the commerce attribution + spend-cap scope key), which
+// is deliberately distinct from the subsystem's own Base.Bill, so it is NOT lifted.
+type state struct {
+	cl *client
 	// fleet is the shared per-org BYO-cluster registry (KMS-sealed kubeconfigs);
 	// bill meters the nominal management fee. BYO clusters are MERGED into the
 	// managed clusters on /v1/clusters — one fleet surface, two sources.
@@ -63,7 +65,9 @@ type svc struct {
 	bill  *cloud.ResourceMeter
 }
 
-// Mount wires the compute surface onto app per HIP-0106.
+// Mount wires the compute surface onto app per HIP-0106. visor is a "complex" mount
+// (it keeps a "compute"-provider meter and a fleet-scoped sub-logger that both need
+// deps at construction), so it builds the Service value directly.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("visor.Mount: nil zip.App")
@@ -71,64 +75,66 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("visor.Mount: nil deps.Logger")
 	}
-	s := &svc{
-		cl:    newClient(),
-		log:   deps.Logger.New("subsystem", "visor"),
-		fleet: fleet.New(deps.Brand, deps.Logger.New("subsystem", "fleet")),
-		bill:  cloud.NewResourceMeter(deps, "compute"),
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "visor"),
+		State: state{
+			cl:    newClient(),
+			fleet: fleet.New(deps.Brand, deps.Logger.New("subsystem", "fleet")),
+			bill:  cloud.NewResourceMeter(deps, "compute"),
+		},
 	}
 
 	// Static routes register before their :param siblings so Fiber's
 	// registration-order match never lets a machine/cluster id capture a literal.
-	app.Get("/v1/machines", s.listMachines)
-	app.Post("/v1/machines", s.launchMachine)
-	app.Get("/v1/machines/:id", s.getMachine)
-	app.Delete("/v1/machines/:id", s.deleteMachine)
+	app.Get("/v1/machines", cloud.Handle(s, listMachines))
+	app.Post("/v1/machines", cloud.Handle(s, launchMachine))
+	app.Get("/v1/machines/:id", cloud.Handle(s, getMachine))
+	app.Delete("/v1/machines/:id", cloud.Handle(s, deleteMachine))
 
-	app.Get("/v1/gpus/alerts", s.gpuAlerts)
-	app.Get("/v1/gpus", s.listGPUs)
+	app.Get("/v1/gpus/alerts", cloud.Handle(s, gpuAlerts))
+	app.Get("/v1/gpus", cloud.Handle(s, listGPUs))
 
 	// BYO fleet: the org's bring-your-own machines that dialed in via
 	// `hanzo gpu connect`. Raw list here; the same workers are folded into
 	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
 	// pages show them alongside Visor-provisioned compute.
-	app.Get("/v1/fleet/workers", s.listFleetWorkers)
+	app.Get("/v1/fleet/workers", cloud.Handle(s, listFleetWorkers))
 
-	app.Get("/v1/clusters", s.listClusters)
+	app.Get("/v1/clusters", cloud.Handle(s, listClusters))
 	// BYO: attach an existing cluster (kubeconfig) or detach one. Managed clusters
 	// (Visor-provisioned DOKS/AWS/…) + BYO ones surface together on GET /v1/clusters.
-	app.Post("/v1/clusters", s.attachCluster)
-	app.Delete("/v1/clusters/:id", s.detachCluster)
-	app.Post("/v1/clusters/:clusterId/pools", s.createPool)
-	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", s.scalePool)
-	app.Delete("/v1/clusters/:clusterId/pools/:poolId", s.deletePool)
+	app.Post("/v1/clusters", cloud.Handle(s, attachCluster))
+	app.Delete("/v1/clusters/:id", cloud.Handle(s, detachCluster))
+	app.Post("/v1/clusters/:clusterId/pools", cloud.Handle(s, createPool))
+	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", cloud.Handle(s, scalePool))
+	app.Delete("/v1/clusters/:clusterId/pools/:poolId", cloud.Handle(s, deletePool))
 
 	// Compute catalog: the global region + size lists that back the Machines/GPUs
 	// launch drawer. Namespaced under /v1/compute (visor's domain) — "sizes"/"regions"
 	// are catalog dimensions shared by machines AND gpus, not owned nouns, so they
 	// nest under compute rather than sitting bare at top level. Org-gated but not
 	// org-scoped — the catalog is identical for every tenant.
-	app.Get("/v1/compute/regions", s.listRegions)
-	app.Get("/v1/compute/sizes", s.listSizes)
+	app.Get("/v1/compute/regions", cloud.Handle(s, listRegions))
+	app.Get("/v1/compute/sizes", cloud.Handle(s, listSizes))
 
 	// Agent↔machine binding — thin proxy over vm's binding surface (mark a machine
 	// as running the @hanzo/bot runtime for a cloud Agent). Deeper than
 	// /v1/machines/:id so no machine id captures these literals. See bots.go.
-	app.Post("/v1/machines/:id/bind-agent", s.bindMachineAgent)
-	app.Get("/v1/machines/:id/agent-binding", s.getMachineAgentBinding)
-	app.Delete("/v1/machines/:id/agent-binding", s.unbindMachineAgent)
-	app.Get("/v1/agent-bindings", s.listAgentBindings)
+	app.Post("/v1/machines/:id/bind-agent", cloud.Handle(s, bindMachineAgent))
+	app.Get("/v1/machines/:id/agent-binding", cloud.Handle(s, getMachineAgentBinding))
+	app.Delete("/v1/machines/:id/agent-binding", cloud.Handle(s, unbindMachineAgent))
+	app.Get("/v1/agent-bindings", cloud.Handle(s, listAgentBindings))
 
 	// Bots — a Bot is a kind=bot machine + an agent binding, composed from the vm
 	// compute + binding surface (bots.go). The sibling of /v1/machines. launch is
 	// an explicit literal, registered before :id so it never binds as an id.
-	app.Get("/v1/bots", s.listBots)
-	app.Post("/v1/bots/launch", s.launchBot)
-	app.Get("/v1/bots/:id", s.getBot)
-	app.Delete("/v1/bots/:id", s.deleteBot)
-	app.Post("/v1/bots/:id/:action", s.botAction)
+	app.Get("/v1/bots", cloud.Handle(s, listBots))
+	app.Post("/v1/bots/launch", cloud.Handle(s, launchBot))
+	app.Get("/v1/bots/:id", cloud.Handle(s, getBot))
+	app.Delete("/v1/bots/:id", cloud.Handle(s, deleteBot))
+	app.Post("/v1/bots/:id/:action", cloud.Handle(s, botAction))
 
-	s.log.Info("visor compute surface mounted", "target", s.cl.target,
+	s.Log.Info("visor compute surface mounted", "target", s.State.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
 	return nil
 }
@@ -150,18 +156,18 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 
 // ---- machines ----
 
-func (s *svc) listMachines(c *zip.Ctx) error {
+func listMachines(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var machines []visorMachine
-	if err := s.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
 		// Visor (the DOKS/reseller provider) is unreachable — do not hide the
 		// tenant's OWN bring-your-own compute behind an upstream blip. Log and
 		// fall through with no Visor rows; the BYO fold-in below still lists the
 		// dialed-in GPUs. In production Visor is up and both sets return.
-		s.log.Warn("visor get-machines failed; returning BYO-only machine list", "org", org, "err", err)
+		s.Log.Warn("visor get-machines failed; returning BYO-only machine list", "org", org, "err", err)
 		machines = nil
 	}
 	out := make([]machineView, 0, len(machines))
@@ -176,7 +182,7 @@ func (s *svc) listMachines(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"machines": out})
 }
 
-func (s *svc) getMachine(c *zip.Ctx) error {
+func getMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -187,7 +193,7 @@ func (s *svc) getMachine(c *zip.Ctx) error {
 	}
 	var m visorMachine
 	// Visor keys a machine by owner/name; the REST :id is the org-scoped name.
-	if err := s.cl.call(c, http.MethodGet, "/v1/get-machine", q("id", org+"/"+name), nil, &m); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machine", q("id", org+"/"+name), nil, &m); err != nil {
 		return err
 	}
 	if m.Name == "" && m.Id == "" {
@@ -201,19 +207,19 @@ func (s *svc) getMachine(c *zip.Ctx) error {
 // listRegions and listSizes expose the global compute catalog that backs the launch
 // drawer. Both delegate to catalog: DRY, one org-gated passthrough of Visor's
 // authoritative list. GET /v1/compute/regions, GET /v1/compute/sizes.
-func (s *svc) listRegions(c *zip.Ctx) error { return s.catalog(c, "/v1/regions") }
-func (s *svc) listSizes(c *zip.Ctx) error   { return s.catalog(c, "/v1/sizes") }
+func listRegions(s *cloud.Service[state], c *zip.Ctx) error { return catalog(s, c, "/v1/regions") }
+func listSizes(s *cloud.Service[state], c *zip.Ctx) error   { return catalog(s, c, "/v1/sizes") }
 
 // catalog proxies a global (non-org-scoped) Visor catalog list. Org-gated so only a
 // validated principal reaches it, but no ?owner is forwarded — the region/size catalog
 // is identical for every tenant. The Visor payload is passed through verbatim so the
 // wire shape stays the single source of truth.
-func (s *svc) catalog(c *zip.Ctx, upstream string) error {
+func catalog(s *cloud.Service[state], c *zip.Ctx, upstream string) error {
 	if _, ok := tenant(c); !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var data json.RawMessage
-	if err := s.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, upstream, "", nil, &data); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, data)
@@ -232,7 +238,7 @@ type launchReq struct {
 // per-hour metering — cloud never bills compute itself; it forwards the tenant.
 // A dryRun returns Visor's price quote verbatim (spends nothing); a real launch
 // returns the launched machine as a clean machineView.
-func (s *svc) launchMachine(c *zip.Ctx) error {
+func launchMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -245,7 +251,7 @@ func (s *svc) launchMachine(c *zip.Ctx) error {
 		return zip.ErrBadRequest("size is required")
 	}
 	var data json.RawMessage
-	if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), body, &data); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), body, &data); err != nil {
 		return err
 	}
 	// dryRun: pass Visor's quote through unchanged (it is the authoritative price).
@@ -268,7 +274,7 @@ func (s *svc) launchMachine(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toMachineView(wrap.Machine))
 }
 
-func (s *svc) deleteMachine(c *zip.Ctx) error {
+func deleteMachine(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -279,7 +285,7 @@ func (s *svc) deleteMachine(c *zip.Ctx) error {
 	}
 	// Visor delete-machine takes the machine identity in the body (owner+name).
 	body := map[string]string{"owner": org, "name": name}
-	if err := s.cl.call(c, http.MethodPost, "/v1/delete-machine", "", body, nil); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/delete-machine", "", body, nil); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -287,16 +293,16 @@ func (s *svc) deleteMachine(c *zip.Ctx) error {
 
 // ---- GPUs (derived from the org's real GPU machines) ----
 
-func (s *svc) listGPUs(c *zip.Ctx) error {
+func listGPUs(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var machines []visorMachine
-	if err := s.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
 		// Resilient union (see listMachines): a Visor outage must not hide the
 		// tenant's BYO accelerators. Log and continue with the BYO fold-in.
-		s.log.Warn("visor get-machines failed; returning BYO-only gpu list", "org", org, "err", err)
+		s.Log.Warn("visor get-machines failed; returning BYO-only gpu list", "org", org, "err", err)
 		machines = nil
 	}
 	out := make([]gpuView, 0)
@@ -315,7 +321,7 @@ func (s *svc) listGPUs(c *zip.Ctx) error {
 // this returns [] rather than fabricating alerts. It stays a real, tenant-gated
 // route so the console's alerts fetch resolves (200 [], not a 404) — an honest
 // "no alerts", the same discipline the rest of the surface follows.
-func (s *svc) gpuAlerts(c *zip.Ctx) error {
+func gpuAlerts(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := tenant(c); !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -324,24 +330,24 @@ func (s *svc) gpuAlerts(c *zip.Ctx) error {
 
 // ---- clusters (DOKS clusters, projected from Visor node pools) ----
 
-func (s *svc) listClusters(c *zip.Ctx) error {
+func listClusters(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var pools []visorNodePool
-	if err := s.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
 		// Visor unreachable — same graceful fold as listMachines/listGpus: a down
 		// optional provider must NOT 502 the Clusters/GPUs page (it surfaced as a
 		// console error on every load where Visor isn't deployed). Log and fall
 		// through with no managed pools; the org's BYO clusters below still list.
-		s.log.Warn("visor get-node-pools failed; returning BYO-only cluster list", "org", org, "err", err)
+		s.Log.Warn("visor get-node-pools failed; returning BYO-only cluster list", "org", org, "err", err)
 		pools = nil
 	}
 	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones,
 	// the latter sharded by the caller's project sub-scope.
 	clusters := clustersFromPools(pools)
-	clusters = append(clusters, s.byoClusters(org, project(c))...)
+	clusters = append(clusters, byoClusters(s, org, project(c))...)
 	return c.JSON(http.StatusOK, map[string]any{"clusters": clusters})
 }
 
@@ -355,7 +361,7 @@ type poolReq struct {
 	AutoScale bool   `json:"autoScale"`
 }
 
-func (s *svc) createPool(c *zip.Ctx) error {
+func createPool(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -376,7 +382,7 @@ func (s *svc) createPool(c *zip.Ctx) error {
 		"minNodes": body.MinNodes, "maxNodes": body.MaxNodes, "autoScale": body.AutoScale,
 	}
 	var pool visorNodePool
-	if err := s.cl.call(c, http.MethodPost, "/v1/create-node-pool",
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/create-node-pool",
 		q("owner", org, "provider", provider, "clusterId", clusterID), spec, &pool); err != nil {
 		return err
 	}
@@ -388,7 +394,7 @@ type scaleReq struct {
 	Count    int    `json:"count"`
 }
 
-func (s *svc) scalePool(c *zip.Ctx) error {
+func scalePool(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -410,7 +416,7 @@ func (s *svc) scalePool(c *zip.Ctx) error {
 		return zip.ErrBadRequest("count must be non-negative")
 	}
 	var pool visorNodePool
-	if err := s.cl.call(c, http.MethodPost, "/v1/scale-node-pool",
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/scale-node-pool",
 		q("owner", org, "provider", provider, "clusterId", clusterID, "poolId", poolID, "count", strconv.Itoa(body.Count)),
 		nil, &pool); err != nil {
 		return err
@@ -418,7 +424,7 @@ func (s *svc) scalePool(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toNodePoolView(pool))
 }
 
-func (s *svc) deletePool(c *zip.Ctx) error {
+func deletePool(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -438,7 +444,7 @@ func (s *svc) deletePool(c *zip.Ctx) error {
 		"owner": org, "name": poolID, "poolId": poolID,
 		"provider": provider, "clusterId": clusterID,
 	}
-	if err := s.cl.call(c, http.MethodPost, "/v1/delete-node-pool", "", body, nil); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/delete-node-pool", "", body, nil); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

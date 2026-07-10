@@ -20,15 +20,16 @@ import (
 // probe is never wrapped.
 type guardFn = func(zip.Handler) zip.Handler
 
-// svc is the mounted team subsystem: the two stores + the wired config. Held so
-// Shutdown can release the DB handles and the roster hub.
-type svc struct {
+// state is team's own data: the account store + the transactor. Held via the
+// mounted cloud.Service so Shutdown can release the DB handles and the roster
+// hub. Shared deps (logger, KMS, billing, brand) live in the embedded cloud.Base.
+type state struct {
 	accounts *accountStore
 	trans    *transServer
 }
 
 // mounted is the active service so Shutdown can release resources. Idempotent.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires the /v1/team/* surface onto app per HIP-0106. It opens the two
 // SQLite stores under {DataDir}/team, wires the account API, the transactor
@@ -111,7 +112,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	fsvc := &filesSvc{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
 	fsvc.register(app, guard)
 
-	mounted = &svc{accounts: accounts, trans: trans}
+	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil
 }
@@ -128,13 +129,13 @@ func Shutdown() error {
 		return nil
 	}
 	var firstErr error
-	if mounted.trans != nil && mounted.trans.store != nil {
-		if err := mounted.trans.store.Close(); err != nil {
+	if mounted.State.trans != nil && mounted.State.trans.store != nil {
+		if err := mounted.State.trans.store.Close(); err != nil {
 			firstErr = err
 		}
 	}
-	if mounted.accounts != nil {
-		if err := mounted.accounts.Close(); err != nil && firstErr == nil {
+	if mounted.State.accounts != nil {
+		if err := mounted.State.accounts.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

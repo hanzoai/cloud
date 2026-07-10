@@ -61,8 +61,8 @@ type runView struct {
 	Shape  string `json:"shape"`
 }
 
-func (s *svc) run(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func run(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -95,10 +95,10 @@ func (s *svc) run(c *zip.Ctx) error {
 	// Scale bounds: minScale is the replica floor (clamped to [1,maxReplicas]).
 	// maxScale>0 declares an autoscaling ceiling (clamped, >=minScale); maxScale==0
 	// means no HPA — a fixed run at minScale (serviceCR omits the autoscaling block).
-	minScale := s.k8s.limits.clampReplicas(body.MinScale)
+	minScale := s.State.k8s.limits.clampReplicas(body.MinScale)
 	maxScale := 0
 	if body.MaxScale > 0 {
-		maxScale = s.k8s.limits.clampReplicas(body.MaxScale)
+		maxScale = s.State.k8s.limits.clampReplicas(body.MaxScale)
 		if maxScale < minScale {
 			maxScale = minScale
 		}
@@ -108,19 +108,19 @@ func (s *svc) run(c *zip.Ctx) error {
 	// resolved above is sent as both the commerce user and X-Org-Id), never a
 	// default — the anti-cross-tenant billing property (resource_billing.go).
 	fee := cloud.ResourceFeeCents(runFeeEnvPrefix, runKind)
-	if err := s.bill.Gate(c.Context(), org, principal.Project(c), runKind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), runKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
 	// Fail closed if the cluster is unreachable — a run that cannot write its CR must
 	// never report a fabricated URL/status.
-	if err := s.k8s.ready(); err != nil {
+	if err := s.State.k8s.ready(); err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "cluster unavailable: %v", err)
 	}
 
 	// Seal secret env into KMS so plaintext is never persisted (same choke point as
 	// createApp); fails closed if a secret is present without KMS.
-	sealedEnv, err := s.sealSecretEnv(c.Context(), org, slug, body.Env)
+	sealedEnv, err := sealSecretEnv(s, c.Context(), org, slug, body.Env)
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
@@ -128,18 +128,18 @@ func (s *svc) run(c *zip.Ctx) error {
 
 	// Always attach the canonical default host so the run gets a working HTTPS URL
 	// the moment the operator reconciles its ingress.
-	domains := s.seedDefaultDomain(org, slug, nil)
+	domains := seedDefaultDomain(s, org, slug, nil)
 	domainsJSON, _ := json.Marshal(domains)
 
 	repo, tag := splitImageRef(image)
 	now := time.Now().Unix()
 
-	project, herr := s.ensureRunProject(c.Context(), org, now)
+	project, herr := ensureRunProject(s, c.Context(), org, now)
 	if herr != nil {
 		return herr
 	}
 
-	a, err := s.store.GetApplication(c.Context(), org, project.ID, slug)
+	a, err := s.State.store.GetApplication(c.Context(), org, project.ID, slug)
 	switch {
 	case errors.Is(err, errNotFound):
 		id, gerr := genID("app")
@@ -154,7 +154,7 @@ func (s *svc) run(c *zip.Ctx) error {
 			DomainsJSON: string(domainsJSON), Status: "deploying", Namespace: tenantNamespace(org),
 			CreatedAt: now, UpdatedAt: now,
 		}
-		if err := s.store.CreateApplication(c.Context(), a); err != nil {
+		if err := s.State.store.CreateApplication(c.Context(), a); err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 		}
 	case err != nil:
@@ -166,28 +166,28 @@ func (s *svc) run(c *zip.Ctx) error {
 		a.Replicas, a.MinScale, a.MaxScale = minScale, minScale, maxScale
 		a.EnvJSON, a.DomainsJSON = string(envJSON), string(domainsJSON)
 		a.Status, a.Namespace, a.UpdatedAt = "deploying", tenantNamespace(org), now
-		if err := s.store.UpdateApplication(c.Context(), a); err != nil {
+		if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 		}
 	}
 
 	// The ONE Service-CR writer (image + autoscaling min/max + port + ingress). The
 	// operator reconciles the rollout; secret-env sync is declared best-effort.
-	if err := s.k8s.applyService(c.Context(), org, project.Slug, a, image); err != nil {
+	if err := s.State.k8s.applyService(c.Context(), org, project.Slug, a, image); err != nil {
 		return zip.Errorf(deployErrStatus(err), "apply Service CR: %v", err)
 	}
-	s.ensureSecretSync(c.Context(), org, a)
+	ensureSecretSync(s, c.Context(), org, a)
 
 	// Record the paid unit on the run's OWN org ledger (fire-and-forget).
-	s.bill.Meter(org, principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(org, principal.Project(c), runKind, fee, c.RequestID(), cloud.ClientIP(c))
 
-	s.log.Info("run (container-serverless)", "org", org, "app", slug, "ns", tenantNamespace(org),
+	s.Log.Info("run (container-serverless)", "org", org, "app", slug, "ns", tenantNamespace(org),
 		"image", image, "min", minScale, "max", maxScale, "actor", c.User(), "requestID", c.RequestID())
 
 	return c.JSON(http.StatusAccepted, runView{
 		ID:     a.ID,
 		Name:   a.Name,
-		URL:    "https://" + s.defaultHost(org, slug),
+		URL:    "https://" + defaultHost(s, org, slug),
 		Status: a.Status,
 		Shape:  firstNonEmpty(strings.TrimSpace(body.Shape), "auto"),
 	})
@@ -195,8 +195,8 @@ func (s *svc) run(c *zip.Ctx) error {
 
 // ensureRunProject get-or-creates the per-org default project that holds
 // container-serverless runs, reusing the project store — no parallel container.
-func (s *svc) ensureRunProject(ctx context.Context, org string, now int64) (Project, error) {
-	p, err := s.store.GetProject(ctx, org, runProjectSlug)
+func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string, now int64) (Project, error) {
+	p, err := s.State.store.GetProject(ctx, org, runProjectSlug)
 	if err == nil {
 		return p, nil
 	}
@@ -208,10 +208,10 @@ func (s *svc) ensureRunProject(ctx context.Context, org string, now int64) (Proj
 		return Project{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
 	}
 	p = Project{ID: id, Org: org, Slug: runProjectSlug, Name: "Default", Description: "Container-serverless runs", CreatedAt: now, UpdatedAt: now}
-	if err := s.store.CreateProject(ctx, p); err != nil {
+	if err := s.State.store.CreateProject(ctx, p); err != nil {
 		if errors.Is(err, errConflict) {
 			// Lost a create race — read the winner so the run proceeds.
-			if p2, e2 := s.store.GetProject(ctx, org, runProjectSlug); e2 == nil {
+			if p2, e2 := s.State.store.GetProject(ctx, org, runProjectSlug); e2 == nil {
 				return p2, nil
 			}
 		}

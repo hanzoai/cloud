@@ -65,23 +65,22 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// svc is the mounted ingress subsystem: the store (source of truth), the engine
-// (compiled runtime table), and — in edge role — the edge (listeners).
-type svc struct {
+// state is the mounted ingress subsystem's own data: the store (source of truth),
+// the engine (compiled runtime table), and — in edge role — the edge (listeners).
+// Shared deps live in the embedded cloud.Base.
+type state struct {
 	store   *Store
 	engine  *Engine
 	edge    *Edge // nil in app role
 	edgeCfg edgeConfig
 	role    string // "edge" | "app" (derived, for /v1/ingress/status)
-	log     luxlog.Logger
 	mu      sync.Mutex // serializes reload compiles
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires the /v1/ingress control plane onto app and, in edge role, starts the
 // edge data plane.
@@ -95,7 +94,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("ingress.Mount: empty DataDir")
 	}
-	log := deps.Logger.New("subsystem", "ingress")
+	b := cloud.NewBase(deps, "ingress")
+	log := b.Log
 
 	dir := filepath.Join(deps.DataDir, "ingress")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -119,14 +119,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		role = "edge"
 	}
 
-	s := &svc{store: store, engine: newEngine(log), edgeCfg: ecfg, role: role, log: log}
+	s := &cloud.Service[state]{Base: b, State: state{store: store, engine: newEngine(log), edgeCfg: ecfg, role: role}}
 	mounted = s
-	s.mountRoutes(app)
+	mountRoutes(s, app)
 
 	// Compile the persisted config into the engine before the edge serves it. A
 	// reload failure is logged, not fatal — the edge serves an empty table until
 	// the config is fixed, rather than refusing to boot.
-	if err := s.reload(context.Background()); err != nil {
+	if err := reload(s, context.Background()); err != nil {
 		log.Warn("ingress: initial reload failed", "err", err)
 	}
 
@@ -134,8 +134,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		if err := os.MkdirAll(ecfg.cacheDir, 0o700); err != nil {
 			return fmt.Errorf("ingress.Mount: acme cache dir: %w", err)
 		}
-		s.edge = newEdge(s.engine, ecfg, log)
-		s.edge.start()
+		s.State.edge = newEdge(s.State.engine, ecfg, log)
+		s.State.edge.start()
 		log.Info("ingress EDGE role active", "http", ecfg.httpAddr, "https", ecfg.httpsAddr, "acmeStaging", ecfg.staging)
 	} else {
 		log.Info("ingress control plane mounted (app role; edge listeners off)", "prefix", "/v1/ingress")
@@ -149,11 +149,11 @@ func Shutdown(ctx context.Context) error {
 		return nil
 	}
 	var err error
-	if mounted.edge != nil {
-		err = mounted.edge.stop(ctx)
+	if mounted.State.edge != nil {
+		err = mounted.State.edge.stop(ctx)
 	}
-	if mounted.store != nil {
-		if e := mounted.store.Close(); e != nil && err == nil {
+	if mounted.State.store != nil {
+		if e := mounted.State.store.Close(); e != nil && err == nil {
 			err = e
 		}
 	}
@@ -178,28 +178,28 @@ func init() {
 // mountRoutes registers the /v1/ingress control-plane surface. routes/services/
 // middlewares share uniform CRUD (list/get/delete keyed by kind); create+update
 // share one handler per kind (POST and PUT both land there).
-func (s *svc) mountRoutes(app *zip.App) {
-	app.Get("/v1/ingress/status", s.status)
-	app.Get("/v1/ingress/tls", s.getTLS)
-	app.Put("/v1/ingress/tls", s.putTLS)
+func mountRoutes(s *cloud.Service[state], app *zip.App) {
+	app.Get("/v1/ingress/status", cloud.Handle(s, status))
+	app.Get("/v1/ingress/tls", cloud.Handle(s, getTLS))
+	app.Put("/v1/ingress/tls", cloud.Handle(s, putTLS))
 
-	app.Get("/v1/ingress/routes", s.list(KindRoute))
-	app.Get("/v1/ingress/routes/:id", s.getObj(KindRoute))
-	app.Post("/v1/ingress/routes", s.putRoute)
-	app.Put("/v1/ingress/routes/:id", s.putRoute)
-	app.Delete("/v1/ingress/routes/:id", s.del(KindRoute))
+	app.Get("/v1/ingress/routes", list(s, KindRoute))
+	app.Get("/v1/ingress/routes/:id", getObj(s, KindRoute))
+	app.Post("/v1/ingress/routes", cloud.Handle(s, putRoute))
+	app.Put("/v1/ingress/routes/:id", cloud.Handle(s, putRoute))
+	app.Delete("/v1/ingress/routes/:id", del(s, KindRoute))
 
-	app.Get("/v1/ingress/services", s.list(KindService))
-	app.Get("/v1/ingress/services/:id", s.getObj(KindService))
-	app.Post("/v1/ingress/services", s.putService)
-	app.Put("/v1/ingress/services/:id", s.putService)
-	app.Delete("/v1/ingress/services/:id", s.del(KindService))
+	app.Get("/v1/ingress/services", list(s, KindService))
+	app.Get("/v1/ingress/services/:id", getObj(s, KindService))
+	app.Post("/v1/ingress/services", cloud.Handle(s, putService))
+	app.Put("/v1/ingress/services/:id", cloud.Handle(s, putService))
+	app.Delete("/v1/ingress/services/:id", del(s, KindService))
 
-	app.Get("/v1/ingress/middlewares", s.list(KindMiddleware))
-	app.Get("/v1/ingress/middlewares/:id", s.getObj(KindMiddleware))
-	app.Post("/v1/ingress/middlewares", s.putMiddleware)
-	app.Put("/v1/ingress/middlewares/:id", s.putMiddleware)
-	app.Delete("/v1/ingress/middlewares/:id", s.del(KindMiddleware))
+	app.Get("/v1/ingress/middlewares", list(s, KindMiddleware))
+	app.Get("/v1/ingress/middlewares/:id", getObj(s, KindMiddleware))
+	app.Post("/v1/ingress/middlewares", cloud.Handle(s, putMiddleware))
+	app.Put("/v1/ingress/middlewares/:id", cloud.Handle(s, putMiddleware))
+	app.Delete("/v1/ingress/middlewares/:id", del(s, KindMiddleware))
 }
 
 // admin resolves the SuperAdmin tenant for an edge-config request. The edge is
@@ -207,7 +207,7 @@ func (s *svc) mountRoutes(app *zip.App) {
 // SuperAdmin (owner=="admin" ⇒ c.IsAdmin(), the same predicate admin-guard and
 // clients/admin enforce), and storage is scoped to that validated admin org. A
 // non-admin — or a forged, unvalidated principal — is refused 403.
-func (s *svc) admin(c *zip.Ctx) (string, error) {
+func admin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 	if !c.IsAdmin() {
 		return "", zip.ErrForbidden("ingress edge config requires SuperAdmin")
 	}
@@ -220,13 +220,13 @@ func (s *svc) admin(c *zip.Ctx) (string, error) {
 
 // ── object CRUD ───────────────────────────────────────────────────────────────
 
-func (s *svc) list(kind string) zip.Handler {
+func list(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, err := s.admin(c)
+		org, err := admin(s, c)
 		if err != nil {
 			return err
 		}
-		objs, err := s.store.List(c.Context(), org, kind)
+		objs, err := s.State.store.List(c.Context(), org, kind)
 		if err != nil {
 			return zip.ErrInternal("list " + kind + ": " + err.Error())
 		}
@@ -238,13 +238,13 @@ func (s *svc) list(kind string) zip.Handler {
 	}
 }
 
-func (s *svc) getObj(kind string) zip.Handler {
+func getObj(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, err := s.admin(c)
+		org, err := admin(s, c)
 		if err != nil {
 			return err
 		}
-		doc, found, err := s.store.Get(c.Context(), org, kind, c.Param("id"))
+		doc, found, err := s.State.store.Get(c.Context(), org, kind, c.Param("id"))
 		if err != nil {
 			return zip.ErrInternal("get " + kind + ": " + err.Error())
 		}
@@ -255,28 +255,28 @@ func (s *svc) getObj(kind string) zip.Handler {
 	}
 }
 
-func (s *svc) del(kind string) zip.Handler {
+func del(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, err := s.admin(c)
+		org, err := admin(s, c)
 		if err != nil {
 			return err
 		}
-		ok, err := s.store.Delete(c.Context(), org, kind, c.Param("id"))
+		ok, err := s.State.store.Delete(c.Context(), org, kind, c.Param("id"))
 		if err != nil {
 			return zip.ErrInternal("delete " + kind + ": " + err.Error())
 		}
 		if !ok {
 			return zip.ErrNotFound(kind + " not found")
 		}
-		if err := s.reload(c.Context()); err != nil {
+		if err := reload(s, c.Context()); err != nil {
 			return zip.ErrInternal("reload: " + err.Error())
 		}
 		return c.NoContent(http.StatusNoContent)
 	}
 }
 
-func (s *svc) putRoute(c *zip.Ctx) error {
-	org, err := s.admin(c)
+func putRoute(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := admin(s, c)
 	if err != nil {
 		return err
 	}
@@ -294,20 +294,20 @@ func (s *svc) putRoute(c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 	doc, _ := json.Marshal(r)
-	if err := s.store.Put(c.Context(), org, KindRoute, r.ID, string(doc), r.Host, now()); err != nil {
+	if err := s.State.store.Put(c.Context(), org, KindRoute, r.ID, string(doc), r.Host, now()); err != nil {
 		if errors.Is(err, ErrHostTaken) {
 			return zip.ErrConflict("host already claimed: " + r.Host)
 		}
 		return zip.ErrInternal("persist route: " + err.Error())
 	}
-	if err := s.reload(c.Context()); err != nil {
+	if err := reload(s, c.Context()); err != nil {
 		return zip.ErrInternal("reload: " + err.Error())
 	}
 	return c.JSON(http.StatusOK, r)
 }
 
-func (s *svc) putService(c *zip.Ctx) error {
-	org, err := s.admin(c)
+func putService(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := admin(s, c)
 	if err != nil {
 		return err
 	}
@@ -325,17 +325,17 @@ func (s *svc) putService(c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 	doc, _ := json.Marshal(svcObj)
-	if err := s.store.Put(c.Context(), org, KindService, svcObj.ID, string(doc), "", now()); err != nil {
+	if err := s.State.store.Put(c.Context(), org, KindService, svcObj.ID, string(doc), "", now()); err != nil {
 		return zip.ErrInternal("persist service: " + err.Error())
 	}
-	if err := s.reload(c.Context()); err != nil {
+	if err := reload(s, c.Context()); err != nil {
 		return zip.ErrInternal("reload: " + err.Error())
 	}
 	return c.JSON(http.StatusOK, svcObj)
 }
 
-func (s *svc) putMiddleware(c *zip.Ctx) error {
-	org, err := s.admin(c)
+func putMiddleware(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := admin(s, c)
 	if err != nil {
 		return err
 	}
@@ -353,10 +353,10 @@ func (s *svc) putMiddleware(c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 	doc, _ := json.Marshal(m)
-	if err := s.store.Put(c.Context(), org, KindMiddleware, m.ID, string(doc), "", now()); err != nil {
+	if err := s.State.store.Put(c.Context(), org, KindMiddleware, m.ID, string(doc), "", now()); err != nil {
 		return zip.ErrInternal("persist middleware: " + err.Error())
 	}
-	if err := s.reload(c.Context()); err != nil {
+	if err := reload(s, c.Context()); err != nil {
 		return zip.ErrInternal("reload: " + err.Error())
 	}
 	return c.JSON(http.StatusOK, m)
@@ -364,36 +364,36 @@ func (s *svc) putMiddleware(c *zip.Ctx) error {
 
 // ── TLS / ACME config ─────────────────────────────────────────────────────────
 
-func (s *svc) getTLS(c *zip.Ctx) error {
-	org, err := s.admin(c)
+func getTLS(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := admin(s, c)
 	if err != nil {
 		return err
 	}
-	t, err := s.orgTLS(c.Context(), org)
+	t, err := orgTLS(s, c.Context(), org)
 	if err != nil {
 		return zip.ErrInternal("load tls: " + err.Error())
 	}
-	hosts, err := s.tlsHostSet(c.Context())
+	hosts, err := tlsHostSet(s, c.Context())
 	if err != nil {
 		return zip.ErrInternal("tls hosts: " + err.Error())
 	}
 	directory := "letsencrypt-production"
-	if s.edgeCfg.staging {
+	if s.State.edgeCfg.staging {
 		directory = leStagingDirectory
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"config":        t,
-		"role":          s.role,
-		"edgeEnabled":   s.edge != nil,
+		"role":          s.State.role,
+		"edgeEnabled":   s.State.edge != nil,
 		"managedHosts":  sortedKeys(hosts),
 		"acmeDirectory": directory,
-		"acmeEmail":     s.edgeCfg.email,
+		"acmeEmail":     s.State.edgeCfg.email,
 		"note":          "acmeEmail/staging apply on edge (re)start; extraHosts + route.tls hot-apply on reload",
 	})
 }
 
-func (s *svc) putTLS(c *zip.Ctx) error {
-	org, err := s.admin(c)
+func putTLS(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := admin(s, c)
 	if err != nil {
 		return err
 	}
@@ -405,27 +405,27 @@ func (s *svc) putTLS(c *zip.Ctx) error {
 		return zip.ErrBadRequest(err.Error())
 	}
 	doc, _ := json.Marshal(t)
-	if err := s.store.PutTLS(c.Context(), org, string(doc), now()); err != nil {
+	if err := s.State.store.PutTLS(c.Context(), org, string(doc), now()); err != nil {
 		return zip.ErrInternal("persist tls: " + err.Error())
 	}
-	if err := s.reload(c.Context()); err != nil {
+	if err := reload(s, c.Context()); err != nil {
 		return zip.ErrInternal("reload: " + err.Error())
 	}
 	return c.JSON(http.StatusOK, t)
 }
 
-func (s *svc) status(c *zip.Ctx) error {
-	if _, err := s.admin(c); err != nil {
+func status(s *cloud.Service[state], c *zip.Ctx) error {
+	if _, err := admin(s, c); err != nil {
 		return err
 	}
-	hosts, tlsHosts := s.engine.counts()
+	hosts, tlsHosts := s.State.engine.counts()
 	return c.JSON(http.StatusOK, map[string]any{
-		"role":         s.role,
-		"edgeEnabled":  s.edge != nil,
-		"httpAddr":     s.edgeCfg.httpAddr,
-		"httpsAddr":    s.edgeCfg.httpsAddr,
-		"acmeStaging":  s.edgeCfg.staging,
-		"acmeCacheDir": s.edgeCfg.cacheDir,
+		"role":         s.State.role,
+		"edgeEnabled":  s.State.edge != nil,
+		"httpAddr":     s.State.edgeCfg.httpAddr,
+		"httpsAddr":    s.State.edgeCfg.httpsAddr,
+		"acmeStaging":  s.State.edgeCfg.staging,
+		"acmeCacheDir": s.State.edgeCfg.cacheDir,
 		"liveHosts":    hosts,
 		"tlsHosts":     tlsHosts,
 		"proxy":        "github.com/vulcand/oxy/v2 (weighted round-robin, Traefik lineage)",
@@ -438,19 +438,19 @@ func (s *svc) status(c *zip.Ctx) error {
 // and atomically swaps it in. Called after every mutation and once at Mount. The
 // compile is cheap and lock-free on the read path; mu only serializes concurrent
 // compiles so the last writer wins deterministically.
-func (s *svc) reload(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func reload(s *cloud.Service[state], ctx context.Context) error {
+	s.State.mu.Lock()
+	defer s.State.mu.Unlock()
 
-	routes, err := loadObjects[Route](ctx, s.store, KindRoute)
+	routes, err := loadObjects[Route](ctx, s.State.store, KindRoute)
 	if err != nil {
 		return err
 	}
-	svcObjs, err := loadObjects[Service](ctx, s.store, KindService)
+	svcObjs, err := loadObjects[Service](ctx, s.State.store, KindService)
 	if err != nil {
 		return err
 	}
-	mwObjs, err := loadObjects[Middleware](ctx, s.store, KindMiddleware)
+	mwObjs, err := loadObjects[Middleware](ctx, s.State.store, KindMiddleware)
 	if err != nil {
 		return err
 	}
@@ -462,20 +462,20 @@ func (s *svc) reload(ctx context.Context) error {
 	for _, o := range mwObjs {
 		mws[o.ID] = o
 	}
-	tlsHosts, err := s.tlsHostSet(ctx)
+	tlsHosts, err := tlsHostSet(s, ctx)
 	if err != nil {
 		return err
 	}
-	live, skipped := s.engine.apply(routes, services, mws, tlsHosts)
-	s.log.Info("ingress reloaded", "liveRoutes", live, "skipped", skipped, "tlsHosts", len(tlsHosts))
+	live, skipped := s.State.engine.apply(routes, services, mws, tlsHosts)
+	s.Log.Info("ingress reloaded", "liveRoutes", live, "skipped", skipped, "tlsHosts", len(tlsHosts))
 	return nil
 }
 
 // tlsHostSet is the union of every route marked TLS and every org's tls.extraHosts
 // — the hosts the ACME HostPolicy will issue certs for.
-func (s *svc) tlsHostSet(ctx context.Context) (map[string]struct{}, error) {
+func tlsHostSet(s *cloud.Service[state], ctx context.Context) (map[string]struct{}, error) {
 	set := map[string]struct{}{}
-	routes, err := loadObjects[Route](ctx, s.store, KindRoute)
+	routes, err := loadObjects[Route](ctx, s.State.store, KindRoute)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +484,7 @@ func (s *svc) tlsHostSet(ctx context.Context) (map[string]struct{}, error) {
 			set[normalizeHost(r.Host)] = struct{}{}
 		}
 	}
-	docs, err := s.store.AllTLS(ctx)
+	docs, err := s.State.store.AllTLS(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -501,9 +501,9 @@ func (s *svc) tlsHostSet(ctx context.Context) (map[string]struct{}, error) {
 	return set, nil
 }
 
-func (s *svc) orgTLS(ctx context.Context, org string) (TLSConfig, error) {
+func orgTLS(s *cloud.Service[state], ctx context.Context, org string) (TLSConfig, error) {
 	var t TLSConfig
-	doc, found, err := s.store.GetTLS(ctx, org)
+	doc, found, err := s.State.store.GetTLS(ctx, org)
 	if err != nil {
 		return t, err
 	}

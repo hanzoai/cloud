@@ -1,7 +1,7 @@
 package agents
 
 // The long-running-agent scheduler: it invokes each long-running agent's run on
-// its cron cadence, through the SAME svc.runAgent path the HTTP handler uses —
+// its cron cadence, through the SAME runAgent path the HTTP handler uses —
 // so a scheduled run is gated (fail-closed on the agent's OWN org balance),
 // executed, recorded, and billed identically to an interactive one. There is no
 // self-HTTP call: the endpoint's BEHAVIOR is the contract, and calling runAgent
@@ -20,7 +20,7 @@ package agents
 //     A success resets the backoff.
 //
 // All state is in-memory and keyed by org/name: the scheduler is a per-process
-// singleton owned by the mounted svc, torn down on Shutdown.
+// singleton owned by the mounted Service, torn down on Shutdown.
 
 import (
 	"context"
@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -58,7 +59,7 @@ type agentState struct {
 }
 
 type scheduler struct {
-	svc    *svc
+	s      *cloud.Service[state]
 	log    luxlog.Logger
 	cancel context.CancelFunc // cancels the loop + all in-flight run contexts.
 
@@ -72,9 +73,9 @@ type scheduler struct {
 	tickC <-chan time.Time
 }
 
-func newScheduler(s *svc, log luxlog.Logger) *scheduler {
+func newScheduler(s *cloud.Service[state], log luxlog.Logger) *scheduler {
 	return &scheduler{
-		svc:    s,
+		s:      s,
 		log:    log.New("component", "scheduler"),
 		states: map[string]*agentState{},
 		now:    time.Now,
@@ -140,7 +141,7 @@ func (sc *scheduler) loop(ctx context.Context) {
 // launches the ones that are due, are not backed off, and have a free
 // concurrency slot. It is separated from loop() so tests can invoke it directly.
 func (sc *scheduler) tick(ctx context.Context, now time.Time) {
-	agents, err := sc.svc.store.ListLongRunning(ctx)
+	agents, err := sc.s.State.store.ListLongRunning(ctx)
 	if err != nil {
 		sc.log.Warn("scheduler: list long-running failed", "err", err)
 		return
@@ -203,7 +204,7 @@ func (sc *scheduler) launch(ctx context.Context, a Agent, key string) {
 		defer cancel()
 
 		// Scheduled runs carry no HTTP request/IP; requestID/clientIP are empty.
-		r, gateErr := sc.svc.runAgent(runCtx, a, "", scheduledActor(a), "", "")
+		r, gateErr := runAgent(sc.s, runCtx, a, "", scheduledActor(a), "", "")
 
 		ok := gateErr == nil && r.Status == "ok"
 		sc.mu.Lock()
