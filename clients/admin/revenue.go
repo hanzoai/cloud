@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -46,12 +47,12 @@ type revenueData struct {
 	Sources            []sourceStatus    `json:"sources"`
 }
 
-func (s *svc) revenue(c *zip.Ctx) error {
+func revenue(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	now := time.Now().UTC()
 
-	orgs, err := s.listOrgs(ctx, cr)
+	orgs, err := listOrgs(s, ctx, cr)
 	if err != nil {
 		return fail(c, err.Error())
 	}
@@ -67,7 +68,7 @@ func (s *svc) revenue(c *zip.Ctx) error {
 		go func(i int, o iamOrg) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			rows[i], oks[i] = s.revenueOf(ctx, o)
+			rows[i], oks[i] = revenueOf(s, ctx, o)
 		}(i, o)
 	}
 	wg.Wait()
@@ -92,7 +93,7 @@ func (s *svc) revenue(c *zip.Ctx) error {
 	}
 
 	// Real 30-day spend trend from the usage ledger (honest empty when no usage).
-	acts, ledgerOK := s.fleetActivity(ctx, orgs)
+	acts, ledgerOK := fleetActivity(s, ctx, orgs)
 	trend := spendSeries(acts, now.AddDate(0, 0, -30), now, "day")
 
 	// Highest-revenue customers first.
@@ -131,22 +132,22 @@ func (s *svc) revenue(c *zip.Ctx) error {
 // revenueOf reads one org's money view (balance + spend + plan/MRR). Returns
 // (row, ok): ok is false when the spend OR balance read failed, so the caller can
 // mark the fleet total PARTIAL rather than presenting an undercount as complete.
-func (s *svc) revenueOf(ctx context.Context, o iamOrg) (revenueCustomer, bool) {
+func revenueOf(s *cloud.Service[state], ctx context.Context, o iamOrg) (revenueCustomer, bool) {
 	subj := orgSubject(o.Name)
 	row := revenueCustomer{Org: o.Name, Display: display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
 	ok := true
 
-	if r, err := s.commerce.usageRollup(ctx, o.Name, subj); err == nil {
+	if r, err := s.State.commerce.usageRollup(ctx, o.Name, subj); err == nil {
 		row.SpendCents = r.ConsumedCents
 	} else {
 		ok = false
 	}
-	if credits, err := s.commerce.creditsCents(ctx, o.Name, subj); err == nil {
+	if credits, err := s.State.commerce.creditsCents(ctx, o.Name, subj); err == nil {
 		row.BalanceCents = credits
 	} else {
 		ok = false
 	}
-	if sub, err := s.commerce.subscriptionSummary(ctx, o.Name, subj); err == nil {
+	if sub, err := s.State.commerce.subscriptionSummary(ctx, o.Name, subj); err == nil {
 		row.MRRCents = sub.MRR
 		row.Plan = sub.Plan
 	}
