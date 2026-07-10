@@ -16,7 +16,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/security/detect"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -36,31 +35,32 @@ const (
 // other subsystems). Invalid → treated as no sub-scope, not a 400.
 var projectRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
-// svc holds the subsystem's process-lifetime state: the findings store, a
-// scoped logger, the (nil-safe) audit recorder and billing meter.
-type svc struct {
+// state is security's own data; shared deps live in the embedded cloud.Base.
+// It holds the findings store, the (nil-safe) audit recorder and the billing
+// meter — kept here (not in Base.Bill) because its commerce provider label is
+// meterKind ("security.scan"), NOT the subsystem name.
+type state struct {
 	store *Store
-	log   luxlog.Logger
 	audit *audit.Recorder
 	bill  *cloud.ResourceMeter
 }
 
 // mounted is the process-wide handle so Shutdown can flush the store (mirrors
 // clients/git). Set by Mount, read by Shutdown.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires /v1/security/* onto app and opens the per-deployment findings
 // store under {DataDir}/security.db. It follows the clients/git contract:
-// validate deps, open the store, register routes, return.
+// validate deps, open the store, register routes, return. The store lifecycle
+// and package-global handle make this a direct construction (cloud.NewBase),
+// not cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("security.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("security.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "security")
 	if deps.DataDir == "" {
 		return fmt.Errorf("security.Mount: empty DataDir")
 	}
@@ -71,35 +71,41 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("security.Mount: open store: %w", err)
 	}
-	s := &svc{
-		store: store,
-		log:   log,
-		audit: deps.Audit,
-		bill:  cloud.NewResourceMeter(deps, meterKind),
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "security"),
+		State: state{
+			store: store,
+			audit: deps.Audit,
+			bill:  cloud.NewResourceMeter(deps, meterKind),
+		},
 	}
 	mounted = s
 
-	// Static routes register before the :id params so a scan id can never
-	// shadow /rules or /health (Fiber first-match).
-	app.Get("/v1/security/health", s.health)
-	app.Get("/v1/security/rules", s.listRules)
-	app.Post("/v1/security/scans", s.submitScan)
-	app.Get("/v1/security/scans", s.listScans)
-	app.Get("/v1/security/findings", s.listFindings)
-	app.Get("/v1/security/scans/:id", s.getScan)
-	app.Get("/v1/security/findings/:id", s.getFinding)
+	routes(app, s)
 
-	log.Info("security mounted", "brand", deps.Brand, "rules", detect.RuleCount(),
+	s.Log.Info("security mounted", "brand", deps.Brand, "rules", detect.RuleCount(),
 		"db", filepath.Join(deps.DataDir, "security.db"))
 	return nil
 }
 
+// routes registers the security surface. Static routes register before the :id
+// params so a scan id can never shadow /rules or /health (Fiber first-match).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/security/health", cloud.Handle(s, health))
+	app.Get("/v1/security/rules", cloud.Handle(s, listRules))
+	app.Post("/v1/security/scans", cloud.Handle(s, submitScan))
+	app.Get("/v1/security/scans", cloud.Handle(s, listScans))
+	app.Get("/v1/security/findings", cloud.Handle(s, listFindings))
+	app.Get("/v1/security/scans/:id", cloud.Handle(s, getScan))
+	app.Get("/v1/security/findings/:id", cloud.Handle(s, getFinding))
+}
+
 // Shutdown closes the findings store. Idempotent; safe if Mount never ran.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
@@ -172,20 +178,20 @@ func toFindingView(f StoredFinding) findingView {
 // health is fail-open: the subsystem has no external dependency, so it reports
 // ok whenever the store opened. Registered before the generic liveness route so
 // the real probe is not shadowed (mirrors s3svc/kms).
-func (s *svc) health(c *zip.Ctx) error {
+func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"status": "ok", "rules": detect.RuleCount()})
 }
 
 // listRules serves the detection catalog. No tenant scope — the catalog is the
 // same for everyone and discloses nothing tenant-specific.
-func (s *svc) listRules(c *zip.Ctx) error {
+func listRules(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"data": detect.Rules()})
 }
 
 // submitScan runs the engine over the submitted files, persists the scan +
 // redacted findings, meters one unit, emits an audit event, and returns the
 // scan summary. The raw content is scanned in memory and never stored.
-func (s *svc) submitScan(c *zip.Ctx) error {
+func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -249,27 +255,27 @@ func (s *svc) submitScan(c *zip.Ctx) error {
 	}
 	sc.Findings = len(stored)
 
-	if err := s.store.SaveScan(c.Context(), sc, stored); err != nil {
+	if err := s.State.store.SaveScan(c.Context(), sc, stored); err != nil {
 		return zip.Errorf(500, "save scan: %v", err)
 	}
 
 	// One metered unit per scan (product=security). Nil/disabled meter → no-op.
-	s.bill.Meter(org, principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
+	s.State.bill.Meter(org, principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.
-	s.emitAudit(c, org, sc)
+	emitAudit(s, c, org, sc)
 
 	return c.JSON(201, toScanView(sc))
 }
 
-func (s *svc) listScans(c *zip.Ctx) error {
+func listScans(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	limit, _ := strconv.Atoi(c.Query("limit"))
-	rows, err := s.store.ListScans(c.Context(), org, limit)
+	rows, err := s.State.store.ListScans(c.Context(), org, limit)
 	if err != nil {
 		return zip.Errorf(500, "list scans: %v", err)
 	}
@@ -280,12 +286,12 @@ func (s *svc) listScans(c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"data": out})
 }
 
-func (s *svc) getScan(c *zip.Ctx) error {
+func getScan(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	sc, err := s.store.GetScan(c.Context(), org, c.Param("id"))
+	sc, err := s.State.store.GetScan(c.Context(), org, c.Param("id"))
 	if err == errNotFound {
 		return zip.ErrNotFound("scan not found")
 	}
@@ -293,7 +299,7 @@ func (s *svc) getScan(c *zip.Ctx) error {
 		return zip.Errorf(500, "get scan: %v", err)
 	}
 	// Include this scan's findings so the detail view is one round-trip.
-	fs, err := s.store.ListFindings(c.Context(), org, sc.ID, "", 0)
+	fs, err := s.State.store.ListFindings(c.Context(), org, sc.ID, "", 0)
 	if err != nil {
 		return zip.Errorf(500, "list findings: %v", err)
 	}
@@ -305,7 +311,7 @@ func (s *svc) getScan(c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"scan": resp, "findings": fv})
 }
 
-func (s *svc) listFindings(c *zip.Ctx) error {
+func listFindings(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -315,7 +321,7 @@ func (s *svc) listFindings(c *zip.Ctx) error {
 	if minSev != "" && detect.SeverityRank(minSev) == 0 {
 		return zip.ErrBadRequest("minSeverity must be one of critical|high|medium|low")
 	}
-	fs, err := s.store.ListFindings(c.Context(), org, strings.TrimSpace(c.Query("scanId")), minSev, limit)
+	fs, err := s.State.store.ListFindings(c.Context(), org, strings.TrimSpace(c.Query("scanId")), minSev, limit)
 	if err != nil {
 		return zip.Errorf(500, "list findings: %v", err)
 	}
@@ -326,12 +332,12 @@ func (s *svc) listFindings(c *zip.Ctx) error {
 	return c.JSON(200, map[string]any{"data": out})
 }
 
-func (s *svc) getFinding(c *zip.Ctx) error {
+func getFinding(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	f, err := s.store.GetFinding(c.Context(), org, c.Param("id"))
+	f, err := s.State.store.GetFinding(c.Context(), org, c.Param("id"))
 	if err == errNotFound {
 		return zip.ErrNotFound("finding not found")
 	}
@@ -346,8 +352,8 @@ func (s *svc) getFinding(c *zip.Ctx) error {
 // emitAudit appends a tamper-evident record for a scan. Nil recorder → no-op
 // (an unconfigured deployment is never blocked). The record carries the tally,
 // not the findings, and certainly not the secrets.
-func (s *svc) emitAudit(c *zip.Ctx, org string, sc Scan) {
-	if s.audit == nil {
+func emitAudit(s *cloud.Service[state], c *zip.Ctx, org string, sc Scan) {
+	if s.State.audit == nil {
 		return
 	}
 	rec := audit.Record{
@@ -361,8 +367,8 @@ func (s *svc) emitAudit(c *zip.Ctx, org string, sc Scan) {
 		SourceIP:  clientIP(c),
 		RequestID: c.RequestID(),
 	}
-	if _, err := s.audit.Append(c.Context(), rec); err != nil {
-		s.log.Warn("audit append failed", "err", err, "scan", sc.ID)
+	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
+		s.Log.Warn("audit append failed", "err", err, "scan", sc.ID)
 	}
 }
 
