@@ -281,9 +281,9 @@ func LoadConfig() *Config {
 		SitesSelfDomains: splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
 
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
-		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
-		Env:              getenv("CLOUD_ENV", ""),
-		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
+		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
+		Env:                     getenv("CLOUD_ENV", ""),
+		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
 		Replicas: getenvInt("CLOUD_REPLICAS", 0),
 		Domain:   getenv("CLOUD_DOMAIN", "api.hanzo.ai"),
@@ -444,26 +444,23 @@ func registrableDomain(host string) string {
 // falls back to the remote/disabled IAM client — see build.go). ONE activation
 // mechanism (the enable-list), ONE place.
 //
-// "commerce" is staged (task #89 phase 1) because clients/commercesvc.Mount boots
-// the WHOLE commerce runtime in-process (commerce.Embed: per-org SQLite, hooks,
-// cron) and moves the /v1/commerce/* authority INTO the cloud pod. Under the
-// mount-all default that cutover would happen automatically on the next deploy,
-// silently switching every white-label deployment off its standalone commerce pod —
-// a prod operational change, not a code no-op. Until the operator opts in AND the
-// fold is verified per deployment, commerce stays served by the standalone commerce
-// pod and cloud reaches it over the CLOUD_COMMERCE_HTTP_URL / CLOUD_COMMERCE_ZAP_ADDR
-// seam exactly as in production today (pickCommerceClient falls back to the
-// remote/disabled client — see build.go). Activate by ADDING "commerce" to
-// CLOUD_ENABLE explicitly. Phase 2 flips the default (drops this entry) once the
-// in-process path is validated in prod.
-//
-// PHASE 2 (task #96): commerce, captable, sign, dataroom are now folded in-process
-// and validated on the cloud-unified-canary (v1.786.167: all four "mounted
-// in-process", /v1/{commerce,captable,sign,dataroom}/health 200). They are dropped
-// from staging so the mount-all default serves them from the one binary — retiring
-// their standalone Postgres/Next pods. iam and ingress STAY staged (the IAM embed
-// corrupts its own bootstrap under mount-all; iam is served by the standalone pod).
-var stagedSubsystems = map[string]bool{"iam": true, "ingress": true, "commerce": true}
+// PHASE 2 (tasks #96, #105): commerce, captable, sign, dataroom are folded
+// in-process (clients/commercesvc, clients/captable, clients/sign, clients/dataroom)
+// and validated on the cloud-unified-canary (all four "mounted in-process",
+// /v1/{commerce,captable,sign,dataroom}/health 200). commerce was flipped LAST
+// (task #105) because it owns the money path: the cutover keeps the authoritative
+// stores in place (balances/deposits/credits live in the shared Hanzo SQL via
+// SQL_URL, analytics in DATASTORE_URL, blobs in S3) and migrates only the per-org
+// merchant SQLite + tenant base into the cloud data dir, so the in-process app
+// reads the SAME stores as the standalone pod did — no money is copied or split.
+// The cloud pod carries commerce's backend seam (SQL_URL/DATASTORE_URL/KV_URL/
+// S3_*/SQUARE_*/HUSD_*/IAM_*/COMMERCE_EDGE_AUTH) exactly as the standalone CR did;
+// a missing SQL_URL still fails loud (commerce.go) rather than reading $0 balances.
+// All four are dropped from staging so the mount-all default serves them from the
+// one binary — retiring their standalone pods. iam and ingress STAY staged (the
+// IAM embed corrupts its own bootstrap under mount-all; iam is served by the
+// standalone pod).
+var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
 // Empty Enable list = all subsystems enabled, EXCEPT staged subsystems
