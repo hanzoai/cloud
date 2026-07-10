@@ -111,6 +111,20 @@ import (
 	"github.com/hanzoai/cloud/clients/websearch"
 	"github.com/hanzoai/cloud/clients/world"
 	"github.com/hanzoai/cloud/clients/zt"
+
+	// Framework CONTENT modules — NOT mount subsystems (they carry no HTTP surface
+	// and are absent from Wire()). Each registers its DocType fixtures and, for erp,
+	// its ledger-posting lifecycle hooks into the clients/framework DocType engine
+	// from a package init() (framework.RegisterModule) — the idiomatic
+	// register-into-a-registry pattern (cf. database/sql drivers). The framework
+	// engine is mounted (always-on, /v1/framework/*) but its module registry is
+	// populated ONLY by these blank imports. Dropping one silently strips that
+	// lane's DocTypes and hooks — for erp, the immutable ledger postings — from the
+	// binary with NO mount change and NO failing mount test. #248 dropped them;
+	// TestFrameworkContentModulesLinked now guards against a recurrence. Keep.
+	_ "github.com/hanzoai/cloud/clients/cms"
+	_ "github.com/hanzoai/cloud/clients/erp"
+	_ "github.com/hanzoai/cloud/clients/help"
 )
 
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
