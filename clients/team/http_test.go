@@ -254,7 +254,7 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 		t.Fatalf("no-principal GET /v1/team/bots = %d, want 403", code)
 	}
 	// A client-forged X-Org-Id with NO validated X-User-Id → still 403 (the exact
-	// off-gateway forge principal.Tenant refuses).
+	// off-gateway forge principal.Org refuses).
 	if code, _ := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "victim"}, nil); code != http.StatusForbidden {
 		t.Fatalf("forged-org GET /v1/team/bots = %d, want 403", code)
 	}
