@@ -7,7 +7,7 @@
 // once commerce is folded in-process (#114), every /v1/billing read/write + the
 // metering debit routes to the same in-tree gin engine that /v1/commerce already does.
 //
-// HOW. commercesvc.Mount registers the embedded commerce http.Handler here via
+// HOW. commerce.Mount registers the embedded commerce http.Handler here via
 // SetHandler once, at boot. A subsystem builds its S2S HTTP request EXACTLY as
 // before (same path, same `Authorization: Bearer <COMMERCE_SERVICE_TOKEN>`, same
 // server-pinned `X-Org-Id`) and sends it through Transport(): when the handler is
@@ -42,7 +42,7 @@ const PlaceholderBase = "http://commerce.inproc"
 var handler atomic.Pointer[http.Handler]
 
 // SetHandler publishes the in-process commerce handler. Called once by
-// commercesvc.Mount after commerce.Embed returns its gin handler. Passing nil
+// commerce.Mount after commerce.Embed returns its gin handler. Passing nil
 // un-publishes (used by tests).
 func SetHandler(h http.Handler) {
 	if h == nil {
