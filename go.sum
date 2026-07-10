@@ -1223,8 +1223,8 @@ github.com/hanzoai/beego/v2 v2.4.1 h1:rChSPaueQtzriNxmt4jonobe6ujeqho0WTcPVYaH8A
 github.com/hanzoai/beego/v2 v2.4.1/go.mod h1:eDGRL/NJSqjoYHtWa5eMb2ze0gnlEabs1UO/naIfuX0=
 github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo8=
 github.com/hanzoai/builder v0.3.13/go.mod h1:TWZaiP0Y9tCMwtLH2EvQqBAeT1f3aJI5Y0XPM8S0wcE=
-github.com/hanzoai/captable v0.0.0-20260710092459-3cc625ee446f h1:2xUe+E25jsNYn6xeS6xpZqGGDYZS6e30w4OLmzVfW90=
-github.com/hanzoai/captable v0.0.0-20260710092459-3cc625ee446f/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
+github.com/hanzoai/captable v0.0.0-20260710213906-119bf9c088d7 h1:aCZ739s3hAdBBjy5RGLNs6ep9xGz4l+MK7EZCC7HqKc=
+github.com/hanzoai/captable v0.0.0-20260710213906-119bf9c088d7/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/clickhouse-go-mock v0.14.1 h1:M5KFGWtg7aFtNk1ufX2ckrt4dNI+hq1jssk7Dh8EBZw=
 github.com/hanzoai/clickhouse-go-mock v0.14.1/go.mod h1:Ad40Fb2gjTL9r3lRgNk2YRJox1iAAACsPdLfO2kjuUk=
 github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyfjmLYmY344=
@@ -1289,8 +1289,8 @@ github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2
 github.com/hanzoai/search-go v0.36.0/go.mod h1:jdcYUdG6exMfRfJvilWhaNdAR8XWQRPvZtuRxQBzn34=
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible h1:xmFYu3gTLpu78mIx6z0bgpYy3MVdMAEFFeKs2YPybVo=
 github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible/go.mod h1:HTKx0R5LWWt7H1eG4pCpNS4PVO6tZIUVVZN/80sHz9o=
-github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97 h1:/E85zLVOQuxeH1KK0m65OesldQRgpU06cDEKo7DqGLM=
-github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97/go.mod h1:pL+4Kwh+W2AsMaU0QUF/OJoe9eV/CWHhO07Z5KV2SOg=
+github.com/hanzoai/sign v0.0.0-20260710214950-315a3fe6a5a6 h1:moTsbJLl3t4d9nntA0DOLd2LM180zUimeEbYKwFN/cE=
+github.com/hanzoai/sign v0.0.0-20260710214950-315a3fe6a5a6/go.mod h1:pL+4Kwh+W2AsMaU0QUF/OJoe9eV/CWHhO07Z5KV2SOg=
 github.com/hanzoai/sqlite v0.2.3 h1:X9AmaAro1hCsYY/ykI/nD5wiTCPpHhtBkUqe+PfSzuM=
 github.com/hanzoai/sqlite v0.2.3/go.mod h1:jhU6OMiNmNmjFHOgfIskse/RImYEe7rUTm6+rMKMRzg=
 github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5VDk=

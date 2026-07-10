@@ -226,6 +226,79 @@ func TestFullLifecycle(t *testing.T) {
 	t.Logf("cap table after round + transfer: %s", mustJSON(t, ct3))
 }
 
+// TestDilutiveOptionsExcludeTerminal proves M5: only OUTSTANDING options dilute.
+// Options in a terminal state (EXERCISED/EXPIRED/CANCELLED) are excluded from
+// grantedOptions, fullyDilutedShares and per-stakeholder ownership — summing every
+// row regardless of status inflated the cap table and understated ownership.
+func TestDilutiveOptionsExcludeTerminal(t *testing.T) {
+	h := newHost(t)
+	const org = "acme"
+
+	st, body := do(t, h, org, "stakeholders.add", nil, []map[string]any{
+		{"name": "Ada Lovelace", "email": "ada@example.com", "stakeholderType": "INDIVIDUAL", "currentRelationship": "FOUNDER"},
+	})
+	mustStatus(t, 201, st, "stakeholders.add", body)
+	_, slist := do(t, h, org, "stakeholders.list", nil, nil)
+	founderID := firstID(t, slist)
+
+	st, body = do(t, h, org, "shareClasses.create", nil, map[string]any{
+		"name": "Common", "classType": "COMMON", "initialSharesAuthorized": 10000000,
+		"boardApprovalDate": "2026-01-01", "stockholderApprovalDate": "2026-01-02",
+		"votesPerShare": 1, "parValue": 0.0001, "pricePerShare": 0.0001, "seniority": 0,
+		"conversionRights": "CONVERTS_TO_FUTURE_ROUND", "convertsToShareClassId": nil,
+		"liquidationPreferenceMultiple": 1, "participationCapMultiple": 0,
+	})
+	mustStatus(t, 201, st, "shareClasses.create", body)
+	_, scList := do(t, h, org, "shareClasses.list", nil, nil)
+	shareClassID := firstID(t, scList)
+
+	st, body = do(t, h, org, "equityPlans.create", nil, map[string]any{
+		"name": "2026 Plan", "boardApprovalDate": "2026-01-05", "initialSharesReserved": 5000000,
+		"shareClassId": shareClassID, "defaultCancellatonBehavior": "RETURN_TO_POOL",
+	})
+	mustStatus(t, 201, st, "equityPlans.create", body)
+	_, epList := do(t, h, org, "equityPlans.list", nil, nil)
+	equityPlanID := firstID(t, epList)
+
+	addOption := func(grant, status string, qty int) {
+		s, b := do(t, h, org, "options.add", nil, map[string]any{
+			"grantId": grant, "stakeholderId": founderID, "equityPlanId": equityPlanID,
+			"quantity": qty, "exercisePrice": 0.10, "type": "ISO", "status": status,
+			"cliffYears": 1, "vestingYears": 4, "issueDate": "2026-01-06", "expirationDate": "2036-01-06",
+			"vestingStartDate": "2026-01-06", "boardApprovalDate": "2026-01-06", "rule144Date": "2026-07-06",
+		})
+		mustStatus(t, 201, s, "options.add "+status, b)
+	}
+	// Only the ACTIVE grant should count toward dilution; the three terminal-state
+	// grants (large quantities) must be excluded.
+	addOption("GR-ACTIVE", "ACTIVE", 500000)
+	addOption("GR-EXPIRED", "EXPIRED", 999999)
+	addOption("GR-CANCELLED", "CANCELLED", 888888)
+	addOption("GR-EXERCISED", "EXERCISED", 777777)
+
+	_, ct := do(t, h, org, "captable", nil, nil)
+	totals := ct.(map[string]any)["totals"].(map[string]any)
+	if got := totals["grantedOptions"].(float64); got != 500000 {
+		t.Fatalf("grantedOptions=%v want 500000 (terminal-state options must not count)", got)
+	}
+	if got := totals["fullyDilutedShares"].(float64); got != 500000 {
+		t.Fatalf("fullyDilutedShares=%v want 500000 (no shares; only the 500k ACTIVE option)", got)
+	}
+	// Per-stakeholder ownership uses the same filtered base: founder holds the 500k
+	// ACTIVE option → 100% fully-diluted (not diluted away by phantom terminal grants).
+	bs := ct.(map[string]any)["byStakeholder"].([]any)
+	if len(bs) == 0 {
+		t.Fatal("no byStakeholder rows")
+	}
+	f := bs[0].(map[string]any)
+	if f["options"].(float64) != 500000 {
+		t.Fatalf("founder options=%v want 500000", f["options"])
+	}
+	if f["ownershipPct"].(float64) != 100 {
+		t.Fatalf("founder ownershipPct=%v want 100", f["ownershipPct"])
+	}
+}
+
 // firstShareID returns the founder's original certificate share id.
 func firstShareID(t *testing.T, h *gojabase.Host, org string) string {
 	t.Helper()
