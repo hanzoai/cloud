@@ -103,12 +103,16 @@ func (s *svc) metrics(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	spec, ok := rangeSpecs[c.Query("range")]
 	if !ok {
 		spec = rangeSpecs["24H"]
 	}
 	since := time.Now().Add(-spec.dur).Unix()
-	invs, err := s.store.InvocationsSince(c.Context(), org, since, 5000)
+	invs, err := store.InvocationsSince(c.Context(), org, since, 5000)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
