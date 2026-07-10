@@ -172,8 +172,12 @@ import (
 	// is the container-app PaaS. Every route is org-scoped by the validated
 	// X-Org-Id and the deploy namespace is DERIVED from it (tenant-<org>), never
 	// taken from the request — the cross-tenant isolation boundary. Order 124
-	// binds /v1/platform/* before projects (125) and the AI catch-all (150).
-	_ "github.com/hanzoai/cloud/clients/platform" // order 124 — /v1/platform/*
+	// binds /v1/platform/* before projects (125) and the AI catch-all (150). It
+	// ALSO owns the top-level container-serverless one-shot POST /v1/run (run.go):
+	// a single call that create-or-updates an image app and deploys it via the SAME
+	// Service-CR writer, so there is no parallel deploy path — one machinery, two
+	// entry points. Mounted by THIS blank import; no separate subsystem needed.
+	_ "github.com/hanzoai/cloud/clients/platform" // order 124 — /v1/platform/*, /v1/run
 
 	// Product control planes: per-org, Base/SQLite-backed application surfaces
 	// mounted natively in the cloud binary (the "all products in the cloud
