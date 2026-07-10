@@ -124,7 +124,7 @@ func (s *Signer) zshare(rc RoundContext) []byte {
 // identity proof-of-possession, so peers can attribute the commitment to a
 // distinct registered sender. The ALL-Round1 barrier counts only authenticated
 // commitments, so a single node cannot forge a quorum of them (anti-rush).
-func (s *Signer) CommitPoP(rc RoundContext, zcommit []byte) []byte {
+func (s *Signer) CommitPoP(rc RoundContext, zcommit []byte) ([]byte, error) {
 	return signPoP(s.share.idKey, round1TBS(rc.SessionID, rc.NonceID, s.share.Index, zcommit))
 }
 
@@ -153,7 +153,11 @@ func (s *Signer) Reveal(rc RoundContext, r1 pulsarlib.SignRound1) (pulsarlib.Par
 		return pulsarlib.Partial{}, err
 	}
 	p.Author = s.share.Node
-	p.AuthSig = signPoP(s.share.idKey, partialTBS(p))
+	authSig, err := signPoP(s.share.idKey, partialTBS(p))
+	if err != nil {
+		return pulsarlib.Partial{}, err
+	}
+	p.AuthSig = authSig
 	return p, nil
 }
 
