@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/zap-proto/zip"
 )
@@ -30,14 +31,14 @@ import (
 // org's agent on behalf of THAT org's linked user. team_id itself is trustworthy
 // only because the whole payload is HMAC-verified with SLACK_SIGNING_SECRET first.
 //
-// MOUNT HANDOFF (clients/integrations owner adds these lines to Mount; this file
-// deliberately does NOT edit Mount — clean separation):
+// MOUNT HANDOFF (registered in integrations.go's routes(); this file deliberately
+// does NOT edit Mount/routes — clean separation):
 //
-//	app.Post("/v1/integrations/slack/events",        s.slackEvents)
-//	app.Post("/v1/integrations/slack/commands",      s.slackCommands)
-//	app.Get("/v1/integrations/slack/link",           s.slackLink)
-//	app.Get("/v1/integrations/slack/link/slack",     s.slackLinkSlack)
-//	app.Get("/v1/integrations/slack/link/callback",  s.slackLinkCallback)
+//	app.Post("/v1/integrations/slack/events",        cloud.Handle(s, slackEvents))
+//	app.Post("/v1/integrations/slack/commands",      cloud.Handle(s, slackCommands))
+//	app.Get("/v1/integrations/slack/link",           cloud.Handle(s, slackLink))
+//	app.Get("/v1/integrations/slack/link/slack",     cloud.Handle(s, slackLinkSlack))
+//	app.Get("/v1/integrations/slack/link/callback",  cloud.Handle(s, slackLinkCallback))
 
 // ── bridge process state (bounded pool + single-use link nonces) ────────────
 
@@ -70,7 +71,7 @@ var (
 // seen-set. The durable dedupe table is created in the store's migrate() at Mount,
 // so nothing store-scoped happens here. Cheap + idempotent; every Slack handler
 // calls it first.
-func (s *svc) slackBridgeReady() {
+func slackBridgeReady(s *cloud.Service[state]) {
 	slackBridgeOnce.Do(func() {
 		slackLim = newOrgLimiter(slackAgentConcurrency(), slackOrgConcurrency())
 		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
@@ -88,10 +89,10 @@ func (s *svc) slackBridgeReady() {
 // request goroutine, so an unrecovered panic here would crash EVERY tenant and
 // subsystem (Red M-2). The recover defer is registered LAST so it runs FIRST
 // (LIFO), and release still runs after it — a panicking turn frees its slot.
-func (s *svc) slackSpawn(org string, run func()) {
+func slackSpawn(s *cloud.Service[state], org string, run func()) {
 	go func() {
 		defer slackLim.release(org)
-		defer s.slackRecover(org)
+		defer slackRecover(s, org)
 		run()
 	}()
 }
@@ -99,9 +100,9 @@ func (s *svc) slackSpawn(org string, run func()) {
 // slackRecover contains a panic in an async agent turn so it can never crash the
 // shared cloud process. Called ONLY as a deferred func (recover must be a direct
 // call in the deferred function).
-func (s *svc) slackRecover(org string) {
+func slackRecover(s *cloud.Service[state], org string) {
 	if r := recover(); r != nil {
-		s.log.Error("slack: agent turn panic (recovered)", "org", org, "err", r)
+		s.Log.Error("slack: agent turn panic (recovered)", "org", org, "err", r)
 	}
 }
 
@@ -168,8 +169,8 @@ func (l *orgLimiter) release(org string) {
 // answers the url_verification challenge, and routes @mentions / DMs to an
 // on-behalf-of agent run — acking FAST (empty 200) and doing the billed work
 // async under the bounded pool, deduped durably on event_id.
-func (s *svc) slackEvents(c *zip.Ctx) error {
-	s.slackBridgeReady()
+func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
+	slackBridgeReady(s)
 	secret := slackSigningSecret()
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
@@ -190,7 +191,7 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 		// team no org connected is dropped (nothing to do — not a shed).
 		org, ok := OrgForExternalID("slack", d.TeamID)
 		if !ok {
-			s.log.Warn("slack: event for unconnected team", "team", d.TeamID)
+			s.Log.Warn("slack: event for unconnected team", "team", d.TeamID)
 			return c.NoContent(http.StatusOK)
 		}
 		// SHED BEFORE the dedupe write (Red M-1). Try to acquire a pool slot first;
@@ -198,17 +199,17 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 		// turn never ran, so no event_id is burned and Slack re-delivers when a slot
 		// frees (no lost @mention, no double-run).
 		if !slackLim.acquire(org) {
-			s.log.Warn("slack: at capacity, shedding for retry", "org", org)
+			s.Log.Warn("slack: at capacity, shedding for retry", "org", org)
 			return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
 		}
 		// Slot held. DURABLE dedupe (BILLED path): a Slack retry of an event that
 		// already ran must never double-run. Release the slot on every path that
 		// does NOT dispatch. Fail CLOSED on a dedupe error (skip) rather than risk a
 		// double charge.
-		fresh, err := s.store.MarkSlackEvent(c.Context(), slackEventKey(raw))
+		fresh, err := s.State.store.MarkSlackEvent(c.Context(), slackEventKey(raw))
 		if err != nil {
 			slackLim.release(org)
-			s.log.Warn("slack: event dedupe error, skipping", "err", err)
+			s.Log.Warn("slack: event dedupe error, skipping", "err", err)
 			return c.NoContent(http.StatusOK)
 		}
 		if !fresh {
@@ -216,11 +217,11 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 			return c.NoContent(http.StatusOK)
 		}
 		// Opportunistic GC so the dedupe table cannot grow without bound.
-		if _, gerr := s.store.GCSlackEvents(c.Context(), staleSlackEventCutoff()); gerr != nil {
-			s.log.Warn("slack: dedupe gc", "err", gerr)
+		if _, gerr := s.State.store.GCSlackEvents(c.Context(), staleSlackEventCutoff()); gerr != nil {
+			s.Log.Warn("slack: dedupe gc", "err", gerr)
 		}
 		route := d
-		s.slackSpawn(org, func() { s.handleSlackAgent(org, route) })
+		slackSpawn(s, org, func() { handleSlackAgent(s, org, route) })
 		return c.NoContent(http.StatusOK)
 	default: // slackRouteAck / slackRouteIgnore — valid but nothing to act on
 		return c.NoContent(http.StatusOK)
@@ -233,8 +234,8 @@ func (s *svc) slackEvents(c *zip.Ctx) error {
 // at https://{domain}/v1/integrations/slack/commands. Same HMAC gate; deduped on
 // trigger_id; acks within Slack's 3s budget (empty 200) and posts the answer
 // asynchronously via the command's response_url.
-func (s *svc) slackCommands(c *zip.Ctx) error {
-	s.slackBridgeReady()
+func slackCommands(s *cloud.Service[state], c *zip.Ctx) error {
+	slackBridgeReady(s)
 	secret := slackSigningSecret()
 	if secret == "" {
 		return zip.Errorf(http.StatusServiceUnavailable, "slack events not configured")
@@ -253,13 +254,13 @@ func (s *svc) slackCommands(c *zip.Ctx) error {
 	// SHED before the dedupe write (Red M-1), same order as the events path.
 	org, _ := OrgForExternalID("slack", team)
 	if !slackLim.acquire(org) {
-		s.log.Warn("slack: at capacity, shedding slash", "org", org)
+		s.Log.Warn("slack: at capacity, shedding slash", "org", org)
 		return zip.Errorf(http.StatusTooManyRequests, "slack agent pool at capacity")
 	}
-	fresh, err := s.store.MarkSlackEvent(c.Context(), triggerID)
+	fresh, err := s.State.store.MarkSlackEvent(c.Context(), triggerID)
 	if err != nil {
 		slackLim.release(org)
-		s.log.Warn("slack: slash dedupe error, skipping", "err", err)
+		s.Log.Warn("slack: slash dedupe error, skipping", "err", err)
 		return c.NoContent(http.StatusOK)
 	}
 	if !fresh {
@@ -267,7 +268,7 @@ func (s *svc) slackCommands(c *zip.Ctx) error {
 		return c.NoContent(http.StatusOK)
 	}
 	route := slackRoute{Kind: slackRouteAgent, TeamID: team, Channel: channel, User: user, Text: text}
-	s.slackSpawn(org, func() { s.handleSlackSlash(org, route, responseURL) })
+	slackSpawn(s, org, func() { handleSlackSlash(s, org, route, responseURL) })
 	return c.NoContent(http.StatusOK)
 }
 
@@ -296,7 +297,7 @@ func parseSlashCommand(raw []byte) (team, channel, user, text, responseURL, trig
 // fetches THAT org's bot token (the reply sink), and posts the agent's answer — or,
 // when the user is unlinked, the account-link prompt EPHEMERALLY (so a link URL
 // never reaches a whole channel) — into the SAME thread.
-func (s *svc) handleSlackAgent(org string, d slackRoute) {
+func handleSlackAgent(s *cloud.Service[state], org string, d slackRoute) {
 	ctx, cancel := context.WithTimeout(context.Background(), slackAgentTimeout)
 	defer cancel()
 
@@ -307,21 +308,21 @@ func (s *svc) handleSlackAgent(org string, d slackRoute) {
 	}
 	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
 	if err != nil {
-		s.log.Warn("slack: bot token fetch", "team", d.TeamID, "err", err)
+		s.Log.Warn("slack: bot token fetch", "team", d.TeamID, "err", err)
 		return
 	}
-	reply, linkPrompt := s.slackAgentReply(ctx, org, d.TeamID, d.User, d.Text)
+	reply, linkPrompt := slackAgentReply(s, ctx, org, d.TeamID, d.User, d.Text)
 	if reply == "" {
 		return
 	}
 	if linkPrompt {
 		if err := slackPostEphemeral(ctx, string(tok), d.Channel, d.User, reply); err != nil {
-			s.log.Warn("slack: ephemeral post", "team", d.TeamID, "err", err)
+			s.Log.Warn("slack: ephemeral post", "team", d.TeamID, "err", err)
 		}
 		return
 	}
 	if err := slackPostThread(ctx, string(tok), d.Channel, d.ThreadTS, reply); err != nil {
-		s.log.Warn("slack: thread post", "team", d.TeamID, "err", err)
+		s.Log.Warn("slack: thread post", "team", d.TeamID, "err", err)
 	}
 }
 
@@ -329,14 +330,14 @@ func (s *svc) handleSlackAgent(org string, d slackRoute) {
 // sync path) and delivers the reply via the (host-pinned) response_url. An answer
 // goes in_channel; a link prompt goes ephemeral (only the invoker sees it). An
 // empty org means the workspace's Hanzo connection was removed.
-func (s *svc) handleSlackSlash(org string, d slackRoute, responseURL string) {
+func handleSlackSlash(s *cloud.Service[state], org string, d slackRoute, responseURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), slackAgentTimeout)
 	defer cancel()
 	if org == "" {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "This Slack workspace isn't connected to Hanzo yet.")
 		return
 	}
-	reply, linkPrompt := s.slackAgentReply(ctx, org, d.TeamID, d.User, d.Text)
+	reply, linkPrompt := slackAgentReply(s, ctx, org, d.TeamID, d.User, d.Text)
 	if reply == "" {
 		return
 	}
@@ -345,7 +346,7 @@ func (s *svc) handleSlackSlash(org string, d slackRoute, responseURL string) {
 		responseType = "ephemeral"
 	}
 	if err := slackPostResponseURL(ctx, responseURL, responseType, reply); err != nil {
-		s.log.Warn("slack: slash reply", "team", d.TeamID, "err", err)
+		s.Log.Warn("slack: slash reply", "team", d.TeamID, "err", err)
 	}
 }
 
@@ -356,16 +357,16 @@ func (s *svc) handleSlackSlash(org string, d slackRoute, responseURL string) {
 // linkPrompt reports whether the reply is the (sensitive) link prompt — the caller
 // MUST deliver those ephemerally. Every returned string is safe to post; internal
 // errors are logged (never a token) and surfaced as a terse message.
-func (s *svc) slackAgentReply(ctx context.Context, org, teamID, slackUser, text string) (reply string, linkPrompt bool) {
-	link, linked, err := s.getSlackUserLink(org, slackUser)
+func slackAgentReply(s *cloud.Service[state], ctx context.Context, org, teamID, slackUser, text string) (reply string, linkPrompt bool) {
+	link, linked, err := getSlackUserLink(s, org, slackUser)
 	if err != nil {
-		s.log.Warn("slack: user link lookup", "team", teamID, "err", err)
+		s.Log.Warn("slack: user link lookup", "team", teamID, "err", err)
 		return "Sorry — I couldn't reach your Hanzo account just now. Please try again shortly.", false
 	}
 	if !linked {
-		u, serr := s.slackLinkURL(teamID, slackUser)
+		u, serr := slackLinkURL(s, teamID, slackUser)
 		if serr != nil {
-			s.log.Error("slack: link url", "team", teamID, "err", serr)
+			s.Log.Error("slack: link url", "team", teamID, "err", serr)
 			return "Connect your Hanzo account to use @hanzo.", true
 		}
 		return "Connect your Hanzo account to use @hanzo: " + u, true
@@ -375,7 +376,7 @@ func (s *svc) slackAgentReply(ctx context.Context, org, teamID, slackUser, text 
 	// gateway hop. The agent ref is env-set (SLACK_AGENT_REF, default "hanzo").
 	run, rerr := agents.RunOnBehalf(ctx, org, link.Subject, slackAgentRef(), text)
 	if rerr != nil {
-		s.log.Warn("slack: agent run", "team", teamID, "err", rerr) // never logs a token
+		s.Log.Warn("slack: agent run", "team", teamID, "err", rerr) // never logs a token
 		return "Sorry — the agent hit an error handling that. Please try again.", false
 	}
 	if run.Status != "ok" {
