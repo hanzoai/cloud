@@ -12,7 +12,7 @@ import (
 	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
 	// !cgo → pure-Go modernc). Importing modernc directly would double-register and
 	// panic at init. Blank import registers the driver — same as clients/agents.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
