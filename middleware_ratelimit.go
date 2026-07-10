@@ -1,11 +1,11 @@
 package cloud
 
 // ScopeRateLimit — the ONE per-scope request-rate limiter (issue #70). It caps
-// requests/min per (org, project, service) scope using the rate limit a tenant
+// requests/min per (org, project, service) scope using the rate limit an org
 // configures on its spend-alert rows (RateLimitRpm). It is DISTINCT from the
 // per-IP pre-auth limiters (clients/kms login, clients/crm intake): those
 // throttle anonymous abuse by IP BEFORE identity; this throttles an authenticated
-// tenant's own configured ceiling per scope, keyed off the VALIDATED principal.
+// org's own configured ceiling per scope, keyed off the VALIDATED principal.
 //
 // Composition, not duplication: the token-bucket mechanics are the proven
 // zip/middleware.RateLimit primitive. This middleware only resolves the DYNAMIC
@@ -40,12 +40,12 @@ import (
 const rateScopeKeyLocal = "cloud.rateScopeKey"
 
 // rateConfigTTL bounds how stale a cached per-org rate-limit config may be. Short
-// so a tenant's limit change takes effect within seconds, long enough that the
+// so an org's limit change takes effect within seconds, long enough that the
 // config fetch is amortized far below the request rate.
 const rateConfigTTL = 5 * time.Second
 
 // ScopeRateLimit returns the per-scope rate-limit middleware. It caps an
-// authenticated tenant from TWO config sources, most-restrictive-wins:
+// authenticated org from TWO config sources, most-restrictive-wins:
 //   - commerce spend-alert RateLimitRpm (the plan-configured ceiling), and
 //   - the /v1/gateway per-org OrgRPM (gp), the runtime-mutable operator override.
 //
@@ -81,11 +81,11 @@ type scopeRateLimiter struct {
 }
 
 func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
-	// Only an authenticated tenant is scope-rate-limited. Without a validated
+	// Only an authenticated org is scope-rate-limited. Without a validated
 	// principal there is no org to key on; anonymous abuse is handled by the
 	// per-IP pre-auth limiters, and priced paths are refused by each subsystem's
 	// own principal gate.
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return c.Next()
 	}
@@ -139,7 +139,7 @@ func bindingRateRule(rules []metering.ScopeRule, org, project, service string) (
 }
 
 // scopeBucketKey is the rate-limit bucket identity for a scope. The org prefix is
-// the hard tenant boundary — a bucket can never be shared across orgs, so org A's
+// the hard org boundary — a bucket can never be shared across orgs, so org A's
 // limit can never throttle org B.
 func scopeBucketKey(org, project, service string) string {
 	return org + "|" + project + "|" + service

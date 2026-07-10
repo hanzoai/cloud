@@ -2,12 +2,12 @@ package cloud
 
 // Tests for the shared per-org resource gate+meter (ResourceMeter). They drive
 // the real metering client against a fake commerce server that RECORDS the
-// X-Org-Id tenant header and request bodies, so the multitenancy contract is
+// X-Org-Id org header and request bodies, so the multitenancy contract is
 // proven end-to-end over HTTP — no mock of the metering client itself. The fake
 // is built with a metering DEFAULT org of "hanzo"; every assertion that the
 // caller "acme" is billed (not "hanzo") proves the per-call org override is what
 // scopes the ledger — i.e. a caller can never be billed to a default or another
-// tenant.
+// org.
 
 import (
 	"encoding/json"
@@ -25,8 +25,8 @@ import (
 )
 
 // recCommerce answers the metering client's balance + usage calls and records,
-// per endpoint, the X-Org-Id tenant header it saw plus the usage body — the
-// evidence for the per-org / cross-tenant assertions.
+// per endpoint, the X-Org-Id org header it saw plus the usage body — the
+// evidence for the per-org / cross-org assertions.
 type recCommerce struct {
 	balanceAvailable int64 // returned as {"available":N} on GET /v1/billing/balance
 	balanceStatus    int   // 0 => 200
@@ -159,7 +159,7 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 
 // Meter debits the CALLER org: usage POST fires once, carries X-Org-Id:acme
 // (not the default 'hanzo'), body user=="acme", amount==cost. This is the
-// per-org / anti-cross-tenant debit proof.
+// per-org / anti-cross-org debit proof.
 func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
@@ -192,8 +192,8 @@ func TestResourceMeter_MeterDebitsCallerOrg(t *testing.T) {
 	}
 }
 
-// A second tenant draws on ITS OWN ledger: gating "globex" must check globex,
-// never "acme" or the default. Proves no cross-tenant fold in the gate path.
+// A second org draws on ITS OWN ledger: gating "globex" must check globex,
+// never "acme" or the default. Proves no cross-org fold in the gate path.
 func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
@@ -202,7 +202,7 @@ func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 		t.Fatalf("Gate(globex) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "globex" {
-		t.Fatalf("balance checked org %q, want %q — cross-tenant billing leak", got, "globex")
+		t.Fatalf("balance checked org %q, want %q — cross-org billing leak", got, "globex")
 	}
 }
 

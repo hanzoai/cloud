@@ -32,14 +32,14 @@ import (
 )
 
 // Client is the in-process inter-subsystem seam cloud's licensing/entitlements tier
-// calls. It IS cloud's types.CommerceClient — one narrow interface (GetTenantConfig
+// calls. It IS cloud's types.CommerceClient — one narrow interface (GetOrgConfig
 // + the real CheckEntitlement), not a second copy — kept as an alias so a value
 // satisfies both names with no adapter. Add methods here only when a consumer needs
 // them; keep it narrow.
 type Client = types.CommerceClient
 
 // inProcessClient answers the seam with direct Go calls. brand is surfaced in
-// TenantConfig (known without the store); resolve returns the live *Embedded — nil
+// OrgConfig (known without the store); resolve returns the live *Embedded — nil
 // when commerce is not co-resident, which makes CheckEntitlement fail closed.
 type inProcessClient struct {
 	brand   string
@@ -67,16 +67,16 @@ func (e *Embedded) Client() Client {
 // InProcessClient returns the process-wide, lazily-resolved client cloud's
 // pickCommerceClient wires as deps.Commerce. BuildDeps runs before MountAll, so it
 // resolves the published Embedded per call rather than capturing one; brand answers
-// TenantConfig even before Mount publishes.
+// OrgConfig even before Mount publishes.
 func InProcessClient(brand string) Client {
 	return &inProcessClient{brand: brand, resolve: currentEmbedded}
 }
 
-// GetTenantConfig answers the tenant's config directly — at this inter-subsystem
-// layer a tenant's config IS its org id + the deployment brand (the two fields
-// types.TenantConfig carries), both known without touching commerce state.
-func (c *inProcessClient) GetTenantConfig(_ context.Context, orgID string) (*types.TenantConfig, error) {
-	return &types.TenantConfig{OrgID: strings.TrimSpace(orgID), Brand: c.brand}, nil
+// GetOrgConfig answers the org's config directly — at this inter-subsystem
+// layer an org's config IS its org id + the deployment brand (the two fields
+// types.OrgConfig carries), both known without touching commerce state.
+func (c *inProcessClient) GetOrgConfig(_ context.Context, orgID string) (*types.OrgConfig, error) {
+	return &types.OrgConfig{OrgID: strings.TrimSpace(orgID), Brand: c.brand}, nil
 }
 
 // CheckEntitlement resolves "does org `orgID` hold an active entitlement for product
@@ -100,14 +100,14 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 	//    KV-cached, secret-name-guarded resolver — the SAME binding the money path
 	//    (iammiddleware) uses to map a gateway X-Org-Id to an Organization. The
 	//    namespace is therefore derived from a real commerce Organization record,
-	//    never blindly from the caller's string, so a read can never cross tenants.
+	//    never blindly from the caller's string, so a read can never cross orgs.
 	o, err := commerceorg.Resolve(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("commerce.CheckEntitlement: resolve org %q: %w", orgID, err)
 	}
 
 	// 2. Load every ACTIVE subscription in that org's namespace. The namespace IS the
-	//    tenant boundary, so any active subscription here belongs to this org
+	//    org boundary, so any active subscription here belongs to this org
 	//    (org-pooled or personal) — we scan them all rather than assume a buyer subject.
 	//    A plain (non-ancestor) Status filter is deliberate: it matches commerce's own
 	//    subscription-read idiom (billing/grant/grant.go's idempotency lookup) so a sub

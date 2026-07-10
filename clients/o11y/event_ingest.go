@@ -237,11 +237,11 @@ func mountEventIngest(a *zip.App, deps cloud.Deps) error {
 }
 
 // makeIngestHandler builds the POST handler over a sink (+ optional blob overflow).
-// The org is the gateway-validated tenant (principal.Tenant), never a raw header —
+// The org is the gateway-validated tenant (principal.Org), never a raw header —
 // a batch can only ever be attributed to the caller's own org.
 func makeIngestHandler(sink eventSink, blobs blobStore, threshold int, log luxlog.Logger) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, ok := principal.Tenant(c)
+		org, ok := principal.Org(c)
 		if !ok {
 			return zip.ErrForbidden("a validated principal is required")
 		}

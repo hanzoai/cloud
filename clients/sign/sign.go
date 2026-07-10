@@ -19,7 +19,7 @@
 // Go. A real signed PDF comes out.
 //
 // TENANCY. Owner routes (/v1/sign/documents/*) resolve the tenant from the
-// VALIDATED cloud principal (principal.Tenant), never a client header. Recipient
+// VALIDATED cloud principal (principal.Org), never a client header. Recipient
 // token routes (/v1/sign/o/:org/sign/:token) are unauthenticated capability
 // links: the :org segment selects the tenant DB and the crypto-random token
 // authorizes — a wrong org simply cannot hold a valid token. gojabase pre-routes
@@ -127,7 +127,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // owner builds a handler for a principal-gated route with fixed params.
 func (s *svc) owner(route string, params map[string]string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, ok := principal.Tenant(c)
+		org, ok := principal.Org(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
@@ -138,7 +138,7 @@ func (s *svc) owner(route string, params map[string]string, readBody bool) zip.H
 // ownerID is owner with the :id path param threaded into params.
 func (s *svc) ownerID(route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
-		org, ok := principal.Tenant(c)
+		org, ok := principal.Org(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
 		}

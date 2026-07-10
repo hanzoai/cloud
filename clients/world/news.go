@@ -54,11 +54,11 @@ func defaultPipeline() Pipeline {
 }
 
 // scope resolves the (org, project) tenant tuple for a request. The org gates on
-// a VALIDATED principal (principal.Tenant → 403 otherwise); the project is the
+// a VALIDATED principal (principal.Org → 403 otherwise); the project is the
 // org sub-scope. A ?project query, when present, MUST equal the authoritative
 // project claim, else 400 — a client cannot widen its own scope via the query.
 func scope(c *zip.Ctx) (org, project string, err error) {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return "", "", zip.ErrForbidden("X-Org-Id required")
 	}

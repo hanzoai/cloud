@@ -44,16 +44,16 @@ func (errScopeResolver) ProjectOwnership(context.Context, string, string) (bool,
 
 // withResolvers installs rs as the boundary's resolver set for one test and
 // restores the prior set on cleanup (package-global, so isolate carefully).
-func withResolvers(t *testing.T, rs ...TenantScopeResolver) {
+func withResolvers(t *testing.T, rs ...OrgScopeResolver) {
 	t.Helper()
-	tenantResolverMu.Lock()
-	old := tenantResolvers
-	tenantResolvers = append([]TenantScopeResolver(nil), rs...)
-	tenantResolverMu.Unlock()
+	orgResolverMu.Lock()
+	old := orgResolvers
+	orgResolvers = append([]OrgScopeResolver(nil), rs...)
+	orgResolverMu.Unlock()
 	t.Cleanup(func() {
-		tenantResolverMu.Lock()
-		tenantResolvers = old
-		tenantResolverMu.Unlock()
+		orgResolverMu.Lock()
+		orgResolvers = old
+		orgResolverMu.Unlock()
 	})
 }
 

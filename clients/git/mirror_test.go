@@ -74,7 +74,7 @@ func seedRepo(t *testing.T, app *zip.App, base, org, name, content, tag string) 
 
 // callMirror imports source into org's repo :name via the mirror endpoint and
 // returns the decoded repoView. asTenant(org) is set first so the server-side
-// outbound fetch carries the tenant identity the in-process source authorizes on.
+// outbound fetch carries the org identity the in-process source authorizes on.
 func callMirror(t *testing.T, app *zip.App, org, name, source string) repoView {
 	t.Helper()
 	asTenant(org)
@@ -112,12 +112,12 @@ func cloneRepo(t *testing.T, base, org, name string) (*gogit.Repository, plumbin
 // mechanism: import an external repo's refs+objects into the embedded server,
 // clone them back and match the commit AND tag, prove a re-mirror is idempotent,
 // prove a force re-mirror onto an UNRELATED source updates the refs, and prove
-// another tenant cannot read the mirrored repo.
+// another org cannot read the mirrored repo.
 func TestMirrorImportCloneIdempotentIsolation(t *testing.T) {
 	app := mountApp(t)
 	base := liveServer(t, app)
 
-	// Two independent external sources under the tenant's org.
+	// Two independent external sources under the org's org.
 	ha := seedRepo(t, app, base, "acme", "srca", "# source A\n", "v1.0.0")
 	hb := seedRepo(t, app, base, "acme", "srcb", "# source B\n", "")
 	srcA := base + "/v1/git/acme/srca.git"
@@ -153,7 +153,7 @@ func TestMirrorImportCloneIdempotentIsolation(t *testing.T) {
 		t.Fatalf("force re-mirror HEAD %s != source B %s", head, hb)
 	}
 
-	// 4) Cross-tenant isolation: another org cannot read the mirrored repo.
+	// 4) Cross-org isolation: another org cannot read the mirrored repo.
 	asTenant("intruder")
 	if _, err := gogit.Clone(memory.NewStorage(), memfs.New(), &gogit.CloneOptions{
 		URL: base + "/v1/git/acme/mirror.git",
