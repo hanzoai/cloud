@@ -13,7 +13,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/commerce/metering v0.1.4
 	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
-	github.com/hanzoai/iam v1.31.18
+	github.com/hanzoai/iam v1.31.19
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v0.144.8
 	github.com/hanzoai/plans v1.4.0
