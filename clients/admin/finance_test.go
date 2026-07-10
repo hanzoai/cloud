@@ -205,7 +205,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	defer do.Close()
 
 	doReq, s, _ := mountSvc(t, iam.server.URL, commerce.URL, "")
-	s.do = newDOClientWithBase(do.URL, "test-do-token") // configured DO client
+	s.State.do = newDOClientWithBase(do.URL, "test-do-token") // configured DO client
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
 		"Authorization": "Bearer operator-jwt", "Cookie": "iam_access_token=operator-jwt",
