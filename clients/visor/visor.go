@@ -331,7 +331,12 @@ func (s *svc) listClusters(c *zip.Ctx) error {
 	}
 	var pools []visorNodePool
 	if err := s.cl.call(c, http.MethodGet, "/v1/get-node-pools", q("owner", org), nil, &pools); err != nil {
-		return err
+		// Visor unreachable — same graceful fold as listMachines/listGpus: a down
+		// optional provider must NOT 502 the Clusters/GPUs page (it surfaced as a
+		// console error on every load where Visor isn't deployed). Log and fall
+		// through with no managed pools; the org's BYO clusters below still list.
+		s.log.Warn("visor get-node-pools failed; returning BYO-only cluster list", "org", org, "err", err)
+		pools = nil
 	}
 	// ONE fleet surface: managed clusters (Visor node pools) + the org's BYO ones,
 	// the latter sharded by the caller's project sub-scope.
