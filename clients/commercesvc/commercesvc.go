@@ -40,6 +40,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 
 	"github.com/hanzoai/cloud"
 	commerce "github.com/hanzoai/commerce"
@@ -90,12 +91,20 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Warn("deps.Vault is nil — vault charge paths unavailable; tenant config + admin still served")
 	}
 
-	// commerce persists its per-org SQLite under <DataDir>; every per-tenant DB
-	// lands under one tree per HIP-0302. The cloud binary owns the listener, so
-	// HTTPAddr is intentionally unset — commerce only contributes its http.Handler.
-	dataDir := deps.DataDir
-	if dataDir == "" {
-		dataDir = "/var/lib/cloud/commerce"
+	// commerce persists its per-org SQLite + `base` tree under <DataDir>; every
+	// per-tenant DB lands under one tree per HIP-0302. The cloud binary owns the
+	// listener, so HTTPAddr is intentionally unset — commerce only contributes its
+	// http.Handler.
+	//
+	// ISOLATION: nest commerce under {deps.DataDir}/commerce, NEVER at deps.DataDir
+	// directly. cloud already owns {deps.DataDir}/orgs (its own per-org subsystem
+	// SQLite, HIP-0302) and {deps.DataDir}/base (its Base/IAM store) — commerce also
+	// writes orgs/ and base/, so sharing the root would collide two apps on the same
+	// SQLite files (e.g. base/data.db) and corrupt them. The dedicated subdir keeps
+	// commerce's ledgers physically separate on the same cloud-api-data PVC.
+	dataDir := "/var/lib/cloud/commerce"
+	if deps.DataDir != "" {
+		dataDir = filepath.Join(deps.DataDir, "commerce")
 	}
 
 	embedded, err := commerce.Embed(context.Background(), commerce.EmbedConfig{
