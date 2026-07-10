@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 )
 
@@ -29,9 +30,12 @@ func testStore(t *testing.T) *Store {
 	return st
 }
 
-func testSvc(t *testing.T) *svc {
+func testSvc(t *testing.T) *cloud.Service[state] {
 	t.Helper()
-	return &svc{store: testStore(t), engine: newEngine(luxlog.NewNoOpLogger()), log: luxlog.NewNoOpLogger()}
+	return &cloud.Service[state]{
+		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.NewNoOpLogger()}, "ingress"),
+		State: state{store: testStore(t), engine: newEngine(luxlog.NewNoOpLogger())},
+	}
 }
 
 // applyOne is a test shortcut: compile a single route/service(/middlewares) into
@@ -217,13 +221,13 @@ func TestReloadBuildsTLSHostSet(t *testing.T) {
 
 	// A TLS route + an org-level extraHost.
 	route := Route{ID: "r1", Host: "a.test", Service: "s1", TLS: true}
-	if err := s.store.Put(ctx, "admin", KindRoute, "r1", mustJSON(route), "a.test", 1); err != nil {
+	if err := s.State.store.Put(ctx, "admin", KindRoute, "r1", mustJSON(route), "a.test", 1); err != nil {
 		t.Fatalf("put route: %v", err)
 	}
-	if err := s.store.PutTLS(ctx, "admin", mustJSON(TLSConfig{ExtraHosts: []string{"b.test"}}), 1); err != nil {
+	if err := s.State.store.PutTLS(ctx, "admin", mustJSON(TLSConfig{ExtraHosts: []string{"b.test"}}), 1); err != nil {
 		t.Fatalf("put tls: %v", err)
 	}
-	set, err := s.tlsHostSet(ctx)
+	set, err := tlsHostSet(s, ctx)
 	if err != nil {
 		t.Fatalf("tlsHostSet: %v", err)
 	}
