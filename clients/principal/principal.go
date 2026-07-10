@@ -151,3 +151,23 @@ func Project(c *zip.Ctx) string {
 func ValidatedProject(c *zip.Ctx) (string, bool) {
 	return Project(c), false
 }
+
+// BillingAccount resolves the caller's funding BillingAccount id — the GCP-style
+// account (models/billingaccount) that pays for this request's usage. It mirrors
+// Project: a zero-copy read of the gateway-minted X-Billing-Account-Id header (in
+// production the gateway mints it from the validated IAM `billing_account` claim;
+// off-gateway, SanitizeIdentity re-injects the caller's own value).
+//
+// It is an ATTRIBUTION hint ONLY. The account that is actually debited is resolved
+// SERVER-SIDE by commerce from the org's ProjectBinding (resolveAccountId), never
+// from this header — so a mislabelled account can only ever misattribute the
+// caller's OWN spend within its own org and can NEVER redirect spend to another
+// tenant's account. Empty when no account is in scope (the org-wide default pool).
+// The value is CLONED because it is retained past the request for telemetry.
+func BillingAccount(c *zip.Ctx) string {
+	acct := strings.TrimSpace(c.Header("X-Billing-Account-Id"))
+	if acct == "" {
+		return ""
+	}
+	return strings.Clone(acct)
+}
