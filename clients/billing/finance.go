@@ -46,25 +46,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
 // mountFinance registers the six commerce-projected /v1/finance/* reads on app. Called
 // from Mount, so the finance surface ships with the billing surface (same commerceProxy).
-func (s *svc) mountFinance(app *zip.App) {
-	app.Get("/v1/finance/balance", s.financeBalance)                // prepaid available + holds + due
-	app.Get("/v1/finance/credits", s.financeCredits)                // credit grants (deposits)
-	app.Get("/v1/finance/usage", s.financeUsage)                    // metered spend over ?range=
-	app.Get("/v1/finance/invoices", s.financeInvoices)              // issued invoices (honest empty today)
-	app.Get("/v1/finance/payment-methods", s.financePaymentMethods) // masked saved cards (brand+last4)
-	app.Get("/v1/finance/ledger", s.financeLedger)                  // per-org double-entry postings over ?range=
+func mountFinance(s *cloud.Service[state], app *zip.App) {
+	app.Get("/v1/finance/balance", cloud.Handle(s, financeBalance))                // prepaid available + holds + due
+	app.Get("/v1/finance/credits", cloud.Handle(s, financeCredits))                // credit grants (deposits)
+	app.Get("/v1/finance/usage", cloud.Handle(s, financeUsage))                    // metered spend over ?range=
+	app.Get("/v1/finance/invoices", cloud.Handle(s, financeInvoices))              // issued invoices (honest empty today)
+	app.Get("/v1/finance/payment-methods", cloud.Handle(s, financePaymentMethods)) // masked saved cards (brand+last4)
+	app.Get("/v1/finance/ledger", cloud.Handle(s, financeLedger))                  // per-org double-entry postings over ?range=
 }
 
 // ── the finance contract (typed, USD cents, matching @hanzo/finance-ui types.ts) ──
 
-// financeBalance is GET /v1/finance/balance.
-type financeBalance struct {
+// financeBalanceView is the GET /v1/finance/balance response.
+type financeBalanceView struct {
 	Currency       string `json:"currency"`
 	AvailableCents int64  `json:"availableCents"`
 	PendingCents   int64  `json:"pendingCents"`
@@ -95,8 +96,8 @@ type usageLine struct {
 	Cents  int64  `json:"cents"`
 }
 
-// financeUsage is GET /v1/finance/usage?range=.
-type financeUsage struct {
+// financeUsageView is the GET /v1/finance/usage?range= response.
+type financeUsageView struct {
 	TotalCents int64        `json:"totalCents"`
 	Currency   string       `json:"currency"`
 	Start      string       `json:"start,omitempty"`
@@ -193,23 +194,23 @@ type commercePaymentMethod struct {
 // an honest 0 — commerce is prepaid (no open-invoice debt), so nothing is owed. The
 // aggregate the finance UI shows is the org's spendable wallet; per-org treasury
 // balances (currently empty) fold in here the day the ledger projection posts them.
-func (s *svc) financeBalance(c *zip.Ctx) error {
-	org, ok := s.financeCaller(c)
+func financeBalance(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := financeCaller(s, c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	var b commerceBalance
-	if err := s.financeGet(c, "/v1/billing/balance", org, url.Values{"currency": {"usd"}}, &b); err != nil {
+	if err := financeGet(s, c, "/v1/billing/balance", org, url.Values{"currency": {"usd"}}, &b); err != nil {
 		return err
 	}
 	available := b.Available
 	if available == 0 && b.Balance != 0 {
 		available = b.Balance
 	}
-	return s.financeJSON(c, financeBalance{
+	return financeJSON(s, c, financeBalanceView{
 		Currency:       "usd",
 		AvailableCents: available,
 		PendingCents:   b.Holds,
@@ -222,15 +223,15 @@ func (s *svc) financeBalance(c *zip.Ctx) error {
 // grant or top-up is a positive credit. Consumption (withdraws) is usage, not a credit,
 // so it is excluded here (it appears in usage + ledger). Honest empty when the org has
 // no grants yet.
-func (s *svc) financeCredits(c *zip.Ctx) error {
-	org, ok := s.financeCaller(c)
+func financeCredits(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := financeCaller(s, c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
-	txns, err := s.financeTxns(c, org)
+	txns, err := financeTxns(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -246,22 +247,22 @@ func (s *svc) financeCredits(c *zip.Ctx) error {
 			GrantedAt: t.CreatedAt,
 		})
 	}
-	return s.financeJSON(c, credits)
+	return financeJSON(s, c, credits)
 }
 
 // financeUsage projects the WITHDRAW rows within the ?range= window into a metered-spend
 // view: a time series (hourly for 24h, daily otherwise), a per-tag line breakdown, and
 // the window total. This is the SAME priced-usage ledger the o11y/analytics folds read —
 // projected, never re-metered.
-func (s *svc) financeUsage(c *zip.Ctx) error {
-	org, ok := s.financeCaller(c)
+func financeUsage(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := financeCaller(s, c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
-	txns, err := s.financeTxns(c, org)
+	txns, err := financeTxns(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -305,7 +306,7 @@ func (s *svc) financeUsage(c *zip.Ctx) error {
 		lines = append(lines, usageLine{Label: label, Units: lineUnits[label], Cents: lineCents[label]})
 	}
 
-	return s.financeJSON(c, financeUsage{
+	return financeJSON(s, c, financeUsageView{
 		TotalCents: total,
 		Currency:   "usd",
 		Start:      cutoff.Format(time.RFC3339),
@@ -319,28 +320,28 @@ func (s *svc) financeUsage(c *zip.Ctx) error {
 // (deposits + withdraws), it issues no customer invoices, so there is no per-org
 // invoice ledger to project today. The shape is stable, so the day an invoice ledger
 // exists this becomes real with ZERO UI change.
-func (s *svc) financeInvoices(c *zip.Ctx) error {
-	if _, ok := s.financeCaller(c); !ok {
+func financeInvoices(s *cloud.Service[state], c *zip.Ctx) error {
+	if _, ok := financeCaller(s, c); !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	return s.financeJSON(c, []financeInvoice{})
+	return financeJSON(s, c, []financeInvoice{})
 }
 
 // financePaymentMethods projects the commerce portal's masked card descriptors. It
 // re-masks defensively (keeps at most the trailing four digits, whatever the wire sent),
 // so a PAN can never leak even if commerce were to over-return.
-func (s *svc) financePaymentMethods(c *zip.Ctx) error {
-	org, ok := s.financeCaller(c)
+func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := financeCaller(s, c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	// Portal read filters on customerId; the subject is pinned to the caller's own org.
-	body, status, err := s.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(org, nil))
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(org, nil))
 	if err != nil {
-		s.log.Warn("commerce payment-methods read failed", "org", org, "err", err)
+		s.Log.Warn("commerce payment-methods read failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	if status < 200 || status >= 300 {
@@ -368,21 +369,21 @@ func (s *svc) financePaymentMethods(c *zip.Ctx) error {
 			IsDefault: pm.IsDefault || pm.Default,
 		})
 	}
-	return s.financeJSON(c, methods)
+	return financeJSON(s, c, methods)
 }
 
 // financeLedger projects the commerce ledger within ?range= into signed double-entry
 // postings: a deposit credits the org's wallet (+), a withdraw debits it (−). This is
 // the org's OWN money movement — the honest per-org ledger the finance UI renders.
-func (s *svc) financeLedger(c *zip.Ctx) error {
-	org, ok := s.financeCaller(c)
+func financeLedger(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := financeCaller(s, c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
-	txns, err := s.financeTxns(c, org)
+	txns, err := financeTxns(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -409,14 +410,14 @@ func (s *svc) financeLedger(c *zip.Ctx) error {
 			Currency:    firstNonEmpty(strings.ToLower(t.Currency), "usd"),
 		})
 	}
-	return s.financeJSON(c, entries)
+	return financeJSON(s, c, entries)
 }
 
 // ── finance helpers ──
 
 // financeCaller resolves the caller's OWN org from the validated principal — the ONE
 // tenant gate every finance read shares.
-func (s *svc) financeCaller(c *zip.Ctx) (string, bool) {
+func financeCaller(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 	return principal.Tenant(c)
 }
 
@@ -437,10 +438,10 @@ func financeSubject(org string, extra url.Values) url.Values {
 
 // financeGet does one org-scoped commerce GET and decodes the 2xx body into out. A
 // non-2xx or unreachable upstream is surfaced honestly (never masked as empty data).
-func (s *svc) financeGet(c *zip.Ctx, path, org string, extra url.Values, out any) error {
-	body, status, err := s.commerce.get(c.Context(), path, org, financeSubject(org, extra))
+func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url.Values, out any) error {
+	body, status, err := s.State.commerce.get(c.Context(), path, org, financeSubject(org, extra))
 	if err != nil {
-		s.log.Warn("commerce finance read failed", "org", org, "path", path, "err", err)
+		s.Log.Warn("commerce finance read failed", "org", org, "path", path, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	if status < 200 || status >= 300 {
@@ -455,10 +456,10 @@ func (s *svc) financeGet(c *zip.Ctx, path, org string, extra url.Values, out any
 // financeTxns reads the org's commerce ledger ONCE (the single transactions read the
 // credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
 // shape and a bare array.
-func (s *svc) financeTxns(c *zip.Ctx, org string) ([]commerceTxn, error) {
-	body, status, err := s.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(org, url.Values{"limit": {"2000"}}))
+func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn, error) {
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(org, url.Values{"limit": {"2000"}}))
 	if err != nil {
-		s.log.Warn("commerce transactions read failed", "org", org, "err", err)
+		s.Log.Warn("commerce transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	if status < 200 || status >= 300 {
@@ -479,7 +480,7 @@ func (s *svc) financeTxns(c *zip.Ctx, org string) ([]commerceTxn, error) {
 
 // financeJSON writes a finance payload as bare JSON with no-store (per-org money must
 // never be cached by the browser or an intermediary).
-func (s *svc) financeJSON(c *zip.Ctx, v any) error {
+func financeJSON(s *cloud.Service[state], c *zip.Ctx, v any) error {
 	c.SetHeader("Cache-Control", "no-store")
 	return c.JSON(http.StatusOK, v)
 }
