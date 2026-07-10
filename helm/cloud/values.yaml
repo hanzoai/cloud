@@ -25,7 +25,14 @@ hanzo:
   # Comma-separated subsystem list (empty = all imported in cmd/cloud).
   # Payments + Vault are NEVER co-resident per HIP-0106 PCI isolation;
   # leave them off unless you fully understand the implications.
-  enable: "iam,base,kms,gateway,o11y"
+  #
+  # platform (/v1/platform, order 124) + git (/v1/git, order 132) are the PaaS
+  # control plane. A non-empty enable list mounts ONLY the named subsystems
+  # (config.go Enabled), so both must be listed explicitly or the PaaS never
+  # mounts. Their deps are already satisfied: platform seals secret env into the
+  # kms plane (kms listed) and meters via deps.Metering (HTTP to commerce, or a
+  # no-op when unset — commerce need NOT be co-resident); git needs none.
+  enable: "iam,base,kms,gateway,o11y,platform,git"
 
 service:
   type: ClusterIP

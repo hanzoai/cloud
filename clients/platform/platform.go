@@ -108,7 +108,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
-		State: state{store: store, k8s: k, sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
+		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
+			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
 	routes(app, s)
 
