@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	fiber "github.com/zap-proto/fiber/v3"
 )
 
 // ── rich stateful fakes for the customer-management surfaces ──────────────────

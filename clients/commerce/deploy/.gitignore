@@ -1,0 +1,22 @@
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# SSL certificates
+nginx/ssl/*.pem
+nginx/ssl/*.crt
+nginx/ssl/*.key
+
+# Generated nginx configs
+nginx/conf.d/active.conf
+
+# Local data
+*.log
+*.db
+
+# Docker artifacts
+.docker/
+
+# Backup files
+*.bak
