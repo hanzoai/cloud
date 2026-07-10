@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/framework"
 )
 
@@ -46,10 +47,10 @@ type ingestDoc struct {
 // runSync dispatches to the provider's pull and files each normalized doc into the
 // org's store. Returns the count ingested and a resume cursor. It is org-scoped
 // throughout (framework.Ingest writes only into `org`).
-func (s *svc) runSync(ctx context.Context, org, provider, token string) (int, string, error) {
+func runSync(s *cloud.Service[state], ctx context.Context, org, provider, token string) (int, string, error) {
 	switch provider {
 	case "github":
-		return s.syncGitHub(ctx, org, token)
+		return syncGitHub(s, ctx, org, token)
 	case "slack":
 		return 0, "", fmt.Errorf("slack sync: listing not yet implemented (connection stored; wire channels.history to ingestDoc)")
 	case "google":
@@ -60,7 +61,7 @@ func (s *svc) runSync(ctx context.Context, org, provider, token string) (int, st
 		// checked inside pieceSync); an unknown one is rejected there. The token is the
 		// OAuth access token this org authorized; pieceSync hands it to the piece as
 		// `auth` and files each returned record via the SAME framework.Ingest path.
-		return s.pieceSync(ctx, org, provider, token)
+		return pieceSync(s, ctx, org, provider, token)
 	}
 }
 
@@ -96,7 +97,7 @@ func fileDoc(ctx context.Context, org, provider string, d ingestDoc) (created bo
 // and open issues, normalizing every item to a kb-source. Bounded by maxSyncDocs.
 // The cursor is the ISO timestamp of the run (a subsequent sync could pass it as
 // `since` for issues — recorded for incremental resumption).
-func (s *svc) syncGitHub(ctx context.Context, org, token string) (int, string, error) {
+func syncGitHub(s *cloud.Service[state], ctx context.Context, org, token string) (int, string, error) {
 	repos, err := ghRepos(ctx, token)
 	if err != nil {
 		return 0, "", err
