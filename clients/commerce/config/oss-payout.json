@@ -1,0 +1,10 @@
+{
+  "id": "hanzo-oss-payout",
+  "name": "Hanzo OSS Developer Payout Program",
+  "version": 1,
+  "active": true,
+  "poolFraction": 0.25,
+  "directWeight": 1.0,
+  "transitiveWeight": 0.25,
+  "notes": "Up to 25% of all Hanzo cloud spend is attributed to the upstream OSS dependencies present in the SBOM(s) of what each org runs, split pro-rata by weight. poolFraction is hard-capped at 0.25 in code (ossattr.MaxPoolFraction); raising it here above 0.25 has no effect. Direct dependencies are weighted 4x a transitive dependency by default."
+}

@@ -6,7 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hanzoai/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -122,17 +123,38 @@ func staticEdgePolicy(cfg *Config) gatewaypolicy.Policy {
 	return p
 }
 
-// buildMeteringClient constructs the commerce metering client for BillingGate.
-// An empty CommerceHTTPURL yields a not-Enabled() client (allow + no-op),
-// matching the metering package's "not configured" mode, so an unconfigured
-// deployment is never blocked. The token is a KMS-sourced secret supplied via
-// config; it is never logged.
+// buildMeteringClient constructs the commerce metering client for BillingGate —
+// the request-edge debit on every paid AI call.
+//
+// CO-RESIDENT (task #111): when commerce is folded in-process (Enabled("commerce")),
+// the gate DEBITS the in-process commerce handler over commerceinproc's self-routing
+// transport — a direct Go call, no socket to commerce.hanzo.svc:8001. The base is
+// pinned NON-EMPTY (real CLOUD_COMMERCE_HTTP_URL, else the in-process placeholder) so
+// the gate stays ENABLED even after the standalone + its env are retired — a metering
+// gate that silently no-ops is a free-money hole, so it must never drop to
+// "not configured" while commerce is co-resident. The transport resolves the handler
+// lazily (published by commerce.Mount before any request), so building the client
+// here (pre-MountAll) is fine.
+//
+// SPLIT-DEPLOY (unchanged): without co-residency an empty CommerceHTTPURL yields a
+// not-Enabled() client (allow + no-op) and a set one speaks plain HTTP to the
+// standalone, exactly as before. The token is KMS-sourced; never logged.
 func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
+	base := cfg.CommerceHTTPURL
+	var httpClient metering.HTTPDoer
+	inProcess := cfg.Enabled("commerce")
+	if inProcess {
+		if base == "" {
+			base = commerceinproc.PlaceholderBase
+		}
+		httpClient = commerceinproc.Client(0) // in-process dispatch; no network timeout
+	}
 	m, err := metering.New(metering.Config{
-		BaseURL:  cfg.CommerceHTTPURL,
-		Token:    cfg.CommerceServiceToken,
-		Org:      cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
-		FailOpen: cfg.BillingFailOpen,
+		BaseURL:    base,
+		Token:      cfg.CommerceServiceToken,
+		Org:        cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
+		FailOpen:   cfg.BillingFailOpen,
+		HTTPClient: httpClient, // nil off the co-resident path → metering builds its own
 	})
 	if err != nil {
 		// Only an unparseable URL reaches here. Fall back to a not-configured
@@ -141,11 +163,18 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 		m, _ = metering.New(metering.Config{})
 	}
 	if m.Enabled() {
-		log.Info("billing gate enabled", "commerce_url", cfg.CommerceHTTPURL, "fail_open", cfg.BillingFailOpen)
+		log.Info("billing gate enabled", "commerce", boolStr(inProcess, "in-process", "http:"+base), "fail_open", cfg.BillingFailOpen)
 	} else {
 		log.Info("billing gate disabled (no commerce URL)")
 	}
 	return m
+}
+
+func boolStr(b bool, t, f string) string {
+	if b {
+		return t
+	}
+	return f
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
@@ -261,25 +290,48 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) error {
 
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetTenantConfig, CheckEntitlement). When the
-// commerce subsystem is co-resident (Enabled("commerce"), clients/commercesvc
-// mounted) it returns the IN-PROCESS client via CommerceInProcess: a direct Go
-// method call, no network hop — the HIP-0106 co-resident default. Absent co-residency
-// the legacy ZAP-RPC + disabled fallbacks apply (out-of-process commerce, or not
-// wired), so the remote proxy seam (CLOUD_COMMERCE_ZAP_ADDR) is unchanged. The
-// in-process client is trivial (org + brand for tenant config; entitlement resolution
-// fail-closed pending commerce exporting it) so it lives in clients directly — no
-// factory inversion is needed, unlike KMS whose store construction lives in
-// clients/kms.
+// commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS
+// client via the factory clients/commerce registers in init() — a direct Go call
+// that reads the embedded commerce datastore + the @hanzo/plans vocabulary, no
+// network hop (the HIP-0106 co-resident default). cloud never imports clients/commerce,
+// so the commerce library, its /v1/commerce subsystem, and this client share ONE
+// package with no cloud⇄commerce cycle — the same inversion KMS uses. Absent the
+// registration (clients/commerce not linked) it fails closed rather than pretending.
+//
+// NETWORK PATH PRESERVED: absent co-residency the ZAP-RPC + disabled fallbacks apply
+// (out-of-process commerce, or not wired), so the remote proxy seam
+// (CLOUD_COMMERCE_ZAP_ADDR) is unchanged — this fold does NOT force the in-process
+// cutover; the live default still selects the network client when commerce is not
+// enabled in this process.
 func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 	if cfg.Enabled("commerce") {
+		if commerceClientFactory == nil {
+			log.Error("deps.Commerce: commerce enabled but no client factory registered (clients/commerce not linked); failing closed")
+			return clients.DisabledCommerce()
+		}
 		log.Info("deps.Commerce → in-process (embedded commerce)", "brand", cfg.Brand)
-		return clients.CommerceInProcess(clients.LocalCommerce(cfg.Brand))
+		return commerceClientFactory(cfg, log)
 	}
 	if cfg.CommerceZAPAddr != "" {
 		log.Info("deps.Commerce → ZAP RPC", "addr", cfg.CommerceZAPAddr)
 		return clients.CommerceRPCAt(cfg.CommerceZAPAddr)
 	}
 	return clients.DisabledCommerce()
+}
+
+// commerceClientFactory constructs the embedded in-process Commerce client from
+// cloud Config. clients/commerce registers it in init(); pickCommerceClient calls it
+// so cloud depends on the CommerceClient interface + this hook, never the concrete
+// commerce package — the same inversion KMS + the subsystem Registry use. Exactly
+// one registration.
+var commerceClientFactory func(cfg *Config, log luxlog.Logger) CommerceClient
+
+// RegisterCommerceClientFactory installs the embedded-Commerce client constructor.
+// clients/commerce calls this from its init(); it is the ONE inversion point that
+// lets the commerce library and its /v1/commerce subsystem share one package with no
+// cloud⇄commerce cycle.
+func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) CommerceClient) {
+	commerceClientFactory = f
 }
 
 // pickAIClient resolves deps.AI — the client the agents subsystem runs chat

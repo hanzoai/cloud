@@ -1,0 +1,19 @@
+{
+  "attempt": 1,
+  "body": {
+    "productId": 5751372,
+    "productSku": "686696998137",
+    "warehouseId": 25,
+    "fromState": "none",
+    "toState": "backordered",
+    "delta": -2,
+    "toStateStockAfterTransition": 0,
+    "fromStateStockAfterTransition": 0,
+    "orderId": 249954082,
+    "physicalWarehouseId": null
+  },
+  "timestamp": "2017-02-13T23:06:50-08:00",
+  "topic": "stock.transition",
+  "uniqueEventID": "07872d6d69dd3000",
+  "webhookSubscriptionID": 44112
+}

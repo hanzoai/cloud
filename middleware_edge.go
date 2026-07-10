@@ -13,7 +13,7 @@ package cloud
 // or the per-IP cap via PUT /v1/gateway/config with no redeploy. The store layers
 // the admin-org "platform" policy over the static boot defaults, so an
 // un-provisioned deployment behaves exactly as the env/flag config until a policy
-// is written. See clients/gatewaypolicy + clients/gatewaysvc.
+// is written. See clients/gatewaypolicy + clients/gateway.
 //
 // These are DELIBERATELY not the things cloud already does. The gateway's other
 // jobs are already owned in-binary and are NOT re-implemented here:
