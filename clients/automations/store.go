@@ -11,6 +11,7 @@ import (
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest; !cgo → pure-Go modernc). Blank import registers it. This
 	// mirrors clients/crm exactly — the ONE storage pattern.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -30,7 +31,7 @@ type Store struct {
 }
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
