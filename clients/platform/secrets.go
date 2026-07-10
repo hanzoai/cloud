@@ -44,6 +44,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -173,17 +174,17 @@ func parseEnv(envJSON string) []EnvVarJSON {
 // NOTHING is stored — a plaintext secret never lands in the DB as a fallback. The
 // returned error never contains a secret value (only the key name), so a 4xx/5xx
 // body cannot leak the plaintext.
-func (s *svc) sealSecretEnv(ctx context.Context, org, appSlug string, env []EnvVarJSON) ([]EnvVarJSON, error) {
+func sealSecretEnv(s *cloud.Service[state], ctx context.Context, org, appSlug string, env []EnvVarJSON) ([]EnvVarJSON, error) {
 	out := make([]EnvVarJSON, 0, len(env))
 	for _, e := range env {
 		if !e.Secret {
 			out = append(out, e)
 			continue
 		}
-		if s.kms == nil {
+		if s.KMS == nil {
 			return nil, fmt.Errorf("secret env unavailable: KMS is not configured for this deployment")
 		}
-		if err := s.kms.PutSecret(ctx, kmsSecretRef(org, appSlug, e.Key), []byte(e.Value)); err != nil {
+		if err := s.KMS.PutSecret(ctx, kmsSecretRef(org, appSlug, e.Key), []byte(e.Value)); err != nil {
 			// Fail closed on ANY seal error — never fall back to storing plaintext.
 			// The error is KMS-internal (master key / store), it does not carry the
 			// value; we still name only the key so nothing sensitive is echoed.
@@ -205,13 +206,13 @@ func (s *svc) sealSecretEnv(ctx context.Context, org, appSlug string, env []EnvV
 // identity to authenticate with), THEN declare the CR. Both are fail-closed — the
 // CR reconciling to "pending" without a credential is the safe state, never a
 // cross-tenant read.
-func (s *svc) ensureSecretSync(ctx context.Context, org string, a Application) {
+func ensureSecretSync(s *cloud.Service[state], ctx context.Context, org string, a Application) {
 	keys := secretEnvKeys(a.EnvJSON)
 	if len(keys) > 0 {
-		s.ensureTenantKMSAuth(ctx, org)
+		ensureTenantKMSAuth(s, ctx, org)
 	}
-	if err := s.k8s.applyKMSSecret(ctx, org, a.Slug, keys); err != nil {
-		s.log.Warn("declare secret sync (KMSSecret) — continuing; secrets show pending until the operator syncs",
+	if err := s.State.k8s.applyKMSSecret(ctx, org, a.Slug, keys); err != nil {
+		s.Log.Warn("declare secret sync (KMSSecret) — continuing; secrets show pending until the operator syncs",
 			"org", org, "app", a.Slug, "keys", len(keys), "err", err)
 	}
 }
@@ -253,33 +254,33 @@ type tenantKMSIdentity interface {
 // best-effort + fail-closed: any gap leaves the credential ABSENT (operator cannot
 // authenticate → the org's sync stays pending), never a shared or wrong-org
 // identity. Never fails the deploy.
-func (s *svc) ensureTenantKMSAuth(ctx context.Context, org string) {
+func ensureTenantKMSAuth(s *cloud.Service[state], ctx context.Context, org string) {
 	// Already present (a prior deploy, ops, or a universe KMSSecret provisioned it)?
 	// Nothing to do — and no pending-spam. Existence is the readiness signal.
-	if s.k8s.tenantKMSAuthExists(ctx, org) {
+	if s.State.k8s.tenantKMSAuthExists(ctx, org) {
 		return
 	}
-	if s.kmsIdentity == nil {
+	if s.State.kmsIdentity == nil {
 		// FLAGGED STEP: no scoped IAM admin credential is wired, so cloud will not
 		// mint a per-tenant identity itself. Fail closed to pending — the operator
 		// cannot authenticate, so it can read NOTHING (least privilege by default),
 		// rather than fall back to any shared reader.
-		s.log.Info("secret sync pending: per-tenant KMS identity provisioning not configured — provision a machine identity (owner=<org>) into the tenant creds Secret to activate; staying fail-closed",
-			"org", org, "credsSecret", s.k8s.kmsSync.credsSecret, "namespace", tenantNamespace(org))
+		s.Log.Info("secret sync pending: per-tenant KMS identity provisioning not configured — provision a machine identity (owner=<org>) into the tenant creds Secret to activate; staying fail-closed",
+			"org", org, "credsSecret", s.State.k8s.kmsSync.credsSecret, "namespace", tenantNamespace(org))
 		return
 	}
-	clientID, clientSecret, err := s.kmsIdentity.EnsureOrgIdentity(ctx, org)
+	clientID, clientSecret, err := s.State.kmsIdentity.EnsureOrgIdentity(ctx, org)
 	if err != nil {
-		s.log.Warn("secret sync pending: provision per-tenant KMS identity failed — staying fail-closed",
+		s.Log.Warn("secret sync pending: provision per-tenant KMS identity failed — staying fail-closed",
 			"org", org, "err", err)
 		return
 	}
 	if clientID == "" || clientSecret == "" {
-		s.log.Warn("secret sync pending: per-tenant KMS identity provisioner returned empty credential — staying fail-closed", "org", org)
+		s.Log.Warn("secret sync pending: per-tenant KMS identity provisioner returned empty credential — staying fail-closed", "org", org)
 		return
 	}
-	if err := s.k8s.applyTenantKMSAuthSecret(ctx, org, clientID, clientSecret); err != nil {
-		s.log.Warn("secret sync pending: project per-tenant KMS creds Secret failed — staying fail-closed",
+	if err := s.State.k8s.applyTenantKMSAuthSecret(ctx, org, clientID, clientSecret); err != nil {
+		s.Log.Warn("secret sync pending: project per-tenant KMS creds Secret failed — staying fail-closed",
 			"org", org, "err", err)
 	}
 }

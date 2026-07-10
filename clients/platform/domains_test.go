@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -51,9 +52,9 @@ func mountDomains(t *testing.T) (*zip.App, *fakeDNS) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	dns := newFakeDNS()
-	s := &svc{store: store, k8s: fakeK8s(), log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app", resolver: dns}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s.routes(app)
+	routes(app, s)
 	return app, dns
 }
 
@@ -112,24 +113,24 @@ func TestCreateAppSeedsDefaultHost(t *testing.T) {
 func TestValidateOrgDomainsAllowsVerifiedCustom(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	svc := &svc{store: s, sitesHost: "hanzo.app"}
+	sv := &cloud.Service[state]{State: state{store: s, sitesHost: "hanzo.app"}}
 
 	// Own subtree — always allowed.
-	if err := svc.validateOrgDomains(ctx, "maxpower", []string{"api.maxpower.hanzo.app"}); err != nil {
+	if err := validateOrgDomains(sv, ctx, "maxpower", []string{"api.maxpower.hanzo.app"}); err != nil {
 		t.Fatalf("own subtree must be allowed: %v", err)
 	}
 	// A PENDING custom claim is NOT yet allowed to render.
 	_ = s.CreateDomain(ctx, Domain{Host: "yourco.com", Org: "maxpower", AppID: "app_1", AppSlug: "api", Status: "pending", Token: "t", CreatedAt: 1})
-	if err := svc.validateOrgDomains(ctx, "maxpower", []string{"yourco.com"}); err == nil {
+	if err := validateOrgDomains(sv, ctx, "maxpower", []string{"yourco.com"}); err == nil {
 		t.Fatal("a pending custom domain must be refused until verified")
 	}
 	// Once verified, this org may render it.
 	_, _ = s.MarkDomainVerified(ctx, "maxpower", "app_1", "yourco.com", 2)
-	if err := svc.validateOrgDomains(ctx, "maxpower", []string{"yourco.com"}); err != nil {
+	if err := validateOrgDomains(sv, ctx, "maxpower", []string{"yourco.com"}); err != nil {
 		t.Fatalf("a verified custom domain must be allowed: %v", err)
 	}
 	// A DIFFERENT org may NOT render maxpower's verified domain.
-	if err := svc.validateOrgDomains(ctx, "acme", []string{"yourco.com"}); err == nil {
+	if err := validateOrgDomains(sv, ctx, "acme", []string{"yourco.com"}); err == nil {
 		t.Fatal("another org must never render a domain it does not own")
 	}
 }
