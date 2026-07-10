@@ -22,13 +22,13 @@ func fastRBAC(k *k8sClient) {
 	k.rbacPollInitial = 1 * time.Millisecond
 }
 
-// TestFirstDeployWaitsForTenantRBAC is the cold-start-race regression guard: a
+// TestFirstDeployWaitsForOrgRBAC is the cold-start-race regression guard: a
 // brand-new tenant's namespace is created, but cloud-api's `cloud-api-platform`
 // RoleBinding is projected by the operator ASYNCHRONOUSLY. The deploy path must
 // POLL its own access (SelfSubjectAccessReview) and only touch the ResourceQuota /
 // Service CR once the grant has landed — so the FIRST deploy succeeds end-to-end
 // without a manual retry, exactly the failure found live.
-func TestFirstDeployWaitsForTenantRBAC(t *testing.T) {
+func TestFirstDeployWaitsForOrgRBAC(t *testing.T) {
 	k := fakeK8s()
 	fastRBAC(k)
 	fake := k.dyn.(*dynamicfake.FakeDynamicClient)
@@ -97,10 +97,10 @@ func TestFirstDeployFailsClosedWhenRBACNeverLands(t *testing.T) {
 	}
 }
 
-// TestTenantRBACWaitAbortsOnContextCancel proves the wait honors ctx cancellation
+// TestOrgRBACWaitAbortsOnContextCancel proves the wait honors ctx cancellation
 // (client disconnect / server shutdown): it returns promptly with the context error,
 // NOT the timeout error, and does not spin to the full deadline.
-func TestTenantRBACWaitAbortsOnContextCancel(t *testing.T) {
+func TestOrgRBACWaitAbortsOnContextCancel(t *testing.T) {
 	k := fakeK8s()
 	k.rbacReadyTimeout = 10 * time.Second // long, so only cancellation can end the wait
 	k.rbacPollInitial = 5 * time.Millisecond
@@ -123,10 +123,10 @@ func TestTenantRBACWaitAbortsOnContextCancel(t *testing.T) {
 	}
 }
 
-// TestExistingTenantDeployHasNoWait is the auto-glue no-regression guard: when
+// TestExistingOrgDeployHasNoWait is the auto-glue no-regression guard: when
 // cloud-api's RBAC is already present (an onboarded tenant), the readiness gate
 // resolves on the FIRST probe with no sleep — the fast deploy path is unchanged.
-func TestExistingTenantDeployHasNoWait(t *testing.T) {
+func TestExistingOrgDeployHasNoWait(t *testing.T) {
 	k := fakeK8s()
 	fake := k.dyn.(*dynamicfake.FakeDynamicClient) // production timings (unshrunk)
 

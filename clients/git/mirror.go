@@ -28,10 +28,10 @@ import (
 // DRY: the fetch writes into the SAME billy/S3 storer the smart-HTTP server
 // clones/pushes from (storage.storer), never a second git stack. Idempotent by
 // mirror semantics (+refs/*:refs/*, forced): re-mirroring force-updates refs.
-// Org-scoped exactly like create — the tenant (X-Org-Id) owns the mirror; no
-// other tenant can read or push to it. Storage is bounded the ONE way this
+// Org-scoped exactly like create — the org (X-Org-Id) owns the mirror; no
+// other org can read or push to it. Storage is bounded the ONE way this
 // subsystem bounds storage: recordUsage meters the mirrored bytes against the
-// tenant's commerce quota, the same number a push is bounded by.
+// org's commerce quota, the same number a push is bounded by.
 
 // mirrorRefSpec is git's mirror refspec: force every source ref onto the same
 // destination ref. HEAD (not under refs/) is handled separately by mirrorInto.
@@ -47,11 +47,11 @@ type mirrorReq struct {
 	Project string `json:"project"`
 }
 
-// mirror imports body.Source into the tenant's repo at :name. It provisions the
+// mirror imports body.Source into the org's repo at :name. It provisions the
 // repo on first use (idempotent, race-safe) then force-fetches every ref, so a
 // first call clones the source and a repeat call syncs it.
 func mirror(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -176,7 +176,7 @@ func defaultBranch(refs []*plumbing.Reference, listErr error) (plumbing.Referenc
 	return first, nil
 }
 
-// ensureRepo returns the tenant's repo, provisioning it (metadata row + empty
+// ensureRepo returns the org's repo, provisioning it (metadata row + empty
 // bare storage) on first use. Idempotent and race-safe: a concurrent create is
 // reconciled by reloading the canonical row, never surfaced as a conflict — a
 // mirror must be repeatable.
@@ -203,9 +203,9 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 	return store.Get(ctx, org, project, name)
 }
 
-// mirrorSource validates the tenant-supplied source URL: a well-formed http/https
+// mirrorSource validates the org-supplied source URL: a well-formed http/https
 // git URL with a host. This is the boundary check for the one place a
-// tenant-supplied address enters the server's outbound network path.
+// org-supplied address enters the server's outbound network path.
 func mirrorSource(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
