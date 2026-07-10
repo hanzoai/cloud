@@ -88,15 +88,22 @@ jobs:
           git_max="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' \
             | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
 
-          # Best-effort: highest ALREADY-PUSHED container tag, so a number that has
-          # an image (even from a run that died before tagging) is never reused.
-          cont_max=""
-          if command -v gh >/dev/null 2>&1; then
-            cont_max="$(GH_TOKEN="$GH_PAT" gh api --paginate \
-              '/orgs/hanzoai/packages/container/cloud/versions' \
-              --jq '.[].metadata.container.tags[]' 2>/dev/null \
-              | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
-          fi
+          # Best-effort: catch a number whose IMAGE was pushed by a run that died
+          # before it minted the git tag (the one orphan git_max can't see), so we
+          # never reuse it. curl (not gh): gh is NOT installed on the ARC runner —
+          # the prior `command -v gh` guard silently degraded this to empty. curl is
+          # always present and GH_PAT as a bearer reads the org package list the same.
+          # Grep the semver-shaped tags straight out of the JSON (no jq dependency —
+          # jq is not installed either). DELIBERATELY single-page (newest-created
+          # first, per_page=100): the only orphan that matters is from a RECENT failed
+          # run and is on page 1; full pagination would resurface ancient off-lane
+          # container tags (e.g. a stray 1.799.x with no git tag) and wrongly blow the
+          # monotonic 1.786.x patch lane. git_max remains the primary floor.
+          cont_max="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            'https://api.github.com/orgs/hanzoai/packages/container/cloud/versions?per_page=100' 2>/dev/null \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | grep -E '^1\.786\.' | sort -V | tail -1 || true)"
 
           # Floor = highest of the two; fall back to 1.786.0 only if the repo has
           # no tags at all (first release ever).
@@ -125,10 +132,19 @@ jobs:
           # layer's cache key moves with console HEAD (otherwise a static `main` freezes
           # the embed on a persistent BuildKit and new console work never ships). Fail
           # loud if it can't be resolved — a blank ref would silently re-freeze the embed.
-          # Use `gh api` (GH_PAT), NOT `git ls-remote`: actions/checkout installs a global
-          # git extraheader carrying THIS repo's GITHUB_TOKEN, which overrides URL creds and
-          # 404s on the cross-repo hanzoai/console clone. gh honors GH_PAT and sidesteps it.
-          console_sha="$(GH_TOKEN="$GH_PAT" gh api repos/hanzoai/console/commits/main --jq '.sha')"
+          # curl + GH_PAT, NOT `gh` (not installed on the runner) and NOT `git ls-remote`
+          # (actions/checkout installs a global git extraheader carrying THIS repo's
+          # GITHUB_TOKEN, which overrides URL creds and 404s the cross-repo hanzoai/console
+          # clone). A raw REST call with the PAT as bearer sidesteps both. The commit sha is
+          # the response object's top-level "sha" (first occurrence) — grep -m1 + sed extract
+          # it without a jq dependency. `|| true` on the fetch so a transient network error
+          # yields an empty sha caught by the guard below, never an unguarded set -e abort.
+          console_json="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            'https://api.github.com/repos/hanzoai/console/commits/main' 2>/dev/null || true)"
+          console_sha="$(printf '%s' "${console_json}" \
+            | grep -m1 '"sha"' | sed -E 's/.*"sha"[[:space:]]*:[[:space:]]*"([0-9a-f]+)".*/\1/')"
           if [ -z "${console_sha}" ]; then
             echo "::error::could not resolve hanzoai/console main HEAD — refusing to build a stale embed"
             exit 1
