@@ -98,16 +98,12 @@ func TraceInprocEnabled() bool {
 	}
 }
 
-func init() {
-	// Order 73: after o11y-runtime (71) sets the DSN/runtime and o11y-otlp-ingest
-	// (72). RegisterWithShutdown so the exporter's sending queue flushes on stop.
-	cloud.RegisterWithShutdown("o11y-trace-inproc", 73, mountTraceSink, shutdownTraceSink)
-}
-
-// mountTraceSink builds the chtraces exporter and registers the in-process
-// handler. Fail-soft at every branch: a disabled flag, a missing DSN, or a
-// construction error all return nil, leaving cloud's spans on the wire path.
-func mountTraceSink(_ any, deps cloud.Deps) error {
+// mountTraceSink builds the chtraces exporter and registers the in-process handler.
+// Called by mountO11y (o11y.go). It registers an in-process ZAP handler (no
+// /v1/o11y/* Fiber route), so it is order-independent. Fail-soft at every branch: a
+// disabled flag, a missing DSN, or a construction error all return nil, leaving
+// cloud's spans on the wire path.
+func mountTraceSink(deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-trace-inproc")
 
 	if !TraceInprocEnabled() {
