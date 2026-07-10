@@ -14,6 +14,7 @@ import (
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
+	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
@@ -57,6 +58,33 @@ func Serve(enable []string) error {
 		return fmt.Errorf("ha role: %w", roleErr)
 	}
 	cfg.Role = resolvedRole
+
+	// Reader role: a transparent, always-ready reverse proxy to the writer. It
+	// opens NO stores (the KMS ZapDB store is not RO-shareable while the writer is
+	// live — clients/kms.TestConcurrentOpen_LiveWriterStoreIsNotROShareable) and
+	// forwards every request to CLOUD_WRITER_URL, retrying dial-only across the
+	// writer's roll gap so the edge never blips. Returns here — never reaches
+	// BuildDeps. Unset CLOUD_ROLE ⇒ Writer, so this is inert by default.
+	if cfg.Role.IsReader() {
+		return serveReaderProxy(cfg)
+	}
+
+	// Writer role, optional lease. When CLOUD_WRITER_LEASE is set (the surge/
+	// overlap roll topology), take the exclusive writer lease BEFORE opening the
+	// RWO stores and release it LAST (after every store is closed) so a surge
+	// writer never double-opens the exclusive-lock ZapDB/audit stores. Default
+	// OFF: a Recreate single-writer never overlaps and needs no lease, so an unset
+	// variable is byte-identical to today.
+	if cfg.WriterLease {
+		release, lerr := acquireWriterLease(cfg.DataDir, 90*time.Second, luxlog.New("cloud").New("subsystem", "writer-lease"))
+		if lerr != nil {
+			return fmt.Errorf("writer lease: %w", lerr)
+		}
+		// Released after the shutdown path closes every store (ShutdownAll +
+		// audit + gateway-policy) below; defer is the store-close backstop that
+		// also covers early error returns (the kernel reclaims on exit regardless).
+		defer func() { _ = release() }()
+	}
 
 	deps := BuildDeps(cfg)
 
@@ -106,14 +134,8 @@ func Serve(enable []string) error {
 
 	app.Use(middleware.Logger(deps.Logger))
 
-	// Read-replica write guard (fail-closed). On a Reader, refuse mutating verbs
-	// at the boundary so a mis-routed write can never silently persist to the
-	// reader's ephemeral store and vanish on restart. ONE place gates EVERY store
-	// (KMS + audit + tasks + per-tenant SQLite), not just KMS's read-only open.
-	// No-op on a Writer (the default), so unset CLOUD_ROLE is byte-identical.
-	if cfg.Role.IsReader() {
-		app.Use(ReaderGuard())
-	}
+	// (A Reader never reaches here — it returns at serveReaderProxy above, opening
+	// no stores and no middleware pipeline. This body is the Writer path only.)
 
 	// Public site edge (clients/sites). Installed FIRST — after Recover/RequestID/
 	// Logger, BEFORE SanitizeIdentity + BillingGate — so a request whose Host is a
