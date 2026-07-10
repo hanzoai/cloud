@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -69,7 +70,7 @@ func newCommerceProxy(base, token string) *commerceProxy {
 	return &commerceProxy{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 15 * time.Second},
+		http:  commerceinproc.Client(15 * time.Second),
 	}
 }
 
@@ -147,7 +148,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log = log.New("subsystem", "billing")
 
 	s := &svc{
-		commerce: newCommerceProxy(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce: newCommerceProxy(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		log:      log,
 	}
 
