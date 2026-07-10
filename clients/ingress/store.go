@@ -10,7 +10,7 @@ import (
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" database/sql name under both build tags: cgo → mattn+SQLCipher;
 	// !cgo → pure-Go modernc). Same driver clients/settings and clients/eval use.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 

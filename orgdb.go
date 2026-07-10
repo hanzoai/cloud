@@ -11,13 +11,15 @@ import (
 	"strings"
 	"sync"
 
+	// cek opens every org file encrypted at rest (the SOLE org-open seam).
+	"github.com/hanzoai/cloud/cek"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest + FTS5; !cgo → pure-Go modernc, FTS5 incl. the trigram
 	// tokenizer). Importing modernc/mattn directly would double-register "sqlite"
-	// under CGO and panic at init. OrgDB is the SOLE place cloud opens an org
-	// SQLite file, so this blank import lives HERE, once — a subsystem that resolves
-	// its store through OrgDB / OrgStore never imports the driver itself.
+	// under CGO and panic at init. OrgDB is the SOLE place cloud opens an org SQLite
+	// file; the blank import keeps the driver registered for cek's no-key fallback.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -81,7 +83,7 @@ func openOrgDB(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("cloud: OrgDB mkdir: %w", err)
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("cloud: OrgDB open %q: %w", path, err)
 	}
