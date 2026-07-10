@@ -38,6 +38,11 @@ const (
 type engine struct {
 	store *Store
 	embed Embedder
+	// org/project are the billing scope for the semantic tier's query embeddings —
+	// set per-request by engineFor so searchSemantic meters the query embed against
+	// the caller's org (the same tenant its store is opened for).
+	org     string
+	project string
 }
 
 // search dispatches to a single tier or the hybrid fusion. An unknown type
@@ -134,7 +139,7 @@ func (e *engine) searchSemantic(ctx context.Context, repo, query string, limit i
 	if e.embed == nil || !e.embed.Enabled() {
 		return nil, nil
 	}
-	qv, err := e.embed.Embed(ctx, []string{query})
+	qv, err := e.embed.Embed(ctx, e.org, e.project, []string{query})
 	if err != nil || len(qv) == 0 {
 		return nil, err
 	}
