@@ -198,6 +198,13 @@ import (
 	_ "github.com/hanzoai/cloud/clients/analytics"  // order 132 — /v1/analytics/* (native-Go analytics on datastore/ClickHouse: per-org LLM usage + web/commerce lenses)
 	_ "github.com/hanzoai/cloud/clients/authors"    // order 143 — /v1/authors/* + /v1/admin/authors* (creator loop: OSS-author deploy royalty via the commerce ledger)
 	_ "github.com/hanzoai/cloud/clients/crm"        // order 131 — /v1/crm/* (native-Go CRM on Base: companies/contacts/opportunities)
+	// captable: the Captable,Inc app folded in-process (HIP-0106, epic #96 pilot).
+	// Hosts the tRPC business logic as a goja bundle (github.com/hanzoai/captable)
+	// over per-tenant Base/SQLite via the REUSABLE clients/gojabase RW-Base binding
+	// (which esign #100 + dataroom #101 reuse). STAGED (config.stagedSubsystems):
+	// mounts ONLY when the operator names "captable" in CLOUD_ENABLE, so the
+	// standalone captable service keeps authority until the phase-2 cutover.
+	_ "github.com/hanzoai/cloud/clients/captable"   // order 133 — /v1/captable/* (cap table on Base via goja)
 	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
 	// The configurable custody / accounts / wallets / keys / sign surface
 	// (HIP-0106): ONE seam over three orthogonal signing backends selected per
