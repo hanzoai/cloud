@@ -120,22 +120,6 @@ jobs:
           echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
           echo "Next release: v${version} (git_max='${git_max:-none}' container_max='${cont_max:-none}')"
 
-          # Resolve the console commit to embed = hanzoai/console main HEAD, RIGHT NOW.
-          # Threaded into the build as --build-arg CONSOLE_REF so the console clone+build
-          # layer's cache key moves with console HEAD (otherwise a static `main` freezes
-          # the embed on a persistent BuildKit and new console work never ships). Fail
-          # loud if it can't be resolved — a blank ref would silently re-freeze the embed.
-          # Use `gh api` (GH_PAT), NOT `git ls-remote`: actions/checkout installs a global
-          # git extraheader carrying THIS repo's GITHUB_TOKEN, which overrides URL creds and
-          # 404s on the cross-repo hanzoai/console clone. gh honors GH_PAT and sidesteps it.
-          console_sha="$(GH_TOKEN="$GH_PAT" gh api repos/hanzoai/console/commits/main --jq '.sha')"
-          if [ -z "${console_sha}" ]; then
-            echo "::error::could not resolve hanzoai/console main HEAD — refusing to build a stale embed"
-            exit 1
-          fi
-          echo "console_ref=${console_sha}" >> "$GITHUB_OUTPUT"
-          echo "Embedding console @ ${console_sha}"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -175,10 +159,11 @@ jobs:
           load: true
           tags: cloud:smoke
           labels: ${{ steps.meta.outputs.labels }}
-          # Pin the console commit to embed (main HEAD, resolved above). Moves the
-          # clone+build cache key with console HEAD so the embed is never frozen.
+          # Bust the console clone+build layer every release (the cloud commit sha is
+          # unique per push) so the embed re-fetches console main HEAD fresh — never the
+          # frozen snapshot the persistent BuildKit cache would otherwise serve forever.
           build-args: |
-            CONSOLE_REF=${{ steps.ver.outputs.console_ref }}
+            CONSOLE_CACHEBUST=${{ github.sha }}
           # gh_token: BuildKit secret the Dockerfile consumes to fetch private
           # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
           secrets: |
@@ -265,10 +250,10 @@ jobs:
             ghcr.io/hanzoai/cloud:sha-${{ steps.ver.outputs.sha_short }}
             ghcr.io/hanzoai/cloud:latest
           labels: ${{ steps.meta.outputs.labels }}
-          # SAME pinned console as the smoke build → every layer is a cache hit and the
-          # pushed image is byte-identical to the one the smoke test proved.
+          # SAME cachebust as the smoke build → every layer is a cache hit from step 1
+          # and the pushed image is byte-identical to the one the smoke test proved.
           build-args: |
-            CONSOLE_REF=${{ steps.ver.outputs.console_ref }}
+            CONSOLE_CACHEBUST=${{ github.sha }}
           secrets: |
             gh_token=${{ secrets.GH_PAT }}
 
