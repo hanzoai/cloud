@@ -62,7 +62,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -103,27 +102,25 @@ const (
 	payoutLimit   = 100
 )
 
-type svc struct {
+// state is authors' own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store      *Store
 	commerce   commerce
 	github     github
-	log        luxlog.Logger
 	badgeBase  string          // https://hanzo.app — the Deploy-on-Hanzo badge/link host
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires the authors surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("authors.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("authors.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "authors")
 	if deps.DataDir == "" {
 		return fmt.Errorf("authors.Mount: empty DataDir")
 	}
@@ -134,29 +131,34 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("authors.Mount: open store: %w", err)
 	}
-	s := &svc{
+	b := cloud.NewBase(deps, "authors")
+	s := &cloud.Service[state]{Base: b, State: state{
 		store:      store,
 		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		github:     newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
-		log:        log,
 		badgeBase:  badgeBase(deps),
 		auditStore: deps.Audit,
-	}
+	}}
 	mounted = s
 
-	app.Get("/v1/authors", s.myAuthors)
-	app.Post("/v1/authors/connect", s.connect)
-	app.Post("/v1/authors/repos/verify", s.verifyRepo)
-	app.Post("/v1/authors/deploys/record", s.recordDeploy)
-	app.Get("/v1/admin/authors", s.adminList)
-	app.Post("/v1/admin/authors/sweep", s.adminSweep)
-	app.Post("/v1/admin/authors/:id/approve", s.adminApprove)
-	app.Post("/v1/admin/authors/:id/suspend", s.adminSuspend)
-	app.Post("/v1/admin/authors/:id/payout", s.adminPayout)
+	routes(app, s)
 
-	log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.badgeBase,
-		"commerce", s.commerce.configured())
+	b.Log.Info("authors mounted", "brand", deps.Brand, "badgeBase", s.State.badgeBase,
+		"commerce", s.State.commerce.configured())
 	return nil
+}
+
+// routes registers the authors surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/authors", cloud.Handle(s, myAuthors))
+	app.Post("/v1/authors/connect", cloud.Handle(s, connect))
+	app.Post("/v1/authors/repos/verify", cloud.Handle(s, verifyRepo))
+	app.Post("/v1/authors/deploys/record", cloud.Handle(s, recordDeploy))
+	app.Get("/v1/admin/authors", cloud.Handle(s, adminList))
+	app.Post("/v1/admin/authors/sweep", cloud.Handle(s, adminSweep))
+	app.Post("/v1/admin/authors/:id/approve", cloud.Handle(s, adminApprove))
+	app.Post("/v1/admin/authors/:id/suspend", cloud.Handle(s, adminSuspend))
+	app.Post("/v1/admin/authors/:id/payout", cloud.Handle(s, adminPayout))
 }
 
 func init() {
@@ -175,19 +177,19 @@ func init() {
 // connect form; otherwise it returns the dashboard (status, login, verified, repos,
 // deploys, accrued/pending/paid, payouts). For an APPROVED author it ALSO
 // opportunistically runs the accrual sweep, so the dashboard is self-updating.
-func (s *svc) myAuthors(c *zip.Ctx) error {
+func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view your author program")
 	}
 	ctx := c.Context()
 
-	a, err := s.store.GetByOrg(ctx, org)
+	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
 		return c.JSON(http.StatusOK, map[string]any{
 			"isAuthor":        false,
 			"defaultShareBps": defaultShareBps,
-			"badgeBase":       s.badgeBase,
+			"badgeBase":       s.State.badgeBase,
 		})
 	}
 	if err != nil {
@@ -197,23 +199,23 @@ func (s *svc) myAuthors(c *zip.Ctx) error {
 	// Lazy accrual sweep for MY deploying orgs (bounded, best-effort — a commerce
 	// hiccup never fails the page; it simply accrues on the next sweep).
 	if a.Status == StatusApproved {
-		if _, _, serr := s.sweepAuthor(ctx, a); serr != nil {
-			s.log.Warn("authors: lazy sweep failed", "author", a.ID, "err", serr)
+		if _, _, serr := sweepAuthor(s, ctx, a); serr != nil {
+			s.Log.Warn("authors: lazy sweep failed", "author", a.ID, "err", serr)
 		}
-		if refreshed, rerr := s.store.GetByID(ctx, a.ID); rerr == nil {
+		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
 			a = refreshed // pick up any accrual the lazy sweep just latched
 		}
 	}
 
-	repos, err := s.store.ListRepos(ctx, a.ID, repoLimit)
+	repos, err := s.State.store.ListRepos(ctx, a.ID, repoLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list repos: %v", err)
 	}
-	deploys, err := s.store.ListDeploys(ctx, a.ID, deployLimit)
+	deploys, err := s.State.store.ListDeploys(ctx, a.ID, deployLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deploys: %v", err)
 	}
-	payouts, err := s.store.ListPayouts(ctx, a.ID, payoutLimit)
+	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
@@ -228,8 +230,8 @@ func (s *svc) myAuthors(c *zip.Ctx) error {
 		"verifyFile":    verifyFile,
 		"verifySnippet": verifySnippet(a.VerifyCode),
 		"shareBps":      a.ShareBps,
-		"badgeBase":     s.badgeBase,
-		"repos":         repoViews(repos, s.badgeBase),
+		"badgeBase":     s.State.badgeBase,
+		"repos":         repoViews(repos, s.State.badgeBase),
 		"deploys":       deployViews(deploys),
 		"accruedCents":  a.AccruedCents,
 		"pendingCents":  a.PendingCents(),
@@ -248,7 +250,7 @@ type connectRequest struct {
 // idempotently. It links a GitHub login — from IAM's linked account (identity
 // verified) when present, else the supplied login (verified later per-repo) — and
 // mints a stable verify code for the file method.
-func (s *svc) connect(c *zip.Ctx) error {
+func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to connect GitHub")
@@ -263,8 +265,8 @@ func (s *svc) connect(c *zip.Ctx) error {
 	// Prefer IAM's linked GitHub identity (strong proof of the login).
 	login := normalizeLogin(body.GithubLogin)
 	identityVerified := false
-	if l, _, linked, lerr := s.github.linkedAccount(ctx, org, userSub); lerr != nil {
-		s.log.Warn("authors: linked-account lookup failed", "org", org, "err", lerr)
+	if l, _, linked, lerr := s.State.github.linkedAccount(ctx, org, userSub); lerr != nil {
+		s.Log.Warn("authors: linked-account lookup failed", "org", org, "err", lerr)
 	} else if linked && l != "" {
 		login = normalizeLogin(l)
 		identityVerified = true
@@ -281,7 +283,7 @@ func (s *svc) connect(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	a, created, err := s.store.Connect(ctx, id, org, login, verifyCode, defaultShareBps, identityVerified, time.Now().Unix())
+	a, created, err := s.State.store.Connect(ctx, id, org, login, verifyCode, defaultShareBps, identityVerified, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "connect: %v", err)
 	}
@@ -311,7 +313,7 @@ type verifyRepoRequest struct {
 // Ownership is proven by an IAM-linked GitHub token (admin/push permission) OR a
 // hanzo.json on the default branch carrying the author's verify code. The author must
 // have connected first.
-func (s *svc) verifyRepo(c *zip.Ctx) error {
+func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to verify a repo")
@@ -326,7 +328,7 @@ func (s *svc) verifyRepo(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	a, err := s.store.GetByOrg(ctx, org)
+	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
 		return zip.ErrBadRequest("connect GitHub before verifying a repo")
 	}
@@ -335,7 +337,7 @@ func (s *svc) verifyRepo(c *zip.Ctx) error {
 	}
 
 	owner, name, _ := splitOwnerRepo(repoURL)
-	method, verified := s.proveOwnership(ctx, a, org, strings.TrimSpace(c.User()), owner, name)
+	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), owner, name)
 	if !verified {
 		return zip.Errorf(http.StatusUnprocessableEntity,
 			"could not verify ownership of %s — grant the Hanzo GitHub app OR add %s containing your verify code (%s) to the default branch",
@@ -346,41 +348,41 @@ func (s *svc) verifyRepo(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	repo, created, err := s.store.UpsertVerifiedRepo(ctx, repoID, a.ID, repoURL, method, time.Now().Unix())
+	repo, created, err := s.State.store.UpsertVerifiedRepo(ctx, repoID, a.ID, repoURL, method, time.Now().Unix())
 	if err != nil {
 		if err == errRepoOwned {
 			return zip.ErrConflict("that repo is already verified by another author")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "record repo: %v", err)
 	}
-	s.emitAudit(ctx, "author.verify_repo", a, map[string]any{"repoUrl": repoURL, "method": method})
+	emitAudit(s, ctx, "author.verify_repo", a, map[string]any{"repoUrl": repoURL, "method": method})
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
 	}
 	return c.JSON(status, map[string]any{
-		"repo":    repoViewOf(repo, s.badgeBase),
+		"repo":    repoViewOf(repo, s.State.badgeBase),
 		"created": created,
 	})
 }
 
 // proveOwnership tries the two verification methods in order (oauth, then file) and
 // returns the method that succeeded + whether it did.
-func (s *svc) proveOwnership(ctx context.Context, a Author, org, userSub, owner, name string) (method string, verified bool) {
+func proveOwnership(s *cloud.Service[state], ctx context.Context, a Author, org, userSub, owner, name string) (method string, verified bool) {
 	// Method 1: IAM-linked GitHub token → admin/push permission on the repo.
-	if login, token, linked, lerr := s.github.linkedAccount(ctx, org, userSub); lerr == nil && linked && token != "" {
-		if admin, aerr := s.github.repoAdmin(ctx, token, owner, name); aerr == nil && admin {
+	if login, token, linked, lerr := s.State.github.linkedAccount(ctx, org, userSub); lerr == nil && linked && token != "" {
+		if admin, aerr := s.State.github.repoAdmin(ctx, token, owner, name); aerr == nil && admin {
 			return MethodOAuth, true
 		} else if aerr != nil {
-			s.log.Warn("authors: repoAdmin check failed", "repo", owner+"/"+name, "err", aerr)
+			s.Log.Warn("authors: repoAdmin check failed", "repo", owner+"/"+name, "err", aerr)
 		}
 		_ = login
 	}
 	// Method 2: hanzo.json on the default branch containing the verify code.
 	for _, branch := range verifyBranches {
-		file, ferr := s.github.fetchFile(ctx, owner, name, branch, verifyFile)
+		file, ferr := s.State.github.fetchFile(ctx, owner, name, branch, verifyFile)
 		if ferr != nil {
-			s.log.Warn("authors: fetch verify file failed", "repo", owner+"/"+name, "branch", branch, "err", ferr)
+			s.Log.Warn("authors: fetch verify file failed", "repo", owner+"/"+name, "branch", branch, "err", ferr)
 			continue
 		}
 		if len(file) > 0 && fileProvesCode(file, a.VerifyCode) {
@@ -403,7 +405,7 @@ type recordDeployRequest struct {
 // verified author repo is NOT an error — it returns recorded:false so the deploy path
 // can fire this unconditionally. A self-deploy is recorded (provenance) but excluded
 // from accrual by the sweep.
-func (s *svc) recordDeploy(c *zip.Ctx) error {
+func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	deployingOrg, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to record a deploy")
@@ -423,7 +425,7 @@ func (s *svc) recordDeploy(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	repo, err := s.store.VerifiedRepoForURL(ctx, repoURL)
+	repo, err := s.State.store.VerifiedRepoForURL(ctx, repoURL)
 	if err == errUnknownRepo || err == errRepoNotVerified {
 		return c.JSON(http.StatusOK, map[string]any{"recorded": false, "reason": "repo is not a verified author repo"})
 	}
@@ -435,16 +437,16 @@ func (s *svc) recordDeploy(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	edge, created, err := s.store.RecordDeploy(ctx, id, repo.AuthorID, repoURL, project, deployingOrg, time.Now().Unix())
+	edge, created, err := s.State.store.RecordDeploy(ctx, id, repo.AuthorID, repoURL, project, deployingOrg, time.Now().Unix())
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "record deploy: %v", err)
 	}
-	author, _ := s.store.GetByID(ctx, repo.AuthorID)
+	author, _ := s.State.store.GetByID(ctx, repo.AuthorID)
 	self := author.Org == deployingOrg
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
-		s.emitAudit(ctx, "author.deploy", author, map[string]any{
+		emitAudit(s, ctx, "author.deploy", author, map[string]any{
 			"repoUrl": repoURL, "project": project, "deployingOrg": deployingOrg, "self": self,
 		})
 	}
@@ -461,20 +463,20 @@ func (s *svc) recordDeploy(c *zip.Ctx) error {
 
 // adminList answers GET /v1/admin/authors — every author (org exposed) + a fleet
 // summary. Global-admin only.
-func (s *svc) adminList(c *zip.Ctx) error {
+func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	rows, err := s.store.ListAll(ctx, adminLimitOf(c))
+	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list authors: %v", err)
 	}
-	repoCounts, err := s.store.RepoCountsByAuthor(ctx)
+	repoCounts, err := s.State.store.RepoCountsByAuthor(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "count repos: %v", err)
 	}
-	deployCounts, err := s.store.DeployCountsByAuthor(ctx)
+	deployCounts, err := s.State.store.DeployCountsByAuthor(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "count deploys: %v", err)
 	}
@@ -489,7 +491,7 @@ func (s *svc) adminList(c *zip.Ctx) error {
 
 // adminApprove answers POST /v1/admin/authors/:id/approve — admit to earning. Body
 // may carry a {shareBps} override. Global-admin only.
-func (s *svc) adminApprove(c *zip.Ctx) error {
+func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -502,32 +504,32 @@ func (s *svc) adminApprove(c *zip.Ctx) error {
 		return zip.ErrBadRequest("shareBps must be 0–10000")
 	}
 	ctx := c.Context()
-	a, err := s.store.Approve(ctx, id, body.ShareBps, time.Now().Unix())
+	a, err := s.State.store.Approve(ctx, id, body.ShareBps, time.Now().Unix())
 	if err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("author not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
 	}
-	s.emitAudit(ctx, "author.approve", a, map[string]any{"shareBps": a.ShareBps})
+	emitAudit(s, ctx, "author.approve", a, map[string]any{"shareBps": a.ShareBps})
 	return adminOK(c, map[string]any{"author": adminViewOf(a, 0, 0)})
 }
 
 // adminSuspend answers POST /v1/admin/authors/:id/suspend. Global-admin only.
-func (s *svc) adminSuspend(c *zip.Ctx) error {
+func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	ctx := c.Context()
-	a, err := s.store.Suspend(ctx, id, time.Now().Unix())
+	a, err := s.State.store.Suspend(ctx, id, time.Now().Unix())
 	if err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("author not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "suspend: %v", err)
 	}
-	s.emitAudit(ctx, "author.suspend", a, nil)
+	emitAudit(s, ctx, "author.suspend", a, nil)
 	return adminOK(c, map[string]any{"author": adminViewOf(a, 0, 0)})
 }
 
@@ -542,7 +544,7 @@ type payoutRequest struct {
 // commerce grant into the author's wallet; a cash method is record-only. The amount
 // can never exceed pending (accrued − paid), reserved atomically before any grant.
 // Global-admin only.
-func (s *svc) adminPayout(c *zip.Ctx) error {
+func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -560,7 +562,7 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	a, err := s.store.GetByID(ctx, id)
+	a, err := s.State.store.GetByID(ctx, id)
 	if err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("author not found")
@@ -573,7 +575,7 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := s.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
+	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -593,8 +595,8 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAuthor, "payout:"+payoutID,
 		fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), body.AmountCents)
 	if berr != nil || !backed {
-		if verr := s.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
-			s.log.Error("authors: void after unbacked payout failed", "payout", payoutID, "err", verr)
+		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
+			s.Log.Error("authors: void after unbacked payout failed", "payout", payoutID, "err", verr)
 		}
 		if berr != nil {
 			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
@@ -609,19 +611,19 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	// grant failure is logged loud (never silent) so an operator reconciles from the
 	// payout row + audit.
 	if method == methodCredits {
-		txn, gerr := s.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
+		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
 			fmt.Sprintf("OSS author royalty payout (%s)", a.GithubLogin), grantTag)
 		if gerr != nil {
-			s.log.Error("authors: credits payout grant failed (reserved against pending; not retried)",
+			s.Log.Error("authors: credits payout grant failed (reserved against pending; not retried)",
 				"author", a.ID, "payout", payoutID, "err", gerr)
-		} else if serr := s.store.SetPayoutTxn(ctx, payoutID, txn); serr != nil {
-			s.log.Error("authors: record payout txn failed", "payout", payoutID, "err", serr)
+		} else if serr := s.State.store.SetPayoutTxn(ctx, payoutID, txn); serr != nil {
+			s.Log.Error("authors: record payout txn failed", "payout", payoutID, "err", serr)
 		}
 		payout.Txn = txn
 	}
 
-	after, _ := s.store.GetByID(ctx, a.ID)
-	s.emitAudit(ctx, "author.payout", after, map[string]any{
+	after, _ := s.State.store.GetByID(ctx, a.ID)
+	emitAudit(s, ctx, "author.payout", after, map[string]any{
 		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
 		"reference": payout.Reference, "txn": payout.Txn,
 	})
@@ -631,22 +633,22 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 // adminSweep answers POST /v1/admin/authors/sweep — the periodic accrual path. It
 // folds over every approved author's DISTINCT deploying orgs and accrues this
 // period's royalty, at-most-once per period. Global-admin only.
-func (s *svc) adminSweep(c *zip.Ctx) error {
+func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	approved, err := s.store.ListApproved(ctx, sweepLimit)
+	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list approved: %v", err)
 	}
 	swept, accrued := 0, 0
 	for _, a := range approved {
-		checked, credited, serr := s.sweepAuthor(ctx, a)
+		checked, credited, serr := sweepAuthor(s, ctx, a)
 		swept += checked
 		accrued += credited
 		if serr != nil {
-			s.log.Warn("authors: sweep author failed", "author", a.ID, "err", serr)
+			s.Log.Warn("authors: sweep author failed", "author", a.ID, "err", serr)
 		}
 	}
 	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued})
@@ -658,8 +660,8 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 // own org) and accrues this period's royalty for each (spend × share), latched
 // at-most-once per period. Returns (orgs checked, accruals created). A per-org
 // commerce error is skipped (accrued next sweep) rather than failing the whole fold.
-func (s *svc) sweepAuthor(ctx context.Context, a Author) (checked, created int, err error) {
-	orgs, err := s.store.DistinctDeployingOrgs(ctx, a.ID, a.Org, sweepLimit)
+func sweepAuthor(s *cloud.Service[state], ctx context.Context, a Author) (checked, created int, err error) {
+	orgs, err := s.State.store.DistinctDeployingOrgs(ctx, a.ID, a.Org, sweepLimit)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -667,9 +669,9 @@ func (s *svc) sweepAuthor(ctx context.Context, a Author) (checked, created int, 
 	now := time.Now().Unix()
 	for _, dorg := range orgs {
 		checked++
-		spend, serr := s.commerce.spendCents(ctx, dorg, orgSubject(dorg))
+		spend, serr := s.State.commerce.spendCents(ctx, dorg, orgSubject(dorg))
 		if serr != nil {
-			s.log.Warn("authors: spend read failed", "author", a.ID, "deployingOrg", dorg, "err", serr)
+			s.Log.Warn("authors: spend read failed", "author", a.ID, "deployingOrg", dorg, "err", serr)
 			continue
 		}
 		earning := spend * a.ShareBps / bpsDenom
@@ -680,14 +682,14 @@ func (s *svc) sweepAuthor(ctx context.Context, a Author) (checked, created int, 
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.store.LatchAccrual(ctx, accrualID, a.ID, dorg, period, spend, earning, now)
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, dorg, period, spend, earning, now)
 		if lerr != nil {
-			s.log.Warn("authors: accrual latch failed", "author", a.ID, "deployingOrg", dorg, "err", lerr)
+			s.Log.Warn("authors: accrual latch failed", "author", a.ID, "deployingOrg", dorg, "err", lerr)
 			continue
 		}
 		if won {
 			created++
-			s.emitAudit(ctx, "author.accrue", a, map[string]any{
+			emitAudit(s, ctx, "author.accrue", a, map[string]any{
 				"deployingOrg": dorg, "period": period,
 				"spendCents": spend, "earningCents": earning,
 			})
@@ -700,8 +702,8 @@ func (s *svc) sweepAuthor(ctx context.Context, a Author) (checked, created int, 
 
 // emitAudit records an author money/lifecycle action in cloud's tamper-evident
 // trail. Best-effort; a nil store is a no-op.
-func (s *svc) emitAudit(ctx context.Context, action string, a Author, extra map[string]any) {
-	if s.auditStore == nil {
+func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Author, extra map[string]any) {
+	if s.State.auditStore == nil {
 		return
 	}
 	after := map[string]any{"authorId": a.ID, "org": a.Org, "githubLogin": a.GithubLogin, "status": a.Status}
@@ -716,8 +718,8 @@ func (s *svc) emitAudit(ctx context.Context, action string, a Author, extra map[
 		Outcome:  audit.Outcome{Result: "success", Status: 200},
 		After:    audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.auditStore.Append(ctx, rec); err != nil {
-		s.log.Error("authors: audit emit failed", "author", a.ID, "action", action, "err", err)
+	if _, err := s.State.auditStore.Append(ctx, rec); err != nil {
+		s.Log.Error("authors: audit emit failed", "author", a.ID, "action", action, "err", err)
 	}
 }
 
@@ -932,10 +934,10 @@ func badgeBase(deps cloud.Deps) string {
 
 // Shutdown closes the authors store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
