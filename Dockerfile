@@ -29,17 +29,17 @@
 # (pure-Go dev image with no Node console), which is NEVER set for prod.
 FROM public.ecr.aws/docker/library/node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS console
 ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
-# CONSOLE_REF pins the exact console commit this image embeds. release.yml resolves
-# it to console main's HEAD sha at build time (`git ls-remote`) and passes it here.
-# WHY a sha, not the bare branch name: the clone+build layer's BuildKit cache key is
-# derived from the RUN text + build args. With a static `main` it NEVER changes, so
-# on a persistent BuildKit (the ARC dind cache volume) every cloud build re-embeds
-# the SAME frozen console snapshot — new console work (Tracker, …) silently never
-# ships. Threading the sha through CONSOLE_REF moves the cache key with console HEAD:
-# a changed sha invalidates the layer → fresh fetch of exactly that commit. A bare
-# `main` (local/dev builds with no build-arg) still fetches fine — fetch-by-ref below
-# resolves a branch name OR a sha, so this is one path for both.
 ARG CONSOLE_REF=main
+# CONSOLE_CACHEBUST busts this stage's BuildKit layer cache every build. WHY it must
+# exist: the clone+build layer's cache key is derived from the RUN text + build args.
+# With only a static `git clone --branch main`, the key NEVER changes, so on the
+# persistent ARC dind BuildKit cache every cloud image re-embedded the SAME frozen
+# console snapshot — new console work (the native Tracker, …) silently never shipped,
+# even on a freshly-built+deployed image. release.yml feeds this the cloud commit sha
+# (unique per push) so the clone RUN re-runs each build and re-fetches console
+# ${CONSOLE_REF} (main HEAD) fresh. Correctness over cache reuse: the console stage
+# rebuilds every time, but the embed is never stale.
+ARG CONSOLE_CACHEBUST=none
 RUN apk add --no-cache git
 WORKDIR /console
 # The static export prerenders every page (webpack compile + export prerender);
@@ -55,9 +55,9 @@ RUN --mount=type=secret,id=gh_token \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
-    echo ">> embedding console @ ${CONSOLE_REF}" && \
-    git init -q . && git remote add origin "${CONSOLE_REPO}" && \
-    git fetch --depth 1 origin "${CONSOLE_REF}" && git checkout -q FETCH_HEAD && \
+    echo ">> embedding console ${CONSOLE_REF} (cachebust ${CONSOLE_CACHEBUST})" && \
+    git clone --depth 1 --branch "${CONSOLE_REF}" "${CONSOLE_REPO}" . && \
+    echo ">> console @ $(git rev-parse HEAD)" && \
     npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
 # FAIL-HARD. build:embed MUST emit a REAL bundle — a non-empty out/index.html AND
 # an out/_next/ chunk dir — and /out then carries it into the Go embed path. If the
