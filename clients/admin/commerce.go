@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 )
 
 // commerceClient reads the commerce billing S2S surface (/v1/billing/*, /v1/costs)
@@ -33,7 +35,7 @@ func newCommerceClient(base, token string) *commerceClient {
 	return &commerceClient{
 		base:  strings.TrimRight(strings.TrimSpace(base), "/"),
 		token: strings.TrimSpace(token),
-		http:  &http.Client{Timeout: 15 * time.Second},
+		http:  commerceinproc.Client(15 * time.Second),
 	}
 }
 

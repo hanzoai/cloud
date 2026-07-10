@@ -174,11 +174,25 @@ func parseEnv(envJSON string) []EnvVarJSON {
 // NOTHING is stored — a plaintext secret never lands in the DB as a fallback. The
 // returned error never contains a secret value (only the key name), so a 4xx/5xx
 // body cannot leak the plaintext.
+//
+// Secrets are WRITE-ONLY: toAppView masks a secret's value to "" on read, so a
+// client that edits env re-submits kept secrets with an EMPTY value. An empty
+// secret value therefore means "keep the already-sealed value" — it is PRESERVED,
+// never re-sealed to empty (which would wipe the KMS secret). Only a non-empty
+// value seals (and so requires KMS). This makes the masked-read → setEnv round-trip
+// a no-op for untouched secrets instead of a data-loss footgun.
 func sealSecretEnv(s *cloud.Service[state], ctx context.Context, org, appSlug string, env []EnvVarJSON) ([]EnvVarJSON, error) {
 	out := make([]EnvVarJSON, 0, len(env))
 	for _, e := range env {
 		if !e.Secret {
 			out = append(out, e)
+			continue
+		}
+		if e.Value == "" {
+			// Write-only secret kept as-is: the value already lives in KMS (masked to
+			// "" on read). Preserve it — do NOT reseal (an empty reseal would wipe it),
+			// and do NOT require KMS (no plaintext is being persisted here).
+			out = append(out, EnvVarJSON{Key: e.Key, Value: "", Secret: true})
 			continue
 		}
 		if s.KMS == nil {
@@ -247,6 +261,63 @@ type tenantKMSIdentity interface {
 	// one clientSecret across tenants — the cross-tenant hole this seam exists to
 	// avoid. NEVER mint the identity in the admin/master org; owner MUST be the tenant.
 	EnsureOrgIdentity(ctx context.Context, org string) (clientID, clientSecret string, err error)
+}
+
+// kmsAuthRef is the org-scoped KMS coordinate of a tenant's per-tenant KMS-sync
+// machine credential — the <org>-platform-kms IAM application's clientId/
+// clientSecret. field is "clientId" or "clientSecret":
+//
+//	orgs/<org>/kms-auth/<field>  →  path=/orgs/<org>/kms-auth, name=<field>
+//
+// It is DISJOINT from the app-secret namespace kmsSecretRef addresses: an app secret
+// is always orgs/<org>/platform/<app>/<KEY> (second segment "platform"), this is
+// orgs/<org>/kms-auth/<field> (second segment "kms-auth"), so a tenant app can never
+// seal onto — nor read — the auth credential, and the two coordinate families never
+// collide. Injective in org (the validated IAM owner, verbatim), so one tenant's
+// credential is never addressable as another's.
+func kmsAuthRef(org, field string) string {
+	return "orgs/" + org + "/kms-auth/" + field
+}
+
+// kmsOrgIdentity is the concrete tenantKMSIdentity: it resolves a tenant's
+// owner=<org> KMS-sync machine credential from cloud's OWN embedded KMS — the SAME
+// plane sealSecretEnv seals app secrets into. The dedicated <org>-platform-kms IAM
+// application (auth_identity.go's kmsMachineAudSuffix contract) is created out of
+// band (IAM/ops) and its clientId/clientSecret sealed at kmsAuthRef; cloud, holding
+// the KMS master key, reads them directly (no login) and ensureTenantKMSAuth projects
+// them into tenant-<org>. This is the ONE way cloud sources the per-tenant identity:
+// the credential's PRESENCE in KMS is the opt-in, its ABSENCE keeps the sync
+// fail-closed pending — never a shared reader, never a fabricated credential.
+type kmsOrgIdentity struct {
+	kms cloud.KMSClient
+}
+
+// newKMSOrgIdentity returns the KMS-backed identity provider, or a TRUE nil interface
+// when no KMS plane is wired (deps.KMS absent) so ensureTenantKMSAuth's nil
+// short-circuit still holds. Returning the interface type (not the concrete pointer)
+// keeps the nil an untyped nil interface, which the `kmsIdentity == nil` guard needs.
+func newKMSOrgIdentity(kms cloud.KMSClient) tenantKMSIdentity {
+	if kms == nil {
+		return nil
+	}
+	return &kmsOrgIdentity{kms: kms}
+}
+
+// EnsureOrgIdentity reads the org's provisioned clientId/clientSecret from KMS. It is
+// idempotent (a pure read) and org-scoped (kmsAuthRef folds :org into the path), so
+// it can only ever return THIS org's credential. Fail-closed: an unprovisioned or
+// unreadable credential returns an error, leaving the sync pending — never a
+// fabricated or cross-org identity.
+func (p *kmsOrgIdentity) EnsureOrgIdentity(ctx context.Context, org string) (string, string, error) {
+	id, err := p.kms.GetSecret(ctx, kmsAuthRef(org, "clientId"))
+	if err != nil {
+		return "", "", fmt.Errorf("no per-tenant KMS credential provisioned for org %q (seal %s): %w", org, kmsAuthRef(org, "clientId"), err)
+	}
+	secret, err := p.kms.GetSecret(ctx, kmsAuthRef(org, "clientSecret"))
+	if err != nil {
+		return "", "", fmt.Errorf("no per-tenant KMS credential provisioned for org %q (seal %s): %w", org, kmsAuthRef(org, "clientSecret"), err)
+	}
+	return strings.TrimSpace(string(id)), strings.TrimSpace(string(secret)), nil
 }
 
 // ensureTenantKMSAuth makes sure the tenant's per-scoped KMS credential exists in

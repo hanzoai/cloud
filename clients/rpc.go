@@ -74,6 +74,10 @@ func (c *rpcAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.
 	return nil, c.errf("ChatCompletion")
 }
 
+func (c *rpcAI) Embed(_ context.Context, _ string, _ []string) ([][]float32, error) {
+	return nil, c.errf("Embed")
+}
+
 type rpcO11y struct{ rpcEndpoint }
 
 func (c *rpcO11y) Counter(_ string, _ ...string) types.Counter { return noopCounter{} }

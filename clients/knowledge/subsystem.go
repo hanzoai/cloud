@@ -32,6 +32,9 @@ type state struct{}
 // Mount wires the KB control-plane onto app per HIP-0106. CRUD + fixtures are the
 // framework's surface; this adds only retrieval + connectors.
 func Mount(app *zip.App, deps cloud.Deps) error {
+	// kbAI reaches the lazy index() singleton (built on first use, without deps)
+	// so embeddings run through the ONE shared, org/project-aligned AI client.
+	kbAI = deps.AI
 	return cloud.Mount(app, deps, "knowledge", build, routes)
 }
 

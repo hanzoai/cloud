@@ -87,7 +87,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	s := &service{
 		dataDir: deps.DataDir,
-		embed:   newEmbedder(),
+		embed:   newEmbedder(deps.AI, ""),
 		synth:   newSynth(deps.AI, deps.AIDefaultModel),
 		log:     deps.Logger.New("subsystem", "code"),
 		stores:  cloud.NewTenantStore(deps.DataDir, "code", openStore),

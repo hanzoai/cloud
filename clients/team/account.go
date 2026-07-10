@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/google/uuid"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
