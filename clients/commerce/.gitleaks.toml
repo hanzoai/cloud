@@ -1,0 +1,28 @@
+title = "hanzoai/commerce gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore generated files, fixtures, and vendor"
+paths = [
+  '''go\.sum''',
+  '''vendor/''',
+  '''_test\.go''',
+  '''app/''',
+  '''\.secrets\.baseline''',
+  '''models/fixtures/''',
+  '''thirdparty/''',
+]
+
+[[allowlists]]
+description = "Allow example/documentation tokens in comments and code patterns"
+regexes = [
+  # OAuth example response in comment
+  '''2YotnFZFEjr1zCsicMWpAA''',
+  '''tGzv3JOkF0XG5Qx2TlKWIA''',
+  # Password hash variables
+  '''PasswordHash\s*=''',
+  # Webhook signing secret (randomly generated prefix)
+  '''"whsec_"''',
+]

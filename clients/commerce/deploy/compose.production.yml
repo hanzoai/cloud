@@ -1,0 +1,189 @@
+# Hanzo Commerce - Production Overlay
+#
+# Usage:
+#   docker compose -f deploy/compose.yml -f deploy/compose.production.yml up -d
+
+name: hanzo-commerce
+
+services:
+  # ===========================================================================
+  # COMMERCE - Production Settings
+  # ===========================================================================
+
+  commerce:
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      update_config:
+        parallelism: 1
+        delay: 30s
+        failure_action: rollback
+        order: start-first
+    environment:
+      COMMERCE_DEV: "false"
+      ENV: production
+      LOG_LEVEL: info
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ===========================================================================
+  # REDIS - Production Settings
+  # ===========================================================================
+
+  redis:
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================================================
+  # CLICKHOUSE - Production Settings
+  # ===========================================================================
+
+  clickhouse:
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    environment:
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ===========================================================================
+  # NGINX - Production Settings (enabled by default)
+  # ===========================================================================
+
+  nginx:
+    profiles: []  # Enable in production (override the 'proxy' profile requirement)
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================================================
+  # MONITORING - Prometheus & Grafana
+  # ===========================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: commerce-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - commerce-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: commerce-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - commerce-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ===========================================================================
+  # BACKUP SERVICE
+  # ===========================================================================
+
+  backup:
+    image: hanzoai/backup:latest
+    container_name: commerce-backup
+    restart: unless-stopped
+    environment:
+      BACKUP_SCHEDULE: "0 3 * * *"  # Daily at 3 AM
+      BACKUP_RETENTION_DAYS: 30
+      S3_ENDPOINT: ${DO_SPACES_ENDPOINT:-}
+      S3_BUCKET: ${DO_SPACES_BUCKET:-commerce-backups}
+      AWS_ACCESS_KEY_ID: ${DO_SPACES_KEY:-}
+      AWS_SECRET_ACCESS_KEY: ${DO_SPACES_SECRET:-}
+      CLICKHOUSE_HOST: clickhouse
+      REDIS_HOST: redis
+    volumes:
+      - commerce_data:/data/commerce:ro
+      - backup_data:/backup
+    depends_on:
+      - clickhouse
+      - redis
+    networks:
+      - commerce-network
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  backup_data:
+    driver: local
+
+networks:
+  commerce-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1450
