@@ -41,6 +41,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/luxfi/crypto/blake3"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -97,7 +98,7 @@ func loadCSRFKey(log luxlog.Logger) []byte {
 }
 
 // csrfMAC computes the bound, truncated keyed-BLAKE3 MAC for (uid, org, ts).
-func (s *svc) csrfMAC(uid, org string, ts int64) []byte {
+func csrfMAC(s *cloud.Service[state], uid, org string, ts int64) []byte {
 	var msg []byte
 	msg = append(msg, csrfDomain...)
 	msg = append(msg, 0)
@@ -108,7 +109,7 @@ func (s *svc) csrfMAC(uid, org string, ts int64) []byte {
 	var t [8]byte
 	binary.BigEndian.PutUint64(t[:], uint64(ts))
 	msg = append(msg, t[:]...)
-	sum, err := blake3.KeyedHash(s.csrfKey, msg)
+	sum, err := blake3.KeyedHash(s.State.csrfKey, msg)
 	if err != nil {
 		// Only errors on a bad key length; loadCSRFKey guarantees 32 bytes.
 		panic("console: CSRF MAC: " + err.Error())
@@ -118,17 +119,17 @@ func (s *svc) csrfMAC(uid, org string, ts int64) []byte {
 
 // issueCSRF mints a token bound to (uid, org) valid for csrfTTL. Returns the token and
 // its lifetime in seconds.
-func (s *svc) issueCSRF(uid, org string) (string, int64) {
+func issueCSRF(s *cloud.Service[state], uid, org string) (string, int64) {
 	ts := time.Now().Unix()
 	var out [csrfTokenLen]byte
 	binary.BigEndian.PutUint64(out[:8], uint64(ts))
-	copy(out[8:], s.csrfMAC(uid, org, ts))
+	copy(out[8:], csrfMAC(s, uid, org, ts))
 	return base64.RawURLEncoding.EncodeToString(out[:]), int64(csrfTTL / time.Second)
 }
 
 // verifyCSRF checks a token against the CURRENT request's validated (uid, org) and its
 // expiry, in constant time.
-func (s *svc) verifyCSRF(token, uid, org string) bool {
+func verifyCSRF(s *cloud.Service[state], token, uid, org string) bool {
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(token))
 	if err != nil || len(raw) != csrfTokenLen {
 		return false
@@ -138,7 +139,7 @@ func (s *svc) verifyCSRF(token, uid, org string) bool {
 	if ts > now+csrfClockSkew || now-ts > int64(csrfTTL/time.Second) {
 		return false
 	}
-	return subtle.ConstantTimeCompare(raw[8:], s.csrfMAC(uid, org, ts)) == 1
+	return subtle.ConstantTimeCompare(raw[8:], csrfMAC(s, uid, org, ts)) == 1
 }
 
 // ambientCookieAuth reports whether the request is authenticated by an AMBIENT
@@ -156,7 +157,7 @@ func ambientCookieAuth(c *zip.Ctx) bool {
 // ambient-cookie path only (see package note). A validated principal is required for
 // the ambient path to mean anything; the wrapped handler still does its own
 // resolveCaller, so this only ADDS the anti-CSRF gate.
-func (s *svc) requireCSRF(next zip.Handler) zip.Handler {
+func requireCSRF(s *cloud.Service[state], next zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !ambientCookieAuth(c) {
 			return next(c) // Bearer/Basic/gateway/API — not CSRF-able
@@ -165,7 +166,7 @@ func (s *svc) requireCSRF(next zip.Handler) zip.Handler {
 		if tok == "" {
 			return zip.ErrForbidden("missing CSRF token (GET /v1/csrf and echo it in X-CSRF-Token)")
 		}
-		if !s.verifyCSRF(tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
+		if !verifyCSRF(s, tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
 			return zip.ErrForbidden("invalid or expired CSRF token")
 		}
 		return next(c)
@@ -176,12 +177,12 @@ func (s *svc) requireCSRF(next zip.Handler) zip.Handler {
 // bound to their identity. no-store so it is never cached by a shared proxy. This is
 // the same-origin endpoint the embedded SPA reads (its response body is unreadable to
 // a cross-site page), then echoes on every money write.
-func (s *svc) issueCSRFToken(c *zip.Ctx) error {
+func issueCSRFToken(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, false) // a zero-org (first-run) user may still need a token
 	if !ok {
 		return zip.ErrForbidden("sign in to obtain a CSRF token")
 	}
-	token, ttl := s.issueCSRF(cr.name, cr.owner)
+	token, ttl := issueCSRF(s, cr.name, cr.owner)
 	c.Fiber().Set("Cache-Control", "no-store")
 	return c.JSON(http.StatusOK, map[string]any{"csrfToken": token, "expiresIn": ttl})
 }
