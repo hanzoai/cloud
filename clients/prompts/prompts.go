@@ -31,7 +31,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
-	luxlog "github.com/luxfi/log"
 )
 
 // nameRE constrains a prompt name to a safe identifier. The name is the
@@ -51,13 +50,13 @@ const (
 	versionHistoryLimit = 100
 )
 
-type svc struct {
+// state is prompts's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store *Store
-	log   luxlog.Logger
 }
 
 // mounted is the active service so Shutdown can release the store.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes (the published contract console consumes) ----
 
@@ -134,16 +133,16 @@ func nonNil(xs []string) []string {
 	return xs
 }
 
-// Mount wires the prompts surface onto app per HIP-0106.
+// Mount wires the prompts surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted) so Shutdown can release the store, so it
+// constructs the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("prompts.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("prompts.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "prompts")
 	if deps.DataDir == "" {
 		return fmt.Errorf("prompts.Mount: empty DataDir")
 	}
@@ -154,20 +153,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("prompts.Mount: open store: %w", err)
 	}
-	s := &svc{store: store, log: log}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "prompts"), State: state{store: store}}
 	mounted = s
-
-	// Static sub-routes are registered before the :name param route so a real
-	// prompt can never shadow /metrics (and "metrics"/"new" are reserved names).
-	app.Get("/v1/prompts", s.list)
-	app.Post("/v1/prompts", s.create)
-	app.Get("/v1/prompts/metrics", s.metrics)
-	app.Get("/v1/prompts/catalog", s.catalog)
-	app.Get("/v1/prompts/:name", s.get)
-	app.Delete("/v1/prompts/:name", s.del)
-
-	log.Info("prompts mounted", "brand", deps.Brand)
+	routes(app, s)
+	s.Log.Info("prompts mounted", "brand", s.Brand)
 	return nil
+}
+
+// routes registers the prompts surface. Static sub-routes are registered before
+// the :name param route so a real prompt can never shadow /metrics (and
+// "metrics"/"new" are reserved names).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/prompts", cloud.Handle(s, list))
+	app.Post("/v1/prompts", cloud.Handle(s, create))
+	app.Get("/v1/prompts/metrics", cloud.Handle(s, metrics))
+	app.Get("/v1/prompts/catalog", cloud.Handle(s, catalog))
+	app.Get("/v1/prompts/:name", cloud.Handle(s, get))
+	app.Delete("/v1/prompts/:name", cloud.Handle(s, del))
 }
 
 func init() {
@@ -184,7 +186,7 @@ type createReq struct {
 	Tags   []string `json:"tags"`
 }
 
-func (s *svc) create(c *zip.Ctx) error {
+func create(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -221,29 +223,29 @@ func (s *svc) create(c *zip.Ctx) error {
 		ID: id, Org: org, Name: name, Type: typ, Content: body.Prompt,
 		Labels: cleanList(body.Labels), Tags: cleanList(body.Tags), UpdatedAt: now,
 	}
-	saved, err := s.store.Upsert(c.Context(), p)
+	saved, err := s.State.store.Upsert(c.Context(), p)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	vs, err := s.store.Versions(c.Context(), org, name)
+	vs, err := s.State.store.Versions(c.Context(), org, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 	}
 	return c.JSON(http.StatusCreated, toDetail(saved, vs))
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	rows, err := s.State.store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]promptMeta, 0, len(rows))
 	for _, p := range rows {
-		vs, err := s.store.Versions(c.Context(), org, p.Name)
+		vs, err := s.State.store.Versions(c.Context(), org, p.Name)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 		}
@@ -252,32 +254,32 @@ func (s *svc) list(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"data": out})
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	name := nameParam(c)
-	p, err := s.store.Get(c.Context(), org, name)
+	p, err := s.State.store.Get(c.Context(), org, name)
 	if err == errNotFound {
 		return zip.ErrNotFound("prompt not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	vs, err := s.store.Versions(c.Context(), org, name)
+	vs, err := s.State.store.Versions(c.Context(), org, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 	}
 	return c.JSON(http.StatusOK, toDetail(p, vs))
 }
 
-func (s *svc) del(c *zip.Ctx) error {
+func del(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	deleted, err := s.store.Delete(c.Context(), org, nameParam(c))
+	deleted, err := s.State.store.Delete(c.Context(), org, nameParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -298,18 +300,18 @@ type metricRow struct {
 	LastUpdatedAt string `json:"lastUpdatedAt"`
 }
 
-func (s *svc) metrics(c *zip.Ctx) error {
+func metrics(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	rows, err := s.State.store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
 	out := make([]metricRow, 0, len(rows))
 	for _, p := range rows {
-		n, err := s.store.CountVersions(c.Context(), org, p.Name)
+		n, err := s.State.store.CountVersions(c.Context(), org, p.Name)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "versions: %v", err)
 		}
@@ -366,10 +368,10 @@ func genID(prefix string) (string, error) {
 
 // Shutdown closes the prompts store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
