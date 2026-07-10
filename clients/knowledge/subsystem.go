@@ -16,7 +16,6 @@
 package knowledge
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -25,41 +24,39 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// svc holds the mounted subsystem's dependencies. deps carries the KMS client the
-// connectors store OAuth tokens in and the logger; the vector index is the process
-// singleton (index()), so svc holds no per-request or per-org state.
-type svc struct {
-	deps cloud.Deps
-}
+// state is knowledge's own data; shared deps (logger, KMS, domain) live in the
+// embedded cloud.Base. The vector index is the process singleton (index()) and the
+// connectors are stateless, so this subsystem keeps no per-request or per-org state.
+type state struct{}
 
 // Mount wires the KB control-plane onto app per HIP-0106. CRUD + fixtures are the
 // framework's surface; this adds only retrieval + connectors.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("kb.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("kb.Mount: nil deps.Logger")
-	}
-	s := &svc{deps: deps}
-	log := deps.Logger.New("subsystem", "knowledge")
+	return cloud.Mount(app, deps, "knowledge", build, routes)
+}
 
-	// Canonical /v1/knowledge surface + pre-rename /v1/kb back-compat alias
-	// (kb→knowledge): the SAME handlers under both prefixes, so clients pinned
-	// to /v1/kb keep working while /v1/knowledge is the canonical surface.
-	for _, p := range []string{"/v1/knowledge", "/v1/kb"} {
-		app.Post(p+"/search", s.search)                 // RAG entry point
-		app.Get(p+"/connectors", s.listConnectors)      // per-org OAuth ingestion
-		app.Get(p+"/connectors/catalog", s.listCatalog) // the ONE catalog
-		app.Get(p+"/connectors/:provider/connect", s.connectStart)
-		app.Get(p+"/connectors/:provider/callback", s.connectCallback)
-		app.Post(p+"/connectors/:provider/sync", s.syncConnector)
-		app.Delete(p+"/connectors/:provider", s.disconnectConnector)
-	}
-
-	log.Info("kb surface mounted",
+// build carries no per-org state (the vector index is the process singleton and the
+// connectors are stateless); it only logs the resolved KB surface.
+func build(b cloud.Base) (state, error) {
+	b.Log.Info("kb surface mounted",
 		"index", index().enabled(), "vector", index().vectorURL, "embedModel", index().embedModel)
-	return nil
+	return state{}, nil
+}
+
+// routes registers the retrieval + connector surface under both the canonical
+// /v1/knowledge prefix and the pre-rename /v1/kb back-compat alias (kb→knowledge):
+// the SAME handlers under both prefixes, so clients pinned to /v1/kb keep working
+// while /v1/knowledge is the canonical surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	for _, p := range []string{"/v1/knowledge", "/v1/kb"} {
+		app.Post(p+"/search", cloud.Handle(s, search))                 // RAG entry point
+		app.Get(p+"/connectors", cloud.Handle(s, listConnectors))      // per-org OAuth ingestion
+		app.Get(p+"/connectors/catalog", cloud.Handle(s, listCatalog)) // the ONE catalog
+		app.Get(p+"/connectors/:provider/connect", cloud.Handle(s, connectStart))
+		app.Get(p+"/connectors/:provider/callback", cloud.Handle(s, connectCallback))
+		app.Post(p+"/connectors/:provider/sync", cloud.Handle(s, syncConnector))
+		app.Delete(p+"/connectors/:provider", cloud.Handle(s, disconnectConnector))
+	}
 }
 
 func init() {
@@ -86,7 +83,7 @@ type searchBody struct {
 // retrieval is impossible: the collection AND the payload filter are both pinned to
 // this org. An unreachable/disabled index returns an honest empty result set, never
 // a 5xx — the RAG caller degrades to no-context rather than failing the turn.
-func (s *svc) search(c *zip.Ctx) error {
+func search(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
@@ -110,7 +107,7 @@ func (s *svc) search(c *zip.Ctx) error {
 	if err != nil {
 		// Log-and-empty: a retrieval outage must not surface as a hard error to the
 		// agent turn. The framework CRUD store is unaffected.
-		s.deps.Logger.Warn("kb search failed", "org", org, "err", err)
+		s.Log.Warn("kb search failed", "org", org, "err", err)
 		return c.JSON(http.StatusOK, map[string]any{"hits": []hit{}, "degraded": true})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"hits": hits})

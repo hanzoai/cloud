@@ -62,7 +62,6 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -75,31 +74,30 @@ const (
 	probeTimeout = 3 * time.Second
 )
 
-type svc struct {
-	log luxlog.Logger
-}
+// state is analytics' own data: none — it holds no store (it rides the SAME shared
+// ClickHouse client the ai subsystem opens). Shared deps live in cloud.Base.
+type state struct{}
 
 // Mount wires the analytics surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("analytics.Mount: nil zip.App")
-	}
-	log := deps.Logger
-	if log == nil {
-		return fmt.Errorf("analytics.Mount: nil deps.Logger")
-	}
-	log = log.New("subsystem", "analytics")
-	s := &svc{log: log}
+	return cloud.Mount(app, deps, "analytics", build, routes)
+}
 
-	// Health owns /v1/analytics/health explicitly (not JWT-gated: liveness must be
-	// probe-able). The data endpoints are all org-gated in-handler.
-	app.Get("/v1/analytics/health", s.health)
-	app.Get("/v1/analytics/overview", s.overview)
-	app.Get("/v1/analytics/timeseries", s.timeseries)
-	app.Get("/v1/analytics/top", s.top)
+// build carries no per-subsystem state — analytics reads the shared warehouse. It
+// only records the informative mount line.
+func build(b cloud.Base) (state, error) {
+	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
+	return state{}, nil
+}
 
-	log.Info("analytics mounted", "warehouse", "hanzo", "brand", deps.Brand)
-	return nil
+// routes registers the analytics surface. Health owns /v1/analytics/health
+// explicitly (not JWT-gated: liveness must be probe-able); the data endpoints are
+// all org-gated in-handler.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/analytics/health", cloud.Handle(s, health))
+	app.Get("/v1/analytics/overview", cloud.Handle(s, overview))
+	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
+	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 }
 
 func init() {
@@ -209,7 +207,7 @@ func topLimit(c *zip.Ctx) int {
 
 // ── /v1/analytics/overview ──────────────────────────────────────────────────
 
-func (s *svc) overview(c *zip.Ctx) error {
+func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid bearer required")
@@ -250,7 +248,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 	eventsRows, eerr := aiobject.DatastoreQuery(ctx, eventsSQL, eargs...)
 	eventsOK := eerr == nil
 	if eerr != nil {
-		s.log.Debug("events lens unavailable (honest-empty)", "err", eerr)
+		s.Log.Debug("events lens unavailable (honest-empty)", "err", eerr)
 	}
 	erow := firstRow(eventsRows)
 
@@ -268,7 +266,7 @@ func (s *svc) overview(c *zip.Ctx) error {
 
 // ── /v1/analytics/timeseries ────────────────────────────────────────────────
 
-func (s *svc) timeseries(c *zip.Ctx) error {
+func timeseries(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid bearer required")
@@ -313,7 +311,7 @@ func (s *svc) timeseries(c *zip.Ctx) error {
 
 // ── /v1/analytics/top ───────────────────────────────────────────────────────
 
-func (s *svc) top(c *zip.Ctx) error {
+func top(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid bearer required")
@@ -367,7 +365,7 @@ func (s *svc) top(c *zip.Ctx) error {
 // table existence. 503 when the warehouse is unreachable so a readiness probe
 // can gate; 200 otherwise even if the events lens is not yet provisioned (that is
 // honest-empty, not a failure).
-func (s *svc) health(c *zip.Ctx) error {
+func health(s *cloud.Service[state], c *zip.Ctx) error {
 	connected := aiobject.DatastoreEnabled()
 	res := map[string]any{
 		"service":   "analytics",

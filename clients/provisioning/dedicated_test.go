@@ -109,12 +109,12 @@ func (f *fakeOrch) DeletePVC(_ context.Context, ns, name string) error {
 	return nil
 }
 
-func newDedicatedSvc(t *testing.T, orch orchestrator) *svc {
+func newDedicatedSvc(t *testing.T, orch orchestrator) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
 	log := luxlog.New("module", "provdedtest")
-	return &svc{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), log: log, orch: orch}
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
 }
 
 func doReq(t *testing.T, h zip.Handler, method, route, path, org, bodyStr string) *http.Response {
@@ -217,7 +217,7 @@ func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 	}
 
 	// The row is persisted "provisioning" with the size dimension.
-	r, err := s.store.Get(context.Background(), "acme", "datastore", "analytics")
+	r, err := s.State.store.Get(context.Background(), "acme", "datastore", "analytics")
 	if err != nil {
 		t.Fatalf("get row: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestDedicated_ReadyReconcile(t *testing.T) {
 
 	// Instance not up yet -> GET still reports provisioning.
 	orch.phase = "Creating"
-	resp := doReq(t, s.get("datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
+	resp := doReq(t, get(s, "datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
 	var g getResp
 	_ = json.NewDecoder(resp.Body).Decode(&g)
 	if g.Status != statusProvisioning {
@@ -278,12 +278,12 @@ func TestDedicated_ReadyReconcile(t *testing.T) {
 
 	// Operator reports Running -> GET reconciles to ready and persists it.
 	orch.phase = phaseRunning
-	resp = doReq(t, s.get("datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
+	resp = doReq(t, get(s, "datastore"), http.MethodGet, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
 	_ = json.NewDecoder(resp.Body).Decode(&g)
 	if g.Status != statusReady {
 		t.Fatalf("status = %q, want ready once instance is Running", g.Status)
 	}
-	r, _ := s.store.Get(context.Background(), "acme", "datastore", "warehouse")
+	r, _ := s.State.store.Get(context.Background(), "acme", "datastore", "warehouse")
 	if r.Status != statusReady {
 		t.Fatalf("row status = %q, want ready (persisted)", r.Status)
 	}
@@ -299,7 +299,7 @@ func TestDedicated_DropTearsDownInstance(t *testing.T) {
 	}
 	inst := instanceName("docdb", "acme", "sessions")
 
-	resp := doReq(t, s.drop("docdb"), http.MethodDelete, "/v1/docdb/:name", "/v1/docdb/sessions", "acme", "")
+	resp := doReq(t, drop(s, "docdb"), http.MethodDelete, "/v1/docdb/:name", "/v1/docdb/sessions", "acme", "")
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("drop = %d body=%s, want 204", resp.StatusCode, body)
@@ -315,7 +315,7 @@ func TestDedicated_DropTearsDownInstance(t *testing.T) {
 	if len(orch.deletedPVC) != 1 || orch.deletedPVC[0] != wantPVC {
 		t.Fatalf("drop deleted PVCs %v, want [%s]", orch.deletedPVC, wantPVC)
 	}
-	if _, err := s.store.Get(context.Background(), "acme", "docdb", "sessions"); err == nil {
+	if _, err := s.State.store.Get(context.Background(), "acme", "docdb", "sessions"); err == nil {
 		t.Fatalf("row still present after drop")
 	}
 }
@@ -334,9 +334,9 @@ func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
 		t.Fatalf("metering.New: %v", err)
 	}
 	orch := newFakeOrch()
-	s := &svc{
-		store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), log: log,
-		orch: orch, bill: cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "provisioning"),
+	s := &cloud.Service[state]{
+		Base:  cloud.Base{Log: log, Bill: cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "provisioning")},
+		State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch},
 	}
 
 	// Provision debit -> caller org "acme", size in Model.
@@ -363,11 +363,11 @@ func TestDedicated_BillsProvisionAndFootprintToOrg(t *testing.T) {
 
 	// Mark the instance ready, then run one footprint sweep -> a GB-day debit to
 	// acme carrying the size dimension.
-	if _, err := s.store.UpdateStatus(context.Background(), "acme", "datastore", "metrics", statusReady); err != nil {
+	if _, err := s.State.store.UpdateStatus(context.Background(), "acme", "datastore", "metrics", statusReady); err != nil {
 		t.Fatalf("mark ready: %v", err)
 	}
 	before := bs.debits()
-	s.meterDedicatedFootprint(context.Background())
+	meterDedicatedFootprint(s, context.Background())
 	if !waitForDebit(func() bool { return bs.debits() > before }) {
 		t.Fatalf("footprint sweep did not bill the running instance")
 	}
