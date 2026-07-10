@@ -19,11 +19,13 @@ import (
 // same-origin telemetry proxy (`app/telemetry/[...path]/route.ts`) is gone and a browser
 // call to `/telemetry/api/v1/query` 404s (task #71, the last console error). This surface
 // serves the SAME three admin queries the board issues, same-origin, over the cloud `/v1`
-// API instead:
+// API instead. The public path is FLAT and version-less (one /v1/, no nested /api/vN);
+// the upstream VictoriaMetrics `api/v1/*` path stays INSIDE the handler (via queryRaw),
+// never in our route:
 //
-//	GET /v1/o11y/vm/api/v1/query?query=up
-//	GET /v1/o11y/vm/api/v1/query_range?query=sum(up)&start&end&step
-//	GET /v1/o11y/vm/api/v1/query_range?query=count(up)&start&end&step
+//	GET /v1/o11y/vm/query?query=up
+//	GET /v1/o11y/vm/query_range?query=sum(up)&start&end&step
+//	GET /v1/o11y/vm/query_range?query=count(up)&start&end&step
 //
 // Security (mirrors scope.go's contract — "the client never supplies a raw query or a
 // PromQL/SQL fragment"), fail-closed at every step:
@@ -41,8 +43,9 @@ import (
 //     console's parseInstant/parseRange work as-is. VM has no per-request auth (it is an
 //     internal ClusterIP), so THIS handler is the access boundary.
 //
-// Registered in scope.go's init (order 69) BEFORE the o11y wildcard (order 70), so the
-// specific route wins Fiber's in-order match — exactly like /v1/o11y/{logs,metrics,status}.
+// Registered by mountScope (scope.go) inside the one order-69 `o11y` mount — BEFORE the
+// o11y wildcard (order 70) — so the specific route wins Fiber's in-order match, exactly
+// like /v1/o11y/{logs,metrics,status}.
 
 // vmProxyQueries is the EXACT allowlist of PromQL the infra-health board issues: the
 // instant `up` inventory and the two range trends `sum(up)` / `count(up)`. The proxy
@@ -54,11 +57,13 @@ var vmProxyQueries = map[string]struct{}{
 	"count(up)": {},
 }
 
-// handleVMQuery proxies the board's instant query: GET /v1/o11y/vm/api/v1/query?query=up.
+// handleVMQuery proxies the board's instant query: GET /v1/o11y/vm/query?query=up.
+// The flat public path resolves to VictoriaMetrics' `api/v1/query` INSIDE the handler.
 func handleVMQuery(c *zip.Ctx) error { return vmProxy(c, "api/v1/query", false) }
 
 // handleVMQueryRange proxies the board's range queries:
-// GET /v1/o11y/vm/api/v1/query_range?query=sum(up)|count(up)&start&end&step.
+// GET /v1/o11y/vm/query_range?query=sum(up)|count(up)&start&end&step. The flat public
+// path resolves to VictoriaMetrics' `api/v1/query_range` INSIDE the handler.
 func handleVMQueryRange(c *zip.Ctx) error { return vmProxy(c, "api/v1/query_range", true) }
 
 // vmProxy is the shared SuperAdmin VM read: gate → allowlist the query (and, for a range,

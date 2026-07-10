@@ -1,7 +1,42 @@
 # clients/o11y — embedded o11y (scoped reads + query + ingest)
 
 cloud embeds the o11y subsystem in-process against the shared ClickHouse
-`datastore` (cluster `insights`). Three planes, one datastore:
+`datastore` (cluster `insights`). Three planes, one datastore.
+
+## ONE registration, one public concept (decomplected)
+
+The whole plane is registered as a SINGLE subsystem —
+`cloud.RegisterWithShutdown("o11y", 69, mountO11y, shutdownO11y, cloud.HealthOwner)`
+in `o11y.go`. `mountO11y` performs the ordered sub-mounts in-process:
+`mountEventIngest` → `mountScope` → `mountRuntime` → `mountIngest` →
+`mountTraceSink`. This replaced FIVE separately-registered subsystems
+(`o11yscope` 69, `o11y-runtime` 71, `o11y-event-ingest` 68, `o11y-otlp-ingest`
+72, `o11y-trace-inproc` 73) whose names leaked five public concepts (five config
+toggles + five `/v1/<name>/health` routes). The k8s-style ordering was an internal
+impl detail. Behavior is preserved EXACTLY: every specific `/v1/o11y/*` route still
+registers inside the one order-69 mount, hence BEFORE the upstream `hanzoai/o11y`
+wildcard (order 70) — so Fiber's in-order match still gives the specific routes
+precedence. The upstream module ALSO registers the name `o11y` (order 70, the
+wildcard); the two are co-owners of ONE concept, and this order-69 entry is
+`HealthOwner` so `/v1/o11y/health` is registered exactly once (by the order-70
+co-entry).
+
+## Flat, version-less public surface (one /v1/, no nested /api/vN)
+
+The public contract is FLAT — the upstream SigNoz engine version is an internal
+impl detail resolved inside the handlers, never leaked into a route:
+
+- `/v1/o11y/{logs,metrics,status}` — tenant-scoped reads (`scope.go`).
+- `/v1/o11y/vm/{query,query_range}` — SuperAdmin VictoriaMetrics proxy
+  (`vmproxy.go`); the upstream `api/v1/*` VM path stays INSIDE the handler.
+- `/v1/o11y/{query,query_range}` — the flat builder query (`query.go`); resolves
+  to the v3 engine route INTERNALLY (the version-less alias would resolve to v5,
+  which 400s the v3 composite payload the console speaks), delegating to the same
+  gated runtime handler the wildcard uses.
+- `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
+  upstream module's version-less alias (highest engine version wins).
+
+Three planes, one datastore:
 
 - **Scoped read plane** — `scope.go` + `logs.go` + `metricsread.go` + `status.go`
   + `productmap.go` + `vmquery.go`. The org-scoped, tenant-isolated
@@ -26,11 +61,11 @@ cloud embeds the o11y subsystem in-process against the shared ClickHouse
 
 - **Query / control plane** — `embed.go` + `o11y.go`. Constructs the o11y
   query runtime (`community.NewServer`) and serves the rest of `/v1/o11y/*` from
-  this binary (dashboards, alerts, querier) via the wildcard (order 70) +
-  `o11y.SetHandler` (order 71). Falls back to reverse-proxying a standalone
-  o11y Deployment when disabled/failed. READS ClickHouse via clickhouse-go
-  **v2.44.0** (upstream). `/v1/settings/:product` is NOT here — it is console
-  product config, split out to `clients/settings`.
+  this binary (dashboards, alerts, querier) via the upstream wildcard (order 70) +
+  `o11y.SetHandler` (installed by `mountRuntime` inside the one order-69 mount).
+  Falls back to reverse-proxying a standalone o11y Deployment when disabled/failed.
+  READS ClickHouse via clickhouse-go **v2.44.0** (upstream). `/v1/settings/:product`
+  is NOT here — it is console product config, split out to `clients/settings`.
 
 - **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
   that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
@@ -85,7 +120,8 @@ ClickHouse trace store WITHOUT a socket, via the ZAP locality-adaptive **Router*
   produces the `o11y_index_v3` schema the query plane reads. The pdata→SpanV3
   conversion is unexported, so the sink reuses the exporter as a `consumer.Traces`
   rather than duplicating ~90 lines of schema-coupled conversion.
-- **OPT-IN + fail-soft.** Mounts (order 73) only when `O11Y_TRACES_ZAP_INPROCESS`
+- **OPT-IN + fail-soft.** Mounts (via `mountTraceSink` in the one order-69 mount)
+  only when `O11Y_TRACES_ZAP_INPROCESS`
   is truthy AND a datastore DSN is set (`TraceInprocEnabled()` is the ONE gate both
   the sink and the producer read). Any construction error leaves cloud's spans on
   the wire — activating it can never take cloud down. Shutdown deregisters the
