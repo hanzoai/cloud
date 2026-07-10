@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 )
 
 // dstPool owns the open destination SQLite handles, one per
