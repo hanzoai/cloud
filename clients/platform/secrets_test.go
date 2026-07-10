@@ -86,6 +86,44 @@ func TestSealSecretEnv_BlanksAndSeals(t *testing.T) {
 	}
 }
 
+// TestSealSecretEnv_PreservesEmptySecret proves the write-only-secret contract: a
+// secret re-submitted with an EMPTY value (as the masked read echoes it) is KEPT,
+// never resealed to empty (which would wipe the KMS value) — the setEnv round-trip
+// is a no-op for untouched secrets. It also needs no KMS (no plaintext persisted).
+func TestSealSecretEnv_PreservesEmptySecret(t *testing.T) {
+	kms := newFakeKMS()
+	s := &svc{kms: kms}
+	// Seed an already-sealed secret, as a prior create/setEnv would have.
+	ref := kmsSecretRef("maxpower", "api", "DB_PASSWORD")
+	if err := kms.PutSecret(context.Background(), ref, []byte("hunter2")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Re-submit the masked set: the kept secret carries an empty value; a plain var
+	// is edited alongside it.
+	out, err := s.sealSecretEnv(context.Background(), "maxpower", "api", []EnvVarJSON{
+		{Key: "PUBLIC", Value: "changed", Secret: false},
+		{Key: "DB_PASSWORD", Value: "", Secret: true},
+	})
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if len(out) != 2 || out[1].Key != "DB_PASSWORD" || out[1].Value != "" || !out[1].Secret {
+		t.Fatalf("kept secret must stay in the set, blanked+secret: %+v", out)
+	}
+	// The sealed value is UNTOUCHED — not wiped to empty.
+	got, err := kms.GetSecret(context.Background(), ref)
+	if err != nil || string(got) != "hunter2" {
+		t.Fatalf("empty submission must PRESERVE the sealed value, got %q err=%v", got, err)
+	}
+
+	// Keeping a secret needs no KMS at all (nothing to seal) — must not fail closed.
+	sNoKMS := &svc{kms: nil}
+	if _, err := sNoKMS.sealSecretEnv(context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "", Secret: true}}); err != nil {
+		t.Fatalf("keeping an empty secret must not require KMS: %v", err)
+	}
+}
+
 // TestSealSecretEnv_FailsClosed proves a secret with no KMS (nil client or a KMS
 // error) refuses the whole set — never a plaintext fallback.
 func TestSealSecretEnv_FailsClosed(t *testing.T) {
