@@ -13,7 +13,7 @@ import (
 )
 
 // scopeApp builds the scoped o11y read surface (the three static routes) exactly as
-// the o11yscope subsystem registers them, so the tests exercise the real handlers.
+// mountScope registers them, so the tests exercise the real handlers.
 func scopeApp(t *testing.T) *zip.App {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -154,9 +154,10 @@ func TestProductAliasResolution(t *testing.T) {
 
 // ── the scoped routes WIN over the hanzoai/o11y wildcard proxy (precedence) ─────
 //
-// This reproduces the PRODUCTION Fiber route stack for the /v1/o11y/* surface: the
-// o11yscope subsystem (order 69) registers its three EXACT GET routes FIRST, then
-// hanzoai/o11y (order 70) registers the catch-all All("/v1/o11y/*") wildcard. A
+// This reproduces the PRODUCTION Fiber route stack for the /v1/o11y/* surface:
+// mountScope (inside the one order-69 `o11y` mount) registers its three EXACT GET
+// routes FIRST, then hanzoai/o11y (order 70) registers the catch-all
+// All("/v1/o11y/*") wildcard. A
 // request that reaches the UNSCOPED wildcard (sentinel 599) is a route-precedence
 // bypass of tenant scoping. Every scoped path/method must land on the scoped
 // handler, never the sentinel.
