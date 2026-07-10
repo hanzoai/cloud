@@ -73,7 +73,7 @@ func (f *fakeCommerce) depositCount() int {
 
 // mount builds a referrals app backed by a fresh store + the injected fake
 // commerce, returning the app and the fake for assertions.
-func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce) {
+func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	t.Helper()
 	store, err := openStore(t.TempDir() + "/referrals.db")
 	if err != nil {
@@ -81,17 +81,16 @@ func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	fc := newFakeCommerce()
-	s := &svc{
-		store:    store,
-		commerce: fc,
-		log:      luxlog.New("test"),
-		linkBase: "https://hanzo.ai",
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "referrals"),
+		State: state{
+			store:    store,
+			commerce: fc,
+			linkBase: "https://hanzo.ai",
+		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/referrals", s.myReferrals)
-	app.Post("/v1/referrals/claim", s.claim)
-	app.Get("/v1/admin/referrals", s.adminList)
-	app.Post("/v1/admin/referrals/sweep", s.adminSweep)
+	routes(app, s)
 	return app, s, fc
 }
 
@@ -157,25 +156,25 @@ func TestEnsureCodeStableAndReversible(t *testing.T) {
 	_, s, _ := mount(t)
 	ctx := context.Background()
 
-	c1, err := s.store.EnsureCode(ctx, "maxpower")
+	c1, err := s.State.store.EnsureCode(ctx, "maxpower")
 	if err != nil {
 		t.Fatalf("EnsureCode: %v", err)
 	}
-	c2, _ := s.store.EnsureCode(ctx, "maxpower")
+	c2, _ := s.State.store.EnsureCode(ctx, "maxpower")
 	if c1 != c2 {
 		t.Fatalf("EnsureCode not stable: %q != %q", c1, c2)
 	}
 	if c1 != deriveCode("maxpower", 0) {
 		t.Fatalf("EnsureCode %q != deriveCode %q", c1, deriveCode("maxpower", 0))
 	}
-	org, err := s.store.OrgForCode(ctx, "  "+lower(c1)+"  ") // whitespace + wrong case
+	org, err := s.State.store.OrgForCode(ctx, "  "+lower(c1)+"  ") // whitespace + wrong case
 	if err != nil {
 		t.Fatalf("OrgForCode: %v", err)
 	}
 	if org != "maxpower" {
 		t.Fatalf("OrgForCode want maxpower, got %q", org)
 	}
-	if _, err := s.store.OrgForCode(ctx, "ZZZZZZZZ"); err != errUnknownCode {
+	if _, err := s.State.store.OrgForCode(ctx, "ZZZZZZZZ"); err != errUnknownCode {
 		t.Fatalf("unknown code want errUnknownCode, got %v", err)
 	}
 }
@@ -185,8 +184,8 @@ func TestEnsureCodeStableAndReversible(t *testing.T) {
 func TestClaimSelfAndIdempotent(t *testing.T) {
 	app, s, _ := mount(t)
 	ctx := context.Background()
-	aCode, _ := s.store.EnsureCode(ctx, "orgA")
-	cCode, _ := s.store.EnsureCode(ctx, "orgC")
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
+	cCode, _ := s.State.store.EnsureCode(ctx, "orgC")
 
 	// No principal → 403.
 	if code, _ := req(t, app, http.MethodPost, "/v1/referrals/claim", "", false, map[string]any{"code": aCode}); code != http.StatusForbidden {
@@ -220,7 +219,7 @@ func TestClaimSelfAndIdempotent(t *testing.T) {
 	}
 	// orgB tries a DIFFERENT code (orgC's) → still bound to the FIRST (orgA), first-touch.
 	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": cCode})
-	ref, err := s.store.getByReferee(ctx, "orgB")
+	ref, err := s.State.store.getByReferee(ctx, "orgB")
 	if err != nil {
 		t.Fatalf("getByReferee: %v", err)
 	}
@@ -237,7 +236,7 @@ func TestClaimSelfAndIdempotent(t *testing.T) {
 func TestQualifyGrantsBothSidesOnceAndBalancesMove(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
-	aCode, _ := s.store.EnsureCode(ctx, "orgA")
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
 
 	// orgB signs up via orgA's code.
 	if code, _ := req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode}); code != http.StatusCreated {
@@ -294,7 +293,7 @@ func TestQualifyGrantsBothSidesOnceAndBalancesMove(t *testing.T) {
 func TestLazyQualifyOnReferrerRead(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
-	aCode, _ := s.store.EnsureCode(ctx, "orgA")
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
 	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
 	fc.setSpend("orgB", 7) // qualifies
 
@@ -346,7 +345,7 @@ func TestLazyQualifyOnReferrerRead(t *testing.T) {
 func TestAdminGateAndDirectory(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
-	aCode, _ := s.store.EnsureCode(ctx, "orgA")
+	aCode, _ := s.State.store.EnsureCode(ctx, "orgA")
 	req(t, app, http.MethodPost, "/v1/referrals/claim", "orgB", false, map[string]any{"code": aCode})
 	fc.setSpend("orgB", 5)
 	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
