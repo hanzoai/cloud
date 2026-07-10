@@ -40,7 +40,6 @@ import (
 	"github.com/hanzoai/cloud/clients/gojabase"
 	"github.com/hanzoai/cloud/clients/principal"
 	signbundle "github.com/hanzoai/sign"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -48,24 +47,24 @@ import (
 // this is generous (32 MiB) relative to captable's small structured records.
 const maxBody = 32 << 20
 
-type svc struct {
+// state is sign's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	host *gojabase.Host
-	log  luxlog.Logger
 }
 
 // mounted is the active service so shutdown can release the per-tenant stores.
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires the /v1/sign/* surface onto app per HIP-0106.
+// Mount wires the /v1/sign/* surface onto app per HIP-0106. Constructs the value
+// directly (cloud.NewBase) — this subsystem keeps a package global for the Shutdown
+// hook and opens a per-tenant goja host + PKI signer from deps.DataDir.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("sign.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("sign.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "sign")
 	if deps.DataDir == "" {
 		return fmt.Errorf("sign.Mount: empty DataDir")
 	}
@@ -93,26 +92,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("sign.Mount: gojabase host: %w", err)
 	}
-	s := &svc{host: host, log: log}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "sign"), State: state{host: host}}
 	mounted = s
+	routes(app, s)
 
-	// Owner routes — tenant = validated principal org. GET reads carry no body.
-	app.Post("/v1/sign/documents", s.owner("documents.create", nil, true))
-	app.Get("/v1/sign/documents", s.owner("documents.list", nil, false))
-	app.Get("/v1/sign/documents/:id", s.ownerID("documents.get", false))
-	app.Post("/v1/sign/documents/:id/recipients", s.ownerID("recipients.add", true))
-	app.Post("/v1/sign/documents/:id/fields", s.ownerID("fields.add", true))
-	app.Post("/v1/sign/documents/:id/send", s.ownerID("documents.send", true))
-	app.Get("/v1/sign/documents/:id/download", s.ownerID("documents.download", false))
-	app.Get("/v1/sign/documents/:id/audit", s.ownerID("documents.audit", false))
-
-	// Recipient token routes — tenant = :org path segment; capability = :token.
-	app.Get("/v1/sign/o/:org/sign/:token", s.token("sign.view", false))
-	app.Post("/v1/sign/o/:org/sign/:token/fields/:fieldId", s.token("sign.field", true))
-	app.Post("/v1/sign/o/:org/sign/:token/complete", s.token("sign.complete", true))
-	app.Post("/v1/sign/o/:org/sign/:token/reject", s.token("sign.reject", true))
-
-	log.Info("sign mounted in-process (goja + per-tenant Base)",
+	s.Log.Info("sign mounted in-process (goja + per-tenant Base)",
 		"prefix", "/v1/sign",
 		"brand", deps.Brand,
 		"env", deps.Env,
@@ -121,32 +105,52 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
+// routes wires the /v1/sign/* owner + recipient-token surface. The native
+// /v1/sign/health route stays inline in Mount (registered before the host build).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	// Owner routes — tenant = validated principal org. GET reads carry no body.
+	app.Post("/v1/sign/documents", owner(s, "documents.create", nil, true))
+	app.Get("/v1/sign/documents", owner(s, "documents.list", nil, false))
+	app.Get("/v1/sign/documents/:id", ownerID(s, "documents.get", false))
+	app.Post("/v1/sign/documents/:id/recipients", ownerID(s, "recipients.add", true))
+	app.Post("/v1/sign/documents/:id/fields", ownerID(s, "fields.add", true))
+	app.Post("/v1/sign/documents/:id/send", ownerID(s, "documents.send", true))
+	app.Get("/v1/sign/documents/:id/download", ownerID(s, "documents.download", false))
+	app.Get("/v1/sign/documents/:id/audit", ownerID(s, "documents.audit", false))
+
+	// Recipient token routes — tenant = :org path segment; capability = :token.
+	app.Get("/v1/sign/o/:org/sign/:token", token(s, "sign.view", false))
+	app.Post("/v1/sign/o/:org/sign/:token/fields/:fieldId", token(s, "sign.field", true))
+	app.Post("/v1/sign/o/:org/sign/:token/complete", token(s, "sign.complete", true))
+	app.Post("/v1/sign/o/:org/sign/:token/reject", token(s, "sign.reject", true))
+}
+
 // owner builds a handler for a principal-gated route with fixed params.
-func (s *svc) owner(route string, params map[string]string, readBody bool) zip.Handler {
+func owner(s *cloud.Service[state], route string, params map[string]string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := principal.Tenant(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
-		return s.dispatch(c, route, org, params, readBody)
+		return dispatch(s, c, route, org, params, readBody)
 	}
 }
 
 // ownerID is owner with the :id path param threaded into params.
-func (s *svc) ownerID(route string, readBody bool) zip.Handler {
+func ownerID(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := principal.Tenant(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
-		return s.dispatch(c, route, org, map[string]string{"id": c.Param("id")}, readBody)
+		return dispatch(s, c, route, org, map[string]string{"id": c.Param("id")}, readBody)
 	}
 }
 
 // token builds a handler for an unauthenticated recipient capability route. The
 // :org path segment selects the tenant DB; the bundle authorizes the :token
 // against THAT org's recipients. All path params are threaded through.
-func (s *svc) token(route string, readBody bool) zip.Handler {
+func token(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org := c.Param("org")
 		if org == "" {
@@ -156,13 +160,13 @@ func (s *svc) token(route string, readBody bool) zip.Handler {
 		if fid := c.Param("fieldId"); fid != "" {
 			params["fieldId"] = fid
 		}
-		return s.dispatch(c, route, org, params, readBody)
+		return dispatch(s, c, route, org, params, readBody)
 	}
 }
 
 // dispatch decodes the body, runs the bundle route on the tenant's Base store
 // (one transaction per request via gojabase), and writes {status, body}.
-func (s *svc) dispatch(c *zip.Ctx, route, tenant string, params map[string]string, readBody bool) error {
+func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params map[string]string, readBody bool) error {
 	var body any
 	if readBody {
 		raw := c.Fiber().Body()
@@ -175,13 +179,13 @@ func (s *svc) dispatch(c *zip.Ctx, route, tenant string, params map[string]strin
 			}
 		}
 	}
-	resp, err := s.host.Dispatch(c.Context(), tenant, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), tenant, gojabase.Request{
 		Route:  route,
 		Params: params,
 		Body:   body,
 	})
 	if err != nil {
-		s.log.Error("sign dispatch failed", "route", route, "err", err)
+		s.Log.Error("sign dispatch failed", "route", route, "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "sign dispatch failed")
 	}
 	c.SetHeader("Content-Type", "application/json")
@@ -199,10 +203,10 @@ func init() {
 
 // shutdown closes the per-tenant stores + the goja engine. Idempotent.
 func shutdown(context.Context) error {
-	if mounted == nil || mounted.host == nil {
+	if mounted == nil || mounted.State.host == nil {
 		return nil
 	}
-	err := mounted.host.Close()
+	err := mounted.State.host.Close()
 	mounted = nil
 	return err
 }
