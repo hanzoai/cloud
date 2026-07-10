@@ -107,7 +107,7 @@ func TestFinanceBalance_ShapeCentsAndIsolation(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("balance acme = %d (%s)", code, body)
 	}
-	var b financeBalance
+	var b financeBalanceView
 	if err := json.Unmarshal(body, &b); err != nil {
 		t.Fatalf("decode balance: %v (%s)", err, body)
 	}
@@ -189,7 +189,7 @@ func TestFinanceUsage_RangeSeriesLinesTotal(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("usage 24h = %d (%s)", code, body)
 	}
-	var u financeUsage
+	var u financeUsageView
 	if err := json.Unmarshal(body, &u); err != nil {
 		t.Fatalf("decode usage: %v (%s)", err, body)
 	}
