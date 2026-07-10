@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -49,12 +50,12 @@ type mirrorReq struct {
 // mirror imports body.Source into the tenant's repo at :name. It provisions the
 // repo on first use (idempotent, race-safe) then force-fetches every ref, so a
 // first call clones the source and a repeat call syncs it.
-func (s *svc) mirror(c *zip.Ctx) error {
+func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -79,18 +80,18 @@ func (s *svc) mirror(c *zip.Ctx) error {
 		return zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 	}
 
-	r, err := s.ensureRepo(c.Context(), store, org, project, name)
+	r, err := ensureRepo(s, c.Context(), store, org, project, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "ensure repo: %v", err)
 	}
-	if err := s.storage.mirrorInto(c.Context(), org, project, name, src); err != nil {
+	if err := s.State.storage.mirrorInto(c.Context(), org, project, name, src); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
 	}
 	// Meter the mirrored bytes the same way a push is metered (the ONE storage
 	// bound). Best-effort — a metering miss must not fail a landed mirror.
-	r.SizeBytes = s.recordUsage(context.WithoutCancel(c.Context()), org, project, name)
-	branches, head := s.refState(org, project, name)
-	return c.JSON(http.StatusOK, s.toView(r, branches, head))
+	r.SizeBytes = recordUsage(s, context.WithoutCancel(c.Context()), org, project, name)
+	branches, head := refState(s, org, project, name)
+	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
 
 // mirrorInto fetches every ref/object from srcURL into the repo's storer with
@@ -179,7 +180,7 @@ func defaultBranch(refs []*plumbing.Reference, listErr error) (plumbing.Referenc
 // bare storage) on first use. Idempotent and race-safe: a concurrent create is
 // reconciled by reloading the canonical row, never surfaced as a conflict — a
 // mirror must be repeatable.
-func (s *svc) ensureRepo(ctx context.Context, store *Store, org, project, name string) (Repo, error) {
+func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org, project, name string) (Repo, error) {
 	r, err := store.Get(ctx, org, project, name)
 	if err == nil {
 		return r, nil
@@ -196,7 +197,7 @@ func (s *svc) ensureRepo(ctx context.Context, store *Store, org, project, name s
 		ID: id, Org: org, Project: project, Name: name,
 		DefaultBranch: defaultBranchName, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.provision(ctx, store, fresh); err != nil && !errors.Is(err, errConflict) {
+	if err := provision(s, ctx, store, fresh); err != nil && !errors.Is(err, errConflict) {
 		return Repo{}, err
 	}
 	return store.Get(ctx, org, project, name)

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,7 +88,7 @@ var reachProbe = liveReachProbe
 
 // embedStatus is GET /v1/embed-status?app=cms|erp|help. Mirrors
 // GET app/embed-status/route.ts.
-func (s *svc) embedStatus(c *zip.Ctx) error {
+func embedStatus(s *cloud.Service[state], c *zip.Ctx) error {
 	cr, ok := resolveCaller(c, false) // validated; a customer org (owner set) is fine
 	if !ok {
 		return zip.ErrForbidden("sign in to continue")
@@ -98,7 +99,7 @@ func (s *svc) embedStatus(c *zip.Ctx) error {
 		return zip.ErrBadRequest("unknown embed app")
 	}
 
-	origin := "https://" + app + "." + embedBrandDomain(s.brand)
+	origin := "https://" + app + "." + embedBrandDomain(s.Brand)
 	embedURL := origin + landing
 
 	// SERVER-SIDE entitlement gate: a brand-owned app frames only for a member of the
@@ -106,7 +107,7 @@ func (s *svc) embedStatus(c *zip.Ctx) error {
 	// caller NEVER receives the embed URL and we don't even probe — the module shows
 	// the provision panel. This is the authoritative gate (the client check only
 	// avoids a flash).
-	entitled := (cr.owner != "" && cr.owner == strings.ToLower(strings.TrimSpace(s.brand))) || c.IsAdmin()
+	entitled := (cr.owner != "" && cr.owner == strings.ToLower(strings.TrimSpace(s.Brand))) || c.IsAdmin()
 	if !entitled {
 		return c.JSON(http.StatusOK, embedStatusResp{App: app, Origin: origin, EmbedURL: "", Reachable: false, Entitled: false, Phase: "not-entitled"})
 	}
