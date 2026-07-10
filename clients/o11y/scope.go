@@ -48,6 +48,12 @@ func init() {
 		a.Get("/v1/o11y/logs", handleLogs)
 		a.Get("/v1/o11y/metrics", handleMetrics)
 		a.Get("/v1/o11y/status", handleStatus)
+		// SuperAdmin-only VM read proxy (vmproxy.go) — the same-origin replacement for
+		// the console's stripped `/telemetry` Next route, backing the platform
+		// infra-health board. Allowlisted to {up, sum(up), count(up)} only; registered
+		// here (< order 70) so it wins the in-order match over the o11y wildcard.
+		a.Get("/v1/o11y/vm/api/v1/query", handleVMQuery)
+		a.Get("/v1/o11y/vm/api/v1/query_range", handleVMQueryRange)
 		return nil
 	})
 }
