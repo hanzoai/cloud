@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // RED adversarial coverage for the V6 machine-audience widening. Blue's
 // v6_aud_e2e_test proves the happy path + simple negatives (cross-tenant,
