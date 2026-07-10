@@ -489,7 +489,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/authzstore v0.1.1 // indirect
-	github.com/hanzoai/beego/v2 v2.4.1-0.20260710093857-0ad99bdf8b90
+	github.com/hanzoai/beego/v2 v2.4.1
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
