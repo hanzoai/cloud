@@ -310,7 +310,7 @@ func (p *Platform) Redeploy(ctx context.Context, org, project, env, container st
 }
 
 // ---------------------------------------------------------------------------
-// Build — POST /v1/arcd/enqueue (platform-native CI, no GitHub builders).
+// Build — POST /v1/runner (platform-native CI, no GitHub builders).
 // ---------------------------------------------------------------------------
 
 // BuildReq is the direct-enqueue body. Repo/SHA/Image are required.
@@ -344,5 +344,5 @@ func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, buildToken st
 		return nil, fmt.Errorf("no build token: set HANZO_BUILD_TOKEN / PLATFORM_BUILD_CALLBACK_TOKEN or `hanzo login --build-token <tok>`")
 	}
 	out := &BuildJob{}
-	return out, p.do(ctx, http.MethodPost, "/v1/arcd/enqueue", buildToken, req, out)
+	return out, p.do(ctx, http.MethodPost, "/v1/runner", buildToken, req, out)
 }
