@@ -45,7 +45,7 @@ func TestProjectCRUD(t *testing.T) {
 		t.Fatalf("unexpected project: %+v", got)
 	}
 
-	// Cross-tenant isolation: another org cannot see it.
+	// Cross-org isolation: another org cannot see it.
 	if _, err := s.GetProject(ctx, "acme", "maxpower"); !errors.Is(err, errNotFound) {
 		t.Fatalf("expected notFound for other org, got %v", err)
 	}

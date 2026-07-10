@@ -35,8 +35,8 @@ func (f *fakeCommerce) grant(org, product string) {
 	f.active[org][product] = true
 }
 
-func (f *fakeCommerce) GetTenantConfig(_ context.Context, orgID string) (*types.TenantConfig, error) {
-	return &types.TenantConfig{OrgID: orgID}, nil
+func (f *fakeCommerce) GetOrgConfig(_ context.Context, orgID string) (*types.OrgConfig, error) {
+	return &types.OrgConfig{OrgID: orgID}, nil
 }
 
 func (f *fakeCommerce) CheckEntitlement(_ context.Context, orgID, productID string) (*types.LicenseEntitlement, error) {
@@ -90,7 +90,7 @@ func orgMember(method, path, org string, body any) *http.Request {
 
 // superAdmin builds a request from a validated GLOBAL admin (X-User-IsAdmin=true,
 // minted only for owner==AdminOrg). X-Org-Id is the admin org; the :org in the
-// path is the tenant being operated on.
+// path is the org being operated on.
 func superAdmin(method, path string, body any) *http.Request {
 	req := jsonReq(method, path, body)
 	req.Header.Set("X-Org-Id", "admin")
@@ -121,7 +121,7 @@ func decodeEnabled(t *testing.T, body []byte) []string {
 	return v.Enabled
 }
 
-// ── store: tenant isolation ────────────────────────────────────────────────────
+// ── store: org isolation ────────────────────────────────────────────────────
 
 func TestStoreIsolation(t *testing.T) {
 	store, err := openStore(t.TempDir() + "/entitlements.db")

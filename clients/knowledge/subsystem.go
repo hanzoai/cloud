@@ -10,7 +10,7 @@
 //   - Connectors (connectors.go): per-org OAuth connections to Slack/GitHub/Google
 //     whose synced documents land in the SAME store + SAME index as manual pages.
 //
-// Every handler resolves its tenant through principal.Tenant (the ONE boundary) and
+// Every handler resolves its tenant through principal.Org (the ONE boundary) and
 // scopes strictly to that org — a caller can only ever search or connect its own
 // knowledge.
 package knowledge
@@ -86,12 +86,12 @@ type searchBody struct {
 }
 
 // search runs an org-scoped semantic retrieval over the org's knowledge namespace.
-// The org comes from principal.Tenant (a validated principal), so cross-tenant
+// The org comes from principal.Org (a validated principal), so cross-tenant
 // retrieval is impossible: the collection AND the payload filter are both pinned to
 // this org. An unreachable/disabled index returns an honest empty result set, never
 // a 5xx — the RAG caller degrades to no-context rather than failing the turn.
 func (s *svc) search(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}

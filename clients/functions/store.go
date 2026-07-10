@@ -16,7 +16,7 @@ var (
 
 // Function is the org-scoped definition of a serverless function: a runtime
 // (environment) + source code + resource limits + the NAMES of the secrets it
-// mounts (values live in KMS, never here). Tenant isolation is the org column.
+// mounts (values live in KMS, never here). Org isolation is the org column.
 type Function struct {
 	ID           string
 	Org          string
@@ -50,16 +50,16 @@ type Invocation struct {
 }
 
 // Store is one org's functions database — ONE SQLite file per org at
-// {DataDir}/orgs/{orgSlug}/functions.db (opened via cloud.TenantDB). functions is
-// org-scoped (it carries no project axis); tenancy is PHYSICAL, with the org
+// {DataDir}/orgs/{orgSlug}/functions.db (opened via cloud.OrgDB). functions is
+// org-scoped (it carries no project axis); org-scoping is PHYSICAL, with the org
 // column retained as defense-in-depth.
 type Store struct {
 	db *sql.DB
 }
 
-// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB —
+// openStore wraps an org DB — already opened + pragma'd by cloud.OrgDB —
 // into the functions store, running its migration. It is the open func the shared
-// cloud.TenantStore cache calls once per org file.
+// cloud.OrgStore cache calls once per org file.
 func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {

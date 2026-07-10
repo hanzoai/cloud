@@ -1,6 +1,6 @@
 package cloud
 
-// Tenant sub-scope sanitization — the project/app half of the identity trust
+// Org sub-scope sanitization — the project/app half of the identity trust
 // boundary (the org half is SanitizeIdentity in middleware_identity.go).
 //
 // THE PROBLEM. X-Org-Id is minted un-forgeably from the validated IAM owner, but
@@ -9,7 +9,7 @@ package cloud
 // value reached downstream attribution (compute_usage.project) and the optional
 // per-project sub-scope some subsystems read. The un-forgeable org column already
 // bounds a forged label to the attacker's OWN subtree (every consumer AND-s the
-// validated org), but asserting another tenant's registered project id is a
+// validated org), but asserting another org's registered project id is a
 // cross-org identity claim we refuse at the boundary.
 //
 // THE RULE (one predicate, one place). A forwarded X-Project-Id must never name a
@@ -18,13 +18,13 @@ package cloud
 // precise cross-org impersonation guard. An UNREGISTERED value (the free-form,
 // within-org sub-scope label the git/security/eval subsystems already accept) is
 // PRESERVED: it can only ever scope the caller's own org data, so it is not a
-// cross-tenant claim. The caller's OWN registered project is preserved (provably
+// cross-org claim. The caller's OWN registered project is preserved (provably
 // theirs). This IS the "project-membership check UNDER the validated org" the
 // data plane always required of per-project scope.
 //
 // DEPENDENCY INVERSION (why a resolver, not an import). The project registries
 // (clients/projects, clients/platform) import THIS package, so cloud must not
-// import them. Each registry registers a TenantScopeResolver at its Mount —
+// import them. Each registry registers a OrgScopeResolver at its Mount —
 // exactly like sites.SetResolver — and the boundary consults the registered set
 // per request. With no registry mounted, nothing is ever "foreign", so the guard
 // is a no-op passthrough (an unmounted registry owns nothing), never a crash.
@@ -34,10 +34,10 @@ import (
 	"sync"
 )
 
-// TenantScopeResolver reports the ownership of a project identifier relative to
+// OrgScopeResolver reports the ownership of a project identifier relative to
 // an org, WITHOUT this package importing the registry that holds it. The
 // identifier may be a slug or an opaque id — the implementation matches whichever.
-type TenantScopeResolver interface {
+type OrgScopeResolver interface {
 	// ProjectOwnership reports, for the project addressed by idOrSlug:
 	//   mine  — org itself owns a project with this id/slug,
 	//   other — some org OTHER than org owns a project with this id/slug.
@@ -48,28 +48,28 @@ type TenantScopeResolver interface {
 }
 
 var (
-	tenantResolverMu sync.RWMutex
-	tenantResolvers  []TenantScopeResolver
+	orgResolverMu sync.RWMutex
+	orgResolvers  []OrgScopeResolver
 )
 
-// RegisterTenantScopeResolver adds a project-ownership registry consulted by the
+// RegisterOrgScopeResolver adds a project-ownership registry consulted by the
 // identity trust boundary. Called once per registry at its Mount (mirrors
 // sites.SetResolver). Registries COMPOSE: a project is "mine" if ANY registry
 // owns it for the org, and "foreign" only if some registry owns it for another
 // org while NONE owns it for this org. A nil resolver is ignored.
-func RegisterTenantScopeResolver(r TenantScopeResolver) {
+func RegisterOrgScopeResolver(r OrgScopeResolver) {
 	if r == nil {
 		return
 	}
-	tenantResolverMu.Lock()
-	tenantResolvers = append(tenantResolvers, r)
-	tenantResolverMu.Unlock()
+	orgResolverMu.Lock()
+	orgResolvers = append(orgResolvers, r)
+	orgResolverMu.Unlock()
 }
 
-func currentTenantResolvers() []TenantScopeResolver {
-	tenantResolverMu.RLock()
-	rs := tenantResolvers
-	tenantResolverMu.RUnlock()
+func currentOrgResolvers() []OrgScopeResolver {
+	orgResolverMu.RLock()
+	rs := orgResolvers
+	orgResolverMu.RUnlock()
 	return rs
 }
 
@@ -86,7 +86,7 @@ func projectIsForeign(ctx context.Context, org, project string) bool {
 		return false
 	}
 	var mine, other, hadErr bool
-	for _, r := range currentTenantResolvers() {
+	for _, r := range currentOrgResolvers() {
 		m, o, err := r.ProjectOwnership(ctx, org, project)
 		if err != nil {
 			hadErr = true
