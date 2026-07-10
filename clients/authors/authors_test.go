@@ -132,8 +132,8 @@ func (g *fakeGitHub) fetchFile(_ context.Context, owner, repo, branch, path stri
 }
 
 // mount builds an authors app backed by a fresh store + injected fakes, returning the
-// app, the svc, and the fakes for assertions.
-func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce, *fakeGitHub) {
+// app, the service, and the fakes for assertions.
+func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeGitHub) {
 	t.Helper()
 	store, err := openStore(t.TempDir() + "/authors.db")
 	if err != nil {
@@ -142,23 +142,17 @@ func mount(t *testing.T) (*zip.App, *svc, *fakeCommerce, *fakeGitHub) {
 	t.Cleanup(func() { _ = store.Close() })
 	fc := newFakeCommerce()
 	fg := newFakeGitHub()
-	s := &svc{
-		store:     store,
-		commerce:  fc,
-		github:    fg,
-		log:       luxlog.New("test"),
-		badgeBase: "https://hanzo.app",
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "authors"),
+		State: state{
+			store:     store,
+			commerce:  fc,
+			github:    fg,
+			badgeBase: "https://hanzo.app",
+		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Get("/v1/authors", s.myAuthors)
-	app.Post("/v1/authors/connect", s.connect)
-	app.Post("/v1/authors/repos/verify", s.verifyRepo)
-	app.Post("/v1/authors/deploys/record", s.recordDeploy)
-	app.Get("/v1/admin/authors", s.adminList)
-	app.Post("/v1/admin/authors/sweep", s.adminSweep)
-	app.Post("/v1/admin/authors/:id/approve", s.adminApprove)
-	app.Post("/v1/admin/authors/:id/suspend", s.adminSuspend)
-	app.Post("/v1/admin/authors/:id/payout", s.adminPayout)
+	routes(app, s)
 	return app, s, fc, fg
 }
 
@@ -206,7 +200,7 @@ func envData(t *testing.T, body []byte) map[string]json.RawMessage {
 
 // connectOrg connects `org` as an author (optionally with a supplied login), returning
 // the author id + verify code.
-func connectOrg(t *testing.T, app *zip.App, s *svc, org, login string) (id, verifyCode string) {
+func connectOrg(t *testing.T, app *zip.App, s *cloud.Service[state], org, login string) (id, verifyCode string) {
 	t.Helper()
 	code, body := req(t, app, http.MethodPost, "/v1/authors/connect", org, false, map[string]any{"githubLogin": login})
 	if code != http.StatusCreated {
@@ -291,7 +285,7 @@ func TestConnectIdempotentAndLinkedIdentity(t *testing.T) {
 
 	// First connect with a supplied login → 201 connected, unverified identity.
 	id, _ := connectOrg(t, app, s, "orgA", "AcmeDev")
-	a, _ := s.store.GetByID(ctx, id)
+	a, _ := s.State.store.GetByID(ctx, id)
 	if a.GithubLogin != "acmedev" || a.VerifiedAt != 0 {
 		t.Fatalf("supplied login connect: login=%q verifiedAt=%d", a.GithubLogin, a.VerifiedAt)
 	}
@@ -311,7 +305,7 @@ func TestConnectIdempotentAndLinkedIdentity(t *testing.T) {
 	if re.Created || !re.Verified || re.Login != "acme-official" {
 		t.Fatalf("re-connect not idempotent-relink-verify: %+v (%s)", re, body)
 	}
-	a2, _ := s.store.GetByID(ctx, id)
+	a2, _ := s.State.store.GetByID(ctx, id)
 	if a2.ID != a.ID || a2.VerifiedAt == 0 {
 		t.Fatalf("re-connect broke identity: %+v", a2)
 	}
@@ -435,7 +429,7 @@ func TestRecordDeployAttribution(t *testing.T) {
 		t.Fatalf("self-deploy want 201 self=true, got %d %+v", st, dv)
 	}
 	// The author now has 2 deploy events; distinct earning orgs excludes self (orgA).
-	orgs, _ := s.store.DistinctDeployingOrgs(ctx, idA, "orgA", 100)
+	orgs, _ := s.State.store.DistinctDeployingOrgs(ctx, idA, "orgA", 100)
 	if len(orgs) != 1 || orgs[0] != "orgB" {
 		t.Fatalf("distinct deploying orgs = %v, want [orgB]", orgs)
 	}
@@ -469,7 +463,7 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 	if code != http.StatusOK || sweptAccrued(t, body) != 1 {
 		t.Fatalf("accrual sweep want 1, got %d (%s)", code, body)
 	}
-	a, _ := s.store.GetByID(ctx, idA)
+	a, _ := s.State.store.GetByID(ctx, idA)
 	const want = 10000 * defaultShareBps / bpsDenom // 500
 	if a.AccruedCents != want || a.PendingCents() != want {
 		t.Fatalf("accrued=%d pending=%d, want %d (orgB spend×share, self excluded)", a.AccruedCents, a.PendingCents(), want)
@@ -477,7 +471,7 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 
 	// Idempotent: a re-sweep in the SAME period accrues nothing more.
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
-	a2, _ := s.store.GetByID(ctx, idA)
+	a2, _ := s.State.store.GetByID(ctx, idA)
 	if a2.AccruedCents != want {
 		t.Fatalf("double-accrual! accrued=%d, want %d", a2.AccruedCents, want)
 	}
@@ -571,7 +565,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	if fc.bal("orgA") != 300 || fc.depositCount() != 1 {
 		t.Fatalf("credits payout wallet=%d deposits=%d, want 300/1", fc.bal("orgA"), fc.depositCount())
 	}
-	a, _ := s.store.GetByID(ctx, idA)
+	a, _ := s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 300 || a.PendingCents() != 200 {
 		t.Fatalf("after credits payout: paid=%d pending=%d (want 300/200)", a.PaidCents, a.PendingCents())
 	}
@@ -594,7 +588,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	if fc.depositCount() != 1 || fc.bal("orgA") != 300 {
 		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
 	}
-	a, _ = s.store.GetByID(ctx, idA)
+	a, _ = s.State.store.GetByID(ctx, idA)
 	if a.PaidCents != 500 || a.PendingCents() != 0 {
 		t.Fatalf("after cash payout: paid=%d pending=%d (want 500/0)", a.PaidCents, a.PendingCents())
 	}
@@ -662,7 +656,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	}
 	fc.setSpend("orgB", 20000) // more spend, but suspended → no accrual
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
-	a, _ := s.store.GetByID(context.Background(), idA)
+	a, _ := s.State.store.GetByID(context.Background(), idA)
 	if a.AccruedCents != want {
 		t.Fatalf("suspended author accrued more: %d, want %d", a.AccruedCents, want)
 	}

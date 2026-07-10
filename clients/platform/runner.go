@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -78,7 +79,7 @@ func stripBearer(h string) string {
 }
 
 // runnerBuild serves POST /v1/runner — enqueue a native, privileged build.
-func (s *svc) runnerBuild(c *zip.Ctx) error {
+func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	// Auth: shared build-callback token, constant-time. Fail closed if unset —
 	// no token configured means no privileged builds, never an open endpoint.
 	want := strings.TrimSpace(getenv("PLATFORM_BUILD_CALLBACK_TOKEN", ""))
@@ -101,7 +102,7 @@ func (s *svc) runnerBuild(c *zip.Ctx) error {
 	// semantics (compute version → build → smoke → tag → notify). It computes its
 	// own owned image, so it runs before the caller-supplied-image checks below.
 	if req.Release {
-		return s.startRelease(c, req)
+		return startRelease(s, c, req)
 	}
 
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
@@ -117,7 +118,7 @@ func (s *svc) runnerBuild(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 
-	jobName, err := s.k8s.launchDirectBuild(c.Context(), req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
+	jobName, err := s.State.k8s.launchDirectBuild(c.Context(), req.Repo, ref, req.Image, strings.TrimSpace(req.Dockerfile), bldID)
 	if err != nil {
 		return zip.Errorf(deployErrStatus(err), "launch build: %v", err)
 	}
@@ -126,10 +127,10 @@ func (s *svc) runnerBuild(c *zip.Ctx) error {
 	// tenant-scoped). Best-effort: a record miss must not fail a launched build.
 	now := time.Now().Unix()
 	b := Build{ID: bldID, Org: firstNonEmpty(req.OrgID, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
-	if err := s.store.InsertBuild(c.Context(), b); err != nil {
-		s.log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
+	if err := s.State.store.InsertBuild(c.Context(), b); err != nil {
+		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
-	s.log.Info("runner build launched", "job", jobName, "image", req.Image, "ref", ref, "repo", req.Repo)
+	s.Log.Info("runner build launched", "job", jobName, "image", req.Image, "ref", ref, "repo", req.Repo)
 
 	return c.JSON(http.StatusAccepted, runnerBuildResp{
 		BuildJobID: bldID, Status: "queued", RunnerPool: "32g", Image: req.Image, Target: strings.TrimSpace(req.DockerTarget),
