@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -96,13 +97,13 @@ func machineIsBot(m visorMachine) bool {
 
 // ---- bots ----
 
-func (s *svc) listBots(c *zip.Ctx) error {
+func listBots(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var machines []visorMachine
-	if err := s.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org, "kind", "bot"), nil, &machines); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org, "kind", "bot"), nil, &machines); err != nil {
 		return err
 	}
 	// Join the org's bindings ONCE (O(1), not N+1), keyed by machine id — the same
@@ -110,7 +111,7 @@ func (s *svc) listBots(c *zip.Ctx) error {
 	// blanks the list (a bot still lists without its reconciled status).
 	byMachine := map[string]*agentBinding{}
 	var bindings []agentBinding
-	if err := s.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err == nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err == nil {
 		for i := range bindings {
 			byMachine[bindings[i].Name] = &bindings[i]
 		}
@@ -140,7 +141,7 @@ type botLaunchReq struct {
 	DryRun       bool   `json:"dryRun"`
 }
 
-func (s *svc) launchBot(c *zip.Ctx) error {
+func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -161,7 +162,7 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 	if body.DryRun {
 		launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": true}
 		var data json.RawMessage
-		if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+		if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
 			return err
 		}
 		var quote any
@@ -182,7 +183,7 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 	// the machine launch also fails a bad request (e.g. a non-catalog model → 400)
 	// BEFORE any metered machine is provisioned. org is the validated tenant.
 	agent := firstNonEmpty(strings.TrimSpace(body.Agent), name)
-	if err := s.ensureAgent(c, agent, body.Model, body.Instructions); err != nil {
+	if err := ensureAgent(s, c, agent, body.Model, body.Instructions); err != nil {
 		return err
 	}
 
@@ -190,7 +191,7 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 	// bootstraps the @hanzo/bot runtime cloud-init for a bot spec (specIsBot).
 	launch := map[string]any{"name": name, "size": size, "region": body.Region, "kind": "bot", "dryRun": false}
 	var data json.RawMessage
-	if err := s.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/launch", q("owner", org), launch, &data); err != nil {
 		return err
 	}
 
@@ -210,7 +211,7 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 	// Bind the (now-existing) cloud Agent to the freshly-launched machine. org is
 	// the validated tenant (never a client field); agent defaults to the bot name.
 	var binding agentBinding
-	if err := s.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(machineID)+"/bind-agent",
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(machineID)+"/bind-agent",
 		q("owner", org),
 		map[string]any{"org": org, "agentName": agent, "botVersion": body.BotVersion},
 		&binding); err != nil {
@@ -231,7 +232,7 @@ func (s *svc) launchBot(c *zip.Ctx) error {
 // relaunch, or an explicit agent shared by several bots, is fine. A genuine
 // rejection (e.g. a non-catalog model → 400) is surfaced verbatim so a bad launch
 // fails fast with the real reason, before any machine is provisioned.
-func (s *svc) ensureAgent(c *zip.Ctx, agent, model, instructions string) error {
+func ensureAgent(s *cloud.Service[state], c *zip.Ctx, agent, model, instructions string) error {
 	payload, err := json.Marshal(map[string]any{
 		"name":         agent,
 		"model":        strings.TrimSpace(model),
@@ -266,13 +267,13 @@ func (s *svc) ensureAgent(c *zip.Ctx, agent, model, instructions string) error {
 	}
 }
 
-func (s *svc) getBot(c *zip.Ctx) error {
-	org, id, err := s.botScope(c)
+func getBot(s *cloud.Service[state], c *zip.Ctx) error {
+	org, id, err := botScope(s, c)
 	if err != nil {
 		return err
 	}
 	var m visorMachine
-	if err := s.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, &m); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, &m); err != nil {
 		return err
 	}
 	if m.Name == "" && m.Id == "" {
@@ -282,22 +283,22 @@ func (s *svc) getBot(c *zip.Ctx) error {
 	// hanzo-kind:bot tag OR has an agent binding — either signal is authoritative,
 	// so a bot resolves even before its cloud-init has stamped every tag.
 	var binding agentBinding
-	_ = s.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding)
+	_ = s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding)
 	if !machineIsBot(m) && !binding.identifies() {
 		return zip.ErrNotFound("bot not found")
 	}
 	return c.JSON(http.StatusOK, toBotView(m, &binding))
 }
 
-func (s *svc) deleteBot(c *zip.Ctx) error {
-	org, id, err := s.botScope(c)
+func deleteBot(s *cloud.Service[state], c *zip.Ctx) error {
+	org, id, err := botScope(s, c)
 	if err != nil {
 		return err
 	}
 	// Tear down both halves: unbind the agent first (best-effort — a bot with no
 	// binding still deletes), then terminate the machine.
-	_ = s.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil)
-	if err := s.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, nil); err != nil {
+	_ = s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil)
+	if err := s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id), q("owner", org), nil, nil); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -306,16 +307,16 @@ func (s *svc) deleteBot(c *zip.Ctx) error {
 // botAction dispatches /v1/bots/:id/:action. message routes to the AGENT path;
 // stop and pause both halt the bot's agent runtime (one honest capability — see
 // the package doc). An unknown action is a clean 400, never a silent no-op.
-func (s *svc) botAction(c *zip.Ctx) error {
-	org, id, err := s.botScope(c)
+func botAction(s *cloud.Service[state], c *zip.Ctx) error {
+	org, id, err := botScope(s, c)
 	if err != nil {
 		return err
 	}
 	switch strings.ToLower(strings.TrimSpace(c.Param("action"))) {
 	case "message":
-		return s.messageBot(c, org, id)
+		return messageBot(s, c, org, id)
 	case "stop", "pause":
-		return s.stopBot(c, org, id)
+		return stopBot(s, c, org, id)
 	default:
 		return zip.ErrBadRequest("unknown bot action (want stop|pause|message)")
 	}
@@ -324,8 +325,8 @@ func (s *svc) botAction(c *zip.Ctx) error {
 // stopBot halts the bot's runtime by unbinding its agent — the machine stays
 // (re-bind to resume, or DELETE /v1/bots/:id to tear it down). Idempotent: a bot
 // with no binding still reports stopped.
-func (s *svc) stopBot(c *zip.Ctx, org, id string) error {
-	if err := s.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
+func stopBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
+	if err := s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
 		return err
 	}
 	return c.JSON(http.StatusOK, map[string]any{"id": id, "status": "stopped"})
@@ -336,9 +337,9 @@ func (s *svc) stopBot(c *zip.Ctx, org, id string) error {
 // runner (/v1/agents/:agent/run) so a message is a real agent run — recorded,
 // billed and traced exactly like any other. The caller's identity is forwarded so
 // the run is scoped + gated as the same principal (never a fabricated identity).
-func (s *svc) messageBot(c *zip.Ctx, org, id string) error {
+func messageBot(s *cloud.Service[state], c *zip.Ctx, org, id string) error {
 	var binding agentBinding
-	if err := s.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
 		return err
 	}
 	agent := strings.TrimSpace(binding.AgentName)
@@ -370,7 +371,7 @@ func (s *svc) messageBot(c *zip.Ctx, org, id string) error {
 
 // botScope validates the principal and extracts the bot id in one place, so every
 // bot :id handler gates identically (403 before vm) and rejects an empty id.
-func (s *svc) botScope(c *zip.Ctx) (org, id string, err error) {
+func botScope(s *cloud.Service[state], c *zip.Ctx) (org, id string, err error) {
 	org, ok := tenant(c)
 	if !ok {
 		return "", "", zip.ErrForbidden("X-Org-Id required")
@@ -389,7 +390,7 @@ type bindAgentReq struct {
 	BotVersion string `json:"botVersion"`
 }
 
-func (s *svc) bindMachineAgent(c *zip.Ctx) error {
+func bindMachineAgent(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -408,7 +409,7 @@ func (s *svc) bindMachineAgent(c *zip.Ctx) error {
 	// org is the validated tenant (never a client field) — vm records it as the
 	// Agent's owning org and scopes the machine by ?owner.
 	var binding agentBinding
-	if err := s.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(id)+"/bind-agent",
+	if err := s.State.cl.call(c, http.MethodPost, "/v1/machines/"+url.PathEscape(id)+"/bind-agent",
 		q("owner", org),
 		map[string]any{"org": org, "agentName": body.AgentName, "botVersion": body.BotVersion},
 		&binding); err != nil {
@@ -417,7 +418,7 @@ func (s *svc) bindMachineAgent(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, binding)
 }
 
-func (s *svc) getMachineAgentBinding(c *zip.Ctx) error {
+func getMachineAgentBinding(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -427,7 +428,7 @@ func (s *svc) getMachineAgentBinding(c *zip.Ctx) error {
 		return zip.ErrBadRequest("machine id required")
 	}
 	var binding agentBinding
-	if err := s.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, &binding); err != nil {
 		return err
 	}
 	if !binding.identifies() {
@@ -436,7 +437,7 @@ func (s *svc) getMachineAgentBinding(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, binding)
 }
 
-func (s *svc) unbindMachineAgent(c *zip.Ctx) error {
+func unbindMachineAgent(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -445,19 +446,19 @@ func (s *svc) unbindMachineAgent(c *zip.Ctx) error {
 	if id == "" {
 		return zip.ErrBadRequest("machine id required")
 	}
-	if err := s.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
+	if err := s.State.cl.call(c, http.MethodDelete, "/v1/machines/"+url.PathEscape(id)+"/agent-binding", q("owner", org), nil, nil); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (s *svc) listAgentBindings(c *zip.Ctx) error {
+func listAgentBindings(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	var bindings []agentBinding
-	if err := s.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err != nil {
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/agent-bindings", q("owner", org), nil, &bindings); err != nil {
 		return err
 	}
 	if bindings == nil {
