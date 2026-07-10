@@ -10,7 +10,7 @@
 // no audit route at all. This adds exactly the customer-facing, org-scoped read.
 //
 // TENANT ISOLATION (the whole point). The org is the VALIDATED IAM owner claim
-// (principal.Tenant — the trusted X-Org-Id the identity middleware minted from the
+// (principal.Org — the trusted X-Org-Id the identity middleware minted from the
 // caller's verified bearer, HIP-0026; NEVER a client-supplied header). Filter.Org
 // is PINNED server-side to that org and a client `org` query param is dropped, so a
 // caller can only ever read its OWN org's events — the per-org READ twin of the
@@ -72,7 +72,7 @@ func init() {
 // the /v1 list envelope { data:[audit.Wire], data2:total } the console decodes —
 // the SAME shape /v1/admin/audit returns, so ONE console adapter reads either.
 func (s *svc) list(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		// A customer's OWN audit trail — an absent identity is a true "not signed
 		// in" (401), never a 403 "not authorized for this surface".

@@ -13,7 +13,7 @@ import (
 //
 // Each hook is trusted first-party Go compiled into the cloud binary, keyed by
 // DocType name and applied PER-ORG: the Event carries the VALIDATED org
-// (framework derives it via principal.Tenant, never a client header) and every
+// (framework derives it via principal.Org, never a client header) and every
 // sibling read/write goes through ev.Store scoped by ev.Org, so a hook can never
 // cross a tenant. Hooks run OUTSIDE the store's write transaction (see hook.go),
 // so a posting hook composes plain store writes.

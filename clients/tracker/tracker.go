@@ -5,10 +5,10 @@
 // @hanzo/gui over this one store sidesteps that entire class of bug: the rows
 // come back as plain JSON and render deterministically.
 //
-// Tenant isolation is enforced SERVER-SIDE on every request: the org is
-// principal.Tenant(c) — the value SanitizeIdentity minted from the VALIDATED
+// Org isolation is enforced SERVER-SIDE on every request: the org is
+// principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED
 // bearer owner claim (HIP-0026) — and NEVER a client-supplied header. Every
-// store query filters WHERE org=?, so one tenant can never read or mutate
+// store query filters WHERE org=?, so one org can never read or mutate
 // another's projects or issues.
 //
 // Surface (all org-scoped; /v1 only):
@@ -73,7 +73,7 @@ var priorities = map[string]bool{
 }
 
 type svc struct {
-	stores *cloud.TenantStore[*Store] // per-(org,project) tracker DBs, opened once each
+	stores *cloud.OrgStore[*Store] // per-(org,project) tracker DBs, opened once each
 	log    luxlog.Logger
 	// bill is the shared per-org resource gate+meter. A project tracker is FREE
 	// by default (charging per issue is the wrong product), so the create fee
@@ -90,7 +90,7 @@ var mounted *svc
 // per-(org,project) file ({DataDir}/orgs/{orgSlug}/projects/{projectSlug}/
 // tracker.db) once via the shared cache. tracker is project-scoped: the IAM
 // project (principal.Project, "default" when none is selected) is the physical
-// tenant boundary — the tracker's own KEY-based projects are rows WITHIN it.
+// org boundary — the tracker's own KEY-based projects are rows WITHIN it.
 func (s *svc) storeFor(c *zip.Ctx, org string) (*Store, error) {
 	return s.stores.For(org, principal.Project(c))
 }
@@ -109,7 +109,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("tracker.Mount: empty DataDir")
 	}
 	s := &svc{
-		stores: cloud.NewTenantStore(deps.DataDir, "tracker", openStore),
+		stores: cloud.NewOrgStore(deps.DataDir, "tracker", openStore),
 		log:    log,
 		bill:   cloud.NewResourceMeter(deps, "tracker"),
 	}
@@ -193,7 +193,7 @@ type createProjectReq struct {
 }
 
 func (s *svc) createProject(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -244,7 +244,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 }
 
 func (s *svc) listProjects(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -264,7 +264,7 @@ func (s *svc) listProjects(c *zip.Ctx) error {
 }
 
 func (s *svc) getProject(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -288,7 +288,7 @@ type updateProjectReq struct {
 }
 
 func (s *svc) updateProject(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -332,7 +332,7 @@ func (s *svc) updateProject(c *zip.Ctx) error {
 }
 
 func (s *svc) deleteProject(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -352,7 +352,7 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 
 // ---- issue handlers ----
 
-// project resolves the caller's project by :key from the given per-tenant store,
+// project resolves the caller's project by :key from the given per-org store,
 // or answers the right HTTP error.
 func (s *svc) project(c *zip.Ctx, store *Store, org string) (Project, error) {
 	p, err := store.GetProject(c.Context(), org, keyParam(c))
@@ -375,7 +375,7 @@ type createIssueReq struct {
 }
 
 func (s *svc) createIssue(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -441,7 +441,7 @@ func (s *svc) createIssue(c *zip.Ctx) error {
 }
 
 func (s *svc) listIssues(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -469,7 +469,7 @@ func (s *svc) listIssues(c *zip.Ctx) error {
 }
 
 func (s *svc) getIssue(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -505,7 +505,7 @@ type updateIssueReq struct {
 }
 
 func (s *svc) updateIssue(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -585,7 +585,7 @@ func (s *svc) updateIssue(c *zip.Ctx) error {
 }
 
 func (s *svc) deleteIssue(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -613,10 +613,10 @@ func (s *svc) deleteIssue(c *zip.Ctx) error {
 
 // ---- helpers ----
 
-// tenant resolves the org — the tenant-isolation KEY — for a request, using
+// org resolves the org — the org-isolation KEY — for a request, using
 // c.Org() EXACTLY as SanitizeIdentity minted it from the validated IAM owner
 // claim (HIP-0026). Mirrors clients/crm and clients/prompts.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // keyParam returns the uppercased :key path segment (project keys are stored
 // uppercase; the URL is matched case-insensitively).

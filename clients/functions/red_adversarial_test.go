@@ -9,7 +9,7 @@ import (
 
 // TestRed_OrgKeyExactIsolation is the REGRESSION GUARD for Red HIGH-1 (was
 // TestRed_SanitizeOrgNotInjective + TestRed_CrossTenantViaOrgNormalization,
-// which proved the vuln). The tenant key is now the EXACT validated org, so the
+// which proved the vuln). The org key is now the EXACT validated org, so the
 // collision classes Red exploited — case-fold, punctuation, '.'-vs-'-', 32-char
 // truncation — no longer share a storage bucket. For every pair of DISTINCT org
 // identifiers, a function created under one is invisible AND inaccessible to the
@@ -42,7 +42,7 @@ func TestRed_OrgKeyExactIsolation(t *testing.T) {
 		}
 		_ = json.Unmarshal(body, &listed)
 		if len(listed.Functions) != 0 {
-			t.Errorf("CROSS-TENANT LEAK: attacker %q sees victim %q's data: %+v", attacker, victim, listed.Functions)
+			t.Errorf("CROSS-ORG LEAK: attacker %q sees victim %q's data: %+v", attacker, victim, listed.Functions)
 		}
 		// Attacker cannot GET or DELETE the victim's function.
 		if code, _ := do(t, app, http.MethodGet, "/v1/functions/secret-fn", attacker, nil); code != http.StatusNotFound {
