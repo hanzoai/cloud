@@ -120,6 +120,20 @@ jobs:
           echo "sha_short=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
           echo "Next release: v${version} (git_max='${git_max:-none}' container_max='${cont_max:-none}')"
 
+          # Console-embed cachebust. The console clone+build layer is keyed on this;
+          # prefer hanzoai/console main HEAD so a CONSOLE-ONLY change re-embeds without
+          # needing a cloud commit (cloud-sha alone froze the embed between cloud pushes).
+          # git ls-remote must CLEAR the extraheader actions/checkout installs (it carries
+          # THIS repo's GITHUB_TOKEN, which 404s the cross-repo console lookup); gh is not
+          # on the runner. If resolution yields nothing, fall back to the cloud sha — still
+          # unique per cloud commit, so the embed is never frozen. Either way THIS build
+          # busts (new value) and re-clones console main fresh.
+          console_head="$(git -c 'http.https://github.com/.extraheader=' ls-remote \
+            "https://x-access-token:${GH_PAT}@github.com/hanzoai/console.git" refs/heads/main 2>/dev/null | cut -f1 || true)"
+          cachebust="${console_head:-$GITHUB_SHA}"
+          echo "cachebust=${cachebust}" >> "$GITHUB_OUTPUT"
+          echo "console cachebust: ${cachebust} (console_head='${console_head:-none}')"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -163,7 +177,7 @@ jobs:
           # unique per push) so the embed re-fetches console main HEAD fresh — never the
           # frozen snapshot the persistent BuildKit cache would otherwise serve forever.
           build-args: |
-            CONSOLE_CACHEBUST=${{ github.sha }}
+            CONSOLE_CACHEBUST=${{ steps.ver.outputs.cachebust }}
           # gh_token: BuildKit secret the Dockerfile consumes to fetch private
           # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
           secrets: |
@@ -253,7 +267,7 @@ jobs:
           # SAME cachebust as the smoke build → every layer is a cache hit from step 1
           # and the pushed image is byte-identical to the one the smoke test proved.
           build-args: |
-            CONSOLE_CACHEBUST=${{ github.sha }}
+            CONSOLE_CACHEBUST=${{ steps.ver.outputs.cachebust }}
           secrets: |
             gh_token=${{ secrets.GH_PAT }}
 
