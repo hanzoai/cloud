@@ -827,7 +827,7 @@ require (
 	github.com/hanzoai/commerce v1.46.40
 	github.com/hanzoai/licensing v0.1.1
 	github.com/hanzoai/metrics v0.4.1
-	github.com/hanzoai/o11y v1.5.5
+	github.com/hanzoai/o11y v1.5.6
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
