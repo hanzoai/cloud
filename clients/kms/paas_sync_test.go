@@ -1,4 +1,4 @@
-package kmssvc_test
+package kms_test
 
 // PaaS KMS→Secret sync proofs, against the REAL embedded KMS store + the REAL
 // org-scope guard + the REAL login broker (no mocks of the boundary under test).

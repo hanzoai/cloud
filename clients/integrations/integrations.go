@@ -219,7 +219,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// deps.KMS is the in-process cloud.KMSClient. The interface exposes only
 	// GetSecret/PutSecret/Sign; per-secret Delete + Ready live on the concrete
-	// client, so we type-assert to it exactly as clients/kmssvc does. A non-KMS
+	// client, so we type-assert to it exactly as clients/kms does. A non-KMS
 	// impl (RPC/disabled) leaves this nil and every secret op fails closed.
 	kc, _ := deps.KMS.(*kms.Client)
 
@@ -268,7 +268,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/integrations/:provider/callback", s.callback)
 	app.Post("/v1/integrations/:provider/disconnect", s.disconnect)
 
-	log.Info("integrations mounted",
+	log.Info(
+		"integrations mounted",
 		"providers", len(s.providers),
 		"kmsReady", s.kmsReady(),
 		"domain", s.domain,
@@ -705,7 +706,7 @@ func consoleURL() string {
 
 // validOrg accepts a DNS-1123-ish label. The org is folded into the KMS secret
 // path and the store key, so it is validated strictly at every boundary that
-// reaches custody. Identical rule to clients/kmssvc's tenant boundary (kept local
+// reaches custody. Identical rule to clients/kms's tenant boundary (kept local
 // because that copy is unexported; both mirror the SAME platform org-slug shape).
 func validOrg(org string) bool {
 	if org == "" || len(org) > 63 {

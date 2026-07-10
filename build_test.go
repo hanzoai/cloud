@@ -6,6 +6,11 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients"
+
+	// Blank import registers the kms subsystem's client factory (init) into cloud,
+	// so BuildDeps can build the in-process deps.KMS below. cloud itself never
+	// imports clients/kms (no cloud⇄kms cycle); this external test can.
+	_ "github.com/hanzoai/cloud/clients/kms"
 )
 
 // TestBuildDeps_EnabledLeavesNil verifies that BuildDeps leaves an enabled
@@ -28,7 +33,7 @@ func TestBuildDeps_EnabledLeavesNil(t *testing.T) {
 }
 
 // TestBuildDeps_KMSEnabledIsInProcess verifies the HIP-0106 "embed KMS in cloud"
-// contract: when the kms subsystem (kmssvc) is enabled, deps.KMS is a live
+// contract: when the kms subsystem is enabled, deps.KMS is a live
 // in-process client (never nil, never a disabled stub) so other subsystems get a
 // working KMS via direct Go dispatch with no RPC. Absent a master key it still
 // resolves (health-only, fail-closed) — the point is that deps.KMS is populated.
@@ -42,7 +47,7 @@ func TestBuildDeps_KMSEnabledIsInProcess(t *testing.T) {
 	deps := cloud.BuildDeps(cfg)
 
 	if deps.KMS == nil {
-		t.Fatal("deps.KMS: enabled kmssvc must give an in-process client, got nil")
+		t.Fatal("deps.KMS: enabled kms must give an in-process client, got nil")
 	}
 	// It must NOT be the fail-closed disabled stub — that stub returns IsDisabled
 	// errors; an in-process client (no master key) returns a master-key error.

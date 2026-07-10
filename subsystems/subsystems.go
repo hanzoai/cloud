@@ -27,8 +27,8 @@ package subsystems
 // Keeping those separate preserves blast-radius isolation and independent
 // scaling for the security/edge tier.
 //
-// KMS is embedded in-process (clients/kmssvc mounts /v1/kms/* backed by
-// clients/kms, replacing the legacy Infisical fork). Its master key is
+// KMS is embedded in-process (clients/kms mounts /v1/kms/* backed by its own
+// in-process luxfi/kms SecretStore, replacing the legacy Infisical fork). Its master key is
 // injected by the operator via a K8s Secret env; absent it the subsystem serves
 // fail-closed health-only.
 //
@@ -53,12 +53,14 @@ import (
 	// in-process luxfi/kms SecretStore under CLOUD_DATA_DIR. Registered as id "kms"
 	// (order 10) with cloud.HealthOwner, so its real /v1/kms/health probe is not
 	// shadowed by the generic liveness route; secret ops fail closed until the
-	// operator injects CLOUD_KMS_MASTER_KEY_REF. (The package dir stays clients/kmssvc
-	// so its name doesn't collide with the clients/kms library it embeds.)
+	// operator injects CLOUD_KMS_MASTER_KEY_REF. One package holds both the KMS
+	// library (the in-process cloud.KMSClient) and this /v1/kms/* REST surface; it
+	// registers the client factory build.go calls, so cloud never imports it back.
 	_ "github.com/hanzoai/cloud/clients/featureflags" // order 9 — Insights feature-flag evaluation seam (no routes; the hot value plane clients/admin + subsystems read)
-	_ "github.com/hanzoai/cloud/clients/kmssvc" // order 10 — /v1/kms/*
-	_ "github.com/hanzoai/cloud/clients/pubsub" // order 5 — embedded NATS :4222 + JetStream
-	_ "github.com/hanzoai/cloud/clients/kafka"  // order 6 — embedded Kafka adaptor :9092
+	_ "github.com/hanzoai/cloud/clients/kafka"        // order 6 — embedded Kafka adaptor :9092
+	_ "github.com/hanzoai/cloud/clients/kms"          // order 10 — /v1/kms/*
+	_ "github.com/hanzoai/cloud/clients/pubsub"       // order 5 — embedded NATS :4222 + JetStream
+	_ "github.com/hanzoai/cloud/clients/pubsub"       // order 5 — embedded NATS :4222 + JetStream
 
 	// Embedded Base app engine + viral waitlist (HIP-0106 base fold): mounts
 	// /v1/waitlist/* (join/status/boost/referrals/points) served in-process off
@@ -80,23 +82,28 @@ import (
 	// is the enable-list gate — do NOT add "iam" to the live --enable until IAM
 	// config is present + the fold is verified (staged cutover from the standalone
 	// iam pod). See clients/iam.
-	_ "github.com/hanzoai/cloud/clients/iam"  // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
+	_ "github.com/hanzoai/cloud/clients/iam"     // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
 	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
-	_ "github.com/hanzoai/cloud/clients/auditlog"  // order 144 — /v1/audit (org-scoped audit trail; per-org twin of /v1/admin/audit)
-	_ "github.com/hanzoai/cloud/clients/bot"       // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
-	_ "github.com/hanzoai/cloud/clients/eval"      // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/exec"      // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
-	_ "github.com/hanzoai/cloud/clients/gatewaysvc" // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
-	_ "github.com/hanzoai/cloud/clients/plan"      // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/plugin"    // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
-	_ "github.com/hanzoai/cloud/clients/pricing"   // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/auditlog"     // order 144 — /v1/audit (org-scoped audit trail; per-org twin of /v1/admin/audit)
+	_ "github.com/hanzoai/cloud/clients/bot"          // order 143 — /v1/bot/* (reverse proxy → bot-gateway)
 	_ "github.com/hanzoai/cloud/clients/entitlements" // order 139 — /v1/orgs/:org/entitlements (per-org product enablement; commerce-gated adds; console paid-product sidebar)
+	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
+	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
+	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
+	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
+	_ "github.com/hanzoai/cloud/clients/gatewaysvc"   // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
+	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
+	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
+	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
+	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
+	_ "github.com/hanzoai/cloud/clients/pricing"      // order 112 — /v1/pricing/*
+	_ "github.com/hanzoai/cloud/clients/pricing"      // order 112 — /v1/pricing/*
 	_ "github.com/hanzoai/cloud/clients/settings"     // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
-	_ "github.com/hanzoai/cloud/clients/websearch" // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
-	_ "github.com/hanzoai/cloud/clients/world"     // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
+	_ "github.com/hanzoai/cloud/clients/websearch"    // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
+	_ "github.com/hanzoai/cloud/clients/world"        // order 142 — /v1/world/* (GDELT + allowlisted RSS news data plane, org/project-scoped)
 
 	// S3 object-storage DATA plane: the org-scoped /v1/s3 file manager (buckets +
 	// objects) over the shared SeaweedFS S3 gateway. Order 118 (< provisioning's
@@ -255,7 +262,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/sbom"      // order 137 — /v1/sbom/* (GLOBAL SBOM datastore on ClickHouse: CI ingest by image digest, console resolve by digest/ref)
-	_ "github.com/hanzoai/cloud/clients/tasks"   // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
+	_ "github.com/hanzoai/cloud/clients/tasks"     // order 147 — /v1/tasks/*, /_/tasks/* (Hanzo Tasks HTTP+UI on the shared in-process durable engine)
 	_ "github.com/hanzoai/cloud/clients/templates" // order 129 — /v1/templates/* (starter-kit gallery, read-only)
 	_ "github.com/hanzoai/cloud/clients/usage"     // order 131 — /v1/usage/summary (org-scoped unified footprint: cost roll-up + LLM totals)
 	_ "github.com/hanzoai/cloud/clients/visor"     // order 133 — /v1/machines/*,/v1/gpus/*,/v1/clusters/* (compute → Visor)
