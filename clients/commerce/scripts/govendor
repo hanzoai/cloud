@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+SDKPATH="$( cd "$(dirname "$0")" ; pwd -P )"
+cd $SDKPATH/gopath/src/hanzo.ai
+$SDKPATH/gopath/bin/govendor $@

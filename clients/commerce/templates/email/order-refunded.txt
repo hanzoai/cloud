@@ -1,0 +1,33 @@
+
+
+ Your refunded order.
+
+ View this email in your browser ({{archive}})
+
+ 
+** YOUR ORDER HAS BEEN REFUNDED!
+------------------------------------------------------------
+
+We're sorry this happened. This email is to confirm that we've refunded your order as you've requested.
+
+Do not hesitate to reach out to us with any questions regarding your order at{{customerserviceemail}}.
+
+ 
+
+============================================================
+
+ ** (http://www.twitter.com/)
+
+ ** (http://www.facebook.com)
+
+ ** (http://mailchimp.com)
+
+ _Copyright © {{currentyear}} {{company}}, All rights reserved._
+
+OUR MAILING ADDRESS IS:
+{{listaddresshtml}}
+
+Want to change how you receive these emails?
+You can ** update your preferences ({{updateprofile}})
+
+

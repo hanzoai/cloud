@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block body %}
+<style>
+input[type="button"], input[type="button"]:focus, input[type="button"]:active,
+button, button:focus, button:active {
+    /* Remove all decorations to look like normal text */
+    background: none;
+    border: none;
+    display: inline;
+    font: inherit;
+    margin: 0;
+    padding: 0;
+    outline: none;
+    outline-offset: 0;
+    /* Additional styles to look like a link */
+    color: blue;
+    cursor: pointer;
+    text-decoration: underline;
+}
+/* Remove extra space inside buttons in Firefox */
+input[type="button"]::-moz-focus-inner,
+button::-moz-focus-inner {
+    border: none;
+    padding: 0;
+}
+</style>
+
+<h3>access token api</h3>
+<ul>
+    {% with organization.Id as orgId %}
+    <li>GET <a href="{{ urlFor("api", "/access/live/", orgId) }}?email={{ email }}&password={{ password }}">{{ urlFor("api", "/access/live/", orgId) }}</a></li>
+    <li>GET <a href="{{ urlFor("api", "/access/test/", orgId) }}?email={{ email }}&password={{ password }}">{{ urlFor("api", "/access/test/", orgId) }}</a></li>
+    <li>
+        <form method="POST" action="{{ urlFor("api", "/access/delete/", orgId) }}?_method=DELETE">
+            DELETE <button type="submit">{{ urlFor("api", "/access/delete/", orgId) }}</button>
+        </form>
+    </li>
+    {% endwith %}
+</ul>
+
+<h3>charge / auth and capture api</h3>
+<ul>
+  <li>POST <a href="#" class="charge">/api/charge</a></li>
+  <li>POST <a href="#" class="authorize">/api/authorize</a></li>
+  <li>POST <a href="#" class="capture">{{ urlFor("api", orderEndpoint.UrlWithId(), "/capture") }}</a></li>
+</ul>
+
+<h3>model api</h3>
+{% for endpoint in endpoints %}
+<h4>{{ endpoint.prefix }}{{ endpoint.kind }} ({{ endpoint.EntityCount() }})</h4>
+<ul>
+    <li>GET  <a href="{{ endpoint.Url() }}/">{{ endpoint.Url() }}</a></li>
+    <li>GET  <a href="{{ endpoint.UrlWithId() }}">{{ endpoint.UrlWithId() }}</a></li>
+    <li>POST <a href="{{ endpoint.Url() }}">{{ endpoint.Url() }}</a></li>
+    <li>PUT  <a href="{{ endpoint.UrlWithId() }}">{{ endpoint.UrlWithId() }}</a></li>
+    <li>
+        <form method="POST" action="{{ endpoint.UrlWithId() }}?_method=DELETE">
+         DELETE <button type="submit">{{ endpoint.UrlWithId() }}</button>
+        </form>
+    </li>
+</ul>
+{% endfor %}
+
+<script type="text/javascript" src="{{ urlFor("/js/jquery.min.js") }}"></script>
+<script type="text/javascript" src="{{ urlFor("/v1.js") }}"></script>
+<script type="text/javascript" src="{{ urlFor("/js/api.js") }}"></script>
+<script>
+    Crowdstart.endpoint = "{{ urlFor("api") }}"
+    Crowdstart.setKey("{{ token }}")
+</script>
+{% endblock %}

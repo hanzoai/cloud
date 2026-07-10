@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: commerce-store
+  namespace: hanzo
+  labels:
+    app: commerce-store
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: commerce-store
+  template:
+    metadata:
+      labels:
+        app: commerce-store
+    spec:
+      containers:
+        - name: store
+          image: ghcr.io/hanzoai/commerce-store:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: HANZO_COMMERCE_API_URL
+              value: "https://api.commerce.hanzo.ai"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: commerce-store
+  namespace: hanzo
+spec:
+  selector:
+    app: commerce-store
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: commerce-store
+  namespace: hanzo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - store.commerce.hanzo.ai
+      secretName: commerce-store-tls
+  rules:
+    - host: store.commerce.hanzo.ai
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: commerce-store
+                port:
+                  number: 80
