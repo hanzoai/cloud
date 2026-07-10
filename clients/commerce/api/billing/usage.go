@@ -212,6 +212,12 @@ func RecordUsage(c *gin.Context) {
 	// project" collapse to the same "" scope the org-wide cap counts.
 	trans.Project = spendalert.NormalizeProject(req.Project)
 	trans.Service = strings.TrimSpace(req.Service)
+	// Attribute the debit to the BillingAccount funding this project (GCP-style):
+	// resolved SERVER-SIDE from the org's ProjectBinding / default account, never a
+	// client field. "" = the org-wide default pool (byte-preserving the pre-account
+	// behavior). This is what makes an account's balance + period spend summable and
+	// keeps a shared account's projects drawing one funding source.
+	trans.AccountId = resolveAccountId(db, trans.Project)
 	trans.Metadata = Map{
 		"model":            req.Model,
 		"provider":         req.Provider,
