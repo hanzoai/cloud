@@ -151,7 +151,7 @@ func byoStatus(lastHeartbeat string, now time.Time) string {
 // caller's tenant. The Machines and GPUs pages fold the same data in via the unions
 // below; this is the canonical list a fleet-specific view (or the CLI's `status`)
 // reads.
-func (s *svc) listFleetWorkers(c *zip.Ctx) error {
+func listFleetWorkers(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
