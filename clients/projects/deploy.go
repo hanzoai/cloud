@@ -56,7 +56,7 @@ func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
 //     then calls .../deployments/:id/complete to flip it live. This is the
 //     "link repo → build (CI, never local) → deploy" path for large sites.
 func (s *svc) deploy(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -230,9 +230,9 @@ type completeReq struct {
 // completeDeployment is the CI completion hook for the git path: after CI syncs
 // the built site to S3 it flips the queued deployment to live (or error). It is
 // org-scoped like every other route; CI authenticates with an org-scoped token
-// through the gateway, so the X-Org-Id binds the call to the right tenant.
+// through the gateway, so the X-Org-Id binds the call to the right org.
 func (s *svc) completeDeployment(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -290,7 +290,7 @@ func (s *svc) completeDeployment(c *zip.Ctx) error {
 }
 
 func (s *svc) listDeployments(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -313,7 +313,7 @@ func (s *svc) listDeployments(c *zip.Ctx) error {
 }
 
 func (s *svc) getDeployment(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

@@ -13,8 +13,8 @@
 //     vector table (the sqlite-vec `vec0` drop-in seam).
 //
 // Storage is ONE SQLite file per org at {DataDir}/orgs/{slug}/code.db (HIP-0302):
-// the tenant boundary is PHYSICAL — a query in one org's file can never reach
-// another org's rows. Every request resolves its org through principal.Tenant
+// the org boundary is PHYSICAL — a query in one org's file can never reach
+// another org's rows. Every request resolves its org through principal.Org
 // (the ONE gate): no validated principal ⇒ 403, and a client X-Org-Id is never
 // trusted.
 //
@@ -58,7 +58,7 @@ const (
 
 // service is the process-wide subsystem: the shared embedder + synthesizer and a
 // lazily-opened, cached per-org store. It holds no org in a field — the org is a
-// parameter on every call, so one service serves all tenants and an org can never
+// parameter on every call, so one service serves all orgs and an org can never
 // be captured from stale state.
 type service struct {
 	dataDir string
@@ -66,10 +66,10 @@ type service struct {
 	synth   Synthesizer
 	log     luxlog.Logger
 
-	// stores is the shared per-tenant SQLite cache: one org-scoped code.db per
-	// org, opened once via cloud.TenantDB. dataDir is retained only so the
+	// stores is the shared per-org SQLite cache: one org-scoped code.db per
+	// org, opened once via cloud.OrgDB. dataDir is retained only so the
 	// physical path convention stays inspectable (tests) — the cache owns opens.
-	stores *cloud.TenantStore[*Store]
+	stores *cloud.OrgStore[*Store]
 }
 
 var mounted *service
@@ -90,7 +90,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		embed:   newEmbedder(deps.AI, ""),
 		synth:   newSynth(deps.AI, deps.AIDefaultModel),
 		log:     deps.Logger.New("subsystem", "code"),
-		stores:  cloud.NewTenantStore(deps.DataDir, "code", openStore),
+		stores:  cloud.NewOrgStore(deps.DataDir, "code", openStore),
 	}
 	mounted = s
 
@@ -120,7 +120,7 @@ func shutdown(_ context.Context) error {
 }
 
 // storeFor lazily opens (and caches) the org's SQLite file through the shared
-// cloud.TenantStore cache. The physical path is {DataDir}/orgs/{orgSlug}/code.db
+// cloud.OrgStore cache. The physical path is {DataDir}/orgs/{orgSlug}/code.db
 // (org-scoped; code carries no project axis), where orgSlug = cloud.SanitizeOrg,
 // the codebase's ONE injective org-slug normalizer (shared with S3/KMS/knowledge),
 // so two distinct orgs never fold onto one file.
@@ -136,11 +136,11 @@ func (s *service) engineFor(org, project string) (*engine, error) {
 	return &engine{store: st, embed: s.embed, org: org, project: project}, nil
 }
 
-// tenant resolves the org for a request, but ONLY for a validated principal
+// org resolves the org for a request, but ONLY for a validated principal
 // (c.User() set by SanitizeIdentity from a verified credential). An unvalidated
-// or org-less request gets no tenant, so the caller returns 403 — never another
+// or org-less request gets no org, so the caller returns 403 — never another
 // org's code. This is the SAME gate clients/eval + clients/knowledge use.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // ── HTTP shapes ──────────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ type askReq struct {
 
 // handleSearch is the unified hybrid search entry point.
 func (s *service) handleSearch(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -219,7 +219,7 @@ func (s *service) handleSearch(c *zip.Ctx) error {
 
 // handleContext is THE agent primitive: a budget-packed context bundle.
 func (s *service) handleContext(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -255,7 +255,7 @@ func (s *service) handleContext(c *zip.Ctx) error {
 
 // handleAsk is the cited RAG answer over the org's index.
 func (s *service) handleAsk(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -298,7 +298,7 @@ func (s *service) handleAsk(c *zip.Ctx) error {
 // handleIndex (re)indexes a repo for the caller's org, incrementally (unchanged
 // files are skipped by content hash).
 func (s *service) handleIndex(c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -429,7 +429,7 @@ func clampBudget(n int) int {
 }
 
 // cleanRepo trims + bounds a repo label. It is a stored column value (never a
-// filesystem path — the org file already isolates the tenant), so it needs only
+// filesystem path — the org file already isolates the org), so it needs only
 // length bounding and, when required, non-emptiness.
 func cleanRepo(repo string, required bool) (string, error) {
 	repo = strings.TrimSpace(repo)

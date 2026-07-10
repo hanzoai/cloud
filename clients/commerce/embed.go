@@ -41,7 +41,7 @@ type Embedded struct {
 	cfg EmbedConfig
 	app *App
 	// brand is the deployment's white-label brand, surfaced in the in-process
-	// commerce.Client's TenantConfig. Set by Mount; empty for a bare Embed
+	// commerce.Client's OrgConfig. Set by Mount; empty for a bare Embed
 	// (the standalone/legacy boot never serves the inter-subsystem client).
 	brand string
 }

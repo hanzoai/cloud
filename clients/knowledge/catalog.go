@@ -56,7 +56,7 @@ type catalogEntry struct {
 func (s *svc) listCatalog(c *zip.Ctx) error {
 	// A valid principal is required (the catalog is only served to authenticated
 	// callers), though the catalog content itself is org-independent.
-	if _, ok := principal.Tenant(c); !ok {
+	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
 	out := make([]catalogEntry, 0, len(providers))

@@ -216,7 +216,7 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 // money (that is the customer's commerce balance at /v1/billing/balance). Policy is
 // read-only here; only global-admin sets it.
 func (s *svc) myTreasury(c *zip.Ctx) error {
-	if _, ok := principal.Tenant(c); !ok {
+	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
 	}
 	rep, err := s.record.Snapshot(c.Context())
@@ -241,7 +241,7 @@ type accountView struct {
 // Honest empty until a tenant has ledger postings (the commerce→ledger projection is
 // the rebrand/datastore agents' concurrent work; this contract is stable for them).
 func (s *svc) myAccounts(c *zip.Ctx) error {
-	tenant, ok := principal.Tenant(c)
+	tenant, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view accounts")
 	}

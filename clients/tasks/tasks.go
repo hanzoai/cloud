@@ -100,7 +100,7 @@ func (s *surface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //     route cloud registers before MountAll, which wins ahead of this mux.)
 //   - the data surface (the /v1/tasks/ catch-all, /v1/tasks/mcp, /v1/tasks/events)
 //     is gated: a request without a validated principal is refused, exactly as the
-//     rest of the cloud data plane (clients/principal.Tenant) and tasksd's
+//     rest of the cloud data plane (clients/principal.Org) and tasksd's
 //     RequireIdentity(require=true) refuse it.
 func httpMux(srv *tasks.Embedded) http.Handler {
 	mux := http.NewServeMux()
