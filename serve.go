@@ -84,6 +84,16 @@ func Serve(enable []string) error {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 
+	// Markdown content negotiation. Registered here — outermost of the business
+	// chain, just inside Recover/RequestID — so its post-Continue transform sees
+	// the FINAL response body and re-serializes it via zap-proto/md when the
+	// caller asked for markdown (Accept: text/markdown or ?format=md). JSON stays
+	// the default for machines; cfg.MarkdownDefaultPrefixes lets designated
+	// agent endpoints (/v1/code/, /v1/agents/…) default to markdown. Touches NO
+	// handler and fails safe (a render error leaves the JSON intact). See
+	// middleware_markdown.go.
+	app.Use(MarkdownNegotiation(cfg.MarkdownDefaultPrefixes))
+
 	// Request tracing. Sits right after RequestID (so the span carries the
 	// request_id) and BEFORE identity/audit/billing/handlers, so the whole
 	// authenticated pipeline nests under one span and the span CONTEXT it writes
