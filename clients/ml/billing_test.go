@@ -60,25 +60,28 @@ func (b *billDouble) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-func newBilledMLSvc(t *testing.T, commerceURL string) *svc {
+func newBilledMLSvc(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
 	log := luxlog.New("module", "mlbilltest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
 	if err != nil {
 		t.Fatalf("metering.New: %v", err)
 	}
-	return &svc{
-		log:  log,
-		hc:   &http.Client{},
-		dyn:  dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
-		bill: cloud.NewResourceMeter(cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}, "compute"),
+	deps := cloud.Deps{Logger: log, Metering: m, Env: "mainnet"}
+	return &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "ml"),
+		State: state{
+			hc:   &http.Client{},
+			dyn:  dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+			bill: cloud.NewResourceMeter(deps, "compute"),
+		},
 	}
 }
 
-func postTrainJob(t *testing.T, s *svc, org string) *http.Response {
+func postTrainJob(t *testing.T, s *cloud.Service[state], org string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/train/jobs", s.create(jobKind))
+	app.Post("/v1/train/jobs", create(s, jobKind))
 	body := `{"name":"job1","spec":{"runtime":"torch"}}`
 	req, _ := http.NewRequest("POST", "/v1/train/jobs", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
