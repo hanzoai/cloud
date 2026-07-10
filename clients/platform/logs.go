@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -136,13 +137,13 @@ func podTime(p corev1.Pod) time.Time {
 // read) — the caller uses that to set the response `source`, so `source` reflects
 // real content, not merely the existence of a build row. The summary line is always
 // real recorded state; a missing live tail is stated honestly, never faked.
-func (s *svc) buildLogContext(ctx context.Context, d Deployment, b Build, lines []string) (out []string, streamed bool) {
+func buildLogContext(s *cloud.Service[state], ctx context.Context, d Deployment, b Build, lines []string) (out []string, streamed bool) {
 	if b.JobName == "" {
 		return lines, false
 	}
 	lines = append(lines, fmt.Sprintf("build %s status=%s job=%s", b.ID, b.Status, b.JobName))
-	if logs, ok := s.k8s.buildLogs(ctx, b.JobName); ok {
-		lines = append(lines, "── build logs "+"("+s.k8s.buildNS+"/"+b.JobName+") ──", logs)
+	if logs, ok := s.State.k8s.buildLogs(ctx, b.JobName); ok {
+		lines = append(lines, "── build logs "+"("+s.State.k8s.buildNS+"/"+b.JobName+") ──", logs)
 		return lines, true
 	}
 	lines = append(lines, "(build pod logs are not available — the Job pod has not started yet or its TTL elapsed)")
