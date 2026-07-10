@@ -63,6 +63,7 @@ import (
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/commerce"
+	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/do"
@@ -202,6 +203,12 @@ func Wire() []cloud.MountSpec {
 		{Name: "templates", Mount: cloud.Typed(templates.Mount)},
 		{Name: "framework", Mount: cloud.Typed(framework.Mount), Shutdown: ctxShutdown(framework.Shutdown)},
 		{Name: "knowledge", Mount: cloud.Typed(knowledge.Mount)},
+		// Marketing content loop /v1/content/* (generate → CMS → transition → publish).
+		// After framework (its DocType store the ops read/write) + knowledge (the sibling
+		// framework lane); before the AI /v1/* catch-all so /v1/content/* resolves here.
+		// CRUD/tenancy/install are framework's; this adds the board, lifecycle transition,
+		// and the generate/publish orchestration over the zen5 + studio + social edges.
+		{Name: "content", Mount: cloud.Typed(content.Mount), Shutdown: ctxShutdown(content.Shutdown)},
 		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
 		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
 		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
