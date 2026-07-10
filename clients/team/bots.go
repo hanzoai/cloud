@@ -38,10 +38,10 @@ type botView struct {
 }
 
 // list returns the org's bot members — the org's agents projected as the workspace
-// Employees they become. Org-scoped via principal.Tenant (the VALIDATED IAM owner
+// Employees they become. Org-scoped via principal.Org (the VALIDATED IAM owner
 // claim), NEVER a client header.
 func (b *botsBridge) list(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("validated org required")
 	}
@@ -63,9 +63,9 @@ func (b *botsBridge) list(c *zip.Ctx) error {
 // sync re-projects the org's agents as Employees into EVERY workspace of the org
 // (idempotent). Admin only: mutating a workspace's roster requires the
 // gateway-minted admin flag (never client-forgeable). Org-scoped via
-// principal.Tenant.
+// principal.Org.
 func (b *botsBridge) sync(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("validated org required")
 	}

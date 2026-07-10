@@ -93,7 +93,7 @@ func hasFeature(features []string, want string) bool {
 }
 
 // TestInProcessClient exercises the REAL in-process commerce.Client end-to-end:
-// GetTenantConfig, a genuinely-entitled org (Active:true with the plan's real license
+// GetOrgConfig, a genuinely-entitled org (Active:true with the plan's real license
 // features), a resolvable-but-not-entitled org (Active:false, no error — never a
 // fabricated grant), and the fail-closed path when commerce is not co-resident. It
 // boots the embedded commerce once so the process-global datastore stays this test's
@@ -105,12 +105,12 @@ func TestInProcessClient(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("GetTenantConfig_echoes_org_and_brand", func(t *testing.T) {
-		tc, err := client.GetTenantConfig(ctx, "acme")
+		tc, err := client.GetOrgConfig(ctx, "acme")
 		if err != nil {
-			t.Fatalf("GetTenantConfig: %v", err)
+			t.Fatalf("GetOrgConfig: %v", err)
 		}
 		if tc == nil || tc.OrgID != "acme" || tc.Brand != "hanzo" {
-			t.Fatalf("GetTenantConfig = %+v, want {OrgID:acme Brand:hanzo}", tc)
+			t.Fatalf("GetOrgConfig = %+v, want {OrgID:acme Brand:hanzo}", tc)
 		}
 	})
 
