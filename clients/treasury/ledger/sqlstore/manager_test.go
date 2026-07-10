@@ -121,7 +121,7 @@ func TestTenantSlug_InjectiveAndSafe(t *testing.T) {
 		t.Fatal("a customer tenant named \"house\" resolved to the reserved house slug")
 	}
 
-	// Empty / over-length tenants are refused (defense-in-depth over principal.Tenant).
+	// Empty / over-length tenants are refused (defense-in-depth over principal.Org).
 	if _, err := tenantSlug(""); err == nil {
 		t.Fatal("tenantSlug(\"\") must error")
 	}

@@ -30,7 +30,7 @@ func mountApp(t *testing.T) *zip.App {
 }
 
 // do runs a JSON request through the Fiber test harness. A non-empty org sets
-// BOTH the tenant header and the validated-principal header (principal.Tenant
+// BOTH the tenant header and the validated-principal header (principal.Org
 // gates on X-User-Id), mirroring clients/git's test helper.
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()

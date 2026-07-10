@@ -1,8 +1,8 @@
 package cloud
 
-// V6 (the activation blocker) — the identity validator must accept a per-tenant
-// PaaS-KMS sync machine token: a client_credentials JWT whose aud is the tenant's
-// own IAM application clientId "<owner>-platform-kms" (a per-tenant value, NEVER in
+// V6 (the activation blocker) — the identity validator must accept a per-org
+// PaaS-KMS sync machine token: a client_credentials JWT whose aud is the org's
+// own IAM application clientId "<owner>-platform-kms" (a per-org value, NEVER in
 // CLOUD_JWT_AUDIENCES) — but ONLY when that audience is bound to the token's OWN
 // owner claim. Before the fix the machine token failed the audience check,
 // SanitizeIdentity resolved anonymous, and the /v1/kms guard 403'd it, so the sync

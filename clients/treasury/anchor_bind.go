@@ -22,7 +22,7 @@ func (s *svc) adminBindAnchor(c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}

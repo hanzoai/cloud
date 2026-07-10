@@ -47,11 +47,11 @@ type Org struct {
 	Name string
 }
 
-// DBHandle is the per-tenant database handle Base hands out.
+// DBHandle is the per-org database handle Base hands out.
 type DBHandle interface{ Close() error }
 
-// TenantConfig is the commerce-served tenant settings struct.
-type TenantConfig struct {
+// OrgConfig is the commerce-served org settings struct.
+type OrgConfig struct {
 	OrgID string
 	Brand string
 }
@@ -186,12 +186,12 @@ type BaseClient interface {
 
 // CommerceClient is the inter-subsystem interface to Commerce.
 type CommerceClient interface {
-	GetTenantConfig(ctx context.Context, orgID string) (*TenantConfig, error)
+	GetOrgConfig(ctx context.Context, orgID string) (*OrgConfig, error)
 	// CheckEntitlement reports whether org `orgID` holds an active
 	// entitlement for licensed product `productID`, and returns the plan's
 	// flat license-features per the toLicenseFeatures vocab contract. Used
 	// by the licensing subsystem to gate + scope token issuance. orgID is
-	// the tenant the buyer acts as (X-Org-Id); when callers only have a
+	// the org the buyer acts as (X-Org-Id); when callers only have a
 	// user subject they pass it through here and commerce resolves the
 	// owning org.
 	CheckEntitlement(ctx context.Context, orgID, productID string) (*LicenseEntitlement, error)

@@ -122,7 +122,7 @@ func New(cfg Config) (*Host, error) {
 // transaction, injects the RW-Base host globals bound to it, and calls
 // globalThis.handle. It commits on a <400 non-throwing response and rolls back
 // otherwise. tenant MUST be a validated principal's org (the caller resolves it,
-// e.g. via clients/principal.Tenant) — the binding does not itself authenticate.
+// e.g. via clients/principal.Org) — the binding does not itself authenticate.
 func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Response, error) {
 	db, release, err := h.stores.acquire(ctx, tenant)
 	if err != nil {

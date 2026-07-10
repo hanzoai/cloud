@@ -31,7 +31,7 @@ func doScoped(t *testing.T, app *zip.App, method, path, org, project string, bod
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
