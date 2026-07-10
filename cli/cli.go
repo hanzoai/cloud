@@ -64,6 +64,8 @@ var controlCommands = map[string]string{
 	"config":   "view/edit ~/.hanzo/config preferences",
 	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
 	"gpu":      "connect this machine's GPU to the Hanzo cloud fleet (connect/status/disconnect)",
+	"engine":   "run a local hanzo-engine (OpenAI + Anthropic model server)",
+	"runner":   "run this machine as a JIT CI runner for your org (GitHub Actions)",
 }
 
 // IsControlVerb reports whether sub is a client-mode command (and therefore
@@ -393,6 +395,7 @@ func newRootCmd() *cobra.Command {
 		newSecurityCmd(envOf),
 		newGPUCmd(envOf, &f),
 		newEngineCmd(envOf, &f),
+		newRunnerCmd(envOf, &f),
 	)
 	return root
 }
