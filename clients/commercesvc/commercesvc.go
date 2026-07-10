@@ -45,6 +45,7 @@ import (
 	"github.com/hanzoai/cloud"
 	commerce "github.com/hanzoai/cloud/clients/commerce"
 	api "github.com/hanzoai/cloud/clients/commerce/api/api"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
 )
 
@@ -134,6 +135,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// and the standalone surface expose identical routes. See commerce cmd/commerce.
 	apiGroup := embedded.App().Router.Group("/v1")
 	api.Route(apiGroup)
+
+	// Publish this handler (now carrying the full /v1/billing + /v1/commerce surface)
+	// as THE in-process commerce endpoint. Every co-resident subsystem that used to
+	// HTTP-proxy the standalone commerce (clients/{billing,account,admin,referrals,
+	// authors,affiliates,usage} + the metering gate) now dispatches its S2S request
+	// straight into this gin engine — no socket to commerce.hanzo.svc:8001 — which is
+	// what lets that standalone be retired (task #111). Behaviour-preserving: same
+	// request, same headers, same body/status bytes; only the transport changes.
+	commerceinproc.SetHandler(handler)
 
 	mountHandler(app, handler)
 
