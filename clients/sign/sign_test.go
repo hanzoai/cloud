@@ -82,13 +82,13 @@ func signaturePNG(t *testing.T) string {
 // subsystems (captable) use for their end-to-end wire proofs.
 func mountApp(t *testing.T) (*zip.App, *memVFS) {
 	t.Helper()
-	_ = shutdown(nil) // reset process-global state between tests
+	_ = Shutdown(nil) // reset process-global state between tests
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	vfs := newMemVFS()
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	t.Cleanup(func() { _ = shutdown(nil) })
+	t.Cleanup(func() { _ = Shutdown(nil) })
 	return app, vfs
 }
 

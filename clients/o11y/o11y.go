@@ -174,7 +174,7 @@ func mountRuntime(deps cloud.Deps) error {
 // name. Every cloud-native /v1/o11y/* route is registered here — inside this one
 // order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
 // in-order match gives the specific routes precedence over the runtime proxy.
-func mountO11y(app any, deps cloud.Deps) error {
+func MountO11y(app any, deps cloud.Deps) error {
 	a, ok := app.(*zip.App)
 	if !ok {
 		return fmt.Errorf("o11y.Mount: app is %T, want *zip.App", app)
@@ -202,7 +202,7 @@ func mountO11y(app any, deps cloud.Deps) error {
 // connections, in REVERSE mount order — trace sink, OTLP collector, event-ingest
 // Datastore — so buffered spans/logs/rows flush before exit. Best-effort: the
 // first error is returned but every teardown still runs. Idempotent and nil-safe.
-func shutdownO11y(ctx context.Context) error {
+func ShutdownO11y(ctx context.Context) error {
 	var firstErr error
 	if err := shutdownTraceSink(ctx); err != nil && firstErr == nil {
 		firstErr = err
@@ -214,14 +214,4 @@ func shutdownO11y(ctx context.Context) error {
 		firstErr = err
 	}
 	return firstErr
-}
-
-func init() {
-	// ONE public concept. Order 69 (< the hanzoai/o11y wildcard at 70) so every
-	// specific /v1/o11y/* route mountO11y registers wins Fiber's in-order match.
-	// HealthOwner: the module's order-70 co-registration of the same `o11y` name
-	// already carries the generic /v1/o11y/health, so this entry opts out to keep
-	// exactly one health route (never a duplicate). RegisterWithShutdown so the
-	// write-plane Datastore/collector connections flush on graceful stop.
-	cloud.RegisterWithShutdown("o11y", 69, mountO11y, shutdownO11y, cloud.HealthOwner)
 }

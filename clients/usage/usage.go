@@ -90,10 +90,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/usage/analytics", cloud.Handle(s, analytics))
 }
 
-func init() {
-	cloud.Register("usage", 131, cloud.Typed(Mount))
-}
-
 // summary answers GET /v1/usage/summary. ?range=24h|7d|30d|custom (+ ?start/?end
 // for custom) bounds the window — the SAME grammar as /v1/analytics/* (one window
 // grammar, no drift). Composes commerce spend + warehouse LLM totals, each

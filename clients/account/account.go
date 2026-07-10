@@ -174,16 +174,6 @@ func routesBridge(s *cloud.Service[state], app *zip.App) {
 	app.Delete("/v1/commerce/*", requireCSRF(s, cloud.Handle(s, commerceData)))
 }
 
-// init registers the two subsystems. The ordering constraint forces the split (see the
-// package doc): the SPECIFIC self-service routes (account, 48) must win over the IAM (50)
-// + commerce (100) wildcards, while the CATCH-ALL data bridges (account-bridge, 122) must
-// sit AFTER clients/billing (121) + the commerce embed. Neither owns its own health probe
-// — the generic /v1/<name>/health liveness route covers both.
-func init() {
-	cloud.Register("account", 48, cloud.Typed(MountAccount))
-	cloud.Register("account-bridge", 122, cloud.Typed(MountBridge))
-}
-
 // ── caller resolution (the tenancy boundary) ─────────────────────────────────
 
 // caller is the signed-in user resolved from the VALIDATED identity headers. id is

@@ -70,18 +70,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Put("/v1/gateway/config", cloud.Handle(s, put))
 }
 
-func init() {
-	// Order 139: after settings (138), before the AI /v1/* catch-all (150), so the
-	// explicit /v1/gateway/* routes register ahead of the wildcard.
-	cloud.Register("gateway", 139, func(app any, deps cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("gateway.Mount: app is %T, want *zip.App", app)
-		}
-		return Mount(a, deps)
-	})
-}
-
 // get returns the EFFECTIVE edge policy the caller is subject to: the platform
 // CORS + per-IP cap in force, plus the caller's own OrgRPM ceiling. A SuperAdmin
 // may inspect a specific tenant with ?org=<slug>.

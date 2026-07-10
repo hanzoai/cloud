@@ -115,10 +115,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/sbom/*", cloud.Handle(s, resolve))
 }
 
-func init() {
-	cloud.Register("sbom", 137, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // requireDatastore returns the honest 503 when the ClickHouse store is not
 // connected, rather than fabricating a result. Mirrors the analytics lens.
 func requireDatastore() error {

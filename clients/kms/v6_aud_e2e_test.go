@@ -115,7 +115,7 @@ func newAppWithIdentity(t *testing.T, cfg *cloud.Config) (*zip.App, cloud.Deps) 
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
 	app.Use(cloud.IdentityMiddleware(cfg))
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
+	if err := cloud.MountAll(app, mountSpecs(), cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	return app, deps
