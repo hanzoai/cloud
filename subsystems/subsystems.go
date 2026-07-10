@@ -205,6 +205,7 @@ import (
 	// mounts ONLY when the operator names "captable" in CLOUD_ENABLE, so the
 	// standalone captable service keeps authority until the phase-2 cutover.
 	_ "github.com/hanzoai/cloud/clients/captable"   // order 133 — /v1/captable/* (cap table on Base via goja)
+	_ "github.com/hanzoai/cloud/clients/dataroom"   // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-tenant Base, STAGED behind CLOUD_ENABLE)
 	// Hanzo Sign (HIP-0106, task #100): the e-signature product (Documenso fork)
 	// folded in-process via the SAME reusable gojabase RW-Base host captable
 	// pilots — the server-side domain runs as an ESM-free goja bundle
