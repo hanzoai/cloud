@@ -5,9 +5,9 @@ cloud embeds the o11y subsystem in-process against the shared ClickHouse
 
 ## ONE registration, one public concept (decomplected)
 
-The whole plane is registered as a SINGLE subsystem —
-`cloud.RegisterWithShutdown("o11y", 69, mountO11y, shutdownO11y, cloud.HealthOwner)`
-in `o11y.go`. `mountO11y` performs the ordered sub-mounts in-process:
+The whole plane is registered as a SINGLE subsystem — one
+`RegisterWithShutdown` of the name `o11y` (order 69, `mountO11y` / `shutdownO11y`,
+`HealthOwner`) in `o11y.go`. `mountO11y` performs the ordered sub-mounts in-process:
 `mountEventIngest` → `mountScope` → `mountRuntime` → `mountIngest` →
 `mountTraceSink`. This replaced FIVE separately-registered subsystems
 (`o11yscope` 69, `o11y-runtime` 71, `o11y-event-ingest` 68, `o11y-otlp-ingest`
