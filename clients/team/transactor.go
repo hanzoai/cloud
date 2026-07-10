@@ -424,6 +424,7 @@ func (s *session) reconcile(broadcast bool) int {
 					UserID: m.UserID, Name: pick(m.DisplayName, m.UserID),
 					Role: m.Role, IsBot: m.IsBot, Active: !m.IsBot || m.Active,
 				}, s.exists(PersonRef(m.UserID)))...)
+				apply(s.remapMigratedSocialIds(m.UserID)...)
 				count++
 			}
 		}
@@ -447,6 +448,7 @@ func (s *session) reconcile(broadcast bool) int {
 				apply(MemberTxes(Member{
 					UserID: uid, Name: pick(b.Name, uid), Role: "member", IsBot: true, Active: b.Active,
 				}, s.exists(PersonRef(uid)))...)
+				apply(s.remapMigratedSocialIds(uid)...)
 				count++
 			}
 		}
@@ -474,6 +476,64 @@ func (s *session) reconcile(broadcast bool) int {
 		s.server.hub.broadcast(s.workspace, applied)
 	}
 	return count
+}
+
+// remapMigratedSocialIds repairs the ONE invariant the Jul-5 team-go→cloud
+// migration broke: a member's confirmed hanzo social identity MUST attach to the
+// deterministic person-<account> (the same Person that carries the account's
+// Employee mixin). The migration carried SocialIdentity rows still attached to a
+// team-go-era Person id, so hanzo:<account> pointed at the WRONG person and the
+// workbench refused the transactor connect ("Confirmed social identity is attached
+// to the wrong person"). MemberTxes only (re)creates the social identity on FIRST
+// projection (exists==false), so on a migrated workspace where person-<account>
+// already exists it never corrects a mis-attached row — this does.
+//
+// It re-points every SocialIdentity keyed hanzo:<uid> (the id the workbench
+// resolves the account by) whose attachedTo is not person-<uid> back onto
+// person-<uid>, reconstituting exactly the shape a FRESH workspace has from the
+// start. Properties, by construction:
+//   - migrated-only: a fresh (or already-remapped) row is attachedTo==pid, so it is
+//     skipped — fresh workspaces are never touched.
+//   - idempotent: after one pass every keyed row is canonical, so every later
+//     connect is a no-op.
+//   - non-destructive: it only UPDATES attachedTo; no row is deleted, so the
+//     migrated person doc and all workspace data survive.
+//
+// Returns the re-pointed txes so the caller folds them into the reconcile apply/
+// broadcast path (admin re-sync fans them to open sessions).
+func (s *session) remapMigratedSocialIds(uid string) []map[string]any {
+	if uid == "" {
+		return nil
+	}
+	pid := PersonRef(uid)
+	socialKey := "hanzo:" + uid
+
+	// Candidates: any SocialIdentity carrying key==hanzo:<uid>, plus the canonical
+	// _id==hanzo:<uid> row directly (belt-and-suspenders, in case a migrated row lost
+	// its key field). De-duped by _id.
+	candidates := s.queryDocs(clSocialIdentity, map[string]any{"key": socialKey})
+	if d, _ := s.store.get(s.org, s.workspace, socialKey); d != nil && str(d["_class"]) == clSocialIdentity {
+		candidates = append(candidates, d)
+	}
+
+	seen := map[string]bool{}
+	var txes []map[string]any
+	for _, sid := range candidates {
+		id := str(sid["_id"])
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if str(sid["attachedTo"]) == pid {
+			continue // already canonical — fresh row or a prior remap
+		}
+		txes = append(txes, updateTx(id, clSocialIdentity, spaceContacts, acctSystem, map[string]any{
+			"attachedTo":      pid,
+			"attachedToClass": clPerson,
+			"collection":      "socialIds",
+		}))
+	}
+	return txes
 }
 
 // exists reports whether a doc id is already in this session's workspace store.
