@@ -380,7 +380,7 @@ func (s *svc) runScreen(ctx context.Context, org, id string) {
 
 	cctx, cancel := context.WithTimeout(ctx, screenTimeout)
 	defer cancel()
-	resp, aerr := s.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.defaultModel, Prompt: screenPrompt(app)})
+	resp, aerr := s.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.defaultModel, Prompt: screenPrompt(app), Org: org})
 	if aerr != nil {
 		app.Screen = ScreenResult{Status: "failed", Error: aerr.Error(), Model: s.defaultModel, ScreenedAt: now}
 		s.saveScreen(ctx, app)
