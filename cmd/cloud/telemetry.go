@@ -39,6 +39,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	"github.com/hanzoai/cloud/clients/o11y"
 	"github.com/hanzoai/cloud/zaptrace"
 )
 
@@ -55,14 +56,30 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 	// collector is live.
 	zapEndpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_ZAP_ENDPOINT"))
 	legacy := firstNonEmptyEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT")
-	if zapEndpoint == "" && legacy == "" {
-		log.Printf("telemetry: disabled (set OTEL_EXPORTER_ZAP_ENDPOINT to emit OTel spans over ZAP to o11y)")
+	// Emit when the in-process o11y sink is enabled (spans route in-process, no
+	// wire endpoint needed) OR a wire endpoint is set. Keeps the clean no-op-when-
+	// unset posture so this is safe before either path is live.
+	if zapEndpoint == "" && legacy == "" && !o11y.TraceInprocEnabled() {
+		log.Printf("telemetry: disabled (set O11Y_TRACES_ZAP_INPROCESS=true or OTEL_EXPORTER_ZAP_ENDPOINT to emit OTel spans to o11y)")
 		return func(context.Context) {}
 	}
 	if v := strings.TrimSpace(os.Getenv("OTEL_SERVICE_NAME")); v != "" {
 		serviceName = v
 	}
-	exp, wire, err := newTraceExporter(ctx, zapEndpoint)
+	// Resolve the wire fallback endpoint: an explicit ZAP endpoint, else (legacy
+	// OTLP intent) the default collector, else none — in-process only. The wire
+	// client is used only when the in-process o11y sink isn't registered.
+	wireEndpoint := zapEndpoint
+	if wireEndpoint == "" && legacy != "" {
+		wireEndpoint = defaultZapEndpoint
+	}
+	var wire otlptrace.Client
+	wireDesc := "none (in-process only)"
+	if wireEndpoint != "" {
+		wire = zaptrace.New(wireEndpoint)
+		wireDesc = "ZAP wire=" + wireEndpoint
+	}
+	exp, err := o11y.NewTraceExporter(ctx, wire)
 	if err != nil {
 		log.Printf("telemetry: create trace exporter: %v", err)
 		return func(context.Context) {}
@@ -88,7 +105,7 @@ func initTelemetry(ctx context.Context, serviceName string) func(context.Context
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
 	_ = os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
-	log.Printf("telemetry: OTel spans -> o11y over %s (service.name=%s)", wire, serviceName)
+	log.Printf("telemetry: OTel spans -> o11y in-process (Cost 0), wire fallback %s (service.name=%s)", wireDesc, serviceName)
 	return func(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -107,18 +124,3 @@ func firstNonEmptyEnv(keys ...string) string {
 	return ""
 }
 
-// newTraceExporter builds the ZAP-native trace exporter. There is ONE wire:
-// spans ride the ZAP transport (zap-proto/http) to the collector's zapreceiver.
-//
-// A legacy OTLP endpoint (OTEL_EXPORTER_OTLP_*ENDPOINT) only signals INTENT to
-// emit — it never selects a transport. It maps to the ZAP endpoint (explicit
-// override, else the default collector), so a stray/standard OTLP env var can
-// never silently downgrade tenant-carrying spans to plaintext OTLP-HTTP(:4318).
-// OTLP is only ever the collector's interop RECEIVER, never cloud's exporter.
-func newTraceExporter(ctx context.Context, zapEndpoint string) (*otlptrace.Exporter, string, error) {
-	if zapEndpoint == "" {
-		zapEndpoint = defaultZapEndpoint
-	}
-	exp, err := otlptrace.New(ctx, zaptrace.New(zapEndpoint))
-	return exp, "ZAP wire=" + zapEndpoint, err
-}
