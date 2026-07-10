@@ -10,7 +10,7 @@
 package cloud
 
 import (
-	"github.com/hanzoai/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/audit"
@@ -97,7 +97,7 @@ type Deps struct {
 	// and the authenticated per-org rate ceiling. BuildDeps constructs it once,
 	// layered over the static env/flag defaults; the EdgeCORS/EdgeRateLimit
 	// middleware read its PLATFORM policy live and ScopeRateLimit reads its
-	// per-org OrgRPM, and the clients/gatewaysvc subsystem serves GET/PUT over the
+	// per-org OrgRPM, and the clients/gateway subsystem serves GET/PUT over the
 	// SAME store. Never nil — New always returns a working (static-only on store
 	// error) *Store, so the edge is never blocked. See clients/gatewaypolicy.
 	GatewayPolicy *gatewaypolicy.Store

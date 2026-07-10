@@ -84,15 +84,17 @@ import (
 	_ "github.com/hanzoai/cloud/clients/iam"     // order 50 — /v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*, /cas/*, /scim/*
 	_ "github.com/hanzoai/cloud/clients/ingress" // order 42 — /v1/ingress/* (embedded runtime edge: routes/TLS/ACME/middlewares; STAGED, edge listeners off unless CLOUD_INGRESS_EDGE_ENABLED)
 
-	// Embedded commerce plane (HIP-0106, task #89 phase 1): wraps hanzoai/commerce's
-	// gin handler (commerce.Embed) and mounts /v1/commerce/* + /_/commerce/* in-process
-	// so cloud serves the checkout/tenant/billing surface ITSELF instead of proxying to
-	// a remote commerce pod. Order 100 — after kms/iam/base + the billing/licensing tier.
-	// The leaf lives in-repo (clients/commercesvc) so the upstream commerce.Mount that
-	// imports cloud stays behind //go:build cloud and never compiles into cloud's plain
-	// build — no cloud⇄commerce import cycle. Activation is the enable-list gate. See
-	// clients/commercesvc.
-	_ "github.com/hanzoai/cloud/clients/commercesvc" // order 100 — /v1/commerce/*, /_/commerce/*
+	// Embedded commerce plane (HIP-0106): the commerce library (clients/commerce)
+	// mounts its own gin handler (commerce.Embed) at /v1/commerce/* + /_/commerce/*
+	// in-process so cloud serves the checkout/tenant/billing surface ITSELF instead of
+	// proxying to a remote commerce pod, AND registers the in-process cloud.Commerce-
+	// Client (real entitlement resolution). ONE package owns the library + its
+	// subsystem + its client, self-registered via cloud's inversion hooks (the
+	// clients/kms pattern; the retired thin -svc mount wrapper is absorbed here, cf.
+	// #241 gatewaysvc → gateway) — cloud never imports it, so no cloud⇄commerce cycle.
+	// Order 100 — after kms/iam/base + the billing/licensing tier. Activation is the
+	// enable-list gate. See clients/commerce (mount.go + client.go).
+	_ "github.com/hanzoai/cloud/clients/commerce" // order 100 — /v1/commerce/*, /_/commerce/* + deps.Commerce factory
 
 	// Node-service subsystems hosted in-process via base+goja (HIP-0106);
 	// the JS + catalog data live in hanzoai/plans, hanzoai/pricing.
@@ -104,7 +106,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
 	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
 	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
-	_ "github.com/hanzoai/cloud/clients/gatewaysvc"   // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
+	_ "github.com/hanzoai/cloud/clients/gateway"      // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
 	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
