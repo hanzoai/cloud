@@ -146,12 +146,16 @@ func (v *Voter) OnProposal(b *PlacementBlock) error {
 	if err != nil {
 		return err
 	}
+	commitSig, err := v.signer.CommitPoP(rc, zcommit)
+	if err != nil {
+		return err
+	}
 	v.rc = rc
 	v.block = b
 	v.r1self = r1
 	v.committed[v.Index] = zcommit
 	v.accepted = true
-	v.bus.Broadcast(Message{Kind: MsgRound1, Height: b.Height, Round: b.Round, From: v.Node, R1: r1, Commit: zcommit, CommitSig: v.signer.CommitPoP(rc, zcommit)})
+	v.bus.Broadcast(Message{Kind: MsgRound1, Height: b.Height, Round: b.Round, From: v.Node, R1: r1, Commit: zcommit, CommitSig: commitSig})
 	return nil
 }
 
