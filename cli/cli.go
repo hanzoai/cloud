@@ -66,6 +66,9 @@ var controlCommands = map[string]string{
 	"gpu":      "connect this machine's GPU to the Hanzo cloud fleet (connect/status/disconnect)",
 	"engine":   "run a local hanzo-engine (OpenAI + Anthropic model server)",
 	"runner":   "run this machine as a JIT CI runner for your org (GitHub Actions)",
+	"run":      "launch a workload on Hanzo compute (container or function)",
+	"agent":    "invoke a managed Hanzo agent to run a task (headless)",
+	"bot":      "launch a computer-using agent (booted desktop or terminal)",
 }
 
 // IsControlVerb reports whether sub is a client-mode command (and therefore
@@ -396,6 +399,9 @@ func newRootCmd() *cobra.Command {
 		newGPUCmd(envOf, &f),
 		newEngineCmd(envOf, &f),
 		newRunnerCmd(envOf, &f),
+		newRunCmd(envOf, &f),
+		newAgentCmd(envOf, &f),
+		newBotCmd(envOf, &f),
 	)
 	return root
 }
