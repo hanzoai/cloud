@@ -49,7 +49,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -138,21 +137,20 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 // CLOUD_PROVISION_FEE_CENTS, else the $1.00 default. Set a kind to 0 to make it
 // free (and therefore un-gated).
 //
-// Ongoing storage footprint (GB-month) is billed by REUSING s.bill.Meter with a
+// Ongoing storage footprint (GB-month) is billed by REUSING s.Bill.Meter with a
 // usage-derived amount; its unit price lives in hanzoai/pricing
 // (infrastructure.blockStorage.pricePerGBMonthly = $0.08/GB-month) and is
 // applied by the recurring caller, not at provision time — there is no live-size
 // source here and a size is never fabricated.
 const provisionFeeEnvPrefix = "CLOUD_PROVISION_FEE_CENTS"
 
-type svc struct {
+// state is provisioning's own data; shared deps (logger, per-org billing meter,
+// brand) live in the embedded cloud.Base, reached as s.Log / s.Bill. The billing
+// meter is nil/!Enabled() → Gate allows and Meter is a no-op.
+type state struct {
 	store *Store
 	sec   *secrets
 	reg   map[string]Provisioner
-	log   luxlog.Logger
-	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
-	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
-	bill *cloud.ResourceMeter
 	// orch is the cluster orchestrator for the DEDICATED-instance strategy
 	// (datastore, docdb). Nil off-cluster: dedicated create then fails closed 503.
 	orch orchestrator
@@ -194,17 +192,17 @@ type listItem struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
-// Mount wires the provisioning surface onto app per HIP-0106.
+// Mount wires the provisioning surface onto app per HIP-0106. It is the complex
+// flavour of the generic subsystem: it keeps a package global (mounted) for
+// cross-package reach and starts a recurring footprint meter, so it constructs the
+// Service value directly rather than through cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("provisioning.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("provisioning.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "provisioning")
-
 	if deps.DataDir == "" {
 		return fmt.Errorf("provisioning.Mount: empty DataDir")
 	}
@@ -216,37 +214,42 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("provisioning.Mount: open store: %w", err)
 	}
 
-	s := &svc{
+	b := cloud.NewBase(deps, "provisioning")
+	s := &cloud.Service[state]{Base: b, State: state{
 		store: store,
-		sec:   openSecrets(deps.Brand, log),
+		sec:   openSecrets(deps.Brand, b.Log),
 		reg:   newRegistry(),
-		log:   log,
-		bill:  cloud.NewResourceMeter(deps, "provisioning"),
 		orch:  newOrchestrator(),
-	}
+	}}
 	mounted = s
 
-	for _, kind := range kinds {
-		k := kind
-		app.Post("/v1/"+k, s.create(k))
-		app.Get("/v1/"+k, s.list(k))
-		app.Get("/v1/"+k+"/:name", s.get(k))
-		app.Delete("/v1/"+k+"/:name", s.drop(k))
-	}
+	routes(app, s)
 
 	// Recurring per-org footprint meter for running dedicated instances.
-	s.startFootprintMeter()
+	startFootprintMeter(s)
 
-	log.Info("provisioning mounted",
+	b.Log.Info("provisioning mounted",
 		"kinds", len(kinds),
 		"dedicated", len(dedicatedEngines),
-		"cluster", s.orch != nil && s.orch.Ready() == nil,
-		"kms", s.sec.Enabled(),
+		"cluster", s.State.orch != nil && s.State.orch.Ready() == nil,
+		"kms", s.State.sec.Enabled(),
 		"brand", deps.Brand,
 		"env", deps.Env,
-		"billing", s.bill.Enabled(),
+		"billing", s.Bill.Enabled(),
 	)
 	return nil
+}
+
+// routes registers the CRUD surface for each provisionable kind (the same handler
+// factories bound per kind).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	for _, kind := range kinds {
+		k := kind
+		app.Post("/v1/"+k, create(s, k))
+		app.Get("/v1/"+k, list(s, k))
+		app.Get("/v1/"+k+"/:name", get(s, k))
+		app.Delete("/v1/"+k+"/:name", drop(s, k))
+	}
 }
 
 func init() {
@@ -257,7 +260,7 @@ func init() {
 // share one preamble (auth, name validation, billing gate, dedup): the shared-
 // logical kinds create a resource inside a live shared backend; the dedicated
 // kinds (datastore, docdb) launch the org's OWN instance (createDedicated).
-func (s *svc) create(kind string) zip.Handler {
+func create(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
@@ -306,12 +309,12 @@ func (s *svc) create(kind string) zip.Handler {
 		// reused by the post-success debit; fee==0 or unconfigured billing makes
 		// this a no-op. Applies to BOTH strategies.
 		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
-		if err := s.bill.Gate(ctx, org, principal.Project(c), kind, fee); err != nil {
+		if err := s.Bill.Gate(ctx, org, principal.Project(c), kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
 		// Fast duplicate check (the UNIQUE index is the authoritative guard).
-		if _, err := s.store.Get(ctx, org, kind, name); err == nil {
+		if _, err := s.State.store.Get(ctx, org, kind, name); err == nil {
 			return zip.ErrConflict("resource already exists")
 		} else if !errors.Is(err, errNotFound) {
 			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
@@ -320,11 +323,11 @@ func (s *svc) create(kind string) zip.Handler {
 		// DEDICATED-instance strategy (datastore, docdb): the org's OWN isolated
 		// instance, launched via an operator Datastore CR in tenant-<org>.
 		if e, dedicated := dedicatedEngines[kind]; dedicated {
-			return s.createDedicated(c, ctx, kind, org, name, e, fee, instance)
+			return createDedicated(s, c, ctx, kind, org, name, e, fee, instance)
 		}
 
 		// SHARED-logical strategy (sql, vector, kv, search, s3).
-		prov := s.reg[kind]
+		prov := s.State.reg[kind]
 		if prov == nil {
 			return zip.Errorf(http.StatusNotImplemented, "kind %q not supported", kind)
 		}
@@ -337,7 +340,7 @@ func (s *svc) create(kind string) zip.Handler {
 		// — never a silent shared resource, which on KV would be a cross-tenant
 		// credential takeover (idempotent ACL SETUSER overwriting another
 		// tenant's user) and elsewhere a cross-tenant DoS / existence oracle.
-		if exists, err := s.store.PhysicalExists(ctx, physical); err != nil {
+		if exists, err := s.State.store.PhysicalExists(ctx, physical); err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 		} else if exists {
 			return zip.ErrConflict("resource already exists")
@@ -354,7 +357,7 @@ func (s *svc) create(kind string) zip.Handler {
 			if errors.Is(err, errAlreadyExists) {
 				return zip.ErrConflict("resource already exists")
 			}
-			s.log.Error("provision failed", "kind", kind, "org", org, "name", name, "err", err)
+			s.Log.Error("provision failed", "kind", kind, "org", org, "name", name, "err", err)
 			return zip.Errorf(http.StatusBadGateway, "provision %s failed: %v", kind, err)
 		}
 
@@ -365,15 +368,15 @@ func (s *svc) create(kind string) zip.Handler {
 		storedRef, returnPw, username := "", "", ""
 		if secretfulKinds[kind] {
 			returnPw, username = pw, user
-			if s.sec.Enabled() {
-				if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
+			if s.State.sec.Enabled() {
+				if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {
 					_ = prov.Drop(ctx, physical, user)
-					s.log.Error("kms put failed; rolled back backend", "kind", kind, "err", err)
+					s.Log.Error("kms put failed; rolled back backend", "kind", kind, "err", err)
 					return zip.Errorf(http.StatusInternalServerError, "store secret failed")
 				}
 				storedRef = secretRef
 			} else {
-				s.log.Warn("KMS degraded: password returned once, not persisted", "kind", kind, "org", org, "name", name)
+				s.Log.Warn("KMS degraded: password returned once, not persisted", "kind", kind, "org", org, "name", name)
 			}
 		}
 
@@ -381,7 +384,7 @@ func (s *svc) create(kind string) zip.Handler {
 		if err != nil {
 			_ = prov.Drop(ctx, physical, user)
 			if storedRef != "" {
-				_ = s.sec.Delete(storedRef)
+				_ = s.State.sec.Delete(storedRef)
 			}
 			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 		}
@@ -392,11 +395,11 @@ func (s *svc) create(kind string) zip.Handler {
 			Host: host, Port: port, Username: username, DBName: db,
 			Status: "ready", CreatedAt: time.Now().Unix(),
 		}
-		if err := s.store.Insert(ctx, r); err != nil {
+		if err := s.State.store.Insert(ctx, r); err != nil {
 			// Lost a concurrent race or DB error — undo the backend + secret.
 			_ = prov.Drop(ctx, physical, user)
 			if storedRef != "" {
-				_ = s.sec.Delete(storedRef)
+				_ = s.State.sec.Delete(storedRef)
 			}
 			if errors.Is(err, errConflict) {
 				return zip.ErrConflict("resource already exists")
@@ -407,9 +410,9 @@ func (s *svc) create(kind string) zip.Handler {
 		// Resource is live + persisted — debit the caller's org ledger for the
 		// provision (per-org, env-attributed, async best-effort so the debit never
 		// blocks or corrupts this 201; a debit failure is logged for
-		// reconciliation). Recurring storage footprint reuses s.bill.Meter with a
+		// reconciliation). Recurring storage footprint reuses s.Bill.Meter with a
 		// GB-month amount once a live-size source exists.
-		s.bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.Bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 
 		// Return the PUBLIC endpoint, never the internal admin host. Remap the
 		// connection string's host:port too so a copy-pasted DSN is routable.
@@ -427,13 +430,13 @@ func (s *svc) create(kind string) zip.Handler {
 }
 
 // list returns every resource of kind for the caller's org. Never a password.
-func (s *svc) list(kind string) zip.Handler {
+func list(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
 			return zip.ErrForbidden("X-Org-Id required")
 		}
-		rows, err := s.store.List(c.Context(), org, kind)
+		rows, err := s.State.store.List(c.Context(), org, kind)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 		}
@@ -450,7 +453,7 @@ func (s *svc) list(kind string) zip.Handler {
 }
 
 // get returns one resource's metadata. Never a password.
-func (s *svc) get(kind string) zip.Handler {
+func get(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
@@ -458,7 +461,7 @@ func (s *svc) get(kind string) zip.Handler {
 		}
 		name := strings.ToLower(strings.TrimSpace(c.Param("name")))
 		ctx := c.Context()
-		r, err := s.store.Get(ctx, org, kind, name)
+		r, err := s.State.store.Get(ctx, org, kind, name)
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("resource not found")
 		}
@@ -468,7 +471,7 @@ func (s *svc) get(kind string) zip.Handler {
 		// For a dedicated instance, reconcile provisioning -> ready from the
 		// operator's live CR status before answering (honest readiness).
 		if _, dedicated := dedicatedEngines[r.Kind]; dedicated {
-			r = s.reconcileDedicated(ctx, r)
+			r = reconcileDedicated(s, ctx, r)
 		}
 		host, port := endpointFor(r)
 		return c.JSON(http.StatusOK, getResp{
@@ -480,7 +483,7 @@ func (s *svc) get(kind string) zip.Handler {
 
 // drop deprovisions the backend resource, deletes the sealed secret, and
 // removes the metadata row.
-func (s *svc) drop(kind string) zip.Handler {
+func drop(s *cloud.Service[state], kind string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		org, ok := tenant(c)
 		if !ok {
@@ -489,7 +492,7 @@ func (s *svc) drop(kind string) zip.Handler {
 		name := strings.ToLower(strings.TrimSpace(c.Param("name")))
 		ctx := c.Context()
 
-		r, err := s.store.Get(ctx, org, kind, name)
+		r, err := s.State.store.Get(ctx, org, kind, name)
 		if errors.Is(err, errNotFound) {
 			return zip.ErrNotFound("resource not found")
 		}
@@ -503,29 +506,29 @@ func (s *svc) drop(kind string) zip.Handler {
 			// down (never leave a live instance pointed at a deleted backend). Fail
 			// closed — block the teardown on error so a retry finishes the revert;
 			// drop is idempotent. No-op when the resource is not instance-bound.
-			if err := s.removeAddonURL(ctx, org, r.Instance, kind); err != nil {
-				s.log.Error("revert instance to base failed", "kind", kind, "org", org, "name", name, "instance", r.Instance, "err", err)
+			if err := removeAddonURL(s, ctx, org, r.Instance, kind); err != nil {
+				s.Log.Error("revert instance to base failed", "kind", kind, "org", org, "name", name, "instance", r.Instance, "err", err)
 				return zip.Errorf(http.StatusBadGateway, "revert instance: %v", err)
 			}
 			// Tear down the org's dedicated instance (CR + admin Secret); the
 			// operator GCs the StatefulSet + Service + PVC. Removing the row below
 			// also stops the recurring footprint meter for this instance.
-			if err := s.dropDedicated(ctx, r); err != nil {
-				s.log.Error("deprovision instance failed", "kind", kind, "org", org, "name", name, "err", err)
+			if err := dropDedicated(s, ctx, r); err != nil {
+				s.Log.Error("deprovision instance failed", "kind", kind, "org", org, "name", name, "err", err)
 				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
 			}
-		} else if prov := s.reg[kind]; prov != nil {
+		} else if prov := s.State.reg[kind]; prov != nil {
 			if err := prov.Drop(ctx, r.PhysicalName, r.Username); err != nil {
-				s.log.Error("deprovision failed", "kind", kind, "org", org, "name", name, "err", err)
+				s.Log.Error("deprovision failed", "kind", kind, "org", org, "name", name, "err", err)
 				return zip.Errorf(http.StatusBadGateway, "deprovision %s failed: %v", kind, err)
 			}
 		}
 		if r.SecretRef != "" {
-			if err := s.sec.Delete(r.SecretRef); err != nil {
-				s.log.Warn("kms delete failed (continuing)", "ref", r.SecretRef, "err", err)
+			if err := s.State.sec.Delete(r.SecretRef); err != nil {
+				s.Log.Warn("kms delete failed (continuing)", "ref", r.SecretRef, "err", err)
 			}
 		}
-		if _, err := s.store.Delete(ctx, org, kind, name); err != nil {
+		if _, err := s.State.store.Delete(ctx, org, kind, name); err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 		}
 		return c.NoContent(http.StatusNoContent)
@@ -644,20 +647,20 @@ func genID() (string, error) {
 
 // mounted is the active service, set by Mount so Shutdown can release the
 // metadata store. The unified binary mounts one provisioning surface.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Shutdown closes the provisioning metadata store. Idempotent. Mirrors the
 // plansvc Shutdown contract so the serve layer can release subsystem resources
 // uniformly.
 func Shutdown(context.Context) error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	if mounted.stopMeter != nil {
-		mounted.stopMeter()
-		mounted.stopMeter = nil
+	if mounted.State.stopMeter != nil {
+		mounted.State.stopMeter()
+		mounted.State.stopMeter = nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
