@@ -171,6 +171,7 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	if uErr := s.store.UpdateBuild(ctx, b); uErr != nil {
 		s.log.Warn("reconcile: finalize build", "build", b.ID, "err", uErr)
 	}
+	s.meterBuild(b, now) // the Job ran to completion → bill its wall-clock minutes.
 	d.Status, d.UpdatedAt = "deploying", now
 	if uErr := s.store.UpdateDeployment(ctx, d); uErr != nil {
 		s.log.Warn("reconcile: finalize deployment", "dep", d.ID, "err", uErr)
@@ -211,6 +212,7 @@ func (s *svc) supersedeBuild(ctx context.Context, d Deployment, b Build) {
 	if b.ID != "" {
 		b.Status, b.UpdatedAt = "succeeded", now
 		_ = s.store.UpdateBuild(ctx, b)
+		s.meterBuild(b, now) // the Job still ran to completion → bill its minutes.
 	}
 	d.Status, d.Message, d.UpdatedAt = "superseded", "a newer deployment went live before this build finished", now
 	_ = s.store.UpdateDeployment(ctx, d)
