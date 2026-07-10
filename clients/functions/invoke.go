@@ -13,6 +13,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/commerce/metering"
 	"github.com/zap-proto/zip"
 )
 
@@ -212,8 +213,24 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// billable compute, so it is NOT charged. Per-org, env-attributed, async
 	// best-effort so the debit never blocks or corrupts this response; a debit
 	// failure is logged for reconciliation.
+	//
+	// Two-part serverless billing, both on the ONE shared meter:
+	//   (1) the flat per-invocation REQUEST fee (gated pre-run above), and
+	//   (2) a usage-native COMPUTE debit = GB-seconds (DurationMs × configured
+	//       memory), priced by CLOUD_FUNCTION_GBSEC_CENTS.
+	// Either is independently free (fee 0 → no-op), so an operator can bill by
+	// request alone, compute alone, or both.
 	if runErr == nil {
-		s.bill.Meter(org, principal.Project(c), "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		project := principal.Project(c)
+		s.bill.Meter(org, project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		gbSecCents := gbSecondsCents(dur, memLimitMB(f.MemoryLimit), cloud.ResourceFeeCents(gbSecFeeEnvPrefix, "gbsec"))
+		s.bill.MeterUsage(org, "gbsec", metering.Usage{
+			Model:       "gbsec", // the billed unit: GB-seconds of compute.
+			AmountCents: gbSecCents,
+			Project:     project,
+			RequestID:   c.RequestID(),
+			ClientIP:    cloud.ClientIP(c),
+		})
 	}
 	code := http.StatusOK
 	if iv.Status != "ok" {
