@@ -6,7 +6,7 @@
 // serves manual pages indexes them. One knowledge store, many sources, one index.
 //
 // SECURITY (the tenant + secret boundary):
-//   - Every handler resolves its org from principal.Tenant (a validated principal),
+//   - Every handler resolves its org from principal.Org (a validated principal),
 //     NEVER a client field. A caller can only ever connect/sync/disconnect its OWN
 //     org, and synced docs are written into that org's store only.
 //   - The OAuth token is a RETRIEVABLE secret (it must be presented to the provider
@@ -203,7 +203,7 @@ func verifyState(state, provider string) (org string, err error) {
 // no server-side redirect, so the BFF stays in control. The org is the validated
 // tenant, bound into the state, so only THIS org's connection can result.
 func connectStart(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -294,7 +294,7 @@ func connectCallback(s *cloud.Service[state], c *zip.Ctx) error {
 // that are configured but not yet connected appear as "disconnected" so the console
 // can offer a Connect button. No secret is ever returned.
 func listConnectors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -330,7 +330,7 @@ func listConnectors(s *cloud.Service[state], c *zip.Ctx) error {
 // as kb-source documents (which the after_save hook indexes). The org is the
 // validated tenant; the token is read from KMS. Returns the number ingested.
 func syncConnector(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}
@@ -381,7 +381,7 @@ func syncConnector(s *cloud.Service[state], c *zip.Ctx) error {
 // no longer retrievable via vector search once their points are purged; a caller
 // may delete them via the framework CRUD surface. Everything is org-scoped.
 func disconnectConnector(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
 	}

@@ -115,7 +115,7 @@ func TracingMiddleware() zip.Handler {
 		err := c.Continue()
 
 		// Identity headers are validated upstream (IdentityMiddleware) before the
-		// handler runs, so by here c.Org() reflects the authenticated tenant.
+		// handler runs, so by here c.Org() reflects the authenticated org.
 		status := c.Fiber().Response().StatusCode()
 		span.SetAttributes(attribute.Int("http.response.status_code", status))
 		if org := strings.Clone(c.Org()); org != "" {

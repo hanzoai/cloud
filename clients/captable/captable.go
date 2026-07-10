@@ -18,7 +18,7 @@
 //	                  /v1/captable/* zip routes     one transaction per request
 //
 // No Prisma, no Postgres, no Next.js in this path. Every route resolves the org
-// from the VALIDATED cloud principal (principal.Tenant), never a client header,
+// from the VALIDATED cloud principal (principal.Org), never a client header,
 // and that org selects the tenant's DB file AND scopes every row.
 //
 // ACTIVATION: captable is NOT staged — it mounts under the mount-all default
@@ -160,7 +160,7 @@ func routeID(s *cloud.Service[state], name string, readBody bool) zip.Handler {
 // dispatch resolves the tenant, decodes the body, runs the bundle route on the
 // tenant's Base store (one transaction per request), and writes {status, body}.
 func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[string]string, readBody bool) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}

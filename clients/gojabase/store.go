@@ -30,7 +30,7 @@ var tenantEnc = base32.StdEncoding.WithPadding(base32.NoPadding)
 //
 // This is deliberately NOT a "slug": lowercasing + folding illegal bytes to '_'
 // (the previous slugify) is NON-injective and collapses DISTINCT owners onto ONE
-// physical store — a cross-tenant break. principal.Tenant returns the org VERBATIM
+// physical store — a cross-tenant break. principal.Org returns the org VERBATIM
 // for exactly that reason (folding "Acme"/"acme" or "a b"/"a_b" into one bucket is
 // itself a tenant break); this encoder preserves that distinction all the way to
 // the on-disk name. base32 of the raw bytes is a bijection with its output, so

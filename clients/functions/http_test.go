@@ -24,7 +24,7 @@ func mountApp(t *testing.T) *zip.App {
 
 // do fires an in-process request. org is stamped as X-Org-Id — the header the
 // gateway's SanitizeIdentity injects from the validated principal in prod; here
-// we set it directly to exercise the subsystem's own tenant scoping.
+// we set it directly to exercise the subsystem's own org scoping.
 func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader
@@ -38,7 +38,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 	}
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
-		req.Header.Set("X-User-Id", "u_"+org) // validated principal (tenant() gates on it)
+		req.Header.Set("X-User-Id", "u_"+org) // validated principal (org() gates on it)
 	}
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
@@ -54,7 +54,7 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, []
 func TestHTTPTenantGateAndIsolation(t *testing.T) {
 	app := mountApp(t)
 
-	// No org header → the tenant() gate refuses (403), never leaks an empty list.
+	// No org header → the org() gate refuses (403), never leaks an empty list.
 	if code, _ := do(t, app, http.MethodGet, "/v1/functions", "", nil); code != http.StatusForbidden {
 		t.Fatalf("no-org list want 403, got %d", code)
 	}

@@ -16,8 +16,8 @@ var (
 )
 
 // Repo is the org-scoped, canonical metadata record for one Git repository.
-// Tenant isolation is the (org, project) pair, enforced at the query layer; the
-// gateway-minted X-Org-Id (HIP-0026) selects the tenant and X-Project-Id an
+// Org isolation is the (org, project) pair, enforced at the query layer; the
+// gateway-minted X-Org-Id (HIP-0026) selects the org and X-Project-Id an
 // optional sub-scope. The repo's OBJECTS (packs, refs) live on the billy-backed
 // storage under the same (org, project, name) path — this row is only the
 // metadata + the last-measured storage size that commerce meters on.
@@ -34,7 +34,7 @@ type Repo struct {
 }
 
 // Store is one org's repo-metadata database — ONE SQLite file per org at
-// {DataDir}/orgs/{orgSlug}/git.db (opened via cloud.TenantDB). git is org-scoped,
+// {DataDir}/orgs/{orgSlug}/git.db (opened via cloud.OrgDB). git is org-scoped,
 // not project-scoped: /v1/git/usage is a deliberate org-wide rollup across every
 // project, so the physical boundary is the org and the (optional) project is a
 // row column. MaxOpenConns(1) serializes writes against the file lock.
@@ -42,9 +42,9 @@ type Store struct {
 	db *sql.DB
 }
 
-// openStore wraps a tenant DB — already opened + pragma'd by cloud.TenantDB —
+// openStore wraps an org DB — already opened + pragma'd by cloud.OrgDB —
 // into the repo-metadata store, running its migration. It is the open func the
-// shared cloud.TenantStore cache calls once per org file.
+// shared cloud.OrgStore cache calls once per org file.
 func openStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {
@@ -89,7 +89,7 @@ func scanRepo(sc interface{ Scan(...any) error }) (Repo, error) {
 }
 
 // Create inserts a new repo row. Returns errConflict when (org,project,name)
-// already exists in the tenant.
+// already exists in the org.
 func (s *Store) Create(ctx context.Context, r Repo) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO repos (`+repoCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
