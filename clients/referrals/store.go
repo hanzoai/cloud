@@ -11,6 +11,7 @@ import (
 
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags).
 	// Mirrors clients/crm / clients/prompts — one storage pattern.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -58,7 +59,7 @@ type Store struct {
 }
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
