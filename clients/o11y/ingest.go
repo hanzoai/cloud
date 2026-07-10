@@ -83,14 +83,6 @@ const defaultEnvironment = "production"
 // reach it, mirroring embed.go's embeddedRuntime. Shutdown() signals Run() to return.
 var embeddedIngest *otelcol.Collector
 
-func init() {
-	// Order 72: after o11y.Mount (70) and the query-runtime handler (71). The
-	// ingest collector is independent of the query handler, but keeping it
-	// adjacent groups the whole o11y subsystem. RegisterWithShutdown so the
-	// collector's batch processor flushes to ClickHouse on graceful stop.
-	cloud.RegisterWithShutdown("o11y-otlp-ingest", 72, mountIngest, shutdownIngest)
-}
-
 // ingestEnabled reports whether the operator has opted in. Fail-closed: unset or
 // any non-truthy value keeps the embed off and the standalone collector live.
 func ingestEnabled() bool {
@@ -103,10 +95,11 @@ func ingestEnabled() bool {
 }
 
 // mountIngest constructs and starts the in-process ingest collector when enabled.
-// It is fail-soft at every branch: a disabled flag, a missing DSN, or a
-// construction error all return nil, leaving the standalone collector as the
-// ingest path.
-func mountIngest(_ any, deps cloud.Deps) error {
+// Called by mountO11y (o11y.go). It binds only the OTLP receiver sockets (no
+// /v1/o11y/* Fiber route), so it is order-independent. Fail-soft at every branch: a
+// disabled flag, a missing DSN, or a construction error all return nil, leaving the
+// standalone collector as the ingest path.
+func mountIngest(deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "o11y-otlp-ingest")
 
 	if !ingestEnabled() {

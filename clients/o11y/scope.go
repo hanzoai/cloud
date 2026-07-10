@@ -2,12 +2,10 @@ package o11y
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	aiobject "github.com/hanzoai/ai/object"
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -26,9 +24,10 @@ import (
 // (metricsread.go) and the two-view logs (logs.go, admin infra + per-org request)
 // were folded in here so nothing was lost, and the duplicate mount is gone.
 //
-// Ordering: registered at order 69 (< 70) so MountAll mounts this subsystem — and
-// thus registers these static routes — before the o11y module installs its
-// wildcard. serve.go's HIP-0106 health loop adds GET /v1/o11yscope/health.
+// Ordering: mountScope runs inside the one order-69 `o11y` mount (mountO11y), so
+// these static routes register before the hanzoai/o11y module installs its wildcard
+// at order 70. serve.go's HIP-0106 health loop adds GET /v1/o11y/health (once, via
+// the module's order-70 co-registration of the `o11y` name — see o11y.go).
 
 // admin reports whether the caller is a validated platform SuperAdmin. After
 // SanitizeIdentity, c.IsAdmin() (X-User-IsAdmin) is set to true ONLY for a verified
@@ -39,23 +38,27 @@ import (
 // telemetry).
 func admin(c *zip.Ctx) bool { return c.IsAdmin() }
 
-func init() {
-	cloud.Register("o11yscope", 69, func(app any, _ cloud.Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("o11yscope.Mount: app is %T, want *zip.App", app)
-		}
-		a.Get("/v1/o11y/logs", handleLogs)
-		a.Get("/v1/o11y/metrics", handleMetrics)
-		a.Get("/v1/o11y/status", handleStatus)
-		// SuperAdmin-only VM read proxy (vmproxy.go) — the same-origin replacement for
-		// the console's stripped `/telemetry` Next route, backing the platform
-		// infra-health board. Allowlisted to {up, sum(up), count(up)} only; registered
-		// here (< order 70) so it wins the in-order match over the o11y wildcard.
-		a.Get("/v1/o11y/vm/api/v1/query", handleVMQuery)
-		a.Get("/v1/o11y/vm/api/v1/query_range", handleVMQueryRange)
-		return nil
-	})
+// mountScope registers the cloud-native SPECIFIC /v1/o11y/* routes — the ONE place
+// the whole specific-route table is declared, so the "before the wildcard" invariant
+// is obvious and lives in a single spot. Called by mountO11y (o11y.go) inside the one
+// order-69 mount, so every route here precedes the hanzoai/o11y wildcard (order 70).
+// The public surface is FLAT and version-less (one /v1/, no nested /api/vN): the
+// upstream SigNoz engine version is an internal impl detail resolved inside the
+// handlers, never leaked into the route.
+func mountScope(a *zip.App) {
+	// Tenant-scoped, org-pinned reads — the ONE owner of these paths (handlers below).
+	a.Get("/v1/o11y/logs", handleLogs)
+	a.Get("/v1/o11y/metrics", handleMetrics)
+	a.Get("/v1/o11y/status", handleStatus)
+	// SuperAdmin-only VictoriaMetrics read proxy (vmproxy.go). Flat public paths;
+	// the upstream `api/v1/*` nesting stays INSIDE the handler, never in our route.
+	// Allowlisted to {up, sum(up), count(up)} only.
+	a.Get("/v1/o11y/vm/query", handleVMQuery)
+	a.Get("/v1/o11y/vm/query_range", handleVMQueryRange)
+	// Flat builder query (query.go): the ONE canonical public path for the console's
+	// composite list query; the upstream engine version (v3) is resolved INTERNALLY.
+	a.Post("/v1/o11y/query", builderQueryHandler("query"))
+	a.Post("/v1/o11y/query_range", builderQueryHandler("query_range"))
 }
 
 // handleLogs serves org-scoped product logs. The org is the validated tenant; a
