@@ -135,6 +135,7 @@ type TenantConfig = types.TenantConfig
 type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse
+type EmbedRequest = types.EmbedRequest
 type Counter = types.Counter
 type Timing = types.Timing
 type Span = types.Span
