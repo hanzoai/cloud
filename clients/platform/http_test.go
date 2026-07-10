@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,24 +21,24 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 )
 
-// mountSvcK8s builds a hermetic app AND returns the backing svc, so tests that need
+// mountSvcK8s builds a hermetic app AND returns the backing Service, so tests that need
 // to inspect/prime process-local state (e.g. the per-org deploy gate) can reach it.
 // It NEVER touches a real cluster (the earlier version resolved the dev kubeconfig
 // and wrote to live DOKS — never again).
-func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *svc) {
+func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &svc{store: store, k8s: k, kms: newFakeKMS(), log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: k, sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s.routes(app)
+	routes(app, s)
 	return app, s
 }
 
-// mountAppK8s builds a hermetic app over an svc with the GIVEN k8s client.
+// mountAppK8s builds a hermetic app over a Service with the GIVEN k8s client.
 func mountAppK8s(t *testing.T, k *k8sClient) *zip.App {
 	app, _ := mountSvcK8s(t, k)
 	return app
@@ -277,7 +278,7 @@ func TestImageDeployOverCapReturns429(t *testing.T) {
 	// Saturate maxpower's in-flight deploy gate (simulate 2 deploys already parked in
 	// applyLive's RBAC wait).
 	for i := 0; i < 2; i++ {
-		if !s.deployGate.acquire("maxpower", s.k8s.limits.maxConcurrentDeploys()) {
+		if !s.State.deployGate.acquire("maxpower", s.State.k8s.limits.maxConcurrentDeploys()) {
 			t.Fatalf("precondition: acquire maxpower slot %d must succeed", i)
 		}
 	}
@@ -298,7 +299,7 @@ func TestImageDeployOverCapReturns429(t *testing.T) {
 	}
 
 	// Releasing one maxpower slot re-admits maxpower → 202.
-	s.deployGate.release("maxpower")
+	s.State.deployGate.release("maxpower")
 	if code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps/api/deploy", "maxpower", map[string]any{"tag": "1.27"}); code != http.StatusAccepted {
 		t.Fatalf("after releasing a slot maxpower deploy want 202, got %d (%s)", code, body)
 	}
@@ -406,11 +407,11 @@ func TestHTTPSecretEnvSealed(t *testing.T) {
 		t.Fatal("secret value must never be echoed back over the API")
 	}
 	// The persisted env_json must carry NO plaintext (the secret value is blanked).
-	proj, err := s.store.GetProject(context.Background(), "maxpower", "web")
+	proj, err := s.State.store.GetProject(context.Background(), "maxpower", "web")
 	if err != nil {
 		t.Fatalf("get project: %v", err)
 	}
-	a, err := s.store.GetApplication(context.Background(), "maxpower", proj.ID, "api")
+	a, err := s.State.store.GetApplication(context.Background(), "maxpower", proj.ID, "api")
 	if err != nil {
 		t.Fatalf("get app: %v", err)
 	}
@@ -418,7 +419,7 @@ func TestHTTPSecretEnvSealed(t *testing.T) {
 		t.Fatalf("plaintext secret leaked into the store: %s", a.EnvJSON)
 	}
 	// The sealed value must be readable back from KMS at the app's coordinate.
-	got, err := s.kms.GetSecret(context.Background(), kmsSecretRef("maxpower", "api", "DB_PASSWORD"))
+	got, err := s.KMS.GetSecret(context.Background(), kmsSecretRef("maxpower", "api", "DB_PASSWORD"))
 	if err != nil || string(got) != "hunter2" {
 		t.Fatalf("secret not sealed into KMS: got %q err=%v", got, err)
 	}
@@ -429,7 +430,7 @@ func TestHTTPSecretEnvSealed(t *testing.T) {
 // lands in the DB as a fallback.
 func TestHTTPSecretEnvFailsClosedWithoutKMS(t *testing.T) {
 	app, s := mountSvcK8s(t, &k8sClient{initErr: "no cluster (test)", limits: testLimits()})
-	s.kms = nil // KMS not configured
+	s.KMS = nil // KMS not configured
 	do(t, app, http.MethodPost, "/v1/platform/projects", "maxpower", map[string]any{"name": "web"})
 	code, body := do(t, app, http.MethodPost, "/v1/platform/projects/web/apps", "maxpower", map[string]any{
 		"name": "api", "source": "image", "image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1"},

@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -186,13 +187,13 @@ func (p releasePlan) run(ctx context.Context) (releaseStep, error) {
 // the computed version and image; the pipeline outlives the request (like
 // buildFromPush). Because the tag is minted only after a proven image, a failure at
 // build or smoke leaves NO tag and universe is never told of a phantom version.
-func (s *svc) startRelease(c *zip.Ctx, req runnerBuildReq) error {
+func startRelease(s *cloud.Service[state], c *zip.Ctx, req runnerBuildReq) error {
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
-	sha, err := s.resolveCommit(c.Context(), releaseRepoSlug, ref)
+	sha, err := resolveCommit(s, c.Context(), releaseRepoSlug, ref)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "resolve %s: %v", ref, err)
 	}
-	version, err := s.computeReleaseVersion(c.Context(), releaseRepoSlug)
+	version, err := computeReleaseVersion(s, c.Context(), releaseRepoSlug)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "compute release version: %v", err)
 	}
@@ -205,19 +206,19 @@ func (s *svc) startRelease(c *zip.Ctx, req runnerBuildReq) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	plan := s.releaseFor(repoURL, sha, image, tag, dockerfile, bldID)
+	plan := releaseFor(s, repoURL, sha, image, tag, dockerfile, bldID)
 
 	ctx := context.WithoutCancel(c.Context())
 	go func() {
 		reached, rerr := plan.run(ctx)
 		if rerr != nil {
-			s.log.Error("release failed", "version", version, "image", image, "reached", reached.String(), "err", rerr)
+			s.Log.Error("release failed", "version", version, "image", image, "reached", reached.String(), "err", rerr)
 			return
 		}
-		s.log.Info("release published", "version", version, "image", image, "sha", sha)
+		s.Log.Info("release published", "version", version, "image", image, "sha", sha)
 	}()
 
-	s.log.Info("release started", "version", version, "image", image, "repo", repoURL, "sha", sha)
+	s.Log.Info("release started", "version", version, "image", image, "repo", repoURL, "sha", sha)
 	return c.JSON(http.StatusAccepted, runnerBuildResp{
 		BuildJobID: bldID, Status: "releasing", RunnerPool: "32g", Image: image,
 	})
@@ -229,37 +230,37 @@ func (s *svc) startRelease(c *zip.Ctx, req runnerBuildReq) error {
 // direct-build core (launchDirectBuild, the same /v1/runner uses) and waits for the
 // image to be pushed; smoke boots that pushed image and waits for "listening"; tag
 // mints the receipt; notify rolls it to universe.
-func (s *svc) releaseFor(repoURL, sha, image, tag, dockerfile, bldID string) releasePlan {
+func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, bldID string) releasePlan {
 	return releasePlan{
 		build: func(ctx context.Context) error {
-			job, err := s.k8s.launchDirectBuild(ctx, repoURL, sha, image, dockerfile, bldID)
+			job, err := s.State.k8s.launchDirectBuild(ctx, repoURL, sha, image, dockerfile, bldID)
 			if err != nil {
 				return fmt.Errorf("launch build: %w", err)
 			}
-			if err := s.k8s.waitForJob(ctx, job, buildDeadline); err != nil {
+			if err := s.State.k8s.waitForJob(ctx, job, buildDeadline); err != nil {
 				return fmt.Errorf("build: %w", err)
 			}
 			return nil
 		},
-		smoke:  func(ctx context.Context) error { return s.smokeImage(ctx, image, bldID) },
-		tag:    func(ctx context.Context) error { return s.tagRelease(ctx, releaseRepoSlug, sha, tag) },
-		notify: func(ctx context.Context) error { return s.notifyUniverse(ctx, image, sha) },
+		smoke:  func(ctx context.Context) error { return smokeImage(s, ctx, image, bldID) },
+		tag:    func(ctx context.Context) error { return tagRelease(s, ctx, releaseRepoSlug, sha, tag) },
+		notify: func(ctx context.Context) error { return notifyUniverse(s, ctx, image, sha) },
 	}
 }
 
 // smokeImage boots the just-built image in-cluster and waits for the smoke Job to
 // pass — the native mirror of release.yml's smoke gate. A failed or timed-out Job is
 // a smoke failure, which STOPS the pipeline before the tag.
-func (s *svc) smokeImage(ctx context.Context, image, bldID string) error {
+func smokeImage(s *cloud.Service[state], ctx context.Context, image, bldID string) error {
 	key, err := randKey()
 	if err != nil {
 		return fmt.Errorf("smoke key: %w", err)
 	}
-	job, err := s.k8s.launchSmokeJob(ctx, image, key, bldID)
+	job, err := s.State.k8s.launchSmokeJob(ctx, image, key, bldID)
 	if err != nil {
 		return fmt.Errorf("launch smoke: %w", err)
 	}
-	if err := s.k8s.waitForJob(ctx, job, smokeJobDeadline); err != nil {
+	if err := s.State.k8s.waitForJob(ctx, job, smokeJobDeadline); err != nil {
 		return fmt.Errorf("smoke: %w", err)
 	}
 	return nil
@@ -281,23 +282,23 @@ func randKey() (string, error) {
 // repo's git tags and ghcr.io/hanzoai/cloud's pushed container tags — and returns the
 // monotonic next patch. Container tags are best-effort: if that call fails we still
 // bump over the git tags (never below a pushed number we could read).
-func (s *svc) computeReleaseVersion(ctx context.Context, repo string) (string, error) {
-	git, err := s.gitTags(ctx, repo)
+func computeReleaseVersion(s *cloud.Service[state], ctx context.Context, repo string) (string, error) {
+	git, err := gitTags(s, ctx, repo)
 	if err != nil {
 		return "", fmt.Errorf("list git tags: %w", err)
 	}
-	cont, err := s.containerTags(ctx)
+	cont, err := containerTags(s, ctx)
 	if err != nil {
-		s.log.Warn("release: list container tags failed (bumping over git tags only)", "err", err)
+		s.Log.Warn("release: list container tags failed (bumping over git tags only)", "err", err)
 	}
 	return nextVersion(git, cont, releaseFloor)
 }
 
-func (s *svc) gitTags(ctx context.Context, repo string) ([]string, error) {
+func gitTags(s *cloud.Service[state], ctx context.Context, repo string) ([]string, error) {
 	var out []struct {
 		Name string `json:"name"`
 	}
-	code, err := s.githubJSON(ctx, http.MethodGet, "/repos/"+repo+"/tags?per_page=100", ghToken(), nil, &out)
+	code, err := githubJSON(s, ctx, http.MethodGet, "/repos/"+repo+"/tags?per_page=100", ghToken(), nil, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +312,7 @@ func (s *svc) gitTags(ctx context.Context, repo string) ([]string, error) {
 	return names, nil
 }
 
-func (s *svc) containerTags(ctx context.Context) ([]string, error) {
+func containerTags(s *cloud.Service[state], ctx context.Context) ([]string, error) {
 	var out []struct {
 		Metadata struct {
 			Container struct {
@@ -319,7 +320,7 @@ func (s *svc) containerTags(ctx context.Context) ([]string, error) {
 			} `json:"container"`
 		} `json:"metadata"`
 	}
-	code, err := s.githubJSON(ctx, http.MethodGet, "/orgs/hanzoai/packages/container/cloud/versions?per_page=100", ghToken(), nil, &out)
+	code, err := githubJSON(s, ctx, http.MethodGet, "/orgs/hanzoai/packages/container/cloud/versions?per_page=100", ghToken(), nil, &out)
 	if err != nil {
 		return nil, err
 	}
@@ -336,14 +337,14 @@ func (s *svc) containerTags(ctx context.Context) ([]string, error) {
 // resolveCommit pins a ref (branch/tag/full sha) to a full commit SHA via the GitHub
 // API, so the whole release — the build, and the tag that receipts it — targets ONE
 // immutable commit. A 40-hex ref is already a commit and returned as-is.
-func (s *svc) resolveCommit(ctx context.Context, repo, ref string) (string, error) {
+func resolveCommit(s *cloud.Service[state], ctx context.Context, repo, ref string) (string, error) {
 	if isHex40(ref) {
 		return ref, nil
 	}
 	var out struct {
 		SHA string `json:"sha"`
 	}
-	code, err := s.githubJSON(ctx, http.MethodGet, "/repos/"+repo+"/commits/"+ref, ghToken(), nil, &out)
+	code, err := githubJSON(s, ctx, http.MethodGet, "/repos/"+repo+"/commits/"+ref, ghToken(), nil, &out)
 	if err != nil {
 		return "", err
 	}
@@ -372,12 +373,12 @@ func isHex40(s string) bool {
 // pass, so the tag is a RECEIPT for a proven image, never a build trigger. A 422 (ref
 // already exists) is surfaced as a collision, exactly release.yml's guard against
 // minting a number a concurrent run already took.
-func (s *svc) tagRelease(ctx context.Context, repo, sha, tag string) error {
+func tagRelease(s *cloud.Service[state], ctx context.Context, repo, sha, tag string) error {
 	tok := ghToken()
 	if tok == "" {
 		return fmt.Errorf("no GH_PAT configured for tag receipt")
 	}
-	code, err := s.githubJSON(ctx, http.MethodPost, "/repos/"+repo+"/git/refs", tok,
+	code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+repo+"/git/refs", tok,
 		map[string]string{"ref": "refs/tags/" + tag, "sha": sha}, nil)
 	if err != nil {
 		return err
@@ -388,7 +389,7 @@ func (s *svc) tagRelease(ctx context.Context, repo, sha, tag string) error {
 	if code != http.StatusCreated {
 		return fmt.Errorf("create tag %s: status %d", tag, code)
 	}
-	s.log.Info("release tag minted (receipt for a pushed, smoke-passed image)", "repo", repo, "tag", tag, "sha", sha)
+	s.Log.Info("release tag minted (receipt for a pushed, smoke-passed image)", "repo", repo, "tag", tag, "sha", sha)
 	return nil
 }
 
@@ -397,7 +398,7 @@ func (s *svc) tagRelease(ctx context.Context, repo, sha, tag string) error {
 // service uses (release.yml's notify-universe). Runs ONLY after the tag is minted, so
 // universe is never asked to deploy a phantom tag. Token is UNIVERSE_DISPATCH_TOKEN
 // from env (KMS-provisioned); fail closed if unset.
-func (s *svc) notifyUniverse(ctx context.Context, image, sha string) error {
+func notifyUniverse(s *cloud.Service[state], ctx context.Context, image, sha string) error {
 	tok := getenv("UNIVERSE_DISPATCH_TOKEN", "")
 	if tok == "" {
 		return fmt.Errorf("no UNIVERSE_DISPATCH_TOKEN configured")
@@ -411,14 +412,14 @@ func (s *svc) notifyUniverse(ctx context.Context, image, sha string) error {
 			"env":     "all",
 		},
 	}
-	code, err := s.githubJSON(ctx, http.MethodPost, "/repos/"+universeRepo+"/dispatches", tok, body, nil)
+	code, err := githubJSON(s, ctx, http.MethodPost, "/repos/"+universeRepo+"/dispatches", tok, body, nil)
 	if err != nil {
 		return err
 	}
 	if code != http.StatusNoContent {
 		return fmt.Errorf("notify universe: status %d", code)
 	}
-	s.log.Info("universe notified (image-update)", "image", image, "sha", sha)
+	s.Log.Info("universe notified (image-update)", "image", image, "sha", sha)
 	return nil
 }
 
@@ -437,7 +438,7 @@ var releaseHTTP = &http.Client{Timeout: 30 * time.Second}
 // bearer + JSON headers, and decodes the response into out (if non-nil), returning
 // the status code so each caller applies its own success/collision policy. It is the
 // single outbound seam the release path uses — DRY across list, resolve, tag, notify.
-func (s *svc) githubJSON(ctx context.Context, method, path, token string, body, out any) (int, error) {
+func githubJSON(s *cloud.Service[state], ctx context.Context, method, path, token string, body, out any) (int, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)

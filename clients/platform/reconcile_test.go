@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -165,7 +166,7 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 	fake := k.dyn.(*dynamicfake.FakeDynamicClient)
 	var rbacReady atomic.Bool
 	allowSSAR(fake, func() bool { return rbacReady.Load() })
-	s := &svc{store: store, k8s: k, log: luxlog.New("test")}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: store, k8s: k}}
 
 	_ = store.CreateProject(ctx, mkProject("acme", "web", "Web"))
 	proj, _ := store.GetProject(ctx, "acme", "web")
@@ -199,7 +200,7 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 	// Tick 1 — tenant RBAC NOT ready. The deployment must stay "building" (NOT failed),
 	// the build must NOT be failed, and no Service CR may exist yet…
 	rbacReady.Store(false)
-	s.reconcileBuild(ctx, get())
+	reconcileBuild(s, ctx, get())
 	if d := get(); d.Status != "building" {
 		t.Fatalf("tick 1 (RBAC pending) must leave the deployment 'building', got %q (msg=%q)", d.Status, d.Message)
 	}
@@ -217,7 +218,7 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 
 	// Tick 2 — the operator's RoleBinding has landed → the build reconciles to live.
 	rbacReady.Store(true)
-	s.reconcileBuild(ctx, get())
+	reconcileBuild(s, ctx, get())
 	if d := get(); d.Status != "deploying" {
 		t.Fatalf("tick 2 (RBAC ready) must advance the deployment to 'deploying', got %q (msg=%q)", d.Status, d.Message)
 	}
@@ -245,7 +246,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
 	k := fakeK8s()
-	s := &svc{store: store, k8s: k, log: luxlog.New("test")}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: store, k8s: k}}
 
 	_ = store.CreateProject(ctx, mkProject("maxpower", "web", "Web"))
 	proj, _ := store.GetProject(ctx, "maxpower", "web")
@@ -277,7 +278,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	get := func(id string) Deployment { d, _ := store.GetDeployment(ctx, "maxpower", app.ID, id); return d }
 
 	// INVERSION: the newer build (v2) reconciles FIRST and goes live.
-	s.reconcileBuild(ctx, get(depV2))
+	reconcileBuild(s, ctx, get(depV2))
 	if a, _ := store.GetApplicationByID(ctx, "maxpower", app.ID); a.CurrentDeploy != depV2 || a.Status != "live" || a.ImageTag != "v2" {
 		t.Fatalf("after v2 want live@v2, got status=%s current=%s tag=%s", a.Status, a.CurrentDeploy, a.ImageTag)
 	}
@@ -286,7 +287,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	}
 
 	// The older build (v1) finishes LATE — it must not regress the live version.
-	s.reconcileBuild(ctx, get(depV1))
+	reconcileBuild(s, ctx, get(depV1))
 	a, _ := store.GetApplicationByID(ctx, "maxpower", app.ID)
 	if a.CurrentDeploy != depV2 || a.ImageTag != "v2" {
 		t.Fatalf("late older build v1 REGRESSED live: want current=%s tag=v2, got current=%s tag=%s", depV2, a.CurrentDeploy, a.ImageTag)
