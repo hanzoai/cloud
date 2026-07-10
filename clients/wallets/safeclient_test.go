@@ -157,7 +157,7 @@ func TestSafeCustody(t *testing.T) {
 		t.Fatalf("safe address = %q, want %q", w.Address, safeAddr)
 	}
 	// KeyRef encodes both ring handles.
-	stored, found, err := s.store.getWallet(context.Background(), "acme", w.ID)
+	stored, found, err := s.State.store.getWallet(context.Background(), "acme", w.ID)
 	if err != nil || !found {
 		t.Fatalf("store getWallet: found=%v err=%v", found, err)
 	}
