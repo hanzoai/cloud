@@ -151,8 +151,12 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
+	}
 	name := nameParam(c)
-	f, err := s.store.Get(c.Context(), org, name)
+	f, err := store.Get(c.Context(), org, name)
 	if err == errNotFound {
 		return zip.ErrNotFound("function not found")
 	}
@@ -203,7 +207,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 		iv.Status = "error"
 		iv.Error = truncate(res.Errout, 16*1024)
 	}
-	if err := s.store.InsertInvocation(c.Context(), iv); err != nil {
+	if err := store.InsertInvocation(c.Context(), iv); err != nil {
 		s.log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
 	}
 	// Debit the caller's org ledger when the sandbox ACTUALLY executed — real
