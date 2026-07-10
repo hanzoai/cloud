@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block body %}
+<h3>
+Hashid: {{ id }}
+</h3>
+
+<p>
+<ul>
+    <li>Namespace: {{ namespace }}</li>
+    <li>Kind: {{ kind }}</li>
+    <li>Parent: {{ parent }}</li>
+    <li>IntID: {{ intid }}</li>
+</ul>
+</p>
+{% endblock %}

@@ -175,6 +175,12 @@ type CommerceClient interface {
 // AIClient is the inter-subsystem interface to AI.
 type AIClient interface {
 	ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
+	// Embed returns one vector per input text, aligned by index, from the SAME
+	// gateway + credential as ChatCompletion. Embeddings therefore authenticate
+	// and meter through the ONE org/project-aligned path — never a static
+	// side-channel key. model is the embeddings model id (e.g. "bge-m3");
+	// an empty inputs slice returns (nil, nil).
+	Embed(ctx context.Context, model string, inputs []string) ([][]float32, error)
 }
 
 // ModelLister is an OPTIONAL capability an AIClient may ALSO implement: it
