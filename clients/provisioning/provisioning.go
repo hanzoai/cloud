@@ -569,104 +569,14 @@ func tenant(c *zip.Ctx) (string, bool) {
 }
 
 // sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
-// INJECTIVE in the raw owner: an org bearing any whitespace/control/format rune
-// is REFUSED (→ "") at the boundary — folding it would not survive TrimSpace /
-// transport OWS-trim and would collapse "acme " onto "acme" (RED CRIT-2
-// residual) — and every accepted owner then maps to the identity on a DNS-1123
-// label, else a folded slug disambiguated with "-" + the first 16 hex of
-// SHA-256(raw owner). Without the suffix the fold was lossy —
-// ToLower + every non-[a-z0-9-]→"-" + a 32-char truncation collapse distinct
-// owners (`Acme`/`acme`, `team.a`/`team-a`) onto one slug, and since the whole
-// tenant→bucket/DB namespace hashes THIS slug (orgHash, physicalName), that was a
-// cross-tenant collision: two orgs sharing one physical namespace (RED MED, proven
-// reachable because the IAM org name is a varchar with no shape validator, so a
-// fold-sibling of a target org is registerable and mints a valid token). Uses the
-// SAME disambiguation STRATEGY as iam/object/orgdb.go:orgSlug (fold + SHA-256
-// suffix) — not byte-identical (this caps the identity branch at 32 chars and
-// truncates the fold, since the slug keys cloud's own bucket/DB names, which stay
-// consistent across allocate + operate; IAM's orgSlug keys only its per-org
-// SQLite files). The org still flows into physical identifiers, so this is the
-// isolation boundary.
-//
-// The identity fast-path is withheld from a clean slug that ITSELF looks like a
-// suffixed output (`<label>-<16 lowercase hex>`): such a slug is ambiguous with a
-// folded owner's disambiguation, so it too is re-suffixed — otherwise a squatted
-// org literally named "foo-<sha256(Foo)[:8]>" would alias non-slug owner "Foo".
-// Real org names essentially never end in "-"+16-hex, so this shifts nothing real
-// while closing the alias class completely (every non-identity output carries a
-// hash of its OWN raw bytes, so two distinct raws collide only on a full 64-bit
-// SHA-256 prefix collision).
-func sanitizeOrg(s string) string {
-	// Reject at the boundary — an empty org, or one carrying any whitespace /
-	// control / zero-width-format rune, is a NON-INJECTIVE tenant identifier:
-	// strings.TrimSpace (here or upstream) and fasthttp's header-value OWS trim
-	// silently collapse "acme " onto "acme", so distinct IAM orgs would fold onto
-	// one physical namespace/bucket/DB. Refusing (→ "", which every caller gates
-	// on) is fail-secure and, with the raw-byte hash below, makes the map
-	// injective end-to-end (RED CRIT-2 residual). This mirrors cloud.OrgHasUnsafeRune
-	// at the identity middleware; enforcing it HERE too covers non-header callers
-	// (clients/s3 derives its org tag through SanitizeOrg, not the request org).
-	if s == "" || cloud.OrgHasUnsafeRune(s) {
-		return ""
-	}
-	lower := strings.ToLower(s)
-	if isDNSLabel(lower) && lower == s && len(lower) <= 32 && !looksSuffixed(lower) {
-		return lower // already a clean, unambiguous slug: identity, no suffix needed
-	}
-	var b strings.Builder
-	for _, r := range lower {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
-	}
-	folded := strings.Trim(b.String(), "-")
-	if len(folded) > 32 {
-		folded = strings.Trim(folded[:32], "-")
-	}
-	// Disambiguate with a 64-bit hash of the RAW (unsafe-rune-free, untrimmed)
-	// owner so distinct owners that fold together stay distinct. The suffix is
-	// derived from the exact input bytes — NEVER a trimmed copy — so a collision
-	// would need a SHA-256 collision on the owner bytes themselves.
-	sum := sha256.Sum256([]byte(s))
-	return folded + "-" + hex.EncodeToString(sum[:8])
-}
-
-// isDNSLabel reports whether s is a non-empty [a-z0-9-] string that is not "."
-// or "..". Such an owner needs no disambiguation (sanitizeOrg is the identity on
-// it), matching iam/object/orgdb.go's validateOrgSlug.
-func isDNSLabel(s string) bool {
-	if s == "" || s == "." || s == ".." {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// looksSuffixed reports whether s ends in "-" + exactly 16 lowercase-hex chars —
-// the shape of sanitizeOrg's own disambiguation suffix. A clean slug of this
-// shape is denied the identity fast-path (and re-suffixed) so it can never alias
-// a folded non-slug owner's output. This is the ONLY collision class the identity
-// fast-path could otherwise admit.
-func looksSuffixed(s string) bool {
-	if len(s) < 17 || s[len(s)-17] != '-' {
-		return false
-	}
-	for _, r := range s[len(s)-16:] {
-		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
-			return false
-		}
-	}
-	return true
-}
+// INJECTIVE in the raw owner. It delegates to cloud.SanitizeOrg — the ONE org-slug
+// normalizer for the tenant layer — so the slug this control plane keys its
+// bucket/DB names on is byte-identical to the one cloud.TenantDB folds every
+// per-tenant SQLite path through (and to what S3/KMS/knowledge derive). The
+// isolation-boundary rationale (refuse unsafe-rune owners; identity on a clean
+// DNS-1123 label; else fold + "-"+SHA-256(raw)[:8], with the suffixed-shape
+// fast-path exclusion) lives with the implementation in cloud/tenantdb.go.
+func sanitizeOrg(s string) string { return cloud.SanitizeOrg(s) }
 
 // orgHash returns a fixed-width, collision-resistant tag for an org slug: the
 // first 16 hex chars (64 bits) of SHA-256(org). The FIXED WIDTH is the whole
