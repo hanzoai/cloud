@@ -380,3 +380,52 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// TestCrossOriginIsolation pins the opt-in header policy: OFF ⇒ no isolation
+// headers on anything; ON ⇒ the document (text/html) carries the COOP+COEP pair a
+// browser requires to grant crossOriginIsolated (and NO CORP), while every asset
+// carries CORP:same-origin (and NO COOP/COEP). This is what lets a multithreaded
+// WebGL/WASM build use SharedArrayBuffer without the isolation ever leaking to a
+// site that did not opt in.
+func TestCrossOriginIsolation(t *testing.T) {
+	// Disabled: never any isolation header, whatever the content type.
+	for _, ct := range []string{"text/html; charset=utf-8", "application/wasm", "text/css; charset=utf-8"} {
+		if h := crossOriginIsolation(false, ct); h != nil {
+			t.Errorf("crossOriginIsolation(false, %q) = %v, want nil", ct, h)
+		}
+	}
+
+	// Enabled + document: COOP + COEP, and NEVER CORP.
+	doc := headerMap(crossOriginIsolation(true, "text/html; charset=utf-8"))
+	if doc["Cross-Origin-Opener-Policy"] != "same-origin" {
+		t.Errorf("document COOP = %q, want same-origin", doc["Cross-Origin-Opener-Policy"])
+	}
+	if doc["Cross-Origin-Embedder-Policy"] != "require-corp" {
+		t.Errorf("document COEP = %q, want require-corp", doc["Cross-Origin-Embedder-Policy"])
+	}
+	if _, ok := doc["Cross-Origin-Resource-Policy"]; ok {
+		t.Errorf("document must not carry CORP, got %v", doc)
+	}
+
+	// Enabled + asset (wasm/js/data/css): CORP:same-origin, and NEVER COOP/COEP.
+	for _, ct := range []string{"application/wasm", "application/octet-stream", "text/javascript; charset=utf-8", "text/css; charset=utf-8"} {
+		a := headerMap(crossOriginIsolation(true, ct))
+		if a["Cross-Origin-Resource-Policy"] != "same-origin" {
+			t.Errorf("asset %q CORP = %q, want same-origin", ct, a["Cross-Origin-Resource-Policy"])
+		}
+		if _, ok := a["Cross-Origin-Opener-Policy"]; ok {
+			t.Errorf("asset %q must not carry COOP, got %v", ct, a)
+		}
+		if _, ok := a["Cross-Origin-Embedder-Policy"]; ok {
+			t.Errorf("asset %q must not carry COEP, got %v", ct, a)
+		}
+	}
+}
+
+func headerMap(pairs [][2]string) map[string]string {
+	m := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		m[p[0]] = p[1]
+	}
+	return m
+}
