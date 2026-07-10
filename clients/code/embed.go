@@ -35,8 +35,12 @@ type gatewayEmbedder struct {
 }
 
 func newEmbedder() *gatewayEmbedder {
+	base := strings.TrimRight(getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"), "/")
+	if !strings.HasSuffix(base, "/v1") {
+		base += "/v1"
+	}
 	return &gatewayEmbedder{
-		base:  strings.TrimRight(getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"), "/"),
+		base:  base,
 		key:   os.Getenv("CLOUD_AI_API_KEY"),
 		model: getenv("CODE_EMBED_MODEL", "text-embedding-3-small"),
 		http:  &http.Client{Timeout: 30 * time.Second},
