@@ -80,6 +80,10 @@ type svc struct {
 	appLock     appMutex     // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
 	deployGate  inflightGate // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 	resolver    dnsResolver  // custom-domain ownership verification (domains.go); nil ⇒ system resolver
+	// bill is the shared per-org resource meter (reuses deps.Metering, the one
+	// commerce client). It meters usage-native build minutes (buildmeter.go) on
+	// build completion. Nil/!Enabled() makes MeterUsage a no-op.
+	bill *cloud.ResourceMeter
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -111,7 +115,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	s := &svc{store: store, k8s: k, kms: deps.KMS, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
-		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}
+		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app"),
+		bill:      cloud.NewResourceMeter(deps, "platform")}
 	mounted = s
 	s.routes(app)
 
