@@ -1,0 +1,113 @@
+name: Build Frontend Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'Dockerfile.site'
+      - 'Dockerfile.store'
+      - 'Dockerfile.admin'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+  workflow_dispatch:
+
+jobs:
+  build-site:
+    runs-on: hanzo-build-linux-amd64
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push commerce-site
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.site
+          push: ${{ github.event_name != 'pull_request' }}
+          # 0.2.0 = the nginx → hanzoai/static migration (canonical static
+          # plugin, no nginx). sha-<gitsha> is the immutable pin the
+          # commerce-site operator CR tracks; :latest is convenience only.
+          tags: |
+            ghcr.io/hanzoai/commerce-site:0.2.0
+            ghcr.io/hanzoai/commerce-site:sha-${{ github.sha }}
+            ghcr.io/hanzoai/commerce-site:latest
+          cache-from: type=gha,scope=site
+          cache-to: type=gha,scope=site,mode=max
+
+  build-store:
+    runs-on: hanzo-build-linux-amd64
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push commerce-store
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.store
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/hanzoai/commerce-store:latest
+            ghcr.io/hanzoai/commerce-store:${{ github.sha }}
+          cache-from: type=gha,scope=store
+          cache-to: type=gha,scope=store,mode=max
+
+  build-admin:
+    runs-on: hanzo-build-linux-amd64
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push commerce-admin
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.admin
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/hanzoai/commerce-admin:latest
+            ghcr.io/hanzoai/commerce-admin:${{ github.sha }}
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,scope=admin,mode=max
