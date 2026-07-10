@@ -35,7 +35,12 @@ var consoleFS embed.FS
 // /v1/does-not-exist) must return a real 404 from the API namespace — not the
 // SPA shell — so clients never receive HTML where they expect JSON. Every other
 // path is a client-side console route and falls back to index.html.
-var apiPrefixes = []string{"/v1/", "/zap", "/healthz", "/readyz", "/metrics"}
+// NOTE: "/metrics" is intentionally NOT here. The Prometheus scrape surface lives
+// on the SEPARATE ops listener (:9090, healthMux) — see serve.go. On the public
+// product API (:8000) "/metrics" is a CONSOLE product page (the MetricsModule), so
+// it must fall through to the SPA shell, not 404. One surface per port: :8000 =
+// product API + SPA, :9090 = ops (health + Prometheus /metrics).
+var apiPrefixes = []string{"/v1/", "/zap", "/healthz", "/readyz"}
 
 // mountConsole registers the embedded console at the web root as the app's
 // terminal handler. It is called LAST in Serve — after every /v1 subsystem

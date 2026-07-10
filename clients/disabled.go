@@ -73,7 +73,7 @@ func (disabledAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*type
 	return nil, &disabledErr{"ai"}
 }
 
-func (disabledAI) Embed(_ context.Context, _ string, _ []string) ([][]float32, error) {
+func (disabledAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
 	return nil, &disabledErr{"ai"}
 }
 

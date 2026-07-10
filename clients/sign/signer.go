@@ -39,13 +39,29 @@ import (
 //  3. A freshly generated self-signed RSA-2048 cert, persisted to (2) so the
 //     signing identity is stable across restarts — the zero-config dev default
 //     that still yields a genuinely signed PDF.
+//
+// PRODUCTION GATE: paths (2) and (3) are DEV-ONLY. In a production environment
+// the platform MUST seal legal documents with the KMS-custodied cert (1) — a
+// self-signed cert, or a plaintext PEM sitting on the PVC, is an untrusted seal.
+// newSigner REFUSES to boot in a production env without (1), failing closed.
 type signer struct {
 	cert  *x509.Certificate
 	key   *rsa.PrivateKey
 	chain []*x509.Certificate
 }
 
-func newSigner(dataDir string) (*signer, error) {
+// isProductionEnv reports whether env names a production deployment (any of the
+// recognized aliases). The signer refuses a self-signed/disk cert in these envs.
+func isProductionEnv(env string) bool {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "production", "prod", "mainnet", "main", "live":
+		return true
+	default:
+		return false
+	}
+}
+
+func newSigner(dataDir, env string) (*signer, error) {
 	if certB64, keyB64 := os.Getenv("CLOUD_SIGN_CERT_PEM"), os.Getenv("CLOUD_SIGN_KEY_PEM"); certB64 != "" && keyB64 != "" {
 		certPEM, err := base64.StdEncoding.DecodeString(strings.TrimSpace(certB64))
 		if err != nil {
@@ -56,6 +72,12 @@ func newSigner(dataDir string) (*signer, error) {
 			return nil, fmt.Errorf("sign: decode CLOUD_SIGN_KEY_PEM: %w", err)
 		}
 		return signerFromPEM(certPEM, keyPEM)
+	}
+
+	// No KMS-custodied cert. In production this is fatal: a legal-document seal must
+	// never be a self-signed cert or a plaintext PEM on the PVC. Require (1).
+	if isProductionEnv(env) {
+		return nil, fmt.Errorf("sign: refusing to boot in env %q without a KMS-custodied signing certificate — set CLOUD_SIGN_CERT_PEM + CLOUD_SIGN_KEY_PEM (base64 PEM injected from KMS); a self-signed cert must never seal legal documents in production", env)
 	}
 
 	dir := filepath.Join(dataDir, "sign")
