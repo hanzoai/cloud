@@ -45,7 +45,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,26 +75,26 @@ const (
 	maxAdminLimit = 1000
 )
 
-type svc struct {
+// state is referrals's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	store      *Store
 	commerce   commerce
-	log        luxlog.Logger
 	linkBase   string          // https://hanzo.ai (brand host) — the ?ref link prefix
 	auditStore *audit.Recorder // best-effort grant audit; nil disables it
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires the referrals surface onto app per HIP-0106.
+// Mount wires the referrals surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted) so Shutdown can release the store, so it
+// constructs the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("referrals.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("referrals.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "referrals")
 	if deps.DataDir == "" {
 		return fmt.Errorf("referrals.Mount: empty DataDir")
 	}
@@ -106,22 +105,24 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("referrals.Mount: open store: %w", err)
 	}
-	s := &svc{
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "referrals"), State: state{
 		store:      store,
 		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		log:        log,
 		linkBase:   linkBase(deps),
 		auditStore: deps.Audit,
-	}
+	}}
 	mounted = s
-
-	app.Get("/v1/referrals", s.myReferrals)
-	app.Post("/v1/referrals/claim", s.claim)
-	app.Get("/v1/admin/referrals", s.adminList)
-	app.Post("/v1/admin/referrals/sweep", s.adminSweep)
-
-	log.Info("referrals mounted", "brand", deps.Brand, "linkBase", s.linkBase, "commerce", s.commerce.configured())
+	routes(app, s)
+	s.Log.Info("referrals mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "commerce", s.State.commerce.configured())
 	return nil
+}
+
+// routes registers the referrals surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/referrals", cloud.Handle(s, myReferrals))
+	app.Post("/v1/referrals/claim", cloud.Handle(s, claim))
+	app.Get("/v1/admin/referrals", cloud.Handle(s, adminList))
+	app.Post("/v1/admin/referrals/sweep", cloud.Handle(s, adminSweep))
 }
 
 func init() {
@@ -138,29 +139,29 @@ func init() {
 // code + link, the referrals they've made (with status + credit earned), and the
 // total credit earned. It ALSO opportunistically runs the qualify check for the
 // caller's own pending referees, so the referrer's page is self-updating.
-func (s *svc) myReferrals(c *zip.Ctx) error {
+func myReferrals(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view referrals")
 	}
 	ctx := c.Context()
 
-	code, err := s.store.EnsureCode(ctx, org)
+	code, err := s.State.store.EnsureCode(ctx, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "referral code: %v", err)
 	}
 
 	// Lazy qualify sweep for MY referees (bounded, best-effort — a commerce hiccup
 	// never fails the page; the referral simply stays pending for the next check).
-	if pending, perr := s.store.ListPending(ctx, org, sweepLimit); perr == nil {
+	if pending, perr := s.State.store.ListPending(ctx, org, sweepLimit); perr == nil {
 		for _, r := range pending {
-			if _, gerr := s.qualifyAndGrant(ctx, r); gerr != nil {
-				s.log.Warn("referrals: lazy qualify check failed", "id", r.ID, "err", gerr)
+			if _, gerr := qualifyAndGrant(s, ctx, r); gerr != nil {
+				s.Log.Warn("referrals: lazy qualify check failed", "id", r.ID, "err", gerr)
 			}
 		}
 	}
 
-	rows, err := s.store.ListByReferrer(ctx, org, listLimit)
+	rows, err := s.State.store.ListByReferrer(ctx, org, listLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
 	}
@@ -180,7 +181,7 @@ func (s *svc) myReferrals(c *zip.Ctx) error {
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"code":               code,
-		"link":               s.linkBase + "/?ref=" + code,
+		"link":               s.State.linkBase + "/?ref=" + code,
 		"referrerBonusCents": referrerBonusCents,
 		"refereeBonusCents":  refereeBonusCents,
 		"creditsEarnedCents": earned,
@@ -198,7 +199,7 @@ type claimRequest struct {
 // claim records a referral. The REFEREE is the validated caller (never client-
 // supplied); the referrer is resolved from the code. Idempotent (one per referee,
 // first-touch wins), self-referral blocked, unknown code rejected.
-func (s *svc) claim(c *zip.Ctx) error {
+func claim(s *cloud.Service[state], c *zip.Ctx) error {
 	refereeOrg, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to claim a referral")
@@ -213,7 +214,7 @@ func (s *svc) claim(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	referrerOrg, err := s.store.OrgForCode(ctx, code)
+	referrerOrg, err := s.State.store.OrgForCode(ctx, code)
 	if err != nil {
 		if err == errUnknownCode {
 			return zip.ErrNotFound("unknown referral code")
@@ -228,7 +229,7 @@ func (s *svc) claim(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	ref, created, err := s.store.Claim(ctx, id, referrerOrg, refereeOrg, code)
+	ref, created, err := s.State.store.Claim(ctx, id, referrerOrg, refereeOrg, code)
 	if err != nil {
 		switch err {
 		case errSelfReferral:
@@ -254,11 +255,11 @@ func (s *svc) claim(c *zip.Ctx) error {
 
 // adminList answers GET /v1/admin/referrals — every referral (both orgs exposed)
 // + a fleet summary. Global-admin only.
-func (s *svc) adminList(c *zip.Ctx) error {
+func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
-	rows, err := s.store.ListAll(c.Context(), adminLimitOf(c))
+	rows, err := s.State.store.ListAll(c.Context(), adminLimitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list referrals: %v", err)
 	}
@@ -281,21 +282,21 @@ func (s *svc) adminList(c *zip.Ctx) error {
 // adminSweep answers POST /v1/admin/referrals/sweep — the periodic qualify path
 // (a cron/o11y hits it, or an operator on demand). It qualify-checks every
 // pending referral and grants the ones that now qualify. Global-admin only.
-func (s *svc) adminSweep(c *zip.Ctx) error {
+func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	pending, err := s.store.ListPending(ctx, "", sweepLimit)
+	pending, err := s.State.store.ListPending(ctx, "", sweepLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list pending: %v", err)
 	}
 	swept, credited := 0, 0
 	for _, r := range pending {
 		swept++
-		after, gerr := s.qualifyAndGrant(ctx, r)
+		after, gerr := qualifyAndGrant(s, ctx, r)
 		if gerr != nil {
-			s.log.Warn("referrals: sweep qualify failed", "id", r.ID, "err", gerr)
+			s.Log.Warn("referrals: sweep qualify failed", "id", r.ID, "err", gerr)
 			continue
 		}
 		if after.Status == StatusCredited && r.Status != StatusCredited {
@@ -321,11 +322,11 @@ func adminOK(c *zip.Ctx, data any) error {
 // a concurrent read, and the sweep can never double-pay. A commerce read error
 // leaves the referral pending (retried next check); a deposit error after the
 // latch is logged loud (at-most-once is the safety priority for credit).
-func (s *svc) qualifyAndGrant(ctx context.Context, ref Referral) (Referral, error) {
+func qualifyAndGrant(s *cloud.Service[state], ctx context.Context, ref Referral) (Referral, error) {
 	if ref.Status == StatusCredited || ref.CreditedAt != 0 {
 		return ref, nil
 	}
-	spent, err := s.commerce.spendCents(ctx, ref.RefereeOrg, orgSubject(ref.RefereeOrg))
+	spent, err := s.State.commerce.spendCents(ctx, ref.RefereeOrg, orgSubject(ref.RefereeOrg))
 	if err != nil {
 		return ref, err // commerce hiccup — try again next check, stays pending
 	}
@@ -346,50 +347,50 @@ func (s *svc) qualifyAndGrant(ctx context.Context, ref Referral) (Referral, erro
 		return ref, fmt.Errorf("reserve referral bonus: %w", berr) // stays pending, retried
 	}
 	if !backed {
-		s.log.Warn("referrals: bonus deferred — treasury reserve insufficient",
+		s.Log.Warn("referrals: bonus deferred — treasury reserve insufficient",
 			"id", ref.ID, "neededCents", referrerBonusCents+refereeBonusCents)
 		return ref, nil // honestly pending until the fund is replenished
 	}
 	_ = entryID // the fund debit is linked to this referral by its ref (referral:<id>)
 
-	won, err := s.store.LatchCredit(ctx, ref.ID, referrerBonusCents, refereeBonusCents, time.Now().Unix())
+	won, err := s.State.store.LatchCredit(ctx, ref.ID, referrerBonusCents, refereeBonusCents, time.Now().Unix())
 	if err != nil {
 		return ref, err
 	}
 	if !won {
 		// A concurrent sweep/read already claimed + granted it — never double-pay.
-		return s.store.Get(ctx, ref.ID)
+		return s.State.store.Get(ctx, ref.ID)
 	}
 
-	referrerTxn, rerr := s.grant(ctx, ref.ReferrerOrg, referrerBonusCents,
+	referrerTxn, rerr := grant(s, ctx, ref.ReferrerOrg, referrerBonusCents,
 		fmt.Sprintf("Referral bonus: %s qualified (code %s)", ref.RefereeOrg, ref.Code))
-	refereeTxn, ferr := s.grant(ctx, ref.RefereeOrg, refereeBonusCents,
+	refereeTxn, ferr := grant(s, ctx, ref.RefereeOrg, refereeBonusCents,
 		fmt.Sprintf("Referral welcome bonus (code %s)", ref.Code))
-	if err := s.store.SetTxns(ctx, ref.ID, referrerTxn, refereeTxn); err != nil {
-		s.log.Error("referrals: record txns failed", "id", ref.ID, "err", err)
+	if err := s.State.store.SetTxns(ctx, ref.ID, referrerTxn, refereeTxn); err != nil {
+		s.Log.Error("referrals: record txns failed", "id", ref.ID, "err", err)
 	}
 	if rerr != nil || ferr != nil {
 		// The latch already fired, so this bonus is NOT retried (at-most-once). Loud,
 		// never silent — an operator can reconcile from this + the audit row.
-		s.log.Error("referrals: bonus deposit failed (latched at-most-once; not retried)",
+		s.Log.Error("referrals: bonus deposit failed (latched at-most-once; not retried)",
 			"id", ref.ID, "referrerErr", rerr, "refereeErr", ferr)
 	}
-	s.emitGrantAudit(ctx, ref, referrerTxn, refereeTxn)
-	return s.store.Get(ctx, ref.ID)
+	emitGrantAudit(s, ctx, ref, referrerTxn, refereeTxn)
+	return s.State.store.Get(ctx, ref.ID)
 }
 
 // grant deposits a promo credit into org's wallet (Credit/trial bucket) and
 // returns the ledger transaction id. Subject == the bare org slug, exactly the
 // wallet the balance panel reads (symmetric with admin.grantCredit).
-func (s *svc) grant(ctx context.Context, org string, cents int64, note string) (string, error) {
-	return s.commerce.deposit(ctx, org, orgSubject(org), cents, grantCurrency, note, grantTag)
+func grant(s *cloud.Service[state], ctx context.Context, org string, cents int64, note string) (string, error) {
+	return s.State.commerce.deposit(ctx, org, orgSubject(org), cents, grantCurrency, note, grantTag)
 }
 
 // emitGrantAudit records a referral bonus in cloud's tamper-evident trail (action
 // referral.credit, distinct from admin.customer.credit). Best-effort; a nil store
 // is a no-op. The actor is the referral engine (a system grant, not a user).
-func (s *svc) emitGrantAudit(ctx context.Context, ref Referral, referrerTxn, refereeTxn string) {
-	if s.auditStore == nil {
+func emitGrantAudit(s *cloud.Service[state], ctx context.Context, ref Referral, referrerTxn, refereeTxn string) {
+	if s.State.auditStore == nil {
 		return
 	}
 	rec := audit.Record{
@@ -404,8 +405,8 @@ func (s *svc) emitGrantAudit(ctx context.Context, ref Referral, referrerTxn, ref
 			"referrerTxn": referrerTxn, "refereeTxn": refereeTxn,
 		})),
 	}
-	if _, err := s.auditStore.Append(ctx, rec); err != nil {
-		s.log.Error("referrals: audit emit failed", "id", ref.ID, "err", err)
+	if _, err := s.State.auditStore.Append(ctx, rec); err != nil {
+		s.Log.Error("referrals: audit emit failed", "id", ref.ID, "err", err)
 	}
 }
 
@@ -537,10 +538,10 @@ func linkBase(deps cloud.Deps) string {
 
 // Shutdown closes the referrals store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }

@@ -58,7 +58,6 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -93,26 +92,27 @@ const (
 	payoutLimit   = 100
 )
 
-type svc struct {
+// state is affiliates's own data; shared deps live in the embedded cloud.Base,
+// reached as s.Log.
+type state struct {
 	store      *Store
 	commerce   commerce
-	log        luxlog.Logger
 	linkBase   string          // https://hanzo.ai (brand host) — the ?aff link prefix
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
-// Mount wires the affiliates surface onto app per HIP-0106.
+// Mount wires the affiliates surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted) so Shutdown can release the store, so it
+// constructs the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("affiliates.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("affiliates.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "affiliates")
 	if deps.DataDir == "" {
 		return fmt.Errorf("affiliates.Mount: empty DataDir")
 	}
@@ -123,26 +123,29 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("affiliates.Mount: open store: %w", err)
 	}
-	s := &svc{
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "affiliates"), State: state{
 		store:      store,
 		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		log:        log,
 		linkBase:   linkBase(deps),
 		auditStore: deps.Audit,
-	}
+	}}
 	mounted = s
-
-	app.Get("/v1/affiliates", s.myAffiliates)
-	app.Post("/v1/affiliates/apply", s.apply)
-	app.Post("/v1/affiliates/attribute", s.attribute)
-	app.Get("/v1/admin/affiliates", s.adminList)
-	app.Post("/v1/admin/affiliates/sweep", s.adminSweep)
-	app.Post("/v1/admin/affiliates/:id/approve", s.adminApprove)
-	app.Post("/v1/admin/affiliates/:id/suspend", s.adminSuspend)
-	app.Post("/v1/admin/affiliates/:id/payout", s.adminPayout)
-
-	log.Info("affiliates mounted", "brand", deps.Brand, "linkBase", s.linkBase, "commerce", s.commerce.configured())
+	routes(app, s)
+	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "commerce", s.State.commerce.configured())
 	return nil
+}
+
+// routes registers the affiliates surface. The static /sweep binds before the
+// /:id/* param routes (distinct segment counts).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/affiliates", cloud.Handle(s, myAffiliates))
+	app.Post("/v1/affiliates/apply", cloud.Handle(s, apply))
+	app.Post("/v1/affiliates/attribute", cloud.Handle(s, attribute))
+	app.Get("/v1/admin/affiliates", cloud.Handle(s, adminList))
+	app.Post("/v1/admin/affiliates/sweep", cloud.Handle(s, adminSweep))
+	app.Post("/v1/admin/affiliates/:id/approve", cloud.Handle(s, adminApprove))
+	app.Post("/v1/admin/affiliates/:id/suspend", cloud.Handle(s, adminSuspend))
+	app.Post("/v1/admin/affiliates/:id/payout", cloud.Handle(s, adminPayout))
 }
 
 func init() {
@@ -162,14 +165,14 @@ func init() {
 // rate, referred count, accrued/pending/paid, payout history). For an APPROVED
 // affiliate it ALSO opportunistically runs the accrual sweep over its own referred
 // orgs, so the dashboard is self-updating (bounded, best-effort).
-func (s *svc) myAffiliates(c *zip.Ctx) error {
+func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to view your affiliate program")
 	}
 	ctx := c.Context()
 
-	a, err := s.store.GetByOrg(ctx, org)
+	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
 		return c.JSON(http.StatusOK, map[string]any{
 			"isAffiliate":    false,
@@ -183,19 +186,19 @@ func (s *svc) myAffiliates(c *zip.Ctx) error {
 	// Lazy accrual sweep for MY referred orgs (bounded, best-effort — a commerce
 	// hiccup never fails the page; it simply accrues on the next sweep).
 	if a.Status == StatusApproved {
-		if _, _, serr := s.sweepAffiliate(ctx, a); serr != nil {
-			s.log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
+		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
+			s.Log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
 		}
-		if refreshed, rerr := s.store.GetByID(ctx, a.ID); rerr == nil {
+		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
 			a = refreshed // pick up any accrual the lazy sweep just latched
 		}
 	}
 
-	referred, err := s.store.CountReferrals(ctx, a.ID)
+	referred, err := s.State.store.CountReferrals(ctx, a.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
-	payouts, err := s.store.ListPayouts(ctx, a.ID, payoutLimit)
+	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
@@ -206,7 +209,7 @@ func (s *svc) myAffiliates(c *zip.Ctx) error {
 		"status":        a.Status,
 		"code":          a.Code,
 		"requestedCode": a.RequestedCode,
-		"link":          s.affiliateLink(a.Code),
+		"link":          affiliateLink(s, a.Code),
 		"rateBps":       a.RateBps,
 		"referredCount": referred,
 		"accruedCents":  a.AccruedCents,
@@ -225,7 +228,7 @@ type applyRequest struct {
 // apply enrolls the validated caller's org as an affiliate at status=applied.
 // Idempotent (one affiliate per org, first apply wins). A malformed vanity code is
 // refused up front.
-func (s *svc) apply(c *zip.Ctx) error {
+func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to apply as an affiliate")
@@ -244,7 +247,7 @@ func (s *svc) apply(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	a, created, err := s.store.Apply(ctx, id, org, code, defaultRateBps)
+	a, created, err := s.State.store.Apply(ctx, id, org, code, defaultRateBps)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "apply: %v", err)
 	}
@@ -272,7 +275,7 @@ type attributeRequest struct {
 // validated caller (never client-supplied); the affiliate is resolved from the code
 // (approved affiliates only). Idempotent (one per referred org, first-touch wins),
 // self-attribution blocked, unknown code rejected.
-func (s *svc) attribute(c *zip.Ctx) error {
+func attribute(s *cloud.Service[state], c *zip.Ctx) error {
 	referredOrg, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("sign in to record an affiliate")
@@ -287,7 +290,7 @@ func (s *svc) attribute(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	aff, err := s.store.AffiliateForCode(ctx, code)
+	aff, err := s.State.store.AffiliateForCode(ctx, code)
 	if err != nil {
 		if err == errUnknownCode {
 			return zip.ErrNotFound("unknown affiliate code")
@@ -302,7 +305,7 @@ func (s *svc) attribute(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	edge, created, err := s.store.Attribute(ctx, id, aff.ID, referredOrg, aff.Org, code)
+	edge, created, err := s.State.store.Attribute(ctx, id, aff.ID, referredOrg, aff.Org, code)
 	if err != nil {
 		if err == errSelfAttribution {
 			return zip.ErrBadRequest("cannot attribute yourself")
@@ -325,16 +328,16 @@ func (s *svc) attribute(c *zip.Ctx) error {
 
 // adminList answers GET /v1/admin/affiliates — every affiliate (org exposed) + a
 // fleet summary. Global-admin only.
-func (s *svc) adminList(c *zip.Ctx) error {
+func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	rows, err := s.store.ListAll(ctx, adminLimitOf(c))
+	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
 	}
-	counts, err := s.store.ReferralCountsByAffiliate(ctx)
+	counts, err := s.State.store.ReferralCountsByAffiliate(ctx)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
 	}
@@ -350,7 +353,7 @@ func (s *svc) adminList(c *zip.Ctx) error {
 // adminApprove answers POST /v1/admin/affiliates/:id/approve — approve + mint the
 // code. Body may carry an explicit {code} override; else the requested vanity code;
 // else a derived slug. Global-admin only.
-func (s *svc) adminApprove(c *zip.Ctx) error {
+func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -360,7 +363,7 @@ func (s *svc) adminApprove(c *zip.Ctx) error {
 	}
 	_ = c.Bind(&body) // body is optional
 	ctx := c.Context()
-	a, err := s.store.Approve(ctx, id, body.Code, time.Now().Unix())
+	a, err := s.State.store.Approve(ctx, id, body.Code, time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -373,25 +376,25 @@ func (s *svc) adminApprove(c *zip.Ctx) error {
 			return zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
 		}
 	}
-	s.emitAudit(ctx, "affiliate.approve", a, map[string]any{"code": a.Code, "rateBps": a.RateBps})
+	emitAudit(s, ctx, "affiliate.approve", a, map[string]any{"code": a.Code, "rateBps": a.RateBps})
 	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
 }
 
 // adminSuspend answers POST /v1/admin/affiliates/:id/suspend. Global-admin only.
-func (s *svc) adminSuspend(c *zip.Ctx) error {
+func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	ctx := c.Context()
-	a, err := s.store.Suspend(ctx, id, time.Now().Unix())
+	a, err := s.State.store.Suspend(ctx, id, time.Now().Unix())
 	if err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("affiliate not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "suspend: %v", err)
 	}
-	s.emitAudit(ctx, "affiliate.suspend", a, nil)
+	emitAudit(s, ctx, "affiliate.suspend", a, nil)
 	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
 }
 
@@ -406,7 +409,7 @@ type payoutRequest struct {
 // commerce grant into the affiliate's wallet; a cash method (wire/paypal/…) is
 // record-only. The amount can never exceed pending (accrued − paid), reserved
 // atomically before any grant. Global-admin only.
-func (s *svc) adminPayout(c *zip.Ctx) error {
+func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
@@ -424,7 +427,7 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	a, err := s.store.GetByID(ctx, id)
+	a, err := s.State.store.GetByID(ctx, id)
 	if err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("affiliate not found")
@@ -437,7 +440,7 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	// Reserve against pending FIRST (atomic guard) — a payout can never exceed owed.
-	payout, err := s.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
+	payout, err := s.State.store.RecordPayout(ctx, payoutID, a.ID, body.AmountCents, method, strings.TrimSpace(body.Reference), time.Now().Unix())
 	if err != nil {
 		switch err {
 		case errNotFound:
@@ -457,8 +460,8 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	backed, _, berr := treasury.Reserve(ctx, treasury.ProgramAffiliate, "payout:"+payoutID,
 		fmt.Sprintf("Affiliate commission payout (%s)", a.Code), body.AmountCents)
 	if berr != nil || !backed {
-		if verr := s.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
-			s.log.Error("affiliates: void after unbacked payout failed", "payout", payoutID, "err", verr)
+		if verr := s.State.store.VoidPayout(ctx, payoutID, a.ID, body.AmountCents); verr != nil {
+			s.Log.Error("affiliates: void after unbacked payout failed", "payout", payoutID, "err", verr)
 		}
 		if berr != nil {
 			return zip.Errorf(http.StatusInternalServerError, "reserve payout: %v", berr)
@@ -473,19 +476,19 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 	// grant failure is logged loud (never silent) so an operator reconciles from the
 	// payout row + audit.
 	if method == methodCredits {
-		txn, gerr := s.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
+		txn, gerr := s.State.commerce.deposit(ctx, a.Org, orgSubject(a.Org), body.AmountCents, grantCurrency,
 			fmt.Sprintf("Affiliate commission payout (%s)", a.Code), grantTag)
 		if gerr != nil {
-			s.log.Error("affiliates: credits payout grant failed (reserved against pending; not retried)",
+			s.Log.Error("affiliates: credits payout grant failed (reserved against pending; not retried)",
 				"affiliate", a.ID, "payout", payoutID, "err", gerr)
-		} else if serr := s.store.SetPayoutTxn(ctx, payoutID, txn); serr != nil {
-			s.log.Error("affiliates: record payout txn failed", "payout", payoutID, "err", serr)
+		} else if serr := s.State.store.SetPayoutTxn(ctx, payoutID, txn); serr != nil {
+			s.Log.Error("affiliates: record payout txn failed", "payout", payoutID, "err", serr)
 		}
 		payout.Txn = txn
 	}
 
-	after, _ := s.store.GetByID(ctx, a.ID)
-	s.emitAudit(ctx, "affiliate.payout", after, map[string]any{
+	after, _ := s.State.store.GetByID(ctx, a.ID)
+	emitAudit(s, ctx, "affiliate.payout", after, map[string]any{
 		"payoutId": payout.ID, "amountCents": payout.AmountCents, "method": payout.Method,
 		"reference": payout.Reference, "txn": payout.Txn,
 	})
@@ -496,22 +499,22 @@ func (s *svc) adminPayout(c *zip.Ctx) error {
 // cron/o11y hits it, or an operator on demand). It folds over every approved
 // affiliate's referred orgs and accrues this period's commission, at-most-once per
 // period. Global-admin only.
-func (s *svc) adminSweep(c *zip.Ctx) error {
+func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
 		return zip.ErrForbidden("global admin required")
 	}
 	ctx := c.Context()
-	approved, err := s.store.ListApproved(ctx, sweepLimit)
+	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list approved: %v", err)
 	}
 	swept, accrued := 0, 0
 	for _, a := range approved {
-		checked, credited, serr := s.sweepAffiliate(ctx, a)
+		checked, credited, serr := sweepAffiliate(s, ctx, a)
 		swept += checked
 		accrued += credited
 		if serr != nil {
-			s.log.Warn("affiliates: sweep affiliate failed", "affiliate", a.ID, "err", serr)
+			s.Log.Warn("affiliates: sweep affiliate failed", "affiliate", a.ID, "err", serr)
 		}
 	}
 	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued})
@@ -523,8 +526,8 @@ func (s *svc) adminSweep(c *zip.Ctx) error {
 // commission for each (spend × rate), latched at-most-once per period. Returns
 // (edges checked, accruals created). A per-edge commerce error is skipped (accrued
 // next sweep) rather than failing the whole fold.
-func (s *svc) sweepAffiliate(ctx context.Context, a Affiliate) (checked, created int, err error) {
-	edges, err := s.store.ListReferrals(ctx, a.ID, sweepLimit)
+func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (checked, created int, err error) {
+	edges, err := s.State.store.ListReferrals(ctx, a.ID, sweepLimit)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -532,9 +535,9 @@ func (s *svc) sweepAffiliate(ctx context.Context, a Affiliate) (checked, created
 	now := time.Now().Unix()
 	for _, edge := range edges {
 		checked++
-		spend, serr := s.commerce.spendCents(ctx, edge.ReferredOrg, orgSubject(edge.ReferredOrg))
+		spend, serr := s.State.commerce.spendCents(ctx, edge.ReferredOrg, orgSubject(edge.ReferredOrg))
 		if serr != nil {
-			s.log.Warn("affiliates: spend read failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", serr)
+			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", serr)
 			continue
 		}
 		commission := spend * a.RateBps / bpsDenom
@@ -545,14 +548,14 @@ func (s *svc) sweepAffiliate(ctx context.Context, a Affiliate) (checked, created
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.store.LatchAccrual(ctx, accrualID, a.ID, edge.ReferredOrg, period, spend, commission, now)
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, edge.ReferredOrg, period, spend, commission, now)
 		if lerr != nil {
-			s.log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", lerr)
+			s.Log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", lerr)
 			continue
 		}
 		if won {
 			created++
-			s.emitAudit(ctx, "affiliate.accrue", a, map[string]any{
+			emitAudit(s, ctx, "affiliate.accrue", a, map[string]any{
 				"referredOrg": edge.ReferredOrg, "period": period,
 				"spendCents": spend, "commissionCents": commission,
 			})
@@ -566,8 +569,8 @@ func (s *svc) sweepAffiliate(ctx context.Context, a Affiliate) (checked, created
 // emitAudit records an affiliate money/lifecycle action in cloud's tamper-evident
 // trail. Best-effort; a nil store is a no-op. The actor is the affiliate engine (a
 // system action), scoped to the affiliate's own org.
-func (s *svc) emitAudit(ctx context.Context, action string, a Affiliate, extra map[string]any) {
-	if s.auditStore == nil {
+func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Affiliate, extra map[string]any) {
+	if s.State.auditStore == nil {
 		return
 	}
 	after := map[string]any{"affiliateId": a.ID, "org": a.Org, "code": a.Code, "status": a.Status}
@@ -582,8 +585,8 @@ func (s *svc) emitAudit(ctx context.Context, action string, a Affiliate, extra m
 		Outcome:  audit.Outcome{Result: "success", Status: 200},
 		After:    audit.Redact(mustJSON(after)),
 	}
-	if _, err := s.auditStore.Append(ctx, rec); err != nil {
-		s.log.Error("affiliates: audit emit failed", "affiliate", a.ID, "action", action, "err", err)
+	if _, err := s.State.auditStore.Append(ctx, rec); err != nil {
+		s.Log.Error("affiliates: audit emit failed", "affiliate", a.ID, "action", action, "err", err)
 	}
 }
 
@@ -665,11 +668,11 @@ func (s *adminSummary) add(a Affiliate) {
 
 // affiliateLink builds the ?aff link for a code ("" when the affiliate has no code
 // yet — un-approved).
-func (s *svc) affiliateLink(code string) string {
+func affiliateLink(s *cloud.Service[state], code string) string {
 	if code == "" {
 		return ""
 	}
-	return s.linkBase + "/?aff=" + code
+	return s.State.linkBase + "/?aff=" + code
 }
 
 // adminOK writes the { status:"ok", msg, data } envelope the console's admin
@@ -745,10 +748,10 @@ func linkBase(deps cloud.Deps) string {
 
 // Shutdown closes the affiliates store. Idempotent.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }

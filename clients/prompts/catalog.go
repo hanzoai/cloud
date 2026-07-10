@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -53,7 +54,7 @@ var starterCatalog = sync.OnceValues(func() ([]CatalogEntry, error) {
 // catalog → the read-only starter library { data: [CatalogEntry] }. Not
 // org-scoped (static reference content), but served under the authenticated
 // /v1/prompts surface like the rest of the module.
-func (s *svc) catalog(c *zip.Ctx) error {
+func catalog(s *cloud.Service[state], c *zip.Ctx) error {
 	entries, err := starterCatalog()
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "catalog: %v", err)

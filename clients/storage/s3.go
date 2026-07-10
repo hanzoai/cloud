@@ -103,17 +103,20 @@ var bucketNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 // source exists — there is no second metering path.
 const opFeeEnvPrefix = "CLOUD_S3_FEE_CENTS"
 
-// svc holds the shared S3 admin connection. A not-Configured() admin means no
-// credentials are present; the subsystem then mounts health/config only and every
-// op fails closed 503.
-type svc struct {
+// state is storage's own data; shared deps live in the embedded cloud.Base. It
+// holds the shared S3 admin connection and the per-org resource gate+meter. The
+// meter is kept here (not in Base.Bill) because its commerce product label is "s3",
+// NOT the subsystem name "storage". A not-Configured() admin means no credentials
+// are present; the subsystem then mounts health/config only and every op fails
+// closed 503. A nil/!Enabled() bill makes Gate allow and Meter a no-op.
+type state struct {
 	admin s3admin.Admin
-	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
-	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
-	bill *cloud.ResourceMeter
+	bill  *cloud.ResourceMeter
 }
 
-// Mount wires /v1/s3/* onto app.
+// Mount wires /v1/s3/* onto app. The "s3"-product meter and the guard-wrapped,
+// unconditional route set make this a direct construction (cloud.NewBase), not
+// cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("s3.Mount: nil zip.App")
@@ -121,33 +124,31 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("s3.Mount: nil deps.Logger")
 	}
-	log := deps.Logger.New("subsystem", "storage")
-
-	s := &svc{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "storage"), State: state{admin: s3admin.New(), bill: cloud.NewResourceMeter(deps, "s3")}}
 
 	// Register the FULL surface unconditionally — even when S3 is unconfigured.
-	// The guard fails each op closed with 503 (s.admin.Configured() is false), so
-	// the s3 subsystem always OWNS its route space. If the routes were mounted only
+	// The guard fails each op closed with 503 (s.State.admin.Configured() is false),
+	// so the s3 subsystem always OWNS its route space. If the routes were mounted only
 	// when configured, an unconfigured deployment would leak /v1/s3/buckets and
 	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
-	app.Get("/v1/s3/health", s.health)
-	app.Get("/v1/s3/buckets", s.guard(s.listBuckets))
-	app.Post("/v1/s3/buckets", s.guard(s.createBucket))
-	app.Delete("/v1/s3/buckets/:bucket", s.guard(s.deleteBucket))
-	app.Get("/v1/s3/buckets/:bucket/objects", s.guard(s.listObjects))
-	app.Post("/v1/s3/buckets/:bucket/objects", s.guard(s.presignUpload))
-	app.Get("/v1/s3/buckets/:bucket/objects/*", s.guard(s.presignDownload))
-	app.Delete("/v1/s3/buckets/:bucket/objects/*", s.guard(s.deleteObject))
+	app.Get("/v1/s3/health", cloud.Handle(s, health))
+	app.Get("/v1/s3/buckets", guard(s, cloud.Handle(s, listBuckets)))
+	app.Post("/v1/s3/buckets", guard(s, cloud.Handle(s, createBucket)))
+	app.Delete("/v1/s3/buckets/:bucket", guard(s, cloud.Handle(s, deleteBucket)))
+	app.Get("/v1/s3/buckets/:bucket/objects", guard(s, cloud.Handle(s, listObjects)))
+	app.Post("/v1/s3/buckets/:bucket/objects", guard(s, cloud.Handle(s, presignUpload)))
+	app.Get("/v1/s3/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
+	app.Delete("/v1/s3/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
 
-	if !s.admin.Configured() {
-		log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
+	if !s.State.admin.Configured() {
+		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")
 		return nil
 	}
-	log.Info("s3 subsystem mounted",
+	s.Log.Info("s3 subsystem mounted",
 		"prefix", "/v1/s3",
-		"presign", s.admin.PresignConfigured(),
+		"presign", s.State.admin.PresignConfigured(),
 		"brand", deps.Brand,
 		"env", deps.Env,
 	)
@@ -177,9 +178,9 @@ func init() {
 // (per-op fee, product "s3", async best-effort so the debit never blocks the
 // response). A handler error is surfaced and NOT billed — mirrors the edge gate
 // ("do not bill failed work"). fee==0 or unconfigured billing makes both no-ops.
-func (s *svc) guard(h zip.Handler) zip.Handler {
+func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(ctx *zip.Ctx) error {
-		if !s.admin.Configured() {
+		if !s.State.admin.Configured() {
 			return zip.Errorf(http.StatusServiceUnavailable, "object storage is not configured")
 		}
 		org, ok := tenant(ctx)
@@ -189,13 +190,13 @@ func (s *svc) guard(h zip.Handler) zip.Handler {
 		ctx.Locals(orgKey, org)
 
 		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
-		if err := s.bill.Gate(ctx.Context(), org, principal.Project(ctx), "op", fee); err != nil {
+		if err := s.State.bill.Gate(ctx.Context(), org, principal.Project(ctx), "op", fee); err != nil {
 			return cloud.DenyResource(ctx, err)
 		}
 		if err := h(ctx); err != nil {
 			return err // handler failed — surface it; do not bill failed work.
 		}
-		s.bill.Meter(org, principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
+		s.State.bill.Meter(org, principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
 	}
 }
@@ -292,15 +293,15 @@ func friendlyBucket(org, physical string) (string, bool) {
 // health is a REAL probe: 200 only when admin credentials are present (the store
 // is reachable in principle); 503 + honest reason in health-only mode. Not
 // JWT-gated — liveness must be probe-able without a token.
-func (s *svc) health(ctx *zip.Ctx) error {
+func health(s *cloud.Service[state], ctx *zip.Ctx) error {
 	res := map[string]any{"service": "s3", "status": "ok"}
-	if !s.admin.Configured() {
+	if !s.State.admin.Configured() {
 		res["status"], res["ready"] = "degraded", false
 		res["error"] = "S3_ADMIN credentials not configured"
 		return ctx.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["ready"] = true
-	res["presign"] = s.admin.PresignConfigured()
+	res["presign"] = s.State.admin.PresignConfigured()
 	return ctx.JSON(http.StatusOK, res)
 }
 
@@ -313,9 +314,9 @@ type bucketItem struct {
 
 // listBuckets returns ONLY the caller's buckets (physical name has the caller's
 // org prefix), with the prefix stripped so the tenant sees friendly names.
-func (s *svc) listBuckets(ctx *zip.Ctx) error {
+func listBuckets(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
-	cli, err := s.admin.Client()
+	cli, err := s.State.admin.Client()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -340,7 +341,7 @@ type createBucketRequest struct {
 
 // createBucket makes a new org-scoped bucket. The physical name is derived from
 // the caller's org, so a tenant can only ever create in its own namespace.
-func (s *svc) createBucket(ctx *zip.Ctx) error {
+func createBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	var req createBucketRequest
 	if err := json.Unmarshal(ctx.Body(), &req); err != nil {
@@ -353,7 +354,7 @@ func (s *svc) createBucket(ctx *zip.Ctx) error {
 	if !bucketNameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
-	cli, err := s.admin.Client()
+	cli, err := s.State.admin.Client()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -365,7 +366,7 @@ func (s *svc) createBucket(ctx *zip.Ctx) error {
 	if exists {
 		return zip.ErrConflict("bucket already exists")
 	}
-	if err := cli.MakeBucket(ctx.Context(), physical, minio.MakeBucketOptions{Region: s.admin.Region()}); err != nil {
+	if err := cli.MakeBucket(ctx.Context(), physical, minio.MakeBucketOptions{Region: s.State.admin.Region()}); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "create bucket: %v", err)
 	}
 	return ctx.JSON(http.StatusCreated, bucketItem{Name: name, CreatedAt: time.Now().Unix()})
@@ -373,13 +374,13 @@ func (s *svc) createBucket(ctx *zip.Ctx) error {
 
 // deleteBucket removes an EMPTY bucket (minio refuses a non-empty one — we do not
 // cascade a delete of a tenant's objects behind a single bucket call).
-func (s *svc) deleteBucket(ctx *zip.Ctx) error {
+func deleteBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	name, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
 		return zip.ErrBadRequest("invalid bucket name")
 	}
-	cli, err := s.admin.Client()
+	cli, err := s.State.admin.Client()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -412,7 +413,7 @@ type objectItem struct {
 // the prefix. Keys are returned RELATIVE to the requested prefix so the UI
 // renders a breadcrumb. The listing is bounded by maxListKeys (both the S3-side
 // MaxKeys page and a hard break) so a huge bucket cannot exhaust memory.
-func (s *svc) listObjects(ctx *zip.Ctx) error {
+func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
@@ -425,7 +426,7 @@ func (s *svc) listObjects(ctx *zip.Ctx) error {
 	// ?delimiter=/ is the default and needs no param; only recursion is opt-in.
 	recursive := ctx.Query("recursive") == "true"
 
-	cli, err := s.admin.Client()
+	cli, err := s.State.admin.Client()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -478,7 +479,7 @@ type presignResponse struct {
 // is signed against the PUBLIC host and scoped to the exact bucket+key, and it
 // expires (presignTTL). The object key is path-cleaned so a "../" cannot escape
 // the bucket.
-func (s *svc) presignUpload(ctx *zip.Ctx) error {
+func presignUpload(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
@@ -492,10 +493,10 @@ func (s *svc) presignUpload(ctx *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("key is required and must be a clean object path")
 	}
-	if !s.admin.PresignConfigured() {
+	if !s.State.admin.PresignConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "presigned upload is not available (no public endpoint configured)")
 	}
-	pub, err := s.admin.PublicClient()
+	pub, err := s.State.admin.PublicClient()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -513,7 +514,7 @@ func (s *svc) presignUpload(ctx *zip.Ctx) error {
 // wildcard path. Same properties as upload: public host, exact key, time-boxed.
 // The Content-Disposition is set to attachment(filename) so a browser downloads
 // rather than renders.
-func (s *svc) presignDownload(ctx *zip.Ctx) error {
+func presignDownload(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
@@ -523,10 +524,10 @@ func (s *svc) presignDownload(ctx *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("object key is required and must be a clean path")
 	}
-	if !s.admin.PresignConfigured() {
+	if !s.State.admin.PresignConfigured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "presigned download is not available (no public endpoint configured)")
 	}
-	pub, err := s.admin.PublicClient()
+	pub, err := s.State.admin.PublicClient()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
@@ -543,7 +544,7 @@ func (s *svc) presignDownload(ctx *zip.Ctx) error {
 }
 
 // deleteObject removes one object at the trailing wildcard path.
-func (s *svc) deleteObject(ctx *zip.Ctx) error {
+func deleteObject(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
 	bname, ok := friendlyParam(ctx.Param("bucket"))
 	if !ok {
@@ -553,7 +554,7 @@ func (s *svc) deleteObject(ctx *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("object key is required and must be a clean path")
 	}
-	cli, err := s.admin.Client()
+	cli, err := s.State.admin.Client()
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
