@@ -79,7 +79,13 @@ func BuildDeps(cfg *Config) Deps {
 	deps.KMS = pickKMSClient(cfg, logger)
 	deps.Base = pick(cfg, logger, "base", "Base", cfg.BaseZAPAddr, clients.BaseRPCAt, clients.DisabledBase)
 	deps.Commerce = pickCommerceClient(cfg, logger)
-	deps.AI = pickAIClient(cfg, logger)
+	// Metering client BEFORE the AI client: deps.AI is wrapped in the metering
+	// decorator (the ONE inference gate+meter — no exempt path, no bypass, no
+	// side-channel key), which needs deps.Metering. nil-safe — an unconfigured
+	// commerce URL yields a !Enabled() client, so the wrap is a transparent
+	// pass-through and a dev deployment is never blocked.
+	deps.Metering = buildMeteringClient(cfg, logger)
+	deps.AI = meteredAIClient(pickAIClient(cfg, logger), deps)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
@@ -88,11 +94,6 @@ func BuildDeps(cfg *Config) Deps {
 	// endpoint, otherwise RPC.
 	deps.Payments = pickPaymentsClient(cfg, logger)
 	deps.Vault = pickVaultClient(cfg, logger)
-
-	// Billing metering client for the request-edge gate. nil-safe: when no
-	// commerce URL is configured the resulting client is !Enabled() and the
-	// gate is a no-op.
-	deps.Metering = buildMeteringClient(cfg, logger)
 
 	// Runtime-mutable edge-policy store (/v1/gateway config plane), layered over
 	// the static env/flag defaults so an un-provisioned deployment behaves exactly
