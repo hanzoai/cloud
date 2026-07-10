@@ -27,10 +27,28 @@ func (r siteResolver) Resolve(ctx context.Context, slug string) (sites.Site, boo
 		return sites.Site{}, false, err
 	}
 	return sites.Site{
-		Org:    p.Org,
-		Slug:   p.Slug,
-		Bucket: p.Bucket,
-		Prefix: sitePrefix(p.Org, p.Slug),
-		Status: p.Status,
+		Org:                  p.Org,
+		Slug:                 p.Slug,
+		Bucket:               p.Bucket,
+		Prefix:               sitePrefix(p.Org, p.Slug),
+		Status:               p.Status,
+		CrossOriginIsolation: crossOriginIsolated(p.Framework),
 	}, true, nil
+}
+
+// crossOriginIsolated reports whether a project's declared framework is a
+// WebGL/WASM game engine whose multithreaded build needs SharedArrayBuffer — the
+// OPT-IN signal the site server uses to serve the site cross-origin-isolated
+// (COOP/COEP). It is a closed set on an EXISTING per-project field (no schema
+// change): only a project a user explicitly declared as a game engine gets the
+// isolating headers, which break embedding third-party cross-origin content and
+// so must never be global. This is the ONE place projects→sites translates a
+// build hint into the serve-time isolation policy.
+func crossOriginIsolated(framework string) bool {
+	switch framework {
+	case "unity", "unreal", "godot":
+		return true
+	default:
+		return false
+	}
 }
