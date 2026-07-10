@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: commerce
+  namespace: hanzo
+  labels:
+    app: commerce
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: commerce
+  template:
+    metadata:
+      labels:
+        app: commerce
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: commerce
+          image: ghcr.io/hanzoai/commerce:v1.42.50
+          ports:
+            - containerPort: 8001
+              protocol: TCP
+          env:
+            - name: RUNNING_IN_DOCKER
+              value: "true"
+            - name: PORT
+              value: "8001"
+            - name: ENV
+              value: "production"
+            # Gateway-trust: refuse /v1/commerce/* without X-Org-Id /
+            # X-User-Id / X-User-Email. Only hanzoai/gateway can stamp
+            # those headers, so this turns the binary into a closed
+            # box behind the gateway.
+            - name: COMMERCED_REQUIRE_IDENTITY
+              value: "true"
+            # Edge trust boundary: strip forged X-Org-Id / X-User-* and re-mint
+            # from the verified IAM JWT. edgeauth.go is a NO-OP without this, so
+            # an in-cluster pod could forge X-User-IsGlobalAdmin → platform
+            # superadmin (Red CRIT-1). Set here AND in the configmap .env.
+            - name: COMMERCE_EDGE_AUTH
+              value: "true"
+            - name: KMS_ENABLED
+              value: "true"
+            - name: KMS_URL
+              value: "http://kms.hanzo.svc.cluster.local:8080"
+            - name: KMS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: commerce-kms-auth
+                  key: client-id
+            - name: KMS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: commerce-kms-auth
+                  key: client-secret
+            - name: KMS_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: commerce-kms-auth
+                  key: project-id
+            - name: KMS_ENVIRONMENT
+              value: "prod"
+          volumeMounts:
+            - name: config
+              mountPath: /app/.env
+              subPath: .env
+            - name: data
+              mountPath: /app/commerce_data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: config
+          secret:
+            secretName: commerce-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: commerce-data

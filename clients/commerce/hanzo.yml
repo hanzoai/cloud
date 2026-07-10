@@ -1,0 +1,72 @@
+# Canonical CI/CD config for hanzoai/commerce — read by both the hanzoai/ci
+# reusable workflow (.github/workflows/cicd.yml) and platform.hanzo.ai
+# (webhook → BuildScheduler → in-cluster BuildKit → operator rollout).
+#
+# The ONE way commerce builds. Before this file, only the frontend apps had CI
+# (frontend-build.yml) and the Go BACKEND image (ghcr.io/hanzoai/commerce) had
+# none — it was built by hand-applied BuildKit Jobs, so a merged fix (e.g. the
+# $5 starter-credit change, PR #63) shipped no image. This closes that gap:
+# every push/tag now builds the backend + the deployed frontends automatically.
+#
+# Private hanzoai/* Go modules: the backend Dockerfile.production authenticates
+# `go mod tidy` with the `gh_token` BuildKit secret (supplied by BOTH build
+# paths) + GOPRIVATE — see the Dockerfile's builder stage.
+images:
+  # Go backend — the API/billing service (StarterCreditCents lives here).
+  - name: commerce
+    context: .
+    dockerfile: Dockerfile.production
+    repo: ghcr.io/hanzoai/commerce
+  # Admin console (deployed as commerce-admin).
+  - name: commerce-admin
+    context: .
+    dockerfile: Dockerfile.admin
+    repo: ghcr.io/hanzoai/commerce-admin
+  # Marketing/storefront site (deployed as commerce-site, hanzoai/static plugin).
+  - name: commerce-site
+    context: .
+    dockerfile: Dockerfile.site
+    repo: ghcr.io/hanzoai/commerce-site
+
+# CI gates run by the hanzoai/ci reusable workflow (`bash -c` per entry).
+# Mirrors the proven test.yml: @hanzo/plans is fetched first (api/billing embeds
+# plans/*.json via go:embed), GOPRIVATE + GOWORK=off resolve private hanzoai/*
+# modules via direct authenticated git (same contract the image build uses).
+test:
+  - name: go-vet
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off
+      sh scripts/fetch-plans.sh
+      go vet ./...
+  - name: go-unit
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*' GOWORK=off CGO_ENABLED=1
+      sh scripts/fetch-plans.sh
+      go test -count=1 -timeout=10m \
+        ./billing/... \
+        ./delay/... \
+        ./models/creditgrant/... \
+        ./models/pricingrule/... \
+        ./models/cryptobalance/... \
+        ./models/cryptopaymentintent/... \
+        ./models/networktoken/... \
+        ./models/product/... \
+        ./payment/...
+
+# NO deploy: block by design. commerce is an operator-MANAGED system service —
+# `services.hanzo.ai/commerce` (+ -admin/-site) owns `.spec.image.tag`, and the
+# hanzo operator reconciles the Deployment from it. A `kubectl set image` on the
+# Deployment (what the reusable's deploy step does) would drift from the CR and
+# be reverted on the next reconcile. So CI's job is build + test; the rollout is
+# the operator Service CR patch (kubectl patch services.hanzo.ai/commerce
+# --type=merge -p '{"spec":{"image":{"tag":"<ver>"}}}'), the canonical
+# system-service deploy path — owned by platform.hanzo.ai / the operator, not GHA.
+
+# KMS (kms.hanzo.ai, Universal Auth) supplies the cross-org private-module read
+# token (buildx `gh_token`) at run time. Only KMS_CLIENT_ID / KMS_CLIENT_SECRET
+# live in GitHub (org secrets); KMS_WORKSPACE is a repo/org var.
+kms:
+  path: /deploy
+  environment: prod

@@ -1,0 +1,46 @@
+{
+  "attempt": 1,
+  "body": {
+    "status": 200,
+    "message": "Successful",
+    "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/holds?offset=0&limit=20",
+    "resource": {
+      "offset": 0,
+      "total": 2,
+      "previous": null,
+      "next": null,
+      "items": [
+        {
+          "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/holds/1607380332",
+          "resource": {
+            "id": 1607380332,
+            "orderId": 249954082,
+            "externalOrderId": null,
+            "type": "customer",
+            "subType": "backorder",
+            "description": "Insufficient stock",
+            "appliedDate": "2017-02-13T23:06:03-08:00",
+            "clearedDate": null
+          }
+        },
+        {
+          "resourceLocation": "https://api.shipwire.com/api/v3/orders/249954082/holds/1607380322",
+          "resource": {
+            "id": 1607380322,
+            "orderId": 249954082,
+            "externalOrderId": null,
+            "type": "customer",
+            "subType": "nomethod",
+            "description": "Shipping method must be selected",
+            "appliedDate": "2017-02-13T23:06:03-08:00",
+            "clearedDate": null
+          }
+        }
+      ]
+    }
+  },
+  "timestamp": "2017-02-13T23:06:04-08:00",
+  "topic": "order.hold.added",
+  "uniqueEventID": "078731fbae858000",
+  "webhookSubscriptionID": 44062
+}

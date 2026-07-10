@@ -1,0 +1,4 @@
+# Additional NGINX configuration files
+# Files placed here are included in the main nginx.conf
+#
+# Example: active.conf (created by switch-active.sh for blue-green deployments)
