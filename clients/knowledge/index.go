@@ -84,9 +84,13 @@ func index() *indexer {
 		idx = &indexer{
 			vectorURL:   strings.TrimRight(getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
 			vectorKey:   os.Getenv("vectorApiKey"),
-			embedURL:    strings.TrimRight(getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"), "/"),
-			embedKey:    os.Getenv("CLOUD_AI_API_KEY"),
-			embedModel:  getenv("KB_EMBED_MODEL", "text-embedding-3-small"),
+			// Dedicated embeddings provider (CLOUD_EMBED_*) — shared with
+			// clients/code — so the semantic tier targets a first-party embed
+			// endpoint (DigitalOcean GenAI bge-m3 @1024-dim) without repointing
+			// the chat AIClient (CLOUD_AI_*). Dedicated wins, falls back to shared.
+			embedURL:    strings.TrimRight(getenv("CLOUD_EMBED_BASE_URL", getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1")), "/"),
+			embedKey:    getenv("CLOUD_EMBED_API_KEY", os.Getenv("CLOUD_AI_API_KEY")),
+			embedModel:  getenv("CLOUD_EMBED_MODEL", getenv("KB_EMBED_MODEL", "text-embedding-3-small")),
 			dims:        dims,
 			http:        &http.Client{Timeout: 20 * time.Second},
 			ensuredOrgs: map[string]bool{},
