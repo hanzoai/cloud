@@ -21,10 +21,12 @@
 // from the VALIDATED cloud principal (principal.Tenant), never a client header,
 // and that org selects the tenant's DB file AND scopes every row.
 //
-// ACTIVATION is the standard enable-list gate (config.stagedSubsystems):
-// captable mounts ONLY when the operator adds "captable" to CLOUD_ENABLE, so the
-// mount-all default is unchanged and the standalone captable service keeps
-// authority until the phase-2 cutover.
+// ACTIVATION: captable is NOT staged — it mounts under the mount-all default
+// (empty CLOUD_ENABLE), so the one binary serves /v1/captable/* from first boot.
+// There is no standalone Captable,Inc pod to defer to (the Next.js/Prisma/Postgres
+// app is retired by this fold — no such deployment runs in the fleet), so cloud's
+// fresh per-tenant Base/SQLite is authoritative from the first write, with no data
+// to migrate.
 package captable
 
 import (
@@ -37,8 +39,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/gojabase"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // maxBody caps a request body. Cap-table payloads are small structured records;
@@ -186,8 +188,7 @@ func (s *svc) dispatch(c *zip.Ctx, route string, params map[string]string, readB
 
 func init() {
 	// Order 133: binds /v1/captable/* before the AI /v1/* catch-all (150) and
-	// after the shared infra tier. STAGED (config.stagedSubsystems) — mounts only
-	// when the operator names "captable" in CLOUD_ENABLE.
+	// after the shared infra tier. NOT staged — mounts under the mount-all default.
 	cloud.RegisterWithShutdown("captable", 133, cloud.Typed(Mount), shutdown)
 }
 

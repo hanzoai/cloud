@@ -59,7 +59,6 @@ import (
 	_ "github.com/hanzoai/cloud/clients/kafka"        // order 6 — embedded Kafka adaptor :9092
 	_ "github.com/hanzoai/cloud/clients/kms"          // order 10 — /v1/kms/*
 	_ "github.com/hanzoai/cloud/clients/pubsub"       // order 5 — embedded NATS :4222 + JetStream
-	_ "github.com/hanzoai/cloud/clients/pubsub"       // order 5 — embedded NATS :4222 + JetStream
 
 	// Embedded Base app engine + viral waitlist (HIP-0106 base fold): mounts
 	// /v1/waitlist/* (join/status/boost/referrals/points) served in-process off
@@ -103,15 +102,10 @@ import (
 	_ "github.com/hanzoai/cloud/clients/bots"         // order 143 — POST /v1/bots/run (launch a computer-using agent, gate+meter, return VNC session)
 	_ "github.com/hanzoai/cloud/clients/entitlements" // order 139 — /v1/orgs/:org/entitlements (per-org product enablement; commerce-gated adds; console paid-product sidebar)
 	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/eval"         // order 145 — /v1/evals/*
-	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
 	_ "github.com/hanzoai/cloud/clients/exec"         // order 140 — /v1/exec,/v1/upload,/v1/download,/v1/files (Code Interpreter → sandbox)
 	_ "github.com/hanzoai/cloud/clients/gateway"      // order 139 — /v1/gateway/config (runtime edge-policy plane: CORS/per-IP/per-org rate)
 	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
-	_ "github.com/hanzoai/cloud/clients/plan"         // order 111 — /v1/plans/*
 	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
-	_ "github.com/hanzoai/cloud/clients/plugin"       // order 900 - runtime wasm/proxy plugins (goa wasm + ZAP proxy)
-	_ "github.com/hanzoai/cloud/clients/pricing"      // order 112 — /v1/pricing/*
 	_ "github.com/hanzoai/cloud/clients/pricing"      // order 112 — /v1/pricing/*
 	_ "github.com/hanzoai/cloud/clients/settings"     // order 138 — /v1/settings/:product (per-org, per-product console config; KMS-custodied secrets). Split out of the retired clients/observe; NOT observability.
 	_ "github.com/hanzoai/cloud/clients/websearch"    // order 141 — /v1/websearch/* (SearXNG+Firecrawl-compat over Hanzo search+crawl)
@@ -207,21 +201,20 @@ import (
 	// captable: the Captable,Inc app folded in-process (HIP-0106, epic #96 pilot).
 	// Hosts the tRPC business logic as a goja bundle (github.com/hanzoai/captable)
 	// over per-tenant Base/SQLite via the REUSABLE clients/gojabase RW-Base binding
-	// (which esign #100 + dataroom #101 reuse). STAGED (config.stagedSubsystems):
-	// mounts ONLY when the operator names "captable" in CLOUD_ENABLE, so the
-	// standalone captable service keeps authority until the phase-2 cutover.
-	_ "github.com/hanzoai/cloud/clients/captable"   // order 133 — /v1/captable/* (cap table on Base via goja)
-	_ "github.com/hanzoai/cloud/clients/dataroom"   // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-tenant Base, STAGED behind CLOUD_ENABLE)
+	// (which sign #100 + dataroom #101 reuse). NOT staged: mounts under the
+	// mount-all default. There is no standalone Captable,Inc/dataroom pod in the
+	// fleet, and the standalone esign pod holds no tenant data, so the one binary
+	// is authoritative from first write — nothing to migrate (see each leaf).
+	_ "github.com/hanzoai/cloud/clients/captable" // order 133 — /v1/captable/* (cap table on Base via goja)
+	_ "github.com/hanzoai/cloud/clients/dataroom" // order 134 — /v1/dataroom/* (documents, data rooms, share links, viewer analytics; goja + per-tenant Base)
 	// Hanzo Sign (HIP-0106, task #100): the e-signature product (Documenso fork)
 	// folded in-process via the SAME reusable gojabase RW-Base host captable
 	// pilots — the server-side domain runs as an ESM-free goja bundle
 	// (github.com/hanzoai/sign) backed by per-tenant Base/SQLite, with the PDF/PKI
 	// seal implemented as Go host-functions injected via gojabase Config.HostFns.
-	// STAGED (config.stagedSubsystems): mounts /v1/sign/* ONLY when the operator
-	// names "sign" in CLOUD_ENABLE, so linking it changes nothing until the
-	// standalone esign pod is cut over.
-	_ "github.com/hanzoai/cloud/clients/sign" // order 145 — /v1/sign/* (documents/recipients/fields/sign/complete/audit)
-	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
+	// NOT staged: mounts /v1/sign/* under the mount-all default.
+	_ "github.com/hanzoai/cloud/clients/referrals" // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
+	_ "github.com/hanzoai/cloud/clients/sign"      // order 145 — /v1/sign/* (documents/recipients/fields/sign/complete/audit)
 	// The configurable custody / accounts / wallets / keys / sign surface
 	// (HIP-0106): ONE seam over three orthogonal signing backends selected per
 	// wallet — KMS single-sig in-process, MPC m-of-n + treasury named-signer
