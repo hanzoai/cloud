@@ -1,6 +1,7 @@
 package cek
 
 import (
+	"context"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -33,10 +34,8 @@ func testMaster(t *testing.T) []byte {
 	return k
 }
 
-// requireCipher skips when the build cannot produce REAL ciphertext. We do not
-// trust EncryptionAvailable() alone (it is a capability flag; a mis-linked cgo
-// build silently writes plaintext), so we probe: create a keyed db and require a
-// non-magic header. This is the same posture the migration enforces at runtime.
+// requireCipher skips when the build cannot produce REAL ciphertext (a mis-linked
+// cgo build silently writes plaintext), probing rather than trusting the flag.
 func requireCipher(t *testing.T) {
 	t.Helper()
 	if !sqlitedrv.EncryptionAvailable() {
@@ -44,7 +43,7 @@ func requireCipher(t *testing.T) {
 	}
 	probe := filepath.Join(t.TempDir(), "probe.db")
 	dek, _ := sqlitedrv.NewDEK()
-	db, err := sqlitedrv.OpenDB(probe, dek)
+	db, err := openKeyed(probe, dek)
 	if err != nil {
 		t.Fatalf("probe open: %v", err)
 	}
@@ -53,21 +52,18 @@ func requireCipher(t *testing.T) {
 	}
 	_ = db.Close()
 	if isPlaintextHeader(probe) {
-		t.Skip("cgo build is NOT linked against libsqlcipher (keyed db is plaintext); " +
-			"set CGO_CFLAGS/LDFLAGS for sqlcipher to run encryption tests")
+		t.Skip("cgo build is NOT linked against libsqlcipher (keyed db is plaintext)")
 	}
 }
 
-// makePlaintextDB writes a genuine UNENCRYPTED SQLite db with known rows and
-// returns the per-table row counts. It is what production has on disk today.
+// makePlaintextDB writes a genuine UNENCRYPTED SQLite db with known rows in WAL
+// mode (exercising exportPlaintext's WAL fold), returning per-table row counts.
 func makePlaintextDB(t *testing.T, path string, companies, contacts int) map[string]int64 {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatalf("open plaintext: %v", err)
 	}
-	// WAL mode + no clean checkpoint, to exercise exportPlaintext's WAL fold
-	// (mirrors crm.db/audit.db carrying MB of live WAL in prod).
 	for _, p := range []string{"PRAGMA journal_mode=WAL", "PRAGMA wal_autocheckpoint=0"} {
 		if _, err := db.Exec(p); err != nil {
 			t.Fatalf("pragma %q: %v", p, err)
@@ -76,7 +72,7 @@ func makePlaintextDB(t *testing.T, path string, companies, contacts int) map[str
 	if _, err := db.Exec(`
 CREATE TABLE crm_companies(id TEXT PRIMARY KEY, org TEXT, name TEXT, arr INTEGER);
 CREATE INDEX ix_co_org ON crm_companies(org);
-CREATE TABLE crm_contacts(id TEXT PRIMARY KEY, org TEXT, email TEXT);`); err != nil {
+CREATE TABLE crm_contacts(id TEXT PRIMARY KEY, org TEXT, email TEXT, note TEXT);`); err != nil {
 		t.Fatalf("ddl: %v", err)
 	}
 	for i := 0; i < companies; i++ {
@@ -86,8 +82,15 @@ CREATE TABLE crm_contacts(id TEXT PRIMARY KEY, org TEXT, email TEXT);`); err != 
 		}
 	}
 	for i := 0; i < contacts; i++ {
-		if _, err := db.Exec(`INSERT INTO crm_contacts VALUES(?,?,?)`,
-			fmt.Sprintf("ct-%d", i), "maxpower", fmt.Sprintf("u%d@x.io", i)); err != nil {
+		// note is NULL on evens to exercise NULL fidelity in the content hash.
+		if i%2 == 0 {
+			_, err = db.Exec(`INSERT INTO crm_contacts(id,org,email) VALUES(?,?,?)`,
+				fmt.Sprintf("ct-%d", i), "maxpower", fmt.Sprintf("u%d@x.io", i))
+		} else {
+			_, err = db.Exec(`INSERT INTO crm_contacts VALUES(?,?,?,?)`,
+				fmt.Sprintf("ct-%d", i), "maxpower", fmt.Sprintf("u%d@x.io", i), "vip")
+		}
+		if err != nil {
 			t.Fatalf("insert contact: %v", err)
 		}
 	}
@@ -107,14 +110,26 @@ func rowCount(t *testing.T, db *sql.DB, table string) int64 {
 	return n
 }
 
-// TestMigratePlaintextToCipher is the keystone: a plaintext financial-shaped db
-// is migrated in place to SQLCipher with (1) a ciphertext header, (2) exact
-// per-table row parity, (3) an unwrappable .dek sidecar, (4) a preserved
-// plaintext backup, and (5) fully readable data through the returned handle.
+func firstBytes(t *testing.T, path string, n int) []byte {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer func() { _ = f.Close() }()
+	b := make([]byte, n)
+	if _, err := f.ReadAt(b, 0); err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return b
+}
+
+// TestMigratePlaintextToCipher is the keystone: plaintext → SQLCipher with a
+// ciphertext header, exact row parity, an unwrappable sidecar, readable data,
+// and — per RED HIGH — NO surviving plaintext backup (shredded after verify).
 func TestMigratePlaintextToCipher(t *testing.T) {
 	requireCipher(t)
 	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
 	path := filepath.Join(dir, "crm.db")
 	want := makePlaintextDB(t, path, 37, 91)
 
@@ -125,63 +140,41 @@ func TestMigratePlaintextToCipher(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 
-	// (1) ciphertext header — the whole point.
 	if isPlaintextHeader(path) {
-		t.Fatalf("FAIL: %s is still plaintext after migration", path)
+		t.Fatalf("FAIL: %s still plaintext after migration", path)
 	}
-	hdr := firstBytes(t, path, 16)
-	t.Logf("migrated header (hex): %s (NOT 'SQLite format 3')", hex.EncodeToString(hdr))
+	t.Logf("migrated header (hex): %s", hex.EncodeToString(firstBytes(t, path, 16)))
 
-	// (2) per-table row parity.
 	for tbl, n := range want {
 		if got := rowCount(t, db, tbl); got != n {
 			t.Errorf("row-count mismatch %s: want %d got %d", tbl, n, got)
 		}
 	}
 
-	// (3) .dek sidecar exists and unwraps under the principal-bound KEK.
-	dekPath := path + dekSuffix
-	blob, err := os.ReadFile(dekPath)
+	// sidecar unwraps under the id-derived KEK (path plays no role).
+	sidecar, err := os.ReadFile(path + dekSuffix)
 	if err != nil {
 		t.Fatalf("read sidecar: %v", err)
 	}
-	kek, err := sqlitedrv.DeriveKey(testMaster(t), principalType, principalID(path))
-	if err != nil {
-		t.Fatalf("derive kek: %v", err)
-	}
-	dek, err := sqlitedrv.UnwrapDEK(kek, blob, sqlitedrv.PrincipalAAD(principalType, principalID(path)))
-	if err != nil {
-		t.Fatalf("unwrap dek: %v", err)
-	}
-	if len(dek) != 32 {
-		t.Fatalf("dek length %d", len(dek))
+	if dek, err := unwrapSidecar(testMaster(t), sidecar); err != nil || len(dek) != 32 {
+		t.Fatalf("unwrap sidecar: dek=%d err=%v", len(dek), err)
 	}
 
-	// (4) plaintext backup preserved (defense-in-depth for the cutover window).
-	if !fileExists(path + plainBakField) {
-		t.Errorf("expected preserved plaintext backup %s", path+plainBakField)
-	}
-	if !isPlaintextHeader(path + plainBakField) {
-		t.Errorf("plaintext backup should be readable plaintext")
+	// RED HIGH: the plaintext backup must be GONE (shredded), not lingering.
+	if fileExists(path + plainBakSuffix) {
+		t.Errorf("SECURITY: plaintext backup %s survived migration (must be shredded)", path+plainBakSuffix)
 	}
 
-	// (5) real data content survived, not just counts.
 	var name string
-	if err := db.QueryRow(`SELECT name FROM crm_companies WHERE id='co-5'`).Scan(&name); err != nil {
-		t.Fatalf("read migrated row: %v", err)
-	}
-	if name != "Co 5" {
-		t.Errorf("content mismatch: got %q want %q", name, "Co 5")
+	if err := db.QueryRow(`SELECT name FROM crm_companies WHERE id='co-5'`).Scan(&name); err != nil || name != "Co 5" {
+		t.Errorf("content check: got %q err %v", name, err)
 	}
 }
 
-// TestOpenIdempotent proves a second Open of an already-migrated db is a no-op
-// (no re-migration, data intact) — the steady-state boot path.
+// TestOpenIdempotent: a second Open of an already-migrated db is a no-op.
 func TestOpenIdempotent(t *testing.T) {
 	requireCipher(t)
-	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
-	path := filepath.Join(dir, "treasury.db")
+	path := filepath.Join(t.TempDir(), "treasury.db")
 	want := makePlaintextDB(t, path, 5, 5)
 
 	resetMaster(testMaster(t))
@@ -192,7 +185,7 @@ func TestOpenIdempotent(t *testing.T) {
 	_ = db1.Close()
 	hdr1 := firstBytes(t, path, 16)
 
-	db2, err := Open(path) // already encrypted → openWithSidecar
+	db2, err := Open(path)
 	if err != nil {
 		t.Fatalf("second open: %v", err)
 	}
@@ -205,20 +198,15 @@ func TestOpenIdempotent(t *testing.T) {
 			t.Errorf("reopen row-count %s: want %d got %d", tbl, n, got)
 		}
 	}
-	// Salt (header) is unchanged: the DEK/pages were not rewritten.
-	if hdr2 := firstBytes(t, path, 16); string(hdr1) != string(hdr2) {
+	if string(hdr1) != string(firstBytes(t, path, 16)) {
 		t.Errorf("header changed on reopen (pages rewritten?)")
 	}
 }
 
-// TestFreshCreateEncrypted proves a brand-new db is born encrypted (never a
-// plaintext intermediate on disk).
+// TestFreshCreateEncrypted: a brand-new db is born encrypted.
 func TestFreshCreateEncrypted(t *testing.T) {
 	requireCipher(t)
-	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
-	path := filepath.Join(dir, "wallets.db")
-
+	path := filepath.Join(t.TempDir(), "wallets.db")
 	resetMaster(testMaster(t))
 	db, err := Open(path)
 	if err != nil {
@@ -236,14 +224,11 @@ func TestFreshCreateEncrypted(t *testing.T) {
 	}
 }
 
-// TestWrongMasterFailsClosed proves a sidecar minted under one master cannot be
-// unwrapped under another — a lifted file + wrong key yields an error, never
-// plaintext or a garbage key.
+// TestWrongMasterFailsClosed: a sidecar minted under one master cannot open under
+// another — a lifted file + wrong key yields an error, never plaintext.
 func TestWrongMasterFailsClosed(t *testing.T) {
 	requireCipher(t)
-	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
-	path := filepath.Join(dir, "audit.db")
+	path := filepath.Join(t.TempDir(), "audit.db")
 	makePlaintextDB(t, path, 3, 3)
 
 	resetMaster(testMaster(t))
@@ -253,7 +238,6 @@ func TestWrongMasterFailsClosed(t *testing.T) {
 	}
 	_ = db.Close()
 
-	// Different master → different KEK → unwrap must fail.
 	other := make([]byte, 32)
 	for i := range other {
 		other[i] = 0xAB
@@ -264,72 +248,182 @@ func TestWrongMasterFailsClosed(t *testing.T) {
 	}
 }
 
-// TestUnencryptedModeWhenNoKey proves that with no master key configured the
-// open is a plain passthrough (dev/CI), leaving the file plaintext — so the
-// encryption is genuinely gated on the KMS key, not accidental.
-func TestUnencryptedModeWhenNoKey(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
-	path := filepath.Join(dir, "settings.db")
+// TestDataDirMoveNoBrick (RED MED #2, PoC): the KEK binds to the sidecar fileID,
+// NOT CLOUD_DATA_DIR, so changing/unsetting the data dir — or moving the file to
+// a different path — must NOT brick the store.
+func TestDataDirMoveNoBrick(t *testing.T) {
+	requireCipher(t)
+	dir1 := t.TempDir()
+	pathA := filepath.Join(dir1, "crm.db")
+	want := makePlaintextDB(t, pathA, 8, 8)
 
-	resetMaster(nil)
-	os.Unsetenv(masterKeyEnv)
-	db, err := Open(path)
+	t.Setenv("CLOUD_DATA_DIR", dir1)
+	resetMaster(testMaster(t))
+	db, err := Open(pathA)
 	if err != nil {
-		t.Fatalf("open dev: %v", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE s(k TEXT)`); err != nil {
-		t.Fatalf("ddl: %v", err)
+		t.Fatalf("migrate under dir1: %v", err)
 	}
 	_ = db.Close()
-	if !isPlaintextHeader(path) {
-		t.Fatalf("dev-mode db should be plaintext when no master key set")
-	}
-	if fileExists(path + dekSuffix) {
-		t.Fatalf("dev-mode db should have no sidecar")
-	}
-}
 
-// TestSetKeyButNoCipherFailsClosed proves that a configured master key on a
-// build that cannot encrypt is a hard error — never a silent plaintext write.
-func TestSetKeyButNoCipherFailsClosed(t *testing.T) {
-	if sqlitedrv.EncryptionAvailable() {
-		t.Skip("this build can encrypt; the fail-closed path is only reachable on pure-Go")
-	}
-	dir := t.TempDir()
-	t.Setenv(dataDirEnv, dir)
-	resetMaster(testMaster(t))
-	if _, err := Open(filepath.Join(dir, "x.db")); err == nil {
-		t.Fatalf("SECURITY: expected hard error when key set but build cannot encrypt")
-	}
-}
+	// Simulate a data-dir change AND a physical move to a different filename.
+	dir2 := t.TempDir()
+	pathB := filepath.Join(dir2, "moved.db")
+	copyFile(t, pathA, pathB)
+	copyFile(t, pathA+dekSuffix, pathB+dekSuffix)
+	t.Setenv("CLOUD_DATA_DIR", "/some/other/root") // the old brick trigger
 
-// TestPrincipalIDStable proves the key-derivation identity is the path relative
-// to the data dir and is stable/injective across the tree.
-func TestPrincipalIDStable(t *testing.T) {
-	t.Setenv(dataDirEnv, "/var/lib/cloud")
-	cases := map[string]string{
-		"/var/lib/cloud/treasury.db":   "treasury.db",
-		"/var/lib/cloud/base/data.db":  "base/data.db",
-		"/var/lib/cloud/team/acct.db":  "team/acct.db",
+	db2, err := Open(pathB) // KEK from fileID → must still open
+	if err != nil {
+		t.Fatalf("AVAILABILITY: data-dir change bricked the store: %v", err)
 	}
-	for in, want := range cases {
-		if got := principalID(in); got != want {
-			t.Errorf("principalID(%q)=%q want %q", in, got, want)
+	defer func() { _ = db2.Close() }()
+	for tbl, n := range want {
+		if got := rowCount(t, db2, tbl); got != n {
+			t.Errorf("moved db row-count %s: want %d got %d", tbl, n, got)
 		}
 	}
 }
 
-func firstBytes(t *testing.T, path string, n int) []byte {
-	t.Helper()
-	f, err := os.Open(path)
+// TestMissingKeyFatalOnCapableBuild (RED MED #3): an encryption-capable build
+// with NO master key must FAIL CLOSED, never silently open plaintext. On a
+// pure-Go build the same absence is dev-mode plaintext.
+func TestMissingKeyFatalOnCapableBuild(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.db")
+	resetMaster(nil)
+	os.Unsetenv(masterKeyEnv)
+
+	_, err := Open(path)
+	if sqlitedrv.EncryptionAvailable() {
+		if err == nil {
+			t.Fatalf("SECURITY: capable build opened the data plane with NO master key (silent plaintext)")
+		}
+		if fileExists(path) {
+			t.Fatalf("SECURITY: a db file was created despite the fatal missing-key error")
+		}
+	} else {
+		if err != nil {
+			t.Fatalf("pure-Go dev build should allow plaintext when no key: %v", err)
+		}
+	}
+}
+
+// TestContentHashCatchesMutation (RED MED #4): the content hash catches a value
+// change that row-count + schema + integrity_check all miss, AND does NOT
+// false-positive on the benign implicit-rowid renumbering sqlcipher_export does.
+func TestContentHashCatchesMutation(t *testing.T) {
+	requireCipher(t)
+	a := filepath.Join(t.TempDir(), "a.db")
+	b := filepath.Join(t.TempDir(), "b.db")
+	makePlaintextDB(t, a, 10, 10)
+	makePlaintextDB(t, b, 10, 10)
+	if inventoryOf(t, a).tables["crm_contacts"].content != inventoryOf(t, b).tables["crm_contacts"].content {
+		t.Fatalf("identical data produced different content hashes")
+	}
+
+	// Mutate ONE value in b (same row count, same schema, integrity stays ok).
+	base := inventoryOf(t, a).tables["crm_contacts"]
+	mutate(t, b, `UPDATE crm_contacts SET email='HIJACKED' WHERE id='ct-3'`)
+	after := inventoryOf(t, b).tables["crm_contacts"]
+	if after.count != base.count {
+		t.Fatalf("mutation changed the row count; test would not isolate content")
+	}
+	if base.content == after.content {
+		t.Fatalf("SECURITY: content hash did NOT catch a value mutation (count-blind gate)")
+	}
+
+	// Benign rowid renumber (delete+reinsert identical row, VACUUM) must NOT change it.
+	c := filepath.Join(t.TempDir(), "c.db")
+	makePlaintextDB(t, c, 10, 10)
+	before := inventoryOf(t, c).tables["crm_contacts"].content
+	mutate(t, c, `DELETE FROM crm_contacts WHERE id='ct-0'; INSERT INTO crm_contacts(id,org,email) VALUES('ct-0','maxpower','u0@x.io'); VACUUM`)
+	if before != inventoryOf(t, c).tables["crm_contacts"].content {
+		t.Errorf("content hash false-positived on a rowid renumber (re-inserted identical row)")
+	}
+}
+
+// TestCorruptSidecarFailsClosed (RED re-test #5, safety net): any undecryptable
+// state — a corrupted or missing .dek sidecar, the family a libsqlcipher format
+// mismatch would land in — FAILS CLOSED (errors), never silently opening
+// plaintext or a garbage db. (Cross-version format stability itself is enforced
+// by freezing the libsqlcipher version in the build; an at-open cipher_compat
+// pin is infeasible with mattn's URI-key requirement — see openKeyed.)
+func TestCorruptSidecarFailsClosed(t *testing.T) {
+	requireCipher(t)
+	path := filepath.Join(t.TempDir(), "audit.db")
+	makePlaintextDB(t, path, 4, 4)
+
+	resetMaster(testMaster(t))
+	db, err := Open(path)
 	if err != nil {
-		t.Fatalf("open %s: %v", path, err)
+		t.Fatalf("migrate: %v", err)
 	}
-	defer func() { _ = f.Close() }()
-	b := make([]byte, n)
-	if _, err := f.ReadAt(b, 0); err != nil {
-		t.Fatalf("read %s: %v", path, err)
+	_ = db.Close()
+
+	// Flip a byte in the wrapped-DEK region of the sidecar → GCM tag fails.
+	sc, err := os.ReadFile(path + dekSuffix)
+	if err != nil {
+		t.Fatalf("read sidecar: %v", err)
 	}
-	return b
+	sc[len(sc)-1] ^= 0xFF
+	if err := os.WriteFile(path+dekSuffix, sc, 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	resetMaster(testMaster(t))
+	if _, err := Open(path); err == nil {
+		t.Fatalf("SECURITY: opened an encrypted db with a corrupted DEK sidecar")
+	}
+
+	// A missing sidecar over an encrypted db must also refuse (never open blind).
+	if err := os.Remove(path + dekSuffix); err != nil {
+		t.Fatalf("rm sidecar: %v", err)
+	}
+	resetMaster(testMaster(t))
+	if _, err := Open(path); err == nil {
+		t.Fatalf("SECURITY: opened an encrypted db with NO DEK sidecar")
+	}
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+func inventoryOf(t *testing.T, path string) inventory {
+	t.Helper()
+	db, err := sql.Open("sqlite", sqlitedrv.DSN(path, nil))
+	if err != nil {
+		t.Fatalf("open for inventory: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	db.SetMaxOpenConns(1)
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("conn: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	inv, err := readInventory(context.Background(), conn)
+	if err != nil {
+		t.Fatalf("readInventory: %v", err)
+	}
+	return inv
+}
+
+func mutate(t *testing.T, path, sqlText string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", sqlitedrv.DSN(path, nil))
+	if err != nil {
+		t.Fatalf("open mutate: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec(sqlText); err != nil {
+		t.Fatalf("mutate %q: %v", sqlText, err)
+	}
+}
+
+func copyFile(t *testing.T, src, dst string) {
+	t.Helper()
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	if err := os.WriteFile(dst, b, 0o600); err != nil {
+		t.Fatalf("write %s: %v", dst, err)
+	}
 }
