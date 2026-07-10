@@ -1,6 +1,7 @@
 package websearch
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,23 +12,46 @@ import (
 
 	fiber "github.com/gofiber/fiber/v3"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
-// Mount() must register /v1/websearch/search + the two scrape POST paths on a
-// real Fiber router without panicking, and requests routed through the whole
-// app must reach the handlers (search proxy + firecrawl-shaped scrape).
-func TestMountRoutesThroughRouter(t *testing.T) {
-	searchUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, `{"results":[]}`)
+// bingFixture is a minimal Bing result page parseBing understands: a b_algo block
+// with an <h2><a> (absolute non-ck/a href passes through verbatim) and a snippet.
+const bingFixture = `<html><body>
+<li class="b_algo">
+  <h2><a href="https://example.com/page">Example Title</a></h2>
+  <p class="b_lineclamp2">A snippet of the result.</p>
+</li>
+</body></html>`
+
+// mockBing points the bing engine at a local server serving fixture HTML and pins
+// the engine set to bing only, so metaSearch is fully offline + deterministic.
+func mockBing(t *testing.T, html string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, html)
 	}))
-	defer searchUp.Close()
+	t.Cleanup(srv.Close)
+	t.Setenv("WEBSEARCH_ENGINES", "bing")
+	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
+	return srv
+}
+
+// okHandler is a trivial next-handler for exercising searchGuard in isolation
+// (the guard rejects before next runs, so it never actually fires on reject paths).
+var okHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+// Mount() must register /v1/websearch/search + the two scrape POST paths on a real
+// Fiber router without panicking, and requests routed through the whole app must
+// reach the native search handler + firecrawl-shaped scrape.
+func TestMountRoutesThroughRouter(t *testing.T) {
+	mockBing(t, bingFixture)
 	crawlUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"status":"completed","results":[{"url":"https://ex","markdown":"# M","success":true}]}`)
 	}))
 	defer crawlUp.Close()
-	t.Setenv("WEBSEARCH_UPSTREAM", searchUp.URL)
 	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", crawlUp.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "k")
 
@@ -37,8 +61,9 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	}
 	fa := app.Fiber()
 
-	// Search routes through to the searxng proxy. The client presents the shared
-	// key as X-API-Key (searchGuard now requires it, like the scrape sibling).
+	// Search routes through to native meta-search. The client presents the shared
+	// key as X-API-Key (searchGuard requires it, like the scrape sibling). The
+	// response is the SearXNG envelope built in-process from the mocked engine.
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x&format=json", nil)
 	req.Header.Set("X-API-Key", "k")
 	resp, err := fa.Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
@@ -48,7 +73,11 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("search route status %d, want 200", resp.StatusCode)
 	}
+	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	if !strings.Contains(string(body), "https://example.com/page") {
+		t.Fatalf("native search did not return the mocked result: %s", string(body))
+	}
 
 	// Firecrawl scrape (the /v1/scrape path the client builds) routes to the
 	// crawl-backed handler and returns the firecrawl shape.
@@ -68,17 +97,19 @@ func TestMountRoutesThroughRouter(t *testing.T) {
 }
 
 // A signed-in console user reaches search WITHOUT the shared key: the identity
-// middleware set X-User-Id (principal.Validated), so the zip-layer gate proxies
-// straight to SearXNG even with WEBSEARCH_API_KEY unset. This is the console
+// middleware set X-User-Id (principal.Validated), so the zip-layer gate runs
+// native search even with WEBSEARCH_API_KEY unset. This is the console
 // user-bearer path the /cloud proxy drives.
 func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 	var reached bool
-	searchUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reached = true
-		_, _ = io.WriteString(w, `{"results":[{"url":"https://x","title":"T","content":"C"}]}`)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, bingFixture)
 	}))
-	defer searchUp.Close()
-	t.Setenv("WEBSEARCH_UPSTREAM", searchUp.URL)
+	defer srv.Close()
+	t.Setenv("WEBSEARCH_ENGINES", "bing")
+	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "") // unset: the key path would 503 — the principal must pass regardless
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -98,19 +129,14 @@ func TestSearchValidatedPrincipalBypassesKey(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if !reached {
-		t.Fatal("upstream SearXNG was not reached for a validated principal")
+		t.Fatal("native search engine was not reached for a validated principal")
 	}
 }
 
 // F2 STILL HOLDS at the router: a caller with NO validated principal AND no key is
-// refused — the principal path did not reopen the open-proxy hole. With the key
-// unset the key path fails closed (503); the anonymous caller never reaches SearXNG.
+// refused — the principal path did not reopen the open-surface hole. With the key
+// unset the key path fails closed (503); the anonymous caller never reaches search.
 func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
-	searchUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must not be reached by an anonymous caller with no key")
-	}))
-	defer searchUp.Close()
-	t.Setenv("WEBSEARCH_UPSTREAM", searchUp.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "")
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -125,7 +151,7 @@ func TestSearchNoPrincipalNoKeyRefused(t *testing.T) {
 		t.Fatalf("search route: %v", err)
 	}
 	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("anonymous no-key search status %d, want 503 (fail closed, no open proxy)", resp.StatusCode)
+		t.Fatalf("anonymous no-key search status %d, want 503 (fail closed, no open surface)", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
 }
@@ -140,54 +166,50 @@ func TestMountRejectsBadInputs(t *testing.T) {
 	}
 }
 
-// Search must proxy /v1/websearch/search → {upstream}/search verbatim (query
-// preserved), so the LibreChat searxng client gets a real SearXNG response.
-func TestSearchProxyRewritesToSearchPath(t *testing.T) {
-	var gotPath, gotQuery string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotQuery = r.URL.RawQuery
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"results":[{"url":"https://x","title":"T","content":"C"}]}`)
+// metaSearch runs the enabled keyless engines in-process and returns the SearXNG
+// envelope. With bing mocked to fixture HTML it parses exactly one result — no
+// network, no SearXNG pod.
+func TestMetaSearchParsesEngineResult(t *testing.T) {
+	mockBing(t, bingFixture)
+	got := metaSearch(context.Background(), "hanzo ai", "")
+	if got.Query != "hanzo ai" {
+		t.Fatalf("query = %q, want echoed", got.Query)
+	}
+	if len(got.Results) != 1 || got.NumberOfResults != 1 {
+		t.Fatalf("results = %+v, want exactly 1", got.Results)
+	}
+	r := got.Results[0]
+	if r.URL != "https://example.com/page" || r.Title != "Example Title" || r.Engine != "bing" {
+		t.Fatalf("parsed result = %+v, want the fixture's url/title/engine", r)
+	}
+	if !strings.Contains(r.Content, "snippet") {
+		t.Fatalf("content = %q, want the snippet", r.Content)
+	}
+}
+
+// A challenged/failing engine (non-200) contributes zero and never fails the
+// request — search degrades to an empty-but-valid envelope, never a 5xx.
+func TestMetaSearchDegradesOnEngineFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden) // bot-challenge / rate-limit
 	}))
-	defer up.Close()
+	defer srv.Close()
+	t.Setenv("WEBSEARCH_ENGINES", "bing")
+	t.Setenv("WEBSEARCH_BING_URL", srv.URL)
 
-	proxy, err := newSearchProxy(up.URL)
-	if err != nil {
-		t.Fatalf("newSearchProxy: %v", err)
+	got := metaSearch(context.Background(), "x", "")
+	if got.Results == nil {
+		t.Fatal("results must be a non-nil array, never null")
 	}
-	t.Setenv("WEBSEARCH_API_KEY", "svc-key")
-	h := searchGuard(proxy)
-
-	req := httptest.NewRequest(http.MethodGet,
-		"http://api.hanzo.ai/v1/websearch/search?q=hanzo+ai&format=json&engines=google,bing", nil)
-	req.Header.Set("X-API-Key", "svc-key")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if gotPath != "/search" {
-		t.Fatalf("upstream path = %q, want /search", gotPath)
-	}
-	if !strings.Contains(gotQuery, "q=hanzo+ai") || !strings.Contains(gotQuery, "format=json") {
-		t.Fatalf("upstream query = %q, want the searxng params preserved", gotQuery)
-	}
-	if !strings.Contains(rec.Body.String(), `"results"`) {
-		t.Fatalf("searxng body not passed through: %s", rec.Body.String())
+	if len(got.Results) != 0 {
+		t.Fatalf("results = %+v, want empty on engine failure", got.Results)
 	}
 }
 
 // When a key IS configured and the caller sends a WRONG X-API-Key, reject.
 func TestSearchWrongKeyRejected(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must not be reached with a wrong key")
-	}))
-	defer up.Close()
-	proxy, _ := newSearchProxy(up.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "right")
-	h := searchGuard(proxy)
+	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	req.Header.Set("X-API-Key", "wrong")
@@ -199,35 +221,23 @@ func TestSearchWrongKeyRejected(t *testing.T) {
 }
 
 // SECURITY (F2): a MISSING X-API-Key must be REJECTED — /v1/websearch/search is
-// not an open proxy. Previously a missing key passed (searxng key was treated as
-// optional), so any unauthenticated caller could drive the Hanzo metasearch
-// instance. It now fails closed exactly like the scrape sibling.
+// not an open surface. It fails closed exactly like the scrape sibling.
 func TestSearchMissingKeyRejected(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must not be reached without a key")
-	}))
-	defer up.Close()
-	proxy, _ := newSearchProxy(up.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "configured")
-	h := searchGuard(proxy)
+	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401 (missing key must be rejected — no open proxy)", rec.Code)
+		t.Fatalf("status = %d, want 401 (missing key must be rejected — no open surface)", rec.Code)
 	}
 }
 
 // Search fails closed with no configured key (503), mirroring scrape.
 func TestSearchUnsetKeyFailsClosed(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("upstream must not be reached when the key is unset")
-	}))
-	defer up.Close()
-	proxy, _ := newSearchProxy(up.URL)
 	t.Setenv("WEBSEARCH_API_KEY", "")
-	h := searchGuard(proxy)
+	h := searchGuard(okHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "http://api.hanzo.ai/v1/websearch/search?q=x", nil)
 	req.Header.Set("X-API-Key", "anything")
@@ -280,13 +290,11 @@ func TestScrapeAdaptsCrawlToFirecrawlShape(t *testing.T) {
 	}
 }
 
-// REGRESSION: the deployed hanzoai/crawl:0.0.1 (Crawl4AI 0.8.6) returns
-// `markdown` as an OBJECT {raw_markdown, fit_markdown, ...}, not a bare string,
-// AND signals the batch with a boolean "success" (no "status"). A `string`
-// Markdown field errored the whole decode → crawl() failed → every scrape
-// returned {success:false} (empty page content). This asserts the real 0.8.6
-// envelope + object markdown adapt correctly, preferring fit_markdown. The body
-// literal is trimmed from an actual crawl4ai 0.8.6 /crawl response.
+// REGRESSION: the deployed hanzoai/crawl:0.0.1 (Crawl4AI 0.8.6) returns `markdown`
+// as an OBJECT {raw_markdown, fit_markdown, ...}, not a bare string, AND signals
+// the batch with a boolean "success" (no "status"). A `string` Markdown field
+// errored the whole decode → crawl() failed → every scrape returned {success:false}.
+// This asserts the real 0.8.6 envelope + object markdown adapt correctly.
 func TestScrapeHandlesCrawl4AIObjectMarkdown(t *testing.T) {
 	crawlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -325,8 +333,6 @@ func TestScrapeHandlesCrawl4AIObjectMarkdown(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("decode response: %v (%s)", err, rec.Body.String())
 	}
-	// Must succeed (not the {success:false} the string-typed field produced) and
-	// carry the CLEANED fit_markdown, not raw and not empty.
 	if !out.Success || out.Data == nil {
 		t.Fatalf("response = %+v, want success:true with data (object markdown must decode)", out)
 	}
@@ -375,26 +381,14 @@ func TestScrapeWrongKeyRejected(t *testing.T) {
 	}
 }
 
-func TestNewSearchProxyRejectsBadURL(t *testing.T) {
-	if _, err := newSearchProxy("://nope"); err == nil {
-		t.Fatal("expected error for malformed upstream URL")
-	}
-	if _, err := newSearchProxy("relative"); err == nil {
-		t.Fatal("expected error for non-absolute upstream URL")
-	}
-}
-
-func TestUpstreamDefaultsAndOverrides(t *testing.T) {
-	t.Setenv("WEBSEARCH_UPSTREAM", "")
-	if got := searchUpstream(); got != defaultSearchUpstream {
-		t.Fatalf("searchUpstream() = %q, want default", got)
-	}
-	t.Setenv("WEBSEARCH_UPSTREAM", "http://searxng:8080")
-	if got := searchUpstream(); got != "http://searxng:8080" {
-		t.Fatalf("searchUpstream() override = %q", got)
-	}
+// crawlEndpoint honors its default and the env override.
+func TestCrawlEndpointDefaultsAndOverrides(t *testing.T) {
 	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", "")
 	if got := crawlEndpoint(); got != defaultCrawlEndpoint {
 		t.Fatalf("crawlEndpoint() = %q, want default", got)
+	}
+	t.Setenv("WEBSEARCH_CRAWL_ENDPOINT", "http://crawl:11235")
+	if got := crawlEndpoint(); got != "http://crawl:11235" {
+		t.Fatalf("crawlEndpoint() override = %q", got)
 	}
 }
