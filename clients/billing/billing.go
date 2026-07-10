@@ -13,7 +13,7 @@
 // exactly the customer surface those calls need.
 //
 // TENANT ISOLATION (the whole point). The org is the VALIDATED IAM owner claim
-// (principal.Tenant — the trusted X-Org-Id the identity middleware minted from the
+// (principal.Org — the trusted X-Org-Id the identity middleware minted from the
 // caller's verified session/bearer, HIP-0026; NEVER a client-supplied header). A
 // customer therefore reads ONLY their OWN org's ledger. The commerce billing
 // subject is pinned server-side to that org and NO client-supplied subject/org
@@ -187,7 +187,7 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 // customerId is overwritten and `org` is dropped), forwards ONLY the safe passthrough
 // params, and returns commerce's raw body + status verbatim.
 func proxy(s *cloud.Service[state], c *zip.Ctx, commercePath string, passthrough ...string) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		// No validated principal / no org. This is a customer's OWN billing — never
 		// admin-gate it — so an absent identity is a true "not signed in" (401),
@@ -246,7 +246,7 @@ func scopedBillingQuery(c *zip.Ctx, org string, passthrough ...string) url.Value
 // On any parse failure it returns commerce's body VERBATIM — enrichment must never
 // lose or corrupt the real ledger.
 func usage(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
@@ -306,7 +306,7 @@ func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 // status is forwarded VERBATIM (201 ok / 402 {card_required|insufficient_prepaid}), so the
 // launch UI renders the exact remedy; a money verdict is never 500-masked.
 func gpuCharge(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		// A customer's OWN GPU charge — never admin-gate it; an absent identity is a
 		// true "not signed in" (401), matching usage/balance.

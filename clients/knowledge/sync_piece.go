@@ -8,7 +8,7 @@
 //
 // SECURITY (the tenant + secret boundary, unchanged from the native path):
 //   - org is the caller's VALIDATED tenant (resolved once in syncConnector via
-//     principal.Tenant), passed here explicitly and stamped as X-Org-Id on the
+//     principal.Org), passed here explicitly and stamped as X-Org-Id on the
 //     in-cluster call to the auto engine. cloud is the trust boundary; the engine
 //     scopes to that org.
 //   - the OAuth token comes from THIS org's KMS path (read in syncConnector) and is

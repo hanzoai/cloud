@@ -574,11 +574,11 @@ func tenant(c *zip.Ctx) (string, bool) {
 // sanitizeOrg reduces a gateway org id to a lowercase [a-z0-9-] slug that is
 // INJECTIVE in the raw owner. It delegates to cloud.SanitizeOrg — the ONE org-slug
 // normalizer for the tenant layer — so the slug this control plane keys its
-// bucket/DB names on is byte-identical to the one cloud.TenantDB folds every
+// bucket/DB names on is byte-identical to the one cloud.OrgDB folds every
 // per-tenant SQLite path through (and to what S3/KMS/knowledge derive). The
 // isolation-boundary rationale (refuse unsafe-rune owners; identity on a clean
 // DNS-1123 label; else fold + "-"+SHA-256(raw)[:8], with the suffixed-shape
-// fast-path exclusion) lives with the implementation in cloud/tenantdb.go.
+// fast-path exclusion) lives with the implementation in cloud/orgdb.go.
 func sanitizeOrg(s string) string { return cloud.SanitizeOrg(s) }
 
 // orgHash returns a fixed-width, collision-resistant tag for an org slug: the

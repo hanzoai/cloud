@@ -12,7 +12,7 @@ import (
 
 // The scoped, tenant-isolated o11y surface: /v1/o11y/{logs,metrics,status}. These
 // are the ONLY code paths that serve product logs/metrics/status, and every one
-// pins the org SERVER-SIDE (principal.Tenant) into the query — the client never
+// pins the org SERVER-SIDE (principal.Org) into the query — the client never
 // supplies an org, a raw query, or a PromQL/SQL fragment. They are registered
 // BEFORE the hanzoai/o11y wildcard (`app.All("/v1/o11y/*")`, order 70) so Fiber's
 // in-order match gives these specific routes precedence; the wildcard proxy
@@ -66,7 +66,7 @@ func mountScope(a *zip.App) {
 // SuperAdmin sees the raw infra stdout stream. An unknown/unbacked product is
 // honest-empty; a malformed product slug is a 400 at the boundary.
 func handleLogs(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
@@ -94,7 +94,7 @@ func handleLogs(c *zip.Ctx) error {
 // selectors are pinned to the product and (non-admin) the org; usage is always the
 // caller's own org. Unknown/unbacked product → honest-empty; malformed slug → 400.
 func handleMetrics(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}

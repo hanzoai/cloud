@@ -21,7 +21,7 @@
 //	          concern handled by launch/delete, not a fabricated bot state.
 //
 // Tenancy is identical to machines: the org is the VALIDATED principal
-// (principal.Tenant, taken from the IAM owner claim), forwarded to vm as
+// (principal.Org, taken from the IAM owner claim), forwarded to vm as
 // ?owner=<org>, so a caller can only ever read or mutate its OWN bots. No
 // validated principal ⇒ 403, before anything reaches vm.
 package visor
@@ -224,7 +224,7 @@ func launchBot(s *cloud.Service[state], c *zip.Ctx) error {
 // launched bot is immediately messageable. It self-calls the SAME POST /v1/agents
 // the console uses — one create path, never a second store — forwarding the
 // caller's validated identity so the agent is created in the caller's OWN org
-// (IDOR-safe: the agents surface scopes the create by the same principal.Tenant).
+// (IDOR-safe: the agents surface scopes the create by the same principal.Org).
 // An empty model is passed through: agent-create fills the deployment default (a
 // valid catalog model), so a bot launched without a model still runs.
 //

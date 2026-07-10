@@ -590,7 +590,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	// tenant() above already required a VALIDATED principal (principal.Tenant
+	// tenant() above already required a VALIDATED principal (principal.Org
 	// returns ok only when c.User() — set solely from a JWT SanitizeIdentity
 	// verified — is non-empty), so every path here, run included, is closed to the
 	// no-bearer direct-to-pod forge path. This explicit re-assertion is a local,
@@ -893,7 +893,7 @@ func refParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("ref")) }
 // owners into one bucket (Red HIGH-1). Reject only empty or pathologically
 // long. No magic "admin" bucket — a global admin operating on per-org data
 // carries an explicit org, so an empty org is a true 403.
-func tenant(c *zip.Ctx) (string, bool) { return principal.Tenant(c) }
+func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
 // validateLifecycle normalizes and validates the execution mode + schedule.
 // Empty mode defaults to one-shot. A long-running agent MUST carry a schedule

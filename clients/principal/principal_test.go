@@ -11,7 +11,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// probe mounts a route that resolves the tenant via principal.Tenant and reports
+// probe mounts a route that resolves the org via principal.Org and reports
 // {org, ok, validated}. It drives the SAME zip.Ctx header accessors the gateway
 // feeds in production, so a test sets X-User-Id / X-Org-Id exactly as
 // SanitizeIdentity would: X-User-Id is present ONLY for a validated principal, and
@@ -21,7 +21,7 @@ func probe(t *testing.T, headers map[string]string) (org string, ok, validated b
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Get("/probe", func(c *zip.Ctx) error {
-		o, k := principal.Tenant(c)
+		o, k := principal.Org(c)
 		return c.JSON(200, map[string]any{"org": o, "ok": k, "validated": principal.Validated(c)})
 	})
 	req := httptest.NewRequest("GET", "/probe", nil)
@@ -46,12 +46,12 @@ func probe(t *testing.T, headers map[string]string) (org string, ok, validated b
 }
 
 // TestTenant_ForgedOrgNoPrincipalRefused is THE break: an off-gateway caller
-// forges X-Org-Id with NO validated principal (no X-User-Id). The tenant MUST NOT
-// resolve — otherwise a bearer-less request reads/writes another tenant's data.
+// forges X-Org-Id with NO validated principal (no X-User-Id). The org MUST NOT
+// resolve — otherwise a bearer-less request reads/writes another org's data.
 func TestTenant_ForgedOrgNoPrincipalRefused(t *testing.T) {
 	org, ok, validated := probe(t, map[string]string{"X-Org-Id": "victim"})
 	if ok || org != "" {
-		t.Fatalf("forged X-Org-Id with no principal resolved a tenant: org=%q ok=%v", org, ok)
+		t.Fatalf("forged X-Org-Id with no principal resolved an org: org=%q ok=%v", org, ok)
 	}
 	if validated {
 		t.Fatalf("Validated must be false with no X-User-Id")
@@ -67,7 +67,7 @@ func TestTenant_ValidatedPrincipalResolves(t *testing.T) {
 	}
 }
 
-// TestTenant_VerbatimNoFold: the org is the tenant KEY, used verbatim — never
+// TestTenant_VerbatimNoFold: the org is the org KEY, used verbatim — never
 // case-folded (folding would collapse distinct owners into one bucket).
 func TestTenant_VerbatimNoFold(t *testing.T) {
 	org, ok, _ := probe(t, map[string]string{"X-Org-Id": "ACME", "X-User-Id": "u_1"})
