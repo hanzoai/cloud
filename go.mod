@@ -21,7 +21,7 @@ require (
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
-	github.com/hanzoai/sign v0.0.0-20260710100143-7583a510ad97
+	github.com/hanzoai/sign v0.0.0-20260710214950-315a3fe6a5a6
 	github.com/hanzoai/sqlite v0.2.3
 	github.com/hanzoai/stream v1.2.0
 	github.com/huandu/facebook v2.3.1+incompatible
@@ -74,7 +74,7 @@ require (
 require (
 	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
-	github.com/hanzoai/captable v0.0.0-20260710092459-3cc625ee446f
+	github.com/hanzoai/captable v0.0.0-20260710213906-119bf9c088d7
 	github.com/luxfi/keys v1.2.2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )

@@ -77,6 +77,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "sign"})
 	})
 
+	// Sign persists PDF BYTES on the object-storage seam (deps.VFS), NOT inline in
+	// the per-tenant SQLite — a 32 MiB base64 PDF in a TEXT column would bloat the
+	// tenant DB and be re-copied on every read. gojabase injects it as __blob,
+	// tenant-scoped. Without VFS sign cannot store documents, so serve health-only
+	// (cloud stays up) rather than write PDFs into the tenant DB.
+	if deps.VFS == nil {
+		log.Error("deps.VFS is nil — PDF byte storage unavailable; serving /v1/sign/health only")
+		return nil
+	}
+
 	sg, err := newSigner(deps.DataDir, deps.Env)
 	if err != nil {
 		return fmt.Errorf("sign.Mount: signer: %w", err)
@@ -90,6 +100,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		Bundle:  bundle,
 		Schema:  schema,
 		DataDir: deps.DataDir,
+		Blob:    deps.VFS, // PDF bytes go to object storage via __blob, not SQLite
 		HostFns: map[string]any{"__pdf": sg.pdfHostObject()},
 	})
 	if err != nil {
