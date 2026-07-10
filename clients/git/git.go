@@ -156,6 +156,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/git/usage", s.usage)
 	app.Get("/v1/git/repos/:name", s.get)
 	app.Delete("/v1/git/repos/:name", s.del)
+	// Mirror an external repo into <org>/:name (creates the repo on first use).
+	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
+	// routes below.
+	app.Post("/v1/git/repos/:name/mirror", s.mirror)
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
@@ -220,20 +224,31 @@ func (s *svc) create(c *zip.Ctx) error {
 		Description: strings.TrimSpace(body.Description), DefaultBranch: defaultBranchName,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := store.Create(c.Context(), r); err != nil {
+	if err := s.provision(c.Context(), store, r); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("repo name already exists in this scope")
 		}
-		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-	}
-	if err := s.storage.initBare(org, project, name, defaultBranchName); err != nil {
-		// Roll back the metadata row so a failed init never leaves a phantom repo.
-		_, _ = store.Delete(c.Context(), org, project, name)
-		return zip.Errorf(http.StatusInternalServerError, "init repo: %v", err)
+		return zip.Errorf(http.StatusInternalServerError, "provision: %v", err)
 	}
 	// Record initial storage size (billing hook: an empty bare repo is a few KiB).
 	r.SizeBytes = s.recordUsage(c.Context(), org, project, name)
 	return c.JSON(http.StatusCreated, s.toView(r, nil, ""))
+}
+
+// provision materializes a repo: its metadata row plus an empty bare repo on
+// storage. The ONE way a repo comes into being — create and mirror both compose
+// it. On a storage-init failure the metadata row is rolled back so a partial
+// provision never leaves a phantom repo. Returns errConflict when the row
+// already exists (the caller decides whether that is fatal).
+func (s *svc) provision(ctx context.Context, store *Store, r Repo) error {
+	if err := store.Create(ctx, r); err != nil {
+		return err // errConflict, or a wrapped insert error
+	}
+	if err := s.storage.initBare(r.Org, r.Project, r.Name, r.DefaultBranch); err != nil {
+		_, _ = store.Delete(ctx, r.Org, r.Project, r.Name)
+		return fmt.Errorf("init repo: %w", err)
+	}
+	return nil
 }
 
 func (s *svc) list(c *zip.Ctx) error {
