@@ -7,8 +7,10 @@ import (
 	"strings"
 	"sync"
 
-	luxlog "github.com/luxfi/log"
 	"testing"
+
+	"github.com/hanzoai/cloud"
+	luxlog "github.com/luxfi/log"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -56,12 +58,12 @@ func (f *fakeKMS) Sign(_ context.Context, _ string, _ []byte) ([]byte, error) {
 // TestSealSecretEnv_BlanksAndSeals proves sealSecretEnv seals secret values into
 // KMS, blanks the persisted value, and passes plain vars through untouched.
 func TestSealSecretEnv_BlanksAndSeals(t *testing.T) {
-	s := &svc{kms: newFakeKMS()}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS()}}
 	in := []EnvVarJSON{
 		{Key: "PUBLIC", Value: "ok", Secret: false},
 		{Key: "DB_PASSWORD", Value: "hunter2", Secret: true},
 	}
-	out, err := s.sealSecretEnv(context.Background(), "maxpower", "api", in)
+	out, err := sealSecretEnv(s, context.Background(), "maxpower", "api", in)
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestSealSecretEnv_BlanksAndSeals(t *testing.T) {
 			}
 		}
 	}
-	got, err := s.kms.GetSecret(context.Background(), kmsSecretRef("maxpower", "api", "DB_PASSWORD"))
+	got, err := s.KMS.GetSecret(context.Background(), kmsSecretRef("maxpower", "api", "DB_PASSWORD"))
 	if err != nil || string(got) != "hunter2" {
 		t.Fatalf("value not sealed to KMS: %q err=%v", got, err)
 	}
@@ -90,18 +92,18 @@ func TestSealSecretEnv_BlanksAndSeals(t *testing.T) {
 // error) refuses the whole set — never a plaintext fallback.
 func TestSealSecretEnv_FailsClosed(t *testing.T) {
 	// nil client
-	s := &svc{kms: nil}
-	if _, err := s.sealSecretEnv(context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v", Secret: true}}); err == nil {
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: nil}}
+	if _, err := sealSecretEnv(s, context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v", Secret: true}}); err == nil {
 		t.Fatal("nil KMS must fail closed for secret env")
 	}
 	// erroring client (master key missing)
-	s = &svc{kms: &fakeKMS{fail: true}}
-	if _, err := s.sealSecretEnv(context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v", Secret: true}}); err == nil {
+	s = &cloud.Service[state]{Base: cloud.Base{KMS: &fakeKMS{fail: true}}}
+	if _, err := sealSecretEnv(s, context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v", Secret: true}}); err == nil {
 		t.Fatal("KMS error must fail closed for secret env")
 	}
 	// but a plain-only set is fine without KMS
-	s = &svc{kms: nil}
-	if _, err := s.sealSecretEnv(context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v"}}); err != nil {
+	s = &cloud.Service[state]{Base: cloud.Base{KMS: nil}}
+	if _, err := sealSecretEnv(s, context.Background(), "o", "a", []EnvVarJSON{{Key: "X", Value: "v"}}); err != nil {
 		t.Fatalf("plain env must not need KMS: %v", err)
 	}
 }
@@ -204,8 +206,8 @@ func (f *fakeIdentity) EnsureOrgIdentity(_ context.Context, org string) (string,
 // falls back to a shared reader.
 func TestEnsureTenantKMSAuth_FailClosedWhenUnprovisioned(t *testing.T) {
 	k := fakeK8s()
-	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: nil, log: luxlog.New("test")}
-	s.ensureTenantKMSAuth(context.Background(), "maxpower")
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: nil}}
+	ensureTenantKMSAuth(s, context.Background(), "maxpower")
 	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
 		t.Fatal("no provisioner ⇒ no creds Secret must be created (fail-closed, never a shared reader)")
 	}
@@ -218,9 +220,9 @@ func TestEnsureTenantKMSAuth_FailClosedWhenUnprovisioned(t *testing.T) {
 func TestEnsureTenantKMSAuth_ProvisionsPerTenant(t *testing.T) {
 	k := fakeK8s()
 	id := &fakeIdentity{}
-	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: id, log: luxlog.New("test")}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: id}}
 	ctx := context.Background()
-	s.ensureTenantKMSAuth(ctx, "maxpower")
+	ensureTenantKMSAuth(s, ctx, "maxpower")
 
 	sec, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(ctx, "platform-kms-auth", metav1.GetOptions{})
 	if err != nil {
@@ -235,7 +237,7 @@ func TestEnsureTenantKMSAuth_ProvisionsPerTenant(t *testing.T) {
 		t.Fatalf("provisioner must be asked only for the deploying org, got %v", id.askedFor)
 	}
 	// Idempotent: a second pass reuses the existing Secret (no error, no dup ask).
-	s.ensureTenantKMSAuth(ctx, "maxpower")
+	ensureTenantKMSAuth(s, ctx, "maxpower")
 	if len(id.askedFor) != 1 {
 		t.Fatalf("existing creds Secret must short-circuit provisioning, asked=%v", id.askedFor)
 	}
@@ -245,8 +247,8 @@ func TestEnsureTenantKMSAuth_ProvisionsPerTenant(t *testing.T) {
 // leaves NO creds Secret (fail-closed) — never a partial or wrong-org credential.
 func TestEnsureTenantKMSAuth_ProvisionFailureStaysPending(t *testing.T) {
 	k := fakeK8s()
-	s := &svc{k8s: k, kms: newFakeKMS(), kmsIdentity: &fakeIdentity{fail: true}, log: luxlog.New("test")}
-	s.ensureTenantKMSAuth(context.Background(), "maxpower")
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test")}, State: state{k8s: k, kmsIdentity: &fakeIdentity{fail: true}}}
+	ensureTenantKMSAuth(s, context.Background(), "maxpower")
 	if _, err := k.dyn.Resource(secretsGVR).Namespace("tenant-maxpower").Get(context.Background(), "platform-kms-auth", metav1.GetOptions{}); err == nil {
 		t.Fatal("provisioner failure must leave no creds Secret (fail-closed)")
 	}
@@ -320,7 +322,7 @@ func TestSecretEnvEndToEndDeploy(t *testing.T) {
 	}
 
 	// Service CR: secret env rendered as secretKeyRef, plaintext nowhere.
-	svcCR, err := s.k8s.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
+	svcCR, err := s.State.k8s.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("service CR: %v", err)
 	}
@@ -350,7 +352,7 @@ func TestSecretEnvEndToEndDeploy(t *testing.T) {
 	}
 
 	// KMSSecret CR authored to materialize the managed Secret.
-	kmsCR, err := s.k8s.dyn.Resource(kmsSecretsGVR).Namespace("tenant-maxpower").Get(ctx, "api-env", metav1.GetOptions{})
+	kmsCR, err := s.State.k8s.dyn.Resource(kmsSecretsGVR).Namespace("tenant-maxpower").Get(ctx, "api-env", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("KMSSecret CR not authored on deploy: %v", err)
 	}

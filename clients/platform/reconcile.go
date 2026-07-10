@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
 const (
@@ -31,7 +33,7 @@ const (
 )
 
 // runBuildReconciler ticks reconcileBuilds until ctx is cancelled (Shutdown).
-func (s *svc) runBuildReconciler(ctx context.Context) {
+func runBuildReconciler(s *cloud.Service[state], ctx context.Context) {
 	t := time.NewTicker(buildReconcileInterval)
 	defer t.Stop()
 	for {
@@ -39,7 +41,7 @@ func (s *svc) runBuildReconciler(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			s.reconcileBuilds(ctx)
+			reconcileBuilds(s, ctx)
 		}
 	}
 }
@@ -47,17 +49,17 @@ func (s *svc) runBuildReconciler(ctx context.Context) {
 // reconcileBuilds advances every "building" deployment one step. Cluster
 // unreachable ⇒ no-op this tick (try again next); no build is ever failed just
 // because the control plane briefly lost the apiserver.
-func (s *svc) reconcileBuilds(ctx context.Context) {
-	if s.k8s.ready() != nil {
+func reconcileBuilds(s *cloud.Service[state], ctx context.Context) {
+	if s.State.k8s.ready() != nil {
 		return
 	}
-	deps, err := s.store.ListBuildingDeployments(ctx)
+	deps, err := s.State.store.ListBuildingDeployments(ctx)
 	if err != nil {
-		s.log.Warn("reconcile: list building deployments", "err", err)
+		s.Log.Warn("reconcile: list building deployments", "err", err)
 		return
 	}
 	for _, d := range deps {
-		s.reconcileBuild(ctx, d)
+		reconcileBuild(s, ctx, d)
 	}
 }
 
@@ -69,50 +71,50 @@ func (s *svc) reconcileBuilds(ctx context.Context) {
 // or the elapsed deadline records an honest terminal error. Crucially, a slow tenant
 // onboarding is NOT failed permanently (there is no client to retry a git build) and
 // is NOT waited on in-line (which would head-of-line-block other orgs' go-lives).
-func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
+func reconcileBuild(s *cloud.Service[state], ctx context.Context, d Deployment) {
 	if d.Source != "git" || d.BuildID == "" {
 		return // only git builds pass through "building"
 	}
 	overdue := time.Now().Unix()-d.CreatedAt > int64(buildDeadline.Seconds())
 
-	b, err := s.store.GetBuild(ctx, d.Org, d.BuildID)
+	b, err := s.State.store.GetBuild(ctx, d.Org, d.BuildID)
 	if err != nil || b.JobName == "" {
 		if overdue {
-			s.failBuild(ctx, d, b, "build record/job missing past deadline")
+			failBuild(s, ctx, d, b, "build record/job missing past deadline")
 		}
 		return
 	}
 
-	done, succeeded, jErr := s.k8s.jobResult(ctx, b.JobName)
+	done, succeeded, jErr := s.State.k8s.jobResult(ctx, b.JobName)
 	if jErr != nil {
 		// Job not found (TTL-cleaned) or transient apiserver error. Only give up
 		// once the deadline has passed; otherwise wait for the next tick.
 		if overdue {
-			s.failBuild(ctx, d, b, "build job not found past deadline: "+jErr.Error())
+			failBuild(s, ctx, d, b, "build job not found past deadline: "+jErr.Error())
 		}
 		return
 	}
 	if !done {
 		if overdue {
-			s.failBuild(ctx, d, b, "build exceeded deadline")
+			failBuild(s, ctx, d, b, "build exceeded deadline")
 		}
 		return
 	}
 	if !succeeded {
-		s.failBuild(ctx, d, b, "build job failed")
+		failBuild(s, ctx, d, b, "build job failed")
 		return
 	}
 
 	// Build succeeded — resolve app + project and apply the Service CR with the
 	// built image (the ONE deploy mechanic, identical to deployImage).
-	app, err := s.store.GetApplicationByID(ctx, d.Org, d.ApplicationID)
+	app, err := s.State.store.GetApplicationByID(ctx, d.Org, d.ApplicationID)
 	if err != nil {
-		s.log.Warn("reconcile: get application", "org", d.Org, "dep", d.ID, "err", err)
+		s.Log.Warn("reconcile: get application", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
-	proj, err := s.store.GetProjectByID(ctx, d.Org, app.ProjectID)
+	proj, err := s.State.store.GetProjectByID(ctx, d.Org, app.ProjectID)
 	if err != nil {
-		s.log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
+		s.Log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
 
@@ -125,16 +127,16 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	// tenant onboarding then never HEAD-OF-LINE-BLOCKS other orgs' go-lives and never
 	// permanently fails the git build. Give up only once the build deadline elapses.
 	ns := tenantNamespace(d.Org)
-	ready, provErr := s.k8s.ensureTenantReady(ctx, ns, d.Org)
+	ready, provErr := s.State.k8s.ensureTenantReady(ctx, ns, d.Org)
 	if provErr != nil {
 		if overdue {
-			s.failBuild(ctx, d, b, "prepare tenant namespace past deadline: "+provErr.Error())
+			failBuild(s, ctx, d, b, "prepare tenant namespace past deadline: "+provErr.Error())
 		}
 		return // transient cluster error — retry next tick
 	}
 	if !ready {
 		if overdue {
-			s.failBuild(ctx, d, b, "tenant RBAC still provisioning past deadline")
+			failBuild(s, ctx, d, b, "tenant RBAC still provisioning past deadline")
 		}
 		return // stay "building"; the operator's RoleBinding lands before the next tick
 	}
@@ -148,11 +150,11 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 	// (MED-1 monotonicity + RED LOW-1 joint ordering).
 	now := time.Now().Unix()
 	_, tag := splitImageRef(d.Image)
-	advanced, superseded, err := s.applyLive(ctx, d.Org, proj.Slug, app, d, tag, d.Image, now)
+	advanced, superseded, err := applyLive(s, ctx, d.Org, proj.Slug, app, d, tag, d.Image, now)
 	if superseded {
 		// A newer version is already live: this build's image is fine but its
 		// (older) CR must NOT be written — record it terminally and stop.
-		s.supersedeBuild(ctx, d, b)
+		supersedeBuild(s, ctx, d, b)
 		return
 	}
 	if err != nil {
@@ -163,24 +165,24 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 		if errors.Is(err, errTenantProvisioning) && !overdue {
 			return
 		}
-		s.failBuild(ctx, d, b, "apply Service CR: "+err.Error())
+		failBuild(s, ctx, d, b, "apply Service CR: "+err.Error())
 		return
 	}
 
 	b.Status, b.UpdatedAt = "succeeded", now
-	if uErr := s.store.UpdateBuild(ctx, b); uErr != nil {
-		s.log.Warn("reconcile: finalize build", "build", b.ID, "err", uErr)
+	if uErr := s.State.store.UpdateBuild(ctx, b); uErr != nil {
+		s.Log.Warn("reconcile: finalize build", "build", b.ID, "err", uErr)
 	}
-	s.meterBuild(b, now) // the Job ran to completion → bill its wall-clock minutes.
+	meterBuild(s, b, now) // the Job ran to completion → bill its wall-clock minutes.
 	d.Status, d.UpdatedAt = "deploying", now
-	if uErr := s.store.UpdateDeployment(ctx, d); uErr != nil {
-		s.log.Warn("reconcile: finalize deployment", "dep", d.ID, "err", uErr)
+	if uErr := s.State.store.UpdateDeployment(ctx, d); uErr != nil {
+		s.Log.Warn("reconcile: finalize deployment", "dep", d.ID, "err", uErr)
 	}
 	if advanced {
-		s.log.Info("build reconciled → deployed (git)",
+		s.Log.Info("build reconciled → deployed (git)",
 			"org", d.Org, "app", app.Slug, "ns", tenantNamespace(d.Org), "image", d.Image, "dep", d.ID)
 	} else {
-		s.log.Info("build reconciled but superseded at finalize (newer version already live)",
+		s.Log.Info("build reconciled but superseded at finalize (newer version already live)",
 			"org", d.Org, "app", app.Slug, "dep", d.ID, "version", d.Version)
 	}
 }
@@ -189,11 +191,11 @@ func (s *svc) reconcileBuild(ctx context.Context, d Deployment) {
 // deployment, so this (older) build must not overwrite it. The live version is
 // resolved from app.CurrentDeploy; an empty pointer, a pointer to THIS deployment,
 // or a dangling pointer is not superseded (there is nothing newer to protect).
-func (s *svc) buildSuperseded(ctx context.Context, d Deployment, app Application) (bool, error) {
+func buildSuperseded(s *cloud.Service[state], ctx context.Context, d Deployment, app Application) (bool, error) {
 	if app.CurrentDeploy == "" || app.CurrentDeploy == d.ID {
 		return false, nil
 	}
-	live, err := s.store.GetDeployment(ctx, d.Org, d.ApplicationID, app.CurrentDeploy)
+	live, err := s.State.store.GetDeployment(ctx, d.Org, d.ApplicationID, app.CurrentDeploy)
 	if errors.Is(err, errNotFound) {
 		return false, nil // dangling live pointer — don't block progress
 	}
@@ -207,32 +209,32 @@ func (s *svc) buildSuperseded(ctx context.Context, d Deployment, app Application
 // deployment already live: the image is REAL (build → succeeded), but the
 // deployment is terminal "superseded" and the app is left untouched. Honest —
 // the app view keeps showing the newer version live; this one never regressed it.
-func (s *svc) supersedeBuild(ctx context.Context, d Deployment, b Build) {
+func supersedeBuild(s *cloud.Service[state], ctx context.Context, d Deployment, b Build) {
 	now := time.Now().Unix()
 	if b.ID != "" {
 		b.Status, b.UpdatedAt = "succeeded", now
-		_ = s.store.UpdateBuild(ctx, b)
-		s.meterBuild(b, now) // the Job still ran to completion → bill its minutes.
+		_ = s.State.store.UpdateBuild(ctx, b)
+		meterBuild(s, b, now) // the Job still ran to completion → bill its minutes.
 	}
 	d.Status, d.Message, d.UpdatedAt = "superseded", "a newer deployment went live before this build finished", now
-	_ = s.store.UpdateDeployment(ctx, d)
-	s.log.Info("build superseded (newer version already live)",
+	_ = s.State.store.UpdateDeployment(ctx, d)
+	s.Log.Info("build superseded (newer version already live)",
 		"org", d.Org, "dep", d.ID, "version", d.Version)
 }
 
 // failBuild records the honest failure across build + deployment + app. Never
 // fabricates a success; the app view surfaces "error" and the message.
-func (s *svc) failBuild(ctx context.Context, d Deployment, b Build, msg string) {
+func failBuild(s *cloud.Service[state], ctx context.Context, d Deployment, b Build, msg string) {
 	now := time.Now().Unix()
 	if b.ID != "" {
 		b.Status, b.UpdatedAt = "failed", now
-		_ = s.store.UpdateBuild(ctx, b)
+		_ = s.State.store.UpdateBuild(ctx, b)
 	}
 	d.Status, d.Message, d.UpdatedAt = "error", msg, now
-	_ = s.store.UpdateDeployment(ctx, d)
-	if app, err := s.store.GetApplicationByID(ctx, d.Org, d.ApplicationID); err == nil {
+	_ = s.State.store.UpdateDeployment(ctx, d)
+	if app, err := s.State.store.GetApplicationByID(ctx, d.Org, d.ApplicationID); err == nil {
 		app.Status, app.UpdatedAt = "error", now
-		_ = s.store.UpdateApplication(ctx, app)
+		_ = s.State.store.UpdateApplication(ctx, app)
 	}
-	s.log.Error("build failed (git)", "org", d.Org, "dep", d.ID, "reason", msg)
+	s.Log.Error("build failed (git)", "org", d.Org, "dep", d.ID, "reason", msg)
 }
