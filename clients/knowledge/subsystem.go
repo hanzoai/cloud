@@ -41,6 +41,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("kb.Mount: nil deps.Logger")
 	}
+	// kbAI reaches the lazy index() singleton (built on first use, without deps)
+	// so embeddings run through the ONE shared, org/project-aligned AI client.
+	kbAI = deps.AI
+
 	s := &svc{deps: deps}
 	log := deps.Logger.New("subsystem", "knowledge")
 
