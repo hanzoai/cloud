@@ -15,15 +15,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // postCreateInstance is postCreate with an instance binding in the body.
-func postCreateInstance(t *testing.T, s *svc, kind, org, name, instance string) *http.Response {
+func postCreateInstance(t *testing.T, s *cloud.Service[state], kind, org, name, instance string) *http.Response {
 	t.Helper()
 	app := zip.New(zip.Config{DisableStartupMessage: true})
-	app.Post("/v1/"+kind, s.create(kind))
+	app.Post("/v1/"+kind, create(s, kind))
 	body := `{"name":"` + name + `","instance":"` + instance + `"}`
 	req, _ := http.NewRequest("POST", "/v1/"+kind, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -262,7 +263,7 @@ func TestDedicated_DropRemovesURLBeforeTeardown(t *testing.T) {
 		t.Fatalf("precondition: DATASTORE_URL should be injected")
 	}
 
-	resp := doReq(t, s.drop("datastore"), http.MethodDelete, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
+	resp := doReq(t, drop(s, "datastore"), http.MethodDelete, "/v1/datastore/:name", "/v1/datastore/warehouse", "acme", "")
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("drop = %d body=%s, want 204", resp.StatusCode, body)
@@ -303,7 +304,7 @@ func TestDedicated_InjectFailureRollsBack(t *testing.T) {
 		t.Fatalf("status = %d body=%s, want 502 (inject failed)", resp.StatusCode, body)
 	}
 	// Nothing persisted.
-	if _, err := s.store.Get(context.Background(), "acme", "datastore", "warehouse"); err == nil {
+	if _, err := s.State.store.Get(context.Background(), "acme", "datastore", "warehouse"); err == nil {
 		t.Fatalf("row persisted despite inject failure — provision not atomic")
 	}
 	// Backend rolled back.
@@ -353,7 +354,7 @@ func TestDedicated_InjectPartialWriteRollsBackOrphanKey(t *testing.T) {
 		t.Fatalf("rollback must scrub the landed key (inject then remove); ops=%v", orch.ops)
 	}
 	// The rest of the provision is still fully rolled back.
-	if _, err := s.store.Get(context.Background(), "acme", "datastore", "warehouse"); err == nil {
+	if _, err := s.State.store.Get(context.Background(), "acme", "datastore", "warehouse"); err == nil {
 		t.Fatalf("row persisted despite inject failure")
 	}
 	inst := instanceName("datastore", "acme", "warehouse")

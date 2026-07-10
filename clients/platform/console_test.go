@@ -7,23 +7,24 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// mountConsole builds a hermetic svc+app so a test can BOTH seed real store
+// mountConsole builds a hermetic Service+app so a test can BOTH seed real store
 // records and fire HTTP reads against the console aggregate routes. No real
 // cluster is touched (fakeK8s / in-memory dynamic client).
-func mountConsole(t *testing.T) (*svc, *zip.App) {
+func mountConsole(t *testing.T) (*cloud.Service[state], *zip.App) {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "platform.db"))
 	if err != nil {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &svc{store: store, k8s: fakeK8s(), log: luxlog.New("test"), brand: "hanzo", sitesHost: "hanzo.app"}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: fakeK8s(), sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s.routes(app)
+	routes(app, s)
 	return s, app
 }
 
@@ -32,11 +33,11 @@ func mountConsole(t *testing.T) (*svc, *zip.App) {
 // git app (env=staging, building, one in-flight build). These are the SAME
 // records the /v1/platform write path produces; the console aggregates only read
 // them.
-func seedConsoleFixture(t *testing.T, s *svc, org string) (imageAppID, gitAppID string) {
+func seedConsoleFixture(t *testing.T, s *cloud.Service[state], org string) (imageAppID, gitAppID string) {
 	t.Helper()
 	ctx := context.Background()
 	proj := Project{ID: "proj_" + org + "_web", Org: org, Slug: "web", Name: "Web", CreatedAt: 100, UpdatedAt: 100}
-	if err := s.store.CreateProject(ctx, proj); err != nil {
+	if err := s.State.store.CreateProject(ctx, proj); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
 	api := Application{
@@ -52,26 +53,26 @@ func seedConsoleFixture(t *testing.T, s *svc, org string) (imageAppID, gitAppID 
 		Status: "building", Namespace: tenantNamespace(org), CreatedAt: 100, UpdatedAt: 100,
 	}
 	for _, a := range []Application{api, site} {
-		if err := s.store.CreateApplication(ctx, a); err != nil {
+		if err := s.State.store.CreateApplication(ctx, a); err != nil {
 			t.Fatalf("seed app %s: %v", a.Slug, err)
 		}
 	}
 	// A released version of the image app (applied to the cluster → "deploying").
-	if err := s.store.InsertDeployment(ctx, Deployment{
+	if err := s.State.store.InsertDeployment(ctx, Deployment{
 		ID: "dep_api_1", Org: org, ApplicationID: api.ID, Version: 1, Status: "deploying",
 		Source: "image", Image: "ghcr.io/hanzoai/nginx:1.27", CreatedAt: 100, UpdatedAt: 130,
 	}); err != nil {
 		t.Fatalf("seed release deployment: %v", err)
 	}
 	// An in-flight git build + its building deployment (not yet a release).
-	if err := s.store.InsertDeployment(ctx, Deployment{
+	if err := s.State.store.InsertDeployment(ctx, Deployment{
 		ID: "dep_site_1", Org: org, ApplicationID: site.ID, Version: 1, Status: "building",
 		Source: "git", Commit: "feature/login-page", Image: "ghcr.io/hanzoai/tenant-" + org + "-site:main",
 		BuildID: "bld_site_1", CreatedAt: 100, UpdatedAt: 100,
 	}); err != nil {
 		t.Fatalf("seed build deployment: %v", err)
 	}
-	if err := s.store.InsertBuild(ctx, Build{
+	if err := s.State.store.InsertBuild(ctx, Build{
 		ID: "bld_site_1", Org: org, ApplicationID: site.ID, DeploymentID: "dep_site_1", Status: "building",
 		Image: "ghcr.io/hanzoai/tenant-" + org + "-site:main", JobName: "pf-build-" + org + "-site-abc", CreatedAt: 100, UpdatedAt: 100,
 	}); err != nil {

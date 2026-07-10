@@ -48,7 +48,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -67,21 +66,21 @@ const defaultBranchName = "main"
 // which stays under the cap per request.
 const maxBody = 256 << 20 // 256 MiB
 
-type svc struct {
+// state is git's own data; shared deps live in the embedded cloud.Base (the
+// clone-URL host is s.Domain).
+type state struct {
 	stores  *cloud.TenantStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
-	log     luxlog.Logger
-	domain  string // for cloneUrl construction
 }
 
 // storeFor resolves the caller's org-scoped repo-metadata store, opening the
 // per-org file ({DataDir}/orgs/{orgSlug}/git.db) once via the shared cache. git
 // is org-scoped (not project-scoped) so /v1/git/usage stays a single org-wide
 // rollup across every project sub-scope.
-func (s *svc) storeFor(org string) (*Store, error) { return s.stores.For(org, "") }
+func storeFor(s *cloud.Service[state], org string) (*Store, error) { return s.State.stores.For(org, "") }
 
 // mounted is the active service so Shutdown can release the store.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes ----
 
@@ -107,19 +106,19 @@ func rfc3339(unix int64) string {
 	return time.Unix(unix, 0).UTC().Format(time.RFC3339)
 }
 
-func (s *svc) cloneURL(org, name string) string {
-	host := s.domain
+func cloneURL(s *cloud.Service[state], org, name string) string {
+	host := s.Domain
 	if host == "" {
 		host = "api.hanzo.ai"
 	}
 	return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
 }
 
-func (s *svc) toView(r Repo, branches []string, head string) repoView {
+func toView(s *cloud.Service[state], r Repo, branches []string, head string) repoView {
 	return repoView{
 		ID: r.ID, Org: r.Org, Project: r.Project, Name: r.Name, Description: r.Description,
 		DefaultBranch: r.DefaultBranch, Branches: branches, Head: head,
-		CloneURL:  s.cloneURL(r.Org, r.Name),
+		CloneURL:  cloneURL(s, r.Org, r.Name),
 		SizeBytes: r.SizeBytes, CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
 	}
 }
@@ -129,11 +128,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("git.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("git.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "git")
 	if deps.DataDir == "" {
 		return fmt.Errorf("git.Mount: empty DataDir")
 	}
@@ -141,34 +138,38 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("git.Mount: open storage: %w", err)
 	}
-	s := &svc{
+	b := cloud.NewBase(deps, "git")
+	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewTenantStore(deps.DataDir, "git", openStore),
 		storage: st,
-		log:     log,
-		domain:  deps.Domain,
-	}
+	}}
 	mounted = s
 
+	routes(app, s)
+
+	b.Log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", filepath.Join(deps.DataDir, "git"))
+	return nil
+}
+
+// routes registers the git control plane + smart-HTTP surface.
+func routes(app *zip.App, s *cloud.Service[state]) {
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
-	app.Post("/v1/git/repos", s.create)
-	app.Get("/v1/git/repos", s.list)
-	app.Get("/v1/git/usage", s.usage)
-	app.Get("/v1/git/repos/:name", s.get)
-	app.Delete("/v1/git/repos/:name", s.del)
+	app.Post("/v1/git/repos", cloud.Handle(s, create))
+	app.Get("/v1/git/repos", cloud.Handle(s, list))
+	app.Get("/v1/git/usage", cloud.Handle(s, usage))
+	app.Get("/v1/git/repos/:name", cloud.Handle(s, get))
+	app.Delete("/v1/git/repos/:name", cloud.Handle(s, del))
 	// Mirror an external repo into <org>/:name (creates the repo on first use).
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
-	app.Post("/v1/git/repos/:name/mirror", s.mirror)
+	app.Post("/v1/git/repos/:name/mirror", cloud.Handle(s, mirror))
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
-	app.Get("/v1/git/:org/:repo/info/refs", s.infoRefs)
-	app.Post("/v1/git/:org/:repo/git-upload-pack", s.uploadPack)
-	app.Post("/v1/git/:org/:repo/git-receive-pack", s.receivePack)
-
-	log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", filepath.Join(deps.DataDir, "git"))
-	return nil
+	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
+	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
+	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 }
 
 func init() {
@@ -183,12 +184,12 @@ type createReq struct {
 	Description string `json:"description"`
 }
 
-func (s *svc) create(c *zip.Ctx) error {
+func create(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -224,15 +225,15 @@ func (s *svc) create(c *zip.Ctx) error {
 		Description: strings.TrimSpace(body.Description), DefaultBranch: defaultBranchName,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.provision(c.Context(), store, r); err != nil {
+	if err := provision(s, c.Context(), store, r); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("repo name already exists in this scope")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "provision: %v", err)
 	}
 	// Record initial storage size (billing hook: an empty bare repo is a few KiB).
-	r.SizeBytes = s.recordUsage(c.Context(), org, project, name)
-	return c.JSON(http.StatusCreated, s.toView(r, nil, ""))
+	r.SizeBytes = recordUsage(s, c.Context(), org, project, name)
+	return c.JSON(http.StatusCreated, toView(s, r, nil, ""))
 }
 
 // provision materializes a repo: its metadata row plus an empty bare repo on
@@ -240,23 +241,23 @@ func (s *svc) create(c *zip.Ctx) error {
 // it. On a storage-init failure the metadata row is rolled back so a partial
 // provision never leaves a phantom repo. Returns errConflict when the row
 // already exists (the caller decides whether that is fatal).
-func (s *svc) provision(ctx context.Context, store *Store, r Repo) error {
+func provision(s *cloud.Service[state], ctx context.Context, store *Store, r Repo) error {
 	if err := store.Create(ctx, r); err != nil {
 		return err // errConflict, or a wrapped insert error
 	}
-	if err := s.storage.initBare(r.Org, r.Project, r.Name, r.DefaultBranch); err != nil {
+	if err := s.State.storage.initBare(r.Org, r.Project, r.Name, r.DefaultBranch); err != nil {
 		_, _ = store.Delete(ctx, r.Org, r.Project, r.Name)
 		return fmt.Errorf("init repo: %w", err)
 	}
 	return nil
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -266,17 +267,17 @@ func (s *svc) list(c *zip.Ctx) error {
 	}
 	out := make([]repoView, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, s.toView(r, nil, ""))
+		out = append(out, toView(s, r, nil, ""))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": out})
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -289,16 +290,16 @@ func (s *svc) get(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	branches, head := s.refState(org, project, name)
-	return c.JSON(http.StatusOK, s.toView(r, branches, head))
+	branches, head := refState(s, org, project, name)
+	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
 
-func (s *svc) del(c *zip.Ctx) error {
+func del(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -313,8 +314,8 @@ func (s *svc) del(c *zip.Ctx) error {
 	}
 	// Purge storage. Metadata is already gone, so a purge failure must not
 	// resurrect the repo — log and continue.
-	if err := s.storage.remove(org, project, name); err != nil {
-		s.log.Warn("purge repo storage failed (continuing)", "org", org, "project", project, "repo", name, "err", err)
+	if err := s.State.storage.remove(org, project, name); err != nil {
+		s.Log.Warn("purge repo storage failed (continuing)", "org", org, "project", project, "repo", name, "err", err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -336,12 +337,12 @@ type usageView struct {
 // usage returns per-repo + total storage bytes for the tenant — the queryable,
 // per-tenant number commerce/o11y meter on. Org-wide (across every project) so
 // a billing consumer sees the whole tenant footprint in one call.
-func (s *svc) usage(c *zip.Ctx) error {
+func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -361,28 +362,28 @@ func (s *svc) usage(c *zip.Ctx) error {
 // meterable "git.usage" log line consumed by commerce/metering. Returns the
 // measured size (0 on any error; usage is best-effort and never fails the
 // caller's operation).
-func (s *svc) recordUsage(ctx context.Context, org, project, name string) int64 {
-	size, err := s.storage.sizeBytes(org, project, name)
+func recordUsage(s *cloud.Service[state], ctx context.Context, org, project, name string) int64 {
+	size, err := s.State.storage.sizeBytes(org, project, name)
 	if err != nil {
-		s.log.Warn("measure repo size failed", "org", org, "project", project, "repo", name, "err", err)
+		s.Log.Warn("measure repo size failed", "org", org, "project", project, "repo", name, "err", err)
 		return 0
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
-		s.log.Warn("record repo size failed (open store)", "org", org, "project", project, "repo", name, "err", err)
+		s.Log.Warn("record repo size failed (open store)", "org", org, "project", project, "repo", name, "err", err)
 		return size
 	}
 	if err := store.SetSize(ctx, org, project, name, size, time.Now().Unix()); err != nil {
-		s.log.Warn("record repo size failed", "org", org, "project", project, "repo", name, "err", err)
+		s.Log.Warn("record repo size failed", "org", org, "project", project, "repo", name, "err", err)
 	}
-	s.log.Info("git.usage", "org", org, "project", project, "repo", name, "bytes", size)
+	s.Log.Info("git.usage", "org", org, "project", project, "repo", name, "bytes", size)
 	return size
 }
 
 // refState reads the repo's branches and resolved HEAD for the detail view.
 // Best-effort: a read error yields empty state rather than failing the request.
-func (s *svc) refState(org, project, name string) (branches []string, head string) {
-	st, err := s.storage.storer(org, project, name)
+func refState(s *cloud.Service[state], org, project, name string) (branches []string, head string) {
+	st, err := s.State.storage.storer(org, project, name)
 	if err != nil {
 		return nil, ""
 	}
@@ -458,7 +459,7 @@ func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.stores.CloseAll()
+	err := mounted.State.stores.CloseAll()
 	mounted = nil
 	return err
 }
