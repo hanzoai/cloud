@@ -47,7 +47,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -130,29 +129,29 @@ func (p *commerceProxy) post(ctx context.Context, path, org string, body []byte)
 	return b, resp.StatusCode, nil
 }
 
-type svc struct {
+// state is billing's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	commerce *commerceProxy
-	log      luxlog.Logger
 }
 
 // Mount registers the customer-facing /v1/billing/* read surface on app.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("billing.Mount: nil zip.App")
-	}
-	log := deps.Logger
-	if log == nil {
-		return fmt.Errorf("billing.Mount: nil deps.Logger")
-	}
-	log = log.New("subsystem", "billing")
+	return cloud.Mount(app, deps, "billing", build, routes)
+}
 
-	s := &svc{
-		commerce: newCommerceProxy(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		log:      log,
-	}
+// build constructs the billing state: the commerce S2S proxy from its env
+// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env).
+func build(b cloud.Base) (state, error) {
+	cp := newCommerceProxy(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN"))
+	b.Log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", cp.configured())
+	return state{commerce: cp}, nil
+}
 
-	app.Get("/v1/billing/usage", s.usage)
-	app.Get("/v1/billing/balance", s.balance)
+// routes registers the customer-facing /v1/billing/* read surface plus the
+// /v1/finance/* projection (same commerceProxy).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/billing/usage", cloud.Handle(s, usage))
+	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
 	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
 	// usage/balance: the subject is pinned to the caller's OWN org, so the console reads
@@ -160,17 +159,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// another tenant's. These SPECIFIC customer routes register before (and so shadow)
 	// the console pkg's /v1/billing/* wildcard, giving an unauthenticated call an honest
 	// 401 (route exists) instead of the wildcard's admin-shaped 403.
-	app.Get("/v1/billing/gpu-eligibility", s.gpuEligibility)
-	app.Post("/v1/billing/gpu-charge", s.gpuCharge)
-	app.Get("/v1/billing/payment-methods", s.paymentMethods)
+	app.Get("/v1/billing/gpu-eligibility", cloud.Handle(s, gpuEligibility))
+	app.Post("/v1/billing/gpu-charge", cloud.Handle(s, gpuCharge))
+	app.Get("/v1/billing/payment-methods", cloud.Handle(s, paymentMethods))
 
 	// The customer-facing /v1/finance/* PROJECTION of this same commerce plane (the
 	// finance.hanzo.ai + console Finance surfaces). It reuses this package's commerceProxy
 	// + per-org subject-pinning; the treasury lane owns /v1/finance/treasury alongside it.
-	s.mountFinance(app)
-
-	log.Info("billing surface mounted", "prefix", "/v1/billing", "commerce", s.commerce.configured())
-	return nil
+	mountFinance(s, app)
 }
 
 func init() {
@@ -189,7 +185,7 @@ var billingSubjectKeys = []string{"user", "userId", "customerId"}
 // subject is server-resolved, never read from the request; a forged user/userId/
 // customerId is overwritten and `org` is dropped), forwards ONLY the safe passthrough
 // params, and returns commerce's raw body + status verbatim.
-func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) error {
+func proxy(s *cloud.Service[state], c *zip.Ctx, commercePath string, passthrough ...string) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		// No validated principal / no org. This is a customer's OWN billing — never
@@ -197,15 +193,15 @@ func (s *svc) proxy(c *zip.Ctx, commercePath string, passthrough ...string) erro
 		// not a 403 "not authorized for this surface".
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 
 	q := scopedBillingQuery(c, org, passthrough...)
 
-	body, status, err := s.commerce.get(c.Context(), commercePath, org, q)
+	body, status, err := s.State.commerce.get(c.Context(), commercePath, org, q)
 	if err != nil {
-		s.log.Warn("commerce billing read failed", "org", org, "path", commercePath, "err", err)
+		s.Log.Warn("commerce billing read failed", "org", org, "path", commercePath, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	c.SetHeader("Content-Type", "application/json")
@@ -248,19 +244,19 @@ func scopedBillingQuery(c *zip.Ctx, org string, passthrough ...string) url.Value
 //
 // On any parse failure it returns commerce's body VERBATIM — enrichment must never
 // lose or corrupt the real ledger.
-func (s *svc) usage(c *zip.Ctx) error {
+func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 
 	q := scopedBillingQuery(c, org, "start", "end")
-	body, status, err := s.commerce.get(c.Context(), "/v1/billing/usage", org, q)
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/usage", org, q)
 	if err != nil {
-		s.log.Warn("commerce billing read failed", "org", org, "path", "/v1/billing/usage", "err", err)
+		s.Log.Warn("commerce billing read failed", "org", org, "path", "/v1/billing/usage", "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	c.SetHeader("Content-Type", "application/json")
@@ -276,8 +272,8 @@ func (s *svc) usage(c *zip.Ctx) error {
 
 // balance → commerce GET /v1/billing/balance: the org's prepaid credit balance
 // ({balance,holds,available} in USD cents), the SAME wallet the gateway debits.
-func (s *svc) balance(c *zip.Ctx) error {
-	return s.proxy(c, "/v1/billing/balance", "currency")
+func balance(s *cloud.Service[state], c *zip.Ctx) error {
+	return proxy(s, c, "/v1/billing/balance", "currency")
 }
 
 // gpuEligibility → commerce GET /v1/billing/gpu-eligibility: the read-only launch gate
@@ -287,8 +283,8 @@ func (s *svc) balance(c *zip.Ctx) error {
 // (amountCents) and the 24h-minimum floor (minPrepaidCents) + currency pass through; the
 // subject is pinned to the caller's OWN org (commerce keys the wallet under the bare org
 // slug), so the gate reads exactly the wallet gpu-charge debits.
-func (s *svc) gpuEligibility(c *zip.Ctx) error {
-	return s.proxy(c, "/v1/billing/gpu-eligibility", "amountCents", "minPrepaidCents", "currency")
+func gpuEligibility(s *cloud.Service[state], c *zip.Ctx) error {
+	return proxy(s, c, "/v1/billing/gpu-eligibility", "amountCents", "minPrepaidCents", "currency")
 }
 
 // paymentMethods → commerce GET /v1/billing/portal/payment-methods: the org's saved cards
@@ -297,8 +293,8 @@ func (s *svc) gpuEligibility(c *zip.Ctx) error {
 // this proxies to commerce's admin-group PORTAL read, which filters CustomerId on the
 // pinned subject (commerce 400s without a customerId — proxy always pins it), so a caller
 // sees ONLY its OWN org's methods. Backs the launch gate's card-on-file check.
-func (s *svc) paymentMethods(c *zip.Ctx) error {
-	return s.proxy(c, "/v1/billing/portal/payment-methods")
+func paymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
+	return proxy(s, c, "/v1/billing/portal/payment-methods")
 }
 
 // gpuCharge → commerce POST /v1/billing/gpu-charge: the prepay-only, card-required GPU
@@ -308,22 +304,22 @@ func (s *svc) paymentMethods(c *zip.Ctx) error {
 // server-side to the caller's OWN org — a client can never charge another tenant. Commerce's
 // status is forwarded VERBATIM (201 ok / 402 {card_required|insufficient_prepaid}), so the
 // launch UI renders the exact remedy; a money verdict is never 500-masked.
-func (s *svc) gpuCharge(c *zip.Ctx) error {
+func gpuCharge(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		// A customer's OWN GPU charge — never admin-gate it; an absent identity is a
 		// true "not signed in" (401), matching usage/balance.
 		return zip.ErrUnauthorized("sign in to charge a GPU")
 	}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	// Pin the billing subject to the caller's OWN org on the body — commerce's ChargeGPU
 	// reads `user` from the JSON body, so a forged body subject must never widen scope.
 	body := pinSubjectBody(c.Body(), org)
-	respBody, status, err := s.commerce.post(c.Context(), "/v1/billing/gpu-charge", org, body)
+	respBody, status, err := s.State.commerce.post(c.Context(), "/v1/billing/gpu-charge", org, body)
 	if err != nil {
-		s.log.Warn("commerce gpu-charge failed", "org", org, "err", err)
+		s.Log.Warn("commerce gpu-charge failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	}
 	c.SetHeader("Content-Type", "application/json")
