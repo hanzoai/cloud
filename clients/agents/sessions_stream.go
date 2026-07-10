@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -135,7 +136,7 @@ func (b *bus) close() {
 // so the loop never touches the request Ctx after the handler returns (fasthttp
 // recycles it) — client-gone is detected by a flush error, bounded by a 25s
 // heartbeat.
-func (s *svc) sessionsStream(c *zip.Ctx) error {
+func sessionsStream(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -152,7 +153,7 @@ func (s *svc) sessionsStream(c *zip.Ctx) error {
 	c.SetHeader("Connection", "keep-alive")
 	c.SetHeader("X-Accel-Buffering", "no") // defeat proxy buffering of the stream
 
-	ch, cancel := s.bus.subscribe(org)
+	ch, cancel := s.State.bus.subscribe(org)
 	return c.SendStreamWriter(func(w *bufio.Writer) {
 		defer cancel()
 		// Initial comment flushes headers so the client's EventSource opens.
