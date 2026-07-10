@@ -4,9 +4,11 @@ package controlplane
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"testing"
 
+	"github.com/luxfi/crypto/mldsa"
 	pulsarlib "github.com/luxfi/pulsar/pkg/pulsar"
 )
 
@@ -212,10 +214,22 @@ func TestSafety_RogueAndForgedLegs_Rejected(t *testing.T) {
 	// 2. Party-index spoof: honest author, wrong claimed index.
 	spoof := goodLeg
 	spoof.PartyID = honest.Index + 1
-	// 3. Forged proof-of-possession: honest author + index, tampered sig.
+	// 3. Correctly-DERIVED forgery (seam a): an attacker signs the SAME leg's TBS
+	// with a well-formed ML-DSA-65 key it generated itself. The signature is
+	// cryptographically valid — it simply is not cloud-3's registered key. This is
+	// the forgery a bit-flip could never exercise, and the whole point of seam (a):
+	// asymmetric identity keys reject it because the registry holds the honest
+	// PUBLIC key, not the attacker's.
+	attackerKey, err := mldsa.GenerateKey(rand.Reader, mldsa.MLDSA65)
+	if err != nil {
+		t.Fatalf("attacker keygen: %v", err)
+	}
 	forged := goodLeg
-	forged.AuthSig = append([]byte(nil), goodLeg.AuthSig...)
-	forged.AuthSig[0] ^= 0xFF
+	forgedSig, err := attackerKey.SignCtxDeterministic(partialTBS(goodLeg), popContext)
+	if err != nil {
+		t.Fatalf("attacker sign: %v", err)
+	}
+	forged.AuthSig = forgedSig
 
 	for name, leg := range map[string]pulsarlib.Partial{"rogue": rogue, "index-spoof": spoof, "forged-pop": forged} {
 		before := len(victim.legs)
