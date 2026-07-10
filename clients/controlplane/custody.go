@@ -3,27 +3,30 @@
 package controlplane
 
 import (
-	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"github.com/luxfi/crypto/mldsa"
 	pulsar "github.com/luxfi/pulsar/pkg/pulsar"
 )
 
 // Share is a sealed per-pod signing share. Exactly one is issued per pod.
 //
-// In the stub the secret is an in-memory 32-byte seed; the real ShareCustody
-// seals it in KMS (KMSSecret CRD) and never returns raw bytes — the signer runs
-// inside the custody boundary. The Index is the pod's 1-based party index in
-// the threshold scheme; idKey is the pod's identity credential used for
-// proof-of-possession on every leg it emits.
+// The Index is the pod's 1-based party index. secret is the stub z-share source
+// (still seed-derived; replaced by KMS-sealed custody in seam b + the real cert
+// material in seam c). idKey is the pod's ML-DSA-65 identity keypair — a genuine
+// asymmetric secret, NOT derived from any public value — used to prove
+// possession on every leg it emits. In the real ShareCustody the secret key is
+// KMS-sealed and the signer runs inside the custody boundary; here it is
+// in-memory but never seed-derived (seam a).
 type Share struct {
 	Index  uint32
 	Node   pulsar.NodeID
-	secret [32]byte // sealed share material (stub: in-memory)
-	idKey  [32]byte // identity credential (stub for an ML-DSA identity key)
+	secret [32]byte          // stub z-share source (seed-derived; seam c replaces it)
+	idKey  *mldsa.PrivateKey // per-pod ML-DSA-65 identity key (seam a); becomes the cert-signing key (seam c)
 }
 
 // ShareCustody yields exactly ONE share for ONE pod. This is where "one pod =
@@ -50,15 +53,25 @@ func NodeIDFromName(name string) pulsar.NodeID {
 	return id
 }
 
-// NewMemCustody issues a single sealed share for pod `name` at party `index`,
-// deriving the share secret and identity key from a cluster seed. Distinct
-// (seed, index) pairs yield distinct, unlinkable share material.
+// NewMemCustody issues a single sealed share for pod `name` at party `index`.
+// The z-share `secret` is still derived from the cluster seed (stub threshold
+// material, replaced in seam c). The identity key is a FRESH, RANDOM ML-DSA-65
+// keypair (crypto/rand) — NEVER derived from the public seed — so no party's
+// proof-of-possession key can be reconstructed from public inputs. That single
+// property is the keystone of seam (a): it is exactly what makes the
+// byzantine-safety suite meaningful (TestRed_B_* / TestSafety_RogueAndForgedLegs).
+//
+// Panics if key generation fails: an unusable RNG is a fatal harness/host
+// condition, never adversarial input.
 func NewMemCustody(seed []byte, name string, index uint32) ShareCustody {
 	node := NodeIDFromName(name)
 	var idx [4]byte
 	binary.BigEndian.PutUint32(idx[:], index)
 	secret := sha256.Sum256(append(append([]byte("cp-share:"), seed...), idx[:]...))
-	idKey := sha256.Sum256(append(append([]byte("cp-idkey:"), seed...), node[:]...))
+	idKey, err := mldsa.GenerateKey(rand.Reader, mldsa.MLDSA65)
+	if err != nil {
+		panic("controlplane: ML-DSA-65 identity keygen failed: " + err.Error())
+	}
 	return &memCustody{share: Share{Index: index, Node: node, secret: secret, idKey: idKey}}
 }
 
@@ -77,6 +90,10 @@ var (
 	// ErrNodeHasShare is the one-pod-two-shares guard: a node already holds a
 	// share and may not register a second.
 	ErrNodeHasShare = errors.New("controlplane: node already holds a share (one pod = one share)")
+	// errMissingIdentityKey rejects a share with no ML-DSA identity keypair — a
+	// node with no verifiable identity could neither authenticate its own legs
+	// nor have them attributed, so it must never enter the registry.
+	errMissingIdentityKey = errors.New("controlplane: share has no ML-DSA identity key")
 )
 
 // ValidatorRegistry pins the bijection party-index <-> node and holds each
@@ -86,7 +103,7 @@ var (
 type ValidatorRegistry struct {
 	byIndex    map[uint32]pulsar.NodeID
 	byNode     map[pulsar.NodeID]uint32
-	idVerifier map[pulsar.NodeID][32]byte // registered identity credential (stub public key)
+	idVerifier map[pulsar.NodeID]*mldsa.PublicKey // registered ML-DSA-65 identity public key
 }
 
 // NewValidatorRegistry returns an empty registry.
@@ -94,15 +111,18 @@ func NewValidatorRegistry() *ValidatorRegistry {
 	return &ValidatorRegistry{
 		byIndex:    map[uint32]pulsar.NodeID{},
 		byNode:     map[pulsar.NodeID]uint32{},
-		idVerifier: map[pulsar.NodeID][32]byte{},
+		idVerifier: map[pulsar.NodeID]*mldsa.PublicKey{},
 	}
 }
 
 // Register binds a share's (index, node, identity) into the registry, refusing
-// any violation of the 1:1 invariant. The identity credential registered is
-// the pod's verification material (the stub uses the symmetric idKey; the real
-// registry stores an ML-DSA identity public key and verification is asymmetric).
+// any violation of the 1:1 invariant. The registered credential is the pod's
+// ML-DSA-65 identity PUBLIC key; verification is asymmetric, so a peer that does
+// not hold the matching secret key cannot forge a leg attributed to this node.
 func (r *ValidatorRegistry) Register(s Share) error {
+	if s.idKey == nil || s.idKey.PublicKey == nil {
+		return errMissingIdentityKey
+	}
 	if existing, ok := r.byIndex[s.Index]; ok && existing != s.Node {
 		return fmt.Errorf("%w: index %d", ErrShareIndexTaken, s.Index)
 	}
@@ -111,7 +131,7 @@ func (r *ValidatorRegistry) Register(s Share) error {
 	}
 	r.byIndex[s.Index] = s.Node
 	r.byNode[s.Node] = s.Index
-	r.idVerifier[s.Node] = s.idKey
+	r.idVerifier[s.Node] = s.idKey.PublicKey
 	return nil
 }
 
@@ -161,23 +181,33 @@ func round1TBS(sid, nid [32]byte, partyID uint32, commit []byte) []byte {
 	return h.Sum(nil)
 }
 
-// signPoP produces a proof-of-possession over a leg using the pod's identity
-// key. Stub: HMAC-SHA256 under idKey. Real: ML-DSA identity signature.
-func signPoP(idKey [32]byte, tbs []byte) []byte {
-	mac := hmac.New(sha256.New, idKey[:])
-	mac.Write(tbs)
-	return mac.Sum(nil)
+// popContext is the FIPS 204 §5.2 domain-separation context bound into every
+// control-plane proof-of-possession signature, preventing a leg's ML-DSA
+// signature from being replayed into any other ML-DSA context. The per-leg TBS
+// preimage (round1TBS / partialTBS) already separates Round1 commitments from
+// Round2 legs by tag, so one context suffices.
+var popContext = []byte("hanzo/controlplane/pop/v1")
+
+// signPoP produces a proof-of-possession over a leg using the pod's ML-DSA-65
+// identity private key, via the FIPS 204 §5.2 DETERMINISTIC variant: the
+// signature is a pure function of (sk, tbs, context), so honest voters are
+// byte-reproducible and the signing path carries no RNG dependency. The secret
+// key never leaves the custody boundary — only the signature is emitted.
+func signPoP(idKey *mldsa.PrivateKey, tbs []byte) ([]byte, error) {
+	return idKey.SignCtxDeterministic(tbs, popContext)
 }
 
 // VerifyPoP checks a leg's proof-of-possession: the author MUST be registered
-// (rejecting rogue/unregistered keys) AND the signature MUST verify under the
-// registered credential (rejecting forgeries and lifted signatures). This runs
-// before a leg is counted toward quorum.
+// (rejecting rogue/unregistered keys) AND the ML-DSA-65 signature MUST verify
+// under the registered PUBLIC key with the control-plane context (rejecting
+// forgeries and lifted signatures). Verification is asymmetric, so an attacker
+// without the node's secret key cannot produce an accepted leg — this is what
+// makes the byzantine-safety suite meaningful. Runs before a leg counts toward
+// quorum.
 func (r *ValidatorRegistry) VerifyPoP(author pulsar.NodeID, tbs, sig []byte) bool {
-	cred, ok := r.idVerifier[author]
+	pub, ok := r.idVerifier[author]
 	if !ok {
 		return false // rogue / unregistered key
 	}
-	want := signPoP(cred, tbs)
-	return hmac.Equal(want, sig)
+	return pub.VerifySignatureCtx(tbs, sig, popContext)
 }
