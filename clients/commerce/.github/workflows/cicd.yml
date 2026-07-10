@@ -1,0 +1,22 @@
+# Canonical CI/CD — imports the shared hanzoai/ci reusable workflow. All real
+# config (images, test) lives in the repo-root hanzo.yml; this file is just the
+# trigger + the import. Same ~7-line shape every hanzo/lux/zoo repo uses.
+#
+# Runner defaults to the Hanzo cloud arc pool (in-cluster DOKS + native arcd
+# fleet), so builds run on our own runners — zero GitHub-hosted minutes. A push
+# to main or a v* tag builds + tests every image in hanzo.yml (the Go backend +
+# the admin/site frontends); PRs build + test but do not deploy.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  cicd:
+    # Pin to @v1 once the fix lands on that tag; @main carries it today.
+    uses: hanzoai/ci/.github/workflows/build.yml@main
+    secrets: inherit
