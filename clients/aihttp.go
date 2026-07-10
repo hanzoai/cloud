@@ -26,6 +26,18 @@ import (
 // shipped over the ZAP wire to o11y. One tracer for the whole clients package.
 var aiTracer = otel.Tracer("hanzo.ai/cloud")
 
+// setScopeAttrs stamps the tenant scope onto a gen_ai span so o11y can filter
+// telemetry PER TENANT (org) and sub-scope (project) — the emit side of per-tenant
+// observability isolation. Empty values are omitted (a system call carries none).
+func setScopeAttrs(span trace.Span, org, project string) {
+	if org != "" {
+		span.SetAttributes(attribute.String("hanzo.org", org))
+	}
+	if project != "" {
+		span.SetAttributes(attribute.String("hanzo.project", project))
+	}
+}
+
 // httpAI is the real, in-process types.AIClient: it runs chat completions
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
 // (https://api.hanzo.ai/v1). This is the ONE concrete inference client the
@@ -130,6 +142,7 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		attribute.String("gen_ai.operation.name", "chat"),
 		attribute.String("gen_ai.request.model", model),
 	)
+	setScopeAttrs(span, req.Org, req.Project)
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
 	defer cancel()
@@ -154,7 +167,12 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		span.SetStatus(codes.Error, "no choices")
 		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices", model)
 	}
-	return &types.ChatResponse{Content: resp.Choices[0].Message.Content}, nil
+	return &types.ChatResponse{
+		Content:          resp.Choices[0].Message.Content,
+		PromptTokens:     resp.Usage.PromptTokens,
+		CompletionTokens: resp.Usage.CompletionTokens,
+		TotalTokens:      resp.Usage.TotalTokens,
+	}, nil
 }
 
 // Embed returns one vector per input from the gateway's OpenAI-compatible
@@ -165,11 +183,12 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 // raw POST reuses a.http (the static-key or M2M-authenticated transport); go-
 // openai's typed embeddings path is bypassed because its EmbeddingModel enum
 // rejects gateway-served models like "bge-m3".
-func (a *httpAI) Embed(ctx context.Context, model string, inputs []string) ([][]float32, error) {
-	if len(inputs) == 0 {
+func (a *httpAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]float32, error) {
+	if req == nil || len(req.Inputs) == 0 {
 		return nil, nil
 	}
-	model = strings.TrimSpace(model)
+	model := strings.TrimSpace(req.Model)
+	inputs := req.Inputs
 	if model == "" {
 		return nil, fmt.Errorf("cloud: embed: empty model")
 	}
@@ -182,22 +201,23 @@ func (a *httpAI) Embed(ctx context.Context, model string, inputs []string) ([][]
 		attribute.String("gen_ai.request.model", model),
 		attribute.Int("gen_ai.request.input_count", len(inputs)),
 	)
+	setScopeAttrs(span, req.Org, req.Project)
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
 	defer cancel()
 
 	body, _ := json.Marshal(map[string]any{"model": model, "input": inputs})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/embeddings", bytes.NewReader(body))
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/embeddings", bytes.NewReader(body))
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	hreq.Header.Set("Content-Type", "application/json")
 	if a.apiKey != "" { // M2M leaves this empty; its transport injects the Bearer
-		req.Header.Set("Authorization", "Bearer "+a.apiKey)
+		hreq.Header.Set("Authorization", "Bearer "+a.apiKey)
 	}
 
-	resp, err := a.http.Do(req)
+	resp, err := a.http.Do(hreq)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "embeddings transport failed")

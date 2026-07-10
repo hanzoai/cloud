@@ -24,15 +24,7 @@ func (f fakeAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*types.
 	return &types.ChatResponse{Content: f.reply}, nil
 }
 
-// Embed satisfies the AIClient interface; the screen path exercises chat, not
-// embeddings, so it returns one deterministic 1-dim vector per input.
-func (f fakeAI) Embed(_ context.Context, _ string, inputs []string) ([][]float32, error) {
-	out := make([][]float32, len(inputs))
-	for i := range inputs {
-		out[i] = []float32{0.1}
-	}
-	return out, nil
-}
+func (fakeAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) { return nil, nil }
 
 // goodScreen is a realistic model reply (wrapped in prose to exercise extraction).
 const goodScreen = `Sure, here is the screen:
