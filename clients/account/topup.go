@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -112,7 +113,7 @@ type walletTopupResp struct {
 
 // walletTopup verifies a sent HUSD transfer on-chain and credits the caller's org.
 // Mirrors POST app/billing/v1/topup/wallet/route.ts.
-func (s *svc) walletTopup(c *zip.Ctx) error {
+func walletTopup(s *cloud.Service[state], c *zip.Ctx) error {
 	cfg := loadTopupConfig()
 	// Greenfield gate: no HUSD contract / treasury ⇒ honest "not configured yet".
 	if !cfg.configured() {
