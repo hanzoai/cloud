@@ -25,10 +25,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 )
 
-func liveSvc(t *testing.T) *svc {
+func liveSvc(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -39,10 +40,10 @@ func liveSvc(t *testing.T) *svc {
 		t.Fatalf("no cluster: %v", err)
 	}
 	orch.rbacTimeout = 90 * time.Second
-	return &svc{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), log: log, orch: orch}
+	return &cloud.Service[state]{Base: cloud.Base{Log: log}, State: state{store: newTestStore(t), sec: openSecrets("hanzo", log), reg: newRegistry(), orch: orch}}
 }
 
-func createLive(t *testing.T, s *svc, kind, org, name string) createResp {
+func createLive(t *testing.T, s *cloud.Service[state], kind, org, name string) createResp {
 	t.Helper()
 	resp := postCreate(t, s, kind, org, name)
 	if resp.StatusCode != http.StatusCreated {
@@ -55,11 +56,11 @@ func createLive(t *testing.T, s *svc, kind, org, name string) createResp {
 	return cr
 }
 
-func waitReady(t *testing.T, s *svc, kind, org, name string, timeout time.Duration) {
+func waitReady(t *testing.T, s *cloud.Service[state], kind, org, name string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp := doReq(t, s.get(kind), http.MethodGet, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
+		resp := doReq(t, get(s, kind), http.MethodGet, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
 		var g getResp
 		_ = json.NewDecoder(resp.Body).Decode(&g)
 		if g.Status == statusReady {
@@ -71,9 +72,9 @@ func waitReady(t *testing.T, s *svc, kind, org, name string, timeout time.Durati
 	t.Fatalf("%s org=%s name=%s never reached ready in %s", kind, org, name, timeout)
 }
 
-func dropLive(t *testing.T, s *svc, kind, org, name string) {
+func dropLive(t *testing.T, s *cloud.Service[state], kind, org, name string) {
 	t.Helper()
-	resp := doReq(t, s.drop(kind), http.MethodDelete, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
+	resp := doReq(t, drop(s, kind), http.MethodDelete, "/v1/"+kind+"/:name", "/v1/"+kind+"/"+name, org, "")
 	if resp.StatusCode != http.StatusNoContent {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("%s/%s drop = %d body=%s", kind, name, resp.StatusCode, b)
@@ -92,8 +93,8 @@ func TestLive_DedicatedProvisioning(t *testing.T) {
 	d := createLive(t, s, "docdb", "clivea", "docs")
 
 	// Isolation: distinct instances, distinct namespaces.
-	ra, _ := s.store.Get(ctx, "clivea", "datastore", "shop")
-	rb, _ := s.store.Get(ctx, "cliveb", "datastore", "shop")
+	ra, _ := s.State.store.Get(ctx, "clivea", "datastore", "shop")
+	rb, _ := s.State.store.Get(ctx, "cliveb", "datastore", "shop")
 	if ra.PhysicalName == rb.PhysicalName {
 		t.Fatalf("two orgs collided on instance %q", ra.PhysicalName)
 	}

@@ -18,6 +18,7 @@ import (
 	"hash/fnv"
 	"sync"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/sbom"
 )
 
@@ -52,32 +53,32 @@ func (m *appMutex) lock(appID string) func() {
 //   - advanced=true    → this deployment is now the live version.
 //   - all false, err nil → CR written but the live-pointer finalize soft-failed
 //     (already logged); the operator still reconciles the applied CR.
-func (s *svc) applyLive(ctx context.Context, org, project string, app Application, d Deployment, tag, image string, now int64) (advanced, superseded bool, err error) {
-	unlock := s.appLock.lock(app.ID)
+func applyLive(s *cloud.Service[state], ctx context.Context, org, project string, app Application, d Deployment, tag, image string, now int64) (advanced, superseded bool, err error) {
+	unlock := s.State.appLock.lock(app.ID)
 	defer unlock()
 
 	// Re-read the app under the lock so supersession is evaluated against the
 	// current live pointer, not a pre-lock snapshot.
-	if fresh, e := s.store.GetApplicationByID(ctx, org, app.ID); e == nil {
+	if fresh, e := s.State.store.GetApplicationByID(ctx, org, app.ID); e == nil {
 		app = fresh
 	}
-	sup, e := s.buildSuperseded(ctx, d, app)
+	sup, e := buildSuperseded(s, ctx, d, app)
 	if e != nil {
 		// A supersede-check error must not silently drop the deploy: fall through
 		// and apply — the FinalizeLive CAS still enforces DB monotonicity.
-		s.log.Warn("applyLive: supersede check failed (continuing)", "org", org, "app", app.Slug, "err", e)
+		s.Log.Warn("applyLive: supersede check failed (continuing)", "org", org, "app", app.Slug, "err", e)
 	} else if sup {
 		return false, true, nil
 	}
-	if e := s.k8s.applyService(ctx, org, project, app, image); e != nil {
+	if e := s.State.k8s.applyService(ctx, org, project, app, image); e != nil {
 		return false, false, e
 	}
 	// Declare the app's secret-env sync alongside its Service CR (best-effort —
 	// never fails the deploy; secrets show "pending" until the operator syncs).
-	s.ensureSecretSync(ctx, org, app)
-	adv, e := s.store.FinalizeLive(ctx, d, tag, tenantNamespace(org), now)
+	ensureSecretSync(s, ctx, org, app)
+	adv, e := s.State.store.FinalizeLive(ctx, d, tag, tenantNamespace(org), now)
 	if e != nil {
-		s.log.Warn("applyLive: finalize live failed (continuing)", "org", org, "app", app.Slug, "err", e)
+		s.Log.Warn("applyLive: finalize live failed (continuing)", "org", org, "app", app.Slug, "err", e)
 		return false, false, nil
 	}
 	if adv {
@@ -86,7 +87,7 @@ func (s *svc) applyLive(ctx context.Context, org, project string, app Applicatio
 		// datastore ahead of the console asking. Best-effort and detached — a
 		// registry miss/failure must never affect the deploy. Own context: the
 		// deploy's ctx is about to end.
-		go sbom.Prefetch(context.WithoutCancel(ctx), s.log, image)
+		go sbom.Prefetch(context.WithoutCancel(ctx), s.Log, image)
 	}
 	return adv, false, nil
 }
