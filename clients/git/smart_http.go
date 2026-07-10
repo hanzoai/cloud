@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/pktline"
@@ -222,9 +223,14 @@ func (s *svc) firePushBuilds(ctx context.Context, org, project, name string, req
 		if cmd == nil || !cmd.Name.IsBranch() || cmd.New == plumbing.ZeroHash {
 			continue // only branch refs that were created/updated, never deletes/tags
 		}
+		// Clone the request-scoped strings: org/project/name and the ref name are
+		// subslices of fiber's reused request buffers (fiber returns mutable
+		// values — "make copies to use outside the handler"), so a builder that
+		// ENQUEUES the event would see them mutate into a later request's path —
+		// e.g. a push resolving to the wrong deploy target. Commit is fresh hex.
 		ev := cloud.GitPushEvent{
-			Org: org, Project: project, Repo: name,
-			Branch: cmd.Name.Short(), Commit: cmd.New.String(), CloneURL: cloneURL,
+			Org: strings.Clone(org), Project: strings.Clone(project), Repo: strings.Clone(name),
+			Branch: strings.Clone(cmd.Name.Short()), Commit: cmd.New.String(), CloneURL: cloneURL,
 		}
 		if err := cloud.OnGitPush(ctx, ev); err != nil {
 			s.log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", ev.Branch, "err", err)
