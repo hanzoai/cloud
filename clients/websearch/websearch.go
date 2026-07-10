@@ -14,8 +14,8 @@
 //
 // This subsystem serves BOTH contracts under /v1/websearch, backed by Hanzo's
 // own services — never a third-party search API:
-//   - GET  /v1/websearch/search        SearXNG-shaped. Proxied to a Hanzo-operated
-//     metasearch instance (WEBSEARCH_UPSTREAM).
+//   - GET  /v1/websearch/search        SearXNG-shaped. Served NATIVELY in-process
+//     by a keyless Go meta-search (search.go) — no SearXNG pod, no search SaaS.
 //   - POST /v1/websearch/v1/scrape      Firecrawl-shaped. Backed by Hanzo Crawl
 //     (also /v1/websearch/scrape)       (crawl.hanzo.svc, Crawl4AI): fetch the URL,
 //     return {success,data:{markdown,metadata}}.
@@ -46,8 +46,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -59,20 +57,9 @@ import (
 
 // defaults are in-cluster service DNS; overridable via env.
 const (
-	// A Hanzo-operated SearXNG metasearch instance. Self-hosted: Hanzo runs it,
-	// no third-party search-API key. Serves the SearXNG JSON contract directly,
-	// so search is a transparent proxy (no reshape).
-	defaultSearchUpstream = "http://searxng.hanzo.svc.cluster.local:8080"
 	// Hanzo Crawl (Crawl4AI) — the scrape backend.
 	defaultCrawlEndpoint = "http://crawl.hanzo.svc.cluster.local:11235"
 )
-
-func searchUpstream() string {
-	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_UPSTREAM")); v != "" {
-		return v
-	}
-	return defaultSearchUpstream
-}
 
 func crawlEndpoint() string {
 	if v := strings.TrimSpace(os.Getenv("WEBSEARCH_CRAWL_ENDPOINT")); v != "" {
@@ -91,29 +78,15 @@ func apiKey() string { return strings.TrimSpace(os.Getenv("WEBSEARCH_API_KEY")) 
 
 var httpClient = &http.Client{Timeout: 45 * time.Second}
 
-// ── SearXNG search: transparent proxy to the Hanzo metasearch instance ──────
-// The upstream already speaks the SearXNG JSON contract, so we forward verbatim
-// (append nothing, reshape nothing). Only scheme/host/path-prefix change.
-
-func newSearchProxy(rawURL string) (http.Handler, error) {
-	target, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, err
-	}
-	if target.Scheme == "" || target.Host == "" {
-		return nil, fmt.Errorf("websearch: WEBSEARCH_UPSTREAM must be an absolute URL, got %q", rawURL)
-	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	base := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		base(r)
-		// /v1/websearch/search → {upstream}/search (SearXNG's own path).
-		r.URL.Path = "/search" + strings.TrimPrefix(r.URL.Path, "/v1/websearch/search")
-		r.URL.RawPath = ""
-		r.Host = target.Host
-	}
-	proxy.Transport = &http.Transport{ResponseHeaderTimeout: 30 * time.Second}
-	return proxy, nil
+// ── SearXNG-shaped search: native keyless meta-search, in-process ────────────
+// search.go's metaSearch runs the enabled keyless engines and returns the exact
+// SearXNG /search?format=json envelope, so the LibreChat searxng client decodes
+// it verbatim — no SearXNG pod, no third-party search API. This replaces the
+// retired reverse proxy. Reads the SearXNG query params (q, language).
+func searchNative(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	lang := strings.TrimSpace(r.URL.Query().Get("language"))
+	writeJSON(w, http.StatusOK, metaSearch(r.Context(), q, lang))
 }
 
 // searchGuard REQUIRES the shared service key, fail-closed exactly like the
@@ -318,31 +291,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	logger = logger.New("subsystem", "websearch")
 
-	searchProxy, err := newSearchProxy(searchUpstream())
-	if err != nil {
-		return err
-	}
 	// /v1/websearch/search admits a caller two ONE-WAY-equivalent ways, checked at
-	// the zip layer so the same request either reaches the metasearch proxy or is
-	// refused — it is NEVER an open proxy (F2):
+	// the zip layer so the same request either reaches native meta-search or is
+	// refused — it is NEVER an open surface (F2):
 	//   1. a VALIDATED PRINCIPAL — principal.Validated(c) is true when the identity
 	//      middleware set X-User-Id from a verified JWT (the SAME gate the whole
 	//      /v1 data plane uses). This is the console user surface: the /cloud proxy
-	//      mints a short-lived user bearer, cloud validates it, and the query
-	//      proxies straight to SearXNG (no shared key needed, the caller is already
-	//      authenticated + metered by the gateway).
+	//      mints a short-lived user bearer, cloud validates it, and search runs
+	//      (no shared key needed, the caller is already authenticated + metered).
 	//   2. the shared X-API-Key — searchGuard, for the hanzo.chat server which reaches
-	//      cloud WITHOUT a user principal (service-to-service). Unchanged: 503 when
-	//      the key is unset, 401 on a missing/wrong key.
+	//      cloud WITHOUT a user principal (service-to-service). 503 when the key is
+	//      unset, 401 on a missing/wrong key.
 	// A caller with NEITHER a validated principal NOR a valid key is refused (401/503),
-	// so the anonymous-forge / open-proxy path stays closed.
-	proxyDirect := zip.AdaptNetHTTP(searchProxy)
-	proxyGuarded := zip.AdaptNetHTTP(searchGuard(searchProxy))
+	// so the anonymous-forge / open-surface path stays closed.
+	native := http.HandlerFunc(searchNative)
+	searchDirect := zip.AdaptNetHTTP(native)
+	searchKeyed := zip.AdaptNetHTTP(searchGuard(native))
 	app.All("/v1/websearch/search", func(c *zip.Ctx) error {
 		if principal.Validated(c) {
-			return proxyDirect(c)
+			return searchDirect(c)
 		}
-		return proxyGuarded(c)
+		return searchKeyed(c)
 	})
 
 	scrape := zip.AdaptNetHTTPFunc(scrapeHandler)
@@ -351,8 +320,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/websearch/v1/scrape", scrape)
 	app.Post("/v1/websearch/scrape", scrape)
 
-	logger.Info("web search surface mounted (searxng-compat proxy + firecrawl-compat over Hanzo Crawl)",
-		"searchUpstream", searchUpstream(), "crawl", crawlEndpoint())
+	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat over Hanzo Crawl)",
+		"crawl", crawlEndpoint())
 	return nil
 }
 
