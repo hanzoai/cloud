@@ -146,6 +146,7 @@ ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" 
     GOFLAGS=-mod=readonly
 COPY go.mod go.sum ./
 RUN --mount=type=secret,id=gh_token \
+    --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     if [ -s /run/secrets/gh_token ]; then \
       git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
     fi && \
@@ -159,7 +160,9 @@ COPY --from=console /out/ /src/webui/dist/
 COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
 # "sqlite" driver is registered twice (mattn + modernc) → panic at init.
-RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/cloud 2>/dev/null | grep -c 'modernc.org/sqlite' || true)"; \
     [ "$MODERNC" = "0" ] || { echo "SQLITE-GATE FAIL: cmd/cloud links modernc.org/sqlite ($MODERNC pkgs) under CGO=1 — double-registers \"sqlite\" with hanzoai/sqlite(mattn) and panics at init."; exit 1; }
 # RED gate — ENCRYPTION PROOF + the cek.go GOLDEN-VECTOR KAT, under the SAME CGO +
 # libsqlcipher build this image ships. TestEncryptionProof asserts real
@@ -167,10 +170,14 @@ RUN MODERNC="$(CGO_ENABLED=1 go list -tags "libsqlite3 sqlite_fts5" -deps ./cmd/
 # image). TestUnwrapGoldenFixture asserts a FROZEN pre-luxfi-swap 61-byte DEK
 # sidecar still decrypts under the shipped luxfi/crypto-AEAD code — existing
 # encrypted stores stay readable, or NO image.
-RUN SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" \
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    SQLITE_REQUIRE_CODEC=1 CGO_ENABLED=1 go test -count=1 -tags "libsqlite3 sqlite_fts5" \
       -run 'TestEncryptionProof|TestUnwrapGoldenFixture|TestWrapUnwrapRoundTripPinsLayout' \
       github.com/hanzoai/sqlite
-RUN CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
