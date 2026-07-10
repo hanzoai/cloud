@@ -268,6 +268,7 @@ import (
 	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
 
 	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
+	_ "github.com/hanzoai/cloud/clients/code"      // order 134 — /v1/code/* (SOTA hybrid code-intelligence: FTS5-trigram lexical + go/parser & lexical symbols + embedded-vector semantic, RRF-fused, per-org SQLite)
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/sbom"      // order 137 — /v1/sbom/* (GLOBAL SBOM datastore on ClickHouse: CI ingest by image digest, console resolve by digest/ref)
