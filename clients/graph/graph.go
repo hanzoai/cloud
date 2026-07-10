@@ -111,9 +111,12 @@ func (s *svc) listIndexers(c *zip.Ctx) error {
 	health, hErr := s.cl.health(c)
 	block, bErr := s.cl.latestBlock(c)
 	if hErr != nil && bErr != nil {
-		// The indexer is not reachable in any form — honest upstream error, not a
-		// fabricated row. (bErr probes the mode-agnostic /v1/explorer/blocks.)
-		return bErr
+		// Indexer unreachable in any form — degrade to an honest-EMPTY list (200), not a
+		// 502 that surfaces as a console error on the page for every org without a chain
+		// indexer deployed. Same graceful fold as visor/clusters; an empty list is honest
+		// (no indexers), never a fabricated row.
+		s.log.Warn("indexer unreachable; returning empty indexer list", "err", bErr)
+		return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{}})
 	}
 	iv := toIndexerView(health, block, s.brand, s.env)
 	return c.JSON(http.StatusOK, map[string]any{"indexers": []indexerView{iv}})
@@ -131,7 +134,9 @@ func (s *svc) listOracles(c *zip.Ctx) error {
 	}
 	feeds, err := s.cl.priceFeeds(c)
 	if err != nil {
-		return err
+		// Price-feed oracle unreachable — honest-EMPTY (200), not a 502 page error.
+		s.log.Warn("oracle price feeds unreachable; returning empty oracle list", "err", err)
+		return c.JSON(http.StatusOK, map[string]any{"oracles": []oracleView{}})
 	}
 	out := make([]oracleView, 0, len(feeds))
 	for _, f := range feeds {
