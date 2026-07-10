@@ -823,6 +823,129 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	return jobName, nil
 }
 
+// jobPollInterval is how often waitForJob re-reads a Job's terminal state, and
+// smokeJobDeadline bounds one smoke boot (a healthy boot is ~1-2s; the ceiling only
+// guards a cold image pull on the node).
+const (
+	jobPollInterval  = 5 * time.Second
+	smokeJobDeadline = 5 * time.Minute
+)
+
+// waitForJob blocks until a Job reaches a terminal state (succeeded → nil, failed →
+// error) or deadline elapses, reading the SAME jobResult the build reconciler uses —
+// one definition of "a Job is done". It re-reads immediately on entry, so an
+// already-terminal Job returns without waiting a tick. ctx cancellation aborts.
+func (k *k8sClient) waitForJob(ctx context.Context, jobName string, deadline time.Duration) error {
+	t := time.NewTicker(jobPollInterval)
+	defer t.Stop()
+	end := time.Now().Add(deadline)
+	for {
+		if done, ok, err := k.jobResult(ctx, jobName); err == nil && done {
+			if ok {
+				return nil
+			}
+			return fmt.Errorf("job %s failed", jobName)
+		}
+		if !time.Now().Before(end) {
+			return fmt.Errorf("job %s did not complete within %s", jobName, deadline)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
+}
+
+// smokeScript boots the built image's /cloud entrypoint in the background and
+// asserts it reaches "listening" with no startup-crash signature — the in-container
+// mirror of release.yml's docker-run smoke. It exits 0 (Job succeeds) only on a
+// clean boot; 1 (Job fails) on any crash signature, a missing "listening" line, or a
+// process that died after logging it. backoffLimit 0 + restartPolicy Never make the
+// Job's terminal state the smoke verdict, read by waitForJob/jobResult.
+const smokeScript = `set -u
+/cloud >/tmp/boot.log 2>&1 &
+pid=$!
+listening=0
+for _ in $(seq 1 60); do
+  if grep -q '"message":"listening"' /tmp/boot.log 2>/dev/null; then listening=1; break; fi
+  kill -0 "$pid" 2>/dev/null || break
+  sleep 1
+done
+cat /tmp/boot.log
+if grep -Eiq 'metrics\.Mount|mount metrics|panic|want \*zip\.App' /tmp/boot.log; then echo 'SMOKE FAIL: startup-crash signature'; exit 1; fi
+if [ "$listening" -ne 1 ]; then echo 'SMOKE FAIL: never reached listening'; exit 1; fi
+kill -0 "$pid" 2>/dev/null || { echo 'SMOKE FAIL: exited after listening'; exit 1; }
+echo 'SMOKE PASS'
+`
+
+// launchSmokeJob boots image as an in-cluster Job that runs smokeScript — the native
+// mirror of release.yml's smoke gate. kmsKey is a throwaway 32-byte master key so the
+// KMS plane mounts on its normal ready path (no real secret) and the boot reaches
+// "listening" exactly as prod does. buildID is the idempotency key (a retry collides
+// on the Job name rather than spawning a duplicate). Returns the Job name to wait on.
+func (k *k8sClient) launchSmokeJob(ctx context.Context, image, kmsKey, buildID string) (string, error) {
+	if err := k.ready(); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(image) == "" {
+		return "", fmt.Errorf("smoke: empty image")
+	}
+	jobName := truncate("pf-smoke-"+jobIDSuffix(buildID), 63)
+	job := k.smokeJobSpec(jobName, image, kmsKey)
+	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
+		return "", err
+	}
+	return jobName, nil
+}
+
+// smokeJobSpec is the boot-test Job: the built image under a sh wrapper (smokeScript)
+// with a production-representative boot env — a writable /data emptyDir, CLOUD_ENV=smoke,
+// and the throwaway KMS master key. It pulls from GHCR with the same kaniko-ghcr secret
+// the build Job uses and runs on the same CI pool, so a green smoke proves the exact
+// pushed image boots on the exact cluster it will deploy to.
+func (k *k8sClient) smokeJobSpec(jobName, image, kmsKey string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "batch/v1",
+		"kind":       "Job",
+		"metadata": map[string]any{
+			"name":      jobName,
+			"namespace": k.buildNS,
+			"labels": map[string]any{
+				"hanzo.ai/org":        platformBuildOrg,
+				"hanzo.ai/managed-by": "platform",
+				"hanzo.ai/release":    "smoke",
+			},
+		},
+		"spec": map[string]any{
+			"backoffLimit":            int64(0),
+			"ttlSecondsAfterFinished": int64(3600),
+			"activeDeadlineSeconds":   int64(120),
+			"template": map[string]any{
+				"spec": map[string]any{
+					"restartPolicy":                "Never",
+					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
+					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
+					"imagePullSecrets":             []any{map[string]any{"name": "kaniko-ghcr"}},
+					"automountServiceAccountToken": false,
+					"containers": []any{map[string]any{
+						"name":    "smoke",
+						"image":   image,
+						"command": []any{"/bin/sh", "-c", smokeScript},
+						"env": []any{
+							map[string]any{"name": "CLOUD_DATA_DIR", "value": "/data"},
+							map[string]any{"name": "CLOUD_ENV", "value": "smoke"},
+							map[string]any{"name": "CLOUD_KMS_MASTER_KEY_REF", "value": kmsKey},
+						},
+						"volumeMounts": []any{map[string]any{"name": "data", "mountPath": "/data"}},
+					}},
+					"volumes": []any{map[string]any{"name": "data", "emptyDir": map[string]any{}}},
+				},
+			},
+		},
+	}}
+}
+
 // countActiveBuilds returns how many build Jobs the org currently has that are
 // NOT finished (no succeeded/failed completion). Jobs are labeled
 // hanzo.ai/org=<org> + hanzo.ai/build=true in the shared build namespace; a
