@@ -31,9 +31,12 @@
 // (a link id → org routing table — the one cross-tenant piece). Tenant isolation is
 // the per-org SQLite file gojabase selects from that org.
 //
-// STAGED (config.stagedSubsystems): mounts ONLY when the operator adds "dataroom"
-// to CLOUD_ENABLE, so the mount-all default is unchanged and the standalone dataroom
-// service keeps authority until the phase-2 cutover.
+// ACTIVATION: dataroom is NOT staged — it mounts under the mount-all default
+// (empty CLOUD_ENABLE), so the one binary serves /v1/dataroom/* from first boot.
+// There is no standalone dataroom pod to defer to (the Papermark/Next.js/Postgres
+// app is retired by this fold — no such deployment runs in the fleet), so cloud's
+// fresh per-tenant Base/SQLite is authoritative from the first write, with no data
+// to migrate.
 package dataroom
 
 import (
@@ -223,7 +226,16 @@ func (s *svc) uploadDocument(c *zip.Ctx) error {
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
-	key := "dataroom/" + org + "/" + randKey()
+	// ONE tenant encoding everywhere: the object-store key prefix uses the SAME
+	// injective, path-safe gojabase.TenantSegment the per-tenant SQLite filename
+	// does — never the raw org (which could carry a '/' and traverse the key
+	// namespace, and would drift from the DB's encoding).
+	rk, err := randKey()
+	if err != nil {
+		s.log.Error("dataroom: crypto/rand unavailable", "err", err)
+		return zip.Errorf(http.StatusInternalServerError, "storage key generation failed")
+	}
+	key := "dataroom/" + gojabase.TenantSegment(org) + "/" + rk
 	if err := s.blob.Put(c.Context(), key, raw); err != nil {
 		s.log.Error("dataroom storage put failed", "err", err)
 		return zip.Errorf(http.StatusBadGateway, "document storage unavailable")
@@ -382,17 +394,23 @@ func bcryptHostFns() map[string]any {
 	}
 }
 
-func randKey() string {
+// randKey returns 128 bits of crypto/rand as hex — the opaque object-store key
+// suffix. A crypto/rand failure is unrecoverable and MUST fail the upload rather
+// than degrade to a zero/predictable key (which could overwrite another
+// document's bytes); the caller turns the error into a 500.
+func randKey() (string, error) {
 	var b [16]byte
-	_, _ = rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("dataroom: crypto/rand unavailable: %w", err)
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 func init() {
 	// Order 134 (after captable's 133, before the AI /v1/* catch-all at 150 and the
 	// node-service tier). cloud.HealthOwner: dataroom serves its OWN
-	// /v1/dataroom/health so the generic liveness route never shadows it. STAGED
-	// (config.stagedSubsystems) — mounts only when "dataroom" is in CLOUD_ENABLE.
+	// /v1/dataroom/health so the generic liveness route never shadows it. NOT
+	// staged — mounts under the mount-all default.
 	hcloud.RegisterWithShutdown("dataroom", 134, hcloud.Typed(Mount), shutdown, hcloud.HealthOwner)
 }
 
