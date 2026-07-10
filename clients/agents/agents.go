@@ -42,7 +42,6 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/commerce/metering"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -94,10 +93,13 @@ const (
 	longRunningCapEnv    = "CLOUD_AGENT_MAX_LONG_RUNNING"
 )
 
-type svc struct {
+// state is agents' own data; the shared deps (logger, brand, KMS) live in the
+// embedded cloud.Base, reached as s.Log etc. bill is KEPT here on purpose: it is
+// the "agent"-provider meter (the commerce attribution + spend-cap scope key),
+// deliberately distinct from the subsystem's own Base.Bill, so it is NOT lifted.
+type state struct {
 	store *Store
 	ai    types.AIClient
-	log   luxlog.Logger
 	// defaultModel is the deployment's configured default served model
 	// (deps.AIDefaultModel). An agent created without an explicit model is
 	// stored with it, so the ONE model default lives in config, never hardcoded
@@ -110,7 +112,7 @@ type svc struct {
 	// agents without billing rather than failing closed on a missing ledger.
 	bill *cloud.ResourceMeter
 	// sched is the long-running-agent scheduler; nil until started, stopped on
-	// Shutdown. It shares svc so it runs agents through the SAME runAgent path.
+	// Shutdown. It shares the Service so it runs agents through the SAME runAgent path.
 	sched *scheduler
 	// bus is the in-process fan-out behind the live session/event stream (SSE +
 	// ZAP). Set in Mount; nil-safe (a direct-construct unit test skips fan-out).
@@ -121,7 +123,7 @@ type svc struct {
 	tasks TaskController
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // ---- HTTP response shapes (the published contract) ----
 
@@ -254,50 +256,54 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("agents.Mount: open store: %w", err)
 	}
 	// deps.AI may be nil when no gateway is configured; run() degrades honestly.
-	s := &svc{
-		store:        store,
-		ai:           deps.AI,
-		log:          log,
-		defaultModel: strings.TrimSpace(deps.AIDefaultModel),
-		bill:         cloud.NewResourceMeter(deps, meterKind),
-		bus:          newBus(),
-		// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
-		// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
-		// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
-		// to the engine's Signal/Cancel API (see sessions_tasks.go).
-		tasks: disabledTaskController{},
+	// agents is a "complex" mount (package-global `mounted`, a background scheduler,
+	// a shutdown teardown), so it builds the Service value directly.
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "agents"),
+		State: state{
+			store:        store,
+			ai:           deps.AI,
+			defaultModel: strings.TrimSpace(deps.AIDefaultModel),
+			bill:         cloud.NewResourceMeter(deps, meterKind),
+			bus:          newBus(),
+			// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
+			// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
+			// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
+			// to the engine's Signal/Cancel API (see sessions_tasks.go).
+			tasks: disabledTaskController{},
+		},
 	}
 	mounted = s
 
-	app.Get("/v1/agents", s.list)
-	app.Post("/v1/agents", s.create)
+	app.Get("/v1/agents", cloud.Handle(s, list))
+	app.Post("/v1/agents", cloud.Handle(s, create))
 	// Static org-wide surfaces MUST register before the :ref wildcard: Fiber
 	// matches routes in registration order, so a bare `/v1/agents/:ref` would
 	// otherwise capture "metrics"/"activity"/"sessions" as a ref and 404 them
 	// (Red route audit). Registering the literals first makes them win.
-	app.Get("/v1/agents/metrics", s.metrics)
-	app.Get("/v1/agents/activity", s.activity)
+	app.Get("/v1/agents/metrics", cloud.Handle(s, metrics))
+	app.Get("/v1/agents/activity", cloud.Handle(s, activity))
 	// Live agent-session control plane: /v1/agents/sessions[/...]. Registered
 	// before :name for the same registration-order reason (and internally the
 	// static /stream precedes /:id).
-	s.mountSessions(app)
-	app.Get("/v1/agents/:ref", s.get)
-	app.Patch("/v1/agents/:ref", s.update)
-	app.Delete("/v1/agents/:ref", s.del)
-	app.Post("/v1/agents/:ref/run", s.run)
-	app.Get("/v1/agents/:ref/runs", s.runs)
+	mountSessions(s, app)
+	app.Get("/v1/agents/:ref", cloud.Handle(s, get))
+	app.Patch("/v1/agents/:ref", cloud.Handle(s, update))
+	app.Delete("/v1/agents/:ref", cloud.Handle(s, del))
+	app.Post("/v1/agents/:ref/run", cloud.Handle(s, run))
+	app.Get("/v1/agents/:ref/runs", cloud.Handle(s, runs))
 
 	// Long-running scheduler: invokes each long-running agent's run on its cron
 	// cadence through the SAME runAgent path as the HTTP handler (one run path,
 	// one gate, one meter). Only started when inference is wired — with no AI a
 	// scheduled run could never execute, so there is nothing to schedule.
-	if s.ai != nil {
-		s.sched = newScheduler(s, log)
-		s.sched.start()
+	if s.State.ai != nil {
+		s.State.sched = newScheduler(s, log)
+		s.State.sched.start()
 	}
 
-	log.Info("agents mounted", "ai", s.ai != nil, "billing", s.bill.Enabled(),
-		"scheduler", s.sched != nil, "brand", deps.Brand)
+	log.Info("agents mounted", "ai", s.State.ai != nil, "billing", s.State.bill.Enabled(),
+		"scheduler", s.State.sched != nil, "brand", deps.Brand)
 	return nil
 }
 
@@ -322,7 +328,7 @@ type createReq struct {
 	ServiceAccountID string   `json:"serviceAccountId"`
 }
 
-func (s *svc) create(c *zip.Ctx) error {
+func create(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -346,10 +352,10 @@ func (s *svc) create(c *zip.Ctx) error {
 	// without a model still runs. If neither is present the model is required.
 	model := strings.TrimSpace(body.Model)
 	if model == "" {
-		if model = s.defaultModel; model == "" {
+		if model = s.State.defaultModel; model == "" {
 			return zip.ErrBadRequest("model is required")
 		}
-	} else if err := s.validateModel(c.Context(), model); err != nil {
+	} else if err := validateModel(s, c.Context(), model); err != nil {
 		return err
 	}
 	if len(body.Instructions) > maxInstructions {
@@ -371,7 +377,7 @@ func (s *svc) create(c *zip.Ctx) error {
 	// unbounded number of scheduled agents that each add recurring load to the
 	// shared store. Only counts when this create is itself long-running.
 	if mode == ModeLongRunning {
-		n, err := s.store.CountLongRunning(c.Context(), org)
+		n, err := s.State.store.CountLongRunning(c.Context(), org)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "count: %v", err)
 		}
@@ -392,7 +398,7 @@ func (s *svc) create(c *zip.Ctx) error {
 		ComputeRef: computeRef, ServiceAccountID: serviceAccountID,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.Create(c.Context(), a); err != nil {
+	if err := s.State.store.Create(c.Context(), a); err != nil {
 		if err == errConflict {
 			return zip.ErrConflict("agent already exists in this org")
 		}
@@ -401,18 +407,18 @@ func (s *svc) create(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toView(a, 0))
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.List(c.Context(), org)
+	rows, err := s.State.store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]agentView, 0, len(rows))
 	for _, a := range rows {
-		n, err := s.store.CountRuns(c.Context(), org, a.Name)
+		n, err := s.State.store.CountRuns(c.Context(), org, a.Name)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 		}
@@ -421,19 +427,19 @@ func (s *svc) list(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"agents": out})
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	runs, err := s.store.ListRuns(c.Context(), org, a.Name, 20)
+	runs, err := s.State.store.ListRuns(c.Context(), org, a.Name, 20)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -457,12 +463,12 @@ type updateReq struct {
 	ServiceAccountID *string   `json:"serviceAccountId"`
 }
 
-func (s *svc) update(c *zip.Ctx) error {
+func update(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -478,7 +484,7 @@ func (s *svc) update(c *zip.Ctx) error {
 		if m == "" {
 			return zip.ErrBadRequest("model cannot be empty")
 		}
-		if err := s.validateModel(c.Context(), m); err != nil {
+		if err := validateModel(s, c.Context(), m); err != nil {
 			return err
 		}
 		a.Model = m
@@ -525,7 +531,7 @@ func (s *svc) update(c *zip.Ctx) error {
 	// agent was NOT already long-running (a no-op re-save of an existing
 	// long-running agent must not 409 against its own row).
 	if a.ExecutionMode == ModeLongRunning && !wasLongRunning {
-		n, cerr := s.store.CountLongRunning(c.Context(), org)
+		n, cerr := s.State.store.CountLongRunning(c.Context(), org)
 		if cerr != nil {
 			return zip.Errorf(http.StatusInternalServerError, "count: %v", cerr)
 		}
@@ -535,17 +541,17 @@ func (s *svc) update(c *zip.Ctx) error {
 		}
 	}
 	a.UpdatedAt = time.Now().Unix()
-	if err := s.store.Update(c.Context(), a); err != nil {
+	if err := s.State.store.Update(c.Context(), a); err != nil {
 		if err == errNotFound {
 			return zip.ErrNotFound("agent not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
 	}
-	n, _ := s.store.CountRuns(c.Context(), org, a.Name)
+	n, _ := s.State.store.CountRuns(c.Context(), org, a.Name)
 	return c.JSON(http.StatusOK, toView(a, n))
 }
 
-func (s *svc) del(c *zip.Ctx) error {
+func del(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -553,14 +559,14 @@ func (s *svc) del(c *zip.Ctx) error {
 	// Resolve id-or-name first, then delete by the canonical name (agent_runs
 	// cascades on agent_name). Deleting by a raw id would never match the store's
 	// name key and silently 404 a real agent.
-	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "resolve: %v", err)
 	}
-	deleted, err := s.store.Delete(c.Context(), org, a.Name)
+	deleted, err := s.State.store.Delete(c.Context(), org, a.Name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -579,7 +585,7 @@ type runReq struct {
 // records the run. Every returned run reflects an execution that actually
 // happened — an inference failure is recorded and returned as an error run, not
 // hidden and not fabricated.
-func (s *svc) run(c *zip.Ctx) error {
+func run(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -595,7 +601,7 @@ func (s *svc) run(c *zip.Ctx) error {
 	if strings.TrimSpace(c.User()) == "" {
 		return zip.ErrForbidden("a validated principal is required to run an agent")
 	}
-	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -609,7 +615,7 @@ func (s *svc) run(c *zip.Ctx) error {
 	if len(body.Input) > maxInput {
 		return zip.ErrBadRequest("input too large")
 	}
-	if s.ai == nil {
+	if s.State.ai == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "inference is not configured on this deployment")
 	}
 
@@ -618,7 +624,7 @@ func (s *svc) run(c *zip.Ctx) error {
 	// org — recorded on the debit for attribution. Gating here means an unfunded
 	// org gets 402 and NO free inference; an unreachable commerce gets 503.
 	actor := billingActor(org, c.User())
-	r, gateErr := s.runAgent(c.Context(), a, body.Input, actor, c.RequestID(), cloud.ClientIP(c))
+	r, gateErr := runAgent(s, c.Context(), a, body.Input, actor, c.RequestID(), cloud.ClientIP(c))
 	if gateErr != nil {
 		return cloud.DenyResource(c, gateErr)
 	}
@@ -637,7 +643,7 @@ func (s *svc) run(c *zip.Ctx) error {
 // denial (out-of-funds / commerce-unknown) that the caller renders (402/503) —
 // it means no run happened. A run that executed but the model failed returns a
 // recorded error-status Run and a nil error.
-func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
+func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, actor, requestID, clientIP string) (Run, error) {
 	// Root span per run — the whole trace (balance gate → step → LLM call)
 	// nests under it, shipped over ZAP to o11y.
 	ctx, span := agentTracer.Start(ctx, "agent.run "+a.Name, trace.WithSpanKind(trace.SpanKindInternal))
@@ -651,13 +657,13 @@ func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, cl
 	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
 	// Gate the AGENT's own org — never a caller default, never another tenant.
 	// fee<=0 or unconfigured billing makes this a no-op (allows).
-	if err := s.bill.Gate(ctx, a.Org, "", meterKind, fee); err != nil {
+	if err := s.State.bill.Gate(ctx, a.Org, "", meterKind, fee); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.ai, a.Org, a, input)
+	r := executeRun(ctx, s.State.ai, a.Org, a, input)
 	span.SetAttributes(
 		attribute.String("hanzo.agent.run_id", r.ID),
 		attribute.String("hanzo.agent.run_status", r.Status),
@@ -666,21 +672,21 @@ func (s *svc) runAgent(ctx context.Context, a Agent, input, actor, requestID, cl
 	if r.Status == "error" {
 		span.SetStatus(codes.Error, r.Error)
 	}
-	if err := s.store.InsertRun(ctx, r); err != nil {
-		s.log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
+	if err := s.State.store.InsertRun(ctx, r); err != nil {
+		s.Log.Warn("record run failed", "org", a.Org, "agent", a.Name, "err", err)
 	}
 
 	// Make the run visible in the live session registry as a ROOT session (the
 	// same registry the @hanzo/dev outer-agent + subagent flows use). Best-effort:
 	// it NEVER fails the run — the run and its billing already happened. DRY: this
 	// is the ONE run path (HTTP + scheduler), so every run becomes a session here.
-	s.openRunSession(ctx, a, r, actor)
+	openRunSession(s, ctx, a, r, actor)
 
 	// Bill only a successful run (mirrors the edge gate: failed work is not
 	// charged). Rich attribution: product=agent (Provider), the agent's model,
 	// and the actor for the audit trail. Fire-and-forget on a background context.
 	if r.Status == "ok" {
-		s.bill.MeterUsage(a.Org, meterKind, metering.Usage{
+		s.State.bill.MeterUsage(a.Org, meterKind, metering.Usage{
 			AmountCents: fee,
 			Model:       a.Model,
 			Actor:       actor,
@@ -730,12 +736,12 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 	return r
 }
 
-func (s *svc) runs(c *zip.Ctx) error {
+func runs(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	a, err := s.store.Resolve(c.Context(), org, refParam(c))
+	a, err := s.State.store.Resolve(c.Context(), org, refParam(c))
 	if err == errNotFound {
 		return zip.ErrNotFound("agent not found")
 	}
@@ -748,7 +754,7 @@ func (s *svc) runs(c *zip.Ctx) error {
 			limit = n
 		}
 	}
-	runs, err := s.store.ListRuns(c.Context(), org, a.Name, limit)
+	runs, err := s.State.store.ListRuns(c.Context(), org, a.Name, limit)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "runs: %v", err)
 	}
@@ -765,7 +771,7 @@ func (s *svc) runs(c *zip.Ctx) error {
 // all-null because this store meters no CPU/memory/storage/cost; the console
 // renders those as "—" rather than a fabricated figure. No runs => empty series
 // (an honest "not connected / no activity yet"), never a synthesized trend.
-func (s *svc) metrics(c *zip.Ctx) error {
+func metrics(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -773,7 +779,7 @@ func (s *svc) metrics(c *zip.Ctx) error {
 	rng, buckets, step := metricsWindow(c.Query("range"))
 	now := time.Now()
 	start := now.Add(-time.Duration(buckets) * step) // last bucket ends at now
-	runs, err := s.store.RunsSince(c.Context(), org, start.Unix(), 10000)
+	runs, err := s.State.store.RunsSince(c.Context(), org, start.Unix(), 10000)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
 	}
@@ -827,17 +833,17 @@ func metricsWindow(raw string) (rng string, buckets int, step time.Duration) {
 // recorded run is an invoked (ok) or failed (error) event; each agent's own
 // create/update timestamps are created/updated events. Merged, newest first,
 // capped. Nothing is invented — an org with no agents and no runs gets [].
-func (s *svc) activity(c *zip.Ctx) error {
+func activity(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	const limit = 50
-	runs, err := s.store.RunsSince(c.Context(), org, 0, 200)
+	runs, err := s.State.store.RunsSince(c.Context(), org, 0, 200)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "activity runs: %v", err)
 	}
-	rows, err := s.store.List(c.Context(), org)
+	rows, err := s.State.store.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "activity agents: %v", err)
 	}
@@ -937,12 +943,12 @@ func longRunningCap() int {
 // or an unreachable/empty catalog skips the check (fail-open), so validation
 // infrastructure never blocks a create. An empty model is the caller's cue to
 // take the deployment default and is never routed here.
-func (s *svc) validateModel(ctx context.Context, model string) error {
+func validateModel(s *cloud.Service[state], ctx context.Context, model string) error {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return nil
 	}
-	lister, ok := s.ai.(types.ModelLister)
+	lister, ok := s.State.ai.(types.ModelLister)
 	if !ok {
 		return nil // this AI client cannot enumerate models — cannot validate
 	}
@@ -1014,17 +1020,17 @@ func Shutdown(ctx context.Context) error {
 	if mounted == nil {
 		return nil
 	}
-	if mounted.sched != nil {
-		mounted.sched.stop(ctx)
+	if mounted.State.sched != nil {
+		mounted.State.sched.stop(ctx)
 	}
 	// Close the live-stream bus so every open SSE/ZAP subscriber's loop returns
 	// and its handler unblocks within the shutdown deadline.
-	if mounted.bus != nil {
-		mounted.bus.close()
+	if mounted.State.bus != nil {
+		mounted.State.bus.close()
 	}
 	var err error
-	if mounted.store != nil {
-		err = mounted.store.Close()
+	if mounted.State.store != nil {
+		err = mounted.State.store.Close()
 	}
 	mounted = nil
 	return err

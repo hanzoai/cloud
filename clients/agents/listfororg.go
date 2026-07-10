@@ -23,12 +23,12 @@ import (
 // token claim), never a raw client header. Fails closed (nil, error) when the
 // agents subsystem is not mounted or the org is empty/oversized.
 func ListForOrg(ctx context.Context, org string) ([]Agent, error) {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil, fmt.Errorf("agents: not mounted")
 	}
 	org = strings.TrimSpace(org)
 	if org == "" || len(org) > principal.MaxOrgLen {
 		return nil, fmt.Errorf("agents: invalid org")
 	}
-	return mounted.store.List(ctx, org)
+	return mounted.State.store.List(ctx, org)
 }
