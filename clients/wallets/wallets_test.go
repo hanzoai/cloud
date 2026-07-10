@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/luxfi/crypto"
 	luxlog "github.com/luxfi/log"
@@ -23,9 +24,9 @@ import (
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
-// newSvc builds a wallets svc over a fresh temp store with the given custody set,
+// newSvc builds a wallets service over a fresh temp store with the given custody set,
 // installs it as the process singleton, and mounts the routes on a fresh app.
-func newSvc(t *testing.T, custody map[Kind]Custody, def Kind) (*svc, *zip.App) {
+func newSvc(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Service[state], *zip.App) {
 	t.Helper()
 	st, err := openStore(filepath.Join(t.TempDir(), "wallets.db"))
 	if err != nil {
@@ -33,18 +34,14 @@ func newSvc(t *testing.T, custody map[Kind]Custody, def Kind) (*svc, *zip.App) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	log := luxlog.New("test")
-	s := &svc{store: st, custody: custody, defaultCustody: def, log: log}
+	s := &cloud.Service[state]{
+		Base:  cloud.NewBase(cloud.Deps{Logger: log}, "wallets"),
+		State: state{store: st, custody: custody, defaultCustody: def},
+	}
 	mounted = s
 	t.Cleanup(func() { mounted = nil })
 	app := zip.New(zip.Config{Logger: log})
-	app.Post("/v1/wallets/accounts", s.createAccount)
-	app.Get("/v1/wallets/accounts", s.listAccounts)
-	app.Post("/v1/wallets", s.createWallet)
-	app.Get("/v1/wallets", s.listWallets)
-	app.Get("/v1/wallets/:id", s.getWallet)
-	app.Post("/v1/wallets/:id/keys", s.rotateKeys)
-	app.Post("/v1/wallets/:id/sign", s.sign)
-	app.Post("/v1/wallets/:id/safe-tx", s.proposeSafeTx)
+	routes(app, s)
 	return s, app
 }
 
@@ -295,16 +292,16 @@ func TestCustodySeamSelectsBackend(t *testing.T) {
 	s, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 
 	// Resolver: kms resolves; mpc/treasury fail closed; unknown is a distinct error.
-	if _, err := s.custodyFor(KindKMS); err != nil {
+	if _, err := custodyFor(s, KindKMS); err != nil {
 		t.Fatalf("kms custody must resolve: %v", err)
 	}
-	if _, err := s.custodyFor(KindMPC); err != ErrMPCNotConfigured {
+	if _, err := custodyFor(s, KindMPC); err != ErrMPCNotConfigured {
 		t.Fatalf("mpc custody unconfigured = %v, want ErrMPCNotConfigured", err)
 	}
-	if _, err := s.custodyFor(KindTreasury); err != ErrMPCNotConfigured {
+	if _, err := custodyFor(s, KindTreasury); err != ErrMPCNotConfigured {
 		t.Fatalf("treasury custody unconfigured = %v, want ErrMPCNotConfigured", err)
 	}
-	if _, err := s.custodyFor(Kind("bogus")); err == nil {
+	if _, err := custodyFor(s, Kind("bogus")); err == nil {
 		t.Fatal("unknown custody must error")
 	}
 
@@ -386,7 +383,7 @@ func TestMPCPathWiredCompiles(t *testing.T) {
 	}
 	// KeyRef is never serialized over the API (json:"-"); verify via the store
 	// that the ring wallet id was recorded as the sign handle.
-	stored, found, err := s.store.getWallet(context.Background(), "acme", w.ID)
+	stored, found, err := s.State.store.getWallet(context.Background(), "acme", w.ID)
 	if err != nil || !found {
 		t.Fatalf("store getWallet: found=%v err=%v", found, err)
 	}
