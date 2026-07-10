@@ -1,0 +1,38 @@
+
+
+ Use this area to offer a short preview of your email's content.
+
+ View this email in your browser ({{archive}})
+
+ 
+** THANK YOU FOR BEING AMAZING!
+------------------------------------------------------------
+
+Thank you for ordering! We're excited to have you join the movement and we'll keep you apprised of all development and schedule updates.
+
+ Order #: {{ order.number }} {{#each order.items}} {{ productname }} {{
+     quantity }} x {{ displayprice}} {{/each}} Subtotal: {{ order.subtotal}} {{
+         order.currency}} {{#if order.displayDiscount}} Discount: -{{
+             order.discount}} {{/if}} Tax: {{ order.tax}} Shipping: {{
+                 order.displayshipping }} Total: {{ order.total}} Shipping
+                 Address {{ order.shippingaddress.line1 }} {{#if
+                 order.shippingaddress.line2}} {{ order.shippingaddress.line2}}
+                 {{/if}} {{ order.shippingaddress.city}} {{#if
+                 order.shippingaddress.postalCode}} {{
+                     order.shippingaddress.postalCode}} {{/if}} {{
+                         order.shippingaddress.state}} {{
+                             order.shippingaddress.country}} Purchase Date {{
+                                 order.day}} {{ order.monthName}} {{ order.year}}
+ 
+
+============================================================
+
+ ** (http://www.twitter.com/)
+
+ ** (http://www.facebook.com)
+
+ ** (http://mailchimp.com)
+
+ _Copyright © {{currentyear}} {{organization.fullname}}, All rights reserved._
+
+
