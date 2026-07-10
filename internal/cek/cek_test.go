@@ -36,10 +36,19 @@ func testMaster(t *testing.T) []byte {
 
 // requireCipher skips when the build cannot produce REAL ciphertext (a mis-linked
 // cgo build silently writes plaintext), probing rather than trusting the flag.
+// With SQLITE_REQUIRE_CODEC=1 (the Docker image build sets it) a would-be skip
+// becomes a FAILURE, so the in-image gate is airtight standalone.
 func requireCipher(t *testing.T) {
 	t.Helper()
+	skipOrFail := func(msg string) {
+		if os.Getenv("SQLITE_REQUIRE_CODEC") == "1" {
+			t.Fatal(msg)
+		}
+		t.Skip(msg)
+	}
 	if !sqlitedrv.EncryptionAvailable() {
-		t.Skip("sqlite build cannot encrypt (pure-Go); run with CGO + libsqlcipher")
+		skipOrFail("sqlite build cannot encrypt (pure-Go); run with CGO + libsqlcipher")
+		return
 	}
 	probe := filepath.Join(t.TempDir(), "probe.db")
 	dek, _ := sqlitedrv.NewDEK()
@@ -52,7 +61,8 @@ func requireCipher(t *testing.T) {
 	}
 	_ = db.Close()
 	if isPlaintextHeader(probe) {
-		t.Skip("cgo build is NOT linked against libsqlcipher (keyed db is plaintext)")
+		skipOrFail("cgo build is NOT linked against libsqlcipher (keyed db is plaintext)")
+		return
 	}
 }
 
