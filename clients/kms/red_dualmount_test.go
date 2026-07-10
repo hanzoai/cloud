@@ -1,9 +1,12 @@
 package kms_test
 
 // RED: dual-mount precedence. With BOTH kms (order 10, mounts FIRST, registers
-// PUBLIC /v1/kms/config) AND admin (order 146, registers GATED /v1/admin/{orgs,
-// users,...}) enabled, prove kms's order-10 public config does NOT shadow the
-// admin gate, and admin's routes still require global-admin (403 without it).
+// PUBLIC /v1/kms/config) AND admin (order 146, registers GATED /v1/admin/*) enabled,
+// prove kms's order-10 public config does NOT shadow the admin gate. Under the admin
+// two-scope model: PLATFORM routes (audit/roles/finance/flags/revenue) stay
+// SuperAdmin-only (403 for a non-admin principal), while ORG-SCOPED cockpit routes
+// (orgs/users/me) admit a VALIDATED org principal (200, hard-scoped to its own org)
+// yet still reject an ANONYMOUS request (403). Neither is ever shadowed to public.
 // This is the real production topology; the kms-only harness cannot see it.
 
 import (
@@ -53,12 +56,28 @@ func TestDualMount_AdminConfigDoesNotShadowGate(t *testing.T) {
 		t.Fatalf("/v1/kms/config not served by kms? body=%v", body)
 	}
 
-	// 2. admin's GATED siblings must 403 WITHOUT admin — NOT shadowed to public,
-	//    NOT 404 (they ARE mounted now).
-	for _, path := range []string{"/v1/admin/orgs", "/v1/admin/users", "/v1/admin/me", "/v1/admin/audit"} {
-		r := do(t, app, "GET", path, "hanzo", "", false, nil) // a normal (non-admin) principal
+	// 2a. PLATFORM control-plane routes stay SuperAdmin-ONLY (s.guard): a validated
+	//     but non-admin principal must 403 — NOT shadowed to public, NOT 404 (they
+	//     ARE mounted). This is the "gate must fire" invariant kms must not defeat.
+	for _, path := range []string{"/v1/admin/audit", "/v1/admin/roles", "/v1/admin/finance", "/v1/admin/flags", "/v1/admin/revenue"} {
+		r := do(t, app, "GET", path, "hanzo", "", false, nil) // validated, non-admin principal
 		if r.StatusCode != 403 {
-			t.Fatalf("BREACH: %s without admin = %d, want 403 (gate must fire; kms must not shadow it)", path, r.StatusCode)
+			t.Fatalf("BREACH: platform %s with non-admin principal = %d, want 403 (SuperAdmin gate must fire; kms must not shadow it)", path, r.StatusCode)
+		}
+	}
+
+	// 2b. ORG-SCOPED cockpit routes (s.guardScoped, the two-scope model): the gate
+	//     admits a VALIDATED org principal (hard-scoped to its OWN org server-side —
+	//     clients/admin/scope_test.go proves the cross-tenant isolation) but MUST
+	//     still reject an ANONYMOUS request. The gate keys on identity, not route:
+	//     no-principal → 403; validated principal → 200 (scoped), never a 404 that
+	//     would mean kms shadowed the route.
+	for _, path := range []string{"/v1/admin/orgs", "/v1/admin/users", "/v1/admin/me"} {
+		if r := do(t, app, "GET", path, "", "", false, nil); r.StatusCode != 403 {
+			t.Fatalf("BREACH: anonymous %s = %d, want 403 (guardScoped must reject no-principal)", path, r.StatusCode)
+		}
+		if r := do(t, app, "GET", path, "hanzo", "", false, nil); r.StatusCode != 200 {
+			t.Fatalf("%s with validated org principal = %d, want 200 (org-scoped cockpit admits; kms must not shadow to 404)", path, r.StatusCode)
 		}
 	}
 
