@@ -103,6 +103,13 @@ type Transaction struct {
 	Project string `json:"project,omitempty"`
 	Service string `json:"service,omitempty"`
 
+	// AccountId funds this row — the BillingAccount (models/billingaccount) whose
+	// balance and calendar-month cap this row counts against. INDEXED so an
+	// account's balance and period spend can be summed per account. "" = the
+	// org-wide default pool (every row that predates billing accounts), so the org
+	// total stays the unfiltered sum and existing balances are byte-preserved.
+	AccountId string `json:"accountId,omitempty"`
+
 	// ExpiresAt marks when a deposit credit expires. Zero value means no expiry.
 	// Expired deposits are excluded from balance calculations.
 	ExpiresAt time.Time `json:"expiresAt,omitempty"`
