@@ -480,7 +480,7 @@ require (
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
-	github.com/hanzoai/datastore-go/v2 v2.45.0 // indirect
+	github.com/hanzoai/datastore-go/v2 v2.45.0
 	github.com/hanzoai/dbx v1.16.0 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v0.0.0-20180920213706-626992b83568 // indirect
