@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/gofiber/fiber/v3"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
