@@ -39,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
 )
 
@@ -47,6 +48,14 @@ import (
 // is generous for an in-cluster / same-region hop. (Owned here — the S2S transport home
 // — since the former waitlist.go was retired with the /v1/console namespace.)
 var httpClient = &http.Client{Timeout: 15 * time.Second}
+
+// commerceHTTP is the client for the commerce S2S seam ONLY (commerceDo). Separate
+// from httpClient (which also dials EVM JSON-RPC) so that — when commerce is folded
+// in-process (task #111) — commerce calls dispatch to the in-process handler via
+// commerceinproc's self-routing transport (no socket to the standalone), while the
+// HUSD chain RPC keeps going over the real network. Off the co-resident path it is a
+// plain HTTP client, exactly like before.
+var commerceHTTP = commerceinproc.Client(15 * time.Second)
 
 // transferTopic is keccak256("Transfer(address,address,uint256)") — the ERC-20
 // Transfer event signature, topics[0] of every transfer log. A universally-fixed
@@ -350,7 +359,7 @@ func commerceDo(ctx context.Context, base, token, method, path string, q url.Val
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := commerceHTTP.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
 	}

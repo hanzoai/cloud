@@ -1,0 +1,31 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@10.8.0 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY app/pnpm-workspace.yaml app/package.json app/pnpm-lock.yaml* ./
+COPY app/packages/commerce/package.json packages/commerce/package.json
+COPY app/store/package.json store/package.json
+RUN pnpm install --frozen-lockfile || pnpm install
+
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/commerce/node_modules ./packages/commerce/node_modules
+COPY --from=deps /app/store/node_modules ./store/node_modules
+COPY app/packages/commerce packages/commerce
+COPY app/store store
+COPY app/tsconfig.json tsconfig.json
+COPY app/turbo.json turbo.json
+COPY app/package.json package.json
+COPY app/pnpm-workspace.yaml pnpm-workspace.yaml
+RUN pnpm --filter=@hanzo/commerce-client build 2>/dev/null || true
+RUN cd store && npx next build
+
+FROM base AS runner
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=builder /app/store/.next/standalone ./
+COPY --from=builder /app/store/.next/static ./.next/static
+COPY --from=builder /app/store/public ./public
+EXPOSE 3000
+CMD ["node", "server.js"]
