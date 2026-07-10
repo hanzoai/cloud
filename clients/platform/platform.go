@@ -44,7 +44,6 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/provisioning"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -66,29 +65,22 @@ type EnvVarJSON struct {
 	Secret bool   `json:"secret"`
 }
 
-type svc struct {
+// state is platform's own data; the shared deps (log, kms, bill, brand, env,
+// domain) live in the embedded cloud.Base, reached as s.Log / s.KMS / s.Bill /
+// s.Brand / s.Env / s.Domain — never re-plumbed here.
+type state struct {
 	store       *Store
 	k8s         *k8sClient
-	kms         cloud.KMSClient    // embedded KMS for sealing secret env (secrets.go); nil ⇒ secret env fails closed
 	kmsIdentity tenantKMSIdentity  // per-tenant KMS machine-identity provisioner (secrets.go); nil ⇒ sync stays fail-closed pending
 	cancel      context.CancelFunc // stops the build reconciler on Shutdown
-	log         luxlog.Logger
-	brand       string
-	env         string
-	domain      string
-	sitesHost   string       // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
-	appLock     appMutex     // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
-	deployGate  inflightGate // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
-	resolver    dnsResolver  // custom-domain ownership verification (domains.go); nil ⇒ system resolver
-	// bill is the shared per-org resource meter (reuses deps.Metering, the one
-	// commerce client). It gates+meters /v1/run (run.go) and meters usage-native
-	// build minutes (buildmeter.go) on build completion. Nil/!Enabled() ⇒ allow +
-	// MeterUsage no-op.
-	bill *cloud.ResourceMeter
+	sitesHost   string             // per-tenant apps host suffix; a custom domain must be under <org>.<sitesHost>
+	appLock     appMutex           // per-app serialization of apply-CR→finalize-live (applylive.go, RED LOW-1)
+	deployGate  inflightGate       // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
+	resolver    dnsResolver        // custom-domain ownership verification (domains.go); nil ⇒ system resolver
 }
 
 // mounted is the active service so Shutdown can release the store.
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // Mount wires the /v1/platform surface onto app per HIP-0106.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -115,11 +107,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
-	s := &svc{store: store, k8s: k, kms: deps.KMS, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
-		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app"),
-		bill:      cloud.NewResourceMeter(deps, "platform")}
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
+		State: state{store: store, k8s: k, sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
-	s.routes(app)
+	routes(app, s)
 
 	// The cloud's own embedded-git apex is a trusted build source (clients/git
 	// serves repos at this host), so a self-hosted-git app builds with no env.
@@ -128,7 +119,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// git-push-to-deploy: a push landed on the embedded git server (clients/git)
 	// triggers a build for every app tracking that repo+branch. Inverted so git
 	// never imports platform — build.go RegisterPushBuilder ⇄ OnGitPush (push.go).
-	cloud.RegisterPushBuilder(s.buildFromPush)
+	cloud.RegisterPushBuilder(func(ctx context.Context, ev cloud.GitPushEvent) error { return buildFromPush(mounted, ctx, ev) })
 
 	// Own the git build→deploy handoff: a background reconciler that applies the
 	// Service CR once a build Job succeeds (reconcile.go). Restart-safe — it reads
@@ -137,8 +128,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// and there is nothing to reconcile).
 	if k.dyn != nil {
 		ctx, cancel := context.WithCancel(context.Background())
-		s.cancel = cancel
-		go s.runBuildReconciler(ctx)
+		s.State.cancel = cancel
+		go runBuildReconciler(s, ctx)
 	}
 
 	log.Info("platform control plane mounted",
@@ -147,71 +138,71 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // routes registers the /v1/platform surface on app. Extracted from Mount so
-// tests can mount the same routes over an svc with an injected (fake/nil) k8s
+// tests can mount the same routes over a Service with an injected (fake/nil) k8s
 // client — hermetic, never touching a real cluster.
-func (s *svc) routes(app *zip.App) {
+func routes(app *zip.App, s *cloud.Service[state]) {
 	// projects
-	app.Get("/v1/platform/projects", s.listProjects)
-	app.Post("/v1/platform/projects", s.createProject)
-	app.Get("/v1/platform/projects/:project", s.getProject)
-	app.Delete("/v1/platform/projects/:project", s.deleteProject)
+	app.Get("/v1/platform/projects", cloud.Handle(s, listProjects))
+	app.Post("/v1/platform/projects", cloud.Handle(s, createProject))
+	app.Get("/v1/platform/projects/:project", cloud.Handle(s, getProject))
+	app.Delete("/v1/platform/projects/:project", cloud.Handle(s, deleteProject))
 
 	// applications
-	app.Get("/v1/platform/projects/:project/apps", s.listApps)
-	app.Post("/v1/platform/projects/:project/apps", s.createApp)
-	app.Get("/v1/platform/projects/:project/apps/:app", s.getApp)
-	app.Delete("/v1/platform/projects/:project/apps/:app", s.deleteApp)
+	app.Get("/v1/platform/projects/:project/apps", cloud.Handle(s, listApps))
+	app.Post("/v1/platform/projects/:project/apps", cloud.Handle(s, createApp))
+	app.Get("/v1/platform/projects/:project/apps/:app", cloud.Handle(s, getApp))
+	app.Delete("/v1/platform/projects/:project/apps/:app", cloud.Handle(s, deleteApp))
 
 	// env management: replace an app's env set (plain + secret). Secret values are
 	// sealed into KMS; plaintext is never persisted (secrets.go). One write path.
-	app.Put("/v1/platform/projects/:project/apps/:app/env", s.setEnv)
+	app.Put("/v1/platform/projects/:project/apps/:app/env", cloud.Handle(s, setEnv))
 
 	// deploy lifecycle + history (deploy.go)
-	app.Post("/v1/platform/projects/:project/apps/:app/deploy", s.deploy)
-	app.Post("/v1/platform/projects/:project/apps/:app/stop", s.stop)
-	app.Post("/v1/platform/projects/:project/apps/:app/start", s.start)
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments", s.listDeployments)
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id", s.getDeployment)
-	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", s.deploymentLogs)
+	app.Post("/v1/platform/projects/:project/apps/:app/deploy", cloud.Handle(s, deploy))
+	app.Post("/v1/platform/projects/:project/apps/:app/stop", cloud.Handle(s, stop))
+	app.Post("/v1/platform/projects/:project/apps/:app/start", cloud.Handle(s, start))
+	app.Get("/v1/platform/projects/:project/apps/:app/deployments", cloud.Handle(s, listDeployments))
+	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id", cloud.Handle(s, getDeployment))
+	app.Get("/v1/platform/projects/:project/apps/:app/deployments/:id/logs", cloud.Handle(s, deploymentLogs))
 
 	// Vercel-style release flows (preview.go), all reusing the ONE deploy mechanic
 	// (deployTagCore → applyLive; write the Service CR, the operator reconciles):
 	// a per-branch preview target with its OWN slug + host, promote an already-built
 	// tag/deployment to prod, and rollback to a prior image. Org-scoped like the rest.
-	app.Post("/v1/platform/projects/:project/apps/:app/preview", s.preview)
-	app.Post("/v1/platform/projects/:project/apps/:app/promote", s.promote)
-	app.Post("/v1/platform/projects/:project/apps/:app/rollback", s.rollback)
+	app.Post("/v1/platform/projects/:project/apps/:app/preview", cloud.Handle(s, preview))
+	app.Post("/v1/platform/projects/:project/apps/:app/promote", cloud.Handle(s, promote))
+	app.Post("/v1/platform/projects/:project/apps/:app/rollback", cloud.Handle(s, rollback))
 
 	// custom domains + org-subtree hosts (domains.go): list, add (subtree active /
 	// custom pending-with-challenge), verify a custom claim's DNS, remove.
-	app.Get("/v1/platform/projects/:project/apps/:app/domains", s.listDomains)
-	app.Post("/v1/platform/projects/:project/apps/:app/domains", s.addDomain)
-	app.Post("/v1/platform/projects/:project/apps/:app/domains/:host/verify", s.verifyDomain)
-	app.Delete("/v1/platform/projects/:project/apps/:app/domains/:host", s.removeDomain)
+	app.Get("/v1/platform/projects/:project/apps/:app/domains", cloud.Handle(s, listDomains))
+	app.Post("/v1/platform/projects/:project/apps/:app/domains", cloud.Handle(s, addDomain))
+	app.Post("/v1/platform/projects/:project/apps/:app/domains/:host/verify", cloud.Handle(s, verifyDomain))
+	app.Delete("/v1/platform/projects/:project/apps/:app/domains/:host", cloud.Handle(s, removeDomain))
 
-	app.Get("/v1/platform/health", s.health)
+	app.Get("/v1/platform/health", cloud.Handle(s, health))
 
 	// Container-serverless one-shot: POST /v1/run — create-or-update an image app
 	// (in the org's default project) and deploy it via the SAME Service-CR writer,
 	// returning its live URL. A top-level convenience over the project→app→deploy
 	// flow above; org-scoped by s.tenant, never by the body (run.go). Bound at order
 	// 124, before the AI /v1/* catch-all (150).
-	app.Post("/v1/run", s.run)
+	app.Post("/v1/run", cloud.Handle(s, run))
 
 	// console aggregates (Environments / Pipelines / Builds / Releases) — flat,
 	// top-level REST DERIVED from the SAME project/app/deploy/build data above
 	// (console.go). GET-only projections: the ONE write path stays POST .../apps
 	// and .../deploy. Registered here (order 124) so they bind before the /v1/*
 	// AI catch-all; every handler is org-scoped through s.tenant like the rest.
-	app.Get("/v1/environments", s.listEnvironments)
-	app.Get("/v1/pipelines", s.listPipelines)
-	app.Get("/v1/builds", s.listBuilds)
-	app.Get("/v1/releases", s.listReleases)
+	app.Get("/v1/environments", cloud.Handle(s, listEnvironments))
+	app.Get("/v1/pipelines", cloud.Handle(s, listPipelines))
+	app.Get("/v1/builds", cloud.Handle(s, listBuilds))
+	app.Get("/v1/releases", cloud.Handle(s, listReleases))
 
 	// Native build API (the no-GitHub-builders trigger, ex-/v1/arcd). Privileged:
 	// token-gated + image-ref allowlisted (runner.go). `hanzo build`, the
 	// git-push-to-deploy hook, and cloud's own self-release all POST here.
-	app.Post("/v1/runner", s.runnerBuild)
+	app.Post("/v1/runner", cloud.Handle(s, runnerBuild))
 }
 
 // Registered as id "platform" with cloud.HealthOwner: it serves its OWN
@@ -244,7 +235,7 @@ func init() {
 // (SanitizeIdentity sets it only for a JWT-verified global admin, HIP-0026), and
 // even then reaches only the admin bucket, never a real tenant's namespace. This
 // is the ONLY source of the tenant; no handler reads an org from body or path.
-func (s *svc) tenant(c *zip.Ctx) (string, bool) {
+func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 	if c.User() == "" {
 		return "", false // no validated principal — refuse the forgeable Phase-1 data path
 	}
@@ -376,8 +367,8 @@ type createProjectReq struct {
 	Description string `json:"description"`
 }
 
-func (s *svc) createProject(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func createProject(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
@@ -399,7 +390,7 @@ func (s *svc) createProject(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	p := Project{ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description), CreatedAt: now, UpdatedAt: now}
-	if err := s.store.CreateProject(c.Context(), p); err != nil {
+	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("project slug already exists in this org")
 		}
@@ -408,45 +399,45 @@ func (s *svc) createProject(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toProjectView(p, 0))
 }
 
-func (s *svc) listProjects(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.store.ListProjects(c.Context(), org)
+	rows, err := s.State.store.ListProjects(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]projectView, 0, len(rows))
 	for _, p := range rows {
-		apps, _ := s.store.ListApplications(c.Context(), org, p.ID)
+		apps, _ := s.State.store.ListApplications(c.Context(), org, p.ID)
 		out = append(out, toProjectView(p, len(apps)))
 	}
 	return c.JSON(http.StatusOK, out)
 }
 
-func (s *svc) getProject(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func getProject(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, projectParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	apps, _ := s.store.ListApplications(c.Context(), org, p.ID)
+	apps, _ := s.State.store.ListApplications(c.Context(), org, p.ID)
 	return c.JSON(http.StatusOK, toProjectView(p, len(apps)))
 }
 
-func (s *svc) deleteProject(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, apps, deleted, err := s.store.DeleteProject(c.Context(), org, projectParam(c))
+	p, apps, deleted, err := s.State.store.DeleteProject(c.Context(), org, projectParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
@@ -455,11 +446,11 @@ func (s *svc) deleteProject(c *zip.Ctx) error {
 	}
 	// Best-effort teardown of each app's Service CR + KMSSecret in the tenant ns.
 	for _, a := range apps {
-		if err := s.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
-			s.log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
+		if err := s.State.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
+			s.Log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
 		}
-		if err := s.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
-			s.log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
+		if err := s.State.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
+			s.Log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
 		}
 	}
 	_ = p
@@ -490,12 +481,12 @@ type createAppReq struct {
 	Domains    []string     `json:"domains"`
 }
 
-func (s *svc) createApp(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func createApp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, projectParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -559,7 +550,7 @@ func (s *svc) createApp(c *zip.Ctx) error {
 			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
 	}
-	sealedEnv, err := s.sealSecretEnv(c.Context(), org, slug, body.Env)
+	sealedEnv, err := sealSecretEnv(s, c.Context(), org, slug, body.Env)
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
@@ -568,8 +559,8 @@ func (s *svc) createApp(c *zip.Ctx) error {
 	// moment it deploys, then validate the full ingress set (subtree hosts + the
 	// default always pass; a bare custom host at create still 501s — it must go
 	// through add-domain → verify first).
-	domains := s.seedDefaultDomain(org, slug, sanitizeDomains(body.Domains))
-	if err := s.validateOrgDomains(c.Context(), org, domains); err != nil {
+	domains := seedDefaultDomain(s, org, slug, sanitizeDomains(body.Domains))
+	if err := validateOrgDomains(s, c.Context(), org, domains); err != nil {
 		return err
 	}
 	domainsJSON, _ := json.Marshal(domains)
@@ -584,11 +575,11 @@ func (s *svc) createApp(c *zip.Ctx) error {
 		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
-		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.k8s.limits.clampReplicas(body.Replicas),
+		BuildType: buildType, Dockerfile: strings.TrimSpace(body.Dockerfile), Port: portOr(body.Port), Replicas: s.State.k8s.limits.clampReplicas(body.Replicas),
 		EnvJSON: string(envJSON), DomainsJSON: string(domainsJSON), Status: "draft", Namespace: tenantNamespace(org),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.CreateApplication(c.Context(), a); err != nil {
+	if err := s.State.store.CreateApplication(c.Context(), a); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("application slug already exists in this project")
 		}
@@ -597,19 +588,19 @@ func (s *svc) createApp(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toAppView(a))
 }
 
-func (s *svc) listApps(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func listApps(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, projectParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
-	rows, err := s.store.ListApplications(c.Context(), org, p.ID)
+	rows, err := s.State.store.ListApplications(c.Context(), org, p.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
@@ -619,10 +610,10 @@ func (s *svc) listApps(c *zip.Ctx) error {
 		// Attach live phase/health from the operator CR when the cluster is
 		// reachable (best-effort; never blocks the list).
 		if a.Status == "live" || a.Status == "deploying" {
-			v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
+			v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
 		}
 		if len(secretEnvKeys(a.EnvJSON)) > 0 {
-			v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, true)
+			v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, true)
 		}
 		out = append(out, v)
 	}
@@ -631,15 +622,15 @@ func (s *svc) listApps(c *zip.Ctx) error {
 
 // loadApp resolves (project, app) for the caller's org, re-verifying tenancy at
 // each hop. Returns the project and application or a mapped HTTP error.
-func (s *svc) loadApp(c *zip.Ctx, org string) (Project, Application, error) {
-	p, err := s.store.GetProject(c.Context(), org, projectParam(c))
+func loadApp(s *cloud.Service[state], c *zip.Ctx, org string) (Project, Application, error) {
+	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
 	if errors.Is(err, errNotFound) {
 		return Project{}, Application{}, zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return Project{}, Application{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
-	a, err := s.store.GetApplication(c.Context(), org, p.ID, appParam(c))
+	a, err := s.State.store.GetApplication(c.Context(), org, p.ID, appParam(c))
 	if errors.Is(err, errNotFound) {
 		return Project{}, Application{}, zip.ErrNotFound("application not found")
 	}
@@ -649,45 +640,45 @@ func (s *svc) loadApp(c *zip.Ctx, org string) (Project, Application, error) {
 	return p, a, nil
 }
 
-func (s *svc) getApp(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func getApp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	_, a, err := s.loadApp(c, org)
+	_, a, err := loadApp(s, c, org)
 	if err != nil {
 		return err
 	}
 	v := toAppView(a)
-	v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
-	v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
+	v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
 	return c.JSON(http.StatusOK, v)
 }
 
-func (s *svc) deleteApp(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func deleteApp(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, projectParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
-	a, deleted, err := s.store.DeleteApplication(c.Context(), org, p.ID, appParam(c))
+	a, deleted, err := s.State.store.DeleteApplication(c.Context(), org, p.ID, appParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
 		return zip.ErrNotFound("application not found")
 	}
-	if err := s.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
-		s.log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
+	if err := s.State.k8s.deleteService(c.Context(), org, a.Slug); err != nil {
+		s.Log.Warn("teardown service CR failed (continuing)", "org", org, "app", a.Slug, "err", err)
 	}
-	if err := s.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
-		s.log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
+	if err := s.State.k8s.deleteKMSSecret(c.Context(), org, a.Slug); err != nil {
+		s.Log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -704,12 +695,12 @@ type setEnvReq struct {
 // the next deploy. Fails closed if KMS is unavailable. If the app is already
 // deployed it re-declares the secret sync immediately (the operator re-materializes
 // the Secret); pods pick up changed env on their next deploy/restart.
-func (s *svc) setEnv(c *zip.Ctx) error {
-	org, ok := s.tenant(c)
+func setEnv(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	_, a, herr := s.loadApp(c, org)
+	_, a, herr := loadApp(s, c, org)
 	if herr != nil {
 		return herr
 	}
@@ -722,24 +713,24 @@ func (s *svc) setEnv(c *zip.Ctx) error {
 			return zip.ErrBadRequest("env key must match ^[A-Za-z_][A-Za-z0-9_]*$")
 		}
 	}
-	sealed, err := s.sealSecretEnv(c.Context(), org, a.Slug, body.Env)
+	sealed, err := sealSecretEnv(s, c.Context(), org, a.Slug, body.Env)
 	if err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
 	}
 	envJSON, _ := json.Marshal(sealed)
 	a.EnvJSON = string(envJSON)
 	a.UpdatedAt = time.Now().Unix()
-	if err := s.store.UpdateApplication(c.Context(), a); err != nil {
+	if err := s.State.store.UpdateApplication(c.Context(), a); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist env: %v", err)
 	}
 	// Re-declare the secret sync so an added/removed secret updates the KMSSecret CR
 	// now (only meaningful once the tenant namespace exists — i.e. after a deploy).
 	if a.Namespace != "" {
-		s.ensureSecretSync(c.Context(), org, a)
+		ensureSecretSync(s, c.Context(), org, a)
 	}
 	v := toAppView(a)
-	v.Phase, v.Health = s.k8s.observeService(c.Context(), org, a.Slug)
-	v.SecretSync, v.SecretSyncDetail = s.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
+	v.Phase, v.Health = s.State.k8s.observeService(c.Context(), org, a.Slug)
+	v.SecretSync, v.SecretSyncDetail = s.State.k8s.observeSecretSync(c.Context(), org, a.Slug, len(secretEnvKeys(a.EnvJSON)) > 0)
 	return c.JSON(http.StatusOK, v)
 }
 
@@ -748,11 +739,11 @@ func (s *svc) setEnv(c *zip.Ctx) error {
 // health is a REAL probe: 200 when the metadata store is open AND the cluster is
 // reachable; 503 + the real reason otherwise (never status-theater). Not
 // admin-gated — liveness must be probe-able without a JWT.
-func (s *svc) health(c *zip.Ctx) error {
-	res := map[string]any{"service": "platform", "status": "ok", "k8s": s.k8s.dyn != nil}
-	if s.k8s.dyn == nil {
+func health(s *cloud.Service[state], c *zip.Ctx) error {
+	res := map[string]any{"service": "platform", "status": "ok", "k8s": s.State.k8s.dyn != nil}
+	if s.State.k8s.dyn == nil {
 		res["status"] = "degraded"
-		res["error"] = s.k8s.initErr
+		res["error"] = s.State.k8s.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	return c.JSON(http.StatusOK, res)
@@ -829,22 +820,22 @@ func branchDefault(repoURL string) string {
 // ownership of (a verified platform_domains row). Every other host — an unverified
 // claim, another org's domain, a Hanzo apex — is refused (501), so an arbitrary
 // host can only reach the ingress through add-domain → DNS verify, never blindly.
-func (s *svc) validateOrgDomains(ctx context.Context, org string, domains []string) error {
+func validateOrgDomains(s *cloud.Service[state], ctx context.Context, org string, domains []string) error {
 	for _, d := range domains {
-		if s.isOrgSubtreeHost(org, d) {
+		if isOrgSubtreeHost(s, org, d) {
 			continue
 		}
 		// A non-subtree host is allowed only when this org owns a VERIFIED claim on
 		// it. LookupDomain is the global (cross-org) uniqueness read; we accept it
 		// only when the row is this org's AND verified — a foreign or pending row is
 		// refused, so the ownership boundary holds.
-		if s.store != nil {
-			if row, found, err := s.store.LookupDomain(ctx, d); err == nil && found && row.Org == org && row.Status == "verified" {
+		if s.State.store != nil {
+			if row, found, err := s.State.store.LookupDomain(ctx, d); err == nil && found && row.Org == org && row.Status == "verified" {
 				continue
 			}
 		}
 		return zip.Errorf(http.StatusNotImplemented,
-			"custom domain %q is not verified for this org; add it to the app and complete DNS verification first (only hosts under %q, or an ownership-verified custom domain, are accepted)", d, org+"."+s.sitesHost)
+			"custom domain %q is not verified for this org; add it to the app and complete DNS verification first (only hosts under %q, or an ownership-verified custom domain, are accepted)", d, org+"."+s.State.sitesHost)
 	}
 	return nil
 }
@@ -883,13 +874,13 @@ func getenv(key, dflt string) string {
 // Shutdown closes the platform store. Idempotent. Mirrors the projects/paas
 // Shutdown contract so the serve layer releases subsystem resources uniformly.
 func Shutdown() error {
-	if mounted == nil || mounted.store == nil {
+	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
-	if mounted.cancel != nil {
-		mounted.cancel() // stop the build reconciler
+	if mounted.State.cancel != nil {
+		mounted.State.cancel() // stop the build reconciler
 	}
-	err := mounted.store.Close()
+	err := mounted.State.store.Close()
 	mounted = nil
 	return err
 }
