@@ -81,8 +81,9 @@ type svc struct {
 	deployGate  inflightGate // per-org in-flight synchronous-deploy cap (deploy.go, RED LOW L1)
 	resolver    dnsResolver  // custom-domain ownership verification (domains.go); nil ⇒ system resolver
 	// bill is the shared per-org resource meter (reuses deps.Metering, the one
-	// commerce client). It meters usage-native build minutes (buildmeter.go) on
-	// build completion. Nil/!Enabled() makes MeterUsage a no-op.
+	// commerce client). It gates+meters /v1/run (run.go) and meters usage-native
+	// build minutes (buildmeter.go) on build completion. Nil/!Enabled() ⇒ allow +
+	// MeterUsage no-op.
 	bill *cloud.ResourceMeter
 }
 
@@ -172,6 +173,13 @@ func (s *svc) routes(app *zip.App) {
 	app.Delete("/v1/platform/projects/:project/apps/:app/domains/:host", s.removeDomain)
 
 	app.Get("/v1/platform/health", s.health)
+
+	// Container-serverless one-shot: POST /v1/run — create-or-update an image app
+	// (in the org's default project) and deploy it via the SAME Service-CR writer,
+	// returning its live URL. A top-level convenience over the project→app→deploy
+	// flow above; org-scoped by s.tenant, never by the body (run.go). Bound at order
+	// 124, before the AI /v1/* catch-all (150).
+	app.Post("/v1/run", s.run)
 
 	// console aggregates (Environments / Pipelines / Builds / Releases) — flat,
 	// top-level REST DERIVED from the SAME project/app/deploy/build data above
