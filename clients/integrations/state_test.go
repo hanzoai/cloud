@@ -5,25 +5,27 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud"
 )
 
-// testSvc builds a bare svc with a fixed 32-byte signing key — enough to exercise
+// testSvc builds a bare cloud.Service[state] with a fixed 32-byte signing key — enough to exercise
 // sign/verify in isolation (no store/KMS/HTTP).
-func testSvc() *svc {
+func testSvc() *cloud.Service[state] {
 	key := make([]byte, minStateKeyLen)
 	for i := range key {
 		key[i] = byte(i + 1)
 	}
-	return &svc{stateKey: key}
+	return &cloud.Service[state]{State: state{stateKey: key}}
 }
 
 func TestStateSignVerifyHappy(t *testing.T) {
 	s := testSvc()
-	tok, err := s.sign("acme", "slack", "nonce-1")
+	tok, err := sign(s, "acme", "slack", "nonce-1")
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
-	p, err := s.verify(tok, "slack")
+	p, err := verify(s, tok, "slack")
 	if err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -34,7 +36,7 @@ func TestStateSignVerifyHappy(t *testing.T) {
 
 func TestStateTamperFails(t *testing.T) {
 	s := testSvc()
-	tok, _ := s.sign("acme", "slack", "n")
+	tok, _ := sign(s, "acme", "slack", "n")
 	// Flip a byte in the payload half (before the dot). The MAC no longer matches.
 	dot := strings.IndexByte(tok, '.')
 	if dot <= 0 {
@@ -46,14 +48,14 @@ func TestStateTamperFails(t *testing.T) {
 	} else {
 		b[0] = 'A'
 	}
-	if _, err := s.verify(string(b), "slack"); err == nil {
+	if _, err := verify(s, string(b), "slack"); err == nil {
 		t.Fatal("tampered payload must fail verify")
 	}
 
 	// A tampered MAC half must also fail.
 	b2 := []byte(tok)
 	b2[len(b2)-1] ^= 0x01 // this is base64; flip won't always decode, but must never verify
-	if _, err := s.verify(string(b2), "slack"); err == nil {
+	if _, err := verify(s, string(b2), "slack"); err == nil {
 		t.Fatal("tampered MAC must fail verify")
 	}
 }
@@ -62,28 +64,28 @@ func TestStateExpiredFails(t *testing.T) {
 	s := testSvc()
 	old := stateTTL
 	stateTTL = -time.Minute // sign with an already-past exp
-	tok, _ := s.sign("acme", "slack", "n")
+	tok, _ := sign(s, "acme", "slack", "n")
 	stateTTL = old
-	if _, err := s.verify(tok, "slack"); err == nil {
+	if _, err := verify(s, tok, "slack"); err == nil {
 		t.Fatal("expired state must fail verify")
 	}
 }
 
 func TestStateWrongProviderFails(t *testing.T) {
 	s := testSvc()
-	tok, _ := s.sign("acme", "slack", "n")
-	if _, err := s.verify(tok, "github"); err == nil {
+	tok, _ := sign(s, "acme", "slack", "n")
+	if _, err := verify(s, tok, "github"); err == nil {
 		t.Fatal("state signed for slack must fail verify for github")
 	}
 }
 
 func TestStateWrongKeyFails(t *testing.T) {
 	signer := testSvc()
-	tok, _ := signer.sign("acme", "slack", "n")
+	tok, _ := sign(signer, "acme", "slack", "n")
 
 	other := testSvc()
-	other.stateKey = make([]byte, minStateKeyLen) // all-zero: a different key
-	if _, err := other.verify(tok, "slack"); err == nil {
+	other.State.stateKey = make([]byte, minStateKeyLen) // all-zero: a different key
+	if _, err := verify(other, tok, "slack"); err == nil {
 		t.Fatal("a token signed under a different key must fail verify")
 	}
 }
@@ -91,7 +93,7 @@ func TestStateWrongKeyFails(t *testing.T) {
 func TestStateMalformedFails(t *testing.T) {
 	s := testSvc()
 	for _, bad := range []string{"", ".", "abc", "abc.", ".abc", "onlyonepart"} {
-		if _, err := s.verify(bad, "slack"); err == nil {
+		if _, err := verify(s, bad, "slack"); err == nil {
 			t.Fatalf("malformed token %q must fail verify", bad)
 		}
 	}
@@ -103,7 +105,7 @@ func TestStateMalformedFails(t *testing.T) {
 // before the FIRST dot, and a base64url payload/MAC never itself contains a '.'.
 func TestStateDotInjectionRejected(t *testing.T) {
 	s := testSvc()
-	tok, _ := s.sign("acme", "slack", "n")
+	tok, _ := sign(s, "acme", "slack", "n")
 	dot := strings.IndexByte(tok, '.')
 	payloadB64, macB64 := tok[:dot], tok[dot+1:]
 
@@ -115,7 +117,7 @@ func TestStateDotInjectionRejected(t *testing.T) {
 		payloadB64 + macB64,                  // no separator
 	}
 	for _, bad := range cases {
-		if _, err := s.verify(bad, "slack"); err == nil {
+		if _, err := verify(s, bad, "slack"); err == nil {
 			t.Fatalf("dot-injected/degenerate token %q must fail verify", bad)
 		}
 	}
@@ -129,7 +131,7 @@ func TestStateMACCheckedBeforeParse(t *testing.T) {
 	s := testSvc()
 	garbage := base64.URLEncoding.EncodeToString([]byte("this-is-not-json-{{{"))
 	forgedMAC := base64.URLEncoding.EncodeToString(make([]byte, 32)) // all-zero MAC
-	if _, err := s.verify(garbage+"."+forgedMAC, "slack"); err == nil {
+	if _, err := verify(s, garbage+"."+forgedMAC, "slack"); err == nil {
 		t.Fatal("a non-JSON payload with a forged MAC must fail at the MAC gate, not parse")
 	}
 }
@@ -141,11 +143,11 @@ func TestStateMACCheckedBeforeParse(t *testing.T) {
 func TestStateBadOrgRejected(t *testing.T) {
 	s := testSvc()
 	for _, org := range []string{"bad/org", "..", "a b", "org\x00", ""} {
-		tok, err := s.sign(org, "slack", "n")
+		tok, err := sign(s, org, "slack", "n")
 		if err != nil {
 			t.Fatalf("sign %q: %v", org, err)
 		}
-		if _, err := s.verify(tok, "slack"); err == nil {
+		if _, err := verify(s, tok, "slack"); err == nil {
 			t.Fatalf("validly-signed state with hostile org %q must still fail verify", org)
 		}
 	}
@@ -156,7 +158,7 @@ func TestStateBadOrgRejected(t *testing.T) {
 func TestStateOverlongRejected(t *testing.T) {
 	s := testSvc()
 	huge := strings.Repeat("A", maxStateLen+1) + "." + strings.Repeat("B", 64)
-	if _, err := s.verify(huge, "slack"); err == nil {
+	if _, err := verify(s, huge, "slack"); err == nil {
 		t.Fatal("token longer than maxStateLen must fail verify")
 	}
 }
