@@ -9,7 +9,7 @@
 //     owners (admin/built-in/app) and the brand/staff orgs (hanzo/lux/zoo/pars),
 //     which the OrgGate routes to the admin host. Creating one would collide with
 //     a staff tenant or a system principal.
-package console
+package account
 
 import "strings"
 
