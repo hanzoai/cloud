@@ -45,7 +45,6 @@ import (
 	"strings"
 
 	"github.com/digitalocean/godo"
-	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -92,57 +91,55 @@ type lbAPI interface {
 	Delete(context.Context, string) (*godo.Response, error)
 }
 
-type svc struct {
+// state is do's own data; shared deps live in the embedded cloud.Base.
+type state struct {
 	vpcs vpcAPI
 	lbs  lbAPI
-	log  luxlog.Logger
 }
 
 // configured reports whether a DO token was present at Mount. Unconfigured → the
 // godo seams are nil and every op fails closed 503.
-func (s *svc) configured() bool { return s.vpcs != nil && s.lbs != nil }
+func configured(s *cloud.Service[state]) bool { return s.State.vpcs != nil && s.State.lbs != nil }
 
-// Mount wires /v1/vpcs/* and /v1/load-balancers/* onto app. Routes register
-// unconditionally (even when unconfigured) so the surface owns its space and
-// fails closed under its own name rather than 404-ing to a fallthrough.
+// Mount wires /v1/vpcs/* and /v1/load-balancers/* onto app — one line over the
+// generic subsystem entrypoint. Routes register unconditionally (even when
+// unconfigured) so the surface owns its space and fails closed under its own name
+// rather than 404-ing to a fallthrough.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return errors.New("do.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return errors.New("do.Mount: nil deps.Logger")
-	}
-	log := deps.Logger.New("subsystem", "do")
+	return cloud.Mount(app, deps, "do", build, routes)
+}
 
-	s := &svc{log: log}
+// build constructs the do state from DO_API_TOKEN (env; sourced from a KMSSecret,
+// never hard-coded). Absent the token the godo seams stay nil → every op fails
+// closed 503; it records that posture in the mount log.
+func build(b cloud.Base) (state, error) {
+	var st state
 	if token := strings.TrimSpace(os.Getenv(tokenEnv)); token != "" {
 		client := godo.NewFromToken(token)
-		s.vpcs = client.VPCs
-		s.lbs = client.LoadBalancers
+		st.vpcs = client.VPCs
+		st.lbs = client.LoadBalancers
 	}
-	s.routes(app)
-
-	if !s.configured() {
-		log.Warn("digitalocean subsystem mounted fail-closed: DO_API_TOKEN not set (all ops 503 until configured)")
-		return nil
+	if st.vpcs == nil || st.lbs == nil {
+		b.Log.Warn("digitalocean subsystem mounted fail-closed: DO_API_TOKEN not set (all ops 503 until configured)")
+	} else {
+		b.Log.Info("digitalocean subsystem mounted", "prefix", "/v1/vpcs,/v1/load-balancers", "brand", b.Brand, "env", b.Env)
 	}
-	log.Info("digitalocean subsystem mounted", "prefix", "/v1/vpcs,/v1/load-balancers", "brand", deps.Brand, "env", deps.Env)
-	return nil
+	return st, nil
 }
 
 // routes is the ONE place the surface is wired — shared by Mount (real godo) and
 // the test (injected fakes). Static list/create register before the :id param
 // route so an id can never shadow the collection handler.
-func (s *svc) routes(app *zip.App) {
-	app.Get("/v1/vpcs", s.listVPCs)
-	app.Post("/v1/vpcs", s.createVPC)
-	app.Get("/v1/vpcs/:id", s.getVPC)
-	app.Delete("/v1/vpcs/:id", s.deleteVPC)
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/vpcs", cloud.Handle(s, listVPCs))
+	app.Post("/v1/vpcs", cloud.Handle(s, createVPC))
+	app.Get("/v1/vpcs/:id", cloud.Handle(s, getVPC))
+	app.Delete("/v1/vpcs/:id", cloud.Handle(s, deleteVPC))
 
-	app.Get("/v1/load-balancers", s.listLBs)
-	app.Post("/v1/load-balancers", s.createLB)
-	app.Get("/v1/load-balancers/:id", s.getLB)
-	app.Delete("/v1/load-balancers/:id", s.deleteLB)
+	app.Get("/v1/load-balancers", cloud.Handle(s, listLBs))
+	app.Post("/v1/load-balancers", cloud.Handle(s, createLB))
+	app.Get("/v1/load-balancers/:id", cloud.Handle(s, getLB))
+	app.Delete("/v1/load-balancers/:id", cloud.Handle(s, deleteLB))
 }
 
 func init() {
@@ -204,12 +201,12 @@ func toLBView(friendly string, lb *godo.LoadBalancer) lbView {
 
 // ── VPC handlers ────────────────────────────────────────────────────────────
 
-func (s *svc) listVPCs(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func listVPCs(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
-	all, err := s.allVPCs(c.Context())
+	all, err := allVPCs(s, c.Context())
 	if err != nil {
 		return gatewayErr(err)
 	}
@@ -231,8 +228,8 @@ type createVPCReq struct {
 	IPRange string `json:"ip_range"`
 }
 
-func (s *svc) createVPC(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func createVPC(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -248,7 +245,7 @@ func (s *svc) createVPC(c *zip.Ctx) error {
 	if region == "" {
 		return zip.ErrBadRequest("region is required")
 	}
-	v, _, err := s.vpcs.Create(c.Context(), &godo.VPCCreateRequest{
+	v, _, err := s.State.vpcs.Create(c.Context(), &godo.VPCCreateRequest{
 		Name:        physicalName(org, name),
 		RegionSlug:  region,
 		IPRange:     strings.TrimSpace(body.IPRange), // empty → DO auto-assigns
@@ -263,8 +260,8 @@ func (s *svc) createVPC(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toVPCView(name, v))
 }
 
-func (s *svc) getVPC(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func getVPC(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -272,7 +269,7 @@ func (s *svc) getVPC(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("invalid id")
 	}
-	v, _, err := s.vpcs.Get(c.Context(), id)
+	v, _, err := s.State.vpcs.Get(c.Context(), id)
 	if err != nil {
 		return notFoundOr(err, "vpc not found")
 	}
@@ -283,8 +280,8 @@ func (s *svc) getVPC(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toVPCView(name, v))
 }
 
-func (s *svc) deleteVPC(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func deleteVPC(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -294,14 +291,14 @@ func (s *svc) deleteVPC(c *zip.Ctx) error {
 	}
 	// Confirm ownership by name prefix BEFORE deleting — a cross-tenant id is 404,
 	// never a delete of another org's VPC.
-	v, _, err := s.vpcs.Get(c.Context(), id)
+	v, _, err := s.State.vpcs.Get(c.Context(), id)
 	if err != nil {
 		return notFoundOr(err, "vpc not found")
 	}
 	if _, ok := friendlyName(orgPrefix(org), v.Name); !ok {
 		return zip.ErrNotFound("vpc not found")
 	}
-	if _, err := s.vpcs.Delete(c.Context(), id); err != nil {
+	if _, err := s.State.vpcs.Delete(c.Context(), id); err != nil {
 		return notFoundOr(err, "vpc not found")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -309,12 +306,12 @@ func (s *svc) deleteVPC(c *zip.Ctx) error {
 
 // ── Load Balancer handlers ──────────────────────────────────────────────────
 
-func (s *svc) listLBs(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func listLBs(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
-	all, err := s.allLBs(c.Context())
+	all, err := allLBs(s, c.Context())
 	if err != nil {
 		return gatewayErr(err)
 	}
@@ -346,8 +343,8 @@ type createLBReq struct {
 	ForwardingRules []fwdRule `json:"forwarding_rules"`
 }
 
-func (s *svc) createLB(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func createLB(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -370,7 +367,7 @@ func (s *svc) createLB(c *zip.Ctx) error {
 	if len(rules) == 0 {
 		rules = []godo.ForwardingRule{{EntryProtocol: "http", EntryPort: 80, TargetProtocol: "http", TargetPort: 80}}
 	}
-	lb, _, err := s.lbs.Create(c.Context(), &godo.LoadBalancerRequest{
+	lb, _, err := s.State.lbs.Create(c.Context(), &godo.LoadBalancerRequest{
 		Name:            physicalName(org, name),
 		Region:          region,
 		Type:            strings.TrimSpace(body.Type), // empty → DO default (REGIONAL)
@@ -386,8 +383,8 @@ func (s *svc) createLB(c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toLBView(name, lb))
 }
 
-func (s *svc) getLB(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func getLB(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -395,7 +392,7 @@ func (s *svc) getLB(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("invalid id")
 	}
-	lb, _, err := s.lbs.Get(c.Context(), id)
+	lb, _, err := s.State.lbs.Get(c.Context(), id)
 	if err != nil {
 		return notFoundOr(err, "load balancer not found")
 	}
@@ -406,8 +403,8 @@ func (s *svc) getLB(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toLBView(name, lb))
 }
 
-func (s *svc) deleteLB(c *zip.Ctx) error {
-	org, err := s.begin(c)
+func deleteLB(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := begin(s, c)
 	if err != nil {
 		return err
 	}
@@ -415,14 +412,14 @@ func (s *svc) deleteLB(c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrBadRequest("invalid id")
 	}
-	lb, _, err := s.lbs.Get(c.Context(), id)
+	lb, _, err := s.State.lbs.Get(c.Context(), id)
 	if err != nil {
 		return notFoundOr(err, "load balancer not found")
 	}
 	if _, ok := friendlyName(orgPrefix(org), lb.Name); !ok {
 		return zip.ErrNotFound("load balancer not found")
 	}
-	if _, err := s.lbs.Delete(c.Context(), id); err != nil {
+	if _, err := s.State.lbs.Delete(c.Context(), id); err != nil {
 		return notFoundOr(err, "load balancer not found")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -430,12 +427,12 @@ func (s *svc) deleteLB(c *zip.Ctx) error {
 
 // ── pagination ──────────────────────────────────────────────────────────────
 
-func (s *svc) allVPCs(ctx context.Context) ([]*godo.VPC, error) {
+func allVPCs(s *cloud.Service[state], ctx context.Context) ([]*godo.VPC, error) {
 	var out []*godo.VPC
 	opt := &godo.ListOptions{PerPage: perPage}
 	for page := 1; page <= maxPages; page++ {
 		opt.Page = page
-		vpcs, resp, err := s.vpcs.List(ctx, opt)
+		vpcs, resp, err := s.State.vpcs.List(ctx, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -447,12 +444,12 @@ func (s *svc) allVPCs(ctx context.Context) ([]*godo.VPC, error) {
 	return out, nil
 }
 
-func (s *svc) allLBs(ctx context.Context) ([]godo.LoadBalancer, error) {
+func allLBs(s *cloud.Service[state], ctx context.Context) ([]godo.LoadBalancer, error) {
 	var out []godo.LoadBalancer
 	opt := &godo.ListOptions{PerPage: perPage}
 	for page := 1; page <= maxPages; page++ {
 		opt.Page = page
-		lbs, resp, err := s.lbs.List(ctx, opt)
+		lbs, resp, err := s.State.lbs.List(ctx, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -472,8 +469,8 @@ func lastPage(resp *godo.Response) bool {
 
 // begin resolves the caller's org and enforces the fail-closed posture in ONE
 // place: 503 when DO is unconfigured, 403 when there is no validated principal.
-func (s *svc) begin(c *zip.Ctx) (string, error) {
-	if !s.configured() {
+func begin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
+	if !configured(s) {
 		return "", zip.Errorf(http.StatusServiceUnavailable, "digitalocean is not configured (DO_API_TOKEN not set)")
 	}
 	org, ok := tenant(c)
