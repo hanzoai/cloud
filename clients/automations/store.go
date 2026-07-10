@@ -11,7 +11,7 @@ import (
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest; !cgo → pure-Go modernc). Blank import registers it. This
 	// mirrors clients/crm exactly — the ONE storage pattern.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 

@@ -12,7 +12,7 @@ import (
 
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags).
 	// Mirrors clients/affiliates / clients/referrals — one storage pattern.
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 

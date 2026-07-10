@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
-	// the "sqlite" database/sql name under both build tags (cgo →
-	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
-	// modernc directly instead would double-register "sqlite" under CGO and
-	// panic at init. Blank import registers the driver. Mirrors clients/crm.
+	// cek opens the store encrypted at rest (migrate-on-open + shred).
+	"github.com/hanzoai/cloud/cek"
+	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -31,7 +29,7 @@ type Store struct {
 }
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
