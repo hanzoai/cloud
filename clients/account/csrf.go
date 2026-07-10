@@ -1,4 +1,4 @@
-package console
+package account
 
 // CSRF protection for the console money-WRITE surface (mint/revoke key, topup,
 // onboard, and the billing/commerce write verbs).
@@ -10,7 +10,7 @@ package console
 // that passes VACUOUSLY when Origin/Referer/Sec-Fetch-Site are all absent (RED). So a
 // state-changing write gets a POSITIVE control: a token the caller can obtain ONLY by
 // reading a same-origin response (the Same-Origin Policy blocks a cross-site page from
-// reading GET /v1/console/csrf) and MUST echo in a CUSTOM header (a cross-site simple/
+// reading GET /v1/csrf) and MUST echo in a CUSTOM header (a cross-site simple/
 // form request cannot set X-CSRF-Token without a CORS preflight the server never
 // grants).
 //
@@ -38,6 +38,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxfi/crypto/blake3"
@@ -47,11 +48,27 @@ import (
 
 const (
 	csrfDomain    = "hanzo-console-csrf-v1"
-	csrfMACLen    = 16               // 128-bit truncated BLAKE3 MAC — ample for a bound, expiring token
-	csrfTTL       = 12 * time.Hour   // token lifetime; SPA re-fetches on expiry/403
-	csrfClockSkew = 120              // seconds of future tolerance
-	csrfTokenLen  = 8 + csrfMACLen   // ts || mac
+	csrfMACLen    = 16             // 128-bit truncated BLAKE3 MAC — ample for a bound, expiring token
+	csrfTTL       = 12 * time.Hour // token lifetime; SPA re-fetches on expiry/403
+	csrfClockSkew = 120            // seconds of future tolerance
+	csrfTokenLen  = 8 + csrfMACLen // ts || mac
 )
+
+// csrfKeyOnce guards the process-wide CSRF MAC key. It is shared across BOTH account
+// subsystems (account@48 issues GET /v1/csrf; account-bridge@122 verifies the token on
+// the /v1/billing|commerce writes), so a token minted by one verifies on the other —
+// even in the ephemeral (no CONSOLE_CSRF_KEY) case where each Mount would otherwise
+// generate its own random key. Deterministic from CONSOLE_CSRF_KEY (KMS) in prod.
+var (
+	csrfKeyOnce sync.Once
+	csrfKeyVal  []byte
+)
+
+// sharedCSRFKey returns the process-wide keyed-BLAKE3 MAC key, loaded ONCE.
+func sharedCSRFKey(log luxlog.Logger) []byte {
+	csrfKeyOnce.Do(func() { csrfKeyVal = loadCSRFKey(log) })
+	return csrfKeyVal
+}
 
 // loadCSRFKey returns the 32-byte keyed-BLAKE3 MAC key. Prefers the server-only env
 // CONSOLE_CSRF_KEY (KMS-sourced; hex or base64-std, must decode to exactly 32 bytes);
@@ -146,7 +163,7 @@ func (s *svc) requireCSRF(next zip.Handler) zip.Handler {
 		}
 		tok := strings.TrimSpace(c.Header("X-CSRF-Token"))
 		if tok == "" {
-			return zip.ErrForbidden("missing CSRF token (GET /v1/console/csrf and echo it in X-CSRF-Token)")
+			return zip.ErrForbidden("missing CSRF token (GET /v1/csrf and echo it in X-CSRF-Token)")
 		}
 		if !s.verifyCSRF(tok, strings.TrimSpace(c.User()), strings.TrimSpace(c.Org())) {
 			return zip.ErrForbidden("invalid or expired CSRF token")
@@ -155,7 +172,7 @@ func (s *svc) requireCSRF(next zip.Handler) zip.Handler {
 	}
 }
 
-// issueCSRFToken serves GET /v1/console/csrf: for a VALIDATED caller, a fresh token
+// issueCSRFToken serves GET /v1/csrf: for a VALIDATED caller, a fresh token
 // bound to their identity. no-store so it is never cached by a shared proxy. This is
 // the same-origin endpoint the embedded SPA reads (its response body is unreadable to
 // a cross-site page), then echoes on every money write.
