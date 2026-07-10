@@ -323,11 +323,11 @@ func dedicatedSize(kind string) string {
 // name validated, billing gated, (org,kind,name) dedup checked). When instance
 // is non-empty the assembled DSN is also projected as <KIND>_URL into that app
 // instance's addons Secret, switching it off Base onto this backend.
-func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64, instance string) error {
-	if s.orch == nil {
+func createDedicated(s *cloud.Service[state], c *zip.Ctx, ctx context.Context, kind, org, name string, e engine, fee int64, instance string) error {
+	if s.State.orch == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: no cluster client")
 	}
-	if err := s.orch.Ready(); err != nil {
+	if err := s.State.orch.Ready(); err != nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "dedicated provisioning unavailable: %v", err)
 	}
 
@@ -337,7 +337,7 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 
 	// Global (cross-org) uniqueness guard on the instance identity — fail closed
 	// BEFORE touching the cluster (mirrors the shared path's PhysicalExists).
-	if exists, err := s.store.PhysicalExists(ctx, inst); err != nil {
+	if exists, err := s.State.store.PhysicalExists(ctx, inst); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
 	} else if exists {
 		return zip.ErrConflict("resource already exists")
@@ -345,11 +345,11 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 
 	// Ensure the tenant namespace + wait for the operator to grant cloud-api
 	// create access in it. Honest retryable 503 while the grant is still landing.
-	if err := s.orch.EnsureTenant(ctx, ns, org); err != nil {
+	if err := s.State.orch.EnsureTenant(ctx, ns, org); err != nil {
 		if errors.Is(err, errTenantProvisioning) {
 			return zip.Errorf(http.StatusServiceUnavailable, "tenant still provisioning, retry")
 		}
-		s.log.Error("ensure tenant failed", "kind", kind, "org", org, "ns", ns, "err", err)
+		s.Log.Error("ensure tenant failed", "kind", kind, "org", org, "ns", ns, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "ensure tenant: %v", err)
 	}
 
@@ -372,34 +372,34 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	// below — but NEVER stored in plaintext at rest here.
 	secretRef := fmt.Sprintf("org/%s/%s/%s", org, kind, name)
 	storedRef := ""
-	if s.sec.Enabled() {
-		if err := s.sec.Put(secretRef, []byte(pw)); err != nil {
-			s.log.Error("kms put failed", "kind", kind, "err", err)
+	if s.State.sec.Enabled() {
+		if err := s.State.sec.Put(secretRef, []byte(pw)); err != nil {
+			s.Log.Error("kms put failed", "kind", kind, "err", err)
 			return zip.Errorf(http.StatusInternalServerError, "store secret failed")
 		}
 		storedRef = secretRef
 	} else {
-		s.log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
+		s.Log.Warn("KMS degraded: instance admin password returned once, not persisted", "kind", kind, "org", org, "name", name)
 	}
 
 	// Project the admin Secret (the env the image boots from) then apply the
 	// Datastore CR (the operator materializes the StatefulSet + Service + PVC).
 	secObj := adminSecretObj(ns, org, inst, kind, secretName, e.secretEnv(user, pw, db))
-	if err := s.orch.ApplySecret(ctx, ns, secretName, secObj); err != nil {
+	if err := s.State.orch.ApplySecret(ctx, ns, secretName, secObj); err != nil {
 		if storedRef != "" {
-			_ = s.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(storedRef)
 		}
-		s.log.Error("project admin secret failed", "kind", kind, "org", org, "err", err)
+		s.Log.Error("project admin secret failed", "kind", kind, "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "project admin secret: %v", err)
 	}
 	size := dedicatedSize(kind)
 	crObj := datastoreCR(ns, org, inst, id, kind, e, size, os.Getenv("CLOUD_DEDICATED_STORAGE_CLASS"), secretName, env("CLOUD_DEDICATED_PULL_SECRET", "ghcr-pull"))
-	if err := s.orch.ApplyDatastore(ctx, ns, inst, crObj); err != nil {
-		_ = s.orch.DeleteSecret(ctx, ns, secretName)
+	if err := s.State.orch.ApplyDatastore(ctx, ns, inst, crObj); err != nil {
+		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(storedRef)
 		}
-		s.log.Error("launch instance failed", "kind", kind, "org", org, "inst", inst, "err", err)
+		s.Log.Error("launch instance failed", "kind", kind, "org", org, "inst", inst, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "launch instance: %v", err)
 	}
 
@@ -411,12 +411,12 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 		Host: host, Port: e.clientPort, Username: user, DBName: db,
 		Status: statusProvisioning, CreatedAt: time.Now().Unix(), Size: size, Instance: instance,
 	}
-	if err := s.store.Insert(ctx, r); err != nil {
+	if err := s.State.store.Insert(ctx, r); err != nil {
 		// Undo the instance + secret we just created.
-		_ = s.orch.DeleteDatastore(ctx, ns, inst)
-		_ = s.orch.DeleteSecret(ctx, ns, secretName)
+		_ = s.State.orch.DeleteDatastore(ctx, ns, inst)
+		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(storedRef)
 		}
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("resource already exists")
@@ -430,7 +430,7 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 	// concurrent duplicates can't race the injection) and is part of the atomic
 	// provision — a failure rolls back the row + instance + secret so the org is
 	// never billed for a half-wired resource and the instance stays on Base.
-	if err := s.injectAddonURL(ctx, org, instance, kind, dsn); err != nil {
+	if err := injectAddonURL(s, ctx, org, instance, kind, dsn); err != nil {
 		// Best-effort revert to Base FIRST. injectAddonURL is not atomic: the
 		// strategic-merge PATCH can LAND server-side yet still return err (a
 		// dropped response, a timeout after the write commits). Delete any
@@ -438,21 +438,21 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 		// committed-but-errored inject can't leave the instance pointing at a
 		// deleted backend — a dangling DSN is worse than Base. Idempotent: a
 		// no-write inject makes this a no-op (missing key/Secret is success).
-		_ = s.removeAddonURL(ctx, org, instance, kind)
-		_, _ = s.store.Delete(ctx, org, kind, name)
-		_ = s.orch.DeleteDatastore(ctx, ns, inst)
-		_ = s.orch.DeleteSecret(ctx, ns, secretName)
+		_ = removeAddonURL(s, ctx, org, instance, kind)
+		_, _ = s.State.store.Delete(ctx, org, kind, name)
+		_ = s.State.orch.DeleteDatastore(ctx, ns, inst)
+		_ = s.State.orch.DeleteSecret(ctx, ns, secretName)
 		if storedRef != "" {
-			_ = s.sec.Delete(storedRef)
+			_ = s.State.sec.Delete(storedRef)
 		}
-		s.log.Error("inject addon url failed; rolled back provision", "kind", kind, "org", org, "instance", instance, "err", err)
+		s.Log.Error("inject addon url failed; rolled back provision", "kind", kind, "org", org, "instance", instance, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "wire instance: %v", err)
 	}
 
 	// The instance is launching + persisted + wired — attribute the provision to
 	// the caller's OWN org, carrying the size dimension so the invoice line names
 	// the instance. The recurring footprint meter charges ongoing GB-time.
-	s.meterProvision(org, kind, size, fee, c.RequestID(), cloud.ClientIP(c))
+	meterProvision(s, org, kind, size, fee, c.RequestID(), cloud.ClientIP(c))
 
 	return c.JSON(http.StatusCreated, createResp{
 		ID: id, Kind: kind, Name: name, Status: statusProvisioning,
@@ -465,16 +465,16 @@ func (s *svc) createDedicated(c *zip.Ctx, ctx context.Context, kind, org, name s
 // reports the instance StatefulSet Running. Honest: any read error leaves the
 // row provisioning (never a fabricated ready). Called on get and by the meter
 // sweep so an unpolled instance still becomes ready (and billable).
-func (s *svc) reconcileDedicated(ctx context.Context, r Resource) Resource {
-	if r.Status != statusProvisioning || s.orch == nil {
+func reconcileDedicated(s *cloud.Service[state], ctx context.Context, r Resource) Resource {
+	if r.Status != statusProvisioning || s.State.orch == nil {
 		return r
 	}
-	phase, err := s.orch.DatastorePhase(ctx, tenantNamespace(r.Org), r.PhysicalName)
+	phase, err := s.State.orch.DatastorePhase(ctx, tenantNamespace(r.Org), r.PhysicalName)
 	if err != nil {
 		return r
 	}
 	if phase == phaseRunning {
-		if _, uErr := s.store.UpdateStatus(ctx, r.Org, r.Kind, r.Name, statusReady); uErr == nil {
+		if _, uErr := s.State.store.UpdateStatus(ctx, r.Org, r.Kind, r.Name, statusReady); uErr == nil {
 			r.Status = statusReady
 		}
 	}
@@ -484,20 +484,20 @@ func (s *svc) reconcileDedicated(ctx context.Context, r Resource) Resource {
 // dropDedicated tears down the instance: delete the Datastore CR (the operator
 // garbage-collects the StatefulSet + Service + PVC via owner refs) and its admin
 // Secret. The KMS secret + metadata row are removed by the shared drop tail.
-func (s *svc) dropDedicated(ctx context.Context, r Resource) error {
-	if s.orch == nil {
+func dropDedicated(s *cloud.Service[state], ctx context.Context, r Resource) error {
+	if s.State.orch == nil {
 		return nil
 	}
 	ns := tenantNamespace(r.Org)
-	if err := s.orch.DeleteDatastore(ctx, ns, r.PhysicalName); err != nil {
+	if err := s.State.orch.DeleteDatastore(ctx, ns, r.PhysicalName); err != nil {
 		return err
 	}
 	// Reap the retained data volume (data-<instance>-0 for the single-replica
 	// StatefulSet) so a dropped instance leaves no storage footprint, then the
 	// admin Secret. Both best-effort after the CR delete — a missing object is
 	// success (already gone).
-	_ = s.orch.DeletePVC(ctx, ns, "data-"+r.PhysicalName+"-0")
-	return s.orch.DeleteSecret(ctx, ns, r.PhysicalName+"-admin")
+	_ = s.State.orch.DeletePVC(ctx, ns, "data-"+r.PhysicalName+"-0")
+	return s.State.orch.DeleteSecret(ctx, ns, r.PhysicalName+"-admin")
 }
 
 // ----- billing --------------------------------------------------------------
@@ -505,8 +505,8 @@ func (s *svc) dropDedicated(ctx context.Context, r Resource) error {
 // meterProvision attributes a dedicated instance's provision to the caller's OWN
 // org with a size dimension, via the ONE commerce meter (never a parallel path).
 // No-op when billing is unconfigured or the kind is free (fee 0).
-func (s *svc) meterProvision(org, kind, size string, fee int64, requestID, clientIP string) {
-	s.bill.MeterUsage(org, kind, metering.Usage{
+func meterProvision(s *cloud.Service[state], org, kind, size string, fee int64, requestID, clientIP string) {
+	s.Bill.MeterUsage(org, kind, metering.Usage{
 		AmountCents: fee,
 		Model:       kind + ":" + size, // e.g. datastore:10Gi — names the instance on the invoice
 		RequestID:   requestID,
@@ -520,10 +520,10 @@ func (s *svc) meterProvision(org, kind, size string, fee int64, requestID, clien
 // because a dedicated instance has a declared size. One call == one charge
 // period (dedicatedMeterInterval); the caller's ticker fires it. A dropped
 // instance (row gone) is never charged — that is how delete stops the meter.
-func (s *svc) meterDedicatedFootprint(ctx context.Context) {
-	rows, err := s.store.ListAllByStatus(ctx, statusReady)
+func meterDedicatedFootprint(s *cloud.Service[state], ctx context.Context) {
+	rows, err := s.State.store.ListAllByStatus(ctx, statusReady)
 	if err != nil {
-		s.log.Error("footprint meter: list failed", "err", err)
+		s.Log.Error("footprint meter: list failed", "err", err)
 		return
 	}
 	for _, r := range rows {
@@ -534,7 +534,7 @@ func (s *svc) meterDedicatedFootprint(ctx context.Context) {
 		if cents <= 0 {
 			continue
 		}
-		s.bill.MeterUsage(r.Org, r.Kind, metering.Usage{
+		s.Bill.MeterUsage(r.Org, r.Kind, metering.Usage{
 			AmountCents: cents,
 			Model:       r.Kind + ":" + r.Size + ":gbday",
 			RequestID:   r.ID,
@@ -545,12 +545,12 @@ func (s *svc) meterDedicatedFootprint(ctx context.Context) {
 // startFootprintMeter runs the recurring footprint charge on a ticker until
 // Shutdown. It only starts when billing actually enforces, so an unconfigured
 // deployment spins no goroutine.
-func (s *svc) startFootprintMeter() {
-	if s.bill == nil || !s.bill.Enabled() {
+func startFootprintMeter(s *cloud.Service[state]) {
+	if s.Bill == nil || !s.Bill.Enabled() {
 		return
 	}
 	stop := make(chan struct{})
-	s.stopMeter = func() { close(stop) }
+	s.State.stopMeter = func() { close(stop) }
 	go func() {
 		t := time.NewTicker(dedicatedMeterInterval)
 		defer t.Stop()
@@ -560,7 +560,7 @@ func (s *svc) startFootprintMeter() {
 				return
 			case <-t.C:
 				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-				s.meterDedicatedFootprint(ctx)
+				meterDedicatedFootprint(s, ctx)
 				cancel()
 			}
 		}
