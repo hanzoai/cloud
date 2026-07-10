@@ -93,6 +93,15 @@ type Config struct {
 	// Empty == same-origin only. Set via CLOUD_ZAP_WEB_ORIGINS (comma-sep).
 	ZAPWebOrigins []string
 
+	// MarkdownDefaultPrefixes lists path prefixes whose successful JSON
+	// responses default to markdown (zap-proto/md) when the caller expresses no
+	// format preference — the agent-facing endpoints (e.g. /v1/code/, /v1/agents/).
+	// A caller always keeps the override: ?format=json or Accept: application/json
+	// forces JSON even here, and JSON stays the default everywhere else. Empty ==
+	// JSON everywhere unless explicitly negotiated. Env CLOUD_MARKDOWN_DEFAULT_PREFIXES
+	// (comma-separated). See middleware_markdown.go.
+	MarkdownDefaultPrefixes []string
+
 	// Edge policy (middleware_edge.go) — the "gateway role" cloud absorbs when it
 	// serves the public api.hanzo.ai edge directly, no KrakenD hop.
 	//
@@ -270,6 +279,8 @@ func LoadConfig() *Config {
 		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		SitesSelfDomains: splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
+
+		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:            getenv("CLOUD_BRAND", DefaultBrand),
 		Env:              getenv("CLOUD_ENV", ""),
 		Role:             role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
