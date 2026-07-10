@@ -3,6 +3,7 @@ package projects
 import (
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/templates"
 	"github.com/zap-proto/zip"
 )
@@ -24,7 +25,7 @@ type forkReq struct {
 // funnels through the SAME createProject path POST /v1/projects uses — so slug
 // validation, org scoping, ID minting, and conflict handling are not duplicated.
 // Returns 201 with the created project.
-func (s *svc) fork(c *zip.Ctx) error {
+func fork(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
@@ -60,7 +61,7 @@ func (s *svc) fork(c *zip.Ctx) error {
 	}
 	req.Repo.URL = t.Source
 
-	return s.createProject(c, org, req)
+	return createProject(s, c, org, req)
 }
 
 // mapFramework maps a template's freeform framework label (e.g. "Next.js 14.2 +
