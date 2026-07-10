@@ -381,7 +381,7 @@ func runScreen(s *cloud.Service[state], ctx context.Context, org, id string) {
 
 	cctx, cancel := context.WithTimeout(ctx, screenTimeout)
 	defer cancel()
-	resp, aerr := s.State.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.State.defaultModel, Prompt: screenPrompt(app)})
+	resp, aerr := s.State.ai.ChatCompletion(cctx, &types.ChatRequest{Model: s.State.defaultModel, Prompt: screenPrompt(app), Org: org})
 	if aerr != nil {
 		app.Screen = ScreenResult{Status: "failed", Error: aerr.Error(), Model: s.State.defaultModel, ScreenedAt: now}
 		saveScreen(s, ctx, app)

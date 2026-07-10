@@ -25,9 +25,12 @@
 // authorizes — a wrong org simply cannot hold a valid token. gojabase pre-routes
 // the bundle's db to that tenant, so isolation is a host property.
 //
-// ACTIVATION is the standard staged enable-list gate (config.stagedSubsystems):
-// sign mounts /v1/sign/* ONLY when the operator names "sign" in CLOUD_ENABLE, so
-// the mount-all default is unchanged until the standalone esign pod is cut over.
+// ACTIVATION: sign is NOT staged — it mounts under the mount-all default (empty
+// CLOUD_ENABLE), so the one binary serves /v1/sign/* from first boot. The
+// standalone esign pod holds NO tenant data (its SQLite has zero documents,
+// recipients and users — only operational churn), so cloud's fresh per-tenant
+// Base/SQLite is authoritative from the first write, with nothing to migrate; the
+// empty esign pod is retired by this fold.
 package sign
 
 import (
@@ -74,7 +77,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "sign"})
 	})
 
-	sg, err := newSigner(deps.DataDir)
+	sg, err := newSigner(deps.DataDir, deps.Env)
 	if err != nil {
 		return fmt.Errorf("sign.Mount: signer: %w", err)
 	}
@@ -194,10 +197,9 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params 
 
 func init() {
 	// Order 145 — a per-org product control plane, mounted before hanzoai/ai's
-	// /v1/* catch-all (150). STAGED (config.stagedSubsystems) — mounts only when
-	// the operator names "sign" in CLOUD_ENABLE. cloud.HealthOwner: sign serves
-	// its OWN /v1/sign/health in Mount, so the generic liveness route never
-	// shadows it.
+	// /v1/* catch-all (150). NOT staged — mounts under the mount-all default.
+	// cloud.HealthOwner: sign serves its OWN /v1/sign/health in Mount, so the
+	// generic liveness route never shadows it.
 	cloud.RegisterWithShutdown("sign", 145, cloud.Typed(Mount), shutdown, cloud.HealthOwner)
 }
 

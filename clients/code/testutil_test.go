@@ -26,7 +26,7 @@ type fakeEmbedder struct {
 
 func (f fakeEmbedder) Enabled() bool { return f.enabled }
 
-func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, error) {
+func (f fakeEmbedder) Embed(_ context.Context, _, _ string, texts []string) ([][]float32, error) {
 	if !f.enabled {
 		return nil, nil
 	}
@@ -48,7 +48,7 @@ func (f fakeEmbedder) Embed(_ context.Context, texts []string) ([][]float32, err
 type fakeSynth struct{ enabled bool }
 
 func (f fakeSynth) Enabled() bool { return f.enabled }
-func (f fakeSynth) Synthesize(_ context.Context, prompt string) (string, error) {
+func (f fakeSynth) Synthesize(_ context.Context, _, _ string, prompt string) (string, error) {
 	if !f.enabled {
 		return "", context.Canceled
 	}

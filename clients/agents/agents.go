@@ -715,7 +715,7 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 		prompt += in
 	}
 	start := time.Now()
-	resp, aiErr := ai.ChatCompletion(ctx, &types.ChatRequest{Model: a.Model, Prompt: prompt})
+	resp, aiErr := ai.ChatCompletion(ctx, &types.ChatRequest{Model: a.Model, Prompt: prompt, Org: org})
 	dur := time.Since(start).Milliseconds()
 	id, _ := genID("run")
 	r := Run{
