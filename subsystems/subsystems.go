@@ -138,13 +138,16 @@ import (
 	// console's VPC + Load Balancers pages (moving them off the /paas proxy).
 	_ "github.com/hanzoai/cloud/clients/do" // order 123 — /v1/vpcs/*,/v1/load-balancers/*
 
-	// Console standalone surface: the native Go port of console's two NON-proxy
-	// server routes (app/keys + app/onboard) — mint/revoke the user's `hk-` Cloud
-	// API key and create the user's org — done as the confidential `hanzo-console`
-	// IAM client on the VALIDATED caller's behalf. Porting these lets console drop
-	// its last stateful Node handlers and be statically exported (task #41, "True
-	// 1-binary FE"): the embedded SPA calls /v1/console/* on its own origin.
-	_ "github.com/hanzoai/cloud/clients/console" // order 122 — /v1/console/keys,/v1/console/onboard
+	// Account self-service surface: the native Go port of console's two NON-proxy
+	// server routes (app/keys + app/onboard) plus the money/store data bridges the
+	// statically-exported console needs — re-homed onto their REAL domains (there is NO
+	// /v1/console API namespace; "console" is just the FE name). Registers TWO subsystems:
+	// `account` (order 48) for the SPECIFIC self-service routes — /v1/iam/{keys,onboard}
+	// (which must win over the IAM /v1/iam/* wildcard at 50), /v1/csrf, /v1/embed-status,
+	// /v1/commerce/topup/wallet — and `account-bridge` (order 122) for the CATCH-ALL
+	// /v1/billing/* + /v1/commerce/* data bridges (after clients/billing at 121 + the
+	// commerce embed at 100). See clients/account.
+	_ "github.com/hanzoai/cloud/clients/account" // order 48 (self-service) + 122 (data bridges)
 
 	// Customer-facing, org-scoped billing READS: /v1/billing/{usage,balance}. On the
 	// console host the ingress sends /v1/* to cloud-api directly (the Next BFF is only
@@ -288,8 +291,8 @@ import (
 	// Order 138 binds /v1/team/* before the AI /v1/* catch-all (150).
 	_ "github.com/hanzoai/cloud/clients/team" // order 138 — /v1/team/*
 
-	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/code"      // order 134 — /v1/code/* (SOTA hybrid code-intelligence: FTS5-trigram lexical + go/parser & lexical symbols + embedded-vector semantic, RRF-fused, per-org SQLite)
+	_ "github.com/hanzoai/cloud/clients/functions" // order 128 — /v1/functions/*
 	_ "github.com/hanzoai/cloud/clients/git"       // order 132 — /v1/git/* (S3-backed native Git hosting; smart-HTTP clone/push)
 	_ "github.com/hanzoai/cloud/clients/prompts"   // order 126 — /v1/prompts/*
 	_ "github.com/hanzoai/cloud/clients/sbom"      // order 137 — /v1/sbom/* (GLOBAL SBOM datastore on ClickHouse: CI ingest by image digest, console resolve by digest/ref)
