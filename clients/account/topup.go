@@ -1,5 +1,5 @@
 // topup.go ports console's app/billing/v1/topup/wallet/route.ts into the unified
-// binary at POST /v1/console/topup/wallet (task #41). It is the verify-and-record
+// binary at POST /v1/commerce/topup/wallet (task #41). It is the verify-and-record
 // seam for an HUSD wallet top-up: the browser sends an HUSD ERC-20 transfer to the
 // treasury and posts the tx hash here; this handler reads the receipt from the Hanzo
 // EVM, confirms it is a mined, successful HUSD Transfer(from → treasury, value),
@@ -23,7 +23,7 @@
 // Honest failure (no fabricated credit, ever): HUSD/treasury unconfigured
 // (greenfield — HUSD not yet deployed) → 501; a missing/failed/non-HUSD-to-treasury
 // tx → 400; the chain or commerce unreachable → 502.
-package console
+package account
 
 import (
 	"bytes"
@@ -37,9 +37,16 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/zap-proto/zip"
 )
+
+// httpClient is the shared outbound client for the account subsystem's plain-HTTP seams
+// (EVM JSON-RPC, commerce billing/store S2S). Small JSON envelopes, bounded reads; 15s
+// is generous for an in-cluster / same-region hop. (Owned here — the S2S transport home
+// — since the former waitlist.go was retired with the /v1/console namespace.)
+var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 // transferTopic is keccak256("Transfer(address,address,uint256)") — the ERC-20
 // Transfer event signature, topics[0] of every transfer log. A universally-fixed
