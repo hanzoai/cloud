@@ -46,6 +46,7 @@ import (
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -146,7 +147,7 @@ type o11yLLM struct {
 // GLOBAL-ADMIN ONLY (s.guard). Every signal degrades independently: a table that is
 // absent or errors contributes its zero-value, never a failure — the fleet board
 // always renders what the datastore actually holds.
-func (s *svc) o11y(c *zip.Ctx) error {
+func o11y(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	rangeLabel := o11yRange(c.Query("range"))
 	since := computeSince(rangeLabel)
