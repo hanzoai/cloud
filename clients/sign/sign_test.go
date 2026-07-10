@@ -2,8 +2,10 @@ package sign
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -11,12 +13,47 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// memVFS is an in-memory types.VFSClient standing in for the S3/SeaweedFS data
+// plane. sign now routes PDF bytes through the object-storage seam (__blob), so the
+// test drives that exact path (Put on create/seal, Get on view/download).
+type memVFS struct {
+	mu sync.Mutex
+	m  map[string][]byte
+}
+
+func newMemVFS() *memVFS { return &memVFS{m: map[string][]byte{}} }
+func (v *memVFS) Put(_ context.Context, key string, payload []byte) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	cp := make([]byte, len(payload))
+	copy(cp, payload)
+	v.m[key] = cp
+	return nil
+}
+func (v *memVFS) Get(_ context.Context, key string) ([]byte, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	b, ok := v.m[key]
+	if !ok {
+		return nil, fmt.Errorf("memVFS: no such key %q", key)
+	}
+	return b, nil
+}
+func (v *memVFS) Delete(_ context.Context, key string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	delete(v.m, key)
+	return nil
+}
 
 // signaturePNG draws a small opaque signature-like image and returns it base64,
 // so the __pdf.stamp host-fn has genuine PNG bytes to decode and render.
@@ -43,15 +80,16 @@ func signaturePNG(t *testing.T) string {
 // middleware — so X-Org-Id/X-User-Id headers are trusted verbatim (principal.Org
 // gates on c.User()). This is the same trusted-header harness the other Base-backed
 // subsystems (captable) use for their end-to-end wire proofs.
-func mountApp(t *testing.T) *zip.App {
+func mountApp(t *testing.T) (*zip.App, *memVFS) {
 	t.Helper()
 	_ = shutdown(nil) // reset process-global state between tests
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}); err != nil {
+	vfs := newMemVFS()
+	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: vfs}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = shutdown(nil) })
-	return app
+	return app, vfs
 }
 
 // do issues an HTTP request against the app. org!="" sets a VALIDATED principal
@@ -95,7 +133,7 @@ func decode(t *testing.T, b []byte) map[string]any {
 // COMPLETED with a REAL x509/PKCS#7 signed PDF, and the audit trail records every
 // step. All per-tenant Base/SQLite-backed.
 func TestFullSigningFlow(t *testing.T) {
-	app := mountApp(t)
+	app, vfs := mountApp(t)
 	const org = "acme"
 
 	pdf, err := os.ReadFile("testdata/example.pdf")
@@ -120,6 +158,24 @@ func TestFullSigningFlow(t *testing.T) {
 	docID, _ := doc["id"].(string)
 	if docID == "" || doc["status"] != "DRAFT" {
 		t.Fatalf("bad create response: %s", body)
+	}
+
+	// M8: the PDF BYTES went to the object-storage seam (__blob), NOT the tenant
+	// SQLite. The VFS holds the original blob under the tenant-scoped key, and the
+	// stored bytes equal the uploaded PDF (not base64) — proof it is off-DB.
+	vfs.mu.Lock()
+	var foundOriginal bool
+	for k, v := range vfs.m {
+		if bytes.Equal(v, pdf) {
+			foundOriginal = true
+			if !strings.HasPrefix(k, "sign/") {
+				t.Fatalf("blob key %q is not tenant-scoped under sign/", k)
+			}
+		}
+	}
+	vfs.mu.Unlock()
+	if !foundOriginal {
+		t.Fatal("uploaded PDF bytes were not stored on the object-storage seam (M8)")
 	}
 
 	// 3. add a SIGNER recipient
@@ -256,7 +312,7 @@ func TestFullSigningFlow(t *testing.T) {
 // per-tenant; a wrong token/org combination cannot resolve) and that a validation
 // error rolls the request transaction back (gojabase atomicity).
 func TestTenantIsolation(t *testing.T) {
-	app := mountApp(t)
+	app, _ := mountApp(t)
 	pdf, _ := os.ReadFile("testdata/example.pdf")
 	pdfB64 := base64.StdEncoding.EncodeToString(pdf)
 
@@ -305,5 +361,89 @@ func TestSignerProductionGate(t *testing.T) {
 	t.Setenv("CLOUD_SIGN_KEY_PEM", base64.StdEncoding.EncodeToString(keyPEM))
 	if _, err := newSigner(t.TempDir(), "production"); err != nil {
 		t.Fatalf("production with a KMS cert should boot, got %v", err)
+	}
+}
+
+// TestSequentialSigningOrder proves M7: in a SEQUENTIAL document a later signer
+// cannot act until every earlier signer has SIGNED; once they have, the turn opens
+// and the document seals when all have signed.
+func TestSequentialSigningOrder(t *testing.T) {
+	app, _ := mountApp(t)
+	const org = "acme"
+	pdf, err := os.ReadFile("testdata/example.pdf")
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	pdfB64 := base64.StdEncoding.EncodeToString(pdf)
+
+	code, body := do(t, app, http.MethodPost, "/v1/sign/documents", org, map[string]any{
+		"title": "Seq NDA", "pdfBase64": pdfB64, "signingOrder": "SEQUENTIAL",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	docID := decode(t, body)["id"].(string)
+
+	addSigner := func(email string, order int) (string, string) {
+		c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/recipients", org, map[string]any{
+			"email": email, "role": "SIGNER", "signingOrder": order,
+		})
+		if c != http.StatusCreated {
+			t.Fatalf("add recipient %s: %d %s", email, c, b)
+		}
+		m := decode(t, b)
+		return m["id"].(string), m["token"].(string)
+	}
+	rec1, tok1 := addSigner("first@acme.test", 1)
+	rec2, tok2 := addSigner("second@acme.test", 2)
+
+	addField := func(recID string) {
+		c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/fields", org, map[string]any{
+			"recipientId": recID, "type": "SIGNATURE", "page": 1, "positionX": 10, "positionY": 70, "width": 30, "height": 8,
+		})
+		if c != http.StatusCreated {
+			t.Fatalf("add field for %s: %d %s", recID, c, b)
+		}
+	}
+	addField(rec1)
+	addField(rec2)
+
+	if c, b := do(t, app, http.MethodPost, "/v1/sign/documents/"+docID+"/send", org, map[string]any{}); c != http.StatusOK {
+		t.Fatalf("send: %d %s", c, b)
+	}
+
+	// field id per recipient
+	_, dv := do(t, app, http.MethodGet, "/v1/sign/documents/"+docID, org, nil)
+	fieldFor := map[string]string{}
+	for _, fi := range decode(t, dv)["fields"].([]any) {
+		fm := fi.(map[string]any)
+		fieldFor[fm["recipientId"].(string)] = fm["id"].(string)
+	}
+
+	base1 := "/v1/sign/o/" + org + "/sign/" + tok1
+	base2 := "/v1/sign/o/" + org + "/sign/" + tok2
+	sig := func() map[string]any { return map[string]any{"value": signaturePNG(t), "isBase64": true} }
+
+	// recipient 2 is OUT OF TURN — must be refused.
+	if c, b := do(t, app, http.MethodPost, base2+"/fields/"+fieldFor[rec2], "", sig()); c != http.StatusForbidden {
+		t.Fatalf("out-of-turn signer 2 want 403, got %d (%s)", c, b)
+	}
+	// recipient 1 signs + completes (opens the turn).
+	if c, b := do(t, app, http.MethodPost, base1+"/fields/"+fieldFor[rec1], "", sig()); c != http.StatusOK {
+		t.Fatalf("signer 1 sign: %d %s", c, b)
+	}
+	if c, b := do(t, app, http.MethodPost, base1+"/complete", "", map[string]any{}); c != http.StatusOK {
+		t.Fatalf("signer 1 complete: %d %s", c, b)
+	}
+	// now recipient 2 may sign + complete, and the document seals.
+	if c, b := do(t, app, http.MethodPost, base2+"/fields/"+fieldFor[rec2], "", sig()); c != http.StatusOK {
+		t.Fatalf("signer 2 sign after turn: %d %s", c, b)
+	}
+	c, b := do(t, app, http.MethodPost, base2+"/complete", "", map[string]any{})
+	if c != http.StatusOK {
+		t.Fatalf("signer 2 complete: %d %s", c, b)
+	}
+	if decode(t, b)["sealed"] != true {
+		t.Fatalf("document did not seal after all signers signed: %s", b)
 	}
 }
