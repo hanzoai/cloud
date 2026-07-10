@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -100,8 +101,8 @@ func mountFake(t *testing.T) (*zip.App, *fakeVPCs, *fakeLBs) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	vpcs := &fakeVPCs{byID: map[string]*godo.VPC{}}
 	lbs := &fakeLBs{byID: map[string]*godo.LoadBalancer{}}
-	s := &svc{vpcs: vpcs, lbs: lbs, log: luxlog.New("test")}
-	s.routes(app)
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: vpcs, lbs: lbs}}
+	routes(app, s)
 	return app, vpcs, lbs
 }
 
@@ -132,8 +133,8 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 	return resp.StatusCode, b
 }
 
-// createVPC returns the created resource's id.
-func createVPC(t *testing.T, app *zip.App, org, name, region string) string {
+// mkVPC returns the created resource's id.
+func mkVPC(t *testing.T, app *zip.App, org, name, region string) string {
 	t.Helper()
 	code, body := req(t, app, http.MethodPost, "/v1/vpcs", org, map[string]string{"name": name, "region": region})
 	if code != http.StatusCreated {
@@ -157,8 +158,8 @@ func createVPC(t *testing.T, app *zip.App, org, name, region string) string {
 func TestVPCPerOrgIsolation(t *testing.T) {
 	app, rawVPCs, _ := mountFake(t)
 
-	acmeID := createVPC(t, app, "acme", "web", "sfo3")
-	maxpID := createVPC(t, app, "maxpower", "web", "nyc3") // same friendly name, different org
+	acmeID := mkVPC(t, app, "acme", "web", "sfo3")
+	maxpID := mkVPC(t, app, "maxpower", "web", "nyc3") // same friendly name, different org
 
 	// Physical DO names are org-namespaced and therefore distinct despite the
 	// shared friendly name — the isolation boundary is by construction.
@@ -260,8 +261,8 @@ func TestForgePathRefused(t *testing.T) {
 
 	// X-Org-Id present but NO X-User-Id (the forgeable path) → still 403.
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &svc{vpcs: &fakeVPCs{byID: map[string]*godo.VPC{}}, lbs: &fakeLBs{byID: map[string]*godo.LoadBalancer{}}, log: luxlog.New("test")}
-	s.routes(app2)
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{vpcs: &fakeVPCs{byID: map[string]*godo.VPC{}}, lbs: &fakeLBs{byID: map[string]*godo.LoadBalancer{}}}}
+	routes(app2, s)
 	rq := httptest.NewRequest(http.MethodGet, "/v1/vpcs", nil)
 	rq.Header.Set("X-Org-Id", "victim") // forged org, no validated user
 	resp, err := app2.Fiber().Test(rq, testCfg)
@@ -278,8 +279,8 @@ func TestForgePathRefused(t *testing.T) {
 // honest 503 — never a fabricated resource.
 func TestFailClosedWhenUnconfigured(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &svc{log: luxlog.New("test")} // nil seams → unconfigured
-	s.routes(app)
+	s := &cloud.Service[state]{Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "do"), State: state{}} // nil seams → unconfigured
+	routes(app, s)
 
 	for _, path := range []string{"/v1/vpcs", "/v1/load-balancers"} {
 		if code, _ := req(t, app, http.MethodGet, path, "acme", nil); code != http.StatusServiceUnavailable {
