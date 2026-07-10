@@ -22,7 +22,7 @@ import (
 	_ "github.com/hanzoai/sqlite"
 
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
-	"github.com/hanzoai/cloud/internal/cek"
+	"github.com/hanzoai/cloud/cek"
 )
 
 // Store is the SQLite-backed ledger persistence. ONE file holds the whole chart of
