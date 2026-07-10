@@ -48,8 +48,17 @@ globalThis.__db.exec(sql, args)   -> { changes, lastId }    (INSERT/UPDATE/DELET
 globalThis.__newId()              -> collision-resistant id (crypto/rand, 128-bit)
 globalThis.__now()                -> unix milliseconds
 
+globalThis.__blob.put(key, b64)   -> (only when Config.Blob is set)  store bytes off-DB
+globalThis.__blob.get(key)  -> b64  (only when Config.Blob is set)  read them back
+
 globalThis.handle({ route, params, query, orgId, body }) -> { status, body }
 ```
+
+`__blob` is the OPTIONAL object-storage seam (`Config.Blob`, backed by the cloud
+VFS/S3). Use it for large binaries that must NOT bloat the per-tenant SQLite — e.g.
+sign's PDFs: the bundle stores the bytes with `__blob.put` and keeps only the
+returned key in a column. Keys are tenant-scoped by the host (`{Name}/{TenantSegment}`),
+so a bundle can never reach another tenant's blobs. Payloads cross as base64.
 
 `orgId` is the tenant passed to `Dispatch` — the bundle uses it to scope rows
 (defence in depth on top of the per-tenant file). `args` is a positional array
