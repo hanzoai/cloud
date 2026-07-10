@@ -194,6 +194,11 @@ func tenantNamespace(org string) string {
 	if org == "" {
 		org = "unknown"
 	}
+	// NAMING(gated): rename tenant-<org> → org-<org> requires migrating live
+	// namespaces — and the coupled tenant-<org>/<app> registry image refs and the
+	// tenant-quota / tenant-limits objects derived from this prefix. The literal
+	// "tenant-" string is retained until that infrastructure migration ships; the
+	// rest of cloud's identity vocabulary is org-native (see LLM.md doctrine).
 	return "tenant-" + org
 }
 

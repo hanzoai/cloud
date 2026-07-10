@@ -12,7 +12,7 @@
 //
 // TENANT ISOLATION is a physical property, not a policy: every stored row leads
 // its indexes with `org`, and the durable engine's ONLY credential scope is
-// FlowRunInput.Owner — the VALIDATED org resolved from principal.Tenant at
+// FlowRunInput.Owner — the VALIDATED org resolved from principal.Org at
 // flow-start, never a client-supplied field. See engine.go (ExecuteStepActivity).
 package automations
 
@@ -29,7 +29,7 @@ const (
 )
 
 // Flow is an org-scoped automation. projectId IS the org (the TS `projectId`
-// field), always server-derived from principal.Tenant and NEVER trusted from a
+// field), always server-derived from principal.Org and NEVER trusted from a
 // request body — a caller can never author a flow into another tenant.
 type Flow struct {
 	ID                 string          `json:"id"`
@@ -298,7 +298,7 @@ type (
 // All JSON-serializable (no funcs/channels): they cross the tasks wire.
 
 // FlowRunInput is the durable workflow's typed input. Owner is the VALIDATED org
-// set at flow-start from principal.Tenant — the SOLE credential scope and the
+// set at flow-start from principal.Org — the SOLE credential scope and the
 // cross-tenant isolation boundary; it is NEVER read from a request body. Steps is
 // the flattened trigger→action chain (side-effecting steps in order).
 type FlowRunInput struct {

@@ -9,7 +9,7 @@
 //	POST /v1/wallets/:id/keys                                       -> rotate key material
 //	POST /v1/wallets/:id/sign   {message?|digest?}                  -> sign (digest=hex 32B, else Keccak256(message))
 //
-// Every handler derives the tenant through principal.Tenant (the ONE trust
+// Every handler derives the tenant through principal.Org (the ONE trust
 // signal) and refuses with 403 when absent. Config selects the custody set:
 // KMS is ALWAYS available (deps.KMS); MPC + treasury only when the cluster is
 // wired (CLOUD_WALLETS_MPC_ADDR) and the JWT secret resolves from KMS — else
@@ -207,7 +207,7 @@ func init() {
 // ── account handlers ─────────────────────────────────────────────────────────
 
 func (s *svc) createAccount(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -230,7 +230,7 @@ func (s *svc) createAccount(c *zip.Ctx) error {
 }
 
 func (s *svc) listAccounts(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -244,7 +244,7 @@ func (s *svc) listAccounts(c *zip.Ctx) error {
 // ── wallet handlers ──────────────────────────────────────────────────────────
 
 func (s *svc) createWallet(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -308,7 +308,7 @@ func (s *svc) createWallet(c *zip.Ctx) error {
 }
 
 func (s *svc) listWallets(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -320,7 +320,7 @@ func (s *svc) listWallets(c *zip.Ctx) error {
 }
 
 func (s *svc) getWallet(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -335,7 +335,7 @@ func (s *svc) getWallet(c *zip.Ctx) error {
 }
 
 func (s *svc) rotateKeys(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -363,7 +363,7 @@ func (s *svc) rotateKeys(c *zip.Ctx) error {
 }
 
 func (s *svc) sign(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
@@ -409,7 +409,7 @@ func (s *svc) sign(c *zip.Ctx) error {
 // ring computes the EIP-712 Safe-tx hash (bound to the Safe contract + chainId)
 // and returns it with the threshold (r,s) its MPC produced — the owner approval.
 func (s *svc) proposeSafeTx(c *zip.Ctx) error {
-	org, ok := principal.Tenant(c)
+	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}

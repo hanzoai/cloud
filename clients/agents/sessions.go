@@ -26,7 +26,7 @@ import (
 //	POST   /v1/agents/sessions/:id/events   append an event (message/tool-call/spawn/log) -> Event
 //	POST   /v1/agents/sessions/:id/{pause,resume,stop,message}  control command -> {command,event,forwarded}
 //
-// Every route is org-scoped through principal.Tenant (a validated principal AND
+// Every route is org-scoped through principal.Org (a validated principal AND
 // a non-empty org), so cross-tenant reads/writes/control are refused fail-closed.
 
 // Event kinds — the closed vocabulary of a session's ordered log.
@@ -512,7 +512,7 @@ func (s *svc) messageSession(c *zip.Ctx) error { return s.control(c, CmdMessage)
 // control records a steering command as a durable control event (the intent the
 // running surface consumes) and, when the session is backed by a hanzoai/tasks
 // workflow AND a tasks backend is wired, forwards it to the engine's signal/
-// cancel API. Org/actor-authorized: principal.Tenant already requires a validated
+// cancel API. Org/actor-authorized: principal.Org already requires a validated
 // principal AND same-org ownership of the session, so no other tenant can steer.
 func (s *svc) control(c *zip.Ctx, command string) error {
 	org, ok := tenant(c)
