@@ -1,0 +1,28 @@
+# commerce-site — serve the marketing SPA via hanzoai/static, NOT nginx.
+#
+# The nginx-based commerce-site:0.0.1 image violates the platform rule
+# "no nginx — use hanzoai/ingress + hanzoai/static only". This Dockerfile
+# RE-SERVES the already-built marketing static export through the canonical
+# hanzoai/static server, with zero change to the published content.
+#
+# Why reuse 0.0.1's content instead of rebuilding from app/site: this is an
+# EDGE serve-layer migration (remove nginx), not an app change. The current
+# app/site source build is independently broken (missing built workspace
+# packages like @hanzo/commerce-icons dist, an unresolved @kapaai/react-sdk
+# import, and a @/providers/BrowserProvider alias) — fixing the Next.js app
+# is a separate task. Reusing the proven, in-production static assets keeps
+# the marketing site byte-identical while eliminating nginx now.
+#
+# TODO(commerce-site app build): once app/site + its workspace packages build
+# cleanly, restore a from-source build stage here and bump the content.
+
+# 1) The existing, in-production built marketing assets.
+FROM ghcr.io/hanzoai/commerce-site:0.0.1 AS content
+
+# 2) Serve them with hanzoai/static. --spa rewrites unknown routes to
+#    index.html (Next.js export client routing); :3000 is the static default,
+#    and the commerce-site Service maps servicePort 80 -> targetPort 3000.
+FROM ghcr.io/hanzoai/static:0.4.1
+COPY --from=content /usr/share/nginx/html /srv
+EXPOSE 3000
+ENTRYPOINT ["/static", "--root=/srv", "--spa", "--port=3000"]
