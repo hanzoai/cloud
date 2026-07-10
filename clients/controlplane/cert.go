@@ -74,7 +74,38 @@ var (
 	// the caller MUST bind the cert to its expected position — otherwise a valid
 	// cert for a DIFFERENT block/height/round would be accepted here.
 	ErrCertPositionMismatch = errors.New("controlplane: cert position does not match the expected block")
+	// ErrUnsafeCertFloor is the two-threshold self-defence (RED finding 1): the
+	// cert quorum floor MUST be the byzantine-safe BFT quorum for the validator-
+	// set size, NEVER a wallet-custody t = floor(n/2)+1. For n=5 that t is 3, and
+	// 2*3 is not > N+f = 6, so a 3-of-5 cert could finalize two conflicting
+	// blocks. The core enforces whatever floor it is handed AND refuses a
+	// structurally unsafe one — so a mis-wired driver cannot get an unsafe cert
+	// verified even if it passes the wrong threshold.
+	ErrUnsafeCertFloor = errors.New("controlplane: cert quorum floor is not the byzantine-safe BFT quorum for the validator set (a wallet-custody t must never be a cert floor)")
 )
+
+// guardBFTFloor fails closed unless quorumWeight is a byzantine-safe cert floor
+// for a set of n validators: at least the canonical BFT quorum (2n/3+1), no more
+// than n, and a (n, quorum, f) triple that satisfies 2q > n+f. This is the
+// self-defence RED finding 1 mandates — it is derived from len(keys), so a
+// future driver that mis-wires the wallet-custody t (=3 for n=5) instead of the
+// BFT quorum (=4) cannot get a cert composed OR verified.
+func guardBFTFloor(n int, quorumWeight uint64) error {
+	if n <= 0 {
+		return ErrNoValidators
+	}
+	floor := bftQuorum(n)
+	if quorumWeight < uint64(floor) {
+		return fmt.Errorf("%w: quorum %d < BFT floor %d for N=%d", ErrUnsafeCertFloor, quorumWeight, floor, n)
+	}
+	if quorumWeight > uint64(n) {
+		return fmt.Errorf("%w: quorum %d exceeds validator count %d", ErrUnsafeCertFloor, quorumWeight, n)
+	}
+	if err := checkQuorumSafety(n, int(quorumWeight), bftFaultTolerance(n)); err != nil {
+		return fmt.Errorf("%w: %v", ErrUnsafeCertFloor, err)
+	}
+	return nil
+}
 
 // certPosition is the consensus position a control-plane cert finalizes. It is
 // the minimal, ceremony-independent input to compose/verify a cert, so this
@@ -240,8 +271,11 @@ func signRecords(vset *quasar.WeightedValidatorSet, keys map[pulsar.NodeID]*mlds
 // secrets, no randomness. Every honest voter holding the same (position, keys,
 // signature set) composes the byte-identical cert.
 func ComposeControlPlaneCert(pos certPosition, keys map[pulsar.NodeID]*mldsa.PublicKey, sigs map[pulsar.NodeID][]byte, quorumWeight uint64) (*quasar.ConsensusCert, error) {
-	if quorumWeight == 0 {
-		return nil, quasar.ErrQCThresholdZero
+	// Two-threshold self-defence (RED finding 1): refuse an unsafe floor derived
+	// from the validator-set size, so a mis-wired wallet-custody t can never
+	// compose a cert.
+	if err := guardBFTFloor(len(keys), quorumWeight); err != nil {
+		return nil, err
 	}
 	if uint64(len(sigs)) < quorumWeight {
 		return nil, fmt.Errorf("%w: have %d need %d", ErrInsufficientCertSigners, len(sigs), quorumWeight)
@@ -308,6 +342,12 @@ func VerifyControlPlaneCert(pos certPosition, keys map[pulsar.NodeID]*mldsa.Publ
 		cert.Height != pos.Height || cert.Round != pos.Round ||
 		cert.BlockHash != pos.BlockHash {
 		return ErrCertPositionMismatch
+	}
+	// Two-threshold self-defence (RED finding 1): a mis-wired wallet-custody t
+	// cannot verify even if a driver passes it here — the floor is re-derived
+	// from the validator-set size and must be byzantine-safe.
+	if err := guardBFTFloor(len(keys), quorumWeight); err != nil {
+		return err
 	}
 	vset, err := buildValidatorSet(pos.Epoch, keys)
 	if err != nil {
