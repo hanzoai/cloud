@@ -205,6 +205,15 @@ import (
 	// mounts ONLY when the operator names "captable" in CLOUD_ENABLE, so the
 	// standalone captable service keeps authority until the phase-2 cutover.
 	_ "github.com/hanzoai/cloud/clients/captable"   // order 133 — /v1/captable/* (cap table on Base via goja)
+	// Hanzo Sign (HIP-0106, task #100): the e-signature product (Documenso fork)
+	// folded in-process via the SAME reusable gojabase RW-Base host captable
+	// pilots — the server-side domain runs as an ESM-free goja bundle
+	// (github.com/hanzoai/sign) backed by per-tenant Base/SQLite, with the PDF/PKI
+	// seal implemented as Go host-functions injected via gojabase Config.HostFns.
+	// STAGED (config.stagedSubsystems): mounts /v1/sign/* ONLY when the operator
+	// names "sign" in CLOUD_ENABLE, so linking it changes nothing until the
+	// standalone esign pod is cut over.
+	_ "github.com/hanzoai/cloud/clients/sign" // order 145 — /v1/sign/* (documents/recipients/fields/sign/complete/audit)
 	_ "github.com/hanzoai/cloud/clients/referrals"  // order 149 — /v1/referrals/* + /v1/admin/referrals* (viral loop: promo credit via commerce ledger)
 	// The configurable custody / accounts / wallets / keys / sign surface
 	// (HIP-0106): ONE seam over three orthogonal signing backends selected per
