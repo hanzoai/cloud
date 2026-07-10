@@ -105,13 +105,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	// Order 138: after integrations (137), before the AI /v1/* catch-all (150). The
-	// /v1/settings prefix shares no path with another subsystem, so the order only
-	// needs to precede 150. RegisterWithShutdown so the store closes on graceful stop.
-	cloud.RegisterWithShutdown("settings", 138, cloud.Typed(Mount), Shutdown)
-}
-
 // Shutdown releases the settings store. Idempotent.
 func Shutdown(_ context.Context) error {
 	if mounted == nil {

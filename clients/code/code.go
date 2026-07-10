@@ -105,12 +105,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.RegisterWithShutdown("code", 134, cloud.Typed(Mount), shutdown)
-}
-
 // shutdown closes every open per-org store. Idempotent.
-func shutdown(_ context.Context) error {
+func Shutdown(_ context.Context) error {
 	if mounted == nil {
 		return nil
 	}
