@@ -27,6 +27,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,7 +58,7 @@ func (t tenantScope) scopedToOrg(o string) bool {
 // resolveScope derives the request's tenant window from the SANITIZED identity only —
 // never a client-forgeable field. A SuperAdmin (c.IsAdmin(), owner == admin org) is
 // cross-tenant; any other caller is pinned to the subtree of their own (sanitized) org.
-func (s *svc) resolveScope(c *zip.Ctx) tenantScope {
+func resolveScope(s *cloud.Service[state], c *zip.Ctx) tenantScope {
 	if c.IsAdmin() {
 		return tenantScope{super: true}
 	}
@@ -65,13 +66,13 @@ func (s *svc) resolveScope(c *zip.Ctx) tenantScope {
 	if org == "" {
 		return tenantScope{} // no validated org ⇒ empty window ⇒ sees nothing
 	}
-	return tenantScope{orgs: s.descendants(org)}
+	return tenantScope{orgs: descendants(s, org)}
 }
 
 // descendants returns org + every sub-org it owns — the subtree the caller administers.
 // See the RECURSION SEAM note above: today the singleton {org}; the ONE place a future
 // IAM parent-org index is walked.
-func (s *svc) descendants(org string) []string {
+func descendants(s *cloud.Service[state], org string) []string {
 	org = strings.TrimSpace(org)
 	if org == "" {
 		return nil
@@ -86,15 +87,15 @@ func (s *svc) descendants(org string) []string {
 // name / createdTime are the REAL values (analytics' signup cohort needs a real
 // createdTime). An org row that can't be read best-effort degrades to a name-only row
 // (Name = the sanitized org) rather than failing the panel — the scope is unaffected.
-func (s *svc) scopedOrgs(ctx context.Context, c *zip.Ctx, cr creds) ([]iamOrg, error) {
-	sc := s.resolveScope(c)
+func scopedOrgs(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, cr creds) ([]iamOrg, error) {
+	sc := resolveScope(s, c)
 	if sc.super {
-		return s.listOrgs(ctx, cr)
+		return listOrgs(s, ctx, cr)
 	}
 	rows := make([]iamOrg, 0, len(sc.orgs))
 	for _, name := range sc.orgs {
-		row := iamOrg{Owner: s.adminOrg, Name: name, DisplayName: name}
-		if full, err := s.iam.getOrg(ctx, cr, s.adminOrg+"/"+name); err == nil && full.Name != "" {
+		row := iamOrg{Owner: s.State.adminOrg, Name: name, DisplayName: name}
+		if full, err := s.State.iam.getOrg(ctx, cr, s.State.adminOrg+"/"+name); err == nil && full.Name != "" {
 			row = full
 		}
 		rows = append(rows, row)
