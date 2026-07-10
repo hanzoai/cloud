@@ -115,7 +115,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
 
-	s := &svc{store: store, k8s: k, kms: deps.KMS, log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
+	s := &svc{store: store, k8s: k, kms: deps.KMS, kmsIdentity: newKMSOrgIdentity(deps.KMS),
+		log: log, brand: deps.Brand, env: deps.Env, domain: deps.Domain,
 		sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app"),
 		bill:      cloud.NewResourceMeter(deps, "platform")}
 	mounted = s
