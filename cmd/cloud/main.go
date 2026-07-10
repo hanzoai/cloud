@@ -11,7 +11,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -20,15 +19,15 @@ import (
 	// Every subsystem registers into cloud.Registry via init(); the set is
 	// defined ONCE in the subsystems bundle (one source of truth, shared with
 	// cmd/hanzo). Blank-importing it populates the registry cloud.Serve mounts.
+	// It also links clients/o11y, whose init() registers the telemetry bootstrap
+	// cloud.Serve runs (cloud.RegisterTelemetryInstaller).
 	_ "github.com/hanzoai/cloud/subsystems"
 )
 
 func main() {
-	ctx := context.Background()
-	shutdown := initTelemetry(ctx, "hanzo-cloud")
-	defer shutdown(ctx)
-
-	// nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
+	// Telemetry is bootstrapped inside cloud.Serve (one site, every entrypoint —
+	// cmd/cloud AND every `hanzo <svc>`), so main() is just the full-surface
+	// entrypoint. nil ⇒ honor cfg.Enable from flags/env (empty = all subsystems).
 	if err := cloud.Serve(nil); err != nil {
 		fmt.Fprintf(os.Stderr, "cloud: %v\n", err)
 		os.Exit(1)
