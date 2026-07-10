@@ -106,6 +106,12 @@ func (s *svc) gate(c *zip.Ctx) (string, error) {
 // ---- networks (the org's ZT overlay, projected from its edge-routers) ----
 
 func (s *svc) listNetworks(c *zip.Ctx) error {
+	if !s.cl.configured() {
+		// ZT not configured on this deployment — a READ returns an honest-EMPTY list
+		// (200), rendered as a clean "no networks" state, NOT the gate's fail-closed
+		// 503 that logs as a console error on every load. Writes stay fail-closed.
+		return c.JSON(http.StatusOK, map[string]any{"networks": []networkView{}})
+	}
 	org, err := s.gate(c)
 	if err != nil {
 		return err
@@ -168,6 +174,11 @@ func (s *svc) listMeshServices(c *zip.Ctx) error {
 // ---- edge nodes (ZT edge-routers) ----
 
 func (s *svc) listEdgeNodes(c *zip.Ctx) error {
+	if !s.cl.configured() {
+		// Same as listNetworks: an unconfigured ZT deployment yields an honest-EMPTY
+		// edge-node list (200), not the gate's fail-closed 503. Writes stay fail-closed.
+		return c.JSON(http.StatusOK, map[string]any{"nodes": []edgeNodeView{}})
+	}
 	org, err := s.gate(c)
 	if err != nil {
 		return err
