@@ -1,0 +1,84 @@
+<html>
+  <head>
+    <script
+      src="https://code.jquery.com/jquery-2.2.4.min.js"
+      integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
+      crossorigin="anonymous">
+    </script>
+    <script type="text/javascript">
+      window.onload = function() {
+        window.parent.postMessage({
+          message: 'reamaze:resize',
+          height: document.body.scrollHeight
+        }, "*");
+      };
+
+      var show = function(sel) {
+        return function(e) {
+          $(sel).toggle();
+          window.parent.postMessage({
+            message: 'reamaze:resize',
+            height: document.body.scrollHeight
+          }, "*");
+          e.stopPropagation();
+          e.preventDefault();
+          return false;
+        }
+      };
+
+      $(document).ready(function() {
+        $('.user-click').click(show('#user'));
+      });
+
+      $(document).ready(function() {
+        $('.order-click').each(function() {
+          var $el = $(this)
+          $el.click(show('#order' + $el.attr('data-number')));
+        });
+      });
+    </script>
+    <style>
+      body {
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 0.8em;
+      }
+    </style>
+  </head>
+  <body>
+    <strong>User</strong>
+    <br>
+    <a href="{{ urlFor("dash") }}#user/{{ usr.Id() }}" target="_blank">{{ usr.Email }}</a> |
+    <a class="user-click" href="#">View JSON</a>
+    <div id="user" style="display:none">
+      <hr>
+      <script type="text/javascript">
+        $(document).ready(function(){
+          $('#user pre').append(JSON.stringify(JSON.parse('{{ usr.JSONString() | safe }}'), null, 2));
+        });
+      </script>
+      <pre></pre>
+    </div>
+    <hr>
+    <br>
+    <strong>Orders</strong>
+    {% for ord in ords %}
+      <br>
+      <a href="{{ urlFor("dash") }}#order/{{ ord.Id() }}" target="_blank">{{ ord.Number }}</a> |
+      <a class="order-click" data-number="{{ ord.Number }}" href="#">View JSON</a> |
+      {% if ord.Payments %}
+      <a href="https://billing.hanzo.ai/payments/{{ ord.Payments.0.Account.ChargeId }}" target="_blank">View Payment</a> |
+      {% endif %}
+      <a href="https://merchant.shipwire.com/merchants/search/index/searchquery/{{ ord.Number }}/searchtype/all" target="_blank">Search Shipwire</a>
+      <div id="order{{ ord.Number }}" style="display:none">
+        <hr>
+        <script type="text/javascript">
+          $(document).ready(function(){
+            $('#order{{ ord.Number }} pre').append(JSON.stringify(JSON.parse('{{ ord.JSONString() | safe }}'), null, 2));
+          });
+        </script>
+        <pre></pre>
+      </div>
+      <hr>
+    {% endfor %}
+  </body>
+</html>

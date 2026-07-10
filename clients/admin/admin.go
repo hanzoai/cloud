@@ -49,6 +49,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
 )
 
@@ -79,7 +80,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	s := &svc{
 		iam:        newIAMClient(iamBase(deps)),
-		commerce:   newCommerceClient(os.Getenv("CLOUD_COMMERCE_HTTP_URL"), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		health:     newHealthClient(o11yHealthURL()),
 		do:         newDOClient(doTokenFromEnv()),
 		adminOrg:   adminOrgOf(deps),
