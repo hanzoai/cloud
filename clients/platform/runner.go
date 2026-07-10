@@ -36,6 +36,10 @@ type runnerBuildReq struct {
 	OS           string `json:"os,omitempty"`
 	Arch         string `json:"arch,omitempty"`
 	OrgID        string `json:"organizationId,omitempty"`
+	// Release requests native release semantics for cloud's self-publish: compute
+	// the next version, build+push ghcr.io/hanzoai/cloud, smoke it, then tag (the
+	// receipt) and notify universe. It owns its output image (release.go).
+	Release bool `json:"release,omitempty"`
 }
 
 // runnerBuildResp is the 202 acceptance (matches the CLI BuildJob).
@@ -92,6 +96,14 @@ func (s *svc) runnerBuild(c *zip.Ctx) error {
 	}
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
+
+	// Release path: cloud self-publishes ghcr.io/hanzoai/cloud with native release
+	// semantics (compute version → build → smoke → tag → notify). It computes its
+	// own owned image, so it runs before the caller-supplied-image checks below.
+	if req.Release {
+		return s.startRelease(c, req)
+	}
+
 	ref := firstNonEmpty(strings.TrimSpace(req.SHA), strings.TrimSpace(req.Ref), strings.TrimSpace(req.Branch), "main")
 	if req.Repo == "" || req.Image == "" {
 		return zip.ErrBadRequest("repo and image are required")
