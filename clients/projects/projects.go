@@ -230,10 +230,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
 }
 
-func init() {
-	cloud.Register("projects", 125, cloud.Typed(Mount))
-}
-
 // ---- handlers ----
 
 type createReq struct {

@@ -155,16 +155,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// init registers the subsystem under the clean id "s3" with cloud.HealthOwner:
-// it serves its OWN fail-closed /v1/s3/health (Mount), and Serve's generic
-// liveness loop skips a HealthOwner so the always-ok route never shadows it.
-// Order 118 stays load-bearing — its static /v1/s3/buckets + /v1/s3/health must
-// register BEFORE provisioning's /v1/s3/:name (order 120) to win zip's first-match
-// scan (see the package doc).
-func init() {
-	cloud.Register("storage", 118, cloud.Typed(Mount), cloud.HealthOwner)
-}
-
 // guard wraps a handler with the org gate + fail-closed check, and is the ONE
 // place the s3 data plane meters per-org spend. A request with no resolvable org
 // is refused 403 before S3 is touched; an unconfigured admin is 503. The resolved

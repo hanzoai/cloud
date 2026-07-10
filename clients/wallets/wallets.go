@@ -202,12 +202,6 @@ func custodyFor(s *cloud.Service[state], kind Kind) (Custody, error) {
 	}
 }
 
-// init registers the subsystem. Order 127 — alongside the product control planes,
-// before the AI /v1/* catch-all (150). Routes are specific so they bind ahead of it.
-func init() {
-	cloud.RegisterWithShutdown("wallets", 127, cloud.Typed(Mount), func(context.Context) error { return Shutdown() })
-}
-
 // ── account handlers ─────────────────────────────────────────────────────────
 
 func createAccount(s *cloud.Service[state], c *zip.Ctx) error {

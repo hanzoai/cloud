@@ -117,7 +117,3 @@ func firstNonEmpty(vals ...string) string {
 }
 
 func getenv(key string) string { return strings.TrimSpace(os.Getenv(key)) }
-
-func init() {
-	cloud.Register("bot", 143, cloud.Typed(Mount))
-}

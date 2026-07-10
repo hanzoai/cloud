@@ -6,32 +6,9 @@ import (
 	"testing"
 
 	"github.com/hanzoai/beego/v2/server/web"
-	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
-
-// TestRegisteredAtOrder50 proves the subsystem wired itself into cloud's registry
-// via init() — name "iam", order 50 (the identity-authority slot, mounting before
-// its dependents). This guards the one-line blank import in subsystems.go.
-func TestRegisteredAtOrder50(t *testing.T) {
-	var found *cloud.MountSpec
-	for i := range cloud.Registry {
-		if cloud.Registry[i].Name == "iam" {
-			found = &cloud.Registry[i]
-			break
-		}
-	}
-	if found == nil {
-		t.Fatal("iam not registered in cloud.Registry")
-	}
-	if found.Order != 50 {
-		t.Fatalf("iam registry order = %d, want 50", found.Order)
-	}
-	if found.Mount == nil {
-		t.Fatal("iam registry Mount is nil")
-	}
-}
 
 // TestPrefixesCoverAuthCritical guards that the mount set never loses an
 // auth-critical surface hanzo.id serves — the operator SSO chain and every
