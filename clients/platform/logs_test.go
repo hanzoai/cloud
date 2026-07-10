@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -153,21 +154,21 @@ func TestDeploymentLogs_DegradesWithoutPod(t *testing.T) {
 
 // seedGitDeployment inserts a project(web)+git app(api)+building deployment(dep_1)
 // with a build whose Job is jobName, so the log handler has a git deployment to read.
-func seedGitDeployment(t *testing.T, s *svc, org, jobName string) {
+func seedGitDeployment(t *testing.T, s *cloud.Service[state], org, jobName string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := s.store.CreateProject(ctx, Project{ID: "proj_1", Org: org, Slug: "web", Name: "Web", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.State.store.CreateProject(ctx, Project{ID: "proj_1", Org: org, Slug: "web", Name: "Web", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
-	if err := s.store.CreateApplication(ctx, Application{ID: "app_1", Org: org, ProjectID: "proj_1", Slug: "api",
+	if err := s.State.store.CreateApplication(ctx, Application{ID: "app_1", Org: org, ProjectID: "proj_1", Slug: "api",
 		Name: "API", Source: "git", RepoURL: "https://github.com/acme/api", Status: "building", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("CreateApplication: %v", err)
 	}
-	if err := s.store.InsertBuild(ctx, Build{ID: "bld_1", Org: org, ApplicationID: "app_1", DeploymentID: "dep_1",
+	if err := s.State.store.InsertBuild(ctx, Build{ID: "bld_1", Org: org, ApplicationID: "app_1", DeploymentID: "dep_1",
 		Status: "building", JobName: jobName, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("InsertBuild: %v", err)
 	}
-	if err := s.store.InsertDeployment(ctx, Deployment{ID: "dep_1", Org: org, ApplicationID: "app_1", Version: 1,
+	if err := s.State.store.InsertDeployment(ctx, Deployment{ID: "dep_1", Org: org, ApplicationID: "app_1", Version: 1,
 		Status: "building", Source: "git", BuildID: "bld_1", Image: "ghcr.io/hanzoai/tenant-acme/api:main",
 		CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("InsertDeployment: %v", err)
