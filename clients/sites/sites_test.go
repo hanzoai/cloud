@@ -55,7 +55,7 @@ func TestResolveKeyNeverEscapesPrefix(t *testing.T) {
 		"/index.html",
 		"/../../../etc/passwd",
 		"/../orgB/site9/secret.env",
-		"/..%2f..%2forgB%2fsecret",        // (already-decoded form fasthttp would pass)
+		"/..%2f..%2forgB%2fsecret", // (already-decoded form fasthttp would pass)
 		"/....//....//orgB",
 		"/a/b/../../../../orgB/x",
 		"//orgB/x",
@@ -145,16 +145,16 @@ func TestSiteSlug(t *testing.T) {
 	site("my-cool-site.hanzo.app", "my-cool-site")
 	site("maxpower.hanzo.app:443", "maxpower") // port stripped
 
-	notSite("hanzo.app")            // apex, no label
-	notSite("www.hanzo.app")        // reserved
-	notSite("app.hanzo.app")        // reserved (real app host)
-	notSite("api.hanzo.app")        // reserved
-	notSite("a.b.hanzo.app")        // multi-label
-	notSite("api.hanzo.ai")         // different zone → normal pipeline
-	notSite("console.hanzo.ai")     // different zone
-	notSite("-bad.hanzo.app")       // invalid slug
-	notSite("UPPER_bad.hanzo.app")  // underscore invalid
-	notSite("../orgb.hanzo.app")    // traversal-shaped label rejected
+	notSite("hanzo.app")           // apex, no label
+	notSite("www.hanzo.app")       // reserved
+	notSite("app.hanzo.app")       // reserved (real app host)
+	notSite("api.hanzo.app")       // reserved
+	notSite("a.b.hanzo.app")       // multi-label
+	notSite("api.hanzo.ai")        // different zone → normal pipeline
+	notSite("console.hanzo.ai")    // different zone
+	notSite("-bad.hanzo.app")      // invalid slug
+	notSite("UPPER_bad.hanzo.app") // underscore invalid
+	notSite("../orgb.hanzo.app")   // traversal-shaped label rejected
 	notSite("evil.hanzo.app.evil.com")
 }
 
@@ -240,14 +240,14 @@ func TestMiddlewareNoResolverIs404(t *testing.T) {
 
 func TestCacheControlFor(t *testing.T) {
 	cases := map[string]string{
-		"index.html":         "public, max-age=60, s-maxage=86400",
-		"about/index.html":   "public, max-age=60, s-maxage=86400",
-		"assets/app.4f3a9c21.js": "public, max-age=31536000, immutable",
+		"index.html":                "public, max-age=60, s-maxage=86400",
+		"about/index.html":          "public, max-age=60, s-maxage=86400",
+		"assets/app.4f3a9c21.js":    "public, max-age=31536000, immutable",
 		"assets/style.a1b2c3d4.css": "public, max-age=31536000, immutable",
-		"logo.svg":           "public, max-age=3600",   // not fingerprinted
-		"app.js":             "public, max-age=3600",   // not fingerprinted
-		"data.json":          "public, max-age=3600",   // default class
-		"favicon.ico":        "public, max-age=3600",
+		"logo.svg":                  "public, max-age=3600", // not fingerprinted
+		"app.js":                    "public, max-age=3600", // not fingerprinted
+		"data.json":                 "public, max-age=3600", // default class
+		"favicon.ico":               "public, max-age=3600",
 	}
 	for key, want := range cases {
 		if got := CacheControlFor(key, ""); got != want {
@@ -346,4 +346,37 @@ func TestSiteRejectsNonGet(t *testing.T) {
 			t.Errorf("%s leaked into the API pipeline", m)
 		}
 	}
+}
+
+func TestGameAssetContentType(t *testing.T) {
+	// The critical WebGL cases the stdlib mime table gets wrong or omits.
+	cases := map[string]string{
+		"Build/game.wasm":      "application/wasm",         // instantiateStreaming requires this exactly
+		"Build/game.data":      "application/octet-stream", // Unity payload — stdlib returns ""
+		"Build/game.mem":       "application/octet-stream", // Emscripten memory init
+		"Build/build.unityweb": "application/octet-stream", // Unity compressed
+		"game.pck":             "application/octet-stream", // Godot pack
+	}
+	for key, want := range cases {
+		if got := contentType(key); got != want {
+			t.Errorf("contentType(%q) = %q, want %q", key, got, want)
+		}
+	}
+	// Non-game assets still defer to the stdlib table (non-empty, sane).
+	if got := contentType("app.css"); got == "" || !contains(got, "css") {
+		t.Errorf("contentType(app.css) = %q, want a css type", got)
+	}
+	if got := contentType("index.html"); got == "" || !contains(got, "html") {
+		t.Errorf("contentType(index.html) = %q, want an html type", got)
+	}
+}
+
+func contains(s, sub string) bool { return len(s) >= len(sub) && (s == sub || indexOf(s, sub) >= 0) }
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
 }
