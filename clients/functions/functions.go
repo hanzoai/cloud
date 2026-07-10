@@ -38,7 +38,6 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
-	luxlog "github.com/luxfi/log"
 )
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -65,20 +64,18 @@ const (
 // second metering path.
 const invokeFeeEnvPrefix = "CLOUD_FUNCTION_FEE_CENTS"
 
-type svc struct {
+// state is functions's own data; shared deps (logger, billing meter) live in the
+// embedded cloud.Base, reached as s.Log / s.Bill.
+type state struct {
 	stores *cloud.TenantStore[*Store] // per-org functions DBs, opened once each
 	exec   *execClient
-	log    luxlog.Logger
-	// bill is the shared per-org resource gate+meter (reuses deps.Metering, the
-	// one commerce client). Nil/!Enabled() makes Gate allow and Meter a no-op.
-	bill *cloud.ResourceMeter
 }
 
-var mounted *svc
+var mounted *cloud.Service[state]
 
 // storeFor resolves the caller's org-scoped functions store, opening the per-org
 // file ({DataDir}/orgs/{orgSlug}/functions.db) once via the shared cache.
-func (s *svc) storeFor(org string) (*Store, error) { return s.stores.For(org, "") }
+func storeFor(s *cloud.Service[state], org string) (*Store, error) { return s.State.stores.For(org, "") }
 
 // ---- HTTP response shapes (console functions.ts contract) ----
 
@@ -137,7 +134,7 @@ func endpointFor(name string) string { return "/v1/functions/" + name + "/invoke
 // toView maps a Function to the ServerlessFunction shape, folding in the REAL
 // 7-day invocation rollup (nil pointers → omitted → the UI shows "—", never a
 // fabricated 0).
-func (s *svc) toView(f Function, st InvStats) functionView {
+func toView(s *cloud.Service[state], f Function, st InvStats) functionView {
 	v := functionView{
 		Name: f.Name, Namespace: f.Namespace, Environment: f.Runtime, Status: f.Status,
 		Image: f.Image, Endpoint: endpointFor(f.Name), EnvCount: len(f.EnvNames),
@@ -164,43 +161,44 @@ func httpTrigger(f Function) triggerView {
 	}
 }
 
-// Mount wires the functions surface onto app per HIP-0106.
+// Mount wires the functions surface onto app per HIP-0106. Complex flavour: it
+// holds a package-global (mounted) so Shutdown can close every per-org store, so
+// it constructs the Service value directly rather than via cloud.Mount.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("functions.Mount: nil zip.App")
 	}
-	log := deps.Logger
-	if log == nil {
+	if deps.Logger == nil {
 		return fmt.Errorf("functions.Mount: nil deps.Logger")
 	}
-	log = log.New("subsystem", "functions")
 	if deps.DataDir == "" {
 		return fmt.Errorf("functions.Mount: empty DataDir")
 	}
-	s := &svc{
+	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "functions"), State: state{
 		stores: cloud.NewTenantStore(deps.DataDir, "functions", openStore),
 		exec:   newExecClient(),
-		log:    log,
-		bill:   cloud.NewResourceMeter(deps, "functions"),
-	}
+	}}
 	mounted = s
-
-	// Static sub-routes before the :name param route so a real function can
-	// never shadow /metrics|/triggers|/deployments|/secrets.
-	app.Get("/v1/functions", s.list)
-	app.Post("/v1/functions", s.create)
-	app.Get("/v1/functions/metrics", s.metrics)
-	app.Get("/v1/functions/triggers", s.triggers)
-	app.Get("/v1/functions/deployments", s.deployments)
-	app.Get("/v1/functions/secrets", s.secrets)
-	app.Get("/v1/functions/:name", s.get)
-	app.Delete("/v1/functions/:name", s.del)
-	app.Get("/v1/functions/:name/invocations", s.invocations)
-	app.Get("/v1/functions/:name/logs", s.logs)
-	app.Post("/v1/functions/:name/invoke", s.invoke)
-
-	log.Info("functions mounted", "exec", s.exec.configured(), "brand", deps.Brand, "billing", s.bill.Enabled())
+	routes(app, s)
+	s.Log.Info("functions mounted", "exec", s.State.exec.configured(), "brand", s.Brand, "billing", s.Bill.Enabled())
 	return nil
+}
+
+// routes registers the functions surface. Static sub-routes before the :name
+// param route so a real function can never shadow
+// /metrics|/triggers|/deployments|/secrets.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/functions", cloud.Handle(s, list))
+	app.Post("/v1/functions", cloud.Handle(s, create))
+	app.Get("/v1/functions/metrics", cloud.Handle(s, metrics))
+	app.Get("/v1/functions/triggers", cloud.Handle(s, triggers))
+	app.Get("/v1/functions/deployments", cloud.Handle(s, deployments))
+	app.Get("/v1/functions/secrets", cloud.Handle(s, secrets))
+	app.Get("/v1/functions/:name", cloud.Handle(s, get))
+	app.Delete("/v1/functions/:name", cloud.Handle(s, del))
+	app.Get("/v1/functions/:name/invocations", cloud.Handle(s, invocations))
+	app.Get("/v1/functions/:name/logs", cloud.Handle(s, logs))
+	app.Post("/v1/functions/:name/invoke", cloud.Handle(s, invoke))
 }
 
 func init() {
@@ -222,12 +220,12 @@ type createReq struct {
 	EnvNames    []string `json:"envNames"`
 }
 
-func (s *svc) create(c *zip.Ctx) error {
+func create(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -281,15 +279,15 @@ func (s *svc) create(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	return c.JSON(http.StatusCreated, s.toView(saved, InvStats{}))
+	return c.JSON(http.StatusCreated, toView(s, saved, InvStats{}))
 }
 
-func (s *svc) list(c *zip.Ctx) error {
+func list(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -304,17 +302,17 @@ func (s *svc) list(c *zip.Ctx) error {
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "stats: %v", err)
 		}
-		out = append(out, s.toView(f, st))
+		out = append(out, toView(s, f, st))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"functions": out})
 }
 
-func (s *svc) get(c *zip.Ctx) error {
+func get(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -333,19 +331,19 @@ func (s *svc) get(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "invocations: %v", err)
 	}
 	return c.JSON(http.StatusOK, functionDetail{
-		functionView:      s.toView(f, st),
+		functionView:      toView(s, f, st),
 		Triggers:          []triggerView{httpTrigger(f)},
 		RecentInvocations: toInvViews(invs),
 		Secrets:           nonNil(f.EnvNames),
 	})
 }
 
-func (s *svc) del(c *zip.Ctx) error {
+func del(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -359,12 +357,12 @@ func (s *svc) del(c *zip.Ctx) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (s *svc) invocations(c *zip.Ctx) error {
+func invocations(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -382,12 +380,12 @@ func (s *svc) invocations(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"invocations": toInvViews(invs)})
 }
 
-func (s *svc) logs(c *zip.Ctx) error {
+func logs(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -406,12 +404,12 @@ func (s *svc) logs(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"logs": logs})
 }
 
-func (s *svc) triggers(c *zip.Ctx) error {
+func triggers(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -426,14 +424,14 @@ func (s *svc) triggers(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"triggers": out})
 }
 
-func (s *svc) deployments(c *zip.Ctx) error {
+func deployments(s *cloud.Service[state], c *zip.Ctx) error {
 	// Each function's current record IS its live deployment; return them as the
 	// deployment inventory (console normalizes this as a function list).
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -443,7 +441,7 @@ func (s *svc) deployments(c *zip.Ctx) error {
 	}
 	out := make([]functionView, 0, len(rows))
 	for _, f := range rows {
-		out = append(out, s.toView(f, InvStats{}))
+		out = append(out, toView(s, f, InvStats{}))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"functions": out})
 }
@@ -454,13 +452,13 @@ type secretView struct {
 	MountedBy string `json:"mountedBy,omitempty"`
 }
 
-func (s *svc) secrets(c *zip.Ctx) error {
+func secrets(s *cloud.Service[state], c *zip.Ctx) error {
 	// NAMES only — values are NEVER read or returned (Secret-Manager principle).
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -579,7 +577,7 @@ func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
-	err := mounted.stores.CloseAll()
+	err := mounted.State.stores.CloseAll()
 	mounted = nil
 	return err
 }
