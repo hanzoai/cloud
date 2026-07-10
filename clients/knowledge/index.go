@@ -186,7 +186,7 @@ func (x *indexer) indexDoc(ctx context.Context, org, doctype, name, title string
 		// so an emptied doc stops being retrievable.
 		return x.deindexDoc(ctx, org, doctype, name)
 	}
-	vec, err := x.embed(ctx, text)
+	vec, err := x.embed(ctx, org, "", text)
 	if err != nil {
 		return fmt.Errorf("embed: %w", err)
 	}
@@ -264,7 +264,7 @@ func (x *indexer) searchDoc(ctx context.Context, req searchReq) ([]hit, error) {
 	if !x.enabled() || strings.TrimSpace(req.query) == "" {
 		return []hit{}, nil
 	}
-	vec, err := x.embed(ctx, req.query)
+	vec, err := x.embed(ctx, req.org, req.project, req.query)
 	if err != nil {
 		return nil, fmt.Errorf("embed query: %w", err)
 	}
@@ -381,11 +381,11 @@ func (x *indexer) ensureCollection(ctx context.Context, org string) error {
 // chat and clients/code run through. There is no embed-specific key or endpoint.
 // An empty vector is an error (the caller decides whether that fails open at
 // index time or empty at query time).
-func (x *indexer) embed(ctx context.Context, text string) ([]float32, error) {
+func (x *indexer) embed(ctx context.Context, org, project, text string) ([]float32, error) {
 	if x.ai == nil {
 		return nil, fmt.Errorf("kb: embeddings disabled (no AI client)")
 	}
-	vecs, err := x.ai.Embed(ctx, x.embedModel, []string{text})
+	vecs, err := x.ai.Embed(ctx, &cloud.EmbedRequest{Model: x.embedModel, Inputs: []string{text}, Org: org, Project: project})
 	if err != nil {
 		return nil, err
 	}

@@ -23,6 +23,10 @@ func (c *catalogAI) ChatCompletion(_ context.Context, _ *types.ChatRequest) (*ty
 
 func (c *catalogAI) Models(_ context.Context) ([]string, error) { return c.ids, nil }
 
+func (c *catalogAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float32, error) {
+	return nil, nil
+}
+
 // TestHTTPCreateModelValidation proves agent-create rejects a model outside the
 // gateway's served catalog with a clean 400 (instead of the customer's reported
 // run-time 502 for e.g. claude-sonnet-4-5), accepts a catalog model, and — when
