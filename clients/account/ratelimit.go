@@ -1,4 +1,4 @@
-package console
+package account
 
 // Per-IP rate limiting for the abuse-sensitive console write routes (hk- key
 // mint/rotate/revoke, HUSD wallet top-up). This is DISTINCT from commerce's spend-cap
