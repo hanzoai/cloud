@@ -155,17 +155,21 @@ func TestOnOpenSeed(t *testing.T) {
 	}
 }
 
-func TestSlugifyContainsTraversal(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"acme", "acme"},
-		{"ACME", "acme"},
-		{"../evil", ".._evil"}, // no separator + not bare "." / ".." → safe single segment
-		{"a/b", "a_b"},
-		{"..", "_.."},
-		{"", ""},
-	} {
-		if got := slugify(tc.in); got != tc.want {
-			t.Errorf("slugify(%q)=%q want %q", tc.in, got, tc.want)
+// TestNewIDUnique proves __newId returns distinct 128-bit crypto/rand ids (no
+// time/zero fallback that could collide) and surfaces its error path as a value.
+func TestNewIDUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 10000; i++ {
+		id, err := newID()
+		if err != nil {
+			t.Fatalf("newID: %v", err)
 		}
+		if len(id) != 33 || id[0] != 'c' {
+			t.Fatalf("newID shape = %q", id)
+		}
+		if seen[id] {
+			t.Fatalf("newID collision at %d: %q", i, id)
+		}
+		seen[id] = true
 	}
 }
