@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerceinproc"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -122,17 +123,38 @@ func staticEdgePolicy(cfg *Config) gatewaypolicy.Policy {
 	return p
 }
 
-// buildMeteringClient constructs the commerce metering client for BillingGate.
-// An empty CommerceHTTPURL yields a not-Enabled() client (allow + no-op),
-// matching the metering package's "not configured" mode, so an unconfigured
-// deployment is never blocked. The token is a KMS-sourced secret supplied via
-// config; it is never logged.
+// buildMeteringClient constructs the commerce metering client for BillingGate —
+// the request-edge debit on every paid AI call.
+//
+// CO-RESIDENT (task #111): when commerce is folded in-process (Enabled("commerce")),
+// the gate DEBITS the in-process commerce handler over commerceinproc's self-routing
+// transport — a direct Go call, no socket to commerce.hanzo.svc:8001. The base is
+// pinned NON-EMPTY (real CLOUD_COMMERCE_HTTP_URL, else the in-process placeholder) so
+// the gate stays ENABLED even after the standalone + its env are retired — a metering
+// gate that silently no-ops is a free-money hole, so it must never drop to
+// "not configured" while commerce is co-resident. The transport resolves the handler
+// lazily (published by commercesvc.Mount before any request), so building the client
+// here (pre-MountAll) is fine.
+//
+// SPLIT-DEPLOY (unchanged): without co-residency an empty CommerceHTTPURL yields a
+// not-Enabled() client (allow + no-op) and a set one speaks plain HTTP to the
+// standalone, exactly as before. The token is KMS-sourced; never logged.
 func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
+	base := cfg.CommerceHTTPURL
+	var httpClient metering.HTTPDoer
+	inProcess := cfg.Enabled("commerce")
+	if inProcess {
+		if base == "" {
+			base = commerceinproc.PlaceholderBase
+		}
+		httpClient = commerceinproc.Client(0) // in-process dispatch; no network timeout
+	}
 	m, err := metering.New(metering.Config{
-		BaseURL:  cfg.CommerceHTTPURL,
-		Token:    cfg.CommerceServiceToken,
-		Org:      cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
-		FailOpen: cfg.BillingFailOpen,
+		BaseURL:    base,
+		Token:      cfg.CommerceServiceToken,
+		Org:        cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
+		FailOpen:   cfg.BillingFailOpen,
+		HTTPClient: httpClient, // nil off the co-resident path → metering builds its own
 	})
 	if err != nil {
 		// Only an unparseable URL reaches here. Fall back to a not-configured
@@ -141,11 +163,18 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 		m, _ = metering.New(metering.Config{})
 	}
 	if m.Enabled() {
-		log.Info("billing gate enabled", "commerce_url", cfg.CommerceHTTPURL, "fail_open", cfg.BillingFailOpen)
+		log.Info("billing gate enabled", "commerce", boolStr(inProcess, "in-process", "http:"+base), "fail_open", cfg.BillingFailOpen)
 	} else {
 		log.Info("billing gate disabled (no commerce URL)")
 	}
 	return m
+}
+
+func boolStr(b bool, t, f string) string {
+	if b {
+		return t
+	}
+	return f
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
