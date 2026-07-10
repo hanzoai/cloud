@@ -33,9 +33,15 @@ type Base struct {
 	DataDir string
 }
 
-// newBase derives the shared deps for a named subsystem: a scoped child logger,
+// NewBase derives the shared deps for a named subsystem: a scoped child logger,
 // the embedded KMS client, and the per-org resource meter (provider = name).
-func newBase(deps Deps, name string) Base {
+//
+// Most packages never call this — cloud.Mount does. It is exported for the few
+// subsystems whose Mount is more than build+routes (a background reconciler, a
+// package-global for cross-package hooks, a shutdown cancel): they construct the
+// value directly — `s := &cloud.Service[state]{Base: cloud.NewBase(deps, "x"),
+// State: st}` — then wire routes with Handle, still on the ONE generic type.
+func NewBase(deps Deps, name string) Base {
 	return Base{
 		Log:     deps.Logger.New("subsystem", name),
 		KMS:     deps.KMS,
@@ -67,7 +73,7 @@ func Mount[S any](app *zip.App, deps Deps, name string, build func(Base) (S, err
 	if deps.Logger == nil {
 		return fmt.Errorf("%s.Mount: nil deps.Logger", name)
 	}
-	b := newBase(deps, name)
+	b := NewBase(deps, name)
 	state, err := build(b)
 	if err != nil {
 		return fmt.Errorf("%s.Mount: %w", name, err)
