@@ -73,6 +73,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	log := deps.Logger.New("subsystem", "base")
 
+	// Native /v1/base/health — always answers (HealthOwner), no auth, BEFORE the
+	// embed gate, so the liveness probe never depends on CLOUD_BASE_EMBED (same
+	// pattern as clients/plan + clients/pricing).
+	app.Get("/v1/base/health", func(c *zip.Ctx) error {
+		return c.JSON(200, map[string]string{"service": "base", "status": "ok"})
+	})
+
 	if !embedEnabled() {
 		log.Info("base embed disabled; /v1/waitlist off (set CLOUD_BASE_EMBED=1 to enable)")
 		return nil
@@ -155,5 +162,7 @@ func buildMux(app core.App) (http.Handler, error) {
 func init() {
 	// Order 60 (matching the long-reserved base slot): the embedded base app +
 	// waitlist bind /v1/waitlist/* well before hanzoai/ai's /v1/* catch-all (150).
-	cloud.Register("base", 60, cloud.Typed(Mount))
+	// cloud.HealthOwner: base serves its OWN /v1/base/health in Mount (above), so
+	// the generic liveness route never shadows it and it answers even embed-off.
+	cloud.Register("base", 60, cloud.Typed(Mount), cloud.HealthOwner)
 }
