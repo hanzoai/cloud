@@ -146,12 +146,12 @@ var errExecUnconfigured = errors.New("code execution runtime not configured")
 
 // invoke runs a function and records a REAL invocation. Fail-closed when the
 // sandbox is unconfigured (503, nothing recorded, nothing fabricated).
-func (s *svc) invoke(c *zip.Ctx) error {
+func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := s.storeFor(org)
+	store, err := storeFor(s, org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
@@ -163,7 +163,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	if !s.exec.configured() {
+	if !s.State.exec.configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "code execution runtime not configured on this deployment")
 	}
 	var body struct {
@@ -180,12 +180,12 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// charge can never target another tenant. fee is computed once and reused by
 	// the post-success debit; fee==0 or unconfigured billing makes this a no-op.
 	fee := cloud.ResourceFeeCents(invokeFeeEnvPrefix, "invoke")
-	if err := s.bill.Gate(c.Context(), org, principal.Project(c), "invoke", fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), "invoke", fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
 	start := time.Now()
-	res, runErr := s.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
+	res, runErr := s.State.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
 	dur := time.Since(start).Milliseconds()
 
 	id, _ := genID("inv")
@@ -208,7 +208,7 @@ func (s *svc) invoke(c *zip.Ctx) error {
 		iv.Error = truncate(res.Errout, 16*1024)
 	}
 	if err := store.InsertInvocation(c.Context(), iv); err != nil {
-		s.log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
+		s.Log.Warn("record invocation failed", "org", org, "fn", name, "err", err)
 	}
 	// Debit the caller's org ledger when the sandbox ACTUALLY executed — real
 	// compute was consumed even if the tenant's own code exited non-zero (that
@@ -226,9 +226,9 @@ func (s *svc) invoke(c *zip.Ctx) error {
 	// request alone, compute alone, or both.
 	if runErr == nil {
 		project := principal.Project(c)
-		s.bill.Meter(org, project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
+		s.Bill.Meter(org, project, "invoke", fee, c.RequestID(), cloud.ClientIP(c))
 		gbSecCents := gbSecondsCents(dur, memLimitMB(f.MemoryLimit), cloud.ResourceFeeCents(gbSecFeeEnvPrefix, "gbsec"))
-		s.bill.MeterUsage(org, "gbsec", metering.Usage{
+		s.Bill.MeterUsage(org, "gbsec", metering.Usage{
 			Model:       "gbsec", // the billed unit: GB-seconds of compute.
 			AmountCents: gbSecCents,
 			Project:     project,
