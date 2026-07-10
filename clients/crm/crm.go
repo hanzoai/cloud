@@ -153,10 +153,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Patch("/v1/crm/applications/:id", cloud.Handle(s, patchApplication))
 }
 
-func init() {
-	cloud.Register("crm", 131, cloud.Typed(Mount))
-}
-
 // ---- shared helpers ----
 
 // tenant resolves the org — the tenant-isolation KEY — for a request. It uses

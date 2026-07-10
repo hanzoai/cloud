@@ -33,11 +33,11 @@ import (
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 
-	// Register BOTH subsystems (init) — s3svc (118) AND provisioning (120) — so the
-	// route-ordering guarantee is exercised against the REAL registry, not a
-	// contrived single-subsystem app.
-	_ "github.com/hanzoai/cloud/clients/provisioning"
-	_ "github.com/hanzoai/cloud/clients/storage"
+	// Mount storage (118) then provisioning (120) IN ORDER via their composition-root
+	// specs, so storage's static /v1/s3/buckets + /v1/s3/health register before
+	// provisioning's /v1/s3/:name — the route-precedence guarantee, on the real Mounts.
+	"github.com/hanzoai/cloud/clients/provisioning"
+	"github.com/hanzoai/cloud/clients/storage"
 )
 
 // newApp wires BuildDeps + canonical middleware + MountAll, like main()'s path.
@@ -67,7 +67,11 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	deps := cloud.BuildDeps(cfg)
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
-	if err := cloud.MountAll(app, cfg, deps); err != nil {
+	specs := []cloud.MountSpec{
+		{Name: "storage", Mount: cloud.Typed(storage.Mount), OwnsHealth: true},
+		{Name: "provisioning", Mount: cloud.Typed(provisioning.Mount)},
+	}
+	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
 	}
 	return app

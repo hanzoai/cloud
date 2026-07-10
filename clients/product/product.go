@@ -153,8 +153,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			storage += col.StorageBytes
 		}
 		return c.JSON(http.StatusOK, vectorStats{
-			TotalCollections: int64(len(cols)),
-			TotalVectors:     vectors,
+			TotalCollections:  int64(len(cols)),
+			TotalVectors:      vectors,
 			TotalStorageBytes: storage,
 		})
 	})
@@ -356,8 +356,4 @@ func orNow(s string) string {
 		return time.Now().UTC().Format(time.RFC3339)
 	}
 	return s
-}
-
-func init() {
-	cloud.Register("product", 145, cloud.Typed(Mount))
 }

@@ -219,10 +219,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-func init() {
-	cloud.Register("evals", 145, cloud.Typed(Mount))
-}
-
 // Shutdown releases the eval stores. Idempotent.
 func Shutdown() error {
 	if mounted == nil {
