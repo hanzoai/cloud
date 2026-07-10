@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -104,7 +105,7 @@ func rateKey(c *zip.Ctx) string {
 
 // rateLimit wraps a handler, refusing 429 when the caller (validated principal, else
 // socket peer) exceeds rl.
-func (s *svc) rateLimit(rl *rateLimiter, next zip.Handler) zip.Handler {
+func rateLimit(s *cloud.Service[state], rl *rateLimiter, next zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !rl.allow(rateKey(c)) {
 			return zip.Errorf(429, "rate limit exceeded; retry shortly")

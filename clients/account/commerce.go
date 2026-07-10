@@ -41,6 +41,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -79,7 +80,7 @@ func isCommerceStoreHead(sub string) bool {
 // store surface /v1/<path>, scoped to the caller's OWN org. Mirrors the five method
 // exports of app/commerce/[...path]/route.ts (the store dashboard reads AND writes:
 // create/delete a product, etc. — full CRUD, unlike billing's read-mostly GET|POST).
-func (s *svc) commerceData(c *zip.Ctx) error {
+func commerceData(s *cloud.Service[state], c *zip.Ctx) error {
 	// IDOR boundary: the org is the VALIDATED caller's own, never a client value.
 	// requireOwner=true — the store is always org-scoped (a zero-org user has none).
 	cr, ok := resolveCaller(c, true)

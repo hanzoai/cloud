@@ -28,6 +28,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -154,7 +155,7 @@ func commerceCreds() (base, token string) {
 
 // billingData forwards GET|POST /v1/billing/<path> to commerce's /v1/billing/<path>,
 // scoped to the caller's OWN subject. Mirrors GET/POST app/billing/v1/[...path]/route.ts.
-func (s *svc) billingData(c *zip.Ctx) error {
+func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	// IDOR boundary: the subject is the VALIDATED caller's own org/user, never a client
 	// value. requireOwner=true — billing is always org-scoped (a zero-org user has none).
 	cr, ok := resolveCaller(c, true)
