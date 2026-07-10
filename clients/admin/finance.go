@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -170,7 +171,7 @@ func computeFinance(in financeInput) financeData {
 // commerce revenue, then hands them to computeFinance. Global-admin only (mounted
 // under s.guard); no principal / tenant-admin / forged header → 403 before this
 // handler ever runs.
-func (s *svc) finance(c *zip.Ctx) error {
+func finance(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := callerCreds(c)
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -183,8 +184,8 @@ func (s *svc) finance(c *zip.Ctx) error {
 	// providers we resell) — it does NOT re-derive any vendor cost. TotalCents is
 	// the margin cost. Honest not-configured when commerce is unreachable.
 	cost := financeCost{Period: period}
-	if s.commerce.configured() {
-		report, err := s.commerce.costs(ctx, period)
+	if s.State.commerce.configured() {
+		report, err := s.State.commerce.costs(ctx, period)
 		if err != nil {
 			cost.Error = err.Error()
 			sources = append(sources, srcOf("commerce-costs", err, 0, now))
@@ -209,12 +210,12 @@ func (s *svc) finance(c *zip.Ctx) error {
 	// The one direct vendor read that remains: our DO prepaid-credit balance +
 	// burn-down history, which commerce does not track. Its MTD spend feeds ONLY
 	// the runway projection — it is NOT the margin cost (that is cost.TotalCents).
-	do := doCost{Configured: s.do.configured()}
-	if !s.do.configured() {
+	do := doCost{Configured: s.State.do.configured()}
+	if !s.State.do.configured() {
 		do.Error = "DO_API_TOKEN not configured"
 		sources = append(sources, srcOf("digitalocean", errUnconfigured, 0, now))
 	} else {
-		bal, err := s.do.balance(ctx)
+		bal, err := s.State.do.balance(ctx)
 		if err != nil {
 			do.Error = err.Error()
 			sources = append(sources, srcOf("digitalocean", err, 0, now))
@@ -230,7 +231,7 @@ func (s *svc) finance(c *zip.Ctx) error {
 			do.AccountBalanceCents = bal.AccountBalanceCents
 			do.GeneratedAt = bal.GeneratedAt
 			do.AvgDailyBurnCents = avgDailyBurnCents(bal.MonthToDateUsageCents, time.Now().UTC())
-			do.History = s.doHistory(ctx)
+			do.History = doHistory(s, ctx)
 			sources = append(sources, srcOf("digitalocean", nil, 1, now))
 		}
 	}
@@ -244,9 +245,9 @@ func (s *svc) finance(c *zip.Ctx) error {
 	// transient IAM/commerce failure it stays FALSE so computeFinance and the console
 	// never fabricate a negative margin / red "burning" alarm from a fake zero.
 	rev := financeRevenue{}
-	if !s.commerce.configured() {
+	if !s.State.commerce.configured() {
 		sources = append(sources, srcOf("commerce", errUnconfigured, 0, now))
-	} else if orgs, orgErr := s.listOrgs(ctx, cr); orgErr != nil {
+	} else if orgs, orgErr := listOrgs(s, ctx, cr); orgErr != nil {
 		// The revenue source is unreadable → honest not-configured, never a zero
 		// that would flip the margin negative on an upstream hiccup.
 		sources = append(sources, srcOf("commerce", orgErr, 0, now))
@@ -255,12 +256,12 @@ func (s *svc) finance(c *zip.Ctx) error {
 		partial := false
 		for _, o := range orgs {
 			subj := orgSubject(o.Name)
-			if r, e := s.commerce.usageRollup(ctx, o.Name, subj); e == nil {
+			if r, e := s.State.commerce.usageRollup(ctx, o.Name, subj); e == nil {
 				totalRev += r.ConsumedCents
 			} else {
 				partial = true
 			}
-			if m, e := s.commerce.mrrCents(ctx, o.Name, subj); e == nil {
+			if m, e := s.State.commerce.mrrCents(ctx, o.Name, subj); e == nil {
 				mrr += m
 			} else {
 				partial = true
@@ -294,8 +295,8 @@ func (s *svc) finance(c *zip.Ctx) error {
 // a failure yields an empty series, never a fabricated trend). Only usage-side
 // entries (Invoice/charges) shape the burn-down; the series stays honest-empty
 // when history is unavailable.
-func (s *svc) doHistory(ctx context.Context) []doHistoryPoint {
-	entries, err := s.do.history(ctx, 60)
+func doHistory(s *cloud.Service[state], ctx context.Context) []doHistoryPoint {
+	entries, err := s.State.do.history(ctx, 60)
 	if err != nil {
 		return []doHistoryPoint{}
 	}
