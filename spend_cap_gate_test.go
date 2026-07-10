@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hanzoai/commerce/metering"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/zap-proto/zip"
 )
 

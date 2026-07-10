@@ -1,0 +1,384 @@
+# Hanzo Commerce - Docker Compose Stack
+# Supports local development, staging, and production deployments
+#
+# Usage:
+#   Development:  docker compose -f deploy/compose.yml up
+#   Production:   docker compose -f deploy/compose.yml -f deploy/compose.production.yml up -d
+#   Blue-Green:   docker compose -f deploy/compose.yml -f deploy/compose.blue-green.yml up -d
+#
+# Environment: Set COMPOSE_ENV=production for production mode
+
+name: hanzo-commerce
+
+services:
+  # ===========================================================================
+  # COMMERCE APPLICATION (Blue/Green Ready)
+  # ===========================================================================
+
+  commerce:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VERSION: ${VERSION:-2.0.0}
+        BUILD_TIME: ${BUILD_TIME:-}
+        GIT_COMMIT: ${GIT_COMMIT:-}
+    image: hanzoai/commerce:${VERSION:-latest}
+    container_name: commerce-${DEPLOY_COLOR:-blue}
+    restart: unless-stopped
+    ports:
+      - "${COMMERCE_PORT:-8001}:8001"
+    environment:
+      # Core configuration
+      COMMERCE_DIR: /app/data
+      COMMERCE_DEV: ${COMMERCE_DEV:-false}
+      COMMERCE_SECRET: ${COMMERCE_SECRET:?Set COMMERCE_SECRET in .env}
+      PORT: 8001
+      ENV: ${ENV:-staging}
+
+      # KV caching (Valkey/Redis)
+      VALKEY_ADDR: valkey:6379
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:-}
+
+      # ClickHouse analytics
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      COMMERCE_DATASTORE: clickhouse://${CLICKHOUSE_USER:-default}:${CLICKHOUSE_PASSWORD:-}@clickhouse:9000/commerce
+
+      # Vector search (Qdrant)
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+
+      # Object storage (MinIO)
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-commerce}
+
+      # Full-text search (Meilisearch)
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
+
+      # Event streaming (NATS)
+      NATS_URL: nats://nats:4222
+      NATS_TOKEN: ${NATS_TOKEN:-}
+
+      # Workflow orchestration (Temporal)
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-commerce}
+
+      # External IAM (hanzo.id)
+      IAM_URL: ${IAM_URL:-https://api.hanzo.id}
+      IAM_API_KEY: ${IAM_API_KEY:-}
+
+      # Payment processors
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+
+      # Email service
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      MANDRILL_API_KEY: ${MANDRILL_API_KEY:-}
+
+      # Deployment metadata
+      DEPLOY_COLOR: ${DEPLOY_COLOR:-blue}
+      DEPLOY_VERSION: ${VERSION:-2.0.0}
+    volumes:
+      - commerce_data:/app/data
+      - commerce_logs:/app/logs
+    depends_on:
+      valkey:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/healthz"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    networks:
+      - commerce-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.commerce.rule=Host(`commerce.${DOMAIN:-localhost}`)"
+      - "traefik.http.services.commerce.loadbalancer.server.port=8001"
+      - "traefik.http.routers.commerce.entrypoints=websecure"
+      - "traefik.http.routers.commerce.tls.certresolver=letsencrypt"
+
+  # ===========================================================================
+  # VALKEY - Session & Cache Store (Redis-compatible)
+  # ===========================================================================
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    container_name: commerce-valkey
+    restart: unless-stopped
+    command: >
+      valkey-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${VALKEY_PASSWORD:-}
+    ports:
+      - "${VALKEY_PORT:-6379}:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+
+  # ===========================================================================
+  # QDRANT - Vector Database for Product Embeddings
+  # ===========================================================================
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: commerce-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__SERVICE__HTTP_PORT: 6333
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+
+  # ===========================================================================
+  # MINIO - Object Storage for Product Images
+  # ===========================================================================
+
+  minio:
+    image: minio/minio:latest
+    container_name: commerce-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+
+  # ===========================================================================
+  # MEILISEARCH - Full-Text Product Search
+  # ===========================================================================
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: commerce-meilisearch
+    restart: unless-stopped
+    ports:
+      - "${MEILISEARCH_PORT:-7700}:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+    environment:
+      MEILI_ENV: ${MEILI_ENV:-development}
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-}
+      MEILI_NO_ANALYTICS: true
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+
+  # ===========================================================================
+  # NATS - Event Streaming for Order Events
+  # ===========================================================================
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: commerce-nats
+    restart: unless-stopped
+    command: >
+      -js
+      -sd /data
+      -m 8222
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+
+  # ===========================================================================
+  # TEMPORAL - Workflow Orchestration
+  # ===========================================================================
+
+  temporal:
+    image: temporalio/auto-setup:1.25
+    container_name: commerce-temporal
+    restart: unless-stopped
+    ports:
+      - "${TEMPORAL_PORT:-7233}:7233"
+    environment:
+      - DB=sqlite
+      - SKIP_SCHEMA_SETUP=false
+      - SKIP_DEFAULT_NAMESPACE_CREATION=false
+    volumes:
+      - temporal_data:/etc/temporal/data
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "localhost:7233", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks:
+      - commerce-network
+    profiles:
+      - workflows
+
+  temporal-ui:
+    image: temporalio/ui:2.30.3
+    container_name: commerce-temporal-ui
+    restart: unless-stopped
+    ports:
+      - "${TEMPORAL_UI_PORT:-8080}:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal
+    networks:
+      - commerce-network
+    profiles:
+      - workflows
+
+  # ===========================================================================
+  # CLICKHOUSE - Analytics & Event Store
+  # ===========================================================================
+
+  clickhouse:
+    image: ghcr.io/hanzoai/datastore:26.6.1.1
+    container_name: commerce-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: commerce
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "datastore-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - commerce-network
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  # ===========================================================================
+  # Ingress - Reverse Proxy & Load Balancer (Optional, for Blue-Green)
+  # ===========================================================================
+
+  ingress:
+    image: ghcr.io/hanzoai/ingress:1.7.41
+    container_name: commerce-ingress
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./ingress/config.yml:/etc/ingress/config.yml:ro
+      - ./ingress/ssl:/etc/ingress/ssl:ro
+      - ingress_logs:/var/log/ingress
+    depends_on:
+      - commerce
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - commerce-network
+    profiles:
+      - proxy
+      - production
+
+# ===========================================================================
+# VOLUMES
+# ===========================================================================
+
+volumes:
+  commerce_data:
+    driver: local
+  commerce_logs:
+    driver: local
+  valkey_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+  qdrant_data:
+    driver: local
+  minio_data:
+    driver: local
+  meilisearch_data:
+    driver: local
+  nats_data:
+    driver: local
+  temporal_data:
+    driver: local
+  ingress_logs:
+    driver: local
+
+# ===========================================================================
+# NETWORKS
+# ===========================================================================
+
+networks:
+  commerce-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
