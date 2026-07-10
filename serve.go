@@ -97,6 +97,17 @@ func Serve(enable []string) error {
 		"writer_pin", writerpin.Resolve().Kind(),
 		"kms_read_only", cfg.Role.IsReader())
 
+	// Telemetry bootstrap — the ONE site. Install the process-global OTel tracer
+	// provider (wired to the o11y in-process trace sink by clients/o11y) and ADOPT it
+	// into the embedded ai module, so ai emits its gen_ai span per LLM call through the
+	// SAME provider. Runs BEFORE MountAll mounts ai (ai's object.InitTelemetry reads
+	// the adopted-ready flag at mount), and on EVERY entrypoint — cmd/cloud AND every
+	// `hanzo <svc>` share this body — replacing the cmd/cloud-only bootstrap that left
+	// `hanzo <svc>` telemetry-dark. No-op (non-nil shutdown) when clients/o11y isn't
+	// linked or no sink/endpoint is configured. clients/o11y installs the concrete
+	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
+	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
+
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
 	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
 	// cookies on every subdomain) no longer 431s legitimate requests at the
@@ -126,8 +137,8 @@ func Serve(enable []string) error {
 	// request_id) and BEFORE identity/audit/billing/handlers, so the whole
 	// authenticated pipeline nests under one span and the span CONTEXT it writes
 	// via SetContext parents every downstream span (agent.run → agent.step →
-	// chat) into a single trace. Spans ship over the SAME global ZAP provider the
-	// log pipeline uses (cmd/cloud initTelemetry), landing in hanzoai/datastore.
+	// chat) into a single trace. Spans ship over the SAME global provider installed
+	// above by installTelemetry, landing in hanzoai/datastore.
 	// Health/readiness/metrics + non-/v1 paths are skipped (see traceable). See
 	// middleware_tracing.go.
 	app.Use(TracingMiddleware())
@@ -306,6 +317,10 @@ func Serve(enable []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = healthSrv.Shutdown(shutdownCtx)
+	// Flush the tracer provider FIRST — before ShutdownAll tears down the o11y trace
+	// sink (a subsystem) — so the batch processor's buffered spans drain through the
+	// still-mounted in-process sink to ClickHouse rather than hitting ErrNoRoute.
+	telemetryShutdown(shutdownCtx)
 	// Tear down subsystems that own process-lifetime resources (background
 	// workers, DB handles) BEFORE the HTTP server closes, within the deadline —
 	// e.g. the agents scheduler drains its in-flight runs (so a scheduled run's
