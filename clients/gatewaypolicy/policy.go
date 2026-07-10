@@ -40,7 +40,8 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/hanzoai/sqlite" // the ONE Hanzo SQLite driver ("sqlite"): SQLCipher-encrypted at rest under cgo, pure-Go modernc otherwise.
+	"github.com/hanzoai/cloud/cek" // opens gateway.db encrypted at rest; a leaf pkg, no import cycle.
+	_ "github.com/hanzoai/sqlite"  // the ONE "sqlite" driver, for cek's no-key plaintext fallback.
 )
 
 // Policy is the edge policy for one scope. Zero-valued fields mean "inherit"
@@ -183,7 +184,7 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
 		return s, fmt.Errorf("gatewaypolicy: mkdir %s: %w", dataDir, err)
 	}
-	db, err := sql.Open("sqlite", filepath.Join(dataDir, "gateway.db"))
+	db, err := cek.Open(filepath.Join(dataDir, "gateway.db"))
 	if err != nil {
 		return s, fmt.Errorf("gatewaypolicy: open: %w", err)
 	}

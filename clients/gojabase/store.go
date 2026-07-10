@@ -13,11 +13,9 @@ import (
 	"sync"
 	"time"
 
-	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
-	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
-	// encrypted at rest; !cgo → pure-Go modernc). Blank import registers it. This
-	// is the SAME driver clients/crm, clients/prompts, clients/eval use — one
-	// storage substrate for every Base-backed subsystem.
+	// cek opens each per-tenant file encrypted at rest.
+	"github.com/hanzoai/cloud/cek"
+	// The ONE "sqlite" driver, kept registered for cek's no-key plaintext fallback.
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -160,7 +158,7 @@ func (s *stores) openLocked(ctx context.Context, tenant, seg string) (*sql.DB, e
 		return nil, fmt.Errorf("gojabase[%s]: mkdir %q: %w", s.name, s.dir, err)
 	}
 	path := filepath.Join(s.dir, seg+".db")
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("gojabase[%s]: open %q: %w", s.name, path, err)
 	}
