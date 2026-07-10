@@ -28,6 +28,7 @@ import (
 	// mattn+SQLCipher, encrypted at rest; !cgo → pure-Go modernc). Importing
 	// modernc directly instead would double-register "sqlite" under CGO and
 	// panic at init. Blank import registers the driver.
+	"github.com/hanzoai/cloud/internal/cek"
 	_ "github.com/hanzoai/sqlite"
 )
 
@@ -382,7 +383,7 @@ type catalog struct {
 // fork (mattn+SQLCipher on cgo, pure-Go on !cgo). MaxOpenConns(1) serializes
 // writes against the file lock without retry.
 func openCatalog(path string) (*catalog, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := cek.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite %q: %w", path, err)
 	}
