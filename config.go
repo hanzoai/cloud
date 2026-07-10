@@ -445,7 +445,7 @@ func registrableDomain(host string) string {
 // mechanism (the enable-list), ONE place.
 //
 // PHASE 2 (tasks #96, #105): commerce, captable, sign, dataroom are folded
-// in-process (clients/commercesvc, clients/captable, clients/sign, clients/dataroom)
+// in-process (clients/commerce, clients/captable, clients/sign, clients/dataroom)
 // and validated on the cloud-unified-canary (all four "mounted in-process",
 // /v1/{commerce,captable,sign,dataroom}/health 200). commerce was flipped LAST
 // (task #105) because it owns the money path: the cutover keeps the authoritative
