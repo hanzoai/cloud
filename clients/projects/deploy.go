@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
@@ -22,20 +23,20 @@ import (
 // another project, or an unconfigured/failing CF token, must NOT fail the deploy
 // (the site is already live at its S3 URL). It stamps LastPurgeAt on the project
 // (the caller persists it in the same UpdateProject that flips status to live).
-func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
+func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Project) {
 	now := time.Now().Unix()
-	if err := s.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
+	if err := s.State.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
 		switch {
 		case errors.Is(err, errHostTaken):
-			s.log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
+			s.Log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
 		case errors.Is(err, errReservedHost):
-			s.log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug)
+			s.Log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug)
 		default:
-			s.log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+			s.Log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "err", err)
 		}
 	}
-	if err := s.cf.PurgeTags(ctx, sites.CacheTag(org, p.Slug)); err != nil {
-		s.log.Warn("cloudflare purge failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+	if err := s.State.cf.PurgeTags(ctx, sites.CacheTag(org, p.Slug)); err != nil {
+		s.Log.Warn("cloudflare purge failed (continuing)", "org", org, "slug", p.Slug, "err", err)
 	}
 	p.LastPurgeAt = now
 }
@@ -55,12 +56,12 @@ func (s *svc) onPublish(ctx context.Context, org string, p *Project) {
 //     checks out the linked repo, builds it, syncs dist/ to the SAME S3 prefix,
 //     then calls .../deployments/:id/complete to flip it live. This is the
 //     "link repo → build (CI, never local) → deploy" path for large sites.
-func (s *svc) deploy(c *zip.Ctx) error {
+func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
@@ -69,9 +70,9 @@ func (s *svc) deploy(c *zip.Ctx) error {
 	}
 
 	if strings.Contains(strings.ToLower(c.Header("Content-Type")), "application/json") {
-		return s.deployGit(c, org, p)
+		return deployGit(s, c, org, p)
 	}
-	return s.deployArtifact(c, org, p)
+	return deployArtifact(s, c, org, p)
 }
 
 type gitDeployReq struct {
@@ -80,7 +81,7 @@ type gitDeployReq struct {
 	Branch string `json:"branch"`
 }
 
-func (s *svc) deployGit(c *zip.Ctx, org string, p Project) error {
+func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error {
 	var body gitDeployReq
 	if err := c.Bind(&body); err != nil {
 		return err
@@ -89,7 +90,7 @@ func (s *svc) deployGit(c *zip.Ctx, org string, p Project) error {
 		return zip.ErrBadRequest("project has no linked repo; link a repo or deploy an artifact")
 	}
 	now := time.Now().Unix()
-	version, err := s.store.NextVersion(c.Context(), p.ID)
+	version, err := s.State.store.NextVersion(c.Context(), p.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "version: %v", err)
 	}
@@ -99,22 +100,22 @@ func (s *svc) deployGit(c *zip.Ctx, org string, p Project) error {
 	}
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "queued",
-		Source: "git", Commit: strings.TrimSpace(body.Commit), Bucket: s.blob.bucket,
+		Source: "git", Commit: strings.TrimSpace(body.Commit), Bucket: s.State.blob.bucket,
 		Prefix: sitePrefix(org, p.Slug), CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.InsertDeployment(c.Context(), d); err != nil {
+	if err := s.State.store.InsertDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
 	}
 	p.Status = "building"
 	p.UpdatedAt = now
-	if err := s.store.UpdateProject(c.Context(), p); err != nil {
-		s.log.Warn("set building failed (continuing)", "slug", p.Slug, "err", err)
+	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
+		s.Log.Warn("set building failed (continuing)", "slug", p.Slug, "err", err)
 	}
 	return c.JSON(http.StatusAccepted, toDeploymentView(d))
 }
 
-func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
-	if !s.blob.configured() {
+func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error {
+	if !s.State.blob.configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage not configured (set S3_ADMIN_*)")
 	}
 	raw, err := readArtifactBody(c)
@@ -127,7 +128,7 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 	}
 
 	now := time.Now().Unix()
-	version, err := s.store.NextVersion(c.Context(), p.ID)
+	version, err := s.State.store.NextVersion(c.Context(), p.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "version: %v", err)
 	}
@@ -137,32 +138,32 @@ func (s *svc) deployArtifact(c *zip.Ctx, org string, p Project) error {
 	}
 	d := Deployment{
 		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "uploading",
-		Source: "upload", Bucket: s.blob.bucket, Prefix: sitePrefix(org, p.Slug),
+		Source: "upload", Bucket: s.State.blob.bucket, Prefix: sitePrefix(org, p.Slug),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	if err := s.store.InsertDeployment(c.Context(), d); err != nil {
+	if err := s.State.store.InsertDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
 	}
 
-	prefix, files, total, upErr := s.blob.uploadSite(c.Context(), org, p.Slug, p.CacheControl, st)
+	prefix, files, total, upErr := s.State.blob.uploadSite(c.Context(), org, p.Slug, p.CacheControl, st)
 	if upErr != nil {
 		d.Status = "error"
 		d.Message = upErr.Error()
 		d.UpdatedAt = time.Now().Unix()
-		_ = s.store.UpdateDeployment(c.Context(), d)
-		s.log.Error("deploy upload failed", "org", org, "slug", p.Slug, "err", upErr)
+		_ = s.State.store.UpdateDeployment(c.Context(), d)
+		s.Log.Error("deploy upload failed", "org", org, "slug", p.Slug, "err", upErr)
 		return zip.Errorf(http.StatusBadGateway, "upload failed: %v", upErr)
 	}
 
-	live := s.blob.liveURL(org, p.Slug)
+	live := s.State.blob.liveURL(org, p.Slug)
 	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
-	if err := s.store.UpdateDeployment(c.Context(), d); err != nil {
+	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize deployment: %v", err)
 	}
 
-	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.blob.bucket, time.Now().Unix()
-	s.onPublish(c.Context(), org, &p)
-	if err := s.store.UpdateProject(c.Context(), p); err != nil {
+	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
+	onPublish(s, c.Context(), org, &p)
+	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize project: %v", err)
 	}
 	return c.JSON(http.StatusOK, toDeploymentView(d))
@@ -231,19 +232,19 @@ type completeReq struct {
 // the built site to S3 it flips the queued deployment to live (or error). It is
 // org-scoped like every other route; CI authenticates with an org-scoped token
 // through the gateway, so the X-Org-Id binds the call to the right tenant.
-func (s *svc) completeDeployment(c *zip.Ctx) error {
+func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	d, err := s.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
+	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("deployment not found")
 	}
@@ -269,39 +270,39 @@ func (s *svc) completeDeployment(c *zip.Ctx) error {
 	if status == "live" {
 		d.LiveURL = strings.TrimSpace(body.LiveURL)
 		if d.LiveURL == "" {
-			d.LiveURL = s.blob.liveURL(org, p.Slug)
+			d.LiveURL = s.State.blob.liveURL(org, p.Slug)
 		}
 	}
-	if err := s.store.UpdateDeployment(c.Context(), d); err != nil {
+	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update deployment: %v", err)
 	}
 
 	p.UpdatedAt = now
 	if status == "live" {
 		p.Status, p.LiveURL, p.CurrentDeploy = "live", d.LiveURL, d.ID
-		s.onPublish(c.Context(), org, &p)
+		onPublish(s, c.Context(), org, &p)
 	} else {
 		p.Status = "error"
 	}
-	if err := s.store.UpdateProject(c.Context(), p); err != nil {
+	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
 	}
 	return c.JSON(http.StatusOK, toDeploymentView(d))
 }
 
-func (s *svc) listDeployments(c *zip.Ctx) error {
+func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	rows, err := s.store.ListDeployments(c.Context(), org, p.ID)
+	rows, err := s.State.store.ListDeployments(c.Context(), org, p.ID)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list deployments: %v", err)
 	}
@@ -312,19 +313,19 @@ func (s *svc) listDeployments(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-func (s *svc) getDeployment(c *zip.Ctx) error {
+func getDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.store.GetProject(c.Context(), org, slugParam(c))
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("project not found")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	d, err := s.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
+	d, err := s.State.store.GetDeployment(c.Context(), org, p.ID, strings.TrimSpace(c.Param("id")))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("deployment not found")
 	}
