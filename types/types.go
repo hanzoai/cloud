@@ -25,12 +25,18 @@ var ErrBlobNotFound = errors.New("vfs: blob not found")
 
 // Claims is the JWT-validated identity surface gateway hands to
 // downstream subsystems per HIP-0026. Sub = JWT `sub`, Org = JWT
-// `owner`, Email = JWT `email`, IsAdmin = JWT `isAdmin`.
+// `owner`, Email = JWT `email`, IsAdmin = JWT `isAdmin`, Project = JWT
+// `project` (the active org sub-scope), BillingAccount = JWT
+// `billing_account` (the funding account for that scope — an ATTRIBUTION
+// hint; the debit account is always resolved server-side by commerce from
+// the org's ProjectBinding, never trusted from a claim/header).
 type Claims struct {
-	Sub     string
-	Org     string
-	Email   string
-	IsAdmin bool
+	Sub            string
+	Org            string
+	Email          string
+	IsAdmin        bool
+	Project        string
+	BillingAccount string
 }
 
 // User is the IAM-served user object.
