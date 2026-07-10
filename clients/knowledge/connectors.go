@@ -36,6 +36,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
@@ -106,8 +107,8 @@ func oauthConfig(provider string) (oauthApp, bool) {
 // callbackURL is the deployment's own OAuth redirect URI for a provider. It is
 // derived from the deployment Domain (Deps.Domain) — a fixed, server-known origin —
 // so it is never client-influenced. Providers must have this registered.
-func (s *svc) callbackURL(provider string) string {
-	base := getenv("KB_OAUTH_REDIRECT_BASE", "https://"+s.deps.Domain)
+func callbackURL(s *cloud.Service[state], provider string) string {
+	base := getenv("KB_OAUTH_REDIRECT_BASE", "https://"+s.Domain)
 	return strings.TrimRight(base, "/") + "/v1/kb/connectors/" + provider + "/callback"
 }
 
@@ -201,7 +202,7 @@ func verifyState(state, provider string) (org string, err error) {
 // provider authorize URL (with an org-bound signed state) for the console to open —
 // no server-side redirect, so the BFF stays in control. The org is the validated
 // tenant, bound into the state, so only THIS org's connection can result.
-func (s *svc) connectStart(c *zip.Ctx) error {
+func connectStart(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
@@ -220,7 +221,7 @@ func (s *svc) connectStart(c *zip.Ctx) error {
 	}
 	q := url.Values{}
 	q.Set("client_id", app.clientID)
-	q.Set("redirect_uri", s.callbackURL(provider))
+	q.Set("redirect_uri", callbackURL(s, provider))
 	q.Set("scope", app.scope)
 	q.Set("state", state)
 	q.Set("response_type", "code")
@@ -236,7 +237,7 @@ func (s *svc) connectStart(c *zip.Ctx) error {
 // the doc/logs), and the kb-connector document is upserted to "connected". Because
 // the org is from the state THIS server signed, an attacker cannot land their token
 // in a victim org.
-func (s *svc) connectCallback(c *zip.Ctx) error {
+func connectCallback(s *cloud.Service[state], c *zip.Ctx) error {
 	provider := c.Param("provider")
 	if !providers[provider] {
 		return zip.ErrNotFound("unknown connector")
@@ -259,23 +260,23 @@ func (s *svc) connectCallback(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s connector is not configured", provider)
 	}
 
-	token, account, err := exchangeCode(c.Context(), provider, app, code, s.callbackURL(provider))
+	token, account, err := exchangeCode(c.Context(), provider, app, code, callbackURL(s, provider))
 	if err != nil {
-		s.deps.Logger.Warn("kb oauth exchange failed", "provider", provider, "org", org, "err", err)
+		s.Log.Warn("kb oauth exchange failed", "provider", provider, "org", org, "err", err)
 		return zip.ErrBadRequest("token exchange failed")
 	}
 
 	// Store the token in KMS — the ONE place a retrievable secret lives. Never the doc.
 	ref := kmsRef(org, provider)
-	if s.deps.KMS == nil {
+	if s.KMS == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
 	}
-	if err := s.deps.KMS.PutSecret(c.Context(), ref, []byte(token)); err != nil {
-		s.deps.Logger.Warn("kb kms put failed", "provider", provider, "org", org, "err", err)
+	if err := s.KMS.PutSecret(c.Context(), ref, []byte(token)); err != nil {
+		s.Log.Warn("kb kms put failed", "provider", provider, "org", org, "err", err)
 		return zip.Errorf(http.StatusServiceUnavailable, "could not persist connector credential")
 	}
 
-	if err := s.upsertConnector(c.Context(), org, provider, map[string]any{
+	if err := upsertConnector(s, c.Context(), org, provider, map[string]any{
 		"provider": provider,
 		"status":   "connected",
 		"account":  account,
@@ -292,7 +293,7 @@ func (s *svc) connectCallback(c *zip.Ctx) error {
 // (a live count of kb-source documents from each provider in this org). Providers
 // that are configured but not yet connected appear as "disconnected" so the console
 // can offer a Connect button. No secret is ever returned.
-func (s *svc) listConnectors(c *zip.Ctx) error {
+func listConnectors(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
@@ -328,7 +329,7 @@ func (s *svc) listConnectors(c *zip.Ctx) error {
 // syncConnector pulls the provider's documents for the caller's org and files them
 // as kb-source documents (which the after_save hook indexes). The org is the
 // validated tenant; the token is read from KMS. Returns the number ingested.
-func (s *svc) syncConnector(c *zip.Ctx) error {
+func syncConnector(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
@@ -340,17 +341,17 @@ func (s *svc) syncConnector(c *zip.Ctx) error {
 	if !framework.Installed(c.Context(), org, DTSource) {
 		return zip.ErrBadRequest("install the kb module first (POST /v1/framework/modules/kb/install)")
 	}
-	if s.deps.KMS == nil {
+	if s.KMS == nil {
 		return zip.Errorf(http.StatusServiceUnavailable, "secret store unavailable")
 	}
-	tokenBytes, err := s.deps.KMS.GetSecret(c.Context(), kmsRef(org, provider))
+	tokenBytes, err := s.KMS.GetSecret(c.Context(), kmsRef(org, provider))
 	if err != nil || len(tokenBytes) == 0 {
 		return zip.ErrBadRequest("connector not connected")
 	}
 
-	_ = s.upsertConnector(c.Context(), org, provider, map[string]any{"provider": provider, "status": "syncing"})
+	_ = upsertConnector(s, c.Context(), org, provider, map[string]any{"provider": provider, "status": "syncing"})
 
-	n, cursor, syncErr := s.runSync(c.Context(), org, provider, string(tokenBytes))
+	n, cursor, syncErr := runSync(s, c.Context(), org, provider, string(tokenBytes))
 
 	fields := map[string]any{
 		"provider":  provider,
@@ -364,10 +365,10 @@ func (s *svc) syncConnector(c *zip.Ctx) error {
 		fields["status"] = "error"
 		fields["error"] = truncate([]byte(syncErr.Error()), 200)
 	}
-	_ = s.upsertConnector(c.Context(), org, provider, fields)
+	_ = upsertConnector(s, c.Context(), org, provider, fields)
 
 	if syncErr != nil {
-		s.deps.Logger.Warn("kb sync failed", "provider", provider, "org", org, "err", syncErr)
+		s.Log.Warn("kb sync failed", "provider", provider, "org", org, "err", syncErr)
 		return zip.Errorf(http.StatusBadGateway, "sync failed: %s", syncErr.Error())
 	}
 	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "ingested": n})
@@ -379,7 +380,7 @@ func (s *svc) syncConnector(c *zip.Ctx) error {
 // The ingested kb-source documents are left in the store (the org's own data) but
 // no longer retrievable via vector search once their points are purged; a caller
 // may delete them via the framework CRUD surface. Everything is org-scoped.
-func (s *svc) disconnectConnector(c *zip.Ctx) error {
+func disconnectConnector(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Tenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid principal required")
@@ -388,14 +389,14 @@ func (s *svc) disconnectConnector(c *zip.Ctx) error {
 	if !providers[provider] {
 		return zip.ErrNotFound("unknown connector")
 	}
-	if s.deps.KMS != nil {
+	if s.KMS != nil {
 		// Tombstone the credential so a later sync cannot reuse it.
-		_ = s.deps.KMS.PutSecret(c.Context(), kmsRef(org, provider), []byte{})
+		_ = s.KMS.PutSecret(c.Context(), kmsRef(org, provider), []byte{})
 	}
 	if err := index().deindexProvider(c.Context(), org, provider); err != nil {
-		s.deps.Logger.Warn("kb deindex provider failed", "provider", provider, "org", org, "err", err)
+		s.Log.Warn("kb deindex provider failed", "provider", provider, "org", org, "err", err)
 	}
-	_ = s.upsertConnector(c.Context(), org, provider, map[string]any{
+	_ = upsertConnector(s, c.Context(), org, provider, map[string]any{
 		"provider": provider, "status": "disconnected", "kms_ref": "", "cursor": "",
 	})
 	return c.JSON(http.StatusOK, map[string]any{"provider": provider, "status": "disconnected"})
@@ -406,7 +407,7 @@ func (s *svc) disconnectConnector(c *zip.Ctx) error {
 // existing document so a partial status update (e.g. "syncing") doesn't drop the
 // account/kms_ref. Uses the framework in-process API so the write is validated and
 // org-scoped exactly like an HTTP write.
-func (s *svc) upsertConnector(ctx context.Context, org, provider string, fields map[string]any) error {
+func upsertConnector(s *cloud.Service[state], ctx context.Context, org, provider string, fields map[string]any) error {
 	name, err := framework.FindByField(ctx, org, DTConnector, "provider", provider)
 	if err != nil {
 		return err
