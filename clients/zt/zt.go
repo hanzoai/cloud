@@ -35,48 +35,46 @@
 package zt
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-type svc struct {
-	cl  *client
-	log luxlog.Logger
+// state is zt's own data; shared deps live in the embedded cloud.Base.
+type state struct {
+	cl *client
 }
 
-// Mount wires the networking surface onto app per HIP-0106.
+// Mount wires the networking surface onto app per HIP-0106 — one line over the
+// generic subsystem entrypoint.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	if app == nil {
-		return fmt.Errorf("zt.Mount: nil zip.App")
-	}
-	if deps.Logger == nil {
-		return fmt.Errorf("zt.Mount: nil deps.Logger")
-	}
-	s := &svc{cl: newClient(), log: deps.Logger.New("subsystem", "zero-trust")}
-	s.routes(app)
-
-	if !s.cl.configured() {
-		s.log.Warn("zt networking surface mounted fail-closed: ZT_CLIENT_ID/ZT_CLIENT_SECRET not set (all ops 503 until configured)",
-			"controller", s.cl.target)
-		return nil
-	}
-	s.log.Info("zt networking surface mounted", "controller", s.cl.target, "brand", deps.Brand, "env", deps.Env)
-	return nil
+	return cloud.Mount(app, deps, "zero-trust", build, routes)
 }
 
-// routes is the ONE place the surface is wired — shared by Mount (real controller)
-// and the test (an httptest fake). Static paths register before their :param
-// siblings so an id can never shadow a literal.
-func (s *svc) routes(app *zip.App) {
-	app.Get("/v1/networks", s.listNetworks)
-	app.Get("/v1/networks/:id", s.getNetwork)
-	app.Get("/v1/mesh/services", s.listMeshServices)
-	app.Get("/v1/edge/nodes", s.listEdgeNodes)
+// build constructs the zt state: the ZT controller client from its env
+// (ZT_CLIENT_ID/ZT_CLIENT_SECRET are KMS-injected). It records the mount posture —
+// a fail-closed Warn when the service credential is absent (every op 503 until
+// configured), an Info with the controller target otherwise.
+func build(b cloud.Base) (state, error) {
+	cl := newClient()
+	if !cl.configured() {
+		b.Log.Warn("zt networking surface mounted fail-closed: ZT_CLIENT_ID/ZT_CLIENT_SECRET not set (all ops 503 until configured)",
+			"controller", cl.target)
+	} else {
+		b.Log.Info("zt networking surface mounted", "controller", cl.target, "brand", b.Brand, "env", b.Env)
+	}
+	return state{cl: cl}, nil
+}
+
+// routes is the ONE place the surface is wired. Static paths register before their
+// :param siblings so an id can never shadow a literal.
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Get("/v1/networks", cloud.Handle(s, listNetworks))
+	app.Get("/v1/networks/:id", cloud.Handle(s, getNetwork))
+	app.Get("/v1/mesh/services", cloud.Handle(s, listMeshServices))
+	app.Get("/v1/edge/nodes", cloud.Handle(s, listEdgeNodes))
 }
 
 func init() {
@@ -88,8 +86,8 @@ func init() {
 // attribute this client filters ZT resources by, so a caller can never read another
 // tenant's networking. gate() also enforces the fail-closed 503 when ZT is
 // unconfigured, in ONE place, before any handler touches the controller.
-func (s *svc) gate(c *zip.Ctx) (string, error) {
-	if !s.cl.configured() {
+func gate(s *cloud.Service[state], c *zip.Ctx) (string, error) {
+	if !s.State.cl.configured() {
 		// Customer-facing body names NO internal env/config (the Warn log at Mount
 		// records ZT_CLIENT_ID/ZT_CLIENT_SECRET for ops). Fail-closed 503 = "mounted
 		// but not configured on this deployment", which the console renders as a clean
@@ -105,23 +103,23 @@ func (s *svc) gate(c *zip.Ctx) (string, error) {
 
 // ---- networks (the org's ZT overlay, projected from its edge-routers) ----
 
-func (s *svc) listNetworks(c *zip.Ctx) error {
-	if !s.cl.configured() {
+func listNetworks(s *cloud.Service[state], c *zip.Ctx) error {
+	if !s.State.cl.configured() {
 		// ZT not configured on this deployment — a READ returns an honest-EMPTY list
 		// (200), rendered as a clean "no networks" state, NOT the gate's fail-closed
 		// 503 that logs as a console error on every load. Writes stay fail-closed.
 		return c.JSON(http.StatusOK, map[string]any{"networks": []networkView{}})
 	}
-	org, err := s.gate(c)
+	org, err := gate(s, c)
 	if err != nil {
 		return err
 	}
-	routers, err := s.orgRouters(c, org)
+	routers, err := orgRouters(s, c, org)
 	if err != nil {
 		// ZT controller unreachable / unconfigured (ZT_CLIENT_ID/SECRET optional) —
 		// degrade this READ to an honest-EMPTY list (200) instead of 503-ing the
 		// Networks page. Writes stay fail-closed.
-		s.log.Warn("zt controller unreachable; returning empty network list", "org", org, "err", err)
+		s.Log.Warn("zt controller unreachable; returning empty network list", "org", org, "err", err)
 		return c.JSON(http.StatusOK, map[string]any{"networks": []networkView{}})
 	}
 	out := make([]networkView, 0, 1)
@@ -131,8 +129,8 @@ func (s *svc) listNetworks(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"networks": out})
 }
 
-func (s *svc) getNetwork(c *zip.Ctx) error {
-	org, err := s.gate(c)
+func getNetwork(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := gate(s, c)
 	if err != nil {
 		return err
 	}
@@ -141,7 +139,7 @@ func (s *svc) getNetwork(c *zip.Ctx) error {
 	if c.Param("id") != networkID(org) {
 		return zip.ErrNotFound("network not found")
 	}
-	routers, err := s.orgRouters(c, org)
+	routers, err := orgRouters(s, c, org)
 	if err != nil {
 		return err
 	}
@@ -154,12 +152,12 @@ func (s *svc) getNetwork(c *zip.Ctx) error {
 
 // ---- mesh services (ZT edge services) ----
 
-func (s *svc) listMeshServices(c *zip.Ctx) error {
-	org, err := s.gate(c)
+func listMeshServices(s *cloud.Service[state], c *zip.Ctx) error {
+	org, err := gate(s, c)
 	if err != nil {
 		return err
 	}
-	all, err := listAll[ztService](s.cl, c, "/services")
+	all, err := listAll[ztService](s.State.cl, c, "/services")
 	if err != nil {
 		return err
 	}
@@ -173,21 +171,21 @@ func (s *svc) listMeshServices(c *zip.Ctx) error {
 
 // ---- edge nodes (ZT edge-routers) ----
 
-func (s *svc) listEdgeNodes(c *zip.Ctx) error {
-	if !s.cl.configured() {
+func listEdgeNodes(s *cloud.Service[state], c *zip.Ctx) error {
+	if !s.State.cl.configured() {
 		// Same as listNetworks: an unconfigured ZT deployment yields an honest-EMPTY
 		// edge-node list (200), not the gate's fail-closed 503. Writes stay fail-closed.
 		return c.JSON(http.StatusOK, map[string]any{"nodes": []edgeNodeView{}})
 	}
-	org, err := s.gate(c)
+	org, err := gate(s, c)
 	if err != nil {
 		return err
 	}
-	routers, err := s.orgRouters(c, org)
+	routers, err := orgRouters(s, c, org)
 	if err != nil {
 		// Same graceful fold as listNetworks — an unreachable/unconfigured ZT controller
 		// yields an honest-EMPTY edge-node list (200), never a 503 page error.
-		s.log.Warn("zt controller unreachable; returning empty edge-node list", "org", org, "err", err)
+		s.Log.Warn("zt controller unreachable; returning empty edge-node list", "org", org, "err", err)
 		return c.JSON(http.StatusOK, map[string]any{"nodes": []edgeNodeView{}})
 	}
 	out := make([]edgeNodeView, 0, len(routers))
@@ -200,8 +198,8 @@ func (s *svc) listEdgeNodes(c *zip.Ctx) error {
 // orgRouters lists the controller's edge-routers and filters to the caller's org —
 // the ONE place routers are fetched+scoped, shared by /v1/networks and
 // /v1/edge/nodes so both derive from the identical tenant-filtered set.
-func (s *svc) orgRouters(c *zip.Ctx, org string) ([]ztEdgeRouter, error) {
-	all, err := listAll[ztEdgeRouter](s.cl, c, "/edge-routers")
+func orgRouters(s *cloud.Service[state], c *zip.Ctx, org string) ([]ztEdgeRouter, error) {
+	all, err := listAll[ztEdgeRouter](s.State.cl, c, "/edge-routers")
 	if err != nil {
 		return nil, err
 	}
