@@ -49,6 +49,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
 )
@@ -59,8 +61,8 @@ import (
 // logger (s.Log), used for the mount line.
 type state struct {
 	iam      *iamClient
-	commerce *commerceClient
-	health   *healthClient
+	commerce *commerce.Client
+	health   *health.Client
 	do       *doClient
 	adminOrg string
 	// auditStore is cloud's OWN tamper-evident audit store (nil when unconfigured,
@@ -87,8 +89,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		Base: b,
 		State: state{
 			iam:        newIAMClient(iamBase(deps)),
-			commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-			health:     newHealthClient(o11yHealthURL()),
+			commerce:   commerce.New(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+			health:     health.New(o11yHealthURL()),
 			do:         newDOClient(doTokenFromEnv()),
 			adminOrg:   adminOrgOf(deps),
 			auditStore: deps.Audit,
@@ -100,7 +102,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	b.Log.Info("admin surface mounted",
 		"prefix", "/v1/admin",
 		"iam", s.State.iam.configured(),
-		"commerce", s.State.commerce.configured(),
+		"commerce", s.State.commerce.Configured(),
 		"digitalocean", s.State.do.configured(),
 		"adminOrg", s.State.adminOrg,
 	)
@@ -433,7 +435,7 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	var spend int64
 	switch {
 	case org != "":
-		if r, err := s.State.commerce.usageRollup(ctx, org, orgSubject(org)); err == nil {
+		if r, err := s.State.commerce.UsageRollup(ctx, org, orgSubject(org)); err == nil {
 			spend = r.ConsumedCents
 		}
 	case sc.super:
@@ -441,7 +443,7 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 		orgs, err := listOrgs(s, ctx, cr)
 		if err == nil {
 			for _, o := range orgs {
-				if r, e := s.State.commerce.usageRollup(ctx, o.Name, orgSubject(o.Name)); e == nil {
+				if r, e := s.State.commerce.UsageRollup(ctx, o.Name, orgSubject(o.Name)); e == nil {
 					spend += r.ConsumedCents
 				}
 			}
@@ -491,12 +493,12 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	// Commerce freshness: probe one org's rollup so the tile reflects a real read.
 	commerceRows := 0
 	var commerceErr error
-	if s.State.commerce.configured() {
+	if s.State.commerce.Configured() {
 		probe := s.State.adminOrg
 		if len(orgs) > 0 {
 			probe = orgs[0].Name
 		}
-		if _, err := s.State.commerce.usageRollup(ctx, probe, orgSubject(probe)); err != nil {
+		if _, err := s.State.commerce.UsageRollup(ctx, probe, orgSubject(probe)); err != nil {
 			commerceErr = err
 		} else {
 			commerceRows = 1
@@ -508,7 +510,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// o11y System Health.
 	o11yRows := 0
-	oOK, oErr := s.State.health.ok(ctx)
+	oOK, oErr := s.State.health.OK(ctx)
 	if oOK {
 		o11yRows = 1
 	}
@@ -577,10 +579,10 @@ func orgUserCount(s *cloud.Service[state], ctx context.Context, cr creds, org st
 func orgMoney(s *cloud.Service[state], ctx context.Context, org string) (int64, int64) {
 	subj := orgSubject(org)
 	var spend, credits int64
-	if r, err := s.State.commerce.usageRollup(ctx, org, subj); err == nil {
+	if r, err := s.State.commerce.UsageRollup(ctx, org, subj); err == nil {
 		spend = r.ConsumedCents
 	}
-	if c, err := s.State.commerce.creditsCents(ctx, org, subj); err == nil {
+	if c, err := s.State.commerce.CreditsCents(ctx, org, subj); err == nil {
 		credits = c
 	}
 	return spend, credits
