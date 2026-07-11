@@ -101,3 +101,58 @@ func TestGateExemptsHealthPathsButGatesData(t *testing.T) {
 		t.Fatal("unauth data route reached the runtime — health exemption leaked to data paths")
 	}
 }
+
+// The Sentry error-ingest WRITE endpoints authenticate with a DSN key downstream in
+// the o11y handler (not a Hanzo principal), so gate() MUST let a principal-less POST
+// to /v1/o11y/api/<project>/envelope|store/ through — else the tokenless ingest the
+// gateway allowlists is 403'd here and error-tracking can never ingest. The exemption
+// MUST stay tight: reads (GET, and the Issues list/detail/update) keep the principal
+// gate, so it can't be widened into a cross-tenant read hole.
+func TestGateExemptsErrorIngestButGatesReads(t *testing.T) {
+	var reached atomic.Bool
+	backend := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Store(true)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	})
+	gated := gate(backend)
+
+	// DSN-authed ingest WRITEs, NO principal → must pass (the handler's DSN check authenticates).
+	for _, p := range []string{
+		"/v1/o11y/api/hanzo/envelope/",
+		"/v1/o11y/api/hanzo/store/",
+		"/v1/o11y/api/00000000-0000-0000-0000-000000000000/envelope", // slash-less tolerated
+	} {
+		reached.Store(false)
+		req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+p, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("unauth ingest %s = HTTP %d, want 200 (DSN-authed ingest must bypass the principal gate)", p, rec.Code)
+		}
+		if !reached.Load() {
+			t.Fatalf("unauth ingest %s did not reach the runtime — gate over-blocking DSN ingest", p)
+		}
+	}
+
+	// These MUST stay gated (403) with no principal — the exemption must not leak to reads.
+	type gc struct{ method, path string }
+	for _, c := range []gc{
+		{http.MethodGet, "/v1/o11y/api/errortracking/issues"},            // Issues LIST (read)
+		{http.MethodGet, "/v1/o11y/api/errortracking/issues/abc"},        // Issue detail (read)
+		{http.MethodPost, "/v1/o11y/api/errortracking/issues/abc"},       // Issue UPDATE (write, not ingest)
+		{http.MethodGet, "/v1/o11y/api/hanzo/envelope/"},                 // ingest is POST-only
+		{http.MethodPost, "/v1/o11y/api/v1/query_range"},                 // data query, not ingest suffix
+	} {
+		reached.Store(false)
+		req := httptest.NewRequest(c.method, "http://api.hanzo.ai"+c.path, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("unauth %s %s = HTTP %d, want 403 (ingest exemption must not leak to reads/updates)", c.method, c.path, rec.Code)
+		}
+		if reached.Load() {
+			t.Fatalf("unauth %s %s reached the runtime — ingest exemption leaked", c.method, c.path)
+		}
+	}
+}
