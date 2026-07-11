@@ -111,8 +111,12 @@ func socialPost() framework.DocType {
 			{Fieldname: "asset", Fieldtype: framework.FieldLink, Label: "Asset", Options: DocTypeAsset},
 			{Fieldname: "design", Fieldtype: framework.FieldData, Label: "Design"},
 			{Fieldname: "scheduled_at", Fieldtype: framework.FieldDatetime, Label: "Scheduled At"},
-			{Fieldname: "published_at", Fieldtype: framework.FieldDatetime, Label: "Published At"},
-			{Fieldname: "external_ids", Fieldtype: framework.FieldJSON, Label: "External IDs"},
+			// published_at + external_ids are SERVER-MANAGED: written only by the trusted
+			// Transition/Publish ops, never by a client. ReadOnly is the schema declaration
+			// (console renders them read-only); the enforceServerOwned before_save hook is
+			// what actually rejects a client write, since the store does not gate ReadOnly.
+			{Fieldname: "published_at", Fieldtype: framework.FieldDatetime, Label: "Published At", ReadOnly: true},
+			{Fieldname: "external_ids", Fieldtype: framework.FieldJSON, Label: "External IDs", ReadOnly: true},
 			statusField(), projectField(), tagsField(),
 		},
 		Perms: contentPerms(),
