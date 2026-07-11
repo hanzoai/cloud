@@ -129,7 +129,11 @@ func HandleProviderWebhook(c *gin.Context) {
 // default "hanzo" org. Mirrors the service-token resolution in
 // middleware/accesstoken.go so webhooks and service calls agree on scope.
 func resolveWebhookOrg(c *gin.Context) *organization.Organization {
-	if org := middleware.GetOrganization(c); org != nil {
+	// GetOrganizationOK, not GetOrganization: webhook ingress runs OUTSIDE the
+	// auth-token group, so no middleware ever set "organization" — the MustGet
+	// variant panics (500) on every sessionless delivery, exactly the case this
+	// resolver exists to handle.
+	if org, ok := middleware.GetOrganizationOK(c); ok && org != nil {
 		return org
 	}
 	db := datastore.New(middleware.GetContext(c))
