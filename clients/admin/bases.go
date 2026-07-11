@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/zap-proto/zip"
 )
 
@@ -62,7 +63,7 @@ func baseAdminConfig() (base, token string, ok bool) {
 // baseProxy issues a server-authed GET to the Base admin surface and returns its raw JSON
 // body + status. Bounded read; Bearer token only when configured; never forwards a client
 // header.
-func baseProxy(s *cloud.Service[state], ctx context.Context, target, token string) (json.RawMessage, int, error) {
+func baseProxy(s *cloud.Service[core.State], ctx context.Context, target, token string) (json.RawMessage, int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("base request: %w", err)
@@ -85,8 +86,8 @@ func baseProxy(s *cloud.Service[state], ctx context.Context, target, token strin
 
 // bases answers GET /v1/admin/bases — the scoped Base-instance list. Honest empty when the
 // engine is unconfigured; scope-filtered for a non-super caller.
-func bases(s *cloud.Service[state], c *zip.Ctx) error {
-	sc := resolveScope(s, c)
+func bases(s *cloud.Service[core.State], c *zip.Ctx) error {
+	sc := core.ResolveScope(s, c)
 	base, token, ok := baseAdminConfig()
 	if !ok {
 		return c.JSON(200, map[string]any{
@@ -97,8 +98,8 @@ func bases(s *cloud.Service[state], c *zip.Ctx) error {
 		})
 	}
 	q := url.Values{}
-	if !sc.super && len(sc.orgs) > 0 {
-		q.Set("org", sc.orgs[0]) // defense 1: server-side narrowing to the caller's org
+	if !sc.Super && len(sc.Orgs) > 0 {
+		q.Set("org", sc.Orgs[0]) // defense 1: server-side narrowing to the caller's org
 	}
 	target := base + "/v1/base/instances"
 	if enc := q.Encode(); enc != "" {
@@ -106,20 +107,20 @@ func bases(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	raw, code, err := baseProxy(s, c.Context(), target, token)
 	if err != nil {
-		return fail(c, err.Error())
+		return core.Fail(c, err.Error())
 	}
 	if code/100 != 2 {
-		return fail(c, fmt.Sprintf("base engine returned http %d", code))
+		return core.Fail(c, fmt.Sprintf("base engine returned http %d", code))
 	}
 	// Defense 2: re-check every row against the resolved scope. A scoped caller NEVER
 	// sees a row outside their subtree even if the upstream ignored ?org=.
 	out := make([]baseInstance, 0)
 	for _, r := range decodeInstances(raw) {
-		if sc.scopedToOrg(r.Org) {
+		if sc.ScopedToOrg(r.Org) {
 			out = append(out, r)
 		}
 	}
-	return okList(c, out, len(out))
+	return core.OKList(c, out, len(out))
 }
 
 // decodeInstances tolerates BOTH a bare JSON array and a { data: [...] } envelope (the two
