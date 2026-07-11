@@ -36,6 +36,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/hanzoai/cloud/clients/admin/money"
 	"github.com/zap-proto/zip"
 )
@@ -116,7 +117,7 @@ func customers(s *cloud.Service[state], c *zip.Ctx) error {
 	for i, o := range orgs {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, o iamOrg) {
+		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			rows[i] = enrichCustomer(s, ctx, cr, o)
@@ -131,7 +132,7 @@ func customers(s *cloud.Service[state], c *zip.Ctx) error {
 // enrichCustomer folds one org's real IAM + commerce reads into a customer row.
 // Each read is best-effort: an upstream miss degrades that field to its honest
 // zero/empty (never a fabricated value), so one flaky org never fails the fleet.
-func enrichCustomer(s *cloud.Service[state], ctx context.Context, cr creds, o iamOrg) customerRow {
+func enrichCustomer(s *cloud.Service[state], ctx context.Context, cr iam.Creds, o iam.Org) customerRow {
 	users, _ := orgUsers(s, ctx, cr, o.Name)
 	spend, credits := orgMoney(s, ctx, o.Name)
 	plan, _ := s.State.commerce.Plan(ctx, o.Name)
@@ -370,13 +371,13 @@ func setForbidden(s *cloud.Service[state], c *zip.Ctx, forbidden bool) error {
 	var affected, failed []string
 	for _, u := range users {
 		id := u.Owner + "/" + u.Name
-		full, gerr := s.State.iam.getUserRaw(ctx, cr, id)
+		full, gerr := s.State.iam.User(ctx, cr, id)
 		if gerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
 		full["isForbidden"] = forbidden
-		if uerr := s.State.iam.updateUserRaw(ctx, cr, id, full); uerr != nil {
+		if uerr := s.State.iam.SetUser(ctx, cr, id, full); uerr != nil {
 			failed = append(failed, u.Name)
 			continue
 		}
@@ -412,18 +413,18 @@ func setForbidden(s *cloud.Service[state], c *zip.Ctx, forbidden bool) error {
 // customer surface folds over. It is the ONE IAM read that yields the user count,
 // the owner email, the suspend status, and the API-key presence — so a customer
 // row costs a single get-users call, not four.
-func orgUsers(s *cloud.Service[state], ctx context.Context, cr creds, org string) ([]iamUser, error) {
+func orgUsers(s *cloud.Service[state], ctx context.Context, cr iam.Creds, org string) ([]iam.User, error) {
 	q := url.Values{}
 	q.Set("owner", org)
 	q.Set("p", "1")
 	q.Set("pageSize", "200")
-	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.Users(ctx, cr, q)
 	if err != nil {
 		return nil, err
 	}
-	var raw []iamUser
-	if len(res.rows) > 0 {
-		if err := json.Unmarshal(res.rows, &raw); err != nil {
+	var raw []iam.User
+	if len(res.Rows) > 0 {
+		if err := json.Unmarshal(res.Rows, &raw); err != nil {
 			return nil, fmt.Errorf("users decode: %w", err)
 		}
 	}
@@ -433,7 +434,7 @@ func orgUsers(s *cloud.Service[state], ctx context.Context, cr creds, org string
 // findOrg returns the IAM org by slug (nil, nil when it does not exist) so a
 // management action can validate its target before acting — never credit or
 // suspend an org that isn't real.
-func findOrg(s *cloud.Service[state], ctx context.Context, cr creds, org string) (*iamOrg, error) {
+func findOrg(s *cloud.Service[state], ctx context.Context, cr iam.Creds, org string) (*iam.Org, error) {
 	orgs, err := listOrgs(s, ctx, cr)
 	if err != nil {
 		return nil, err
@@ -448,7 +449,7 @@ func findOrg(s *cloud.Service[state], ctx context.Context, cr creds, org string)
 
 // ownerEmail picks the org's admin user's email (the account owner), falling back
 // to the first user with an email. Empty when no user carries one.
-func ownerEmail(users []iamUser) string {
+func ownerEmail(users []iam.User) string {
 	for _, u := range users {
 		if u.IsAdmin && strings.TrimSpace(u.Email) != "" {
 			return u.Email
@@ -465,7 +466,7 @@ func ownerEmail(users []iamUser) string {
 // statusOf derives the suspend status: an org is "suspended" only when it has at
 // least one user and EVERY user is forbidden (a partial forbid is still "active" —
 // the operator sees the per-user state in the detail). Honest by construction.
-func statusOf(users []iamUser) string {
+func statusOf(users []iam.User) string {
 	if len(users) == 0 {
 		return "active"
 	}
@@ -479,7 +480,7 @@ func statusOf(users []iamUser) string {
 
 // lastActiveOf returns the most recent user sign-in across the org (RFC3339), the
 // best "last active" signal available from IAM. Empty when no user has signed in.
-func lastActiveOf(users []iamUser) string {
+func lastActiveOf(users []iam.User) string {
 	last := ""
 	for _, u := range users {
 		if u.LastSigninTime > last {
