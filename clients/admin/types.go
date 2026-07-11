@@ -110,29 +110,5 @@ type productRow struct {
 	Updated     string `json:"updated"`
 }
 
-// ── IAM wire shapes (the subset admin decodes from get-* payloads) ─────────
-
-// iamOrg is the IAM Organization subset the aggregators fold over.
-type iamOrg struct {
-	Owner       string `json:"owner"`
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	CreatedTime string `json:"createdTime"`
-}
-
-// iamUser is the IAM User subset mapped into OperatorUser. AccessKey is decoded
-// ONLY to derive API-key PRESENCE (hasApiKey) for the customer detail — its VALUE
-// is never surfaced in any admin response (the hk- key is a credential, not a
-// display field), so no secret leaves this binary.
-type iamUser struct {
-	Owner          string `json:"owner"`
-	Name           string `json:"name"`
-	Email          string `json:"email"`
-	DisplayName    string `json:"displayName"`
-	Tag            string `json:"tag"`
-	CreatedTime    string `json:"createdTime"`
-	LastSigninTime string `json:"lastSigninTime"`
-	IsAdmin        bool   `json:"isAdmin"`
-	IsForbidden    bool   `json:"isForbidden"`
-	AccessKey      string `json:"accessKey"`
-}
+// IAM wire shapes (iamOrg/iamUser) now live in clients/admin/iam as iam.Org /
+// iam.User — the upstream-client layer owns the get-* payload decode.

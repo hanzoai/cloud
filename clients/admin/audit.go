@@ -123,9 +123,9 @@ func auditFilterFromQuery(c *zip.Ctx) audit.Filter {
 // still surfaces IAM's own audit trail rather than an empty list.
 func auditFromIAM(s *cloud.Service[state], c *zip.Ctx) error {
 	q := iamAuditQuery(c)
-	res, err := s.State.iam.getList(c.Context(), callerCreds(c), "/v1/iam/get-records", q)
+	res, err := s.State.iam.List(c.Context(), callerCreds(c), "/v1/iam/get-records", q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
-	return okRaw(c, res.rows, res.total)
+	return okRaw(c, res.Rows, res.Total)
 }

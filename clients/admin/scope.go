@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,15 +88,15 @@ func descendants(s *cloud.Service[state], org string) []string {
 // name / createdTime are the REAL values (analytics' signup cohort needs a real
 // createdTime). An org row that can't be read best-effort degrades to a name-only row
 // (Name = the sanitized org) rather than failing the panel — the scope is unaffected.
-func scopedOrgs(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, cr creds) ([]iamOrg, error) {
+func scopedOrgs(s *cloud.Service[state], ctx context.Context, c *zip.Ctx, cr iam.Creds) ([]iam.Org, error) {
 	sc := resolveScope(s, c)
 	if sc.super {
 		return listOrgs(s, ctx, cr)
 	}
-	rows := make([]iamOrg, 0, len(sc.orgs))
+	rows := make([]iam.Org, 0, len(sc.orgs))
 	for _, name := range sc.orgs {
-		row := iamOrg{Owner: s.State.adminOrg, Name: name, DisplayName: name}
-		if full, err := s.State.iam.getOrg(ctx, cr, s.State.adminOrg+"/"+name); err == nil && full.Name != "" {
+		row := iam.Org{Owner: s.State.adminOrg, Name: name, DisplayName: name}
+		if full, err := s.State.iam.Org(ctx, cr, s.State.adminOrg+"/"+name); err == nil && full.Name != "" {
 			row = full
 		}
 		rows = append(rows, row)
