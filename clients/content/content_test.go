@@ -51,8 +51,13 @@ func TestLifecycleInvariants(t *testing.T) {
 	if !IsLive(StatusPublished) || IsLive(StatusDraft) {
 		t.Fatal("IsLive must be exactly published")
 	}
-	if !entersDistribution(StatusQueued) || !entersDistribution(StatusPublished) || entersDistribution(StatusApproved) {
-		t.Fatal("entersDistribution must be queued|published only")
+	// Distribution fires on EXACTLY ONE edge — published. queued is staging (scheduled/
+	// ready, not yet posted), so a legal walk approved→queued→published fans out once.
+	if !entersDistribution(StatusPublished) {
+		t.Fatal("entersDistribution must be true for published")
+	}
+	if entersDistribution(StatusQueued) || entersDistribution(StatusApproved) {
+		t.Fatal("entersDistribution must be published-only (queued is staging, not a fan-out)")
 	}
 	// Every reachable target is itself a valid state (no dangling edge).
 	for from, tos := range transitions {
