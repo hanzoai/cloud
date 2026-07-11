@@ -138,11 +138,11 @@ func TestGateExemptsErrorIngestButGatesReads(t *testing.T) {
 	// These MUST stay gated (403) with no principal — the exemption must not leak to reads.
 	type gc struct{ method, path string }
 	for _, c := range []gc{
-		{http.MethodGet, "/v1/o11y/api/errortracking/issues"},            // Issues LIST (read)
-		{http.MethodGet, "/v1/o11y/api/errortracking/issues/abc"},        // Issue detail (read)
-		{http.MethodPost, "/v1/o11y/api/errortracking/issues/abc"},       // Issue UPDATE (write, not ingest)
-		{http.MethodGet, "/v1/o11y/api/hanzo/envelope/"},                 // ingest is POST-only
-		{http.MethodPost, "/v1/o11y/api/v1/query_range"},                 // data query, not ingest suffix
+		{http.MethodGet, "/v1/o11y/api/errortracking/issues"},      // Issues LIST (read)
+		{http.MethodGet, "/v1/o11y/api/errortracking/issues/abc"},  // Issue detail (read)
+		{http.MethodPost, "/v1/o11y/api/errortracking/issues/abc"}, // Issue UPDATE (write, not ingest)
+		{http.MethodGet, "/v1/o11y/api/hanzo/envelope/"},           // ingest is POST-only
+		{http.MethodPost, "/v1/o11y/api/v1/query_range"},           // data query, not ingest suffix
 	} {
 		reached.Store(false)
 		req := httptest.NewRequest(c.method, "http://api.hanzo.ai"+c.path, nil)
@@ -153,6 +153,62 @@ func TestGateExemptsErrorIngestButGatesReads(t *testing.T) {
 		}
 		if reached.Load() {
 			t.Fatalf("unauth %s %s reached the runtime — ingest exemption leaked", c.method, c.path)
+		}
+	}
+}
+
+// TestGateExemptsSentryIngestButGatesReads is the Sentry sibling: the DSN-authenticated
+// /v1/sentry/{project}/envelope|store WRITE bypasses the principal gate (the runtime's
+// DSN check authenticates), while EVERY Sentry read/write API stays principal-gated —
+// the ingest exemption must not leak to projects/issues/discover/logs/traces/stats.
+func TestGateExemptsSentryIngestButGatesReads(t *testing.T) {
+	var reached atomic.Bool
+	backend := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		reached.Store(true)
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	})
+	gated := gate(backend)
+
+	// DSN-authed ingest WRITEs, NO principal → must pass (the runtime's DSN check authenticates).
+	for _, p := range []string{
+		"/v1/sentry/00000000-0000-0000-0000-000000000000/envelope/",
+		"/v1/sentry/00000000-0000-0000-0000-000000000000/store/",
+		"/v1/sentry/00000000-0000-0000-0000-000000000000/envelope", // slash-less tolerated
+	} {
+		reached.Store(false)
+		req := httptest.NewRequest(http.MethodPost, "http://api.hanzo.ai"+p, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("unauth sentry ingest %s = HTTP %d, want 200 (DSN-authed ingest must bypass the principal gate)", p, rec.Code)
+		}
+		if !reached.Load() {
+			t.Fatalf("unauth sentry ingest %s did not reach the runtime — gate over-blocking DSN ingest", p)
+		}
+	}
+
+	// These MUST stay gated (403) with no principal — the exemption must not leak.
+	type gc struct{ method, path string }
+	for _, c := range []gc{
+		{http.MethodGet, "/v1/sentry/issues"},                                         // Issues LIST (read)
+		{http.MethodGet, "/v1/sentry/projects"},                                       // Projects LIST (read)
+		{http.MethodPost, "/v1/sentry/projects"},                                      // Project CREATE (write, not ingest)
+		{http.MethodPost, "/v1/sentry/discover"},                                      // Discover (read query, not ingest suffix)
+		{http.MethodGet, "/v1/sentry/logs"},                                           // Logs (read)
+		{http.MethodGet, "/v1/sentry/traces"},                                         // Traces (read)
+		{http.MethodGet, "/v1/sentry/stats"},                                          // Stats (read)
+		{http.MethodGet, "/v1/sentry/00000000-0000-0000-0000-000000000000/envelope/"}, // ingest is POST-only
+	} {
+		reached.Store(false)
+		req := httptest.NewRequest(c.method, "http://api.hanzo.ai"+c.path, nil)
+		rec := httptest.NewRecorder()
+		gated.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("unauth %s %s = HTTP %d, want 403 (sentry ingest exemption must not leak to reads/writes)", c.method, c.path, rec.Code)
+		}
+		if reached.Load() {
+			t.Fatalf("unauth %s %s reached the runtime — sentry ingest exemption leaked", c.method, c.path)
 		}
 	}
 }
