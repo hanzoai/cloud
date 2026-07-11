@@ -37,15 +37,15 @@ type RevenueCustomer struct {
 
 // RevenueData is the whole GET /v1/admin/revenue payload.
 type RevenueData struct {
-	TotalBalancesCents int64              `json:"totalBalancesCents"`
-	TotalSpendCents    int64              `json:"totalSpendCents"`
-	MRRCents           int64              `json:"mrrCents"`
-	Customers          int                `json:"customers"`
-	PayingCustomers    int                `json:"payingCustomers"`
-	ARPUCents          int64              `json:"arpuCents"`
-	PerCustomer        []RevenueCustomer  `json:"perCustomer"`
-	SpendTrend         []core.SeriesPoint `json:"spendTrend"`
-	GeneratedAt        string             `json:"generatedAt"`
+	TotalBalancesCents int64               `json:"totalBalancesCents"`
+	TotalSpendCents    int64               `json:"totalSpendCents"`
+	MRRCents           int64               `json:"mrrCents"`
+	Customers          int                 `json:"customers"`
+	PayingCustomers    int                 `json:"payingCustomers"`
+	ARPUCents          int64               `json:"arpuCents"`
+	PerCustomer        []RevenueCustomer   `json:"perCustomer"`
+	SpendTrend         []core.SeriesPoint  `json:"spendTrend"`
+	GeneratedAt        string              `json:"generatedAt"`
 	Sources            []core.SourceStatus `json:"sources"`
 }
 
