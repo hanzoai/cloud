@@ -123,7 +123,7 @@ func Customers(s *cloud.Service[core.State], c *zip.Ctx) error {
 // fabricated value), so one flaky org never fails the fleet.
 func enrichCustomer(s *cloud.Service[core.State], ctx context.Context, cr iam.Creds, o iam.Org) CustomerRow {
 	users, _ := orgUsers(s, ctx, cr, o.Name)
-	spend, credits := core.OrgMoney(s, ctx, o.Name)
+	spend, credits, _ := core.OrgMoney(s, ctx, o.Name)
 	plan, _ := s.State.Commerce.Plan(ctx, o.Name)
 
 	return CustomerRow{
@@ -161,7 +161,7 @@ func CustomerDetail(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 
 	users, _ := orgUsers(s, ctx, cr, org)
-	spend, credits := core.OrgMoney(s, ctx, org)
+	spend, credits, _ := core.OrgMoney(s, ctx, org)
 	plan, _ := s.State.Commerce.Plan(ctx, org)
 	ledgerEntries, _ := s.State.Commerce.Ledger(ctx, org, 50)
 

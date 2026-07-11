@@ -152,7 +152,10 @@ func orgs(s *cloud.Service[core.State], c *zip.Ctx) error {
 	rows := make([]orgRow, 0, len(orgs))
 	for _, o := range orgs {
 		users := orgUserCount(s, ctx, cr, o.Name)
-		spend, credits := core.OrgMoney(s, ctx, o.Name)
+		// orgs is a per-ROW panel (OrgRow[] via OKList; it carries NO sources[] channel):
+		// a failed read degrades THAT org's row to an honest zero, never a fleet total that
+		// falsely reads healthy. The aggregate-freshness signal lives on /overview.
+		spend, credits, _ := core.OrgMoney(s, ctx, o.Name)
 		rows = append(rows, orgRow{
 			Org:          o.Name,
 			Display:      core.Display(o.DisplayName, o.Name),
@@ -327,31 +330,36 @@ func overview(s *cloud.Service[core.State], c *zip.Ctx) error {
 
 	orgs, orgErr := core.ScopedOrgs(s, ctx, c, cr)
 	sources = append(sources, core.SrcOf("iam", orgErr, len(orgs), now))
+	commercePartial := false
 	if orgErr == nil {
 		orgCount = len(orgs)
 		for _, o := range orgs {
 			userCount += orgUserCount(s, ctx, cr, o.Name)
-			sp, cr2 := core.OrgMoney(s, ctx, o.Name)
+			sp, cr2, ok := core.OrgMoney(s, ctx, o.Name)
 			spend += sp
 			credits += cr2
+			if !ok {
+				// This org's money did not read — the fleet spend/credits totals are now
+				// an UNDERCOUNT, so the commerce source must report degraded, not healthy.
+				commercePartial = true
+			}
 		}
 	}
 
-	// Commerce freshness: probe one org's rollup so the tile reflects a real read.
-	commerceRows := 0
+	// Commerce freshness derives from the SAME per-org reads the totals fold — NOT a
+	// single probe org (which could read healthy while commerce was down for every other
+	// org, masking an undercount). Not-configured when unwired; degraded/partial (the ONE
+	// core.ErrPartialRevenue sentinel revenue/finance use) when ANY per-org read failed.
 	var commerceErr error
-	if s.State.Commerce.Ready() {
-		probe := s.State.AdminOrg
-		if len(orgs) > 0 {
-			probe = orgs[0].Name
-		}
-		if _, err := s.State.Commerce.Spend(ctx, probe); err != nil {
-			commerceErr = err
-		} else {
-			commerceRows = 1
-		}
-	} else {
+	commerceRows := 0
+	switch {
+	case !s.State.Commerce.Ready():
 		commerceErr = fmt.Errorf("commerce endpoint not configured")
+	case commercePartial:
+		commerceErr = core.ErrPartialRevenue
+		commerceRows = orgCount
+	default:
+		commerceRows = orgCount
 	}
 	sources = append(sources, core.SrcOf("commerce", commerceErr, commerceRows, now))
 
