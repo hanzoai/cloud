@@ -492,29 +492,18 @@ type MountSpec struct {
 	OwnsHealth bool
 }
 
-// ShutdownAll tears down every ENABLED subsystem that has a ShutdownFunc, in
-// REVERSE mount order (a dependency is torn down after its dependents), best
-// effort: a failure is collected and the rest still run, so one stuck subsystem
-// can't strand another's flush. specs is the SAME slice MountAll mounted
-// (subsystems.Wire()); Serve calls this inside the shutdown deadline.
-func ShutdownAll(ctx context.Context, specs []MountSpec, cfg *Config) error {
-	var firstErr error
-	for i := len(specs) - 1; i >= 0; i-- {
-		spec := specs[i]
-		if spec.Shutdown == nil || !cfg.Enabled(spec.Name) {
-			continue
-		}
-		if err := spec.Shutdown(ctx); err != nil && firstErr == nil {
-			firstErr = fmt.Errorf("shutdown %s: %w", spec.Name, err)
-		}
-	}
-	return firstErr
-}
-
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
 // the composition root's (subsystems.Wire()); MountAll does NOT sort. app is the
 // concrete *zip.App from Serve; the MountFunc accepts it as `any` and in-repo
 // subsystems recover it via Typed.
+//
+// Teardown is wired HERE, at mount time: right after a subsystem mounts, its
+// ShutdownFunc (if any) is registered via app.OnShutdown. zip drains those hooks
+// LIFO — AFTER the listeners stop accepting and in-flight requests drain — so
+// registration-at-mount yields reverse-mount teardown (a dependency mounted before
+// its dependents is torn down after them) with no subsystem torn down while a
+// request still uses it. Only ENABLED specs mount, so only they register a hook;
+// teardown needs no separate enablement gate.
 func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 	logger := deps.Logger
 	for _, spec := range specs {
@@ -524,6 +513,12 @@ func MountAll(app *zip.App, specs []MountSpec, cfg *Config, deps Deps) error {
 		}
 		if err := spec.Mount(app, deps); err != nil {
 			return fmt.Errorf("mount %s: %w", spec.Name, err)
+		}
+		// Register teardown as a zip shutdown hook. zip runs hooks LIFO after the
+		// drain (zip.App.Shutdown), so this reproduces the reverse-mount order the
+		// hand-rolled reverse-loop gave — without the teardown-before-drain race.
+		if spec.Shutdown != nil {
+			app.OnShutdown(spec.Shutdown)
 		}
 		logger.Info("mounted subsystem", "name", spec.Name)
 	}
