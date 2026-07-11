@@ -60,6 +60,7 @@ var frozen = []struct {
 	{"ml", true, false},              // was order 130
 	{"usage", false, false},          // was order 131
 	{"crm", false, false},            // was order 131
+	{"social", false, true},          // new: /v1/social fold (after crm)
 	{"analytics", true, false},       // was order 132
 	{"git", false, false},            // was order 132
 	{"visor", false, false},          // was order 133
