@@ -7,8 +7,11 @@ package core
 // row. One path, one way to grant.
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/hanzoai/cloud"
@@ -68,6 +71,34 @@ func grantNote(c *zip.Ctx, reason string) string {
 	return "Admin grant: " + r
 }
 
+// grantIdempotencyKey derives the DETERMINISTIC commerce idempotency key for a grant from
+// its (org, amount, currency, source) BOUND to the operator-supplied Idempotency-Key nonce
+// — so a retried grant (a commit-then-timeout re-submit carrying the SAME nonce) dedupes at
+// commerce (X-Idempotency-Key, at-most-once), while two DISTINCT grants — even same org +
+// amount — never collide. Binding the amount/currency/source into the hash means a nonce
+// accidentally reused for a DIFFERENT grant still lands (a different key), so dedup can
+// never silently DROP a legitimate distinct grant.
+//
+// Empty when the operator supplied no nonce: without a stable per-attempt id there is no
+// value that is both retry-stable AND grant-unique, so we do NOT fabricate one (a content
+// -only hash would wrongly dedupe two legitimate identical comps). The deposit is then
+// additive — the pre-existing behavior. Effective end-to-end once the operator console
+// sends an Idempotency-Key per grant attempt (reused verbatim on retry); commerce already
+// enforces the dedup (api/billing/deposit.go).
+func grantIdempotencyKey(c *zip.Ctx, org, currency, source string, amountCents int64) string {
+	nonce := strings.TrimSpace(c.Header("Idempotency-Key"))
+	if nonce == "" {
+		nonce = strings.TrimSpace(c.Header("X-Idempotency-Key"))
+	}
+	if nonce == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		org, strconv.FormatInt(amountCents, 10), currency, source, nonce,
+	}, "|")))
+	return "grant-" + hex.EncodeToString(sum[:])
+}
+
 // ApplyGrant validates the amount + target org, deposits into the org's commerce ledger
 // (trial vs prepaid by source), and records the tamper-evident audit row. One path, one
 // way to grant.
@@ -94,11 +125,22 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
 	}
 
+	// FAIL-CLOSED durability (SOC2 AU-2/AU-5): a credit grant moves REAL money and MUST
+	// leave a durable, tamper-evident record. If this deployment has no audit store to
+	// record into, REFUSE the grant BEFORE any money moves — never an unaudited money
+	// move. A nil store is not a production state: cloud requires a persistent data dir
+	// for the trail (audit_serve.go), and nil arises only from the explicit
+	// CLOUD_AUDIT_DISABLED dev opt-out, on which moving money is not a supported op.
+	if s.State.AuditStore == nil {
+		return c.JSON(503, map[string]any{"status": "error", "msg": "grant refused: no durable audit store is configured on this deployment; a credit grant must be recorded before money moves", "data": nil})
+	}
+
 	before, _ := s.State.Commerce.Credits(ctx, org)
 
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(req.AmountCents), currency, notes, tag)
+	idem := grantIdempotencyKey(c, org, currency, source, req.AmountCents)
+	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(req.AmountCents), currency, notes, tag, idem)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
