@@ -3,8 +3,29 @@ package content
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud/clients/framework"
+)
+
+const (
+	// statusInProgress is the honest headline a publish returns when it could not win the
+	// per-item lease within the wait budget: another publisher already holds it, so this
+	// call posts NOTHING (no duplicate) and the caller retries. It is never an error/5xx.
+	statusInProgress = "in_progress"
+
+	// publishLeaseTTL bounds a single item's publish claim. It MUST exceed the worst-case
+	// fan-out (each channel bounded by distributeTimeout=20s) so a LIVE publisher is never
+	// pre-empted mid-flight; it also auto-expires so a crashed publisher never wedges the
+	// item. 5 minutes covers a many-channel fan-out with every channel at its timeout while
+	// keeping crash recovery bounded.
+	publishLeaseTTL = 5 * time.Minute
+
+	// publishLeaseWait is how long a CONTENDER blocks for the holder to finish before
+	// answering statusInProgress. A fast winner (the common case) releases in well under a
+	// second, so a contender confirms the real "distributed"; a stuck holder yields an
+	// honest "in progress" rather than a hang or a 5xx.
+	publishLeaseWait = 8 * time.Second
 )
 
 // publish.go is the distribution seam: fan a published/queued content item OUT to
@@ -44,19 +65,39 @@ type MediaRef struct {
 
 // DistributeRequest is the provider-agnostic post the Distributor sends. Content is the
 // caption/copy; Channels are provider ids (or integration ids) to target; ScheduleAt ""
-// means publish now, otherwise an ISO-8601 future time.
+// means publish now, otherwise an ISO-8601 future time. Distributed is the idempotency
+// guard: the set of channel ids ALREADY posted for this item (from the doc's
+// external_ids). A Distributor MUST skip any target already in this set so a
+// re-transition or a retry can never post the same channel twice.
 type DistributeRequest struct {
-	Content    string
-	Media      []MediaRef
-	Channels   []string
-	ScheduleAt string
+	Content     string
+	Media       []MediaRef
+	Channels    []string
+	ScheduleAt  string
+	Distributed map[string]bool
 }
 
-// DistributeResult is what the edge returns: whether it was scheduled (vs posted now)
-// and the per-channel external post ids to record for reconciliation.
+// DistributeResult is what the edge returns: whether it was scheduled (vs posted
+// now), the per-channel external post ids to record for reconciliation, and the
+// honest per-channel outcome. ExternalIDs holds ONLY the channels that succeeded
+// (channel id → external post id); Channels reports every attempted channel,
+// including failures, so partial success is never flattened into a blanket error.
 type DistributeResult struct {
 	Scheduled   bool
-	ExternalIDs map[string]string // channel/provider → external post id
+	ExternalIDs map[string]string // channel id → external post id (successes only)
+	Channels    []ChannelResult   // per-channel honest status (ok + failed)
+}
+
+// ChannelResult is the honest outcome for ONE channel of a distribution. A channel
+// that posted carries its ExternalID; a channel that failed carries a short Error.
+// This is what lets a partial fan-out (some channels ok, some down) report the truth
+// instead of a 5xx.
+type ChannelResult struct {
+	Channel    string `json:"channel"`              // the social integration id targeted
+	Provider   string `json:"provider,omitempty"`   // "x" | "instagram" | ... when known
+	Status     string `json:"status"`               // "distributed" | "scheduled" | "failed"
+	ExternalID string `json:"externalId,omitempty"` // social post id, when it went out
+	Error      string `json:"error,omitempty"`      // short reason, when it failed
 }
 
 // Distributor is the channel edge. Channels lists a brand's connected channels;
@@ -87,13 +128,17 @@ type PublishInput struct {
 	ScheduleAt string `json:"scheduleAt,omitempty"` // "" = now
 }
 
-// PublishResult reports the distribution outcome. Status is "distributed" | "scheduled"
-// | "not_configured" so a caller (and a transition response) sees the honest state
-// without an error being fatal.
+// PublishResult reports the distribution outcome. Status is "distributed" |
+// "scheduled" | "failed" | "not_configured" so a caller (and a transition response)
+// sees the honest state without an error being fatal. "failed" means EVERY targeted
+// channel failed (the whole fan-out missed) — a partial success stays "distributed"/
+// "scheduled" with the per-channel truth in Results. Results is the per-channel
+// breakdown (which channel went out, which did not, and why).
 type PublishResult struct {
 	Status      string            `json:"status"`
 	Channels    []string          `json:"channels,omitempty"`
 	ExternalIDs map[string]string `json:"externalIds,omitempty"`
+	Results     []ChannelResult   `json:"results,omitempty"`
 }
 
 // Publish distributes a CMS content item to its channels and records the returned post
@@ -108,35 +153,136 @@ func Publish(ctx context.Context, org string, in PublishInput) (PublishResult, e
 	if !isPublishableDocType(in.DocType) {
 		return PublishResult{}, errUnknownDocType
 	}
+
+	// TOCTOU interlock: serialize concurrent publishes of the SAME item. The channel
+	// fan-out is NOT idempotent on its own — two publishers that both read an empty
+	// external_ids BEFORE either records one would both post the full fan-out (the
+	// per-channel guard below only closes the SEQUENTIAL retry, since it reads-then-writes
+	// with no interlock). Optimistic CAS at the END cannot help: the non-idempotent post
+	// already went out before the write is even attempted. So the read-skipset → fan-out →
+	// record section runs under a per-item lease. It is STORE-backed, not an in-memory
+	// mutex: the subsystem is multi-driver and multi-pod, so publishes for one item are
+	// NOT guaranteed same-process — only a shared-store lease makes them contend. Whoever
+	// holds it publishes; a contender re-reads the now-recorded skip-set after it releases
+	// and posts only what is left (nothing, in the common case) — exactly once per channel.
+	lease, ok, err := framework.AcquireLease(ctx, org, publishLeaseKey(in.DocType, in.Name), publishLeaseTTL, publishLeaseWait)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	if !ok {
+		// A live publisher holds the item for the whole wait window: answer honestly,
+		// post nothing (no duplicate), never a 5xx. The caller retries.
+		return PublishResult{Status: statusInProgress}, nil
+	}
+	defer func() { _ = lease.Release(ctx) }()
+
 	doc, err := framework.Get(ctx, org, in.DocType, in.Name)
 	if err != nil {
 		return PublishResult{}, err
 	}
 
+	// Idempotency: read the channels already posted for this item and hand the
+	// Distributor that set so it never re-posts them. Under the lease this read is
+	// authoritative — no other publisher can be mid-fan-out — so a re-read by a contender
+	// after this call releases sees the ids this call recorded and skips them.
+	existing := existingExternalIDs(doc.Data)
 	req := distributeRequestFromDoc(doc.Data)
 	req.ScheduleAt = strings.TrimSpace(in.ScheduleAt)
+	req.Distributed = boolSet(existing)
 
 	res, err := s.State.dist.Publish(ctx, org, req)
 	if err != nil {
 		return PublishResult{}, err
 	}
 
-	// Record the external ids for reconciliation (best effort). A failure here is logged
-	// by the caller; the post already went out, so it must not surface as a 5xx.
-	if len(res.ExternalIDs) > 0 {
+	// MERGE the freshly-posted ids into what was already on record (never clobber the
+	// prior fan-out's ids). Persist only when the set actually grew — a fully-idempotent
+	// re-publish writes nothing. The write is a TRUSTED server write (external_ids is
+	// server-managed; the before_save guard rejects a CLIENT write of it). Best effort:
+	// the post already went out, so a record failure must not surface as a 5xx.
+	merged := mergeExternalIDs(existing, res.ExternalIDs)
+	if len(merged) > len(existing) {
 		data := cloneData(doc.Data)
-		data["external_ids"] = res.ExternalIDs
-		if err := framework.UpdateData(ctx, org, in.DocType, in.Name, data); err != nil {
+		data["external_ids"] = merged
+		if err := framework.UpdateData(withTrustedWrite(ctx), org, in.DocType, in.Name, data); err != nil {
 			s.Log.Warn("record external ids failed (post already sent)",
 				"doctype", in.DocType, "name", in.Name, "err", err)
 		}
 	}
 
-	status := "distributed"
-	if res.Scheduled {
-		status = "scheduled"
+	return PublishResult{
+		Status:      overallStatus(res, merged),
+		Channels:    req.Channels,
+		ExternalIDs: merged,
+		Results:     res.Channels,
+	}, nil
+}
+
+// publishLeaseKey is the per-item lease key: an org holds ONE publish lease per
+// (doctype, name), so concurrent publishes of DIFFERENT items never contend. The org is
+// a separate lease column, so the key needs only the item identity.
+func publishLeaseKey(doctype, name string) string {
+	return "content.publish\x00" + doctype + "\x00" + name
+}
+
+// overallStatus folds a fan-out into the ONE honest headline, judged against the MERGED
+// reconciliation set (this call's posts + everything already on record). Any channel on
+// record makes the item "distributed" (or "scheduled" when this call scheduled) — the
+// per-channel failures are still itemised in Results. Only when NOTHING is on record —
+// this fan-out missed entirely and nothing was posted before — is it "failed". A caller
+// never has to guess: the headline plus the per-channel Results are always consistent.
+func overallStatus(res DistributeResult, merged map[string]string) string {
+	if len(merged) == 0 {
+		return "failed"
 	}
-	return PublishResult{Status: status, Channels: req.Channels, ExternalIDs: res.ExternalIDs}, nil
+	if res.Scheduled {
+		return "scheduled"
+	}
+	return "distributed"
+}
+
+// existingExternalIDs reads the channel-id → post-id map already recorded on the doc
+// (framework round-trips JSON, so it comes back as map[string]any). Blank/oddly-typed
+// entries are dropped — never panics on stored data.
+func existingExternalIDs(data map[string]any) map[string]string {
+	out := map[string]string{}
+	raw, ok := data["external_ids"].(map[string]any)
+	if !ok {
+		return out
+	}
+	for k, v := range raw {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			out[k] = s
+		}
+	}
+	return out
+}
+
+// boolSet is the idempotency guard the Distributor consumes: the set of channel ids
+// already posted. nil when nothing has been distributed yet (no filtering to do).
+func boolSet(m map[string]string) map[string]bool {
+	if len(m) == 0 {
+		return nil
+	}
+	set := make(map[string]bool, len(m))
+	for k := range m {
+		set[k] = true
+	}
+	return set
+}
+
+// mergeExternalIDs unions the prior external ids with this call's, prior kept (a
+// re-post is impossible — the Distributor skipped already-posted channels — so the two
+// never actually collide, but prior-wins keeps the guarantee explicit).
+func mergeExternalIDs(prior, fresh map[string]string) map[string]string {
+	out := make(map[string]string, len(prior)+len(fresh))
+	for k, v := range fresh {
+		out[k] = v
+	}
+	for k, v := range prior {
+		out[k] = v
+	}
+	return out
 }
 
 // distributeRequestFromDoc extracts the provider-agnostic post from a content document:
