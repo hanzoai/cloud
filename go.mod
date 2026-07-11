@@ -832,7 +832,7 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.3
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.12
+	github.com/hanzoai/o11y v1.5.13
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
