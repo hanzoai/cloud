@@ -137,17 +137,17 @@ func revenueOf(s *cloud.Service[state], ctx context.Context, o iamOrg) (revenueC
 	row := revenueCustomer{Org: o.Name, Display: display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
 	ok := true
 
-	if r, err := s.State.commerce.usageRollup(ctx, o.Name, subj); err == nil {
+	if r, err := s.State.commerce.UsageRollup(ctx, o.Name, subj); err == nil {
 		row.SpendCents = r.ConsumedCents
 	} else {
 		ok = false
 	}
-	if credits, err := s.State.commerce.creditsCents(ctx, o.Name, subj); err == nil {
+	if credits, err := s.State.commerce.CreditsCents(ctx, o.Name, subj); err == nil {
 		row.BalanceCents = credits
 	} else {
 		ok = false
 	}
-	if sub, err := s.State.commerce.subscriptionSummary(ctx, o.Name, subj); err == nil {
+	if sub, err := s.State.commerce.SubscriptionSummary(ctx, o.Name, subj); err == nil {
 		row.MRRCents = sub.MRR
 		row.Plan = sub.Plan
 	}
