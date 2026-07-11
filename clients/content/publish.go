@@ -52,11 +52,27 @@ type DistributeRequest struct {
 	ScheduleAt string
 }
 
-// DistributeResult is what the edge returns: whether it was scheduled (vs posted now)
-// and the per-channel external post ids to record for reconciliation.
+// DistributeResult is what the edge returns: whether it was scheduled (vs posted
+// now), the per-channel external post ids to record for reconciliation, and the
+// honest per-channel outcome. ExternalIDs holds ONLY the channels that succeeded
+// (channel id → external post id); Channels reports every attempted channel,
+// including failures, so partial success is never flattened into a blanket error.
 type DistributeResult struct {
 	Scheduled   bool
-	ExternalIDs map[string]string // channel/provider → external post id
+	ExternalIDs map[string]string // channel id → external post id (successes only)
+	Channels    []ChannelResult   // per-channel honest status (ok + failed)
+}
+
+// ChannelResult is the honest outcome for ONE channel of a distribution. A channel
+// that posted carries its ExternalID; a channel that failed carries a short Error.
+// This is what lets a partial fan-out (some channels ok, some down) report the truth
+// instead of a 5xx.
+type ChannelResult struct {
+	Channel    string `json:"channel"`              // the social integration id targeted
+	Provider   string `json:"provider,omitempty"`   // "x" | "instagram" | ... when known
+	Status     string `json:"status"`               // "distributed" | "scheduled" | "failed"
+	ExternalID string `json:"externalId,omitempty"` // social post id, when it went out
+	Error      string `json:"error,omitempty"`      // short reason, when it failed
 }
 
 // Distributor is the channel edge. Channels lists a brand's connected channels;
@@ -87,13 +103,17 @@ type PublishInput struct {
 	ScheduleAt string `json:"scheduleAt,omitempty"` // "" = now
 }
 
-// PublishResult reports the distribution outcome. Status is "distributed" | "scheduled"
-// | "not_configured" so a caller (and a transition response) sees the honest state
-// without an error being fatal.
+// PublishResult reports the distribution outcome. Status is "distributed" |
+// "scheduled" | "failed" | "not_configured" so a caller (and a transition response)
+// sees the honest state without an error being fatal. "failed" means EVERY targeted
+// channel failed (the whole fan-out missed) — a partial success stays "distributed"/
+// "scheduled" with the per-channel truth in Results. Results is the per-channel
+// breakdown (which channel went out, which did not, and why).
 type PublishResult struct {
 	Status      string            `json:"status"`
 	Channels    []string          `json:"channels,omitempty"`
 	ExternalIDs map[string]string `json:"externalIds,omitempty"`
+	Results     []ChannelResult   `json:"results,omitempty"`
 }
 
 // Publish distributes a CMS content item to its channels and records the returned post
@@ -132,11 +152,26 @@ func Publish(ctx context.Context, org string, in PublishInput) (PublishResult, e
 		}
 	}
 
-	status := "distributed"
-	if res.Scheduled {
-		status = "scheduled"
+	return PublishResult{
+		Status:      overallStatus(res),
+		Channels:    req.Channels,
+		ExternalIDs: res.ExternalIDs,
+		Results:     res.Channels,
+	}, nil
+}
+
+// overallStatus folds a fan-out into the ONE honest headline. Any channel that
+// went out makes the post "distributed" (or "scheduled") — the failures are still
+// itemised in Results. Only a fan-out where NOTHING went out is "failed". A caller
+// never has to guess: the headline plus the per-channel Results are always consistent.
+func overallStatus(res DistributeResult) string {
+	if len(res.ExternalIDs) == 0 {
+		return "failed"
 	}
-	return PublishResult{Status: status, Channels: req.Channels, ExternalIDs: res.ExternalIDs}, nil
+	if res.Scheduled {
+		return "scheduled"
+	}
+	return "distributed"
 }
 
 // distributeRequestFromDoc extracts the provider-agnostic post from a content document:
