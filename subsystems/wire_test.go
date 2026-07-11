@@ -61,6 +61,7 @@ var frozen = []struct {
 	{"usage", false, false},          // was order 131
 	{"crm", false, false},            // was order 131
 	{"marketing", false, true},       // new: marketing domain fold (after crm)
+	{"ads", false, true},             // new: ads domain fold (after crm)
 	{"analytics", true, false},       // was order 132
 	{"git", false, false},            // was order 132
 	{"visor", false, false},          // was order 133
