@@ -528,7 +528,7 @@ func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) 
 				ca.Created = t.UTC()
 				ca.HasCreated = true
 			}
-			rows, err := s.State.commerce.transactions(ctx, o.Name, orgSubject(o.Name), 2000)
+			rows, err := s.State.commerce.Transactions(ctx, o.Name, orgSubject(o.Name), 2000)
 			oks[i] = err == nil
 			for _, r := range rows {
 				if strings.ToLower(r.Type) != "withdraw" {
@@ -570,7 +570,7 @@ func fleetMRR(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) int64
 		go func(i int, o iamOrg) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if sum, err := s.State.commerce.subscriptionSummary(ctx, o.Name, orgSubject(o.Name)); err == nil {
+			if sum, err := s.State.commerce.SubscriptionSummary(ctx, o.Name, orgSubject(o.Name)); err == nil {
 				vals[i] = sum.MRR
 			}
 		}(i, o)
