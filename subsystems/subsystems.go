@@ -82,6 +82,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kafka"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
+	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
 	"github.com/hanzoai/cloud/clients/o11y"
@@ -212,6 +213,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
 		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
 		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
+		// Native /v1/marketing/* — the in-process fold of github.com/hanzoai/marketing
+		// (per-org campaign store on Base/SQLite), twin of crm. Owns a DB handle, so
+		// its Shutdown closes it cleanly on SIGTERM (ctxShutdown adapts func() error).
+		{Name: "marketing", Mount: cloud.Typed(marketing.Mount), Shutdown: ctxShutdown(marketing.Shutdown)},
 		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
 		{Name: "git", Mount: cloud.Typed(git.Mount)},
 		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
