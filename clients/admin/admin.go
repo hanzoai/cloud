@@ -52,6 +52,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/admin/health"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
 )
@@ -61,7 +62,7 @@ import (
 // the caller's own creds); the embedded cloud.Base carries only the mount-time
 // logger (s.Log), used for the mount line.
 type state struct {
-	iam      *iamClient
+	iam      *iam.Client
 	commerce *commerce.Client
 	health   *health.Client
 	do       *digitalocean.Client
@@ -89,7 +90,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{
 		Base: b,
 		State: state{
-			iam:        newIAMClient(iamBase(deps)),
+			iam:        iam.New(iamBase(deps)),
 			commerce:   commerce.New(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 			health:     health.New(o11yHealthURL()),
 			do:         digitalocean.New(doTokenFromEnv()),
@@ -102,7 +103,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	b.Log.Info("admin surface mounted",
 		"prefix", "/v1/admin",
-		"iam", s.State.iam.configured(),
+		"iam", s.State.iam.Ready(),
 		"commerce", s.State.commerce.Ready(),
 		"digitalocean", s.State.do.Ready(),
 		"adminOrg", s.State.adminOrg,
@@ -209,10 +210,10 @@ func guardScoped(s *cloud.Service[state], h func(*cloud.Service[state], *zip.Ctx
 
 // callerCreds captures the caller's replayed authorization context for the IAM
 // fan-out: the raw Cookie header (session model) and the Authorization bearer.
-func callerCreds(c *zip.Ctx) creds {
-	return creds{
-		cookie: string(c.Fiber().Request().Header.Peek("Cookie")),
-		auth:   c.Header("Authorization"),
+func callerCreds(c *zip.Ctx) iam.Creds {
+	return iam.Creds{
+		Cookie: string(c.Fiber().Request().Header.Peek("Cookie")),
+		Auth:   c.Header("Authorization"),
 	}
 }
 
@@ -324,13 +325,13 @@ func users(s *cloud.Service[state], c *zip.Ctx) error {
 		q.Set("field", "name")
 		q.Set("value", term)
 	}
-	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.Users(ctx, cr, q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
-	var raw []iamUser
-	if len(res.rows) > 0 {
-		if err := json.Unmarshal(res.rows, &raw); err != nil {
+	var raw []iam.User
+	if len(res.Rows) > 0 {
+		if err := json.Unmarshal(res.Rows, &raw); err != nil {
 			return fail(c, "users decode: "+err.Error())
 		}
 	}
@@ -350,7 +351,7 @@ func users(s *cloud.Service[state], c *zip.Ctx) error {
 			Forbidden:     u.IsForbidden,
 		})
 	}
-	total := res.total
+	total := res.Total
 	if total < len(rows) {
 		total = len(rows)
 	}
@@ -383,11 +384,11 @@ func iamPassthrough(s *cloud.Service[state], c *zip.Ctx, path string) error {
 	if ps := strings.TrimSpace(c.Query("pageSize")); ps != "" {
 		q.Set("pageSize", ps)
 	}
-	res, err := s.State.iam.getList(c.Context(), callerCreds(c), path, q)
+	res, err := s.State.iam.List(c.Context(), callerCreds(c), path, q)
 	if err != nil {
 		return fail(c, err.Error())
 	}
-	return okRaw(c, res.rows, res.total)
+	return okRaw(c, res.Rows, res.Total)
 }
 
 // ── /v1/admin/audit — records directory (AuditRow[]) ─────────────────────────
@@ -545,16 +546,16 @@ func syncNow(s *cloud.Service[state], c *zip.Ctx) error {
 
 // listOrgs reads the org directory (owner = admin org) as the typed shape the
 // overview/orgs/usage aggregators fold over.
-func listOrgs(s *cloud.Service[state], ctx context.Context, cr creds) ([]iamOrg, error) {
+func listOrgs(s *cloud.Service[state], ctx context.Context, cr iam.Creds) ([]iam.Org, error) {
 	q := url.Values{}
 	q.Set("owner", s.State.adminOrg)
-	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-organizations", q)
+	res, err := s.State.iam.Orgs(ctx, cr, q)
 	if err != nil {
 		return nil, err
 	}
-	var orgs []iamOrg
-	if len(res.rows) > 0 {
-		if err := json.Unmarshal(res.rows, &orgs); err != nil {
+	var orgs []iam.Org
+	if len(res.Rows) > 0 {
+		if err := json.Unmarshal(res.Rows, &orgs); err != nil {
 			return nil, fmt.Errorf("orgs decode: %w", err)
 		}
 	}
@@ -563,16 +564,16 @@ func listOrgs(s *cloud.Service[state], ctx context.Context, cr creds) ([]iamOrg,
 
 // orgUserCount returns the member count for one org from the IAM list total
 // (data2). Best-effort: an error yields 0 rather than failing the whole row.
-func orgUserCount(s *cloud.Service[state], ctx context.Context, cr creds, org string) int {
+func orgUserCount(s *cloud.Service[state], ctx context.Context, cr iam.Creds, org string) int {
 	q := url.Values{}
 	q.Set("owner", org)
 	q.Set("p", "1")
 	q.Set("pageSize", "1")
-	res, err := s.State.iam.getList(ctx, cr, "/v1/iam/get-users", q)
+	res, err := s.State.iam.Users(ctx, cr, q)
 	if err != nil {
 		return 0
 	}
-	return res.total
+	return res.Total
 }
 
 // orgMoney returns (spendCents, creditsCents) for one org from commerce.

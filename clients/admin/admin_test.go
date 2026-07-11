@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/admin/health"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -35,7 +36,7 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[state]{State: state{
-		iam:      newIAMClient(iamURL),
+		iam:      iam.New(iamURL),
 		commerce: commerce.New(commerceURL, "test-token"),
 		health:   health.New(healthURL),
 		do:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.do
