@@ -12,6 +12,8 @@ import (
 
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/health"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -33,8 +35,8 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[state]{State: state{
 		iam:      newIAMClient(iamURL),
-		commerce: newCommerceClient(commerceURL, "test-token"),
-		health:   newHealthClient(healthURL),
+		commerce: commerce.New(commerceURL, "test-token"),
+		health:   health.New(healthURL),
 		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.State.do
 		adminOrg: "admin",
 	}}

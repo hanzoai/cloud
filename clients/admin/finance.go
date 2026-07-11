@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/zap-proto/zip"
 )
 
@@ -64,11 +65,11 @@ type financeData struct {
 // the DO compute COGS line; this is our prepaid-credit balance, which commerce
 // does not track, so it stays a direct DO account read.
 type financeCost struct {
-	Configured bool         `json:"configured"`
-	Error      string       `json:"error,omitempty"`
-	Period     string       `json:"period"`
-	TotalCents int64        `json:"totalCents"`
-	Vendors    []vendorCost `json:"vendors"`
+	Configured bool                  `json:"configured"`
+	Error      string                `json:"error,omitempty"`
+	Period     string                `json:"period"`
+	TotalCents int64                 `json:"totalCents"`
+	Vendors    []commerce.VendorCost `json:"vendors"`
 
 	DigitalOcean doCost `json:"digitalocean"`
 }
@@ -184,8 +185,8 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 	// providers we resell) — it does NOT re-derive any vendor cost. TotalCents is
 	// the margin cost. Honest not-configured when commerce is unreachable.
 	cost := financeCost{Period: period}
-	if s.State.commerce.configured() {
-		report, err := s.State.commerce.costs(ctx, period)
+	if s.State.commerce.Configured() {
+		report, err := s.State.commerce.Costs(ctx, period)
 		if err != nil {
 			cost.Error = err.Error()
 			sources = append(sources, srcOf("commerce-costs", err, 0, now))
@@ -203,7 +204,7 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 		sources = append(sources, srcOf("commerce-costs", errUnconfigured, 0, now))
 	}
 	if cost.Vendors == nil {
-		cost.Vendors = []vendorCost{}
+		cost.Vendors = []commerce.VendorCost{}
 	}
 
 	// ── DigitalOcean promo-credit / runway (orthogonal treasury view) ──
@@ -245,7 +246,7 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 	// transient IAM/commerce failure it stays FALSE so computeFinance and the console
 	// never fabricate a negative margin / red "burning" alarm from a fake zero.
 	rev := financeRevenue{}
-	if !s.State.commerce.configured() {
+	if !s.State.commerce.Configured() {
 		sources = append(sources, srcOf("commerce", errUnconfigured, 0, now))
 	} else if orgs, orgErr := listOrgs(s, ctx, cr); orgErr != nil {
 		// The revenue source is unreadable → honest not-configured, never a zero
@@ -256,12 +257,12 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 		partial := false
 		for _, o := range orgs {
 			subj := orgSubject(o.Name)
-			if r, e := s.State.commerce.usageRollup(ctx, o.Name, subj); e == nil {
+			if r, e := s.State.commerce.UsageRollup(ctx, o.Name, subj); e == nil {
 				totalRev += r.ConsumedCents
 			} else {
 				partial = true
 			}
-			if m, e := s.State.commerce.mrrCents(ctx, o.Name, subj); e == nil {
+			if m, e := s.State.commerce.MRRCents(ctx, o.Name, subj); e == nil {
 				mrr += m
 			} else {
 				partial = true
