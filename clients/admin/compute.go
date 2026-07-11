@@ -39,6 +39,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/zap-proto/zip"
 )
 
@@ -73,12 +74,12 @@ type computeLeaf struct {
 
 // compute answers GET /v1/admin/compute. ?kind=<kind> and ?org= narrow the
 // aggregate; ?range=24h|7d|30d bounds it (default 30d). Global-admin only.
-func compute(s *cloud.Service[state], c *zip.Ctx) error {
+func compute(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	// Honest-empty when the warehouse is not connected or the usage table is not
 	// provisioned yet (the visor/commerce emitter is still being wired).
 	if !aiobject.DatastoreEnabled() || !computeTableExists(ctx) {
-		return okList(c, []computeLeaf{}, 0)
+		return core.OKList(c, []computeLeaf{}, 0)
 	}
 
 	// `kind` is an OPEN LowCardinality spectrum (bot | machine | cluster | nodepool |
@@ -89,10 +90,10 @@ func compute(s *cloud.Service[state], c *zip.Ctx) error {
 	sql, args := buildComputeQuery(c.Query("range"), kind, strings.TrimSpace(c.Query("org")))
 	rows, err := aiobject.DatastoreQuery(ctx, sql, args...)
 	if err != nil {
-		return fail(c, "compute query: "+err.Error())
+		return core.Fail(c, "compute query: "+err.Error())
 	}
 	leaves := computeLeavesFromRows(rows)
-	return okList(c, leaves, len(leaves))
+	return core.OKList(c, leaves, len(leaves))
 }
 
 // buildComputeQuery assembles the two-level roll-up (pure, so it is unit-tested).
