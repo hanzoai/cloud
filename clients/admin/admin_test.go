@@ -13,6 +13,7 @@ import (
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/admin/iam"
@@ -32,42 +33,21 @@ func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, pat
 // AND the raw fiber app (so tests that need a request BODY can drive it directly —
 // the returned `do` sends a nil body). The handlers read s.* live at request time,
 // so an override before issuing a request takes effect.
-func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[state], *fiber.App) {
+func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[core.State], *fiber.App) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &cloud.Service[state]{State: state{
-		iam:      iam.New(iamURL),
-		commerce: commerce.New(commerceURL, "test-token"),
-		health:   health.New(healthURL),
-		do:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.do
-		adminOrg: "admin",
+	s := &cloud.Service[core.State]{State: core.State{
+		IAM:      iam.New(iamURL),
+		Commerce: commerce.New(commerceURL, "test-token"),
+		Health:   health.New(healthURL),
+		DO:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.DO
+		AdminOrg: "admin",
 	}}
-	// Mirror the REAL Mount (admin.go): org-scoped panels behind guardScoped, the
-	// platform control plane behind guard (super-only), so the harness stays
-	// authoritative for the two-tier gate.
-	app.Get("/v1/admin/me", guardScoped(s, me))
-	app.Get("/v1/admin/overview", guardScoped(s, overview))
-	app.Get("/v1/admin/orgs", guardScoped(s, orgs))
-	app.Get("/v1/admin/users", guardScoped(s, users))
-	app.Get("/v1/admin/usage", guardScoped(s, usage))
-	app.Get("/v1/admin/analytics", guardScoped(s, analytics))
-	app.Get("/v1/admin/bases", guardScoped(s, bases))
-	app.Get("/v1/admin/roles", guard(s, roles))
-	app.Get("/v1/admin/applications", guard(s, applications))
-	app.Get("/v1/admin/audit", guard(s, auditRecords))
-	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
-	app.Get("/v1/admin/products", guard(s, products))
-	app.Get("/v1/admin/finance", guard(s, finance))
-	app.Post("/v1/admin/sync", guard(s, syncNow))
-	app.Get("/v1/admin/customers", guard(s, customers))
-	app.Get("/v1/admin/customers/:org", guard(s, customerDetail))
-	app.Post("/v1/admin/customers/:org/credit", guard(s, grantCredit))
-	app.Post("/v1/admin/customers/:org/suspend", guard(s, suspendCustomer))
-	app.Post("/v1/admin/customers/:org/reactivate", guard(s, reactivateCustomer))
-	app.Get("/v1/admin/revenue", guard(s, revenue))
-	app.Get("/v1/admin/flags", guard(s, flags))
-	app.Get("/v1/admin/waitlist", guard(s, waitlist))
-	app.Post("/v1/admin/waitlist/boost", guard(s, waitlistBoost))
+	// Mirror the REAL Mount EXACTLY by registering the same routes() the subsystem uses
+	// (org-scoped panels behind GuardScoped, the platform control plane behind Guard,
+	// each domain owning its own routes), so the harness stays authoritative for the
+	// two-tier gate + every surface.
+	routes(app, s)
 	fa := app.Fiber()
 
 	return func(method, path string, hdr map[string]string) (*http.Response, []byte) {
@@ -522,7 +502,7 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 		t.Error("overview lastSync must be set")
 	}
 	// Source freshness: iam ok, commerce ok, o11y not-ok (unconfigured).
-	src := map[string]sourceStatus{}
+	src := map[string]core.SourceStatus{}
 	for _, s := range d.Sources {
 		src[s.Name] = s
 	}
