@@ -11,9 +11,17 @@
 // stack's "integration": GET /public/v1/integrations), and a Post is content
 // published or scheduled to a channel (POST /public/v1/posts {type:now|schedule,
 // date, …}). Scheduling is not a third entity — it is a Post with Status=="scheduled"
-// carrying a future ScheduleAt. The orchestrator's real provider push / OAuth channel
-// connect / media pipeline from the live stack are NOT folded here yet — this is the
-// reviewable domain + CRUD seam they hang off (see the fold report).
+// carrying a future ScheduleAt.
+//
+// The publish edge (publish.go) and the scheduler (scheduler.go) ARE folded: a post
+// fans out to its channel's connected accounts through the Publisher seam, on an
+// explicit publish, on create (when scheduled for now-or-earlier), and on the scheduler
+// tick (scheduled → published when the time arrives). The provider push itself is the
+// swappable Publisher edge; its fail-closed default is honest — no Hanzo deployment
+// carries the provider OAuth-app credentials (providerCreds) the live orchestrator needs,
+// so a publish reports exactly which credentials are missing (503) and NEVER fakes
+// success. The per-account OAuth connect flow + native per-provider push are the honest
+// remaining gap (see the fold report + GET /v1/social/providers).
 //
 // Tenant isolation is enforced SERVER-SIDE on every request: the org is
 // principal.Org(c) — the value SanitizeIdentity minted from the VALIDATED bearer
@@ -23,6 +31,7 @@
 // Surface (all org-scoped; /v1 only):
 //
 //	GET    /v1/social/summary            per-org roll-up (posts/scheduled/published/accounts)
+//	GET    /v1/social/providers          publish-readiness per network (+ missing creds)
 //	GET    /v1/social/accounts           list accounts (?provider=)      -> {data:[…]}
 //	POST   /v1/social/accounts           connect an account             -> Account (201)
 //	GET    /v1/social/accounts/:id       account detail                 -> Account
@@ -33,14 +42,17 @@
 //	GET    /v1/social/posts/:id          post detail                    -> Post
 //	PUT    /v1/social/posts/:id          update a post                  -> Post
 //	DELETE /v1/social/posts/:id          delete a post
+//	POST   /v1/social/posts/:id/publish  publish a post now              -> Post
 //
 // serve.go auto-registers GET /v1/social/health (this subsystem does not set
 // OwnsHealth, so the generic always-ok liveness route serves it).
 package social
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -65,32 +77,45 @@ const (
 	maxLimit     = 1000
 )
 
-// providers is the network vocabulary for both an Account's provider and a Post's
-// target channel, drawn from the live stack's integration providers. A create/update
-// with an unknown provider is rejected; empty defaults to x.
-var providers = map[string]bool{
-	"x": true, "facebook": true, "instagram": true, "linkedin": true,
-	"tiktok": true, "youtube": true, "threads": true,
-}
+// providers is the validation set for both an Account's provider and a Post's target
+// channel — a create/update with an unknown provider is rejected; empty defaults to x.
+// It is DERIVED from the ONE ordered vocabulary (providerOrder in publish.go), so adding
+// a network in one place makes it valid, ordered, and cred-checkable everywhere.
+var providers = providerSet()
 
 // accountStatuses is the account connection lifecycle. Empty defaults to connected.
 var accountStatuses = map[string]bool{
 	"connected": true, "disconnected": true, "error": true,
 }
 
-// postStatuses is the post lifecycle. Empty defaults to draft.
+// Post lifecycle states. These four are user-settable (validated on create/update). The
+// store also holds a transient 'publishing' state during a publish attempt (the claim
+// guard, see store.ClaimForPublish) which is NEVER user-settable and never counted.
+const (
+	statusDraft     = "draft"
+	statusScheduled = "scheduled"
+	statusPublished = "published"
+	statusFailed    = "failed"
+)
+
+// postStatuses is the user-settable post lifecycle vocabulary. Empty defaults to draft.
 var postStatuses = map[string]bool{
-	"draft": true, "scheduled": true, "published": true, "failed": true,
+	statusDraft: true, statusScheduled: true, statusPublished: true, statusFailed: true,
 }
 
-// state is social's own data; shared deps (logger, brand) live in the embedded
-// cloud.Base, reached as s.Log / s.Brand.
+// state is social's own data: the per-org store and the publish edge. Shared deps
+// (logger, brand) live in the embedded cloud.Base, reached as s.Log / s.Brand.
 type state struct {
 	store *Store
+	pub   Publisher
 }
 
 // mounted is the active service so Shutdown can release the store.
 var mounted *cloud.Service[state]
+
+// stopScheduler stops the background due-post scheduler. Set by Mount, called by
+// Shutdown; the no-op default keeps Shutdown safe before/without a Mount.
+var stopScheduler = func() {}
 
 // Mount wires the social surface onto app per HIP-0106. It keeps a package global
 // (mounted) for Shutdown, so it constructs the Service value directly — the same
@@ -112,9 +137,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("social.Mount: open store: %w", err)
 	}
+	// Reset any post left mid-publish by a previous process crash (→ failed, retryable)
+	// BEFORE the scheduler starts, so a stuck claim never wedges a scheduled post.
+	if n, err := store.RecoverStuckPublishing(context.Background(), time.Now().Unix()); err != nil {
+		_ = store.Close()
+		return fmt.Errorf("social.Mount: recover: %w", err)
+	} else if n > 0 {
+		deps.Logger.Warn("social: reset interrupted publishes to failed", "count", n)
+	}
 	b := cloud.NewBase(deps, "social")
-	s := &cloud.Service[state]{Base: b, State: state{store: store}}
+	s := &cloud.Service[state]{Base: b, State: state{store: store, pub: newPublisher(deps)}}
 	mounted = s
+	stopScheduler = startScheduler(s)
 
 	routes(app, s)
 
@@ -125,6 +159,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the social surface: the account + post CRUD + the summary roll-up.
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/social/summary", cloud.Handle(s, summary))
+	app.Get("/v1/social/providers", cloud.Handle(s, listProviders))
 
 	app.Get("/v1/social/accounts", cloud.Handle(s, listAccounts))
 	app.Post("/v1/social/accounts", cloud.Handle(s, createAccount))
@@ -137,6 +172,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/social/posts/:id", cloud.Handle(s, getPost))
 	app.Put("/v1/social/posts/:id", cloud.Handle(s, updatePost))
 	app.Delete("/v1/social/posts/:id", cloud.Handle(s, deletePost))
+	app.Post("/v1/social/posts/:id/publish", cloud.Handle(s, publishPostHandler))
 }
 
 // ---- shared helpers (mirror clients/crm + clients/marketing) ----
@@ -370,6 +406,17 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return mapErr(err, "")
 	}
+	// On-create fanout: a post scheduled for now-or-earlier publishes immediately
+	// (best effort — the post is already stored; the publish outcome, published or
+	// failed, is recorded on it and returned). A future-scheduled post is left for the
+	// scheduler. A publish NEVER fails the 201: the post exists regardless. Only the
+	// two outcome-bearing results (published, or a fail-closed not-configured) update
+	// the returned record; an infra error leaves it 'scheduled' for the scheduler.
+	if saved.Status == statusScheduled && saved.ScheduleAt <= now {
+		if updated, perr := publishPost(c.Context(), s, org, saved.ID); perr == nil || errors.Is(perr, errProviderNotConfigured) {
+			saved = updated
+		}
+	}
 	return c.JSON(http.StatusCreated, saved)
 }
 
@@ -445,6 +492,48 @@ func deletePost(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// ---- publish ----
+
+// publishPostHandler publishes a post NOW to its channel's connected accounts (the
+// explicit publish action, the twin of the on-create fanout). Idempotent: re-publishing
+// an already-published post returns it unchanged. 404 if the post is not the org's; 503
+// (with the exact missing credentials) if the deployment cannot publish the provider.
+func publishPostHandler(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	post, err := publishPost(c.Context(), s, org, idParam(c))
+	if err != nil {
+		return mapPublishErr(err)
+	}
+	return c.JSON(http.StatusOK, post)
+}
+
+// listProviders reports each network's publish-readiness: whether this deployment has
+// its OAuth-app credentials and, if not, exactly which env vars are missing. Honest and
+// live (reads the environment), never fabricated — the console's connect affordance and
+// the coordinator's pre-cutover checklist of what to supply.
+func listProviders(_ *cloud.Service[state], c *zip.Ctx) error {
+	if _, ok := tenant(c); !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	return c.JSON(http.StatusOK, map[string]any{"data": providerCapabilities()})
+}
+
+// mapPublishErr maps a publishPost control error to an honest HTTP status: not-found →
+// 404, provider-not-configured → 503 (with the missing-credentials detail), else 500.
+func mapPublishErr(err error) error {
+	switch {
+	case errors.Is(err, errNotFound):
+		return zip.ErrNotFound("post not found")
+	case errors.Is(err, errProviderNotConfigured):
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+	}
+}
+
 // ---- summary ----
 
 func summary(s *cloud.Service[state], c *zip.Ctx) error {
@@ -461,8 +550,11 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// Shutdown closes the social store. Idempotent.
+// Shutdown stops the scheduler and closes the social store, in that order (drain the
+// background publisher before releasing its store). Idempotent.
 func Shutdown() error {
+	stopScheduler()
+	stopScheduler = func() {}
 	if mounted == nil || mounted.State.store == nil {
 		return nil
 	}
