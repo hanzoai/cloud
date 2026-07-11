@@ -68,8 +68,8 @@ import (
 )
 
 // iamPrefixes is every root path prefix the IAM Beego handler owns. The whole
-// handler is mounted at each via zip.App.Mount (which registers prefix+"/*" and
-// preserves the full request path). The handler answers only paths IAM
+// handler is mounted at each via app.All(prefix+"/*", zip.AdaptNetHTTP(h)), which
+// preserves the full request path. The handler answers only paths IAM
 // registered; an unknown path under a prefix 404s from Beego exactly as
 // standalone IAM does, so a broad mount cannot leak another subsystem's surface.
 var iamPrefixes = []string{
@@ -151,12 +151,12 @@ func mountFailClosed(app *zip.App) {
 }
 
 // mountHandler attaches the IAM http.Handler at every prefix IAM owns. Split from
-// Mount so the routing plumbing — zip.App.Mount dispatching prefix/* to the
-// handler with the ORIGINAL request path preserved (Beego routes on the full
-// path) — is unit-testable without booting the full Beego runtime.
+// Mount so the routing plumbing — app.All(prefix+"/*", zip.AdaptNetHTTP(h))
+// dispatching to the handler with the ORIGINAL request path preserved (Beego
+// routes on the full path) — is unit-testable without booting the full Beego runtime.
 func mountHandler(app *zip.App, handler http.Handler) {
 	for _, p := range iamPrefixes {
-		app.Mount(p, handler)
+		app.All(p+"/*", zip.AdaptNetHTTP(handler))
 	}
 }
 
