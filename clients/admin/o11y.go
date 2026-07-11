@@ -47,6 +47,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/zap-proto/zip"
 )
 
@@ -147,7 +148,7 @@ type o11yLLM struct {
 // GLOBAL-ADMIN ONLY (s.guard). Every signal degrades independently: a table that is
 // absent or errors contributes its zero-value, never a failure — the fleet board
 // always renders what the datastore actually holds.
-func o11y(s *cloud.Service[state], c *zip.Ctx) error {
+func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	rangeLabel := o11yRange(c.Query("range"))
 	since := computeSince(rangeLabel)
@@ -165,7 +166,7 @@ func o11y(s *cloud.Service[state], c *zip.Ctx) error {
 	// Honest-empty when the warehouse is not connected: the board renders its zero
 	// state, never a fabricated fleet.
 	if !aiobject.DatastoreEnabled() {
-		return ok(c, payload)
+		return core.OK(c, payload)
 	}
 
 	sinceTS := chTS(since)         // DateTime literal — cloud_usage.timestamp, traces.timestamp
@@ -210,7 +211,7 @@ func o11y(s *cloud.Service[state], c *zip.Ctx) error {
 		payload.LLM = o11yLLM{Generations: chInt64(r["gens"]), CostUsd: chFloat64(r["cost"])}
 	}
 
-	return ok(c, payload)
+	return core.OK(c, payload)
 }
 
 // ── pure SQL builders (static SQL + one positional time bound; unit-tested) ──
