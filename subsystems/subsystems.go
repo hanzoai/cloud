@@ -102,6 +102,7 @@ import (
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
 	"github.com/hanzoai/cloud/clients/sign"
+	"github.com/hanzoai/cloud/clients/social"
 	"github.com/hanzoai/cloud/clients/storage"
 	"github.com/hanzoai/cloud/clients/tasks"
 	"github.com/hanzoai/cloud/clients/team"
@@ -222,6 +223,11 @@ func Wire() []cloud.MountSpec {
 		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
 		// on SIGTERM (ctxShutdown adapts func() error).
 		{Name: "ads", Mount: cloud.Typed(ads.Mount), Shutdown: ctxShutdown(ads.Shutdown)},
+		// Native /v1/social/* — the in-process fold of the live social stack
+		// (github.com/hanzoai/social: social-backend/frontend/orchestrator, a Postiz-style
+		// scheduler), a per-org accounts+posts store on Base/SQLite, twin of crm. Owns a DB
+		// handle, so its Shutdown closes it cleanly on SIGTERM (ctxShutdown adapts func() error).
+		{Name: "social", Mount: cloud.Typed(social.Mount), Shutdown: ctxShutdown(social.Shutdown)},
 		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
 		{Name: "git", Mount: cloud.Typed(git.Mount)},
 		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
