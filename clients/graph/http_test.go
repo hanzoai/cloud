@@ -156,15 +156,27 @@ func TestIndexerUnhealthyDegraded(t *testing.T) {
 	}
 }
 
-func TestIndexerUnreachable502(t *testing.T) {
+func TestIndexerUnreachableHonestEmpty(t *testing.T) {
 	t.Setenv("INDEXER_URL", "http://indexer.invalid.test")
 	t.Setenv("GRAPH_URL", "http://graph.invalid.test")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), Brand: "lux", Env: "mainnet"}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
-	if code, _ := do(t, app, http.MethodGet, "/v1/indexers", "acme"); code != http.StatusBadGateway {
-		t.Fatalf("unreachable indexer want 502, got %d", code)
+	// Unreachable indexer degrades to an honest-EMPTY list (200), not a console-error
+	// 502 — and never a fabricated row.
+	code, body := do(t, app, http.MethodGet, "/v1/indexers", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("unreachable indexer want 200 (honest-empty), got %d (%s)", code, body)
+	}
+	var listed struct {
+		Indexers []indexerView `json:"indexers"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Indexers) != 0 {
+		t.Fatalf("unreachable indexer must return honest-empty list, got %+v", listed.Indexers)
 	}
 }
 
@@ -208,11 +220,23 @@ func TestOraclesGatedShapeAndEmpty(t *testing.T) {
 	}
 }
 
-func TestOraclesGraphQLError502(t *testing.T) {
+func TestOraclesGraphQLErrorHonestEmpty(t *testing.T) {
 	f := &fakeChain{gqlError: "schema unavailable"}
 	app := mountApp(t, f.server(t).URL)
-	if code, _ := do(t, app, http.MethodGet, "/v1/oracles", "acme"); code != http.StatusBadGateway {
-		t.Fatalf("graphql error want 502, got %d", code)
+	// A GraphQL {errors} envelope degrades to an honest-EMPTY list (200), not a
+	// console-error 502 — and never a fabricated feed.
+	code, body := do(t, app, http.MethodGet, "/v1/oracles", "acme")
+	if code != http.StatusOK {
+		t.Fatalf("graphql error want 200 (honest-empty), got %d (%s)", code, body)
+	}
+	var listed struct {
+		Oracles []oracleView `json:"oracles"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if len(listed.Oracles) != 0 {
+		t.Fatalf("graphql error must return honest-empty list, got %+v", listed.Oracles)
 	}
 }
 
