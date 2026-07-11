@@ -528,17 +528,17 @@ func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) 
 				ca.Created = t.UTC()
 				ca.HasCreated = true
 			}
-			rows, err := s.State.commerce.Transactions(ctx, o.Name, orgSubject(o.Name), 2000)
+			rows, err := s.State.commerce.Ledger(ctx, o.Name, 2000)
 			oks[i] = err == nil
 			for _, r := range rows {
-				if strings.ToLower(r.Type) != "withdraw" {
+				if strings.ToLower(r.Kind) != "withdraw" {
 					continue // only consumption is "activity"; deposits are credits
 				}
-				t, perr := parseTxnTime(r.CreatedAt)
+				t, perr := parseTxnTime(r.At)
 				if perr != nil {
 					continue
 				}
-				amt := r.Amount
+				amt := int64(r.Amount)
 				if amt < 0 {
 					amt = -amt
 				}
@@ -570,8 +570,8 @@ func fleetMRR(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) int64
 		go func(i int, o iamOrg) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if sum, err := s.State.commerce.SubscriptionSummary(ctx, o.Name, orgSubject(o.Name)); err == nil {
-				vals[i] = sum.MRR
+			if pl, err := s.State.commerce.Plan(ctx, o.Name); err == nil {
+				vals[i] = int64(pl.MRR)
 			}
 		}(i, o)
 	}

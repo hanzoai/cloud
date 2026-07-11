@@ -13,6 +13,7 @@ import (
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/admin/health"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -37,7 +38,7 @@ func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method,
 		iam:      newIAMClient(iamURL),
 		commerce: commerce.New(commerceURL, "test-token"),
 		health:   health.New(healthURL),
-		do:       newDOClient(""), // no token → honest not-configured unless a test overrides s.State.do
+		do:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.do
 		adminOrg: "admin",
 	}}
 	// Mirror the REAL Mount (admin.go): org-scoped panels behind guardScoped, the
@@ -294,11 +295,9 @@ func newFakeCommerce() *fakeCommerce {
 // revenue bug (commerce.go had X-IAM-Org-Id; admin.go orgSubject had "org/org", so
 // every real balance read $0). /v1/admin/orgs must surface acme's real $50.00.
 func TestCommerce_ReconcilesWithXOrgIdBareSlug(t *testing.T) {
-	// orgSubject MUST be the bare slug (not "org/org").
-	if got := orgSubject("acme"); got != "acme" {
-		t.Fatalf("orgSubject(\"acme\") = %q, want \"acme\" (bare slug; \"acme/acme\" reads an empty commerce wallet)", got)
-	}
-
+	// The billing subject is the bare org slug for BOTH the X-Org-Id header and the
+	// `user` param — commerce.Client bakes that in (one subject, no "org/org"). This
+	// test proves it end to end: /v1/admin/orgs must surface acme's real $50.00.
 	iam := newFakeIAM()
 	defer iam.server.Close()
 	commerce := newFakeCommerce()

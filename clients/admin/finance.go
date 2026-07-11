@@ -65,11 +65,11 @@ type financeData struct {
 // the DO compute COGS line; this is our prepaid-credit balance, which commerce
 // does not track, so it stays a direct DO account read.
 type financeCost struct {
-	Configured bool                  `json:"configured"`
-	Error      string                `json:"error,omitempty"`
-	Period     string                `json:"period"`
-	TotalCents int64                 `json:"totalCents"`
-	Vendors    []commerce.VendorCost `json:"vendors"`
+	Configured bool              `json:"configured"`
+	Error      string            `json:"error,omitempty"`
+	Period     string            `json:"period"`
+	TotalCents int64             `json:"totalCents"`
+	Vendors    []commerce.Vendor `json:"vendors"`
 
 	DigitalOcean doCost `json:"digitalocean"`
 }
@@ -185,14 +185,14 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 	// providers we resell) — it does NOT re-derive any vendor cost. TotalCents is
 	// the margin cost. Honest not-configured when commerce is unreachable.
 	cost := financeCost{Period: period}
-	if s.State.commerce.Configured() {
+	if s.State.commerce.Ready() {
 		report, err := s.State.commerce.Costs(ctx, period)
 		if err != nil {
 			cost.Error = err.Error()
 			sources = append(sources, srcOf("commerce-costs", err, 0, now))
 		} else {
 			cost.Configured = true
-			cost.TotalCents = report.TotalCents
+			cost.TotalCents = int64(report.Total)
 			cost.Vendors = report.Vendors
 			if report.Period != "" {
 				cost.Period = report.Period
@@ -204,34 +204,34 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 		sources = append(sources, srcOf("commerce-costs", errUnconfigured, 0, now))
 	}
 	if cost.Vendors == nil {
-		cost.Vendors = []commerce.VendorCost{}
+		cost.Vendors = []commerce.Vendor{}
 	}
 
 	// ── DigitalOcean promo-credit / runway (orthogonal treasury view) ──
 	// The one direct vendor read that remains: our DO prepaid-credit balance +
 	// burn-down history, which commerce does not track. Its MTD spend feeds ONLY
 	// the runway projection — it is NOT the margin cost (that is cost.TotalCents).
-	do := doCost{Configured: s.State.do.configured()}
-	if !s.State.do.configured() {
+	do := doCost{Configured: s.State.do.Ready()}
+	if !s.State.do.Ready() {
 		do.Error = "DO_API_TOKEN not configured"
 		sources = append(sources, srcOf("digitalocean", errUnconfigured, 0, now))
 	} else {
-		bal, err := s.State.do.balance(ctx)
+		bal, err := s.State.do.Balance(ctx)
 		if err != nil {
 			do.Error = err.Error()
 			sources = append(sources, srcOf("digitalocean", err, 0, now))
 		} else {
 			// creditRemaining = -account_balance clamped at 0 (negative account
 			// balance = credit we hold; a positive balance means we owe DO → 0 credit).
-			credit := -bal.AccountBalanceCents
+			credit := -int64(bal.Account)
 			if credit < 0 {
 				credit = 0
 			}
 			do.CreditRemainingCents = credit
-			do.MonthToDateSpendCents = bal.MonthToDateUsageCents
-			do.AccountBalanceCents = bal.AccountBalanceCents
-			do.GeneratedAt = bal.GeneratedAt
-			do.AvgDailyBurnCents = avgDailyBurnCents(bal.MonthToDateUsageCents, time.Now().UTC())
+			do.MonthToDateSpendCents = int64(bal.Usage)
+			do.AccountBalanceCents = int64(bal.Account)
+			do.GeneratedAt = bal.At
+			do.AvgDailyBurnCents = avgDailyBurnCents(int64(bal.Usage), time.Now().UTC())
 			do.History = doHistory(s, ctx)
 			sources = append(sources, srcOf("digitalocean", nil, 1, now))
 		}
@@ -246,7 +246,7 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 	// transient IAM/commerce failure it stays FALSE so computeFinance and the console
 	// never fabricate a negative margin / red "burning" alarm from a fake zero.
 	rev := financeRevenue{}
-	if !s.State.commerce.Configured() {
+	if !s.State.commerce.Ready() {
 		sources = append(sources, srcOf("commerce", errUnconfigured, 0, now))
 	} else if orgs, orgErr := listOrgs(s, ctx, cr); orgErr != nil {
 		// The revenue source is unreadable → honest not-configured, never a zero
@@ -256,14 +256,13 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 		var totalRev, mrr int64
 		partial := false
 		for _, o := range orgs {
-			subj := orgSubject(o.Name)
-			if r, e := s.State.commerce.UsageRollup(ctx, o.Name, subj); e == nil {
-				totalRev += r.ConsumedCents
+			if sp, e := s.State.commerce.Spend(ctx, o.Name); e == nil {
+				totalRev += int64(sp.Consumed)
 			} else {
 				partial = true
 			}
-			if m, e := s.State.commerce.MRRCents(ctx, o.Name, subj); e == nil {
-				mrr += m
+			if pl, e := s.State.commerce.Plan(ctx, o.Name); e == nil {
+				mrr += int64(pl.MRR)
 			} else {
 				partial = true
 			}
@@ -297,7 +296,7 @@ func finance(s *cloud.Service[state], c *zip.Ctx) error {
 // entries (Invoice/charges) shape the burn-down; the series stays honest-empty
 // when history is unavailable.
 func doHistory(s *cloud.Service[state], ctx context.Context) []doHistoryPoint {
-	entries, err := s.State.do.history(ctx, 60)
+	entries, err := s.State.do.History(ctx, 60)
 	if err != nil {
 		return []doHistoryPoint{}
 	}
@@ -305,8 +304,8 @@ func doHistory(s *cloud.Service[state], ctx context.Context) []doHistoryPoint {
 	for _, e := range entries {
 		pts = append(pts, doHistoryPoint{
 			Date:        e.Date,
-			AmountCents: e.AmountCents,
-			Type:        e.Type,
+			AmountCents: int64(e.Amount),
+			Type:        e.Kind,
 			Description: e.Description,
 		})
 	}
