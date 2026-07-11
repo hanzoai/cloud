@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -65,15 +66,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "content")
 
-	// The edges default to fail-closed. The real generator (zen5 copy via deps.AI +
-	// studio assets, metered through b.Bill) and distributor (hanzoai/social, tokens
-	// via deps.KMS) are constructed here in a follow-up; until then every generate/
-	// publish honestly reports "not configured" (503) and a transition into
-	// distribution records "not_configured" WITHOUT failing the status change. This is
-	// the ONE place the edges are selected.
+	// This is the ONE place the edges are selected. The generator is REAL (newGenerator:
+	// zen5 copy via the metered deps.AI + studio assets metered through b.Bill); it
+	// fail-closes per-mode when a backend is unconfigured, so a deployment without an AI
+	// plane or a reachable studio degrades to an honest 503 rather than fake output. The
+	// distributor (hanzoai/social) is still the fail-closed default — a transition into
+	// distribution records "not_configured" WITHOUT failing the status change — until it
+	// is wired in its own follow-up.
 	st := state{
-		gen:  notConfiguredGenerator{},
-		dist: notConfiguredDistributor{},
+		gen:  newGenerator(deps, b),
+		dist: newDistributor(),
 	}
 	s := &cloud.Service[state]{Base: b, State: st}
 	mounted = s
@@ -109,6 +111,7 @@ var (
 	errUnknownStatus      = errors.New("content: unknown status")
 	errIllegalTransition  = errors.New("content: illegal transition")
 	errModuleNotInstalled = errors.New("content: marketing module not installed for org")
+	errInvalidSource      = errors.New("content: invalid source_media")
 )
 
 // ---- handlers (free functions bound with cloud.Handle) ----
@@ -197,6 +200,11 @@ func postGenerate(_ *cloud.Service[state], c *zip.Ctx) error {
 	}
 	res, err := Generate(c.Context(), org, in)
 	if err != nil {
+		// A studio-render billing denial is a funds/cap outcome, not a server fault:
+		// render it as the SAME 402/503 contract every Hanzo resource create emits.
+		if errors.Is(err, metering.ErrInsufficientBalance) || errors.Is(err, metering.ErrSpendCapExceeded) {
+			return cloud.DenyResource(c, err)
+		}
 		return opErr(err)
 	}
 	return c.JSON(http.StatusCreated, res)
@@ -297,7 +305,11 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 	data := cloneData(doc.Data)
 	data[StatusField] = to
 	stampTimestamps(data, to, scheduleAt)
-	if err := framework.UpdateData(ctx, org, doctype, name, data); err != nil {
+	// TRUSTED write: Transition is the server op that stamps the server-managed
+	// published_at (and preserves external_ids), so it wraps the context to pass the
+	// enforceServerOwned gate. The enforceLifecycle gate still runs — the trusted marker
+	// exempts ONLY the server-owned-field check, never edge legality (defence in depth).
+	if err := framework.UpdateData(withTrustedWrite(ctx), org, doctype, name, data); err != nil {
 		return TransitionResult{}, err
 	}
 
@@ -419,6 +431,8 @@ func opErr(err error) error {
 		return nil
 	case errors.Is(err, errNotConfigured):
 		return zip.Errorf(http.StatusServiceUnavailable, "content feature not configured for this deployment")
+	case errors.Is(err, errUpstream):
+		return zip.Errorf(http.StatusServiceUnavailable, "distribution edge temporarily unavailable")
 	case errors.Is(err, errNotMounted):
 		return zip.Errorf(http.StatusServiceUnavailable, "content subsystem unavailable")
 	case errors.Is(err, errModuleNotInstalled):
@@ -427,6 +441,10 @@ func opErr(err error) error {
 		return zip.ErrNotFound("unknown content type")
 	case errors.Is(err, errUnknownStatus):
 		return zip.ErrBadRequest("unknown status")
+	case errors.Is(err, errInvalidSource):
+		// A caller-supplied source_media that fails the SSRF/traversal validator is a
+		// bad request — an honest 400 that never reaches the studio, never bills.
+		return zip.ErrBadRequest(err.Error())
 	case errors.Is(err, errIllegalTransition):
 		return zip.Errorf(http.StatusConflict, "%v", err)
 	case errors.Is(err, framework.ErrNotFound):

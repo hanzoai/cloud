@@ -68,12 +68,25 @@ func CanTransition(from, to string) bool {
 	return transitions[from][to]
 }
 
-// entersDistribution reports whether moving to `to` should trigger the distribution
-// fan-out (queued = scheduled/handed off, published = go live now). The transition
-// endpoint fires the Distributor only on these; the hook never does (side effects
-// are orchestration, never engine-internal).
+// entersDistribution reports whether moving to `to` should trigger the channel
+// fan-out. Distribution happens on EXACTLY ONE edge — the move to `published` — so a
+// legal walk (approved → queued → published) can never fan the same item out twice.
+//
+// The two states are decomplected:
+//   - `queued` = approved + scheduled/ready, NOT yet posted. The move to queued records
+//     `scheduled_at` (the intended go-live), a pure CMS staging column; it makes NO
+//     external call. A scheduler/automation promotes a queued item to `published` when
+//     its `scheduled_at` arrives (mirroring the site's PULL model: the platform owns
+//     timing, not the channel edge).
+//   - `published` = live/distributed. This is the ONE edge that fans out — `published_at`
+//     is stamped now and the item is posted to its channels now (a caller may still pass
+//     an explicit scheduleAt to hand a future time to the channel's own scheduler).
+//
+// The transition endpoint fires the Distributor only on this edge; the hook never does
+// (side effects are orchestration, never engine-internal). Publish is ALSO idempotent
+// per-channel (publish.go), so even a re-transition or retry cannot double-post.
 func entersDistribution(to string) bool {
-	return to == StatusQueued || to == StatusPublished
+	return to == StatusPublished
 }
 
 // IsLive reports whether a document in state s is publicly readable (the site reads
