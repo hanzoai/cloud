@@ -132,9 +132,10 @@ import (
 )
 
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
-// slice position IS the order (cloud.MountAll iterates it as-given; cloud.ShutdownAll
-// walks it in reverse). Enablement is a separate axis: cloud.Serve mounts only the
-// specs cfg.Enabled(name) admits, so a STAGED subsystem is linked but inert until named.
+// slice position IS the order: cloud.MountAll iterates it as-given, registering each
+// subsystem's teardown as a zip shutdown hook so teardown runs in reverse (LIFO).
+// Enablement is a separate axis: cloud.Serve mounts only the specs cfg.Enabled(name)
+// admits, so a STAGED subsystem is linked but inert until named.
 func Wire() []cloud.MountSpec {
 	return []cloud.MountSpec{
 		// embedded NATS :4222 + JetStream.
