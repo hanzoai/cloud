@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -65,7 +66,7 @@ func revenue(s *cloud.Service[state], c *zip.Ctx) error {
 	for i, o := range orgs {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, o iamOrg) {
+		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			rows[i], oks[i] = revenueOf(s, ctx, o)
@@ -132,7 +133,7 @@ func revenue(s *cloud.Service[state], c *zip.Ctx) error {
 // revenueOf reads one org's money view (balance + spend + plan/MRR). Returns
 // (row, ok): ok is false when the spend OR balance read failed, so the caller can
 // mark the fleet total PARTIAL rather than presenting an undercount as complete.
-func revenueOf(s *cloud.Service[state], ctx context.Context, o iamOrg) (revenueCustomer, bool) {
+func revenueOf(s *cloud.Service[state], ctx context.Context, o iam.Org) (revenueCustomer, bool) {
 	row := revenueCustomer{Org: o.Name, Display: display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
 	ok := true
 
