@@ -56,8 +56,8 @@ type MountConfig struct {
 }
 
 // commercePrefixes is every root path the commerce gin handler owns. The whole
-// handler is mounted at each via zip.App.Mount (which registers prefix+"/*" and
-// preserves the full request path — gin routes on it). An unknown path under a
+// handler is mounted at each via app.All(prefix+"/*", zip.AdaptNetHTTP(h)), which
+// preserves the full request path — gin routes on it. An unknown path under a
 // prefix 404s from gin exactly as standalone commerce does, so a broad mount cannot
 // leak another subsystem's surface.
 var commercePrefixes = []string{
@@ -144,7 +144,7 @@ func Mount(app *zip.App, cfg MountConfig, log luxlog.Logger) (*Embedded, error) 
 	PublishEmbedded(embedded)
 
 	for _, p := range commercePrefixes {
-		app.Mount(p, handler)
+		app.All(p+"/*", zip.AdaptNetHTTP(handler))
 	}
 
 	// The platform billing sweep, in-process (sweep.go): replaces the external
