@@ -79,6 +79,29 @@ Until wired, both are the fail-closed default: generate/publish/channels return 
 and a transition into distribution records `distribution:{"status":"not_configured"}`
 WITHOUT failing the status change. Never a 5xx from a foreseeable condition.
 
+### HARD GATE — must land BEFORE any brand connects a social key
+
+Red review left exactly ONE open item, on the `Distributor` key-connect path. It is a
+BLOCKING prerequisite for connecting the first real per-brand social key. Exposure
+TODAY is ZERO: no key ⇒ `Distributor` is `errNotConfigured` ⇒ no fan-out ⇒ the window
+below cannot open. It arms the instant a brand connects a KMS social key, so the fix
+MUST ship in that same change.
+
+- **The window:** `Publish` records `external_ids` (the per-channel skip-set) only AFTER
+  the whole fan-out completes (`publish.go`), and the per-item lease is a crash net, not
+  a fence — an expired-but-unreleased holder IS preempted (framework `acquireLock` steals
+  on `expires_at<=now`; pinned by `TestRedLease_ExpiredLiveHolderIsPreempted`). So if one
+  item's fan-out runs LONGER than `publishLeaseTTL` (5m), a contender steals the lease,
+  re-reads a still-empty skip-set, and re-posts the whole set → double-post. It takes a
+  brand with ~15+ slow channels each stalling to `distributeTimeout` (20s):
+  `(N+1)×20s > 5m ⇒ N ≳ 14`.
+- **Fix (one of, in priority order):** (1) lease heartbeat/renew — keep the holder's lease
+  alive while the fan-out is live so a live holder is never preempted (PREFERRED; turns the
+  lease into a real fence); (2) record `external_ids` INCREMENTALLY per channel so a stolen
+  lease sees the already-posted set and skips it; (3) bound the fan-out to strictly less
+  than `publishLeaseTTL`. Land one of these in the same change that connects the first
+  real social key — do not connect a key without it.
+
 ## karma migration
 
 karma.style swaps two data URLs onto this CMS (markup unchanged): `journal.json` →
