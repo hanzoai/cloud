@@ -1,4 +1,4 @@
-package admin
+package customer
 
 import (
 	"encoding/json"
@@ -7,26 +7,23 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/zap-proto/zip"
 )
 
-// The GRANTS surface (/v1/admin/grants) — the operator cockpit's credit-grant
-// ledger. A grant is a staff-issued credit (a comp/refund/promo) written to a
-// customer org's commerce ledger by POST /v1/admin/customers/:org/credit (or
-// POST /v1/admin/grants). Every grant is recorded in cloud's tamper-evident audit
-// store as action "admin.customer.credit" (resource type "credit", resource id =
-// the target org), so THIS view is a projection of that trail — the ONE source of
-// truth for "who granted what to whom, when, and from which bucket". Global-admin
-// only (mounted behind s.guard, like every /v1/admin/* route).
+// The GRANTS surface (/v1/admin/grants) — the operator cockpit's credit-grant ledger. A
+// grant is a staff-issued credit (a comp/refund/promo) written to a customer org's
+// commerce ledger by POST /v1/admin/customers/:org/credit (or POST /v1/admin/grants).
+// Every grant is recorded in cloud's tamper-evident audit store as action
+// "admin.customer.credit", so THIS view is a projection of that trail — the ONE source of
+// truth for "who granted what to whom, when, and from which bucket". Global-admin only.
 //
 // A grant's `source` splits it into the two commerce money buckets:
-//   - trial   — a non-cash promo/comp credit (never refundable cash, never paid
-//               out, non-premium usage only).
+//   - trial   — a non-cash promo/comp credit (never refundable cash, never paid out).
 //   - prepaid — real money added to the customer's cash balance.
-// The staff-issue default is trial (we never silently mint payout-able money).
 
-// grantRow is one row in GET /v1/admin/grants.
-type grantRow struct {
+// GrantRow is one row in GET /v1/admin/grants.
+type GrantRow struct {
 	Org           string `json:"org"`
 	AmountCents   int64  `json:"amountCents"`
 	Currency      string `json:"currency"`
@@ -38,7 +35,7 @@ type grantRow struct {
 	Result        string `json:"result"` // success | error
 }
 
-// grantAfter is the audit record's After payload emitted by applyGrant. Success
+// grantAfter is the audit record's After payload emitted by core.ApplyGrant. Success
 // carries grantedCents+transactionId; a failed attempt carries amountCents+error.
 type grantAfter struct {
 	GrantedCents  int64  `json:"grantedCents"`
@@ -49,19 +46,15 @@ type grantAfter struct {
 	TransactionID string `json:"transactionId"`
 }
 
-// grants answers GET /v1/admin/grants — the credit-grant ledger across ALL orgs,
-// newest first, projected from the audit trail. Filters: ?org, ?result
-// (success|error), ?limit. Honest empty when no local audit store is configured
-// (the grants view is audit-backed; without the store there is no grant history
-// to read — never a fabricated list).
-//
-//	GET /v1/admin/grants
-func grants(s *cloud.Service[state], c *zip.Ctx) error {
-	if s.State.auditStore == nil {
+// Grants answers GET /v1/admin/grants — the credit-grant ledger across ALL orgs, newest
+// first, projected from the audit trail. Filters: ?org, ?result (success|error), ?limit.
+// Honest empty when no local audit store is configured.
+func Grants(s *cloud.Service[core.State], c *zip.Ctx) error {
+	if s.State.AuditStore == nil {
 		return c.JSON(200, map[string]any{
 			"status": "ok",
 			"msg":    "grant history is unavailable (no local audit store configured on this deployment)",
-			"data":   []grantRow{},
+			"data":   []GrantRow{},
 			"data2":  0,
 		})
 	}
@@ -81,12 +74,12 @@ func grants(s *cloud.Service[state], c *zip.Ctx) error {
 		Limit:    limit,
 	}
 
-	rows, total, err := s.State.auditStore.Query(c.Context(), f)
+	rows, total, err := s.State.AuditStore.Query(c.Context(), f)
 	if err != nil {
-		return fail(c, err.Error())
+		return core.Fail(c, err.Error())
 	}
 
-	out := make([]grantRow, 0, len(rows))
+	out := make([]GrantRow, 0, len(rows))
 	for _, r := range rows {
 		var a grantAfter
 		if len(r.After) > 0 {
@@ -108,7 +101,7 @@ func grants(s *cloud.Service[state], c *zip.Ctx) error {
 		if actor == "" {
 			actor = r.Actor.Sub
 		}
-		out = append(out, grantRow{
+		out = append(out, GrantRow{
 			Org:           r.Resource.ID, // the TARGET org the credit landed on
 			AmountCents:   amount,
 			Currency:      currency,
@@ -129,8 +122,8 @@ func grants(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// issueGrantRequest is the POST /v1/admin/grants body: the credit fields plus the
-// target org (which the per-customer route carries in its path instead).
+// issueGrantRequest is the POST /v1/admin/grants body: the credit fields plus the target
+// org (which the per-customer route carries in its path instead).
 type issueGrantRequest struct {
 	Org         string `json:"org"`
 	AmountCents int64  `json:"amountCents"`
@@ -139,22 +132,19 @@ type issueGrantRequest struct {
 	Source      string `json:"source"` // "trial" (default) | "prepaid"
 }
 
-// issueGrant answers POST /v1/admin/grants — issue a credit grant to any org from
-// the operator Grants view (org in the body). It funnels through the SAME
-// applyGrant core POST /v1/admin/customers/:org/credit uses, so there is exactly
-// ONE credit-write path (validate + deposit trial/prepaid + audit).
-//
-//	POST /v1/admin/grants  { org, amountCents, currency?, reason?, source? }
-func issueGrant(s *cloud.Service[state], c *zip.Ctx) error {
+// IssueGrant answers POST /v1/admin/grants — issue a credit grant to any org from the
+// operator Grants view (org in the body). It funnels through the SAME core.ApplyGrant
+// POST /v1/admin/customers/:org/credit uses, so there is exactly ONE credit-write path.
+func IssueGrant(s *cloud.Service[core.State], c *zip.Ctx) error {
 	var body issueGrantRequest
 	if err := c.Bind(&body); err != nil {
-		return fail(c, "invalid request body")
+		return core.Fail(c, "invalid request body")
 	}
 	org := strings.TrimSpace(body.Org)
 	if org == "" {
-		return fail(c, "org is required")
+		return core.Fail(c, "org is required")
 	}
-	return applyGrant(s, c, org, creditRequest{
+	return core.ApplyGrant(s, c, org, core.CreditRequest{
 		AmountCents: body.AmountCents,
 		Currency:    body.Currency,
 		Reason:      body.Reason,
