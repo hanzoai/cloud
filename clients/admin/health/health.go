@@ -1,6 +1,6 @@
 // Package health probes an upstream's health endpoint (e.g. o11y's
 // /v1/o11y/health) so the admin overview can report System Health honestly. A
-// non-2xx or unreachable upstream is reported as not-ok — never masked.
+// non-2xx or unreachable upstream reads as down — never masked.
 package health
 
 import (
@@ -23,26 +23,26 @@ func New(u string) *Client {
 	return &Client{url: strings.TrimSpace(u), http: &http.Client{Timeout: 8 * time.Second}}
 }
 
-// Configured reports whether a health URL is set.
-func (h *Client) Configured() bool { return h != nil && h.url != "" }
+// Ready reports whether a health URL is wired.
+func (c *Client) Ready() bool { return c != nil && c.url != "" }
 
-// OK reports whether the health endpoint answers 2xx.
-func (h *Client) OK(ctx context.Context) (bool, error) {
-	if !h.Configured() {
-		return false, fmt.Errorf("o11y health not configured")
+// Up reports whether the health endpoint answers 2xx.
+func (c *Client) Up(ctx context.Context) (bool, error) {
+	if !c.Ready() {
+		return false, fmt.Errorf("health endpoint not configured")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return false, err
 	}
-	resp, err := h.http.Do(req)
+	resp, err := c.http.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("o11y unreachable: %w", err)
+		return false, fmt.Errorf("health unreachable: %w", err)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return false, fmt.Errorf("o11y health %d", resp.StatusCode)
+		return false, fmt.Errorf("health status %d", resp.StatusCode)
 	}
 	return true, nil
 }

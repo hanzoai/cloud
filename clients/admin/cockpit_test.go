@@ -66,14 +66,14 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 	// Signup + usage dates relative to now so analytics windows include them.
 	acmeCreated := now.AddDate(0, 0, -45).Format(time.RFC3339)
 	globexCreated := now.AddDate(0, 0, -20).Format(time.RFC3339)
-	usage := map[string][]commerce.Txn{
+	usage := map[string][]commerce.Entry{
 		"acme": {
-			{ID: "t1", Type: "withdraw", Amount: 100, Currency: "usd", CreatedAt: now.AddDate(0, 0, -40).Format(time.RFC3339)},
-			{ID: "t2", Type: "withdraw", Amount: 200, Currency: "usd", CreatedAt: now.AddDate(0, 0, -5).Format(time.RFC3339)},
-			{ID: "t3", Type: "deposit", Amount: 20000, Currency: "usd", CreatedAt: now.AddDate(0, 0, -46).Format(time.RFC3339)},
+			{ID: "t1", Kind: "withdraw", Amount: 100, Currency: "usd", At: now.AddDate(0, 0, -40).Format(time.RFC3339)},
+			{ID: "t2", Kind: "withdraw", Amount: 200, Currency: "usd", At: now.AddDate(0, 0, -5).Format(time.RFC3339)},
+			{ID: "t3", Kind: "deposit", Amount: 20000, Currency: "usd", At: now.AddDate(0, 0, -46).Format(time.RFC3339)},
 		},
 		"globex": {
-			{ID: "t4", Type: "withdraw", Amount: 400, Currency: "usd", CreatedAt: now.AddDate(0, 0, -3).Format(time.RFC3339)},
+			{ID: "t4", Kind: "withdraw", Amount: 400, Currency: "usd", At: now.AddDate(0, 0, -3).Format(time.RFC3339)},
 		},
 	}
 	// users per org (owner/name): forbidden read live from f.forbidden.
