@@ -49,6 +49,7 @@ import (
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
 	"github.com/hanzoai/cloud/clients/account"
 	"github.com/hanzoai/cloud/clients/admin"
+	"github.com/hanzoai/cloud/clients/ads"
 	"github.com/hanzoai/cloud/clients/affiliates"
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/agentskills"
@@ -212,6 +213,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
 		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
 		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
+		// Native /v1/ads/* — the net-new per-org ad-campaign store on Base/SQLite,
+		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
+		// on SIGTERM (ctxShutdown adapts func() error).
+		{Name: "ads", Mount: cloud.Typed(ads.Mount), Shutdown: ctxShutdown(ads.Shutdown)},
 		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
 		{Name: "git", Mount: cloud.Typed(git.Mount)},
 		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
