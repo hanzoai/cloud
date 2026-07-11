@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	// cek opens the store encrypted at rest (migrate-on-open + shred).
 	"github.com/hanzoai/cloud/cek"
@@ -54,7 +55,10 @@ func openStore(path string) (*Store, error) {
 
 // migrate creates the accounts + posts tables. Idempotent (IF NOT EXISTS). Each
 // table leads its lookup indexes with `org` so tenant isolation is a physical
-// property, not just a WHERE clause.
+// property, not just a WHERE clause. The one exception is
+// ix_social_posts_status_schedule: the scheduler's due-post sweep is the ONE
+// system-level (cross-org) read (see DueScheduled), so it is led by (status,
+// schedule_at), never by org.
 func (s *Store) migrate() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS social_accounts (
@@ -63,6 +67,7 @@ CREATE TABLE IF NOT EXISTS social_accounts (
   provider    TEXT NOT NULL DEFAULT 'x',
   handle      TEXT NOT NULL DEFAULT '',
   status      TEXT NOT NULL DEFAULT 'connected',
+  token       TEXT NOT NULL DEFAULT '',
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -76,17 +81,44 @@ CREATE TABLE IF NOT EXISTS social_posts (
   channel      TEXT NOT NULL DEFAULT 'x',
   status       TEXT NOT NULL DEFAULT 'draft',
   schedule_at  INTEGER NOT NULL DEFAULT 0,
+  account_id   TEXT NOT NULL DEFAULT '',
+  external_id  TEXT NOT NULL DEFAULT '',
+  error        TEXT NOT NULL DEFAULT '',
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_social_posts_org_updated  ON social_posts(org, updated_at);
-CREATE INDEX IF NOT EXISTS ix_social_posts_org_status   ON social_posts(org, status);
-CREATE INDEX IF NOT EXISTS ix_social_posts_org_schedule ON social_posts(org, schedule_at);
+CREATE INDEX IF NOT EXISTS ix_social_posts_org_updated       ON social_posts(org, updated_at);
+CREATE INDEX IF NOT EXISTS ix_social_posts_org_status        ON social_posts(org, status);
+CREATE INDEX IF NOT EXISTS ix_social_posts_org_schedule      ON social_posts(org, schedule_at);
+CREATE INDEX IF NOT EXISTS ix_social_posts_status_schedule   ON social_posts(status, schedule_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("social migrate: %w", err)
 	}
+	// Idempotent column upgrades for a pre-existing DB created before publishing
+	// landed (fresh installs already have them via the DDL above). ADD COLUMN on a
+	// column that already exists is the only error swallowed.
+	for _, ac := range []struct{ table, col, def string }{
+		{"social_accounts", "token", "TEXT NOT NULL DEFAULT ''"},
+		{"social_posts", "account_id", "TEXT NOT NULL DEFAULT ''"},
+		{"social_posts", "external_id", "TEXT NOT NULL DEFAULT ''"},
+		{"social_posts", "error", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := s.addColumn(ac.table, ac.col, ac.def); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// addColumn adds a column to an existing table, treating an already-present
+// column as success (SQLite has no ADD COLUMN IF NOT EXISTS).
+func (s *Store) addColumn(table, col, def string) error {
+	_, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, def))
+	if err == nil || strings.Contains(err.Error(), "duplicate column name") {
+		return nil
+	}
+	return fmt.Errorf("social migrate: add %s.%s: %w", table, col, err)
 }
 
 // Close closes the underlying database. Idempotent-safe via sql.DB.
@@ -99,30 +131,58 @@ func (s *Store) Close() error { return s.db.Close() }
 // Status is the connection lifecycle (connected/disconnected/error) — both
 // validated at the write layer against the fixed vocabularies in social.go.
 type Account struct {
-	ID        string `json:"id"`
-	Org       string `json:"-"`
-	Provider  string `json:"provider"`
-	Handle    string `json:"handle"`
-	Status    string `json:"status"`
+	ID       string `json:"id"`
+	Org      string `json:"-"`
+	Provider string `json:"provider"`
+	Handle   string `json:"handle"`
+	Status   string `json:"status"`
+	// Token is the account's provider access token (obtained by the connect/OAuth
+	// flow). It is a secret at rest — the store is SQLCipher-encrypted under CGO —
+	// and is NEVER serialized to an API response (`json:"-"`), so a token can never
+	// leak to the browser. Only the publisher reads it. The live Postiz stack stores
+	// this token in PLAINTEXT in Postgres; this fold keeps it encrypted at rest.
+	Token     string `json:"-"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 }
 
-const accountCols = `id,org,provider,handle,status,created_at,updated_at`
+const accountCols = `id,org,provider,handle,status,token,created_at,updated_at`
 
 func scanAccount(sc interface{ Scan(...any) error }) (Account, error) {
 	var a Account
-	err := sc.Scan(&a.ID, &a.Org, &a.Provider, &a.Handle, &a.Status, &a.CreatedAt, &a.UpdatedAt)
+	err := sc.Scan(&a.ID, &a.Org, &a.Provider, &a.Handle, &a.Status, &a.Token, &a.CreatedAt, &a.UpdatedAt)
 	return a, err
 }
 
 func (s *Store) CreateAccount(ctx context.Context, a Account) (Account, error) {
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO social_accounts (`+accountCols+`) VALUES (?,?,?,?,?,?,?)`,
-		a.ID, a.Org, a.Provider, a.Handle, a.Status, a.CreatedAt, a.UpdatedAt); err != nil {
+		`INSERT INTO social_accounts (`+accountCols+`) VALUES (?,?,?,?,?,?,?,?)`,
+		a.ID, a.Org, a.Provider, a.Handle, a.Status, a.Token, a.CreatedAt, a.UpdatedAt); err != nil {
 		return Account{}, fmt.Errorf("insert account: %w", err)
 	}
 	return a, nil
+}
+
+// ListConnectedAccounts returns an org's CONNECTED accounts for one provider — the
+// publish targets for a post on that channel. status='connected' only (a disconnected
+// or errored account is never a publish target). Org-scoped like every other read.
+func (s *Store) ListConnectedAccounts(ctx context.Context, org, provider string) ([]Account, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+accountCols+` FROM social_accounts WHERE org=? AND provider=? AND status='connected' ORDER BY updated_at DESC`,
+		org, provider)
+	if err != nil {
+		return nil, fmt.Errorf("list connected accounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]Account, 0, 4)
+	for rows.Next() {
+		a, err := scanAccount(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan account: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) GetAccount(ctx context.Context, org, id string) (Account, error) {
@@ -202,22 +262,31 @@ type Post struct {
 	Channel    string `json:"channel"`
 	Status     string `json:"status"`
 	ScheduleAt int64  `json:"scheduleAt"`
+	// AccountID / ExternalID / Error are server-managed publish results, set only by
+	// the publish path (never by a client update): the account a post was published
+	// through, the provider's returned external post id (for reconciliation), and the
+	// last failure reason. Empty until a publish attempt lands.
+	AccountID  string `json:"accountId,omitempty"`
+	ExternalID string `json:"externalId,omitempty"`
+	Error      string `json:"error,omitempty"`
 	CreatedAt  int64  `json:"createdAt"`
 	UpdatedAt  int64  `json:"updatedAt"`
 }
 
-const postCols = `id,org,content,channel,status,schedule_at,created_at,updated_at`
+const postCols = `id,org,content,channel,status,schedule_at,account_id,external_id,error,created_at,updated_at`
 
 func scanPost(sc interface{ Scan(...any) error }) (Post, error) {
 	var p Post
-	err := sc.Scan(&p.ID, &p.Org, &p.Content, &p.Channel, &p.Status, &p.ScheduleAt, &p.CreatedAt, &p.UpdatedAt)
+	err := sc.Scan(&p.ID, &p.Org, &p.Content, &p.Channel, &p.Status, &p.ScheduleAt,
+		&p.AccountID, &p.ExternalID, &p.Error, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
 
 func (s *Store) CreatePost(ctx context.Context, p Post) (Post, error) {
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO social_posts (`+postCols+`) VALUES (?,?,?,?,?,?,?,?)`,
-		p.ID, p.Org, p.Content, p.Channel, p.Status, p.ScheduleAt, p.CreatedAt, p.UpdatedAt); err != nil {
+		`INSERT INTO social_posts (`+postCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		p.ID, p.Org, p.Content, p.Channel, p.Status, p.ScheduleAt,
+		p.AccountID, p.ExternalID, p.Error, p.CreatedAt, p.UpdatedAt); err != nil {
 		return Post{}, fmt.Errorf("insert post: %w", err)
 	}
 	return p, nil
@@ -284,6 +353,106 @@ func (s *Store) DeletePost(ctx context.Context, org, id string) (bool, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// ---- publish state machine ----
+
+// ClaimForPublish atomically claims a post for a publish attempt: it flips a
+// publishable post (draft/scheduled/failed) to the transient 'publishing' state and
+// returns it. This is the concurrency guard shared by the HTTP publish handler and
+// the scheduler — with SQLite's single writer, exactly one caller's UPDATE affects a
+// given row, so a post is published AT MOST once even if the handler and a scheduler
+// tick race for it. Returns (post, true) when THIS caller won the claim, (post,
+// false) when the post is not claimable (already published, or being published by
+// another caller), and errNotFound if the post is not the org's.
+func (s *Store) ClaimForPublish(ctx context.Context, org, id string, now int64) (Post, bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE social_posts SET status='publishing',updated_at=? WHERE org=? AND id=? AND status IN ('draft','scheduled','failed')`,
+		now, org, id)
+	if err != nil {
+		return Post{}, false, fmt.Errorf("claim post: %w", err)
+	}
+	claimed := int64(0)
+	if n, _ := res.RowsAffected(); n > 0 {
+		claimed = n
+	}
+	p, err := s.GetPost(ctx, org, id) // errNotFound distinguishes absent from not-claimable
+	if err != nil {
+		return Post{}, false, err
+	}
+	return p, claimed > 0, nil
+}
+
+// MarkPublished records a successful publish: status→published, the account it went
+// through, the provider's external post id, and clears any prior error. Org-scoped.
+func (s *Store) MarkPublished(ctx context.Context, org, id, accountID, externalID string, now int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE social_posts SET status='published',account_id=?,external_id=?,error='',updated_at=? WHERE org=? AND id=?`,
+		accountID, externalID, now, org, id); err != nil {
+		return fmt.Errorf("mark published: %w", err)
+	}
+	return nil
+}
+
+// MarkFailed records a failed publish: status→failed with an honest reason (retryable
+// — a failed post can be claimed again). Org-scoped.
+func (s *Store) MarkFailed(ctx context.Context, org, id, reason string, now int64) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE social_posts SET status='failed',error=?,updated_at=? WHERE org=? AND id=?`,
+		reason, now, org, id); err != nil {
+		return fmt.Errorf("mark failed: %w", err)
+	}
+	return nil
+}
+
+// OrgPost is the minimal (org,id) identity the scheduler's due sweep returns — enough
+// to dispatch each due post back into the strictly org-scoped publish path.
+type OrgPost struct {
+	Org string
+	ID  string
+}
+
+// DueScheduled returns up to `limit` posts whose schedule time has arrived
+// (status='scheduled' AND schedule_at <= now), oldest-due first. This is the SINGLE
+// system-level (cross-org) read in the subsystem — the scheduler's due sweep. It reads
+// only the identifiers needed to dispatch; the actual publish re-enters the org-scoped
+// path (publishPost), so tenant isolation is preserved: the sweep dispatches, it never
+// returns or mutates one org's content under another's request. A 'scheduled' post with
+// an unset time (schedule_at=0) is due immediately — the durable backstop for the
+// on-create fanout.
+func (s *Store) DueScheduled(ctx context.Context, now int64, limit int) ([]OrgPost, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT org,id FROM social_posts WHERE status='scheduled' AND schedule_at<=? ORDER BY schedule_at LIMIT ?`,
+		now, limit)
+	if err != nil {
+		return nil, fmt.Errorf("due scheduled: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]OrgPost, 0, 16)
+	for rows.Next() {
+		var o OrgPost
+		if err := rows.Scan(&o.Org, &o.ID); err != nil {
+			return nil, fmt.Errorf("scan due: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// RecoverStuckPublishing resets any post left in the transient 'publishing' state by a
+// crash mid-attempt back to 'failed' (retryable). It is deliberately NOT reset to
+// 'published': we cannot know whether the provider actually received the post, and a
+// false 'published' would silently drop it, whereas a false 'failed' is a safe,
+// visible retry. Runs once at Mount; cross-org recovery sweep; returns the count reset.
+func (s *Store) RecoverStuckPublishing(ctx context.Context, now int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE social_posts SET status='failed',error='interrupted before completion',updated_at=? WHERE status='publishing'`,
+		now)
+	if err != nil {
+		return 0, fmt.Errorf("recover stuck: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // ---- summary ----
