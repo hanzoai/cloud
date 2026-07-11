@@ -63,6 +63,17 @@ type MountConfig struct {
 var commercePrefixes = []string{
 	"/v1/commerce", // public checkout + tenant + catalog + deposits + the api.Route bundle
 	"/_/commerce",  // tenant-admin surface
+	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
+	// Square et al). Square signs each delivery over the registered notification
+	// URL (https://pay.hanzo.ai/v1/billing/webhooks/square) + body, and the gin
+	// handler verifies that HMAC — the signature IS the auth; a bearer gate is
+	// impossible for provider callbacks. Only this route family lives under the
+	// prefix, and commerce mounts BEFORE the account-bridge /v1/billing/*
+	// catch-all (Wire order 100 < bridge), so the webhook path reaches gin while
+	// every other /v1/billing/* route keeps its existing owner. Required to
+	// retire the standalone pod: pay.hanzo.ai repoints at the cloud binary and
+	// deliveries must land on the SAME verified handler.
+	"/v1/billing/webhooks",
 }
 
 // Mount boots the in-process commerce app and attaches its http.Handler to app at
@@ -135,6 +146,11 @@ func Mount(app *zip.App, cfg MountConfig, log luxlog.Logger) (*Embedded, error) 
 	for _, p := range commercePrefixes {
 		app.Mount(p, handler)
 	}
+
+	// The platform billing sweep, in-process (sweep.go): replaces the external
+	// commerce-auto-recharge CronJob that curled the standalone pod. Runs only
+	// here — Mount is reached only on the single-writer commerce host.
+	embedded.stopSweep = startAutoRechargeSweep(handler, log)
 
 	log.Info("commerce embedded in-process (gin handler mounted)",
 		"prefixes", commercePrefixes,
