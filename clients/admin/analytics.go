@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/zap-proto/zip"
 )
 
@@ -512,7 +513,7 @@ func activeWithin(acts []custActivity, cut time.Time) int {
 // false if ANY org's ledger read failed (the caller marks the source degraded and
 // flags the ledger-backed metrics as not-fully-computed). Fanned out concurrently
 // with a bound, like the customer list.
-func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) ([]custActivity, bool) {
+func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iam.Org) ([]custActivity, bool) {
 	acts := make([]custActivity, len(orgs))
 	oks := make([]bool, len(orgs))
 	sem := make(chan struct{}, maxCustomerConcurrency)
@@ -520,7 +521,7 @@ func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) 
 	for i, o := range orgs {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, o iamOrg) {
+		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			ca := custActivity{Org: o.Name, Display: display(o.DisplayName, o.Name)}
@@ -560,14 +561,14 @@ func fleetActivity(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) 
 }
 
 // fleetMRR sums each org's active-subscription MRR concurrently.
-func fleetMRR(s *cloud.Service[state], ctx context.Context, orgs []iamOrg) int64 {
+func fleetMRR(s *cloud.Service[state], ctx context.Context, orgs []iam.Org) int64 {
 	vals := make([]int64, len(orgs))
 	sem := make(chan struct{}, maxCustomerConcurrency)
 	var wg sync.WaitGroup
 	for i, o := range orgs {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, o iamOrg) {
+		go func(i int, o iam.Org) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			if pl, err := s.State.commerce.Plan(ctx, o.Name); err == nil {
