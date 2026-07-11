@@ -136,11 +136,14 @@ type Account struct {
 	Provider string `json:"provider"`
 	Handle   string `json:"handle"`
 	Status   string `json:"status"`
-	// Token is the account's provider access token (obtained by the connect/OAuth
-	// flow). It is a secret at rest — the store is SQLCipher-encrypted under CGO —
-	// and is NEVER serialized to an API response (`json:"-"`), so a token can never
-	// leak to the browser. Only the publisher reads it. The live Postiz stack stores
-	// this token in PLAINTEXT in Postgres; this fold keeps it encrypted at rest.
+	// Token is the account's provider access token (written by the connect/OAuth
+	// flow, which has NOT landed yet). It is NEVER serialized to an API response
+	// (`json:"-"`), so it cannot leak to the browser; only the publisher reads it.
+	// NOT yet encrypted at rest: the store opens via cek.Open, which today runs the
+	// no-key PLAINTEXT fallback — real column encryption (WithRawKey sourced from KMS)
+	// lands together with the connect flow that first writes a token. The column is
+	// empty today, so no plaintext secret ships. (The live Postiz stack stores this
+	// token in PLAINTEXT in Postgres.)
 	Token     string `json:"-"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
