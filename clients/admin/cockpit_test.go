@@ -15,6 +15,8 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	fiber "github.com/zap-proto/fiber/v3"
+
+	"github.com/hanzoai/cloud/clients/admin/commerce"
 )
 
 // ── rich stateful fakes for the customer-management surfaces ──────────────────
@@ -64,7 +66,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 	// Signup + usage dates relative to now so analytics windows include them.
 	acmeCreated := now.AddDate(0, 0, -45).Format(time.RFC3339)
 	globexCreated := now.AddDate(0, 0, -20).Format(time.RFC3339)
-	usage := map[string][]txn{
+	usage := map[string][]commerce.Txn{
 		"acme": {
 			{ID: "t1", Type: "withdraw", Amount: 100, Currency: "usd", CreatedAt: now.AddDate(0, 0, -40).Format(time.RFC3339)},
 			{ID: "t2", Type: "withdraw", Amount: 200, Currency: "usd", CreatedAt: now.AddDate(0, 0, -5).Format(time.RFC3339)},
