@@ -1,8 +1,13 @@
 package admin
 
+import "github.com/hanzoai/cloud/clients/admin/core"
+
 // Response shapes for /v1/admin/*. Each mirrors the operator's api.ts contract
 // (admin/apps/operator/src/lib/api.ts) field-for-field — the JSON tags ARE the
 // contract, so the operator's TypeScript types decode these one-to-one.
+//
+// The cross-cutting SourceStatus (freshness of one upstream) lives in clients/admin/core
+// (core.SourceStatus) because revenue/finance/analytics share it; overview embeds it.
 
 // adminMe is the operator identity (AdminMe / GET /v1/admin/me).
 //
@@ -19,28 +24,18 @@ type adminMe struct {
 	IsGlobalAdmin bool   `json:"isGlobalAdmin"` // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
 }
 
-// sourceStatus is the freshness of one upstream the aggregator pulls from
-// (SourceStatus / overview.sources[]).
-type sourceStatus struct {
-	Name  string `json:"name"`
-	OK    bool   `json:"ok"`
-	Rows  int    `json:"rows"`
-	Error string `json:"error"`
-	At    string `json:"at"`
-}
-
 // overviewData is the fleet overview tiles (OverviewData / GET /v1/admin/overview).
 type overviewData struct {
-	Orgs           int            `json:"orgs"`
-	Users          int            `json:"users"`
-	Products       int            `json:"products"`
-	ActiveProducts int            `json:"activeProducts"`
-	Drift          int            `json:"drift"`
-	SpendCents30d  int64          `json:"spendCents30d"`
-	Tokens30d      int64          `json:"tokens30d"`
-	CreditsCents   int64          `json:"creditsCents"`
-	LastSync       string         `json:"lastSync"`
-	Sources        []sourceStatus `json:"sources"`
+	Orgs           int                 `json:"orgs"`
+	Users          int                 `json:"users"`
+	Products       int                 `json:"products"`
+	ActiveProducts int                 `json:"activeProducts"`
+	Drift          int                 `json:"drift"`
+	SpendCents30d  int64               `json:"spendCents30d"`
+	Tokens30d      int64               `json:"tokens30d"`
+	CreditsCents   int64               `json:"creditsCents"`
+	LastSync       string              `json:"lastSync"`
+	Sources        []core.SourceStatus `json:"sources"`
 }
 
 // orgRow is one tenant row (OrgRow / GET /v1/admin/orgs).
