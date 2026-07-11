@@ -259,7 +259,15 @@ type Receipt struct {
 // Deposit grants credit to a subject's wallet (POST /v1/billing/deposit) — the ONE
 // money-in primitive. Symmetric with Credits: the same X-Org-Id namespace + `user`
 // subject the reads resolve. amount must be positive (the handler validates + caps).
-func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents, currency, notes, tags string) (Receipt, error) {
+//
+// idempotencyKey, when non-empty, is sent as X-Idempotency-Key so commerce dedupes a
+// retried deposit AT MOST ONCE (a completed key REPLAYS the stored receipt, an in-flight
+// key 409s; scoped billing-deposit:<subject>). This closes the commit-then-timeout double
+// -credit: cloud's 15s client can time out AFTER commerce committed, and a retry carrying
+// the SAME key lands nothing new. An EMPTY key preserves the additive default (distinct
+// deposits to the same subject are legitimately cumulative) — commerce never dedupes by
+// amount. See commerce api/billing/deposit.go.
+func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents, currency, notes, tags, idempotencyKey string) (Receipt, error) {
 	var out Receipt
 	if !c.Ready() {
 		return out, errUnconfigured
@@ -277,7 +285,7 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 	if err != nil {
 		return out, err
 	}
-	respBody, err := c.post(ctx, "/v1/billing/deposit", subject, body)
+	respBody, err := c.post(ctx, "/v1/billing/deposit", subject, body, idempotencyKey)
 	if err != nil {
 		return out, err
 	}
@@ -290,8 +298,10 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 // post performs one admin-authenticated commerce POST (JSON body) and returns the
 // raw response. The admin S2S service token is the bearer and X-Org-Id=<subject>
 // the per-org namespace selector commerce's EdgeAuth trusts only after verifying
-// the service token. A non-2xx is an error the caller surfaces + audits honestly.
-func (c *Client) post(ctx context.Context, path, subject string, body []byte) ([]byte, error) {
+// the service token. idempotencyKey, when non-empty, is sent as X-Idempotency-Key so a
+// retried write dedupes at commerce. A non-2xx is an error the caller surfaces + audits
+// honestly.
+func (c *Client) post(ctx context.Context, path, subject string, body []byte, idempotencyKey string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -303,6 +313,9 @@ func (c *Client) post(ctx context.Context, path, subject string, body []byte) ([
 	}
 	if subject != "" {
 		req.Header.Set("X-Org-Id", subject)
+	}
+	if idempotencyKey != "" {
+		req.Header.Set("X-Idempotency-Key", idempotencyKey)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
