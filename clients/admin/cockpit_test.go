@@ -17,6 +17,9 @@ import (
 	fiber "github.com/zap-proto/fiber/v3"
 
 	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/admin/customer"
+	"github.com/hanzoai/cloud/clients/admin/revenue"
 )
 
 // ── rich stateful fakes for the customer-management surfaces ──────────────────
@@ -26,7 +29,7 @@ import (
 type cockpitFakes struct {
 	iam      *httptest.Server
 	commerce *httptest.Server
-	service  *cloud.Service[state]
+	service  *cloud.Service[core.State]
 	do       func(method, path string, hdr map[string]string, body string) (*http.Response, []byte)
 
 	mu          sync.Mutex
@@ -235,7 +238,7 @@ func TestCustomers_ListRealFleet(t *testing.T) {
 		t.Fatalf("customers: %d (%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Data  []customerRow `json:"data"`
+		Data  []customer.CustomerRow `json:"data"`
 		Data2 int           `json:"data2"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
@@ -268,7 +271,7 @@ func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 		t.Fatalf("SECRET LEAK: the access key value appears in the customer detail response")
 	}
 	var env struct {
-		Data customerDetailData `json:"data"`
+		Data customer.CustomerDetailData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -285,7 +288,7 @@ func TestCustomerDetail_RealAndNoSecretLeak(t *testing.T) {
 		t.Fatalf("want 2 users, got %d", len(d.Users))
 	}
 	// The users carry hasApiKey (presence) but NO key value field exists in the type.
-	var anna *customerUser
+	var anna *customer.CustomerUser
 	for i := range d.Users {
 		if d.Users[i].Name == "anna" {
 			anna = &d.Users[i]
@@ -309,7 +312,7 @@ func TestGrantCredit_DepositLandsAndAudited(t *testing.T) {
 		t.Fatalf("audit open: %v", err)
 	}
 	defer rec.Close()
-	f.service.State.auditStore = rec
+	f.service.State.AuditStore = rec
 
 	resp, body := f.do("POST", "/v1/admin/customers/acme/credit", adminHdr(), `{"amountCents":5000,"reason":"support comp"}`)
 	if resp.StatusCode != 200 {
@@ -392,7 +395,7 @@ func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 	f := newCockpitFakes(t)
 	rec, _ := audit.Open(":memory:", nil)
 	defer rec.Close()
-	f.service.State.auditStore = rec
+	f.service.State.AuditStore = rec
 
 	// Suspend acme.
 	resp, body := f.do("POST", "/v1/admin/customers/acme/suspend", adminHdr(), "")
@@ -409,7 +412,7 @@ func TestSuspendReactivate_ForbidsUsersAndAudits(t *testing.T) {
 	// A re-list shows acme suspended (all users forbidden).
 	_, lb := f.do("GET", "/v1/admin/customers", adminHdr(), "")
 	var env struct {
-		Data []customerRow `json:"data"`
+		Data []customer.CustomerRow `json:"data"`
 	}
 	_ = json.Unmarshal(lb, &env)
 	for _, c := range env.Data {
@@ -442,7 +445,7 @@ func TestRevenue_RealAggregate(t *testing.T) {
 		t.Fatalf("revenue: %d (%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Data revenueData `json:"data"`
+		Data revenue.RevenueData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)

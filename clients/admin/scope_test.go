@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/core"
 )
 
 // scopeIAM is a fake IAM serving the org directory + single-org + users reads. It RECORDS
@@ -179,29 +180,29 @@ func TestScope_PlatformRouteDeniesOrgAdminButScopedAdmits(t *testing.T) {
 // parent-org field yet, so the subtree is the singleton. When IAM adds the parent link,
 // this test changes (and descendants becomes the BFS) — nothing else does.
 func TestScope_DescendantsSingletonToday(t *testing.T) {
-	s := &cloud.Service[state]{State: state{adminOrg: "admin"}}
-	got := descendants(s, "maxpower")
+	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}}
+	got := core.Descendants(s, "maxpower")
 	if len(got) != 1 || got[0] != "maxpower" {
 		t.Fatalf("descendants(maxpower) = %v, want [maxpower] (IAM has no parent-org field yet)", got)
 	}
-	if descendants(s, "") != nil {
+	if core.Descendants(s, "") != nil {
 		t.Fatalf("descendants(\"\") must be nil")
 	}
 }
 
 func TestScope_ScopedToOrg(t *testing.T) {
-	super := tenantScope{super: true}
-	if !super.scopedToOrg("anything") {
+	super := core.TenantScope{Super: true}
+	if !super.ScopedToOrg("anything") {
 		t.Fatal("super admits any org")
 	}
-	scoped := tenantScope{orgs: []string{"maxpower"}}
-	if !scoped.scopedToOrg("maxpower") {
+	scoped := core.TenantScope{Orgs: []string{"maxpower"}}
+	if !scoped.ScopedToOrg("maxpower") {
 		t.Fatal("scoped admits its own org")
 	}
-	if scoped.scopedToOrg("hanzo") {
+	if scoped.ScopedToOrg("hanzo") {
 		t.Fatal("scoped must NOT admit another tenant's org")
 	}
-	if scoped.scopedToOrg("") {
+	if scoped.ScopedToOrg("") {
 		t.Fatal("scoped must NOT admit an empty org")
 	}
 }

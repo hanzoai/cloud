@@ -16,11 +16,12 @@ package admin
 
 import (
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/featureflags"
 	"github.com/zap-proto/zip"
 )
 
 // flags answers GET /v1/admin/flags — the platform control-plane read board.
-func flags(s *cloud.Service[state], c *zip.Ctx) error {
-	return ok(c, featureflags.Board())
+func flags(s *cloud.Service[core.State], c *zip.Ctx) error {
+	return core.OK(c, featureflags.Board())
 }
