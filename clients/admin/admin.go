@@ -50,6 +50,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
+	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/zap-proto/zip"
@@ -63,7 +64,7 @@ type state struct {
 	iam      *iamClient
 	commerce *commerce.Client
 	health   *health.Client
-	do       *doClient
+	do       *digitalocean.Client
 	adminOrg string
 	// auditStore is cloud's OWN tamper-evident audit store (nil when unconfigured,
 	// in which case /v1/admin/audit falls back to the IAM get-records proxy). Serve
@@ -91,7 +92,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			iam:        newIAMClient(iamBase(deps)),
 			commerce:   commerce.New(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 			health:     health.New(o11yHealthURL()),
-			do:         newDOClient(doTokenFromEnv()),
+			do:         digitalocean.New(doTokenFromEnv()),
 			adminOrg:   adminOrgOf(deps),
 			auditStore: deps.Audit,
 		},
@@ -102,8 +103,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	b.Log.Info("admin surface mounted",
 		"prefix", "/v1/admin",
 		"iam", s.State.iam.configured(),
-		"commerce", s.State.commerce.Configured(),
-		"digitalocean", s.State.do.configured(),
+		"commerce", s.State.commerce.Ready(),
+		"digitalocean", s.State.do.Ready(),
 		"adminOrg", s.State.adminOrg,
 	)
 	return nil
@@ -435,16 +436,16 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	var spend int64
 	switch {
 	case org != "":
-		if r, err := s.State.commerce.UsageRollup(ctx, org, orgSubject(org)); err == nil {
-			spend = r.ConsumedCents
+		if sp, err := s.State.commerce.Spend(ctx, org); err == nil {
+			spend = int64(sp.Consumed)
 		}
 	case sc.super:
 		// Fleet: sum month-to-date consumption across every org.
 		orgs, err := listOrgs(s, ctx, cr)
 		if err == nil {
 			for _, o := range orgs {
-				if r, e := s.State.commerce.UsageRollup(ctx, o.Name, orgSubject(o.Name)); e == nil {
-					spend += r.ConsumedCents
+				if sp, e := s.State.commerce.Spend(ctx, o.Name); e == nil {
+					spend += int64(sp.Consumed)
 				}
 			}
 		}
@@ -493,12 +494,12 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 	// Commerce freshness: probe one org's rollup so the tile reflects a real read.
 	commerceRows := 0
 	var commerceErr error
-	if s.State.commerce.Configured() {
+	if s.State.commerce.Ready() {
 		probe := s.State.adminOrg
 		if len(orgs) > 0 {
 			probe = orgs[0].Name
 		}
-		if _, err := s.State.commerce.UsageRollup(ctx, probe, orgSubject(probe)); err != nil {
+		if _, err := s.State.commerce.Spend(ctx, probe); err != nil {
 			commerceErr = err
 		} else {
 			commerceRows = 1
@@ -510,7 +511,7 @@ func overview(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// o11y System Health.
 	o11yRows := 0
-	oOK, oErr := s.State.health.OK(ctx)
+	oOK, oErr := s.State.health.Up(ctx)
 	if oOK {
 		o11yRows = 1
 	}
@@ -577,27 +578,15 @@ func orgUserCount(s *cloud.Service[state], ctx context.Context, cr creds, org st
 // orgMoney returns (spendCents, creditsCents) for one org from commerce.
 // Best-effort: unreachable/unconfigured commerce yields zeros.
 func orgMoney(s *cloud.Service[state], ctx context.Context, org string) (int64, int64) {
-	subj := orgSubject(org)
 	var spend, credits int64
-	if r, err := s.State.commerce.UsageRollup(ctx, org, subj); err == nil {
-		spend = r.ConsumedCents
+	if sp, err := s.State.commerce.Spend(ctx, org); err == nil {
+		spend = int64(sp.Consumed)
 	}
-	if c, err := s.State.commerce.CreditsCents(ctx, org, subj); err == nil {
-		credits = c
+	if c, err := s.State.commerce.Credits(ctx, org); err == nil {
+		credits = int64(c)
 	}
 	return spend, credits
 }
-
-// orgSubject is the billing subject commerce keys an org's wallet on. Commerce's
-// per-org billing store (the 2026-07 durability rework, commerce >=1.46.8)
-// namespaces by the TRUSTED X-Org-Id header (set by commerceClient.get from this
-// same org) and keys the org wallet under the BARE org slug as the `user` subject —
-// NOT "org/user". The prior "org/org" subject (with the wrong X-IAM-Org-Id header)
-// resolved to an EMPTY wallet, so every per-org money panel read $0 while real
-// balances existed (lux $10,000, maxpower $20,498). Verified live against commerce
-// /v1/billing/{balance,usage-rollup}: user=<org> + X-Org-Id=<org> returns the real
-// wallet; user="org/org" or a missing/other org header returns $0.
-func orgSubject(org string) string { return org }
 
 // srcOf builds a SourceStatus freshness row for the overview.
 func srcOf(name string, err error, rows int, at string) sourceStatus {
