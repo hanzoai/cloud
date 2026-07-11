@@ -84,9 +84,10 @@ func Serve(specs []MountSpec, enable []string) error {
 		if lerr != nil {
 			return fmt.Errorf("writer lease: %w", lerr)
 		}
-		// Released after the shutdown path closes every store (ShutdownAll +
-		// audit + gateway-policy) below; defer is the store-close backstop that
-		// also covers early error returns (the kernel reclaims on exit regardless).
+		// Released after the shutdown path closes every store (app.Shutdown's
+		// subsystem teardown hooks + audit + gateway-policy) below; defer is the
+		// store-close backstop that also covers early error returns (the kernel
+		// reclaims on exit regardless).
 		defer func() { _ = release() }()
 	}
 
@@ -321,19 +322,12 @@ func Serve(specs []MountSpec, enable []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	_ = healthSrv.Shutdown(shutdownCtx)
-	// Flush the tracer provider FIRST — before ShutdownAll tears down the o11y trace
-	// sink (a subsystem) — so the batch processor's buffered spans drain through the
-	// still-mounted in-process sink to ClickHouse rather than hitting ErrNoRoute.
+	// Flush the tracer provider FIRST — before app.ShutdownWithContext runs the o11y
+	// trace sink's teardown hook (a subsystem) — so the batch processor's buffered
+	// spans drain through the still-mounted in-process sink to ClickHouse rather than
+	// hitting ErrNoRoute.
 	telemetryShutdown(shutdownCtx)
-	// Tear down subsystems that own process-lifetime resources (background
-	// workers, DB handles) BEFORE the HTTP server closes, within the deadline —
-	// e.g. the agents scheduler drains its in-flight runs (so a scheduled run's
-	// InsertRun + debit land) and closes its store. Best-effort: a teardown error
-	// is logged, not fatal, so one subsystem can't strand shutdown.
-	if err := ShutdownAll(shutdownCtx, specs, cfg); err != nil {
-		deps.Logger.Warn("subsystem shutdown", "err", err)
-	}
-	// Close the audit store last so any in-flight append has drained through the
+	// Close the audit store so any in-flight append has drained through the
 	// serialized writer and the SQLite file is flushed cleanly.
 	if auditRec != nil {
 		_ = auditRec.Close()
@@ -343,6 +337,14 @@ func Serve(specs []MountSpec, enable []string) error {
 	if deps.GatewayPolicy != nil {
 		_ = deps.GatewayPolicy.Close()
 	}
+	// Graceful stop, owned by zip: it stops the listeners accepting, drains
+	// in-flight requests, THEN runs each subsystem's teardown hook LIFO (reverse
+	// mount order) — the hooks MountAll registered via app.OnShutdown. Draining
+	// BEFORE teardown is the fix for the old hand-rolled reverse-loop, which tore
+	// subsystems down while the listener still accepted: e.g. the agents scheduler
+	// now drains its in-flight runs (InsertRun + debit land) and closes its store
+	// only after requests quiesce. A hook error is joined into the returned error,
+	// never fatal to the others.
 	return app.ShutdownWithContext(shutdownCtx)
 }
 
