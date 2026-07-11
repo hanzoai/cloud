@@ -24,4 +24,10 @@ func TestFrameworkContentModulesLinked(t *testing.T) {
 			t.Errorf("framework content module %q not registered — a blank import in subsystems.go is missing (erp drop = ledger hooks gone from the binary)", want)
 		}
 	}
+	// The module registry proves DocTypes are linked, but erp's ledger-posting
+	// HOOKS register in a separate init() step; assert them directly so the guard
+	// survives a future split of registerHooks() out of erp's module init().
+	if framework.RegisteredHookCount() == 0 {
+		t.Error("no framework lifecycle hooks registered — erp's ledger-posting hooks (computeJournalTotals, journalEntry/paymentEntry submit+cancel, …) are not linked into the binary")
+	}
 }
