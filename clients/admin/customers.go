@@ -36,6 +36,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/money"
 	"github.com/zap-proto/zip"
 )
 
@@ -131,21 +132,20 @@ func customers(s *cloud.Service[state], c *zip.Ctx) error {
 // Each read is best-effort: an upstream miss degrades that field to its honest
 // zero/empty (never a fabricated value), so one flaky org never fails the fleet.
 func enrichCustomer(s *cloud.Service[state], ctx context.Context, cr creds, o iamOrg) customerRow {
-	subj := orgSubject(o.Name)
 	users, _ := orgUsers(s, ctx, cr, o.Name)
 	spend, credits := orgMoney(s, ctx, o.Name)
-	sub, _ := s.State.commerce.SubscriptionSummary(ctx, o.Name, subj)
+	plan, _ := s.State.commerce.Plan(ctx, o.Name)
 
 	return customerRow{
 		Org:          o.Name,
 		Display:      display(o.DisplayName, o.Name),
 		OwnerEmail:   ownerEmail(users),
-		Plan:         sub.Plan,
+		Plan:         plan.Name,
 		Status:       statusOf(users),
 		Users:        len(users),
 		BalanceCents: credits,
 		SpendCents:   spend,
-		MRRCents:     sub.MRR,
+		MRRCents:     int64(plan.MRR),
 		Created:      o.CreatedTime,
 		LastActive:   lastActiveOf(users),
 	}
@@ -169,11 +169,10 @@ func customerDetail(s *cloud.Service[state], c *zip.Ctx) error {
 		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
 	}
 
-	subj := orgSubject(org)
 	users, _ := orgUsers(s, ctx, cr, org)
 	spend, credits := orgMoney(s, ctx, org)
-	sub, _ := s.State.commerce.SubscriptionSummary(ctx, org, subj)
-	txns, _ := s.State.commerce.Transactions(ctx, org, subj, 50)
+	plan, _ := s.State.commerce.Plan(ctx, org)
+	ledgerEntries, _ := s.State.commerce.Ledger(ctx, org, 50)
 
 	rows := make([]customerUser, 0, len(users))
 	apiKeys := 0
@@ -193,15 +192,15 @@ func customerDetail(s *cloud.Service[state], c *zip.Ctx) error {
 		})
 	}
 
-	ledger := make([]customerTxn, 0, len(txns))
-	for _, t := range txns {
+	ledger := make([]customerTxn, 0, len(ledgerEntries))
+	for _, e := range ledgerEntries {
 		ledger = append(ledger, customerTxn{
-			ID:       t.ID,
-			Type:     t.Type,
-			Cents:    t.Amount,
-			Currency: t.Currency,
-			Notes:    t.Notes,
-			Time:     t.CreatedAt,
+			ID:       e.ID,
+			Type:     e.Kind,
+			Cents:    int64(e.Amount),
+			Currency: e.Currency,
+			Notes:    e.Notes,
+			Time:     e.At,
 		})
 	}
 
@@ -209,12 +208,12 @@ func customerDetail(s *cloud.Service[state], c *zip.Ctx) error {
 		Org:          org,
 		Display:      display(o.DisplayName, org),
 		OwnerEmail:   ownerEmail(users),
-		Plan:         sub.Plan,
+		Plan:         plan.Name,
 		Status:       statusOf(users),
 		Created:      o.CreatedTime,
 		BalanceCents: credits,
 		SpendCents:   spend,
-		MRRCents:     sub.MRR,
+		MRRCents:     int64(plan.MRR),
 		APIKeys:      apiKeys,
 		Users:        rows,
 		Transactions: ledger,
@@ -297,12 +296,11 @@ func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditReque
 		return c.JSON(404, map[string]any{"status": "error", "msg": "customer not found", "data": nil})
 	}
 
-	subj := orgSubject(org)
-	before, _ := s.State.commerce.CreditsCents(ctx, org, subj)
+	before, _ := s.State.commerce.Credits(ctx, org)
 
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	res, derr := s.State.commerce.Deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
+	res, derr := s.State.commerce.Deposit(ctx, org, money.Cents(req.AmountCents), currency, notes, tag)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
@@ -313,10 +311,10 @@ func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditReque
 		return fail(c, "grant failed: "+derr.Error())
 	}
 
-	after, _ := s.State.commerce.CreditsCents(ctx, org, subj)
+	after, _ := s.State.commerce.Credits(ctx, org)
 	emitAudit(s, c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
-		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TransactionID},
+		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TxID},
 		audit.Outcome{Result: "success", Status: 200})
 
 	return ok(c, map[string]any{
@@ -325,7 +323,7 @@ func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditReque
 		"currency":      currency,
 		"source":        source,
 		"balanceCents":  after,
-		"transactionId": res.TransactionID,
+		"transactionId": res.TxID,
 	})
 }
 
