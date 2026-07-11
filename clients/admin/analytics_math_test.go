@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/admin/core"
 )
 
 // mkTime is a test helper for an RFC3339-ish instant.
@@ -21,14 +23,14 @@ func mkTime(s string) time.Time {
 //	alpha: signup 2024-05-10; usage 2024-05-20 (100c), 2024-06-05 (200c)  [cohort 05, active 05+06]
 //	beta : signup 2024-05-25; usage 2024-05-28 (50c)                       [cohort 05, active 05 only]
 //	gamma: signup 2024-06-15; usage 2024-07-01 (400c)                      [cohort 06, active 07 only]
-func fleetFixture() []custActivity {
-	return []custActivity{
+func fleetFixture() []core.CustActivity {
+	return []core.CustActivity{
 		{Org: "alpha", Display: "Alpha", Created: mkTime("2024-05-10"), HasCreated: true,
-			Usage: []txnPoint{{T: mkTime("2024-05-20"), Cents: 100}, {T: mkTime("2024-06-05"), Cents: 200}}, SpendCents: 300},
+			Usage: []core.TxnPoint{{T: mkTime("2024-05-20"), Cents: 100}, {T: mkTime("2024-06-05"), Cents: 200}}, SpendCents: 300},
 		{Org: "beta", Display: "Beta", Created: mkTime("2024-05-25"), HasCreated: true,
-			Usage: []txnPoint{{T: mkTime("2024-05-28"), Cents: 50}}, SpendCents: 50},
+			Usage: []core.TxnPoint{{T: mkTime("2024-05-28"), Cents: 50}}, SpendCents: 50},
 		{Org: "gamma", Display: "Gamma", Created: mkTime("2024-06-15"), HasCreated: true,
-			Usage: []txnPoint{{T: mkTime("2024-07-01"), Cents: 400}}, SpendCents: 400},
+			Usage: []core.TxnPoint{{T: mkTime("2024-07-01"), Cents: 400}}, SpendCents: 400},
 	}
 }
 
@@ -215,10 +217,10 @@ func TestComputeAnalytics_HonestEmptyNoLedger(t *testing.T) {
 func TestSpendSeries_ContinuousHonestBuckets(t *testing.T) {
 	now := mkTime("2024-07-05")
 	since := mkTime("2024-07-01")
-	acts := []custActivity{
-		{Usage: []txnPoint{{T: mkTime("2024-07-01"), Cents: 100}, {T: mkTime("2024-07-03"), Cents: 300}}},
+	acts := []core.CustActivity{
+		{Usage: []core.TxnPoint{{T: mkTime("2024-07-01"), Cents: 100}, {T: mkTime("2024-07-03"), Cents: 300}}},
 	}
-	series := spendSeries(acts, since, now, "day")
+	series := core.SpendSeries(acts, since, now, "day")
 	// 5 daily buckets 07-01..07-05.
 	if len(series) != 5 {
 		t.Fatalf("series buckets = %d, want 5 (%+v)", len(series), series)
