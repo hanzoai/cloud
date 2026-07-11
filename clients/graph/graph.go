@@ -31,9 +31,10 @@
 // every route requires a validated IAM principal (principal.Org → 403 without one),
 // so an unauthenticated caller reads nothing.
 //
-// HONEST FAILURE. Absent a reachable upstream the handler returns an honest 502 (the
-// console renders its "unavailable" card), and a reachable-but-empty upstream returns
-// an honest empty list — it NEVER fabricates an indexer or oracle row.
+// HONEST FAILURE. Absent a reachable upstream the handler degrades to an honest-EMPTY
+// list (200) — the same graceful fold as visor/clusters, NOT a 502 that surfaces as a
+// console error for every org without an indexer/graph deployed. A reachable-but-empty
+// upstream likewise returns an empty list — it NEVER fabricates an indexer or oracle row.
 package graph
 
 import (
@@ -87,9 +88,9 @@ func gate(s *cloud.Service[state], c *zip.Ctx) error {
 
 // listIndexers reports the deployment's chain indexer(s). Identity + health come from
 // the indexer's /health; the latest indexed block (height + time) from
-// /v1/explorer/blocks. The row EXISTS if EITHER call reaches the indexer; only when
-// the indexer is entirely unreachable does it surface an honest 502 (the console's
-// "unavailable" card). No chain HEAD is exposed by the indexer REST, so `lag` is
+// /v1/explorer/blocks. The row EXISTS if EITHER call reaches the indexer; when the
+// indexer is entirely unreachable it degrades to an honest-EMPTY list (200), not a
+// console-error 502. No chain HEAD is exposed by the indexer REST, so `lag` is
 // honestly omitted rather than fabricated.
 func listIndexers(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := gate(s, c); err != nil {
@@ -113,8 +114,9 @@ func listIndexers(s *cloud.Service[state], c *zip.Ctx) error {
 
 // listOracles reports the on-chain price/data oracles from luxfi/graph's O-Chain
 // PriceFeed registry (a REAL registry — the graph's oracle resolver). A reachable
-// graph with no feeds returns an honest empty list; an unreachable graph surfaces an
-// honest 502. No feed is ever fabricated.
+// graph with no feeds returns an honest empty list; an unreachable or erroring graph
+// likewise degrades to an honest-EMPTY list (200), not a console-error 502. No feed is
+// ever fabricated.
 func listOracles(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := gate(s, c); err != nil {
 		return err
