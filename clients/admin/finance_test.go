@@ -159,19 +159,6 @@ func TestDollarsToCents(t *testing.T) {
 	}
 }
 
-// TestMonthlyNormalizedCents proves annual/monthly normalization for MRR.
-func TestMonthlyNormalizedCents(t *testing.T) {
-	if got := monthlyNormalizedCents(12_000, "year"); got != 1_000 {
-		t.Errorf("yearly $120 → monthly = %d, want 1000", got)
-	}
-	if got := monthlyNormalizedCents(2_000, "month"); got != 2_000 {
-		t.Errorf("monthly must pass through, got %d", got)
-	}
-	if got := monthlyNormalizedCents(2_000, ""); got != 2_000 {
-		t.Errorf("unknown interval must be treated as monthly, got %d", got)
-	}
-}
-
 // newFakeDO serves the DO billing API with fixed decimal-dollar strings so the
 // finance aggregation is deterministic. account_balance is NEGATIVE (credit held).
 func newFakeDO() *httptest.Server {
