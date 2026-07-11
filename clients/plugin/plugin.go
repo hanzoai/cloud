@@ -3,7 +3,7 @@
 // cloud is a thin host: its native Go subsystems are compiled in, but
 // everything else mounts at RUNTIME from a manifest — no cloud rebuild to add
 // or update a service. Two plugin kinds, both reduced to "produce an
-// http.Handler, then app.Mount(prefix, h)":
+// http.Handler, then app.All(prefix+"/*", zip.AdaptNetHTTP(h))":
 //
 //   - wasm  — a polyglot service (Rust/WASM, or Python/TS via goa) loaded
 //     in-process through github.com/hanzoai/goa (wazero/gpython/goja,
@@ -122,7 +122,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		if err != nil {
 			return fmt.Errorf("plugin.Mount: plugin %q: %w", p.Name, err)
 		}
-		app.Mount(p.Prefix, h)
+		app.All(p.Prefix+"/*", zip.AdaptNetHTTP(h))
 		log.Info("plugin mounted", "name", p.Name, "kind", p.Kind, "prefix", p.Prefix)
 	}
 
