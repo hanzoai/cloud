@@ -85,6 +85,35 @@ func TokenPermits(masks ...bit.Mask) gin.HandlerFunc {
 	}
 }
 
+// ensureIAMOrg resolves the request's org from the VALIDATED IAM identity (the
+// gateway-minted X-Org-Id) and sets the "organization" context key — so commerce
+// derives the org from IAM, the ONE org/user/auth authority, never its own
+// Organization table and never requiring commerce-side pre-provisioning. It is
+// idempotent (a no-op when iammiddleware already resolved the org upstream) and
+// uses the SAME cached GetOrCreate resolver as the service-token path, so an IAM
+// principal's first request auto-projects a thin billing record keyed by the IAM
+// org. No org header, or a bearer-shaped selector, leaves the key unset (the
+// handler's GetOrganizationOK degrades cleanly rather than seeding a bogus org).
+func ensureIAMOrg(c *gin.Context) {
+	if _, ok := c.Get("organization"); ok {
+		return
+	}
+	orgName := strings.TrimSpace(c.GetHeader("X-Org-Id"))
+	if orgName == "" || organization.IsSecretLikeName(orgName) {
+		return
+	}
+	org, err := svcorg.Resolve(orgName)
+	if err != nil {
+		log.Warn("TokenRequired: IAM org resolve for '%s' failed: %v", orgName, err)
+		return
+	}
+	// Per-request Live view on a COPY (the resolver returns a shared cached org).
+	reqOrg := *org
+	reqOrg.Live = !strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Hanzo-Test")), "true")
+	c.Set("organization", &reqOrg)
+	c.Set("active-organization", reqOrg.Id())
+}
+
 // Parses token, default permissions check
 func TokenRequired(masks ...bit.Mask) gin.HandlerFunc {
 	// Any permissions acceptable by default (i.e., only valid token required)
@@ -110,6 +139,12 @@ func TokenRequired(masks ...bit.Mask) gin.HandlerFunc {
 		// read path is unchanged; with masks the caller must actually hold them.
 		if iammiddleware.IsIAMAuthenticated(c) {
 			if len(masks) == 0 || hasScope(c, permissions) {
+				// Commerce derives the org from IAM, never its own table: resolve the
+				// validated X-Org-Id via the SAME cached GetOrCreate resolver the
+				// service-token path uses, auto-projecting a thin billing record so an
+				// IAM principal's org "just works" with no commerce-side provisioning.
+				// Idempotent — a no-op when iammiddleware already resolved it upstream.
+				ensureIAMOrg(c)
 				c.Next()
 				return
 			}
