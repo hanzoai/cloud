@@ -34,17 +34,25 @@ func ListOrgs(s *cloud.Service[State], ctx context.Context, cr iam.Creds) ([]iam
 	return orgs, nil
 }
 
-// OrgMoney returns (spendCents, creditsCents) for one org from commerce. Best-effort:
-// unreachable/unconfigured commerce yields zeros.
-func OrgMoney(s *cloud.Service[State], ctx context.Context, org string) (int64, int64) {
-	var spend, credits int64
+// OrgMoney returns (spendCents, creditsCents, ok) for one org from commerce. ok is
+// false when the spend OR credits read FAILED — so a fleet aggregator can fold the
+// per-org failure into a PARTIAL/degraded source rather than presenting the resulting
+// undercount as authoritative (the SAME (row, ok) contract revenue.revenueOf uses). An
+// unwired commerce is NOT a failure: Spend/Credits return (0, nil) when unconfigured, so
+// ok stays true and the caller distinguishes "not configured" via Commerce.Ready().
+func OrgMoney(s *cloud.Service[State], ctx context.Context, org string) (spend, credits int64, ok bool) {
+	ok = true
 	if sp, err := s.State.Commerce.Spend(ctx, org); err == nil {
 		spend = int64(sp.Consumed)
+	} else {
+		ok = false
 	}
 	if c, err := s.State.Commerce.Credits(ctx, org); err == nil {
 		credits = int64(c)
+	} else {
+		ok = false
 	}
-	return spend, credits
+	return spend, credits, ok
 }
 
 // FindOrg returns the IAM org by slug (nil, nil when it does not exist) so a management
