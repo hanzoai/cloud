@@ -104,9 +104,19 @@ func newHandler(rawURL string) (http.Handler, error) {
 // probes (admin System Health's CLOUD_O11Y_HEALTH_URL, the external o11y.* hosts,
 // k8s) without protecting anything. Data routes (/v1/o11y/api/v1/query_range, …)
 // stay gated.
+//
+// The Sentry error-ingest wire endpoints (POST /v1/o11y/api/<project>/envelope|store/)
+// are ALSO exempt: they carry NO Hanzo principal by design — a Sentry SDK presents a
+// DSN public key, not a hanzo.id session — and the o11y ingest handler verifies that
+// key (constant-time HMAC over the platform secret, fail-closed 401/503) and derives
+// the org from the DSN project segment. This is the cloud-side counterpart to the
+// gateway's isErrorIngestPath JWT bypass (both stay tight: method+prefix+suffix, never
+// a broad /v1/o11y/api allowlist), so the DSN-authenticated ingest reaches its own auth
+// instead of being 403'd here for lacking a principal it never carries. Reads under
+// /v1/o11y/api/vN/… and the Issues list/detail remain principal-gated.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isHealthPath(r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
+		if !isHealthPath(r.URL.Path) && !isErrorIngestPath(r.Method, r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"status":"error","msg":"no validated principal"}`))
@@ -125,6 +135,26 @@ func isHealthPath(p string) bool {
 		strings.HasSuffix(p, "/api/v2/healthz") ||
 		strings.HasSuffix(p, "/api/v2/readyz") ||
 		strings.HasSuffix(p, "/api/v2/livez")
+}
+
+// isErrorIngestPath reports whether r is a Sentry error-ingest WRITE that the o11y
+// handler authenticates itself with a DSN key (not a Hanzo principal): POST to
+// /v1/o11y/api/<project>/envelope/ or /v1/o11y/api/<project>/store/. The <project>
+// segment varies, so it matches by method + prefix + suffix — NEVER a bare prefix —
+// so the o11y read APIs under /v1/o11y/api/vN/… and the Issues list/detail stay
+// principal-gated. Byte-for-byte the gateway's isErrorIngestPath (auth_middleware.go):
+// the two allowlists MUST agree so the tokenless ingest that the gateway lets through
+// is not then 403'd here. The trailing slash is the Sentry protocol form; the
+// slash-less variant is tolerated defensively.
+func isErrorIngestPath(method, path string) bool {
+	if method != http.MethodPost {
+		return false
+	}
+	if !strings.HasPrefix(path, "/v1/o11y/api/") {
+		return false
+	}
+	return strings.HasSuffix(path, "/envelope/") || strings.HasSuffix(path, "/envelope") ||
+		strings.HasSuffix(path, "/store/") || strings.HasSuffix(path, "/store")
 }
 
 // runtimeHandler is the gated o11y runtime handler (the in-process runtime, or the
