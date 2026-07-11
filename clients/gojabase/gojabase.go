@@ -81,7 +81,8 @@ type Config struct {
 	// CREATE TABLE IF NOT EXISTS) on every tenant DB when it first opens.
 	Schema string
 	// DataDir is the deployment data root; per-tenant files land at
-	// {DataDir}/{Name}/{tenantSlug}.db.
+	// {DataDir}/{Name}/{TenantSegment(tenant)}.db (injective, traversal-safe
+	// base32 of the raw org bytes — see gojabase/store.go TenantSegment).
 	DataDir string
 	// OnOpen is an optional per-tenant seed hook run ONCE after migration (e.g.
 	// captable seeds the tenant's company row). It runs outside the per-request
