@@ -1,10 +1,10 @@
-package admin
+package core
 
 import "testing"
 
-// TestGrantTag pins the money-bucket mapping: a staff comp defaults to the
-// non-cash TRIAL (Credit) bucket, and ONLY an explicit "prepaid" mints real
-// money. A tagging slip must never silently create payout-able cash.
+// TestGrantTag pins the money-bucket mapping: a staff comp defaults to the non-cash
+// TRIAL (Credit) bucket, and ONLY an explicit "prepaid" mints real money. A tagging slip
+// must never silently create payout-able cash.
 func TestGrantTag(t *testing.T) {
 	cases := []struct {
 		source   string
