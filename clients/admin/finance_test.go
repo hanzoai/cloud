@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/admin/digitalocean"
 )
 
 // TestComputeFinance_Math is the PURE derivation proof: given a fixed multi-vendor
@@ -139,25 +141,6 @@ func TestAvgDailyBurn_ElapsedDays(t *testing.T) {
 
 // TestDollarsToCents proves the DO decimal-dollar → cents parsing, including the
 // negative (credit) case and the blank fallback.
-func TestDollarsToCents(t *testing.T) {
-	cases := []struct {
-		in   string
-		want int64
-	}{
-		{"23.44", 2344},
-		{"-40000.00", -4_000_000}, // promo credit held (negative account_balance)
-		{"12.23", 1223},
-		{"0", 0},
-		{"", 0},
-		{"  5.5 ", 550},
-		{"garbage", 0},
-	}
-	for _, c := range cases {
-		if got := dollarsToCents(c.in); got != c.want {
-			t.Errorf("dollarsToCents(%q) = %d, want %d", c.in, got, c.want)
-		}
-	}
-}
 
 // newFakeDO serves the DO billing API with fixed decimal-dollar strings so the
 // finance aggregation is deterministic. account_balance is NEGATIVE (credit held).
@@ -192,7 +175,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	defer do.Close()
 
 	doReq, s, _ := mountSvc(t, iam.server.URL, commerce.URL, "")
-	s.State.do = newDOClientWithBase(do.URL, "test-do-token") // configured DO client
+	s.State.do = digitalocean.NewWithBase(do.URL, "test-do-token") // configured DO client
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
 		"Authorization": "Bearer operator-jwt", "Cookie": "iam_access_token=operator-jwt",
@@ -224,7 +207,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	if len(d.Cost.Vendors) != 2 {
 		t.Fatalf("cost.vendors must carry 2 lines (DO + OpenAI), got %d", len(d.Cost.Vendors))
 	}
-	if d.Cost.Vendors[0].Vendor == "" || d.Cost.Vendors[0].AmountCents == 0 {
+	if d.Cost.Vendors[0].Name == "" || d.Cost.Vendors[0].Amount == 0 {
 		t.Errorf("vendor line must carry a vendor + amount, got %+v", d.Cost.Vendors[0])
 	}
 

@@ -133,23 +133,22 @@ func revenue(s *cloud.Service[state], c *zip.Ctx) error {
 // (row, ok): ok is false when the spend OR balance read failed, so the caller can
 // mark the fleet total PARTIAL rather than presenting an undercount as complete.
 func revenueOf(s *cloud.Service[state], ctx context.Context, o iamOrg) (revenueCustomer, bool) {
-	subj := orgSubject(o.Name)
 	row := revenueCustomer{Org: o.Name, Display: display(o.DisplayName, o.Name), Plan: "pay-as-you-go"}
 	ok := true
 
-	if r, err := s.State.commerce.UsageRollup(ctx, o.Name, subj); err == nil {
-		row.SpendCents = r.ConsumedCents
+	if sp, err := s.State.commerce.Spend(ctx, o.Name); err == nil {
+		row.SpendCents = int64(sp.Consumed)
 	} else {
 		ok = false
 	}
-	if credits, err := s.State.commerce.CreditsCents(ctx, o.Name, subj); err == nil {
-		row.BalanceCents = credits
+	if credits, err := s.State.commerce.Credits(ctx, o.Name); err == nil {
+		row.BalanceCents = int64(credits)
 	} else {
 		ok = false
 	}
-	if sub, err := s.State.commerce.SubscriptionSummary(ctx, o.Name, subj); err == nil {
-		row.MRRCents = sub.MRR
-		row.Plan = sub.Plan
+	if pl, err := s.State.commerce.Plan(ctx, o.Name); err == nil {
+		row.MRRCents = int64(pl.MRR)
+		row.Plan = pl.Name
 	}
 	return row, ok
 }
