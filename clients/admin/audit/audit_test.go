@@ -1,9 +1,9 @@
-package admin
+package audit
 
-// Tests for the store-backed /v1/admin/audit + /v1/admin/audit/verify surface.
-// They wire admin against a REAL audit.Recorder (on-disk SQLite) seeded with
-// records, drive requests through the whole zip app, and assert the query
-// results, the integrity summary, and the global-admin gate.
+// Tests for the store-backed /v1/admin/audit + /v1/admin/audit/verify surface. They wire
+// the audit domain against a REAL audit.Recorder (on-disk SQLite) seeded with records,
+// drive requests through the whole zip app, and assert the query results, the integrity
+// summary, and the global-admin gate.
 
 import (
 	"context"
@@ -16,29 +16,28 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/audit"
+	auditstore "github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
-// mountWithStore builds a zip app with admin's audit routes wired to a real audit
-// store, and returns the store + a request helper. Only the audit routes are
-// mounted here (the rest are covered by mount()); this keeps the store-backed
-// tests focused.
-func mountWithStore(t *testing.T) (*audit.Recorder, func(method, path string, hdr map[string]string) (*http.Response, []byte)) {
+// mountWithStore builds a zip app with the audit routes wired to a real audit store, and
+// returns the store + a request helper. Only the audit routes are mounted here.
+func mountWithStore(t *testing.T) (*auditstore.Recorder, func(method, path string, hdr map[string]string) (*http.Response, []byte)) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "audit.db")
-	rec, err := audit.Open(path, nil)
+	rec, err := auditstore.Open(path, nil)
 	if err != nil {
 		t.Fatalf("audit.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = rec.Close() })
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &cloud.Service[state]{State: state{adminOrg: "admin", auditStore: rec}}
-	app.Get("/v1/admin/audit", guard(s, auditRecords))
-	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
+	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin", AuditStore: rec}}
+	app.Get("/v1/admin/audit", core.Guard(s, Records))
+	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
 	fa := app.Fiber()
 
 	do := func(method, p string, hdr map[string]string) (*http.Response, []byte) {
@@ -57,17 +56,17 @@ func mountWithStore(t *testing.T) (*audit.Recorder, func(method, path string, hd
 	return rec, do
 }
 
-func seedAudit(t *testing.T, rec *audit.Recorder, n int) {
+func seedAudit(t *testing.T, rec *auditstore.Recorder, n int) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < n; i++ {
-		_, err := rec.Append(ctx, audit.Record{
+		_, err := rec.Append(ctx, auditstore.Record{
 			Time:     time.Now().UTC(),
-			Actor:    audit.Actor{Org: "admin", Sub: "z@hanzo.ai"},
+			Actor:    auditstore.Actor{Org: "admin", Sub: "z@hanzo.ai"},
 			Action:   "DELETE /v1/admin/orgs",
-			Resource: audit.Resource{Type: "org", ID: "acme"},
-			Auth:     audit.AuthContext{Method: "jwt", IsAdmin: true},
-			Outcome:  audit.Outcome{Result: "success", Status: 200},
+			Resource: auditstore.Resource{Type: "org", ID: "acme"},
+			Auth:     auditstore.AuthContext{Method: "jwt", IsAdmin: true},
+			Outcome:  auditstore.Outcome{Result: "success", Status: 200},
 			Method:   "DELETE",
 			Path:     "/v1/admin/orgs/acme",
 		})
@@ -79,8 +78,8 @@ func seedAudit(t *testing.T, rec *audit.Recorder, n int) {
 
 var globalAdmin = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "z@hanzo.ai"}
 
-// TestAdminAudit_ReturnsRealRecords proves GET /v1/admin/audit returns the
-// store's records (newest-first) with an accurate total and an integrity summary.
+// TestAdminAudit_ReturnsRealRecords proves GET /v1/admin/audit returns the store's
+// records (newest-first) with an accurate total and an integrity summary.
 func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 5)
@@ -124,7 +123,7 @@ func TestAdminAudit_Filters(t *testing.T) {
 	rec, do := mountWithStore(t)
 	ctx := context.Background()
 	// One deny among successes.
-	_, _ = rec.Append(ctx, audit.Record{Action: "POST /v1/admin/roles", Actor: audit.Actor{Org: "admin"}, Outcome: audit.Outcome{Result: "deny", Status: 403}})
+	_, _ = rec.Append(ctx, auditstore.Record{Action: "POST /v1/admin/roles", Actor: auditstore.Actor{Org: "admin"}, Outcome: auditstore.Outcome{Result: "deny", Status: 403}})
 	seedAudit(t, rec, 3)
 
 	resp, body := do("GET", "/v1/admin/audit?result=deny", globalAdmin)
@@ -144,8 +143,8 @@ func TestAdminAudit_Filters(t *testing.T) {
 	}
 }
 
-// TestAdminAudit_VerifyEndpoint proves GET /v1/admin/audit/verify returns the
-// integrity result for the chain.
+// TestAdminAudit_VerifyEndpoint proves GET /v1/admin/audit/verify returns the integrity
+// result for the chain.
 func TestAdminAudit_VerifyEndpoint(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 8)
@@ -173,11 +172,8 @@ func TestAdminAudit_VerifyEndpoint(t *testing.T) {
 	}
 }
 
-// TestAdminAudit_DeniedWithoutGlobalAdmin proves BOTH audit endpoints fail-closed
-// 403 for a non-global-admin, and — critically — the store is NEVER read on a
-// denied request (the gate runs before the handler, so no records leak to an
-// unauthorized caller). We assert non-leakage by seeding records and confirming
-// the denied response body contains none of them.
+// TestAdminAudit_DeniedWithoutGlobalAdmin proves BOTH audit endpoints fail-closed 403 for
+// a non-global-admin, and — critically — the store is NEVER read on a denied request.
 func TestAdminAudit_DeniedWithoutGlobalAdmin(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 3)
@@ -204,15 +200,12 @@ func TestAdminAudit_DeniedWithoutGlobalAdmin(t *testing.T) {
 	}
 }
 
-// TestAdminAudit_FallsBackToIAMWhenNoStore proves that when no local store is
-// configured (auditStore == nil), /v1/admin/audit still serves the federated IAM
-// view rather than erroring — preserving the prior capability. Covered by the
-// existing TestAudit_MapsRecords (IAM proxy path); here we assert the nil-store
-// verify endpoint reports "not configured" rather than panicking.
+// TestAdminAudit_VerifyWithoutStore proves the nil-store verify endpoint reports "not
+// configured" rather than panicking.
 func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	s := &cloud.Service[state]{State: state{adminOrg: "admin"}} // no auditStore
-	app.Get("/v1/admin/audit/verify", guard(s, auditVerify))
+	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}} // no auditStore
+	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
 	req := httptest.NewRequest("GET", "/v1/admin/audit/verify", nil)
 	for k, v := range globalAdmin {
 		req.Header.Set(k, v)
