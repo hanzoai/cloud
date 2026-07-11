@@ -116,7 +116,7 @@ func newHandler(rawURL string) (http.Handler, error) {
 // /v1/o11y/api/vN/… and the Issues list/detail remain principal-gated.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isHealthPath(r.URL.Path) && !isErrorIngestPath(r.Method, r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
+		if !isHealthPath(r.URL.Path) && !isErrorIngestPath(r.Method, r.URL.Path) && !isSentryIngestPath(r.Method, r.URL.Path) && strings.TrimSpace(r.Header.Get("X-User-Id")) == "" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"status":"error","msg":"no validated principal"}`))
@@ -124,6 +124,26 @@ func gate(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isSentryIngestPath reports whether r is a Hanzo Sentry error-ingest WRITE the
+// runtime authenticates with a DSN key (not a Hanzo principal): POST to
+// /v1/sentry/{project}/envelope/ or /v1/sentry/{project}/store/. Like isErrorIngestPath
+// it matches by method + prefix + suffix — NEVER a bare /v1/sentry/ prefix — so the
+// Sentry READ APIs (issues, discover, projects, logs, traces, stats) stay
+// principal-gated. The {project} segment is a UUID enforced by the runtime route; the
+// trailing slash is the Sentry wire form, the slash-less variant tolerated defensively.
+// The gateway needs a byte-identical sibling allow-rule so the tokenless ingest it lets
+// through is not then 403'd here (coordinated separately; see the report).
+func isSentryIngestPath(method, path string) bool {
+	if method != http.MethodPost {
+		return false
+	}
+	if !strings.HasPrefix(path, "/v1/sentry/") {
+		return false
+	}
+	return strings.HasSuffix(path, "/envelope/") || strings.HasSuffix(path, "/envelope") ||
+		strings.HasSuffix(path, "/store/") || strings.HasSuffix(path, "/store")
 }
 
 // isHealthPath reports whether p is an o11y liveness/readiness endpoint. These
@@ -199,6 +219,22 @@ func mountRuntime(deps cloud.Deps) error {
 	return nil
 }
 
+// mountSentry registers the /v1/sentry/* wildcard, forwarding every request to the
+// gated runtime handler (resolved PER-REQUEST, so it is in place by first request —
+// same discipline as the o11y wildcard). No path rewrite: the Sentry routes are
+// literal /v1/sentry/… in the runtime. The DSN-ingest routes are principal-gate-exempt
+// (isSentryIngestPath); the reads stay gated.
+func mountSentry(a *zip.App) {
+	a.All("/v1/sentry/*", zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := runtimeHandler
+		if h == nil {
+			http.Error(w, "o11y runtime not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})))
+}
+
 // mountO11y is the ONE mount for the whole observability concept. It performs the
 // ordered sub-mounts in-process so the public registry carries a single `o11y`
 // name. Every cloud-native /v1/o11y/* route is registered here — inside this one
@@ -218,6 +254,12 @@ func MountO11y(app any, deps cloud.Deps) error {
 	if err := mountRuntime(deps); err != nil {
 		return err
 	}
+	// Hanzo Sentry product face /v1/sentry/* — the SIBLING of the /v1/o11y wildcard,
+	// delegating to the SAME gated runtime handler (which carries the clean /v1/sentry
+	// routes; the DSN-ingest routes are gate-exempt via isSentryIngestPath). One
+	// runtime, two path families. The runtime must be an o11y build that includes the
+	// /v1/sentry routes (see the report's dep-bump note); until then these 404, inert.
+	mountSentry(a)
 	// WRITE plane — opt-in, order-independent (no /v1/o11y/* Fiber route).
 	if err := mountIngest(deps); err != nil { // OTLP collector (:4317/:4318)
 		return err
