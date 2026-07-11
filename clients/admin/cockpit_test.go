@@ -43,6 +43,7 @@ type depositCapture struct {
 	org    string
 	user   string
 	amount int64
+	idem   string // X-Idempotency-Key commerce received (empty when none forwarded)
 }
 
 // adminHdr is a validated global-admin identity (what SanitizeIdentity mints for
@@ -175,7 +176,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 			_ = json.Unmarshal(body, &req)
 			f.mu.Lock()
 			f.balances[org] += req.Amount
-			f.deposits = append(f.deposits, depositCapture{org: org, user: req.User, amount: req.Amount})
+			f.deposits = append(f.deposits, depositCapture{org: org, user: req.User, amount: req.Amount, idem: r.Header.Get("X-Idempotency-Key")})
 			f.mu.Unlock()
 			w.WriteHeader(201)
 			fmt.Fprintf(w, `{"transactionId":"dep-%d","user":%q,"amount":%d,"currency":%q,"type":"deposit"}`, req.Amount, req.User, req.Amount, req.Currency)
@@ -385,6 +386,88 @@ func TestGrantCredit_Validation(t *testing.T) {
 	f.mu.Unlock()
 	if n != 0 {
 		t.Errorf("invalid grants must NOT deposit, but %d landed", n)
+	}
+}
+
+// TestGrantCredit_NilAuditStoreFailsClosed proves the SOC2 durability guarantee: a
+// credit grant is REFUSED (503) — with NO money moved — on a deployment that has no
+// durable audit store to record it into. newCockpitFakes attaches no AuditStore, so a
+// valid grant must fail closed rather than silently move money with no cloud-side record.
+func TestGrantCredit_NilAuditStoreFailsClosed(t *testing.T) {
+	f := newCockpitFakes(t)
+	if f.service.State.AuditStore != nil {
+		t.Fatal("precondition: cockpit fakes must start with a nil AuditStore")
+	}
+
+	resp, body := f.do("POST", "/v1/admin/customers/acme/credit", adminHdr(), `{"amountCents":5000,"reason":"support comp"}`)
+	if resp.StatusCode != 503 {
+		t.Fatalf("nil-audit-store grant: status %d, want 503 (fail-closed) — body=%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), `"error"`) {
+		t.Errorf("expected error envelope, got %s", body)
+	}
+	// The money must NOT have moved — no deposit reached commerce.
+	f.mu.Lock()
+	n := len(f.deposits)
+	bal := f.balances["acme"]
+	f.mu.Unlock()
+	if n != 0 {
+		t.Errorf("unaudited grant must NOT deposit, but %d landed", n)
+	}
+	if bal != 20000 {
+		t.Errorf("acme balance = %d after refused grant, want unchanged 20000", bal)
+	}
+}
+
+// TestGrantCredit_IdempotencyKeyForwarded proves the double-credit guard: when the
+// operator supplies an Idempotency-Key, cloud forwards a DETERMINISTIC X-Idempotency-Key
+// to commerce (so a commit-then-timeout retry dedupes there), the SAME nonce yields the
+// SAME key (a retry lands nothing new), a DIFFERENT nonce yields a DIFFERENT key, and NO
+// nonce forwards no key (the additive default).
+func TestGrantCredit_IdempotencyKeyForwarded(t *testing.T) {
+	f := newCockpitFakes(t)
+	rec, err := audit.Open(":memory:", nil)
+	if err != nil {
+		t.Fatalf("audit open: %v", err)
+	}
+	defer rec.Close()
+	f.service.State.AuditStore = rec
+
+	grant := func(hdr map[string]string) string {
+		resp, body := f.do("POST", "/v1/admin/customers/acme/credit", hdr, `{"amountCents":5000,"reason":"support comp"}`)
+		if resp.StatusCode != 200 {
+			t.Fatalf("credit: %d (%s)", resp.StatusCode, body)
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if len(f.deposits) == 0 {
+			t.Fatal("no deposit captured")
+		}
+		return f.deposits[len(f.deposits)-1].idem
+	}
+
+	withKey := func(k string) map[string]string {
+		h := adminHdr()
+		h["Idempotency-Key"] = k
+		return h
+	}
+
+	// A supplied nonce is forwarded as a non-empty, deterministic X-Idempotency-Key.
+	k1 := grant(withKey("op-nonce-1"))
+	if k1 == "" {
+		t.Fatal("Idempotency-Key supplied but commerce received no X-Idempotency-Key")
+	}
+	// The SAME nonce (a retry) → the SAME key, so commerce dedupes and lands nothing new.
+	if k1b := grant(withKey("op-nonce-1")); k1b != k1 {
+		t.Errorf("same nonce must yield same key: %q vs %q", k1, k1b)
+	}
+	// A DIFFERENT nonce → a DIFFERENT key (a genuinely new grant is never dropped).
+	if k2 := grant(withKey("op-nonce-2")); k2 == k1 {
+		t.Errorf("distinct nonce must yield distinct key, both = %q", k1)
+	}
+	// No nonce → no key forwarded (additive default preserved).
+	if k0 := grant(adminHdr()); k0 != "" {
+		t.Errorf("no nonce must forward no key, got %q", k0)
 	}
 }
 
