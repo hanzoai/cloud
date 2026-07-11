@@ -27,6 +27,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/zap-proto/zip"
 )
 
@@ -45,7 +46,7 @@ func waitlistConfig() (base, secret string, ok bool) {
 
 // waitlistProxy issues a server-authed request to the waitlist engine and returns its
 // raw JSON body + status. Bounded read; Bearer secret; never forwards a client header.
-func waitlistProxy(s *cloud.Service[state], ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
+func waitlistProxy(s *cloud.Service[core.State], ctx context.Context, method, target, secret string, body []byte) (json.RawMessage, int, error) {
 	var rdr io.Reader
 	if body != nil {
 		rdr = bytes.NewReader(body)
@@ -74,7 +75,7 @@ func waitlistProxy(s *cloud.Service[state], ctx context.Context, method, target,
 // waitlist answers GET /v1/admin/waitlist — the leaderboard/list for one waitlist,
 // proxied from the engine (GET /v1/waitlist/list?waitlist=&page=&pageSize=). Honest
 // "not configured" empty when the engine is absent on this deployment (never fabricated).
-func waitlist(s *cloud.Service[state], c *zip.Ctx) error {
+func waitlist(s *cloud.Service[core.State], c *zip.Ctx) error {
 	base, secret, configured := waitlistConfig()
 	if !configured {
 		return c.JSON(200, map[string]any{"status": "ok", "msg": "the waitlist engine is not configured on this deployment", "data": map[string]any{}, "data2": 0})
@@ -91,12 +92,12 @@ func waitlist(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	raw, code, err := waitlistProxy(s, c.Context(), http.MethodGet, target, secret, nil)
 	if err != nil {
-		return fail(c, err.Error())
+		return core.Fail(c, err.Error())
 	}
 	if code/100 != 2 {
-		return fail(c, fmt.Sprintf("waitlist engine returned http %d", code))
+		return core.Fail(c, fmt.Sprintf("waitlist engine returned http %d", code))
 	}
-	return ok(c, raw) // data = the engine list payload verbatim (the console normalizes)
+	return core.OK(c, raw) // data = the engine list payload verbatim (the console normalizes)
 }
 
 // waitlistBoostRequest is the POST /v1/admin/waitlist/boost body.
@@ -112,23 +113,23 @@ type waitlistBoostRequest struct {
 // move them up toward the access cutoff. It funnels through the engine's verified grant
 // seam (POST /v1/waitlist/award, source="grant" — the one path that honors an explicit
 // points amount) and audits the grant to cloud's tamper-evident trail.
-func waitlistBoost(s *cloud.Service[state], c *zip.Ctx) error {
+func waitlistBoost(s *cloud.Service[core.State], c *zip.Ctx) error {
 	base, secret, configured := waitlistConfig()
 	if !configured {
-		return fail(c, "the waitlist engine is not configured on this deployment")
+		return core.Fail(c, "the waitlist engine is not configured on this deployment")
 	}
 	var body waitlistBoostRequest
 	if err := c.Bind(&body); err != nil {
-		return fail(c, "invalid request body")
+		return core.Fail(c, "invalid request body")
 	}
 	body.Waitlist = strings.TrimSpace(body.Waitlist)
 	body.Email = strings.TrimSpace(body.Email)
 	body.RefCode = strings.TrimSpace(body.RefCode)
 	if body.Waitlist == "" || (body.Email == "" && body.RefCode == "") {
-		return fail(c, "waitlist and (email or refCode) are required")
+		return core.Fail(c, "waitlist and (email or refCode) are required")
 	}
 	if body.Points <= 0 {
-		return fail(c, "points must be a positive number")
+		return core.Fail(c, "points must be a positive number")
 	}
 
 	payload := map[string]any{"waitlist": body.Waitlist, "source": "grant", "points": body.Points}
@@ -149,16 +150,16 @@ func waitlistBoost(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil || code/100 != 2 {
 		result = "error"
 	}
-	emitAudit(s, c, "admin.waitlist.grant", "waitlist", body.Waitlist,
+	core.EmitAudit(s, c, "admin.waitlist.grant", "waitlist", body.Waitlist,
 		map[string]any{"target": target},
 		map[string]any{"points": body.Points, "reason": body.Reason, "source": "grant"},
 		audit.Outcome{Result: result, Status: code})
 
 	if err != nil {
-		return fail(c, err.Error())
+		return core.Fail(c, err.Error())
 	}
 	if code/100 != 2 {
-		return fail(c, fmt.Sprintf("waitlist grant failed (http %d): %s", code, strings.TrimSpace(string(raw))))
+		return core.Fail(c, fmt.Sprintf("waitlist grant failed (http %d): %s", code, strings.TrimSpace(string(raw))))
 	}
-	return ok(c, raw)
+	return core.OK(c, raw)
 }
