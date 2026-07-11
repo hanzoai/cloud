@@ -61,7 +61,11 @@ func loadOwnedAccount(c *gin.Context, db *datastore.Datastore, id string) (*bill
 	if err := a.GetById(id); err != nil {
 		return nil, false
 	}
-	if a.OrgId != "" && a.OrgId != strings.TrimSpace(middleware.GetOrganization(c).Name) {
+	cur, curOK := middleware.GetOrganizationOK(c)
+	if !curOK {
+		return nil, false
+	}
+	if a.OrgId != "" && a.OrgId != strings.TrimSpace(cur.Name) {
 		return nil, false
 	}
 	return a, true
@@ -74,7 +78,11 @@ func loadOwnedAccount(c *gin.Context, db *datastore.Datastore, id string) (*bill
 //
 //	GET /v1/billing/accounts
 func ListBillingAccounts(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		c.JSON(200, []gin.H{})
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	test := org.TestMode()
 
@@ -126,7 +134,11 @@ type createBillingAccountRequest struct {
 //
 //	POST /v1/billing/accounts
 func CreateBillingAccount(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 400, "organization required", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 
 	var req createBillingAccountRequest
@@ -188,7 +200,11 @@ func CreateBillingAccount(c *gin.Context) {
 //
 //	GET /v1/billing/accounts/:id
 func GetBillingAccount(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -213,7 +229,11 @@ type updateBillingAccountRequest struct {
 //
 //	PATCH /v1/billing/accounts/:id
 func UpdateBillingAccount(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -273,7 +293,11 @@ func UpdateBillingAccount(c *gin.Context) {
 //
 //	DELETE /v1/billing/accounts/:id
 func DeleteBillingAccount(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -305,7 +329,11 @@ func DeleteBillingAccount(c *gin.Context) {
 //
 //	GET /v1/billing/accounts/:id/projects
 func ListAccountProjects(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -331,7 +359,11 @@ func ListAccountProjects(c *gin.Context) {
 //
 //	PUT /v1/billing/accounts/:id/projects/:project
 func BindAccountProject(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -371,7 +403,11 @@ func BindAccountProject(c *gin.Context) {
 //
 //	DELETE /v1/billing/accounts/:id/projects/:project
 func UnbindAccountProject(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		http.Fail(c, 404, "billing account not found", nil)
+		return
+	}
 	db := datastore.New(org.Namespaced(c))
 	a, ok := loadOwnedAccount(c, db, c.Param("id"))
 	if !ok {
@@ -410,7 +446,11 @@ type billingAccountMember struct {
 //
 //	GET /v1/billing/accounts/:id/members
 func ListAccountMembers(c *gin.Context) {
-	org := middleware.GetOrganization(c)
+	org, ok := middleware.GetOrganizationOK(c)
+	if !ok {
+		c.JSON(200, []gin.H{})
+		return
+	}
 
 	if id := c.Param("id"); id != org.Id() {
 		if _, ok := loadOwnedAccount(c, datastore.New(org.Namespaced(c)), id); !ok {
