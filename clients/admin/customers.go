@@ -134,7 +134,7 @@ func enrichCustomer(s *cloud.Service[state], ctx context.Context, cr creds, o ia
 	subj := orgSubject(o.Name)
 	users, _ := orgUsers(s, ctx, cr, o.Name)
 	spend, credits := orgMoney(s, ctx, o.Name)
-	sub, _ := s.State.commerce.subscriptionSummary(ctx, o.Name, subj)
+	sub, _ := s.State.commerce.SubscriptionSummary(ctx, o.Name, subj)
 
 	return customerRow{
 		Org:          o.Name,
@@ -172,8 +172,8 @@ func customerDetail(s *cloud.Service[state], c *zip.Ctx) error {
 	subj := orgSubject(org)
 	users, _ := orgUsers(s, ctx, cr, org)
 	spend, credits := orgMoney(s, ctx, org)
-	sub, _ := s.State.commerce.subscriptionSummary(ctx, org, subj)
-	txns, _ := s.State.commerce.transactions(ctx, org, subj, 50)
+	sub, _ := s.State.commerce.SubscriptionSummary(ctx, org, subj)
+	txns, _ := s.State.commerce.Transactions(ctx, org, subj, 50)
 
 	rows := make([]customerUser, 0, len(users))
 	apiKeys := 0
@@ -298,11 +298,11 @@ func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditReque
 	}
 
 	subj := orgSubject(org)
-	before, _ := s.State.commerce.creditsCents(ctx, org, subj)
+	before, _ := s.State.commerce.CreditsCents(ctx, org, subj)
 
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	res, derr := s.State.commerce.deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
+	res, derr := s.State.commerce.Deposit(ctx, org, subj, req.AmountCents, currency, notes, tag)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
@@ -313,7 +313,7 @@ func applyGrant(s *cloud.Service[state], c *zip.Ctx, org string, req creditReque
 		return fail(c, "grant failed: "+derr.Error())
 	}
 
-	after, _ := s.State.commerce.creditsCents(ctx, org, subj)
+	after, _ := s.State.commerce.CreditsCents(ctx, org, subj)
 	emitAudit(s, c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
 		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TransactionID},
