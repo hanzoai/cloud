@@ -19,6 +19,8 @@ package square
 
 import (
 	"context"
+	"os"
+	"strings"
 
 	"github.com/hanzoai/cloud/clients/commerce/models/types/currency"
 	"github.com/hanzoai/cloud/clients/commerce/payment/processor"
@@ -63,11 +65,62 @@ type Provider struct {
 }
 
 func init() {
-	// Register an empty provider. BD calls Configure() before Charge()
-	// on every request; callers that forget will see IsAvailable()=false.
-	processor.Register(&Provider{
+	// Register the provider, seeded from the deployment env when creds are
+	// present. BD's per-tenant resolver still calls Configure() before every
+	// Charge() (the DB is truth for outbound money); the env seed exists for
+	// the SESSIONLESS inbound path — webhook validation. tryValidateWebhook
+	// reaches this registry slot directly, with no tenant resolver in front,
+	// so an unseeded Provider made every Square delivery 401 "processor not
+	// configured": this package imports thirdparty/square, so thirdparty's
+	// env-registering init either ran first and was clobbered by this
+	// Register, or deferred to the already-registered empty Provider. Either
+	// order left the slot unconfigured. Seeding here makes init order moot.
+	p := &Provider{
 		BaseProcessor: processor.NewBaseProcessor(processor.Square, thirdparty.SquareSupportedCurrencies()),
-	})
+	}
+	if cfg, ok := configFromEnv(); ok {
+		p.Configure(cfg)
+	}
+	processor.Register(p)
+}
+
+// configFromEnv builds a Config from the deployment environment — the same
+// variables thirdparty/square's standalone init reads (SQUARE_ENVIRONMENT
+// picking the sandbox credential set). ok is false when the minimum charge
+// credentials (access token + location) are absent; webhook fields may still
+// be empty, in which case ValidateWebhook fail-closes per its own contract.
+func configFromEnv() (Config, bool) {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("SQUARE_ENVIRONMENT")))
+	isSandbox := env == "sandbox" || env == "test"
+
+	token := strings.TrimSpace(os.Getenv("SQUARE_ACCESS_TOKEN"))
+	locationID := strings.TrimSpace(os.Getenv("SQUARE_LOCATION_ID"))
+	appID := strings.TrimSpace(os.Getenv("SQUARE_APPLICATION_ID"))
+	if isSandbox {
+		if t := strings.TrimSpace(os.Getenv("SQUARE_SANDBOX_ACCESS_TOKEN")); t != "" {
+			token = t
+		}
+		if l := strings.TrimSpace(os.Getenv("SQUARE_SANDBOX_LOCATION_ID")); l != "" {
+			locationID = l
+		}
+		if a := strings.TrimSpace(os.Getenv("SQUARE_SANDBOX_APPLICATION_ID")); a != "" {
+			appID = a
+		}
+		env = "sandbox"
+	} else if env == "" {
+		env = "production"
+	}
+	if token == "" || locationID == "" {
+		return Config{}, false
+	}
+	return Config{
+		ApplicationID:       appID,
+		AccessToken:         token,
+		LocationID:          locationID,
+		WebhookSignatureKey: strings.TrimSpace(os.Getenv("SQUARE_WEBHOOK_SIGNATURE_KEY")),
+		WebhookURL:          strings.TrimSpace(os.Getenv("SQUARE_WEBHOOK_URL")),
+		Environment:         env,
+	}, true
 }
 
 // NewProvider builds and configures a Provider in one shot. Prefer this
