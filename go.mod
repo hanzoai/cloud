@@ -40,7 +40,7 @@ require (
 	github.com/zap-proto/http v0.2.0
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zap2pb v0.2.0
-	github.com/zap-proto/zip v1.3.0
+	github.com/zap-proto/zip v1.5.0
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
