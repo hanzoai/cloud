@@ -517,6 +517,64 @@ func TestOverview_RealTilesAndSources(t *testing.T) {
 	}
 }
 
+// TestOverview_CommercePartialOnPerOrgError proves the decomplected freshness rule: the
+// commerce source is DEGRADED when ANY per-org money read fails — the fleet total is then
+// an undercount and must NOT read healthy. Commerce succeeds for hanzo but 500s for acme;
+// the overview folds acme's failure into a not-ok commerce source (the SAME partial
+// pattern revenue/finance use) instead of the old single-probe that masked it.
+func TestOverview_CommercePartialOnPerOrgError(t *testing.T) {
+	iam := newFakeIAM()
+	defer iam.server.Close()
+	commerce := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("X-Org-Id") == "acme" {
+			w.WriteHeader(500) // commerce down for THIS org only
+			io.WriteString(w, `{"status":"error","msg":"commerce down for acme"}`)
+			return
+		}
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/usage-rollup"):
+			io.WriteString(w, `{"consumedCents":1500,"overageCents":0}`)
+		case strings.HasSuffix(r.URL.Path, "/balance"):
+			io.WriteString(w, `{"available":5000,"balance":5000}`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer commerce.Close()
+
+	do := mount(t, iam.server.URL, commerce.URL, "")
+	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
+	resp, body := do("GET", "/v1/admin/overview", admin)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("overview: %d (%s)", resp.StatusCode, body)
+	}
+	var env struct {
+		Data overviewData `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	src := map[string]core.SourceStatus{}
+	for _, s := range env.Data.Sources {
+		src[s.Name] = s
+	}
+	c, ok := src["commerce"]
+	if !ok {
+		t.Fatal("overview must report a commerce source")
+	}
+	if c.OK {
+		t.Errorf("commerce source must be DEGRADED when a per-org read failed (undercount masked as healthy), got %+v", c)
+	}
+	if c.Error == "" {
+		t.Errorf("degraded commerce source must carry an error: %+v", c)
+	}
+	// The healthy org still contributes — an honest PARTIAL total, never a hard panel fail.
+	if env.Data.SpendCents30d != 1500 {
+		t.Errorf("spend = %d, want 1500 (only hanzo read; acme failed)", env.Data.SpendCents30d)
+	}
+}
+
 // TestUsage_RealTotalsHonestEmptySeries proves the usage roll-up returns the REAL
 // fleet spend from commerce but an HONEST empty series/byProduct — the timeseries
 // feed lives in insights/datastore, and admin must never fabricate a trend.
