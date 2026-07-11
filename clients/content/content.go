@@ -65,15 +65,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	b := cloud.NewBase(deps, "content")
 
-	// The edges default to fail-closed. The real generator (zen5 copy via deps.AI +
-	// studio assets, metered through b.Bill) and distributor (hanzoai/social, tokens
-	// via deps.KMS) are constructed here in a follow-up; until then every generate/
-	// publish honestly reports "not configured" (503) and a transition into
-	// distribution records "not_configured" WITHOUT failing the status change. This is
-	// the ONE place the edges are selected.
+	// This is the ONE place the edges are selected. The distributor is the REAL
+	// hanzoai/social edge (channels.go): it talks the social Public API with the
+	// brand's per-org API key custodied in KMS via clients/integrations, resolved at
+	// call time. It fails closed honestly — a brand that has not connected social (no
+	// key) or has zero channels reports "not_configured" (503 / distribution
+	// "not_configured") WITHOUT failing a status change, never a crash. The generator
+	// (zen5 copy via deps.AI + studio assets, metered through b.Bill) is wired in its
+	// own follow-up; until then generate honestly reports "not configured".
 	st := state{
 		gen:  notConfiguredGenerator{},
-		dist: notConfiguredDistributor{},
+		dist: newDistributor(),
 	}
 	s := &cloud.Service[state]{Base: b, State: st}
 	mounted = s
@@ -419,6 +421,8 @@ func opErr(err error) error {
 		return nil
 	case errors.Is(err, errNotConfigured):
 		return zip.Errorf(http.StatusServiceUnavailable, "content feature not configured for this deployment")
+	case errors.Is(err, errUpstream):
+		return zip.Errorf(http.StatusServiceUnavailable, "distribution edge temporarily unavailable")
 	case errors.Is(err, errNotMounted):
 		return zip.Errorf(http.StatusServiceUnavailable, "content subsystem unavailable")
 	case errors.Is(err, errModuleNotInstalled):
