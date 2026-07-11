@@ -3,144 +3,19 @@ package admin
 import (
 	"encoding/json"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/hanzoai/cloud/clients/admin/core"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
+	"github.com/hanzoai/cloud/clients/admin/finance"
 )
 
-// TestComputeFinance_Math is the PURE derivation proof: given a fixed multi-vendor
-// COGS view and commerce revenue view, gross margin, margin %, runway, and
-// profitability are exactly the arithmetic the dashboard promises — no I/O. The
-// margin cost is the COGS total (all vendors); runway is the DO-credit projection.
-func TestComputeFinance_Math(t *testing.T) {
-	// COGS: $30k total across vendors. DO treasury: $40k credit, $10k left, burning
-	// $1k/day. Revenue: $35k realized.
-	in := financeInput{
-		cost: financeCost{
-			Configured: true,
-			TotalCents: 3_000_000, // $30,000 COGS across all vendors (the margin cost)
-			DigitalOcean: doCost{
-				Configured:           true,
-				CreditRemainingCents: 1_000_000, // $10,000 promo credit remaining
-				AvgDailyBurnCents:    100_000,   // $1,000/day DO burn (runway input)
-			},
-		},
-		revenue: financeRevenue{
-			Configured:        true,
-			TotalRevenueCents: 3_500_000, // $35,000 revenue
-			MRRCents:          500_000,   // $5,000 MRR
-		},
-	}
-	got := computeFinance(in)
-
-	// margin = 35,000 - 30,000 = $5,000
-	if got.Derived.GrossMarginCents != 500_000 {
-		t.Errorf("grossMarginCents = %d, want 500000 ($5,000)", got.Derived.GrossMarginCents)
-	}
-	// marginPct = 5,000 / 35,000 * 100 = 14.2857…%
-	if math.Abs(got.Derived.GrossMarginPct-14.285714) > 0.0001 {
-		t.Errorf("grossMarginPct = %f, want ≈14.2857", got.Derived.GrossMarginPct)
-	}
-	// runway = 10,000 / 1,000 = 10 days
-	if got.Derived.RunwayDays == nil || math.Abs(*got.Derived.RunwayDays-10) > 1e-9 {
-		t.Errorf("runwayDays = %v, want 10", got.Derived.RunwayDays)
-	}
-	// revenue (35k) > cost (30k) → profitable this month.
-	if !got.Derived.Profitable {
-		t.Error("profitable must be true when revenue > cost")
-	}
-}
-
-// TestComputeFinance_BurningFasterThanEarning proves the red state: cost exceeds
-// revenue → negative margin, not profitable, runway still finite.
-func TestComputeFinance_BurningFasterThanEarning(t *testing.T) {
-	in := financeInput{
-		cost: financeCost{
-			Configured: true,
-			TotalCents: 4_000_000, // $40,000 COGS (the margin cost)
-			DigitalOcean: doCost{
-				Configured:           true,
-				CreditRemainingCents: 2_000_000, // $20,000 left
-				AvgDailyBurnCents:    200_000,   // $2,000/day
-			},
-		},
-		revenue: financeRevenue{Configured: true, TotalRevenueCents: 1_000_000}, // $10,000
-	}
-	got := computeFinance(in)
-	if got.Derived.GrossMarginCents != -3_000_000 { // 10k - 40k = -30k
-		t.Errorf("grossMarginCents = %d, want -3000000", got.Derived.GrossMarginCents)
-	}
-	if got.Derived.Profitable {
-		t.Error("must NOT be profitable when cost > revenue")
-	}
-	// runway = 20,000 / 2,000 = 10 days
-	if got.Derived.RunwayDays == nil || math.Abs(*got.Derived.RunwayDays-10) > 1e-9 {
-		t.Errorf("runwayDays = %v, want 10", got.Derived.RunwayDays)
-	}
-}
-
-// TestComputeFinance_HonestUnconfigured proves the DO-off path: no fabricated
-// credit/burn, runway is NULL (not zero), margin is just revenue (cost 0), and
-// margin % is 0 when revenue is 0.
-func TestComputeFinance_HonestUnconfigured(t *testing.T) {
-	in := financeInput{
-		cost:    financeCost{Configured: false, DigitalOcean: doCost{Configured: false}}, // commerce + DO both off
-		revenue: financeRevenue{Configured: false},
-	}
-	got := computeFinance(in)
-	if got.Cost.DigitalOcean.Configured {
-		t.Error("DO must report configured:false when the token is unset")
-	}
-	if got.Cost.DigitalOcean.CreditRemainingCents != 0 || got.Cost.DigitalOcean.AvgDailyBurnCents != 0 {
-		t.Error("unconfigured DO must not fabricate credit/burn")
-	}
-	// runway is null (nil) — no honest runway without a burn rate.
-	if got.Derived.RunwayDays != nil {
-		t.Errorf("runwayDays must be nil when DO is unconfigured, got %v", *got.Derived.RunwayDays)
-	}
-	if got.Derived.GrossMarginPct != 0 {
-		t.Errorf("grossMarginPct must be 0 when revenue is 0, got %f", got.Derived.GrossMarginPct)
-	}
-	// revenue 0 is not > cost 0 → not profitable.
-	if got.Derived.Profitable {
-		t.Error("zero revenue and zero cost is not profitable")
-	}
-}
-
-// TestComputeFinance_ZeroBurnNullRunway proves runway is null when DO is
-// configured but burn is zero (no division by zero, no fabricated infinity).
-func TestComputeFinance_ZeroBurnNullRunway(t *testing.T) {
-	in := financeInput{
-		cost:    financeCost{Configured: true, TotalCents: 0, DigitalOcean: doCost{Configured: true, CreditRemainingCents: 4_000_000, AvgDailyBurnCents: 0}},
-		revenue: financeRevenue{Configured: true, TotalRevenueCents: 100_000},
-	}
-	got := computeFinance(in)
-	if got.Derived.RunwayDays != nil {
-		t.Errorf("runwayDays must be nil when burn is 0, got %v", *got.Derived.RunwayDays)
-	}
-}
-
-// TestAvgDailyBurn_ElapsedDays proves the run-rate is MTD spend over elapsed
-// days (≥1), a real read over real time — never an invented rate.
-func TestAvgDailyBurn_ElapsedDays(t *testing.T) {
-	// $3,000 MTD on the 10th → $300/day.
-	got := avgDailyBurnCents(300_000, time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC))
-	if got != 30_000 {
-		t.Errorf("avgDailyBurn = %d, want 30000 ($300/day)", got)
-	}
-	// Day 1 must not divide by zero.
-	if avgDailyBurnCents(50_000, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)) != 50_000 {
-		t.Error("day-1 burn must be the full MTD spend (divide by 1)")
-	}
-}
-
-// TestDollarsToCents proves the DO decimal-dollar → cents parsing, including the
-// negative (credit) case and the blank fallback.
+// The finance PURE-math derivation tests (ComputeFinance / AvgDailyBurnCents) live with
+// the handler in clients/admin/finance. These are the INTEGRATION tests that drive GET
+// /v1/admin/finance through the shared admin mount harness (mountSvc + fake IAM/commerce/DO).
 
 // newFakeDO serves the DO billing API with fixed decimal-dollar strings so the
 // finance aggregation is deterministic. account_balance is NEGATIVE (credit held).
@@ -175,7 +50,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	defer do.Close()
 
 	doReq, s, _ := mountSvc(t, iam.server.URL, commerce.URL, "")
-	s.State.do = digitalocean.NewWithBase(do.URL, "test-do-token") // configured DO client
+	s.State.DO = digitalocean.NewWithBase(do.URL, "test-do-token") // configured DO client
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
 		"Authorization": "Bearer operator-jwt", "Cookie": "iam_access_token=operator-jwt",
@@ -186,7 +61,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	}
 	var env struct {
 		Status string      `json:"status"`
-		Data   financeData `json:"data"`
+		Data   finance.FinanceData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -252,7 +127,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 		t.Error("runwayDays must be present when DO burn > 0")
 	}
 	// Every source reported (digitalocean + commerce both ok).
-	src := map[string]sourceStatus{}
+	src := map[string]core.SourceStatus{}
 	for _, x := range d.Sources {
 		src[x.Name] = x
 	}
@@ -284,7 +159,7 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 		t.Fatalf("finance: got %d (body=%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Data financeData `json:"data"`
+		Data finance.FinanceData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -317,7 +192,7 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 		t.Errorf("commerce revenue must still be real with DO off, got %d", d.Revenue.TotalRevenueCents)
 	}
 	// The digitalocean source must be present and NOT ok (honest not-configured).
-	var doSrc *sourceStatus
+	var doSrc *core.SourceStatus
 	for i := range d.Sources {
 		if d.Sources[i].Name == "digitalocean" {
 			doSrc = &d.Sources[i]
@@ -345,7 +220,7 @@ func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
 		t.Fatalf("finance: got %d (body=%s)", resp.StatusCode, body)
 	}
 	var env struct {
-		Data financeData `json:"data"`
+		Data finance.FinanceData `json:"data"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -363,7 +238,7 @@ func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
 		t.Errorf("COGS must remain configured when the revenue source is down: %+v", d.Cost)
 	}
 	// The commerce (revenue) source is present and NOT ok — honest degraded state.
-	var revSrc *sourceStatus
+	var revSrc *core.SourceStatus
 	for i := range d.Sources {
 		if d.Sources[i].Name == "commerce" {
 			revSrc = &d.Sources[i]
