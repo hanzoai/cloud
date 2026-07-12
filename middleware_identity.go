@@ -96,6 +96,7 @@ var authorityHeaders = []string{
 	"X-User-Email",
 	"X-Phone-Number",
 	"X-User-IsAdmin",
+	"X-User-IsOrgAdmin",
 	// Legacy identity aliases an attacker might try; none are org sub-scopes.
 	"X-User-Role",
 	"X-User-Roles",
@@ -223,9 +224,24 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				}
 				req.Header.Set("X-Org-Id", effOrg)
 			case owner != "":
-				// Any other principal: pinned to their own org, never admin.
+				// Any other principal: pinned to their own org, never GLOBAL admin.
 				effOrg = owner
 				req.Header.Set("X-Org-Id", owner)
+			}
+			// X-User-IsOrgAdmin marks a validated principal that is an admin OF ITS OWN
+			// ORG — the IAM `isAdmin` bit (claims.IsAdmin). It is minted on the SAME
+			// predicate in BOTH switch arms, so it covers a real GLOBAL admin (admin of
+			// the admin org) AND an ORG admin (admin of their own org). GuardScoped
+			// requires it, so a validated but NON-admin member of an org is refused from
+			// the org-scoped admin panels (the same denial an unvalidated caller gets),
+			// closing the same-tenant over-visibility gap. It stays owner-scoped and safe:
+			// a KMS-sync MACHINE principal (audience <owner>-platform-kms) is EXCLUDED —
+			// mirroring the global-admin guard above — so the machine path grants NEITHER
+			// global NOR org admin, and V6's audience widening can never be leveraged into
+			// an admin surface. Like every authorityHeader it is stripped on ingress and
+			// re-injected ONLY here from validated claims, so a client can never forge it.
+			if claims.IsAdmin && !isKMSMachinePrincipal(claims) {
+				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
 			sanitizeSubScopes(c, effOrg, cliProject, cliApp, cliBillingAccount)
 			return c.Continue()
