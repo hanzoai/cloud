@@ -93,6 +93,7 @@ var frozen = []struct {
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"tasks", false, false},          // was order 147
+	{"cron", false, false},           // durable platform cron on the shared engine (post-freeze add)
 	{"automations", false, true},     // was order 148
 	{"referrals", false, false},      // was order 149
 	{"ai", false, false},             // was order 150
