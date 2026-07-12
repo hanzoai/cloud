@@ -2,7 +2,7 @@ package affiliate
 
 // payout_gate_test.go proves the [MEDIUM] C1 miss is closed: the OSS-contributor
 // treasury payout machinery (executePayouts and friends) is service-token /
-// platform-global-admin ONLY — an org-level admin can no longer drive treasury
+// platform-SuperAdmin ONLY — an org-level admin can no longer drive treasury
 // disbursement (CreditGrants / Stripe transfers / on-chain HUSD).
 
 import (

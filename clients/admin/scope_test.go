@@ -63,7 +63,7 @@ func newScopeIAM() *scopeIAM {
 // superHdr / orgAdminHdr are the two tiers' SANITIZED identities (as SanitizeIdentity
 // would mint them): a SuperAdmin carries X-User-IsAdmin=true; an org admin carries a
 // validated X-User-Id + their pinned X-Org-Id + the X-User-IsOrgAdmin bit the boundary
-// mints for any validated isAdmin principal, but NO GLOBAL admin flag. memberHdr is a
+// mints for any validated isAdmin principal, but NO SuperAdmin flag. memberHdr is a
 // validated but NON-admin member of an org: same identity MINUS the org-admin bit — the
 // caller the over-visibility gap used to admit, now refused.
 var superHdr = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "admin/z"}
@@ -172,8 +172,8 @@ func TestScope_PlatformRouteDeniesOrgAdminButScopedAdmits(t *testing.T) {
 		Data adminMe `json:"data"`
 	}
 	_ = json.Unmarshal(body, &env)
-	if env.Data.IsGlobalAdmin {
-		t.Fatalf("org admin me.IsGlobalAdmin must be false")
+	if env.Data.IsSuperAdmin {
+		t.Fatalf("org admin me.IsSuperAdmin must be false")
 	}
 	if env.Data.Owner != "maxpower" {
 		t.Fatalf("org admin me.Owner = %q, want maxpower", env.Data.Owner)

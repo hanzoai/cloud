@@ -41,26 +41,26 @@ func TestEdgeAuth_StripsSpoofedIdentity(t *testing.T) {
 	}
 }
 
-// TestEdgeAuth_StripsGlobalAdminSpoof proves the PLATFORM-superadmin header
-// is stripped at the edge. After the global-admin/org-admin split,
-// GetIAMClaims reads X-User-IsGlobalAdmin straight off the request and
-// GlobalAdmin() trusts it — so if EdgeAuth did NOT strip it, an in-cluster
-// caller could forge `X-User-IsGlobalAdmin: true` and pass every cross-org
+// TestEdgeAuth_StripsSuperAdminSpoof proves the PLATFORM-superadmin header
+// is stripped at the edge. After the SuperAdmin/org-admin split,
+// GetIAMClaims reads X-User-IsSuperAdmin straight off the request and
+// SuperAdmin() trusts it — so if EdgeAuth did NOT strip it, an in-cluster
+// caller could forge `X-User-IsSuperAdmin: true` and pass every cross-org
 // gate (the exact /_/commerce/tenants escalation). It MUST be in the strip set.
-func TestEdgeAuth_StripsGlobalAdminSpoof(t *testing.T) {
+func TestEdgeAuth_StripsSuperAdminSpoof(t *testing.T) {
 	t.Setenv("COMMERCE_EDGE_AUTH", "true")
 	h := EdgeAuth()
 
 	req := httptest.NewRequest("POST", "/_/commerce/tenants", nil)
 	req.Header.Set("X-Org-Id", "admin")
-	req.Header.Set("X-User-IsGlobalAdmin", "true") // forged platform superadmin
+	req.Header.Set("X-User-IsSuperAdmin", "true") // forged platform superadmin
 	req.Header.Set("X-User-IsAdmin", "true")
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = req
 	h(c)
 
-	for _, k := range []string{"X-Org-Id", "X-User-IsGlobalAdmin", "X-User-IsAdmin"} {
+	for _, k := range []string{"X-Org-Id", "X-User-IsSuperAdmin", "X-User-IsAdmin"} {
 		if got := c.Request.Header.Get(k); got != "" {
 			t.Fatalf("EdgeAuth must strip spoofed %s, got %q", k, got)
 		}
@@ -309,11 +309,11 @@ func TestLooksLikeJWTAndBearer(t *testing.T) {
 	}
 }
 
-// TestIsGlobalAdmin proves the global-admin gate: only the explicit
-// isGlobalAdmin claim or membership in the "admin" org qualifies. A plain
+// TestIsSuperAdmin proves the SuperAdmin gate: only the explicit
+// isSuperAdmin claim or membership in the "admin" org qualifies. A plain
 // org-level IsAdmin (e.g. an org owner) must NOT — trusting it would let any
 // org owner read another org via ?org=.
-func TestIsGlobalAdmin(t *testing.T) {
+func TestIsSuperAdmin(t *testing.T) {
 	cases := []struct {
 		name   string
 		claims *auth.IAMClaims
@@ -322,13 +322,13 @@ func TestIsGlobalAdmin(t *testing.T) {
 		{"nil", nil, false},
 		{"admin-org", &auth.IAMClaims{Owner: "admin"}, true},
 		{"admin-org-mixedcase", &auth.IAMClaims{Owner: "Admin"}, true},
-		{"global-flag", &auth.IAMClaims{Owner: "hanzo", IsGlobalAdmin: true}, true},
+		{"global-flag", &auth.IAMClaims{Owner: "hanzo", IsSuperAdmin: true}, true},
 		{"org-admin-not-global", &auth.IAMClaims{Owner: "maxpower", IsAdmin: true}, false},
 		{"plain-user", &auth.IAMClaims{Owner: "hanzo"}, false},
 	}
 	for _, tc := range cases {
-		if got := isGlobalAdmin(tc.claims); got != tc.want {
-			t.Fatalf("%s: isGlobalAdmin=%v want %v", tc.name, got, tc.want)
+		if got := isSuperAdmin(tc.claims); got != tc.want {
+			t.Fatalf("%s: isSuperAdmin=%v want %v", tc.name, got, tc.want)
 		}
 	}
 }
@@ -336,7 +336,7 @@ func TestIsGlobalAdmin(t *testing.T) {
 // TestPermsHeader_AdminBitIsGlobalOnly is the money-hole regression. It pins the
 // exact X-User-Permissions bit.Field permsHeader mints for the three principal
 // classes, in the wire units commerce parses (permission.Live=4, Admin=16). The
-// invariant: the Admin (money/admin) bit is minted ONLY for a global admin; an
+// invariant: the Admin (money/admin) bit is minted ONLY for a SuperAdmin; an
 // org-level admin (an org owner) gets Live but NOT Admin, so
 // TokenRequired(permission.Admin) on the credit-creating / card-charging billing
 // endpoints denies them. Before the fix an org owner minted Admin|Live=20 and
@@ -358,15 +358,15 @@ func TestPermsHeader_AdminBitIsGlobalOnly(t *testing.T) {
 		// Org owner (maxpower): live mode YES (real Square top-up must work),
 		// Admin money bit NO. This is the exact principal that exploited the hole.
 		{"org-admin-live-not-admin", &auth.IAMClaims{Owner: "maxpower", IsAdmin: true}, live},
-		// Global admin via the admin org: full Admin|Live.
-		{"global-admin-org", &auth.IAMClaims{Owner: "admin", IsAdmin: true}, adminLive},
-		// Global admin via the explicit claim (any org): full Admin|Live.
-		{"global-admin-flag", &auth.IAMClaims{Owner: "hanzo", IsGlobalAdmin: true, IsAdmin: true}, adminLive},
-		// Global-admin flag WITHOUT org-level IsAdmin still carries Admin (the
+		// SuperAdmin via the admin org: full Admin|Live.
+		{"SuperAdmin-org", &auth.IAMClaims{Owner: "admin", IsAdmin: true}, adminLive},
+		// SuperAdmin via the explicit claim (any org): full Admin|Live.
+		{"SuperAdmin-flag", &auth.IAMClaims{Owner: "hanzo", IsSuperAdmin: true, IsAdmin: true}, adminLive},
+		// SuperAdmin flag WITHOUT org-level IsAdmin still carries Admin (the
 		// money authority), and also Live is absent (IsAdmin gates Live) —
 		// documents the orthogonality: authority (Admin) and mode (Live) are
 		// independent signals.
-		{"global-flag-no-orgadmin", &auth.IAMClaims{Owner: "hanzo", IsGlobalAdmin: true}, admin},
+		{"global-flag-no-orgadmin", &auth.IAMClaims{Owner: "hanzo", IsSuperAdmin: true}, admin},
 	}
 	for _, tc := range cases {
 		got, err := strconv.ParseInt(permsHeader(tc.claims), 10, 64)
@@ -374,21 +374,21 @@ func TestPermsHeader_AdminBitIsGlobalOnly(t *testing.T) {
 			t.Fatalf("%s: permsHeader returned non-integer: %v", tc.name, err)
 		}
 		if got != tc.want {
-			t.Fatalf("%s: permsHeader=%d want %d (admin bit set iff global admin)", tc.name, got, tc.want)
+			t.Fatalf("%s: permsHeader=%d want %d (admin bit set iff SuperAdmin)", tc.name, got, tc.want)
 		}
-		// Belt-and-suspenders: the Admin bit is present iff the caller is a global admin.
+		// Belt-and-suspenders: the Admin bit is present iff the caller is a SuperAdmin.
 		hasAdmin := got&admin != 0
-		if hasAdmin != isGlobalAdmin(tc.claims) {
-			t.Fatalf("%s: Admin bit=%v but isGlobalAdmin=%v — must match exactly", tc.name, hasAdmin, isGlobalAdmin(tc.claims))
+		if hasAdmin != isSuperAdmin(tc.claims) {
+			t.Fatalf("%s: Admin bit=%v but isSuperAdmin=%v — must match exactly", tc.name, hasAdmin, isSuperAdmin(tc.claims))
 		}
 	}
 }
 
-// TestResolveBillingSubject_AdminOverride: a global admin may retarget the
+// TestResolveBillingSubject_AdminOverride: a SuperAdmin may retarget the
 // billing view to another org via ?org=, and the namespace follows it.
 func TestResolveBillingSubject_AdminOverride(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/billing/balance?user=admin/z&org=hanzo&currency=usd", nil)
-	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsGlobalAdmin: true})
+	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsSuperAdmin: true})
 	if subject != "hanzo" || !override {
 		t.Fatalf("admin ?org=hanzo => subject=%q override=%v, want hanzo,true", subject, override)
 	}
@@ -401,10 +401,10 @@ func TestResolveBillingSubject_AdminOverride(t *testing.T) {
 }
 
 // TestResolveBillingSubject_NonAdminIgnoresOverride is the isolation proof:
-// a non-global-admin cannot use ?org= to read another org. The override is
+// a non-SuperAdmin cannot use ?org= to read another org. The override is
 // stripped and the subject stays pinned to the caller's own org.
 func TestResolveBillingSubject_NonAdminIgnoresOverride(t *testing.T) {
-	// Dave: org owner with IsAdmin=true (org-level), NOT a global admin.
+	// Dave: org owner with IsAdmin=true (org-level), NOT a SuperAdmin.
 	req := httptest.NewRequest("GET", "/v1/billing/balance?org=hanzo&currency=usd", nil)
 	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "maxpower", IsAdmin: true})
 	if subject != "maxpower" || override {
@@ -416,10 +416,10 @@ func TestResolveBillingSubject_NonAdminIgnoresOverride(t *testing.T) {
 }
 
 // TestResolveBillingSubject_NoOverride: without ?org, every caller (incl. a
-// global admin) defaults to their own org and the namespace is untouched.
+// SuperAdmin) defaults to their own org and the namespace is untouched.
 func TestResolveBillingSubject_NoOverride(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/billing/balance?currency=usd", nil)
-	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsGlobalAdmin: true})
+	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsSuperAdmin: true})
 	if subject != "admin" || override {
 		t.Fatalf("no ?org => subject=%q override=%v, want admin,false", subject, override)
 	}
@@ -430,7 +430,7 @@ func TestResolveBillingSubject_NoOverride(t *testing.T) {
 // smuggled value.
 func TestResolveBillingSubject_RejectsBadSlug(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/billing/balance?org=hanzo%2Fevil", nil)
-	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsGlobalAdmin: true})
+	subject, override := resolveBillingSubject(req, &auth.IAMClaims{Owner: "admin", IsSuperAdmin: true})
 	if subject != "admin" || override {
 		t.Fatalf("bad ?org slug => subject=%q override=%v, want admin,false", subject, override)
 	}

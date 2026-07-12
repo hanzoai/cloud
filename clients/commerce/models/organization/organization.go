@@ -1,8 +1,8 @@
 package organization
 
 import (
-	"github.com/hanzoai/orm"
 	"context"
+	"github.com/hanzoai/orm"
 	"strings"
 	"time"
 
@@ -34,7 +34,6 @@ import (
 )
 
 var kind = "organization"
-
 
 func init() { orm.Register[Organization]("organization") }
 
@@ -376,7 +375,7 @@ func (o *Organization) AddOwner(userOrId string) {
 // an org named "platform" read/wrote the global namespace where every org's
 // records live (Red — privilege escalation via the empty namespace).
 // Cross-org / superadmin datastore access is now gated EXCLUSIVELY on
-// auth.IAMClaims.GlobalAdmin() (owner=="admin" or the isGlobalAdmin claim)
+// auth.IAMClaims.SuperAdmin() (owner=="admin" or the isSuperAdmin claim)
 // at the handler/middleware layer — never inferred from the org name here.
 func (o Organization) Namespace() string {
 	return o.Name

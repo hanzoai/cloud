@@ -25,7 +25,7 @@ package admin
 // @hanzo/bot agent, a machine is raw compute visor opens — and each console lens
 // reuses this one endpoint with a different `?kind=` (Bots=bot, Machines=machine).
 //
-// GLOBAL-ADMIN ONLY (the s.guard wrap in admin.go), all-orgs by default; this is
+// SUPERADMIN ONLY (the s.guard wrap in admin.go), all-orgs by default; this is
 // an AGGREGATOR — admin holds no compute state, it only reads. Honest by
 // construction, exactly like the analytics events lens: no datastore connected, or
 // the events table not provisioned yet (the emitter is still being wired) → the
@@ -73,7 +73,7 @@ type computeLeaf struct {
 }
 
 // compute answers GET /v1/admin/compute. ?kind=<kind> and ?org= narrow the
-// aggregate; ?range=24h|7d|30d bounds it (default 30d). Global-admin only.
+// aggregate; ?range=24h|7d|30d bounds it (default 30d). SuperAdmin only.
 func compute(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	// Honest-empty when the warehouse is not connected or the usage table is not

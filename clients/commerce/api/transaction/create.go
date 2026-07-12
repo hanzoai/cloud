@@ -70,7 +70,7 @@ func Create(c *gin.Context) {
 	// C1-b: this generic ledger endpoint reaches the SAME mint sink as
 	// /v1/billing/deposit. A Deposit (no funded source) or a credit into the
 	// gateway-spendable IAM-user wallet MINTS money, so the mint case is gated on
-	// MayMintMoney (internal service token / platform global admin) — NOT the
+	// MayMintMoney (internal service token / platform SuperAdmin) — NOT the
 	// org-level RequireAdmin above, which admits any org owner. Withdraws and
 	// transfers between the org's OWN funded accounts are not mints and remain
 	// org-admin. mintauth.Enforce at the datastore sink is the fail-closed
@@ -79,7 +79,7 @@ func Create(c *gin.Context) {
 		if !middleware.MayMintMoney(c) {
 			http.Fail(c, 403,
 				"minting spendable balance requires platform-administrator or internal-service credentials",
-				errors.New("transaction mint: caller is neither the internal service token nor a platform global admin"))
+				errors.New("transaction mint: caller is neither the internal service token nor a platform SuperAdmin"))
 			return
 		}
 		trans.SetContext(mintauth.WithAuthorized(trans.Context()))

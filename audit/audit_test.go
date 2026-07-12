@@ -31,7 +31,7 @@ func openTemp(t *testing.T) (*Recorder, string) {
 	return rec, path
 }
 
-// sampleRecord is a representative security event (a global-admin org deletion).
+// sampleRecord is a representative security event (a SuperAdmin org deletion).
 func sampleRecord(action string) Record {
 	return Record{
 		Time:      time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),

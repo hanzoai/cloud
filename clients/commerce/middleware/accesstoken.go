@@ -218,7 +218,7 @@ func TokenRequired(masks ...bit.Mask) gin.HandlerFunc {
 				// commerce, holding COMMERCE_SERVICE_TOKEN) from an org-scoped
 				// principal that merely holds the Admin bit (an org owner's IAM
 				// isAdmin, or a legacy per-org access token). Money-MINT routes
-				// (PlatformOnly) gate on this + GlobalAdmin ONLY, never on Admin,
+				// (PlatformOnly) gate on this + SuperAdmin ONLY, never on Admin,
 				// so an org owner can never reach them. Set in BOTH the test and
 				// live sub-branches (once here, before the split).
 				c.Set(ctxKeyServiceToken, true)

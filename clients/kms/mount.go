@@ -178,7 +178,7 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 }
 
 // guard wraps a secrets handler with the org-scope gate. Fail-closed: a request
-// whose validated org is neither {org} nor a global admin is refused 403 before
+// whose validated org is neither {org} nor a SuperAdmin is refused 403 before
 // the store is touched; an unconfigured master key yields 503.
 //
 // The org match is EXACT (==), not case-folded: this mirrors the platform's own

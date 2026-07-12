@@ -7,7 +7,7 @@
 // own login/session records remain a DIFFERENT trail; admin still federates them as a
 // fallback when cloud's local store is not configured, so no capability is lost.
 //
-// SECURITY. Both handlers are registered behind core.Guard (global-admin only,
+// SECURITY. Both handlers are registered behind core.Guard (SuperAdmin only,
 // fail-closed). They are READ-ONLY (Query and Verify issue SELECT only), so exposing
 // them cannot weaken the append-only property.
 package audit
@@ -24,7 +24,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Routes registers the /v1/admin/audit* surface (global-admin only).
+// Routes registers the /v1/admin/audit* surface (SuperAdmin only).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/audit", core.Guard(s, Records))
 	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))

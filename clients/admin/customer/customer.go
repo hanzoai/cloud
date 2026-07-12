@@ -13,8 +13,8 @@
 //     forbidden user at login AND at token issuance, so a suspended customer cannot sign
 //     in or mint a fresh token. Fully reversible.
 //
-// SECURITY. Every route is mounted behind core.Guard (global-admin only, fail-closed).
-// The write actions REPLAY THE CALLER'S OWN global-admin credential to IAM, and each is
+// SECURITY. Every route is mounted behind core.Guard (SuperAdmin only, fail-closed).
+// The write actions REPLAY THE CALLER'S OWN SuperAdmin credential to IAM, and each is
 // recorded to cloud's tamper-evident audit trail with a redacted BEFORE/AFTER.
 package customer
 
@@ -240,7 +240,7 @@ func ReactivateCustomer(s *cloud.Service[core.State], c *zip.Ctx) error {
 // setForbidden flips IAM `isForbidden` on every member of the org — suspend
 // (forbidden=true) cuts login + token issuance; reactivate restores it. Each user's FULL
 // object is read, the one field flipped, and written back, replaying the caller's
-// global-admin credential so IAM authorizes it. Best-effort per user with an aggregated
+// SuperAdmin credential so IAM authorizes it. Best-effort per user with an aggregated
 // result: a partial failure is reported honestly (affected vs failed), never masked as a
 // clean success. The action is recorded with a redacted before/after user tally.
 func setForbidden(s *cloud.Service[core.State], c *zip.Ctx, forbidden bool) error {

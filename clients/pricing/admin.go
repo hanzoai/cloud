@@ -1,4 +1,4 @@
-// Admin surface for the catalog enablement overlay (global-admin only).
+// Admin surface for the catalog enablement overlay (SuperAdmin only).
 //
 //	GET   /v1/admin/catalog                     full catalog + every entry's state
 //	PATCH /v1/admin/catalog/models/*            upsert one model overlay (id may
@@ -35,8 +35,8 @@ const (
 // existing overlay. A brand-new overlay defaults to enabled (the catalog
 // default), so PATCH {"enabled":false} is the first act that hides an entry.
 type patchBody struct {
-	Enabled  *bool   `json:"enabled,omitempty"`
-	Beta     *bool   `json:"beta,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
+	Beta    *bool `json:"beta,omitempty"`
 	// State is the high-level tri-state setter ("off"|"beta"|"ga") that sets
 	// enabled+beta coherently; the low-level Enabled/Beta pointers (applied after)
 	// override it for fine control.
@@ -50,7 +50,7 @@ type patchBody struct {
 // the admin always sees the canonical full list (isAdmin gate => nothing hidden).
 func adminCatalog(c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "catalog overlay not initialised"})
@@ -90,7 +90,7 @@ func adminCatalog(c *zip.Ctx) error {
 // wildcard so slashed ids (anthropic/claude-opus-4.6) route intact.
 func adminPatchModel(c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("*"))
 	if id == "" {
@@ -102,7 +102,7 @@ func adminPatchModel(c *zip.Ctx) error {
 // adminPatchProvider upserts the overlay for one provider name.
 func adminPatchProvider(c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	name := strings.TrimSpace(c.Param("name"))
 	if name == "" {

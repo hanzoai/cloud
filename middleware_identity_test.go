@@ -4,7 +4,7 @@ package cloud
 // through the zip/fiber stack against a real RSA-signed JWKS (httptest), so the
 // whole path runs end-to-end: header strip -> token extract -> JWKS verify ->
 // re-mint. The crux assertions: a raw X-User-IsAdmin never grants admin, and an
-// ORG admin can never escalate to the GLOBAL-admin authority or another org.
+// ORG admin can never escalate to the SuperAdmin authority or another org.
 
 import (
 	"crypto/rand"
@@ -124,7 +124,7 @@ func TestSanitizeIdentity(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Hour)
 
-	globalAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
+	superAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
 	orgAdmin := signWith(t, key, tokenClaims("hanzo-console", "acme", "dave@acme.io", true, future))
 	normalUser := signWith(t, key, tokenClaims("hanzo-console", "acme", "joe@acme.io", false, future))
 	expiredAdmin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, past))
@@ -160,22 +160,22 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg:   "victim",
 		},
 		{
-			name:      "valid GLOBAL admin bearer grants admin, pinned to admin org",
-			mutate:    bearer(globalAdmin),
+			name:      "valid SuperAdmin bearer grants admin, pinned to admin org",
+			mutate:    bearer(superAdmin),
 			wantAdmin: true,
 			wantOrg:   "admin",
 		},
 		{
-			name: "GLOBAL admin honors org switch",
+			name: "SuperAdmin honors org switch",
 			mutate: func(r *http.Request) {
-				r.Header.Set("Authorization", "Bearer "+globalAdmin)
+				r.Header.Set("Authorization", "Bearer "+superAdmin)
 				r.Header.Set("X-Org-Id", "maxpower")
 			},
 			wantAdmin: true,
 			wantOrg:   "maxpower",
 		},
 		{
-			name: "ORG admin cannot escalate to global admin nor cross org",
+			name: "ORG admin cannot escalate to SuperAdmin nor cross org",
 			mutate: func(r *http.Request) {
 				r.Header.Set("Authorization", "Bearer "+orgAdmin)
 				r.Header.Set("X-Org-Id", "victim") // attempt to read another org
@@ -219,9 +219,9 @@ func TestSanitizeIdentity(t *testing.T) {
 		{
 			// V6 residual close: a KMS-sync MACHINE principal (aud=<owner>-platform-kms)
 			// in the admin org with isAdmin=true VALIDATES (V6 accepts the machine aud)
-			// but is DENIED global admin — pinned to its own org, never cross-org. So
+			// but is DENIED SuperAdmin — pinned to its own org, never cross-org. So
 			// the machine-audience widening cannot be leveraged into an admin bypass.
-			name:      "admin-org machine principal is denied global admin (V6 decoupling)",
+			name:      "admin-org machine principal is denied SuperAdmin (V6 decoupling)",
 			mutate:    bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
 			wantAdmin: false,
 			wantOrg:   "admin",
@@ -251,26 +251,26 @@ func TestSanitizeIdentity(t *testing.T) {
 			wantOrg:   "",
 		},
 		{
-			// A global admin cannot org-switch INTO a whitespace-bearing org (the
+			// A SuperAdmin cannot org-switch INTO a whitespace-bearing org (the
 			// switch target is refused); they fall back to their own admin org.
-			name: "global admin org-switch to a whitespace org is refused",
+			name: "SuperAdmin org-switch to a whitespace org is refused",
 			mutate: func(r *http.Request) {
-				r.Header.Set("Authorization", "Bearer "+globalAdmin)
+				r.Header.Set("Authorization", "Bearer "+superAdmin)
 				r.Header.Set("X-Org-Id", "ac me") // internal space survives transport
 			},
 			wantAdmin: true,
 			wantOrg:   "admin",
 		},
 		{
-			name:      "GLOBAL admin via session cookie",
-			mutate:    func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "access_token", Value: globalAdmin}) },
+			name:      "SuperAdmin via session cookie",
+			mutate:    func(r *http.Request) { r.AddCookie(&http.Cookie{Name: "access_token", Value: superAdmin}) },
 			wantAdmin: true,
 			wantOrg:   "admin",
 		},
 		{
-			name: "GLOBAL admin via HTTP Basic password (go/.netrc idiom)",
+			name: "SuperAdmin via HTTP Basic password (go/.netrc idiom)",
 			mutate: func(r *http.Request) {
-				r.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("z@hanzo.ai:"+globalAdmin)))
+				r.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("z@hanzo.ai:"+superAdmin)))
 			},
 			wantAdmin: true,
 			wantOrg:   "admin",
@@ -292,7 +292,7 @@ func TestSanitizeIdentity(t *testing.T) {
 }
 
 // TestSanitizeIdentity_OrgAdminHeader locks the X-User-IsOrgAdmin signal GuardScoped gates
-// on. The boundary mints it for ANY validated isAdmin principal — a GLOBAL admin (admin of
+// on. The boundary mints it for ANY validated isAdmin principal — a SuperAdmin (admin of
 // the admin org) AND an ORG admin (admin of their own org) — but NEVER for a validated
 // non-admin member, NEVER for a KMS-sync machine principal, and it is UNFORGEABLE: like
 // every authority header it is stripped on ingress and re-injected only from validated
@@ -325,9 +325,9 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 	}{
 		{
 			// An ORG admin (isAdmin=true, owner != adminOrg) gets the org-admin bit but
-			// NEVER the GLOBAL admin bit — it can reach its OWN org's scoped panels, never
+			// NEVER the SuperAdmin bit — it can reach its OWN org's scoped panels, never
 			// the cross-tenant platform surface.
-			name:         "org admin gets org-admin bit, not global admin",
+			name:         "org admin gets org-admin bit, not SuperAdmin",
 			mutate:       bearer(signWith(t, key, tokenClaims("hanzo-console", "acme", "dave@acme.io", true, future))),
 			wantAdmin:    "",
 			wantOrgAdmin: "true",
@@ -343,8 +343,8 @@ func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
 			wantOrg:      "acme",
 		},
 		{
-			// A GLOBAL admin is also an org admin of its own (admin) org — it gets BOTH.
-			name:         "global admin gets both bits",
+			// A SuperAdmin is also an org admin of its own (admin) org — it gets BOTH.
+			name:         "SuperAdmin gets both bits",
 			mutate:       bearer(signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))),
 			wantAdmin:    "true",
 			wantOrgAdmin: "true",
@@ -420,7 +420,7 @@ func TestSanitizeIdentity_StampsUserName(t *testing.T) {
 
 	c := tokenClaims("hanzo-console", "hanzo", "z@hanzo.ai", false, time.Now().Add(time.Hour))
 	c.Subject = "2d4d67ab-30f1-474e-b81f-f60461852259" // the JWT subject: a UUID
-	c.Name = "z"                                        // the IAM username
+	c.Name = "z"                                       // the IAM username
 	tok := signWith(t, key, c)
 
 	var gotName, gotID, gotOrg string
@@ -571,10 +571,10 @@ func TestIdentityValidator(t *testing.T) {
 	})
 }
 
-// TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin locks the exact global-admin
+// TestSuperAdminGate_RequiresAdminOrgAndIsAdmin locks the exact SuperAdmin
 // invariant the cloud admin surfaces (incl. /v1/admin/treasury/*) gate on:
 //
-//	global admin  ⟺  validated principal with (owner == adminOrg) AND isAdmin
+//	SuperAdmin  ⟺  validated principal with (owner == adminOrg) AND isAdmin
 //
 // adminOrg is DEPLOYMENT config (IAM_ADMIN_ORG): the operator pins it to the org
 // its platform operators actually live in. Hanzo pins it to "hanzo" — the org the
@@ -589,9 +589,9 @@ func TestIdentityValidator(t *testing.T) {
 //     the gate is never "owner == adminOrg" alone.
 //   - owner is REQUIRED: an admin of ANY OTHER org gets nothing, so an org-admin of
 //     one org can never reach the global (all-orgs) admin surface — only the
-//     operator org's admins do. This is what keeps global-admin the operator's, and
+//     operator org's admins do. This is what keeps SuperAdmin the operator's, and
 //     what "isAdmin required" keeps from being every operator-org user.
-func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
+func TestSuperAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
@@ -608,19 +608,19 @@ func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 		isAdmin   bool
 		wantAdmin bool
 	}{
-		// An admin IN the configured admin org is the global admin (in prod this is
+		// An admin IN the configured admin org is the SuperAdmin (in prod this is
 		// z@hanzo.ai, owner==the operator org, isAdmin=true).
-		{"admin in the configured admin org is global admin", "admin", "z@hanzo.ai", true, true},
+		{"admin in the configured admin org is SuperAdmin", "admin", "z@hanzo.ai", true, true},
 		// A non-admin in the admin org gets NOTHING: proves isAdmin is REQUIRED, so the
 		// gate is not "owner==adminOrg" alone (a normal operator-org user is not global).
-		{"non-admin in the admin org is not global admin", "admin", "svc@hanzo.ai", false, false},
-		// An ADMIN of a DIFFERENT org is NOT a global admin: proves owner==adminOrg is
+		{"non-admin in the admin org is not SuperAdmin", "admin", "svc@hanzo.ai", false, false},
+		// An ADMIN of a DIFFERENT org is NOT a SuperAdmin: proves owner==adminOrg is
 		// REQUIRED — an org-admin of one org never reaches the all-orgs surface.
-		{"admin of another org is not global admin", "globex", "boss@globex.io", true, false},
+		{"admin of another org is not SuperAdmin", "globex", "boss@globex.io", true, false},
 		// A normal user of another org: not elevated.
-		{"normal user of another org is not global admin", "globex", "joe@globex.io", false, false},
+		{"normal user of another org is not SuperAdmin", "globex", "joe@globex.io", false, false},
 		// A cross-org admin of yet another org: not elevated.
-		{"cross-org admin is not global admin", "acme", "dave@acme.io", true, false},
+		{"cross-org admin is not SuperAdmin", "acme", "dave@acme.io", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -628,7 +628,7 @@ func TestGlobalAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 			tok := signWith(t, key, tokenClaims("hanzo-console", tc.owner, tc.email, tc.isAdmin, future))
 			probe(t, app, bearer(tok))
 			if got.admin != tc.wantAdmin {
-				t.Errorf("global-admin for owner=%q isAdmin=%v: got %v, want %v",
+				t.Errorf("SuperAdmin for owner=%q isAdmin=%v: got %v, want %v",
 					tc.owner, tc.isAdmin, got.admin, tc.wantAdmin)
 			}
 		})

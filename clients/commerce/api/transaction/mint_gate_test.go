@@ -37,7 +37,7 @@ func invokeCreate(org *organization.Organization, ctx context.Context, identity 
 }
 
 // orgAdmin is the C1 adversary: an org OWNER (org-level isAdmin, permissions
-// Admin|Live) who is NOT a platform global admin and NOT the internal service
+// Admin|Live) who is NOT a platform SuperAdmin and NOT the internal service
 // token. This is exactly the principal that must be able to move its own funds
 // (withdraw/transfer) but NOT mint spendable balance.
 func orgAdmin(c *gin.Context) {

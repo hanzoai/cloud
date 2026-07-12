@@ -15,7 +15,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 
 	// mintRequired gates the money-MINT routes (those that credit spendable
 	// balance from a client-supplied amount) on the internal service token OR a
-	// platform global admin ONLY — NEVER the org-level Admin bit. Without it,
+	// platform SuperAdmin ONLY — NEVER the org-level Admin bit. Without it,
 	// TokenRequired(permission.Admin) admitted any org OWNER (org-level IAM
 	// isAdmin → Admin|Live), who could then self-credit unlimited balance →
 	// unlimited free inference (the real-money-GA blocker). cloud-api's
@@ -40,7 +40,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	api.GET("/balance/all", GetBalanceAll)
 	api.GET("/usage", GetUsage)
 	api.POST("/usage", RecordUsage)
-	// Money-MINT routes: service-token / global-admin ONLY (mintRequired).
+	// Money-MINT routes: service-token / SuperAdmin ONLY (mintRequired).
 	api.POST("/deposit", mintRequired, Deposit)
 	api.POST("/refund", mintRequired, Refund)
 
@@ -74,7 +74,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	// Tier check (lightweight model-access gate for Chat / white-label)
 	api.GET("/tier-check", TierCheck)
 
-	// Credit grants (money-MINT: service-token / global-admin ONLY). Reads moved
+	// Credit grants (money-MINT: service-token / SuperAdmin ONLY). Reads moved
 	// to the user group below. Void is a grant mutation in the same resource
 	// family — same platform-only bar, so an org owner can neither create nor
 	// alter a grant.
@@ -84,7 +84,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	// Starter credit grant (service-to-service, idempotent, no payment method
 	// required). The on-signup welcome deposit invoked by chat / cloud-api on
 	// a user's first use, keyed by an explicit per-user (or per-org) subject.
-	// Money-MINT: service-token / global-admin ONLY. (The user-facing,
+	// Money-MINT: service-token / SuperAdmin ONLY. (The user-facing,
 	// fixed-amount, idempotent welcome credit is the SEPARATE user-group
 	// POST /billing/credit → GrantStarterCredit, which stays self-service.)
 	api.POST("/grant-starter", mintRequired, GrantStarter)
@@ -156,13 +156,13 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	api.POST("/disputes/:id/close", CloseDispute)
 
 	// Customer balance (reads stay admin; the adjustment MINTS balance →
-	// service-token / global-admin ONLY).
+	// service-token / SuperAdmin ONLY).
 	api.GET("/customer-balance", GetCustomerBalance)
 	api.POST("/customer-balance/adjustments", mintRequired, AdjustCustomerBalance)
 	api.GET("/balance-transactions", ListBalanceTransactions)
 
 	// Payouts. Creating/cancelling a payout MOVES money out — money-MINT bar
-	// (service-token / global-admin ONLY). Reads stay admin-scoped.
+	// (service-token / SuperAdmin ONLY). Reads stay admin-scoped.
 	api.POST("/payouts", mintRequired, CreatePayout)
 	api.GET("/payouts", ListPayouts)
 	api.GET("/payouts/:id", GetPayout)
@@ -233,7 +233,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 
 	// Billing cycle automation (platform scheduler / service). Collecting a
 	// cycle charges cards across orgs — money-MINT bar (service-token /
-	// global-admin ONLY), never an org owner's Admin bit. run-all sweeps EVERY
+	// SuperAdmin ONLY), never an org owner's Admin bit. run-all sweeps EVERY
 	// org, so it is emphatically platform-only.
 	api.POST("/cycle/run", mintRequired, RunBillingCycle)
 	api.POST("/cycle/run-user", mintRequired, RunBillingCycleUser)
@@ -241,14 +241,14 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 
 	// Auto-recharge sweep (called by the platform scheduler / CronJob): charge
 	// the default card for orgs whose balance dropped below their threshold.
-	// Platform-wide card charging — money-MINT bar (service-token / global-admin
+	// Platform-wide card charging — money-MINT bar (service-token / SuperAdmin
 	// ONLY). An org owner reaching this could sweep-charge saved cards across
 	// every org.
 	api.POST("/auto-recharge/run-all", mintRequired, RunAutoRechargeAllOrgs)
 
 	// Test mode toggle: move an org between Square sandbox and production. This
 	// flips whether charges hit real cards, so it is a money-mode change —
-	// service-token / global-admin ONLY, never an org owner.
+	// service-token / SuperAdmin ONLY, never an org owner.
 	api.POST("/test-mode", mintRequired, SetOrgTestMode)
 
 	// ── User-facing billing endpoints ─────────────────────────────────────

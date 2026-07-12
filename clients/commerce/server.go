@@ -30,7 +30,7 @@ import (
 // hk-/sk- API keys flow straight through (they are not JWTs) and X-Org-Id is
 // NOT in the strip set, so the cloud-api -> commerce per-org billing money path
 // is untouched. Authorization is each route's own job (IAMTokenRequired, the
-// access-token middleware, handler GlobalAdmin checks); EdgeAuth only guarantees
+// access-token middleware, handler SuperAdmin checks); EdgeAuth only guarantees
 // no caller can SPOOF identity at the directly-exposed edge.
 func installEdgeAuth(app *App) {
 	if app == nil || app.Router == nil {

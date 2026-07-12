@@ -48,7 +48,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state]) {
 }
 
 // req drives one HTTP request. org sets a VALIDATED principal; admin adds the
-// global-admin header.
+// SuperAdmin header.
 func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body any) (int, []byte) {
 	t.Helper()
 	var r io.Reader
@@ -229,7 +229,7 @@ func TestAccounts_ScopeIsolation(t *testing.T) {
 	if code, _ := req(t, app, http.MethodGet, "/v1/finance/accounts", "", false, nil); code != http.StatusForbidden {
 		t.Fatalf("unauth accounts = %d, want 403", code)
 	}
-	// Global-admin ?scope=house sees the seeded reserve.
+	// SuperAdmin ?scope=house sees the seeded reserve.
 	_, hb := req(t, app, http.MethodGet, "/v1/finance/accounts?scope=house", "root", true, nil)
 	var house struct {
 		Scope    string        `json:"scope"`

@@ -23,7 +23,7 @@ import (
 // admin.hanzo.ai forward-auth guard is the confidential client `hanzo-admin-guard`,
 // so IAM mints its access tokens with aud=hanzo-admin-guard (each app's aud is its
 // client_id). The guard forwards that bearer to cloud-api /v1/admin/*; the identity
-// sanitizer only grants global-admin (owner==adminOrg) to a VALIDATED principal, and
+// sanitizer only grants SuperAdmin (owner==adminOrg) to a VALIDATED principal, and
 // validation enforces this audience allowlist. If hanzo-admin-guard is not accepted
 // the token resolves anonymous and the SuperAdmin gate reads false -> 403, even
 // though the token's owner IS admin. Pin the client_id into the baked default so the

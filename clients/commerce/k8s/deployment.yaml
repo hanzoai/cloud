@@ -40,7 +40,7 @@ spec:
               value: "true"
             # Edge trust boundary: strip forged X-Org-Id / X-User-* and re-mint
             # from the verified IAM JWT. edgeauth.go is a NO-OP without this, so
-            # an in-cluster pod could forge X-User-IsGlobalAdmin → platform
+            # an in-cluster pod could forge X-User-IsSuperAdmin → platform
             # superadmin (Red CRIT-1). Set here AND in the configmap .env.
             - name: COMMERCE_EDGE_AUTH
               value: "true"
