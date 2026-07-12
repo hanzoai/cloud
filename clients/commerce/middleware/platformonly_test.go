@@ -73,7 +73,7 @@ func TestPlatformOnly_OrgAdminDeniedMint(t *testing.T) {
 func TestPlatformOnly_SuperAdminMints(t *testing.T) {
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "")
 	for _, gc := range []*auth.IAMClaims{
-		{Owner: "hanzo", IsSuperAdmin: true},
+		{HomeOrg: "admin", Owner: "hanzo"},
 		{Owner: "admin"}, // the SuperAdmin org
 	} {
 		status, reached := runMintGate(t, iamIdentity(bit.Field(permission.Admin|permission.Live), gc), nil)
