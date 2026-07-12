@@ -32,7 +32,7 @@ func AuthorizeMint(c *gin.Context) {
 //  1. the internal service (cloud-api → commerce), authenticated by a bearer
 //     equal to COMMERCE_SERVICE_TOKEN — recorded by TokenRequired's service-token
 //     branch as IsServiceToken(c); and
-//  2. a Hanzo PLATFORM SuperAdmin — auth.IAMClaims.SuperAdmin(): the
+//  2. a Hanzo PLATFORM SuperAdmin — auth.IAMClaims.IsSuperAdmin(): the
 //     spoof-proof isSuperAdmin claim (gateway/EdgeAuth X-User-IsSuperAdmin) OR
 //     membership in the "admin" org.
 //
@@ -74,7 +74,7 @@ func PlatformOnly() gin.HandlerFunc {
 // spendable balance". It admits exactly the two principals PlatformOnly admits:
 //
 //  1. the verified internal service token (cloud-api → commerce), IsServiceToken(c); and
-//  2. a Hanzo PLATFORM SuperAdmin, auth.IAMClaims.SuperAdmin() — the
+//  2. a Hanzo PLATFORM SuperAdmin, auth.IAMClaims.IsSuperAdmin() — the
 //     spoof-proof isSuperAdmin claim OR membership in the "admin" org.
 //
 // It deliberately does NOT admit the org-level Admin bit (an org OWNER's IAM
@@ -85,5 +85,5 @@ func PlatformOnly() gin.HandlerFunc {
 // shared by the route gate (PlatformOnly) and every in-handler gate. Fail-closed:
 // neither signal present → false.
 func MayMintMoney(c *gin.Context) bool {
-	return IsServiceToken(c) || iammiddleware.GetIAMClaims(c).SuperAdmin()
+	return IsServiceToken(c) || iammiddleware.GetIAMClaims(c).IsSuperAdmin()
 }
