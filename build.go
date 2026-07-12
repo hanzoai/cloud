@@ -13,8 +13,10 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients"
+	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/gatewaypolicy"
 	"github.com/hanzoai/cloud/clients/s3admin"
+	"github.com/hanzoai/cloud/types"
 )
 
 // BuildDeps constructs the Deps used by every subsystem's Mount(app, deps).
@@ -87,7 +89,7 @@ func BuildDeps(cfg *Config) Deps {
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
 	deps.AI = meteredAIClient(pickAIClient(cfg, logger), deps)
-	wireAIPrepaidGate(cfg, logger)
+	wireFinance(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
@@ -180,32 +182,30 @@ func boolStr(b bool, t, f string) string {
 	return f
 }
 
-// wireAIPrepaidGate routes the embedded ai router's PREPAID balance gate + usage
-// debit to the co-resident commerce handler: the SAME self-routing transport the
-// metering client uses (service-token, in-process, no socket) — so the ai gate
-// reads and debits the ONE commerce ledger the rest of the platform bills, WITHOUT
-// hitting the public customer billing proxy (which 401s a service token). The ai
-// module reads commerceEndpoint/commerceToken from env (conf.GetConfigString); when
-// commerce is co-resident, self-configure them to the in-process placeholder so no
-// CR env is required for the ai gate to work. There is NO exempt path in the ai gate
-// (hanzoai/ai >= v1.805.7): every principal is gated on a positive prepaid balance,
-// fail-closed. MUST run before ai.Mount — InitBalanceGate builds its client once at
-// mount — which BuildDeps guarantees (deps are built before MountAll).
-func wireAIPrepaidGate(cfg *Config, log luxlog.Logger) {
+// wireFinance constructs the ONE in-process finance ledger (per-org SQLite
+// double-entry prepaid wallet), publishes it for every money consumer to resolve by
+// the narrow finance.Client, and installs the embedded ai router's balance-read +
+// usage-debit hooks so the PREPAID gate dispatches DIRECTLY to it — a typed in-proc
+// call, no HTTP, no socket. There is NO exempt path (hanzoai/ai >= v1.805.8): every
+// principal is gated on a positive prepaid balance, fail-closed. MUST run before
+// ai.Mount (the ai gate reads the hook per request; the hook must be installed first)
+// — which BuildDeps guarantees (deps are built before MountAll).
+func wireFinance(cfg *Config, log luxlog.Logger) {
 	if !cfg.Enabled("commerce") {
-		// Split-deploy: the ai module speaks real HTTP to its own commerceEndpoint
-		// (the standalone commerce), unchanged — no in-process transport.
-		return
+		return // money layer not co-resident (split-deploy); ai falls back to HTTP.
 	}
-	aiobject.CommerceTransport = commerceinproc.Transport()
-	if os.Getenv("commerceEndpoint") == "" {
-		_ = os.Setenv("commerceEndpoint", commerceinproc.PlaceholderBase)
-	}
-	if os.Getenv("commerceToken") == "" && cfg.CommerceServiceToken != "" {
-		_ = os.Setenv("commerceToken", cfg.CommerceServiceToken)
-	}
-	log.Info("ai prepaid gate wired to in-process commerce (no exempt, fail-closed)",
-		"commerceEndpoint", os.Getenv("commerceEndpoint"))
+	fin := finance.New(cfg.DataDir)
+	finance.Publish(fin)
+	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
+		return fin.BalanceCents(ctx, namespace, subject, currency, false)
+	})
+	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+		return fin.RecordUsage(ctx, types.UsageInput{
+			Org: u.Namespace, Subject: u.Subject, Cents: u.Cents,
+			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
+		})
+	})
+	log.Info("finance ledger wired (in-process per-org, native, no exempt, fail-closed)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
