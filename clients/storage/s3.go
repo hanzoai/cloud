@@ -181,13 +181,13 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 
 		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
 		project, projectValidated := principal.ValidatedProject(ctx)
-		if err := s.State.bill.Gate(ctx.Context(), org, project, projectValidated, "op", fee); err != nil {
+		if err := s.State.bill.Gate(ctx.Context(), principal.Payer(ctx), project, projectValidated, "op", fee); err != nil {
 			return cloud.DenyResource(ctx, err)
 		}
 		if err := h(ctx); err != nil {
 			return err // handler failed — surface it; do not bill failed work.
 		}
-		s.State.bill.Meter(org, principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
+		s.State.bill.Meter(principal.Payer(ctx), principal.Project(ctx), "op", fee, ctx.RequestID(), cloud.ClientIP(ctx))
 		return nil
 	}
 }

@@ -340,7 +340,7 @@ type publicStoreView struct {
 // the claims type (auth.IAMClaims.SuperAdmin) and shared with the edge
 // billing boundary. nil-safe.
 func isSuperadmin(c *auth.IAMClaims) bool {
-	return c.SuperAdmin()
+	return c.IsSuperAdmin()
 }
 
 // isTenantAdmin returns true for an ORG-level admin — the robust isAdmin claim

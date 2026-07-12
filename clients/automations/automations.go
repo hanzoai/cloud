@@ -671,7 +671,7 @@ func recordRunEnd(s *cloud.Service[state], ctx context.Context, in RunEndInput) 
 
 // meterUnit records one metered unit for an HTTP caller's org. Nil/disabled meter → no-op.
 func meterUnit(s *cloud.Service[state], org string, c *zip.Ctx) {
-	s.Bill.Meter(org, principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Payer(c), principal.Project(c), meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), c.RequestID(), cloud.ClientIP(c))
 }
 
 // meterRun records one metered unit for a flow run from the durable path (no HTTP

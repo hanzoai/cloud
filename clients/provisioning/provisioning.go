@@ -409,7 +409,7 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 		// blocks or corrupts this 201; a debit failure is logged for
 		// reconciliation). Recurring storage footprint reuses s.Bill.Meter with a
 		// GB-month amount once a live-size source exists.
-		s.Bill.Meter(org, principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.Bill.Meter(principal.Payer(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
 
 		// Return the PUBLIC endpoint, never the internal admin host. Remap the
 		// connection string's host:port too so a copy-pasted DSN is routable.
