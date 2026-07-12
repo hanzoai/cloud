@@ -1,6 +1,6 @@
 // Package revenue is the fleet REVENUE aggregate (/v1/admin/revenue) — the operator's
 // money board: total prepaid balances held, total realized spend, MRR, a per-customer
-// revenue table, ARPU, and a real spend trend. Global-admin only (core.Guard).
+// revenue table, ARPU, and a real spend trend. SuperAdmin only (core.Guard).
 //
 // This is ORTHOGONAL to /v1/admin/finance: finance is the COGS/margin god-view (what WE
 // pay vendors); revenue is the CUSTOMER money view (what each customer holds/spends/
@@ -20,7 +20,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Routes registers the fleet revenue board (global-admin only, cross-tenant profitability).
+// Routes registers the fleet revenue board (SuperAdmin only, cross-tenant profitability).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/revenue", core.Guard(s, Revenue))
 }

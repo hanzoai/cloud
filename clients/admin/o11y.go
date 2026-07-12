@@ -28,7 +28,7 @@ package admin
 //   - Logs       → o11y_logs.distributed_logs_v2 : fleet log volume + volume-over-time
 //   - LLM gens   → langfuse.observations      : generations + cost (fleet-wide; honest-empty today)
 //
-// GLOBAL-ADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
+// SUPERADMIN ONLY (the s.guard wrap in admin.go): the gateway strips a client
 // X-Org-Id and re-mints from the JWT owner, and this handler applies NO org filter,
 // so it is the ONE place a fleet operator crosses tenants — a non-admin bearer is
 // refused 403 before a single row is read. Fail-closed.
@@ -145,7 +145,7 @@ type o11yLLM struct {
 }
 
 // o11y answers GET /v1/admin/o11y. ?range=24h|7d|30d bounds the window (default 30d).
-// GLOBAL-ADMIN ONLY (s.guard). Every signal degrades independently: a table that is
+// SUPERADMIN ONLY (s.guard). Every signal degrades independently: a table that is
 // absent or errors contributes its zero-value, never a failure — the fleet board
 // always renders what the datastore actually holds.
 func o11y(s *cloud.Service[core.State], c *zip.Ctx) error {
