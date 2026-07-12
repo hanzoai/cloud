@@ -29,6 +29,10 @@ var errUnconfigured = errors.New("not configured")
 // Routes registers the finance dashboard (global-admin only).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/finance", core.Guard(s, Finance))
+	// Per-provider upstream credit ledger + usage funding split (multi-provider
+	// credit-management). Same SuperAdmin guard, same cloud_usage warehouse.
+	app.Get("/v1/admin/providers/credit", core.Guard(s, ProvidersCredit))
+	app.Get("/v1/admin/usage/funding", core.Guard(s, UsageFunding))
 }
 
 // FinanceData is the full /v1/admin/finance aggregate.
