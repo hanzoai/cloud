@@ -18,7 +18,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// TestWarehouseErrStatus locks the honest-status contract: a ClickHouse
+// TestWarehouseErrStatus locks the honest-status contract: a datastore
 // connectivity failure (the observed `:9000` i/o timeout) degrades to 503
 // "unavailable" — never a raw 502 — while a query the warehouse actively
 // rejected stays a 502 bad-gateway.
@@ -29,7 +29,7 @@ func TestWarehouseErrStatus(t *testing.T) {
 		err  error
 		want int
 	}{
-		{"clickhouse i/o timeout", fmt.Errorf("read tcp 10.0.0.1:9000: i/o timeout"), http.StatusServiceUnavailable},
+		{"datastore i/o timeout", fmt.Errorf("read tcp 10.0.0.1:9000: i/o timeout"), http.StatusServiceUnavailable},
 		{"connection refused", fmt.Errorf("dial tcp 10.0.0.1:9000: connect: connection refused"), http.StatusServiceUnavailable},
 		{"context deadline", context.DeadlineExceeded, http.StatusServiceUnavailable},
 		{"typed net timeout", timeoutErr, http.StatusServiceUnavailable},

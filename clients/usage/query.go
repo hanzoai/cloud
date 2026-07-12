@@ -1,7 +1,7 @@
 // Pure core of the usage summary: the response shape, the ledger→category mapper,
-// the spend roll-up + gap-filled series assembler, and the ClickHouse value
+// the spend roll-up + gap-filled series assembler, and the datastore value
 // coercers. Everything here is I/O-free so the tests drive it with plain structs
-// and mock rows — no commerce, no ClickHouse. The handler (usage.go) is the thin
+// and mock rows — no commerce, no datastore. The handler (usage.go) is the thin
 // orchestration that fetches and calls these.
 package usage
 
@@ -277,9 +277,9 @@ func parseTxnTime(s string) time.Time {
 	return time.Time{}
 }
 
-// ── ClickHouse value coercion ───────────────────────────────────────────────
+// ── datastore value coercion ───────────────────────────────────────────────
 //
-// The direct ClickHouse driver decodes count()/sum(UInt*) to uint64; the JSON
+// The direct datastore driver decodes count()/sum(UInt*) to uint64; the JSON
 // transport fallback decodes to float64/json.Number/string. aInt64 accepts all so
 // a transport change can never crash a read.
 

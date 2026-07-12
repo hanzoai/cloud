@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	datastore "github.com/hanzoai/datastore-go/v2"
-	"github.com/hanzoai/datastore-go/v2/lib/driver"
+	datastore "github.com/hanzo-ds/go"
+	"github.com/hanzo-ds/go/lib/driver"
 )
 
 // NewDatastore creates a new Hanzo Datastore connection
-// This connects to ClickHouse via hanzo/datastore-go for deep analytics
+// This connects to datastore via hanzo/datastore-go for deep analytics
 func NewDatastore(cfg *Config) (Datastore, error) {
 	if cfg.DatastoreDSN == "" {
 		return nil, errors.New("db: DatastoreDSN is required for Hanzo Datastore")
@@ -65,22 +65,22 @@ func NewDatastore(cfg *Config) (Datastore, error) {
 		return nil, fmt.Errorf("db: failed to ping datastore: %w", err)
 	}
 
-	return &clickhouseDatastore{
+	return &datastoreConn{
 		dsn:    cfg.DatastoreDSN,
 		config: cfg.Datastore,
 		conn:   conn,
 	}, nil
 }
 
-// clickhouseDatastore implements Datastore using ClickHouse via hanzo/datastore-go
-type clickhouseDatastore struct {
+// datastoreConn implements Datastore using datastore via hanzo/datastore-go
+type datastoreConn struct {
 	dsn    string
 	config DatastoreConfig
 	conn   driver.Conn
 }
 
 // Query executes a datastore query
-func (c *clickhouseDatastore) Query(ctx context.Context, query string, args ...interface{}) (DatastoreRows, error) {
+func (c *datastoreConn) Query(ctx context.Context, query string, args ...interface{}) (DatastoreRows, error) {
 	// Apply query timeout if configured
 	if c.config.QueryTimeout > 0 {
 		var cancel context.CancelFunc
@@ -99,11 +99,11 @@ func (c *clickhouseDatastore) Query(ctx context.Context, query string, args ...i
 		return nil, fmt.Errorf("datastore query failed: %w", err)
 	}
 
-	return &clickhouseRows{rows: rows}, nil
+	return &datastoreRows{rows: rows}, nil
 }
 
 // Select scans results into a destination slice
-func (c *clickhouseDatastore) Select(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (c *datastoreConn) Select(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
 	// Apply query timeout if configured
 	if c.config.QueryTimeout > 0 {
 		var cancel context.CancelFunc
@@ -125,7 +125,7 @@ func (c *clickhouseDatastore) Select(ctx context.Context, dest interface{}, quer
 }
 
 // Exec executes a non-query statement
-func (c *clickhouseDatastore) Exec(ctx context.Context, query string, args ...interface{}) error {
+func (c *datastoreConn) Exec(ctx context.Context, query string, args ...interface{}) error {
 	// Apply query timeout if configured
 	if c.config.QueryTimeout > 0 {
 		var cancel context.CancelFunc
@@ -147,17 +147,17 @@ func (c *clickhouseDatastore) Exec(ctx context.Context, query string, args ...in
 }
 
 // PrepareBatch prepares a batch insert
-func (c *clickhouseDatastore) PrepareBatch(ctx context.Context, query string) (DatastoreBatch, error) {
+func (c *datastoreConn) PrepareBatch(ctx context.Context, query string) (DatastoreBatch, error) {
 	batch, err := c.conn.PrepareBatch(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("datastore prepare batch failed: %w", err)
 	}
 
-	return &clickhouseBatch{batch: batch}, nil
+	return &datastoreBatch{batch: batch}, nil
 }
 
 // AsyncInsert performs an async insert (fire-and-forget style)
-func (c *clickhouseDatastore) AsyncInsert(ctx context.Context, query string, wait bool, args ...interface{}) error {
+func (c *datastoreConn) AsyncInsert(ctx context.Context, query string, wait bool, args ...interface{}) error {
 	// Convert []interface{} to []any for datastore-go
 	anyArgs := make([]any, len(args))
 	for i, arg := range args {
@@ -172,23 +172,23 @@ func (c *clickhouseDatastore) AsyncInsert(ctx context.Context, query string, wai
 }
 
 // Close closes the datastore connection
-func (c *clickhouseDatastore) Close() error {
+func (c *datastoreConn) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()
 	}
 	return nil
 }
 
-// clickhouseRows wraps driver.Rows to implement DatastoreRows
-type clickhouseRows struct {
+// datastoreRows wraps driver.Rows to implement DatastoreRows
+type datastoreRows struct {
 	rows driver.Rows
 }
 
-func (r *clickhouseRows) Next() bool {
+func (r *datastoreRows) Next() bool {
 	return r.rows.Next()
 }
 
-func (r *clickhouseRows) Scan(dest ...interface{}) error {
+func (r *datastoreRows) Scan(dest ...interface{}) error {
 	// Convert []interface{} to []any for datastore-go
 	anyDest := make([]any, len(dest))
 	for i, d := range dest {
@@ -197,28 +197,28 @@ func (r *clickhouseRows) Scan(dest ...interface{}) error {
 	return r.rows.Scan(anyDest...)
 }
 
-func (r *clickhouseRows) ScanStruct(dest interface{}) error {
+func (r *datastoreRows) ScanStruct(dest interface{}) error {
 	return r.rows.ScanStruct(dest)
 }
 
-func (r *clickhouseRows) Columns() []string {
+func (r *datastoreRows) Columns() []string {
 	return r.rows.Columns()
 }
 
-func (r *clickhouseRows) Close() error {
+func (r *datastoreRows) Close() error {
 	return r.rows.Close()
 }
 
-func (r *clickhouseRows) Err() error {
+func (r *datastoreRows) Err() error {
 	return r.rows.Err()
 }
 
-// clickhouseBatch wraps driver.Batch to implement DatastoreBatch
-type clickhouseBatch struct {
+// datastoreBatch wraps driver.Batch to implement DatastoreBatch
+type datastoreBatch struct {
 	batch driver.Batch
 }
 
-func (b *clickhouseBatch) Append(v ...interface{}) error {
+func (b *datastoreBatch) Append(v ...interface{}) error {
 	// Convert []interface{} to []any for datastore-go
 	anyV := make([]any, len(v))
 	for i, val := range v {
@@ -227,27 +227,27 @@ func (b *clickhouseBatch) Append(v ...interface{}) error {
 	return b.batch.Append(anyV...)
 }
 
-func (b *clickhouseBatch) AppendStruct(v interface{}) error {
+func (b *datastoreBatch) AppendStruct(v interface{}) error {
 	return b.batch.AppendStruct(v)
 }
 
-func (b *clickhouseBatch) Flush() error {
+func (b *datastoreBatch) Flush() error {
 	return b.batch.Flush()
 }
 
-func (b *clickhouseBatch) Send() error {
+func (b *datastoreBatch) Send() error {
 	return b.batch.Send()
 }
 
-func (b *clickhouseBatch) Abort() error {
+func (b *datastoreBatch) Abort() error {
 	return b.batch.Abort()
 }
 
-func (b *clickhouseBatch) Rows() int {
+func (b *datastoreBatch) Rows() int {
 	return b.batch.Rows()
 }
 
-func (b *clickhouseBatch) Close() error {
+func (b *datastoreBatch) Close() error {
 	return b.batch.Close()
 }
 
@@ -313,7 +313,7 @@ type SyncConfig struct {
 	// Kinds specifies which entity kinds to sync (empty = all)
 	Kinds []string
 
-	// AsyncInsert uses ClickHouse async insert for fire-and-forget
+	// AsyncInsert uses datastore async insert for fire-and-forget
 	AsyncInsert bool
 }
 

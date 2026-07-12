@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// ── pure assemblers (no ClickHouse) ───────────────────────────────────────────
+// ── pure assemblers (no datastore) ───────────────────────────────────────────
 
 func TestAssembleTotals(t *testing.T) {
 	tot := assembleTotals(map[string]any{
