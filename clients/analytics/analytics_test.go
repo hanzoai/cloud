@@ -65,7 +65,7 @@ func TestEventsWhereBindsOrgPositionally(t *testing.T) {
 // (maxpower's live shape ≈ 21 req / 3.2K tokens / $1.20 / 3 models). Proves the
 // KPIs and the errorRate math are exact.
 func TestBuildLLMOverviewRealNumbers(t *testing.T) {
-	// Mimics the direct ClickHouse driver's native scan types (uint64 aggregates).
+	// Mimics the direct datastore driver's native scan types (uint64 aggregates).
 	row := map[string]any{
 		"requests":          uint64(21),
 		"tokens":            uint64(3200),
@@ -126,7 +126,7 @@ func TestOrgAOverviewDiffersFromOrgB(t *testing.T) {
 	}
 }
 
-// TestBuildSeriesGapFill: sparse ClickHouse buckets become an evenly-spaced,
+// TestBuildSeriesGapFill: sparse datastore buckets become an evenly-spaced,
 // gap-filled series across the window (zeros where no data, real where present).
 func TestBuildSeriesGapFill(t *testing.T) {
 	start := time.Date(2026, 6, 28, 0, 0, 0, 0, time.UTC)

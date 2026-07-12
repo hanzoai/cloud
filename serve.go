@@ -335,7 +335,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	_ = healthSrv.Shutdown(shutdownCtx)
 	// Flush the tracer provider FIRST — before app.ShutdownWithContext runs the o11y
 	// trace sink's teardown hook (a subsystem) — so the batch processor's buffered
-	// spans drain through the still-mounted in-process sink to ClickHouse rather than
+	// spans drain through the still-mounted in-process sink to datastore rather than
 	// hitting ErrNoRoute.
 	telemetryShutdown(shutdownCtx)
 	// Close the audit store so any in-flight append has drained through the

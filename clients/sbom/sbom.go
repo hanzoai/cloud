@@ -24,8 +24,8 @@
 // fleet), and resolve exposes only the immutable bill-of-materials of an image, no
 // tenant data. This is why there is no org predicate here.
 //
-// ONE ClickHouse client. Like clients/analytics, this package rides the SAME
-// clickhouse-go client the ai subsystem opens in the shared Bootstrap
+// ONE datastore client. Like clients/analytics, this package rides the SAME
+// datastore-go client the ai subsystem opens in the shared Bootstrap
 // (ai/object.DatastoreExec/DatastoreQuery). It never opens a second connection.
 //
 // Surface (/v1 only):
@@ -79,7 +79,7 @@ const createTable = `CREATE TABLE IF NOT EXISTS hanzo.sbom_component (
 ORDER BY (image_digest, component_name, component_version, purl)`
 
 // state is sbom's own data: none — the global store rides the SAME shared
-// ClickHouse client the ai subsystem opens. Shared deps live in cloud.Base.
+// datastore client the ai subsystem opens. Shared deps live in cloud.Base.
 type state struct{}
 
 // Mount wires the SBOM surface onto app and bootstraps the global table.
@@ -115,11 +115,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/sbom/*", cloud.Handle(s, resolve))
 }
 
-// requireDatastore returns the honest 503 when the ClickHouse store is not
+// requireDatastore returns the honest 503 when the datastore store is not
 // connected, rather than fabricating a result. Mirrors the analytics lens.
 func requireDatastore() error {
 	if !aiobject.DatastoreEnabled() {
-		return zip.Errorf(http.StatusServiceUnavailable, "sbom store unavailable: datastore (ClickHouse) not connected")
+		return zip.Errorf(http.StatusServiceUnavailable, "sbom store unavailable: datastore (datastore) not connected")
 	}
 	return nil
 }
@@ -329,7 +329,7 @@ func Prefetch(ctx context.Context, log luxlog.Logger, ref string) {
 // ── GET /v1/sbom/health — liveness ───────────────────────────────────────────
 
 // health is a pure liveness probe: the service is up; datastore reflects whether
-// the ClickHouse store is connected. Not JWT-gated, always 200 (a disconnected
+// the datastore store is connected. Not JWT-gated, always 200 (a disconnected
 // datastore is degraded-but-alive; the data endpoints report that as 503).
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{

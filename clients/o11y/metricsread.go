@@ -17,7 +17,7 @@ import (
 // not VictoriaMetrics infra metrics (those carry no org label). Usage comes from the
 // hanzo.cloud_usage ledger (organization=<org>).
 //
-// TENANT ISOLATION: org is the validated tenant, bound as a positional ClickHouse
+// TENANT ISOLATION: org is the validated tenant, bound as a positional datastore
 // parameter (never interpolated), the FIRST predicate on every query. A tenant can
 // only ever aggregate its own spans/usage. The client picks a PRODUCT (validated +
 // allowlisted via resolveService) and a bounded RANGE — never the query. A validated

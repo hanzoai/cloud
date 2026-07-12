@@ -5,7 +5,6 @@ go 1.26.4
 // Dependencies will be added as subsystems are mounted per HIP-0106.
 
 require (
-	github.com/ClickHouse/clickhouse-go/v2 v2.44.0
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
 	github.com/coder/websocket v1.8.14
 	github.com/digitalocean/godo v1.197.0
@@ -68,6 +67,8 @@ require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/hanzo-ds/mock v0.14.2 // indirect
+	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 )
 
@@ -103,7 +104,6 @@ require (
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
-	github.com/hanzoai/clickhouse-go-mock v0.14.1 // indirect
 	github.com/hanzoai/govaluate v0.1.0 // indirect
 	github.com/hanzoai/ha v0.1.1
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -248,7 +248,6 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/ALTree/bigfloat v0.2.0 // indirect
-	github.com/AfterShip/clickhouse-sql-parser v0.4.16 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.3 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 // indirect
@@ -257,7 +256,6 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.15.0 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.7.0 // indirect
-	github.com/ClickHouse/ch-go v0.71.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
@@ -497,7 +495,6 @@ require (
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
-	github.com/hanzoai/datastore-go/v2 v2.45.0
 	github.com/hanzoai/dbx v1.16.0 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v0.0.0-20180920213706-626992b83568
@@ -654,7 +651,7 @@ require (
 	github.com/pdfcpu/pdfcpu v0.11.0
 	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/petar-dambovaliev/aho-corasick v0.0.0-20240411101913-e07a1f0e8eb4 // indirect
-	github.com/pierrec/lz4/v4 v4.1.26 // indirect
+	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -827,12 +824,14 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzoai/ai v1.805.7
+	github.com/hanzo-ds/go v1.0.0
+	github.com/hanzo-ds/native v0.72.0
+	github.com/hanzoai/ai v1.805.9
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.3
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.13
+	github.com/hanzoai/o11y v1.5.15
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
@@ -877,3 +876,7 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
+
+replace github.com/hanzoai/otel-collector => github.com/hanzoai/otel-collector v0.144.8-hanzo.0
+
+replace github.com/SigNoz/signoz-otel-collector => github.com/hanzoai/signoz-otel-collector v0.144.3-hanzo.1

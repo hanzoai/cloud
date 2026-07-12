@@ -4,12 +4,12 @@
 // you may not use this file except in compliance with the License.
 
 // In-process trace sink — cloud's OWN spans (service + ai GenAI/LLM-obs, the
-// highest-value insights data) reach the embedded o11y ClickHouse trace store
+// highest-value insights data) reach the embedded o11y datastore trace store
 // WITHOUT a socket, via the ZAP locality-adaptive Router.
 //
 // The wire path (cmd/cloud/telemetry.go) used to ship every one of cloud's own
 // spans over ZAP to a REMOTE collector. But cloud already embeds the o11y write
-// side (ingest.go's chtraces exporter) against the SAME ClickHouse. So when the
+// side (ingest.go's dstraces exporter) against the SAME datastore. So when the
 // sender and the sink live in ONE binary, the wire is pure waste: the spans
 // should be handed to the sink in-process.
 //
@@ -18,11 +18,11 @@
 // tracer provider Sends there. When this sink is mounted, the Router delivers the
 // LIVE span batch to the handler (zero ZAP-wire serialize, zero socket, no second
 // collector hop) and the handler writes it to o11y_traces through the REAL
-// chtraces exporter — the one writer that produces the o11y_index_v3 schema the
+// dstraces exporter — the one writer that produces the o11y_index_v3 schema the
 // embedded query plane reads. When the sink is NOT mounted (standalone aid, embed
 // off), Router.Send returns ErrNoRoute and the producer falls back to the wire.
 //
-// The chtraces pdata->ClickHouse conversion (resource fingerprinting, tag
+// The dstraces pdata->datastore conversion (resource fingerprinting, tag
 // attributes, materialized columns) lives unexported inside the exporter, so the
 // sink reuses the exporter as a consumer.Traces rather than duplicating ~90 lines
 // of schema-coupled conversion. The only cost paid on the in-process hop is one
@@ -35,7 +35,7 @@
 //   - Fail-soft: any construction error logs and returns nil, leaving cloud's
 //     spans on the existing wire path — activating this can never take cloud down.
 //   - Shutdown deregisters the handler (Router falls back to wire) then flushes
-//     the exporter's sending queue to ClickHouse before exit.
+//     the exporter's sending queue to datastore before exit.
 package o11y
 
 import (
@@ -45,7 +45,7 @@ import (
 	"os"
 	"strings"
 
-	chtraces "github.com/hanzoai/otel-collector/exporter/clickhousetracesexporter"
+	dstraces "github.com/hanzoai/otel-collector/exporter/datastoretracesexporter"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/exporter"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -80,7 +80,7 @@ var Router = func() *zap.Router {
 	return r
 }()
 
-// traceExporter pins the chtraces exporter for the process life so shutdown can
+// traceExporter pins the dstraces exporter for the process life so shutdown can
 // flush it, mirroring embeddedIngest.
 var traceExporter exporter.Traces
 
@@ -98,7 +98,7 @@ func TraceInprocEnabled() bool {
 	}
 }
 
-// mountTraceSink builds the chtraces exporter and registers the in-process handler.
+// mountTraceSink builds the dstraces exporter and registers the in-process handler.
 // Called by mountO11y (o11y.go). It registers an in-process ZAP handler (no
 // /v1/o11y/* Fiber route), so it is order-independent. Fail-soft at every branch: a
 // disabled flag, a missing DSN, or a construction error all return nil, leaving
@@ -124,7 +124,7 @@ func mountTraceSink(deps cloud.Deps) error {
 	traceExporter = exp
 
 	// Register the Cost-0 handler: it receives the LIVE proto span batch (no ZAP
-	// wire encode, no socket) and writes it to o11y_traces via the real chtraces
+	// wire encode, no socket) and writes it to o11y_traces via the real dstraces
 	// exporter. The only serialization is an in-memory OTLP proto round-trip to
 	// bridge SDK-exporter proto spans -> collector pdata.
 	traceInproc.Register(TraceDest, func(ctx context.Context, _ zap.Destination, p zap.Payload) (zap.Payload, error) {
@@ -144,7 +144,7 @@ func mountTraceSink(deps cloud.Deps) error {
 }
 
 // shutdownTraceSink deregisters the handler (so a late Send falls back to the
-// wire) then flushes the exporter's sending queue to ClickHouse. Nil-safe.
+// wire) then flushes the exporter's sending queue to datastore. Nil-safe.
 func shutdownTraceSink(ctx context.Context) error {
 	traceInproc.Register(TraceDest, nil)
 	if traceExporter != nil {
@@ -153,13 +153,13 @@ func shutdownTraceSink(ctx context.Context) error {
 	return nil
 }
 
-// buildTraceExporter constructs the chtraces exporter as a consumer.Traces over
+// buildTraceExporter constructs the dstraces exporter as a consumer.Traces over
 // the datastore DSN and Starts it (idempotent schema ensure + sending-queue
 // consumers). Same exporter, same DSN target the ingest collector already runs in
 // prod — so Start against the live datastore carries no new risk.
 func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error) {
-	f := chtraces.NewFactory()
-	cfg := f.CreateDefaultConfig().(*chtraces.Config)
+	f := dstraces.NewFactory()
+	cfg := f.CreateDefaultConfig().(*dstraces.Config)
 	cfg.Datasource = dsn
 
 	logger, err := uberzap.NewProduction()
@@ -182,20 +182,20 @@ func buildTraceExporter(ctx context.Context, dsn string) (exporter.Traces, error
 	}
 	exp, err := f.CreateTraces(ctx, set, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("create chtraces exporter: %w", err)
+		return nil, fmt.Errorf("create dstraces exporter: %w", err)
 	}
-	// CreateTraces already opened the ClickHouse conn + spawned the writer's
+	// CreateTraces already opened the datastore conn + spawned the writer's
 	// background goroutine; a failed Start must release them, not leak on the
 	// fail-soft path (Shutdown is safe to call after a failed Start).
 	if err := exp.Start(ctx, nopHost{}); err != nil {
 		_ = exp.Shutdown(ctx)
-		return nil, fmt.Errorf("start chtraces exporter: %w", err)
+		return nil, fmt.Errorf("start dstraces exporter: %w", err)
 	}
 	return exp, nil
 }
 
 // protoToTraces bridges SDK-exporter OTLP proto spans (what otlptrace.Client hands
-// UploadTraces) to collector pdata (what the chtraces exporter consumes). The two
+// UploadTraces) to collector pdata (what the dstraces exporter consumes). The two
 // use distinct generated proto packages but the SAME OTLP wire format
 // (resource_spans = field 1), so a marshal+unmarshal is the one public, stable
 // bridge — an in-memory round-trip, never a socket.
@@ -215,7 +215,7 @@ func (nopHost) GetExtensions() map[component.ID]component.Component { return nil
 
 // NewTraceExporter builds the OTel span exporter cloud installs on its ONE tracer
 // provider. It is an otlptrace.Exporter whose Client routes every batch through
-// the Router: in-process to the embedded ClickHouse sink when mounted (Cost 0 —
+// the Router: in-process to the embedded datastore sink when mounted (Cost 0 —
 // the native proto batch is delivered by value, never serialized to a socket),
 // else falling back to the wire client. otlptrace owns the (public) SDK-span ->
 // OTLP-proto conversion; this owns only WHERE the proto batch goes. wire may be

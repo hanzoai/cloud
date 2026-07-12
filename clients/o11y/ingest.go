@@ -6,23 +6,23 @@
 // OTLP telemetry INGEST — the in-process OpenTelemetry Collector that folds the
 // standalone otel-collector Deployment into the unified cloud binary.
 //
-// cloud already embeds the o11y QUERY runtime (embed.go) over the ClickHouse
+// cloud already embeds the o11y QUERY runtime (embed.go) over the datastore
 // datastore. This file adds the WRITE side: a real OpenTelemetry Collector,
 // constructed IN-PROCESS, that accepts OTLP (gRPC :4317, HTTP :4318) and writes
-// spans + logs into the SAME ClickHouse the embedded query runtime reads
+// spans + logs into the SAME datastore the embedded query runtime reads
 // (o11y_traces / o11y_logs on the `insights` cluster). Consumers — cloud
 // itself, console-worker, and third-party OTel SDKs — point at cloud instead of
 // the standalone otel-collector Service, so the standalone Deployment can retire.
 //
 // Pipeline — trimmed from the standalone collector to the components that both
 // (a) the live consumers exercise and (b) compile against cloud's UPSTREAM
-// ClickHouse driver (clickhouse-go v2.44.0 / ch-go v0.71.0):
+// datastore driver (datastore-go v2.44.0 / ch-go v0.71.0):
 //
 //	receivers:  otlp (grpc + http)
 //	processors: memory_limiter -> resource(service.namespace=hanzo, deployment.environment) -> batch
-//	exporters:  clickhousetraces (traces), clickhouselogsexporter (logs)
+//	exporters:  datastoretraces (traces), datastorelogsexporter (logs)
 //
-// DEFERRED — the METRICS pipeline (signozclickhousemetrics + the o11yspanmetrics
+// DEFERRED — the METRICS pipeline (signozdatastoremetrics + the o11yspanmetrics
 // connector) is intentionally NOT embedded here. That exporter references
 // SigNoz's dd-sketch fork of ch-go (chproto.DD/Store/IndexMapping), which does
 // NOT compile against cloud's upstream ch-go — the two driver lines cannot coexist
@@ -61,8 +61,8 @@ import (
 
 	resourceprocessor "github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor"
 
-	chlogs "github.com/hanzoai/otel-collector/exporter/clickhouselogsexporter"
-	chtraces "github.com/hanzoai/otel-collector/exporter/clickhousetracesexporter"
+	dslogs "github.com/hanzoai/otel-collector/exporter/datastorelogsexporter"
+	dstraces "github.com/hanzoai/otel-collector/exporter/datastoretracesexporter"
 
 	"github.com/hanzoai/cloud"
 )
@@ -76,7 +76,7 @@ const dsnEnvVar = "CLOUD_OTLP_INGEST_DSN"
 
 // defaultEnvironment mirrors the standalone collector's resource attribute
 // (deployment.environment=production) so spans written by the embed land under
-// the same o11y filter as the data already in ClickHouse. Overridable.
+// the same o11y filter as the data already in datastore. Overridable.
 const defaultEnvironment = "production"
 
 // embeddedIngest holds the in-process ingest collector so shutdownIngest can
@@ -120,19 +120,19 @@ func mountIngest(deps cloud.Deps) error {
 
 	// Run blocks until Shutdown() (called by shutdownIngest) or a fatal component
 	// error. Cloud owns its own HTTP listeners; the collector owns only the OTLP
-	// receiver sockets and the ClickHouse exporter connections.
+	// receiver sockets and the datastore exporter connections.
 	go func() {
 		if runErr := col.Run(context.Background()); runErr != nil {
 			log.Error("OTLP ingest collector exited", "err", runErr)
 		}
 	}()
 	embeddedIngest = col
-	log.Info("OTLP ingest collector running", "otlp_grpc", ":4317", "otlp_http", ":4318", "sink", "ClickHouse traces+logs")
+	log.Info("OTLP ingest collector running", "otlp_grpc", ":4317", "otlp_http", ":4318", "sink", "datastore traces+logs")
 	return nil
 }
 
 // shutdownIngest gracefully stops the collector so the batch processor flushes
-// buffered spans/logs to ClickHouse before exit. Idempotent and nil-safe.
+// buffered spans/logs to datastore before exit. Idempotent and nil-safe.
 func shutdownIngest(_ context.Context) error {
 	if embeddedIngest != nil {
 		embeddedIngest.Shutdown()
@@ -143,7 +143,7 @@ func shutdownIngest(_ context.Context) error {
 // buildIngestCollector assembles the trimmed factory set, renders the pipeline
 // config to the data volume (secret-free — DSN via ${env:}), and constructs the
 // collector. Pure enough to unit-test via DryRun without binding sockets or
-// touching ClickHouse.
+// touching datastore.
 func buildIngestCollector(deps cloud.Deps, dsn string) (*otelcol.Collector, error) {
 	factories, err := ingestFactories()
 	if err != nil {
@@ -194,8 +194,8 @@ func ingestFactories() (otelcol.Factories, error) {
 		return otelcol.Factories{}, err
 	}
 	exporters, err := otelcol.MakeFactoryMap([]exporter.Factory{
-		chtraces.NewFactory(),
-		chlogs.NewFactory(),
+		dstraces.NewFactory(),
+		dslogs.NewFactory(),
 	}...)
 	if err != nil {
 		return otelcol.Factories{}, err
@@ -250,9 +250,9 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 		"    send_batch_size: 2048\n" +
 		"    send_batch_max_size: 4096\n" +
 		"exporters:\n" +
-		"  clickhousetraces:\n" +
+		"  datastoretraces:\n" +
 		"    datasource: ${env:" + dsnEnvVar + "}\n" +
-		"  clickhouselogsexporter:\n" +
+		"  datastorelogsexporter:\n" +
 		"    dsn: ${env:" + dsnEnvVar + "}\n" +
 		"service:\n" +
 		"  telemetry:\n" +
@@ -264,11 +264,11 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 		"    traces:\n" +
 		"      receivers: [otlp]\n" +
 		"      processors: [memory_limiter, resource, batch]\n" +
-		"      exporters: [clickhousetraces]\n" +
+		"      exporters: [datastoretraces]\n" +
 		"    logs:\n" +
 		"      receivers: [otlp]\n" +
 		"      processors: [memory_limiter, resource, batch]\n" +
-		"      exporters: [clickhouselogsexporter]\n"
+		"      exporters: [datastorelogsexporter]\n"
 
 	path := filepath.Join(dataDir, "otlp-ingest.yaml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
@@ -281,7 +281,7 @@ func writeIngestConfig(deps cloud.Deps) (string, error) {
 func buildInfo() component.BuildInfo {
 	return component.BuildInfo{
 		Command:     "hanzo-cloud-otlp-ingest",
-		Description: "Hanzo Cloud embedded OTLP ingest (traces+logs -> ClickHouse)",
+		Description: "Hanzo Cloud embedded OTLP ingest (traces+logs -> datastore)",
 		Version:     "embedded",
 	}
 }

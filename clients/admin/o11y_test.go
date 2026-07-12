@@ -95,7 +95,7 @@ func TestO11yTop_LimitAndOrder(t *testing.T) {
 	}
 }
 
-// TestFillUsageTotals reads the ClickHouse row into the KPI band across the
+// TestFillUsageTotals reads the datastore row into the KPI band across the
 // numeric variants the driver returns (uint64/int64/float64), honest zeros on
 // an empty row.
 func TestFillUsageTotals(t *testing.T) {
@@ -134,7 +134,7 @@ func TestFillTraceTotals(t *testing.T) {
 	}
 }
 
-// TestTopParsers map ClickHouse rows into the leaderboard view-models and preserve
+// TestTopParsers map datastore rows into the leaderboard view-models and preserve
 // order (the SQL already ORDER BYs; the parser must not reorder or drop rows).
 func TestTopParsers(t *testing.T) {
 	orgs := topOrgsFromRows([]map[string]any{

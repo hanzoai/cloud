@@ -385,7 +385,7 @@ func (o Organization) Namespace() string {
 // When called with a gin.Context, we always detach from the HTTP request
 // lifecycle and use context.Background() for the database context. This
 // prevents "context canceled" errors when the browser disconnects or the
-// upstream proxy timeout fires before the ClickHouse query completes.
+// upstream proxy timeout fires before the datastore query completes.
 func (o Organization) Namespaced(ctx context.Context) context.Context {
 	if c, ok := ctx.(*gin.Context); ok {
 		// HTTP boundary: mark every inbound-request datastore context mint-gated

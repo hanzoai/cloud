@@ -18,12 +18,12 @@ import (
 	o11yapp "github.com/hanzoai/o11y/pkg/query-service/app"
 )
 
-// embeddedDSN is the enable signal AND the ClickHouse (Hanzo Datastore) target for
+// embeddedDSN is the enable signal AND the datastore (Hanzo Datastore) target for
 // the in-process runtime. It reads the SAME operator knob the standalone o11y pod
 // sets — the flat, canonical O11Y_DATASTORE_DSN (which o11y config maps onto
 // telemetrystore.datastore.dsn and gives precedence) — falling back to the
 // structured O11Y_TELEMETRYSTORE_DATASTORE_DSN. Set (prod CR) ⇒ construct the
-// runtime in-process; empty (local dev / tests, no ClickHouse) ⇒ buildEmbeddedHandler
+// runtime in-process; empty (local dev / tests, no datastore) ⇒ buildEmbeddedHandler
 // no-ops and /v1/o11y/* uses the reverse-proxy fallback. ONE knob, no separate flag.
 func embeddedDSN() string {
 	return firstNonEmpty(os.Getenv("O11Y_DATASTORE_DSN"), os.Getenv("O11Y_TELEMETRYSTORE_DATASTORE_DSN"))
@@ -32,7 +32,7 @@ func embeddedDSN() string {
 // embeddedRuntime / embeddedServer pin the ONE in-process o11y runtime for the
 // life of the process (a package ref the GC won't collect), mirroring cloud's
 // embeddedTasks. It is the SAME runtime the standalone o11y cmd/community builds —
-// telemetry stores (ClickHouse/datastore), sqlstore, querier, rule manager,
+// telemetry stores (datastore/datastore), sqlstore, querier, rule manager,
 // dashboards, alerts — served through cloud's HTTP stack instead of a second
 // Deployment.
 var (
@@ -53,9 +53,9 @@ var (
 // than round-tripping back out to an external IAM Casbin enforcer (iamauthz) the
 // one-binary carries no credentials for — same enforced policy, tuples in-process
 // (o11y/pkg/authz/localauthz). Gateway-header traffic authenticates (200), NOT the
-// native-JWT 401 of the retired v1.3.x line. The telemetry backend (ClickHouse `datastore`
+// native-JWT 401 of the retired v1.3.x line. The telemetry backend (datastore `datastore`
 // StatefulSet, cluster `insights`) is untouched: the embedded runtime connects to
-// it over ClickHouse-native :9000; only the query/dashboards/alerts control plane
+// it over datastore-native :9000; only the query/dashboards/alerts control plane
 // moves in-process.
 //
 // Returns (nil, nil) when the embed is disabled (no DSN) so the caller keeps the
@@ -89,7 +89,7 @@ func buildEmbeddedHandler(deps cloud.Deps) (http.Handler, error) {
 
 	// community.NewConfig + community.NewServer are the ONE construction shared with
 	// the standalone binary — config from env (env:, applying the O11Y_DATASTORE_DSN
-	// alias), the o11y provider set (iamidentn identity, iamauthz authz, ClickHouse
+	// alias), the o11y provider set (iamidentn identity, iamauthz authz, datastore
 	// telemetrystore, sqlite sqlstore), and the app server. One bootstrap, one way.
 	cfg, err := community.NewConfig(ctx, slog.Default(), nil)
 	if err != nil {
