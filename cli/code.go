@@ -41,11 +41,36 @@ const defaultCodeModel = "best"
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
 
+// anthropicWire builds the env that points Claude Code at the Hanzo cloud AND
+// pins every model slot to a zen5 alias so CC never routes to a raw claude-*
+// model. api.hanzo.ai does not serve the Anthropic model ids CC defaults to
+// (claude-haiku-*, claude-opus-*, …) — a request for one 403s, which kills the
+// permission classifier ("auto mode cannot determine safety"), every
+// subagent, and /compact. The zen5 ladder is the Hanzo-standard mapping of
+// those tiers onto top OSS models resold via DigitalOcean GenAI:
+//
+//	main / OPUS-tier → <model> (the resolved id, default `best` → zen5/glm-5.2)
+//	SONNET-tier      → zen5      (GLM-5.2, the default frontier model)
+//	HAIKU-tier       → zen5-flash (DeepSeek-4 Flash — the fast/cheap tier)
+//	FABLE-tier       → zen5-pro  (DeepSeek-V4 Pro — the heavy tier)
+//	small/fast       → zen5-flash (the permission classifier + quick tasks)
+//
+// `best` is the virtual auto-routing model: it picks the best-available coding
+// model by quality and cascades on rate-limit/down — so `hanzo code claude`
+// with no model arg runs on the fleet's best model with no claude-* ever dialed.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
 		"ANTHROPIC_AUTH_TOKEN": token,
 		"ANTHROPIC_MODEL":      model,
+		// Pin every CC tier slot to a served zen5 alias. Without these, CC
+		// falls back to its built-in claude-* ids and 403s on every non-main
+		// call (subagents, the classifier, compaction).
+		"ANTHROPIC_SMALL_FAST_MODEL":       "zen5-flash",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":    "zen5-flash",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL":   "zen5",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":     model, // the resolved main model (best → glm-5.2)
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":    "zen5-pro",
 	}
 }
 
