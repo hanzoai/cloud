@@ -1,9 +1,10 @@
 package cloud
 
 // Tests for the org SUB-SCOPE half of the identity trust boundary: X-Project-Id
-// is refused when it names a project registered to a DIFFERENT org (cross-org
-// impersonation), the caller's own / unregistered values survive, X-App-Id rides
-// as a caller label, and BOTH are dropped on the anonymous path — while the
+// is MINTED from the validated `project` claim (never a raw client header), a
+// forged client X-Project-Id is ignored and cannot override the claim, a claim
+// FOREIGN to the acted-as org is refused (admin org-switch), X-App-Id rides as a
+// caller label, and every sub-scope is dropped on the anonymous path — while the
 // existing X-Org-Id anti-forgery is untouched. Reuses the JWKS + token helpers
 // from middleware_identity_test.go (same package).
 
@@ -157,49 +158,81 @@ func TestSanitizeIdentity_SubScopes(t *testing.T) {
 	// acme owns "site-a"; beta owns "secret".
 	withResolvers(t, fakeScopeResolver{owner: map[string]string{"site-a": "acme", "secret": "beta"}})
 
-	acme := signWith(t, key, tokenClaims("hanzo-console", "acme", "joe@acme.io", false, future))
-	admin := signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))
+	// withProject signs a token for owner carrying a `project` claim — the ONLY
+	// source X-Project-Id is ever minted from (a client header is never trusted).
+	withProject := func(owner, email string, isAdmin bool, project string) string {
+		c := tokenClaims("hanzo-console", owner, email, isAdmin, future)
+		c.Project = project
+		return signWith(t, key, c)
+	}
 
-	t.Run("own project is forwarded", func(t *testing.T) {
+	t.Run("own project claim is minted", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
-		probe(t, app, both(bearer(acme), setHdr(map[string]string{"X-Project-Id": "site-a"})))
+		probe(t, app, bearer(withProject("acme", "joe@acme.io", false, "site-a")))
 		if got.org != "acme" || got.project != "site-a" {
-			t.Fatalf("own project must survive: org=%q project=%q", got.org, got.project)
+			t.Fatalf("own project claim must bind X-Project-Id: org=%q project=%q", got.org, got.project)
 		}
 	})
 
-	t.Run("another org's project is STRIPPED", func(t *testing.T) {
+	t.Run("unregistered free-form project claim survives", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
-		probe(t, app, both(bearer(acme), setHdr(map[string]string{"X-Project-Id": "secret"})))
-		if got.org != "acme" {
-			t.Fatalf("org must stay the validated owner, got %q", got.org)
-		}
-		if got.project != "" {
-			t.Fatalf("cross-org project must be stripped, got %q", got.project)
-		}
-	})
-
-	t.Run("unregistered free-form label survives", func(t *testing.T) {
-		app, got := newScopeApp(t, v)
-		probe(t, app, both(bearer(acme), setHdr(map[string]string{"X-Project-Id": "team-scratch"})))
+		probe(t, app, bearer(withProject("acme", "joe@acme.io", false, "team-scratch")))
 		if got.project != "team-scratch" {
-			t.Fatalf("unregistered within-org label must survive, got %q", got.project)
+			t.Fatalf("unregistered within-org claim must survive, got %q", got.project)
+		}
+	})
+
+	t.Run("default project claim mints no header", func(t *testing.T) {
+		// No project claim ⟹ default ⟹ header absent (minimal-canonical form).
+		app, got := newScopeApp(t, v)
+		probe(t, app, bearer(withProject("acme", "joe@acme.io", false, "")))
+		if got.project != "" {
+			t.Fatalf("absent project claim must mint no header, got %q", got.project)
+		}
+		// The literal "default" is likewise omitted.
+		app2, got2 := newScopeApp(t, v)
+		probe(t, app2, bearer(withProject("acme", "joe@acme.io", false, "default")))
+		if got2.project != "" {
+			t.Fatalf("literal default project must mint no header, got %q", got2.project)
+		}
+	})
+
+	t.Run("forged client X-Project-Id is IGNORED (never a source)", func(t *testing.T) {
+		// Token has NO project claim; the client forges X-Project-Id. It must NOT
+		// survive — the header binds ONLY the validated claim.
+		app, got := newScopeApp(t, v)
+		probe(t, app, both(bearer(withProject("acme", "joe@acme.io", false, "")),
+			setHdr(map[string]string{"X-Project-Id": "site-a"})))
+		if got.project != "" {
+			t.Fatalf("forged client X-Project-Id must be ignored, got %q", got.project)
+		}
+	})
+
+	t.Run("client X-Project-Id cannot override the claim (evade defense)", func(t *testing.T) {
+		// Token claims "site-a"; the client tries to relabel to "team-scratch" to
+		// evade the site-a cap. The CLAIM wins; the client value is dropped.
+		app, got := newScopeApp(t, v)
+		probe(t, app, both(bearer(withProject("acme", "joe@acme.io", false, "site-a")),
+			setHdr(map[string]string{"X-Project-Id": "team-scratch"})))
+		if got.project != "site-a" {
+			t.Fatalf("claim must win over a forged client X-Project-Id, got %q", got.project)
 		}
 	})
 
 	t.Run("app rides as a caller label on the validated path", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
-		probe(t, app, both(bearer(acme), setHdr(map[string]string{"X-App-Id": "web"})))
+		probe(t, app, both(bearer(withProject("acme", "joe@acme.io", false, "")),
+			setHdr(map[string]string{"X-App-Id": "web"})))
 		if got.app != "web" {
 			t.Fatalf("app label must survive the validated path, got %q", got.app)
 		}
 	})
 
-	t.Run("anonymous request strips BOTH sub-scopes", func(t *testing.T) {
+	t.Run("anonymous request strips every sub-scope", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
 		probe(t, app, setHdr(map[string]string{
 			"X-Org-Id":     "victim", // Phase-1 data residual — but never validated
-			"X-Project-Id": "site-a",
+			"X-Project-Id": "site-a", // forged; no principal
 			"X-App-Id":     "web",
 		}))
 		if got.user != "" {
@@ -210,29 +243,29 @@ func TestSanitizeIdentity_SubScopes(t *testing.T) {
 		}
 	})
 
-	t.Run("SuperAdmin org-switch validates project against the acted-as org", func(t *testing.T) {
+	t.Run("SuperAdmin org-switch refuses a cross-org project claim", func(t *testing.T) {
+		// SuperAdmin acts as beta but its token claims acme's "site-a" → the claim
+		// is FOREIGN to the acted-as org (beta) → stripped.
 		app, got := newScopeApp(t, v)
-		// Admin acts as beta and carries beta's project → kept.
-		probe(t, app, both(bearer(admin), setHdr(map[string]string{
-			"X-Org-Id": "beta", "X-Project-Id": "secret",
-		})))
-		if got.org != "beta" || !got.admin || got.project != "secret" {
-			t.Fatalf("admin-as-beta with beta's project: org=%q admin=%v project=%q", got.org, got.admin, got.project)
+		probe(t, app, both(bearer(withProject("admin", "z@hanzo.ai", true, "site-a")),
+			setHdr(map[string]string{"X-Org-Id": "beta"})))
+		if got.org != "beta" || !got.admin || got.project != "" {
+			t.Fatalf("admin-as-beta with acme's project must strip it: org=%q admin=%v project=%q", got.org, got.admin, got.project)
 		}
-		// Admin acts as beta but carries acme's project → stripped (foreign to beta).
+		// When the admin's claim IS beta's project it is non-foreign to beta → kept.
 		app2, got2 := newScopeApp(t, v)
-		probe(t, app2, both(bearer(admin), setHdr(map[string]string{
-			"X-Org-Id": "beta", "X-Project-Id": "site-a",
-		})))
-		if got2.org != "beta" || got2.project != "" {
-			t.Fatalf("admin-as-beta with acme's project must strip it: org=%q project=%q", got2.org, got2.project)
+		probe(t, app2, both(bearer(withProject("admin", "z@hanzo.ai", true, "secret")),
+			setHdr(map[string]string{"X-Org-Id": "beta"})))
+		if got2.org != "beta" || got2.project != "secret" {
+			t.Fatalf("admin-as-beta with beta's project must keep it: org=%q project=%q", got2.org, got2.project)
 		}
 	})
 
 	t.Run("X-Org-Id forgery still blocked (no regression)", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
 		// A normal user cannot widen org by asserting X-Org-Id: victim.
-		probe(t, app, both(bearer(acme), setHdr(map[string]string{"X-Org-Id": "victim"})))
+		probe(t, app, both(bearer(withProject("acme", "joe@acme.io", false, "")),
+			setHdr(map[string]string{"X-Org-Id": "victim"})))
 		if got.org != "acme" || got.admin {
 			t.Fatalf("client X-Org-Id must not widen scope: org=%q admin=%v", got.org, got.admin)
 		}

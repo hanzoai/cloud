@@ -31,6 +31,8 @@ import (
 
 	gojose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
+
+	"github.com/hanzoai/cloud/clients/principal"
 )
 
 // idClaims is the subset of Hanzo IAM JWT claims the identity sanitizer needs.
@@ -39,10 +41,25 @@ type idClaims struct {
 	jwt.Claims
 
 	Owner             string `json:"owner"`              // org slug (the org)
+	Project           string `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
 	Name              string `json:"name"`               // display name (id fallback)
 	PreferredUsername string `json:"preferred_username"` // id fallback
 	Email             string `json:"email"`
 	IsAdmin           bool   `json:"isAdmin"`
+}
+
+// mintedProject returns the project id to stamp into X-Project-Id, or "" when the
+// header must be OMITTED. The project rides in the validated JWT `project` claim,
+// scoped to the caller's org exactly like `owner` — trusted, not forgeable. The
+// default project (absent claim, or the literal principal.DefaultProject) mints
+// nothing, so X-Project-Id is present iff a non-default project is in scope. This
+// mirrors the edge (iamauth.Claims.MintedProject) byte-for-byte, so the in-binary
+// path binds the same header the gateway would.
+func (c *idClaims) mintedProject() string {
+	if principal.IsDefaultProject(c.Project) {
+		return ""
+	}
+	return strings.TrimSpace(c.Project)
 }
 
 // userID resolves the canonical user id: sub, then preferred_username, then
