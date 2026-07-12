@@ -8,7 +8,7 @@
 //     public group so it serves the exact path GET /v1/commerce/catalog.
 //   - PLATFORM-ADMIN write: create/update/delete/seed mutate the platform-global
 //     catalog (the "system" namespace, NOT a per-tenant org), so they gate on
-//     auth.IAMClaims.SuperAdmin() — a Hanzo platform admin, never an org-level
+//     auth.IAMClaims.IsSuperAdmin() — a Hanzo platform admin, never an org-level
 //     admin. Wired on the /v1 bundle under /catalog/entries.
 //
 // The catalog is platform-global: one store in the "system" namespace, scoped
@@ -46,7 +46,7 @@ func catalogDB(c *gin.Context) *datastore.Datastore {
 // it (Red: org-admin → platform escalation). Returns false + writes 403 on deny.
 func requireSuperAdmin(c *gin.Context) bool {
 	claims := iammiddleware.GetIAMClaims(c)
-	if claims == nil || !claims.SuperAdmin() {
+	if claims == nil || !claims.IsSuperAdmin() {
 		http.Fail(c, 403, "platform admin required to edit the catalog", errors.New("not a SuperAdmin"))
 		return false
 	}

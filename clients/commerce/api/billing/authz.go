@@ -35,7 +35,7 @@ func isPrivilegedBillingCaller(c *gin.Context) bool {
 		}
 	}
 	claims := iammiddleware.GetIAMClaims(c)
-	return claims.IsAdmin || claims.SuperAdmin()
+	return claims.IsAdmin || claims.IsSuperAdmin()
 }
 
 // callerMayReachBillingSubject reports whether the authenticated caller is

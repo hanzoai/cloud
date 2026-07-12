@@ -2,7 +2,9 @@ package cloud
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud/types"
 )
@@ -101,6 +103,65 @@ func TestMeteredAI_PassThroughForwardsScope(t *testing.T) {
 	}
 	if inner.embedReq == nil || inner.embedReq.Org != "acme" {
 		t.Fatalf("embed scope not forwarded: %+v", inner.embedReq)
+	}
+}
+
+// billedOrg is the metered_ai billing-key resolver: HOME (BillingOrg) when set,
+// else the EFFECTIVE Org. Whitespace-only billing falls back too.
+func TestBilledOrg(t *testing.T) {
+	cases := []struct{ billing, effective, want string }{
+		{"admin", "victim", "admin"}, // masquerade: home pays
+		{"", "acme", "acme"},         // normal caller: not split → effective
+		{"  ", "acme", "acme"},       // whitespace billing → effective
+		{"admin", "", "admin"},       // home present, no effective
+	}
+	for _, tc := range cases {
+		if got := billedOrg(tc.billing, tc.effective); got != tc.want {
+			t.Fatalf("billedOrg(%q,%q)=%q want %q", tc.billing, tc.effective, got, tc.want)
+		}
+	}
+}
+
+// TestMeteredAI_AdminMasqueradeBillsHomeOrg is the AI-meter half of the billing
+// split (mirrors the edge-gate proof): a SuperAdmin (BillingOrg=admin) running
+// inference while acting in a victim org (Org=victim) must debit the ADMIN ledger,
+// while the inner AI call still receives the EFFECTIVE org (victim) for its data
+// scope (BYO keys / RAG). Driven end-to-end through a real metering client → fake
+// commerce, so the recorded debit's billing key is observed on the wire.
+func TestMeteredAI_AdminMasqueradeBillsHomeOrg(t *testing.T) {
+	fc := &fakeCommerce{balanceBody: `{"available":100000}`}
+	srv := fc.server(t)
+	inner := &recordingAI{resp: &types.ChatResponse{Content: "hi", TotalTokens: 100}}
+	m := &meteredAI{
+		inner: inner,
+		meter: NewResourceMeter(Deps{Metering: mustClient(t, srv.URL, false)}, aiMeterProvider),
+		rate:  defaultAIPriceUUSDPer1kTokens,
+	}
+
+	if _, err := m.ChatCompletion(context.Background(), &types.ChatRequest{
+		Model: "x", Prompt: "hello world", Org: "victim", BillingOrg: "admin", Project: "p",
+	}); err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+
+	// DATA scope: the inner AI call receives the EFFECTIVE org (victim), NOT home —
+	// so BYO keys / RAG resolve against the acted-on org, never the admin org.
+	if got := inner.chatReq.Org; got != "victim" {
+		t.Fatalf("inner AI data scope = %q, want victim (effective, never rescoped to home)", got)
+	}
+
+	// DEBIT: recorded against the HOME org (admin). Record is async (fire-and-forget).
+	if !waitFor(func() bool { return fc.usages() == 1 }, time.Second) {
+		t.Fatalf("no usage recorded (Record must fire on the metered AI path)")
+	}
+	fc.mu.Lock()
+	body := string(fc.usageBody)
+	fc.mu.Unlock()
+	if !strings.Contains(body, `"user":"admin"`) {
+		t.Fatalf("debit must land on the HOME org (admin), got usage body: %s", body)
+	}
+	if strings.Contains(body, `"user":"victim"`) {
+		t.Fatalf("debit leaked to the acted-on org (victim): %s", body)
 	}
 }
 
