@@ -511,7 +511,7 @@ require (
 	github.com/hanzoai/search-go v0.36.0
 	github.com/hanzoai/sendgrid-go v1.3.0
 	github.com/hanzoai/storage-go v1.0.0
-	github.com/hanzoai/tasks v1.49.0
+	github.com/hanzoai/tasks v1.51.0
 	github.com/hanzoai/xorm v1.1.6 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
