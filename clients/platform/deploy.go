@@ -104,7 +104,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 
 	switch a.Source {
 	case "image":
-		return deployImage(s, c, org, project.Slug, a, depID, version, now, body, clusterErr)
+		return deployImage(s, c, org, project, a, depID, version, now, body, clusterErr)
 	case "git":
 		return deployGit(s, c, org, a, depID, version, now, body, clusterErr)
 	default:
