@@ -70,25 +70,30 @@ func Validated(c *zip.Ctx) bool {
 	return strings.TrimSpace(c.User()) != ""
 }
 
-// IsSuperAdmin reports whether the caller is a Hanzo platform SuperAdmin — the
-// cross-tenant sudo scope (SOC2/FedRAMP). SuperAdmin is the ONE standard term
-// (SOC2/FedRAMP naming). SuperAdmin ⟺ membership in the reserved "admin" org
-// (owner == adminOrg): SanitizeIdentity mints X-User-IsAdmin ONLY for that
-// identity, so c.IsAdmin() IS the SuperAdmin predicate. Like every authority
-// header it is stripped on ingress and re-injected only from validated claims —
-// unforgeable.
+// TWO ADMIN SCOPES, TWO PREDICATES, ONE FACT EACH — never conflate them
+// (conflation is a privilege escalation).
+//
+//	IsSuperAdmin — platform sudo: the principal's ORG IS the reserved "admin" org
+//	               (owner == adminOrg). Cross-tenant. The SAME equality IAM's
+//	               canonical User.IsSuperAdmin() uses. `owner` is the org a
+//	               principal BELONGS TO (<owner>/<name>), not a role.
+//	IsOrgAdmin   — admin OF ONE'S OWN org: the IAM `isAdmin` bit. Org-scoped,
+//	               self-service. NOT platform-privileged.
+//
+// A gate that admits either writes `IsSuperAdmin(c) || IsOrgAdmin(c)` — explicit,
+// so the superset is visible at the gate instead of hidden inside a predicate.
+// Both read authority headers SanitizeIdentity STRIPS on ingress and re-injects
+// only from validated claims — unforgeable.
+
+// IsSuperAdmin reports platform sudo: the caller is a member of the reserved
+// "admin" org. SanitizeIdentity mints X-User-IsAdmin for exactly that identity,
+// so c.IsAdmin() IS this predicate.
 func IsSuperAdmin(c *zip.Ctx) bool { return c.IsAdmin() }
 
-// IsOrgAdmin reports whether the caller may administer the org it is acting in:
-// EITHER a platform SuperAdmin (the superset) OR an admin of its OWN org (the
-// X-User-IsOrgAdmin the boundary mints for any validated isAdmin principal). It is
-// the ONE predicate the org-scoped admin panels gate on — a validated but
-// NON-admin member of an org is NOT an IsOrgAdmin, so it is refused. Reads an
-// authority header the identity boundary (SanitizeIdentity) STRIPS on ingress and
-// re-injects only from validated claims, so a client can never forge it.
-func IsOrgAdmin(c *zip.Ctx) bool {
-	return IsSuperAdmin(c) || c.Header("X-User-IsOrgAdmin") == "true"
-}
+// IsOrgAdmin reports that the caller is an admin OF ITS OWN org (the IAM isAdmin
+// bit, minted as X-User-IsOrgAdmin). It says NOTHING about platform sudo — a
+// SuperAdmin is not implied. A validated but NON-admin member of an org is not one.
+func IsOrgAdmin(c *zip.Ctx) bool { return c.Header("X-User-IsOrgAdmin") == "true" }
 
 // Org resolves the caller's org — the org-isolation KEY — for the common
 // verbatim case (crm, prompts, agents, functions, git, eval). It returns

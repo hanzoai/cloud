@@ -212,14 +212,15 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
-			case claims.IsAdmin && owner != "" && owner == adminOrg && !isKMSMachinePrincipal(claims):
-				// Verified SuperAdmin: admin authority + honored org-switch. A KMS-sync
-				// MACHINE principal (audience <owner>-platform-kms) is EXCLUDED here even
-				// if it carries isAdmin=true: V6 accepts the machine audience for data
-				// scope, but the machine path must never grant SuperAdmin, or an
+			case owner != "" && owner == adminOrg && !isKMSMachinePrincipal(claims):
+				// SuperAdmin ⟺ the principal's org IS the reserved admin org. ONE fact,
+				// the SAME equality IAM's canonical User.IsSuperAdmin() uses
+				// (user.Owner == conf.AdminOrg) — cloud does not add a second signal.
+				// Honored org-switch. A KMS-sync MACHINE principal (audience
+				// <owner>-platform-kms) is EXCLUDED: V6 accepts the machine audience for
+				// data scope, but the machine path must never grant SuperAdmin, or an
 				// admin-org machine token could read every org. It falls through to the
-				// owner-scoped case below (org-scoped, no admin) — the audience widening
-				// stays decoupled from admin inside cloud, not reliant on IAM's behavior.
+				// owner-scoped case below (org-scoped, not super).
 				req.Header.Set("X-User-IsAdmin", "true")
 				if cliOrg != "" {
 					effOrg = cliOrg
