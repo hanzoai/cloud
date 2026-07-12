@@ -12,7 +12,7 @@ import (
 )
 
 // Contact class ids the projection materializes. Kept in one place so the
-// Huly-model wire identity lives with the code that builds it.
+// Team-model wire identity lives with the code that builds it.
 const (
 	clPerson         = "contact:class:Person"
 	mixinEmployee    = "contact:mixin:Employee"
@@ -20,7 +20,7 @@ const (
 	spaceContacts    = "contact:space:Contacts"
 )
 
-// ── tx builders (the Huly-model knowledge, one place) ────────────────────────
+// ── tx builders (the Team-model knowledge, one place) ────────────────────────
 
 func createTx(objectID, objectClass, space, modifiedBy string, attrs map[string]any) map[string]any {
 	now := time.Now().UnixMilli()
@@ -83,7 +83,7 @@ func PersonRef(userID string) string { return "person-" + userID }
 // the PersonSpace trigger.
 func MemberTxes(m Member, exists bool) []map[string]any {
 	pid := PersonRef(m.UserID)
-	name := hulyName(pick(m.Name, m.UserID))
+	name := personName(pick(m.Name, m.UserID))
 	role := strings.ToUpper(pick(m.Role, "member"))
 	position := ""
 	if m.IsBot {
@@ -115,11 +115,11 @@ func MemberTxes(m Member, exists bool) []map[string]any {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// hulyName formats a display name into Huly's canonical Person.name convention
+// personName formats a display name into the canonical Person.name convention
 // "last,first" (the SPA renders it "first last"; a native SPA person stores ","
 // for an empty name). A single-token name (most bots) has no last name, so it
 // becomes the first name (",token") — rendered verbatim. Empty stays ",".
-func hulyName(display string) string {
+func personName(display string) string {
 	display = strings.TrimSpace(display)
 	if display == "" {
 		return ","
