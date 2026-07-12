@@ -200,7 +200,42 @@ type BaseClient interface {
 	Open(ctx context.Context, orgID, serviceName string) (DBHandle, error)
 }
 
-// CommerceClient is the inter-subsystem interface to Commerce.
+// DepositInput is a native credit write (grant / prefund / settlement) to a
+// subject's prepaid ledger in an org's namespace — the typed twin of the
+// /v1/billing/deposit body, no HTTP. Authorization is the CALLER's: only
+// already-gated paths (the global-admin grant, the platform service float) invoke
+// it; the native write marks the ledger sink authorized because the HTTP mint gate
+// it bypasses is replaced by that caller gate.
+type DepositInput struct {
+	Org      string // X-Org-Id namespace, resolved to the commerce Organization
+	Subject  string // billing subject / DestinationId (org slug or "owner/name")
+	Cents    int64  // amount in cents (> 0)
+	Currency string // default "usd"
+	Notes    string
+	Tags     string
+	Test     bool // write to the sandbox (test-mode) ledger
+}
+
+// UsageInput is a native usage (withdraw/debit) write to a subject's prepaid
+// ledger — the typed twin of the /v1/billing/usage body, no HTTP.
+type UsageInput struct {
+	Org       string
+	Subject   string // billing subject / SourceId
+	Cents     int64  // amount in cents (> 0)
+	Currency  string
+	Model     string
+	Provider  string
+	Project   string
+	Service   string
+	RequestID string
+	Test      bool
+}
+
+// CommerceClient is the inter-subsystem interface to Commerce (entitlements +
+// org config). Money is NOT here — a subject's prepaid balance/deposit/usage is
+// the orthogonal BillingClient, so commerce (catalog/subscriptions/licensing) and
+// billing (the money ledger) never braid. Every method is a DIRECT in-process call
+// to the embedded commerce datastore (co-resident) or a ZAP RPC (split-deploy).
 type CommerceClient interface {
 	GetOrgConfig(ctx context.Context, orgID string) (*OrgConfig, error)
 	// CheckEntitlement reports whether org `orgID` holds an active
@@ -211,6 +246,28 @@ type CommerceClient interface {
 	// user subject they pass it through here and commerce resolves the
 	// owning org.
 	CheckEntitlement(ctx context.Context, orgID, productID string) (*LicenseEntitlement, error)
+}
+
+// FinanceClient is the ONE money interface (package alias: finance.Client, mirroring
+// commerce.Client): a subject's prepaid wallet on the double-entry finance ledger
+// (hanzoai/ledger). Balance is a ledger account balance; a deposit and a usage debit
+// are balanced ledger postings (funding→wallet, wallet→revenue) — so every customer
+// debit IS a platform-revenue credit in one entry. IAM multi-tenancy is the account
+// namespace (org/project), scoped by the authenticated caller. Orthogonal to
+// CommerceClient: the ai prepaid gate, the admin grant, and the edge meter all bill
+// through THIS, and it composes the same finance ledger the treasury posts to — one
+// ledger, two account layers.
+type FinanceClient interface {
+	// BalanceCents returns subject's AVAILABLE prepaid balance in cents (settled
+	// ledger balance; transient holds are the caller's in-pod reservation) within
+	// org's namespace. The ONE balance read the ai gate + the edge meter share.
+	BalanceCents(ctx context.Context, org, subject, currency string, test bool) (int64, error)
+	// Deposit posts a credit (funding→wallet) to subject's ledger wallet and returns
+	// the ledger entry id. Idempotent on in.RequestID when set.
+	Deposit(ctx context.Context, in DepositInput) (entryID string, err error)
+	// RecordUsage posts a usage debit (wallet→revenue) from subject's ledger wallet.
+	// Idempotent on in.RequestID.
+	RecordUsage(ctx context.Context, in UsageInput) error
 }
 
 // AIClient is the inter-subsystem interface to AI.
