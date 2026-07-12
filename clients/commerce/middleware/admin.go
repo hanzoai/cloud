@@ -27,12 +27,12 @@ import (
 //     money path (cloud-api → commerce, which carries X-Org-Id) is authorized by
 //     its verified token, not mistaken for a spoofable IAM-edge header identity.
 //  2. IAM identity — the gateway/EdgeAuth-minted, JWT-verified claims must carry
-//     org-level IsAdmin OR platform GlobalAdmin.
+//     org-level IsAdmin OR platform SuperAdmin.
 //
 // These are per-ORG money actions (the caller acts within its own resolved
-// namespace), so org-level admin suffices and a global admin is also allowed
+// namespace), so org-level admin suffices and a SuperAdmin is also allowed
 // (superset). Cross-tenant/platform-global actions gate on the STRICTER
-// GlobalAdmin predicate instead (api/catalog.requireGlobalAdmin,
+// SuperAdmin predicate instead (api/catalog.requireSuperAdmin,
 // checkout.isSuperadmin), never this one.
 //
 // Returns true when admin; writes a 403 and returns false otherwise. Reads
@@ -46,7 +46,7 @@ func RequireAdmin(c *gin.Context) bool {
 	}
 	if iammiddleware.IsIAMAuthenticated(c) {
 		claims := iammiddleware.GetIAMClaims(c) // non-nil by contract
-		if claims.IsAdmin || claims.GlobalAdmin() {
+		if claims.IsAdmin || claims.SuperAdmin() {
 			return true
 		}
 	}

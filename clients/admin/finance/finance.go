@@ -1,7 +1,7 @@
 // Package finance is the SaaS business/finance dashboard (/v1/admin/finance) — the
 // profitability panel: what we pay every vendor (COGS), what we earn, the gross margin,
 // how fast we're burning the DigitalOcean promo credit, and the runway that credit + burn
-// imply. GLOBAL-ADMIN ONLY (core.Guard).
+// imply. SUPERADMIN ONLY (core.Guard).
 //
 // It FABRICATES NOTHING and OWNS NO cost logic. COGS is the SINGLE source of truth in
 // commerce (GET /v1/costs) — cloud CONSUMES it. Revenue + MRR come from commerce billing.
@@ -26,7 +26,7 @@ import (
 // honest not-configured state rather than a fabricated read.
 var errUnconfigured = errors.New("not configured")
 
-// Routes registers the finance dashboard (global-admin only).
+// Routes registers the finance dashboard (SuperAdmin only).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/finance", core.Guard(s, Finance))
 	// Per-provider upstream credit ledger + usage funding split (multi-provider
@@ -152,7 +152,7 @@ func ComputeFinance(in FinanceInput) FinanceData {
 
 // Finance answers GET /v1/admin/finance. It reads the multi-vendor COGS from commerce
 // /v1/costs, the DO promo-credit/burn-down treasury view, and the fleet commerce revenue,
-// then hands them to ComputeFinance. Global-admin only.
+// then hands them to ComputeFinance. SuperAdmin only.
 func Finance(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	cr := core.CallerCreds(c)

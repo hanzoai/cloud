@@ -54,9 +54,9 @@ type Resource struct {
 }
 
 // AuthContext records HOW the actor authenticated and what authority they held
-// at decision time — the AC-* evidence (was this a global admin? by what
+// at decision time — the AC-* evidence (was this a SuperAdmin? by what
 // credential?). Method is "jwt" | "api-key" | "none". IsAdmin is the VALIDATED
-// global-admin bit (owner == AdminOrg), never a raw X-User-IsAdmin.
+// SuperAdmin bit (owner == AdminOrg), never a raw X-User-IsAdmin.
 type AuthContext struct {
 	Method  string `json:"method"`
 	IsAdmin bool   `json:"isAdmin"`
@@ -65,7 +65,7 @@ type AuthContext struct {
 // Outcome is the result of the action: whether it was allowed and what
 // happened. Result is "success" | "deny" | "error". Status is the HTTP status.
 // Reason is a short, non-sensitive explanation for a deny/error (e.g.
-// "global admin required", "insufficient_balance") — never a secret, never a
+// "SuperAdmin required", "insufficient_balance") — never a secret, never a
 // raw upstream error body.
 type Outcome struct {
 	Result string `json:"result"`

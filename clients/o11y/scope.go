@@ -31,7 +31,7 @@ import (
 
 // admin reports whether the caller is a validated platform SuperAdmin. After
 // SanitizeIdentity, c.IsAdmin() (X-User-IsAdmin) is set to true ONLY for a verified
-// global admin whose owner == the reserved admin org (middleware_identity.go) — the
+// SuperAdmin whose owner == the reserved admin org (middleware_identity.go) — the
 // SAME predicate every cloud admin surface gates on. So the infra-log god-view and
 // the whole-product metrics view use the platform-sudo scope, never a per-org
 // isAdmin claim (which would be a privilege-escalation path to cross-tenant infra

@@ -9,7 +9,7 @@
 // platform-admin identity. Anyone who could land in (or forge owner=) an org
 // named "platform" got a cross-org datastore view (Red — privilege escalation
 // via the empty namespace). Cross-org access is now gated EXCLUSIVELY on
-// auth.IAMClaims.GlobalAdmin() at the handler layer; the model never grants it
+// auth.IAMClaims.SuperAdmin() at the handler layer; the model never grants it
 // by name.
 package organization
 
@@ -29,8 +29,8 @@ func TestNamespace_StrictScoping(t *testing.T) {
 	cases := map[string]string{
 		"maxpower": "maxpower",
 		"hanzo":    "hanzo",
-		"admin":    "admin", // even the global-admin org is name-scoped here;
-		//                       cross-org access is granted by GlobalAdmin(), not by Namespace().
+		"admin":    "admin", // even the SuperAdmin org is name-scoped here;
+		//                       cross-org access is granted by SuperAdmin(), not by Namespace().
 		"": "",
 	}
 	for name, want := range cases {

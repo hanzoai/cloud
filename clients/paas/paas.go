@@ -17,7 +17,7 @@
 //	                                reimplements a deployer.
 //	GET  /v1/paas/health          — real k8s reachability + Service CRD presence.
 //
-// SECURITY — every route is GLOBAL-ADMIN ONLY, fail-closed, gated on the SAME
+// SECURITY — every route is SUPERADMIN ONLY, fail-closed, gated on the SAME
 // predicate the rest of cloud uses: c.IsAdmin() (true only for a JWT-validated
 // principal whose org is the admin org, matching the gateway's admin-guard — see
 // clients/admin). Unlike clients/ml (per-tenant namespaces), the PaaS control
@@ -97,7 +97,7 @@ type state struct {
 }
 
 // Mount wires the /v1/paas/* surface onto app. Every handler gates on
-// c.IsAdmin() first (global-admin only), then reads/patches the operator Service
+// c.IsAdmin() first (SuperAdmin only), then reads/patches the operator Service
 // CRs.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "paas", build, routes)
@@ -119,7 +119,7 @@ func build(b cloud.Base) (state, error) {
 }
 
 // routes registers the /v1/paas/* surface. Every mutating/observing route is behind
-// the global-admin guard; the health probe is public (real k8s reachability).
+// the SuperAdmin guard; the health probe is public (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/apps", guard(s, cloud.Handle(s, listApps)))
 	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
@@ -127,13 +127,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/health", cloud.Handle(s, health))
 }
 
-// guard wraps a handler with the global-admin gate. Fail-closed: any request whose
-// validated identity is not a global admin is refused 403 before the handler — no
+// guard wraps a handler with the SuperAdmin gate. Fail-closed: any request whose
+// validated identity is not a SuperAdmin is refused 403 before the handler — no
 // cluster object is read or mutated, matching clients/admin.guard.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
-			return zip.ErrForbidden("global admin required")
+			return zip.ErrForbidden("SuperAdmin required")
 		}
 		return h(c)
 	}

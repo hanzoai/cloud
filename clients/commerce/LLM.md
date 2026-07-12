@@ -26,7 +26,7 @@ Commerce App (Cobra CLI + Gin HTTP + Hooks + Events)
 - Every org (incl. `"platform"`) is STRICTLY scoped to its own name. The legacy
   `"platform" -> "" (cross-org) namespace` bypass was REMOVED (1.42.40, Red M1):
   it keyed cross-org datastore on an org-NAME string, not real platform-admin
-  identity. Cross-org access gates on `auth.IAMClaims.GlobalAdmin()` ONLY.
+  identity. Cross-org access gates on `auth.IAMClaims.SuperAdmin()` ONLY.
 
 ## Gateway Trust Headers (2026-04-27)
 
@@ -44,7 +44,7 @@ only to routes registered AFTER the call. It is now installed in `Bootstrap`
 `/_/commerce/*`, `/v1/commerce/*` AND the post-Bootstrap `/v1` `api.Route()`
 bundle. Previously it was mounted from `embed.go` AFTER Bootstrap, so gin left
 the setupRoutes groups unguarded and an in-cluster pod could `POST
-/_/commerce/tenants` with forged `X-Org-Id: admin` + `X-User-IsGlobalAdmin: true`
+/_/commerce/tenants` with forged `X-Org-Id: admin` + `X-User-IsSuperAdmin: true`
 → 201 (platform superadmin by header forgery). The boundary NEVER 401s opaque
 service tokens (not JWTs) and does NOT strip `X-Hanzo-Org`, so the cloud-api →
 commerce per-org billing money path is untouched (`require=false`;
@@ -57,42 +57,42 @@ path). Regression: `edgeauth_standalone_test.go`, `middleware/edgeauth_test.go`.
 | X-User-Id             | JWT `sub` claim         | User identity                               |
 | X-User-Email          | JWT `email` claim       | Email; audit + notifications                |
 | X-User-IsAdmin        | JWT `isAdmin` claim     | "true" iff ORG-level admin (an org owner)   |
-| X-User-IsGlobalAdmin  | gateway-derived         | "true" iff PLATFORM (global) admin          |
+| X-User-IsSuperAdmin  | gateway-derived         | "true" iff PLATFORM SuperAdmin          |
 | X-Roles               | JWT `roles` claim       | Comma-joined role names (admin/owner/etc.)  |
 | X-User-Permissions    | gateway-derived         | bit.Field as base-10 int; 0 fails closed    |
 
 Fail-closed contract: missing X-User-IsAdmin -> IsAdmin=false; missing
-X-User-IsGlobalAdmin -> IsGlobalAdmin=false. Missing X-User-Permissions ->
+X-User-IsSuperAdmin -> IsSuperAdmin=false. Missing X-User-Permissions ->
 bit.Field(0). Identity headers absent -> handler chain falls through to legacy
 auth (or 401 when COMMERCED_REQUIRE_IDENTITY).
 
-**Org-admin vs global-admin (Red — anti-conflation):** `X-User-IsAdmin` is the
+**Org-admin vs SuperAdmin (Red — anti-conflation):** `X-User-IsAdmin` is the
 ORG-level admin role — an org owner (e.g. `maxpower`) carries `isAdmin=true`
 within their own org. It is ONLY for org-scoped RBAC. Cross-org / superadmin
 actions (e.g. POST `/_/commerce/tenants`) MUST gate on
-`auth.IAMClaims.GlobalAdmin()` — the explicit `isGlobalAdmin` claim
-(X-User-IsGlobalAdmin) OR `owner=="admin"` — NEVER on `IsAdmin` nor an
+`auth.IAMClaims.SuperAdmin()` — the explicit `isSuperAdmin` claim
+(X-User-IsSuperAdmin) OR `owner=="admin"` — NEVER on `IsAdmin` nor an
 org-mintable role NAME like "superadmin". `iammiddleware.GetIAMClaims` populates
-both `IsAdmin` (X-User-IsAdmin) and `IsGlobalAdmin` (X-User-IsGlobalAdmin); the
-gateway mints X-User-IsGlobalAdmin only for a real global admin and strips it on
+both `IsAdmin` (X-User-IsAdmin) and `IsSuperAdmin` (X-User-IsSuperAdmin); the
+gateway mints X-User-IsSuperAdmin only for a real SuperAdmin and strips it on
 ingress, so it can't be forged. Predicates: `checkout.isSuperadmin` =
-`GlobalAdmin()`; `checkout.isTenantAdmin` = the robust org-level `IsAdmin` claim
-(not a role string). Tests: `auth/globaladmin_test.go`,
+`SuperAdmin()`; `checkout.isTenantAdmin` = the robust org-level `IsAdmin` claim
+(not a role string). Tests: `auth/superadmin_test.go`,
 `checkout/admin_tenants_authz_test.go`, `middleware/edgeauth_test.go`.
 
 ### EdgeAuth admin billing-view override (middleware/edgeauth.go, 1.42.36+)
 
 At the standalone edge (COMMERCE_EDGE_AUTH=true) EdgeAuth normally locks every
 `/billing/` request to the caller's OWN org (X-Org-Id + user/userId/customerId
-== claims.Owner) — strict per-org isolation. A GLOBAL ADMIN may retarget the
+== claims.Owner) — strict per-org isolation. A SUPERADMIN may retarget the
 view to another org via `?org=<slug>`: `resolveBillingSubject()` sets both the
 namespace (X-Org-Id) and the locked subject to the requested org. The override
-is HONORED only when `isGlobalAdmin(claims)` holds — `claims.IsGlobalAdmin` OR
+is HONORED only when `isSuperAdmin(claims)` holds — `claims.IsSuperAdmin` OR
 `claims.Owner=="admin"` (NOT plain `IsAdmin`, which is an org-level role: an org
 owner like maxpower has it). For everyone else the `?org` param is
 consumed-and-ignored (stripped, never honored) so isolation can never be
 weakened. Tests: middleware/edgeauth_test.go (admin-switch, non-admin-isolation,
-bad-slug reject). `auth.IAMClaims` carries `IsGlobalAdmin` (json `isGlobalAdmin`).
+bad-slug reject). `auth.IAMClaims` carries `IsSuperAdmin` (json `isSuperAdmin`).
 
 Call sites read identity via:
 - `pkg/auth.OrgID(ctx)` / `UserID(ctx)` / `UserEmail(ctx)` (preferred)
@@ -764,7 +764,7 @@ exactly — the shape is NOT ours to change.
   same `system`-namespace store serves every brand; an entry shows iff its
   category is in the requested brand's set. Slug is globally unique.
 - **Admin CRUD** `/v1/catalog/entries` (+ `/seed`) gates on
-  `auth.IAMClaims.GlobalAdmin()` — the catalog is cross-tenant PLATFORM data in
+  `auth.IAMClaims.SuperAdmin()` — the catalog is cross-tenant PLATFORM data in
   the `system` namespace, so an org-level admin must NOT edit it. Keyed by slug.
 - **Seed**: the embedded `seed/hanzo-catalog.json` is the `@hanzo/products`
   snapshot (`hanzoai/ui/pkgs/products/snapshot/catalog.json`) VERBATIM — 95

@@ -411,7 +411,7 @@ func TestVector3_AdminConfigPrecedence(t *testing.T) {
 	t.Logf("/v1/admin/orgs without admin = %d (gate intact)", r.StatusCode)
 }
 
-// TestAdminEdge_ValidOrgStillEnforcedForAdmin: a global admin bypasses the
+// TestAdminEdge_ValidOrgStillEnforcedForAdmin: a SuperAdmin bypasses the
 // org-EQUALITY check but NOT validOrg — so an admin cannot address a malformed
 // :org (empty, oversized, or with forbidden chars). Confirms admin is scoped to
 // well-formed org labels only (the store path is still /orgs/{validOrg}).

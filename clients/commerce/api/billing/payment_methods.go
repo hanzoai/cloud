@@ -301,7 +301,7 @@ func ListPaymentMethods(c *gin.Context) {
 	// return EVERY method in the namespace (incl. any service-token-created
 	// per-user records) — so force the subject filter for non-privileged callers,
 	// failing closed when no subject resolves. Privileged callers (service token /
-	// admin / global admin) keep the explicit client-supplied filter.
+	// admin / SuperAdmin) keep the explicit client-supplied filter.
 	if isPrivilegedBillingCaller(c) {
 		if customerId := c.Query("customerId"); customerId != "" {
 			q = q.Filter("CustomerId=", customerId)
