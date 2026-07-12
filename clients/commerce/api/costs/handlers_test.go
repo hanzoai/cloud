@@ -30,8 +30,11 @@ func gateCtx(w http.ResponseWriter, claims *auth.IAMClaims, perms *bit.Field) *g
 
 // iamUser builds claims for a JWT-verified IAM user (a non-empty Subject, the sub
 // the gateway always mints). Subject is promoted from the embedded StandardClaims.
-func iamUser(subject, owner string, isAdmin, isSuperAdmin bool) *auth.IAMClaims {
-	cl := &auth.IAMClaims{Owner: owner, IsAdmin: isAdmin, IsSuperAdmin: isSuperAdmin}
+func iamUser(subject, owner string, isAdmin, superAdmin bool) *auth.IAMClaims {
+	cl := &auth.IAMClaims{Owner: owner, IsAdmin: isAdmin}
+	if superAdmin {
+		cl.HomeOrg = "admin"
+	}
 	cl.Subject = subject
 	return cl
 }

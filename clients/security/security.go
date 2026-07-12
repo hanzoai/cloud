@@ -249,7 +249,7 @@ func submitScan(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// One metered unit per scan (product=security). Nil/disabled meter → no-op.
-	s.State.bill.Meter(org, principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
+	s.State.bill.Meter(principal.Payer(c), principal.Project(c), meterKind, 0, c.RequestID(), clientIP(c))
 
 	// Audit: the scan happened, by whom, with what tally. The redacted findings
 	// (never the secrets) are the evidence; the tally is the AU-3 outcome.
