@@ -280,20 +280,23 @@ func GetIAMClaims(c *gin.Context) *auth.IAMClaims {
 	user := strings.TrimSpace(c.GetHeader(pkgAuth.HeaderUserID))
 	email := strings.TrimSpace(c.GetHeader(pkgAuth.HeaderUserEmail))
 	isAdmin := strings.EqualFold(strings.TrimSpace(c.GetHeader(HeaderUserIsAdmin)), "true")
-	// PLATFORM superadmin signal — distinct from org-level isAdmin. The
-	// gateway mints X-User-IsSuperAdmin only for a real SuperAdmin; absent
-	// → false (fail-closed). SuperAdmin() also honors owner=="admin", so this
-	// is defense-in-depth + forwards-compat with an explicit gateway signal.
-	isSuperAdmin := strings.EqualFold(strings.TrimSpace(c.GetHeader(HeaderUserIsSuperAdmin)), "true")
+	// HOME org — the identity + platform-sudo anchor (the gateway/EdgeAuth
+	// X-User-Owner header, the validated JWT `owner`). DISTINCT from Owner (==
+	// X-Org-Id, the EFFECTIVE org a SuperAdmin may switch to another tenant):
+	// IsSuperAdmin gates on this, so owner=="admin" survives an org-switch. Absent
+	// (pre-rollout) → homeOrg() falls back to Owner, which equals home for a
+	// non-switching caller. No spoofable isSuperAdmin boolean is read — the org
+	// IS the signal.
+	homeOrg := strings.TrimSpace(c.GetHeader(HeaderUserOwner))
 	roles := parseRolesHeader(c.GetHeader(HeaderRoles))
 
 	claims := &auth.IAMClaims{
-		Owner:        owner,
-		Name:         user,
-		Email:        email,
-		IsAdmin:      isAdmin,
-		IsSuperAdmin: isSuperAdmin,
-		Roles:        roles,
+		Owner:   owner,
+		HomeOrg: homeOrg,
+		Name:    user,
+		Email:   email,
+		IsAdmin: isAdmin,
+		Roles:   roles,
 	}
 	// Subject is the canonical user id field IAMClaims callers read;
 	// the gateway puts the JWT sub into X-User-Id.
@@ -304,13 +307,15 @@ func GetIAMClaims(c *gin.Context) *auth.IAMClaims {
 // HeaderUserIsAdmin is the gateway-minted "true"/"" ORG-level admin flag
 // (set for an org owner). Only "true" (case-insensitive) is treated as admin;
 // any other value (including absent) fails closed to false. It is org-scoped
-// only — NEVER gate cross-org/superadmin actions on it; use SuperAdmin().
+// only — NEVER gate cross-org/superadmin actions on it; use IsSuperAdmin().
 const HeaderUserIsAdmin = "X-User-IsAdmin"
 
-// HeaderUserIsSuperAdmin is the gateway-minted "true"/"" PLATFORM superadmin
-// flag, minted only for a real SuperAdmin (owner==AdminOrg or the explicit
-// isSuperAdmin claim). Fails closed to false when absent.
-const HeaderUserIsSuperAdmin = "X-User-IsSuperAdmin"
+// HeaderUserOwner is the gateway/EdgeAuth-minted HOME-org header — the validated
+// JWT `owner`, the identity + platform-sudo anchor. DISTINCT from X-Org-Id (the
+// EFFECTIVE org a SuperAdmin can switch to another tenant): IsSuperAdmin gates on
+// this so owner=="admin" survives an org-switch. Replaces the removed
+// X-User-IsSuperAdmin boolean — the org IS the signal, not a spoofable flag.
+const HeaderUserOwner = "X-User-Owner"
 
 // HeaderRoles is the canonical comma-joined role-name header set by
 // the gateway from the JWT roles claim. Empty value -> no roles.
