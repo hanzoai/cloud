@@ -24,10 +24,10 @@ func TestParseDefault(t *testing.T) {
 	}
 }
 
-// TestEnvOverride proves HULY_MODEL_VERSION overrides both the string and the
+// TestEnvOverride proves MODEL_VERSION overrides both the string and the
 // parsed triple — one source, both surfaces track it.
 func TestEnvOverride(t *testing.T) {
-	t.Setenv("HULY_MODEL_VERSION", "1.2.3")
+	t.Setenv("MODEL_VERSION", "1.2.3")
 	if got := modelVersion(); got != "1.2.3" {
 		t.Fatalf("modelVersion() = %q, want 1.2.3", got)
 	}
@@ -41,7 +41,7 @@ func TestEnvOverride(t *testing.T) {
 // the SAME number, never drifting.
 func TestNoDrift(t *testing.T) {
 	for _, v := range []string{"0.6.0", "0.7.0", "1.10.5"} {
-		t.Setenv("HULY_MODEL_VERSION", v)
+		t.Setenv("MODEL_VERSION", v)
 		if got := fmt.Sprintf("%d.%d.%d", modelMajor(), modelMinor(), modelPatch()); got != v {
 			t.Fatalf("triple %q != modelVersion() %q", got, v)
 		}
@@ -51,7 +51,7 @@ func TestNoDrift(t *testing.T) {
 // TestMalformedDegrades proves a bad override degrades to 0 components rather than
 // panicking.
 func TestMalformedDegrades(t *testing.T) {
-	t.Setenv("HULY_MODEL_VERSION", "not-a-version")
+	t.Setenv("MODEL_VERSION", "not-a-version")
 	if modelMajor() != 0 || modelMinor() != 0 || modelPatch() != 0 {
 		t.Fatalf("malformed parse = %d.%d.%d, want 0.0.0", modelMajor(), modelMinor(), modelPatch())
 	}
