@@ -14,13 +14,13 @@ import (
 
 // The eval TELEMETRY store is the high-volume, append-only half of the storage
 // split (CTO directive): traces, observations and scores-as-events land in
-// datastore (hanzoai's ClickHouse fork), NOT SQLite. datastore is THE backend
+// datastore (hanzoai's datastore fork), NOT SQLite. datastore is THE backend
 // for all AI observability, so this is the same MergeTree, insert-only discipline
 // the audit OLAP mirror uses (audit_mirror.go) and it reuses the v3
-// ClickHouse shapes (traces/observations/scores) since datastore IS ClickHouse.
+// datastore shapes (traces/observations/scores) since datastore IS datastore.
 //
 // ONE DATASTORE CLIENT (CTO consolidation). This store does NOT open a second
-// ClickHouse connection with a parallel CLOUD_EVALS_CLICKHOUSE_* cred namespace.
+// datastore connection with a parallel CLOUD_EVALS_CLICKHOUSE_* cred namespace.
 // It routes every write and read over the SHARED datastore peer that ai/object
 // owns (aiobject.InitDatastore → DatastoreExec / DatastoreQuery), the same client
 // clients/analytics and the ai o11y ledger use. The connection, retry/backoff,
@@ -33,7 +33,7 @@ import (
 //   - Every table carries `org` LowCardinality(String), NOT a nullable, and it is
 //     the FIRST key in ORDER BY so tenant reads are a prefix scan.
 //   - Every read predicate binds org as a NAMED PARAMETER ({org:String}) — never
-//     string-interpolated. ClickHouse SQL injection through a crafted org/dataset
+//     string-interpolated. datastore SQL injection through a crafted org/dataset
 //     is thereby impossible; the value is bound by the driver.
 //   - Every read carries a LIMIT (bounded response, no OLAP-scan DoS).
 //   - Scores are events: a MergeTree rejects UPDATE/DELETE at parse time, so a
@@ -42,9 +42,9 @@ import (
 //     ever reach Record; this store additionally refuses non-finite values as a
 //     defense-in-depth backstop.
 //
-// The interface makes the store swappable: production wires the ClickHouse impl;
+// The interface makes the store swappable: production wires the datastore impl;
 // tests use memTelemetry (in-memory) so the store/API/orchestrator are testable
-// without a ClickHouse instance. The orchestrator composes Telemetry with the
+// without a datastore instance. The orchestrator composes Telemetry with the
 // metastore + gateway + judge; it owns none of their internals.
 
 // Trace is one model-under-test invocation recorded during a run. Input/Output
@@ -116,10 +116,10 @@ type Telemetry interface {
 	Close() error
 }
 
-// ── datastore (shared ClickHouse client) implementation ──────────────────────
+// ── datastore (shared datastore client) implementation ──────────────────────
 
 // dsTelemetry writes eval telemetry to the datastore over the SHARED ai/object
-// ClickHouse client. It holds no connection of its own — aiobject owns the peer,
+// datastore client. It holds no connection of its own — aiobject owns the peer,
 // its retry/backoff, its pool and its DATASTORE_* creds. dsTelemetry owns only
 // its two tables and the SQL for its rows.
 type dsTelemetry struct {
@@ -355,7 +355,7 @@ func (t *dsTelemetry) Close() error { return nil }
 // ── in-memory implementation (tests + telemetry-disabled fallback is nil) ─────
 
 // memTelemetry is an in-memory Telemetry for tests. It enforces the SAME org
-// isolation and finiteness invariants as the ClickHouse impl so the security
+// isolation and finiteness invariants as the datastore impl so the security
 // tests exercise real behavior without a datastore.
 type memTelemetry struct {
 	mu     sync.Mutex
@@ -474,7 +474,7 @@ func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 // ── datastore row coercion ────────────────────────────────────────────────────
 //
 // aiobject.DatastoreQuery returns each column already decoded into its native
-// ClickHouse scan type (String→string, Float64→float64, DateTime64→time.Time).
+// datastore scan type (String→string, Float64→float64, DateTime64→time.Time).
 // These coercers accept the native value (and defensively its pointer form) so a
 // nil/absent column degrades to a zero value rather than panicking.
 
