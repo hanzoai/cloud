@@ -15,12 +15,13 @@
 // file: a deposit is funding:platform → wallet (credit the customer, debit the platform
 // float); a usage debit is wallet → revenue:platform (debit the customer, credit
 // platform revenue) — so every customer debit IS a platform-revenue credit in one atomic
-// entry, and a file's postings always sum to zero. Usage is idempotent on RequestID (the
-// ledger's (kind,program,ref) idempotency), so a retried debit charges AT MOST ONCE; a
-// deposit takes a fresh ref each call (grants are additive; DepositInput carries no
-// idempotency key). Amounts are int64 minor units (USD cents) — no float ever touches a
-// balance. A balance read is the settled ledger balance, clamped at zero; transient holds
-// are the caller's in-pod concern, never persisted here.
+// entry, and a file's postings always sum to zero. Both writes are idempotent on their ref
+// (the ledger's (kind,program,ref) idempotency): a usage debit on RequestID and a deposit
+// on DepositInput.Ref, so a retried debit or a fixed-ref backfill posts AT MOST ONCE; a
+// deposit with an empty Ref takes a fresh ref and stays additive (grants stack). Amounts
+// are int64 minor units (USD cents) — no float ever touches a balance. A balance read is
+// the settled ledger balance, clamped at zero; transient holds are the caller's in-pod
+// concern, never persisted here.
 package finance
 
 import (
@@ -133,8 +134,10 @@ func (f *ledgerFinance) BalanceCents(ctx context.Context, org, subject, currency
 }
 
 // Deposit posts a balanced credit (funding:platform → wallet) to subject's wallet in
-// org's file and returns the ledger entry id. Each deposit takes a FRESH ref, so grants
-// are additive (DepositInput carries no idempotency key).
+// org's file and returns the ledger entry id. Idempotent on in.Ref when set: a replay of
+// the same non-empty Ref is a no-op returning the ORIGINAL entry id (checked inside the
+// same transaction as the insert), so a fixed-ref backfill/settlement credits AT MOST
+// ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
 func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (string, error) {
 	if in.Cents <= 0 {
 		return "", fmt.Errorf("finance: deposit amount must be positive, got %d", in.Cents)
@@ -147,24 +150,39 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	if err != nil {
 		return "", err
 	}
-	e := ledger.Entry{
-		ID:          id,
-		Kind:        kindDeposit,
-		Ref:         id, // fresh id → additive grant
-		Memo:        in.Notes,
-		AmountCents: in.Cents,
-		CreatedAt:   time.Now().Unix(),
+	ref := in.Ref
+	if ref == "" {
+		ref = id // no idempotency key → fresh ref, additive grant
 	}
-	postings := []ledger.Posting{
-		{Account: acctFunding, Amount: -in.Cents},
-		{Account: walletAcct(in.Subject), Amount: in.Cents},
-	}
+	entryID := id
 	if err := store.Tx(ctx, func(tx ledger.Tx) error {
+		if in.Ref != "" {
+			existing, ok, ferr := tx.EntryByRef(kindDeposit, "", in.Ref)
+			if ferr != nil {
+				return ferr
+			}
+			if ok {
+				entryID = existing.ID
+				return nil // idempotent replay — already credited once
+			}
+		}
+		e := ledger.Entry{
+			ID:          id,
+			Kind:        kindDeposit,
+			Ref:         ref,
+			Memo:        in.Notes,
+			AmountCents: in.Cents,
+			CreatedAt:   time.Now().Unix(),
+		}
+		postings := []ledger.Posting{
+			{Account: acctFunding, Amount: -in.Cents},
+			{Account: walletAcct(in.Subject), Amount: in.Cents},
+		}
 		return tx.Insert(e, postings)
 	}); err != nil {
 		return "", fmt.Errorf("finance: deposit: %w", err)
 	}
-	return id, nil
+	return entryID, nil
 }
 
 // RecordUsage posts a balanced usage debit (wallet → revenue:platform) from subject's
