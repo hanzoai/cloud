@@ -110,7 +110,7 @@ type Entry struct {
 
 // Policy is the revenue-share configuration: the fraction of net platform revenue,
 // in basis points, that a sweep accrues into the reserve fund. One value, one
-// place; global-admin adjusts it.
+// place; SuperAdmin adjusts it.
 type Policy struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 	UpdatedAt       int64 `json:"updatedAt"`
@@ -188,7 +188,7 @@ type Backend interface {
 	Root(ctx context.Context) ([32]byte, int, error)
 	// AccountsWithPrefix returns account→balance for every account under prefix — the
 	// scope-aware read primitive: a per-org caller reads its own "org:<tenant>:"
-	// prefix; global-admin reads house prefixes ("fund:", "payout:", "revenue:").
+	// prefix; SuperAdmin reads house prefixes ("fund:", "payout:", "revenue:").
 	AccountsWithPrefix(ctx context.Context, prefix string) (map[string]int64, error)
 }
 

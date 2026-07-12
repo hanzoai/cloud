@@ -598,7 +598,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	}
 }
 
-// TestAdminGateAndDirectory: every /v1/admin/authors* route is global-admin
+// TestAdminGateAndDirectory: every /v1/admin/authors* route is SuperAdmin
 // fail-closed, and the directory exposes orgs + counts + a summary.
 func TestAdminGateAndDirectory(t *testing.T) {
 	app, s, fc, fg := mount(t)
@@ -624,7 +624,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 		}
 	}
 
-	// Global admin sees the directory with the author + counts + a summary.
+	// SuperAdmin sees the directory with the author + counts + a summary.
 	code, body := req(t, app, http.MethodGet, "/v1/admin/authors", "admin", true, nil)
 	if code != http.StatusOK {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)

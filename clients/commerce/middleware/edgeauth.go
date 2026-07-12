@@ -29,7 +29,7 @@ import (
 // re-mints them from a cryptographically-verified IAM JWT.
 var identityHeaders = []string{
 	"X-Org-Id", "X-User-Id", "X-User-Email", "X-User-IsAdmin",
-	"X-User-IsGlobalAdmin", "X-User-Permissions", "X-Roles", "X-Phone-Number",
+	"X-User-IsSuperAdmin", "X-User-Permissions", "X-Roles", "X-Phone-Number",
 }
 
 // EdgeAuth is the standalone-edge trust boundary for a directly-exposed
@@ -122,17 +122,17 @@ func EdgeAuth() gin.HandlerFunc {
 				if claims.IsAdmin {
 					c.Request.Header.Set("X-User-IsAdmin", "true")
 				}
-				// Mint the PLATFORM superadmin signal ONLY for a global admin —
+				// Mint the PLATFORM superadmin signal ONLY for a SuperAdmin —
 				// distinct from org-level isAdmin, mirroring the gateway. This
 				// is the spoof-proof header cross-org gates read.
-				if isGlobalAdmin(claims) {
-					c.Request.Header.Set("X-User-IsGlobalAdmin", "true")
+				if isSuperAdmin(claims) {
+					c.Request.Header.Set("X-User-IsSuperAdmin", "true")
 				}
 				c.Request.Header.Set("X-User-Permissions", permsHeader(claims))
 
 				// (3) Per-org isolation: the browser never chooses whose
 				// billing it reads — the subject is locked to the caller's
-				// own org slug. A GLOBAL ADMIN (and only a global admin) may
+				// own org slug. A SUPERADMIN (and only a SuperAdmin) may
 				// redirect the view to another org via ?org=<slug>; for
 				// everyone else the override is consumed-and-ignored so
 				// isolation can never be weakened (fail-closed).
@@ -212,10 +212,10 @@ func looksLikeJWT(tok string) bool {
 // (api/billing/handlers.go — deposit, credit-grants, customer-balance/adjustments,
 // auto-recharge/run-all, cycle/run-all, payouts, refund, test-mode). Because
 // bit.Field.Has is intersection semantics, granting Admin to a caller lets that
-// caller satisfy those gates. It is therefore GLOBAL-admin-only: an org-level
+// caller satisfy those gates. It is therefore SuperAdmin-only: an org-level
 // admin (claims.IsAdmin — an org OWNER like maxpower carries it within their own
 // org) must NOT mint free balance or charge cards platform-wide. Only
-// isGlobalAdmin(claims) — the same spoof-proof predicate this file uses for the
+// isSuperAdmin(claims) — the same spoof-proof predicate this file uses for the
 // cross-org ?org billing-view override (resolveBillingSubject) — grants Admin.
 //
 // Live is the "real money, not sandbox" mode bit, orthogonal to authority: an org
@@ -228,10 +228,10 @@ func permsHeader(claims *auth.IAMClaims) string {
 	var f int64
 	if claims.IsAdmin {
 		// Org-level admin ⇒ live (non-sandbox) mode. Deliberately NOT the Admin
-		// (money/admin) bit — that is global-admin-only below.
+		// (money/admin) bit — that is SuperAdmin-only below.
 		f |= int64(permission.Live)
 	}
-	if isGlobalAdmin(claims) {
+	if isSuperAdmin(claims) {
 		// PLATFORM admin ⇒ the money/admin authority the admin billing gates check.
 		f |= int64(permission.Admin)
 	}
@@ -279,7 +279,7 @@ const maxBillingBodyBytes = 1 << 20 // 1 MiB
 // a /billing/ POST/PUT/PATCH with a JSON object body it pins the same
 // billing-subject fields (user/userId/customerId) to subject before the
 // handler binds them, so a client can never persist a billing record under a
-// subject other than its own (global-admin ?org= override still honored,
+// subject other than its own (SuperAdmin ?org= override still honored,
 // because subject already reflects it). It is body-shape-agnostic: only those
 // keys are rewritten, and only when present; arrays, primitives, other shapes,
 // non-JSON content, and unparseable bodies all pass through untouched. Reads
@@ -369,38 +369,38 @@ func pinJSONSubjectFields(raw []byte, subject string) ([]byte, bool) {
 // and whether the org namespace header must follow that choice.
 //
 // Default (every caller): the subject is the caller's OWN org slug
-// (claims.Owner) — strict per-org isolation. A global admin, and ONLY a
-// global admin, may redirect the view to another org with ?org=<slug>.
+// (claims.Owner) — strict per-org isolation. A SuperAdmin, and ONLY a
+// SuperAdmin, may redirect the view to another org with ?org=<slug>.
 //
 // The ?org override is consumed (stripped from the query) unconditionally so
 // it can never reach a handler as anything but the admin-gated signal decided
-// here. It is HONORED only when isGlobalAdmin(claims) holds; a non-admin's
+// here. It is HONORED only when isSuperAdmin(claims) holds; a non-admin's
 // ?org is read, discarded, and the subject stays pinned to their own org.
 // Returns (subject, override) where override means the namespace header
 // (X-Org-Id) must be re-pointed at subject.
 func resolveBillingSubject(r *http.Request, claims *auth.IAMClaims) (string, bool) {
 	own := strings.ToLower(strings.TrimSpace(claims.Owner))
 	reqOrg := consumeOrgOverride(r)
-	if reqOrg != "" && isGlobalAdmin(claims) {
+	if reqOrg != "" && isSuperAdmin(claims) {
 		return reqOrg, true
 	}
 	return own, false
 }
 
-// isGlobalAdmin reports whether the verified claims belong to a real
+// isSuperAdmin reports whether the verified claims belong to a real
 // platform-wide administrator. Two independent signals, either suffices:
-//   - the explicit isGlobalAdmin JWT claim; or
-//   - membership in the global admin org (Owner == "admin"), the slug Hanzo
-//     IAM seeds global admins into.
+//   - the explicit isSuperAdmin JWT claim; or
+//   - membership in the SuperAdmin org (Owner == "admin"), the slug Hanzo
+//     IAM seeds SuperAdmins into.
 //
 // Plain IsAdmin is deliberately NOT trusted: it is an ORG-level role (an org
 // owner carries IsAdmin=true within their own org), so gating cross-org reads
 // on it would let any org owner view another org via ?org= — the exact
 // isolation break this boundary exists to stop.
-func isGlobalAdmin(claims *auth.IAMClaims) bool {
+func isSuperAdmin(claims *auth.IAMClaims) bool {
 	// One canonical predicate, defined on the claims type and shared by every
-	// global-admin gate (edge billing ?org override, checkout tenant admin).
-	return claims.GlobalAdmin()
+	// SuperAdmin gate (edge billing ?org override, checkout tenant admin).
+	return claims.SuperAdmin()
 }
 
 // consumeOrgOverride removes and returns a normalized ?org=<slug> billing-view

@@ -6,7 +6,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// Routes registers the customer-management surface (global-admin only). List (static)
+// Routes registers the customer-management surface (SuperAdmin only). List (static)
 // precedes the :org param route; the write actions are POST (distinct method), so none
 // collide. The grants ledger + the org-in-body issue-grant share the ONE credit path.
 func Routes(app *zip.App, s *cloud.Service[core.State]) {

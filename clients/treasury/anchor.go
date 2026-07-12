@@ -154,12 +154,12 @@ func (a *anchorer) status(ctx context.Context, b ledger.Backend) anchorStatus {
 }
 
 // adminAnchor answers POST /v1/admin/treasury/anchor — commit the current ledger
-// root to Hanzo L1. Global-admin only. When the chain path is wired it signs +
+// root to Hanzo L1. SuperAdmin only. When the chain path is wired it signs +
 // submits the anchor tx and records it; otherwise it returns the root that WOULD be
 // committed plus the exact remaining step (honest, records nothing false).
 func adminAnchor(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	if s.State.anchor.configured() {

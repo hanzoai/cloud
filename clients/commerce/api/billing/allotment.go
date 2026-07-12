@@ -100,7 +100,7 @@ func resolvePlanSlug(db *datastore.Datastore, user, explicit string) string {
 // able to name a higher tier ("max") and mint its $100/mo for free. Therefore:
 //
 //   - a client-supplied override is honored ONLY for a privileged MINT caller
-//     (the internal service token or a platform global admin — the SAME
+//     (the internal service token or a platform SuperAdmin — the SAME
 //     principals PlatformOnly admits and the ONLY ones allowed to mint an
 //     arbitrary amount via /deposit), for legitimate comps/backfills; and
 //   - for EVERYONE else it is verified against the real subscription and IGNORED

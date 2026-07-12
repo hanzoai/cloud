@@ -550,7 +550,7 @@ func drop(s *cloud.Service[state], kind string) zip.Handler {
 // client breaks.
 //
 // The X-User-IsAdmin claim is likewise only trustworthy under a validated
-// principal — SanitizeIdentity sets it only for a JWT-verified global admin
+// principal — SanitizeIdentity sets it only for a JWT-verified SuperAdmin
 // (HIP-0026) — and even then reaches only the literal "admin" org's own physical
 // namespace, never a real tenant's.
 func tenant(c *zip.Ctx) (string, bool) {

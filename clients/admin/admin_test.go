@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/hanzoai/cloud/clients/admin/core"
@@ -18,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/admin/iam"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -106,7 +106,7 @@ var platformAdminRoutes = []adminRoute{
 var adminRoutes = append(append([]adminRoute{}, scopedAdminRoutes...), platformAdminRoutes...)
 
 // TestGate_DeniesEveryRoute proves the non-negotiable: EVERY /v1/admin/* route is
-// global-admin only, fail-closed. An anonymous caller and a tenant-admin (whose
+// SuperAdmin only, fail-closed. An anonymous caller and a tenant-admin (whose
 // identity carries an org but NOT the sanitizer-minted X-User-IsAdmin) are BOTH
 // denied 403 on every route — no upstream is even reached. admin mirrors the
 // gateway's admin-guard: SanitizeIdentity sets X-User-IsAdmin only for a
@@ -150,15 +150,15 @@ func TestGate_DeniesEveryRoute(t *testing.T) {
 	}
 }
 
-// TestGate_AllowsGlobalAdmin proves the flip side: a validated global admin
+// TestGate_AllowsSuperAdmin proves the flip side: a validated SuperAdmin
 // (X-User-IsAdmin=true, minted only for owner==AdminOrg) is admitted — the gate
 // is not vacuously closed. Reaches /v1/admin/me, which needs no upstream.
-func TestGate_AllowsGlobalAdmin(t *testing.T) {
+func TestGate_AllowsSuperAdmin(t *testing.T) {
 	do := mount(t, "http://127.0.0.1:0", "http://127.0.0.1:0", "http://127.0.0.1:0")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "admin/z", "X-User-Email": "z@hanzo.ai"}
 	resp, body := do("GET", "/v1/admin/me", admin)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("global-admin GET /v1/admin/me: got %d, want 200 (body=%s)", resp.StatusCode, body)
+		t.Fatalf("SuperAdmin GET /v1/admin/me: got %d, want 200 (body=%s)", resp.StatusCode, body)
 	}
 	var env struct {
 		Status string  `json:"status"`
@@ -170,17 +170,13 @@ func TestGate_AllowsGlobalAdmin(t *testing.T) {
 	if env.Status != "ok" {
 		t.Fatalf("me status = %q, want ok", env.Status)
 	}
-	if env.Data.Owner != "admin" || env.Data.Email != "z@hanzo.ai" || !env.Data.IsGlobalAdmin {
+	if env.Data.Owner != "admin" || env.Data.Email != "z@hanzo.ai" || !env.Data.IsSuperAdmin {
 		t.Errorf("me identity wrong: %+v", env.Data)
 	}
-	// SuperAdmin canonicalization: the new isSuperAdmin key MUST be present and
-	// equal to the deprecated isGlobalAdmin alias — the console may read either
-	// during the rename migration and must see the same truth.
+	// SuperAdmin canonicalization: the isSuperAdmin key MUST be present and true
+	// for a platform SuperAdmin.
 	if !env.Data.IsSuperAdmin {
-		t.Errorf("me: isSuperAdmin must be true for a global admin: %+v", env.Data)
-	}
-	if env.Data.IsSuperAdmin != env.Data.IsGlobalAdmin {
-		t.Errorf("me: isSuperAdmin (%v) must equal back-compat isGlobalAdmin (%v)", env.Data.IsSuperAdmin, env.Data.IsGlobalAdmin)
+		t.Errorf("me: isSuperAdmin must be true for a SuperAdmin: %+v", env.Data)
 	}
 }
 
@@ -368,7 +364,7 @@ func TestOrgs_RealAggregation(t *testing.T) {
 }
 
 // TestUsers_MapsIAMToOperatorUser verifies the cross-org directory mapping,
-// including the derived isGlobalAdmin (owner == adminOrg) and the data2 total.
+// including the derived isSuperAdmin (owner == adminOrg) and the data2 total.
 func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	iam := newFakeIAM()
 	defer iam.server.Close()
@@ -393,17 +389,9 @@ func TestUsers_MapsIAMToOperatorUser(t *testing.T) {
 	if u.Name != "alice" || u.Email != "alice@hanzo.ai" || !u.IsAdmin || u.LastSignin == "" {
 		t.Errorf("user mapping wrong: %+v", u)
 	}
-	// owner "hanzo" != adminOrg "admin" → not a global admin.
-	if u.IsGlobalAdmin {
-		t.Errorf("user owner=hanzo must not be flagged global admin")
-	}
-	// SuperAdmin canonicalization: the new key mirrors the same derivation, so a
-	// non-admin-org user is NOT a super admin under either key, and they agree.
+	// owner "hanzo" != adminOrg "admin" → not a SuperAdmin.
 	if u.IsSuperAdmin {
-		t.Errorf("user owner=hanzo must not be flagged super admin")
-	}
-	if u.IsSuperAdmin != u.IsGlobalAdmin {
-		t.Errorf("user: isSuperAdmin (%v) must equal back-compat isGlobalAdmin (%v)", u.IsSuperAdmin, u.IsGlobalAdmin)
+		t.Errorf("user owner=hanzo must not be flagged SuperAdmin")
 	}
 }
 
