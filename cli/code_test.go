@@ -32,8 +32,8 @@ func TestAnthropicWirePinsZen5Tiers(t *testing.T) {
 		"ANTHROPIC_SMALL_FAST_MODEL":     "zen5-flash",
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "best",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-pro",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-ultra",
 	}
 	for k, v := range want {
 		if got := env[k]; got != v {
@@ -57,8 +57,10 @@ func TestAnthropicWireExplicitModel(t *testing.T) {
 	if env["ANTHROPIC_MODEL"] != "zen5-max" {
 		t.Errorf("ANTHROPIC_MODEL: want zen5-max, got %q", env["ANTHROPIC_MODEL"])
 	}
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "zen5-max" {
-		t.Errorf("OPUS tier should track the main model: want zen5-max, got %q", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	// The tier slots are FIXED zen5 aliases (the stable contract) — they do
+	// NOT track the main model. Only ANTHROPIC_MODEL carries the resolved id.
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "zen5-pro" {
+		t.Errorf("OPUS tier is the fixed zen5-pro contract, not the main model: got %q", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
 	}
 	// The fast/classifier tier stays pinned to zen5-flash regardless of main.
 	if env["ANTHROPIC_SMALL_FAST_MODEL"] != "zen5-flash" {
