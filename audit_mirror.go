@@ -42,27 +42,47 @@ type datastoreMirror struct {
 // no datastore is configured (mirroring is optional — the local chain is the
 // authority). It connects lazily-validated (a Ping) and ensures the table exists.
 //
-// Config (all from env / KMS-injected secrets, never hard-coded):
+// Config (all from env / KMS-injected secrets, never hard-coded). Each key is read as
+// CLOUD_AUDIT_DATASTORE_* first, falling back to the legacy CLOUD_AUDIT_CLICKHOUSE_* so a
+// rollout mid-flight (new binary / old manifest, or vice versa) never drops the
+// audit-datastore connection:
 //
-//	CLOUD_AUDIT_CLICKHOUSE_ADDR   host:9000 of the datastore native port
-//	CLOUD_AUDIT_CLICKHOUSE_DB     database (default "hanzo")
-//	CLOUD_AUDIT_CLICKHOUSE_TABLE  table (default "audit_log")
-//	CLOUD_AUDIT_CLICKHOUSE_USER   user
-//	CLOUD_AUDIT_CLICKHOUSE_PASSWORD  password (KMS-backed secret)
+//	CLOUD_AUDIT_DATASTORE_ADDR      host:9000 of the datastore native port
+//	CLOUD_AUDIT_DATASTORE_DB        database (default "hanzo")
+//	CLOUD_AUDIT_DATASTORE_TABLE     table (default "audit_log")
+//	CLOUD_AUDIT_DATASTORE_USER      user
+//	CLOUD_AUDIT_DATASTORE_PASSWORD  password (KMS-backed secret)
+//
+// auditEnv reads CLOUD_AUDIT_DATASTORE_<suffix>, falling back to the legacy
+// CLOUD_AUDIT_CLICKHOUSE_<suffix>; auditEnvOr adds a default when neither is set.
+func auditEnv(suffix string) string {
+	if v := os.Getenv("CLOUD_AUDIT_DATASTORE_" + suffix); v != "" {
+		return v
+	}
+	return os.Getenv("CLOUD_AUDIT_CLICKHOUSE_" + suffix)
+}
+
+func auditEnvOr(suffix, def string) string {
+	if v := auditEnv(suffix); v != "" {
+		return v
+	}
+	return def
+}
+
 func newAuditMirror(log luxlog.Logger) (audit.Mirror, error) {
-	addr := strings.TrimSpace(os.Getenv("CLOUD_AUDIT_CLICKHOUSE_ADDR"))
+	addr := strings.TrimSpace(auditEnv("ADDR"))
 	if addr == "" {
 		return nil, nil // no datastore configured — local chain only.
 	}
-	db := getenv("CLOUD_AUDIT_CLICKHOUSE_DB", "hanzo")
-	table := getenv("CLOUD_AUDIT_CLICKHOUSE_TABLE", "audit_log")
+	db := auditEnvOr("DB", "hanzo")
+	table := auditEnvOr("TABLE", "audit_log")
 
 	conn, err := datastore.Open(&datastore.Options{
 		Addr: []string{addr},
 		Auth: datastore.Auth{
 			Database: db,
-			Username: os.Getenv("CLOUD_AUDIT_CLICKHOUSE_USER"),
-			Password: os.Getenv("CLOUD_AUDIT_CLICKHOUSE_PASSWORD"),
+			Username: auditEnv("USER"),
+			Password: auditEnv("PASSWORD"),
 		},
 		DialTimeout: 5 * time.Second,
 	})
