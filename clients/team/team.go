@@ -105,7 +105,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	bridge := &botsBridge{trans: trans, accounts: accounts}
 	bridge.register(app, guard)
 
-	// Files plane: the workspace blob store the Huly front's UPLOAD_URL/FILES_URL
+	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
 	fsvc := &filesSvc{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}

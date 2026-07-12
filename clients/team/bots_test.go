@@ -45,9 +45,9 @@ func TestBotActive(t *testing.T) {
 	}
 }
 
-// TestHulyName locks the Person.name convention "last,first": a two-token name
+// TestPersonName locks the Person.name convention "last,first": a two-token name
 // splits, a single token (most bots) becomes ",token", and empty stays ",".
-func TestHulyName(t *testing.T) {
+func TestPersonName(t *testing.T) {
 	cases := map[string]string{
 		"Zeekay Kanjo":       "Kanjo,Zeekay",
 		"maxpower-assistant": ",maxpower-assistant",
@@ -55,8 +55,8 @@ func TestHulyName(t *testing.T) {
 		"  Ada  Lovelace  ":  "Lovelace,Ada",
 	}
 	for in, want := range cases {
-		if got := hulyName(in); got != want {
-			t.Errorf("hulyName(%q) = %q, want %q", in, got, want)
+		if got := personName(in); got != want {
+			t.Errorf("personName(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
