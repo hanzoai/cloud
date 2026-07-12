@@ -196,22 +196,33 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	}
 	fin := finance.New(cfg.DataDir)
 	finance.Publish(fin)
-	// Money is billed to the org's BILLING ACCOUNT, never the per-user subject:
-	// both the balance read and the usage debit key on the org (its default-account
-	// pool wallet), so a funded account gates AND depletes consistently — the debit
-	// can never land on a different wallet than the gate read. The per-user identity
-	// the ai module resolves is attribution only; the account is the funding entity.
-	// (Project-scoped non-default accounts resolve here once the hook carries project.)
+	// Money is billed to the SUBJECT's wallet, inside the org's ledger.
+	//
+	// org  = which ledger (the tenant's books)
+	// subject = which wallet in it (ai resolves it: a person => "org/name", an
+	//           org-owned application/service key => the org's own account)
+	//
+	// So a personal account has a PERSONAL balance and a personal plan, and an org
+	// pays for what its applications and service keys spend — which is the product:
+	// sign up as yourself, then stand up an org whose users are your customers.
+	//
+	// Keying both hooks on the org collapsed every member onto the tenant's pool
+	// wallet: every new signup lives in "hanzo", so a brand-new $0 account read
+	// HANZO's balance and sailed through the gate — we enforced our own wallet.
+	//
+	// The invariant that must never break: the gate READ and the usage DEBIT key on
+	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
+	// subject; keep them together.
 	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
-		return fin.BalanceCents(ctx, namespace, namespace, currency, false)
+		return fin.BalanceCents(ctx, namespace, subject, currency, false)
 	})
 	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
 		return fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Namespace, Subject: u.Namespace, Cents: u.Cents,
+			Org: u.Namespace, Subject: u.Subject, Cents: u.Cents,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
 	})
-	log.Info("finance ledger wired (per-org account, native, no exempt, fail-closed)", "dataDir", cfg.DataDir)
+	log.Info("finance ledger wired (per-subject wallet in the org ledger, native, fail-closed)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
