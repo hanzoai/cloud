@@ -63,7 +63,7 @@ var kinds = []string{"sql", "vector", "datastore", "kv", "search", "s3", "docdb"
 // security bar: never a shared/cluster-wide grant.
 //
 // It is now EMPTY: datastore + docdb — the only two kinds a shared
-// ClickHouse/FerretDB could never scope a per-tenant role on — moved to the
+// datastore/FerretDB could never scope a per-tenant role on — moved to the
 // DEDICATED-instance strategy (dedicated.go, dedicatedEngines), where the org
 // owns the whole instance so its admin credential is naturally tenant-scoped.
 // The mechanism stays so any FUTURE kind can be honest-gated before it can mint
@@ -600,7 +600,7 @@ func sanitizeIdent(name string) string { return strings.ReplaceAll(name, "-", "_
 // physicalName namespaces a resource on a shared backend as
 // "o"<orgHash>_<sanitizedName>. The leading 'o' keeps it alpha-initial (a valid
 // identifier for every backend); the fixed-width org hash disambiguates org
-// from name; sanitizeIdent makes the name a safe SQL/ClickHouse/Base identifier.
+// from name; sanitizeIdent makes the name a safe SQL/datastore/Base identifier.
 // Injective in (org,name) up to a 64-bit SHA-256 collision. With
 // name ≤ 40 chars (nameRE) the identifier is ≤ 58 chars — inside Postgres's
 // 63-char identifier limit.
