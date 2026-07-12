@@ -2,8 +2,8 @@
 //
 // Two handlers:
 //
-//	POST /_/commerce/tenants   global-admin-only create (GlobalAdmin: owner==admin
-//	                           or isGlobalAdmin — NOT org-level isAdmin)
+//	POST /_/commerce/tenants   SuperAdmin-only create (SuperAdmin: owner==admin
+//	                           or isSuperAdmin — NOT org-level isAdmin)
 //	GET  /_/commerce/providers tenant-admin list current tenant's providers
 //
 // Security invariants (Red-1 H-1 precedent):
@@ -52,14 +52,14 @@ func NewTenantAdminAPI(s *store.Store) *TenantAdminAPI {
 // than the in-store Tenant: an admin creating a row is not allowed to
 // preset id or timestamps, and hostnames are normalized server-side.
 type createTenantRequest struct {
-	Name               string             `json:"name"`
-	Hostnames          []string           `json:"hostnames"`
-	Brand              store.BrandConfig  `json:"brand"`
-	IAM                store.IAMConfig    `json:"iam"`
-	IDV                store.IDVConfig    `json:"idv"`
-	Providers          []store.Provider   `json:"providers"`
-	BDEndpoint         string             `json:"bd_endpoint"`
-	ReturnURLAllowlist []string           `json:"return_url_allowlist"`
+	Name               string            `json:"name"`
+	Hostnames          []string          `json:"hostnames"`
+	Brand              store.BrandConfig `json:"brand"`
+	IAM                store.IAMConfig   `json:"iam"`
+	IDV                store.IDVConfig   `json:"idv"`
+	Providers          []store.Provider  `json:"providers"`
+	BDEndpoint         string            `json:"bd_endpoint"`
+	ReturnURLAllowlist []string          `json:"return_url_allowlist"`
 }
 
 // createTenantResponse echoes the server-assigned id + timestamps. It does
@@ -74,8 +74,8 @@ type createTenantResponse struct {
 
 // ─── handler: POST /_/commerce/tenants ──────────────────────────────────
 
-// CreateTenant creates a new tenant row. Only PLATFORM (global) admins —
-// GlobalAdmin(): owner==admin or the explicit isGlobalAdmin claim — may call
+// CreateTenant creates a new tenant row. Only PLATFORM SuperAdmins —
+// SuperAdmin(): owner==admin or the explicit isSuperAdmin claim — may call
 // this. Org owners (org-level isAdmin) and tenant-admins get 403;
 // unauthenticated callers get 401.
 func (a *TenantAdminAPI) CreateTenant(c *gin.Context) {
@@ -88,7 +88,7 @@ func (a *TenantAdminAPI) CreateTenant(c *gin.Context) {
 	}
 	claims := iammiddleware.GetIAMClaims(c)
 	if !isSuperadmin(claims) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "global admin required"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "SuperAdmin required"})
 		return
 	}
 
@@ -170,7 +170,7 @@ func (a *TenantAdminAPI) ListProviders(c *gin.Context) {
 	}
 	claims := iammiddleware.GetIAMClaims(c)
 
-	// Tenant-admin (org-scoped) OR global admin may list. A plain authenticated
+	// Tenant-admin (org-scoped) OR SuperAdmin may list. A plain authenticated
 	// user without an admin signal gets 403.
 	if !isSuperadmin(claims) && !isTenantAdmin(claims) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin role required"})
@@ -321,33 +321,33 @@ func publicTenantDTO(t *store.Tenant) publicStoreView {
 // clients. Matches publicView's shape from tenant.go but on store types so
 // there is no accidental type-assertion seam.
 type publicStoreView struct {
-	Name               string              `json:"name"`
-	Brand              store.BrandConfig   `json:"brand"`
-	IAM                store.IAMConfig     `json:"iam"`
-	IDV                store.IDVConfig     `json:"idv"`
-	Providers          []publicProvider    `json:"providers"`
-	ReturnURLAllowlist []string            `json:"returnUrlAllowlist"`
+	Name               string            `json:"name"`
+	Brand              store.BrandConfig `json:"brand"`
+	IAM                store.IAMConfig   `json:"iam"`
+	IDV                store.IDVConfig   `json:"idv"`
+	Providers          []publicProvider  `json:"providers"`
+	ReturnURLAllowlist []string          `json:"returnUrlAllowlist"`
 }
 
 // ─── role predicates ────────────────────────────────────────────────────
 
-// isSuperadmin returns true ONLY for a Hanzo PLATFORM (global) administrator:
-// the explicit isGlobalAdmin claim, or membership in the admin org. It does
+// isSuperadmin returns true ONLY for a Hanzo PLATFORM SuperAdmin:
+// the explicit isSuperAdmin claim, or membership in the admin org. It does
 // NOT trust org-level IsAdmin (an org owner carries it within their own org)
 // nor any org-mintable role NAME like "superadmin"/"platform-admin" — either
 // would let an org owner create tenants and perform cross-tenant ops (Red
 // HIGH: org-admin → superadmin escalation). One robust predicate, defined on
-// the claims type (auth.IAMClaims.GlobalAdmin) and shared with the edge
+// the claims type (auth.IAMClaims.SuperAdmin) and shared with the edge
 // billing boundary. nil-safe.
 func isSuperadmin(c *auth.IAMClaims) bool {
-	return c.GlobalAdmin()
+	return c.SuperAdmin()
 }
 
 // isTenantAdmin returns true for an ORG-level admin — the robust isAdmin claim
 // IAM sets for an org's owner/admins, NOT a fragile, org-mintable role-name
 // string (Red: role-name conflation). It is ORG-SCOPED: every handler that
 // consults it derives the tenant from the caller's own `owner` claim, so it can
-// only ever act on the caller's own org. A global admin is covered separately
+// only ever act on the caller's own org. A SuperAdmin is covered separately
 // by isSuperadmin. nil-safe.
 func isTenantAdmin(c *auth.IAMClaims) bool {
 	return c != nil && c.IsAdmin

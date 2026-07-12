@@ -141,7 +141,7 @@ func kmsMachineAudience(owner string) string {
 // isKMSMachinePrincipal reports whether a validated token is a per-org KMS-sync
 // machine identity: its audience set contains the owner-bound machine audience
 // (<owner>-platform-kms). Such a principal is a client_credentials machine identity
-// scoped to exactly one org. SanitizeIdentity uses this to DENY it global-admin
+// scoped to exactly one org. SanitizeIdentity uses this to DENY it SuperAdmin
 // authority even if it somehow carries isAdmin=true and owner==adminOrg, so V6's
 // audience widening can never be leveraged (via an admin-org machine token) into a
 // cross-org read. Its org-scoped data access is unaffected — this gates ONLY the

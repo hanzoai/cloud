@@ -32,8 +32,8 @@ func AuthorizeMint(c *gin.Context) {
 //  1. the internal service (cloud-api → commerce), authenticated by a bearer
 //     equal to COMMERCE_SERVICE_TOKEN — recorded by TokenRequired's service-token
 //     branch as IsServiceToken(c); and
-//  2. a Hanzo PLATFORM (global) administrator — auth.IAMClaims.GlobalAdmin(): the
-//     spoof-proof isGlobalAdmin claim (gateway/EdgeAuth X-User-IsGlobalAdmin) OR
+//  2. a Hanzo PLATFORM SuperAdmin — auth.IAMClaims.SuperAdmin(): the
+//     spoof-proof isSuperAdmin claim (gateway/EdgeAuth X-User-IsSuperAdmin) OR
 //     membership in the "admin" org.
 //
 // It deliberately does NOT admit the org-level Admin bit (permission.Admin). An
@@ -43,7 +43,7 @@ func AuthorizeMint(c *gin.Context) {
 // bit — via TokenRequired(permission.Admin) alone — let ANY org owner self-credit
 // unlimited balance (POST /v1/billing/deposit &c.) → unlimited free inference.
 // That is the real-money-GA blocker this gate closes. It is the same
-// org-admin-vs-global-admin anti-conflation the codebase enforces for cross-org
+// org-admin-vs-SuperAdmin anti-conflation the codebase enforces for cross-org
 // actions (checkout tenant admin, the edge billing ?org override).
 //
 // MOUNT IT AFTER TokenRequired(permission.Admin): TokenRequired resolves the org
@@ -66,7 +66,7 @@ func PlatformOnly() gin.HandlerFunc {
 		}
 		http.Fail(c, 403,
 			"This operation requires platform-administrator or internal-service credentials.",
-			errors.New("money-mint route: caller is neither the internal service token nor a platform global admin"))
+			errors.New("money-mint route: caller is neither the internal service token nor a platform SuperAdmin"))
 	}
 }
 
@@ -74,8 +74,8 @@ func PlatformOnly() gin.HandlerFunc {
 // spendable balance". It admits exactly the two principals PlatformOnly admits:
 //
 //  1. the verified internal service token (cloud-api → commerce), IsServiceToken(c); and
-//  2. a Hanzo PLATFORM (global) administrator, auth.IAMClaims.GlobalAdmin() — the
-//     spoof-proof isGlobalAdmin claim OR membership in the "admin" org.
+//  2. a Hanzo PLATFORM SuperAdmin, auth.IAMClaims.SuperAdmin() — the
+//     spoof-proof isSuperAdmin claim OR membership in the "admin" org.
 //
 // It deliberately does NOT admit the org-level Admin bit (an org OWNER's IAM
 // isAdmin, or a legacy per-org access token). Use it wherever a mint decision is
@@ -85,5 +85,5 @@ func PlatformOnly() gin.HandlerFunc {
 // shared by the route gate (PlatformOnly) and every in-handler gate. Fail-closed:
 // neither signal present → false.
 func MayMintMoney(c *gin.Context) bool {
-	return IsServiceToken(c) || iammiddleware.GetIAMClaims(c).GlobalAdmin()
+	return IsServiceToken(c) || iammiddleware.GetIAMClaims(c).SuperAdmin()
 }

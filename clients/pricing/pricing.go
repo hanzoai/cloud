@@ -159,7 +159,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/pricing/summary", gatedSummary)
 	app.Get("/v1/pricing/model/:name", gatedModel)
 
-	// Admin write surface for the overlay (global-admin only; see admin.go).
+	// Admin write surface for the overlay (SuperAdmin only; see admin.go).
 	app.Get("/v1/admin/catalog", adminCatalog)
 	app.Patch("/v1/admin/catalog/models/*", adminPatchModel)
 	app.Patch("/v1/admin/catalog/providers/:name", adminPatchProvider)
