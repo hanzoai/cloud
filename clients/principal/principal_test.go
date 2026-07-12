@@ -156,6 +156,71 @@ func TestProject_ReadsMintedHeader(t *testing.T) {
 	}
 }
 
+// validatedProjectProbe resolves principal.ValidatedProject and returns its
+// (project, validated) pair, driving the SAME zip.Ctx accessors production feeds.
+func validatedProjectProbe(t *testing.T, headers map[string]string) (string, bool) {
+	t.Helper()
+	app := zip.New(zip.Config{DisableStartupMessage: true})
+	app.Get("/vp", func(c *zip.Ctx) error {
+		p, v := principal.ValidatedProject(c)
+		return c.JSON(200, map[string]any{"project": p, "validated": v})
+	})
+	req := httptest.NewRequest("GET", "/vp", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("validatedProjectProbe: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var out struct {
+		Project   string `json:"project"`
+		Validated bool   `json:"validated"`
+	}
+	b, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatalf("validatedProjectProbe decode: %v (%s)", err, b)
+	}
+	return out.Project, out.Validated
+}
+
+// TestValidatedProject_ClaimBackedHardens: a validated principal carrying a
+// NON-default, server-minted X-Project-Id is claim-backed → (project, true), the
+// signal a project-scoped spend cap uses to HARD-enforce.
+func TestValidatedProject_ClaimBackedHardens(t *testing.T) {
+	p, v := validatedProjectProbe(t, map[string]string{
+		"X-Org-Id": "acme", "X-User-Id": "u", "X-Project-Id": "research",
+	})
+	if p != "research" || !v {
+		t.Fatalf("claim-backed project must be (research,true), got (%q,%v)", p, v)
+	}
+}
+
+// TestValidatedProject_DefaultStaysSoft: no project claim (absent X-Project-Id, or
+// the literal default) is NOT claim-backed → (DefaultProject, false). IAM does not
+// seed default projects, so this preserves today's soft posture for every org until
+// its projects are seeded — a blanket true would wrongly hard-402 default spend.
+func TestValidatedProject_DefaultStaysSoft(t *testing.T) {
+	// Absent claim.
+	if p, v := validatedProjectProbe(t, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u"}); p != principal.DefaultProject || v {
+		t.Fatalf("absent project claim must be (%q,false), got (%q,%v)", principal.DefaultProject, p, v)
+	}
+	// Literal default header — same default scope, still soft.
+	if p, v := validatedProjectProbe(t, map[string]string{"X-Org-Id": "acme", "X-User-Id": "u", "X-Project-Id": "default"}); p != principal.DefaultProject || v {
+		t.Fatalf("literal default must be (%q,false), got (%q,%v)", principal.DefaultProject, p, v)
+	}
+}
+
+// TestValidatedProject_UnvalidatedNeverHard: without a validated principal (no
+// X-User-Id) even a present X-Project-Id is NOT claim-backed — it can only harden
+// behind a validated identity, so the anonymous/forge path stays soft.
+func TestValidatedProject_UnvalidatedNeverHard(t *testing.T) {
+	if p, v := validatedProjectProbe(t, map[string]string{"X-Project-Id": "research"}); v {
+		t.Fatalf("unvalidated project must be soft, got (%q,%v)", p, v)
+	}
+}
+
 // TestIsDefaultProject: empty and the literal default are the one default scope;
 // any other id is a distinct project.
 func TestIsDefaultProject(t *testing.T) {
