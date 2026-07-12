@@ -62,9 +62,13 @@ func newScopeIAM() *scopeIAM {
 
 // superHdr / orgAdminHdr are the two tiers' SANITIZED identities (as SanitizeIdentity
 // would mint them): a SuperAdmin carries X-User-IsAdmin=true; an org admin carries a
-// validated X-User-Id + their pinned X-Org-Id but NO admin flag.
+// validated X-User-Id + their pinned X-Org-Id + the X-User-IsOrgAdmin bit the boundary
+// mints for any validated isAdmin principal, but NO GLOBAL admin flag. memberHdr is a
+// validated but NON-admin member of an org: same identity MINUS the org-admin bit — the
+// caller the over-visibility gap used to admit, now refused.
 var superHdr = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "admin/z"}
-var orgAdminHdr = map[string]string{"X-Org-Id": "maxpower", "X-User-Id": "maxpower/dave", "X-User-Email": "dave@maxpower.test"}
+var orgAdminHdr = map[string]string{"X-Org-Id": "maxpower", "X-User-Id": "maxpower/dave", "X-User-Email": "dave@maxpower.test", "X-User-IsOrgAdmin": "true"}
+var memberHdr = map[string]string{"X-Org-Id": "maxpower", "X-User-Id": "maxpower/eve", "X-User-Email": "eve@maxpower.test"}
 
 func TestScope_SuperSeesAllOrgs(t *testing.T) {
 	iam := newScopeIAM()
@@ -173,6 +177,21 @@ func TestScope_PlatformRouteDeniesOrgAdminButScopedAdmits(t *testing.T) {
 	}
 	if env.Data.Owner != "maxpower" {
 		t.Fatalf("org admin me.Owner = %q, want maxpower", env.Data.Owner)
+	}
+}
+
+// TestScope_MemberWithoutOrgAdminDenied closes the same-tenant over-visibility gap: a
+// VALIDATED member of an org that is NOT an org admin (a real X-User-Id + pinned X-Org-Id
+// but NO X-User-IsOrgAdmin) must be 403 on EVERY org-scoped panel — not just hard-scoped,
+// REFUSED. Before the fix GuardScoped admitted any validated org member; it now requires
+// the unforgeable org-admin bit, so a plain member can never reach their org's admin data.
+func TestScope_MemberWithoutOrgAdminDenied(t *testing.T) {
+	do := mount(t, "http://127.0.0.1:0", "http://127.0.0.1:0", "")
+	for _, r := range scopedAdminRoutes {
+		if resp, body := do(r.method, r.path, memberHdr); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s [validated non-admin member]: got %d, want 403 — over-visibility gap open (body=%s)",
+				r.method, r.path, resp.StatusCode, body)
+		}
 	}
 }
 
