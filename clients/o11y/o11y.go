@@ -186,7 +186,7 @@ var runtimeHandler http.Handler
 
 // mountRuntime installs the runtime handler the order-70 wildcard delegates to.
 // ONE way, two backings: prefer the in-process runtime (embed.go) that serves
-// /v1/o11y/* from THIS binary against the ClickHouse datastore, so the standalone
+// /v1/o11y/* from THIS binary against the datastore datastore, so the standalone
 // o11y Deployment can retire; fall back to reverse-proxying that Deployment when the
 // embed is disabled (no DSN) or fails to init — fail-soft, zero downtime. Ordering is
 // not strictly required (the handler is resolved per-request); it runs inside the one

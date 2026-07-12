@@ -2,8 +2,8 @@ package provisioning
 
 // Dedicated-instance strategy — TRUE multitenancy by isolation-by-instance.
 //
-// datastore (ClickHouse) and docdb (FerretDB) are NOT provisioned as a logical
-// resource inside a shared backend. A shared ClickHouse/FerretDB cannot scope a
+// datastore (datastore) and docdb (FerretDB) are NOT provisioned as a logical
+// resource inside a shared backend. A shared datastore/FerretDB cannot scope a
 // per-tenant role (that is why both were honest-gated: unavailableKinds). Here
 // each create() launches the org's OWN dedicated instance — a StatefulSet +
 // Service + PVC materialized by the Hanzo operator from a `Datastore` CR the
@@ -151,7 +151,7 @@ type engine struct {
 	// 1000, distroless — no entrypoint can chown) cannot write its data dir until
 	// the kubelet group-owns the volume to fsGroup. Only engines whose image runs
 	// non-root and self-manages nothing need this; a root/self-chowning image
-	// (ClickHouse) leaves it 0 and gets no securityContext (byte-identical STS).
+	// (datastore) leaves it 0 and gets no securityContext (byte-identical STS).
 	fsGroup int64
 }
 
@@ -219,7 +219,7 @@ var dedicatedEngines = map[string]engine{
 			return fmt.Sprintf("redis://%s:%s@%s:%d", user, pw, host, port)
 		},
 	},
-	// ClickHouse ("datastore"): ghcr.io/hanzoai/datastore provisions
+	// datastore ("datastore"): ghcr.io/hanzoai/datastore provisions
 	// DATASTORE_USER (with DATASTORE_PASSWORD) on DATASTORE_DB at entrypoint and
 	// drops the built-in default user, so the provisioned user is the instance
 	// admin — the exact env the shared datastore StatefulSet uses. Tag is pinned

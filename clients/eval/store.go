@@ -20,7 +20,7 @@ import (
 // The eval METASTORE is the config/metadata half of the storage split (CTO
 // directive): datasets, dataset-items, evaluators, score-configs and dataset-run
 // definitions live here in Hanzo Base/SQLite, per-org. The high-volume telemetry
-// half (traces, observations, scores-as-events) lives in datastore/ClickHouse —
+// half (traces, observations, scores-as-events) lives in datastore/datastore —
 // see telemetry.go. These two are orthogonal: the metastore owns durable config,
 // the telemetry store owns the append-only event stream; neither knows the
 // other's schema. The run orchestrator (eval.go) composes both.
@@ -93,7 +93,7 @@ type ScoreConfig struct {
 
 // DatasetRun is the DEFINITION of a run (its metadata): which dataset+model, the
 // run name, and rollup counters. The per-item scores/traces are telemetry
-// (ClickHouse); this row is the durable, listable run record. (org,dataset,name)
+// (datastore); this row is the durable, listable run record. (org,dataset,name)
 // is unique so a run name is stable per dataset.
 type DatasetRun struct {
 	ID         string

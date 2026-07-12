@@ -19,7 +19,7 @@ type tprod struct {
 }
 
 // newTestManager builds a real db.Manager on a temp dir plus the shared "system"
-// DB, and returns a cleanup. Vector search + ClickHouse are off for hermetic runs.
+// DB, and returns a cleanup. Vector search + datastore are off for hermetic runs.
 func newTestManager(t *testing.T) (*db.Manager, db.DB, func()) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "commerce-nsroute-*")

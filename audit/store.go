@@ -2,7 +2,7 @@ package audit
 
 // The append-only sink + the serialized Recorder that owns the hash-chain head.
 //
-// WHY SQLITE IS THE PRIMARY, DURABLE STORE (not ClickHouse). The chain is only
+// WHY SQLITE IS THE PRIMARY, DURABLE STORE (not datastore). The chain is only
 // tamper-EVIDENT if records are appended in a strict, gapless total order and
 // each record's PrevHash is the immediately-preceding record's Hash. That demands
 // a single serializing writer with a synchronous, read-your-write head. cloud's
@@ -15,7 +15,7 @@ package audit
 // the file. That is the compliance-grade primary control.
 //
 // THE CLICKHOUSE MIRROR IS A PROJECTION, NOT THE SOURCE OF TRUTH. The datastore
-// (ClickHouse MergeTree — insert-only, mutation-rejected at parse time) is the
+// (datastore MergeTree — insert-only, mutation-rejected at parse time) is the
 // fleet-wide OLAP mirror for long-retention, cross-deployment query. It is
 // best-effort and asynchronous: a mirror outage must never block or fail an
 // audited request, and the local chain remains the authority the verifier walks.
@@ -43,9 +43,9 @@ import (
 	_ "github.com/hanzoai/sqlite"
 )
 
-// Mirror is the optional OLAP projection sink (the datastore/ClickHouse). It is
+// Mirror is the optional OLAP projection sink (the datastore/datastore). It is
 // deliberately a tiny interface, not a concrete client, so the Recorder has no
-// compile-time dependency on ClickHouse and tests can supply a fake. Append is
+// compile-time dependency on datastore and tests can supply a fake. Append is
 // called best-effort, asynchronously, off the request path.
 type Mirror interface {
 	// Append writes one sealed record to the projection. A returned error is
