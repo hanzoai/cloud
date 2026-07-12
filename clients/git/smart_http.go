@@ -3,6 +3,7 @@ package git
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -92,124 +93,81 @@ func (s *svc) infoRefs(c *zip.Ctx) error {
 	return c.Bytes(http.StatusOK, buf.Bytes())
 }
 
-// uploadPack serves POST /git-upload-pack — the clone/fetch phase. It decodes
-// the client's wants/haves, runs the upload-pack session, and streams the
-// packfile response.
+// uploadPack serves POST /git-upload-pack — the clone/fetch phase. It is a thin
+// HTTP adapter over the shared pack driver (pack.go serveUploadPack): resolve +
+// tenant-check, then hand the request body + response writer to the ONE pack
+// code path SSH also uses.
 func (s *svc) uploadPack(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name, err := repoNameParam(c)
+	org, project, name, err := s.resolvePackRepo(c)
 	if err != nil {
 		return err
 	}
-	project := projectScope(c)
-	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated tenant")
-	}
-	store, err := s.storeFor(org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	if _, err := store.Get(c.Context(), org, project, name); err != nil {
-		return zip.ErrNotFound("repo not found")
-	}
-
 	body := c.Body()
 	if int64(len(body)) > maxBody {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body exceeds %d bytes", maxBody)
 	}
-	req := packp.NewUploadPackRequest()
-	if err := req.Decode(bytes.NewReader(body)); err != nil {
-		return zip.ErrBadRequest("decode upload-pack request: " + err.Error())
-	}
-
-	sess, err := s.uploadSession(org, project, name)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "git session: %v", err)
-	}
-	defer func() { _ = sess.Close() }()
-
-	resp, err := sess.UploadPack(c.Context(), req)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "upload-pack: %v", err)
-	}
-	defer func() { _ = resp.Close() }()
-
 	var buf bytes.Buffer
-	if err := resp.Encode(&buf); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "encode upload-pack: %v", err)
+	if err := s.serveUploadPack(c.Context(), org, project, name, bytes.NewReader(body), &buf); err != nil {
+		if errors.Is(err, errBadPack) {
+			return zip.ErrBadRequest(err.Error())
+		}
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	c.SetHeader("Content-Type", "application/x-git-upload-pack-result")
 	c.SetHeader("Cache-Control", "no-cache")
 	return c.Bytes(http.StatusOK, buf.Bytes())
 }
 
-// receivePack serves POST /git-receive-pack — the push phase. It decodes the
-// ref-update commands + packfile, applies them to the storer, records the new
-// storage size (billing hook), and returns the report-status.
+// receivePack serves POST /git-receive-pack — the push phase. Thin HTTP adapter
+// over the shared pack driver (pack.go serveReceivePack), which applies the
+// pack, records usage, and fires the push-to-deploy hook. SSH pushes take the
+// SAME serveReceivePack path.
 func (s *svc) receivePack(c *zip.Ctx) error {
-	org, ok := tenant(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name, err := repoNameParam(c)
+	org, project, name, err := s.resolvePackRepo(c)
 	if err != nil {
 		return err
 	}
-	project := projectScope(c)
-	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated tenant")
-	}
-	store, err := s.storeFor(org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	if _, err := store.Get(c.Context(), org, project, name); err != nil {
-		return zip.ErrNotFound("repo not found")
-	}
-
 	body := c.Body()
 	if int64(len(body)) > maxBody {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "request body exceeds %d bytes", maxBody)
 	}
-	req := packp.NewReferenceUpdateRequest()
-	if err := req.Decode(bytes.NewReader(body)); err != nil {
-		return zip.ErrBadRequest("decode receive-pack request: " + err.Error())
-	}
-
-	sess, err := s.receiveSession(org, project, name)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "git session: %v", err)
-	}
-	defer func() { _ = sess.Close() }()
-
-	report, err := sess.ReceivePack(c.Context(), req)
-	if report == nil && err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "receive-pack: %v", err)
-	}
-
-	// Push landed (or partially landed with a report): re-measure and record the
-	// tenant's storage size so commerce/o11y meter the new bytes. Best-effort —
-	// a metering miss must never fail the push the client already committed.
-	s.recordUsage(context.WithoutCancel(c.Context()), org, project, name)
-
-	// git-push-to-deploy: trigger a build for every branch ref this push advanced.
-	// Best-effort by contract — the push already landed, so a build-trigger failure
-	// is logged, never surfaced to the client (build.go OnGitPush is a no-op when
-	// the platform subsystem is not co-resident).
-	s.firePushBuilds(context.WithoutCancel(c.Context()), org, project, name, req)
-
 	var buf bytes.Buffer
-	if report != nil {
-		if encErr := report.Encode(&buf); encErr != nil {
-			return zip.Errorf(http.StatusInternalServerError, "encode report: %v", encErr)
+	if err := s.serveReceivePack(c.Context(), org, project, name, bytes.NewReader(body), &buf); err != nil {
+		if errors.Is(err, errBadPack) {
+			return zip.ErrBadRequest(err.Error())
 		}
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	c.SetHeader("Content-Type", "application/x-git-receive-pack-result")
 	c.SetHeader("Cache-Control", "no-cache")
 	return c.Bytes(http.StatusOK, buf.Bytes())
+}
+
+// resolvePackRepo is the shared front-half of every smart-HTTP pack handler:
+// resolve the tenant from X-Org-Id, validate the repo name, enforce the URL org
+// segment matches the authenticated tenant (path-vs-identity guard), and confirm
+// the repo exists. Returns the (org, project, name) the pack driver operates on.
+func (s *svc) resolvePackRepo(c *zip.Ctx) (org, project, name string, err error) {
+	org, ok := tenant(c)
+	if !ok {
+		return "", "", "", zip.ErrForbidden("X-Org-Id required")
+	}
+	name, nerr := repoNameParam(c)
+	if nerr != nil {
+		return "", "", "", nerr
+	}
+	project = projectScope(c)
+	if p := c.Param("org"); p != "" && p != org {
+		return "", "", "", zip.ErrForbidden("org path does not match authenticated tenant")
+	}
+	store, serr := s.storeFor(org)
+	if serr != nil {
+		return "", "", "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
+	}
+	if _, gerr := store.Get(c.Context(), org, project, name); gerr != nil {
+		return "", "", "", zip.ErrNotFound("repo not found")
+	}
+	return org, project, name, nil
 }
 
 // firePushBuilds triggers a platform build for every branch ref this push
