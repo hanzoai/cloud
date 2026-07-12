@@ -96,24 +96,23 @@ func (rm *ResourceMeter) Enabled() bool { return rm != nil && rm.m != nil && rm.
 // would authorize an arbitrarily expensive charge (the debit still lands, taking
 // the ledger negative). This mirrors what a prepaid gate must do: refuse a
 // request the balance cannot cover BEFORE the work runs.
-// project is the caller's validated org SUB-SCOPE (principal.Project(c)) — the
-// scope's project axis — and service is intrinsically this meter's provider, so
-// a per-scope spend cap (issue #70) on (project, provider) is enforced on resource
-// creation exactly as it is on the request edge. Pass "" for project on a
-// background/no-principal path (the resource is then gated only by org- and
-// service-scoped caps).
-func (rm *ResourceMeter) Gate(ctx context.Context, org, project, kind string, costCents int64) error {
+// project + projectValidated are the caller's org SUB-SCOPE and whether it is
+// bound to a VALIDATED identity claim — principal.ValidatedProject(c), the SAME
+// signal the edge BillingGate threads. When validated, a project-scoped spend cap
+// (issue #70) on (project, provider) HARD-enforces (402) on resource creation
+// exactly as on the request edge; when not, it DEGRADES to soft (org- and
+// service-scoped caps stay hard), so a forgeable X-Project-Id can neither
+// hard-stop nor be evaded. service is intrinsically this meter's provider. Pass
+// ("", false) on a background/no-principal path (org- and service-scoped caps only).
+func (rm *ResourceMeter) Gate(ctx context.Context, org, project string, projectValidated bool, kind string, costCents int64) error {
 	if !rm.Enabled() || costCents <= 0 {
 		return nil
 	}
 	return rm.m.Authorize(ctx, metering.AuthInput{
 		User: org, Org: org, AmountCents: costCents,
-		// Service (=provider) is server-set → validated. Project is the caller's
-		// X-Project-Id, NOT yet claim-bound, so ProjectValidated stays false: a
-		// project-scoped cap on a resource DEGRADES to soft (org- and
-		// service-scoped caps stay hard), matching the edge posture. When IAM mints
-		// a project claim, thread principal.ValidatedProject through here to harden.
-		Project: project, ProjectValidated: false, Service: rm.provider,
+		// Service (=provider) is server-set → always validated. Project hardens iff
+		// it is claim-bound (projectValidated) — the anti project-spoof gate.
+		Project: project, ProjectValidated: projectValidated, Service: rm.provider,
 	})
 }
 
