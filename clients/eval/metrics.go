@@ -16,7 +16,7 @@ import (
 // GET /v1/evals/metrics — the native, per-org / per-project "AI overview": which
 // models are used, request volume, cost, tokens (prompt / completion / total),
 // error & success rate, and latency percentiles (p50 / p95 / p99) over a window.
-// It is the Langfuse home-dashboard, native — the MIT ClickHouse query shapes
+// It is the Langfuse home-dashboard, native — the MIT datastore query shapes
 // (counts / cost / tokens BY MODEL over time, error rate, latency quantiles)
 // ported to pure Go over our datastore; none of Langfuse's commercial (ee/) code
 // is used.
@@ -34,7 +34,7 @@ import (
 //     renders — a latency miss never fails the board (the ledger is the core).
 //
 // TENANT ISOLATION: org is the validated tenant (principal.Org), bound as a
-// positional ClickHouse parameter (never interpolated), the FIRST predicate on
+// positional datastore parameter (never interpolated), the FIRST predicate on
 // every query. A validated platform SuperAdmin (c.IsAdmin()) runs AllOrgs — the
 // board then aggregates every org with no org predicate — mirroring the o11y RED
 // view exactly; a non-admin can only ever see its own org.
@@ -240,7 +240,7 @@ func resolveRange(label string) (string, time.Time, time.Time, string) {
 
 // ── datastore implementation ──────────────────────────────────────────────────
 
-// Metrics runs the aggregate queries against the ClickHouse ledger (+ best-effort
+// Metrics runs the aggregate queries against the datastore ledger (+ best-effort
 // GenAI-span latency) and assembles the board. A ledger error is surfaced (the
 // board is the core signal); a latency-span error degrades to Available=false.
 func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, error) {
@@ -360,7 +360,7 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 }
 
 // usageWhere builds the cloud_usage time (+ org) predicate. Times are bound as
-// ClickHouse DateTime string literals (the proven ai/object cloud_usage pattern);
+// datastore DateTime string literals (the proven ai/object cloud_usage pattern);
 // the org is bound as a positional parameter (never interpolated). A SuperAdmin
 // (AllOrgs) drops the org predicate for the platform-wide board.
 func usageWhere(f MetricsFilter) (string, []any) {
@@ -385,7 +385,7 @@ func (m *memTelemetry) Metrics(_ context.Context, f MetricsFilter) (Board, error
 	return emptyBoard(f), nil
 }
 
-// ── pure assemblers (unit-tested without ClickHouse) ──────────────────────────
+// ── pure assemblers (unit-tested without datastore) ──────────────────────────
 
 func assembleTotals(r map[string]any) BoardTotals {
 	gen := asInt64(r["generations"])
@@ -406,7 +406,7 @@ func assembleTotals(r map[string]any) BoardTotals {
 	return tot
 }
 
-// assembleSeries turns sparse ClickHouse buckets into an evenly-spaced, gap-filled
+// assembleSeries turns sparse datastore buckets into an evenly-spaced, gap-filled
 // series over [since, until) so the console charts a continuous line. Bucket
 // alignment matches toStartOfInterval(step): Go's Truncate over the same step
 // lands on the same UTC boundaries for hour/day widths.
@@ -501,7 +501,7 @@ func firstRow(rows []map[string]any) map[string]any {
 }
 
 // boardStepSec / boardStep are the ONE mapping from the server-chosen interval to
-// a bucket width, shared by the ClickHouse GROUP BY and the Go gap-fill so the two
+// a bucket width, shared by the datastore GROUP BY and the Go gap-fill so the two
 // can never drift.
 func boardStepSec(interval string) int {
 	if interval == "day" {

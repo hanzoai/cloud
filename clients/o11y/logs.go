@@ -11,8 +11,8 @@ import (
 )
 
 // The scoped logs read serves GET /v1/o11y/logs — a live, org-scoped log stream for
-// a product. Application/infra logs live in the o11y ClickHouse on the SAME
-// datastore ClickHouse server the shared ai/object client already owns, so this
+// a product. Application/infra logs live in the o11y datastore on the SAME
+// datastore datastore server the shared ai/object client already owns, so this
 // reuses aiobject.DatastoreQuery (ONE datastore client, ONE KMS-injected cred
 // namespace) rather than opening a second connection.
 //
@@ -29,7 +29,7 @@ import (
 //     infra stream (that path is gated on admin).
 //
 // Every value (app, org, since, cursor, limit) is a BOUND positional parameter —
-// never string-interpolated — so a crafted product/org cannot inject ClickHouse
+// never string-interpolated — so a crafted product/org cannot inject datastore
 // SQL; the product/app is additionally allowlisted (resolveService) before it ever
 // reaches here. Live tail: the client polls with ?sinceNs=<cursor> (the nextCursor
 // from the prior response); absent it, the last ?window seconds are returned. Every

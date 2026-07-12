@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // Pure core of the SBOM lens: the wire types, the CycloneDX parser, the row
-// builder, and the ClickHouse value coercers. Everything here is I/O-free so the
-// tests drive it with inline documents — no ClickHouse needed — exactly as the
+// builder, and the datastore value coercers. Everything here is I/O-free so the
+// tests drive it with inline documents — no datastore needed — exactly as the
 // analytics lens proves out its assemblers. The handlers (sbom.go) are the thin
 // orchestration that persists these rows and reads them back.
 package sbom
@@ -147,7 +147,7 @@ func flattenLicense(ls []cdxLicense) string {
 
 // insertBatch builds the ONE multi-row INSERT for a component set: a single
 // statement with a value-tuple per component and every value bound POSITIONALLY
-// (clickhouse-go renders `?` into the statement — nothing is interpolated). Empty
+// (datastore-go renders `?` into the statement — nothing is interpolated). Empty
 // components → empty stmt, so the caller skips the write. ingested_at is DEFAULT
 // now(), so it is not in the column list.
 func insertBatch(in SbomIngest, comps []SbomComponent) (string, []any) {
@@ -167,7 +167,7 @@ func insertBatch(in SbomIngest, comps []SbomComponent) (string, []any) {
 	return stmt, args
 }
 
-// buildView assembles the resolve response from the ClickHouse rows (already
+// buildView assembles the resolve response from the datastore rows (already
 // ordered by type,name). The image identity comes from the first row; components
 // come from every row up to the cap. Pure.
 func buildView(rows []map[string]any) SbomView {
@@ -199,7 +199,7 @@ func buildView(rows []map[string]any) SbomView {
 
 // ── Value coercion ──────────────────────────────────────────────────────────
 //
-// The direct ClickHouse driver decodes String→string and DateTime→time.Time.
+// The direct datastore driver decodes String→string and DateTime→time.Time.
 // These coercers accept those natives (and a string fallback for time) so a
 // transport change can't crash a read. Mirrors the analytics lens's coercers.
 

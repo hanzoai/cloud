@@ -24,7 +24,7 @@ func TestFundingClass(t *testing.T) {
 	}
 }
 
-// TestAI64 covers the ClickHouse-cell coercion across the driver/JSON transports
+// TestAI64 covers the datastore-cell coercion across the driver/JSON transports
 // (sum()/count() come back as uint64, float64, or decimal-string depending on path).
 func TestAI64(t *testing.T) {
 	cases := []struct {

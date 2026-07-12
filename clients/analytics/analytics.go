@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package analytics mounts the Hanzo Cloud /v1/analytics/* surface: a native-Go,
-// per-org analytics read API over the `hanzo` ClickHouse warehouse (the
+// per-org analytics read API over the `hanzo` datastore warehouse (the
 // `datastore` cluster). It is the backend for the console Native Analytics module
 // (unified-analytics.md §5) — two read lenses over one warehouse:
 //
@@ -21,8 +21,8 @@
 //     cloud o11y path already writes (requests, tokens, spend, models, errors).
 //   - Web/commerce lens (honest-empty until the collector emits): hanzo.events.
 //
-// ONE ClickHouse client. This package does NOT open a second connection: it rides
-// the SAME clickhouse-go/v2 client the ai subsystem's o11y ledger opens in the
+// ONE datastore client. This package does NOT open a second connection: it rides
+// the SAME datastore-go/v2 client the ai subsystem's o11y ledger opens in the
 // shared Bootstrap (ai/object.InitDatastore → object.DatastoreQuery). DRY: one
 // transport, one pool, one set of KMS-injected DATASTORE_* creds — never
 // hard-coded, never a second design.
@@ -33,7 +33,7 @@
 // request must carry a validated principal (c.User() set, which SanitizeIdentity
 // sets ONLY for a verified bearer). This closes the Phase-1 "no-bearer + forged
 // X-Org-Id direct-to-pod" cross-tenant read exactly as clients/s3 does. Every
-// ClickHouse query binds the org POSITIONALLY (query.go llmWhere/eventsWhere), so
+// datastore query binds the org POSITIONALLY (query.go llmWhere/eventsWhere), so
 // a maxpower token can NEVER read another org's analytics.
 //
 // Surface (all org-scoped; /v1 only; read-only):
@@ -76,7 +76,7 @@ const (
 )
 
 // state is analytics' own data: none — it holds no store (it rides the SAME shared
-// ClickHouse client the ai subsystem opens). Shared deps live in cloud.Base.
+// datastore client the ai subsystem opens). Shared deps live in cloud.Base.
 type state struct{}
 
 // Mount wires the analytics surface onto app per HIP-0106.
@@ -129,22 +129,22 @@ func window(c *zip.Ctx) (time.Time, time.Time, string, string, error) {
 	return start, end, interval, rangeLabel, nil
 }
 
-// requireDatastore returns the honest 503 when the ClickHouse ledger is not
+// requireDatastore returns the honest 503 when the datastore ledger is not
 // connected, rather than fabricating zeros. Mirrors ai/object's read gate.
 func requireDatastore() error {
 	if !aiobject.DatastoreEnabled() {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: datastore (ClickHouse) not connected")
+		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: datastore (datastore) not connected")
 	}
 	return nil
 }
 
-// warehouseErr maps a ClickHouse query failure to the HONEST HTTP status. A
+// warehouseErr maps a datastore query failure to the HONEST HTTP status. A
 // connectivity failure — the warehouse became unreachable mid-request (dial /
 // i/o timeout / refused / reset / EOF) — is a transient 503 "unavailable", the
 // SAME contract requireDatastore() uses when the pool never connected. Only a
 // REACHABLE warehouse that rejected the query (bad SQL, protocol error) is a 502
 // bad-gateway. This is the fix for /v1/analytics/* surfacing a raw 502 on a
-// ClickHouse `:9000` i/o timeout — the caller now gets an honest 503 it can retry.
+// datastore `:9000` i/o timeout — the caller now gets an honest 503 it can retry.
 func warehouseErr(kind string, err error) error {
 	if isWarehouseUnreachable(err) {
 		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %s: %v", kind, err)
@@ -153,9 +153,9 @@ func warehouseErr(kind string, err error) error {
 }
 
 // isWarehouseUnreachable reports whether err is a transport/connectivity failure
-// to ClickHouse (as opposed to a query the warehouse actively rejected). It checks
+// to datastore (as opposed to a query the warehouse actively rejected). It checks
 // the typed context/net signals first, then the connectivity strings the
-// clickhouse-go driver surfaces without a typed net.Error wrapper.
+// datastore-go driver surfaces without a typed net.Error wrapper.
 func isWarehouseUnreachable(err error) bool {
 	if err == nil {
 		return false
@@ -361,7 +361,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if !connected {
 		res["status"] = "degraded"
-		res["reason"] = "datastore (ClickHouse) not connected"
+		res["reason"] = "datastore (datastore) not connected"
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), probeTimeout)
@@ -373,7 +373,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, res)
 }
 
-// tableExists probes ClickHouse for a table's presence. The name is a package
+// tableExists probes datastore for a table's presence. The name is a package
 // constant (never user input), so `EXISTS TABLE` is safe. Any error → false
 // (honest "not available") rather than surfacing.
 func tableExists(ctx context.Context, qualified string) bool {

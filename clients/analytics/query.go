@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pure core of the analytics lens: SQL predicate builders, ClickHouse value
-// coercers, and the pure assemblers that turn raw ClickHouse rows into the
+// Pure core of the analytics lens: SQL predicate builders, datastore value
+// coercers, and the pure assemblers that turn raw datastore rows into the
 // response structs. Everything here is I/O-free so the tests drive it with mock
-// rows — no ClickHouse needed — exactly as ai/object/cloud_usage.go proves out
+// rows — no datastore needed — exactly as ai/object/cloud_usage.go proves out
 // its Overview assembler. The handlers (analytics.go) are the thin orchestration
 // that fetches the rows and calls these.
 //
@@ -44,7 +44,7 @@ const (
 // ── Tenancy predicates (the isolation boundary) ─────────────────────────────
 //
 // Both builders bind the org POSITIONALLY. The time bounds are bound too (as
-// ClickHouse DateTime string literals, the proven cloud_usage.go transport), so
+// datastore DateTime string literals, the proven cloud_usage.go transport), so
 // NOTHING user-derived is ever interpolated. cloud_usage keys the tenant on
 // `organization`; hanzo.events keys it on `tenant_id` (== the IAM org slug).
 
@@ -63,7 +63,7 @@ func eventsWhere(org string, start, end time.Time) (string, []any) {
 		[]any{tsLiteral(start), tsLiteral(end), org}
 }
 
-// tsLiteral formats a time as a ClickHouse DateTime literal (UTC). Bound as a
+// tsLiteral formats a time as a datastore DateTime literal (UTC). Bound as a
 // string arg — identical to ai/object/cloud_usage.go's cloudUsageTS.
 func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
 
@@ -231,7 +231,7 @@ func buildCommerceOverview(row map[string]any, ok bool) CommerceOverview {
 	return c
 }
 
-// buildSeries turns sparse ClickHouse buckets into an evenly-spaced, gap-filled
+// buildSeries turns sparse datastore buckets into an evenly-spaced, gap-filled
 // series so the client charts a continuous line. Bucket alignment matches
 // toStartOf{Hour,Day}(…, 'UTC'): Go's Truncate over the step lands on the same
 // UTC boundaries. Pure (mirrors ai/object buildCloudUsageSeries).
@@ -318,7 +318,7 @@ func buildTopProducts(rows []map[string]any, ok bool) TopProducts {
 
 // ── Value coercion ──────────────────────────────────────────────────────────
 //
-// The direct ClickHouse driver decodes each column to its native Go scan type
+// The direct datastore driver decodes each column to its native Go scan type
 // (uint64 for count()/sum(UInt*), float64 for toFloat64, time.Time for DateTime,
 // string for String). These coercers accept those natives AND the JSON-transport
 // fallbacks (float64/json.Number/string) so a transport change can't crash a read.

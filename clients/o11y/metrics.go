@@ -25,7 +25,7 @@ var metricsIngest *zapmetricreceiver.Receiver
 // datastore over UPSTREAM ch-go via o11y's pkg/datastoremetrics driver — with NO
 // histogram-fork dependency (classic bucket/quantile decomposition, never a
 // DDSketch/exp_hist). It reuses the embedded runtime's ONE datastore connection
-// (store.ClickhouseDB), so the query plane (read) and metrics (write) ride the
+// (store.DatastoreDB), so the query plane (read) and metrics (write) ride the
 // same conn — no second pool, no separate DSN.
 //
 // This is the piece that lets metrics finally live in-process alongside the
@@ -48,7 +48,7 @@ func startNativeMetricsIngest(store telemetrystore.TelemetryStore, log luxlog.Lo
 		log.Warn("native metrics ingest: no telemetry store; skipping", "listen", listen)
 		return
 	}
-	conn := store.ClickhouseDB()
+	conn := store.DatastoreDB()
 	if conn == nil {
 		log.Warn("native metrics ingest: datastore connection unavailable; skipping", "listen", listen)
 		return

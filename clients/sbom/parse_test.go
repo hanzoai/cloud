@@ -150,7 +150,7 @@ func TestInsertBatchEmptyNoop(t *testing.T) {
 	}
 }
 
-// TestBuildView assembles the resolve response from native ClickHouse scan types
+// TestBuildView assembles the resolve response from native datastore scan types
 // (string + time.Time), preserving row order and deriving componentCount.
 func TestBuildView(t *testing.T) {
 	ts := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
