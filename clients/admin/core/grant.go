@@ -17,6 +17,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/money"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -178,8 +179,9 @@ func EmitAudit(s *cloud.Service[State], c *zip.Ctx, action, resType, resID strin
 	if s.State.AuditStore == nil {
 		return
 	}
+	org, _ := principal.Org(c)
 	rec := audit.Record{
-		Actor:     audit.Actor{Org: strings.TrimSpace(c.Org()), Sub: strings.TrimSpace(c.User()), Email: strings.TrimSpace(c.UserEmail())},
+		Actor:     audit.Actor{Org: org, Sub: strings.TrimSpace(c.User()), Email: strings.TrimSpace(c.UserEmail())},
 		Action:    action,
 		Resource:  audit.Resource{Type: resType, ID: resID},
 		Auth:      audit.AuthContext{Method: "jwt", IsAdmin: c.IsAdmin()},
