@@ -74,7 +74,13 @@ func (m *meteredAIModels) Models(ctx context.Context) ([]string, error) {
 // over-cap / frozen org is refused BEFORE upstream tokens are spent), runs the
 // call, then debits the EXACT token cost (completion tokens are only known after).
 func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*types.ChatResponse, error) {
-	if err := m.gate(ctx, req.Org, req.Project, estTokens(req.Prompt)); err != nil {
+	// The balance gate + the debit key on the HOME org that PAYS (BillingOrg, the
+	// caller's X-User-Owner) — so a SuperAdmin acting in another org spends from the
+	// admin ledger. The inner AI call still receives req (req.Org, the EFFECTIVE org)
+	// for its data scope (BYO keys, RAG). billedOrg falls back to req.Org when the
+	// caller did not split them (home==effective for a normal caller).
+	payer := billedOrg(req.BillingOrg, req.Org)
+	if err := m.gate(ctx, payer, req.Project, estTokens(req.Prompt)); err != nil {
 		return nil, err
 	}
 	resp, err := m.inner.ChatCompletion(ctx, req)
@@ -89,7 +95,7 @@ func (m *meteredAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) 
 		if total <= 0 {
 			total = estTokens(req.Prompt) // gateway omitted usage → fall back to the estimate.
 		}
-		m.record(req.Org, req.Project, req.Model, metering.Usage{
+		m.record(payer, req.Project, req.Model, metering.Usage{
 			PromptTokens:     resp.PromptTokens,
 			CompletionTokens: resp.CompletionTokens,
 			TotalTokens:      total,
@@ -105,15 +111,29 @@ func (m *meteredAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]flo
 		return m.inner.Embed(ctx, req) // nothing to bill; let the transport no-op.
 	}
 	toks := estTokens(req.Inputs...)
-	if err := m.gate(ctx, req.Org, req.Project, toks); err != nil {
+	payer := billedOrg(req.BillingOrg, req.Org) // HOME org pays; req.Org stays the data scope.
+	if err := m.gate(ctx, payer, req.Project, toks); err != nil {
 		return nil, err
 	}
 	vecs, err := m.inner.Embed(ctx, req)
 	if err != nil {
 		return vecs, err
 	}
-	m.record(req.Org, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks)
+	m.record(payer, req.Project, req.Model, metering.Usage{TotalTokens: toks}, toks)
 	return vecs, nil
+}
+
+// billedOrg resolves the org whose ledger PAYS for an inference: the caller's HOME
+// org (billing, the X-User-Owner threaded onto the request) when present, else the
+// EFFECTIVE org (the data scope). For a normal caller the two are equal; only a
+// platform SuperAdmin acting in another org differs, and then the debit must land on
+// the admin (home) org, never the acted-on org. Empty billing ⟹ effective, so a
+// caller that has not split them keeps today's behavior (no regression).
+func billedOrg(billing, effective string) string {
+	if b := strings.TrimSpace(billing); b != "" {
+		return b
+	}
+	return effective
 }
 
 // gate is the pre-call balance/budget/freeze check. tokens is the pre-call cost
