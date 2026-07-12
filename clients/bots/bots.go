@@ -273,7 +273,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// unconfigured billing makes this a no-op (allow).
 	fee := cloud.ResourceFeeCents(botFeeEnvPrefix, meterKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if gateErr := s.State.bill.Gate(c.Context(), org, project, projectValidated, meterKind, fee); gateErr != nil {
+	if gateErr := s.State.bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, meterKind, fee); gateErr != nil {
 		return cloud.DenyResource(c, gateErr)
 	}
 
@@ -281,7 +281,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// the commerce ledger debit (product=bot, the surface as the billed unit, the
 	// acting principal for the audit trail) — fire-and-forget, exactly like the
 	// agents run fee. GPU/surface ride the log line for operator visibility.
-	s.State.bill.MeterUsage(org, meterKind, metering.Usage{
+	s.State.bill.MeterUsage(principal.Payer(c), meterKind, metering.Usage{
 		AmountCents: fee,
 		Model:       surface,
 		Actor:       billingActor(org, c.User()),
