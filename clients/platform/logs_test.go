@@ -157,10 +157,10 @@ func TestDeploymentLogs_DegradesWithoutPod(t *testing.T) {
 func seedGitDeployment(t *testing.T, s *cloud.Service[state], org, jobName string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := s.State.store.CreateProject(ctx, Project{ID: "proj_1", Org: org, Slug: "web", Name: "Web", CreatedAt: 1, UpdatedAt: 1}); err != nil {
-		t.Fatalf("CreateProject: %v", err)
+	if _, err := s.State.projects.Create(ctx, org, "web", "Web", ""); err != nil {
+		t.Fatalf("seed project: %v", err)
 	}
-	if err := s.State.store.CreateApplication(ctx, Application{ID: "app_1", Org: org, ProjectID: "proj_1", Slug: "api",
+	if err := s.State.store.CreateApplication(ctx, Application{ID: "app_1", Org: org, ProjectID: "web", Slug: "api",
 		Name: "API", Source: "git", RepoURL: "https://github.com/acme/api", Status: "building", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatalf("CreateApplication: %v", err)
 	}
