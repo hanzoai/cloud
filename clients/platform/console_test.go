@@ -46,7 +46,7 @@ func seedConsoleFixture(t *testing.T, s *cloud.Service[state], org string) (imag
 	site := Application{
 		ID: "app_" + org + "_site", Org: org, ProjectID: "web", Slug: "site", Name: "Site",
 		Environment: "staging", Source: "git", RepoURL: "https://github.com/maxpower/site", RepoBranch: "main", RepoProvider: "github",
-		BuildType: "nixpacks", Port: 3000, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
+		BuildType: "pack", Port: 3000, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
 		Status: "building", Namespace: tenantNamespace(org), CreatedAt: 100, UpdatedAt: 100,
 	}
 	for _, a := range []Application{api, site} {
