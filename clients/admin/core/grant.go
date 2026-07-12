@@ -17,7 +17,9 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/money"
+	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
 
@@ -136,12 +138,15 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		return c.JSON(503, map[string]any{"status": "error", "msg": "grant refused: no durable audit store is configured on this deployment; a credit grant must be recorded before money moves", "data": nil})
 	}
 
-	before, _ := s.State.Commerce.Credits(ctx, org)
-
 	tag, source := grantTag(req.Source)
 	notes := grantNote(c, req.Reason)
-	idem := grantIdempotencyKey(c, org, currency, source, req.AmountCents)
-	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(req.AmountCents), currency, notes, tag, idem)
+
+	// ONE credit money-move: the co-resident native finance wallet is preferred (the ai
+	// prepaid gate + the edge meter read/debit THAT wallet, so a grant MUST land there),
+	// with the commerce HTTP deposit as the split-deploy fallback. Both return the
+	// pre-balance (recorded even on failure), the entry/transaction id, and the post-balance,
+	// so the audit + response below are one shape regardless of which path moved the money.
+	before, txID, after, derr := grantDeposit(s, c, org, currency, notes, tag, source, req.AmountCents)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
@@ -152,10 +157,9 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		return Fail(c, "grant failed: "+derr.Error())
 	}
 
-	after, _ := s.State.Commerce.Credits(ctx, org)
 	EmitAudit(s, c, "admin.customer.credit", "credit", org,
 		map[string]any{"balanceCents": before},
-		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": res.TxID},
+		map[string]any{"balanceCents": after, "grantedCents": req.AmountCents, "currency": currency, "reason": req.Reason, "source": source, "transactionId": txID},
 		audit.Outcome{Result: "success", Status: 200})
 
 	return OK(c, map[string]any{
@@ -164,8 +168,40 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		"currency":      currency,
 		"source":        source,
 		"balanceCents":  after,
-		"transactionId": res.TxID,
+		"transactionId": txID,
 	})
+}
+
+// grantDeposit performs the ONE credit money-move for a grant. It prefers the co-resident
+// native finance wallet — the ai prepaid gate and the edge meter read/debit THAT wallet,
+// so an admin grant must credit it (subject == the org slug, the org-pool wallet) — and
+// falls back to the commerce HTTP deposit only when no finance ledger is co-resident (a
+// split deploy). It returns the pre-balance (so ApplyGrant can audit even a FAILED
+// attempt), the entry/transaction id, and the post-balance, so the audit + response are
+// one shape regardless of which path moved the money.
+func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, err error) {
+	ctx := c.Context()
+	if fin := finance.Current(); fin != nil {
+		before, _ = fin.BalanceCents(ctx, org, org, currency, false)
+		id, derr := fin.Deposit(ctx, types.DepositInput{
+			Org: org, Subject: org, Cents: amountCents, Currency: currency, Notes: notes, Tags: tag,
+		})
+		if derr != nil {
+			return before, "", before, derr
+		}
+		after, _ = fin.BalanceCents(ctx, org, org, currency, false)
+		return before, id, after, nil
+	}
+	// Split deploy: no co-resident finance ledger → the commerce billing HTTP deposit, with
+	// its operator-nonce idempotency key so a retried grant dedupes at commerce.
+	beforeC, _ := s.State.Commerce.Credits(ctx, org)
+	idem := grantIdempotencyKey(c, org, currency, source, amountCents)
+	res, derr := s.State.Commerce.Deposit(ctx, org, money.Cents(amountCents), currency, notes, tag, idem)
+	if derr != nil {
+		return int64(beforeC), "", int64(beforeC), derr
+	}
+	afterC, _ := s.State.Commerce.Credits(ctx, org)
+	return int64(beforeC), res.TxID, int64(afterC), nil
 }
 
 // EmitAudit writes ONE compliance record for a management action to cloud's
