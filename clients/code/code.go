@@ -124,12 +124,12 @@ func (s *service) storeFor(org string) (*Store, error) {
 	return s.stores.For(org, "")
 }
 
-func (s *service) engineFor(org, project string) (*engine, error) {
+func (s *service) engineFor(org, billingOrg, project string) (*engine, error) {
 	st, err := s.storeFor(org)
 	if err != nil {
 		return nil, err
 	}
-	return &engine{store: st, embed: s.embed, org: org, project: project}, nil
+	return &engine{store: st, embed: s.embed, org: org, billingOrg: billingOrg, project: project}, nil
 }
 
 // org resolves the org for a request, but ONLY for a validated principal
@@ -194,7 +194,7 @@ func (s *service) handleSearch(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.Project(c))
+	eng, err := s.engineFor(org, principal.Payer(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -234,7 +234,7 @@ func (s *service) handleContext(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.Project(c))
+	eng, err := s.engineFor(org, principal.Payer(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -279,7 +279,7 @@ func (s *service) handleAsk(c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	eng, err := s.engineFor(org, principal.Project(c))
+	eng, err := s.engineFor(org, principal.Payer(c), principal.Project(c))
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
@@ -329,7 +329,7 @@ func (s *service) handleIndex(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrInternal("open index")
 	}
-	res, err := s.indexRepo(c.Context(), org, principal.Project(c), store, repo, body.Files, body.Prune)
+	res, err := s.indexRepo(c.Context(), org, principal.Payer(c), principal.Project(c), store, repo, body.Files, body.Prune)
 	if err != nil {
 		s.log.Warn("code index failed", "org", org, "repo", repo, "err", err)
 		return zip.ErrInternal("index failed")
@@ -340,7 +340,7 @@ func (s *service) handleIndex(c *zip.Ctx) error {
 // indexRepo runs the pipeline per file: skip-if-unchanged (content hash) → parse
 // → embed chunks → atomically replace the file's artifacts. prune removes indexed
 // files absent from the payload (a full-tree reconcile).
-func (s *service) indexRepo(ctx context.Context, org, project string, store *Store, repo string, files []fileInput, prune bool) (indexResult, error) {
+func (s *service) indexRepo(ctx context.Context, org, billingOrg, project string, store *Store, repo string, files []fileInput, prune bool) (indexResult, error) {
 	now := time.Now().Unix()
 	var indexed, skipped int
 	present := make(map[string]bool, len(files))
@@ -359,7 +359,7 @@ func (s *service) indexRepo(ctx context.Context, org, project string, store *Sto
 			for i, ch := range parsed.Chunks {
 				texts[i] = ch.Text
 			}
-			if v, err := s.embed.Embed(ctx, org, project, texts); err != nil {
+			if v, err := s.embed.Embed(ctx, org, billingOrg, project, texts); err != nil {
 				s.log.Warn("embed failed, indexing lexical-only", "repo", repo, "path", path, "err", err)
 			} else {
 				vecs = v

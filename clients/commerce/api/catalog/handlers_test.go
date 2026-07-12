@@ -33,7 +33,7 @@ func TestPublic_ReturnsProjection_NoAuth(t *testing.T) {
 
 	// Seed the catalog in the system namespace via a SuperAdmin seed call.
 	sw := httptest.NewRecorder()
-	sc := ctxWith(sw, &auth.IAMClaims{IsSuperAdmin: true})
+	sc := ctxWith(sw, &auth.IAMClaims{Owner: "admin"})
 	sc.Request = httptest.NewRequest(http.MethodPost, "/v1/catalog/seed", nil)
 	SeedCatalog(sc)
 	if sw.Code != 200 {
@@ -80,7 +80,7 @@ func TestCreateEntry_RequiresSuperAdmin(t *testing.T) {
 
 	// SuperAdmin — allowed 201.
 	w2 := httptest.NewRecorder()
-	c2 := ctxWith(w2, &auth.IAMClaims{IsSuperAdmin: true})
+	c2 := ctxWith(w2, &auth.IAMClaims{Owner: "admin"})
 	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/catalog/entries", bytes.NewReader(body))
 	c2.Request.Header.Set("Content-Type", "application/json")
 	CreateEntry(c2)
@@ -114,7 +114,7 @@ func TestCreateEntry_DuplicateSlugRejected(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"slug": "dup", "brand": "hanzo", "name": "Dup", "category": "AI", "iconKey": "Box",
 	})
-	admin := &auth.IAMClaims{IsSuperAdmin: true}
+	admin := &auth.IAMClaims{Owner: "admin"}
 
 	w := httptest.NewRecorder()
 	c := ctxWith(w, admin)
