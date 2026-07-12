@@ -281,19 +281,19 @@ func GetIAMClaims(c *gin.Context) *auth.IAMClaims {
 	email := strings.TrimSpace(c.GetHeader(pkgAuth.HeaderUserEmail))
 	isAdmin := strings.EqualFold(strings.TrimSpace(c.GetHeader(HeaderUserIsAdmin)), "true")
 	// PLATFORM superadmin signal — distinct from org-level isAdmin. The
-	// gateway mints X-User-IsGlobalAdmin only for a real global admin; absent
-	// → false (fail-closed). GlobalAdmin() also honors owner=="admin", so this
+	// gateway mints X-User-IsSuperAdmin only for a real SuperAdmin; absent
+	// → false (fail-closed). SuperAdmin() also honors owner=="admin", so this
 	// is defense-in-depth + forwards-compat with an explicit gateway signal.
-	isGlobalAdmin := strings.EqualFold(strings.TrimSpace(c.GetHeader(HeaderUserIsGlobalAdmin)), "true")
+	isSuperAdmin := strings.EqualFold(strings.TrimSpace(c.GetHeader(HeaderUserIsSuperAdmin)), "true")
 	roles := parseRolesHeader(c.GetHeader(HeaderRoles))
 
 	claims := &auth.IAMClaims{
-		Owner:         owner,
-		Name:          user,
-		Email:         email,
-		IsAdmin:       isAdmin,
-		IsGlobalAdmin: isGlobalAdmin,
-		Roles:         roles,
+		Owner:        owner,
+		Name:         user,
+		Email:        email,
+		IsAdmin:      isAdmin,
+		IsSuperAdmin: isSuperAdmin,
+		Roles:        roles,
 	}
 	// Subject is the canonical user id field IAMClaims callers read;
 	// the gateway puts the JWT sub into X-User-Id.
@@ -304,13 +304,13 @@ func GetIAMClaims(c *gin.Context) *auth.IAMClaims {
 // HeaderUserIsAdmin is the gateway-minted "true"/"" ORG-level admin flag
 // (set for an org owner). Only "true" (case-insensitive) is treated as admin;
 // any other value (including absent) fails closed to false. It is org-scoped
-// only — NEVER gate cross-org/superadmin actions on it; use GlobalAdmin().
+// only — NEVER gate cross-org/superadmin actions on it; use SuperAdmin().
 const HeaderUserIsAdmin = "X-User-IsAdmin"
 
-// HeaderUserIsGlobalAdmin is the gateway-minted "true"/"" PLATFORM superadmin
-// flag, minted only for a real global admin (owner==AdminOrg or the explicit
-// isGlobalAdmin claim). Fails closed to false when absent.
-const HeaderUserIsGlobalAdmin = "X-User-IsGlobalAdmin"
+// HeaderUserIsSuperAdmin is the gateway-minted "true"/"" PLATFORM superadmin
+// flag, minted only for a real SuperAdmin (owner==AdminOrg or the explicit
+// isSuperAdmin claim). Fails closed to false when absent.
+const HeaderUserIsSuperAdmin = "X-User-IsSuperAdmin"
 
 // HeaderRoles is the canonical comma-joined role-name header set by
 // the gateway from the JWT roles claim. Empty value -> no roles.

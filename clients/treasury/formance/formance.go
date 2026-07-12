@@ -299,7 +299,7 @@ func (b *Backend) ReserveCents(ctx context.Context) (int64, error) {
 
 // AccountsWithPrefix lists accounts and returns account→USD balance for those under
 // prefix — the scope-aware read (a per-org caller's "org:<tenant>:" accounts, or the
-// house prefixes for global-admin). Best-effort: an unreachable Formance degrades to
+// house prefixes for SuperAdmin). Best-effort: an unreachable Formance degrades to
 // an empty map (honest empty, never a fabricated balance).
 func (b *Backend) AccountsWithPrefix(ctx context.Context, prefix string) (map[string]int64, error) {
 	q := url.Values{"expand": {"volumes"}, "pageSize": {"1000"}}

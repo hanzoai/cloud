@@ -131,12 +131,11 @@ func me(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 	name := strings.TrimSpace(c.User())
 	return core.OK(c, adminMe{
-		Owner:         owner,
-		Name:          name,
-		Email:         strings.TrimSpace(c.UserEmail()),
-		DisplayName:   name,
-		IsSuperAdmin:  sc.Super,
-		IsGlobalAdmin: sc.Super, // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
+		Owner:        owner,
+		Name:         name,
+		Email:        strings.TrimSpace(c.UserEmail()),
+		DisplayName:  name,
+		IsSuperAdmin: sc.Super,
 	})
 }
 
@@ -211,17 +210,16 @@ func users(s *cloud.Service[core.State], c *zip.Ctx) error {
 	rows := make([]operatorUser, 0, len(raw))
 	for _, u := range raw {
 		rows = append(rows, operatorUser{
-			Owner:         u.Owner,
-			Name:          u.Name,
-			Email:         u.Email,
-			DisplayName:   u.DisplayName,
-			IsAdmin:       u.IsAdmin,
-			IsSuperAdmin:  u.Owner == s.State.AdminOrg,
-			IsGlobalAdmin: u.Owner == s.State.AdminOrg, // back-compat alias; same fact
-			Tag:           u.Tag,
-			Created:       u.CreatedTime,
-			LastSignin:    u.LastSigninTime,
-			Forbidden:     u.IsForbidden,
+			Owner:        u.Owner,
+			Name:         u.Name,
+			Email:        u.Email,
+			DisplayName:  u.DisplayName,
+			IsAdmin:      u.IsAdmin,
+			IsSuperAdmin: u.Owner == s.State.AdminOrg,
+			Tag:          u.Tag,
+			Created:      u.CreatedTime,
+			LastSignin:   u.LastSigninTime,
+			Forbidden:    u.IsForbidden,
 		})
 	}
 	total := res.Total

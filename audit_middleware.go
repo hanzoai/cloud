@@ -208,7 +208,7 @@ func actorFromCtx(c *zip.Ctx) audit.Actor {
 
 // authFromCtx records HOW the caller authenticated and the VALIDATED admin bit.
 // IsAdmin comes from c.IsAdmin() (the sanitized X-User-IsAdmin, true only for a
-// verified global admin), never a raw header. Method is inferred from the
+// verified SuperAdmin), never a raw header. Method is inferred from the
 // presence/shape of a credential: an Authorization/X-Authorization bearer or a
 // session cookie ⇒ "jwt" (or "api-key" for an opaque hk-/sk- token); none ⇒
 // "none".

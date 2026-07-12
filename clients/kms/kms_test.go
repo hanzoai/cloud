@@ -243,7 +243,7 @@ func TestRESTRoundtripOrgScoped(t *testing.T) {
 		t.Errorf("cross-org GET = %d, want 403 (org isolation)", resp.StatusCode)
 	}
 
-	// A global admin may read any org.
+	// A SuperAdmin may read any org.
 	resp = do(t, app, "GET", "/v1/kms/orgs/hanzo/secrets/API_KEY?env=main", "admin", "", true, nil)
 	if resp.StatusCode != 200 {
 		t.Errorf("admin cross-org GET = %d, want 200", resp.StatusCode)

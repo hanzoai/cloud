@@ -70,10 +70,10 @@ func TestEmbedStatus_BrandMemberEntitled_Reachable(t *testing.T) {
 	}
 }
 
-func TestEmbedStatus_GlobalAdminEntitled(t *testing.T) {
+func TestEmbedStatus_SuperAdminEntitled(t *testing.T) {
 	stubProbe(t, false)
 	app := mountBrand(t, "hanzo")
-	// A global admin from a DIFFERENT org is still entitled (isGlobalAdmin bypass);
+	// A SuperAdmin from a DIFFERENT org is still entitled (isSuperAdmin bypass);
 	// the probe says down → not-provisioned but entitled with the embed URL.
 	code, body := callH(t, app, http.MethodGet, "/v1/embed-status?app=erp",
 		map[string]string{"X-User-Id": "root", "X-Org-Id": "acme", "X-User-IsAdmin": "true"}, "")

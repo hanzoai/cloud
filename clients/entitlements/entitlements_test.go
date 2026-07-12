@@ -88,7 +88,7 @@ func orgMember(method, path, org string, body any) *http.Request {
 	return req
 }
 
-// superAdmin builds a request from a validated GLOBAL admin (X-User-IsAdmin=true,
+// superAdmin builds a request from a validated SuperAdmin (X-User-IsAdmin=true,
 // minted only for owner==AdminOrg). X-Org-Id is the admin org; the :org in the
 // path is the org being operated on.
 func superAdmin(method, path string, body any) *http.Request {

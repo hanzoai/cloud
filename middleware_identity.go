@@ -19,11 +19,11 @@ package cloud
 // catalog + /v1/pricing/sync, provisioningsvc, mlsvc, evalsvc, plansvc) becomes
 // trustworthy without touching a single handler.
 //
-// ADMIN IS GLOBAL-ADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
+// ADMIN IS SUPERADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
 // bool, which IAM also sets true for ORG admins (an org owner). The cloud admin
 // surfaces (global catalog writes, the literal "admin" org bucket) mean
-// GLOBAL admin. So the admin authority here is granted ONLY to a validated
-// principal whose org IS the admin org (owner == adminOrg — IAM's IsGlobalAdmin),
+// SuperAdmin. So the admin authority here is granted ONLY to a validated
+// principal whose org IS the admin org (owner == adminOrg — IAM's IsSuperAdmin),
 // matching the gateway's admin-guard. An org admin gets NO admin authority.
 
 import (
@@ -118,7 +118,7 @@ var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id
 //   - ALWAYS delete every header in authorityHeaders (a client copy never
 //     survives — this alone kills X-User-IsAdmin forgery).
 //   - Validate a Bearer / Basic / session-cookie JWT, if present:
-//     global admin (claims.isAdmin && owner == adminOrg)
+//     SuperAdmin (claims.isAdmin && owner == adminOrg)
 //     → X-User-IsAdmin=true; X-Org-Id = the requested org when present
 //     (admin org-switch), else owner.
 //     any other principal (incl. org admins, normal users)
@@ -204,15 +204,15 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against
-			// THIS org (a global admin viewing org X may legitimately carry X's
+			// THIS org (a SuperAdmin viewing org X may legitimately carry X's
 			// project; a project owned by neither is refused).
 			var effOrg string
 			switch {
 			case claims.IsAdmin && owner != "" && owner == adminOrg && !isKMSMachinePrincipal(claims):
-				// Verified GLOBAL admin: admin authority + honored org-switch. A KMS-sync
+				// Verified SuperAdmin: admin authority + honored org-switch. A KMS-sync
 				// MACHINE principal (audience <owner>-platform-kms) is EXCLUDED here even
 				// if it carries isAdmin=true: V6 accepts the machine audience for data
-				// scope, but the machine path must never grant global admin, or an
+				// scope, but the machine path must never grant SuperAdmin, or an
 				// admin-org machine token could read every org. It falls through to the
 				// owner-scoped case below (org-scoped, no admin) — the audience widening
 				// stays decoupled from admin inside cloud, not reliant on IAM's behavior.
@@ -224,19 +224,19 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 				}
 				req.Header.Set("X-Org-Id", effOrg)
 			case owner != "":
-				// Any other principal: pinned to their own org, never GLOBAL admin.
+				// Any other principal: pinned to their own org, never SuperAdmin.
 				effOrg = owner
 				req.Header.Set("X-Org-Id", owner)
 			}
 			// X-User-IsOrgAdmin marks a validated principal that is an admin OF ITS OWN
 			// ORG — the IAM `isAdmin` bit (claims.IsAdmin). It is minted on the SAME
-			// predicate in BOTH switch arms, so it covers a real GLOBAL admin (admin of
+			// predicate in BOTH switch arms, so it covers a real SuperAdmin (admin of
 			// the admin org) AND an ORG admin (admin of their own org). GuardScoped
 			// requires it, so a validated but NON-admin member of an org is refused from
 			// the org-scoped admin panels (the same denial an unvalidated caller gets),
 			// closing the same-tenant over-visibility gap. It stays owner-scoped and safe:
 			// a KMS-sync MACHINE principal (audience <owner>-platform-kms) is EXCLUDED —
-			// mirroring the global-admin guard above — so the machine path grants NEITHER
+			// mirroring the SuperAdmin guard above — so the machine path grants NEITHER
 			// global NOR org admin, and V6's audience widening can never be leveraged into
 			// an admin surface. Like every authorityHeader it is stripped on ingress and
 			// re-injected ONLY here from validated claims, so a client can never forge it.

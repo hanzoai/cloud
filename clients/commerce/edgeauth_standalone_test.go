@@ -5,7 +5,7 @@
 //
 // Red proved that against the directly-exposed commerce-api a pod could
 // `POST commerce.hanzo.svc:8001/_/commerce/tenants` with
-// `X-Org-Id: admin` + `X-User-IsGlobalAdmin: true` and get 201 — platform
+// `X-Org-Id: admin` + `X-User-IsSuperAdmin: true` and get 201 — platform
 // superadmin by header forgery. Root cause: the identity boundary (EdgeAuth
 // strip+remint) was mounted AFTER setupRoutes had already registered
 // /_/commerce/* and /v1/commerce/*, and gin applies engine.Use() only to
@@ -78,7 +78,7 @@ func TestStandaloneForge_TenantCreate_Blocked(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	// The exact forge Red used, plus the org-level admin header for good measure.
 	req.Header.Set("X-Org-Id", "admin")
-	req.Header.Set("X-User-IsGlobalAdmin", "true")
+	req.Header.Set("X-User-IsSuperAdmin", "true")
 	req.Header.Set("X-User-IsAdmin", "true")
 	req.Header.Set("X-User-Id", "mallory")
 
