@@ -40,6 +40,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/hanzoai/cloud/clients/admin/revenue"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -125,7 +126,7 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 // client-forgeable.
 func me(s *cloud.Service[core.State], c *zip.Ctx) error {
 	sc := core.ResolveScope(s, c)
-	owner := strings.TrimSpace(c.Org())
+	owner, _ := principal.Org(c)
 	if owner == "" && sc.Super {
 		owner = s.State.AdminOrg
 	}
