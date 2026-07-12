@@ -19,6 +19,10 @@ var (
 // the org-unique, uppercase handle that both routes the URL (/v1/tracker/
 // projects/:key) AND prefixes every issue identifier (KEY-<number>). Org
 // isolation is the org column, filtered on every query.
+//
+// Distinct from projects.Project (not a duplicate): that is the Slug-keyed
+// deployable site forming this tracker's physical tenant boundary; these
+// KEY-prefixed teams are rows WITHIN it.
 type Project struct {
 	ID          string
 	Org         string
