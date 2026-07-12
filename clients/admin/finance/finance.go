@@ -31,6 +31,9 @@ func Routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/finance", core.Guard(s, Finance))
 	// One-time commerce→finance balance cutover (SuperAdmin only). Idempotent per org.
 	app.Post("/v1/admin/finance/backfill", core.Guard(s, Backfill))
+	// Fund an ARBITRARY subject's native wallet — an org pool or a human ("hanzo/z").
+	// SuperAdmin only; additive (grants stack).
+	app.Post("/v1/admin/finance/deposit", core.Guard(s, Deposit))
 	// Per-provider upstream credit ledger + usage funding split (multi-provider
 	// credit-management). Same SuperAdmin guard, same cloud_usage warehouse.
 	app.Get("/v1/admin/providers/credit", core.Guard(s, ProvidersCredit))
