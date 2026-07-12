@@ -22,8 +22,8 @@
 //
 //	GET  /v1/referrals               (org)          my code, link, referrals, credits earned
 //	POST /v1/referrals/claim         (org=referee)  record a referral from a ?ref code
-//	GET  /v1/admin/referrals         (global-admin) every referral + a summary
-//	POST /v1/admin/referrals/sweep   (global-admin) qualify-check every pending referral
+//	GET  /v1/admin/referrals         (SuperAdmin) every referral + a summary
+//	POST /v1/admin/referrals/sweep   (SuperAdmin) qualify-check every pending referral
 //
 // serve.go auto-registers GET /v1/referrals/health.
 package referrals
@@ -244,13 +244,13 @@ func claim(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ── admin surface (global-admin, fail-closed) ────────────────────────────────
+// ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
 // adminList answers GET /v1/admin/referrals — every referral (both orgs exposed)
-// + a fleet summary. Global-admin only.
+// + a fleet summary. SuperAdmin only.
 func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	rows, err := s.State.store.ListAll(c.Context(), adminLimitOf(c))
 	if err != nil {
@@ -274,10 +274,10 @@ func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 
 // adminSweep answers POST /v1/admin/referrals/sweep — the periodic qualify path
 // (a cron/o11y hits it, or an operator on demand). It qualify-checks every
-// pending referral and grants the ones that now qualify. Global-admin only.
+// pending referral and grants the ones that now qualify. SuperAdmin only.
 func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	pending, err := s.State.store.ListPending(ctx, "", sweepLimit)
@@ -416,7 +416,7 @@ type myReferralView struct {
 	CreditedAt   int64  `json:"creditedAt"`
 }
 
-// adminReferralView is one row in the global-admin directory (both orgs exposed).
+// adminReferralView is one row in the SuperAdmin directory (both orgs exposed).
 type adminReferralView struct {
 	ID                 string `json:"id"`
 	ReferrerOrg        string `json:"referrerOrg"`

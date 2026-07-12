@@ -19,7 +19,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	adminRequired := middleware.TokenRequired(permission.Admin)
 
 	// mintRequired gates the treasury payout machinery on the internal service
-	// token OR a platform global admin ONLY — NEVER an org-level Admin (a legacy
+	// token OR a platform SuperAdmin ONLY — NEVER an org-level Admin (a legacy
 	// per-org access token or a gateway-minted org owner). executePayouts
 	// DISBURSES real value (CreditGrants, queued Stripe transfers, on-chain HUSD);
 	// calculatePayouts computes the split; the SBOM writes feed that attribution.
@@ -45,7 +45,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 	contributorRest.GET("/by-login/:login", tokenRequired, contributorGetByLogin)
 	// Money-OUT / payout machinery: adminRequired FIRST resolves the org and
 	// stamps the service-token marker + permissions; mintRequired (PlatformOnly)
-	// then NARROWS to the service token / global admin. PlatformOnly must run
+	// then NARROWS to the service token / SuperAdmin. PlatformOnly must run
 	// AFTER TokenRequired (it reads what TokenRequired sets), so both are chained.
 	contributorRest.POST("/sbom", adminRequired, mintRequired, createSBOMEntry)
 	contributorRest.GET("/sbom", adminRequired, listSBOMEntries)

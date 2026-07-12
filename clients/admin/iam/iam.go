@@ -2,7 +2,7 @@
 // surface (/v1/iam/get-*). IAM runs as its own deployment (not fused into this
 // binary), so these are HTTP calls, not Go method dispatch. Every call REPLAYS
 // THE CALLER'S OWN credential (session cookie + Authorization), so IAM authorizes
-// the read as the same principal the gateway already validated as a global admin.
+// the read as the same principal the gateway already validated as a SuperAdmin.
 // admin adds NO service credential of its own here: it never widens what the
 // caller could read directly, and IAM's own IsSuperAdmin gate stays the second
 // line of defense.
@@ -28,7 +28,7 @@ import (
 )
 
 // Client reads the IAM management surface (/v1/iam/get-*) on behalf of a verified
-// global-admin caller.
+// SuperAdmin caller.
 type Client struct {
 	base string // e.g. http://iam.hanzo.svc.cluster.local:8000
 	http *http.Client
@@ -131,7 +131,7 @@ func (c *Client) Org(ctx context.Context, cr Creds, id string) (Org, error) {
 // whole object, flips isForbidden, and writes it back — update-user REPLACES the
 // row, so operating on the full object (not a typed subset) is what keeps every
 // other field intact. Replays the caller's own credential, so IAM authorizes the
-// read as the same validated global admin.
+// read as the same validated SuperAdmin.
 func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any, error) {
 	q := url.Values{"id": {id}}
 	env, err := c.get(ctx, cr, "/v1/iam/get-user", q)
@@ -149,7 +149,7 @@ func (c *Client) User(ctx context.Context, cr Creds, id string) (map[string]any,
 }
 
 // SetUser writes a full user object back (POST /v1/iam/update-user?id=owner/name).
-// The caller's replayed credential is a VALIDATED global admin, whom IAM's
+// The caller's replayed credential is a VALIDATED SuperAdmin, whom IAM's
 // CheckPermissionForUpdateUser admits to set privileged fields (isForbidden) on any
 // user — a tenant/org-admin is refused by IAM itself, so this can never be abused to
 // suspend across a boundary the caller couldn't already cross. admin adds no service

@@ -46,7 +46,7 @@ type depositCapture struct {
 	idem   string // X-Idempotency-Key commerce received (empty when none forwarded)
 }
 
-// adminHdr is a validated global-admin identity (what SanitizeIdentity mints for
+// adminHdr is a validated SuperAdmin identity (what SanitizeIdentity mints for
 // owner==AdminOrg) plus a replayable credential.
 func adminHdr() map[string]string {
 	return map[string]string{
@@ -240,7 +240,7 @@ func TestCustomers_ListRealFleet(t *testing.T) {
 	}
 	var env struct {
 		Data  []customer.CustomerRow `json:"data"`
-		Data2 int           `json:"data2"`
+		Data2 int                    `json:"data2"`
 	}
 	if err := json.Unmarshal(body, &env); err != nil {
 		t.Fatalf("decode: %v", err)

@@ -14,7 +14,7 @@ import (
 )
 
 // operatorOrgsFromEnv builds the set of orgs allowed to bind custom domains
-// (besides a global admin): CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) when
+// (besides a SuperAdmin): CLOUD_PLATFORM_OPERATOR_ORGS (comma-separated) when
 // set, else the deployment's own brand org (sanitized). The brand org is the
 // platform operator, which manages customer domains until DNS-ownership
 // verification is wired here.
@@ -47,7 +47,7 @@ type setDomainsReq struct {
 // setDomains binds one or more CUSTOM public hostnames to this org's static site,
 // so the site edge (clients/sites) serves them from the site's S3 prefix once the
 // hostname is pointed at this edge. Binding a host you do not own would let you
-// shadow it at the edge, so a custom host requires EITHER a global admin OR the
+// shadow it at the edge, so a custom host requires EITHER a SuperAdmin OR the
 // platform-operator org (the brand's own org — it manages customer DNS).
 // DNS-ownership verification (the challenge/verify the /v1/platform apps path
 // already implements) is the planned path for any org to self-bind; until it
@@ -88,7 +88,7 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		if !authorized {
 			return zip.Errorf(http.StatusForbidden,
-				"binding custom domain %q requires ownership verification; a global admin or the platform-operator org may bind it today", host)
+				"binding custom domain %q requires ownership verification; a SuperAdmin or the platform-operator org may bind it today", host)
 		}
 		if err := s.State.store.BindHost(c.Context(), host, org, p.Slug, now); err != nil {
 			switch {

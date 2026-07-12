@@ -71,8 +71,8 @@ func Validated(c *zip.Ctx) bool {
 }
 
 // IsSuperAdmin reports whether the caller is a Hanzo platform SuperAdmin — the
-// cross-tenant sudo scope (SOC2/FedRAMP). The standard term is SuperAdmin, NEVER
-// "global admin". SuperAdmin ⟺ membership in the reserved "admin" org
+// cross-tenant sudo scope (SOC2/FedRAMP). SuperAdmin is the ONE standard term
+// (SOC2/FedRAMP naming). SuperAdmin ⟺ membership in the reserved "admin" org
 // (owner == adminOrg): SanitizeIdentity mints X-User-IsAdmin ONLY for that
 // identity, so c.IsAdmin() IS the SuperAdmin predicate. Like every authority
 // header it is stripped on ingress and re-injected only from validated claims —

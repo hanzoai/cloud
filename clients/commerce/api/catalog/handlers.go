@@ -8,7 +8,7 @@
 //     public group so it serves the exact path GET /v1/commerce/catalog.
 //   - PLATFORM-ADMIN write: create/update/delete/seed mutate the platform-global
 //     catalog (the "system" namespace, NOT a per-tenant org), so they gate on
-//     auth.IAMClaims.GlobalAdmin() — a Hanzo platform admin, never an org-level
+//     auth.IAMClaims.SuperAdmin() — a Hanzo platform admin, never an org-level
 //     admin. Wired on the /v1 bundle under /catalog/entries.
 //
 // The catalog is platform-global: one store in the "system" namespace, scoped
@@ -41,13 +41,13 @@ func catalogDB(c *gin.Context) *datastore.Datastore {
 	return datastore.New(nscontext.WithNamespace(middleware.GetContext(c), CatalogNamespace))
 }
 
-// requireGlobalAdmin fails closed unless the caller is a Hanzo PLATFORM admin.
+// requireSuperAdmin fails closed unless the caller is a Hanzo PLATFORM admin.
 // The platform catalog is cross-tenant data, so an org-level admin must NOT edit
 // it (Red: org-admin → platform escalation). Returns false + writes 403 on deny.
-func requireGlobalAdmin(c *gin.Context) bool {
+func requireSuperAdmin(c *gin.Context) bool {
 	claims := iammiddleware.GetIAMClaims(c)
-	if claims == nil || !claims.GlobalAdmin() {
-		http.Fail(c, 403, "platform admin required to edit the catalog", errors.New("not a global admin"))
+	if claims == nil || !claims.SuperAdmin() {
+		http.Fail(c, 403, "platform admin required to edit the catalog", errors.New("not a SuperAdmin"))
 		return false
 	}
 	return true
@@ -63,7 +63,7 @@ func PublicRoute(r router.Router) {
 func AdminRoute(r router.Router, args ...gin.HandlerFunc) {
 	g := r.Group("/catalog")
 	// args carry the bundle's tokenRequired/adminRequired; each handler ALSO
-	// enforces GlobalAdmin() explicitly (defense in depth — a token gate is not
+	// enforces SuperAdmin() explicitly (defense in depth — a token gate is not
 	// a platform-admin gate).
 	g.GET("/entries", append(args, ListEntries)...)
 	g.POST("/entries", append(args, CreateEntry)...)
@@ -90,7 +90,7 @@ func Public(c *gin.Context) {
 // ListEntries returns the raw catalog entries (admin view — includes
 // unpublished). Optional ?brand filter.
 func ListEntries(c *gin.Context) {
-	if !requireGlobalAdmin(c) {
+	if !requireSuperAdmin(c) {
 		return
 	}
 	db := catalogDB(c)
@@ -104,7 +104,7 @@ func ListEntries(c *gin.Context) {
 
 // CreateEntry adds a catalog entry (platform admin).
 func CreateEntry(c *gin.Context) {
-	if !requireGlobalAdmin(c) {
+	if !requireSuperAdmin(c) {
 		return
 	}
 	db := catalogDB(c)
@@ -133,7 +133,7 @@ func CreateEntry(c *gin.Context) {
 // UpdateEntry edits a catalog entry by slug (platform admin). The slug identity
 // is preserved; other fields are replaced from the body.
 func UpdateEntry(c *gin.Context) {
-	if !requireGlobalAdmin(c) {
+	if !requireSuperAdmin(c) {
 		return
 	}
 	db := catalogDB(c)
@@ -164,7 +164,7 @@ func UpdateEntry(c *gin.Context) {
 
 // DeleteEntry removes a catalog entry by slug (platform admin).
 func DeleteEntry(c *gin.Context) {
-	if !requireGlobalAdmin(c) {
+	if !requireSuperAdmin(c) {
 		return
 	}
 	db := catalogDB(c)
@@ -189,7 +189,7 @@ func DeleteEntry(c *gin.Context) {
 // SeedCatalog upserts the embedded Hanzo catalog seed (idempotent,
 // non-destructive — never overwrites CMS edits). Platform admin only.
 func SeedCatalog(c *gin.Context) {
-	if !requireGlobalAdmin(c) {
+	if !requireSuperAdmin(c) {
 		return
 	}
 	created, err := catalogentry.Seed(catalogDB(c))

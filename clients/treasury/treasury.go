@@ -21,18 +21,18 @@
 // reads the authoritative ledger, cross-tenant aggregates read the projection.
 //
 // ONE scope-aware /v1/finance/* engine, three tenancy surfaces — the tenant is derived
-// from the validated IAM identity, house/reserve is locked to global-admin, and a
+// from the validated IAM identity, house/reserve is locked to SuperAdmin, and a
 // per-org caller only ever sees its own tenant:
 //
 //	GET  /v1/finance/treasury          (org)          reserve health + policy (the pool backing MY payouts)
 //	GET  /v1/finance/accounts          (org)          MY ledger accounts (admin: ?scope=house | ?org=<t>)
-//	GET  /v1/admin/treasury            (global-admin) full report + journal + anchor status
-//	POST /v1/admin/treasury/policy     (global-admin) set the revenue-share %
-//	POST /v1/admin/treasury/sweep      (global-admin) accrue the revenue-share into the fund for a period
-//	POST /v1/admin/treasury/seed       (global-admin) inject bootstrap capital into the fund
-//	POST /v1/admin/treasury/anchor     (global-admin) anchor the ledger root on Hanzo L1
+//	GET  /v1/admin/treasury            (SuperAdmin) full report + journal + anchor status
+//	POST /v1/admin/treasury/policy     (SuperAdmin) set the revenue-share %
+//	POST /v1/admin/treasury/sweep      (SuperAdmin) accrue the revenue-share into the fund for a period
+//	POST /v1/admin/treasury/seed       (SuperAdmin) inject bootstrap capital into the fund
+//	POST /v1/admin/treasury/anchor     (SuperAdmin) anchor the ledger root on Hanzo L1
 //
-// The three surfaces (admin.hanzo.ai global-admin, console.hanzo.ai per-org customer,
+// The three surfaces (admin.hanzo.ai SuperAdmin, console.hanzo.ai per-org customer,
 // finance.hanzo.ai per-org operator) are the SAME engine projected by IAM scope. A
 // separate frontend agent builds the console + finance surfaces against this contract.
 // The reserve-fund admin board is the `treasury` admin head (distinct from the
@@ -134,16 +134,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// ONE scope-aware /v1/finance/* engine, three tenancy surfaces (HIP finance):
 	// per-org reads derive the tenant from the validated IAM identity and see ONLY
 	// their own accounts; the reserve fund + revenue-share + house mutations are
-	// locked to global-admin under /v1/admin/treasury* (the console admin-proxy
+	// locked to SuperAdmin under /v1/admin/treasury* (the console admin-proxy
 	// convention, enveloped).
 	app.Get("/v1/finance/treasury", cloud.Handle(s, myTreasury))                 // per-org: reserve transparency + policy
 	app.Get("/v1/finance/accounts", cloud.Handle(s, myAccounts))                 // per-org: own ledger accounts (admin: ?org=/?scope=house)
-	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))                  // global-admin: report + journal + anchor
-	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))       // global-admin: set revenue-share %
-	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))            // global-admin: accrue revenue-share
-	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))              // global-admin: inject reserve capital
-	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))          // global-admin: anchor ledger root on Hanzo L1
-	app.Post("/v1/admin/treasury/bind-anchor", cloud.Handle(s, adminBindAnchor)) // global-admin: bind the reserve MPC wallet as the anchor signer
+	app.Get("/v1/admin/treasury", cloud.Handle(s, adminReport))                  // SuperAdmin: report + journal + anchor
+	app.Post("/v1/admin/treasury/policy", cloud.Handle(s, adminSetPolicy))       // SuperAdmin: set revenue-share %
+	app.Post("/v1/admin/treasury/sweep", cloud.Handle(s, adminSweep))            // SuperAdmin: accrue revenue-share
+	app.Post("/v1/admin/treasury/seed", cloud.Handle(s, adminSeed))              // SuperAdmin: inject reserve capital
+	app.Post("/v1/admin/treasury/anchor", cloud.Handle(s, adminAnchor))          // SuperAdmin: anchor ledger root on Hanzo L1
+	app.Post("/v1/admin/treasury/bind-anchor", cloud.Handle(s, adminBindAnchor)) // SuperAdmin: bind the reserve MPC wallet as the anchor signer
 
 	log.Info("treasury mounted", "brand", deps.Brand, "ledgerOfRecord", record.Name(), "anchor", s.State.anchor.configured())
 	return nil
@@ -206,7 +206,7 @@ func ReserveCents(ctx context.Context) (int64, bool) {
 // reserve-fund health + the revenue-share policy. This is a TRANSPARENCY view — a
 // partner/author can see the pool that backs their payouts is solvent — not per-org
 // money (that is the customer's commerce balance at /v1/billing/balance). Policy is
-// read-only here; only global-admin sets it.
+// read-only here; only SuperAdmin sets it.
 func myTreasury(s *cloud.Service[state], c *zip.Ctx) error {
 	if _, ok := principal.Org(c); !ok {
 		return zip.ErrForbidden("sign in to view the treasury")
@@ -227,7 +227,7 @@ type accountView struct {
 // myAccounts answers GET /v1/finance/accounts — the scope-aware ledger-account read
 // that the console (surface #2) and finance.hanzo.ai (surface #3) consume. It is
 // tenant-isolated SERVER-SIDE: a per-org caller sees ONLY accounts under its own
-// "org:<tenant>:" prefix, never house or another tenant's accounts. Global-admin may
+// "org:<tenant>:" prefix, never house or another tenant's accounts. SuperAdmin may
 // widen with ?scope=house (the reserve/revenue/payout house accounts) or ?org=<t> (a
 // specific tenant) — the ONLY way to cross the tenant boundary, and only for admins.
 // Honest empty until a tenant has ledger postings (the commerce→ledger projection is
@@ -268,13 +268,13 @@ func myAccounts(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ── admin surface (global-admin, fail-closed) ────────────────────────────────
+// ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
 // adminReport answers GET /v1/admin/treasury — the full fund report, the recent
-// journal (double-entry postings), and the Hanzo L1 anchor status. Global-admin only.
+// journal (double-entry postings), and the Hanzo L1 anchor status. SuperAdmin only.
 func adminReport(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	rep, err := s.State.record.Snapshot(ctx)
@@ -297,10 +297,10 @@ type policyRequest struct {
 	RevenueShareBps int64 `json:"revenueShareBps"`
 }
 
-// adminSetPolicy sets the revenue-share basis points (0–10000). Global-admin only.
+// adminSetPolicy sets the revenue-share basis points (0–10000). SuperAdmin only.
 func adminSetPolicy(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	var body policyRequest
 	if err := c.Bind(&body); err != nil {
@@ -324,10 +324,10 @@ type sweepRequest struct {
 }
 
 // adminSweep posts the revenue-share accrual for a period (revenue → fund),
-// idempotent per period. Global-admin only.
+// idempotent per period. SuperAdmin only.
 func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	var body sweepRequest
 	if err := c.Bind(&body); err != nil {
@@ -369,10 +369,10 @@ type seedRequest struct {
 }
 
 // adminSeed injects bootstrap capital into the reserve fund so backed payouts can
-// begin before the first revenue-share sweep. Global-admin only.
+// begin before the first revenue-share sweep. SuperAdmin only.
 func adminSeed(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	var body seedRequest
 	if err := c.Bind(&body); err != nil {

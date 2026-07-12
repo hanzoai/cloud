@@ -1,11 +1,11 @@
 // Package checkout — authorization regression tests for the tenant-admin
-// handlers (Red: org-admin vs global-admin conflation + role-name conflation).
+// handlers (Red: org-admin vs SuperAdmin conflation + role-name conflation).
 //
 // These pin the corrected model end-to-end through the real gin router and
 // store, reusing the harness in tenant_handler_test.go (newHandlerStore,
 // seedTenant, newRouterWithClaims):
 //
-//   - CreateTenant (cross-tenant) requires a PLATFORM global admin. Org-level
+//   - CreateTenant (cross-tenant) requires a PLATFORM SuperAdmin. Org-level
 //     isAdmin (an org owner) and org-mintable role NAMES do NOT qualify.
 //   - tenant-admin (org-scoped) is the robust isAdmin claim, not a role name.
 package checkout
@@ -59,15 +59,15 @@ func TestCreateTenant_ForgedSuperadminRole_403(t *testing.T) {
 	}
 }
 
-// TestCreateTenant_GlobalAdminByFlag_201 proves the explicit isGlobalAdmin
+// TestCreateTenant_SuperAdminByFlag_201 proves the explicit isSuperAdmin
 // claim grants superadmin even from a non-admin org — forwards-compat with the
-// explicit gateway X-User-IsGlobalAdmin signal.
-func TestCreateTenant_GlobalAdminByFlag_201(t *testing.T) {
-	claims := &auth.IAMClaims{Owner: "hanzo", IsGlobalAdmin: true}
+// explicit gateway X-User-IsSuperAdmin signal.
+func TestCreateTenant_SuperAdminByFlag_201(t *testing.T) {
+	claims := &auth.IAMClaims{Owner: "hanzo", IsSuperAdmin: true}
 	claims.Subject = "platform-op"
 	code, body := postCreateTenant(t, claims)
 	if code != http.StatusCreated {
-		t.Fatalf("global-admin-by-flag status=%d want 201; body=%s", code, body)
+		t.Fatalf("SuperAdmin-by-flag status=%d want 201; body=%s", code, body)
 	}
 }
 

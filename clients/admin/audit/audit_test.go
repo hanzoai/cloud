@@ -3,7 +3,7 @@ package audit
 // Tests for the store-backed /v1/admin/audit + /v1/admin/audit/verify surface. They wire
 // the audit domain against a REAL audit.Recorder (on-disk SQLite) seeded with records,
 // drive requests through the whole zip app, and assert the query results, the integrity
-// summary, and the global-admin gate.
+// summary, and the SuperAdmin gate.
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func seedAudit(t *testing.T, rec *auditstore.Recorder, n int) {
 	}
 }
 
-var globalAdmin = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "z@hanzo.ai"}
+var superAdmin = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "z@hanzo.ai"}
 
 // TestAdminAudit_ReturnsRealRecords proves GET /v1/admin/audit returns the store's
 // records (newest-first) with an accurate total and an integrity summary.
@@ -84,7 +84,7 @@ func TestAdminAudit_ReturnsRealRecords(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 5)
 
-	resp, body := do("GET", "/v1/admin/audit", globalAdmin)
+	resp, body := do("GET", "/v1/admin/audit", superAdmin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("audit: got %d (body=%s)", resp.StatusCode, body)
 	}
@@ -126,7 +126,7 @@ func TestAdminAudit_Filters(t *testing.T) {
 	_, _ = rec.Append(ctx, auditstore.Record{Action: "POST /v1/admin/roles", Actor: auditstore.Actor{Org: "admin"}, Outcome: auditstore.Outcome{Result: "deny", Status: 403}})
 	seedAudit(t, rec, 3)
 
-	resp, body := do("GET", "/v1/admin/audit?result=deny", globalAdmin)
+	resp, body := do("GET", "/v1/admin/audit?result=deny", superAdmin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("got %d (body=%s)", resp.StatusCode, body)
 	}
@@ -149,7 +149,7 @@ func TestAdminAudit_VerifyEndpoint(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 8)
 
-	resp, body := do("GET", "/v1/admin/audit/verify", globalAdmin)
+	resp, body := do("GET", "/v1/admin/audit/verify", superAdmin)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("verify: got %d (body=%s)", resp.StatusCode, body)
 	}
@@ -172,9 +172,9 @@ func TestAdminAudit_VerifyEndpoint(t *testing.T) {
 	}
 }
 
-// TestAdminAudit_DeniedWithoutGlobalAdmin proves BOTH audit endpoints fail-closed 403 for
-// a non-global-admin, and — critically — the store is NEVER read on a denied request.
-func TestAdminAudit_DeniedWithoutGlobalAdmin(t *testing.T) {
+// TestAdminAudit_DeniedWithoutSuperAdmin proves BOTH audit endpoints fail-closed 403 for
+// a non-SuperAdmin, and — critically — the store is NEVER read on a denied request.
+func TestAdminAudit_DeniedWithoutSuperAdmin(t *testing.T) {
 	rec, do := mountWithStore(t)
 	seedAudit(t, rec, 3)
 
@@ -207,7 +207,7 @@ func TestAdminAudit_VerifyWithoutStore(t *testing.T) {
 	s := &cloud.Service[core.State]{State: core.State{AdminOrg: "admin"}} // no auditStore
 	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
 	req := httptest.NewRequest("GET", "/v1/admin/audit/verify", nil)
-	for k, v := range globalAdmin {
+	for k, v := range superAdmin {
 		req.Header.Set(k, v)
 	}
 	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})

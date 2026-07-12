@@ -3,7 +3,7 @@ package admin
 // The PLATFORM CONTROL PLANE board (/v1/admin/flags) — every runtime LAUNCH / RELEASE
 // switch (waitlist, public signup, subsystem activation, gateway limits, network ids)
 // with its LIVE value, evaluated through the Hanzo Insights feature-flag engine
-// (clients/featureflags → insights rust/feature-flags). Global-admin only (mounted
+// (clients/featureflags → insights rust/feature-flags). SuperAdmin only (mounted
 // behind s.guard, like every /v1/admin/* route).
 //
 // ONE flag engine, not two. Insights OWNS the flag definitions, targeting, percentage

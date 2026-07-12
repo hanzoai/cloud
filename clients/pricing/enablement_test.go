@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 )
 
 // TestEnablement_TriStateVisibility pins the resolver's security invariant: ga is
@@ -136,10 +136,10 @@ func mountEnablement(t *testing.T) func(method, path, body string, hdr map[strin
 }
 
 // TestEnablement_GlobalSetIsAdminOnly proves a customer/org-admin can NEVER change
-// global enablement state — the admin registry surface is global-admin only.
+// global enablement state — the admin registry surface is SuperAdmin only.
 func TestEnablement_GlobalSetIsAdminOnly(t *testing.T) {
 	do := mountEnablement(t)
-	cust := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"} // org-level, NOT global admin
+	cust := map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"} // org-level, NOT SuperAdmin
 
 	// A customer cannot LIST the global registry.
 	if resp, _ := do("GET", "/v1/admin/enablement", "", cust); resp.StatusCode != http.StatusForbidden {

@@ -32,11 +32,11 @@
 //	GET  /v1/affiliates                        (org)          my status, code, link, referred count, accrued/pending/paid, payouts
 //	POST /v1/affiliates/apply                  (org)          apply to the program (optional vanity code)
 //	POST /v1/affiliates/attribute              (org=referred) record attribution from an ?aff code
-//	GET  /v1/admin/affiliates                  (global-admin) every affiliate + a summary
-//	POST /v1/admin/affiliates/:id/approve      (global-admin) approve + mint the code
-//	POST /v1/admin/affiliates/:id/suspend      (global-admin) suspend
-//	POST /v1/admin/affiliates/:id/payout       (global-admin) record a payout (credits → grant; cash → record-only)
-//	POST /v1/admin/affiliates/sweep            (global-admin) accrue commission for every referred org this period
+//	GET  /v1/admin/affiliates                  (SuperAdmin) every affiliate + a summary
+//	POST /v1/admin/affiliates/:id/approve      (SuperAdmin) approve + mint the code
+//	POST /v1/admin/affiliates/:id/suspend      (SuperAdmin) suspend
+//	POST /v1/admin/affiliates/:id/payout       (SuperAdmin) record a payout (credits → grant; cash → record-only)
+//	POST /v1/admin/affiliates/sweep            (SuperAdmin) accrue commission for every referred org this period
 //
 // serve.go auto-registers GET /v1/affiliates/health.
 package affiliates
@@ -316,13 +316,13 @@ func attribute(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ── admin surface (global-admin, fail-closed) ────────────────────────────────
+// ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
 // adminList answers GET /v1/admin/affiliates — every affiliate (org exposed) + a
-// fleet summary. Global-admin only.
+// fleet summary. SuperAdmin only.
 func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
@@ -344,10 +344,10 @@ func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 
 // adminApprove answers POST /v1/admin/affiliates/:id/approve — approve + mint the
 // code. Body may carry an explicit {code} override; else the requested vanity code;
-// else a derived slug. Global-admin only.
+// else a derived slug. SuperAdmin only.
 func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	var body struct {
@@ -372,10 +372,10 @@ func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
 }
 
-// adminSuspend answers POST /v1/admin/affiliates/:id/suspend. Global-admin only.
+// adminSuspend answers POST /v1/admin/affiliates/:id/suspend. SuperAdmin only.
 func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	ctx := c.Context()
@@ -400,10 +400,10 @@ type payoutRequest struct {
 // adminPayout records a payout of accrued commission. A "credits" method issues a
 // commerce grant into the affiliate's wallet; a cash method (wire/paypal/…) is
 // record-only. The amount can never exceed pending (accrued − paid), reserved
-// atomically before any grant. Global-admin only.
+// atomically before any grant. SuperAdmin only.
 func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	var body payoutRequest
@@ -490,10 +490,10 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 // adminSweep answers POST /v1/admin/affiliates/sweep — the periodic accrual path (a
 // cron/o11y hits it, or an operator on demand). It folds over every approved
 // affiliate's referred orgs and accrues this period's commission, at-most-once per
-// period. Global-admin only.
+// period. SuperAdmin only.
 func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
@@ -584,7 +584,7 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Af
 
 // ── view models + helpers ─────────────────────────────────────────────────────
 
-// adminAffiliateView is one row in the global-admin directory (org exposed).
+// adminAffiliateView is one row in the SuperAdmin directory (org exposed).
 type adminAffiliateView struct {
 	ID            string `json:"id"`
 	Org           string `json:"org"`
