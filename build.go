@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	luxlog "github.com/luxfi/log"
@@ -86,6 +87,7 @@ func BuildDeps(cfg *Config) Deps {
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
 	deps.AI = meteredAIClient(pickAIClient(cfg, logger), deps)
+	wireAIPrepaidGate(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
@@ -176,6 +178,34 @@ func boolStr(b bool, t, f string) string {
 		return t
 	}
 	return f
+}
+
+// wireAIPrepaidGate routes the embedded ai router's PREPAID balance gate + usage
+// debit to the co-resident commerce handler: the SAME self-routing transport the
+// metering client uses (service-token, in-process, no socket) — so the ai gate
+// reads and debits the ONE commerce ledger the rest of the platform bills, WITHOUT
+// hitting the public customer billing proxy (which 401s a service token). The ai
+// module reads commerceEndpoint/commerceToken from env (conf.GetConfigString); when
+// commerce is co-resident, self-configure them to the in-process placeholder so no
+// CR env is required for the ai gate to work. There is NO exempt path in the ai gate
+// (hanzoai/ai >= v1.805.7): every principal is gated on a positive prepaid balance,
+// fail-closed. MUST run before ai.Mount — InitBalanceGate builds its client once at
+// mount — which BuildDeps guarantees (deps are built before MountAll).
+func wireAIPrepaidGate(cfg *Config, log luxlog.Logger) {
+	if !cfg.Enabled("commerce") {
+		// Split-deploy: the ai module speaks real HTTP to its own commerceEndpoint
+		// (the standalone commerce), unchanged — no in-process transport.
+		return
+	}
+	aiobject.CommerceTransport = commerceinproc.Transport()
+	if os.Getenv("commerceEndpoint") == "" {
+		_ = os.Setenv("commerceEndpoint", commerceinproc.PlaceholderBase)
+	}
+	if os.Getenv("commerceToken") == "" && cfg.CommerceServiceToken != "" {
+		_ = os.Setenv("commerceToken", cfg.CommerceServiceToken)
+	}
+	log.Info("ai prepaid gate wired to in-process commerce (no exempt, fail-closed)",
+		"commerceEndpoint", os.Getenv("commerceEndpoint"))
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
