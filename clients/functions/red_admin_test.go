@@ -11,8 +11,8 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// doAdmin fires a request as a validated GLOBAL ADMIN: empty X-Org-Id but
-// X-User-IsAdmin:true — the state SanitizeIdentity leaves for a global admin
+// doAdmin fires a request as a validated SUPERADMIN: empty X-Org-Id but
+// X-User-IsAdmin:true — the state SanitizeIdentity leaves for a SuperAdmin
 // who has NOT selected an org.
 func doAdmin(t *testing.T, app *zip.App, method, path string, body any) (int, []byte) {
 	t.Helper()
@@ -38,16 +38,16 @@ func doAdmin(t *testing.T, app *zip.App, method, path string, body any) (int, []
 
 // TestRed_NoAdminBucketConfusion is the REGRESSION GUARD for Red HIGH-1's
 // admin-bucket corollary. There is no longer a magic "admin" storage bucket: a
-// global admin with no selected org is REFUSED (403) rather than dropped into a
+// SuperAdmin with no selected org is REFUSED (403) rather than dropped into a
 // shared bucket, and "Admin"/"admin" are DISTINCT exact orgs (no case-fold).
 func TestRed_NoAdminBucketConfusion(t *testing.T) {
 	app := mountApp(t)
 
-	// Global admin, empty org -> 403 (no bucket to write into). Per-org data
+	// SuperAdmin, empty org -> 403 (no bucket to write into). Per-org data
 	// requires an explicit org even for admins.
 	if code, _ := doAdmin(t, app, http.MethodPost, "/v1/functions",
 		map[string]any{"name": "admin-only", "runtime": "python", "code": "PRIV"}); code != http.StatusForbidden {
-		t.Fatalf("global admin with empty org want 403 (no admin bucket), got %d", code)
+		t.Fatalf("SuperAdmin with empty org want 403 (no admin bucket), got %d", code)
 	}
 
 	// "Admin" and "admin" are distinct exact buckets — no case-fold collision.

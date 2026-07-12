@@ -7,7 +7,7 @@
 // Relationship to the sibling subsystems:
 //
 //   - clients/paas  (/v1/paas)     — the ADMIN fleet drift board: observes +
-//     deploys SYSTEM Service CRs across the platform namespaces, global-admin
+//     deploys SYSTEM Service CRs across the platform namespaces, SuperAdmin
 //     only. It answers "what is the fleet running, and roll a tag."
 //   - clients/projects (/v1/projects) — per-org STATIC sites (S3 hosting).
 //   - clients/platform (/v1/platform)  — THIS: per-org CONTAINER apps. Users
@@ -222,9 +222,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // gateway or the console BFF, which mint a user-bound bearer (→ X-User-Id set),
 // so this refuses ONLY the anonymous-forge path and breaks no real client.
 //
-// Empty org is allowed only for a validated global admin (bucketed under
+// Empty org is allowed only for a validated SuperAdmin (bucketed under
 // "admin"): a forged X-User-IsAdmin cannot exist without a validated principal
-// (SanitizeIdentity sets it only for a JWT-verified global admin, HIP-0026), and
+// (SanitizeIdentity sets it only for a JWT-verified SuperAdmin, HIP-0026), and
 // even then reaches only the admin bucket, never a real tenant's namespace. This
 // is the ONLY source of the tenant; no handler reads an org from body or path.
 func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {

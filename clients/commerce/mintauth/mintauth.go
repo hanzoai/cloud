@@ -44,7 +44,7 @@ import (
 // It is a fail-closed refusal at the ledger layer, independent of any route gate.
 var ErrNotAuthorized = errors.New(
 	"commerce: minting spendable balance requires mint authorization " +
-		"(internal service token, platform global admin, settled payment, or server-fixed grant)")
+		"(internal service token, platform SuperAdmin, settled payment, or server-fixed grant)")
 
 type gateKey struct{}
 type grantKey struct{}

@@ -7,8 +7,8 @@
 //  1. GET /v1/commerce/tenant never leaks provider credentials / client
 //     secrets / KMS paths / BD endpoints. Public body is a tight
 //     projection.
-//  2. POST /_/commerce/tenants requires a PLATFORM (global) admin —
-//     GlobalAdmin(): owner==admin or the explicit isGlobalAdmin claim. An org
+//  2. POST /_/commerce/tenants requires a PLATFORM SuperAdmin —
+//     SuperAdmin(): owner==admin or the explicit isSuperAdmin claim. An org
 //     owner (org-level isAdmin) or an org-mintable "superadmin" role gets 403.
 //  3. GET /_/commerce/providers is tenant-scoped from the IAM `owner`
 //     claim, never from the request. A caller whose owner has no tenant
@@ -127,11 +127,11 @@ func TestTenantJSONFromStore_RedactsSecrets(t *testing.T) {
 	// MUST NOT leak: KMS paths, BD endpoint, disabled provider names,
 	// client secrets (none are stored — confirm they never appear).
 	forbidden := []string{
-		"kms/commerce/acme/square",   // KMS path
+		"kms/commerce/acme/square", // KMS path
 		"kms/commerce/acme/braintree",
-		"bd.acme.example.test",       // BD endpoint
-		"braintree",                  // disabled provider
-		"client_secret",              // never stored, confirm projection doesn't invent
+		"bd.acme.example.test", // BD endpoint
+		"braintree",            // disabled provider
+		"client_secret",        // never stored, confirm projection doesn't invent
 	}
 	for _, s := range forbidden {
 		if strings.Contains(body, s) {
@@ -226,7 +226,7 @@ func TestCreateTenant_TenantAdmin_403(t *testing.T) {
 
 func TestCreateTenant_Superadmin_201(t *testing.T) {
 	s := newHandlerStore(t)
-	// A real PLATFORM (global) admin: member of the admin org. Org-level
+	// A real PLATFORM SuperAdmin: member of the admin org. Org-level
 	// IsAdmin alone is NOT sufficient (see TestCreateTenant_OrgOwner_403).
 	claims := &auth.IAMClaims{
 		Owner:   "admin",

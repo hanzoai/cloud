@@ -29,8 +29,8 @@ import (
 )
 
 // orgAdminSeed sets the exact C1 adversary: an org-level admin (org-level
-// isAdmin, isGlobalAdmin=false) — a gateway-minted org owner or legacy per-org
-// Admin token. NOT the internal service token, NOT a platform global admin.
+// isAdmin, isSuperAdmin=false) — a gateway-minted org owner or legacy per-org
+// Admin token. NOT the internal service token, NOT a platform SuperAdmin.
 func orgAdminSeed(c *gin.Context) {
 	c.Set("iam_authenticated", true)
 	c.Set("permissions", bit.Field(permission.Admin|permission.Live))
@@ -80,7 +80,7 @@ func TestZapDeposit_ServiceTokenMints(t *testing.T) {
 		t.Fatalf("service-token /zap billing.deposit: status=%d body=%s, want 200", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Result map[string]any `json:"result"`
+		Result map[string]any            `json:"result"`
 		Error  *struct{ Message string } `json:"error"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {

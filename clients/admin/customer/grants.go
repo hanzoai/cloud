@@ -16,7 +16,7 @@ import (
 // commerce ledger by POST /v1/admin/customers/:org/credit (or POST /v1/admin/grants).
 // Every grant is recorded in cloud's tamper-evident audit store as action
 // "admin.customer.credit", so THIS view is a projection of that trail — the ONE source of
-// truth for "who granted what to whom, when, and from which bucket". Global-admin only.
+// truth for "who granted what to whom, when, and from which bucket". SuperAdmin only.
 //
 // A grant's `source` splits it into the two commerce money buckets:
 //   - trial   — a non-cash promo/comp credit (never refundable cash, never paid out).

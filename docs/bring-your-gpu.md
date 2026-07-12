@@ -132,7 +132,7 @@ Register `Type=Claude` with the same `providerUrl` — the engine serves both.)
   reachability — the worker dials out.)
 - **`POST /v1/add-provider` is gated to a platform-admin token today.** Org self-service
   BYOK is wired (each org owns its provider rows, keys stored in KMS, never plaintext)
-  but fronted by a global-admin filter. Until that gate opens to org admins, register a
+  but fronted by a SuperAdmin filter. Until that gate opens to org admins, register a
   connected GPU with an admin token or from the platform console.
 
 ---

@@ -38,11 +38,11 @@
 //	POST /v1/authors/connect               (org)          link GitHub (IAM-linked account or supplied login) + mint verify code
 //	POST /v1/authors/repos/verify          (org)          verify repo ownership (oauth admin-check OR hanzo.json file)
 //	POST /v1/authors/deploys/record        (org=deployer) record a deploy of a verified author repo (provenance → royalty)
-//	GET  /v1/admin/authors                  (global-admin) every author + a summary
-//	POST /v1/admin/authors/sweep            (global-admin) accrue royalty for every deploying org this period
-//	POST /v1/admin/authors/:id/approve      (global-admin) admit to earning (+ optional share override)
-//	POST /v1/admin/authors/:id/suspend      (global-admin) suspend
-//	POST /v1/admin/authors/:id/payout       (global-admin) record a payout (credits → grant; cash → record-only)
+//	GET  /v1/admin/authors                  (SuperAdmin) every author + a summary
+//	POST /v1/admin/authors/sweep            (SuperAdmin) accrue royalty for every deploying org this period
+//	POST /v1/admin/authors/:id/approve      (SuperAdmin) admit to earning (+ optional share override)
+//	POST /v1/admin/authors/:id/suspend      (SuperAdmin) suspend
+//	POST /v1/admin/authors/:id/payout       (SuperAdmin) record a payout (credits → grant; cash → record-only)
 //
 // serve.go auto-registers GET /v1/authors/health.
 package authors
@@ -451,13 +451,13 @@ func recordDeploy(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ── admin surface (global-admin, fail-closed) ────────────────────────────────
+// ── admin surface (SuperAdmin, fail-closed) ────────────────────────────────
 
 // adminList answers GET /v1/admin/authors — every author (org exposed) + a fleet
-// summary. Global-admin only.
+// summary. SuperAdmin only.
 func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	rows, err := s.State.store.ListAll(ctx, adminLimitOf(c))
@@ -482,10 +482,10 @@ func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // adminApprove answers POST /v1/admin/authors/:id/approve — admit to earning. Body
-// may carry a {shareBps} override. Global-admin only.
+// may carry a {shareBps} override. SuperAdmin only.
 func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	var body struct {
@@ -507,10 +507,10 @@ func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 	return adminOK(c, map[string]any{"author": adminViewOf(a, 0, 0)})
 }
 
-// adminSuspend answers POST /v1/admin/authors/:id/suspend. Global-admin only.
+// adminSuspend answers POST /v1/admin/authors/:id/suspend. SuperAdmin only.
 func adminSuspend(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	ctx := c.Context()
@@ -535,10 +535,10 @@ type payoutRequest struct {
 // adminPayout records a payout of accrued royalty. A "credits" method issues a
 // commerce grant into the author's wallet; a cash method is record-only. The amount
 // can never exceed pending (accrued − paid), reserved atomically before any grant.
-// Global-admin only.
+// SuperAdmin only.
 func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	id := strings.TrimSpace(c.Param("id"))
 	var body payoutRequest
@@ -624,10 +624,10 @@ func adminPayout(s *cloud.Service[state], c *zip.Ctx) error {
 
 // adminSweep answers POST /v1/admin/authors/sweep — the periodic accrual path. It
 // folds over every approved author's DISTINCT deploying orgs and accrues this
-// period's royalty, at-most-once per period. Global-admin only.
+// period's royalty, at-most-once per period. SuperAdmin only.
 func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
 	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
@@ -717,7 +717,7 @@ func emitAudit(s *cloud.Service[state], ctx context.Context, action string, a Au
 
 // ── view models + helpers ─────────────────────────────────────────────────────
 
-// adminAuthorView is one row in the global-admin directory (org exposed).
+// adminAuthorView is one row in the SuperAdmin directory (org exposed).
 type adminAuthorView struct {
 	ID           string `json:"id"`
 	Org          string `json:"org"`
