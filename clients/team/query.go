@@ -1,7 +1,7 @@
 package team
 
 // This file is the DocumentQuery matcher + sort — ported VERBATIM from
-// github.com/hanzoai/team-go/pkg/transactor/query.go. It evaluates the Huly
+// github.com/hanzoai/team-go/pkg/transactor/query.go. It evaluates the Team
 // query selectors ($in/$nin/$ne/$gt/$like/$all/…) the SPA issues over findAll.
 
 import (

@@ -74,7 +74,7 @@ func TestReconcileRosterHumansAndBots(t *testing.T) {
 	}
 
 	// Each bot is a Person keyed by its DETERMINISTIC derived uuid, rendered from
-	// its single-token agent name (Huly ",name"), and carries an active Employee.
+	// its single-token agent name (Team ",name"), and carries an active Employee.
 	for _, b := range bots {
 		uid := botUserID(b.ID)
 		ps := sess.queryDocs(clPerson, map[string]any{"personUuid": uid})
