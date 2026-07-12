@@ -84,13 +84,13 @@ var version = "dev"
 
 // nonRegistrySubcommands are the dispatch targets that do NOT correspond to
 // a single Wire() subsystem entry: the full fused surface, the standalone IAM
-// boot, and the datastore (a ClickHouse C++ fork with no Go serve target —
+// boot, and the datastore (a datastore C++ fork with no Go serve target —
 // see the datastore case in dispatch()). Listed in --help alongside the
 // registry-backed subcommands.
 var nonRegistrySubcommands = map[string]string{
 	"cloud":     "serve the full unified surface (all enabled subsystems, one listener)",
 	"iam":       "serve standalone Hanzo IAM (full Beego server: login UI, OAuth2/OIDC, LDAP/RADIUS)",
-	"datastore": "ClickHouse-fork analytics DB — not a Go serve target (see help text)",
+	"datastore": "datastore-fork analytics DB — not a Go serve target (see help text)",
 }
 
 func main() {
@@ -170,20 +170,20 @@ func dispatch(sub string, specs []cloud.MountSpec) error {
 		return nil
 
 	case "datastore":
-		// Hanzo Datastore is a ClickHouse C++ fork. It has no Go
-		// Serve()/Run() to dispatch to: the server is the ClickHouse
+		// Hanzo Datastore is a datastore C++ fork. It has no Go
+		// Serve()/Run() to dispatch to: the server is the datastore
 		// engine (built via CMake), and the only Go in the repo is
 		// cmd/zap-bridge — a SEPARATE per-package Go module
 		// (github.com/hanzoai/datastore/cmd/zap-bridge) built solely by
 		// the datastore Dockerfile's zap-builder stage, not part of this
 		// module graph. Folding it into `hanzo` would mean either cgo-
-		// linking ClickHouse into every Hanzo binary (a non-starter) or
+		// linking datastore into every Hanzo binary (a non-starter) or
 		// vendoring a second main module (violates one-binary). So
 		// datastore stays its own artifact; `hanzo datastore` documents
 		// that boundary instead of pretending to serve it.
 		return fmt.Errorf(
-			"datastore is a ClickHouse-fork analytics DB, not a Go serve target.\n" +
-				"  - server:    the ClickHouse engine (CMake build) — run its own image ghcr.io/hanzoai/datastore\n" +
+			"datastore is a datastore-fork analytics DB, not a Go serve target.\n" +
+				"  - server:    the datastore engine (CMake build) — run its own image ghcr.io/hanzoai/datastore\n" +
 				"  - zap-bridge: github.com/hanzoai/datastore/cmd/zap-bridge is a separate Go module,\n" +
 				"               built only by the datastore Dockerfile; it is not linked into hanzo.\n" +
 				"  use the standalone datastore deployment; `hanzo` composes the request-tier Go services")
