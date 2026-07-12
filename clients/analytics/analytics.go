@@ -62,6 +62,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -102,26 +103,15 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 // ── shared helpers ──────────────────────────────────────────────────────────
 
-// tenant resolves the org — the tenant-isolation KEY — for a request, and refuses
-// the forgeable data path. It REQUIRES a validated principal: c.User() (X-User-Id)
-// is set by SanitizeIdentity ONLY when it verified a bearer/cookie; on the Phase-1
-// no-principal path it may RESTORE a client's raw X-Org-Id but leaves X-User-Id
-// empty. Gating on c.User() therefore refuses an in-cluster caller that forges
-// `X-Org-Id: victim` with NO bearer — the same defense clients/s3 uses — while
-// breaking no legitimate caller (all reach this via a user-bound bearer).
-//
-// The org is used EXACTLY as minted (no case-fold/normalize): the cloud_usage
-// ledger stored `organization` verbatim from the same owner claim, so an exact
-// match is required to see one's own rows (normalizing could collapse or miss).
+// tenant resolves the org — the tenant-isolation KEY — through principal.Org, the
+// ONE org accessor. It requires a validated principal (refusing the Phase-1
+// no-bearer forged-X-Org-Id data path exactly as clients/s3 does) and returns the
+// org used EXACTLY as minted (only trimmed, never case-folded) but CLONED: the org
+// keys the cloud_usage ledger PAST request end (telemetry, async meters), and
+// c.Org() is a zero-copy view into the reused fasthttp buffer, so it must be a
+// stable owned copy — the retained-buffer fix.
 func tenant(c *zip.Ctx) (string, bool) {
-	if strings.TrimSpace(c.User()) == "" {
-		return "", false // no validated principal — refuse the forgeable data path
-	}
-	org := strings.TrimSpace(c.Org())
-	if org == "" || len(org) > 128 {
-		return "", false
-	}
-	return org, true
+	return principal.Org(c)
 }
 
 // window resolves the [start,end) window + bucket interval from ?range/?start/?end,
