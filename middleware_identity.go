@@ -96,6 +96,11 @@ var authorityHeaders = []string{
 	"X-Phone-Number",
 	"X-User-IsAdmin",
 	"X-User-IsOrgAdmin",
+	// X-User-Owner is the HOME org (the validated `owner` claim) — the identity +
+	// BILLING anchor, minted below DISTINCT from X-Org-Id (the effective/acted-on
+	// org). Stripped on ingress like every authority header so a client can never
+	// forge who pays, then re-injected only from validated claims.
+	"X-User-Owner",
 	// Legacy identity aliases an attacker might try; none are org sub-scopes.
 	"X-User-Role",
 	"X-User-Roles",
@@ -205,6 +210,18 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			}
 			if claims.Email != "" {
 				req.Header.Set("X-User-Email", claims.Email)
+			}
+			// X-User-Owner is the HOME org — the validated `owner` claim, minted
+			// here DISTINCT from X-Org-Id (the effective org set below). It is the
+			// identity + BILLING anchor: for a normal principal it equals X-Org-Id,
+			// but for a SuperAdmin org-switch it stays the admin org while X-Org-Id
+			// becomes the switched-into org — so the billing gate + debit (which key
+			// on principal.Owner/BillingOrg) always land on the admin ledger, never
+			// the org being acted on. Minted for EVERY validated principal, before the
+			// switch, so it is independent of the effective-org decision. An unsafe/
+			// empty owner mints nothing (billing then fails closed with no home org).
+			if owner != "" {
+				req.Header.Set("X-User-Owner", owner)
 			}
 			// effOrg is the org actually acted as: the switched-to org for a global
 			// admin, else the principal's own owner. Sub-scopes are validated against
