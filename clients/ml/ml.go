@@ -299,7 +299,7 @@ func create(s *cloud.Service[state], k resourceKind) zip.Handler {
 		// Resource created — debit the caller's org ledger for the compute
 		// submission (per-org, env-attributed, async best-effort). Ongoing
 		// GPU-hour cost reuses s.State.bill.Meter from a future runtime usage watcher.
-		s.State.bill.Meter(org, project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
+		s.State.bill.Meter(principal.Payer(c), project, k.kind, fee, c.RequestID(), cloud.ClientIP(c))
 		return c.JSON(http.StatusCreated, view(out, true))
 	}
 }
