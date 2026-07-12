@@ -39,7 +39,7 @@ require (
 	github.com/zap-proto/http v0.2.0
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zap2pb v0.2.0
-	github.com/zap-proto/zip v1.5.0
+	github.com/zap-proto/zip v1.6.0
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
@@ -829,7 +829,7 @@ require (
 	github.com/hanzoai/ai v1.805.9
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
-	github.com/hanzoai/licensing v0.1.3
+	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.15
 	github.com/hanzoai/vfs v0.6.4
