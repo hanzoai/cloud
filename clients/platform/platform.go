@@ -53,10 +53,13 @@ import (
 // injection/traversal guard at the boundary.
 var slugRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$`)
 
-// buildTypes is the closed set of build strategies (Dokploy: buildType). "image"
-// means "no build — run a prebuilt image" (source == image).
+// buildTypes is the closed set of buildable strategies for a git source. "pack"
+// (hanzoai/pack, a BuildKit gateway.v0 frontend) is the zero-config default that
+// detects any project — Go, Node, Python, Rust, static; "dockerfile" is the
+// explicit escape hatch. An image source never builds (buildType "image"), so it
+// is not a member here — it is forced by source in createApp.
 var buildTypes = map[string]bool{
-	"nixpacks": true, "dockerfile": true, "static": true, "buildpacks": true, "image": true,
+	"pack": true, "dockerfile": true,
 }
 
 // EnvVarJSON is the JSON shape of one application env var as stored/served.
@@ -519,16 +522,19 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 	default:
 		return zip.ErrBadRequest("source must be 'git' or 'image'")
 	}
-	buildType := strings.ToLower(strings.TrimSpace(body.BuildType))
-	if buildType == "" {
-		if source == "image" {
-			buildType = "image"
-		} else {
-			buildType = "nixpacks"
+	// buildType is a function of source: an image app never builds ("image"); a
+	// git app defaults to zero-config pack and may opt into the dockerfile escape
+	// hatch. The build path (buildFrontendCmd) keys off dockerfile presence, so
+	// buildType is honest metadata, not a second switch.
+	buildType := "image"
+	if source == "git" {
+		buildType = strings.ToLower(strings.TrimSpace(body.BuildType))
+		if buildType == "" {
+			buildType = "pack"
 		}
-	}
-	if !buildTypes[buildType] {
-		return zip.ErrBadRequest("unsupported buildType")
+		if !buildTypes[buildType] {
+			return zip.ErrBadRequest("buildType must be 'pack' or 'dockerfile'")
+		}
 	}
 	// Validate env keys at the boundary, then SEAL secret:true values into KMS so
 	// plaintext is NEVER persisted (sealSecretEnv blanks the stored value; the real

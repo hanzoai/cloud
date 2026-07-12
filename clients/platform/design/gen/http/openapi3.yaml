@@ -632,7 +632,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Application'
                             example:
-                                buildType: buildpacks
+                                buildType: pack
                                 createdAt: 3999984951475094670
                                 currentDeploymentId: Laborum recusandae vel quia illum ratione ut.
                                 description: Esse quod corrupti ipsum magnam.
@@ -794,7 +794,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Application'
                             example:
-                                buildType: static
+                                buildType: pack
                                 createdAt: 2503951960683093151
                                 currentDeploymentId: Voluptatem sequi corporis enim a culpa facilis.
                                 description: Quo necessitatibus quia eligendi aliquid.
@@ -1272,7 +1272,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Application'
                             example:
-                                buildType: nixpacks
+                                buildType: pack
                                 createdAt: 8643066377119414280
                                 currentDeploymentId: Assumenda nostrum aut eligendi laboriosam et.
                                 description: Architecto voluptate qui neque dolores deserunt.
@@ -1376,7 +1376,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Application'
                             example:
-                                buildType: nixpacks
+                                buildType: pack
                                 createdAt: 539177619552842699
                                 currentDeploymentId: Saepe corrupti et perferendis.
                                 description: Et harum unde enim consequatur tempore tempore.
@@ -1574,13 +1574,11 @@ components:
             properties:
                 buildType:
                     type: string
-                    description: nixpacks|dockerfile|static|buildpacks|image
-                    example: nixpacks
+                    description: pack|dockerfile|image
+                    example: pack
                     enum:
-                        - nixpacks
+                        - pack
                         - dockerfile
-                        - static
-                        - buildpacks
                         - image
                 createdAt:
                     type: integer
