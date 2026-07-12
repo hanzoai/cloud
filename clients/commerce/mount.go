@@ -147,10 +147,10 @@ func Mount(app *zip.App, cfg MountConfig, log luxlog.Logger) (*Embedded, error) 
 		app.All(p+"/*", zip.AdaptNetHTTP(handler))
 	}
 
-	// The platform billing sweep, in-process (sweep.go): replaces the external
-	// commerce-auto-recharge CronJob that curled the standalone pod. Runs only
-	// here — Mount is reached only on the single-writer commerce host.
-	embedded.stopSweep = startAutoRechargeSweep(handler, log)
+	// The auto-recharge sweep is a durable platform-cron poke entry
+	// (clients/cron; the cron-billing-autorecharge ConfigMap POSTs
+	// /v1/billing/auto-recharge/run-all with COMMERCE_SERVICE_TOKEN every
+	// 15m) — no in-package ticker. ONE cron system for the whole platform.
 
 	log.Info("commerce embedded in-process (gin handler mounted)",
 		"prefixes", commercePrefixes,
