@@ -13,6 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
+	github.com/hanzoai/datastore-go/v2 v2.47.0
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.22
 	github.com/hanzoai/notify v1.6.18
@@ -61,7 +62,7 @@ require (
 )
 
 require (
-	github.com/ClickHouse/ch-go v0.71.0 // indirect
+	github.com/ClickHouse/ch-go v0.72.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
@@ -695,7 +696,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0 // indirect
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
+	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
@@ -823,9 +824,9 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzo-ds/go v1.0.0
+	github.com/hanzo-ds/go v1.0.0 // indirect
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/ai v1.806.3
+	github.com/hanzoai/ai v1.806.4
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
