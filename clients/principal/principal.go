@@ -70,6 +70,18 @@ func Validated(c *zip.Ctx) bool {
 	return strings.TrimSpace(c.User()) != ""
 }
 
+// OrgAdmin reports whether the caller is an ADMIN of the org it is acting in:
+// EITHER the platform SuperAdmin (c.IsAdmin(), the X-User-IsAdmin the boundary
+// mints only for owner == adminOrg) OR an admin of its OWN org (the
+// X-User-IsOrgAdmin the boundary mints for any validated isAdmin principal). It is
+// the ONE predicate the org-scoped admin panels gate on — a validated but
+// NON-admin member of an org is NOT an OrgAdmin, so it is refused. Like c.IsAdmin()
+// it reads an authority header the identity boundary (SanitizeIdentity) STRIPS on
+// ingress and re-injects only from validated claims, so a client can never forge it.
+func OrgAdmin(c *zip.Ctx) bool {
+	return c.IsAdmin() || c.Header("X-User-IsOrgAdmin") == "true"
+}
+
 // Org resolves the caller's org — the org-isolation KEY — for the common
 // verbatim case (crm, prompts, agents, functions, git, eval). It returns
 // ("", false), and the caller MUST answer 403, unless BOTH hold:
