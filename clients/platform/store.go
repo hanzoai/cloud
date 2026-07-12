@@ -26,17 +26,6 @@ var (
 	errNotFound = errors.New("platform: not found")
 )
 
-// Project is the org-scoped root of the deploy tree (Dokploy: project).
-type Project struct {
-	ID          string
-	Org         string
-	Slug        string
-	Name        string
-	Description string
-	CreatedAt   int64
-	UpdatedAt   int64
-}
-
 // Application is a deployable unit under a project (Dokploy: application). It
 // deploys as an operator hanzo.ai/v1 Service CR in the tenant-<org> namespace.
 // EnvJSON/DomainsJSON hold JSON-encoded []EnvVar / []string; secrets are never
@@ -44,7 +33,7 @@ type Project struct {
 type Application struct {
 	ID            string
 	Org           string
-	ProjectID     string
+	ProjectID     string // the IAM project NAME (owner=org,name) this app lives under
 	Slug          string
 	Name          string
 	Description   string
@@ -159,19 +148,10 @@ func openStore(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	// Projects are owned by IAM (see projects.go); platform persists NO project
+	// row. platform_apps.project_id holds the IAM project NAME — the (org,name)
+	// key an app lives under.
 	const ddl = `
-CREATE TABLE IF NOT EXISTS platform_projects (
-  id           TEXT PRIMARY KEY,
-  org          TEXT NOT NULL,
-  slug         TEXT NOT NULL,
-  name         TEXT NOT NULL,
-  description  TEXT NOT NULL DEFAULT '',
-  created_at   INTEGER NOT NULL,
-  updated_at   INTEGER NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_pf_projects_org_slug ON platform_projects(org, slug);
-CREATE INDEX IF NOT EXISTS ix_pf_projects_org_updated ON platform_projects(org, updated_at);
-
 CREATE TABLE IF NOT EXISTS platform_apps (
   id             TEXT PRIMARY KEY,
   org            TEXT NOT NULL,
@@ -267,132 +247,40 @@ CREATE INDEX IF NOT EXISTS ix_pf_domains_app ON platform_domains(org, app_id);
 // Close closes the underlying database. Idempotent-safe via the caller.
 func (s *Store) Close() error { return s.db.Close() }
 
-// ── projects ─────────────────────────────────────────────────────────────────
-
-const projectCols = `id,org,slug,name,description,created_at,updated_at`
-
-func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
-	var p Project
-	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description, &p.CreatedAt, &p.UpdatedAt)
-	return p, err
-}
-
-func (s *Store) CreateProject(ctx context.Context, p Project) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO platform_projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?)`,
-		p.ID, p.Org, p.Slug, p.Name, p.Description, p.CreatedAt, p.UpdatedAt)
-	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return errConflict
-		}
-		return fmt.Errorf("insert project: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) GetProject(ctx context.Context, org, slug string) (Project, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+projectCols+` FROM platform_projects WHERE org=? AND slug=?`, org, slug)
-	p, err := scanProject(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Project{}, errNotFound
-	}
-	if err != nil {
-		return Project{}, fmt.Errorf("get project: %w", err)
-	}
-	return p, nil
-}
-
-// GetProjectByID resolves a project by (org,id) — used to re-verify tenancy when
-// an application row references its project.
-func (s *Store) GetProjectByID(ctx context.Context, org, id string) (Project, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+projectCols+` FROM platform_projects WHERE org=? AND id=?`, org, id)
-	p, err := scanProject(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Project{}, errNotFound
-	}
-	if err != nil {
-		return Project{}, fmt.Errorf("get project by id: %w", err)
-	}
-	return p, nil
-}
-
-func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+projectCols+` FROM platform_projects WHERE org=? ORDER BY updated_at DESC, id ASC`, org)
-	if err != nil {
-		return nil, fmt.Errorf("list projects: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []Project
-	for rows.Next() {
-		p, err := scanProject(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) UpdateProject(ctx context.Context, p Project) error {
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE platform_projects SET name=?,description=?,updated_at=? WHERE org=? AND slug=?`,
-		p.Name, p.Description, p.UpdatedAt, p.Org, p.Slug)
-	if err != nil {
-		return fmt.Errorf("update project: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return errNotFound
-	}
-	return nil
-}
-
-// DeleteProject removes a project plus every application/deployment/build under
-// it, in one transaction, all scoped to org. Reports whether a project was
-// deleted and returns the removed apps so the caller can tear down their CRs.
-func (s *Store) DeleteProject(ctx context.Context, org, slug string) (Project, []Application, bool, error) {
+// DeleteProjectApps removes every application/deployment/build/domain under a
+// project (keyed by the IAM project NAME) in ONE transaction, all scoped to org,
+// and returns the removed apps so the caller can tear down their operator CRs.
+// The project row itself lives in IAM (see projects.go) — deleting it is the
+// caller's separate ProjectStore.Delete; this wipes only platform's app tree.
+func (s *Store) DeleteProjectApps(ctx context.Context, org, project string) ([]Application, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Project{}, nil, false, fmt.Errorf("begin: %w", err)
+		return nil, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	row := tx.QueryRowContext(ctx, `SELECT `+projectCols+` FROM platform_projects WHERE org=? AND slug=?`, org, slug)
-	p, err := scanProject(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Project{}, nil, false, nil
-	}
+	apps, err := listAppsTx(ctx, tx, org, project)
 	if err != nil {
-		return Project{}, nil, false, fmt.Errorf("get for delete: %w", err)
-	}
-
-	apps, err := listAppsTx(ctx, tx, org, p.ID)
-	if err != nil {
-		return Project{}, nil, false, err
+		return nil, err
 	}
 	for _, a := range apps {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_builds WHERE org=? AND application_id=?`, org, a.ID); err != nil {
-			return Project{}, nil, false, fmt.Errorf("delete builds: %w", err)
+			return nil, fmt.Errorf("delete builds: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_deployments WHERE org=? AND application_id=?`, org, a.ID); err != nil {
-			return Project{}, nil, false, fmt.Errorf("delete deployments: %w", err)
+			return nil, fmt.Errorf("delete deployments: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM platform_domains WHERE org=? AND app_id=?`, org, a.ID); err != nil {
-			return Project{}, nil, false, fmt.Errorf("delete domains: %w", err)
+			return nil, fmt.Errorf("delete domains: %w", err)
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND project_id=?`, org, p.ID); err != nil {
-		return Project{}, nil, false, fmt.Errorf("delete apps: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_projects WHERE org=? AND id=?`, org, p.ID); err != nil {
-		return Project{}, nil, false, fmt.Errorf("delete project: %w", err)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM platform_apps WHERE org=? AND project_id=?`, org, project); err != nil {
+		return nil, fmt.Errorf("delete apps: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return Project{}, nil, false, fmt.Errorf("commit: %w", err)
+		return nil, fmt.Errorf("commit: %w", err)
 	}
-	return p, apps, true, nil
+	return apps, nil
 }
 
 // ── applications ─────────────────────────────────────────────────────────────
