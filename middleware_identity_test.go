@@ -291,6 +291,118 @@ func TestSanitizeIdentity(t *testing.T) {
 	}
 }
 
+// TestSanitizeIdentity_OrgAdminHeader locks the X-User-IsOrgAdmin signal GuardScoped gates
+// on. The boundary mints it for ANY validated isAdmin principal — a GLOBAL admin (admin of
+// the admin org) AND an ORG admin (admin of their own org) — but NEVER for a validated
+// non-admin member, NEVER for a KMS-sync machine principal, and it is UNFORGEABLE: like
+// every authority header it is stripped on ingress and re-injected only from validated
+// claims, so a client-sent copy never survives (mirrors the X-User-IsAdmin strip). This
+// is what closes the same-tenant over-visibility gap: a plain member gets no bit, so
+// GuardScoped refuses it.
+func TestSanitizeIdentity_OrgAdminHeader(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	v := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0)
+	future := time.Now().Add(time.Hour)
+
+	var gotAdmin, gotOrgAdmin, gotOrg string
+	app := zip.New(zip.Config{})
+	app.Use(SanitizeIdentity(v, "admin"))
+	app.Get("/probe", func(cx *zip.Ctx) error {
+		gotAdmin = cx.Header("X-User-IsAdmin")
+		gotOrgAdmin = cx.Header("X-User-IsOrgAdmin")
+		gotOrg = cx.Org()
+		return cx.JSON(http.StatusOK, map[string]string{"ok": "1"})
+	})
+
+	cases := []struct {
+		name                             string
+		mutate                           func(*http.Request)
+		wantAdmin, wantOrgAdmin, wantOrg string
+	}{
+		{
+			// An ORG admin (isAdmin=true, owner != adminOrg) gets the org-admin bit but
+			// NEVER the GLOBAL admin bit — it can reach its OWN org's scoped panels, never
+			// the cross-tenant platform surface.
+			name:         "org admin gets org-admin bit, not global admin",
+			mutate:       bearer(signWith(t, key, tokenClaims("hanzo-console", "acme", "dave@acme.io", true, future))),
+			wantAdmin:    "",
+			wantOrgAdmin: "true",
+			wantOrg:      "acme",
+		},
+		{
+			// The gap-closing case: a validated NON-admin member of an org gets NEITHER
+			// bit, so GuardScoped refuses it from the org-scoped admin panels.
+			name:         "validated non-admin member gets neither bit",
+			mutate:       bearer(signWith(t, key, tokenClaims("hanzo-console", "acme", "joe@acme.io", false, future))),
+			wantAdmin:    "",
+			wantOrgAdmin: "",
+			wantOrg:      "acme",
+		},
+		{
+			// A GLOBAL admin is also an org admin of its own (admin) org — it gets BOTH.
+			name:         "global admin gets both bits",
+			mutate:       bearer(signWith(t, key, tokenClaims("hanzo-console", "admin", "z@hanzo.ai", true, future))),
+			wantAdmin:    "true",
+			wantOrgAdmin: "true",
+			wantOrg:      "admin",
+		},
+		{
+			// A KMS-sync MACHINE principal in the admin org validates (V6 accepts the
+			// machine aud) but must get NEITHER global NOR org admin — the machine path
+			// stays decoupled from admin, so the audience widening is never an admin bypass.
+			name:         "admin-org machine principal gets neither bit",
+			mutate:       bearer(signWith(t, key, tokenClaims("admin-platform-kms", "admin", "z@hanzo.ai", true, future))),
+			wantAdmin:    "",
+			wantOrgAdmin: "",
+			wantOrg:      "admin",
+		},
+		{
+			// Forge-resistance (bearer path): a client-sent X-User-IsOrgAdmin riding a
+			// valid NON-admin bearer is stripped on ingress and never re-injected.
+			name: "forged org-admin header on a non-admin bearer is stripped",
+			mutate: func(r *http.Request) {
+				r.Header.Set("Authorization", "Bearer "+signWith(t, key, tokenClaims("hanzo-console", "acme", "joe@acme.io", false, future)))
+				r.Header.Set("X-User-IsOrgAdmin", "true") // forged — must not survive
+			},
+			wantAdmin:    "",
+			wantOrgAdmin: "",
+			wantOrg:      "acme",
+		},
+		{
+			// Forge-resistance (anonymous path): a raw X-User-IsOrgAdmin with no credential
+			// is stripped, mirroring the X-User-IsAdmin P0 strip. The Phase-1 org passthrough
+			// still restores X-Org-Id, but it carries NO org-admin authority.
+			name: "forged org-admin header on anonymous request is stripped",
+			mutate: func(r *http.Request) {
+				r.Header.Set("X-User-IsOrgAdmin", "true")
+				r.Header.Set("X-Org-Id", "victim")
+			},
+			wantAdmin:    "",
+			wantOrgAdmin: "",
+			wantOrg:      "victim",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotAdmin, gotOrgAdmin, gotOrg = "", "", ""
+			probe(t, app, tc.mutate)
+			if gotOrgAdmin != tc.wantOrgAdmin {
+				t.Errorf("X-User-IsOrgAdmin = %q, want %q", gotOrgAdmin, tc.wantOrgAdmin)
+			}
+			if gotAdmin != tc.wantAdmin {
+				t.Errorf("X-User-IsAdmin = %q, want %q", gotAdmin, tc.wantAdmin)
+			}
+			if gotOrg != tc.wantOrg {
+				t.Errorf("Org() = %q, want %q", gotOrg, tc.wantOrg)
+			}
+		})
+	}
+}
+
 // A nil validator (unconfigured) must still STRIP a forged admin header — the
 // sanitizer never fails open to admin, even with no JWKS wired.
 // TestSanitizeIdentity_StampsUserName proves the validated IAM username is stamped
