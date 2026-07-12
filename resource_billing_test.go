@@ -99,7 +99,7 @@ func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
 		t.Fatalf("Gate(funded) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "acme" {
@@ -112,7 +112,7 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != metering.ErrInsufficientBalance {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != metering.ErrInsufficientBalance {
 		t.Fatalf("Gate(zero balance) = %v, want ErrInsufficientBalance", err)
 	}
 }
@@ -123,7 +123,7 @@ func TestResourceMeter_GateFreeKindNoCommerceCall(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 0); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",0); err != nil {
 		t.Fatalf("Gate(free kind) = %v, want nil", err)
 	}
 	if n := fc.balances(); n != 0 {
@@ -138,7 +138,7 @@ func TestResourceMeter_GateFailClosedOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	err := rm.Gate(t.Context(), "acme", "", "sql", 100)
+	err := rm.Gate(t.Context(), "acme", "", false, "sql",100)
 	if err == nil {
 		t.Fatal("Gate(commerce 5xx, fail-closed) = nil, want a deny error (no free provisioning on outage)")
 	}
@@ -152,7 +152,7 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", true /* fail-open */)
 
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
 		t.Fatalf("Gate(commerce 5xx, fail-open) = %v, want nil", err)
 	}
 }
@@ -198,11 +198,54 @@ func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "globex", "", "vector", 100); err != nil {
+	if err := rm.Gate(t.Context(), "globex", "", false, "vector",100); err != nil {
 		t.Fatalf("Gate(globex) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "globex" {
 		t.Fatalf("balance checked org %q, want %q — cross-org billing leak", got, "globex")
+	}
+}
+
+// A VALIDATED named project makes resource creation HARD; a default/unvalidated
+// project stays SOFT — the resource-side mirror of the edge BillingGate's project
+// hardening (issue #70). The fake commerce is funded (so gating reaches the scope
+// cap) and enforces the project cap ONLY when it sees pv=1, exactly modelling
+// commerce's project-spoof degrade. This proves principal.ValidatedProject threads
+// through ResourceMeter.Gate into AuthInput.ProjectValidated: a claim-bound project
+// forwards pv=1 and 402s on the cap, while a forgeable/absent one forwards no pv and
+// is allowed, so a spoofed X-Project-Id can neither hard-stop nor evade a cap.
+func TestResourceMeter_GateProjectValidatedHardens(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/billing/balance":
+			_, _ = io.WriteString(w, `{"available":100000}`) // funded — proceed to the scope cap.
+		case "/v1/billing/spend-alerts/authorize":
+			if r.URL.Query().Get("pv") == "1" { // validated project → cap HARD-enforces.
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"allow": false, "reason": "spend_cap", "capCents": 100, "spentCents": 100,
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"allow": true}) // unvalidated → soft (degraded).
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	rm := meterFor(t, srv.URL, "mainnet", false)
+
+	// Validated NAMED project → pv=1 → the project-scoped cap HARD-enforces (402).
+	if err := rm.Gate(t.Context(), "acme", "acme-prod", true, "sql", 100); err != metering.ErrSpendCapExceeded {
+		t.Fatalf("Gate(validated named project) = %v, want ErrSpendCapExceeded (project cap must HARD-enforce)", err)
+	}
+	// Default/unvalidated project → no pv → the SAME cap degrades to soft (allow).
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
+		t.Fatalf("Gate(default/unvalidated) = %v, want nil (unvalidated project cap must stay soft)", err)
+	}
+	// A NAMED project the caller did not prove (validated=false) also stays soft —
+	// a forgeable label can neither hard-stop nor be weaponised to evade a cap.
+	if err := rm.Gate(t.Context(), "acme", "acme-prod", false, "sql", 100); err != nil {
+		t.Fatalf("Gate(unvalidated named project) = %v, want nil (forgeable label must not hard-enforce)", err)
 	}
 }
 
@@ -212,7 +255,7 @@ func TestResourceMeter_EnvNeverBypassesGate(t *testing.T) {
 	for _, env := range []string{"testnet", "devnet"} {
 		fc := &recCommerce{balanceAvailable: 0}
 		rm := meterFor(t, fc.server(t).URL, env, false)
-		if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != metering.ErrInsufficientBalance {
+		if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != metering.ErrInsufficientBalance {
 			t.Fatalf("env=%s: Gate(zero) = %v, want ErrInsufficientBalance (test/dev must still bill)", env, err)
 		}
 	}
@@ -226,7 +269,7 @@ func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
 		t.Fatalf("Gate(unconfigured) = %v, want nil (no-op)", err)
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
@@ -239,7 +282,7 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("nil ResourceMeter must report !Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
 		t.Fatalf("nil Gate = %v, want nil", err)
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
@@ -248,7 +291,7 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	if rm2.Enabled() {
 		t.Fatal("ResourceMeter with nil client must report !Enabled()")
 	}
-	if err := rm2.Gate(t.Context(), "acme", "", "sql", 100); err != nil {
+	if err := rm2.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
 		t.Fatalf("nil-client Gate = %v, want nil", err)
 	}
 }

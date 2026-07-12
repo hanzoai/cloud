@@ -122,7 +122,11 @@ func (m *meteredAI) gate(ctx context.Context, org, project string, tokens int) e
 	if org == "" {
 		return nil
 	}
-	return m.meter.Gate(ctx, org, project, aiMeterProvider, m.cents(tokens))
+	// project rides the ChatRequest/EmbedRequest value (internal S2S), not a
+	// server-minted identity claim, so it is unvalidated here → a project-scoped
+	// cap stays soft. The request-edge BillingGate already hardens the validated
+	// project axis for the inbound LLM path.
+	return m.meter.Gate(ctx, org, project, false, aiMeterProvider, m.cents(tokens))
 }
 
 // record debits the EXACT micro-USD cost to the org's billing account, attributed
