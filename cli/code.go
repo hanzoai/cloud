@@ -30,7 +30,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const defaultCodeModel = "glm-5.2"
+// defaultCodeModel is the model `hanzo code <agent>` runs when no model is
+// named: the virtual `best` model, which auto-routes to the best-available
+// coding model by quality (glm-5.2 → deepseek-v4-pro → kimi-k2.6 → …) and
+// cascades on the next rank when one is rate-limited, out of credit, or down
+// (server-side, controllers/failover.go). Override per-invocation with an
+// explicit id: `hanzo code claude glm5.2`.
+const defaultCodeModel = "best"
 
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
