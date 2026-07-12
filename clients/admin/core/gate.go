@@ -27,14 +27,14 @@ func Guard(s *cloud.Service[State], h Handler) zip.Handler {
 }
 
 // GuardScoped is the gate for the ORG-SCOPED panels (me/overview/orgs/users/usage/
-// analytics/bases). It admits a SuperAdmin (c.IsAdmin()) OR an ORG admin (an admin of
-// their OWN org — principal.OrgAdmin(c)) pinned to a validated org, and the handler then
-// scopes every read to ResolveScope(c) — so a non-super caller passes the gate but the
-// DATA layer hard-limits them to their own org subtree. Cross-tenant reads are impossible
-// for a non-super caller regardless of input.
+// analytics/bases). It admits a SuperAdmin (principal.IsSuperAdmin) OR an ORG admin
+// (an admin of their OWN org — principal.IsOrgAdmin) pinned to a validated org, and the
+// handler then scopes every read to ResolveScope(c) — so a non-super caller passes the
+// gate but the DATA layer hard-limits them to their own org subtree. Cross-tenant reads
+// are impossible for a non-super caller regardless of input.
 //
 // The non-super admission requires BOTH the sanitizer-minted X-User-IsOrgAdmin
-// (principal.OrgAdmin — the "admin of my own org" bit, unforgeable because the boundary
+// (principal.IsOrgAdmin — the "admin of my own org" bit, unforgeable because the boundary
 // strips it on ingress) AND c.User() (X-User-Id) + c.Org() non-empty (a validated
 // principal pinned to their own owner). So a validated but NON-admin MEMBER of an org is
 // REFUSED here — the same denial an anonymous caller who forged X-Org-Id gets — closing
@@ -43,10 +43,10 @@ func Guard(s *cloud.Service[State], h Handler) zip.Handler {
 // own owner, never client-chosen.
 func GuardScoped(s *cloud.Service[State], h Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if c.IsAdmin() {
+		if principal.IsSuperAdmin(c) {
 			return h(s, c) // SuperAdmin: cross-tenant, admitted regardless of org pin.
 		}
-		if principal.OrgAdmin(c) && strings.TrimSpace(c.User()) != "" && strings.TrimSpace(c.Org()) != "" {
+		if principal.IsOrgAdmin(c) && strings.TrimSpace(c.User()) != "" && strings.TrimSpace(c.Org()) != "" {
 			return h(s, c)
 		}
 		return zip.ErrForbidden("admin required")
