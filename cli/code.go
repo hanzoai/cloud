@@ -42,35 +42,44 @@ const defaultCodeModel = "best"
 type wire func(base, token, model string) map[string]string
 
 // anthropicWire builds the env that points Claude Code at the Hanzo cloud AND
-// pins every model slot to a zen5 alias so CC never routes to a raw claude-*
-// model. api.hanzo.ai does not serve the Anthropic model ids CC defaults to
-// (claude-haiku-*, claude-opus-*, …) — a request for one 403s, which kills the
-// permission classifier ("auto mode cannot determine safety"), every
-// subagent, and /compact. The zen5 ladder is the Hanzo-standard mapping of
-// those tiers onto top OSS models resold via DigitalOcean GenAI:
+// pins every CC model slot to a zen5 alias — the stable Hanzo capability
+// contract — so CC never routes to a raw claude-* model. api.hanzo.ai does not
+// serve the Anthropic ids CC defaults to (claude-haiku-*, claude-opus-*, …);
+// a request for one 403s, which kills the permission classifier ("auto mode
+// cannot determine safety"), every subagent, and /compact.
 //
-//	main / OPUS-tier → <model> (the resolved id, default `best` → zen5/glm-5.2)
-//	SONNET-tier      → zen5      (GLM-5.2, the default frontier model)
-//	HAIKU-tier       → zen5-flash (DeepSeek-4 Flash — the fast/cheap tier)
-//	FABLE-tier       → zen5-pro  (DeepSeek-V4 Pro — the heavy tier)
-//	small/fast       → zen5-flash (the permission classifier + quick tasks)
+// zen5-* is the STABLE API contract. Each alias is a capability tier, not a
+// model name — the backend maps each to the best upstream it serves (today, on
+// DigitalOcean GenAI; tomorrow, whatever supersedes it). Clients never see the
+// upstream: swap GLM for Qwen 3.6 or a future frontier and every SDK / CLI /
+// Claude Code integration keeps working unchanged. The CC tier → zen5 alias
+// map is fixed here; the zen5 → upstream map lives in models.yaml.
+//
+//	CC tier        zen5 alias    capability
+//	──────────    ──────────    ─────────────────────────────
+//	Haiku         zen5-flash    fast / cheap (classifier, quick tasks)
+//	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
+//	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
+//	Fable         zen5-ultra    premium frontier (best available; cascades)
+//	main          <model>       the resolved id, default `best` → zen5
 //
 // `best` is the virtual auto-routing model: it picks the best-available coding
-// model by quality and cascades on rate-limit/down — so `hanzo code claude`
-// with no model arg runs on the fleet's best model with no claude-* ever dialed.
+// model by quality and cascades on rate-limit/down. `zen5-ultra` carries its
+// own backend fallback chain (zen5-ultra → zen5-pro → zen5 → zen5-flash) so the
+// Fable tier degrades gracefully if the premium upstream is unavailable.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
 		"ANTHROPIC_AUTH_TOKEN": token,
 		"ANTHROPIC_MODEL":      model,
-		// Pin every CC tier slot to a served zen5 alias. Without these, CC
-		// falls back to its built-in claude-* ids and 403s on every non-main
-		// call (subagents, the classifier, compaction).
-		"ANTHROPIC_SMALL_FAST_MODEL":       "zen5-flash",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL":    "zen5-flash",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL":   "zen5",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL":     model, // the resolved main model (best → glm-5.2)
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":    "zen5-pro",
+		// The four CC tier slots are FIXED zen5 aliases — the stable contract.
+		// Without these, CC falls back to its built-in claude-* ids and 403s
+		// on every non-main call (subagents, the classifier, compaction).
+		"ANTHROPIC_SMALL_FAST_MODEL":     "zen5-flash",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-ultra",
 	}
 }
 
