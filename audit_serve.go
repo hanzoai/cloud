@@ -22,7 +22,7 @@ import (
 )
 
 // buildAuditRecorder constructs the audit Recorder from cfg: the append-only
-// SQLite chain at {DataDir}/audit.db plus a best-effort ClickHouse OLAP mirror
+// SQLite chain at {DataDir}/audit.db plus a best-effort datastore OLAP mirror
 // when a datastore is configured. Returns (nil, nil) only when the trail is
 // explicitly disabled — the caller then wires a no-op middleware.
 func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, error) {

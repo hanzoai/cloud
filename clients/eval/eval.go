@@ -5,7 +5,7 @@
 // Storage split (CTO directive), two orthogonal stores this package composes:
 //   - metastore  (store.go)     — Hanzo Base/SQLite, per-org config/metadata:
 //     datasets, dataset-items, evaluators, score-configs, dataset-run defs.
-//   - telemetry  (telemetry.go) — datastore/ClickHouse, append-only event stream:
+//   - telemetry  (telemetry.go) — datastore/datastore, append-only event stream:
 //     traces + scores-as-events (all AI observability). Optional at Mount; when
 //     no datastore is wired the run still scores, but trace/score persistence is
 //     honestly skipped (logged), never faked.

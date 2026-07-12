@@ -81,7 +81,7 @@ func TestForgedOrgWithoutBearerForbidden(t *testing.T) {
 	}
 }
 
-// TestDatastoreDisabledHonest503: a VALIDATED principal, but the ClickHouse ledger
+// TestDatastoreDisabledHonest503: a VALIDATED principal, but the datastore ledger
 // is not connected (DatastoreEnabled()==false in this harness) → honest 503, never
 // a fake 200 with zeros. Proves the "no fabricated metrics" invariant.
 func TestDatastoreDisabledHonest503(t *testing.T) {

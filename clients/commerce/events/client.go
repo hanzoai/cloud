@@ -1,7 +1,7 @@
 // Package events provides a thin HTTP client for the analytics collector.
 //
 // Commerce fires events via HTTP to the analytics-collector sidecar
-// rather than writing directly to ClickHouse. This decouples analytics
+// rather than writing directly to datastore. This decouples analytics
 // from the commerce binary.
 package events
 

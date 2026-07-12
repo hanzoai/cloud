@@ -18,7 +18,7 @@ package admin
 // operator's Bots and Machines boards (admin.hanzo.ai) group into an
 // org → app → project tree. It aggregates the operator-owned usage table
 // hanzo.compute_usage(org, app, project, kind, event, machine_id, size,
-// price_cents, ts) — the same warehouse (`datastore`, ClickHouse) the analytics
+// price_cents, ts) — the same warehouse (`datastore`, datastore) the analytics
 // subsystem reads, over the SAME shared client (aiobject.DatastoreQuery), no
 // second connection. `kind` is an OPEN LowCardinality spectrum (bot | machine |
 // cluster | nodepool | container | function | …) — a bot is a machine running the
@@ -169,7 +169,7 @@ func computeSince(rangeLabel string) time.Time {
 	}
 }
 
-// terminalComputeSQL renders the terminal-event set as a ClickHouse string list.
+// terminalComputeSQL renders the terminal-event set as a datastore string list.
 func terminalComputeSQL() string {
 	quoted := make([]string, len(terminalComputeEvents))
 	for i, e := range terminalComputeEvents {
@@ -178,12 +178,12 @@ func terminalComputeSQL() string {
 	return strings.Join(quoted, ",")
 }
 
-// chTS formats a time as a ClickHouse DateTime literal (UTC), bound as a string arg.
+// chTS formats a time as a datastore DateTime literal (UTC), bound as a string arg.
 func chTS(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
 
 // ── map[string]any coercers (the DatastoreQuery row shape) ───────────────────
 //
-// The ClickHouse driver decodes each column to its native Go type (uint64 for
+// The datastore driver decodes each column to its native Go type (uint64 for
 // count()/sum(UInt*), time.Time for DateTime, string for String); these accept
 // those natives so a driver/transport change can't crash a read.
 
@@ -221,7 +221,7 @@ func chStr(v any) string {
 	return ""
 }
 
-// chTime coerces a ClickHouse DateTime (time.Time) to an RFC3339 UTC string.
+// chTime coerces a datastore DateTime (time.Time) to an RFC3339 UTC string.
 func chTime(v any) string {
 	switch t := v.(type) {
 	case time.Time:

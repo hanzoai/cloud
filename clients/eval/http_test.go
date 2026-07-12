@@ -18,7 +18,7 @@ import (
 // mountApp builds the native eval surface with an IN-MEMORY telemetry store and a
 // stub runner so the HTTP contract + isolation invariants are exercised end-to-end
 // without a datastore or a live model gateway. It bypasses Mount's datastore wiring
-// (no ClickHouse in unit tests) but uses the SAME handlers, store, and validation.
+// (no datastore in unit tests) but uses the SAME handlers, store, and validation.
 func mountApp(t *testing.T) (*zip.App, *service) {
 	t.Helper()
 	store, err := openStore(t.TempDir() + "/evals.db")
