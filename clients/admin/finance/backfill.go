@@ -5,6 +5,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
+	"github.com/hanzoai/cloud/clients/commerce"
 	ledger "github.com/hanzoai/cloud/clients/finance"
 	"github.com/zap-proto/zip"
 )
@@ -23,20 +24,24 @@ func Backfill(s *cloud.Service[core.State], c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
-	// Pre-migration source of truth: the org's current commerce prepaid balance — the exact
-	// figure the native wallet must start from.
-	balance, err := s.State.Commerce.Credits(ctx, org)
+	// Pre-migration source of truth: the org's current commerce prepaid balance for the
+	// org-pool subject (== the org slug), read DIRECTLY from the co-resident embedded
+	// commerce ledger. The admin commerce HTTP client dials an unroutable in-proc address
+	// and reads $0, which would migrate nothing; the native read returns the real figure,
+	// or an ERROR when commerce is not co-resident (never a phantom zero the cutover would
+	// silently carry as "nothing to migrate").
+	balanceCents, err := commerce.BalanceCents(ctx, org, org, "usd", false)
 	if err != nil {
 		return core.Fail(c, "read commerce balance: "+err.Error())
 	}
 
-	entryID, err := ledger.MigrateOrg(ctx, org, int64(balance))
+	entryID, err := ledger.MigrateOrg(ctx, org, balanceCents)
 	if err != nil {
 		return core.Fail(c, "finance backfill: "+err.Error())
 	}
 	return core.OK(c, map[string]any{
 		"org":           org,
-		"migratedCents": int64(balance),
+		"migratedCents": balanceCents,
 		"entryId":       entryID,
 	})
 }
