@@ -1,6 +1,6 @@
 // Package tracker mounts the Hanzo Cloud /v1/tracker/* surface: a native-Go,
 // per-org issue tracker (projects + issues) on SQLite. It is the durable
-// replacement for the Huly/Svelte hanzo.team tracker, whose upstream each-block
+// replacement for the prior Svelte hanzo.team tracker, whose upstream each-block
 // reactive-batching render race left issue lists rendering zero rows. Native
 // @hanzo/gui over this one store sidesteps that entire class of bug: the rows
 // come back as plain JSON and render deterministically.
