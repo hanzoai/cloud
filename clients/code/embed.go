@@ -14,7 +14,7 @@ type Embedder interface {
 	// Embed returns one vector per input, aligned by index, metered against the
 	// (org, project) billing scope. A disabled embedder returns (nil, nil) so
 	// indexing proceeds lexically + symbolically.
-	Embed(ctx context.Context, org, project string, texts []string) ([][]float32, error)
+	Embed(ctx context.Context, org, billingOrg, project string, texts []string) ([][]float32, error)
 	Enabled() bool
 }
 
@@ -44,7 +44,7 @@ func (e *aiEmbedder) Enabled() bool { return e.ai != nil }
 // round-trips rather than one oversized body.
 const embedBatch = 64
 
-func (e *aiEmbedder) Embed(ctx context.Context, org, project string, texts []string) ([][]float32, error) {
+func (e *aiEmbedder) Embed(ctx context.Context, org, billingOrg, project string, texts []string) ([][]float32, error) {
 	if e.ai == nil || len(texts) == 0 {
 		return nil, nil
 	}
@@ -55,10 +55,11 @@ func (e *aiEmbedder) Embed(ctx context.Context, org, project string, texts []str
 			end = len(texts)
 		}
 		vecs, err := e.ai.Embed(ctx, &cloud.EmbedRequest{
-			Model:   e.model,
-			Inputs:  texts[start:end],
-			Org:     org,
-			Project: project,
+			Model:      e.model,
+			Inputs:     texts[start:end],
+			Org:        org,
+			BillingOrg: billingOrg,
+			Project:    project,
 		})
 		if err != nil {
 			return nil, err
