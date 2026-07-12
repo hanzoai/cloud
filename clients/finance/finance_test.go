@@ -66,6 +66,79 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	mustBalance(t, f, "acme", "acme", 700) // the org pool is untouched by bob's wallet
 }
 
+// TestDepositRefIdempotent pins DepositInput.Ref idempotency: two deposits with the SAME
+// non-empty Ref credit the wallet ONCE (the second replays the first entry id), while
+// empty-Ref deposits stay additive (each stacks).
+func TestDepositRefIdempotent(t *testing.T) {
+	ctx := context.Background()
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+
+	// Same non-empty Ref → credited once.
+	id1, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 1000, Ref: "settle-1"})
+	if err != nil {
+		t.Fatalf("deposit ref #1: %v", err)
+	}
+	id2, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 1000, Ref: "settle-1"})
+	if err != nil {
+		t.Fatalf("deposit ref #2: %v", err)
+	}
+	if id2 != id1 {
+		t.Fatalf("deposit ref #2 id = %q; want the first entry id %q (idempotent replay)", id2, id1)
+	}
+	mustBalance(t, f, "acme", "acme", 1000) // ONE credit, not 2000.
+
+	// Empty Ref stays additive: two fresh-ref deposits stack.
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 500}); err != nil {
+		t.Fatalf("deposit additive #1: %v", err)
+	}
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 500}); err != nil {
+		t.Fatalf("deposit additive #2: %v", err)
+	}
+	mustBalance(t, f, "acme", "acme", 2000) // 1000 + 500 + 500.
+}
+
+// TestMigrateOrgIdempotent proves the commerce→finance backfill is exactly-once: running
+// MigrateOrg twice for the same org credits the pooled wallet ONE time (the fixed
+// "backfill:<org>" ref dedupes the second run), and a non-positive balance is skipped.
+func TestMigrateOrgIdempotent(t *testing.T) {
+	ctx := context.Background()
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+	Publish(f)
+	defer Publish(nil)
+
+	// First backfill lands the balance.
+	id1, err := MigrateOrg(ctx, "acme", 2500)
+	if err != nil {
+		t.Fatalf("migrate #1: %v", err)
+	}
+	if id1 == "" {
+		t.Fatal("migrate #1 returned empty entry id")
+	}
+	mustBalance(t, f, "acme", "acme", 2500)
+
+	// Re-running the cutover is a no-op: same fixed ref → credited AT MOST ONCE.
+	id2, err := MigrateOrg(ctx, "acme", 2500)
+	if err != nil {
+		t.Fatalf("migrate #2: %v", err)
+	}
+	if id2 != id1 {
+		t.Fatalf("migrate #2 id = %q; want the first entry id %q (idempotent replay)", id2, id1)
+	}
+	mustBalance(t, f, "acme", "acme", 2500) // still ONE credit, not 5000.
+
+	// A non-positive balance is skipped: nothing to carry, empty id, no posting.
+	id3, err := MigrateOrg(ctx, "empty", 0)
+	if err != nil {
+		t.Fatalf("migrate zero: %v", err)
+	}
+	if id3 != "" {
+		t.Fatalf("migrate zero id = %q; want \"\" (skipped)", id3)
+	}
+	mustBalance(t, f, "empty", "empty", 0)
+}
+
 func mustBalance(t *testing.T, f *ledgerFinance, org, subject string, want int64) {
 	t.Helper()
 	got, err := f.BalanceCents(context.Background(), org, subject, "usd", false)
