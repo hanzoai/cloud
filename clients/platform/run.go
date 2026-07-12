@@ -105,7 +105,8 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// resolved above is sent as both the commerce user and X-Org-Id), never a
 	// default — the anti-cross-tenant billing property (resource_billing.go).
 	fee := cloud.ResourceFeeCents(runFeeEnvPrefix, runKind)
-	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), runKind, fee); err != nil {
+	project, projectValidated := principal.ValidatedProject(c)
+	if err := s.Bill.Gate(c.Context(), org, project, projectValidated, runKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 

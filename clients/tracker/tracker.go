@@ -220,7 +220,8 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 
 	kind := "project"
 	fee := createFeeCents(kind)
-	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
+	project, projectValidated := principal.ValidatedProject(c)
+	if err := s.Bill.Gate(c.Context(), org, project, projectValidated, kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -415,7 +416,8 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 
 	kind := "issue"
 	fee := createFeeCents(kind)
-	if err := s.Bill.Gate(c.Context(), org, principal.Project(c), kind, fee); err != nil {
+	project, projectValidated := principal.ValidatedProject(c)
+	if err := s.Bill.Gate(c.Context(), org, project, projectValidated, kind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
