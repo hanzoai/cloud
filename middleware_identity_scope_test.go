@@ -210,7 +210,7 @@ func TestSanitizeIdentity_SubScopes(t *testing.T) {
 		}
 	})
 
-	t.Run("global admin org-switch validates project against the acted-as org", func(t *testing.T) {
+	t.Run("SuperAdmin org-switch validates project against the acted-as org", func(t *testing.T) {
 		app, got := newScopeApp(t, v)
 		// Admin acts as beta and carries beta's project → kept.
 		probe(t, app, both(bearer(admin), setHdr(map[string]string{

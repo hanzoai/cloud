@@ -343,9 +343,9 @@ func TestPermissionEnforcement(t *testing.T) {
 		t.Fatalf("u2 delete Ticket want 403 (no delete perm), got %d", code)
 	}
 
-	// A GLOBAL ADMIN bypasses per-doctype perms.
+	// A SUPERADMIN bypasses per-doctype perms.
 	if code, _ := call(t, app, http.MethodDelete, "/v1/framework/Ticket/"+tname, org, "root", true, nil); code != http.StatusNoContent {
-		t.Fatalf("global admin delete Ticket want 204, got %d", code)
+		t.Fatalf("SuperAdmin delete Ticket want 204, got %d", code)
 	}
 	// System Manager (u1) can define doctypes.
 	if code, _ := call(t, app, http.MethodPost, "/v1/framework/doctypes", org, "u1", false, taskDocType()); code != http.StatusCreated {

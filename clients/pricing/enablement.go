@@ -4,14 +4,14 @@
 // and /v1/admin/catalog admin surface use — there is ONE enablement registry and
 // ONE resolver (Overlay.visibleTo / .State), never a parallel copy.
 //
-//	GET  /v1/admin/enablement          global-admin: the full managed registry
-//	PUT  /v1/admin/enablement          global-admin: set an item off|beta|ga (+ grant orgs)
+//	GET  /v1/admin/enablement          SuperAdmin: the full managed registry
+//	PUT  /v1/admin/enablement          SuperAdmin: set an item off|beta|ga (+ grant orgs)
 //	GET  /v1/enablement                any authed: the caller's EFFECTIVE view + betas
 //	POST /v1/enablement/optin          authed: opt the caller's OWN org into a beta
 //	POST /v1/enablement/optout         authed: opt the caller's own org back out
 //
 // SECURITY — the two-way crux RED verifies:
-//   - Global state is GLOBAL-ADMIN only (c.IsAdmin()). A customer/org-admin can
+//   - Global state is SUPERADMIN only (c.IsAdmin()). A customer/org-admin can
 //     never flip an item's off/beta/ga.
 //   - Self opt-in is scoped to the VALIDATED caller org (principal.Org — a
 //     gateway-minted principal, NOT a raw client X-Org-Id, which SanitizeIdentity
@@ -49,7 +49,7 @@ type adminEnablementItem struct {
 // default); the console composes the candidate list from the live model catalog.
 func adminEnablementList(c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
@@ -73,7 +73,7 @@ func adminEnablementList(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"items": items})
 }
 
-// setEnablementBody is the global-admin PUT payload.
+// setEnablementBody is the SuperAdmin PUT payload.
 type setEnablementBody struct {
 	Kind     string    `json:"kind"`
 	ID       string    `json:"id"`
@@ -82,11 +82,11 @@ type setEnablementBody struct {
 }
 
 // adminEnablementSet answers PUT /v1/admin/enablement — set an item's global state
-// (and optionally its beta-org grant list). Global-admin only. Generic over kind,
+// (and optionally its beta-org grant list). SuperAdmin only. Generic over kind,
 // so it manages models, providers, AND product/features through the one store.
 func adminEnablementSet(c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	if cat == nil {
 		return c.JSON(http.StatusServiceUnavailable, map[string]any{"error": "enablement store not initialised"})
