@@ -1,6 +1,6 @@
 package team
 
-// This file is the workspace FILES plane (Phase 2A) — the blob store the Huly SPA
+// This file is the workspace FILES plane (Phase 2A) — the blob store the Team SPA
 // hits via its FrontStorage client (foundations/core/packages/storage-client/src/
 // client/front.ts). team-go's pkg/files was only a 307 alias to Base's file API
 // (no store), so this is a fresh implementation of the SAME FrontStorage contract
@@ -37,7 +37,7 @@ import (
 )
 
 // maxBlobSize caps a single upload so an unbounded body can't exhaust the blob
-// backend or memory. 100 MiB matches the Huly attachment ceiling.
+// backend or memory. 100 MiB matches the attachment ceiling.
 const maxBlobSize = 100 << 20
 
 // filesSvc serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
