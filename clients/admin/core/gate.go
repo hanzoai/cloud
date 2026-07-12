@@ -1,8 +1,6 @@
 package core
 
 import (
-	"strings"
-
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/iam"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -35,8 +33,9 @@ func Guard(s *cloud.Service[State], h Handler) zip.Handler {
 //
 // The non-super admission requires BOTH the sanitizer-minted X-User-IsOrgAdmin
 // (principal.IsOrgAdmin — the "admin of my own org" bit, unforgeable because the boundary
-// strips it on ingress) AND c.User() (X-User-Id) + c.Org() non-empty (a validated
-// principal pinned to their own owner). So a validated but NON-admin MEMBER of an org is
+// strips it on ingress) AND a validated principal pinned to its own org (principal.Org,
+// the ONE org accessor: validated X-User-Id + non-empty in-bounds X-Org-Id). So a
+// validated but NON-admin MEMBER of an org is
 // REFUSED here — the same denial an anonymous caller who forged X-Org-Id gets — closing
 // the same-tenant over-visibility gap where any org member could read their org's admin
 // panels. A validated non-super principal's X-Org-Id is PINNED by the boundary to their
@@ -46,7 +45,7 @@ func GuardScoped(s *cloud.Service[State], h Handler) zip.Handler {
 		if principal.IsSuperAdmin(c) {
 			return h(s, c) // SuperAdmin: cross-tenant, admitted regardless of org pin.
 		}
-		if principal.IsOrgAdmin(c) && strings.TrimSpace(c.User()) != "" && strings.TrimSpace(c.Org()) != "" {
+		if _, ok := principal.Org(c); ok && principal.IsOrgAdmin(c) {
 			return h(s, c)
 		}
 		return zip.ErrForbidden("admin required")
