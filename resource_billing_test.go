@@ -10,6 +10,7 @@ package cloud
 // org.
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -99,11 +101,65 @@ func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(funded) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "acme" {
 		t.Fatalf("balance checked org %q, want caller %q (per-call org must override the client default 'hanzo')", got, "acme")
+	}
+}
+
+// payerFor resolves principal.Payer(c) — the HOME org that PAYS — from a request's
+// identity headers, exactly as a create-handler does before passing it to Gate.
+func payerFor(t *testing.T, headers map[string]string) string {
+	t.Helper()
+	var payer string
+	done := make(chan struct{})
+	app := zip.New(zip.Config{})
+	app.Use(func(c *zip.Ctx) error {
+		payer = principal.Payer(c)
+		close(done)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/provisioning/create", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("payerFor: %v", err)
+	}
+	<-done
+	return payer
+}
+
+// TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin (LOW-1 fast-follow): the ml
+// + provisioning create-handlers pass principal.Payer(c) (the HOME org) to the
+// pre-create balance Gate, matching the paired debit. So a masquerading SuperAdmin
+// (home=admin via X-User-Owner, acting in a victim org via X-Org-Id) is balance-gated
+// on the ADMIN's funds — never the victim's. Before the fix these two Gates keyed on
+// the effective org (the debit already keyed on home), so a masquerade was gated on
+// the victim's balance while its spend landed on admin's ledger — the gate/debit
+// asymmetry this closes (gate + debit both key on home; data scope stays effective).
+func TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin(t *testing.T) {
+	// A create-handler resolves Payer(c) from the request; for a masquerade it is home.
+	payer := payerFor(t, map[string]string{
+		"X-User-Id":    "u_admin", // validated principal
+		"X-Org-Id":     "victim",  // EFFECTIVE — the org being acted on
+		"X-User-Owner": "admin",   // HOME — the identity + billing anchor
+	})
+	if payer != "admin" {
+		t.Fatalf("principal.Payer for a masquerade = %q, want admin (HOME org)", payer)
+	}
+
+	fc := &recCommerce{balanceAvailable: 5000}
+	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
+
+	// Gate keyed on the payer (home) → the balance check must hit admin's ledger.
+	if err := rm.Gate(context.Background(), payer, "", false, "sql", 100); err != nil {
+		t.Fatalf("Gate(payer=admin, funded) = %v, want nil", err)
+	}
+	if got := fc.lastBalanceOrg(); got != "admin" {
+		t.Fatalf("balance check keyed on X-Org-Id=%q, want admin — a masquerading admin must be gated on their OWN funds (home), not the acted-on org (victim)", got)
 	}
 }
 
@@ -112,7 +168,7 @@ func TestResourceMeter_GateRefusesAtZero(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != metering.ErrInsufficientBalance {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != metering.ErrInsufficientBalance {
 		t.Fatalf("Gate(zero balance) = %v, want ErrInsufficientBalance", err)
 	}
 }
@@ -123,7 +179,7 @@ func TestResourceMeter_GateFreeKindNoCommerceCall(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 0}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",0); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 0); err != nil {
 		t.Fatalf("Gate(free kind) = %v, want nil", err)
 	}
 	if n := fc.balances(); n != 0 {
@@ -138,7 +194,7 @@ func TestResourceMeter_GateFailClosedOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	err := rm.Gate(t.Context(), "acme", "", false, "sql",100)
+	err := rm.Gate(t.Context(), "acme", "", false, "sql", 100)
 	if err == nil {
 		t.Fatal("Gate(commerce 5xx, fail-closed) = nil, want a deny error (no free provisioning on outage)")
 	}
@@ -152,7 +208,7 @@ func TestResourceMeter_GateFailOpenOnCommerceError(t *testing.T) {
 	fc := &recCommerce{balanceStatus: http.StatusInternalServerError}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", true /* fail-open */)
 
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(commerce 5xx, fail-open) = %v, want nil", err)
 	}
 }
@@ -198,7 +254,7 @@ func TestResourceMeter_GateIsolatesTenants(t *testing.T) {
 	fc := &recCommerce{balanceAvailable: 5000}
 	rm := meterFor(t, fc.server(t).URL, "mainnet", false)
 
-	if err := rm.Gate(t.Context(), "globex", "", false, "vector",100); err != nil {
+	if err := rm.Gate(t.Context(), "globex", "", false, "vector", 100); err != nil {
 		t.Fatalf("Gate(globex) = %v, want nil", err)
 	}
 	if got := fc.lastBalanceOrg(); got != "globex" {
@@ -255,7 +311,7 @@ func TestResourceMeter_EnvNeverBypassesGate(t *testing.T) {
 	for _, env := range []string{"testnet", "devnet"} {
 		fc := &recCommerce{balanceAvailable: 0}
 		rm := meterFor(t, fc.server(t).URL, env, false)
-		if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != metering.ErrInsufficientBalance {
+		if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != metering.ErrInsufficientBalance {
 			t.Fatalf("env=%s: Gate(zero) = %v, want ErrInsufficientBalance (test/dev must still bill)", env, err)
 		}
 	}
@@ -269,7 +325,7 @@ func TestResourceMeter_UnconfiguredIsNoop(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("ResourceMeter with empty commerce URL must not be Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
 		t.Fatalf("Gate(unconfigured) = %v, want nil (no-op)", err)
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
@@ -282,7 +338,7 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	if rm.Enabled() {
 		t.Fatal("nil ResourceMeter must report !Enabled()")
 	}
-	if err := rm.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
+	if err := rm.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
 		t.Fatalf("nil Gate = %v, want nil", err)
 	}
 	rm.Meter("acme", "", "sql", 100, "r", "") // must not panic
@@ -291,7 +347,7 @@ func TestResourceMeter_NilSafe(t *testing.T) {
 	if rm2.Enabled() {
 		t.Fatal("ResourceMeter with nil client must report !Enabled()")
 	}
-	if err := rm2.Gate(t.Context(), "acme", "", false, "sql",100); err != nil {
+	if err := rm2.Gate(t.Context(), "acme", "", false, "sql", 100); err != nil {
 		t.Fatalf("nil-client Gate = %v, want nil", err)
 	}
 }
