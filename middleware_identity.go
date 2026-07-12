@@ -75,19 +75,18 @@ var cookieTokenNames = []string{"hanzo_iam_token", "iam_access_token", "access_t
 // validated principal.
 //
 // Deliberately NOT in this list: org SUB-SCOPES (X-Project-Id, X-App-Id,
-// X-Environment). Those are sub-scopes WITHIN an org, NOT identity authority, so
-// they are not minted from the token like the headers above. They ARE still
-// sanitized — but as sub-scopes, in a separate pass (sanitizeSubScopes, keyed on
+// X-Environment). A sub-scope NARROWS within an org; it is not identity authority,
+// so it is handled in a separate pass (sanitizeSubScopes, keyed on
 // subScopeHeaders): every raw client copy is deleted on ingress, then X-Project-Id
-// is RE-INJECTED for a validated principal only when it is not a cross-org claim
-// (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT
-// org), and both are dropped on the anonymous path. This IS the "project-
-// membership check UNDER the validated org" the data plane always required: a
-// service must never derive org scope from a raw X-Project-Id, and after this
-// pass a surviving X-Project-Id is either the caller's OWN registered project or
-// an unregistered free-form label that can only ever scope the caller's own org
-// (every consumer AND-s it with the validated org). The native evals subsystem,
-// which scopes exclusively by c.Org() and ignores X-Project-Id, is unaffected.
+// is RE-MINTED from the validated `project` claim (claims.mintedProject) exactly
+// like X-Org-Id from `owner`, still checked non-foreign to the effective org
+// (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT org,
+// which also drops an admin's own-org project when a global admin views another
+// org), and dropped on the anonymous path. The raw client X-Project-Id is NEVER a
+// source. So after this pass X-Project-Id is a TRUSTWORTHY server-minted scope,
+// which is exactly why principal.ValidatedProject reports it claim-backed and per-
+// project spend caps HARD-enforce. The native evals subsystem, which scopes
+// exclusively by c.Org() and ignores X-Project-Id, is unaffected.
 var authorityHeaders = []string{
 	"X-User-Id",
 	"X-Org-Id",
@@ -104,12 +103,16 @@ var authorityHeaders = []string{
 	"X-Org",
 }
 
-// subScopeHeaders are org SUB-SCOPES (project/app) — caller-provided narrowings,
-// NOT identity authority. They are deleted on ingress like the authority headers
-// so no raw client copy survives, then re-injected by sanitizeSubScopes only for
-// a validated principal and only after passing the cross-org guard. Unlike
-// authorityHeaders they are not minted from the token; they must merely be proven
-// non-foreign to the validated org.
+// subScopeHeaders are org SUB-SCOPES — narrowings WITHIN an org, NOT identity
+// authority. All are deleted on ingress like the authority headers so no raw client
+// copy survives, then re-injected by sanitizeSubScopes only for a validated
+// principal:
+//   - X-Project-Id is MINTED from the validated `project` claim (claims.mintedProject),
+//     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
+//     effective org (defense in depth; it also drops an admin's own-org project when
+//     a global admin views another org). The raw client copy is never a source.
+//   - X-App-Id / X-Billing-Account-Id are caller attribution hints (no isolation
+//     boundary): forwarded as-is on the validated path, dropped when anonymous.
 var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id"}
 
 // SanitizeIdentity returns the identity-trust-boundary middleware.
@@ -152,18 +155,19 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 	return func(c *zip.Ctx) error {
 		req := c.Fiber().Request()
 
-		// Capture the requested org + sub-scopes before stripping (admin org-switch
-		// input + Phase-1 data passthrough for the org; cross-org validation input
-		// for the sub-scopes), then delete every authority header AND every sub-scope
-		// header, so nothing a client sent survives as identity OR scope. A client
-		// org bearing a whitespace/control/format rune is refused here (not trimmed):
+		// Capture the requested org + the attribution sub-scopes before stripping
+		// (admin org-switch input + Phase-1 data passthrough for the org; the app /
+		// billing-account attribution hints), then delete every authority header AND
+		// every sub-scope header, so nothing a client sent survives as identity OR
+		// scope. X-Project-Id is NOT captured: it is minted from the validated
+		// `project` claim below (claims.mintedProject), never from a client value. A
+		// client org bearing a whitespace/control/format rune is refused here (not trimmed):
 		// trimming would collapse "acme " onto "acme", and the injective org
 		// boundary must never fold two distinct org identifiers into one.
 		cliOrg := string(req.Header.Peek("X-Org-Id"))
 		if OrgHasUnsafeRune(cliOrg) {
 			cliOrg = ""
 		}
-		cliProject := strings.TrimSpace(string(req.Header.Peek("X-Project-Id")))
 		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
 		cliBillingAccount := strings.TrimSpace(string(req.Header.Peek("X-Billing-Account-Id")))
 		for _, h := range authorityHeaders {
@@ -243,7 +247,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			if claims.IsAdmin && !isKMSMachinePrincipal(claims) {
 				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
-			sanitizeSubScopes(c, effOrg, cliProject, cliApp, cliBillingAccount)
+			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, cliBillingAccount)
 			return c.Continue()
 		}
 
@@ -271,11 +275,13 @@ func IdentityMiddleware(cfg *Config) zip.Handler {
 // VALIDATED principal, the raw client copies having been deleted on ingress. It
 // is the project/app half of the trust boundary:
 //
-//   - X-Project-Id is re-injected only when it is NOT a cross-org claim
-//     (projectIsForeign): the caller's OWN registered project, or an unregistered
-//     free-form label, survives; a project REGISTERED to a different org is
-//     refused (dropped). This is the membership-check-under-the-validated-org that
-//     per-project scope always required.
+//   - project is the caller's MINTED `project` claim (claims.mintedProject — empty
+//     for the default project, so the header stays absent ⟺ default). It is
+//     re-injected only when NON-foreign to org (projectIsForeign): the caller's own
+//     claim survives; a project REGISTERED to a different org is refused (dropped),
+//     which drops an admin's own-org project when a global admin (effOrg = the
+//     switched-to org) views another org. The header is now server-minted, so a
+//     surviving X-Project-Id is claim-backed — principal.ValidatedProject trusts it.
 //   - X-App-Id is a caller LABEL, not an isolation boundary: NO cloud subsystem
 //     scopes access by it (git/security/eval scope by org + optional project, and
 //     platform scopes apps by route params under the validated org), and an app is
