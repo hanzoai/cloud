@@ -32,7 +32,7 @@ func mountSvcK8s(t *testing.T, k *k8sClient) (*zip.App, *cloud.Service[state]) {
 		t.Fatalf("openStore: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: k, sitesHost: "hanzo.app"}}
+	s := &cloud.Service[state]{Base: cloud.Base{KMS: newFakeKMS(), Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: newFakeProjects(), k8s: k, sitesHost: "hanzo.app"}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
 	return app, s
@@ -407,11 +407,7 @@ func TestHTTPSecretEnvSealed(t *testing.T) {
 		t.Fatal("secret value must never be echoed back over the API")
 	}
 	// The persisted env_json must carry NO plaintext (the secret value is blanked).
-	proj, err := s.State.store.GetProject(context.Background(), "maxpower", "web")
-	if err != nil {
-		t.Fatalf("get project: %v", err)
-	}
-	a, err := s.State.store.GetApplication(context.Background(), "maxpower", proj.ID, "api")
+	a, err := s.State.store.GetApplication(context.Background(), "maxpower", "web", "api")
 	if err != nil {
 		t.Fatalf("get app: %v", err)
 	}
