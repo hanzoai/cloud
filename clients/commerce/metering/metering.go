@@ -30,11 +30,13 @@
 // disk — the caller supplies it (typically from an env var the operator wires
 // from a KMS-backed secret, e.g. COMMERCE_SERVICE_TOKEN).
 //
-// This is a leaf package: it imports only the standard library (no commerce
-// server internals), so any product — Go service, CLI, or job — can import
-// github.com/hanzoai/cloud/clients/commerce/metering without pulling server code into its
-// binary. It lives in the commerce repo because commerce is the billing
-// source of truth; the package is the canonical client for its billing API.
+// Its only intra-repo dependency is the in-process finance seam (clients/finance): when a
+// co-resident finance ledger is published, Authorize's balance read and Record's usage
+// debit resolve it DIRECTLY (a typed in-proc call, no HTTP); otherwise both fall back to
+// the commerce billing HTTP contract above. It pulls in NO commerce server internals, so
+// any product — Go service, CLI, or job — can meter through it. It lives in the commerce
+// repo because commerce is the billing source of truth; the package is the canonical
+// client for its billing API.
 package metering
 
 import (
@@ -49,6 +51,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/types"
 )
 
 // Canonical commerce billing paths (mounted under /v1). Keep in lockstep with
@@ -401,6 +406,12 @@ func (c *Client) scopeAuthorize(ctx context.Context, in AuthInput) (scopeVerdict
 // the tier endpoint's effectiveAvailable (prepaid + included allotment);
 // otherwise the bare prepaid available from the balance endpoint.
 func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int64, error) {
+	// Co-resident native wallet: the balance is a DIRECT ledger read (no HTTP). user is the
+	// billing subject, org the wallet namespace; finance derives the account. A test-mode
+	// client reads the sandbox books so test and live money never mix.
+	if fin := finance.Current(); fin != nil {
+		return fin.BalanceCents(ctx, org, user, cur, c.test)
+	}
 	if c.tierAware {
 		q := url.Values{"user": {user}}
 		body, err := c.get(ctx, pathTier, q, org)
@@ -489,6 +500,23 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		u.Currency = "usd"
 	}
 
+	// Co-resident native ledger: post the usage debit DIRECTLY (no HTTP), the ONE money
+	// seam. finance is a whole-cent ledger, so a micros-only caller (the AI meter prices
+	// sub-cent per call) is folded to whole cents by CEIL — never dropped to zero, which
+	// would leak exactly the sub-cent revenue AmountMicros exists to capture. The debit is
+	// idempotent on RequestID inside finance, and a test-mode client hits the sandbox books.
+	if fin := finance.Current(); fin != nil {
+		cents := usageCents(u)
+		if err := fin.RecordUsage(ctx, types.UsageInput{
+			Org: u.Org, Subject: u.User, Cents: cents, Currency: u.Currency,
+			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
+			RequestID: u.RequestID, Test: c.test,
+		}); err != nil {
+			return nil, err
+		}
+		return &RecordResult{User: u.User, Amount: cents, Currency: u.Currency, Type: "withdraw"}, nil
+	}
+
 	payload, err := json.Marshal(u)
 	if err != nil {
 		return nil, fmt.Errorf("metering: encode usage: %w", err)
@@ -506,6 +534,19 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		return nil, nil
 	}
 	return &res, nil
+}
+
+// usageCents is the whole-cent debit for the native finance ledger (a cents-only ledger).
+// It prefers AmountCents; when a caller priced sub-cent (AmountMicros only — e.g. the AI
+// meter, which debits micro-USD per call) it CEILs micro-USD → cents (10_000 micro-USD =
+// 1¢), so a tiny per-call cost bills at least 1¢ instead of rounding to zero and slipping
+// through unbilled. Record's early guard guarantees at least one of the two is positive, so
+// the result here is always >= 1.
+func usageCents(u Usage) int64 {
+	if u.AmountCents > 0 {
+		return u.AmountCents
+	}
+	return (u.AmountMicros + 9999) / 10000 // ceil micro-USD to whole cents
 }
 
 // ---- HTTP plumbing -------------------------------------------------------
