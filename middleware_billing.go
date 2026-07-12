@@ -21,8 +21,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -214,9 +214,15 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 		// so an attacker cannot probe or drain a victim org's ledger.
 		return metering.AuthInput{}
 	}
-	org := strings.TrimSpace(c.Org())
+	// The billing key is the HOME org (who PAYS), NOT the effective X-Org-Id (whose
+	// DATA is acted on). For a normal caller the two are identical; for a platform
+	// SuperAdmin masquerading into another org the debit + balance check must land on
+	// the admin org's ledger, never the org being acted on. BillingOrg resolves home
+	// (X-User-Owner) with an effective-org fallback, and is Validated-gated (true here,
+	// checked above). Data scope elsewhere keeps reading c.Org() (effective).
+	payer, _ := principal.BillingOrg(c)
 	sub := strings.TrimSpace(c.User())
-	user := org // per-org billing key
+	user := payer // per-org billing key = home org
 	if user == "" {
 		user = sub // org-less fallback
 	}
@@ -228,7 +234,7 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	project, projectValidated := principal.ValidatedProject(c)
 	return metering.AuthInput{
 		User:             user,
-		Org:              org,
+		Org:              payer, // balance check + debit → HOME org (who pays)
 		Project:          project,
 		ProjectValidated: projectValidated,
 		Service:          canonicalService(c.Path()),
