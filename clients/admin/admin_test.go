@@ -136,10 +136,12 @@ func TestGate_DeniesEveryRoute(t *testing.T) {
 		}
 	}
 
-	// A VALIDATED non-super org admin (X-User-Id + pinned X-Org-Id, NO X-User-IsAdmin)
-	// is denied on every PLATFORM route (super-only). The org-scoped routes admit them
-	// but hard-scope the data — proven in scope_test.go.
-	orgAdmin := map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/bob", "X-User-Email": "bob@acme.test"}
+	// A VALIDATED org admin (X-User-Id + pinned X-Org-Id + the sanitizer-minted
+	// X-User-IsOrgAdmin, but NO GLOBAL X-User-IsAdmin) is denied on every PLATFORM route
+	// (super-only). The org-scoped routes admit them but hard-scope the data — proven in
+	// scope_test.go. (A validated NON-admin member, lacking the org-admin bit, is refused
+	// on the scoped panels too — TestScope_MemberWithoutOrgAdminDenied.)
+	orgAdmin := map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/bob", "X-User-Email": "bob@acme.test", "X-User-IsOrgAdmin": "true"}
 	for _, r := range platformAdminRoutes {
 		resp, body := do(r.method, r.path, orgAdmin)
 		if resp.StatusCode != http.StatusForbidden {
