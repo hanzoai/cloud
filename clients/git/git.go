@@ -432,12 +432,15 @@ func repoNameParam(c *zip.Ctx) (string, error) {
 // no magic bucket. Mirrors clients/prompts.org.
 func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
-// projectScope resolves the optional X-Project-Id sub-scope. Empty is valid
-// (an org-level repo). Validated to a safe identifier; an invalid header is
-// treated as no sub-scope rather than 400 (it is an OPTIONAL narrowing).
+// projectScope resolves the optional X-Project-Id sub-scope through principal.Project
+// (the ONE project accessor). The default scope — an absent header OR the literal
+// "default" (principal.IsDefaultProject) — keys with NO project segment, so today's
+// org-level repo keys stay un-suffixed. A non-default project is validated to a safe
+// identifier; an invalid header degrades to the default scope rather than 400 (it is
+// an OPTIONAL narrowing).
 func projectScope(c *zip.Ctx) string {
-	p := strings.TrimSpace(c.Header("X-Project-Id"))
-	if p == "" || len(p) > 128 || !projectRE.MatchString(p) {
+	p := principal.Project(c)
+	if principal.IsDefaultProject(p) || len(p) > 128 || !projectRE.MatchString(p) {
 		return ""
 	}
 	return p

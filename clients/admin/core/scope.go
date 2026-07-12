@@ -23,6 +23,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/iam"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,9 +58,9 @@ func ResolveScope(s *cloud.Service[State], c *zip.Ctx) TenantScope {
 	if c.IsAdmin() {
 		return TenantScope{Super: true}
 	}
-	org := strings.TrimSpace(c.Org())
-	if org == "" {
-		return TenantScope{} // no validated org ⇒ empty window ⇒ sees nothing
+	org, ok := principal.Org(c)
+	if !ok {
+		return TenantScope{} // no validated principal/org ⇒ empty window ⇒ sees nothing
 	}
 	return TenantScope{Orgs: Descendants(s, org)}
 }
