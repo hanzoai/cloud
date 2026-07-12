@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	datastore "github.com/hanzo-ds/go"
+	datastore "github.com/hanzoai/datastore-go/v2"
 	"github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
 )
