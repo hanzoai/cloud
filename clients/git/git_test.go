@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/fiber/v3"
 	"github.com/go-git/go-billy/v5/memfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -22,9 +21,10 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
-	"github.com/valyala/fasthttp"
 	luxlog "github.com/luxfi/log"
+	"github.com/valyala/fasthttp"
+	"github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 )
 
 var testCfg = fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true}
@@ -63,6 +63,10 @@ func asTenant(org string) { asOrg.Lock(); asOrg.org = org; asOrg.Unlock() }
 
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()
+	// Bind the SSH listener to an ephemeral loopback port so parallel/sequential
+	// tests never collide on the default :2222 (each Mount gets its own port +
+	// host key under its own TempDir).
+	t.Setenv("CLOUD_GIT_SSH_ADDR", "127.0.0.1:0")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)

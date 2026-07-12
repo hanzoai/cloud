@@ -71,6 +71,9 @@ const maxBody = 256 << 20 // 256 MiB
 type state struct {
 	stores  *cloud.OrgStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
+	sshHost string     // for sshUrl construction (e.g. "git.hanzo.ai")
+	ssh     *sshServer // Git SSH transport listener
+	keys    *keyStore  // SSH public-key registry (global fingerprint index)
 }
 
 // storeFor resolves the caller's org-scoped repo-metadata store, opening the
@@ -96,6 +99,7 @@ type repoView struct {
 	Branches      []string `json:"branches,omitempty"`
 	Head          string   `json:"head,omitempty"`
 	CloneURL      string   `json:"cloneUrl"`
+	SSHURL        string   `json:"sshUrl"`
 	SizeBytes     int64    `json:"sizeBytes"`
 	CreatedAt     string   `json:"createdAt"`
 	UpdatedAt     string   `json:"updatedAt,omitempty"`
@@ -116,11 +120,23 @@ func cloneURL(s *cloud.Service[state], org, name string) string {
 	return fmt.Sprintf("https://%s/v1/git/%s/%s.git", host, org, name)
 }
 
+// sshURL is the scp-style Git SSH remote: git@<sshHost>:<org>/<repo>.git. The
+// colon (not slash) after the host is the canonical scp-like syntax `git clone`
+// accepts; the org/repo tail is the same path the SSH exec handler parses.
+func sshURL(s *cloud.Service[state], org, name string) string {
+	host := s.State.sshHost
+	if host == "" {
+		host = defaultSSHHost(s.Domain)
+	}
+	return fmt.Sprintf("git@%s:%s/%s.git", host, org, name)
+}
+
 func toView(s *cloud.Service[state], r Repo, branches []string, head string) repoView {
 	return repoView{
 		ID: r.ID, Org: r.Org, Project: r.Project, Name: r.Name, Description: r.Description,
 		DefaultBranch: r.DefaultBranch, Branches: branches, Head: head,
 		CloneURL:  cloneURL(s, r.Org, r.Name),
+		SSHURL:    sshURL(s, r.Org, r.Name),
 		SizeBytes: r.SizeBytes, CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
 	}
 }
@@ -136,24 +152,49 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.DataDir == "" {
 		return fmt.Errorf("git.Mount: empty DataDir")
 	}
-	st, err := newStorage(filepath.Join(deps.DataDir, "git"))
+	gitRoot := filepath.Join(deps.DataDir, "git")
+	st, err := newStorage(gitRoot)
 	if err != nil {
 		return fmt.Errorf("git.Mount: open storage: %w", err)
+	}
+	// The SSH public-key registry: ONE global file (the PublicKeyCallback runs
+	// before any org is known, so auth is a single fingerprint lookup).
+	keys, err := openKeyStore(filepath.Join(gitRoot, "ssh_keys.db"))
+	if err != nil {
+		return fmt.Errorf("git.Mount: open ssh key store: %w", err)
 	}
 	b := cloud.NewBase(deps, "git")
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(deps.DataDir, "git", openStore),
 		storage: st,
+		sshHost: gitSSHHost(deps.Domain),
+		keys:    keys,
 	}}
 	mounted = s
 
 	routes(app, s)
 
-	b.Log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", filepath.Join(deps.DataDir, "git"))
+	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
+	// a per-process goroutine started here and stopped by Shutdown. The host key
+	// is loaded from KMS/env (CLOUD_GIT_SSH_HOST_KEY) or generated + persisted
+	// under the git data root.
+	sshSrv, err := newSSHServer(s, sshConfig(deps, gitRoot))
+	if err != nil {
+		_ = keys.Close()
+		return fmt.Errorf("git.Mount: init ssh: %w", err)
+	}
+	s.State.ssh = sshSrv
+	if err := sshSrv.start(); err != nil {
+		_ = keys.Close()
+		return fmt.Errorf("git.Mount: start ssh: %w", err)
+	}
+
+	b.Log.Info("git mounted", "brand", deps.Brand, "storage", "osfs", "root", gitRoot,
+		"sshHost", s.State.sshHost, "sshAddr", sshSrv.addr(), "zap", "/zap")
 	return nil
 }
 
-// routes registers the git control plane + smart-HTTP surface.
+// routes registers the git control plane + smart-HTTP + SSH-key + ZAP surface.
 func routes(app *zip.App, s *cloud.Service[state]) {
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
@@ -162,6 +203,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/usage", cloud.Handle(s, usage))
 	app.Get("/v1/git/repos/:name", cloud.Handle(s, get))
 	app.Delete("/v1/git/repos/:name", cloud.Handle(s, del))
+	// Push generated files without a local git client (hanzo.app builder).
+	// A distinct trailing segment, so it never shadows the :org/:repo routes.
+	app.Post("/v1/git/repos/:name/push", cloud.Handle(s, pushFiles))
+	// SSH public-key registry (per-user keys for `git clone git@…`).
+	app.Post("/v1/git/keys", cloud.Handle(s, registerKey))
+	app.Get("/v1/git/keys", cloud.Handle(s, listKeys))
+	app.Delete("/v1/git/keys/:id", cloud.Handle(s, deleteKey))
 	// Mirror an external repo into <org>/:name (creates the repo on first use).
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
@@ -172,6 +220,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
 	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
+
+	// ZAP transport — the SAME control-plane core, reachable by browsers/services
+	// that speak ZAP instead of REST, over the shared /zap plane. See zap.go.
+	mountZAP(app, s)
 }
 
 // ---- control-plane handlers ----
@@ -187,51 +239,29 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
 	var body createReq
 	if err := c.Bind(&body); err != nil {
 		return err
 	}
-	name := normalizeName(body.Name)
-	if name == "" {
-		return zip.ErrBadRequest("name is required")
-	}
-	if !nameRE.MatchString(name) {
-		return zip.ErrBadRequest("name must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-	}
-	// Project sub-scope: explicit body value wins, else the header sub-scope.
-	project := strings.TrimSpace(body.Project)
-	if project == "" {
-		project = projectScope(c)
-	} else if !projectRE.MatchString(project) {
-		return zip.ErrBadRequest("project must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-	}
-	if len(body.Description) > 4096 {
-		return zip.ErrBadRequest("description too large (max 4KiB)")
-	}
-
-	id, err := genID("repo")
+	view, err := coreCreate(s, c.Context(), org, projectScope(c), body)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+		return createErr(err)
 	}
-	now := time.Now().Unix()
-	r := Repo{
-		ID: id, Org: org, Project: project, Name: name,
-		Description: strings.TrimSpace(body.Description), DefaultBranch: defaultBranchName,
-		CreatedAt: now, UpdatedAt: now,
+	return c.JSON(http.StatusCreated, view)
+}
+
+// createErr maps a coreCreate error to its HTTP status. The ONE mapping the REST
+// adapter applies; the ZAP adapter (zapErr) maps the SAME sentinels to its own
+// wire shape.
+func createErr(err error) error {
+	switch {
+	case errors.Is(err, errBadInput):
+		return zip.ErrBadRequest(strings.TrimPrefix(err.Error(), "git: invalid input: "))
+	case errors.Is(err, errConflict):
+		return zip.ErrConflict("repo name already exists in this scope")
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	if err := provision(s, c.Context(), store, r); err != nil {
-		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("repo name already exists in this scope")
-		}
-		return zip.Errorf(http.StatusInternalServerError, "provision: %v", err)
-	}
-	// Record initial storage size (billing hook: an empty bare repo is a few KiB).
-	r.SizeBytes = recordUsage(s, c.Context(), org, project, name)
-	return c.JSON(http.StatusCreated, toView(s, r, nil, ""))
 }
 
 // provision materializes a repo: its metadata row plus an empty bare repo on
@@ -255,17 +285,9 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, org)
+	out, err := coreList(s, c.Context(), org, projectScope(c))
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	rows, err := store.List(c.Context(), org, projectScope(c))
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	out := make([]repoView, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, toView(s, r, nil, ""))
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"data": out})
 }
@@ -275,21 +297,14 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	name := normalizeName(c.Param("name"))
-	project := projectScope(c)
-	r, err := store.Get(c.Context(), org, project, name)
+	view, err := coreGet(s, c.Context(), org, projectScope(c), c.Param("name"))
 	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("repo not found")
 	}
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
-	branches, head := refState(s, org, project, name)
-	return c.JSON(http.StatusOK, toView(s, r, branches, head))
+	return c.JSON(http.StatusOK, view)
 }
 
 func del(s *cloud.Service[state], c *zip.Ctx) error {
@@ -297,23 +312,12 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	name := normalizeName(c.Param("name"))
-	project := projectScope(c)
-	deleted, err := store.Delete(c.Context(), org, project, name)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
-	}
-	if !deleted {
+	err := coreDelete(s, c.Context(), org, projectScope(c), c.Param("name"))
+	if errors.Is(err, errNotFound) {
 		return zip.ErrNotFound("repo not found")
 	}
-	// Purge storage. Metadata is already gone, so a purge failure must not
-	// resurrect the repo — log and continue.
-	if err := s.State.storage.remove(org, project, name); err != nil {
-		s.Log.Warn("purge repo storage failed (continuing)", "org", org, "project", project, "repo", name, "err", err)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -340,18 +344,9 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	store, err := storeFor(s, org)
+	out, err := coreUsage(s, c.Context(), org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	rows, err := store.ListOrg(c.Context(), org)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "usage: %v", err)
-	}
-	out := usageView{Org: org, Repos: make([]usageRepo, 0, len(rows))}
-	for _, r := range rows {
-		out.Repos = append(out.Repos, usageRepo{Name: r.Name, Project: r.Project, SizeBytes: r.SizeBytes})
-		out.TotalBytes += r.SizeBytes
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	return c.JSON(http.StatusOK, out)
 }
@@ -455,12 +450,21 @@ func genID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(b[:]), nil
 }
 
-// Shutdown closes every open per-org git store. Idempotent.
+// Shutdown stops the SSH listener and closes every open store (per-org repo
+// metadata + the SSH key registry). Idempotent.
 func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
+	if mounted.State.ssh != nil {
+		mounted.State.ssh.stop()
+	}
 	err := mounted.State.stores.CloseAll()
+	if mounted.State.keys != nil {
+		if kerr := mounted.State.keys.Close(); kerr != nil && err == nil {
+			err = kerr
+		}
+	}
 	mounted = nil
 	return err
 }
