@@ -62,13 +62,34 @@ func personalBillingOrgs() map[string]bool {
 	return out
 }
 
+// orgBillingOrgs — orgs promoted to ONE shared pool (subject = "<org>") by the
+// ORG_BILLING_ORGS allowlist, even when they would otherwise bill per-user.
+// Mirrors ai/object.isOrgBilling and billing-scope.ts: default EMPTY; the scoped,
+// additive override that wins over the personal-billing default. Keep in lockstep
+// with the gateway's BillingSubject so the console view scopes to the SAME subject
+// the gate reads.
+func orgBillingOrgs() map[string]bool {
+	out := map[string]bool{}
+	for _, p := range strings.Split(getenv("ORG_BILLING_ORGS", ""), ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			out[p] = true
+		}
+	}
+	return out
+}
+
 // billingSubject — the commerce billing subject for an org+user, the SAME subject the
-// gateway debits: a member of a personal-billing org bills per-user as "<org>/<name>";
-// a dedicated org bills per-org as "<org>". Mirrors billing-scope.ts billingSubject.
+// gateway debits: an ORG_BILLING_ORGS org pools per-org as "<org>"; else a member of a
+// personal-billing org bills per-user as "<org>/<name>"; a dedicated org bills per-org
+// as "<org>". Mirrors billing-scope.ts billingSubject and ai/object.BillingSubject.
 func billingSubject(org, name string) string {
 	o := strings.ToLower(strings.TrimSpace(org))
 	if o == "" {
 		return ""
+	}
+	// ORG_BILLING_ORGS wins: pool the whole org regardless of the personal default.
+	if orgBillingOrgs()[o] {
+		return o
 	}
 	if personalBillingOrgs()[o] {
 		if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
