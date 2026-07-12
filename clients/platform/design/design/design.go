@@ -105,8 +105,8 @@ var Application = Type("Application", func() {
 	Attribute("source", String, "git|image", func() { Enum("git", "image") })
 	Attribute("repo", RepoSpec)
 	Attribute("image", ImageSpec)
-	Attribute("buildType", String, "nixpacks|dockerfile|static|buildpacks|image", func() {
-		Enum("nixpacks", "dockerfile", "static", "buildpacks", "image")
+	Attribute("buildType", String, "pack|dockerfile|image", func() {
+		Enum("pack", "dockerfile", "image")
 	})
 	Attribute("dockerfile", String, "path to Dockerfile (buildType dockerfile)")
 	Attribute("env", ArrayOf(EnvVar))
