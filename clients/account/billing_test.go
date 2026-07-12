@@ -31,6 +31,30 @@ func TestBillingSubject(t *testing.T) {
 	}
 }
 
+// TestBillingSubject_OrgBillingOverride mirrors ai/object: ORG_BILLING_ORGS pools
+// a listed org (subject = "<org>") even though it is a personal-billing org, and
+// the switch is scoped — an unlisted personal org still bills per-user, and an
+// empty allowlist is a no-op. Keeps the console view in lockstep with the gate.
+func TestBillingSubject_OrgBillingOverride(t *testing.T) {
+	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo,acme")
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")
+	cases := []struct{ org, name, want string }{
+		{"hanzo", "z", "hanzo"},      // promoted → pooled per-org (was hanzo/z)
+		{"acme", "alice", "acme/alice"}, // scoped: still per-user
+		{"maxpower", "dave", "maxpower"}, // dedicated org unchanged
+	}
+	for _, c := range cases {
+		if got := billingSubject(c.org, c.name); got != c.want {
+			t.Fatalf("billingSubject(%q,%q) [ORG_BILLING_ORGS=hanzo]: want %q, got %q", c.org, c.name, c.want, got)
+		}
+	}
+	// Empty allowlist = zero change: hanzo reverts to per-user.
+	t.Setenv("ORG_BILLING_ORGS", "")
+	if got := billingSubject("hanzo", "z"); got != "hanzo/z" {
+		t.Fatalf("empty ORG_BILLING_ORGS must not change hanzo: want hanzo/z, got %q", got)
+	}
+}
+
 func TestScopedBillingSearch_PinsSubjectDropsOrgKeepsRest(t *testing.T) {
 	in := url.Values{}
 	in.Set("userId", "victim")     // forged subject — must be OVERWRITTEN
