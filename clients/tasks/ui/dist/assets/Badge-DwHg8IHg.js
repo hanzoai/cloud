@@ -1,0 +1,1 @@
+import{Ft as e,Ot as t}from"./ui-DqFtg5im.js";import{C as n}from"./api-DjPy4e5f.js";import{t as r}from"./format-C_ODJNgG.js";var i=e();function a({variant:e=`muted`,children:a}){let o=r(e);return(0,i.jsx)(t,{px:`$2`,py:`$1`,rounded:`$2`,bg:o.bg,self:`flex-start`,items:`center`,children:(0,i.jsx)(n,{fontSize:`$1`,color:o.fg,fontWeight:`500`,children:a})})}export{a as t};
