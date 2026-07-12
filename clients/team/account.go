@@ -105,7 +105,7 @@ type WorkspaceLoginInfo struct {
 	AllowGuestSignUp bool   `json:"allowGuestSignUp,omitempty"`
 }
 
-// WorkspaceInfo is one entry of getUserWorkspaces. The version triple is the Huly
+// WorkspaceInfo is one entry of getUserWorkspaces. The version triple is the Team
 // MODEL version (the SAME source the transactor reports as serverVersion).
 type WorkspaceInfo struct {
 	UUID         string `json:"uuid"`
@@ -682,7 +682,7 @@ func providerParam(c *zip.Ctx) string {
 }
 
 // toWorkspaceInfo flattens a workspace for getUserWorkspaces. The version triple
-// is the Huly MODEL version (the SAME source the transactor reports as
+// is the MODEL version (the SAME source the transactor reports as
 // serverVersion) so the workspace-model version and the server version never drift.
 func toWorkspaceInfo(ws workspace) WorkspaceInfo {
 	return WorkspaceInfo{

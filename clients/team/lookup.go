@@ -1,6 +1,6 @@
 package team
 
-// This file is the Huly `lookup` join support for findAll — ported VERBATIM from
+// This file is the `lookup` join support for findAll — ported VERBATIM from
 // github.com/hanzoai/team-go/pkg/transactor/lookup.go. The employees query is the
 // load-bearing case that makes bots-as-members render:
 //

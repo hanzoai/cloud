@@ -38,7 +38,7 @@ func TestIngestMirrorsMemberToEmployee(t *testing.T) {
 	if len(persons) != 1 {
 		t.Fatalf("contact:class:Person count = %d, want 1", len(persons))
 	}
-	if persons[0]["name"] != ",Zeekay" { // Huly "last,first"; single token → first-name only
+	if persons[0]["name"] != ",Zeekay" { // Team "last,first"; single token → first-name only
 		t.Fatalf("person name = %v, want ,Zeekay", persons[0]["name"])
 	}
 	if persons[0]["avatarType"] != "color" {
@@ -93,7 +93,7 @@ func TestMemberUpdatePreservesProfile(t *testing.T) {
 	if after["city"] != "Tokyo" {
 		t.Fatalf("city clobbered: %v (want Tokyo)", after["city"])
 	}
-	if after["name"] != "Kanjo,Zeekay" { // "Zeekay Kanjo" → Huly "last,first"
+	if after["name"] != "Kanjo,Zeekay" { // "Zeekay Kanjo" → Team "last,first"
 		t.Fatalf("name not updated: %v (want Kanjo,Zeekay)", after["name"])
 	}
 	if role, _ := after[mixinEmployee].(map[string]any)["role"].(string); role != "ADMIN" {
