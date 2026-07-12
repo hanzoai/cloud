@@ -42,6 +42,10 @@ var (
 // enforced at the query layer, and the gateway-minted X-Org-Id selects the
 // org. Repo fields are flat columns here; the HTTP surface nests them under
 // "repo" (see projects.go). It never stores a secret.
+//
+// Distinct from tracker.Project (not a duplicate): this is the Slug-keyed
+// deployable site; a tracker.Project is a KEY-prefixed issue team that lives
+// INSIDE one of these (the IAM/deploy project is the tracker's tenant boundary).
 type Project struct {
 	ID            string
 	Org           string
