@@ -196,16 +196,22 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	}
 	fin := finance.New(cfg.DataDir)
 	finance.Publish(fin)
+	// Money is billed to the org's BILLING ACCOUNT, never the per-user subject:
+	// both the balance read and the usage debit key on the org (its default-account
+	// pool wallet), so a funded account gates AND depletes consistently — the debit
+	// can never land on a different wallet than the gate read. The per-user identity
+	// the ai module resolves is attribution only; the account is the funding entity.
+	// (Project-scoped non-default accounts resolve here once the hook carries project.)
 	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
-		return fin.BalanceCents(ctx, namespace, subject, currency, false)
+		return fin.BalanceCents(ctx, namespace, namespace, currency, false)
 	})
 	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
 		return fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Namespace, Subject: u.Subject, Cents: u.Cents,
+			Org: u.Namespace, Subject: u.Namespace, Cents: u.Cents,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
 	})
-	log.Info("finance ledger wired (in-process per-org, native, no exempt, fail-closed)", "dataDir", cfg.DataDir)
+	log.Info("finance ledger wired (per-org account, native, no exempt, fail-closed)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared
