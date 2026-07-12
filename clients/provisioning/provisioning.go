@@ -306,7 +306,7 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 		// this a no-op. Applies to BOTH strategies.
 		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
 		project, projectValidated := principal.ValidatedProject(c)
-		if err := s.Bill.Gate(ctx, org, project, projectValidated, kind, fee); err != nil {
+		if err := s.Bill.Gate(ctx, principal.Payer(c), project, projectValidated, kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
