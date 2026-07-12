@@ -213,7 +213,12 @@ type DepositInput struct {
 	Currency string // default "usd"
 	Notes    string
 	Tags     string
-	Test     bool // write to the sandbox (test-mode) ledger
+	// Ref, when non-empty, is the deposit's idempotency key: two deposits carrying the SAME
+	// Ref credit the wallet AT MOST ONCE (the replay is a no-op returning the first entry's
+	// id), so a fixed Ref makes a backfill/settlement exactly-once. Empty keeps the additive
+	// default — each grant takes a fresh ref and stacks. Mirrors UsageInput.RequestID.
+	Ref  string
+	Test bool // write to the sandbox (test-mode) ledger
 }
 
 // UsageInput is a native usage (withdraw/debit) write to a subject's prepaid
