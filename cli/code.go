@@ -55,17 +55,30 @@ type codeAgent struct {
 	wire     wire     // how it finds the cloud
 	fullAuto []string // flags that bypass approval prompts
 	modelArg []string // how the model is passed on argv (empty: via env)
+	provider func(base string) []string // agents that need the endpoint declared, not just env'd
+	clear    []string // env that would shadow the wire (a stale key in the shell)
 	install  string   // hint when the binary is missing
 }
 
 // codex and @hanzo/dev share a lineage (dev is a Codex fork), hence a wire.
+// They also ignore OPENAI_BASE_URL and talk to chatgpt.com unless a provider is
+// declared, so declare Hanzo as the provider and select it.
 func codexLike(bin, install string) codeAgent {
 	return codeAgent{
 		bin:      bin,
 		wire:     openaiWire,
 		fullAuto: []string{"--dangerously-bypass-approvals-and-sandbox"},
 		modelArg: []string{"-m"},
-		install:  install,
+		provider: func(base string) []string {
+			return []string{
+				"-c", "model_provider=hanzo",
+				"-c", `model_providers.hanzo.name="Hanzo"`,
+				"-c", fmt.Sprintf(`model_providers.hanzo.base_url="%s/v1"`, strings.TrimSuffix(base, "/")),
+				"-c", `model_providers.hanzo.env_key="OPENAI_API_KEY"`,
+				"-c", `model_providers.hanzo.wire_api="responses"`,
+			}
+		},
+		install: install,
 	}
 }
 
@@ -74,6 +87,7 @@ var codeAgents = map[string]codeAgent{
 		bin:      "claude",
 		wire:     anthropicWire,
 		fullAuto: []string{"--allow-dangerously-skip-permissions"},
+		clear:    []string{"ANTHROPIC_API_KEY"}, // outranks AUTH_TOKEN: a stale one silently wins
 		install:  "npm i -g @anthropic-ai/claude-code",
 	},
 	"codex": codexLike("codex", "npm i -g @openai/codex"),
@@ -166,12 +180,20 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 	if !safe {
 		argv = append(argv, agent.fullAuto...)
 	}
+	if agent.provider != nil {
+		argv = append(argv, agent.provider(base)...)
+	}
 	if len(agent.modelArg) > 0 { // claude takes the model via env, codex/dev on argv
 		argv = append(argv, agent.modelArg...)
 		argv = append(argv, model)
 	}
 	argv = append(argv, rest...)
 
+	for _, k := range agent.clear {
+		if err := os.Unsetenv(k); err != nil {
+			return err
+		}
+	}
 	for k, v := range agent.wire(base, token, model) {
 		if err := os.Setenv(k, v); err != nil {
 			return err
@@ -211,7 +233,9 @@ func storedAPIKey() string {
 func resolveModel(env *Env, want string) (string, error) {
 	models, err := catalog(env)
 	if err != nil {
-		return want, nil // offline: trust the caller, let the agent report it
+		// Never hand an agent a model we could not confirm: it would fail deep
+		// inside the session with an opaque error. Say so here instead.
+		return "", fmt.Errorf("cannot read the model catalog: %w", err)
 	}
 	fold := func(s string) string {
 		return strings.Map(func(r rune) rune {
