@@ -27,7 +27,7 @@ import (
 // a real OCI registry (registry:2) serving a real CycloneDX SBOM (cyclonedx-gomod
 // output) cosign-attached to an image digest, materialized through the REAL
 // production path — GET /v1/sbom/{ref} → pull-on-miss → production pullSBOM →
-// go-containerregistry → parseComponents → INSERT into a real ClickHouse → reread.
+// go-containerregistry → parseComponents → INSERT into a real datastore → reread.
 //
 // It exercises production pullSBOM (DefaultKeychain, no test-only insecure opt) —
 // go-containerregistry auto-selects http for a localhost registry, so the SAME code
@@ -35,7 +35,7 @@ import (
 //
 //	SBOM_LIVE_REGISTRY  host:port of a writable OCI registry (e.g. localhost:5555)
 //	SBOM_LIVE_DOC       path to a CycloneDX JSON document to attach
-//	DATASTORE_ADDR      host:port of a ClickHouse native port (e.g. localhost:19000)
+//	DATASTORE_ADDR      host:port of a datastore native port (e.g. localhost:19000)
 func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	reg := os.Getenv("SBOM_LIVE_REGISTRY")
 	doc := os.Getenv("SBOM_LIVE_DOC")
@@ -81,19 +81,19 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	}
 	t.Logf("pushed subject %s @ %s + SBOM attachment %s (%d real components)", subjectRef, dig, sbomTag, len(want))
 
-	// Connect the real ClickHouse and wait for the async datastore to latch ready.
+	// Connect the real datastore and wait for the async datastore to latch ready.
 	aiobject.InitDatastore()
 	deadline := time.Now().Add(20 * time.Second)
 	for !aiobject.DatastoreEnabled() {
 		if time.Now().After(deadline) {
-			t.Fatal("datastore did not become ready (is ClickHouse at DATASTORE_ADDR up?)")
+			t.Fatal("datastore did not become ready (is datastore at DATASTORE_ADDR up?)")
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
 
 	app := mountApp(t)
 
-	// First GET: not in ClickHouse yet → pull-on-miss materializes it → 200 real comps.
+	// First GET: not in datastore yet → pull-on-miss materializes it → 200 real comps.
 	code, body := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", false)
 	if code != http.StatusOK {
 		t.Fatalf("pull-on-miss GET want 200, got %d (%s)", code, body)
@@ -111,7 +111,7 @@ func TestPullOnMissLiveEndToEnd(t *testing.T) {
 	assertHasComponent(t, view.Components, want[0].Name, want[0].Version)
 	t.Logf("pull-on-miss materialized %d components; digest=%s", view.ComponentCount, view.ImageDigest)
 
-	// Second GET: now a ClickHouse cache HIT (no pull) — same real components.
+	// Second GET: now a datastore cache HIT (no pull) — same real components.
 	code2, body2 := do(t, app, http.MethodGet, "/v1/sbom/"+subjectRef, "", false)
 	if code2 != http.StatusOK {
 		t.Fatalf("cache-hit GET want 200, got %d (%s)", code2, body2)

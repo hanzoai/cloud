@@ -17,7 +17,7 @@ package admin
 // o11y — GET /v1/admin/o11y, the GLOBAL fleet-wide observability read that powers
 // the operator's o11y board on admin.hanzo.ai. It is the un-org-scoped twin of the
 // per-org console o11y: the same signals, aggregated across EVERY tenant, over the
-// ONE hanzoai/datastore (ClickHouse) — the same warehouse + shared client
+// ONE hanzoai/datastore (datastore) — the same warehouse + shared client
 // (aiobject.DatastoreQuery) the analytics/compute lenses already use, no second
 // connection.
 //
@@ -372,7 +372,7 @@ func o11yRange(v string) string {
 	}
 }
 
-// o11yBucket maps the range to a fixed ClickHouse interval clause (a server-side
+// o11yBucket maps the range to a fixed datastore interval clause (a server-side
 // CONSTANT — never user input — so it is safe to render into the SQL). ~24-30
 // buckets across the window keeps the charts legible.
 func o11yBucket(rangeLabel string) string {
@@ -395,7 +395,7 @@ func firstRowOr(rows []map[string]any) map[string]any {
 	return rows[0]
 }
 
-// chFloat64 coerces a ClickHouse numeric cell to float64 (the round()/quantile()
+// chFloat64 coerces a datastore numeric cell to float64 (the round()/quantile()
 // columns land as float64; a Decimal serialized to string is parsed). The twin of
 // chInt64 for the latency/error-rate/cost fields. Non-numeric → 0 (honest zero).
 func chFloat64(v any) float64 {

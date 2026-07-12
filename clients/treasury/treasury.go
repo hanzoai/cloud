@@ -14,10 +14,10 @@
 //
 // Storage tiers (OLTP → OLAP): the authoritative double-entry is the ledger-of-record
 // backend (single-writer, overdraw-guarded — reserve/revenue/house on the house
-// tenant). Cross-tenant GLOBAL analytics is the ClickHouse OLAP projection in the
+// tenant). Cross-tenant GLOBAL analytics is the datastore OLAP projection in the
 // shared hanzoai/datastore, fed by the SAME event stream o11y already emits — treasury
-// money-actions mirror there via cloud's audit ClickHouse mirror, so there is NO second
-// metering pipeline. ClickHouse is NEVER the ledger of record; single-tenant drill-down
+// money-actions mirror there via cloud's audit datastore mirror, so there is NO second
+// metering pipeline. datastore is NEVER the ledger of record; single-tenant drill-down
 // reads the authoritative ledger, cross-tenant aggregates read the projection.
 //
 // ONE scope-aware /v1/finance/* engine, three tenancy surfaces — the tenant is derived
