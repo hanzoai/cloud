@@ -46,7 +46,7 @@ func RequireAdmin(c *gin.Context) bool {
 	}
 	if iammiddleware.IsIAMAuthenticated(c) {
 		claims := iammiddleware.GetIAMClaims(c) // non-nil by contract
-		if claims.IsAdmin || claims.SuperAdmin() {
+		if claims.IsAdmin || claims.IsSuperAdmin() {
 			return true
 		}
 	}

@@ -63,7 +63,7 @@ func TestCreateTenant_ForgedSuperadminRole_403(t *testing.T) {
 // claim grants superadmin even from a non-admin org — forwards-compat with the
 // explicit gateway X-User-IsSuperAdmin signal.
 func TestCreateTenant_SuperAdminByFlag_201(t *testing.T) {
-	claims := &auth.IAMClaims{Owner: "hanzo", IsSuperAdmin: true}
+	claims := &auth.IAMClaims{HomeOrg: "admin", Owner: "hanzo"}
 	claims.Subject = "platform-op"
 	code, body := postCreateTenant(t, claims)
 	if code != http.StatusCreated {

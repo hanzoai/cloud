@@ -224,36 +224,50 @@ type IAMClaims struct {
 
 	// Authorization
 	IsAdmin bool `json:"isAdmin,omitempty"`
-	// IsSuperAdmin is the platform-wide superadmin flag from IAM. Unlike
-	// IsAdmin (an ORG-level role — an org owner has IsAdmin=true within
-	// their own org), this is true ONLY for SuperAdmins. It is the
-	// one claim safe to gate cross-org actions on.
-	IsSuperAdmin bool      `json:"isSuperAdmin,omitempty"`
-	Groups       []string  `json:"groups,omitempty"`
-	Roles        FlexRoles `json:"roles,omitempty"`
-	Permissions  []string  `json:"permissions,omitempty"`
+	// HomeOrg is the caller's HOME org — the identity anchor (the JWT `owner`).
+	// It is DISTINCT from Owner in the header-sourced path (GetIAMClaims), where
+	// Owner is the EFFECTIVE org (X-Org-Id, which a platform SuperAdmin can switch
+	// to another tenant): there HomeOrg carries the un-switchable home org from the
+	// gateway/EdgeAuth X-User-Owner header, so IsSuperAdmin (owner=="admin") survives
+	// an org-switch. In the JWT-validated path (EdgeAuth) it is empty and Owner already
+	// holds the JWT `owner` claim (== home). homeOrg() resolves the right one. NOT a
+	// JWT claim — populated only from the trusted X-User-Owner header.
+	HomeOrg     string    `json:"-"`
+	Groups      []string  `json:"groups,omitempty"`
+	Roles       FlexRoles `json:"roles,omitempty"`
+	Permissions []string  `json:"permissions,omitempty"`
 
 	// User properties (arbitrary key-value pairs from IAM).
 	// The "tier" property is used for tiered billing (free/starter/pro/enterprise).
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
-// SuperAdmin reports whether these claims belong to a Hanzo PLATFORM SuperAdmin
-// — the ONLY predicate safe to gate cross-org / superadmin
-// actions on. Two independent signals, either suffices:
-//   - the explicit isSuperAdmin claim (gateway X-User-IsSuperAdmin); or
-//   - membership in the SuperAdmin org (owner == "admin"), the slug Hanzo
-//     IAM seeds SuperAdmins into.
+// homeOrg resolves the caller's HOME org: the dedicated HomeOrg (the header-sourced
+// path, from X-User-Owner) when present, else Owner (the JWT-validated path, where
+// Owner IS the `owner` claim == home). nil-safe.
+func (c *IAMClaims) homeOrg() string {
+	if c == nil {
+		return ""
+	}
+	if h := strings.TrimSpace(c.HomeOrg); h != "" {
+		return h
+	}
+	return strings.TrimSpace(c.Owner)
+}
+
+// IsSuperAdmin reports whether these claims belong to a Hanzo PLATFORM SuperAdmin —
+// the ONLY predicate safe to gate cross-org / superadmin actions on. ONE signal:
+// membership in the reserved "admin" org (the HOME owner == "admin", the slug Hanzo
+// IAM seeds SuperAdmins into). It keys on the HOME org (homeOrg), NEVER the effective
+// X-Org-Id, so a SuperAdmin org-switch (acting in another tenant) cannot strip sudo
+// and a switched-into org can never be mistaken for admin.
 //
 // Plain IsAdmin is deliberately excluded: it is an ORG-level role (an org owner
-// carries IsAdmin=true within their own org). Gating cross-org actions on
-// IsAdmin — or on an org-mintable role name like "superadmin" — is the
-// privilege escalation this predicate exists to prevent. nil-safe.
-func (c *IAMClaims) SuperAdmin() bool {
-	if c == nil {
-		return false
-	}
-	return c.IsSuperAdmin || strings.EqualFold(strings.TrimSpace(c.Owner), "admin")
+// carries IsAdmin=true within their own org). Gating cross-org actions on IsAdmin —
+// or on an org-mintable role name like "superadmin", or a spoofable boolean header —
+// is the privilege escalation this predicate exists to prevent. nil-safe.
+func (c *IAMClaims) IsSuperAdmin() bool {
+	return strings.EqualFold(c.homeOrg(), "admin")
 }
 
 // Tier returns the user's billing tier from the "tier" property.
