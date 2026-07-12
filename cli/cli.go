@@ -65,6 +65,7 @@ var controlCommands = map[string]string{
 	"security": "scan files for hardcoded secrets (local guardrail; no server/auth)",
 	"gpu":      "connect this machine's GPU to the Hanzo cloud fleet (connect/status/disconnect)",
 	"engine":   "run a local hanzo-engine (OpenAI + Anthropic model server)",
+	"code":     "launch a coding agent (claude, codex, dev) on a Hanzo cloud model",
 	"runner":   "run this machine as a JIT CI runner for your org (GitHub Actions)",
 	"run":      "launch a workload on Hanzo compute (container or function)",
 	"agent":    "invoke a managed Hanzo agent to run a task (headless)",
@@ -102,6 +103,7 @@ type Config struct {
 	PlatformURL string `json:"platform_url,omitempty"`
 	CloudURL    string `json:"cloud_url,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
+	APIKey      string `json:"apiKey,omitempty"` // hk-… key; what `hanzo code` hands the agents
 }
 
 // Credentials holds secret material, ~/.hanzo/credentials.json, mode 0600.
@@ -398,6 +400,7 @@ func newRootCmd() *cobra.Command {
 		newSecurityCmd(envOf),
 		newGPUCmd(envOf, &f),
 		newEngineCmd(envOf, &f),
+		newCodeCmd(envOf, &f),
 		newRunnerCmd(envOf, &f),
 		newRunCmd(envOf, &f),
 		newAgentCmd(envOf, &f),
