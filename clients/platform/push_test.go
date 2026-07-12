@@ -7,16 +7,13 @@ import (
 	"github.com/hanzoai/cloud"
 )
 
-// seedGitApp writes a project + one git-source app tracking repoURL@branch.
+// seedGitApp writes one git-source app tracking repoURL@branch under the default
+// project (projects live in IAM; app.ProjectID is the project name).
 func seedGitApp(t *testing.T, s *cloud.Service[state], org, slug, repoURL, branch string) Application {
 	t.Helper()
 	ctx := context.Background()
-	proj := Project{ID: "proj_" + org + "_" + slug, Org: org, Slug: slug, Name: slug, CreatedAt: 1, UpdatedAt: 1}
-	if err := s.State.store.CreateProject(ctx, proj); err != nil {
-		t.Fatalf("seed project: %v", err)
-	}
 	a := Application{
-		ID: "app_" + org + "_" + slug, Org: org, ProjectID: proj.ID, Slug: slug, Name: slug,
+		ID: "app_" + org + "_" + slug, Org: org, ProjectID: "default", Slug: slug, Name: slug,
 		Environment: "production", Source: "git", RepoURL: repoURL, RepoBranch: branch, RepoProvider: "hanzo",
 		BuildType: "pack", Port: 3000, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
 		Status: "created", Namespace: tenantNamespace(org), CreatedAt: 1, UpdatedAt: 1,
@@ -96,12 +93,8 @@ func TestBuildFromPush_NoMatchIsNoop(t *testing.T) {
 func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 	ctx := context.Background()
 	s := pushSvc(t)
-	proj := Project{ID: "proj_acme_api", Org: "acme", Slug: "api", Name: "api", CreatedAt: 1, UpdatedAt: 1}
-	if err := s.State.store.CreateProject(ctx, proj); err != nil {
-		t.Fatalf("seed project: %v", err)
-	}
 	img := Application{
-		ID: "app_acme_api", Org: "acme", ProjectID: proj.ID, Slug: "api", Name: "api",
+		ID: "app_acme_api", Org: "acme", ProjectID: "default", Slug: "api", Name: "api",
 		Source: "image", RepoURL: "https://git.hanzo.ai/v1/git/acme/api", ImageRepo: "ghcr.io/hanzoai/api", ImageTag: "1",
 		EnvJSON: "[]", DomainsJSON: "[]", Status: "live", CreatedAt: 1, UpdatedAt: 1,
 	}
