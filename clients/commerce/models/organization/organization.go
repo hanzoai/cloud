@@ -375,7 +375,7 @@ func (o *Organization) AddOwner(userOrId string) {
 // an org named "platform" read/wrote the global namespace where every org's
 // records live (Red — privilege escalation via the empty namespace).
 // Cross-org / superadmin datastore access is now gated EXCLUSIVELY on
-// auth.IAMClaims.SuperAdmin() (owner=="admin" or the isSuperAdmin claim)
+// auth.IAMClaims.IsSuperAdmin() (owner=="admin")
 // at the handler/middleware layer — never inferred from the org name here.
 func (o Organization) Namespace() string {
 	return o.Name

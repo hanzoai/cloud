@@ -59,7 +59,7 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 // gate fails closed (403) rather than panicking (500).
 func requireCostsAdmin(c *gin.Context) bool {
 	claims := iammiddleware.GetIAMClaims(c) // non-nil by contract
-	if claims.SuperAdmin() {
+	if claims.IsSuperAdmin() {
 		return true
 	}
 	// Trusted M2M service token: Admin bit present AND no IAM user identity.

@@ -126,6 +126,63 @@ func Org(c *zip.Ctx) (string, bool) {
 	return strings.Clone(org), true
 }
 
+// Owner resolves the caller's HOME org — the identity + BILLING anchor: the
+// validated IAM `owner` claim, minted by the gateway (and by cloud's own identity
+// boundary, SanitizeIdentity) as the X-User-Owner header. It is DISTINCT from Org
+// (the EFFECTIVE / acted-on org, X-Org-Id): for a normal caller the two are
+// identical, but a platform SuperAdmin acting in another org — an admin org-switch
+// (owner == adminOrg, X-Org-Id = the switched-into org) — has Owner == "admin"
+// while Org is the switched org. Empty when the home header is absent (a request
+// with no validated principal, or a pre-rollout gateway that has not yet minted it).
+// Bounded + cloned exactly like Org, for the same reason: the value is retained past
+// the request as a ledger key, so it must be a stable owned copy.
+func Owner(c *zip.Ctx) string {
+	owner := strings.TrimSpace(c.Header("X-User-Owner"))
+	if owner == "" || len(owner) > MaxOrgLen {
+		return ""
+	}
+	return strings.Clone(owner)
+}
+
+// BillingOrg resolves the org whose ledger PAYS for this request — the HOME org
+// (Owner). It is the ONE "who pays" resolver: the edge gate, the AI meter, and the
+// resource meter all key their balance CHECK and their DEBIT on it, so a platform
+// SuperAdmin masquerading into another org spends from the admin org's balance and
+// the debit lands on the admin ledger — never the org being acted on. DATA scope
+// keeps using Org (the effective org); this splits "who pays" (home) from "whose
+// data" (effective), which the old code conflated onto one org value.
+//
+// Gated on Validated like Org: an unvalidated request bills nothing (("", false)),
+// so an off-gateway forge can neither probe nor drain a ledger. Falls back to the
+// effective Org when the home header is absent — a normal caller has home==effective
+// so the fallback is EXACT for them, and it preserves today's behavior on a gateway
+// that has not yet minted X-User-Owner; only an admin org-switch differs, and that
+// path always carries X-User-Owner once minted. Returns the resolved payer + true,
+// or ("", false) when the request may not be billed.
+func BillingOrg(c *zip.Ctx) (string, bool) {
+	if !Validated(c) {
+		return "", false
+	}
+	if owner := Owner(c); owner != "" {
+		return owner, true
+	}
+	return Org(c) // rollout fallback: no home header yet ⟹ today's effective-org billing.
+}
+
+// Payer is the bare-string form of BillingOrg for the in-handler resource meters
+// (ResourceMeter.Gate/Meter/MeterUsage), which take an org string rather than the
+// ctx. It returns the HOME org that PAYS (X-User-Owner, effective-org fallback), or
+// "" when unvalidated. Call it ONLY after the caller has already resolved AND gated
+// the effective org via Org (every resource handler does), so "" cannot occur on a
+// live path; the meter also no-ops on an empty org, so an unexpected "" bills nothing
+// rather than mis-billing. Use it for the billing key; keep Org for the data namespace.
+func Payer(c *zip.Ctx) string {
+	if org, ok := BillingOrg(c); ok {
+		return org
+	}
+	return ""
+}
+
 // Project resolves the caller's project — the org SUB-SCOPE that narrows WITHIN
 // the validated org (a fleet registry shard, an ml namespace suffix, a metering
 // attribution dimension). It mirrors c.Org() exactly: a zero-copy read of the
