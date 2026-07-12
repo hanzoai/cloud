@@ -16,12 +16,12 @@ import (
 // caller-org's KindTreasury wallet on the deployed luxfi/mpc ring and installs it
 // via BindAnchorSigner, so subsequent POST /v1/admin/treasury/anchor commits the
 // ledger root SIGNED BY THE QUORUM WALLET (the reserve's threshold MPC wallet)
-// instead of the lone KMS key. Global-admin only; idempotent (a repeat resolves
+// instead of the lone KMS key. SuperAdmin only; idempotent (a repeat resolves
 // the same wallet). Returns the bound EVM address so the operator can fund it for
 // gas on the Hanzo L1.
 func adminBindAnchor(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	org, ok := principal.Org(c)
 	if !ok {

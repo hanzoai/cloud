@@ -59,9 +59,9 @@ func mountMintSurface(v1 router.Router) {
 	tokenRequired := middleware.TokenRequired(permission.Admin)
 	adminRequired := middleware.TokenRequired(permission.Admin)
 
-	Route(v1)                 // billing
-	affiliate.Route(v1)       // affiliate payouts
-	transactionApi.Route(v1)  // POST /v1/transaction (generic ledger create — C1-b)
+	Route(v1)                // billing
+	affiliate.Route(v1)      // affiliate payouts
+	transactionApi.Route(v1) // POST /v1/transaction (generic ledger create — C1-b)
 	rest.New(wallet.Wallet{}).Route(v1, adminRequired)
 	rest.New(tokentransaction.Transaction{}).Route(v1, tokenRequired)
 }
@@ -108,7 +108,7 @@ func mintReachingFuncs(t *testing.T) map[string]bool {
 					// .Create()s it (so its Type is attacker-controlled, e.g. a
 					// Deposit) — the shape the literal `x.Type = Deposit` detector
 					// misses. This is exactly api/transaction.Create.
-					txVars := map[string]bool{}       // vars assigned from transaction.New(...)
+					txVars := map[string]bool{}        // vars assigned from transaction.New(...)
 					decodeTargets := map[string]bool{} // vars a request body was decoded INTO
 					hasCreate := false                 // a .Create() call is present
 					ast.Inspect(fn.Body, func(n ast.Node) bool {
@@ -402,7 +402,7 @@ func registeredMintRoutes(t *testing.T, reaches map[string]bool) []mintRoute {
 }
 
 // orgAdminEngine mounts billing + affiliate behind a seed that mints an ORG-admin
-// identity (org-level isAdmin, isGlobalAdmin=false) — the exact C1 adversary.
+// identity (org-level isAdmin, isSuperAdmin=false) — the exact C1 adversary.
 func orgAdminEngine(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

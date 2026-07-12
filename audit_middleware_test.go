@@ -52,7 +52,7 @@ func newAuditApp(t *testing.T) (*zip.App, *audit.Recorder) {
 	// security event and MUST be audited even though it is a GET.
 	app.Get("/v1/admin/orgs", func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
-			return zip.ErrForbidden("global admin required")
+			return zip.ErrForbidden("SuperAdmin required")
 		}
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})
@@ -65,7 +65,7 @@ func newAuditApp(t *testing.T) (*zip.App, *audit.Recorder) {
 	return app, rec
 }
 
-// asAdmin sets the sanitized identity headers a VALIDATED global admin would
+// asAdmin sets the sanitized identity headers a VALIDATED SuperAdmin would
 // carry after SanitizeIdentity (X-User-IsAdmin=true, org=admin).
 func asAdmin(req *http.Request) {
 	req.Header.Set("X-User-Id", "z@hanzo.ai")

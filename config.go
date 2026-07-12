@@ -43,8 +43,8 @@ type Config struct {
 	// IAMIssuer is the JWKS issuer for JWT validation (usually iam.hanzo.ai).
 	IAMIssuer string
 
-	// AdminOrg is the IAM org slug whose members are GLOBAL admins (IAM's
-	// IsGlobalAdmin: owner == AdminOrg). The in-binary identity sanitizer grants
+	// AdminOrg is the IAM org slug whose members are SuperAdmins (IAM's
+	// IsSuperAdmin: owner == AdminOrg). The in-binary identity sanitizer grants
 	// admin authority — the c.IsAdmin() that gates /v1/admin/* writes, the
 	// /v1/pricing/sync trigger, and the literal "admin" org bucket — ONLY to a
 	// validated principal from this org, never to a raw header. Env IAM_ADMIN_ORG

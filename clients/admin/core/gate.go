@@ -13,14 +13,14 @@ import (
 // domain handler is `func h(s *cloud.Service[core.State], c *zip.Ctx) error`.
 type Handler = func(*cloud.Service[State], *zip.Ctx) error
 
-// Guard wraps a handler with the global-admin gate. Fail-closed: any request whose
-// validated identity is not a global admin (X-User-IsAdmin != "true", which
+// Guard wraps a handler with the SuperAdmin gate. Fail-closed: any request whose
+// validated identity is not a SuperAdmin (X-User-IsAdmin != "true", which
 // SanitizeIdentity sets only for owner == AdminOrg) is refused 403 before the handler
 // — no upstream is touched, no data leaks.
 func Guard(s *cloud.Service[State], h Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
-			return zip.ErrForbidden("global admin required")
+			return zip.ErrForbidden("SuperAdmin required")
 		}
 		return h(s, c)
 	}

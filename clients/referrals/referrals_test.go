@@ -340,7 +340,7 @@ func TestLazyQualifyOnReferrerRead(t *testing.T) {
 	_ = ctx
 }
 
-// TestAdminGateAndDirectory: /v1/admin/referrals is global-admin fail-closed, and
+// TestAdminGateAndDirectory: /v1/admin/referrals is SuperAdmin fail-closed, and
 // exposes both orgs + a summary.
 func TestAdminGateAndDirectory(t *testing.T) {
 	app, s, fc := mount(t)
@@ -358,7 +358,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 		t.Fatalf("non-admin sweep want 403, got %d", code)
 	}
 
-	// Global admin sees the directory with both orgs + summary.
+	// SuperAdmin sees the directory with both orgs + summary.
 	code, body := req(t, app, http.MethodGet, "/v1/admin/referrals", "admin", true, nil)
 	if code != http.StatusOK {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)

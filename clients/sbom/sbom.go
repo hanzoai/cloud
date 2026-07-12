@@ -162,13 +162,13 @@ func ensureTable(ctx context.Context) error {
 // ── POST /v1/sbom — ingest (CI) ──────────────────────────────────────────────
 
 // ingest persists a CycloneDX SBOM's components keyed by image digest. Gated to a
-// validated GLOBAL admin (owner == AdminOrg) — the canonical cloud super-admin
+// validated SuperAdmin (owner == AdminOrg) — the canonical cloud super-admin
 // check, which the build fleet / CI carries. Re-ingest is idempotent: rows share
 // the (digest, name, version, purl) ORDER BY, so ReplacingMergeTree keeps the
 // latest by ingested_at (and resolve reads FINAL).
 func ingest(s *cloud.Service[state], c *zip.Ctx) error {
 	if !c.IsAdmin() {
-		return zip.ErrForbidden("global admin required")
+		return zip.ErrForbidden("SuperAdmin required")
 	}
 	var in SbomIngest
 	if err := c.Bind(&in); err != nil {

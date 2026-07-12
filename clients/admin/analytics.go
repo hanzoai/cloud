@@ -3,7 +3,7 @@ package admin
 // Native SaaS business ANALYTICS (/v1/admin/analytics) — cohort retention, growth,
 // churn, active-customers (DAU/WAU/MAU), revenue (MRR/ARPU) and usage over time, derived
 // from REAL fleet data: IAM org `createdTime` (the signup cohort) + the commerce
-// transaction ledger (usage = `withdraw` rows). Global-admin/org-scoped via GuardScoped.
+// transaction ledger (usage = `withdraw` rows). SuperAdmin/org-scoped via GuardScoped.
 //
 // The fleet activity model + the continuous spend series live in clients/admin/core
 // (core.FleetActivity / core.SpendSeries / core.CustActivity / core.SeriesPoint) because

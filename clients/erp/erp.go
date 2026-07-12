@@ -336,7 +336,7 @@ func journalEntryAccount() framework.DocType {
 // perms) with a deterministic per-leg name (prompt autoname), so a concurrent or
 // retried post is idempotent. ledgerPerms closes it to every NON-manager role on
 // the generic surface (a granted Erp User gets 403 read/write). The org owner
-// (System Manager) and a global admin retain full control within THEIR OWN tenant —
+// (System Manager) and a SuperAdmin retain full control within THEIR OWN tenant —
 // the framework's manager bypass, a within-tenant authority, never a cross-org
 // escalation.
 func glEntry() framework.DocType {
