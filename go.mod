@@ -13,14 +13,14 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/goa v0.0.0-20260629022130-202bcdc87340
+	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.22
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v0.144.8
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
-	github.com/hanzoai/sign v0.0.0-20260710214950-315a3fe6a5a6
+	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.2.3
 	github.com/hanzoai/stream v1.2.0
 	github.com/huandu/facebook v2.3.1+incompatible
@@ -75,8 +75,8 @@ require (
 require (
 	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
-	github.com/hanzoai/captable v0.0.0-20260710213906-119bf9c088d7
-	github.com/luxfi/keys v1.2.2 // indirect
+	github.com/hanzoai/captable v1.0.0
+	github.com/luxfi/keys v1.4.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )
 
@@ -496,8 +496,8 @@ require (
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
 	github.com/hanzoai/dbx v1.16.0 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
-	github.com/hanzoai/goauthorizenet v0.0.0-20180920213706-626992b83568
-	github.com/hanzoai/gochimp3 v0.0.0-20241127054040-6051f77e24f1
+	github.com/hanzoai/goauthorizenet v1.0.0
+	github.com/hanzoai/gochimp3 v1.0.0
 	github.com/hanzoai/iamsdk/v2 v2.1.2 // indirect
 	github.com/hanzoai/idv v1.0.3 // indirect
 	github.com/hanzoai/kv-go/v9 v9.18.0
@@ -506,9 +506,9 @@ require (
 	github.com/hanzoai/orm v0.6.1
 	github.com/hanzoai/oss v1.8.5 // indirect
 	github.com/hanzoai/pdf v1.2.0 // indirect
-	github.com/hanzoai/pubsub-go v1.0.1-0.20260513042624-1b25bdfe16a6
+	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0
-	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible
+	github.com/hanzoai/sendgrid-go v1.3.0
 	github.com/hanzoai/storage-go v1.0.0
 	github.com/hanzoai/tasks v1.49.0
 	github.com/hanzoai/xorm v1.1.6 // indirect
@@ -575,14 +575,14 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
-	github.com/luxfi/age v1.6.0
+	github.com/luxfi/age v1.6.0 // indirect
 	github.com/luxfi/cache v1.2.1 // indirect
 	github.com/luxfi/compress v0.0.5 // indirect
 	github.com/luxfi/concurrent v0.0.3 // indirect
 	github.com/luxfi/consensus v1.35.32
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/corona v0.10.3 // indirect
-	github.com/luxfi/crypto v1.19.26
+	github.com/luxfi/crypto v1.20.0
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/database v1.19.3 // indirect
 	github.com/luxfi/fhe v1.8.2 // indirect
@@ -690,7 +690,6 @@ require (
 	github.com/segmentio/backo-go v1.0.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible
-	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/sethvargo/go-password v0.2.0 // indirect
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
@@ -824,7 +823,7 @@ require (
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.0
-	github.com/hanzo-ds/native v0.72.0
+	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/ai v1.805.9
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
