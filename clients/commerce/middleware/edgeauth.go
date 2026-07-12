@@ -29,7 +29,11 @@ import (
 // re-mints them from a cryptographically-verified IAM JWT.
 var identityHeaders = []string{
 	"X-Org-Id", "X-User-Id", "X-User-Email", "X-User-IsAdmin",
-	"X-User-IsSuperAdmin", "X-User-Permissions", "X-Roles", "X-Phone-Number",
+	// X-User-Owner is the HOME-org (platform-sudo) anchor — stripped on ingress so a
+	// client can NEVER forge `X-User-Owner: admin` to become a SuperAdmin; re-minted
+	// below only from a verified JWT. X-User-IsSuperAdmin is the RETIRED boolean — no
+	// longer minted, but still stripped so a stale client copy never survives.
+	"X-User-Owner", "X-User-IsSuperAdmin", "X-User-Permissions", "X-Roles", "X-Phone-Number",
 }
 
 // EdgeAuth is the standalone-edge trust boundary for a directly-exposed
@@ -110,6 +114,13 @@ func EdgeAuth() gin.HandlerFunc {
 			case claims == nil || claims.Owner == "":
 				log.Debug("EdgeAuth: validated JWT has no owner claim")
 			default:
+				// X-User-Owner is the HOME org — the validated JWT `owner`, minted
+				// BEFORE the /billing/ ?org override below so it always carries the
+				// caller's un-switchable home org even when X-Org-Id is re-pointed at
+				// another tenant for a SuperAdmin view. IsSuperAdmin (owner=="admin")
+				// reads it, so an org-switch never strips sudo — and no spoofable
+				// boolean is minted (the org IS the signal).
+				c.Request.Header.Set("X-User-Owner", claims.Owner)
 				c.Request.Header.Set("X-Org-Id", claims.Owner)
 				if uid := claims.Subject; uid != "" {
 					c.Request.Header.Set("X-User-Id", uid)
@@ -121,12 +132,6 @@ func EdgeAuth() gin.HandlerFunc {
 				}
 				if claims.IsAdmin {
 					c.Request.Header.Set("X-User-IsAdmin", "true")
-				}
-				// Mint the PLATFORM superadmin signal ONLY for a SuperAdmin —
-				// distinct from org-level isAdmin, mirroring the gateway. This
-				// is the spoof-proof header cross-org gates read.
-				if isSuperAdmin(claims) {
-					c.Request.Header.Set("X-User-IsSuperAdmin", "true")
 				}
 				c.Request.Header.Set("X-User-Permissions", permsHeader(claims))
 
@@ -215,7 +220,7 @@ func looksLikeJWT(tok string) bool {
 // caller satisfy those gates. It is therefore SuperAdmin-only: an org-level
 // admin (claims.IsAdmin — an org OWNER like maxpower carries it within their own
 // org) must NOT mint free balance or charge cards platform-wide. Only
-// isSuperAdmin(claims) — the same spoof-proof predicate this file uses for the
+// claims.IsSuperAdmin() — the same spoof-proof predicate this file uses for the
 // cross-org ?org billing-view override (resolveBillingSubject) — grants Admin.
 //
 // Live is the "real money, not sandbox" mode bit, orthogonal to authority: an org
@@ -231,7 +236,7 @@ func permsHeader(claims *auth.IAMClaims) string {
 		// (money/admin) bit — that is SuperAdmin-only below.
 		f |= int64(permission.Live)
 	}
-	if isSuperAdmin(claims) {
+	if claims.IsSuperAdmin() {
 		// PLATFORM admin ⇒ the money/admin authority the admin billing gates check.
 		f |= int64(permission.Admin)
 	}
@@ -374,33 +379,17 @@ func pinJSONSubjectFields(raw []byte, subject string) ([]byte, bool) {
 //
 // The ?org override is consumed (stripped from the query) unconditionally so
 // it can never reach a handler as anything but the admin-gated signal decided
-// here. It is HONORED only when isSuperAdmin(claims) holds; a non-admin's
+// here. It is HONORED only when claims.IsSuperAdmin() holds; a non-admin's
 // ?org is read, discarded, and the subject stays pinned to their own org.
 // Returns (subject, override) where override means the namespace header
 // (X-Org-Id) must be re-pointed at subject.
 func resolveBillingSubject(r *http.Request, claims *auth.IAMClaims) (string, bool) {
 	own := strings.ToLower(strings.TrimSpace(claims.Owner))
 	reqOrg := consumeOrgOverride(r)
-	if reqOrg != "" && isSuperAdmin(claims) {
+	if reqOrg != "" && claims.IsSuperAdmin() {
 		return reqOrg, true
 	}
 	return own, false
-}
-
-// isSuperAdmin reports whether the verified claims belong to a real
-// platform-wide administrator. Two independent signals, either suffices:
-//   - the explicit isSuperAdmin JWT claim; or
-//   - membership in the SuperAdmin org (Owner == "admin"), the slug Hanzo
-//     IAM seeds SuperAdmins into.
-//
-// Plain IsAdmin is deliberately NOT trusted: it is an ORG-level role (an org
-// owner carries IsAdmin=true within their own org), so gating cross-org reads
-// on it would let any org owner view another org via ?org= — the exact
-// isolation break this boundary exists to stop.
-func isSuperAdmin(claims *auth.IAMClaims) bool {
-	// One canonical predicate, defined on the claims type and shared by every
-	// SuperAdmin gate (edge billing ?org override, checkout tenant admin).
-	return claims.SuperAdmin()
 }
 
 // consumeOrgOverride removes and returns a normalized ?org=<slug> billing-view
