@@ -56,7 +56,7 @@ import (
 	"strconv"
 	"strings"
 
-	datastore "github.com/hanzoai/datastore-go/v2"
+	datastore "github.com/hanzo-ds/go"
 	luxlog "github.com/luxfi/log"
 	zip "github.com/zap-proto/zip"
 

@@ -1,15 +1,15 @@
 package cloud
 
-// The datastore (ClickHouse) OLAP mirror — a best-effort projection of the audit
+// The datastore OLAP mirror — a best-effort projection of the audit
 // trail for fleet-wide, long-retention, cross-deployment query. It implements
 // audit.Mirror.
 //
 // The datastore is the natural OLAP audit sink: the table is a MergeTree, which
-// is INSERT-ONLY by engine — ClickHouse rejects UPDATE/DELETE against it at parse
+// is INSERT-ONLY by engine — datastore rejects UPDATE/DELETE against it at parse
 // time ("MergeTree does not support mutations"), so the mirror is append-only at
 // the storage layer, matching the local chain's discipline. We create the table
 // idempotently on first connect (CREATE TABLE IF NOT EXISTS) and insert via the
-// canonical clickhouse-go PrepareBatch → Append → Send idiom (the same the
+// canonical datastore-go PrepareBatch → Append → Send idiom (the same the
 // provisioning subsystem uses; the driver is already in cloud's module graph, so
 // this adds no dependency).
 //
@@ -26,14 +26,14 @@ import (
 	"strings"
 	"time"
 
-	clickhouse "github.com/ClickHouse/clickhouse-go/v2"
+	datastore "github.com/hanzo-ds/go"
 	"github.com/hanzoai/cloud/audit"
 	luxlog "github.com/luxfi/log"
 )
 
-// clickhouseMirror writes audit records to a ClickHouse MergeTree table.
-type clickhouseMirror struct {
-	conn  clickhouse.Conn
+// datastoreMirror writes audit records to a datastore MergeTree table.
+type datastoreMirror struct {
+	conn  datastore.Conn
 	table string
 	log   luxlog.Logger
 }
@@ -57,9 +57,9 @@ func newAuditMirror(log luxlog.Logger) (audit.Mirror, error) {
 	db := getenv("CLOUD_AUDIT_CLICKHOUSE_DB", "hanzo")
 	table := getenv("CLOUD_AUDIT_CLICKHOUSE_TABLE", "audit_log")
 
-	conn, err := clickhouse.Open(&clickhouse.Options{
+	conn, err := datastore.Open(&datastore.Options{
 		Addr: []string{addr},
-		Auth: clickhouse.Auth{
+		Auth: datastore.Auth{
 			Database: db,
 			Username: os.Getenv("CLOUD_AUDIT_CLICKHOUSE_USER"),
 			Password: os.Getenv("CLOUD_AUDIT_CLICKHOUSE_PASSWORD"),
@@ -77,7 +77,7 @@ func newAuditMirror(log luxlog.Logger) (audit.Mirror, error) {
 	}
 
 	qualified := db + "." + table
-	m := &clickhouseMirror{conn: conn, table: qualified, log: log}
+	m := &datastoreMirror{conn: conn, table: qualified, log: log}
 	if err := m.ensureTable(ctx); err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -92,7 +92,7 @@ func newAuditMirror(log luxlog.Logger) (audit.Mirror, error) {
 // = insert-only (mutations rejected at parse time). Partitioned by month and
 // ordered for the (org, time) query pattern; seq + hash are carried so the OLAP
 // copy is cross-checkable against the local chain.
-func (m *clickhouseMirror) ensureTable(ctx context.Context) error {
+func (m *datastoreMirror) ensureTable(ctx context.Context) error {
 	ddl := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
   seq        UInt64,
@@ -130,7 +130,7 @@ ORDER BY (actor_org, ts, seq)`, m.table)
 // still payload-bearing) diffs out of the fleet warehouse minimizes the blast
 // radius of a warehouse compromise. The full record (with diffs) lives only in
 // the local, access-controlled chain.
-func (m *clickhouseMirror) Append(ctx context.Context, r audit.Record) error {
+func (m *datastoreMirror) Append(ctx context.Context, r audit.Record) error {
 	batch, err := m.conn.PrepareBatch(ctx, "INSERT INTO "+m.table+` (
   seq, ts, actor_org, actor_sub, actor_email, action, res_type, res_id,
   auth_method, is_admin, result, status, reason, source_ip, user_agent,
@@ -159,7 +159,7 @@ func (m *clickhouseMirror) Append(ctx context.Context, r audit.Record) error {
 // series and alerts on any regression. Best-effort; a failure is dropped by the
 // Recorder (the structured log carries the same digest). Implements
 // audit.CheckpointSink.
-func (m *clickhouseMirror) Checkpoint(ctx context.Context, cp audit.Checkpoint) error {
+func (m *datastoreMirror) Checkpoint(ctx context.Context, cp audit.Checkpoint) error {
 	if err := m.ensureCheckpointTable(ctx); err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (m *clickhouseMirror) Checkpoint(ctx context.Context, cp audit.Checkpoint) 
 // ensureCheckpointTable creates the append-only checkpoint digest table. A plain
 // MergeTree ordered by time — the monitor reads the latest rows and checks that
 // count never decreases.
-func (m *clickhouseMirror) ensureCheckpointTable(ctx context.Context) error {
+func (m *datastoreMirror) ensureCheckpointTable(ctx context.Context) error {
 	ddl := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s_checkpoints (
   ts    DateTime64(3, 'UTC'),

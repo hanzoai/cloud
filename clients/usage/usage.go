@@ -291,7 +291,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	return out
 }
 
-// aString coerces a ClickHouse string cell to string across the driver/JSON
+// aString coerces a datastore string cell to string across the driver/JSON
 // transports (mirrors aInt64 in query.go). Non-string → "".
 func aString(v any) string {
 	if s, ok := v.(string); ok {
@@ -353,7 +353,7 @@ func buildLLMBlock(s *cloud.Service[state], ctx context.Context, org string, sta
 	return buildLLM(true, row), true
 }
 
-// tsLiteral formats a time as a ClickHouse DateTime literal (UTC), bound as a string
+// tsLiteral formats a time as a datastore DateTime literal (UTC), bound as a string
 // arg — identical to ai/object/cloud_usage.go's transport.
 func tsLiteral(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
 
