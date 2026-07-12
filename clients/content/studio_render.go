@@ -139,8 +139,10 @@ func (g *aiStudioGenerator) draftAsset(ctx context.Context, org string, in Gener
 	project := strings.TrimSpace(in.Project)
 
 	// Gate the render to the brand's org BEFORE the compute (fail-closed 402 out of funds).
+	// project rides the request body (in.Project), not a server-minted identity claim,
+	// so it is unvalidated → a project-scoped cap stays soft (anti project-spoof).
 	fee := cloud.ResourceFeeCents("CONTENT_STUDIO_FEE_CENTS", kind)
-	if err := g.bill.Gate(ctx, org, project, "asset", fee); err != nil {
+	if err := g.bill.Gate(ctx, org, project, false, "asset", fee); err != nil {
 		return nil, err
 	}
 

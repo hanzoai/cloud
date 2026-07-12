@@ -272,7 +272,8 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	// enforced on a bot launch exactly as on the request edge. fee<=0 or
 	// unconfigured billing makes this a no-op (allow).
 	fee := cloud.ResourceFeeCents(botFeeEnvPrefix, meterKind)
-	if gateErr := s.State.bill.Gate(c.Context(), org, principal.Project(c), meterKind, fee); gateErr != nil {
+	project, projectValidated := principal.ValidatedProject(c)
+	if gateErr := s.State.bill.Gate(c.Context(), org, project, projectValidated, meterKind, fee); gateErr != nil {
 		return cloud.DenyResource(c, gateErr)
 	}
 

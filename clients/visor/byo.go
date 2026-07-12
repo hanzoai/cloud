@@ -58,7 +58,8 @@ func attachCluster(s *cloud.Service[state], c *zip.Ctx) error {
 	// Nominal management-fee gate (fail-closed, per-org — billing keys on the paying
 	// org, not the project sub-scope).
 	fee := cloud.ResourceFeeCents("CLOUD_COMPUTE_FEE_CENTS", byoClusterKind)
-	if err := s.State.bill.Gate(c.Context(), org, principal.Project(c), byoClusterKind, fee); err != nil {
+	_, projectValidated := principal.ValidatedProject(c)
+	if err := s.State.bill.Gate(c.Context(), org, principal.Project(c), projectValidated, byoClusterKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 	rec, err := s.State.fleet.Register(c.Context(), org, project(c), name, req.Kubeconfig, req.Provider, req.Default)

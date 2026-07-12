@@ -649,8 +649,9 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 
 	fee := cloud.ResourceFeeCents(agentFeeEnvPrefix, meterKind)
 	// Gate the AGENT's own org — never a caller default, never another tenant.
-	// fee<=0 or unconfigured billing makes this a no-op (allows).
-	if err := s.State.bill.Gate(ctx, a.Org, "", meterKind, fee); err != nil {
+	// fee<=0 or unconfigured billing makes this a no-op (allows). Background run
+	// path: no request principal, so the project axis is empty + unvalidated (soft).
+	if err := s.State.bill.Gate(ctx, a.Org, "", false, meterKind, fee); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "balance gate denied")
 		return Run{}, err
