@@ -591,7 +591,14 @@ func TestIdentityValidator(t *testing.T) {
 //     one org can never reach the global (all-orgs) admin surface — only the
 //     operator org's admins do. This is what keeps SuperAdmin the operator's, and
 //     what "isAdmin required" keeps from being every operator-org user.
-func TestSuperAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
+// TestSuperAdminGate_IsAdminOrgMembership locks THE ONE predicate:
+// SuperAdmin ⟺ the principal's org IS the reserved admin org (owner == adminOrg).
+// The same equality IAM's canonical User.IsSuperAdmin() uses — cloud adds no second
+// signal. The `admin` org exists to hold ONLY SuperAdmins (a SuperAdmin is PROVISIONED
+// into it, never promoted), so membership IS the fact; the per-user isAdmin bit is the
+// ORTHOGONAL "admin of my own org" scope (X-User-IsOrgAdmin), never a super gate.
+// (A KMS machine principal is excluded separately — see TestKMSMachine*.)
+func TestSuperAdminGate_IsAdminOrgMembership(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("genkey: %v", err)
@@ -608,14 +615,15 @@ func TestSuperAdminGate_RequiresAdminOrgAndIsAdmin(t *testing.T) {
 		isAdmin   bool
 		wantAdmin bool
 	}{
-		// An admin IN the configured admin org is the SuperAdmin (in prod this is
-		// z@hanzo.ai, owner==the operator org, isAdmin=true).
-		{"admin in the configured admin org is SuperAdmin", "admin", "z@hanzo.ai", true, true},
-		// A non-admin in the admin org gets NOTHING: proves isAdmin is REQUIRED, so the
-		// gate is not "owner==adminOrg" alone (a normal operator-org user is not global).
-		{"non-admin in the admin org is not SuperAdmin", "admin", "svc@hanzo.ai", false, false},
-		// An ADMIN of a DIFFERENT org is NOT a SuperAdmin: proves owner==adminOrg is
-		// REQUIRED — an org-admin of one org never reaches the all-orgs surface.
+		// A member of the configured admin org IS the SuperAdmin (in prod: z@hanzo.ai).
+		{"member of the admin org is SuperAdmin", "admin", "z@hanzo.ai", true, true},
+		// Membership ALONE decides — the isAdmin bit is NOT consulted for super. A user
+		// in the admin org is a SuperAdmin because the admin org holds only SuperAdmins
+		// (provisioned in, never promoted). ONE predicate, no second signal.
+		{"member of the admin org is SuperAdmin without the isAdmin bit", "admin", "ops@hanzo.ai", false, true},
+		// An ADMIN of a DIFFERENT org is NOT a SuperAdmin: proves owner==adminOrg is the
+		// REQUIRED fact — an org-admin of one org never reaches the all-orgs surface.
+		// (Their isAdmin bit makes them an ORG admin — the orthogonal scope.)
 		{"admin of another org is not SuperAdmin", "globex", "boss@globex.io", true, false},
 		// A normal user of another org: not elevated.
 		{"normal user of another org is not SuperAdmin", "globex", "joe@globex.io", false, false},
