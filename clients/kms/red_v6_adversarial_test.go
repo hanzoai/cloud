@@ -12,7 +12,7 @@ package kms_test
 //      isAdmin=false (the real client_credentials shape — IAM's
 //      GetClientCredentialsToken builds nullUser with IsAdmin unset) and
 //      isAdmin=true (the residual: IF such a token ever exists, does V6 admit it to
-//      the global-admin path and thereby read EVERY tenant?).
+//      the SuperAdmin path and thereby read EVERY tenant?).
 //   3. A trim-collapsible / unsafe-rune owner in the SIGNED claim (owner "maxpower "
 //      must never fold onto tenant "maxpower" end-to-end).
 //
@@ -127,14 +127,14 @@ func TestRed_MultiValueAud_OwnerStillGoverns(t *testing.T) {
 // (a) The REAL client_credentials shape: owner == AdminOrg ("admin"), aud ==
 //
 //	"admin-platform-kms", isAdmin=FALSE. V6 makes this VALIDATE (machine aud). It
-//	must NOT thereby become global admin — owner==adminOrg ALONE is not admin; the
+//	must NOT thereby become SuperAdmin — owner==adminOrg ALONE is not admin; the
 //	code requires isAdmin=true. So it can read only the admin org's own secrets.
 //
 // (b) The RESIDUAL: the SAME token but isAdmin=TRUE. This models an isAdmin-bearing
 //
 //	token whose ONLY audience is the per-tenant machine aud (not in the static
 //	allowlist) — pre-V6 that 403s at validation; POST-V6 the machine-aud
-//	acceptance admits it to the global-admin path and it reads EVERY tenant. The
+//	acceptance admits it to the SuperAdmin path and it reads EVERY tenant. The
 //	in-binary code does NOT defend against this; the sole barrier is the external
 //	invariant "IAM never stamps isAdmin=true on a machine-aud token."
 func TestRed_AdminOrgMachineToken(t *testing.T) {
@@ -158,9 +158,9 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 	if resp := getWithBearer(t, app, adminPath, ccAdmin); resp.StatusCode != 200 {
 		t.Fatalf("admin-org machine token → admin-org own secret = %d, want 200", resp.StatusCode)
 	}
-	// It must NOT read a DIFFERENT tenant — owner==adminOrg without isAdmin is not global admin.
+	// It must NOT read a DIFFERENT tenant — owner==adminOrg without isAdmin is not SuperAdmin.
 	if resp := getWithBearer(t, app, victimPath, ccAdmin); resp.StatusCode != 403 {
-		t.Fatalf("admin-org MACHINE token (isAdmin=false) → victim = %d, want 403 (no global admin from owner alone)", resp.StatusCode)
+		t.Fatalf("admin-org MACHINE token (isAdmin=false) → victim = %d, want 403 (no SuperAdmin from owner alone)", resp.StatusCode)
 	}
 	// Not even with an explicit org-switch header (admin org-switch is honored ONLY for isAdmin=true).
 	if resp := getBearerHdr(t, app, victimPath, ccAdmin, map[string]string{"X-Org-Id": paasOrgA}); resp.StatusCode != 403 {
@@ -176,12 +176,12 @@ func TestRed_AdminOrgMachineToken(t *testing.T) {
 		t.Fatalf("isAdmin=true + arbitrary aud → victim = %d, want 403 (not admitted)", resp.StatusCode)
 	}
 	//     Swap the arbitrary aud for the machine aud: the token now VALIDATES (V6), but
-	//     SanitizeIdentity denies global admin to a MACHINE principal, so it is pinned to
+	//     SanitizeIdentity denies SuperAdmin to a MACHINE principal, so it is pinned to
 	//     owner=admin and CANNOT read the victim → 403 (was 200 pre-fix — residual closed).
 	machAdminTrue := mintRed(t, key, "admin", []string{"admin-platform-kms"}, true, future)
 	if resp := getWithBearer(t, app, victimPath, machAdminTrue); resp.StatusCode != 403 {
 		t.Fatalf("RESIDUAL must be CLOSED: isAdmin=true + machine aud → victim = %d, want 403 "+
-			"(a machine principal must NEVER receive global admin)", resp.StatusCode)
+			"(a machine principal must NEVER receive SuperAdmin)", resp.StatusCode)
 	}
 	//     The fix gates ONLY the admin grant: the machine principal still reads its OWN
 	//     org (admin), so data-plane access is intact.

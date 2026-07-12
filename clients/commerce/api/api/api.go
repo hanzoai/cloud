@@ -174,7 +174,7 @@ func Route(api router.Router) {
 	b2bApi.Route(api, tokenRequired)             // B2B: companies, employees, quotes, approvals
 	exchangeApi.Route(api, tokenRequired)        // order exchanges (return + replacement)
 	producttaxonomyApi.Route(api, tokenRequired) // product options/values, categories, tags, types, return/refund reasons
-	catalogApi.AdminRoute(api, adminRequired)    // platform product catalog CMS (global-admin gated inside)
+	catalogApi.AdminRoute(api, adminRequired)    // platform product catalog CMS (SuperAdmin gated inside)
 	// Public catalog projection GET /v1/commerce/catalog is wired on the
 	// commerce public group (commerce.go) so it serves that exact path.
 

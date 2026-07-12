@@ -329,7 +329,7 @@ func nameParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("name")) }
 // key would collapse DISTINCT owners into one storage bucket — a cross-tenant
 // break (Red HIGH-1: "acme"/"ACME"/"acme!"/32-char-prefix all shared data).
 // Reject only empty or pathologically long; never transform. There is NO magic
-// "admin" bucket: a global admin operating on per-org data carries an explicit
+// "admin" bucket: a SuperAdmin operating on per-org data carries an explicit
 // org (SanitizeIdentity sets X-Org-Id on the admin path), so an empty org is a
 // true 403, never a bucket a real org named "admin"/"Admin" could land in.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }

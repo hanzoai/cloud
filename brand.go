@@ -46,7 +46,7 @@ type BrandInfo struct {
 // https://hanzo.id/v1/iam/.well-known/jwks (iam.hanzo.ai is a routing alias, not
 // the issuer), and the cloud CLI already defaults to hanzo.id. Pinning
 // iam.hanzo.ai here would fail the issuer check on every real token, anonymizing
-// every principal — global admin would 403 platform-wide (fail-secure, but
+// every principal — SuperAdmin would 403 platform-wide (fail-secure, but
 // broken). lux/zoo/pars already correctly point at their own .id issuers.
 var brands = map[string]BrandInfo{
 	"hanzo":    {ID: "hanzo", IAMIssuer: "https://hanzo.id", Domain: "hanzo.ai", AltDomains: []string{"hanzo.cloud", "hanzo.app"}},

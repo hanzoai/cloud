@@ -479,7 +479,7 @@ func begin(s *cloud.Service[state], c *zip.Ctx) (string, error) {
 // tenant resolves the caller's org exactly as clients/s3 does: a validated
 // principal is REQUIRED (a bearer-less, forgeable X-Org-Id is refused), then the
 // org is reduced to the SAME sanitized slug the shared-backend control plane keys
-// on. A validated global admin with no org falls back to the "admin" namespace.
+// on. A validated SuperAdmin with no org falls back to the "admin" namespace.
 func tenant(c *zip.Ctx) (string, bool) {
 	if !principal.Validated(c) {
 		return "", false

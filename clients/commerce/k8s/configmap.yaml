@@ -17,7 +17,7 @@ stringData:
     IAM_JWKS_URI=http://iam.hanzo.svc.cluster.local/.well-known/jwks
     # Edge trust boundary: strip client-supplied X-Org-Id / X-User-* and re-mint
     # them from the verified IAM JWT. WITHOUT this the identity headers are
-    # trusted as-is and any in-cluster pod can forge X-User-IsGlobalAdmin → platform
+    # trusted as-is and any in-cluster pod can forge X-User-IsSuperAdmin → platform
     # superadmin (Red CRIT-1). edgeauth.go is a NO-OP unless this is "true".
     COMMERCE_EDGE_AUTH=true
     # MUST equal the PVC mountPath in deployment.yaml (/app/commerce_data). Per-org

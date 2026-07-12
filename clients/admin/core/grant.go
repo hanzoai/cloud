@@ -168,7 +168,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 }
 
 // EmitAudit writes ONE compliance record for a management action to cloud's
-// tamper-evident trail: who (the validated global admin from the sanitized identity —
+// tamper-evident trail: who (the validated SuperAdmin from the sanitized identity —
 // the gate already proved it), what (action + resource), the redacted before/after, and
 // the outcome. This is the "before/after on a config-affecting change" the request-level
 // middleware record cannot carry (it never reads bodies). Best-effort: a failure here is

@@ -220,7 +220,7 @@ func reqOrg(ctx *zip.Ctx) string {
 //
 // Empty org is allowed only for a validated admin, bucketed under the literal
 // "admin" org (a forged X-User-IsAdmin cannot exist without a validated principal
-// either — SanitizeIdentity sets it only for a JWT-verified global admin, HIP-0026
+// either — SanitizeIdentity sets it only for a JWT-verified SuperAdmin, HIP-0026
 // — and even then reaches only the admin bucket, never a real tenant's).
 //
 // NORMALIZATION — this uses provisioning.SanitizeOrg (case-folds to a DNS slug),

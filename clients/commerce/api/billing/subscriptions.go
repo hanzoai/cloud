@@ -88,8 +88,8 @@ func CreateBillingSubscription(c *gin.Context) {
 	// this endpoint starts it Active instantly with ZERO payment
 	// (ProviderType="internal", no CollectInvoice). An org-level admin must NOT be
 	// able to self-mint a paid tier ("max" → $100/mo, recurring) by naming it
-	// here; only a proven mint principal (internal service token / platform global
-	// admin — e.g. cloud-api after a real payment) may create a paid-tier
+	// here; only a proven mint principal (internal service token / platform
+	// SuperAdmin — e.g. cloud-api after a real payment) may create a paid-tier
 	// subscription. A FREE tier (no price and no included allotment) stays
 	// self-serve. Pairs with the payment-backed clamp in subscriptionPlanSlug.
 	planSlug := p.Slug

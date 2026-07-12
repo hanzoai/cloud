@@ -17,7 +17,7 @@ import (
 )
 
 // mintRoutes are the money-mint / money-out billing routes that MUST be gated to
-// the internal service token / platform global admin ONLY (C1). Table-driving them
+// the internal service token / platform SuperAdmin ONLY (C1). Table-driving them
 // proves the gate is mounted on EVERY one — dropping it from any single route
 // reopens the unlimited-self-credit hole.
 var mintRoutes = []struct{ method, path, body string }{
@@ -45,7 +45,7 @@ func engineWithSeed(seed func(*gin.Context)) *gin.Engine {
 }
 
 // TestC1_OrgAdminDeniedOnEveryMintRoute is THE acceptance test: an org-admin JWT
-// (org-level isAdmin=true → gateway-minted Admin|Live, isGlobalAdmin=false) is
+// (org-level isAdmin=true → gateway-minted Admin|Live, isSuperAdmin=false) is
 // FORBIDDEN (403) on every money-mint route. Before the fix, TokenRequired(Admin)
 // admitted this principal and the handler minted a client-supplied amount → a live
 // self-credit-unlimited-balance hole.

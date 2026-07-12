@@ -31,9 +31,9 @@ func TestPublic_ReturnsProjection_NoAuth(t *testing.T) {
 	defer tc.Close()
 	gin.SetMode(gin.TestMode)
 
-	// Seed the catalog in the system namespace via a global-admin seed call.
+	// Seed the catalog in the system namespace via a SuperAdmin seed call.
 	sw := httptest.NewRecorder()
-	sc := ctxWith(sw, &auth.IAMClaims{IsGlobalAdmin: true})
+	sc := ctxWith(sw, &auth.IAMClaims{IsSuperAdmin: true})
 	sc.Request = httptest.NewRequest(http.MethodPost, "/v1/catalog/seed", nil)
 	SeedCatalog(sc)
 	if sw.Code != 200 {
@@ -58,7 +58,7 @@ func TestPublic_ReturnsProjection_NoAuth(t *testing.T) {
 	}
 }
 
-func TestCreateEntry_RequiresGlobalAdmin(t *testing.T) {
+func TestCreateEntry_RequiresSuperAdmin(t *testing.T) {
 	tc := ae.NewContext()
 	defer tc.Close()
 	gin.SetMode(gin.TestMode)
@@ -78,14 +78,14 @@ func TestCreateEntry_RequiresGlobalAdmin(t *testing.T) {
 		t.Fatalf("org-admin create status = %d, want 403 (platform-admin only); body=%s", w.Code, w.Body.String())
 	}
 
-	// Global admin — allowed 201.
+	// SuperAdmin — allowed 201.
 	w2 := httptest.NewRecorder()
-	c2 := ctxWith(w2, &auth.IAMClaims{IsGlobalAdmin: true})
+	c2 := ctxWith(w2, &auth.IAMClaims{IsSuperAdmin: true})
 	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/catalog/entries", bytes.NewReader(body))
 	c2.Request.Header.Set("Content-Type", "application/json")
 	CreateEntry(c2)
 	if w2.Code != 201 {
-		t.Fatalf("global-admin create status = %d, want 201; body=%s", w2.Code, w2.Body.String())
+		t.Fatalf("SuperAdmin create status = %d, want 201; body=%s", w2.Code, w2.Body.String())
 	}
 
 	// The created entry is now visible in the public projection.
@@ -114,7 +114,7 @@ func TestCreateEntry_DuplicateSlugRejected(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"slug": "dup", "brand": "hanzo", "name": "Dup", "category": "AI", "iconKey": "Box",
 	})
-	admin := &auth.IAMClaims{IsGlobalAdmin: true}
+	admin := &auth.IAMClaims{IsSuperAdmin: true}
 
 	w := httptest.NewRecorder()
 	c := ctxWith(w, admin)

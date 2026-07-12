@@ -8,7 +8,7 @@ package admin
 // clients/automations/connector_waitlist.go bridges), so there is ONE waitlist system,
 // not two: the cockpit reads its list and issues a grant AGAINST it.
 //
-// SECURITY. Both routes are global-admin only (mounted behind s.guard). A grant is a
+// SECURITY. Both routes are SuperAdmin only (mounted behind s.guard). A grant is a
 // privileged mutation, so it is written to cloud's tamper-evident audit trail
 // (action "admin.waitlist.grant", resource "waitlist"). The engine secret is never a
 // client claim — it is injected from KMS into the process env by the deployment.

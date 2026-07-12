@@ -8,8 +8,8 @@
 // TWO real jobs (why it is a handler, not a vanishing proxy):
 //
 //   - ENTITLEMENT (server-authoritative). cms/erp/help are each a SINGLE shared
-//     per-BRAND instance, so only a member of the owning brand org — or a global
-//     admin — may frame them; a customer org gets the honest provision panel, never
+//     per-BRAND instance, so only a member of the owning brand org — or a
+//     SuperAdmin — may frame them; a customer org gets the honest provision panel, never
 //     a cross-tenant frame. The caller's org is the VALIDATED X-Org-Id (never a
 //     browser claim); the owning org is the deployment brand.
 //
@@ -103,7 +103,7 @@ func embedStatus(s *cloud.Service[state], c *zip.Ctx) error {
 	embedURL := origin + landing
 
 	// SERVER-SIDE entitlement gate: a brand-owned app frames only for a member of the
-	// owning brand org (cr.owner == deps.Brand) or a global admin. A non-entitled
+	// owning brand org (cr.owner == deps.Brand) or a SuperAdmin. A non-entitled
 	// caller NEVER receives the embed URL and we don't even probe — the module shows
 	// the provision panel. This is the authoritative gate (the client check only
 	// avoids a flash).

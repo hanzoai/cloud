@@ -884,7 +884,7 @@ func refParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("ref")) }
 // as SanitizeIdentity minted it from the validated IAM owner claim (HIP-0026):
 // never lowercased/stripped/truncated. Normalizing would collapse distinct
 // owners into one bucket (Red HIGH-1). Reject only empty or pathologically
-// long. No magic "admin" bucket — a global admin operating on per-org data
+// long. No magic "admin" bucket — a SuperAdmin operating on per-org data
 // carries an explicit org, so an empty org is a true 403.
 func tenant(c *zip.Ctx) (string, bool) { return principal.Org(c) }
 
