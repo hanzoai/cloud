@@ -36,18 +36,15 @@ func mountConsole(t *testing.T) (*cloud.Service[state], *zip.App) {
 func seedConsoleFixture(t *testing.T, s *cloud.Service[state], org string) (imageAppID, gitAppID string) {
 	t.Helper()
 	ctx := context.Background()
-	proj := Project{ID: "proj_" + org + "_web", Org: org, Slug: "web", Name: "Web", CreatedAt: 100, UpdatedAt: 100}
-	if err := s.State.store.CreateProject(ctx, proj); err != nil {
-		t.Fatalf("seed project: %v", err)
-	}
+	// Projects live in IAM; apps key on the project NAME ("web").
 	api := Application{
-		ID: "app_" + org + "_api", Org: org, ProjectID: proj.ID, Slug: "api", Name: "API",
+		ID: "app_" + org + "_api", Org: org, ProjectID: "web", Slug: "api", Name: "API",
 		Environment: "production", Source: "image", ImageRepo: "ghcr.io/hanzoai/nginx", ImageTag: "1.27",
 		BuildType: "image", Port: 8080, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
 		Status: "live", Namespace: tenantNamespace(org), CreatedAt: 100, UpdatedAt: 140,
 	}
 	site := Application{
-		ID: "app_" + org + "_site", Org: org, ProjectID: proj.ID, Slug: "site", Name: "Site",
+		ID: "app_" + org + "_site", Org: org, ProjectID: "web", Slug: "site", Name: "Site",
 		Environment: "staging", Source: "git", RepoURL: "https://github.com/maxpower/site", RepoBranch: "main", RepoProvider: "github",
 		BuildType: "nixpacks", Port: 3000, Replicas: 1, EnvJSON: "[]", DomainsJSON: "[]",
 		Status: "building", Namespace: tenantNamespace(org), CreatedAt: 100, UpdatedAt: 100,
