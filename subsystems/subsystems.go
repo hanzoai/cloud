@@ -66,6 +66,7 @@ import (
 	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
+	"github.com/hanzoai/cloud/clients/cron"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/entitlements"
@@ -262,6 +263,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "treasury", Mount: cloud.Typed(treasury.Mount), Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
 		{Name: "tasks", Mount: cloud.Typed(tasks.Mount)},
+		// Platform cron: durable schedules on the shared tasks engine replacing
+		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
+		// runs visible in the Tasks console. Mounts no routes; starts after the
+		// engine is wired.
+		{Name: "cron", Mount: cloud.Typed(cron.Mount)},
 		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
 		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
