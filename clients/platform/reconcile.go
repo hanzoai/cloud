@@ -105,16 +105,13 @@ func reconcileBuild(s *cloud.Service[state], ctx context.Context, d Deployment) 
 		return
 	}
 
-	// Build succeeded — resolve app + project and apply the Service CR with the
-	// built image (the ONE deploy mechanic, identical to deployImage).
+	// Build succeeded — resolve the app and apply the Service CR with the built
+	// image (the ONE deploy mechanic, identical to deployImage). The app carries
+	// its project NAME (app.ProjectID), which is the operator part-of label — no
+	// separate project lookup needed.
 	app, err := s.State.store.GetApplicationByID(ctx, d.Org, d.ApplicationID)
 	if err != nil {
 		s.Log.Warn("reconcile: get application", "org", d.Org, "dep", d.ID, "err", err)
-		return
-	}
-	proj, err := s.State.store.GetProjectByID(ctx, d.Org, app.ProjectID)
-	if err != nil {
-		s.Log.Warn("reconcile: get project", "org", d.Org, "dep", d.ID, "err", err)
 		return
 	}
 
@@ -150,7 +147,7 @@ func reconcileBuild(s *cloud.Service[state], ctx context.Context, d Deployment) 
 	// (MED-1 monotonicity + RED LOW-1 joint ordering).
 	now := time.Now().Unix()
 	_, tag := splitImageRef(d.Image)
-	advanced, superseded, err := applyLive(s, ctx, d.Org, proj.Slug, app, d, tag, d.Image, now)
+	advanced, superseded, err := applyLive(s, ctx, d.Org, app.ProjectID, app, d, tag, d.Image, now)
 	if superseded {
 		// A newer version is already live: this build's image is fine but its
 		// (older) CR must NOT be written — record it terminally and stop.

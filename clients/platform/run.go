@@ -33,9 +33,6 @@ const (
 	// unset ⇒ the $1.00 policy default. A create/run fee only — no GB-seconds invented.
 	runFeeEnvPrefix = "CLOUD_PLATFORM_RUN_FEE_CENTS"
 	runKind         = "run"
-	// runProjectSlug is the per-org project that holds container-serverless runs, so a
-	// run needs no explicit project and still lands in the normal app hierarchy.
-	runProjectSlug = "default"
 )
 
 // runReq is the CLI contract for POST /v1/run. The org is NEVER read from here —
@@ -134,12 +131,12 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	repo, tag := splitImageRef(image)
 	now := time.Now().Unix()
 
-	project, herr := ensureRunProject(s, c.Context(), org, now)
+	project, herr := ensureRunProject(s, c.Context(), org)
 	if herr != nil {
 		return herr
 	}
 
-	a, err := s.State.store.GetApplication(c.Context(), org, project.ID, slug)
+	a, err := s.State.store.GetApplication(c.Context(), org, project, slug)
 	switch {
 	case errors.Is(err, errNotFound):
 		id, gerr := genID("app")
@@ -147,7 +144,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
 		}
 		a = Application{
-			ID: id, Org: org, ProjectID: project.ID, Slug: slug, Name: name,
+			ID: id, Org: org, ProjectID: project, Slug: slug, Name: name,
 			Environment: "production", Source: "image", ImageRepo: repo, ImageTag: tag,
 			BuildType: "image", Port: portOr(body.Port), Replicas: minScale,
 			MinScale: minScale, MaxScale: maxScale, EnvJSON: string(envJSON),
@@ -173,7 +170,7 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// The ONE Service-CR writer (image + autoscaling min/max + port + ingress). The
 	// operator reconciles the rollout; secret-env sync is declared best-effort.
-	if err := s.State.k8s.applyService(c.Context(), org, project.Slug, a, image); err != nil {
+	if err := s.State.k8s.applyService(c.Context(), org, project, a, image); err != nil {
 		return zip.Errorf(deployErrStatus(err), "apply Service CR: %v", err)
 	}
 	ensureSecretSync(s, c.Context(), org, a)
@@ -193,29 +190,23 @@ func run(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ensureRunProject get-or-creates the per-org default project that holds
-// container-serverless runs, reusing the project store — no parallel container.
-func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string, now int64) (Project, error) {
-	p, err := s.State.store.GetProject(ctx, org, runProjectSlug)
-	if err == nil {
-		return p, nil
+// ensureRunProject ensures the org's default project exists in IAM (the project
+// lifecycle owner) and returns its name, so a run needs no explicit project and
+// still lands in the normal app hierarchy. Idempotent and race-tolerant.
+func ensureRunProject(s *cloud.Service[state], ctx context.Context, org string) (string, error) {
+	name := principal.DefaultProject
+	ok, err := s.State.projects.Exists(ctx, org, name)
+	if err != nil {
+		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
 	}
-	if !errors.Is(err, errNotFound) {
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
+	if ok {
+		return name, nil
 	}
-	id, gerr := genID("proj")
-	if gerr != nil {
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "rng: %v", gerr)
-	}
-	p = Project{ID: id, Org: org, Slug: runProjectSlug, Name: "Default", Description: "Container-serverless runs", CreatedAt: now, UpdatedAt: now}
-	if err := s.State.store.CreateProject(ctx, p); err != nil {
+	if _, err := s.State.projects.Create(ctx, org, name, "Default", "Container-serverless runs"); err != nil {
 		if errors.Is(err, errConflict) {
-			// Lost a create race — read the winner so the run proceeds.
-			if p2, e2 := s.State.store.GetProject(ctx, org, runProjectSlug); e2 == nil {
-				return p2, nil
-			}
+			return name, nil // lost a create race — the winner's default project is fine
 		}
-		return Project{}, zip.Errorf(http.StatusInternalServerError, "persist project: %v", err)
+		return "", zip.Errorf(http.StatusInternalServerError, "persist project: %v", err)
 	}
-	return p, nil
+	return name, nil
 }

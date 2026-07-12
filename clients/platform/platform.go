@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/zap-proto/zip"
 )
@@ -70,6 +71,7 @@ type EnvVarJSON struct {
 // s.Brand / s.Env / s.Domain — never re-plumbed here.
 type state struct {
 	store       *Store
+	projects    ProjectStore // IAM-backed project lifecycle (projects.go); apps live under its names
 	k8s         *k8sClient
 	kmsIdentity tenantKMSIdentity  // per-tenant KMS machine-identity provisioner (secrets.go); nil ⇒ sync stays fail-closed pending
 	cancel      context.CancelFunc // stops the build reconciler on Shutdown
@@ -108,7 +110,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "platform"),
-		State: state{store: store, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
+		State: state{store: store, projects: iamProjects{}, k8s: k, kmsIdentity: newKMSOrgIdentity(deps.KMS),
 			sitesHost: getenv("CLOUD_PLATFORM_SITES_HOST", "hanzo.app")}}
 	mounted = s
 	routes(app, s)
@@ -228,7 +230,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // even then reaches only the admin bucket, never a real tenant's namespace. This
 // is the ONLY source of the tenant; no handler reads an org from body or path.
 func tenant(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
-	if c.User() == "" {
+	if !principal.Validated(c) {
 		return "", false // no validated principal — refuse the forgeable Phase-1 data path
 	}
 	// ONE org normalizer, cloud-wide: the injective provisioning.SanitizeOrg, so a
@@ -254,24 +256,6 @@ type repoView struct {
 type imageView struct {
 	Repository string `json:"repository,omitempty"`
 	Tag        string `json:"tag,omitempty"`
-}
-
-type projectView struct {
-	ID           string `json:"id"`
-	Org          string `json:"org"`
-	Slug         string `json:"slug"`
-	Name         string `json:"name"`
-	Description  string `json:"description,omitempty"`
-	Applications int    `json:"applications"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
-}
-
-func toProjectView(p Project, apps int) projectView {
-	return projectView{
-		ID: p.ID, Org: p.Org, Slug: p.Slug, Name: p.Name, Description: p.Description,
-		Applications: apps, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
-	}
 }
 
 type appView struct {
@@ -376,16 +360,11 @@ func createProject(s *cloud.Service[state], c *zip.Ctx) error {
 	if !slugRE.MatchString(slug) {
 		return zip.ErrBadRequest("slug must match ^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 	}
-	now := time.Now().Unix()
-	id, err := genID("proj")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
+	p, err := s.State.projects.Create(c.Context(), org, slug, name, strings.TrimSpace(body.Description))
+	if errors.Is(err, errConflict) {
+		return zip.ErrConflict("project slug already exists in this org")
 	}
-	p := Project{ID: id, Org: org, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description), CreatedAt: now, UpdatedAt: now}
-	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
-		if errors.Is(err, errConflict) {
-			return zip.ErrConflict("project slug already exists in this org")
-		}
+	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
 	return c.JSON(http.StatusCreated, toProjectView(p, 0))
@@ -396,13 +375,13 @@ func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	rows, err := s.State.store.ListProjects(c.Context(), org)
+	rows, err := s.State.projects.List(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
 	out := make([]projectView, 0, len(rows))
 	for _, p := range rows {
-		apps, _ := s.State.store.ListApplications(c.Context(), org, p.ID)
+		apps, _ := s.State.store.ListApplications(c.Context(), org, p.Name)
 		out = append(out, toProjectView(p, len(apps)))
 	}
 	return c.JSON(http.StatusOK, out)
@@ -413,14 +392,14 @@ func getProject(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
+	p, err := s.State.projects.Get(c.Context(), org, projectParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	apps, _ := s.State.store.ListApplications(c.Context(), org, p.ID)
+	if p == nil {
+		return zip.ErrNotFound("project not found")
+	}
+	apps, _ := s.State.store.ListApplications(c.Context(), org, p.Name)
 	return c.JSON(http.StatusOK, toProjectView(p, len(apps)))
 }
 
@@ -429,12 +408,19 @@ func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, apps, deleted, err := s.State.store.DeleteProject(c.Context(), org, projectParam(c))
+	project := projectParam(c)
+	// Delete the project in IAM (the source of truth) first; a missing project is
+	// a clean 404. Then cascade-delete platform's own app tree under it.
+	deleted, err := s.State.projects.Delete(c.Context(), org, project)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}
 	if !deleted {
 		return zip.ErrNotFound("project not found")
+	}
+	apps, err := s.State.store.DeleteProjectApps(c.Context(), org, project)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "delete apps: %v", err)
 	}
 	// Best-effort teardown of each app's Service CR + KMSSecret in the tenant ns.
 	for _, a := range apps {
@@ -445,7 +431,6 @@ func deleteProject(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("teardown KMSSecret failed (continuing)", "org", org, "app", a.Slug, "err", err)
 		}
 	}
-	_ = p
 	return c.NoContent(http.StatusNoContent)
 }
 
@@ -473,17 +458,29 @@ type createAppReq struct {
 	Domains    []string     `json:"domains"`
 }
 
+// requireProject confirms the request's :project exists in IAM for org, returning
+// its name (the app-scope key) or a mapped 404/500. It is the ONE place the app
+// routes verify project existence before touching platform's app tree.
+func requireProject(s *cloud.Service[state], c *zip.Ctx, org string) (string, error) {
+	project := projectParam(c)
+	ok, err := s.State.projects.Exists(c.Context(), org, project)
+	if err != nil {
+		return "", zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
+	}
+	if !ok {
+		return "", zip.ErrNotFound("project not found")
+	}
+	return project, nil
+}
+
 func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
-	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
+	project, herr := requireProject(s, c, org)
+	if herr != nil {
+		return herr
 	}
 	var body createAppReq
 	if err := c.Bind(&body); err != nil {
@@ -563,7 +560,7 @@ func createApp(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	a := Application{
-		ID: id, Org: org, ProjectID: p.ID, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
+		ID: id, Org: org, ProjectID: project, Slug: slug, Name: name, Description: strings.TrimSpace(body.Description),
 		Environment: firstNonEmpty(strings.TrimSpace(body.Environment), "production"), Source: source,
 		RepoURL: strings.TrimSpace(body.Repo.URL), RepoBranch: firstNonEmpty(strings.TrimSpace(body.Repo.Branch), branchDefault(body.Repo.URL)),
 		RepoProvider: providerFromURL(body.Repo.URL), ImageRepo: strings.TrimSpace(body.Image.Repository), ImageTag: strings.TrimSpace(body.Image.Tag),
@@ -585,14 +582,11 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+	project, herr := requireProject(s, c, org)
+	if herr != nil {
+		return herr
 	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
-	}
-	rows, err := s.State.store.ListApplications(c.Context(), org, p.ID)
+	rows, err := s.State.store.ListApplications(c.Context(), org, project)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list apps: %v", err)
 	}
@@ -612,24 +606,23 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-// loadApp resolves (project, app) for the caller's org, re-verifying tenancy at
-// each hop. Returns the project and application or a mapped HTTP error.
-func loadApp(s *cloud.Service[state], c *zip.Ctx, org string) (Project, Application, error) {
-	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
+// loadApp resolves (projectName, app) for the caller's org, re-verifying tenancy
+// at each hop: the project must exist in IAM, then the app under it. Returns the
+// project name (the app-scope key / operator part-of label) and application, or a
+// mapped HTTP error.
+func loadApp(s *cloud.Service[state], c *zip.Ctx, org string) (string, Application, error) {
+	project, herr := requireProject(s, c, org)
+	if herr != nil {
+		return "", Application{}, herr
+	}
+	a, err := s.State.store.GetApplication(c.Context(), org, project, appParam(c))
 	if errors.Is(err, errNotFound) {
-		return Project{}, Application{}, zip.ErrNotFound("project not found")
+		return "", Application{}, zip.ErrNotFound("application not found")
 	}
 	if err != nil {
-		return Project{}, Application{}, zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
+		return "", Application{}, zip.Errorf(http.StatusInternalServerError, "get app: %v", err)
 	}
-	a, err := s.State.store.GetApplication(c.Context(), org, p.ID, appParam(c))
-	if errors.Is(err, errNotFound) {
-		return Project{}, Application{}, zip.ErrNotFound("application not found")
-	}
-	if err != nil {
-		return Project{}, Application{}, zip.Errorf(http.StatusInternalServerError, "get app: %v", err)
-	}
-	return p, a, nil
+	return project, a, nil
 }
 
 func getApp(s *cloud.Service[state], c *zip.Ctx) error {
@@ -652,14 +645,11 @@ func deleteApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	p, err := s.State.store.GetProject(c.Context(), org, projectParam(c))
-	if errors.Is(err, errNotFound) {
-		return zip.ErrNotFound("project not found")
+	project, herr := requireProject(s, c, org)
+	if herr != nil {
+		return herr
 	}
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get project: %v", err)
-	}
-	a, deleted, err := s.State.store.DeleteApplication(c.Context(), org, p.ID, appParam(c))
+	a, deleted, err := s.State.store.DeleteApplication(c.Context(), org, project, appParam(c))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
 	}

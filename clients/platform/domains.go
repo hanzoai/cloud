@@ -290,7 +290,7 @@ func addDomain(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	d := Domain{Host: host, Org: org, ProjectID: proj.ID, AppID: a.ID, AppSlug: a.Slug, Status: "pending", Token: token, CreatedAt: now}
+	d := Domain{Host: host, Org: org, ProjectID: proj, AppID: a.ID, AppSlug: a.Slug, Status: "pending", Token: token, CreatedAt: now}
 	if err := s.State.store.CreateDomain(c.Context(), d); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("domain is already claimed") // lost a create race
