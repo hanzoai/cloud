@@ -52,7 +52,7 @@ func mountDomains(t *testing.T) (*zip.App, *fakeDNS) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	dns := newFakeDNS()
-	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
+	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test"), Brand: "hanzo"}, State: state{store: store, projects: newFakeProjects(), k8s: fakeK8s(), sitesHost: "hanzo.app", resolver: dns}}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
 	return app, dns

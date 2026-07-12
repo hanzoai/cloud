@@ -92,7 +92,7 @@ func preview(s *cloud.Service[state], c *zip.Ctx) error {
 	repo, tag := splitImageRef(image)
 	now := time.Now().Unix()
 
-	a, herr := ensurePreviewApp(s, c.Context(), org, proj.ID, parent, slug, branch, repo, tag, now)
+	a, herr := ensurePreviewApp(s, c.Context(), org, proj, parent, slug, branch, repo, tag, now)
 	if herr != nil {
 		return herr
 	}
@@ -101,7 +101,7 @@ func preview(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "allocate deployment: %v", err)
 	}
-	d, status, derr := deployTagCore(s, c.Context(), org, proj.Slug, a, depID, version, now, image, tag, "image", "", s.State.k8s.ready())
+	d, status, derr := deployTagCore(s, c.Context(), org, proj, a, depID, version, now, image, tag, "image", "", s.State.k8s.ready())
 	if derr != nil {
 		return zip.Errorf(status, "%s", derr.Error())
 	}
@@ -191,7 +191,7 @@ func promote(s *cloud.Service[state], c *zip.Ctx) error {
 	if herr != nil {
 		return herr
 	}
-	return redeploy(s, c, org, proj.Slug, a, image, tag, source, commit, "promoted", "image", image)
+	return redeploy(s, c, org, proj, a, image, tag, source, commit, "promoted", "image", image)
 }
 
 // resolvePromotionTarget resolves (image, tag, source, commit) for a promote from
@@ -268,7 +268,7 @@ func rollback(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("target deployment has no image to roll back to")
 	}
 	_, tag := splitImageRef(image)
-	return redeploy(s, c, org, proj.Slug, a, image, tag, firstNonEmpty(target.Source, a.Source), target.Commit,
+	return redeploy(s, c, org, proj, a, image, tag, firstNonEmpty(target.Source, a.Source), target.Commit,
 		"rolled back", "toVersion", target.Version, "image", image)
 }
 

@@ -64,9 +64,7 @@ func TestListBuildingDeployments(t *testing.T) {
 	s := newTestStore(t)
 
 	seed := func(org, appSlug, depID, status string, created int64) {
-		_ = s.CreateProject(ctx, mkProject(org, "proj", "Proj"))
-		proj, _ := s.GetProject(ctx, org, "proj")
-		a := mkApp(org, proj.ID, appSlug)
+		a := mkApp(org, "proj", appSlug)
 		_ = s.CreateApplication(ctx, a)
 		if err := s.InsertDeployment(ctx, Deployment{
 			ID: depID, Org: org, ApplicationID: a.ID, Version: 1, Status: status,
@@ -106,9 +104,7 @@ func TestListBuildingDeployments(t *testing.T) {
 func TestFinalizeLiveIsMonotonic(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
-	_ = s.CreateProject(ctx, mkProject("maxpower", "web", "Web"))
-	proj, _ := s.GetProject(ctx, "maxpower", "web")
-	a := mkApp("maxpower", proj.ID, "api")
+	a := mkApp("maxpower", "web", "api")
 	_ = s.CreateApplication(ctx, a)
 
 	mk := func(v int) Deployment {
@@ -168,9 +164,7 @@ func TestBuildReconcilerRetriesUntilTenantRBACReady(t *testing.T) {
 	allowSSAR(fake, func() bool { return rbacReady.Load() })
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: store, k8s: k}}
 
-	_ = store.CreateProject(ctx, mkProject("acme", "web", "Web"))
-	proj, _ := store.GetProject(ctx, "acme", "web")
-	app := mkApp("acme", proj.ID, "api")
+	app := mkApp("acme", "web", "api")
 	app.Source = "git"
 	_ = store.CreateApplication(ctx, app)
 
@@ -248,9 +242,7 @@ func TestBuildReconcilerVersionMonotonic(t *testing.T) {
 	k := fakeK8s()
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: store, k8s: k}}
 
-	_ = store.CreateProject(ctx, mkProject("maxpower", "web", "Web"))
-	proj, _ := store.GetProject(ctx, "maxpower", "web")
-	app := mkApp("maxpower", proj.ID, "api")
+	app := mkApp("maxpower", "web", "api")
 	app.Source = "git"
 	_ = store.CreateApplication(ctx, app)
 
