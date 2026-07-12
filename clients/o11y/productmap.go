@@ -4,7 +4,7 @@ import "strings"
 
 // productmap is the ONE server-side table that resolves a client-supplied
 // `product` query param into the concrete infra identities the scoped o11y
-// handlers query: the ClickHouse log `resources_string['app']` value, the
+// handlers query: the datastore log `resources_string['app']` value, the
 // VictoriaMetrics `up{service=…}` selector, and the in-cluster health host.
 //
 // SECURITY (this is a tenant-isolation + injection boundary, so it lives in ONE
@@ -12,7 +12,7 @@ import "strings"
 //
 //   - The `product` param is NEVER interpolated raw into a query or a hostname.
 //     It is first shape-validated to a DNS-1123 label (validProduct) — so it can
-//     never smuggle a PromQL break-out (`"} or up{`), a ClickHouse fragment, or a
+//     never smuggle a PromQL break-out (`"} or up{`), a datastore fragment, or a
 //     path/host segment into the health prober (SSRF) — then mapped through the
 //     console-slug ALIAS table, and finally the RESOLVED workload is checked
 //     against the KNOWN set. An unknown-but-well-formed product resolves to
@@ -68,7 +68,7 @@ const clusterDNSSuffix = ".hanzo.svc.cluster.local"
 type service struct {
 	// ID is the canonical product id (== the product param, validated).
 	ID string
-	// App is the ClickHouse `resources_string['app']` value for this product's logs.
+	// App is the datastore `resources_string['app']` value for this product's logs.
 	App string
 	// PromService is the VictoriaMetrics `service` label value (up{service=…}).
 	PromService string
@@ -101,7 +101,7 @@ func resolveService(product string) (service, bool) {
 
 // validProduct enforces a strict DNS-1123 label on the product param — the ONE
 // shape gate that makes the value safe to place (only after an allowlist check)
-// into a PromQL label, a ClickHouse bound parameter, and a hostname. Length is
+// into a PromQL label, a datastore bound parameter, and a hostname. Length is
 // bounded to 63 (a DNS label), lowercase alnum plus internal hyphens only.
 func validProduct(p string) bool {
 	if p == "" || len(p) > 63 {

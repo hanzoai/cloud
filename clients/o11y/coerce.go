@@ -2,7 +2,7 @@ package o11y
 
 import "time"
 
-// Native ClickHouse scan-type coercers. aiobject.DatastoreQuery returns each
+// Native datastore scan-type coercers. aiobject.DatastoreQuery returns each
 // column already decoded into its native Go type (String→string,
 // UInt64→uint64, DateTime64→time.Time, …); these accept the native value (and
 // defensively its pointer form) so a nil/absent column degrades to a zero value
