@@ -6,7 +6,7 @@
 // WHY THIS EXISTS. An enterprise buyer's own compliance team must be able to see
 // "what happened in MY org" — the audit trail is table stakes for SOC 2 / ISO / a
 // security review — WITHOUT being a fleet operator. The pre-existing surface was
-// admin-ONLY (/v1/admin/audit, s.guard → global admin), so a normal org owner had
+// admin-ONLY (/v1/admin/audit, s.guard → SuperAdmin), so a normal org owner had
 // no audit route at all. This adds exactly the customer-facing, org-scoped read.
 //
 // TENANT ISOLATION (the whole point). The org is the VALIDATED IAM owner claim

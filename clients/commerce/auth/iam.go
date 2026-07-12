@@ -134,18 +134,18 @@ type TokenError struct {
 
 // IAMUserInfo represents the OIDC userinfo response from Hanzo IAM.
 type IAMUserInfo struct {
-	Sub           string   `json:"sub"`
-	Iss           string   `json:"iss,omitempty"`
-	Aud           string   `json:"aud,omitempty"`
-	Name          string   `json:"preferred_username,omitempty"`
-	DisplayName   string   `json:"name,omitempty"`
-	Email         string   `json:"email,omitempty"`
-	EmailVerified bool     `json:"email_verified,omitempty"`
-	Picture       string   `json:"picture,omitempty"`
-	Address       string   `json:"address,omitempty"`
-	Phone         string   `json:"phone,omitempty"`
-	RealName      string   `json:"real_name,omitempty"`
-	IsVerified    bool     `json:"is_verified,omitempty"`
+	Sub           string    `json:"sub"`
+	Iss           string    `json:"iss,omitempty"`
+	Aud           string    `json:"aud,omitempty"`
+	Name          string    `json:"preferred_username,omitempty"`
+	DisplayName   string    `json:"name,omitempty"`
+	Email         string    `json:"email,omitempty"`
+	EmailVerified bool      `json:"email_verified,omitempty"`
+	Picture       string    `json:"picture,omitempty"`
+	Address       string    `json:"address,omitempty"`
+	Phone         string    `json:"phone,omitempty"`
+	RealName      string    `json:"real_name,omitempty"`
+	IsVerified    bool      `json:"is_verified,omitempty"`
 	Groups        []string  `json:"groups,omitempty"`
 	Roles         FlexRoles `json:"roles,omitempty"`
 	Permissions   []string  `json:"permissions,omitempty"`
@@ -224,36 +224,36 @@ type IAMClaims struct {
 
 	// Authorization
 	IsAdmin bool `json:"isAdmin,omitempty"`
-	// IsGlobalAdmin is the platform-wide superadmin flag from IAM. Unlike
+	// IsSuperAdmin is the platform-wide superadmin flag from IAM. Unlike
 	// IsAdmin (an ORG-level role — an org owner has IsAdmin=true within
-	// their own org), this is true ONLY for global administrators. It is the
+	// their own org), this is true ONLY for SuperAdmins. It is the
 	// one claim safe to gate cross-org actions on.
-	IsGlobalAdmin bool      `json:"isGlobalAdmin,omitempty"`
-	Groups        []string  `json:"groups,omitempty"`
-	Roles         FlexRoles `json:"roles,omitempty"`
-	Permissions   []string  `json:"permissions,omitempty"`
+	IsSuperAdmin bool      `json:"isSuperAdmin,omitempty"`
+	Groups       []string  `json:"groups,omitempty"`
+	Roles        FlexRoles `json:"roles,omitempty"`
+	Permissions  []string  `json:"permissions,omitempty"`
 
 	// User properties (arbitrary key-value pairs from IAM).
 	// The "tier" property is used for tiered billing (free/starter/pro/enterprise).
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
-// GlobalAdmin reports whether these claims belong to a Hanzo PLATFORM (global)
-// administrator — the ONLY predicate safe to gate cross-org / superadmin
+// SuperAdmin reports whether these claims belong to a Hanzo PLATFORM SuperAdmin
+// — the ONLY predicate safe to gate cross-org / superadmin
 // actions on. Two independent signals, either suffices:
-//   - the explicit isGlobalAdmin claim (gateway X-User-IsGlobalAdmin); or
-//   - membership in the global-admin org (owner == "admin"), the slug Hanzo
-//     IAM seeds global admins into.
+//   - the explicit isSuperAdmin claim (gateway X-User-IsSuperAdmin); or
+//   - membership in the SuperAdmin org (owner == "admin"), the slug Hanzo
+//     IAM seeds SuperAdmins into.
 //
 // Plain IsAdmin is deliberately excluded: it is an ORG-level role (an org owner
 // carries IsAdmin=true within their own org). Gating cross-org actions on
 // IsAdmin — or on an org-mintable role name like "superadmin" — is the
 // privilege escalation this predicate exists to prevent. nil-safe.
-func (c *IAMClaims) GlobalAdmin() bool {
+func (c *IAMClaims) SuperAdmin() bool {
 	if c == nil {
 		return false
 	}
-	return c.IsGlobalAdmin || strings.EqualFold(strings.TrimSpace(c.Owner), "admin")
+	return c.IsSuperAdmin || strings.EqualFold(strings.TrimSpace(c.Owner), "admin")
 }
 
 // Tier returns the user's billing tier from the "tier" property.

@@ -11,17 +11,14 @@ import "github.com/hanzoai/cloud/clients/admin/core"
 
 // adminMe is the operator identity (AdminMe / GET /v1/admin/me).
 //
-// SuperAdmin naming: isSuperAdmin is the CANONICAL key; isGlobalAdmin is the
-// transitional back-compat alias populated with the SAME value so a console
-// reading either key sees the truth during the rename migration. Both derive
-// from ONE fact — owner == AdminOrg (IAM's IsSuperAdmin, ex-IsGlobalAdmin).
+// isSuperAdmin is the SuperAdmin key: true iff owner == AdminOrg (IAM's
+// IsSuperAdmin predicate).
 type adminMe struct {
-	Owner         string `json:"owner"`
-	Name          string `json:"name"`
-	Email         string `json:"email"`
-	DisplayName   string `json:"displayName"`
-	IsSuperAdmin  bool   `json:"isSuperAdmin"`
-	IsGlobalAdmin bool   `json:"isGlobalAdmin"` // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
+	Owner        string `json:"owner"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"displayName"`
+	IsSuperAdmin bool   `json:"isSuperAdmin"`
 }
 
 // overviewData is the fleet overview tiles (OverviewData / GET /v1/admin/overview).
@@ -53,17 +50,16 @@ type orgRow struct {
 // operatorUser is one user in the cross-org directory (OperatorUser / GET
 // /v1/admin/users).
 type operatorUser struct {
-	Owner         string `json:"owner"`
-	Name          string `json:"name"`
-	Email         string `json:"email"`
-	DisplayName   string `json:"displayName"`
-	IsAdmin       bool   `json:"isAdmin"`
-	IsSuperAdmin  bool   `json:"isSuperAdmin"`
-	IsGlobalAdmin bool   `json:"isGlobalAdmin"` // DEPRECATED alias of isSuperAdmin; kept populated for back-compat
-	Tag           string `json:"tag"`
-	Created       string `json:"created"`
-	LastSignin    string `json:"lastSignin"`
-	Forbidden     bool   `json:"forbidden"`
+	Owner        string `json:"owner"`
+	Name         string `json:"name"`
+	Email        string `json:"email"`
+	DisplayName  string `json:"displayName"`
+	IsAdmin      bool   `json:"isAdmin"`
+	IsSuperAdmin bool   `json:"isSuperAdmin"`
+	Tag          string `json:"tag"`
+	Created      string `json:"created"`
+	LastSignin   string `json:"lastSignin"`
+	Forbidden    bool   `json:"forbidden"`
 }
 
 // usage roll-up (UsageData / GET /v1/admin/usage).

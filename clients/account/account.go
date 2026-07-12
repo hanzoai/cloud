@@ -62,7 +62,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// adminOrg is THE global-admin / IAM-system org that owns every customer org row —
+// adminOrg is THE SuperAdmin / IAM-system org that owns every customer org row —
 // standardized as "admin" across the whole stack (IAM, commerce, ai, gateway all
 // gate cross-tenant on owner=="admin"). A created customer org is owned by it.
 const adminOrg = "admin"
@@ -327,7 +327,7 @@ type onboardResp struct {
 //   - FIRST-RUN (no owner): create + MOVE the user in as admin, so their next JWT
 //     carries the new owner and the cloud scopes everything to it.
 //   - ADDITIONAL (owner set): create the org but do NOT move the user — a move
-//     changes their IAM owner (stripping a global admin's status + orphaning their
+//     changes their IAM owner (stripping a SuperAdmin's status + orphaning their
 //     current org). They reach the new org via the OrgSwitcher, which re-scopes
 //     X-Org-Id without touching IAM membership. A personal-org request from someone
 //     who already has an org is meaningless → 409.

@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/storagelock"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/writerpin"
@@ -198,7 +198,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// the gateway's "X-User-IsAdmin is never client-supplied" contract hold even
 	// when cloud-api is reached directly (in-cluster) instead of through the
 	// gateway, closing the forgeable-admin trust boundary. The admin claim is
-	// granted ONLY to a validated GLOBAL admin (owner == AdminOrg). See
+	// granted ONLY to a validated SuperAdmin (owner == AdminOrg). See
 	// middleware_identity.go / auth_identity.go.
 	app.Use(IdentityMiddleware(cfg))
 

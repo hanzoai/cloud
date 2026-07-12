@@ -38,28 +38,28 @@ func Route(r router.Router, args ...gin.HandlerFunc) {
 // These figures are cross-tenant, PLATFORM spend (DigitalOcean + the LLM providers
 // we resell) plus the whole-platform revenue/margin, so — UNLIKE the per-org money
 // handlers that use middleware.RequireAdmin (org-level IsAdmin OK) — this gates on
-// the STRICTER GlobalAdmin predicate (see auth.IAMClaims.GlobalAdmin: "the ONLY
+// the STRICTER SuperAdmin predicate (see auth.IAMClaims.SuperAdmin: "the ONLY
 // predicate safe to gate cross-org/superadmin actions on"). An org owner carries
 // IsAdmin=true within their own org and the gateway mints permission.Admin from it
 // (edgeauth.permsHeader), so NEITHER the Admin permission bit NOR IsAdmin may admit
-// an IAM user here — only GlobalAdmin.
+// an IAM user here — only SuperAdmin.
 //
 // Two ways in, fail-closed:
-//  1. A JWT-verified GLOBAL admin (isGlobalAdmin claim, or the built-in admin org).
-//  2. The trusted M2M service token — the console's OWN global-admin-gated proxy
+//  1. A JWT-verified SuperAdmin (isSuperAdmin claim, or the built-in admin org).
+//  2. The trusted M2M service token — the console's OWN SuperAdmin-gated proxy
 //     (console → commerce) forwards with COMMERCE_SERVICE_TOKEN and X-Org-Id, but
 //     NO user identity. accesstoken.go authorizes that token and sets
 //     permission.Admin; it carries no IAM user (empty Subject). An IAM user ALWAYS
 //     carries a Subject (the JWT sub the gateway mints alongside any permission),
 //     so "Admin bit AND no IAM Subject" uniquely identifies the verified service
 //     token and can never be an org admin. The console proxy is the party that
-//     already enforced global-admin (getAdminGate) before it ever reached here.
+//     already enforced SuperAdmin (getAdminGate) before it ever reached here.
 //
 // Reads c["permissions"] without MustGet so a handler mounted without the token
 // gate fails closed (403) rather than panicking (500).
 func requireCostsAdmin(c *gin.Context) bool {
 	claims := iammiddleware.GetIAMClaims(c) // non-nil by contract
-	if claims.GlobalAdmin() {
+	if claims.SuperAdmin() {
 		return true
 	}
 	// Trusted M2M service token: Admin bit present AND no IAM user identity.
@@ -70,7 +70,7 @@ func requireCostsAdmin(c *gin.Context) bool {
 			}
 		}
 	}
-	http.Fail(c, 403, "platform admin required to read vendor costs", errors.New("caller is not a global admin"))
+	http.Fail(c, 403, "platform admin required to read vendor costs", errors.New("caller is not a SuperAdmin"))
 	return false
 }
 
