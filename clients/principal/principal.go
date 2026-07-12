@@ -124,9 +124,9 @@ func Org(c *zip.Ctx) (string, bool) {
 // Project resolves the caller's project — the org SUB-SCOPE that narrows WITHIN
 // the validated org (a fleet registry shard, an ml namespace suffix, a metering
 // attribution dimension). It mirrors c.Org() exactly: a zero-copy read of the
-// gateway-minted X-Project-Id header (in production the gateway mints it from the
-// validated IAM `project` claim; off-gateway, cloud.SanitizeIdentity re-injects it
-// only when it is not a cross-org claim — so by the time it is read here it is
+// server-minted X-Project-Id header (in production the gateway mints it from the
+// validated IAM `project` claim; off-gateway, cloud.SanitizeIdentity mints it from
+// the same claim, dropping a cross-org one — so by the time it is read here it is
 // trustworthy, never a raw client value).
 //
 // The header is present iff a NON-default project is in scope, so an empty header
@@ -155,21 +155,25 @@ func Project(c *zip.Ctx) string {
 // whether a project-scoped cap may HARD-enforce (402) or must DEGRADE to a soft
 // warn (issue #70 project-spoof defense).
 //
-// Today it returns validated=FALSE. X-Project-Id survives SanitizeIdentity only as
-// "the caller's OWN registered project OR an unregistered free-form label"
-// (middleware_identity.go): cross-org projects are refused, but the caller still
-// CHOOSES the label — it is not bound to a server-minted claim. So a caller can
-// evade a project cap (tag spend with a different project) or, if it were hard,
-// weaponize it. hanzo.id tokens carry owner/sub but NO project claim, so the
-// gateway cannot mint a trustworthy X-Project-Id. Until IAM mints a project claim
-// AND the gateway binds X-Project-Id to it server-side, project caps stay SOFT.
+// It is claim-backed iff a validated principal carries a NON-default `project`
+// claim. IAM now mints that claim next to `owner`, and BOTH minters bind
+// X-Project-Id from it SERVER-SIDE: the gateway (iamauth.Claims.MintedProject) and,
+// on the off-gateway path, cloud.SanitizeIdentity (idClaims.mintedProject) — each
+// stripping any client copy first and dropping a cross-org project. So a non-default
+// X-Project-Id can only ever be a server-minted, validated scope; the caller can no
+// longer CHOOSE its label to evade a project cap or, were it hard, weaponize it.
+// That is the signal a project-scoped cap uses to HARD-enforce.
 //
-// This is the ONE lever: when that claim exists, return (project, true) here and
-// project/service caps auto-harden across the edge gate and the resource meter.
-// The ORG axis is always validated (owner claim); the SERVICE axis is
-// server-derived (route/provider) — both are already trustworthy.
+// The DEFAULT project stays SOFT (validated=false). An absent/default X-Project-Id
+// means IAM minted NO project claim — the org has no project scope yet. IAM does not
+// seed default projects, so today the claim is absent for EVERY org, and returning
+// false here preserves exactly today's behavior (no surprise 402 on default-project
+// spend). As an org's projects are seeded, its NAMED project caps auto-harden one
+// org at a time. The ORG axis is always validated (owner claim) and the SERVICE axis
+// is server-derived (route/provider), so only the PROJECT axis needs this signal.
 func ValidatedProject(c *zip.Ctx) (string, bool) {
-	return Project(c), false
+	project := Project(c)
+	return project, Validated(c) && !IsDefaultProject(project)
 }
 
 // BillingAccount resolves the caller's funding BillingAccount id — the GCP-style
