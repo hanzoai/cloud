@@ -44,9 +44,6 @@ type Embedded struct {
 	// commerce.Client's OrgConfig. Set by Mount; empty for a bare Embed
 	// (the standalone/legacy boot never serves the inter-subsystem client).
 	brand string
-	// stopSweep halts the in-process auto-recharge sweeper (sweep.go). Set by
-	// Mount; nil for a bare Embed.
-	stopSweep func()
 }
 
 // Embed bootstraps the Commerce app and returns a handle. Call Stop
@@ -137,9 +134,6 @@ func (e *Embedded) App() *App {
 func (e *Embedded) Stop(ctx context.Context) error {
 	if e == nil || e.app == nil {
 		return nil
-	}
-	if e.stopSweep != nil {
-		e.stopSweep()
 	}
 	if err := e.app.Shutdown(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
