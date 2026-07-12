@@ -38,6 +38,7 @@ func BaseInProcess(impl types.BaseClient) types.BaseClient { return impl }
 // CommerceInProcess wraps a co-resident Commerce implementation.
 func CommerceInProcess(impl types.CommerceClient) types.CommerceClient { return impl }
 
+
 // AIInProcess wraps a co-resident AI implementation.
 func AIInProcess(impl types.AIClient) types.AIClient { return impl }
 
