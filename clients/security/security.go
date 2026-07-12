@@ -361,11 +361,14 @@ func emitAudit(s *cloud.Service[state], c *zip.Ctx, org string, sc Scan) {
 	}
 }
 
-// projectScope resolves the optional X-Project-Id sub-scope; empty is valid,
-// an invalid header is ignored (an OPTIONAL narrowing, not a 400).
+// projectScope resolves the optional X-Project-Id sub-scope through principal.Project
+// (the ONE project accessor). The default scope — an absent header OR the literal
+// "default" (principal.IsDefaultProject) — keys with NO project segment, so today's
+// org-level keys stay un-suffixed. An invalid non-default header is ignored (an
+// OPTIONAL narrowing, not a 400).
 func projectScope(c *zip.Ctx) string {
-	p := strings.TrimSpace(c.Header("X-Project-Id"))
-	if p == "" || len(p) > 128 || !projectRE.MatchString(p) {
+	p := principal.Project(c)
+	if principal.IsDefaultProject(p) || len(p) > 128 || !projectRE.MatchString(p) {
 		return ""
 	}
 	return p
