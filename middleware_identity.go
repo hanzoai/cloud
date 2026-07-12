@@ -81,7 +81,7 @@ var cookieTokenNames = []string{"hanzo_iam_token", "iam_access_token", "access_t
 // is RE-MINTED from the validated `project` claim (claims.mintedProject) exactly
 // like X-Org-Id from `owner`, still checked non-foreign to the effective org
 // (projectIsForeign — org_scope.go refuses a project REGISTERED to a DIFFERENT org,
-// which also drops an admin's own-org project when a global admin views another
+// which also drops an admin's own-org project when a SuperAdmin views another
 // org), and dropped on the anonymous path. The raw client X-Project-Id is NEVER a
 // source. So after this pass X-Project-Id is a TRUSTWORTHY server-minted scope,
 // which is exactly why principal.ValidatedProject reports it claim-backed and per-
@@ -110,7 +110,7 @@ var authorityHeaders = []string{
 //   - X-Project-Id is MINTED from the validated `project` claim (claims.mintedProject),
 //     exactly like X-Org-Id from `owner`, then still checked non-foreign to the
 //     effective org (defense in depth; it also drops an admin's own-org project when
-//     a global admin views another org). The raw client copy is never a source.
+//     a SuperAdmin views another org). The raw client copy is never a source.
 //   - X-App-Id / X-Billing-Account-Id are caller attribution hints (no isolation
 //     boundary): forwarded as-is on the validated path, dropped when anonymous.
 var subScopeHeaders = []string{"X-Project-Id", "X-App-Id", "X-Billing-Account-Id"}
@@ -280,7 +280,7 @@ func IdentityMiddleware(cfg *Config) zip.Handler {
 //     for the default project, so the header stays absent ⟺ default). It is
 //     re-injected only when NON-foreign to org (projectIsForeign): the caller's own
 //     claim survives; a project REGISTERED to a different org is refused (dropped),
-//     which drops an admin's own-org project when a global admin (effOrg = the
+//     which drops an admin's own-org project when a SuperAdmin (effOrg = the
 //     switched-to org) views another org. The header is now server-minted, so a
 //     surviving X-Project-Id is claim-backed — principal.ValidatedProject trusts it.
 //   - X-App-Id is a caller LABEL, not an isolation boundary: NO cloud subsystem
