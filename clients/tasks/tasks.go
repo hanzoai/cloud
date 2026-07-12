@@ -12,7 +12,7 @@
 // one way. The engine is created after MountAll, so the surface resolves it
 // LAZILY per request (503 until it is live).
 //
-// Surface (all under /v1/tasks/*, plus the embedded React UI at /_/tasks/*):
+// Surface (all under /v1/tasks/*, plus the embedded React UI at /tasks/*):
 //
 //	/v1/tasks/health                    generic liveness (cloud's per-subsystem contract)
 //	/v1/tasks/settings                  capability flags (open bootstrap)
@@ -20,7 +20,7 @@
 //	/v1/tasks/namespaces|nexus|...      engine JSON API (identity-gated)
 //	/v1/tasks/mcp                       MCP tool surface (identity-gated)
 //	/v1/tasks/events                    SSE realtime stream (identity-gated)
-//	/_/tasks/*                          embedded React UI
+//	/tasks/*                            embedded React UI (console.hanzo.ai/tasks)
 //
 // Identity: cloud's gateway validates the IAM JWT and mints X-Org-Id / X-User-Id
 // (HIP-0026); clients/principal treats a credential-minted X-User-Id as the ONE
@@ -57,11 +57,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// The UI is a static asset bundle embedded in THIS binary
 	// (clients/tasks/ui) — engine-independent, mount directly. Serving it
-	// here is what lets cloud front tasks.hanzo.ai and retire the standalone
-	// tasks-ui pod.
-	ui := zip.AdaptNetHTTP(http.StripPrefix("/_/tasks", tasksui.Handler()))
-	app.All("/_/tasks", ui)
-	app.All("/_/tasks/*", ui)
+	// here is what lets cloud front tasks.hanzo.ai + console.hanzo.ai/tasks
+	// and retire the standalone tasks-ui pod. Mounted at /tasks (no /_/):
+	// subsystem routes register before the console SPA catch-all, so this
+	// wins the path; the SPA fallback keeps every other console route.
+	ui := zip.AdaptNetHTTP(http.StripPrefix("/tasks", tasksui.Handler()))
+	app.All("/tasks", ui)
+	app.All("/tasks/*", ui)
 
 	deps.Logger.New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
 	return nil
@@ -115,12 +117,14 @@ func httpMux(srv *tasks.Embedded) http.Handler {
 
 // gate enforces cloud's data-plane trust boundary on the Tasks surface and injects
 // the validated tenant into the handler context. The gateway (HIP-0026) mints
-// X-User-Id ONLY from a verified credential and X-Org-Id from the validated owner
-// claim; the fiber adaptor forwards those request headers verbatim, so a non-empty
-// X-User-Id is the SAME trust signal clients/principal.Validated uses. Absent it,
-// the request is the anonymous-forge path and is refused (403) — never served
-// another tenant's data nor the unscoped store. Present, the org is threaded into
-// the engine via tasks/pkg/auth.WithIdentity so per-(org,ns) shard scoping applies.
+// X-User-Id ONLY from a verified credential, X-Org-Id from the validated owner
+// claim, and X-Project-Id from the validated project claim; the fiber adaptor
+// forwards those request headers verbatim, so a non-empty X-User-Id is the SAME
+// trust signal clients/principal.Validated uses. Absent it, the request is the
+// anonymous-forge path and is refused (403) — never served another tenant's data
+// nor the unscoped store. Present, the full org/project/user identity is threaded
+// into the engine via tasks/pkg/auth.WithIdentity so per-(org,ns) shard scoping
+// (and the project↔namespace convention) applies.
 func gate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get(tasksauth.HeaderUserID)
@@ -130,7 +134,11 @@ func gate(next http.Handler) http.Handler {
 			_, _ = w.Write([]byte(`{"error":"identity required","code":403}`))
 			return
 		}
-		ctx := tasksauth.WithIdentity(r.Context(), r.Header.Get(tasksauth.HeaderOrgID), user, r.Header.Get(tasksauth.HeaderUserEmail))
+		ctx := tasksauth.WithIdentity(r.Context(),
+			r.Header.Get(tasksauth.HeaderOrgID),
+			r.Header.Get(tasksauth.HeaderProjectID),
+			user,
+			r.Header.Get(tasksauth.HeaderUserEmail))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
