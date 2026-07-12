@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -280,6 +281,96 @@ func waitFor(cond func() bool, d time.Duration) bool {
 		time.Sleep(2 * time.Millisecond)
 	}
 	return cond()
+}
+
+// billingProbe drives a request with the given identity headers through a handler
+// that captures BOTH the billing identity (identityFromCtx — who PAYS) and the
+// data-scope org (principal.Org — whose DATA), so a test can assert the home/
+// effective SPLIT in one shot. Read inside the handler (Fiber recycles the ctx).
+func billingProbe(t *testing.T, headers map[string]string) (billingOrg, billingUser, dataOrg string) {
+	t.Helper()
+	done := make(chan struct{})
+	app := zip.New(zip.Config{})
+	app.Use(func(c *zip.Ctx) error {
+		in := identityFromCtx(c)
+		billingOrg, billingUser = in.Org, in.User
+		dataOrg, _ = principal.Org(c)
+		close(done)
+		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/agent/run", nil)
+	for h, v := range headers {
+		req.Header.Set(h, v)
+	}
+	if _, err := app.Fiber().Test(req); err != nil {
+		t.Fatalf("billingProbe: %v", err)
+	}
+	<-done
+	return billingOrg, billingUser, dataOrg
+}
+
+// TestIdentityFromCtx_AdminMasqueradeBillsHomeOrg is THE billing-split proof: a
+// platform SuperAdmin (X-User-Owner=admin) acting in a victim org (X-Org-Id=victim)
+// must have the billing GATE + DEBIT keyed on the HOME org (admin) while DATA scope
+// stays on the effective org (victim). Before the fix, both keyed on X-Org-Id, so an
+// admin's spend was silently charged to the org being acted on.
+func TestIdentityFromCtx_AdminMasqueradeBillsHomeOrg(t *testing.T) {
+	billOrg, billUser, dataOrg := billingProbe(t, map[string]string{
+		"X-User-Id":    "u_admin", // validated principal
+		"X-Org-Id":     "victim",  // EFFECTIVE — the org being acted on
+		"X-User-Owner": "admin",   // HOME — the identity + billing anchor
+	})
+	if billOrg != "admin" {
+		t.Errorf("billing org (debit ledger) = %q, want %q (HOME org pays, not the acted-on org)", billOrg, "admin")
+	}
+	if billUser != "admin" {
+		t.Errorf("billing user (per-org key) = %q, want %q", billUser, "admin")
+	}
+	if dataOrg != "victim" {
+		t.Errorf("data scope = %q, want %q (DATA must stay on the EFFECTIVE org)", dataOrg, "victim")
+	}
+}
+
+// TestIdentityFromCtx_NormalUserHomeEqualsEffective: a normal caller has
+// home==effective, so nothing changes — billing and data both resolve to their own
+// org. (The masquerade split is a no-op for 99% of traffic.)
+func TestIdentityFromCtx_NormalUserHomeEqualsEffective(t *testing.T) {
+	billOrg, billUser, dataOrg := billingProbe(t, map[string]string{
+		"X-User-Id":    "u_1",
+		"X-Org-Id":     "acme",
+		"X-User-Owner": "acme",
+	})
+	if billOrg != "acme" || billUser != "acme" || dataOrg != "acme" {
+		t.Errorf("normal user: bill=%q/%q data=%q, want all %q", billOrg, billUser, dataOrg, "acme")
+	}
+}
+
+// TestIdentityFromCtx_RolloutFallbackNoHomeHeader: before the gateway mints
+// X-User-Owner, billing falls back to the effective org — today's behavior, exact
+// for a normal caller (home==effective) and fail-closed (never bills a stranger).
+func TestIdentityFromCtx_RolloutFallbackNoHomeHeader(t *testing.T) {
+	billOrg, _, dataOrg := billingProbe(t, map[string]string{
+		"X-User-Id": "u_1",
+		"X-Org-Id":  "acme",
+		// no X-User-Owner
+	})
+	if billOrg != "acme" || dataOrg != "acme" {
+		t.Errorf("rollout fallback: bill=%q data=%q, want both %q", billOrg, dataOrg, "acme")
+	}
+}
+
+// TestIdentityFromCtx_UnvalidatedBillsNothing: no validated principal (no X-User-Id)
+// ⟹ empty billing identity, so an off-gateway forge can neither probe nor drain a
+// ledger. (Mirrors the existing principal.Validated gate.)
+func TestIdentityFromCtx_UnvalidatedBillsNothing(t *testing.T) {
+	billOrg, billUser, _ := billingProbe(t, map[string]string{
+		"X-Org-Id":     "victim",
+		"X-User-Owner": "admin",
+		// no X-User-Id ⟹ not validated
+	})
+	if billOrg != "" || billUser != "" {
+		t.Errorf("unvalidated request must bill nothing, got org=%q user=%q", billOrg, billUser)
+	}
 }
 
 func assertErrorCode(t *testing.T, resp *http.Response, want string) {

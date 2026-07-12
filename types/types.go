@@ -105,10 +105,17 @@ type LicenseEntitlement struct {
 // unattributed. Empty Org denotes an internal/system call with no customer to bill
 // (executed, recorded unattributed) — a customer path always sets it.
 type ChatRequest struct {
-	Model   string
-	Prompt  string
-	Org     string
-	Project string
+	Model  string
+	Prompt string
+	// Org is the EFFECTIVE org — the DATA scope the inner AI client reads (BYO
+	// provider keys, RAG/knowledge). BillingOrg is the HOME org that PAYS (the caller's
+	// X-User-Owner): for a normal caller they are equal, but a platform SuperAdmin
+	// acting in another org has BillingOrg=="admin" while Org is the acted-on org, so
+	// the debit lands on the admin ledger, never the org whose data is used. Empty
+	// BillingOrg falls back to Org (a caller that has not split them).
+	Org        string
+	BillingOrg string
+	Project    string
 }
 
 // ChatResponse mirrors the AI subsystem's chat-completion response. The token
@@ -126,10 +133,13 @@ type ChatResponse struct {
 // identical in meaning to ChatRequest's, so embeddings meter and observe through
 // the same org/project-aligned path.
 type EmbedRequest struct {
-	Model   string
-	Inputs  []string
-	Org     string
-	Project string
+	Model  string
+	Inputs []string
+	// Org is the EFFECTIVE (data-scope) org; BillingOrg is the HOME org that PAYS —
+	// see ChatRequest. Empty BillingOrg falls back to Org.
+	Org        string
+	BillingOrg string
+	Project    string
 }
 
 // Counter / Timing / Span are the canonical o11y handles.
