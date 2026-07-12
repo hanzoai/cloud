@@ -180,7 +180,8 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 		ctx.Locals(orgKey, org)
 
 		fee := cloud.ResourceFeeCents(opFeeEnvPrefix, "op")
-		if err := s.State.bill.Gate(ctx.Context(), org, principal.Project(ctx), "op", fee); err != nil {
+		project, projectValidated := principal.ValidatedProject(ctx)
+		if err := s.State.bill.Gate(ctx.Context(), org, project, projectValidated, "op", fee); err != nil {
 			return cloud.DenyResource(ctx, err)
 		}
 		if err := h(ctx); err != nil {

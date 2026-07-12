@@ -305,7 +305,8 @@ func create(s *cloud.Service[state], kind string) zip.Handler {
 		// reused by the post-success debit; fee==0 or unconfigured billing makes
 		// this a no-op. Applies to BOTH strategies.
 		fee := cloud.ResourceFeeCents(provisionFeeEnvPrefix, kind)
-		if err := s.Bill.Gate(ctx, org, principal.Project(c), kind, fee); err != nil {
+		project, projectValidated := principal.ValidatedProject(c)
+		if err := s.Bill.Gate(ctx, org, project, projectValidated, kind, fee); err != nil {
 			return cloud.DenyResource(c, err)
 		}
 
