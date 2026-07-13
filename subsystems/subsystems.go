@@ -62,6 +62,7 @@ import (
 	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/content"
@@ -214,6 +215,11 @@ func Wire() []cloud.MountSpec {
 		// CRUD/tenancy/install are framework's; this adds the board, lifecycle transition,
 		// and the generate/publish orchestration over the zen5 + studio + social edges.
 		{Name: "content", Mount: cloud.Typed(content.Mount), Shutdown: ctxShutdown(content.Shutdown)},
+		// Reverse storefront loop: consume the commerce COMMERCE stream (product.created)
+		// → content.EnsureCatalogAsset (render the new product's ecom asset, design==slug).
+		// After content (whose EnsureCatalogAsset it drives). Inert until CLOUD_COMMERCE_NATS_URL
+		// names the NATS carrying commerce catalog events — the reverse of the forward edge.
+		{Name: "catalogsync", Mount: cloud.Typed(catalogsync.Mount), Shutdown: catalogsync.Shutdown},
 		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
 		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
 		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
