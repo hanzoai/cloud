@@ -169,6 +169,19 @@ type Config struct {
 	// framework default — only the browser-facing edge opts up.
 	ReadBufferSize int
 
+	// BodyLimit is the maximum request body the public HTTP edge (zip/fiber)
+	// accepts, in bytes. The framework default is 4 MiB — which silently caps the
+	// CONTEXT WINDOW: a chat request carries its whole prompt in the body, and at
+	// ~4.3 bytes/token a 1M-token prompt is ~4.3 MB. So the 1M-context models we
+	// route to (deepseek-v4-pro; anything glm-5.2 overflows into past its 262,144
+	// cap) could not actually be reached — fasthttp refused the body before any
+	// handler ran, with the opaque 400 "Error when parsing request" that reads
+	// like a malformed payload rather than a size cap. 16 MiB gives 1M tokens
+	// real headroom (~3.7x) without inviting a memory-exhaustion vector: the edge
+	// is authenticated + rate-limited, and fasthttp streams rather than buffering
+	// per-conn. Env GATEWAY_BODY_LIMIT.
+	BodyLimit int
+
 	// SitesApex is the zone whose subdomains are PUBLIC published-site hosts
 	// (`<slug>.<apex>`, default hanzo.app). The site host-router (clients/sites)
 	// serves the root path space for these hosts from OUR S3, ahead of the API
@@ -301,6 +314,7 @@ func LoadConfig() *Config {
 		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
 		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
 		ReadBufferSize:   getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
+		BodyLimit:        getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
 		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
 		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
 		SitesSelfDomains: splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
