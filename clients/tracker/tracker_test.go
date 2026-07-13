@@ -143,11 +143,12 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 	}
 }
 
-// TestIssuePolymorphicSpine proves the ONE-table alignment: a git PR, a git
-// issue, a CRM deal and a native team task all live as issues rows in one
-// project, and every product surface is a FILTER — a repo's Issues tab, its PRs
-// tab, CRM's pipeline — never a second store. Defaults and cross-org isolation
-// on the new discriminators are covered here too.
+// TestIssuePolymorphicSpine proves the ONE-table alignment: a git PR, git
+// issues, a parent epic and a native team issue all live as issues rows in one
+// project, and every work-item surface is a FILTER — a repo's Issues tab, its
+// PRs tab, an epic view, a source view — never a second store. Defaults are
+// covered too. (Domain records like CRM deals live on another plane; see
+// contract.go — they are NOT tracker kinds.)
 func TestIssuePolymorphicSpine(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
@@ -160,7 +161,7 @@ func TestIssuePolymorphicSpine(t *testing.T) {
 		{Kind: "pr", Source: "git", Repo: "cloud", Title: "wire filter", Status: "in_progress"},
 		{Kind: "issue", Source: "git", Repo: "cloud", Title: "flaky test", Status: "todo"},
 		{Kind: "issue", Source: "git", Repo: "console", Title: "dark mode", Status: "todo"},
-		{Kind: "deal", Source: "crm", Title: "Acme expansion", Status: "backlog"},
+		{Kind: "epic", Source: "team", Title: "Q3 platform", Status: "backlog"},
 		{Title: "plan q3", Status: "backlog"}, // defaults: kind=issue, source=team
 	}
 	for _, in := range seed {
@@ -189,10 +190,10 @@ func TestIssuePolymorphicSpine(t *testing.T) {
 	if err != nil || len(cloudPRs) != 1 || cloudPRs[0].Title != "wire filter" {
 		t.Fatalf("cloud PRs tab: %+v err=%v", cloudPRs, err)
 	}
-	// CRM pipeline = filter {Kind:deal}.
-	deals, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Kind: "deal"})
-	if err != nil || len(deals) != 1 || deals[0].Title != "Acme expansion" {
-		t.Fatalf("crm deals: %+v err=%v", deals, err)
+	// An epic view = filter {Kind:epic}.
+	epics, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Kind: "epic"})
+	if err != nil || len(epics) != 1 || epics[0].Title != "Q3 platform" {
+		t.Fatalf("epics: %+v err=%v", epics, err)
 	}
 	// Everything a git source opened, across repos = filter {Source:git}: 3 rows.
 	git, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Source: "git"})
