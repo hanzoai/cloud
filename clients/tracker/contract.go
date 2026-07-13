@@ -1,71 +1,81 @@
 // The Hanzo work-item contract.
 //
-// This is law for every Hanzo product that has a "thing someone works on" —
-// a bug, a pull request, a support ticket, a sales deal, a content task, an
-// epic, a doc. There is ONE such primitive: the tracker Issue. There is no
-// second issue table, no per-product work-item schema, no parallel board.
+// Hanzo has THREE orthogonal planes for "state that changes over time". Each is
+// ONE way to do its job; none is a substitute for another, and the boundaries
+// between them are load-bearing. This file is law for where a new thing goes.
 //
-// # One primitive
+//	tracker Issue         engineering / project WORK ITEMS
+//	framework.DocType     schema-defined DOMAIN RECORDS with a lifecycle
+//	hanzoai/tasks         durable ASYNC EXECUTION
 //
-// An Issue is a row: (org, project, number) identity + mutable board state
-// (title, description, status, priority, assignee, labels) + four IMMUTABLE
+// # 1. tracker Issue — the one work-item primitive
+//
+// A work item is a unit of engineering/project work someone (human or agent)
+// moves across a board: a bug, a feature, a pull request, a parent epic. There
+// is ONE such primitive — the tracker Issue — and no second issues table, no
+// per-tool board. It is purpose-built native-Go (fixed schema, per-project
+// monotonic KEY-N numbering, git binding, deterministic high-perf lists) — the
+// durable replacement for the hanzo.team Svelte tracker.
+//
+// An Issue is (org, project, number) identity + mutable board state (title,
+// description, status, priority, assignee, labels) + four IMMUTABLE
 // discriminators set once at Create:
 //
-//	Kind    what it IS       issue | pr | task | epic | deal | ticket | doc
+//	Kind    what it IS       issue | pr | epic
 //	Source  who OPENED it    team | git | crm | helpdesk | cms | agent
 //	Repo    git binding      "<repo>" for git-sourced rows, "" otherwise
-//	ExtRef  external anchor   PR branch, deal id, ticket #, doc slug, ""
+//	ExtRef  external anchor   PR branch, or a link INTO another plane, ""
 //
-// Kind and Source are orthogonal: a git surface can open a task, an agent can
-// open a deal. They are validated independently against closed sets and never
-// braided into one "type" enum.
+// Kind and Source are orthogonal and validated independently. Kind is the small
+// closed set of genuine work-item shapes — deliberately NOT "task" (that word is
+// the async plane, see §3) and NOT "deal"/"ticket"/"doc" (those are domain
+// records, see §2). Source is the ORIGIN: source=helpdesk means "an engineering
+// issue opened FROM a support escalation", not "a support ticket".
 //
-// # One law: every surface is a filter
+// Every work-item surface is a FILTER over this one table, served by the SAME
+// /v1/tracker endpoints — never a parallel store:
 //
-// A product surface is NOT a new store. It is a FILTER over this one table,
-// expressed as an IssueFilter and served by the SAME /v1/tracker endpoints:
-//
-//	hanzo.team board      Filter{}                       every row in the project
+//	hanzo.team board      Filter{}                       every issue in the project
 //	board column          Filter{Status: "todo"}
 //	git repo Issues tab   Filter{Repo: r, Kind: "issue"}
 //	git repo PRs tab      Filter{Repo: r, Kind: "pr"}
-//	CRM pipeline          Filter{Kind: "deal"}
-//	helpdesk queue        Filter{Kind: "ticket"}
-//	CMS task list         Filter{Source: "cms"}
-//	an agent's work       Filter{Source: "agent"}
+//	an epic's children    (issues whose ExtRef is the epic)
+//	an agent's work        Filter{Source: "agent"}
 //
-// Adding a surface adds a filter, never a table. If you reach for a second
-// issues store you are complecting identity with presentation — stop.
+// # 2. framework.DocType — the one domain-record plane
 //
-// # Two tenancy roots, never conflated
+// A domain record is a structured, schema-defined row with its own fields and a
+// status lifecycle: a CMS article (Draft -> Published), a helpdesk ticket
+// (Open -> Pending -> Resolved -> Closed), an ERP document, a knowledge entry.
+// These are framework.DocType on Hanzo Base (help/cms/content/erp/knowledge),
+// and richly-relational domains that predate the framework (crm Company /
+// Contact / Opportunity) keep their bespoke stores. They are NOT tracker Issues:
+// forcing a ticket or an opportunity into the flat Issue shape would DROP its
+// schema and relations — the opposite of decomplecting. A ticket's queue is a
+// DocType query; a CRM pipeline is an Opportunity query. Do not rebuild them on
+// the tracker, and do not rebuild the tracker as a DocType.
 //
-// The physical boundary is the IAM project (principal.Project) — one SQLite
-// file per (org, IAM-project). WITHIN it, a tracker Project (the KEY-N handle,
-// a Linear "team") groups issues. A git repo is a THIRD thing: the code layer
-// under the IAM project, bound to issues by the Repo discriminator, not by
-// being a tracker Project. So "the cloud repo's issues" = rows with
-// Repo:"cloud"; the tracker Project they live in is an org convention (e.g. a
-// per-repo or per-org default team), NOT the repo itself.
+// # 3. hanzoai/tasks — the one async-execution substrate
 //
-// # The tasks seam: tracking is not execution
+// Neither plane above runs background work. Retries, scheduling, and anything
+// that must survive a restart is github.com/hanzoai/tasks (its CONTRACT: "there
+// is no second async system"). If you write `go func(){}` you are writing a bug.
 //
-// The Issue is the plane of INTENT and STATE — what a human or agent should do
-// and where it sits on a board. It is not an execution engine. Durable async
-// execution is github.com/hanzoai/tasks, the one substrate for retries,
-// scheduling, and work that must survive a restart (see its CONTRACT: "there
-// is no second async system").
+// # The seams — compose by reference, never by embedding
 //
-// The two compose across a thin seam, and only in these two directions:
+// The three planes touch only across thin, one-directional seams:
 //
-//	Issue -> task   creating/moving an Issue may ENQUEUE a task (notify an
-//	                assignee, kick a build for a git pr, run a CRM webhook).
-//	                The Issue never blocks on it and never runs it inline.
-//	task  -> Issue  a task may PATCH an Issue's board state as its durable
-//	                side effect (build passed -> move pr to done; ticket SLA
-//	                exceeded -> raise priority).
+//	Issue   <-> DocType   a domain record links to the engineering work item
+//	                      about it (and back) by ExtRef. A helpdesk ticket that
+//	                      needs a code fix opens an Issue{Source:"helpdesk"} and
+//	                      stores its number; neither table embeds the other.
+//	Issue    -> task      creating/moving an Issue may ENQUEUE a task (notify an
+//	                      assignee, kick a git build). The Issue never blocks.
+//	task     -> Issue     a task may PATCH an Issue's board state as its durable
+//	                      side effect (build passed -> move the pr to done).
 //
-// Never invert this: the tracker holds no queue, spawns no `go func()`, owns
-// no retry policy; tasks holds no board columns and renders no list. Intent
-// and execution stay decomplected — one seam, two values, each complete.
+// Never invert a seam: the tracker holds no queue and no domain schema; DocType
+// holds no board and no queue; tasks holds no records and no columns. Intent,
+// records, and execution stay decomplected — three values, each complete.
 
 package tracker
