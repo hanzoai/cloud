@@ -26,7 +26,7 @@ import (
 //     table ListObservations reads). Every production generation lands here, so it
 //     is the AUTHORITATIVE source for counts, tokens, cost, errors, model & user
 //     cardinality. count()/sum()/uniqExact() GROUP BY model / time bucket.
-//   - signoz_traces GenAI spans — the OTel gen_ai.* spans ai/object emits carry
+//   - o11y_traces GenAI spans — the OTel gen_ai.* spans ai/object emits carry
 //     duration_nano + gen_ai.request.model + gen_ai.hanzo.org_id, so per-model and
 //     overall latency percentiles come from here. This read is BEST-EFFORT: if the
 //     span store is unreachable or holds no GenAI spans, latency is honestly absent
@@ -310,12 +310,12 @@ func (t *dsTelemetry) Metrics(ctx context.Context, f MetricsFilter) (Board, erro
 }
 
 // latency reads per-model + overall latency percentiles from the GenAI spans in
-// signoz_traces. Best-effort: an error (span store unreachable, table absent)
+// o11y_traces. Best-effort: an error (span store unreachable, table absent)
 // returns an empty per-model map and an unavailable overall — never an error —
 // so a latency miss cannot fail the dashboard. The org gate mirrors the ledger:
 // non-admin is pinned to gen_ai.hanzo.org_id; a SuperAdmin sees every org.
 func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]latPercentiles, LatencyStat) {
-	const spanTable = "signoz_traces.distributed_signoz_index_v3"
+	const spanTable = "o11y_traces.distributed_o11y_index_v3"
 	where := "attributes_string['gen_ai.system'] = 'hanzo' AND timestamp >= ? AND timestamp < ?"
 	args := []any{chTime(f.Since), chTime(f.Until)}
 	if !f.AllOrgs {
