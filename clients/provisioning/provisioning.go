@@ -12,7 +12,7 @@
 //	kv        -> Hanzo KV        Datastore type=valkey       redis://…:6379
 //	sql       -> Hanzo SQL       Datastore type=postgresql   postgres://…:5432
 //	docdb     -> Hanzo DocDB     Datastore type=docdb        mongodb://…:27017
-//	datastore -> Hanzo Datastore Datastore type=datastore    clickhouse://…:8123
+//	datastore -> Hanzo Datastore Datastore type=datastore    datastore://…:8123
 //
 // SHARED-logical — a logical resource inside an already-live shared backend:
 //
