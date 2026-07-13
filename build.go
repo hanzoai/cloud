@@ -214,7 +214,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	// The invariant that must never break: the gate READ and the usage DEBIT key on
 	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
 	// subject; keep them together. The gate reads a coarse cents balance (a >0
-	// threshold only); the DEBIT is atto-exact.
+	// threshold only); the DEBIT is 18-decimal-exact.
 	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
 		bal, err := fin.Balance(ctx, namespace, subject, currency, false)
 		if err != nil {
@@ -223,7 +223,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 		return bal.Cents(), nil
 	})
 	// The DEBIT is exact: the ai module emits the cost as a decimal-USD string, parsed
-	// here to atto-USD (1e-18) so a sub-cent call bills precisely and is never floored.
+	// here to 18-decimal USD (1e-18) so a sub-cent call bills precisely and is never floored.
 	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
 		amt, err := money.ParseUSD(u.USD)
 		if err != nil {
@@ -234,7 +234,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
 	})
-	log.Info("finance ledger wired (per-subject wallet in the org ledger, atto-exact, fail-closed)", "dataDir", cfg.DataDir)
+	log.Info("finance ledger wired (per-subject wallet in the org ledger, 18-decimal-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared

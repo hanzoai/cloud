@@ -213,7 +213,7 @@ type BaseClient interface {
 type DepositInput struct {
 	Org      string       // X-Org-Id namespace, resolved to the commerce Organization
 	Subject  string       // billing subject / DestinationId (org slug or "owner/name")
-	Amount   money.Amount // amount to credit, exact atto-USD (> 0)
+	Amount   money.Amount // amount to credit, exact 18-decimal USD (> 0)
 	Currency string       // default "usd"
 	Notes    string
 	Tags     string
@@ -230,7 +230,7 @@ type DepositInput struct {
 type UsageInput struct {
 	Org       string
 	Subject   string       // billing subject / SourceId
-	Amount    money.Amount // amount to debit, exact atto-USD (> 0)
+	Amount    money.Amount // amount to debit, exact 18-decimal USD (> 0)
 	Currency  string
 	Model     string
 	Provider  string
@@ -267,7 +267,7 @@ type CommerceClient interface {
 // through THIS, and it composes the same finance ledger the treasury posts to — one
 // ledger, two account layers.
 type FinanceClient interface {
-	// Balance returns subject's AVAILABLE prepaid balance as an exact atto-USD money
+	// Balance returns subject's AVAILABLE prepaid balance as an exact 18-decimal USD money
 	// value (settled ledger balance; transient holds are the caller's in-pod
 	// reservation) within org's namespace. The ONE balance read the ai gate + the edge
 	// meter share.
