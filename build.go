@@ -218,7 +218,7 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	})
 	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
 		return fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Namespace, Subject: u.Subject, Cents: u.Cents,
+			Org: u.Namespace, Subject: u.Subject, USD: u.USD,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
 	})
