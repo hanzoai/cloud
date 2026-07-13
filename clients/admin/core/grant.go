@@ -147,7 +147,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 	// with the commerce HTTP deposit as the split-deploy fallback. Both return the
 	// pre-balance (recorded even on failure), the entry/transaction id, and the post-balance,
 	// so the audit + response below are one shape regardless of which path moved the money.
-	before, txID, after, afterAtto, derr := grantDeposit(s, c, org, currency, notes, tag, source, req.AmountCents)
+	before, txID, after, afterExact, derr := grantDeposit(s, c, org, currency, notes, tag, source, req.AmountCents)
 	if derr != nil {
 		// The grant did not land — record the FAILED attempt (accountability), then
 		// surface the error. Never report a grant that failed as success.
@@ -169,7 +169,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 		"currency":      currency,
 		"source":        source,
 		"balanceCents":  after,
-		"balanceAtto":   afterAtto, // EXACT 18-decimal balance — a sub-cent debit is visible here
+		"balanceExact":  afterExact, // EXACT 18-decimal balance — a sub-cent debit is visible here
 		"transactionId": txID,
 	})
 }
@@ -181,7 +181,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 // split deploy). It returns the pre-balance (so ApplyGrant can audit even a FAILED
 // attempt), the entry/transaction id, and the post-balance, so the audit + response are
 // one shape regardless of which path moved the money.
-func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterAtto string, err error) {
+func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
 	ctx := c.Context()
 	if fin := finance.Current(); fin != nil {
 		if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
@@ -194,9 +194,9 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag
 			return before, "", before, "", derr
 		}
 		if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
-			after, afterAtto = bal.Cents(), bal.AttoString() // afterAtto = the EXACT balance (sub-cent visible)
+			after, afterExact = bal.Cents(), bal.IntString() // afterExact = the EXACT balance (sub-cent visible)
 		}
-		return before, id, after, afterAtto, nil
+		return before, id, after, afterExact, nil
 	}
 	// Split deploy: no co-resident finance ledger → the commerce billing HTTP deposit, with
 	// its operator-nonce idempotency key so a retried grant dedupes at commerce.
