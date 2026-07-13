@@ -66,7 +66,7 @@ func mountApp(t *testing.T) *zip.App {
 	// Bind the SSH listener to an ephemeral loopback port so parallel/sequential
 	// tests never collide on the default :2222 (each Mount gets its own port +
 	// host key under its own TempDir).
-	t.Setenv("CLOUD_GIT_SSH_ADDR", "127.0.0.1:0")
+	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)

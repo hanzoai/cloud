@@ -1,6 +1,6 @@
 // Package git mounts the Hanzo Cloud /v1/git surface: S3-backed Git hosting
-// native in the unified cloud binary — the "internal Gitea" foundation agents
-// push code into.
+// native in the unified cloud binary — Hanzo Git, the internal git host
+// foundation agents push code into.
 //
 // A repo is the Git LAYER (source code, buildable/deployable) that lives UNDER
 // an IAM project. It is NOT the IAM project itself: `project` is org-scoping
@@ -176,7 +176,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
-	// is loaded from KMS/env (CLOUD_GIT_SSH_HOST_KEY) or generated + persisted
+	// is loaded from KMS/env (GIT_SSH_HOST_KEY) or generated + persisted
 	// under the git data root.
 	sshSrv, err := newSSHServer(s, sshConfig(deps, gitRoot))
 	if err != nil {
@@ -220,6 +220,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
 	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
+
+	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) at
+	// /git/*, the native replacement for the standalone Gitea web app (ui.go).
+	uiRoutes(app, s)
 
 	// ZAP transport — the SAME control-plane core, reachable by browsers/services
 	// that speak ZAP instead of REST, over the shared /zap plane. See zap.go.
