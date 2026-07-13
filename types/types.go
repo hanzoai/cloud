@@ -226,7 +226,10 @@ type DepositInput struct {
 type UsageInput struct {
 	Org       string
 	Subject   string // billing subject / SourceId
-	Cents     int64  // amount in cents (> 0)
+	Cents     int64  // amount in cents (> 0). Legacy/back-compat; USD wins when set.
+	USD       string // EXACT decimal USD ("0.00132") from ai's UsageEvent; precise
+	//               debit source. When non-empty it supersedes Cents (the recorder
+	//               rounds it to the ledger's cents at the boundary).
 	Currency  string
 	Model     string
 	Provider  string
