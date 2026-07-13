@@ -171,7 +171,7 @@ func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 	if cr.Host != wantHost || cr.Port != 8123 {
 		t.Fatalf("endpoint = %s:%d, want %s:8123 (the instance's own service)", cr.Host, cr.Port, wantHost)
 	}
-	if !strings.HasPrefix(cr.ConnectionString, "clickhouse://admin:") || !strings.Contains(cr.ConnectionString, wantHost+":8123") {
+	if !strings.HasPrefix(cr.ConnectionString, "datastore://admin:") || !strings.Contains(cr.ConnectionString, wantHost+":8123") {
 		t.Fatalf("dsn %q does not target the dedicated instance", cr.ConnectionString)
 	}
 
