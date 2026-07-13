@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -28,6 +29,13 @@ func registerHooks() {
 		framework.RegisterHook(dt, framework.ActionBeforeSave, enforceLifecycle)
 		framework.RegisterHook(dt, framework.ActionBeforeSave, enforceServerOwned)
 	}
+	// Campaign carries the ONE explicit commerce join key (`product`); the integrity gate
+	// verifies it resolves to a real catalog product. It is Campaign-only on purpose:
+	// Asset.`design` is a studio design slug that only BY CONVENTION equals a product slug
+	// and is authored render-first (before the catalog product exists), so gating it would
+	// reject the very first step of the storefront loop; the publish edge already
+	// fail-closes when a published Asset's design is not a real store product.
+	framework.RegisterHook(DocTypeCampaign, framework.ActionBeforeSave, enforceCatalogRefs)
 }
 
 // serverOwnedFields are the reconciliation/confirmation columns that reflect SERVER
@@ -154,6 +162,48 @@ func enforceLifecycle(_ context.Context, ev *framework.Event) error {
 	}
 	if !CanTransition(from, to) {
 		return fmt.Errorf("illegal %s transition %q → %q", ev.DocType, from, to)
+	}
+	return nil
+}
+
+// enforceCatalogRefs is the before_save integrity gate on a Campaign's `product` join
+// key: a campaign that names a commerce product must name one the org's catalog actually
+// has (a dangling handle would drive generation/distribution for a nonexistent product).
+//
+//   - It validates ONLY when the handle is newly set or CHANGED — never on an unrelated
+//     re-save (e.g. a status transition) — so a later catalog edit can never wedge an
+//     existing campaign's lifecycle.
+//   - It resolves via the ONE commerce edge content already owns (Storefront.ProductExists).
+//     When that edge is not wired (local dev / no commerce), or reachable-but-erroring, it
+//     SKIPS — integrity is enforced only where it can actually be checked, and a commerce
+//     outage never wedges content authoring. Only a clean "resolved, no such product"
+//     answer fails the write closed.
+//
+// ev.Org is the VALIDATED tenant; the lookup is X-Org-Id-pinned to it (no cross-org read).
+func enforceCatalogRefs(ctx context.Context, ev *framework.Event) error {
+	handle := strings.TrimSpace(dataString(ev.Doc.Data, "product"))
+	if handle == "" {
+		return nil
+	}
+	if ev.Prev != nil && strings.TrimSpace(dataString(ev.Prev.Data, "product")) == handle {
+		return nil // unchanged reference — already validated when it was set
+	}
+	s := mounted
+	if s == nil || s.State.sf == nil {
+		return nil // content not mounted / no edge — cannot verify, so do not block
+	}
+	ok, err := s.State.sf.ProductExists(ctx, ev.Org, handle)
+	if err != nil {
+		if !errors.Is(err, errNotConfigured) && ev.Logger != nil {
+			// Commerce was reachable but errored — do not wedge the write on a transient
+			// blip; the dangling-handle guard is best-effort against a live catalog.
+			ev.Logger.Warn("campaign product validation skipped (commerce edge error)",
+				"org", ev.Org, "product", handle, "err", err)
+		}
+		return nil
+	}
+	if !ok {
+		return fmt.Errorf("%s.product %q does not resolve to a product in this org's catalog", ev.DocType, handle)
 	}
 	return nil
 }
