@@ -278,6 +278,12 @@ func Wire() []cloud.MountSpec {
 		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
+		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
+		// to zen's serving layer in-process (identity, tools, 1M ladder, codec) and
+		// c.Next()s everything else to ai. zen owns the zen family; ai owns every
+		// other model and the /v1/models list. Order is load-bearing — Claim must
+		// run before ai's catch-all. (See hip-00NN.)
+		{Name: "zen", Mount: mountZen},
 		{Name: "ai", Mount: cloud.Typed(ai.Mount)},
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: cloud.Typed(plugin.Mount)},
