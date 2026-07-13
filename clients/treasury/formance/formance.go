@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
 )
 
@@ -159,9 +160,10 @@ func (b *Backend) postTransfer(ctx context.Context, kind, program, ref, memo, so
 		"metadata":  map[string]string{"kind": kind, "program": program, "memo": memo},
 	})
 	raw, status, errCode, err := b.do(ctx, http.MethodPost, "/v2/"+b.ledger+"/transactions", nil, body)
+	amt := money.FromCents(amountCents)
 	entry := ledger.Entry{
-		Kind: kind, Program: program, Ref: ref, Memo: memo, AmountCents: amountCents, CreatedAt: now,
-		Postings: []ledger.Posting{{Account: source, Amount: -amountCents}, {Account: dest, Amount: amountCents}},
+		Kind: kind, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now,
+		Postings: []ledger.Posting{{Account: source, Amount: amt.Neg()}, {Account: dest, Amount: amt}},
 	}
 	if err != nil {
 		return ledger.Entry{}, false, err
@@ -280,11 +282,12 @@ func (b *Backend) Entries(ctx context.Context, limit int) ([]ledger.Entry, error
 			CreatedAt: t.Timestamp.Unix(),
 		}
 		for _, p := range t.Postings {
+			amt := money.FromCents(p.Amount) // Formance USD/2 asset == cents
 			e.Postings = append(e.Postings,
-				ledger.Posting{Account: p.Source, Amount: -p.Amount},
-				ledger.Posting{Account: p.Destination, Amount: p.Amount})
+				ledger.Posting{Account: p.Source, Amount: amt.Neg()},
+				ledger.Posting{Account: p.Destination, Amount: amt})
 			if p.Destination == reserveAddress || strings.HasPrefix(p.Destination, "payout:") {
-				e.AmountCents = p.Amount
+				e.Amount = amt
 			}
 		}
 		entries = append(entries, e)
@@ -341,7 +344,7 @@ func (b *Backend) Root(ctx context.Context) ([32]byte, int, error) {
 	if err != nil {
 		return [32]byte{}, 0, err
 	}
-	return ledger.ComputeRoot(entries, reserve), len(entries), nil
+	return ledger.ComputeRoot(entries, money.FromCents(reserve)), len(entries), nil
 }
 
 // ── HTTP ─────────────────────────────────────────────────────────────────────
