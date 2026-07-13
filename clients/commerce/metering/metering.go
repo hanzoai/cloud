@@ -46,6 +46,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -442,24 +443,41 @@ func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int
 	return br.Available, nil
 }
 
-// Usage is one usage event to record. User (IAM "org/sub") and AmountCents
-// (the cost to debit) are the essentials; the rest is descriptive metadata
-// commerce stores on the transaction. Fields mirror commerce's usageRequest
-// (commerce/api/billing/usage.go) one-for-one.
+// Usage is one usage event to record. The amount (the cost to debit) is the
+// essential beside the billing key (User); the rest is descriptive metadata
+// commerce stores on the transaction.
+//
+// Amount is the debit as an exact money.Amount — the canonical, typed value,
+// native 18-decimal USD (the co-resident finance ledger's precision). One typed
+// value, no precedence rules: a caller that has the exact cost (zen, which
+// prices per token at 18-dp) sets Amount directly and the co-resident path
+// debits it with NO rounding. The legacy int64 wire fields (AmountCents,
+// AmountMicros) remain only for the HTTP path to commerce and for older callers
+// that build a Usage without a money.Amount; from them Record reconstructs the
+// same money.Amount. Amount, when non-zero, always wins.
 type Usage struct {
-	User        string `json:"user"`            // per-org billing key (org slug) — the debit destination.
-	Actor       string `json:"actor,omitempty"` // org/sub identity for the audit trail (commerce ignores unknown fields today; forward-compatible).
-	Org         string `json:"-"`               // routed via X-Org-Id, not the body.
-	Currency    string `json:"currency,omitempty"`
-	AmountCents int64  `json:"amount"`
-	// AmountMicros is the debit in micro-USD (1e6 = $1), carrying sub-cent
-	// precision so a tiny per-call inference cost meters EXACTLY instead of
-	// rounding to zero (and slipping through unbilled). Commerce prefers it over
-	// AmountCents (usage.go: effMicros); when set, AmountCents may be 0. Zero/absent
-	// → commerce falls back to AmountCents*10000.
-	AmountMicros int64  `json:"amountMicros,omitempty"`
-	Model        string `json:"model,omitempty"`
-	Provider     string `json:"provider,omitempty"`
+	User     string `json:"user"`            // per-org billing key (org slug) — the debit destination.
+	Actor    string `json:"actor,omitempty"` // org/sub identity for the audit trail (commerce ignores unknown fields today; forward-compatible).
+	Org      string `json:"-"`               // routed via X-Org-Id, not the body.
+	Currency string `json:"currency,omitempty"`
+
+	// Amount is the exact debit, typed. Not serialized: the co-resident finance
+	// path reads it directly; the HTTP path derives the wire fields below from it.
+	Amount money.Amount `json:"-"`
+
+	// AmountCents is the debit in whole cents (legacy wire field). Set by older
+	// callers and by Record when serializing a typed Amount for commerce. When
+	// Amount is set, this is ignored on the co-resident path.
+	AmountCents int64 `json:"amount"`
+	// AmountMicros is the debit in micro-USD (1e6 = $1), sub-cent precision for the
+	// HTTP path so a tiny per-call cost is not lost to cent rounding. Commerce
+	// prefers it over AmountCents (usage.go: effMicros); when set, AmountCents may
+	// be 0. Zero/absent → commerce falls back to AmountCents*10000. Ignored on the
+	// co-resident path when Amount is set.
+	AmountMicros int64 `json:"amountMicros,omitempty"`
+
+	Model    string `json:"model,omitempty"`
+	Provider string `json:"provider,omitempty"`
 	// Project and Service attribute this debit to a scope so commerce records the
 	// dimensions the per-scope spend cap sums over (issue #70). Empty = the
 	// org-wide default scope.
@@ -473,6 +491,24 @@ type Usage struct {
 	Stream           bool   `json:"stream,omitempty"`
 	Status           string `json:"status,omitempty"`
 	ClientIP         string `json:"clientIp,omitempty"`
+}
+
+// amountMoney returns the canonical typed debit. Amount wins; otherwise the
+// int64 wire fields are reconstructed (micros preferred, then cents) so a
+// legacy Usage without a typed Amount still debits. The result is zero when no
+// amount is set, which Record treats as "skip".
+func (u Usage) amountMoney() money.Amount {
+	if !u.Amount.IsZero() {
+		return u.Amount
+	}
+	if u.AmountMicros > 0 {
+		// micro-USD (1e6 = $1) → 18-dp USD: scale the integer micros by 1e12.
+		return money.FromInt(new(big.Int).Mul(big.NewInt(u.AmountMicros), big.NewInt(1_000_000_000_000)))
+	}
+	if u.AmountCents > 0 {
+		return money.FromCents(u.AmountCents)
+	}
+	return money.Zero()
 }
 
 // RecordResult is the commerce response to a usage write.
@@ -495,7 +531,8 @@ type RecordResult struct {
 // Provider is the service name doing the metering when no model/provider is
 // natural (e.g. "search", "functions"); set it on Usage.Provider.
 func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
-	if !c.Enabled() || (u.AmountCents <= 0 && u.AmountMicros <= 0) {
+	amt := u.amountMoney()
+	if !c.Enabled() || amt.IsZero() || amt.IsNeg() {
 		return nil, nil
 	}
 	if strings.TrimSpace(u.User) == "" {
@@ -505,21 +542,28 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		u.Currency = "usd"
 	}
 
-	// Co-resident native ledger: post the usage debit DIRECTLY (no HTTP), the ONE money
-	// seam. finance is a whole-cent ledger, so a micros-only caller (the AI meter prices
-	// sub-cent per call) is folded to whole cents by CEIL — never dropped to zero, which
-	// would leak exactly the sub-cent revenue AmountMicros exists to capture. The debit is
-	// idempotent on RequestID inside finance, and a test-mode client hits the sandbox books.
+	// Co-resident native ledger: post the usage debit DIRECTLY (no HTTP), the ONE
+	// money seam. finance is an exact 18-decimal USD ledger, so the typed Amount
+	// debits with NO rounding — a per-token cost priced at 18-dp is never floored to
+	// cents or micros. The debit is idempotent on RequestID inside finance, and a
+	// test-mode client hits the sandbox books.
 	if fin := finance.Current(); fin != nil {
-		cents := usageCents(u)
 		if err := fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Org, Subject: u.User, Amount: money.FromCents(cents), Currency: u.Currency,
+			Org: u.Org, Subject: u.User, Amount: amt, Currency: u.Currency,
 			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
 			RequestID: u.RequestID, Test: c.test,
 		}); err != nil {
 			return nil, err
 		}
-		return &RecordResult{User: u.User, Amount: cents, Currency: u.Currency, Type: "withdraw"}, nil
+		return &RecordResult{User: u.User, Amount: amt.Cents(), Currency: u.Currency, Type: "withdraw"}, nil
+	}
+
+	// HTTP path to commerce: serialize the wire fields. A typed Amount is folded to
+	// micros (sub-cent) when it carries sub-cent precision, else cents — commerce
+	// preserves the exact micros in metadata (usage.go: effMicros). When commerce
+	// grows an 18-dp wire field, the typed Amount flows there unrounded too.
+	if u.AmountMicros == 0 && u.AmountCents == 0 {
+		u.AmountCents = amt.Cents()
 	}
 
 	payload, err := json.Marshal(u)
@@ -539,19 +583,6 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 		return nil, nil
 	}
 	return &res, nil
-}
-
-// usageCents is the whole-cent debit for the native finance ledger (a cents-only ledger).
-// It prefers AmountCents; when a caller priced sub-cent (AmountMicros only — e.g. the AI
-// meter, which debits micro-USD per call) it CEILs micro-USD → cents (10_000 micro-USD =
-// 1¢), so a tiny per-call cost bills at least 1¢ instead of rounding to zero and slipping
-// through unbilled. Record's early guard guarantees at least one of the two is positive, so
-// the result here is always >= 1.
-func usageCents(u Usage) int64 {
-	if u.AmountCents > 0 {
-		return u.AmountCents
-	}
-	return (u.AmountMicros + 9999) / 10000 // ceil micro-USD to whole cents
 }
 
 // ---- HTTP plumbing -------------------------------------------------------
