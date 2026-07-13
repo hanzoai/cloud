@@ -37,6 +37,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/hanzoai/cloud/clients/money"
 )
 
 // Canonical chart-of-accounts ids. ONE shared reserve pool with per-program payout
@@ -90,22 +92,22 @@ var (
 // credit positive to the funded account); the engine only requires the legs to sum
 // to zero.
 type Posting struct {
-	Account string `json:"account"`
-	Amount  int64  `json:"amount"` // signed minor units; Σ over an entry == 0
+	Account string       `json:"account"`
+	Amount  money.Amount `json:"amount"` // signed atto-USD (1e-18); Σ over an entry == 0
 }
 
 // Entry is one balanced journal entry. Ref (with Kind+Program) is the idempotency
 // key: re-posting the same (Kind, Program, Ref) is a no-op that returns the
 // original — so a crashed-and-retried payout debits the fund AT MOST ONCE.
 type Entry struct {
-	ID          string    `json:"id"`
-	Kind        string    `json:"kind"`
-	Program     string    `json:"program,omitempty"` // referral|affiliate|author for payouts; "" otherwise
-	Ref         string    `json:"ref"`               // idempotency ref (unique within Kind+Program)
-	Memo        string    `json:"memo,omitempty"`
-	AmountCents int64     `json:"amountCents"` // the entry's magnitude (display; postings hold the signed truth)
-	CreatedAt   int64     `json:"createdAt"`
-	Postings    []Posting `json:"postings,omitempty"`
+	ID        string       `json:"id"`
+	Kind      string       `json:"kind"`
+	Program   string       `json:"program,omitempty"` // referral|affiliate|author for payouts; "" otherwise
+	Ref       string       `json:"ref"`               // idempotency ref (unique within Kind+Program)
+	Memo      string       `json:"memo,omitempty"`
+	Amount    money.Amount `json:"amount"` // the entry's magnitude (display; postings hold the signed truth)
+	CreatedAt int64        `json:"createdAt"`
+	Postings  []Posting    `json:"postings,omitempty"`
 }
 
 // Policy is the revenue-share configuration: the fraction of net platform revenue,
@@ -138,7 +140,7 @@ type Tx interface {
 	// the idempotency lookup performed inside the same tx as the insert.
 	EntryByRef(kind, program, ref string) (Entry, bool, error)
 	// Balance returns an account's signed balance as visible inside this tx.
-	Balance(account string) (int64, error)
+	Balance(account string) (money.Amount, error)
 	// Insert upserts every referenced account then writes the entry and its
 	// postings. The engine has already validated the postings balance and the ref
 	// is free; the adapter only persists.
@@ -153,10 +155,10 @@ type Store interface {
 	// back on error.
 	Tx(ctx context.Context, fn func(Tx) error) error
 	// Balance returns an account's signed balance (read path, no tx).
-	Balance(ctx context.Context, account string) (int64, error)
+	Balance(ctx context.Context, account string) (money.Amount, error)
 	// BalancesWithPrefix returns balances for every account whose id has prefix
 	// (e.g. "payout:") — the per-program rollup.
-	BalancesWithPrefix(ctx context.Context, prefix string) (map[string]int64, error)
+	BalancesWithPrefix(ctx context.Context, prefix string) (map[string]money.Amount, error)
 	// Entries returns the most recent entries (newest first, with postings), bounded.
 	Entries(ctx context.Context, limit int) ([]Entry, error)
 	// Policy returns the current revenue-share policy (zero value if never set).
@@ -253,17 +255,18 @@ func (l *Ledger) Accrue(ctx context.Context, period string, revenueCents, now in
 	if err != nil {
 		return Entry{}, false, err
 	}
+	shareAmt := money.FromCents(share)
 	e := Entry{
-		ID:          id,
-		Kind:        KindAccrual,
-		Ref:         "accrual:" + period,
-		Memo:        fmt.Sprintf("revenue-share %d bps of %d cents (period %s)", pol.RevenueShareBps, revenueCents, period),
-		AmountCents: share,
-		CreatedAt:   now,
+		ID:        id,
+		Kind:      KindAccrual,
+		Ref:       "accrual:" + period,
+		Memo:      fmt.Sprintf("revenue-share %d bps of %d cents (period %s)", pol.RevenueShareBps, revenueCents, period),
+		Amount:    shareAmt,
+		CreatedAt: now,
 	}
 	postings := []Posting{
-		{Account: AccountRevenue, Amount: -share},
-		{Account: AccountReserve, Amount: share},
+		{Account: AccountRevenue, Amount: shareAmt.Neg()},
+		{Account: AccountReserve, Amount: shareAmt},
 	}
 	return l.post(ctx, e, postings)
 }
@@ -283,10 +286,11 @@ func (l *Ledger) Seed(ctx context.Context, ref, memo string, amountCents, now in
 	if err != nil {
 		return Entry{}, false, err
 	}
-	e := Entry{ID: id, Kind: KindSeed, Ref: ref, Memo: memo, AmountCents: amountCents, CreatedAt: now}
+	amt := money.FromCents(amountCents)
+	e := Entry{ID: id, Kind: KindSeed, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
-		{Account: AccountRevenue, Amount: -amountCents},
-		{Account: AccountReserve, Amount: amountCents},
+		{Account: AccountRevenue, Amount: amt.Neg()},
+		{Account: AccountReserve, Amount: amt},
 	}
 	return l.post(ctx, e, postings)
 }
@@ -321,10 +325,11 @@ func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, am
 	if gerr != nil {
 		return Entry{}, false, false, gerr
 	}
-	e := Entry{ID: id, Kind: KindPayout, Program: program, Ref: ref, Memo: memo, AmountCents: amountCents, CreatedAt: now}
+	amt := money.FromCents(amountCents)
+	e := Entry{ID: id, Kind: KindPayout, Program: program, Ref: ref, Memo: memo, Amount: amt, CreatedAt: now}
 	postings := []Posting{
-		{Account: AccountReserve, Amount: -amountCents},
-		{Account: PayoutAccount(program), Amount: amountCents},
+		{Account: AccountReserve, Amount: amt.Neg()},
+		{Account: PayoutAccount(program), Amount: amt},
 	}
 	if verr := validateBalanced(postings); verr != nil {
 		return Entry{}, false, false, verr
@@ -342,7 +347,7 @@ func (l *Ledger) DebitReserve(ctx context.Context, program, ref, memo string, am
 		if berr != nil {
 			return berr
 		}
-		if bal < amountCents {
+		if bal.Cmp(amt) < 0 {
 			backed = false // insufficient reserve — post nothing, leave the fund intact
 			return nil
 		}
@@ -397,7 +402,11 @@ func (l *Ledger) post(ctx context.Context, e Entry, postings []Posting) (Entry, 
 // ReserveCents is the fund's available balance — the ceiling on total backable
 // payouts right now.
 func (l *Ledger) ReserveCents(ctx context.Context) (int64, error) {
-	return l.store.Balance(ctx, AccountReserve)
+	bal, err := l.store.Balance(ctx, AccountReserve)
+	if err != nil {
+		return 0, err
+	}
+	return bal.Cents(), nil
 }
 
 // Snapshot computes the reserve-fund health report. Fund == Accrued − Paid always,
@@ -415,20 +424,21 @@ func (l *Ledger) Snapshot(ctx context.Context) (Report, error) {
 	var paid int64
 	for acct, bal := range payouts {
 		program := strings.TrimPrefix(acct, payoutPrefix)
-		byProgram[program] = bal
-		paid += bal
+		byProgram[program] = bal.Cents()
+		paid += bal.Cents()
 	}
 	pol, err := l.store.Policy(ctx)
 	if err != nil {
 		return Report{}, fmt.Errorf("policy: %w", err)
 	}
+	reserveCents := reserve.Cents()
 	return Report{
-		ReserveCents:     reserve,
-		AccruedCents:     reserve + paid, // lifetime into the fund
+		ReserveCents:     reserveCents,
+		AccruedCents:     reserveCents + paid, // lifetime into the fund
 		PaidCents:        paid,
 		ByProgramCents:   byProgram,
 		Policy:           pol,
-		SolventForPayout: reserve > 0,
+		SolventForPayout: reserve.Sign() > 0,
 	}, nil
 }
 
@@ -437,9 +447,18 @@ func (l *Ledger) Entries(ctx context.Context, limit int) ([]Entry, error) {
 	return l.store.Entries(ctx, limit)
 }
 
-// AccountsWithPrefix returns account→balance for accounts under prefix (Backend).
+// AccountsWithPrefix returns account→balance (in cents, the Backend facade unit) for
+// accounts under prefix.
 func (l *Ledger) AccountsWithPrefix(ctx context.Context, prefix string) (map[string]int64, error) {
-	return l.store.BalancesWithPrefix(ctx, prefix)
+	bals, err := l.store.BalancesWithPrefix(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(bals))
+	for acct, bal := range bals {
+		out[acct] = bal.Cents()
+	}
+	return out, nil
 }
 
 // Root computes a deterministic commitment over the ENTIRE journal plus the reserve
@@ -464,9 +483,11 @@ func (l *Ledger) Root(ctx context.Context) (root [32]byte, entryCount int, err e
 
 // ComputeRoot hashes a journal (in a canonical created-at,id order) plus the reserve
 // balance into a 32-byte commitment — the value the Hanzo L1 anchor commits on-chain.
-// Both backends (native + Formance) use it, so the on-chain root is computed one way
+// Amounts are serialized as their EXACT atto-USD decimal string (the on-chain uint256
+// value), so the off-chain preimage and the on-chain balance agree bit-for-bit. Both
+// backends (native + Formance) use it, so the on-chain root is computed one way
 // regardless of which ledger owns the books.
-func ComputeRoot(entries []Entry, reserveCents int64) [32]byte {
+func ComputeRoot(entries []Entry, reserve money.Amount) [32]byte {
 	sorted := make([]Entry, len(entries))
 	copy(sorted, entries)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -477,12 +498,12 @@ func ComputeRoot(entries []Entry, reserveCents int64) [32]byte {
 	})
 	h := sha256.New()
 	for _, e := range sorted {
-		fmt.Fprintf(h, "%s|%s|%s|%s|%d|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.AmountCents, e.CreatedAt)
+		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.Amount.AttoString(), e.CreatedAt)
 		for _, p := range e.Postings {
-			fmt.Fprintf(h, "\t%s|%d\n", p.Account, p.Amount)
+			fmt.Fprintf(h, "\t%s|%s\n", p.Account, p.Amount.AttoString())
 		}
 	}
-	fmt.Fprintf(h, "reserve|%d\n", reserveCents)
+	fmt.Fprintf(h, "reserve|%s\n", reserve.AttoString())
 	var root [32]byte
 	copy(root[:], h.Sum(nil))
 	return root
@@ -513,11 +534,11 @@ func validateBalanced(postings []Posting) error {
 	if len(postings) < 2 {
 		return ErrUnbalanced
 	}
-	var sum int64
+	sum := money.Zero()
 	for _, p := range postings {
-		sum += p.Amount
+		sum = sum.Add(p.Amount)
 	}
-	if sum != 0 {
+	if !sum.IsZero() {
 		return ErrUnbalanced
 	}
 	return nil
