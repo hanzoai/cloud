@@ -42,7 +42,7 @@ const (
 // SAME principal.Org the REST path uses.
 func mountZapApp(t *testing.T) (base string, stop func()) {
 	t.Helper()
-	t.Setenv("CLOUD_GIT_SSH_ADDR", "127.0.0.1:0")
+	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 
 	// Identity shim (stands in for the gateway + SanitizeIdentity middleware):
