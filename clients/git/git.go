@@ -1,6 +1,6 @@
 // Package git mounts the Hanzo Cloud /v1/git surface: S3-backed Git hosting
-// native in the unified cloud binary — the "internal Gitea" foundation agents
-// push code into.
+// native in the unified cloud binary — Hanzo Git, the internal git host
+// foundation agents push code into.
 //
 // A repo is the Git LAYER (source code, buildable/deployable) that lives UNDER
 // an IAM project. It is NOT the IAM project itself: `project` is org-scoping
