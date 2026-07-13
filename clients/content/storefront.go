@@ -65,11 +65,17 @@ const (
 // primary product shot, so they do NOT drive the storefront image.
 var catalogKinds = map[string]bool{"ecom": true, "product": true, "lifestyle": true}
 
-// Storefront is the catalog edge. Publish materializes a published product asset's
-// image into the org's storefront (the product Listing's headerImage). Implementations
-// are the ONLY place Hanzo Commerce is touched.
+// Storefront is the catalog edge — the ONLY place Hanzo Commerce is touched. Publish
+// materializes a published product asset's image into the org's storefront (the product
+// Listing's headerImage); ProductExists is the cheap read the integrity gate uses to
+// reject a content doc that names a product the org's catalog does not have.
 type Storefront interface {
 	Publish(ctx context.Context, org string, req StorefrontRequest) (StorefrontResult, error)
+	// ProductExists reports whether the org's catalog holds a product with this handle
+	// (slug). errNotConfigured when the commerce edge is not wired (no token / no
+	// reachable commerce) — the integrity gate then SKIPS validation (local dev). A clean
+	// (false, nil) is an authoritative "resolved, no such product" the gate fails closed on.
+	ProductExists(ctx context.Context, org, handle string) (bool, error)
 }
 
 // StorefrontRequest is the provider-agnostic "this asset is the product image" the
@@ -101,6 +107,10 @@ type notConfiguredStorefront struct{}
 
 func (notConfiguredStorefront) Publish(context.Context, string, StorefrontRequest) (StorefrontResult, error) {
 	return StorefrontResult{}, errNotConfigured
+}
+
+func (notConfiguredStorefront) ProductExists(context.Context, string, string) (bool, error) {
+	return false, errNotConfigured
 }
 
 // commerceStorefront is the REAL Storefront over the Hanzo Commerce store API. It opens
@@ -165,6 +175,32 @@ func (s commerceStorefront) Publish(ctx context.Context, org string, req Storefr
 		return StorefrontResult{}, fmt.Errorf("%w: listing upsert %d", errUpstream, status)
 	}
 	return StorefrontResult{Status: "published", Slug: req.Design, Store: storeID, ImageURL: req.ImageURL}, nil
+}
+
+// ProductExists resolves a product handle (slug) against the org's catalog via
+// GET /v1/product/<handle> (the generic product REST get resolves by slug), pinned to
+// the caller org by X-Org-Id behind the admin service token. 2xx ⇒ exists; 404 ⇒
+// resolved-but-absent (a real dangling handle); a missing token / unreachable commerce
+// or an auth rejection ⇒ errNotConfigured (the gate skips); anything else ⇒ errUpstream.
+func (s commerceStorefront) ProductExists(ctx context.Context, org, handle string) (bool, error) {
+	token := s.token()
+	if s.base == "" || token == "" {
+		return false, errNotConfigured
+	}
+	status, _, err := s.do(ctx, http.MethodGet, "/v1/product/"+url.PathEscape(handle), org, token, nil)
+	if err != nil {
+		return false, err
+	}
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return false, errNotConfigured
+	case status == http.StatusNotFound:
+		return false, nil // resolved: the org's catalog has no such product
+	case status >= 200 && status < 300:
+		return true, nil
+	default:
+		return false, fmt.Errorf("%w: product lookup %d", errUpstream, status)
+	}
 }
 
 // currentStore resolves the org's default store id via GET /v1/store/current (the same
