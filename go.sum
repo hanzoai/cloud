@@ -1241,8 +1241,8 @@ github.com/hanzoai/licensing v0.1.4 h1:pSsHfBMkECPh6ZrZMbPRyRPXeDxgD9Yrvh+FxmJE8
 github.com/hanzoai/licensing v0.1.4/go.mod h1:0SWQBAvGuhL7IRM5bTIPRhhOebLmfhjK+ppx/83uWPo=
 github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwTwQ=
 github.com/hanzoai/metrics v1.110.2/go.mod h1:+XOENte7ldQwSEsY/ASrvCifQqhIG+PFqTGzLxBLvYY=
-github.com/hanzoai/money v0.2.0 h1:lYjy5KFOdd8A6zoTcs7J3Y1t4qVbiEeCFwM2oCjk37g=
-github.com/hanzoai/money v0.2.0/go.mod h1:Oc5SOdRPZ4BLMRMZxD6q11EUgH0qpbM1TGrBAkR94og=
+github.com/hanzoai/money v0.2.1 h1:w2Fi2aP9bBYY+Zk1jyYfCOT3QhaswGzXQUmoZIjwIHM=
+github.com/hanzoai/money v0.2.1/go.mod h1:A8BJJ7CFalMMv+gyJm0gUMGfxg3zpygXgfb2WeRzStY=
 github.com/hanzoai/notify v1.6.18 h1:YLIKheJSMhGqRuo7NRsMicHjAWSVFV6j6ZGqm2H+IBM=
 github.com/hanzoai/notify v1.6.18/go.mod h1:O8OZj1cfUAIY39ROTPpiaVH8jv947VNfAGor2AZ/ebQ=
 github.com/hanzoai/notify2 v1.6.3 h1:E0yE3mhwpCPLYAY7AAKJIzf+XL2yXcyxXD7/tK9giLs=
