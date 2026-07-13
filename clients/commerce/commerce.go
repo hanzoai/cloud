@@ -180,7 +180,7 @@ func DefaultConfig() *Config {
 //	KV_PREFIX     = optional key namespace (cache is hanzo/base, embedded)
 //	S3_URL        = s3://key:secret@host:9000/bucket
 //	S3_ENDPOINT   = host:9000  (with S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET)
-//	DATASTORE_URL = clickhouse://host:9000/db
+//	DATASTORE_URL = datastore://host:9000/db
 //	SQL_URL       = postgresql://user:pass@host:5432/db
 //	VECTOR_URL    = qdrant://host:6333
 //	SEARCH_URL    = http://host:7700

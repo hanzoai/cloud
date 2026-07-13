@@ -42,10 +42,7 @@ type datastoreMirror struct {
 // no datastore is configured (mirroring is optional — the local chain is the
 // authority). It connects lazily-validated (a Ping) and ensures the table exists.
 //
-// Config (all from env / KMS-injected secrets, never hard-coded). Each key is read as
-// CLOUD_AUDIT_DATASTORE_* first, falling back to the legacy CLOUD_AUDIT_CLICKHOUSE_* so a
-// rollout mid-flight (new binary / old manifest, or vice versa) never drops the
-// audit-datastore connection:
+// Config (all from env / KMS-injected secrets, never hard-coded):
 //
 //	CLOUD_AUDIT_DATASTORE_ADDR      host:9000 of the datastore native port
 //	CLOUD_AUDIT_DATASTORE_DB        database (default "hanzo")
@@ -53,13 +50,9 @@ type datastoreMirror struct {
 //	CLOUD_AUDIT_DATASTORE_USER      user
 //	CLOUD_AUDIT_DATASTORE_PASSWORD  password (KMS-backed secret)
 //
-// auditEnv reads CLOUD_AUDIT_DATASTORE_<suffix>, falling back to the legacy
-// CLOUD_AUDIT_CLICKHOUSE_<suffix>; auditEnvOr adds a default when neither is set.
+// auditEnv reads CLOUD_AUDIT_DATASTORE_<suffix>; auditEnvOr adds a default when unset.
 func auditEnv(suffix string) string {
-	if v := os.Getenv("CLOUD_AUDIT_DATASTORE_" + suffix); v != "" {
-		return v
-	}
-	return os.Getenv("CLOUD_AUDIT_CLICKHOUSE_" + suffix)
+	return os.Getenv("CLOUD_AUDIT_DATASTORE_" + suffix)
 }
 
 func auditEnvOr(suffix, def string) string {
