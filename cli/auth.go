@@ -170,7 +170,8 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 		// Paste an externally-minted token. Decode claims for identity.
 		tr := &tokenResp{AccessToken: lf.token, TokenType: "Bearer"}
 		creds = credsFromToken(tr)
-	default:
+	case lf.username != "" || lf.passwordStdin:
+		// Password grant — kept for automation (--username/--password-stdin).
 		username := lf.username
 		if username == "" {
 			username, err = prompt(cmd, "Email: ")
@@ -188,6 +189,13 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 			return err
 		}
 		creds = credsFromToken(tr)
+	default:
+		// The ONE interactive way: RFC 8628 device flow — link + QR + code,
+		// approve from any signed-in browser or phone. Headless-safe.
+		creds, err = runDeviceLogin(cmd, env, lf.scope)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Optional machine-to-machine tokens for the platform control plane,
@@ -215,10 +223,13 @@ func newLoginCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Authenticate against Hanzo IAM and store a token",
-		Long: "Authenticate against Hanzo IAM (hanzo.id) via the password grant and store\n" +
-			"the token in ~/.hanzo/credentials.json (mode 0600). Use --token to store an\n" +
-			"externally-minted token instead, and --platform-token to store the platform\n" +
-			"control-plane service token needed by apps/deploy/clusters.",
+		Long: "Authenticate against Hanzo IAM (hanzo.id) and store the token in\n" +
+			"~/.hanzo/credentials.json (mode 0600). Default is the device flow: scan the\n" +
+			"QR (or open the link) from any signed-in device and approve — no password\n" +
+			"touches this terminal, works over ssh/headless. --username/--password-stdin\n" +
+			"keep the password grant for automation; --token stores an externally-minted\n" +
+			"token; --platform-token stores the platform control-plane service token\n" +
+			"needed by apps/deploy/clusters.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runLogin(envOf(), lf, cmd) },
 	}
