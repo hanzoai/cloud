@@ -94,6 +94,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	var engineURL string
 	var engineEndpoint string
 	var registerProvider bool
+	var studioDir string
 	connect := &cobra.Command{
 		Use:   "connect",
 		Short: "Register this GPU and run the outbound worker loop",
@@ -105,6 +106,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 				engineURL:        engineURL,
 				engineEndpoint:   engineEndpoint,
 				registerProvider: registerProvider,
+				studioDir:        studioDir,
 			}
 			if daemon {
 				return installDaemon(cmd, opts)
@@ -118,6 +120,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	connect.Flags().StringVar(&engineURL, "engine-url", defaultEngineURL, "local URL where hanzo-engine is probed (GET /v1/models)")
 	connect.Flags().StringVar(&engineEndpoint, "engine-endpoint", "", "public URL to advertise for gateway routing (defaults to --engine-url; a BYO node needs a reachable URL/tunnel)")
 	connect.Flags().BoolVar(&registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
+	connect.Flags().StringVar(&studioDir, "studio-dir", os.Getenv("HANZO_STUDIO_DIR"), "local Hanzo Studio checkout; when set, connect launches and supervises the render backend on 127.0.0.1:8188")
 
 	status := &cobra.Command{
 		Use:   "status",
@@ -341,6 +344,7 @@ type connectOpts struct {
 	engineURL        string // local URL to probe hanzo-engine
 	engineEndpoint   string // public URL to advertise (defaults to engineURL)
 	registerProvider bool   // auto POST /v1/add-provider for the engine
+	studioDir        string // local Studio checkout to launch + supervise on :8188
 }
 
 func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
@@ -369,6 +373,12 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 		return fmt.Errorf("register: %w", err)
 	}
 	fmt.Fprintf(out, "connected %q to %s (org %s) — %s\n", w.hostname, w.baseURL, orgOf(env), describeGPUs(w.gpus))
+
+	// studio.render backend: the claim loop drives the LOCAL studio server, so
+	// when a checkout is named we own its lifecycle too — no separate watchdog.
+	if opts.studioDir != "" {
+		go superviseStudio(ctx, opts.studioDir, out)
+	}
 	fmt.Fprintf(out, "claiming %s jobs; heartbeating every %s. Ctrl-C to stop (the machine goes offline after ~90s; `hanzo gpu disconnect` removes it).\n", w.jobsNS, heartbeatEvery)
 
 	if w.serveEngine {
@@ -1153,6 +1163,9 @@ func installDaemon(cmd *cobra.Command, opts connectOpts) error {
 		if opts.registerProvider {
 			args += " --register-provider"
 		}
+	}
+	if opts.studioDir != "" {
+		args += " --studio-dir " + opts.studioDir
 	}
 	unit := fmt.Sprintf(`[Unit]
 Description=Hanzo GPU worker (bring-your-own compute)
