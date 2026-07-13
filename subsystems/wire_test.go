@@ -97,6 +97,7 @@ var frozen = []struct {
 	{"cron", false, false},           // durable platform cron on the shared engine (post-freeze add)
 	{"automations", false, true},     // was order 148
 	{"referrals", false, false},      // was order 149
+	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
 	{"plugins", false, false},        // was order 900
 }
