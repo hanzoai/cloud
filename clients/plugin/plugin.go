@@ -37,7 +37,7 @@ import (
 // Plugin is one manifest entry. Kind selects which fields apply.
 type Plugin struct {
 	Name   string `json:"name"`
-	Kind   string `json:"kind"`   // "wasm" | "proxy"
+	Kind   string `json:"kind"`   // "wasm" | "proxy" | "native"
 	Prefix string `json:"prefix"` // mount point, e.g. /v1/pricing
 
 	// kind=wasm (goa): a polyglot module + its route table.

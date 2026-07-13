@@ -62,14 +62,11 @@ type wire func(base, token, model string) map[string]string
 //	Haiku         zen5-flash    fast / cheap (classifier, quick tasks)
 //	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
 //	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
-//	Fable         zen5-ultra    premium frontier (best available; cascades)
+//	Fable         zen5-pro      premium frontier (ultra disabled; falls through to zen5)
 //	main          <model>       the resolved id, default glm-5.2 (see defaultCodeModel)
 //
 // The main slot takes a concrete id (default glm-5.2), never the virtual `best`:
-// CC rewrites the reserved word `best` to a claude-* id that 403s. `zen5-ultra`
-// carries its own backend fallback chain (zen5-ultra → zen5-pro → zen5 →
-// zen5-flash) so the Fable tier degrades gracefully if the premium upstream is
-// unavailable.
+// CC rewrites the reserved word `best` to a claude-* id that 403s.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
@@ -82,7 +79,7 @@ func anthropicWire(base, token, model string) map[string]string {
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-ultra",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-pro",
 	}
 }
 
