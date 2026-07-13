@@ -15,6 +15,7 @@ import (
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/types"
 )
@@ -212,17 +213,28 @@ func wireFinance(cfg *Config, log luxlog.Logger) {
 	//
 	// The invariant that must never break: the gate READ and the usage DEBIT key on
 	// the SAME wallet, or spend can outrun the balance that admitted it. Both use
-	// subject; keep them together.
+	// subject; keep them together. The gate reads a coarse cents balance (a >0
+	// threshold only); the DEBIT is atto-exact.
 	aiobject.SetBalanceReader(func(ctx context.Context, subject, namespace, currency string) (int64, error) {
-		return fin.BalanceCents(ctx, namespace, subject, currency, false)
+		bal, err := fin.Balance(ctx, namespace, subject, currency, false)
+		if err != nil {
+			return 0, err
+		}
+		return bal.Cents(), nil
 	})
+	// The DEBIT is exact: the ai module emits the cost as a decimal-USD string, parsed
+	// here to atto-USD (1e-18) so a sub-cent call bills precisely and is never floored.
 	aiobject.SetUsageRecorder(func(ctx context.Context, u aiobject.UsageEvent) error {
+		amt, err := money.ParseUSD(u.USD)
+		if err != nil {
+			return err
+		}
 		return fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Namespace, Subject: u.Subject, USD: u.USD,
+			Org: u.Namespace, Subject: u.Subject, Amount: amt,
 			Currency: u.Currency, Model: u.Model, Provider: u.Provider, RequestID: u.RequestID,
 		})
 	})
-	log.Info("finance ledger wired (per-subject wallet in the org ledger, native, fail-closed)", "dataDir", cfg.DataDir)
+	log.Info("finance ledger wired (per-subject wallet in the org ledger, atto-exact, fail-closed)", "dataDir", cfg.DataDir)
 }
 
 // pick resolves one inter-subsystem client under the HIP-0106 wiring rule shared

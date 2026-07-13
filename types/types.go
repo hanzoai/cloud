@@ -14,6 +14,8 @@ package types
 import (
 	"context"
 	"errors"
+
+	"github.com/hanzoai/cloud/clients/money"
 )
 
 // ErrBlobNotFound is the sentinel a WORKING VFS backend returns from Get/Delete
@@ -143,9 +145,11 @@ type EmbedRequest struct {
 }
 
 // Counter / Timing / Span are the canonical o11y handles.
-type Counter interface{ Inc(n int64) }
-type Timing interface{ Observe(seconds float64) }
-type Span interface{ End() }
+type (
+	Counter interface{ Inc(n int64) }
+	Timing  interface{ Observe(seconds float64) }
+	Span    interface{ End() }
+)
 
 // IntentRequest creates a payments intent. Commerce never sees PAN;
 // it only ever passes the vault token + amount + currency.
@@ -207,10 +211,10 @@ type BaseClient interface {
 // it; the native write marks the ledger sink authorized because the HTTP mint gate
 // it bypasses is replaced by that caller gate.
 type DepositInput struct {
-	Org      string // X-Org-Id namespace, resolved to the commerce Organization
-	Subject  string // billing subject / DestinationId (org slug or "owner/name")
-	Cents    int64  // amount in cents (> 0)
-	Currency string // default "usd"
+	Org      string       // X-Org-Id namespace, resolved to the commerce Organization
+	Subject  string       // billing subject / DestinationId (org slug or "owner/name")
+	Amount   money.Amount // amount to credit, exact atto-USD (> 0)
+	Currency string       // default "usd"
 	Notes    string
 	Tags     string
 	// Ref, when non-empty, is the deposit's idempotency key: two deposits carrying the SAME
@@ -225,11 +229,8 @@ type DepositInput struct {
 // ledger — the typed twin of the /v1/billing/usage body, no HTTP.
 type UsageInput struct {
 	Org       string
-	Subject   string // billing subject / SourceId
-	Cents     int64  // amount in cents (> 0). Legacy/back-compat; USD wins when set.
-	USD       string // EXACT decimal USD ("0.00132") from ai's UsageEvent; precise
-	//               debit source. When non-empty it supersedes Cents (the recorder
-	//               rounds it to the ledger's cents at the boundary).
+	Subject   string       // billing subject / SourceId
+	Amount    money.Amount // amount to debit, exact atto-USD (> 0)
 	Currency  string
 	Model     string
 	Provider  string
@@ -266,10 +267,11 @@ type CommerceClient interface {
 // through THIS, and it composes the same finance ledger the treasury posts to — one
 // ledger, two account layers.
 type FinanceClient interface {
-	// BalanceCents returns subject's AVAILABLE prepaid balance in cents (settled
-	// ledger balance; transient holds are the caller's in-pod reservation) within
-	// org's namespace. The ONE balance read the ai gate + the edge meter share.
-	BalanceCents(ctx context.Context, org, subject, currency string, test bool) (int64, error)
+	// Balance returns subject's AVAILABLE prepaid balance as an exact atto-USD money
+	// value (settled ledger balance; transient holds are the caller's in-pod
+	// reservation) within org's namespace. The ONE balance read the ai gate + the edge
+	// meter share.
+	Balance(ctx context.Context, org, subject, currency string, test bool) (money.Amount, error)
 	// Deposit posts a credit (funding→wallet) to subject's ledger wallet and returns
 	// the ledger entry id. Idempotent on in.RequestID when set.
 	Deposit(ctx context.Context, in DepositInput) (entryID string, err error)
