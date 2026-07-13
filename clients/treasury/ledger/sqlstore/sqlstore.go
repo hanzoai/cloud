@@ -8,6 +8,14 @@
 // or IAM. When the core is lifted to hanzoai/finance this adapter travels with it
 // as the default backend; the driver import is the only thing a different Base
 // backend would swap.
+//
+// MONEY IS EXACT AND BIG. Amounts are atto-USD (1e-18, the EVM/uint256 unit) held as
+// big.Int money.Amount — a value exceeds SQLite's 64-bit INTEGER past ~$9.20, so amount
+// columns are TEXT (the signed decimal atto string) and an account's balance is a
+// maintained running total (treasury_accounts.balance), NOT a SQL SUM (you cannot SUM a
+// decimal-string column, and a busy wallet's million usage postings must not be re-summed
+// on every gate read). The running balance is updated inside the same transaction as each
+// posting, so it can never drift from the journal.
 package sqlstore
 
 import (
@@ -21,8 +29,9 @@ import (
 	// Base storage substrate, identical to every other clients/* store.
 	_ "github.com/hanzoai/sqlite"
 
-	"github.com/hanzoai/cloud/clients/treasury/ledger"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/clients/money"
+	"github.com/hanzoai/cloud/clients/treasury/ledger"
 )
 
 // Store is the SQLite-backed ledger persistence. ONE file holds the whole chart of
@@ -59,21 +68,23 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	// Target (atto) schema — a fresh file gets this directly.
 	const ddl = `
 CREATE TABLE IF NOT EXISTS treasury_accounts (
   id         TEXT PRIMARY KEY,
   kind       TEXT NOT NULL,
+  balance    TEXT NOT NULL DEFAULT '0',
   created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS treasury_entries (
-  id           TEXT PRIMARY KEY,
-  kind         TEXT NOT NULL,
-  program      TEXT NOT NULL DEFAULT '',
-  ref          TEXT NOT NULL,
-  memo         TEXT NOT NULL DEFAULT '',
-  amount_cents INTEGER NOT NULL,
-  created_at   INTEGER NOT NULL,
+  id         TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  program    TEXT NOT NULL DEFAULT '',
+  ref        TEXT NOT NULL,
+  memo       TEXT NOT NULL DEFAULT '',
+  amount     TEXT NOT NULL DEFAULT '0',
+  created_at INTEGER NOT NULL,
   UNIQUE(kind, program, ref)
 );
 CREATE INDEX IF NOT EXISTS ix_treasury_entries_created ON treasury_entries(created_at);
@@ -82,7 +93,7 @@ CREATE TABLE IF NOT EXISTS treasury_postings (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   entry_id   TEXT NOT NULL REFERENCES treasury_entries(id),
   account    TEXT NOT NULL,
-  amount     INTEGER NOT NULL,
+  amount     TEXT NOT NULL DEFAULT '0',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_treasury_postings_account ON treasury_postings(account);
@@ -97,7 +108,164 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("treasury migrate: %w", err)
 	}
+	if err := s.migrateCentsToAtto(); err != nil {
+		return err
+	}
+	// Re-apply the DDL so any table REBUILT by the legacy migration regains its indexes
+	// (every statement is IF NOT EXISTS, so this is a no-op for already-present objects).
+	if _, err := s.db.Exec(ddl); err != nil {
+		return fmt.Errorf("treasury reindex: %w", err)
+	}
 	return nil
+}
+
+// migrateCentsToAtto rebuilds a pre-atto file (the legacy INTEGER-cents schema:
+// treasury_entries.amount_cents + INTEGER posting amounts, no accounts.balance) into the
+// atto schema, converting every stored cents value ×1e16 to exact atto and materializing
+// each account's running balance. Idempotent: on an already-atto file it detects the
+// absent amount_cents column and returns immediately. Runs once, inside one transaction.
+func (s *Store) migrateCentsToAtto() error {
+	legacy, err := s.hasColumn("treasury_entries", "amount_cents")
+	if err != nil {
+		return fmt.Errorf("detect legacy schema: %w", err)
+	}
+	if !legacy {
+		return nil // already atto (or fresh)
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("migrate begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// The atto tables were created above with different names? No — CREATE TABLE IF NOT
+	// EXISTS was a no-op because the legacy tables already exist. Rename them aside, make
+	// the atto tables, copy-convert, drop the legacy copies.
+	for _, stmt := range []string{
+		`ALTER TABLE treasury_entries  RENAME TO treasury_entries_legacy`,
+		`ALTER TABLE treasury_postings RENAME TO treasury_postings_legacy`,
+		`ALTER TABLE treasury_accounts RENAME TO treasury_accounts_legacy`,
+		`CREATE TABLE treasury_accounts (
+		   id TEXT PRIMARY KEY, kind TEXT NOT NULL, balance TEXT NOT NULL DEFAULT '0', created_at INTEGER NOT NULL)`,
+		`CREATE TABLE treasury_entries (
+		   id TEXT PRIMARY KEY, kind TEXT NOT NULL, program TEXT NOT NULL DEFAULT '', ref TEXT NOT NULL,
+		   memo TEXT NOT NULL DEFAULT '', amount TEXT NOT NULL DEFAULT '0', created_at INTEGER NOT NULL,
+		   UNIQUE(kind, program, ref))`,
+		`CREATE TABLE treasury_postings (
+		   id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT NOT NULL REFERENCES treasury_entries(id),
+		   account TEXT NOT NULL, amount TEXT NOT NULL DEFAULT '0', created_at INTEGER NOT NULL)`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("migrate ddl %q: %w", stmt, err)
+		}
+	}
+
+	// entries: amount_cents (int) → amount (atto text)
+	if err := convertRows(tx,
+		`SELECT id,kind,program,ref,memo,amount_cents,created_at FROM treasury_entries_legacy`,
+		func(scan func(...any) error) error {
+			var id, kind, program, ref, memo string
+			var cents, created int64
+			if err := scan(&id, &kind, &program, &ref, &memo, &cents, &created); err != nil {
+				return err
+			}
+			_, err := tx.Exec(
+				`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
+				id, kind, program, ref, memo, money.FromCents(cents).AttoString(), created)
+			return err
+		}); err != nil {
+		return err
+	}
+
+	// postings: amount (int cents) → amount (atto text), accumulating each account's balance
+	balances := map[string]money.Amount{}
+	if err := convertRows(tx,
+		`SELECT entry_id,account,amount,created_at FROM treasury_postings_legacy ORDER BY id`,
+		func(scan func(...any) error) error {
+			var entryID, account string
+			var cents, created int64
+			if err := scan(&entryID, &account, &cents, &created); err != nil {
+				return err
+			}
+			amt := money.FromCents(cents)
+			if _, err := tx.Exec(
+				`INSERT INTO treasury_postings (entry_id,account,amount,created_at) VALUES (?,?,?,?)`,
+				entryID, account, amt.AttoString(), created); err != nil {
+				return err
+			}
+			balances[account] = balances[account].Add(amt)
+			return nil
+		}); err != nil {
+		return err
+	}
+
+	// accounts: carry kind/created_at, set the materialized balance
+	if err := convertRows(tx,
+		`SELECT id,kind,created_at FROM treasury_accounts_legacy`,
+		func(scan func(...any) error) error {
+			var id, kind string
+			var created int64
+			if err := scan(&id, &kind, &created); err != nil {
+				return err
+			}
+			_, err := tx.Exec(
+				`INSERT INTO treasury_accounts (id,kind,balance,created_at) VALUES (?,?,?,?)`,
+				id, kind, balances[id].AttoString(), created)
+			return err
+		}); err != nil {
+		return err
+	}
+
+	for _, drop := range []string{
+		`DROP TABLE treasury_postings_legacy`,
+		`DROP TABLE treasury_entries_legacy`,
+		`DROP TABLE treasury_accounts_legacy`,
+	} {
+		if _, err := tx.Exec(drop); err != nil {
+			return fmt.Errorf("migrate drop %q: %w", drop, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("migrate commit: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) hasColumn(table, column string) (bool, error) {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+// convertRows runs q and calls fn for each row with its Scan; used only by the one-shot
+// legacy migration so its per-row insert reads inside the same tx.
+func convertRows(tx *sql.Tx, q string, fn func(scan func(...any) error) error) error {
+	rows, err := tx.Query(q)
+	if err != nil {
+		return fmt.Errorf("migrate query %q: %w", q, err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		if err := fn(rows.Scan); err != nil {
+			return fmt.Errorf("migrate row: %w", err)
+		}
+	}
+	return rows.Err()
 }
 
 // Close closes the underlying database.
@@ -105,32 +273,29 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ── ledger.Store (read path, no tx) ──────────────────────────────────────────
 
-func (s *Store) Balance(ctx context.Context, account string) (int64, error) {
-	var bal int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(amount),0) FROM treasury_postings WHERE account=?`, account).Scan(&bal)
-	if err != nil {
-		return 0, fmt.Errorf("balance %q: %w", account, err)
-	}
-	return bal, nil
+func (s *Store) Balance(ctx context.Context, account string) (money.Amount, error) {
+	return balanceOf(s.db.QueryRowContext(ctx,
+		`SELECT balance FROM treasury_accounts WHERE id=?`, account), account)
 }
 
-func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[string]int64, error) {
+func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[string]money.Amount, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT account, COALESCE(SUM(amount),0) FROM treasury_postings WHERE account LIKE ? GROUP BY account`,
-		prefix+"%")
+		`SELECT id, balance FROM treasury_accounts WHERE id LIKE ?`, prefix+"%")
 	if err != nil {
 		return nil, fmt.Errorf("balances prefix %q: %w", prefix, err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := make(map[string]int64)
+	out := make(map[string]money.Amount)
 	for rows.Next() {
-		var acct string
-		var bal int64
+		var acct, bal string
 		if err := rows.Scan(&acct, &bal); err != nil {
 			return nil, fmt.Errorf("scan balance: %w", err)
 		}
-		out[acct] = bal
+		amt, err := money.ParseAtto(bal)
+		if err != nil {
+			return nil, fmt.Errorf("parse balance %q: %w", acct, err)
+		}
+		out[acct] = amt
 	}
 	return out, rows.Err()
 }
@@ -138,7 +303,7 @@ func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[stri
 func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) {
 	// limit <= 0 means EVERY entry (the ledger.Root full scan); a positive limit
 	// bounds the admin journal read.
-	q := `SELECT id,kind,program,ref,memo,amount_cents,created_at
+	q := `SELECT id,kind,program,ref,memo,amount,created_at
 		   FROM treasury_entries ORDER BY created_at DESC, id DESC`
 	args := []any{}
 	if limit > 0 {
@@ -153,8 +318,12 @@ func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) 
 	var out []ledger.Entry
 	for rows.Next() {
 		var e ledger.Entry
-		if err := rows.Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &e.AmountCents, &e.CreatedAt); err != nil {
+		var amt string
+		if err := rows.Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &amt, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
+		}
+		if e.Amount, err = money.ParseAtto(amt); err != nil {
+			return nil, fmt.Errorf("parse entry amount: %w", err)
 		}
 		out = append(out, e)
 	}
@@ -181,8 +350,12 @@ func (s *Store) postingsOf(ctx context.Context, entryID string) ([]ledger.Postin
 	var out []ledger.Posting
 	for rows.Next() {
 		var p ledger.Posting
-		if err := rows.Scan(&p.Account, &p.Amount); err != nil {
+		var amt string
+		if err := rows.Scan(&p.Account, &amt); err != nil {
 			return nil, fmt.Errorf("scan posting: %w", err)
+		}
+		if p.Amount, err = money.ParseAtto(amt); err != nil {
+			return nil, fmt.Errorf("parse posting amount: %w", err)
 		}
 		out = append(out, p)
 	}
@@ -238,50 +411,78 @@ type txAdapter struct {
 
 func (t *txAdapter) EntryByRef(kind, program, ref string) (ledger.Entry, bool, error) {
 	var e ledger.Entry
+	var amt string
 	err := t.tx.QueryRowContext(t.ctx,
-		`SELECT id,kind,program,ref,memo,amount_cents,created_at
+		`SELECT id,kind,program,ref,memo,amount,created_at
 		   FROM treasury_entries WHERE kind=? AND program=? AND ref=?`, kind, program, ref).
-		Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &e.AmountCents, &e.CreatedAt)
+		Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &amt, &e.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ledger.Entry{}, false, nil
 	}
 	if err != nil {
 		return ledger.Entry{}, false, fmt.Errorf("entry by ref: %w", err)
 	}
+	if e.Amount, err = money.ParseAtto(amt); err != nil {
+		return ledger.Entry{}, false, fmt.Errorf("parse entry amount: %w", err)
+	}
 	return e, true, nil
 }
 
-func (t *txAdapter) Balance(account string) (int64, error) {
-	var bal int64
-	err := t.tx.QueryRowContext(t.ctx,
-		`SELECT COALESCE(SUM(amount),0) FROM treasury_postings WHERE account=?`, account).Scan(&bal)
-	if err != nil {
-		return 0, fmt.Errorf("tx balance %q: %w", account, err)
-	}
-	return bal, nil
+func (t *txAdapter) Balance(account string) (money.Amount, error) {
+	return balanceOf(t.tx.QueryRowContext(t.ctx,
+		`SELECT balance FROM treasury_accounts WHERE id=?`, account), account)
 }
 
 func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
 	for _, p := range postings {
 		if _, err := t.tx.ExecContext(t.ctx,
-			`INSERT OR IGNORE INTO treasury_accounts (id, kind, created_at) VALUES (?,?,?)`,
+			`INSERT OR IGNORE INTO treasury_accounts (id, kind, balance, created_at) VALUES (?,?, '0', ?)`,
 			p.Account, accountKind(p.Account), e.CreatedAt); err != nil {
 			return fmt.Errorf("upsert account %q: %w", p.Account, err)
 		}
 	}
 	if _, err := t.tx.ExecContext(t.ctx,
-		`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount_cents,created_at) VALUES (?,?,?,?,?,?,?)`,
-		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.AmountCents, e.CreatedAt); err != nil {
+		`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
+		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.Amount.AttoString(), e.CreatedAt); err != nil {
 		return fmt.Errorf("insert entry: %w", err)
 	}
 	for _, p := range postings {
 		if _, err := t.tx.ExecContext(t.ctx,
 			`INSERT INTO treasury_postings (entry_id, account, amount, created_at) VALUES (?,?,?,?)`,
-			e.ID, p.Account, p.Amount, e.CreatedAt); err != nil {
+			e.ID, p.Account, p.Amount.AttoString(), e.CreatedAt); err != nil {
 			return fmt.Errorf("insert posting: %w", err)
+		}
+		// Maintain the account's running balance in the SAME tx, so a read never re-sums
+		// the journal and can never drift from it.
+		cur, err := balanceOf(t.tx.QueryRowContext(t.ctx,
+			`SELECT balance FROM treasury_accounts WHERE id=?`, p.Account), p.Account)
+		if err != nil {
+			return err
+		}
+		if _, err := t.tx.ExecContext(t.ctx,
+			`UPDATE treasury_accounts SET balance=? WHERE id=?`, cur.Add(p.Amount).AttoString(), p.Account); err != nil {
+			return fmt.Errorf("update balance %q: %w", p.Account, err)
 		}
 	}
 	return nil
+}
+
+// balanceOf scans a single balance TEXT column into a money.Amount (a missing row is a
+// zero balance, not an error — an account exists only once it has been posted to).
+func balanceOf(row *sql.Row, account string) (money.Amount, error) {
+	var bal string
+	err := row.Scan(&bal)
+	if errors.Is(err, sql.ErrNoRows) {
+		return money.Zero(), nil
+	}
+	if err != nil {
+		return money.Zero(), fmt.Errorf("balance %q: %w", account, err)
+	}
+	amt, perr := money.ParseAtto(bal)
+	if perr != nil {
+		return money.Zero(), fmt.Errorf("parse balance %q: %w", account, perr)
+	}
+	return amt, nil
 }
 
 // accountKind derives an account's kind from its id namespace (the segment before
