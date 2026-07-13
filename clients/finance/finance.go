@@ -32,11 +32,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/treasury/ledger"
 	"github.com/hanzoai/cloud/clients/treasury/ledger/sqlstore"
 	"github.com/hanzoai/cloud/types"
@@ -118,18 +118,18 @@ func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error)
 	return s, nil
 }
 
-// BalanceCents returns subject's settled prepaid balance in cents within org, clamped at
-// zero (a negative is never expected — the caller gates spend — but the clamp keeps the
-// read honest). currency/test select the asset/ledger file; a single asset (USD cents)
-// ships today.
-func (f *ledgerFinance) BalanceCents(ctx context.Context, org, subject, currency string, test bool) (int64, error) {
+// Balance returns subject's settled prepaid balance as an exact atto-USD money value
+// within org, clamped at zero (a negative is never expected — the caller gates spend —
+// but the clamp keeps the read honest). currency/test select the asset/ledger file; a
+// single asset (USD, atto-precise) ships today.
+func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency string, test bool) (money.Amount, error) {
 	store, err := f.storeFor(org, test)
 	if err != nil {
-		return 0, err
+		return money.Zero(), err
 	}
 	bal, _ := store.Balance(ctx, walletAcct(subject))
-	if bal < 0 {
-		bal = 0
+	if bal.IsNeg() {
+		return money.Zero(), nil
 	}
 	return bal, nil
 }
@@ -140,8 +140,8 @@ func (f *ledgerFinance) BalanceCents(ctx context.Context, org, subject, currency
 // same transaction as the insert), so a fixed-ref backfill/settlement credits AT MOST
 // ONCE. An empty Ref takes a fresh id, so grants stay additive (they stack).
 func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (string, error) {
-	if in.Cents <= 0 {
-		return "", fmt.Errorf("finance: deposit amount must be positive, got %d", in.Cents)
+	if in.Amount.Sign() <= 0 {
+		return "", fmt.Errorf("finance: deposit amount must be positive, got %s", in.Amount)
 	}
 	store, err := f.storeFor(in.Org, in.Test)
 	if err != nil {
@@ -168,16 +168,16 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 			}
 		}
 		e := ledger.Entry{
-			ID:          id,
-			Kind:        kindDeposit,
-			Ref:         ref,
-			Memo:        in.Notes,
-			AmountCents: in.Cents,
-			CreatedAt:   time.Now().Unix(),
+			ID:        id,
+			Kind:      kindDeposit,
+			Ref:       ref,
+			Memo:      in.Notes,
+			Amount:    in.Amount,
+			CreatedAt: time.Now().Unix(),
 		}
 		postings := []ledger.Posting{
-			{Account: acctFunding, Amount: -in.Cents},
-			{Account: walletAcct(in.Subject), Amount: in.Cents},
+			{Account: acctFunding, Amount: in.Amount.Neg()},
+			{Account: walletAcct(in.Subject), Amount: in.Amount},
 		}
 		return tx.Insert(e, postings)
 	}); err != nil {
@@ -190,31 +190,8 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // wallet. Idempotent on in.RequestID: a replay of the same request is a no-op inside the
 // same transaction as the insert, so a retry debits AT MOST ONCE. A non-positive amount is
 // a no-op.
-// usdToCents converts an exact decimal USD string ("0.00132", "1.50") to cents,
-// round-half-up, via math/big (no float error). Malformed/empty -> 0.
-func usdToCents(usd string) int64 {
-	r, ok := new(big.Rat).SetString(strings.TrimSpace(usd))
-	if !ok {
-		return 0
-	}
-	// cents = round(usd * 100): add 1/2 then floor toward zero on the scaled integer.
-	r.Mul(r, big.NewRat(100, 1))
-	num, den := r.Num(), r.Denom()
-	half := new(big.Int).Rsh(den, 1) // den/2
-	num = new(big.Int).Add(num, half)
-	return new(big.Int).Quo(num, den).Int64()
-}
-
 func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) error {
-	// USD (ai's exact decimal debit) supersedes Cents when present; the local ledger
-	// is cents-denominated, so round at this boundary (round-half-up). Sub-cent AI
-	// calls round to 0 here and skip — a property of the cents ledger, unchanged from
-	// the prior int64-Cents contract; the atto-precise path is commerce, not this store.
-	cents := in.Cents
-	if in.USD != "" {
-		cents = usdToCents(in.USD)
-	}
-	if cents <= 0 {
+	if in.Amount.Sign() <= 0 {
 		return nil
 	}
 	store, err := f.storeFor(in.Org, in.Test)
@@ -240,16 +217,16 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 			ref = id // no request id → fresh ref (non-idempotent, still a single debit)
 		}
 		e := ledger.Entry{
-			ID:          id,
-			Kind:        kindUsage,
-			Ref:         ref,
-			Memo:        in.Model,
-			AmountCents: cents,
-			CreatedAt:   time.Now().Unix(),
+			ID:        id,
+			Kind:      kindUsage,
+			Ref:       ref,
+			Memo:      in.Model,
+			Amount:    in.Amount,
+			CreatedAt: time.Now().Unix(),
 		}
 		postings := []ledger.Posting{
-			{Account: walletAcct(in.Subject), Amount: -cents},
-			{Account: acctRevenue, Amount: cents},
+			{Account: walletAcct(in.Subject), Amount: in.Amount.Neg()},
+			{Account: acctRevenue, Amount: in.Amount},
 		}
 		return tx.Insert(e, postings)
 	})
