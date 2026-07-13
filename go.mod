@@ -13,7 +13,6 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/datastore-go/v2 v2.47.2
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.24
 	github.com/hanzoai/notify v1.6.18
@@ -28,6 +27,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
+	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nats-io/nats.go v1.50.0
 	github.com/onsi/ginkgo/v2 v2.28.1
@@ -62,21 +62,18 @@ require (
 )
 
 require (
-	github.com/ClickHouse/ch-go v0.72.0 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
-	github.com/hanzoai/datastore-go-mock v0.14.3 // indirect
-	github.com/hanzoai/datastore-sql-parser v0.4.17 // indirect
-	github.com/hanzoai/sqlbuilder v1.39.2 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
-	github.com/mdp/qrterminal/v3 v3.2.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
 
@@ -826,14 +823,14 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzo-ds/go v1.0.1 // indirect
+	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/ai v1.806.10
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.25
+	github.com/hanzoai/o11y v1.5.26
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
