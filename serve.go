@@ -128,7 +128,19 @@ func Serve(specs []MountSpec, enable []string) error {
 	// default so a multi-domain SSO session (admin-guard Domain=.hanzo.ai
 	// cookies on every subdomain) no longer 431s legitimate requests at the
 	// public edge. Env GATEWAY_READ_BUFFER_SIZE, default 32 KiB (see config.go).
-	app := zip.New(zip.Config{Logger: deps.Logger, ReadBufferSize: cfg.ReadBufferSize})
+	//
+	// BodyLimit is the same shape of bug one layer down: the framework default is
+	// 4 MiB, and a full-context chat request is BIGGER than that. A 1M-token
+	// prompt serializes to ~4.3 MB of JSON, so the 1M-context models we route to
+	// (deepseek-v4-pro, and anything glm-5.2 overflows into) were unreachable —
+	// fasthttp rejected the body before any handler ran, and its wire error is the
+	// opaque 400 "Error when parsing request", which reads like a malformed
+	// payload rather than a size cap. Env GATEWAY_BODY_LIMIT (see config.go).
+	app := zip.New(zip.Config{
+		Logger:         deps.Logger,
+		ReadBufferSize: cfg.ReadBufferSize,
+		BodyLimit:      cfg.BodyLimit,
+	})
 
 	// Canonical middleware pipeline. Order matters:
 	//  1. Recover         — panic → JSON 500
