@@ -118,10 +118,10 @@ func (f *ledgerFinance) storeFor(org string, test bool) (*sqlstore.Store, error)
 	return s, nil
 }
 
-// Balance returns subject's settled prepaid balance as an exact atto-USD money value
+// Balance returns subject's settled prepaid balance as an exact 18-decimal USD money value
 // within org, clamped at zero (a negative is never expected — the caller gates spend —
 // but the clamp keeps the read honest). currency/test select the asset/ledger file; a
-// single asset (USD, atto-precise) ships today.
+// single asset (USD, 18-decimal-precise) ships today.
 func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency string, test bool) (money.Amount, error) {
 	store, err := f.storeFor(org, test)
 	if err != nil {
