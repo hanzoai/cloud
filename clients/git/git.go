@@ -222,7 +222,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 
 	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) at
-	// /git/*, the native replacement for the standalone Gitea web app (ui.go).
+	// /git/*, Hanzo Git's native web surface (ui.go).
 	uiRoutes(app, s)
 
 	// ZAP transport — the SAME control-plane core, reachable by browsers/services
