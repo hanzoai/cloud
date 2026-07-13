@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -410,7 +411,11 @@ func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int
 	// billing subject, org the wallet namespace; finance derives the account. A test-mode
 	// client reads the sandbox books so test and live money never mix.
 	if fin := finance.Current(); fin != nil {
-		return fin.BalanceCents(ctx, org, user, cur, c.test)
+		bal, err := fin.Balance(ctx, org, user, cur, c.test)
+		if err != nil {
+			return 0, err
+		}
+		return bal.Cents(), nil
 	}
 	if c.tierAware {
 		q := url.Values{"user": {user}}
@@ -454,7 +459,7 @@ type Usage struct {
 	// → commerce falls back to AmountCents*10000.
 	AmountMicros int64  `json:"amountMicros,omitempty"`
 	Model        string `json:"model,omitempty"`
-	Provider    string `json:"provider,omitempty"`
+	Provider     string `json:"provider,omitempty"`
 	// Project and Service attribute this debit to a scope so commerce records the
 	// dimensions the per-scope spend cap sums over (issue #70). Empty = the
 	// org-wide default scope.
@@ -508,7 +513,7 @@ func (c *Client) Record(ctx context.Context, u Usage) (*RecordResult, error) {
 	if fin := finance.Current(); fin != nil {
 		cents := usageCents(u)
 		if err := fin.RecordUsage(ctx, types.UsageInput{
-			Org: u.Org, Subject: u.User, Cents: cents, Currency: u.Currency,
+			Org: u.Org, Subject: u.User, Amount: money.FromCents(cents), Currency: u.Currency,
 			Model: u.Model, Provider: u.Provider, Project: u.Project, Service: u.Service,
 			RequestID: u.RequestID, Test: c.test,
 		}); err != nil {

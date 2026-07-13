@@ -17,7 +17,7 @@ require (
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.24
 	github.com/hanzoai/notify v1.6.18
-	github.com/hanzoai/otel-collector v0.144.10
+	github.com/hanzoai/otel-collector v0.144.13
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
@@ -62,14 +62,17 @@ require (
 )
 
 require (
+	github.com/AfterShip/clickhouse-sql-parser v0.4.16 // indirect
+	github.com/ClickHouse/ch-go v0.72.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/hanzo-ds/mock v0.14.2 // indirect
+	github.com/hanzo-ds/mock v0.14.3 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
+	github.com/hanzoai/clickhouse-go-mock v0.14.2 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 )
 
@@ -828,7 +831,7 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.17
+	github.com/hanzoai/o11y v1.5.19
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
@@ -873,3 +876,5 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
+
+replace github.com/hanzoai/otel-collector v0.144.10 => github.com/hanzoai/otel-collector v0.144.13
