@@ -492,7 +492,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/authzstore v0.1.1 // indirect
-	github.com/hanzoai/beego/v2 v2.4.1
+	github.com/hanzoai/beego/v2 v2.4.2
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
@@ -513,7 +513,7 @@ require (
 	github.com/hanzoai/sendgrid-go v1.3.0
 	github.com/hanzoai/storage-go v1.0.0
 	github.com/hanzoai/tasks v1.51.0
-	github.com/hanzoai/xorm v1.1.6 // indirect
+	github.com/hanzoai/xorm v1.4.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
@@ -857,15 +857,10 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
 // Phantom-version fix: some transitive dep requires the non-existent
-// mattn/go-sqlite3 v2.0.3+incompatible. Redirect it to the last REAL go-sqlite3
 // release (drop-in, package sqlite3) via a VERSIONED replace (left side pins the
 // phantom) so Go never tries to read v2.0.3's go.mod during module-graph load —
-// the unversioned form didn't. NOTE: cloud's ONE sqlite driver is now
-// github.com/hanzoai/sqlite — it registers the "sqlite" name under both build
-// tags (cgo → mattn+SQLCipher, hence this go-sqlite3 pin; !cgo → pure-Go
 // modernc). Every cloud store imports the fork, never modernc directly, so the
 // "sqlite" driver is registered exactly once.
-replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.47
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 
