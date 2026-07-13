@@ -19,7 +19,7 @@
 //	PATCH  /v1/tracker/projects/:key                     update a project        -> Project
 //	DELETE /v1/tracker/projects/:key                     delete a project (+ issues)
 //	POST   /v1/tracker/projects/:key/issues              create an issue         -> Issue (201)
-//	GET    /v1/tracker/projects/:key/issues[?status=]    list issues (board/list) -> [Issue]
+//	GET    /v1/tracker/projects/:key/issues[?status=&kind=&repo=&source=]  list  -> [Issue]
 //	GET    /v1/tracker/projects/:key/issues/:num         issue detail            -> Issue
 //	PATCH  /v1/tracker/projects/:key/issues/:num         update an issue         -> Issue
 //	DELETE /v1/tracker/projects/:key/issues/:num         delete an issue
@@ -69,6 +69,23 @@ var statuses = map[string]bool{
 // priorities is the closed priority set. Empty defaults to "none".
 var priorities = map[string]bool{
 	"none": true, "urgent": true, "high": true, "medium": true, "low": true,
+}
+
+// kinds is the closed set of work-item shapes — what a row IS. Empty defaults to
+// "issue". Deliberately minimal (see contract.go): a work item is an issue, a
+// git pull request, or a parent epic. NOT "task" (that word is the async plane,
+// hanzoai/tasks) and NOT "deal"/"ticket"/"doc" (those are domain records on
+// framework.DocType / crm, a different plane — keep them there).
+var kinds = map[string]bool{
+	"issue": true, "pr": true, "epic": true,
+}
+
+// sources is the closed set of opening surfaces — which product ORIGINATED the
+// work item. Empty defaults to "team". Orthogonal to kind and validated
+// independently. source=helpdesk means "an engineering issue opened FROM a
+// support escalation", not "a helpdesk ticket" (a ticket is a DocType).
+var sources = map[string]bool{
+	"team": true, "git": true, "crm": true, "helpdesk": true, "cms": true, "agent": true,
 }
 
 // state is tracker's own data; shared deps (logger, billing meter) live in the
@@ -158,6 +175,10 @@ type issueView struct {
 	Identifier  string   `json:"identifier"` // KEY-<number>, the human handle
 	ProjectKey  string   `json:"projectKey"`
 	Number      int      `json:"number"`
+	Kind        string   `json:"kind"`             // issue | pr | epic
+	Source      string   `json:"source"`           // team | git | crm | helpdesk | cms | agent
+	Repo        string   `json:"repo,omitempty"`   // git repo binding
+	ExtRef      string   `json:"extRef,omitempty"` // external anchor
 	Title       string   `json:"title"`
 	Description string   `json:"description,omitempty"`
 	Status      string   `json:"status"`
@@ -174,7 +195,8 @@ func toIssueView(projectKey string, i Issue) issueView {
 		Identifier: fmt.Sprintf("%s-%d", projectKey, i.Number),
 		ProjectKey: projectKey,
 		Number:     i.Number,
-		Title:      i.Title, Description: i.Description,
+		Kind:       i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
+		Title: i.Title, Description: i.Description,
 		Status: i.Status, Priority: i.Priority, Assignee: i.Assignee,
 		Labels:    splitLabels(i.Labels),
 		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
@@ -364,6 +386,10 @@ func project(s *cloud.Service[state], c *zip.Ctx, store *Store, org string) (Pro
 }
 
 type createIssueReq struct {
+	Kind        string   `json:"kind"`   // issue|pr|epic, default issue
+	Source      string   `json:"source"` // team|git|crm|helpdesk|cms|agent, default team
+	Repo        string   `json:"repo"`   // git repo binding (kind pr/issue from git)
+	ExtRef      string   `json:"extRef"` // external anchor (PR branch, or link into another plane)
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Status      string   `json:"status"`
@@ -393,6 +419,14 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if title == "" || len(title) > maxTitle {
 		return zip.ErrBadRequest("title is required (<=512 chars)")
 	}
+	kind, err := normKind(body.Kind)
+	if err != nil {
+		return err
+	}
+	source, err := normSource(body.Source)
+	if err != nil {
+		return err
+	}
 	status, err := normStatus(body.Status)
 	if err != nil {
 		return err
@@ -413,11 +447,22 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(assignee) > maxField {
 		return zip.ErrBadRequest("assignee too long")
 	}
+	repo := strings.TrimSpace(body.Repo)
+	if len(repo) > maxField {
+		return zip.ErrBadRequest("repo too long")
+	}
+	extRef := strings.TrimSpace(body.ExtRef)
+	if len(extRef) > maxField {
+		return zip.ErrBadRequest("extRef too long")
+	}
 
-	kind := "issue"
-	fee := createFeeCents(kind)
+	// Billing category is the constant "issue" tracker row — an issue costs the
+	// same whatever kind it discriminates into, and ops prices it via
+	// CLOUD_TRACKER_FEE_CENTS_ISSUE. Decoupled from the polymorphic work-item Kind.
+	const billKind = "issue"
+	fee := createFeeCents(billKind)
 	project, projectValidated := principal.ValidatedProject(c)
-	if err := s.Bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, kind, fee); err != nil {
+	if err := s.Bill.Gate(c.Context(), principal.Payer(c), project, projectValidated, billKind, fee); err != nil {
 		return cloud.DenyResource(c, err)
 	}
 
@@ -428,6 +473,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	now := time.Now().Unix()
 	i := Issue{
 		ID: id, ProjectID: p.ID, Org: org,
+		Kind: kind, Source: source, Repo: repo, ExtRef: extRef,
 		Title: title, Description: desc, Status: status, Priority: priority,
 		Assignee: assignee, Labels: labels, CreatedAt: now, UpdatedAt: now,
 	}
@@ -435,7 +481,7 @@ func createIssue(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
-	s.Bill.Meter(principal.Payer(c), principal.Project(c), kind, fee, c.RequestID(), cloud.ClientIP(c))
+	s.Bill.Meter(principal.Payer(c), principal.Project(c), billKind, fee, c.RequestID(), cloud.ClientIP(c))
 	return c.JSON(http.StatusCreated, toIssueView(p.Key, created))
 }
 
@@ -452,11 +498,11 @@ func listIssues(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	status := strings.TrimSpace(c.Query("status"))
-	if status != "" && !statuses[status] {
-		return zip.ErrBadRequest("unknown status filter")
+	filter, err := issueFilter(c)
+	if err != nil {
+		return err
 	}
-	rows, err := store.ListIssues(c.Context(), org, p.ID, status)
+	rows, err := store.ListIssues(c.Context(), org, p.ID, filter)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 	}
@@ -650,6 +696,53 @@ func normPriority(s string) (string, error) {
 		return "", zip.ErrBadRequest("unknown priority")
 	}
 	return s, nil
+}
+
+func normKind(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "issue", nil
+	}
+	if !kinds[s] {
+		return "", zip.ErrBadRequest("unknown kind")
+	}
+	return s, nil
+}
+
+func normSource(s string) (string, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "team", nil
+	}
+	if !sources[s] {
+		return "", zip.ErrBadRequest("unknown source")
+	}
+	return s, nil
+}
+
+// issueFilter builds an IssueFilter from the ?status=&kind=&repo=&source= query,
+// rejecting any value outside a closed set (repo is a free-form binding, only
+// length-bounded). This is the ONE place a surface's slice of the shared issue
+// table is expressed: hanzo.team passes none/status, a git repo's Issues tab
+// ?kind=issue&repo=<r>, its PRs tab ?kind=pr&repo=<r>.
+func issueFilter(c *zip.Ctx) (IssueFilter, error) {
+	status := strings.TrimSpace(c.Query("status"))
+	if status != "" && !statuses[status] {
+		return IssueFilter{}, zip.ErrBadRequest("unknown status filter")
+	}
+	kind := strings.TrimSpace(c.Query("kind"))
+	if kind != "" && !kinds[kind] {
+		return IssueFilter{}, zip.ErrBadRequest("unknown kind filter")
+	}
+	source := strings.TrimSpace(c.Query("source"))
+	if source != "" && !sources[source] {
+		return IssueFilter{}, zip.ErrBadRequest("unknown source filter")
+	}
+	repo := strings.TrimSpace(c.Query("repo"))
+	if len(repo) > maxField {
+		return IssueFilter{}, zip.ErrBadRequest("repo filter too long")
+	}
+	return IssueFilter{Status: status, Kind: kind, Repo: repo, Source: source}, nil
 }
 
 // normLabels trims, validates and comma-joins labels for storage. A label is a
