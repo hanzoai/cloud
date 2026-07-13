@@ -33,21 +33,23 @@ type Project struct {
 	UpdatedAt   int64
 }
 
-// Issue is THE ONE work-item primitive for all of Hanzo — polymorphic by Kind so
-// a project task, a git issue, a pull request, an epic, a CRM deal, and a helpdesk
-// ticket are all the same row, and every product surface (hanzo.team's board, a
-// git repo's Issues/PRs tab, CRM's pipeline, helpdesk's queue) is a FILTER over
-// this table, never a second tracker. Number is monotonic PER PROJECT (KEY-1,
-// KEY-2, …), allocated under the single-writer transaction in CreateIssue so it
-// never races. Status is the board column; Labels is a comma-joined tag string
-// (split at the HTTP boundary).
+// Issue is THE ONE engineering/project work-item primitive for Hanzo —
+// polymorphic by Kind so a git issue, a pull request and a parent epic are all
+// the same row, and every work-item surface (hanzo.team's board, a git repo's
+// Issues/PRs tab, an agent's queue) is a FILTER over this table, never a second
+// tracker. It is NOT the domain-record plane: helpdesk tickets, CMS content and
+// CRM deals live on framework.DocType / crm and link here by ExtRef — see
+// contract.go for the three-plane boundary. Number is monotonic PER PROJECT
+// (KEY-1, KEY-2, …), allocated under the single-writer transaction in
+// CreateIssue so it never races. Status is the board column; Labels is a
+// comma-joined tag string (split at the HTTP boundary).
 //
 // The four discriminators (Kind, Source, Repo, ExtRef) are the alignment spine:
-//   - Kind:   issue | pr | task | epic | deal | ticket | doc — what it IS.
-//   - Source: team | git | crm | helpdesk | cms | agent — which surface opened it.
+//   - Kind:   issue | pr | epic — what it IS (the small closed work-item set).
+//   - Source: team | git | crm | helpdesk | cms | agent — which surface OPENED it.
 //   - Repo:   the git repo it belongs to (Kind pr/issue from git); "" otherwise —
 //     so a repo's Issues/PRs tab is `ListIssues(... Filter{Repo, Kind})`.
-//   - ExtRef: the external anchor (PR branch, deal id, ticket #, doc slug).
+//   - ExtRef: the external anchor (PR branch, or a link INTO another plane).
 //
 // They are identity, set once at Create and immutable thereafter (Update touches
 // only the mutable board state), so a row never migrates between surfaces.
@@ -56,10 +58,10 @@ type Issue struct {
 	ProjectID   string
 	Org         string
 	Number      int
-	Kind        string // issue | pr | task | epic | deal | ticket | doc (default "issue")
+	Kind        string // issue | pr | epic (default "issue")
 	Source      string // team | git | crm | helpdesk | cms | agent (default "team")
 	Repo        string // git repo binding; "" = not repo-bound
-	ExtRef      string // external anchor (PR branch, deal id, ticket #, …)
+	ExtRef      string // external anchor (PR branch, or link into another plane)
 	Title       string
 	Description string
 	Status      string
@@ -314,9 +316,9 @@ func (s *Store) GetIssue(ctx context.Context, org, projectID string, number int)
 }
 
 // IssueFilter narrows ListIssues. All fields optional (empty = no constraint).
-// This is the ONE knob every surface turns: hanzo.team passes {Status}, a git
-// repo's Issues tab passes {Repo, Kind:"issue"}, its PRs tab {Repo, Kind:"pr"},
-// CRM {Kind:"deal"}, helpdesk {Kind:"ticket"}.
+// This is the ONE knob every work-item surface turns: hanzo.team passes {Status},
+// a git repo's Issues tab passes {Repo, Kind:"issue"}, its PRs tab {Repo,
+// Kind:"pr"}, an agent's queue {Source:"agent"}.
 type IssueFilter struct {
 	Status string
 	Kind   string
