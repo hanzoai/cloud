@@ -44,7 +44,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 		t.Fatalf("record micros result = %+v; want Amount 2 (ceil of 1.5¢)", res)
 	}
 	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 98 {
-		t.Fatalf("balance after micros debit = %d; want 98 (100-2)", bal)
+		t.Fatalf("balance after micros debit = %s; want 98 (100-2)", bal)
 	}
 
 	// Whole-cent debit: 50¢.
@@ -52,7 +52,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 		t.Fatalf("record cents: %v", err)
 	}
 	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
-		t.Fatalf("balance after cents debit = %d; want 48 (98-50)", bal)
+		t.Fatalf("balance after cents debit = %s; want 48 (98-50)", bal)
 	}
 
 	// Idempotent replay on RequestID m2 → no second debit.
@@ -60,7 +60,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 		t.Fatalf("record replay: %v", err)
 	}
 	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
-		t.Fatalf("balance after replay = %d; want 48 (idempotent)", bal)
+		t.Fatalf("balance after replay = %s; want 48 (idempotent)", bal)
 	}
 
 	// Not one byte of HTTP: the finance seam intercepted every debit.
