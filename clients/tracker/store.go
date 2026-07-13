@@ -33,15 +33,35 @@ type Project struct {
 	UpdatedAt   int64
 }
 
-// Issue is one work item inside a Project. Number is monotonic PER PROJECT
+// Issue is THE ONE engineering/project work-item primitive for Hanzo —
+// polymorphic by Kind so a git issue, a pull request and a parent epic are all
+// the same row, and every work-item surface (hanzo.team's board, a git repo's
+// Issues/PRs tab, an agent's queue) is a FILTER over this table, never a second
+// tracker. It is NOT the domain-record plane: helpdesk tickets, CMS content and
+// CRM deals live on framework.DocType / crm and link here by ExtRef — see
+// contract.go for the three-plane boundary. Number is monotonic PER PROJECT
 // (KEY-1, KEY-2, …), allocated under the single-writer transaction in
 // CreateIssue so it never races. Status is the board column; Labels is a
 // comma-joined tag string (split at the HTTP boundary).
+//
+// The four discriminators (Kind, Source, Repo, ExtRef) are the alignment spine:
+//   - Kind:   issue | pr | epic — what it IS (the small closed work-item set).
+//   - Source: team | git | crm | helpdesk | cms | agent — which surface OPENED it.
+//   - Repo:   the git repo it belongs to (Kind pr/issue from git); "" otherwise —
+//     so a repo's Issues/PRs tab is `ListIssues(... Filter{Repo, Kind})`.
+//   - ExtRef: the external anchor (PR branch, or a link INTO another plane).
+//
+// They are identity, set once at Create and immutable thereafter (Update touches
+// only the mutable board state), so a row never migrates between surfaces.
 type Issue struct {
 	ID          string
 	ProjectID   string
 	Org         string
 	Number      int
+	Kind        string // issue | pr | epic (default "issue")
+	Source      string // team | git | crm | helpdesk | cms | agent (default "team")
+	Repo        string // git repo binding; "" = not repo-bound
+	ExtRef      string // external anchor (PR branch, or link into another plane)
 	Title       string
 	Description string
 	Status      string
@@ -93,6 +113,10 @@ CREATE TABLE IF NOT EXISTS issues (
   project_id   TEXT NOT NULL,
   org          TEXT NOT NULL,
   number       INTEGER NOT NULL,
+  kind         TEXT NOT NULL DEFAULT 'issue',
+  source       TEXT NOT NULL DEFAULT 'team',
+  repo         TEXT NOT NULL DEFAULT '',
+  ext_ref      TEXT NOT NULL DEFAULT '',
   title        TEXT NOT NULL,
   description  TEXT NOT NULL DEFAULT '',
   status       TEXT NOT NULL DEFAULT 'backlog',
@@ -104,9 +128,25 @@ CREATE TABLE IF NOT EXISTS issues (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_issues_project_number ON issues(project_id, number);
 CREATE INDEX IF NOT EXISTS ix_issues_org_project_status ON issues(org, project_id, status);
+CREATE INDEX IF NOT EXISTS ix_issues_org_repo ON issues(org, repo);
+CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Additive columns for DBs created before the polymorphic-spine alignment.
+	// SQLite has no "ADD COLUMN IF NOT EXISTS"; a duplicate-column error on an
+	// already-migrated DB is expected and ignored. Every column carries a DEFAULT
+	// so existing rows read as native project issues (kind='issue', source='team').
+	for _, col := range []string{
+		`ALTER TABLE issues ADD COLUMN kind    TEXT NOT NULL DEFAULT 'issue'`,
+		`ALTER TABLE issues ADD COLUMN source  TEXT NOT NULL DEFAULT 'team'`,
+		`ALTER TABLE issues ADD COLUMN repo    TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE issues ADD COLUMN ext_ref TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("migrate add column: %w", err)
+		}
 	}
 	return nil
 }
@@ -215,12 +255,13 @@ func (s *Store) DeleteProject(ctx context.Context, org, key string) (bool, error
 	return true, nil
 }
 
-const issueCols = `id,project_id,org,number,title,description,status,priority,assignee,labels,created_at,updated_at`
+const issueCols = `id,project_id,org,number,kind,source,repo,ext_ref,title,description,status,priority,assignee,labels,created_at,updated_at`
 
 func scanIssue(sc interface{ Scan(...any) error }) (Issue, error) {
 	var i Issue
-	err := sc.Scan(&i.ID, &i.ProjectID, &i.Org, &i.Number, &i.Title, &i.Description,
-		&i.Status, &i.Priority, &i.Assignee, &i.Labels, &i.CreatedAt, &i.UpdatedAt)
+	err := sc.Scan(&i.ID, &i.ProjectID, &i.Org, &i.Number, &i.Kind, &i.Source, &i.Repo,
+		&i.ExtRef, &i.Title, &i.Description, &i.Status, &i.Priority, &i.Assignee,
+		&i.Labels, &i.CreatedAt, &i.UpdatedAt)
 	return i, err
 }
 
@@ -241,10 +282,17 @@ func (s *Store) CreateIssue(ctx context.Context, i Issue) (Issue, error) {
 		return Issue{}, fmt.Errorf("next number: %w", err)
 	}
 	i.Number = next
+	if i.Kind == "" {
+		i.Kind = "issue"
+	}
+	if i.Source == "" {
+		i.Source = "team"
+	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		i.ID, i.ProjectID, i.Org, i.Number, i.Title, i.Description,
-		i.Status, i.Priority, i.Assignee, i.Labels, i.CreatedAt, i.UpdatedAt); err != nil {
+		`INSERT INTO issues (`+issueCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		i.ID, i.ProjectID, i.Org, i.Number, i.Kind, i.Source, i.Repo, i.ExtRef,
+		i.Title, i.Description, i.Status, i.Priority, i.Assignee, i.Labels,
+		i.CreatedAt, i.UpdatedAt); err != nil {
 		return Issue{}, fmt.Errorf("insert issue: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -267,16 +315,33 @@ func (s *Store) GetIssue(ctx context.Context, org, projectID string, number int)
 	return i, nil
 }
 
-// ListIssues returns issues for a project, optionally filtered to one status
-// (empty status = all). Ordered by status then number so a status-grouped view
-// renders deterministically and a single-column board reads oldest-first.
-func (s *Store) ListIssues(ctx context.Context, org, projectID, status string) ([]Issue, error) {
+// IssueFilter narrows ListIssues. All fields optional (empty = no constraint).
+// This is the ONE knob every work-item surface turns: hanzo.team passes {Status},
+// a git repo's Issues tab passes {Repo, Kind:"issue"}, its PRs tab {Repo,
+// Kind:"pr"}, an agent's queue {Source:"agent"}.
+type IssueFilter struct {
+	Status string
+	Kind   string
+	Repo   string
+	Source string
+}
+
+// ListIssues returns issues for a project narrowed by IssueFilter. Ordered by
+// status then number so a status-grouped view renders deterministically and a
+// single-column board reads oldest-first.
+func (s *Store) ListIssues(ctx context.Context, org, projectID string, f IssueFilter) ([]Issue, error) {
 	q := `SELECT ` + issueCols + ` FROM issues WHERE org=? AND project_id=?`
 	args := []any{org, projectID}
-	if status != "" {
-		q += ` AND status=?`
-		args = append(args, status)
+	add := func(col, val string) {
+		if val != "" {
+			q += ` AND ` + col + `=?`
+			args = append(args, val)
+		}
 	}
+	add("status", f.Status)
+	add("kind", f.Kind)
+	add("repo", f.Repo)
+	add("source", f.Source)
 	q += ` ORDER BY status ASC, number ASC`
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
