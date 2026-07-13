@@ -71,16 +71,19 @@ var priorities = map[string]bool{
 	"none": true, "urgent": true, "high": true, "medium": true, "low": true,
 }
 
-// kinds is the closed set of work-item kinds — what a row IS. Empty defaults to
-// "issue". This is the polymorphism axis: one table, one row shape, discriminated
-// here so a git PR, a CRM deal, and a helpdesk ticket are all issues rows.
+// kinds is the closed set of work-item shapes — what a row IS. Empty defaults to
+// "issue". Deliberately minimal (see contract.go): a work item is an issue, a
+// git pull request, or a parent epic. NOT "task" (that word is the async plane,
+// hanzoai/tasks) and NOT "deal"/"ticket"/"doc" (those are domain records on
+// framework.DocType / crm, a different plane — keep them there).
 var kinds = map[string]bool{
-	"issue": true, "pr": true, "task": true, "epic": true, "deal": true, "ticket": true, "doc": true,
+	"issue": true, "pr": true, "epic": true,
 }
 
-// sources is the closed set of opening surfaces — which product created the row.
-// Empty defaults to "team". Orthogonal to kind (a git surface can open a task; an
-// agent can open a deal), so the two are validated independently.
+// sources is the closed set of opening surfaces — which product ORIGINATED the
+// work item. Empty defaults to "team". Orthogonal to kind and validated
+// independently. source=helpdesk means "an engineering issue opened FROM a
+// support escalation", not "a helpdesk ticket" (a ticket is a DocType).
 var sources = map[string]bool{
 	"team": true, "git": true, "crm": true, "helpdesk": true, "cms": true, "agent": true,
 }
@@ -172,7 +175,7 @@ type issueView struct {
 	Identifier  string   `json:"identifier"` // KEY-<number>, the human handle
 	ProjectKey  string   `json:"projectKey"`
 	Number      int      `json:"number"`
-	Kind        string   `json:"kind"`             // issue | pr | task | epic | deal | ticket | doc
+	Kind        string   `json:"kind"`             // issue | pr | epic
 	Source      string   `json:"source"`           // team | git | crm | helpdesk | cms | agent
 	Repo        string   `json:"repo,omitempty"`   // git repo binding
 	ExtRef      string   `json:"extRef,omitempty"` // external anchor
@@ -193,7 +196,7 @@ func toIssueView(projectKey string, i Issue) issueView {
 		ProjectKey: projectKey,
 		Number:     i.Number,
 		Kind:       i.Kind, Source: i.Source, Repo: i.Repo, ExtRef: i.ExtRef,
-		Title:      i.Title, Description: i.Description,
+		Title: i.Title, Description: i.Description,
 		Status: i.Status, Priority: i.Priority, Assignee: i.Assignee,
 		Labels:    splitLabels(i.Labels),
 		CreatedAt: i.CreatedAt, UpdatedAt: i.UpdatedAt,
@@ -383,10 +386,10 @@ func project(s *cloud.Service[state], c *zip.Ctx, store *Store, org string) (Pro
 }
 
 type createIssueReq struct {
-	Kind        string   `json:"kind"`   // issue|pr|task|epic|deal|ticket|doc, default issue
+	Kind        string   `json:"kind"`   // issue|pr|epic, default issue
 	Source      string   `json:"source"` // team|git|crm|helpdesk|cms|agent, default team
 	Repo        string   `json:"repo"`   // git repo binding (kind pr/issue from git)
-	ExtRef      string   `json:"extRef"` // external anchor (PR branch, deal id, ticket #, doc slug)
+	ExtRef      string   `json:"extRef"` // external anchor (PR branch, or link into another plane)
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Status      string   `json:"status"`
