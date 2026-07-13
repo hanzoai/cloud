@@ -1227,8 +1227,8 @@ github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyf
 github.com/hanzoai/dashscope-go-sdk v0.0.2/go.mod h1:DSUNMIR7RvSoO8B/VOQLGTqsMAnE6boJm9MjeodsVF4=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
 github.com/hanzoai/dashscopego v0.6.0/go.mod h1:ciV938pktk0Tw6ssGYzEdxwS8OaHgv3xCWiy7W5664E=
-github.com/hanzoai/datastore-go/v2 v2.47.1 h1:SkT99r/G1ogpMtlOYOn0zRDY/n1TqWDv2s5WzGXtfL4=
-github.com/hanzoai/datastore-go/v2 v2.47.1/go.mod h1:MQYk/Ztzt+WoT1SMx2wS2XvvdETWgXJQfUwT/bBj8qw=
+github.com/hanzoai/datastore-go/v2 v2.47.2 h1:SThITu8+otmlWuAiSmZ2L3z+2suLIAdAfwoliwO8qLs=
+github.com/hanzoai/datastore-go/v2 v2.47.2/go.mod h1:MQYk/Ztzt+WoT1SMx2wS2XvvdETWgXJQfUwT/bBj8qw=
 github.com/hanzoai/dbx v1.16.0 h1:C8wsb9BIiit4nYnXizpcB4SyzVaepPkQFwq5i9fxAV0=
 github.com/hanzoai/dbx v1.16.0/go.mod h1:ynP6HSiDDoFZ8M3DC+XvSglBPFRygfTd/gjTWabh4yA=
 github.com/hanzoai/go-openai v1.40.0 h1:8KHDSUaJCNHlueMp76ZyJuJGc5wrz/ANMGvkfKBB3a4=
