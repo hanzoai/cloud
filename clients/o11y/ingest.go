@@ -22,9 +22,9 @@
 //	processors: memory_limiter -> resource(service.namespace=hanzo, deployment.environment) -> batch
 //	exporters:  datastoretraces (traces), datastorelogsexporter (logs)
 //
-// DEFERRED — the METRICS pipeline (signozdatastoremetrics + the o11yspanmetrics
+// DEFERRED — the METRICS pipeline (the datastore-metrics exporter + the o11yspanmetrics
 // connector) is intentionally NOT embedded here. That exporter references
-// SigNoz's dd-sketch fork of ch-go (chproto.DD/Store/IndexMapping), which does
+// the upstream dd-sketch fork of ch-go (chproto.DD/Store/IndexMapping), which does
 // NOT compile against cloud's upstream ch-go — the two driver lines cannot coexist
 // in one binary because cloud's embedded o11y QUERY service pins upstream v2.44.0.
 // Metrics ingest therefore stays on the standalone collector until the metrics

@@ -9,7 +9,7 @@
 //	POST /v1/o11y/query_range  (range/list builder query — the console's composite list)
 //
 // The public surface is FLAT and version-less: one /v1/, no nested /api/vN. The
-// upstream SigNoz engine version is an internal impl detail resolved HERE, never
+// upstream engine version is an internal impl detail resolved HERE, never
 // leaked into the public route.
 //
 // Why a cloud-side route instead of the module's version-less alias: the hanzoai/o11y
