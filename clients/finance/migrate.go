@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -29,7 +30,7 @@ func MigrateOrg(ctx context.Context, org string, balanceCents int64) (string, er
 	return fin.Deposit(ctx, types.DepositInput{
 		Org:      org,
 		Subject:  org, // the org-pool wallet (subject == slug)
-		Cents:    balanceCents,
+		Amount:   money.FromCents(balanceCents),
 		Currency: "usd",
 		Notes:    "commerce balance backfill",
 		Tags:     "backfill",

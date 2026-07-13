@@ -9,6 +9,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
 	ledger "github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 )
@@ -67,7 +68,7 @@ func Deposit(s *cloud.Service[core.State], c *zip.Ctx) error {
 	entryID, err := fin.Deposit(c.Context(), types.DepositInput{
 		Org:      org,
 		Subject:  subject,
-		Cents:    cents,
+		Amount:   money.FromCents(cents),
 		Currency: currency,
 		Notes:    notes,
 	})

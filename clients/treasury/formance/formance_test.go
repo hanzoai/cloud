@@ -110,8 +110,8 @@ func TestFormance_Accrue(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("accrue: created=%v err=%v", created, err)
 	}
-	if e.AmountCents != 20_000 {
-		t.Fatalf("accrual = %d, want 20000", e.AmountCents)
+	if e.Amount.Cents() != 20_000 {
+		t.Fatalf("accrual = %d, want 20000", e.Amount.Cents())
 	}
 	if bal, _ := b.ReserveCents(ctx); bal != 20_000 {
 		t.Fatalf("reserve = %d, want 20000", bal)
