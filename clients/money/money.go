@@ -1,233 +1,154 @@
-// Package money is the ONE exact USD money type for the Hanzo finance stack. A value
-// is a signed integer count of ATTO-USD (1e-18 USD) held in a big.Int — the same
-// 18-decimal fixed-point unit an EVM/ERC-20 balance uses, so an off-chain Amount and
-// an on-chain uint256 credit balance are THE SAME NUMBER with no conversion or rounding
-// at the boundary. No float64 ever touches a balance, and every per-token AI price is
-// represented and billed EXACTLY — there is no cent-flooring and no fractional-cent
-// skim, at any scale.
+// Package money is the ONE exact money value for the Hanzo cloud finance stack: a USD
+// balance carried at 18-decimal (EVM/ERC-20) precision, so an off-chain ledger amount and
+// an on-chain uint256 credit balance are THE SAME INTEGER — no conversion or rounding at
+// the boundary. Every per-token AI price is represented and billed EXACTLY; there is no
+// cent-flooring and no fractional-cent skim, at any scale.
 //
-// An Amount is IMMUTABLE: every operation returns a new value and the wrapped big.Int
-// is never mutated after construction, so an Amount is a safe value object to copy,
-// compare, and share. The zero value is a valid 0.
+// The exact-number machinery (big.Int fixed-point, no float, no precision ceiling) is NOT
+// reimplemented here — it lives ONCE in github.com/hanzoai/money + github.com/hanzoai/decimal,
+// the shared money value for the whole stack. This package is the thin policy layer that
+// pins the cloud's credit unit to 18-decimal USD and nothing else; it is the single place
+// that decision lives.
 //
-// UNIT CHOICE. Atto-USD (18 decimals) is exact for any decimal price with up to 18
-// fractional digits — vastly finer than any real bill — and matches the native chain,
-// so credits can settle on-chain later byte-for-byte. Cents/dollars appear ONLY at the
-// human/API edge (FromCents, ParseUSD, USD) and are converted to/from atto exactly.
+// An Amount is IMMUTABLE — every operation returns a new value — and the zero value is a
+// valid 0.
 package money
 
 import (
 	"fmt"
 	"math/big"
 	"strings"
+
+	"github.com/hanzoai/decimal"
+	hz "github.com/hanzoai/money"
 )
 
-// Decimals is the fixed-point scale: 18 atto-USD == 1 USD. The EVM/ERC-20 unit.
+// Decimals is the fixed-point scale of the credit unit: 18 (the EVM/ERC-20 unit). The
+// smallest representable amount is 10^-18 USD.
 const Decimals = 18
 
-// scale = 10^18 (atto per USD); centScale = 10^16 (atto per cent). Computed once.
-var (
-	scale     = pow10(Decimals)
-	centScale = pow10(Decimals - 2)
-	million   = big.NewInt(1_000_000)
-	two       = big.NewInt(2)
-)
+// creditUSD is the cloud's ONE money unit: US dollars at 18-decimal precision, so the
+// stored integer equals the on-chain uint256 credit balance byte-for-byte. Cents and
+// dollars appear ONLY at the human/API edge (FromCents, ParseUSD, Cents) and convert
+// to/from this unit exactly.
+var creditUSD = hz.Currency{Code: "USD", Decimals: Decimals, Symbol: "$", Numeric: "840", Name: "US Dollar credit"}
 
-func pow10(n int) *big.Int {
-	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
-}
-
-// Amount is an exact USD value in atto-USD (1e-18), immutable and big.Int-backed.
-type Amount struct {
-	atto *big.Int // nil == 0; never mutated after construction
-}
+// Amount is an exact USD credit value (18-decimal, big.Int-backed, immutable). It wraps the
+// shared money.Amount, fixed to the credit unit.
+type Amount struct{ a hz.Amount }
 
 // Zero is the additive identity.
-func Zero() Amount { return Amount{} }
+func Zero() Amount { return Amount{a: hz.Zero(creditUSD)} }
 
-// int returns a non-nil, non-aliased big.Int of the atto value (safe to mutate).
-func (a Amount) int() *big.Int {
-	if a.atto == nil {
-		return new(big.Int)
+// FromCents converts integer cents (a human/legacy unit) to an exact credit Amount.
+func FromCents(cents int64) Amount { return Amount{a: hz.New(decimal.New(cents, 2), creditUSD)} }
+
+// FromInt wraps a raw 18-decimal integer magnitude — the storage/on-chain form (the value
+// an EVM uint256 credit balance holds). A nil magnitude is 0.
+func FromInt(units *big.Int) Amount {
+	if units == nil {
+		return Zero()
 	}
-	return new(big.Int).Set(a.atto)
+	return Amount{a: hz.FromMinorBig(units, creditUSD)}
 }
 
-// FromAtto wraps a raw atto-USD magnitude (copied — the caller's big.Int is not retained).
-func FromAtto(atto *big.Int) Amount {
-	if atto == nil {
-		return Amount{}
-	}
-	return Amount{atto: new(big.Int).Set(atto)}
-}
-
-// FromCents converts integer cents (a human/legacy unit) to atto exactly: cents × 1e16.
-func FromCents(cents int64) Amount {
-	v := big.NewInt(cents)
-	return Amount{atto: v.Mul(v, centScale)}
-}
-
-// ParseAtto parses a signed integer atto-USD string (the storage/on-chain form).
-func ParseAtto(s string) (Amount, error) {
+// ParseInt parses a signed 18-decimal integer string (the storage/on-chain form). An empty
+// string is 0.
+func ParseInt(s string) (Amount, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return Amount{}, nil
+		return Zero(), nil
 	}
 	v, ok := new(big.Int).SetString(s, 10)
 	if !ok {
-		return Amount{}, fmt.Errorf("money: invalid atto %q", s)
+		return Amount{}, fmt.Errorf("money: invalid integer %q", s)
 	}
-	return Amount{atto: v}, nil
+	return Amount{a: hz.FromMinorBig(v, creditUSD)}, nil
 }
 
-// ParseUSD parses a decimal USD string ("6.60", "-0.00132", "100") to an EXACT atto
-// Amount — no float. Up to 18 fractional digits are honored; more is an error rather
-// than a silent truncation (we never quietly drop money).
+// ParseUSD parses a decimal USD string ("6.60", "-0.00132", "100") to an EXACT Amount — no
+// float. Up to 18 fractional digits are honored; more is an error rather than a silent
+// truncation (we never quietly drop money).
 func ParseUSD(s string) (Amount, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return Amount{}, nil
+		return Zero(), nil
 	}
-	neg := false
-	switch s[0] {
-	case '+':
-		s = s[1:]
-	case '-':
-		neg, s = true, s[1:]
+	d, err := decimal.Parse(s)
+	if err != nil {
+		return Amount{}, fmt.Errorf("money: invalid USD %q: %w", s, err)
 	}
-	intPart, fracPart := s, ""
-	if i := strings.IndexByte(s, '.'); i >= 0 {
-		intPart, fracPart = s[:i], s[i+1:]
-	}
-	if intPart == "" {
-		intPart = "0"
-	}
-	if len(fracPart) > Decimals {
+	if d.Scale() > Decimals {
 		return Amount{}, fmt.Errorf("money: %q has more than %d fractional digits", s, Decimals)
 	}
-	digits := intPart + fracPart
-	v, ok := new(big.Int).SetString(digits, 10)
-	if !ok {
-		return Amount{}, fmt.Errorf("money: invalid USD %q", s)
-	}
-	// shift the fractional part up to full atto scale
-	v.Mul(v, pow10(Decimals-len(fracPart)))
-	if neg {
-		v.Neg(v)
-	}
-	return Amount{atto: v}, nil
+	return Amount{a: hz.New(d, creditUSD)}, nil
 }
 
-// TokenCost is the EXACT cost of n tokens at pricePerMillion USD/1M-tokens:
-// n × price / 1e6, computed entirely in atto (big.Int) with round-half-up on the
-// sub-atto remainder — so a bill is never floored to zero and never skims a fraction.
+// TokenCost is the EXACT cost of n tokens at pricePerMillion USD/1M-tokens: n × price / 1e6,
+// rounded half-away-from-zero at 10^-18 — so a bill is never floored to zero and never skims
+// a fraction.
 func TokenCost(tokens int, pricePerMillion Amount) Amount {
 	if tokens <= 0 || pricePerMillion.IsZero() {
-		return Amount{}
+		return Zero()
 	}
-	num := pricePerMillion.int()
-	num.Mul(num, big.NewInt(int64(tokens))) // atto × tokens
-	q, r := new(big.Int).QuoRem(num, million, new(big.Int))
-	// round half up on the /1e6 remainder (r is non-negative; price/tokens are ≥ 0 here)
-	if r.Sign() != 0 {
-		if new(big.Int).Mul(r, two).Cmp(million) >= 0 {
-			q.Add(q, big.NewInt(1))
-		}
-	}
-	return Amount{atto: q}
+	cost := pricePerMillion.a.Decimal().
+		Mul(decimal.New(int64(tokens), 0)).
+		Quo(decimal.New(1_000_000, 0), Decimals)
+	return Amount{a: hz.New(cost, creditUSD)}
 }
 
-// Add returns a + b.
-func (a Amount) Add(b Amount) Amount { return Amount{atto: a.int().Add(a.int(), b.int())} }
+// Add returns a + b. (The credit unit is fixed, so the shared add can never mismatch.)
+func (a Amount) Add(b Amount) Amount { s, _ := a.a.Add(b.a); return Amount{a: s} }
 
 // Sub returns a − b.
-func (a Amount) Sub(b Amount) Amount { return Amount{atto: a.int().Sub(a.int(), b.int())} }
+func (a Amount) Sub(b Amount) Amount { s, _ := a.a.Sub(b.a); return Amount{a: s} }
 
 // Neg returns −a.
-func (a Amount) Neg() Amount { return Amount{atto: a.int().Neg(a.int())} }
+func (a Amount) Neg() Amount { return Amount{a: a.a.Neg()} }
 
 // Cmp reports −1, 0, +1 as a <, ==, > b.
-func (a Amount) Cmp(b Amount) int { return a.int().Cmp(b.int()) }
+func (a Amount) Cmp(b Amount) int { return a.a.Cmp(b.a) }
 
 // Sign reports −1, 0, +1 as a <, ==, > 0.
-func (a Amount) Sign() int {
-	if a.atto == nil {
-		return 0
-	}
-	return a.atto.Sign()
-}
+func (a Amount) Sign() int { return a.a.Sign() }
 
 // IsZero reports whether a == 0.
-func (a Amount) IsZero() bool { return a.Sign() == 0 }
+func (a Amount) IsZero() bool { return a.a.IsZero() }
 
 // IsNeg reports whether a < 0.
-func (a Amount) IsNeg() bool { return a.Sign() < 0 }
+func (a Amount) IsNeg() bool { return a.a.Sign() < 0 }
 
-// Atto returns a fresh big.Int of the atto magnitude (the on-chain uint256 value).
-func (a Amount) Atto() *big.Int { return a.int() }
+// Int returns a fresh big.Int of the 18-decimal magnitude — the on-chain uint256 value.
+func (a Amount) Int() *big.Int { return a.a.Minor() }
 
-// AttoString is the canonical STORAGE form: the signed integer atto as a decimal string
-// (exact, sortable with fixed width by the caller, on-chain-identical).
-func (a Amount) AttoString() string { return a.int().String() }
+// IntString is the canonical STORAGE form: the signed 18-decimal integer as a decimal
+// string (exact, on-chain-identical, sortable at fixed width by the caller).
+func (a Amount) IntString() string { return a.a.MinorString() }
 
-// Cents rounds the value to whole cents (round-half-up) — a human/legacy display unit
+// Cents rounds the value to whole cents (half-away-from-zero) — a human/legacy display unit
 // ONLY; never use it inside money math (it is lossy by construction).
-func (a Amount) Cents() int64 {
-	v := a.int()
-	neg := v.Sign() < 0
-	if neg {
-		v.Neg(v)
-	}
-	q, r := new(big.Int).QuoRem(v, centScale, new(big.Int))
-	if new(big.Int).Mul(r, two).Cmp(centScale) >= 0 {
-		q.Add(q, big.NewInt(1))
-	}
-	if neg {
-		q.Neg(q)
-	}
-	return q.Int64()
-}
+func (a Amount) Cents() int64 { return a.a.Decimal().Round(2).Coef().Int64() }
+
+// String renders the value as a trimmed decimal USD string ("6.6", "0.00132", "-0.5", "0")
+// — the human/JSON form. Exact: derived from the integer coefficient, never a float.
+func (a Amount) String() string { return a.a.String() }
 
 // MarshalJSON emits the exact decimal USD string ("0.00132") — a STRING, never a JSON
 // number, so no consumer can reintroduce a float rounding error.
-func (a Amount) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + a.String() + `"`), nil
-}
+func (a Amount) MarshalJSON() ([]byte, error) { return []byte(`"` + a.a.String() + `"`), nil }
 
-// UnmarshalJSON accepts either a quoted decimal USD string or a bare decimal number
-// (parsed exactly, without float).
+// UnmarshalJSON accepts either a quoted decimal USD string or a bare decimal number (parsed
+// exactly, without float).
 func (a *Amount) UnmarshalJSON(b []byte) error {
-	s := strings.TrimSpace(string(b))
+	s := strings.Trim(strings.TrimSpace(string(b)), `"`)
 	if s == "null" || s == "" {
-		*a = Amount{}
+		*a = Zero()
 		return nil
 	}
-	s = strings.Trim(s, `"`)
 	parsed, err := ParseUSD(s)
 	if err != nil {
 		return err
 	}
 	*a = parsed
 	return nil
-}
-
-// String renders the value as a trimmed decimal USD string ("6.6", "0.00132", "-0.5",
-// "0") — the human/JSON form. Exact: derived from the integer atto, not a float.
-func (a Amount) String() string {
-	v := a.int()
-	neg := v.Sign() < 0
-	if neg {
-		v.Neg(v)
-	}
-	q, r := new(big.Int).QuoRem(v, scale, new(big.Int))
-	out := q.String()
-	if r.Sign() != 0 {
-		frac := fmt.Sprintf("%0*s", Decimals, r.String())
-		frac = strings.TrimRight(frac, "0")
-		out += "." + frac
-	}
-	if neg {
-		out = "-" + out
-	}
-	return out
 }

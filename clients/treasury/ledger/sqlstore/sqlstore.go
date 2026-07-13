@@ -9,9 +9,9 @@
 // as the default backend; the driver import is the only thing a different Base
 // backend would swap.
 //
-// MONEY IS EXACT AND BIG. Amounts are atto-USD (1e-18, the EVM/uint256 unit) held as
+// MONEY IS EXACT AND BIG. Amounts are 18-decimal USD (1e-18, the EVM/uint256 unit) held as
 // big.Int money.Amount — a value exceeds SQLite's 64-bit INTEGER past ~$9.20, so amount
-// columns are TEXT (the signed decimal atto string) and an account's balance is a
+// columns are TEXT (the signed 18-decimal integer string) and an account's balance is a
 // maintained running total (treasury_accounts.balance), NOT a SQL SUM (you cannot SUM a
 // decimal-string column, and a busy wallet's million usage postings must not be re-summed
 // on every gate read). The running balance is updated inside the same transaction as each
@@ -68,7 +68,7 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
-	// Target (atto) schema — a fresh file gets this directly.
+	// Target 18-decimal schema — a fresh file gets this directly.
 	const ddl = `
 CREATE TABLE IF NOT EXISTS treasury_accounts (
   id         TEXT PRIMARY KEY,
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("treasury migrate: %w", err)
 	}
-	if err := s.migrateCentsToAtto(); err != nil {
+	if err := s.migrateCentsToUnits(); err != nil {
 		return err
 	}
 	// Re-apply the DDL so any table REBUILT by the legacy migration regains its indexes
@@ -119,18 +119,18 @@ CREATE TABLE IF NOT EXISTS treasury_policy (
 	return nil
 }
 
-// migrateCentsToAtto rebuilds a pre-atto file (the legacy INTEGER-cents schema:
+// migrateCentsToUnits rebuilds a pre-migration file (the legacy INTEGER-cents schema:
 // treasury_entries.amount_cents + INTEGER posting amounts, no accounts.balance) into the
-// atto schema, converting every stored cents value ×1e16 to exact atto and materializing
-// each account's running balance. Idempotent: on an already-atto file it detects the
+// 18-decimal schema, converting every stored cents value ×1e16 to the exact 18-decimal integer and materializing
+// each account's running balance. Idempotent: on an already-migrated file it detects the
 // absent amount_cents column and returns immediately. Runs once, inside one transaction.
-func (s *Store) migrateCentsToAtto() error {
+func (s *Store) migrateCentsToUnits() error {
 	legacy, err := s.hasColumn("treasury_entries", "amount_cents")
 	if err != nil {
 		return fmt.Errorf("detect legacy schema: %w", err)
 	}
 	if !legacy {
-		return nil // already atto (or fresh)
+		return nil // already migrated (or fresh)
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -138,9 +138,9 @@ func (s *Store) migrateCentsToAtto() error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// The atto tables were created above with different names? No — CREATE TABLE IF NOT
+	// The 18-decimal tables were created above with different names? No — CREATE TABLE IF NOT
 	// EXISTS was a no-op because the legacy tables already exist. Rename them aside, make
-	// the atto tables, copy-convert, drop the legacy copies.
+	// the 18-decimal tables, copy-convert, drop the legacy copies.
 	for _, stmt := range []string{
 		`ALTER TABLE treasury_entries  RENAME TO treasury_entries_legacy`,
 		`ALTER TABLE treasury_postings RENAME TO treasury_postings_legacy`,
@@ -160,7 +160,7 @@ func (s *Store) migrateCentsToAtto() error {
 		}
 	}
 
-	// entries: amount_cents (int) → amount (atto text)
+	// entries: amount_cents (int) → amount (18-decimal integer text)
 	if err := convertRows(tx,
 		`SELECT id,kind,program,ref,memo,amount_cents,created_at FROM treasury_entries_legacy`,
 		func(scan func(...any) error) error {
@@ -171,13 +171,13 @@ func (s *Store) migrateCentsToAtto() error {
 			}
 			_, err := tx.Exec(
 				`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
-				id, kind, program, ref, memo, money.FromCents(cents).AttoString(), created)
+				id, kind, program, ref, memo, money.FromCents(cents).IntString(), created)
 			return err
 		}); err != nil {
 		return err
 	}
 
-	// postings: amount (int cents) → amount (atto text), accumulating each account's balance
+	// postings: amount (int cents) → amount (18-decimal integer text), accumulating each account's balance
 	balances := map[string]money.Amount{}
 	if err := convertRows(tx,
 		`SELECT entry_id,account,amount,created_at FROM treasury_postings_legacy ORDER BY id`,
@@ -190,7 +190,7 @@ func (s *Store) migrateCentsToAtto() error {
 			amt := money.FromCents(cents)
 			if _, err := tx.Exec(
 				`INSERT INTO treasury_postings (entry_id,account,amount,created_at) VALUES (?,?,?,?)`,
-				entryID, account, amt.AttoString(), created); err != nil {
+				entryID, account, amt.IntString(), created); err != nil {
 				return err
 			}
 			balances[account] = balances[account].Add(amt)
@@ -210,7 +210,7 @@ func (s *Store) migrateCentsToAtto() error {
 			}
 			_, err := tx.Exec(
 				`INSERT INTO treasury_accounts (id,kind,balance,created_at) VALUES (?,?,?,?)`,
-				id, kind, balances[id].AttoString(), created)
+				id, kind, balances[id].IntString(), created)
 			return err
 		}); err != nil {
 		return err
@@ -291,7 +291,7 @@ func (s *Store) BalancesWithPrefix(ctx context.Context, prefix string) (map[stri
 		if err := rows.Scan(&acct, &bal); err != nil {
 			return nil, fmt.Errorf("scan balance: %w", err)
 		}
-		amt, err := money.ParseAtto(bal)
+		amt, err := money.ParseInt(bal)
 		if err != nil {
 			return nil, fmt.Errorf("parse balance %q: %w", acct, err)
 		}
@@ -322,7 +322,7 @@ func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) 
 		if err := rows.Scan(&e.ID, &e.Kind, &e.Program, &e.Ref, &e.Memo, &amt, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan entry: %w", err)
 		}
-		if e.Amount, err = money.ParseAtto(amt); err != nil {
+		if e.Amount, err = money.ParseInt(amt); err != nil {
 			return nil, fmt.Errorf("parse entry amount: %w", err)
 		}
 		out = append(out, e)
@@ -354,7 +354,7 @@ func (s *Store) postingsOf(ctx context.Context, entryID string) ([]ledger.Postin
 		if err := rows.Scan(&p.Account, &amt); err != nil {
 			return nil, fmt.Errorf("scan posting: %w", err)
 		}
-		if p.Amount, err = money.ParseAtto(amt); err != nil {
+		if p.Amount, err = money.ParseInt(amt); err != nil {
 			return nil, fmt.Errorf("parse posting amount: %w", err)
 		}
 		out = append(out, p)
@@ -422,7 +422,7 @@ func (t *txAdapter) EntryByRef(kind, program, ref string) (ledger.Entry, bool, e
 	if err != nil {
 		return ledger.Entry{}, false, fmt.Errorf("entry by ref: %w", err)
 	}
-	if e.Amount, err = money.ParseAtto(amt); err != nil {
+	if e.Amount, err = money.ParseInt(amt); err != nil {
 		return ledger.Entry{}, false, fmt.Errorf("parse entry amount: %w", err)
 	}
 	return e, true, nil
@@ -443,13 +443,13 @@ func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
 	}
 	if _, err := t.tx.ExecContext(t.ctx,
 		`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
-		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.Amount.AttoString(), e.CreatedAt); err != nil {
+		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.Amount.IntString(), e.CreatedAt); err != nil {
 		return fmt.Errorf("insert entry: %w", err)
 	}
 	for _, p := range postings {
 		if _, err := t.tx.ExecContext(t.ctx,
 			`INSERT INTO treasury_postings (entry_id, account, amount, created_at) VALUES (?,?,?,?)`,
-			e.ID, p.Account, p.Amount.AttoString(), e.CreatedAt); err != nil {
+			e.ID, p.Account, p.Amount.IntString(), e.CreatedAt); err != nil {
 			return fmt.Errorf("insert posting: %w", err)
 		}
 		// Maintain the account's running balance in the SAME tx, so a read never re-sums
@@ -460,7 +460,7 @@ func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
 			return err
 		}
 		if _, err := t.tx.ExecContext(t.ctx,
-			`UPDATE treasury_accounts SET balance=? WHERE id=?`, cur.Add(p.Amount).AttoString(), p.Account); err != nil {
+			`UPDATE treasury_accounts SET balance=? WHERE id=?`, cur.Add(p.Amount).IntString(), p.Account); err != nil {
 			return fmt.Errorf("update balance %q: %w", p.Account, err)
 		}
 	}
@@ -478,7 +478,7 @@ func balanceOf(row *sql.Row, account string) (money.Amount, error) {
 	if err != nil {
 		return money.Zero(), fmt.Errorf("balance %q: %w", account, err)
 	}
-	amt, perr := money.ParseAtto(bal)
+	amt, perr := money.ParseInt(bal)
 	if perr != nil {
 		return money.Zero(), fmt.Errorf("parse balance %q: %w", account, perr)
 	}
