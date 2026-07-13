@@ -72,6 +72,7 @@ type state struct {
 	stores  *cloud.OrgStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
 	sshHost string     // for sshUrl construction (e.g. "git.hanzo.ai")
+	gitHost string     // the HTTPS git host (e.g. "git.hanzo.ai"); root smart-HTTP is served only for this Host
 	ssh     *sshServer // Git SSH transport listener
 	keys    *keyStore  // SSH public-key registry (global fingerprint index)
 }
@@ -168,6 +169,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		stores:  cloud.NewOrgStore(deps.DataDir, "git", openStore),
 		storage: st,
 		sshHost: gitSSHHost(deps.Domain),
+		gitHost: defaultSSHHost(deps.Domain),
 		keys:    keys,
 	}}
 	mounted = s
@@ -221,6 +223,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
 	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 
+	// Root-level smart-HTTP on the git host so `git clone
+	// https://git.hanzo.ai/<org>/<repo>.git` works with the canonical git URL
+	// (no /v1/git prefix). Guarded to s.State.gitHost via onGitHost: on the
+	// api/console hosts these fall through (c.Next()), so a root :org/:repo can
+	// never shadow another surface. Same handlers, same :org/:repo params.
+	onGit := onGitHost(s.State.gitHost)
+	app.Get("/:org/:repo/info/refs", onGit(cloud.Handle(s, infoRefs)))
+	app.Post("/:org/:repo/git-upload-pack", onGit(cloud.Handle(s, uploadPack)))
+	app.Post("/:org/:repo/git-receive-pack", onGit(cloud.Handle(s, receivePack)))
+
 	// Browser UI — Hanzo Git's web surface (repo list/browse/blob/commits) at
 	// /git/*, Hanzo Git's native web surface (ui.go).
 	uiRoutes(app, s)
@@ -228,6 +240,23 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// ZAP transport — the SAME control-plane core, reachable by browsers/services
 	// that speak ZAP instead of REST, over the shared /zap plane. See zap.go.
 	mountZAP(app, s)
+}
+
+// onGitHost gates a handler on the request Host matching the git host
+// (e.g. git.hanzo.ai). The root-level smart-HTTP routes (/:org/:repo/*) are
+// registered globally, so on the api/console hosts they must fall through
+// (c.Next()) rather than serve — otherwise a bare /:org/:repo could shadow
+// another surface. An empty git host disables the match entirely (always falls
+// through), leaving /v1/git the only reachable smart-HTTP path.
+func onGitHost(host string) func(zip.Handler) zip.Handler {
+	return func(h zip.Handler) zip.Handler {
+		return func(c *zip.Ctx) error {
+			if host == "" || !strings.EqualFold(c.Fiber().Hostname(), host) {
+				return c.Next()
+			}
+			return h(c)
+		}
+	}
 }
 
 // ---- control-plane handlers ----
