@@ -7,6 +7,7 @@ import (
 
 	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -22,7 +23,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	defer finance.Publish(nil)
 
 	// Seed acme's pooled wallet with $1.00 (100¢).
-	if _, err := fin.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 100}); err != nil {
+	if _, err := fin.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(100)}); err != nil {
 		t.Fatalf("seed deposit: %v", err)
 	}
 
@@ -42,7 +43,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	if res == nil || res.Amount != 2 {
 		t.Fatalf("record micros result = %+v; want Amount 2 (ceil of 1.5¢)", res)
 	}
-	if bal, _ := fin.BalanceCents(ctx, "acme", "acme", "usd", false); bal != 98 {
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 98 {
 		t.Fatalf("balance after micros debit = %d; want 98 (100-2)", bal)
 	}
 
@@ -50,7 +51,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 50, RequestID: "m2"}); err != nil {
 		t.Fatalf("record cents: %v", err)
 	}
-	if bal, _ := fin.BalanceCents(ctx, "acme", "acme", "usd", false); bal != 48 {
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
 		t.Fatalf("balance after cents debit = %d; want 48 (98-50)", bal)
 	}
 
@@ -58,7 +59,7 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 50, RequestID: "m2"}); err != nil {
 		t.Fatalf("record replay: %v", err)
 	}
-	if bal, _ := fin.BalanceCents(ctx, "acme", "acme", "usd", false); bal != 48 {
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
 		t.Fatalf("balance after replay = %d; want 48 (idempotent)", bal)
 	}
 
