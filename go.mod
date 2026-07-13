@@ -22,7 +22,7 @@ require (
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.2.3
+	github.com/hanzoai/sqlite v0.3.0
 	github.com/hanzoai/stream v1.2.0
 	github.com/huandu/facebook v2.3.1+incompatible
 	github.com/lib/pq v1.12.3
@@ -62,7 +62,6 @@ require (
 )
 
 require (
-	github.com/AfterShip/clickhouse-sql-parser v0.4.16 // indirect
 	github.com/ClickHouse/ch-go v0.72.0 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
@@ -70,9 +69,10 @@ require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/hanzo-ds/mock v0.14.3 // indirect
-	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
-	github.com/hanzoai/clickhouse-go-mock v0.14.2 // indirect
+	github.com/hanzoai/csqlite v0.1.0 // indirect
+	github.com/hanzoai/datastore-go-mock v0.14.3 // indirect
+	github.com/hanzoai/datastore-sql-parser v0.4.17 // indirect
+	github.com/hanzoai/sqlbuilder v1.39.2 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 )
 
@@ -131,7 +131,6 @@ require (
 	github.com/luxfi/version v1.0.1 // indirect
 	github.com/luxfi/warp v1.24.0 // indirect
 	github.com/luxwallet/connect/go v0.1.3 // indirect
-	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
@@ -531,7 +530,6 @@ require (
 	github.com/hhrutter/tiff v1.0.2 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/hsluoyz/modsecurity-go v0.0.7 // indirect
-	github.com/huandu/go-sqlbuilder v1.39.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/hupe1980/go-huggingface v0.0.15 // indirect
 	github.com/icrowley/fake v0.0.0-20240710202011-f797eb4a99c0
@@ -831,7 +829,7 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.19
+	github.com/hanzoai/o11y v1.5.23
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
