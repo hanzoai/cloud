@@ -13,7 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/datastore-go/v2 v2.47.1
+	github.com/hanzoai/datastore-go/v2 v2.47.2
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.22
 	github.com/hanzoai/notify v1.6.18
