@@ -64,7 +64,7 @@ var (
 //
 // Lifecycle: the registry background services (alertmanager, statsreporter,
 // licensing, tokenizer, authz, user, ruler/alert-rule-manager, auditor,
-// meterreporter) run via SigNoz.Start — non-blocking (per-service goroutines).
+// meterreporter) run via the o11y registry Start — non-blocking (per-service goroutines).
 // Cloud owns its own HTTP listeners, so we never call server.Start (which would
 // bind the standalone query/opamp ports). OpAMP collector management (a second
 // websocket listener) is NOT started in-process — telemetry ingest continues on
