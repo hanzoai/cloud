@@ -17,7 +17,7 @@ require (
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.22
 	github.com/hanzoai/notify v1.6.18
-	github.com/hanzoai/otel-collector v0.144.8
+	github.com/hanzoai/otel-collector v0.144.10
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
@@ -75,7 +75,6 @@ require (
 )
 
 require (
-	github.com/SigNoz/signoz-otel-collector v0.144.5 // indirect
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/hanzoai/captable v1.0.0
 	github.com/luxfi/keys v1.4.0 // indirect
@@ -159,7 +158,6 @@ require (
 	github.com/ttacon/libphonenumber v1.2.1 // indirect
 	github.com/uptrace/bun/dialect/pgdialect v1.2.9 // indirect
 	github.com/valyala/fastjson v1.6.7 // indirect
-	github.com/vjeantet/grok v1.0.1 // indirect
 	github.com/yuin/goldmark v1.7.16 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -876,7 +874,3 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
-
-replace github.com/hanzoai/otel-collector => github.com/hanzoai/otel-collector v0.144.8-hanzo.0
-
-replace github.com/SigNoz/signoz-otel-collector => github.com/hanzoai/signoz-otel-collector v0.144.3-hanzo.1
