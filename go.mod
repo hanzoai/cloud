@@ -17,7 +17,7 @@ require (
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.22
 	github.com/hanzoai/notify v1.6.18
-	github.com/hanzoai/otel-collector v0.144.13
+	github.com/hanzoai/otel-collector v0.144.10
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
@@ -68,7 +68,7 @@ require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/hanzo-ds/mock v0.14.3 // indirect
+	github.com/hanzo-ds/mock v0.14.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 )
