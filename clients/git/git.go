@@ -176,7 +176,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
-	// is loaded from KMS/env (CLOUD_GIT_SSH_HOST_KEY) or generated + persisted
+	// is loaded from KMS/env (GIT_SSH_HOST_KEY) or generated + persisted
 	// under the git data root.
 	sshSrv, err := newSSHServer(s, sshConfig(deps, gitRoot))
 	if err != nil {
