@@ -119,7 +119,7 @@ func Route(api router.Router) {
 	rest.New(discount.Discount{}).Route(api, tokenRequired)
 	rest.New(movie.Movie{}).Route(api, tokenRequired)
 	rest.New(note.Note{}).Route(api, tokenRequired)
-	rest.New(product.Product{}).Route(api, tokenRequired)
+	rest.New(product.Product{}).Route(api, tokenRequired, publishProductEvents)
 	rest.New(return_.Return{}).Route(api, tokenRequired)
 	rest.New(site.Site{}).Route(api, tokenRequired)
 	rest.New(submission.Submission{}).Route(api, tokenRequired)

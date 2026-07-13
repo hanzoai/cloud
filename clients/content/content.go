@@ -43,11 +43,12 @@ import (
 // knowledge, before the AI /v1/* catch-all); the module fixtures + lifecycle hooks are
 // registered in doctypes.go's init(), process-global and mount-order-independent.
 
-// state is content's own data: the two swappable edges. The shared deps (logger,
+// state is content's own data: the swappable edges. The shared deps (logger,
 // billing meter, KMS, brand) live in the embedded cloud.Base, reached as s.Log / s.Bill.
 type state struct {
 	gen  Generator
 	dist Distributor
+	sf   Storefront
 }
 
 // mounted is the process singleton the exported ops (Generate/Publish/Transition) run
@@ -76,13 +77,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	st := state{
 		gen:  newGenerator(deps, b),
 		dist: newDistributor(),
+		sf:   newStorefront(),
 	}
 	s := &cloud.Service[state]{Base: b, State: st}
 	mounted = s
 	routes(app, s)
 
 	b.Log.Info("content mounted", "brand", b.Brand,
-		"generator", configured(st.gen), "distributor", configured(st.dist))
+		"generator", configured(st.gen), "distributor", configured(st.dist),
+		"storefront", configured(st.sf))
 	return nil
 }
 
@@ -263,11 +266,12 @@ func postTransition(_ *cloud.Service[state], c *zip.Ctx) error {
 // TransitionResult is the outcome of a lifecycle move, including any distribution the
 // transition triggered (nil when the target state does not distribute).
 type TransitionResult struct {
-	DocType      string         `json:"doctype"`
-	Name         string         `json:"name"`
-	From         string         `json:"from"`
-	To           string         `json:"to"`
-	Distribution *PublishResult `json:"distribution,omitempty"`
+	DocType      string            `json:"doctype"`
+	Name         string            `json:"name"`
+	From         string            `json:"from"`
+	To           string            `json:"to"`
+	Distribution *PublishResult    `json:"distribution,omitempty"`
+	Storefront   *StorefrontResult `json:"storefront,omitempty"`
 }
 
 // Transition moves a content item to a new lifecycle state and, when that state
@@ -323,6 +327,10 @@ func Transition(ctx context.Context, org, doctype, name, to, scheduleAt string) 
 			pr = PublishResult{Status: distributionState(perr)}
 		}
 		res.Distribution = &pr
+		// Catalog fan-out: a published product Asset becomes the storefront product
+		// image (Listing headerImage), keyed by design == slug. Best-effort and skipped
+		// for non-catalog items (StorefrontPublish returns nil) — never fatal.
+		res.Storefront = StorefrontPublish(ctx, org, doctype, name)
 	}
 	return res, nil
 }
@@ -392,7 +400,7 @@ func dataString(m map[string]any, key string) string {
 // default) — for the mount log line.
 func configured(x any) bool {
 	switch x.(type) {
-	case notConfiguredGenerator, notConfiguredDistributor, nil:
+	case notConfiguredGenerator, notConfiguredDistributor, notConfiguredStorefront, nil:
 		return false
 	}
 	return true
