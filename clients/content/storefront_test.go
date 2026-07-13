@@ -68,6 +68,11 @@ type fakeStorefront struct {
 	calls  []StorefrontRequest
 	result StorefrontResult
 	err    error
+
+	// ProductExists behavior: exists is the set of handles the catalog "has"; existsErr,
+	// when set, is returned instead (e.g. errNotConfigured to prove the gate skips).
+	exists    map[string]bool
+	existsErr error
 }
 
 func (f *fakeStorefront) Publish(_ context.Context, _ string, req StorefrontRequest) (StorefrontResult, error) {
@@ -82,6 +87,15 @@ func (f *fakeStorefront) Publish(_ context.Context, _ string, req StorefrontRequ
 		r = StorefrontResult{Status: "published", Slug: req.Design, ImageURL: req.ImageURL}
 	}
 	return r, nil
+}
+
+func (f *fakeStorefront) ProductExists(_ context.Context, _ string, handle string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.existsErr != nil {
+		return false, f.existsErr
+	}
+	return f.exists[handle], nil
 }
 
 func (f *fakeStorefront) count() int { f.mu.Lock(); defer f.mu.Unlock(); return len(f.calls) }
