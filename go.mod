@@ -74,6 +74,8 @@ require (
 	github.com/hanzoai/datastore-sql-parser v0.4.17 // indirect
 	github.com/hanzoai/sqlbuilder v1.39.2 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
+	github.com/mdp/qrterminal/v3 v3.2.1 // indirect
+	rsc.io/qr v0.2.0 // indirect
 )
 
 require (
