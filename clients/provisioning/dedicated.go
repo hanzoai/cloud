@@ -242,7 +242,7 @@ var dedicatedEngines = map[string]engine{
 			}
 		},
 		dsn: func(user, pw, host string, port int, db string) string {
-			return fmt.Sprintf("clickhouse://%s:%s@%s:%d/%s?protocol=http", user, pw, host, port, db)
+			return fmt.Sprintf("datastore://%s:%s@%s:%d/%s?protocol=http", user, pw, host, port, db)
 		},
 	},
 	// FerretDB on Hanzo SQL ("docdb"): the managed "document database" is a
