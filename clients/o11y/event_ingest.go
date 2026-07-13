@@ -9,7 +9,7 @@
 //
 // GROUNDING — why a new SPECIFIC route, not a wire into the embed:
 //
-//	The embedded o11y runtime (embed.go, github.com/hanzoai/o11y) is a SigNoz fork:
+//	The embedded o11y runtime (embed.go, github.com/hanzoai/o11y) is our infra-observability engine:
 //	it serves INFRA observability (OTLP traces/logs/metrics, dashboards, alerts) and
 //	mounts `app.All("/v1/o11y/*")` as a WILDCARD proxy at subsystem order 70. It has
 //	NO LLM-observability ingestion surface (no traces/observations/scores writer) —
@@ -27,7 +27,7 @@
 // group by target Datastore table → batch-insert via the branded
 // github.com/hanzoai/datastore-go/v2 client → oversized event bodies overflow to
 // object storage, only the blob ref is stored inline. The store is the Datastore;
-// datastore-go is verified to bring the ONE ch-go transport line the SigNoz o11y
+// datastore-go is verified to bring the ONE ch-go transport line the o11y
 // runtime already uses (MVS-unified), so it coexists in the single binary.
 //
 // Safety posture (this writes a LIVE, SHARED Datastore):
@@ -273,7 +273,7 @@ func shutdownEventIngest(_ context.Context) error {
 // datastoreSink is the real eventSink: a native connection to the Hanzo Datastore
 // via the branded github.com/hanzoai/datastore-go/v2 client (the FIRST direct user
 // in cloud — this thin wrapper is the whole client). datastore-go brings the ONE
-// ch-go transport line the SigNoz o11y runtime already uses (MVS-unified), so it
+// ch-go transport line the o11y runtime already uses (MVS-unified), so it
 // coexists in the single binary.
 type datastoreSink struct {
 	conn datastore.Conn

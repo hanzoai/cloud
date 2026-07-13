@@ -23,7 +23,7 @@ co-entry).
 
 ## Flat, version-less public surface (one /v1/, no nested /api/vN)
 
-The public contract is FLAT — the upstream SigNoz engine version is an internal
+The public contract is FLAT — the upstream engine version is an internal
 impl detail resolved inside the handlers, never leaked into a route:
 
 - `/v1/o11y/{logs,metrics,status}` — tenant-scoped reads (`scope.go`).
@@ -45,9 +45,9 @@ Three planes, one datastore:
   the retired `clients/observe` so nothing was lost:
   - **logs**: two views over ONE store. A validated SuperAdmin (`c.IsAdmin()`, ==
     `owner==admin` after SanitizeIdentity) sees the raw infra stdout stream
-    (`signoz_logs`, `resources_string['app']=<workload>`); every other org sees its
+    (`o11y_logs`, `resources_string['app']=<workload>`); every other org sees its
     OWN request stream derived from org-tagged spans
-    (`signoz_traces`, `attributes_string['hanzo.org']=<org>`).
+    (`o11y_traces`, `attributes_string['hanzo.org']=<org>`).
   - **metrics**: REAL per-org RED (rate/errors/p50/p95) from org-tagged request
     spans + the org's LLM usage from `hanzo.cloud_usage`. A SuperAdmin sees the
     whole-product RED (no org predicate); usage is always the caller's own org.
@@ -70,7 +70,7 @@ Three planes, one datastore:
 - **Ingest / write plane** — `ingest.go`. An in-process OpenTelemetry Collector
   that folds the standalone `otel-collector` Deployment into cloud. Accepts OTLP
   (gRPC :4317, HTTP :4318) and writes spans+logs into the same ClickHouse the
-  query plane reads (`signoz_traces` / `signoz_logs`). Trimmed pipeline:
+  query plane reads (`o11y_traces` / `o11y_logs`). Trimmed pipeline:
   `otlp -> memory_limiter, resource(namespace=hanzo, env), batch -> {clickhousetraces, clickhouselogsexporter}`.
   - **OFF by default.** Enable with `CLOUD_OTLP_INGEST_ENABLED=true` (+ a
     datastore DSN). Fail-soft: any error leaves the standalone collector as the
@@ -81,8 +81,8 @@ Three planes, one datastore:
 
 ## Metrics ingest is DEFERRED (driver-fork conflict — do not "fix" naively)
 
-The metrics write path (`signozclickhousemetrics` + the `o11yspanmetrics`
-connector) is intentionally NOT embedded. That exporter references SigNoz's
+The metrics write path (the datastore ClickHouse metrics exporter + the `o11yspanmetrics`
+connector) is intentionally NOT embedded. That exporter references the upstream
 **dd-sketch fork** of ch-go (`chproto.DD/Store/IndexMapping`), which does NOT
 compile against cloud's upstream ch-go v0.71.0 / clickhouse-go v2.44.0 (verified:
 `undefined: chproto.DD` etc.). The two driver lines cannot coexist in one binary
