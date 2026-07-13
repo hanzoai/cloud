@@ -48,55 +48,15 @@ func isSubjectKey(k string) bool {
 	return false
 }
 
-// personalBillingOrgs — orgs whose members bill per-USER (the shared catch-all).
-// Mirrors commerce's PERSONAL_BILLING_ORGS and billing-scope.ts personalBillingOrgs:
-// default "hanzo"; PERSONAL_BILLING_ORGS or HANZO_DEFAULT_ORG overrides (comma list).
-func personalBillingOrgs() map[string]bool {
-	raw := getenv("PERSONAL_BILLING_ORGS", getenv("HANZO_DEFAULT_ORG", "hanzo"))
-	out := map[string]bool{}
-	for _, p := range strings.Split(raw, ",") {
-		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
-			out[p] = true
-		}
-	}
-	return out
-}
-
-// orgBillingOrgs — orgs promoted to ONE shared pool (subject = "<org>") by the
-// ORG_BILLING_ORGS allowlist, even when they would otherwise bill per-user.
-// Mirrors ai/object.isOrgBilling and billing-scope.ts: default EMPTY; the scoped,
-// additive override that wins over the personal-billing default. Keep in lockstep
-// with the gateway's BillingSubject so the console view scopes to the SAME subject
-// the gate reads.
-func orgBillingOrgs() map[string]bool {
-	out := map[string]bool{}
-	for _, p := range strings.Split(getenv("ORG_BILLING_ORGS", ""), ",") {
-		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
-			out[p] = true
-		}
-	}
-	return out
-}
-
-// billingSubject — the commerce billing subject for an org+user, the SAME subject the
-// gateway debits: an ORG_BILLING_ORGS org pools per-org as "<org>"; else a member of a
-// personal-billing org bills per-user as "<org>/<name>"; a dedicated org bills per-org
-// as "<org>". Mirrors billing-scope.ts billingSubject and ai/object.BillingSubject.
+// billingSubject — the commerce billing subject for an org+user: ALWAYS the org
+// (`org`), lowercased. Every member of an org reads/scopes to the ONE org billing
+// account — the same subject the gateway gate reads and debits. `name` is recorded
+// for metrics, never for the billing key. This is the ONE rule; the former
+// PERSONAL_BILLING_ORGS / ORG_BILLING_ORGS allowlists are gone. Keep in lockstep
+// with ai/object.BillingSubject so the console view and the gate never disagree.
 func billingSubject(org, name string) string {
-	o := strings.ToLower(strings.TrimSpace(org))
-	if o == "" {
-		return ""
-	}
-	// ORG_BILLING_ORGS wins: pool the whole org regardless of the personal default.
-	if orgBillingOrgs()[o] {
-		return o
-	}
-	if personalBillingOrgs()[o] {
-		if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
-			return o + "/" + n
-		}
-	}
-	return o
+	_ = name
+	return strings.ToLower(strings.TrimSpace(org))
 }
 
 // scopedBillingSearch — pin every billingSubjectKey to subject (OVERWRITING any client
