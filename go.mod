@@ -833,6 +833,7 @@ require (
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.26
 	github.com/hanzoai/vfs v0.6.4
+	github.com/hanzoai/zen v1.1.0
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
