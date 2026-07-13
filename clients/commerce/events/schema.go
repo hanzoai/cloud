@@ -12,6 +12,14 @@ const (
 	SubjectCartUpdated     = "commerce.cart.updated"
 	SubjectProductViewed   = "commerce.product.viewed"
 
+	// Catalog lifecycle. A created/updated product is what closes the
+	// commerce→content loop: the content lane consumes product.created to
+	// auto-render the product's ecom asset (design == slug). Prefixed
+	// `commerce.` like every other subject so the COMMERCE stream
+	// (StreamSubjects `commerce.>`) captures them.
+	SubjectProductCreated = "commerce.product.created"
+	SubjectProductUpdated = "commerce.product.updated"
+
 	// Referral events
 	SubjectReferralLinkCreated      = "commerce.referral.link_created"
 	SubjectReferralClaimed          = "commerce.referral.claimed"
@@ -21,9 +29,9 @@ const (
 	SubjectReferralTierUpgraded     = "commerce.referral.tier_upgraded"
 
 	// Contributor events
-	SubjectContributorRegistered     = "commerce.contributor.registered"
-	SubjectContributorPayoutCalc     = "commerce.contributor.payout_calculated"
-	SubjectContributorPayoutSent     = "commerce.contributor.payout_sent"
+	SubjectContributorRegistered = "commerce.contributor.registered"
+	SubjectContributorPayoutCalc = "commerce.contributor.payout_calculated"
+	SubjectContributorPayoutSent = "commerce.contributor.payout_sent"
 )
 
 // StreamName is the JetStream stream for commerce events.
