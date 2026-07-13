@@ -15,7 +15,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
-	github.com/hanzoai/iam v1.31.24
+	github.com/hanzoai/iam v1.31.25
 	github.com/hanzoai/money v0.2.0
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v0.144.13
@@ -74,6 +74,7 @@ require (
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
+	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	rsc.io/qr v0.2.0 // indirect
@@ -91,7 +92,6 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0 // indirect
 	github.com/antithesishq/antithesis-sdk-go v0.7.0 // indirect
 	github.com/antonmedv/expr v1.15.3 // indirect
-	github.com/beego/beego/v2 v2.3.8 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.9.2 // indirect
 	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
@@ -327,7 +327,6 @@ require (
 	github.com/aymerick/raymond v2.0.2+incompatible
 	github.com/baidubce/bce-qianfan-sdk/go/qianfan v0.0.14 // indirect
 	github.com/baidubce/bce-sdk-go v0.9.264 // indirect
-	github.com/beego/beego v1.12.14 // indirect
 	github.com/beevik/etree v1.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.24.4 // indirect
@@ -494,7 +493,7 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/gtank/ristretto255 v0.2.0 // indirect
 	github.com/hanzoai/authzstore v0.1.1 // indirect
-	github.com/hanzoai/beego/v2 v2.4.1
+	github.com/hanzoai/beego/v2 v2.4.2
 	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
@@ -515,7 +514,7 @@ require (
 	github.com/hanzoai/sendgrid-go v1.3.0
 	github.com/hanzoai/storage-go v1.0.0
 	github.com/hanzoai/tasks v1.51.0
-	github.com/hanzoai/xorm v1.1.6 // indirect
+	github.com/hanzoai/xorm v1.4.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
@@ -589,7 +588,7 @@ require (
 	github.com/luxfi/crypto/ipa v1.2.4 // indirect
 	github.com/luxfi/database v1.19.3 // indirect
 	github.com/luxfi/fhe v1.8.2 // indirect
-	github.com/luxfi/geth v1.17.11
+	github.com/luxfi/geth v1.17.12
 	github.com/luxfi/ids v1.3.0 // indirect
 	github.com/luxfi/kms v1.11.8
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
@@ -827,7 +826,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/ai v1.806.10
+	github.com/hanzoai/ai v1.806.12
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
@@ -859,15 +858,10 @@ replace github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190
 replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-20260126093803-fb11d60e0fdf
 
 // Phantom-version fix: some transitive dep requires the non-existent
-// mattn/go-sqlite3 v2.0.3+incompatible. Redirect it to the last REAL go-sqlite3
 // release (drop-in, package sqlite3) via a VERSIONED replace (left side pins the
 // phantom) so Go never tries to read v2.0.3's go.mod during module-graph load —
-// the unversioned form didn't. NOTE: cloud's ONE sqlite driver is now
-// github.com/hanzoai/sqlite — it registers the "sqlite" name under both build
-// tags (cgo → mattn+SQLCipher, hence this go-sqlite3 pin; !cgo → pure-Go
 // modernc). Every cloud store imports the fork, never modernc directly, so the
 // "sqlite" driver is registered exactly once.
-replace github.com/mattn/go-sqlite3 v2.0.3+incompatible => github.com/mattn/go-sqlite3 v1.14.47
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
 
