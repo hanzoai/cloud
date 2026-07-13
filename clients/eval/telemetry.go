@@ -20,7 +20,7 @@ import (
 // datastore shapes (traces/observations/scores) since datastore IS datastore.
 //
 // ONE DATASTORE CLIENT (CTO consolidation). This store does NOT open a second
-// datastore connection with a parallel CLOUD_EVALS_CLICKHOUSE_* cred namespace.
+// datastore connection with a parallel CLOUD_EVALS_DATASTORE_* cred namespace.
 // It routes every write and read over the SHARED datastore peer that ai/object
 // owns (aiobject.InitDatastore → DatastoreExec / DatastoreQuery), the same client
 // clients/analytics and the ai o11y ledger use. The connection, retry/backoff,

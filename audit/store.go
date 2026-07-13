@@ -14,7 +14,7 @@ package audit
 // app issues no UPDATE/DELETE, and the hash-chain detects any out-of-band edit to
 // the file. That is the compliance-grade primary control.
 //
-// THE CLICKHOUSE MIRROR IS A PROJECTION, NOT THE SOURCE OF TRUTH. The datastore
+// THE DATASTORE MIRROR IS A PROJECTION, NOT THE SOURCE OF TRUTH. The datastore
 // (datastore MergeTree — insert-only, mutation-rejected at parse time) is the
 // fleet-wide OLAP mirror for long-retention, cross-deployment query. It is
 // best-effort and asynchronous: a mirror outage must never block or fail an
