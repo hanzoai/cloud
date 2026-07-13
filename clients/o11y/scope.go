@@ -43,7 +43,7 @@ func admin(c *zip.Ctx) bool { return c.IsAdmin() }
 // is obvious and lives in a single spot. Called by mountO11y (o11y.go) inside the one
 // order-69 mount, so every route here precedes the hanzoai/o11y wildcard (order 70).
 // The public surface is FLAT and version-less (one /v1/, no nested /api/vN): the
-// upstream SigNoz engine version is an internal impl detail resolved inside the
+// upstream engine version is an internal impl detail resolved inside the
 // handlers, never leaked into the route.
 func mountScope(a *zip.App) {
 	// Tenant-scoped, org-pinned reads — the ONE owner of these paths (handlers below).
