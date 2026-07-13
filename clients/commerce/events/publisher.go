@@ -31,7 +31,7 @@ type CommerceEvent struct {
 	UserID         string                 `json:"user_id,omitempty"`
 	SessionID      string                 `json:"session_id,omitempty"`
 	Data           map[string]interface{} `json:"data"`
-	GA4            *GA4EcommerceEvent      `json:"ga4,omitempty"`
+	GA4            *GA4EcommerceEvent     `json:"ga4,omitempty"`
 	FacebookCAPI   *FacebookCAPIEvent     `json:"facebook_capi,omitempty"`
 }
 
@@ -291,14 +291,55 @@ func (p *Publisher) PublishOrderRefunded(ctx context.Context, orderID, orgName, 
 				ExternalID: userID,
 			},
 			CustomData: map[string]interface{}{
-				"currency":        currencyCode,
-				"value":           refundedAmount,
-				"order_id":        orderID,
+				"currency": currencyCode,
+				"value":    refundedAmount,
+				"order_id": orderID,
 			},
 		},
 	}
 
 	return p.Publish(ctx, SubjectOrderRefunded, event)
+}
+
+// PublishProductCreated sends a product.created event after a catalog product is
+// created. It is the reverse half of the storefront loop: the content lane consumes
+// this to auto-render the product's ecom asset (design == slug). Fire-and-forget,
+// no-op when no publisher/pubsub is wired — exactly like the order publishers.
+func (p *Publisher) PublishProductCreated(ctx context.Context, orgName, productID, slug, name, sku string) error {
+	return p.publishProduct(ctx, SubjectProductCreated, "product.created", orgName, productID, slug, name, sku)
+}
+
+// PublishProductUpdated sends a product.updated event after a catalog product is
+// replaced/patched. Same envelope as product.created; published for parity, so a
+// consumer that reconciles catalog imagery sees edits too.
+func (p *Publisher) PublishProductUpdated(ctx context.Context, orgName, productID, slug, name, sku string) error {
+	return p.publishProduct(ctx, SubjectProductUpdated, "product.updated", orgName, productID, slug, name, sku)
+}
+
+// publishProduct is the ONE catalog-event path shared by created/updated. It is a no-op
+// when no publisher is wired (mirrors the order publishers).
+func (p *Publisher) publishProduct(ctx context.Context, subject, eventType, orgName, productID, slug, name, sku string) error {
+	if p == nil {
+		return nil
+	}
+	return p.Publish(ctx, subject, newProductEvent(eventType, orgName, productID, slug, name, sku))
+}
+
+// newProductEvent builds the catalog event envelope. slug is the product handle content
+// joins on (design == slug); product_id/name/sku are catalog context for other consumers.
+func newProductEvent(eventType, orgName, productID, slug, name, sku string) *CommerceEvent {
+	return &CommerceEvent{
+		ID:             productID,
+		Type:           eventType,
+		Timestamp:      time.Now().UTC(),
+		OrganizationID: orgName,
+		Data: map[string]interface{}{
+			"product_id": productID,
+			"slug":       slug,
+			"name":       name,
+			"sku":        sku,
+		},
+	}
 }
 
 // PublishReferralLinkCreated sends a referral.link_created event.
