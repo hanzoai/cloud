@@ -17,12 +17,13 @@ import (
 // ── pure scoping ─────────────────────────────────────────────────────────────
 
 func TestBillingSubject(t *testing.T) {
-	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo")
 	cases := []struct{ org, name, want string }{
-		{"acme", "alice", "acme"},       // dedicated org bills per-ORG
-		{"hanzo", "Dave", "hanzo/dave"}, // personal-billing org bills per-USER (lowercased)
-		{"hanzo", "", "hanzo"},          // personal org, no name → org
-		{"", "x", ""},                   // no org → empty subject
+		{"acme", "alice", "acme"},  // any member bills the ONE org account
+		{"hanzo", "Dave", "hanzo"}, // no per-user wallet; org, lowercased
+		{"hanzo", "z", "hanzo"},    // another member — same org account
+		{"hanzo", "", "hanzo"},     // no name → org
+		{"Hanzo", "z", "hanzo"},    // lowercased
+		{"", "x", ""},              // no org → empty subject
 	}
 	for _, c := range cases {
 		if got := billingSubject(c.org, c.name); got != c.want {
@@ -31,27 +32,22 @@ func TestBillingSubject(t *testing.T) {
 	}
 }
 
-// TestBillingSubject_OrgBillingOverride mirrors ai/object: ORG_BILLING_ORGS pools
-// a listed org (subject = "<org>") even though it is a personal-billing org, and
-// the switch is scoped — an unlisted personal org still bills per-user, and an
-// empty allowlist is a no-op. Keeps the console view in lockstep with the gate.
-func TestBillingSubject_OrgBillingOverride(t *testing.T) {
+// TestBillingSubject_IgnoresLegacyEnv locks that the killed allowlist envs have NO
+// effect: the subject is ALWAYS the org, whether or not the old PERSONAL_BILLING_ORGS
+// / ORG_BILLING_ORGS knobs are set. This mirrors ai/object.BillingSubject (one rule,
+// no config) so the console view and the gateway gate can never disagree.
+func TestBillingSubject_IgnoresLegacyEnv(t *testing.T) {
 	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo,acme")
 	t.Setenv("ORG_BILLING_ORGS", "hanzo")
 	cases := []struct{ org, name, want string }{
-		{"hanzo", "z", "hanzo"},      // promoted → pooled per-org (was hanzo/z)
-		{"acme", "alice", "acme/alice"}, // scoped: still per-user
-		{"maxpower", "dave", "maxpower"}, // dedicated org unchanged
+		{"hanzo", "z", "hanzo"},
+		{"acme", "alice", "acme"},
+		{"maxpower", "dave", "maxpower"},
 	}
 	for _, c := range cases {
 		if got := billingSubject(c.org, c.name); got != c.want {
-			t.Fatalf("billingSubject(%q,%q) [ORG_BILLING_ORGS=hanzo]: want %q, got %q", c.org, c.name, c.want, got)
+			t.Fatalf("legacy env must be ignored: billingSubject(%q,%q) want %q, got %q", c.org, c.name, c.want, got)
 		}
-	}
-	// Empty allowlist = zero change: hanzo reverts to per-user.
-	t.Setenv("ORG_BILLING_ORGS", "")
-	if got := billingSubject("hanzo", "z"); got != "hanzo/z" {
-		t.Fatalf("empty ORG_BILLING_ORGS must not change hanzo: want hanzo/z, got %q", got)
 	}
 }
 
@@ -156,7 +152,6 @@ func TestBilling_ScopesQueryToCallerAndForwards(t *testing.T) {
 	f := &fakeBilling{}
 	t.Setenv("COMMERCE_URL", f.server(t).URL)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo") // acme is a DEDICATED org → subject "acme"
 	app := mountApp(t, "http://iam.invalid", "", "")
 
 	// alice/acme with a FORGED ?userId=victim & ?org=othercorp: the handler must pin
@@ -189,7 +184,6 @@ func TestBilling_ScopesWriteBodyToCaller(t *testing.T) {
 	f := &fakeBilling{}
 	t.Setenv("COMMERCE_URL", f.server(t).URL)
 	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
-	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo")
 	app := mountApp(t, "http://iam.invalid", "", "")
 
 	// a POST with a forged userId in the body must be overwritten to acme.
