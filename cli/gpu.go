@@ -313,9 +313,13 @@ func sanitizeID(s string) string {
 	return s
 }
 
-// detectGPUs queries nvidia-smi for the machine's accelerators, degrading
-// gracefully to an empty list (CPU-only) when nvidia-smi is absent or errors.
+// detectGPUs queries nvidia-smi for the machine's accelerators; on Apple
+// Silicon it reports the chip's integrated GPU with its unified memory.
+// Degrades gracefully to an empty list (CPU-only) when neither is present.
 func detectGPUs() []gpuInfo {
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		return detectAppleGPU()
+	}
 	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").Output()
 	if err != nil {
 		return nil
@@ -331,6 +335,27 @@ func detectGPUs() []gpuInfo {
 		gpus = append(gpus, gpuInfo{Name: strings.TrimSpace(name), MemoryTotal: strings.TrimSpace(mem)})
 	}
 	return gpus
+}
+
+// detectAppleGPU reports the Apple Silicon chip as one GPU with the machine's
+// unified memory (Metal/MPS shares it all), MiB-formatted like nvidia-smi.
+func detectAppleGPU() []gpuInfo {
+	brand, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output()
+	if err != nil {
+		return nil
+	}
+	name := strings.TrimSpace(string(brand))
+	if !strings.HasPrefix(name, "Apple") {
+		return nil
+	}
+	info := gpuInfo{Name: name + " (Metal)"}
+	if mem, err := exec.Command("sysctl", "-n", "hw.memsize").Output(); err == nil {
+		var b int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(mem)), &b); err == nil && b > 0 {
+			info.MemoryTotal = fmt.Sprintf("%d MiB", b/(1024*1024))
+		}
+	}
+	return []gpuInfo{info}
 }
 
 // ---------------------------------------------------------------------------
