@@ -149,8 +149,6 @@ github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/ChainSafe/go-schnorrkel v1.1.0 h1:rZ6EU+CZFCjB4sHUE1jIu8VDoB/wRKZxoe1tkcO71Wk=
 github.com/ChainSafe/go-schnorrkel v1.1.0/go.mod h1:ABkENxiP+cvjFiByMIZ9LYbRoNNLeBLiakC1XeTFxfE=
-github.com/ClickHouse/ch-go v0.72.0 h1:DSyUd4kuxisOVXlZSXyIQYBAajSErZWC379651DpAMU=
-github.com/ClickHouse/ch-go v0.72.0/go.mod h1:eeWlJavWDsMf5fZzLNCYaBiMxVoREJYK00aiZ9FJ3E0=
 github.com/Code-Hex/go-generics-cache v1.5.1 h1:6vhZGc5M7Y/YD8cIUcY8kcuQLB4cHR7U+0KMqAA0KcU=
 github.com/Code-Hex/go-generics-cache v1.5.1/go.mod h1:qxcC9kRVrct9rHeiYpFWSoW1vxyillCVzX13KZG8dl4=
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
@@ -1229,8 +1227,8 @@ github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyf
 github.com/hanzoai/dashscope-go-sdk v0.0.2/go.mod h1:DSUNMIR7RvSoO8B/VOQLGTqsMAnE6boJm9MjeodsVF4=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
 github.com/hanzoai/dashscopego v0.6.0/go.mod h1:ciV938pktk0Tw6ssGYzEdxwS8OaHgv3xCWiy7W5664E=
-github.com/hanzoai/datastore-go/v2 v2.47.0 h1:3mTf0jZy4XAdr8+SbKU6ePWuSEAZq4VMzbk4RdNfgPY=
-github.com/hanzoai/datastore-go/v2 v2.47.0/go.mod h1:WJOH+9PH/4qHRccZOwPR3DjHS0mRN0GI6aGT62+bH1U=
+github.com/hanzoai/datastore-go/v2 v2.47.1 h1:SkT99r/G1ogpMtlOYOn0zRDY/n1TqWDv2s5WzGXtfL4=
+github.com/hanzoai/datastore-go/v2 v2.47.1/go.mod h1:MQYk/Ztzt+WoT1SMx2wS2XvvdETWgXJQfUwT/bBj8qw=
 github.com/hanzoai/dbx v1.16.0 h1:C8wsb9BIiit4nYnXizpcB4SyzVaepPkQFwq5i9fxAV0=
 github.com/hanzoai/dbx v1.16.0/go.mod h1:ynP6HSiDDoFZ8M3DC+XvSglBPFRygfTd/gjTWabh4yA=
 github.com/hanzoai/go-openai v1.40.0 h1:8KHDSUaJCNHlueMp76ZyJuJGc5wrz/ANMGvkfKBB3a4=
