@@ -93,7 +93,7 @@ var (
 // to zero.
 type Posting struct {
 	Account string       `json:"account"`
-	Amount  money.Amount `json:"amount"` // signed atto-USD (1e-18); Σ over an entry == 0
+	Amount  money.Amount `json:"amount"` // signed 18-decimal USD (1e-18); Σ over an entry == 0
 }
 
 // Entry is one balanced journal entry. Ref (with Kind+Program) is the idempotency
@@ -483,7 +483,7 @@ func (l *Ledger) Root(ctx context.Context) (root [32]byte, entryCount int, err e
 
 // ComputeRoot hashes a journal (in a canonical created-at,id order) plus the reserve
 // balance into a 32-byte commitment — the value the Hanzo L1 anchor commits on-chain.
-// Amounts are serialized as their EXACT atto-USD decimal string (the on-chain uint256
+// Amounts are serialized as their EXACT 18-decimal USD decimal string (the on-chain uint256
 // value), so the off-chain preimage and the on-chain balance agree bit-for-bit. Both
 // backends (native + Formance) use it, so the on-chain root is computed one way
 // regardless of which ledger owns the books.
@@ -498,12 +498,12 @@ func ComputeRoot(entries []Entry, reserve money.Amount) [32]byte {
 	})
 	h := sha256.New()
 	for _, e := range sorted {
-		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.Amount.AttoString(), e.CreatedAt)
+		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.Amount.IntString(), e.CreatedAt)
 		for _, p := range e.Postings {
-			fmt.Fprintf(h, "\t%s|%s\n", p.Account, p.Amount.AttoString())
+			fmt.Fprintf(h, "\t%s|%s\n", p.Account, p.Amount.IntString())
 		}
 	}
-	fmt.Fprintf(h, "reserve|%s\n", reserve.AttoString())
+	fmt.Fprintf(h, "reserve|%s\n", reserve.IntString())
 	var root [32]byte
 	copy(root[:], h.Sum(nil))
 	return root
