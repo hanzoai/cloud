@@ -94,13 +94,13 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 	}
 
 	// List all: three rows, grouped-sortable by status then number.
-	all, err := s.ListIssues(ctx, "hanzo", pid, "")
+	all, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{})
 	if err != nil || len(all) != 3 {
 		t.Fatalf("list all: n=%d err=%v", len(all), err)
 	}
 
 	// Status filter (the board column query) returns just the matching rows.
-	todo, err := s.ListIssues(ctx, "hanzo", pid, "todo")
+	todo, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Status: "todo"})
 	if err != nil || len(todo) != 2 {
 		t.Fatalf("list todo: n=%d err=%v", len(todo), err)
 	}
@@ -138,8 +138,71 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 	if err != nil || !del {
 		t.Fatalf("delete project: del=%v err=%v", del, err)
 	}
-	if rows, _ := s.ListIssues(ctx, "hanzo", pid, ""); len(rows) != 0 {
+	if rows, _ := s.ListIssues(ctx, "hanzo", pid, IssueFilter{}); len(rows) != 0 {
 		t.Fatalf("issues not cascaded: %d remain", len(rows))
+	}
+}
+
+// TestIssuePolymorphicSpine proves the ONE-table alignment: a git PR, a git
+// issue, a CRM deal and a native team task all live as issues rows in one
+// project, and every product surface is a FILTER — a repo's Issues tab, its PRs
+// tab, CRM's pipeline — never a second store. Defaults and cross-org isolation
+// on the new discriminators are covered here too.
+func TestIssuePolymorphicSpine(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	if err := s.CreateProject(ctx, mkProject("hanzo", "ENG", "Engineering")); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	pid := "prj_hanzo_ENG"
+
+	seed := []Issue{
+		{Kind: "pr", Source: "git", Repo: "cloud", Title: "wire filter", Status: "in_progress"},
+		{Kind: "issue", Source: "git", Repo: "cloud", Title: "flaky test", Status: "todo"},
+		{Kind: "issue", Source: "git", Repo: "console", Title: "dark mode", Status: "todo"},
+		{Kind: "deal", Source: "crm", Title: "Acme expansion", Status: "backlog"},
+		{Title: "plan q3", Status: "backlog"}, // defaults: kind=issue, source=team
+	}
+	for _, in := range seed {
+		in.ID = genMust(t)
+		in.ProjectID = pid
+		in.Org = "hanzo"
+		in.CreatedAt, in.UpdatedAt = 100, 100
+		if _, err := s.CreateIssue(ctx, in); err != nil {
+			t.Fatalf("create %q: %v", in.Title, err)
+		}
+	}
+
+	// Defaults applied when omitted.
+	plan, err := s.GetIssue(ctx, "hanzo", pid, 5)
+	if err != nil || plan.Kind != "issue" || plan.Source != "team" {
+		t.Fatalf("defaults: kind=%q source=%q err=%v", plan.Kind, plan.Source, err)
+	}
+
+	// A git repo's Issues tab = filter {Repo, Kind:issue}. Only cloud's issue row.
+	cloudIssues, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Repo: "cloud", Kind: "issue"})
+	if err != nil || len(cloudIssues) != 1 || cloudIssues[0].Title != "flaky test" {
+		t.Fatalf("cloud issues tab: %+v err=%v", cloudIssues, err)
+	}
+	// Its PRs tab = filter {Repo, Kind:pr}.
+	cloudPRs, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Repo: "cloud", Kind: "pr"})
+	if err != nil || len(cloudPRs) != 1 || cloudPRs[0].Title != "wire filter" {
+		t.Fatalf("cloud PRs tab: %+v err=%v", cloudPRs, err)
+	}
+	// CRM pipeline = filter {Kind:deal}.
+	deals, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Kind: "deal"})
+	if err != nil || len(deals) != 1 || deals[0].Title != "Acme expansion" {
+		t.Fatalf("crm deals: %+v err=%v", deals, err)
+	}
+	// Everything a git source opened, across repos = filter {Source:git}: 3 rows.
+	git, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Source: "git"})
+	if err != nil || len(git) != 3 {
+		t.Fatalf("git source: n=%d err=%v", len(git), err)
+	}
+	// Unfiltered = the whole board.
+	all, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{})
+	if err != nil || len(all) != 5 {
+		t.Fatalf("board: n=%d err=%v", len(all), err)
 	}
 }
 
