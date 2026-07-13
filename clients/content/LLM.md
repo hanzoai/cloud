@@ -19,6 +19,8 @@ owner), `project` field = brand/site sub-scope.
 | `content.go`   | Mount + `/v1/content/*` handlers + exported `Transition` |
 | `generate.go`  | `Generator` seam (zen5 copy + studio assets) + `Generate` write path |
 | `publish.go`   | `Distributor` seam (hanzoai/social) + `Publish` |
+| `channels.go`  | the REAL `Distributor` over hanzoai/social's Public API |
+| `storefront.go`| `Storefront` seam (Hanzo Commerce) + `StorefrontPublish`: a published catalog `Asset` → the storefront product image |
 
 ## Lifecycle (one state machine, one place)
 
@@ -104,9 +106,39 @@ MUST ship in that same change.
 
 ## karma migration
 
-karma.style swaps two data URLs onto this CMS (markup unchanged): `journal.json` →
-`GET /v1/framework/Post?filters=[["status","in",["published"]]]`; `products.json` stays
-Hanzo Commerce (Product is the join key). library.json/karma-queue/sync-* are subsumed:
-studio render → `Asset`, blog → `Post`, social → `SocialPost`, campaign → `Campaign`;
-the lifecycle replaces karma-queue. Phase 2 widens cms `Post`/`Page`/`Article` `status`
-to this shared lifecycle so ONE state machine governs all publishable content.
+karma.style swaps its data sources onto this CMS (markup unchanged): `journal.json` →
+`GET /v1/framework/Post?filters=[["status","in",["published"]]]`; products stay Hanzo
+Commerce (`design` == the product `slug` is the join key). library.json/karma-queue/
+sync-* are subsumed: studio render → `Asset`, blog → `Post`, social → `SocialPost`,
+campaign → `Campaign`; the lifecycle replaces karma-queue. Phase 2 widens cms
+`Post`/`Page`/`Article` `status` to this shared lifecycle so ONE state machine governs
+all publishable content.
+
+### the product image: the Storefront edge (`storefront.go`)
+
+The OLD image path was a BUILD-TIME batch: studio → S3 → `library.json` → `sync-*` →
+site build (`img/<slug>/<role>.webp`). That whole pipeline is replaced by ONE edge on
+the publish transition. karma.style already reads its product images at RUNTIME from
+Hanzo Commerce (`site/commerce.js`: `GET /v1/store/:store/listing` → `headerImage.url`),
+so the seam is: when a catalog `Asset` (kind ∈ {ecom,product,lifestyle}, non-empty
+`design`) transitions to `published`, `StorefrontPublish` upserts the org's commerce
+store **Listing** keyed by `design` (== product slug) so its `headerImage` points at the
+asset's **S3 URL** (`file` object key → `CONTENT_ASSET_PUBLIC_BASE`, default
+`https://s3.hanzo.ai/hanzo-studio`). No copy, no re-host, no build step — the Asset stays
+the origin, the commerce Listing is the runtime display layer karma already reads.
+
+- ONE path, decomplected exactly like the social `Distributor`: `Storefront` is the edge
+  (Hanzo Commerce), `StorefrontPublish` is the stable orchestration fired as a
+  best-effort side effect of the `published` edge in `Transition` (never rolls back the
+  status, never 5xxes). Non-catalog / non-`Asset` items are skipped (nil result).
+- Tenant-scoped: the S2S call is `Authorization: Bearer <COMMERCE_SERVICE_TOKEN>` +
+  `X-Org-Id=<org>` over the co-resident/standalone commerce transport
+  (`clients/commerceinproc`) — the SAME admin S2S pattern billing/account use; commerce
+  trusts `X-Org-Id` ONLY behind the service token, so every write stays on the caller's
+  own store (`GET /v1/store/current` resolves it).
+- Fail-closed: no `COMMERCE_SERVICE_TOKEN` (or no store yet) ⇒ `not_configured`, recorded
+  on the transition result WITHOUT failing the publish. Env: `COMMERCE_SERVICE_TOKEN`,
+  `CLOUD_COMMERCE_HTTP_URL` (blank ⇒ in-process when co-resident), `CONTENT_ASSET_PUBLIC_BASE`.
+- Scope note: sets the single `headerImage` (what karma renders today), last catalog
+  publish wins. A role→gallery `Media` fan-out (front→header, back/life→gallery) is a
+  clean follow-up once the storefront renders a gallery.
