@@ -1229,6 +1229,8 @@ github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyf
 github.com/hanzoai/dashscope-go-sdk v0.0.2/go.mod h1:DSUNMIR7RvSoO8B/VOQLGTqsMAnE6boJm9MjeodsVF4=
 github.com/hanzoai/dashscopego v0.6.0 h1:sLUepwcnVajaDgzlgfuJWkZblBg9UIalkpFUjXHx0Fg=
 github.com/hanzoai/dashscopego v0.6.0/go.mod h1:ciV938pktk0Tw6ssGYzEdxwS8OaHgv3xCWiy7W5664E=
+github.com/hanzoai/datastore-go/v2 v2.47.0 h1:3mTf0jZy4XAdr8+SbKU6ePWuSEAZq4VMzbk4RdNfgPY=
+github.com/hanzoai/datastore-go/v2 v2.47.0/go.mod h1:WJOH+9PH/4qHRccZOwPR3DjHS0mRN0GI6aGT62+bH1U=
 github.com/hanzoai/datastore-go/v2 v2.47.1 h1:SkT99r/G1ogpMtlOYOn0zRDY/n1TqWDv2s5WzGXtfL4=
 github.com/hanzoai/datastore-go/v2 v2.47.1/go.mod h1:MQYk/Ztzt+WoT1SMx2wS2XvvdETWgXJQfUwT/bBj8qw=
 github.com/hanzoai/dbx v1.16.0 h1:C8wsb9BIiit4nYnXizpcB4SyzVaepPkQFwq5i9fxAV0=
@@ -1249,6 +1251,8 @@ github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
 github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
 github.com/hanzoai/iam v1.31.22 h1:v4nER78fO/+mHswmmqGJIhDutB4eYOmG1T8dOnS6aF4=
 github.com/hanzoai/iam v1.31.22/go.mod h1:Pc6N6JQUoaYZumoc4sj9ql07zvanonb7Bc5WukKegio=
+github.com/hanzoai/iam v1.31.24 h1:pG9+e8wN+Kzf5p1PwTRSauOiZzcPQh0oa7PFgV3aTHw=
+github.com/hanzoai/iam v1.31.24/go.mod h1:Pc6N6JQUoaYZumoc4sj9ql07zvanonb7Bc5WukKegio=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
 github.com/hanzoai/iamsdk/v2 v2.1.2/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.3 h1:x4v5VjCv8onxLsWRSOrRifxLdYEvYBQjYzgnv1NNeKg=
