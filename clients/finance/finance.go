@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -189,8 +190,31 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 // wallet. Idempotent on in.RequestID: a replay of the same request is a no-op inside the
 // same transaction as the insert, so a retry debits AT MOST ONCE. A non-positive amount is
 // a no-op.
+// usdToCents converts an exact decimal USD string ("0.00132", "1.50") to cents,
+// round-half-up, via math/big (no float error). Malformed/empty -> 0.
+func usdToCents(usd string) int64 {
+	r, ok := new(big.Rat).SetString(strings.TrimSpace(usd))
+	if !ok {
+		return 0
+	}
+	// cents = round(usd * 100): add 1/2 then floor toward zero on the scaled integer.
+	r.Mul(r, big.NewRat(100, 1))
+	num, den := r.Num(), r.Denom()
+	half := new(big.Int).Rsh(den, 1) // den/2
+	num = new(big.Int).Add(num, half)
+	return new(big.Int).Quo(num, den).Int64()
+}
+
 func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) error {
-	if in.Cents <= 0 {
+	// USD (ai's exact decimal debit) supersedes Cents when present; the local ledger
+	// is cents-denominated, so round at this boundary (round-half-up). Sub-cent AI
+	// calls round to 0 here and skip — a property of the cents ledger, unchanged from
+	// the prior int64-Cents contract; the atto-precise path is commerce, not this store.
+	cents := in.Cents
+	if in.USD != "" {
+		cents = usdToCents(in.USD)
+	}
+	if cents <= 0 {
 		return nil
 	}
 	store, err := f.storeFor(in.Org, in.Test)
@@ -220,12 +244,12 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 			Kind:        kindUsage,
 			Ref:         ref,
 			Memo:        in.Model,
-			AmountCents: in.Cents,
+			AmountCents: cents,
 			CreatedAt:   time.Now().Unix(),
 		}
 		postings := []ledger.Posting{
-			{Account: walletAcct(in.Subject), Amount: -in.Cents},
-			{Account: acctRevenue, Amount: in.Cents},
+			{Account: walletAcct(in.Subject), Amount: -cents},
+			{Account: acctRevenue, Amount: cents},
 		}
 		return tx.Insert(e, postings)
 	})
