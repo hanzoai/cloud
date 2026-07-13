@@ -193,8 +193,6 @@ github.com/Shopify/sarama v1.19.0/go.mod h1:FVkBWblsNy7DGZRfXLU0O9RCGt5g3g3yEuWX
 github.com/Shopify/sarama v1.30.1/go.mod h1:hGgx05L/DiW8XYBXeJdKIN6V2QUy2H6JqME5VT1NLRw=
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
 github.com/Shopify/toxiproxy/v2 v2.1.6-0.20210914104332-15ea381dcdae/go.mod h1:/cvHQkZ1fst0EmZnA5dFtiQdWCNCFYzb+uE2vqVgvx0=
-github.com/SigNoz/signoz-otel-collector v0.144.5 h1:+OGnUhnSxZhH08jM45WRG5slCvkAcO4lyiGGrJIEnpM=
-github.com/SigNoz/signoz-otel-collector v0.144.5/go.mod h1:Jw1Y3s/ZOSz6RmLjZtj2A7wK6bse0T4pxs+oggBQnSs=
 github.com/ThinkInAIXYZ/go-mcp v0.2.24 h1:NLMshD8Dgrc7Di0JDLM+KhrETmu1V9tIgrJsBtyqe10=
 github.com/ThinkInAIXYZ/go-mcp v0.2.24/go.mod h1:KnUWUymko7rmOgzvIjxwX0uB9oiJeLF/Q3W9cRt8fVg=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
@@ -1213,8 +1211,6 @@ github.com/hanzo-ds/native v0.72.0 h1:lQhH2dza3foJCHN6scIVsEpqdj/xzI1N0QlI94vtWh
 github.com/hanzo-ds/native v0.72.0/go.mod h1:11FZtFdtfXMnmpybDEW6+uPRWFeC3TOT59YaV+lED+E=
 github.com/hanzo-ds/sqlparser v0.4.16 h1:OeWiLSL6u/I/RzhUKHHbE33MevQ2b0QVyDgSJur6OTs=
 github.com/hanzo-ds/sqlparser v0.4.16/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
-github.com/hanzoai/ai v1.806.6 h1:G5aZ6oGr6ODRGjUI3AEJzcmjgJTeQNsS371L/Lk3aN4=
-github.com/hanzoai/ai v1.806.6/go.mod h1:YpAU6oEoxfhOyN5ezVtwy1pw+xb9wcjmsgY8zuiAdiI=
 github.com/hanzoai/ai v1.806.7 h1:+AACP+uEaO/0ughvHWTvZJ7QrxKp2nflbZmCAmQtK9Q=
 github.com/hanzoai/ai v1.806.7/go.mod h1:YpAU6oEoxfhOyN5ezVtwy1pw+xb9wcjmsgY8zuiAdiI=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
@@ -1275,8 +1271,8 @@ github.com/hanzoai/orm v0.6.1 h1:PELYVy+kTVuA7hqn1y3IQqR1Q5cTk008Wh4CLn9Isok=
 github.com/hanzoai/orm v0.6.1/go.mod h1:7tXULhLKymkAwlC+jASS66tlLEzU2sdCXX1sRFPoAFs=
 github.com/hanzoai/oss v1.8.5 h1:ukFSUKDuZV9bxorOeT3kliJ2EXi/4nHLEV//ZinqDxI=
 github.com/hanzoai/oss v1.8.5/go.mod h1:YTloIUcvl72YftsPx1WVmSU9BrVc1jargtivhKZCRXw=
-github.com/hanzoai/otel-collector v0.144.8-hanzo.0 h1:m532kweC2EyD/d5zKQumuPI8VTxa4PmHEOvjn7est9U=
-github.com/hanzoai/otel-collector v0.144.8-hanzo.0/go.mod h1:DJFdX9ixBbxVj7E7SUGfcmTgcmC4N1l3NHhz9q26+pU=
+github.com/hanzoai/otel-collector v0.144.10 h1:leBcsyBqkyJ4khbQgkpSMn2GWZ6jhUEvDW/ia+IHY3o=
+github.com/hanzoai/otel-collector v0.144.10/go.mod h1:QPn7NqPZTxThXLKiM2jLbeym/c5S9RRxv16hRGoSC1U=
 github.com/hanzoai/pdf v1.2.0 h1:3/zYs4estaf6hpa3Ug/NgfYEQpmkmMClmRcREAP8KUo=
 github.com/hanzoai/pdf v1.2.0/go.mod h1:Lb5LhbMY7QvrxxMeKbI22Kvoz4XQhHgJV7Erq0U8zHU=
 github.com/hanzoai/plans v1.4.0 h1:WPPmo1/QvQtQz3ZO91JPSZDnUi7Tz8Pr2D6ntgUpHfU=
@@ -1293,8 +1289,6 @@ github.com/hanzoai/sendgrid-go v1.3.0 h1:3xobRSrOlJKqB6xWZiRCRXNuSdYlLtWKsso2CGh
 github.com/hanzoai/sendgrid-go v1.3.0/go.mod h1:mbvVVFfX6i7VotafBZn2Lw+Nt+hOOajePyTlEs3ZjHo=
 github.com/hanzoai/sign v1.0.0 h1:xqrMzBHp/m7mxAsYgV/1/kT7x5GEXYOXfu9xbiKDeNg=
 github.com/hanzoai/sign v1.0.0/go.mod h1:pL+4Kwh+W2AsMaU0QUF/OJoe9eV/CWHhO07Z5KV2SOg=
-github.com/hanzoai/signoz-otel-collector v0.144.3-hanzo.1 h1:S/dz3vasSNsk8tEkNDTK62182aHuAW+CmrRzwjK06nU=
-github.com/hanzoai/signoz-otel-collector v0.144.3-hanzo.1/go.mod h1:S1zOMlcEe2glFkhIdz6QWe9VBrPGNcpJrA5riwovWIQ=
 github.com/hanzoai/sqlite v0.2.3 h1:X9AmaAro1hCsYY/ykI/nD5wiTCPpHhtBkUqe+PfSzuM=
 github.com/hanzoai/sqlite v0.2.3/go.mod h1:jhU6OMiNmNmjFHOgfIskse/RImYEe7rUTm6+rMKMRzg=
 github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5VDk=
@@ -2362,8 +2356,6 @@ github.com/valyala/fasthttp v1.70.0 h1:LAhMGcWk13QZWm85+eg8ZBNbrq5mnkWFGbHMUJHId
 github.com/valyala/fasthttp v1.70.0/go.mod h1:oDZEHHkJ/Buyklg6uURmYs19442zFSnCIfX3j1FY3pE=
 github.com/valyala/fastjson v1.6.7 h1:ZE4tRy0CIkh+qDc5McjatheGX2czdn8slQjomexVpBM=
 github.com/valyala/fastjson v1.6.7/go.mod h1:CLCAqky6SMuOcxStkYQvblddUtoRxhYMGLrsQns1aXY=
-github.com/vjeantet/grok v1.0.1 h1:2rhIR7J4gThTgcZ1m2JY4TrJZNgjn985U28kT2wQrJ4=
-github.com/vjeantet/grok v1.0.1/go.mod h1:ax1aAchzC6/QMXMcyzHQGZWaW1l195+uMYIkCWPCNIo=
 github.com/vmihailenco/msgpack/v5 v5.4.1 h1:cQriyiUvjTwOHg8QZaPihLWeRAAVoCpE00IUPn0Bjt8=
 github.com/vmihailenco/msgpack/v5 v5.4.1/go.mod h1:GaZTsDaehaPpQVyxrf5mtQlH+pc21PIudVV/E3rRQok=
 github.com/vmihailenco/tagparser/v2 v2.0.0 h1:y09buUbR+b5aycVFQs/g70pqKVZNBmxwAhO7/IwNM9g=
