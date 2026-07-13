@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/clients/money"
 )
 
 // memStore is an in-memory ledger.Store used ONLY to prove the engine is
@@ -23,32 +25,32 @@ func newMem() *memStore { return &memStore{byRef: map[string]Entry{}} }
 
 func refKey(kind, program, ref string) string { return kind + "|" + program + "|" + ref }
 
-func (m *memStore) balanceLocked(account string) int64 {
-	var bal int64
+func (m *memStore) balanceLocked(account string) money.Amount {
+	bal := money.Zero()
 	for _, e := range m.entries {
 		for _, p := range e.Postings {
 			if p.Account == account {
-				bal += p.Amount
+				bal = bal.Add(p.Amount)
 			}
 		}
 	}
 	return bal
 }
 
-func (m *memStore) Balance(_ context.Context, account string) (int64, error) {
+func (m *memStore) Balance(_ context.Context, account string) (money.Amount, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.balanceLocked(account), nil
 }
 
-func (m *memStore) BalancesWithPrefix(_ context.Context, prefix string) (map[string]int64, error) {
+func (m *memStore) BalancesWithPrefix(_ context.Context, prefix string) (map[string]money.Amount, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := map[string]int64{}
+	out := map[string]money.Amount{}
 	for _, e := range m.entries {
 		for _, p := range e.Postings {
 			if strings.HasPrefix(p.Account, prefix) {
-				out[p.Account] += p.Amount
+				out[p.Account] = out[p.Account].Add(p.Amount)
 			}
 		}
 	}
@@ -101,7 +103,7 @@ func (t *memTx) EntryByRef(kind, program, ref string) (Entry, bool, error) {
 	e, ok := t.m.byRef[refKey(kind, program, ref)]
 	return e, ok, nil
 }
-func (t *memTx) Balance(account string) (int64, error) { return t.m.balanceLocked(account), nil }
+func (t *memTx) Balance(account string) (money.Amount, error) { return t.m.balanceLocked(account), nil }
 func (t *memTx) Insert(e Entry, postings []Posting) error {
 	e.Postings = postings
 	t.pending = append(t.pending, e)
@@ -111,13 +113,13 @@ func (t *memTx) Insert(e Entry, postings []Posting) error {
 // ── the double-entry invariant ───────────────────────────────────────────────
 
 func TestValidateBalanced(t *testing.T) {
-	if err := validateBalanced([]Posting{{"a", 100}, {"b", -100}}); err != nil {
+	if err := validateBalanced([]Posting{{"a", money.FromCents(100)}, {"b", money.FromCents(-100)}}); err != nil {
 		t.Fatalf("balanced entry rejected: %v", err)
 	}
-	if err := validateBalanced([]Posting{{"a", 100}, {"b", -99}}); err != ErrUnbalanced {
+	if err := validateBalanced([]Posting{{"a", money.FromCents(100)}, {"b", money.FromCents(-99)}}); err != ErrUnbalanced {
 		t.Fatalf("unbalanced entry accepted, got %v", err)
 	}
-	if err := validateBalanced([]Posting{{"a", 0}}); err != ErrUnbalanced {
+	if err := validateBalanced([]Posting{{"a", money.Zero()}}); err != ErrUnbalanced {
 		t.Fatalf("single-leg entry accepted, got %v", err)
 	}
 }
@@ -126,12 +128,12 @@ func TestValidateBalanced(t *testing.T) {
 func assertAllBalanced(t *testing.T, m *memStore) {
 	t.Helper()
 	for _, e := range m.entries {
-		var sum int64
+		sum := money.Zero()
 		for _, p := range e.Postings {
-			sum += p.Amount
+			sum = sum.Add(p.Amount)
 		}
-		if sum != 0 {
-			t.Fatalf("entry %s (%s) postings sum to %d, not 0", e.ID, e.Kind, sum)
+		if !sum.IsZero() {
+			t.Fatalf("entry %s (%s) postings sum to %s, not 0", e.ID, e.Kind, sum)
 		}
 	}
 }
@@ -149,14 +151,14 @@ func TestAccrue_RevenueShare(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("accrue: created=%v err=%v", created, err)
 	}
-	if e.AmountCents != 5_000 {
-		t.Fatalf("share = %d, want 5000", e.AmountCents)
+	if e.Amount.Cents() != 5_000 {
+		t.Fatalf("share = %d, want 5000", e.Amount.Cents())
 	}
 	if bal, _ := l.ReserveCents(ctx); bal != 5_000 {
 		t.Fatalf("reserve = %d, want 5000", bal)
 	}
-	if rev, _ := m.Balance(ctx, AccountRevenue); rev != -5_000 {
-		t.Fatalf("revenue counter = %d, want -5000", rev)
+	if rev, _ := m.Balance(ctx, AccountRevenue); rev.Cents() != -5_000 {
+		t.Fatalf("revenue counter = %d, want -5000", rev.Cents())
 	}
 	assertAllBalanced(t, m)
 }
@@ -213,14 +215,14 @@ func TestDebitReserve_BackedThenBlocked(t *testing.T) {
 	if err != nil || !backed || !created {
 		t.Fatalf("debit: backed=%v created=%v err=%v", backed, created, err)
 	}
-	if e.AmountCents != 3_000 {
-		t.Fatalf("entry amount = %d", e.AmountCents)
+	if e.Amount.Cents() != 3_000 {
+		t.Fatalf("entry amount = %d", e.Amount.Cents())
 	}
 	if bal, _ := l.ReserveCents(ctx); bal != 2_000 {
 		t.Fatalf("reserve after debit = %d, want 2000", bal)
 	}
-	if p, _ := m.Balance(ctx, PayoutAccount("referral")); p != 3_000 {
-		t.Fatalf("payout:referral = %d, want 3000", p)
+	if p, _ := m.Balance(ctx, PayoutAccount("referral")); p.Cents() != 3_000 {
+		t.Fatalf("payout:referral = %d, want 3000", p.Cents())
 	}
 
 	// Blocked: 5000 > remaining 2000 → nothing posted, fund intact.

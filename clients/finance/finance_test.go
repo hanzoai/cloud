@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -37,7 +38,7 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	// Deposit 1000 into acme's org pool.
-	id, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 1000})
+	id, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(1000)})
 	if err != nil {
 		t.Fatalf("deposit: %v", err)
 	}
@@ -47,19 +48,19 @@ func TestPrepaidWalletLedger(t *testing.T) {
 	mustBalance(t, f, "acme", "acme", 1000)
 
 	// Debit 300 of usage → 700.
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Cents: 300, RequestID: "r1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), RequestID: "r1"}); err != nil {
 		t.Fatalf("usage: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 700)
 
 	// Replay the same RequestID → idempotent, still 700 (debited at most once).
-	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Cents: 300, RequestID: "r1"}); err != nil {
+	if err := f.RecordUsage(ctx, types.UsageInput{Org: "acme", Subject: "acme", Amount: money.FromCents(300), RequestID: "r1"}); err != nil {
 		t.Fatalf("usage replay: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 700)
 
 	// A per-user subject is an isolated wallet WITHIN the same file.
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme/bob", Cents: 500}); err != nil {
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme/bob", Amount: money.FromCents(500)}); err != nil {
 		t.Fatalf("deposit bob: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme/bob", 500)
@@ -75,11 +76,11 @@ func TestDepositRefIdempotent(t *testing.T) {
 	defer func() { _ = f.Close() }()
 
 	// Same non-empty Ref → credited once.
-	id1, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 1000, Ref: "settle-1"})
+	id1, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Ref: "settle-1"})
 	if err != nil {
 		t.Fatalf("deposit ref #1: %v", err)
 	}
-	id2, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 1000, Ref: "settle-1"})
+	id2, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(1000), Ref: "settle-1"})
 	if err != nil {
 		t.Fatalf("deposit ref #2: %v", err)
 	}
@@ -89,10 +90,10 @@ func TestDepositRefIdempotent(t *testing.T) {
 	mustBalance(t, f, "acme", "acme", 1000) // ONE credit, not 2000.
 
 	// Empty Ref stays additive: two fresh-ref deposits stack.
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 500}); err != nil {
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500)}); err != nil {
 		t.Fatalf("deposit additive #1: %v", err)
 	}
-	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Cents: 500}); err != nil {
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(500)}); err != nil {
 		t.Fatalf("deposit additive #2: %v", err)
 	}
 	mustBalance(t, f, "acme", "acme", 2000) // 1000 + 500 + 500.
@@ -141,11 +142,11 @@ func TestMigrateOrgIdempotent(t *testing.T) {
 
 func mustBalance(t *testing.T, f *ledgerFinance, org, subject string, want int64) {
 	t.Helper()
-	got, err := f.BalanceCents(context.Background(), org, subject, "usd", false)
+	got, err := f.Balance(context.Background(), org, subject, "usd", false)
 	if err != nil {
 		t.Fatalf("balance(%s,%s): %v", org, subject, err)
 	}
-	if got != want {
-		t.Fatalf("balance(%s,%s) = %d; want %d", org, subject, got, want)
+	if got.Cents() != want {
+		t.Fatalf("balance(%s,%s) = %d; want %d", org, subject, got.Cents(), want)
 	}
 }
