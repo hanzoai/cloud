@@ -25,7 +25,7 @@
 //
 // PIPELINE — POST /v1/o11y/ingestion (validated tenant) → parse the event batch →
 // group by target Datastore table → batch-insert via the branded
-// github.com/hanzoai/datastore-go/v2 client → oversized event bodies overflow to
+// github.com/hanzo-ds/go client → oversized event bodies overflow to
 // object storage, only the blob ref is stored inline. The store is the Datastore;
 // datastore-go is verified to bring the ONE ch-go transport line the o11y
 // runtime already uses (MVS-unified), so it coexists in the single binary.
@@ -56,7 +56,7 @@ import (
 	"strconv"
 	"strings"
 
-	datastore "github.com/hanzoai/datastore-go/v2"
+	datastore "github.com/hanzo-ds/go"
 	luxlog "github.com/luxfi/log"
 	zip "github.com/zap-proto/zip"
 
@@ -271,7 +271,7 @@ func shutdownEventIngest(_ context.Context) error {
 }
 
 // datastoreSink is the real eventSink: a native connection to the Hanzo Datastore
-// via the branded github.com/hanzoai/datastore-go/v2 client (the FIRST direct user
+// via the branded github.com/hanzo-ds/go client (the FIRST direct user
 // in cloud — this thin wrapper is the whole client). datastore-go brings the ONE
 // ch-go transport line the o11y runtime already uses (MVS-unified), so it
 // coexists in the single binary.
