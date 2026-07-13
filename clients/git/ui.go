@@ -1,8 +1,8 @@
 // ui.go — Hanzo Git's web UI: the browser surface of the embedded, IAM-native
 // git host. Server-rendered HTML in the ONE cloud binary (no separate app, no
-// stock-Gitea image), reading the SAME org-scoped store + go-git object storage
+// stock git-host image), reading the SAME org-scoped store + go-git object storage
 // the API/protocol handlers use. This is what lets git.hanzo.ai retire the
-// standalone Gitea: repo list, repo home, tree browse, file view, commit log —
+// standalone git web app: repo list, repo home, tree browse, file view, commit log —
 // all native.
 //
 // Isolation is identical to the rest of git: every page is scoped to the
