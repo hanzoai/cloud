@@ -13,8 +13,10 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
+	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.24
+	github.com/hanzoai/money v0.2.0
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v0.144.13
 	github.com/hanzoai/plans v1.4.0

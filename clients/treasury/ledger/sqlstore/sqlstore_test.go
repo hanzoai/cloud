@@ -78,12 +78,12 @@ func TestSQLStore_TxRollback(t *testing.T) {
 	}
 }
 
-// A legacy (int64-cents) ledger file migrates to exact atto on Open: balances are
+// A legacy (int64-cents) ledger file migrates to the exact 18-decimal integer on Open: balances are
 // materialized and every stored cents value is scaled ×1e16 with no loss.
-func TestMigrateCentsToAtto(t *testing.T) {
+func TestMigrateCentsToUnits(t *testing.T) {
 	ctx := context.Background()
 
-	// Hand-build the pre-atto schema and seed it as the old code would have.
+	// Hand-build the pre-migration schema and seed it as the old code would have.
 	db, err := cek.Open(t.TempDir() + "/legacy.db")
 	if err != nil {
 		t.Fatalf("open raw: %v", err)
@@ -110,8 +110,8 @@ func TestMigrateCentsToAtto(t *testing.T) {
 		}
 	}
 
-	// Run the REAL migration in-process (migrate() = atto DDL no-op over the existing
-	// legacy tables, then migrateCentsToAtto). Done on the open connection rather than
+	// Run the REAL migration in-process (migrate() = 18-decimal DDL no-op over the existing
+	// legacy tables, then migrateCentsToUnits). Done on the open connection rather than
 	// via a close+reopen, which a mis-linked local libsqlcipher cannot do (sqlcipher_export);
 	// CI's real libsqlcipher runs Open() end to end.
 	s := &Store{db: db}
@@ -123,8 +123,8 @@ func TestMigrateCentsToAtto(t *testing.T) {
 	if reserve.Cmp(money.FromCents(6000)) != 0 {
 		t.Fatalf("reserve after migrate = %s, want $60", reserve)
 	}
-	if reserve.AttoString() != "60000000000000000000" { // 6000 cents × 1e16
-		t.Fatalf("reserve atto = %s, want 6000×1e16", reserve.AttoString())
+	if reserve.IntString() != "60000000000000000000" { // 6000 cents × 1e16
+		t.Fatalf("reserve 18-dec = %s, want 6000×1e16", reserve.IntString())
 	}
 	if payout, _ := s.Balance(ctx, ledger.PayoutAccount("referral")); payout.Cmp(money.FromCents(4000)) != 0 {
 		t.Fatalf("payout:referral after migrate = %s, want $40", payout)
