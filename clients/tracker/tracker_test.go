@@ -94,13 +94,13 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 	}
 
 	// List all: three rows, grouped-sortable by status then number.
-	all, err := s.ListIssues(ctx, "hanzo", pid, "")
+	all, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{})
 	if err != nil || len(all) != 3 {
 		t.Fatalf("list all: n=%d err=%v", len(all), err)
 	}
 
 	// Status filter (the board column query) returns just the matching rows.
-	todo, err := s.ListIssues(ctx, "hanzo", pid, "todo")
+	todo, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Status: "todo"})
 	if err != nil || len(todo) != 2 {
 		t.Fatalf("list todo: n=%d err=%v", len(todo), err)
 	}
@@ -138,8 +138,72 @@ func TestIssueNumberingStatusAndCascade(t *testing.T) {
 	if err != nil || !del {
 		t.Fatalf("delete project: del=%v err=%v", del, err)
 	}
-	if rows, _ := s.ListIssues(ctx, "hanzo", pid, ""); len(rows) != 0 {
+	if rows, _ := s.ListIssues(ctx, "hanzo", pid, IssueFilter{}); len(rows) != 0 {
 		t.Fatalf("issues not cascaded: %d remain", len(rows))
+	}
+}
+
+// TestIssuePolymorphicSpine proves the ONE-table alignment: a git PR, git
+// issues, a parent epic and a native team issue all live as issues rows in one
+// project, and every work-item surface is a FILTER — a repo's Issues tab, its
+// PRs tab, an epic view, a source view — never a second store. Defaults are
+// covered too. (Domain records like CRM deals live on another plane; see
+// contract.go — they are NOT tracker kinds.)
+func TestIssuePolymorphicSpine(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	if err := s.CreateProject(ctx, mkProject("hanzo", "ENG", "Engineering")); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	pid := "prj_hanzo_ENG"
+
+	seed := []Issue{
+		{Kind: "pr", Source: "git", Repo: "cloud", Title: "wire filter", Status: "in_progress"},
+		{Kind: "issue", Source: "git", Repo: "cloud", Title: "flaky test", Status: "todo"},
+		{Kind: "issue", Source: "git", Repo: "console", Title: "dark mode", Status: "todo"},
+		{Kind: "epic", Source: "team", Title: "Q3 platform", Status: "backlog"},
+		{Title: "plan q3", Status: "backlog"}, // defaults: kind=issue, source=team
+	}
+	for _, in := range seed {
+		in.ID = genMust(t)
+		in.ProjectID = pid
+		in.Org = "hanzo"
+		in.CreatedAt, in.UpdatedAt = 100, 100
+		if _, err := s.CreateIssue(ctx, in); err != nil {
+			t.Fatalf("create %q: %v", in.Title, err)
+		}
+	}
+
+	// Defaults applied when omitted.
+	plan, err := s.GetIssue(ctx, "hanzo", pid, 5)
+	if err != nil || plan.Kind != "issue" || plan.Source != "team" {
+		t.Fatalf("defaults: kind=%q source=%q err=%v", plan.Kind, plan.Source, err)
+	}
+
+	// A git repo's Issues tab = filter {Repo, Kind:issue}. Only cloud's issue row.
+	cloudIssues, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Repo: "cloud", Kind: "issue"})
+	if err != nil || len(cloudIssues) != 1 || cloudIssues[0].Title != "flaky test" {
+		t.Fatalf("cloud issues tab: %+v err=%v", cloudIssues, err)
+	}
+	// Its PRs tab = filter {Repo, Kind:pr}.
+	cloudPRs, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Repo: "cloud", Kind: "pr"})
+	if err != nil || len(cloudPRs) != 1 || cloudPRs[0].Title != "wire filter" {
+		t.Fatalf("cloud PRs tab: %+v err=%v", cloudPRs, err)
+	}
+	// An epic view = filter {Kind:epic}.
+	epics, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Kind: "epic"})
+	if err != nil || len(epics) != 1 || epics[0].Title != "Q3 platform" {
+		t.Fatalf("epics: %+v err=%v", epics, err)
+	}
+	// Everything a git source opened, across repos = filter {Source:git}: 3 rows.
+	git, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{Source: "git"})
+	if err != nil || len(git) != 3 {
+		t.Fatalf("git source: n=%d err=%v", len(git), err)
+	}
+	// Unfiltered = the whole board.
+	all, err := s.ListIssues(ctx, "hanzo", pid, IssueFilter{})
+	if err != nil || len(all) != 5 {
+		t.Fatalf("board: n=%d err=%v", len(all), err)
 	}
 }
 
