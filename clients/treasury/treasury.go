@@ -346,14 +346,14 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if created {
 		emitAudit(s, c.Context(), "treasury.sweep", "", entry.ID, map[string]any{
-			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.AmountCents,
+			"period": period, "revenueCents": body.RevenueCents, "accruedCents": entry.Amount.Cents(),
 		})
 	}
 	reserve, _ := s.State.record.ReserveCents(c.Context())
 	return adminOK(c, map[string]any{
 		"period":       period,
 		"revenueCents": body.RevenueCents,
-		"accruedCents": entry.AmountCents,
+		"accruedCents": entry.Amount.Cents(),
 		"created":      created,
 		"reserveCents": reserve,
 	})
