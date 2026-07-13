@@ -13,7 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/datastore-go/v2 v2.47.0
+	github.com/hanzoai/datastore-go/v2 v2.47.2
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.24
 	github.com/hanzoai/notify v1.6.18
@@ -69,6 +69,8 @@ require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
+	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/datastore-go-mock v0.14.3 // indirect
 	github.com/hanzoai/datastore-sql-parser v0.4.17 // indirect
@@ -824,14 +826,14 @@ require (
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0
-	github.com/hanzo-ds/go v1.0.0 // indirect
+	github.com/hanzo-ds/go v1.0.1 // indirect
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/ai v1.806.9
+	github.com/hanzoai/ai v1.806.10
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.23
+	github.com/hanzoai/o11y v1.5.25
 	github.com/hanzoai/vfs v0.6.4
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
