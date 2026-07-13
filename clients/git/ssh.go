@@ -59,11 +59,11 @@ type sshServer struct {
 	boundTCP string // actual bound address (resolves :0 to the ephemeral port for tests)
 }
 
-// gitSSHHost resolves the SSH host advertised in sshUrl. CLOUD_GIT_SSH_HOST wins;
+// gitSSHHost resolves the SSH host advertised in sshUrl. GIT_SSH_HOST wins;
 // else it is derived from the deployment domain (api.hanzo.ai → git.hanzo.ai);
 // else "git.hanzo.ai".
 func gitSSHHost(domain string) string {
-	if h := strings.TrimSpace(os.Getenv("CLOUD_GIT_SSH_HOST")); h != "" {
+	if h := strings.TrimSpace(os.Getenv("GIT_SSH_HOST")); h != "" {
 		return h
 	}
 	return defaultSSHHost(domain)
@@ -83,17 +83,17 @@ func defaultSSHHost(domain string) string {
 }
 
 // sshConfig resolves the SSH runtime config from deps/env. The host key is
-// sourced KMS-first (CLOUD_GIT_SSH_HOST_KEY, a PEM the operator syncs from KMS),
+// sourced KMS-first (GIT_SSH_HOST_KEY, a PEM the operator syncs from KMS),
 // falling back to an on-disk key under the git data root that is generated +
-// persisted 0600 on first boot. The listen address is CLOUD_GIT_SSH_ADDR
+// persisted 0600 on first boot. The listen address is GIT_SSH_ADDR
 // (default :2222 — real :22 is fronted by a k8s TCP LoadBalancer).
 func sshConfig(deps cloud.Deps, gitRoot string) sshConf {
-	addr := strings.TrimSpace(os.Getenv("CLOUD_GIT_SSH_ADDR"))
+	addr := strings.TrimSpace(os.Getenv("GIT_SSH_ADDR"))
 	if addr == "" {
 		addr = ":2222"
 	}
 	var pemKey []byte
-	if p := strings.TrimSpace(os.Getenv("CLOUD_GIT_SSH_HOST_KEY")); p != "" {
+	if p := strings.TrimSpace(os.Getenv("GIT_SSH_HOST_KEY")); p != "" {
 		pemKey = []byte(p)
 	}
 	return sshConf{
@@ -363,7 +363,7 @@ func loadOrCreateHostKey(conf sshConf) (ssh.Signer, error) {
 	if len(conf.hostKeyPEM) > 0 {
 		signer, err := ssh.ParsePrivateKey(conf.hostKeyPEM)
 		if err != nil {
-			return nil, fmt.Errorf("parse CLOUD_GIT_SSH_HOST_KEY: %w", err)
+			return nil, fmt.Errorf("parse GIT_SSH_HOST_KEY: %w", err)
 		}
 		return signer, nil
 	}
