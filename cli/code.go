@@ -31,12 +31,14 @@ import (
 )
 
 // defaultCodeModel is the model `hanzo code <agent>` runs when no model is
-// named: the virtual `best` model, which auto-routes to the best-available
-// coding model by quality (glm-5.2 → deepseek-v4-pro → kimi-k2.6 → …) and
-// cascades on the next rank when one is rate-limited, out of credit, or down
+// named. It must be a concrete, catalog-served id, NOT the virtual `best`:
+// Claude Code treats `best` (like `opus`/`sonnet`/`haiku`) as a reserved alias
+// and rewrites it to a claude-* id that api.hanzo.ai does not serve (403),
+// which kills the CC session. glm-5.2 is the stable GLM-5.2-class frontier
+// (1M ctx); the backend still cascades on rate-limit / out-of-credit / down
 // (server-side, controllers/failover.go). Override per-invocation with an
 // explicit id: `hanzo code claude glm5.2`.
-const defaultCodeModel = "best"
+const defaultCodeModel = "glm-5.2"
 
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
@@ -61,12 +63,13 @@ type wire func(base, token, model string) map[string]string
 //	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
 //	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
 //	Fable         zen5-ultra    premium frontier (best available; cascades)
-//	main          <model>       the resolved id, default `best` → zen5
+//	main          <model>       the resolved id, default glm-5.2 (see defaultCodeModel)
 //
-// `best` is the virtual auto-routing model: it picks the best-available coding
-// model by quality and cascades on rate-limit/down. `zen5-ultra` carries its
-// own backend fallback chain (zen5-ultra → zen5-pro → zen5 → zen5-flash) so the
-// Fable tier degrades gracefully if the premium upstream is unavailable.
+// The main slot takes a concrete id (default glm-5.2), never the virtual `best`:
+// CC rewrites the reserved word `best` to a claude-* id that 403s. `zen5-ultra`
+// carries its own backend fallback chain (zen5-ultra → zen5-pro → zen5 →
+// zen5-flash) so the Fable tier degrades gracefully if the premium upstream is
+// unavailable.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
