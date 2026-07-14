@@ -44,6 +44,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/zap-proto/zip"
 )
 
@@ -131,6 +132,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 
 	routes(app, s)
+
+	// Register every connector action into the unified tool plane. The /v1/automations/mcp
+	// endpoint stays (connector-scoped MCP view); the plane surfaces the SAME tools org-wide.
+	tools.Register(connectorToolProvider{})
 
 	b.Log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
 	return nil
