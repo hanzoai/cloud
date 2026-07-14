@@ -244,11 +244,21 @@ type execPayload struct {
 	Command string
 }
 
+// envPayload is the wire shape of an SSH "env" request: a name/value pair
+// (RFC 4254 §6.4). git clients send GIT_PROTOCOL here to negotiate protocol v2.
+type envPayload struct {
+	Name  string
+	Value string
+}
+
 // handleSession services one session channel: it waits for the "exec" request
-// carrying the git command, runs it, and closes the channel. Any other request
-// type (shell, pty) is rejected — this is a git-only endpoint.
+// carrying the git command, runs it, and closes the channel. A preceding "env"
+// request carrying GIT_PROTOCOL is captured so the git subprocess negotiates the
+// requested wire protocol (v2 = cheaper on large repos). Any other request type
+// (shell, pty) is rejected — this is a git-only endpoint.
 func (srv *sshServer) handleSession(org string, ch ssh.Channel, reqs <-chan *ssh.Request) {
 	defer func() { _ = ch.Close() }()
+	var gitProtocol string
 	for req := range reqs {
 		switch req.Type {
 		case "exec":
@@ -259,13 +269,20 @@ func (srv *sshServer) handleSession(org string, ch ssh.Channel, reqs <-chan *ssh
 				return
 			}
 			_ = req.Reply(true, nil)
-			code := srv.runGitCommand(org, p.Command, ch)
+			code := srv.runGitCommand(org, p.Command, gitProtocol, ch)
 			srv.exit(ch, code)
 			return
-		case "shell", "pty-req", "env":
-			// A bare `ssh git@host` (shell) or env/pty setup: git-only endpoint,
-			// so reject shell/pty but ack env silently (git sets GIT_PROTOCOL).
-			_ = req.Reply(req.Type == "env", nil)
+		case "env":
+			// Capture GIT_PROTOCOL (validated before use in gitProtocolEnv); ack
+			// silently. Other env vars are accepted-and-ignored.
+			var e envPayload
+			if err := ssh.Unmarshal(req.Payload, &e); err == nil && e.Name == "GIT_PROTOCOL" {
+				gitProtocol = e.Value
+			}
+			_ = req.Reply(true, nil)
+		case "shell", "pty-req":
+			// A bare `ssh git@host` (shell) or pty setup: git-only endpoint.
+			_ = req.Reply(false, nil)
 			if req.Type == "shell" {
 				_, _ = io.WriteString(ch.Stderr(), "Hi! This is the Hanzo git SSH endpoint; interactive shells are not available.\n")
 				srv.exit(ch, 1)
@@ -284,7 +301,7 @@ var gitCmdRE = regexp.MustCompile(`^(git-upload-pack|git-receive-pack) '?([^']+?
 // runGitCommand parses the exec command, enforces org scoping (path org == key
 // org), confirms the repo exists, and drives the shared pack code path on the
 // channel's stdin/stdout. Returns the exit code the session reports to the client.
-func (srv *sshServer) runGitCommand(keyOrg, command string, ch ssh.Channel) int {
+func (srv *sshServer) runGitCommand(keyOrg, command, gitProtocol string, ch ssh.Channel) int {
 	m := gitCmdRE.FindStringSubmatch(strings.TrimSpace(command))
 	if m == nil {
 		_, _ = io.WriteString(ch.Stderr(), "unsupported command; only git-upload-pack / git-receive-pack are allowed\n")
@@ -319,12 +336,12 @@ func (srv *sshServer) runGitCommand(keyOrg, command string, ch ssh.Channel) int 
 	ctx := context.Background()
 	switch service {
 	case svcUploadPack:
-		if err := sshUploadPack(srv.svc, ctx, keyOrg, project, name, ch, ch); err != nil {
+		if err := sshUploadPack(srv.svc, ctx, keyOrg, project, name, gitProtocol, ch); err != nil {
 			srv.svc.Log.Warn("git ssh upload-pack failed", "org", keyOrg, "repo", name, "err", err)
 			return 1
 		}
 	case svcReceivePack:
-		if err := sshReceivePack(srv.svc, ctx, keyOrg, project, name, ch, ch); err != nil {
+		if err := sshReceivePack(srv.svc, ctx, keyOrg, project, name, gitProtocol, ch); err != nil {
 			srv.svc.Log.Warn("git ssh receive-pack failed", "org", keyOrg, "repo", name, "err", err)
 			return 1
 		}

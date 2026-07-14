@@ -14,7 +14,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -186,10 +185,11 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project, name s
 		_ = st.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, branchRef))
 	}
 
-	// Same side effects as a receive-pack push: meter storage + fire the build.
+	// Same side effects as a receive-pack push: meter storage + fire the build for
+	// the one branch this push advanced (the ONE fireBranchBuild every push uses).
 	bg := context.WithoutCancel(ctx)
 	recordUsage(s, bg, org, project, name)
-	firePushBuilds(s, bg, org, project, name, syntheticUpdate(branchRef, parents, ch))
+	fireBranchBuild(s, bg, org, project, name, branch, ch.String())
 
 	return ch.String(), branch, nil
 }
@@ -367,19 +367,6 @@ func writeTreeNode(st storer.EncodedObjectStorer, node *treeNode) (plumbing.Hash
 		return plumbing.ZeroHash, err
 	}
 	return st.SetEncodedObject(obj)
-}
-
-// syntheticUpdate builds a ReferenceUpdateRequest with the one command this push
-// performed, so firePushBuilds sees the SAME shape a real receive-pack produces
-// (old→new on the branch ref) and triggers exactly as it would for `git push`.
-func syntheticUpdate(ref plumbing.ReferenceName, parents []plumbing.Hash, newHash plumbing.Hash) *packp.ReferenceUpdateRequest {
-	old := plumbing.ZeroHash
-	if len(parents) > 0 {
-		old = parents[0]
-	}
-	req := packp.NewReferenceUpdateRequest()
-	req.Commands = []*packp.Command{{Name: ref, Old: old, New: newHash}}
-	return req
 }
 
 // branchRE constrains a push branch name to a safe ref — nested (feature/foo)
