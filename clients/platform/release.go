@@ -44,6 +44,10 @@ const (
 	releaseRepoURL  = "https://github.com/hanzoai/cloud"
 	releaseFloor    = "1.786.0"
 	universeRepo    = "hanzoai/universe"
+	// releaseServiceName is the operator Service CR metadata.name for cloud's own
+	// self-publish (crs/cloud.yaml) — the target of both the native CR rollout and
+	// the image-update mirror, so the two never name different CRs.
+	releaseServiceName = "cloud"
 )
 
 // githubAPIBase is the GitHub REST root. It is a var (not a const) ONLY so tests can
@@ -244,8 +248,46 @@ func releaseFor(s *cloud.Service[state], repoURL, sha, image, tag, dockerfile, b
 		},
 		smoke:  func(ctx context.Context) error { return smokeImage(s, ctx, image, bldID) },
 		tag:    func(ctx context.Context) error { return tagRelease(s, ctx, releaseRepoSlug, sha, tag) },
-		notify: func(ctx context.Context) error { return notifyUniverse(s, ctx, image, sha) },
+		notify: func(ctx context.Context) error { return rolloutRelease(s, ctx, image, sha) },
 	}
+}
+
+// rolloutRelease rolls the proven image live. It is the release pipeline's final
+// step, reached only AFTER the tag receipt is minted (build + smoke passed).
+//
+// PRIMARY — native CR rollout: patch the operator hanzo.ai/v1 Service CR's
+// spec.image directly (cloud.OnServiceRelease → clients/paas releaseService), so
+// the operator reconciles the Deployment. No ArgoCD, no repository_dispatch, no
+// git round-trip — the direct-CR seam this closes.
+//
+// MIRROR — GitOps: also fire the image-update dispatch at universe
+// (notifyUniverse) so any environment still reconciled by the git/ArgoCD pipeline
+// stays in sync during the cutover.
+//
+// Best-effort composition: the step succeeds if EITHER path rolled the image, so a
+// missing cloud-api CR-patch RBAC (native) or a missing dispatch token (GitOps)
+// alone never fails a release that already produced a proven, tagged image.
+func rolloutRelease(s *cloud.Service[state], ctx context.Context, image, sha string) error {
+	var crErr error
+	if cloud.ServiceReleaserRegistered() {
+		crErr = cloud.OnServiceRelease(ctx, cloud.ServiceReleaseEvent{Service: releaseServiceName, Image: image, SHA: sha})
+		if crErr == nil {
+			s.Log.Info("release rolled out via operator CR patch (native)", "service", releaseServiceName, "image", image)
+		} else {
+			s.Log.Warn("native CR rollout failed; relying on the GitOps mirror", "service", releaseServiceName, "image", image, "err", crErr)
+		}
+	} else {
+		crErr = fmt.Errorf("paas control plane not co-resident (no native CR rollout)")
+	}
+
+	nuErr := notifyUniverse(s, ctx, image, sha)
+	if nuErr != nil {
+		s.Log.Warn("universe image-update mirror failed", "image", image, "err", nuErr)
+	}
+	if crErr != nil && nuErr != nil {
+		return fmt.Errorf("rollout failed on both paths: native=%v; gitops=%v", crErr, nuErr)
+	}
+	return nil
 }
 
 // smokeImage boots the just-built image in-cluster and waits for the smoke Job to
