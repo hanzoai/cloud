@@ -49,6 +49,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -62,6 +63,12 @@ import (
 // maxBatch bounds one ingest request so a single POST cannot pin the warehouse.
 // Larger batches are rejected (400) rather than silently truncated.
 const maxBatch = 500
+
+// publicCaptureEnv gates anonymous (no-principal) capture. Default ON: the
+// marketing sites emit anonymous pageviews, and cloud is REPLACING the already-
+// public insights-capture ingest, so refusing anonymous events would drop that
+// traffic. Set to a falsey value to require a validated principal on every event.
+const publicCaptureEnv = "CLOUD_ANALYTICS_PUBLIC_CAPTURE"
 
 // maxClockSkew clamps a client timestamp: a ts more than this into the FUTURE (or
 // unparseable/absent) falls back to server-now, so a skewed or hostile clock can
@@ -481,12 +488,44 @@ func strconv64(n int64) string {
 
 // ── handler ──────────────────────────────────────────────────────────────────
 
+// publicCaptureEnabled reports whether anonymous capture is allowed (default ON).
+func publicCaptureEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(publicCaptureEnv))) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+// captureTenant resolves the tenant a batch is attributed to. A VALIDATED
+// principal always wins (authenticated product traffic → its own org). Otherwise,
+// for anonymous marketing traffic, the tenant is the PUBLIC brand org derived
+// SERVER-SIDE from the request Host via the white-label registry — never a
+// client-claimed org, so the isolation invariant holds: a caller with no bearer
+// can only ever write into the brand-public partition of the Host it actually
+// reached, and a forged X-Org-Id is ignored exactly as on the read path. An
+// unrecognized Host is refused (we never dump anonymous events into a default
+// org). Returns ("", false) when the caller must be answered 403.
+func captureTenant(c *zip.Ctx) (string, bool) {
+	if org, ok := tenant(c); ok {
+		return org, true
+	}
+	if !publicCaptureEnabled() {
+		return "", false
+	}
+	if brand, ok := cloud.BrandForHostOK(strings.TrimSpace(c.Fiber().Host())); ok {
+		return brand, true
+	}
+	return "", false
+}
+
 // capture ingests one batch into hanzo.events, tenant-scoped. Shared by
 // /v1/analytics, /v1/analytics/batch, and /v1/tracker.
 func capture(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := tenant(c)
+	org, ok := captureTenant(c)
 	if !ok {
-		return zip.ErrForbidden("valid bearer required")
+		return zip.ErrForbidden("valid bearer or a recognized brand host required")
 	}
 	var batch CaptureBatch
 	if err := c.Bind(&batch); err != nil {
