@@ -67,10 +67,11 @@ func (s *storage) dotGitFS(org, project, name string) (billy.Filesystem, error) 
 
 // absRepoPath is the OS-absolute path to a repo's on-disk bare .git home — the
 // ONE place the storage-root + validated (org, project, name) identifiers join
-// into the path a git subprocess operates on. org/project/name are all validated
-// identifiers (nameRE / projectRE, no path separators), so the join can never
-// traverse out of the storage root: this is the tenant-isolation boundary for
-// every `git` invocation (gitexec.go, mirror.go).
+// into the path a git subprocess operates on. All three are gated to safe path
+// segments before they reach here — org by orgRE (the git.org boundary / SSH
+// repoPathRE), name by nameRE, project by projectRE — none can contain '/' or be
+// '.'/'..', so the join can never traverse out of the storage root. This is the
+// tenant-isolation boundary for every `git` invocation (gitexec.go, mirror.go).
 func (s *storage) absRepoPath(org, project, name string) string {
 	return filepath.Join(s.rootDir, filepath.FromSlash(repoRel(org, project, name)))
 }
