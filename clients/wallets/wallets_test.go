@@ -176,7 +176,7 @@ func TestKMSSingleSigEndToEnd(t *testing.T) {
 
 	// Custody is REAL, not a passthrough: the custodied secret is 32-byte key
 	// material (not the public address), and it is the key backing the address.
-	stored, err := k.GetSecret(context.Background(), keyRef(&Wallet{Org: "acme", ID: w.ID}))
+	stored, err := k.GetSecret(context.Background(), (&Wallet{ID: w.ID, Scope: Scope{Org: "acme", AccountID: w.AccountID}}).keyRef())
 	if err != nil {
 		t.Fatalf("GetSecret: %v", err)
 	}

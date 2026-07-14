@@ -118,6 +118,7 @@ import (
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
 	"github.com/hanzoai/cloud/clients/world"
+	"github.com/hanzoai/cloud/clients/x402"
 	"github.com/hanzoai/cloud/clients/zt"
 
 	// Framework CONTENT modules — NOT mount subsystems (they carry no HTTP surface
@@ -205,6 +206,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "prompts", Mount: cloud.Typed(prompts.Mount)},
 		{Name: "agents", Mount: cloud.Typed(agents.Mount), Shutdown: agents.Shutdown},
 		{Name: "wallets", Mount: cloud.Typed(wallets.Mount), Shutdown: ctxShutdown(wallets.Shutdown)},
+		// x402 pay-per-use: settles a signed ERC-3009 authorization to a recipient
+		// wallet through the metering spine. Mounts AFTER wallets (it resolves the
+		// recipient via wallets.ResolvePaymentTarget) and provides the Enforce
+		// middleware a marketplace applies to its priced routes.
+		{Name: "x402", Mount: cloud.Typed(x402.Mount), Shutdown: ctxShutdown(x402.Shutdown)},
 		{Name: "paas", Mount: cloud.Typed(paas.Mount), OwnsHealth: true},
 		{Name: "functions", Mount: cloud.Typed(functions.Mount)},
 		{Name: "tracker", Mount: cloud.Typed(tracker.Mount)},
