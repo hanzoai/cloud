@@ -379,8 +379,17 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	if tok == "" && sessionBridgeSameOrigin(c) {
 		tok = sessionAccessToken(c)
 	}
-	if tok == "" || isAPIKey(tok) {
+	if tok == "" {
 		return nil
+	}
+	// An opaque API key is not a JWT: resolve it to the same principal a JWT yields,
+	// so key auth and session auth mint one identity. An unresolved key stays
+	// anonymous (nil) — a bad key never grants trust.
+	if isAPIKey(tok) {
+		if v.keys == nil {
+			return nil
+		}
+		return v.keys.resolve(c.Context(), tok)
 	}
 	claims, err := v.validate(tok)
 	if err != nil {
