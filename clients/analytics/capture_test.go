@@ -295,3 +295,62 @@ func TestCapture_DatastoreDownHonest503(t *testing.T) {
 		t.Fatalf("datastore-down capture want 503, got %d", code)
 	}
 }
+
+// doHost issues a POST with an explicit Host header + body, for the anonymous
+// brand-host attribution tests.
+func doHost(t *testing.T, app *zip.App, path, user, org, host, body string) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = host
+	if user != "" {
+		req.Header.Set("X-User-Id", user)
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test POST %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+func TestCapture_AnonymousBrandHostAccepted(t *testing.T) {
+	app := mountApp(t)
+	// No principal, but a recognized brand Host → anonymous capture is accepted
+	// and attributed to the brand-public org. It reaches requireDatastore (503
+	// here, datastore down) rather than 403 — proving the tenant resolved.
+	code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("anonymous brand-host capture want 503 (accepted, datastore down), got %d", code)
+	}
+	// The tracker beacon alias must accept the same anonymous brand-host traffic.
+	code, _ = doHost(t, app, "/v1/tracker", "", "", "app.lux.cloud", `{"batch":[{"type":"pageview"}]}`)
+	if code != http.StatusServiceUnavailable {
+		t.Fatalf("anonymous brand-host beacon want 503, got %d", code)
+	}
+}
+
+func TestCapture_AnonymousUnknownHostForbidden(t *testing.T) {
+	app := mountApp(t)
+	// An unrecognized Host with no principal must be refused — anonymous events
+	// are never dumped into a default org.
+	code, _ := doHost(t, app, "/v1/analytics", "", "", "evil.example.com", `{"batch":[{"type":"pageview"}]}`)
+	if code != http.StatusForbidden {
+		t.Fatalf("anonymous unknown-host capture want 403, got %d", code)
+	}
+}
+
+func TestCapture_PublicCaptureDisabled(t *testing.T) {
+	t.Setenv(publicCaptureEnv, "off")
+	app := mountApp(t)
+	// With public capture disabled, even a recognized brand host is refused
+	// without a validated principal.
+	code, _ := doHost(t, app, "/v1/analytics", "", "", "hanzo.ai", `{"batch":[{"type":"pageview"}]}`)
+	if code != http.StatusForbidden {
+		t.Fatalf("public-capture-off anonymous want 403, got %d", code)
+	}
+}
