@@ -1,20 +1,18 @@
 package git
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
-	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
@@ -25,17 +23,17 @@ import (
 // there fires git-push-to-deploy exactly like any native repo (smart_http.go),
 // so cloud can host — and deploy — its OWN source without depending on GitHub.
 //
-// DRY: the fetch writes into the SAME billy/S3 storer the smart-HTTP server
-// clones/pushes from (storage.storer), never a second git stack. Idempotent by
-// mirror semantics (+refs/*:refs/*, forced): re-mirroring force-updates refs.
-// Org-scoped exactly like create — the org (X-Org-Id) owns the mirror; no
-// other org can read or push to it. Storage is bounded the ONE way this
-// subsystem bounds storage: recordUsage meters the mirrored bytes against the
-// org's commerce quota, the same number a push is bounded by.
+// The fetch shells out to the streaming `git fetch` CLI against the on-disk bare
+// repo (index-pack streams the pack to disk), so mirroring a multi-GB repo stays
+// bounded in memory — go-git's in-process FetchContext buffered the whole pack in
+// RAM and OOM-killed the pod. Idempotent by mirror semantics (+refs/*:refs/*,
+// forced): re-mirroring force-updates refs. Org-scoped exactly like create — the
+// org (X-Org-Id) owns the mirror. recordUsage meters the mirrored bytes against
+// the org's commerce quota, the same bound a push is measured by.
 
 // mirrorRefSpec is git's mirror refspec: force every source ref onto the same
-// destination ref. HEAD (not under refs/) is handled separately by mirrorInto.
-const mirrorRefSpec config.RefSpec = "+refs/*:refs/*"
+// destination ref. HEAD (not under refs/) is set separately by mirrorInto.
+const mirrorRefSpec = "+refs/*:refs/*"
 
 // mirrorEnvToken names the env var — KMS-injected via a KMSSecret sync, never
 // hardcoded, never logged — holding the credential for mirroring a PRIVATE
@@ -94,90 +92,83 @@ func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
 
-// mirrorInto fetches every ref/object from srcURL into the repo's storer with
-// mirror semantics and points HEAD at the source's default branch so a
-// clone-back resolves a default. Idempotent: an up-to-date source is a no-op.
+// mirrorInto fetches every ref/object from srcURL into the repo's on-disk bare
+// storage with mirror semantics and points HEAD at the source's default branch
+// so a clone-back resolves a default. Idempotent: an up-to-date source is a
+// no-op. The pack streams to disk via `git fetch` (bounded memory).
 func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL string) error {
-	st, err := s.storer(org, project, name)
-	if err != nil {
-		return err
-	}
-	remote := gogit.NewRemote(st, &config.RemoteConfig{
-		Name:  "mirror",
-		URLs:  []string{srcURL},
-		Fetch: []config.RefSpec{mirrorRefSpec},
-	})
-	auth := mirrorAuth(srcURL)
+	bareDir := s.absRepoPath(org, project, name)
+	env := mirrorGitEnv(srcURL)
 
-	// Discover the source default branch (HEAD symref) BEFORE fetching — the
-	// refs/* refspec never carries HEAD.
-	def, err := defaultBranch(remote.ListContext(ctx, &gogit.ListOptions{Auth: auth}))
+	// Discover the source default branch (HEAD symref) — bounded ls-remote — so a
+	// clone of the mirror resolves the same default the source has.
+	head, err := remoteHead(ctx, srcURL, env)
 	if err != nil {
 		return fmt.Errorf("list source: %w", err)
 	}
 
-	switch err := remote.FetchContext(ctx, &gogit.FetchOptions{
-		RefSpecs: []config.RefSpec{mirrorRefSpec},
-		Auth:     auth,
-		Force:    true,
-		Tags:     gogit.AllTags,
-	}); {
-	case err == nil, errors.Is(err, gogit.NoErrAlreadyUpToDate):
-		// fetched, or nothing new — both are a successful (idempotent) mirror.
-	default:
+	// Fetch all refs + tags with mirror semantics, streaming the pack to disk.
+	// protocol.version=2 = cheaper negotiation on large repos; credential.helper=
+	// disables any interactive/leaky helper (gitea). --no-write-fetch-head keeps
+	// a bare mirror clean.
+	fetch, err := gitCmd(ctx, env,
+		"-c", "protocol.version=2", "-c", "credential.helper=",
+		"--git-dir="+bareDir, "fetch", "--prune", "--tags", "--no-write-fetch-head",
+		srcURL, mirrorRefSpec)
+	if err != nil {
 		return err
 	}
+	stderr := &cappedBuffer{cap: stderrCap}
+	fetch.Stderr = stderr
+	if err := fetch.Run(); err != nil {
+		return fmt.Errorf("git fetch: %w: %s", err, sanitizeGitErr(stderr.String()))
+	}
 
-	if def != "" {
-		if err := st.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, def)); err != nil {
-			return fmt.Errorf("set HEAD: %w", err)
+	if head != "" {
+		set, err := gitCmd(ctx, env, "--git-dir="+bareDir, "symbolic-ref", "HEAD", head)
+		if err != nil {
+			return err
+		}
+		serr := &cappedBuffer{cap: stderrCap}
+		set.Stderr = serr
+		if err := set.Run(); err != nil {
+			return fmt.Errorf("set HEAD: %w: %s", err, sanitizeGitErr(serr.String()))
 		}
 	}
 	return nil
 }
 
-// defaultBranch resolves the source's default branch from an advertised ref
-// list: the HEAD symref if the server sends one, else the branch whose tip
-// equals HEAD's hash, else "main", else the first branch. Returns "" for a
-// source with no branches (an empty repo — HEAD is then left untouched).
-func defaultBranch(refs []*plumbing.Reference, listErr error) (plumbing.ReferenceName, error) {
-	if listErr != nil {
-		return "", listErr
+// remoteHead resolves the source's default branch via
+// `git ls-remote --symref <src> HEAD`, returning e.g. "refs/heads/main" or ""
+// when the server advertises no HEAD symref (an empty repo, or a server that
+// doesn't send one — HEAD is then left as the bare repo's default). Output is
+// tiny + bounded (one symref line for HEAD).
+func remoteHead(ctx context.Context, srcURL string, env []string) (string, error) {
+	cmd, err := gitCmd(ctx, env,
+		"-c", "protocol.version=2", "-c", "credential.helper=",
+		"ls-remote", "--symref", srcURL, "HEAD")
+	if err != nil {
+		return "", err
 	}
-	byHash := map[plumbing.Hash]plumbing.ReferenceName{}
-	var headHash plumbing.Hash
-	var haveHead bool
-	var main, first plumbing.ReferenceName
-	for _, ref := range refs {
-		switch {
-		case ref.Name() == plumbing.HEAD:
-			if ref.Type() == plumbing.SymbolicReference {
-				return ref.Target(), nil // authoritative
-			}
-			headHash, haveHead = ref.Hash(), true
-		case ref.Name().IsBranch():
-			byHash[ref.Hash()] = ref.Name()
-			if ref.Name() == plumbing.NewBranchReferenceName(defaultBranchName) {
-				main = ref.Name()
-			}
-			if first == "" {
-				first = ref.Name()
+	var out bytes.Buffer
+	stderr := &cappedBuffer{cap: stderrCap}
+	cmd.Stdout, cmd.Stderr = &out, stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("ls-remote: %w: %s", err, sanitizeGitErr(stderr.String()))
+	}
+	// "ref: refs/heads/main\tHEAD"
+	for _, line := range strings.Split(out.String(), "\n") {
+		if rest, ok := strings.CutPrefix(line, "ref: "); ok {
+			if tab := strings.IndexByte(rest, '\t'); tab > 0 {
+				return strings.TrimSpace(rest[:tab]), nil
 			}
 		}
 	}
-	if haveHead {
-		if b, ok := byHash[headHash]; ok {
-			return b, nil
-		}
-	}
-	if main != "" {
-		return main, nil
-	}
-	return first, nil
+	return "", nil
 }
 
-// ensureRepo returns the org's repo, provisioning it (metadata row + empty
-// bare storage) on first use. Idempotent and race-safe: a concurrent create is
+// ensureRepo returns the org's repo, provisioning it (metadata row + empty bare
+// storage) on first use. Idempotent and race-safe: a concurrent create is
 // reconciled by reloading the canonical row, never surfaced as a conflict — a
 // mirror must be repeatable.
 func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org, project, name string) (Repo, error) {
@@ -205,7 +196,9 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 
 // mirrorSource validates the org-supplied source URL: a well-formed http/https
 // git URL with a host. This is the boundary check for the one place a
-// org-supplied address enters the server's outbound network path.
+// org-supplied address enters the server's outbound network path; the git
+// subprocess additionally runs under GIT_ALLOW_PROTOCOL=http:https so a source
+// can never smuggle a file:// / ext:: protocol past this check.
 func mirrorSource(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -218,17 +211,44 @@ func mirrorSource(raw string) (string, error) {
 	return u.String(), nil
 }
 
-// mirrorAuth builds the fetch credential for an https source from the
-// KMS-injected env token, in GitHub's token-as-password basic-auth form. Returns
-// nil for http (loopback) and when no token is set, so public mirrors stay
-// anonymous and a token is never sent in cleartext.
-func mirrorAuth(srcURL string) transport.AuthMethod {
+// mirrorGitEnv builds the git subprocess environment for a mirror fetch:
+// GIT_ALLOW_PROTOCOL restricts outbound to http/https (blocks file://, ext::,
+// etc.), and a PRIVATE https source's credential is injected via env-only
+// git-config http.extraHeader (GitHub's token-as-basic-auth form) — NEVER on
+// argv (ps-visible) or in logs. A public/http source stays anonymous.
+func mirrorGitEnv(srcURL string) []string {
+	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
+	if hdr := mirrorAuthHeader(srcURL); hdr != "" {
+		env = append(env,
+			"GIT_CONFIG_COUNT=1",
+			"GIT_CONFIG_KEY_0=http.extraHeader",
+			"GIT_CONFIG_VALUE_0=Authorization: Basic "+hdr,
+		)
+	}
+	return env
+}
+
+// mirrorAuthHeader returns the base64 "x-access-token:<token>" basic-auth
+// credential for an https source from the KMS-injected env token, or "" for http
+// (loopback) / when no token is set — so public mirrors stay anonymous and a
+// token is never sent in cleartext.
+func mirrorAuthHeader(srcURL string) string {
 	tok := strings.TrimSpace(os.Getenv(mirrorEnvToken))
 	if tok == "" {
-		return nil
+		return ""
 	}
 	if u, err := url.Parse(srcURL); err != nil || u.Scheme != "https" {
-		return nil
+		return ""
 	}
-	return &githttp.BasicAuth{Username: "x-access-token", Password: tok}
+	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+}
+
+// credURLRE matches a "scheme://userinfo@" prefix so any credential embedded in
+// a source URL is redacted out of an error surfaced to the client or the log.
+var credURLRE = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*)://[^/@\s]*@`)
+
+// sanitizeGitErr trims a git subprocess's stderr and redacts any credential
+// embedded in a URL before it reaches a client error or a log line.
+func sanitizeGitErr(msg string) string {
+	return strings.TrimSpace(credURLRE.ReplaceAllString(msg, "$1://***@"))
 }
