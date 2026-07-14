@@ -45,8 +45,15 @@ func TestCodeAgentsBypassPermissionsByDefault(t *testing.T) {
 }
 
 func TestDefaultCodeModelIsToolCapableAlias(t *testing.T) {
-	if defaultCodeModel != "zen5-pro" {
-		t.Fatalf("coding-agent default %q is not the stable tool-capable alias", defaultCodeModel)
+	// zen5 is the flagship GLM-5.2-class alias — tool-capable (verified live: the
+	// glm-5.2 upstream returns tool_use / stop_reason:tool_use) and the model the
+	// user's "pop open with GLM-5.2" intent maps to. It must NOT be the virtual
+	// `best` (a reserved word Claude Code rewrites to an unserved claude-* id).
+	if defaultCodeModel != "zen5" {
+		t.Fatalf("coding-agent default %q is not the flagship zen5 alias", defaultCodeModel)
+	}
+	if defaultCodeModel == "best" {
+		t.Fatal("default must be a concrete served id, never the reserved word best")
 	}
 }
 
@@ -113,4 +120,26 @@ func isAllowedModel(m string) bool {
 		return false
 	}
 	return true
+}
+
+// TestClaudeArgvForcesModel locks in the fix for "everything shows up as best":
+// the claude agent must pass --model <resolved> on argv so a persisted /model
+// selection (the reserved word "best") cannot override the zen5 model the
+// launcher chose. ANTHROPIC_MODEL alone is not enough — /model beats it.
+func TestClaudeArgvForcesModel(t *testing.T) {
+	agent := codeAgents["claude"]
+	argv := codeArgv(agent, "https://api.hanzo.ai", "zen5-pro", false, nil)
+	i := slices.Index(argv, "--model")
+	if i < 0 {
+		t.Fatalf("claude argv %q does not force --model (a persisted /model selection would win)", argv)
+	}
+	if i+1 >= len(argv) || argv[i+1] != "zen5-pro" {
+		t.Fatalf("claude argv %q: --model must be followed by the resolved id zen5-pro", argv)
+	}
+	// --model is forced in --safe mode too (model pinning is independent of
+	// the permission mode).
+	safeArgv := codeArgv(agent, "https://api.hanzo.ai", "zen5-pro", true, nil)
+	if i := slices.Index(safeArgv, "--model"); i < 0 || safeArgv[i+1] != "zen5-pro" {
+		t.Fatalf("--safe argv %q must still force --model zen5-pro", safeArgv)
+	}
 }
