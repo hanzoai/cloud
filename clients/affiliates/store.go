@@ -178,7 +178,10 @@ CREATE TABLE IF NOT EXISTS affiliate_referrals (
   created_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_aff_referrals_affiliate ON affiliate_referrals(affiliate_id, created_at);
-CREATE INDEX IF NOT EXISTS ix_aff_referrals_referrer ON affiliate_referrals(referrer_org);
+-- ix_aff_referrals_referrer is created AFTER the ADD COLUMN pass below: on a store
+-- whose affiliate_referrals predates referrer_org, CREATE TABLE IF NOT EXISTS is a
+-- no-op, so indexing referrer_org here would fail ("no such column") before the
+-- column is added. Column first, then its index.
 
 -- The referredBy graph edge (user level): a user's referrer is set-once/immutable
 -- (referred_user PRIMARY KEY) and cycle-checked, mirroring the org edge.
@@ -228,6 +231,12 @@ CREATE INDEX IF NOT EXISTS ix_aff_payouts_affiliate ON affiliate_payouts(affilia
 		if _, err := s.db.Exec(alter); err != nil && !isDuplicateColumn(err) {
 			return fmt.Errorf("affiliates migrate alter: %w", err)
 		}
+	}
+	// Indexes on newly-added columns come AFTER the ADD COLUMN pass, so they are
+	// valid on both a fresh store and one migrated from an older schema.
+	if _, err := s.db.Exec(
+		`CREATE INDEX IF NOT EXISTS ix_aff_referrals_referrer ON affiliate_referrals(referrer_org)`); err != nil {
+		return fmt.Errorf("affiliates migrate index: %w", err)
 	}
 	// Backfill referrer_org for pre-migration edges from the owning affiliate's org.
 	if _, err := s.db.Exec(
