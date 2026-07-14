@@ -18,7 +18,7 @@ require (
 	github.com/hanzoai/iam v1.31.25
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
-	github.com/hanzoai/otel-collector v0.144.13
+	github.com/hanzoai/otel-collector v1.2.0
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
@@ -558,7 +558,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/knadh/koanf v1.5.0 // indirect
-	github.com/knadh/koanf/v2 v2.3.3 // indirect
+	github.com/knadh/koanf/v2 v2.3.5 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
@@ -831,8 +831,8 @@ require (
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
 	github.com/hanzoai/metrics v1.110.2
-	github.com/hanzoai/o11y v1.5.26
-	github.com/hanzoai/thinking v0.1.0
+	github.com/hanzoai/o11y v1.5.28
+	github.com/hanzoai/thinking v0.1.0 // indirect
 	github.com/hanzoai/vfs v0.6.4
 	github.com/hanzoai/zen v1.3.0
 	github.com/klauspost/compress v1.18.6 // indirect
@@ -873,5 +873,3 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
-
-replace github.com/hanzoai/otel-collector v0.144.10 => github.com/hanzoai/otel-collector v0.144.13
