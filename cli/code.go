@@ -33,11 +33,12 @@ import (
 // defaultCodeModel is the model `hanzo code <agent>` runs when no model is
 // named. It must be a catalog-served id with working tool calls: coding agents
 // cannot operate on a text-only model even when its SSE transport is healthy.
-// zen5-pro is the stable tool-capable capability alias. Do not use the virtual
-// `best`: Claude Code treats it (like `opus`/`sonnet`/`haiku`) as a reserved
-// alias and rewrites it to a claude-* id that api.hanzo.ai does not serve.
-// Override per invocation with an explicit id: `hanzo code claude glm5.2`.
-const defaultCodeModel = "zen5-pro"
+// zen5 is the flagship GLM-5.2-class capability alias (1M ctx, tool-capable) —
+// the frontier coding tier. Do not use the virtual `best`: Claude Code treats
+// it (like `opus`/`sonnet`/`haiku`) as a reserved alias and rewrites it to a
+// claude-* id that api.hanzo.ai does not serve. Override per invocation with an
+// explicit id: `hanzo code claude zen5-pro`.
+const defaultCodeModel = "zen5"
 
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
@@ -66,7 +67,10 @@ type wire func(base, token, model string) map[string]string
 //
 // The main slot takes a served, tool-capable id (default zen5-pro), never the
 // virtual `best`: CC rewrites the reserved word `best` to a claude-* id that
-// 403s.
+// 403s. ANTHROPIC_MODEL alone is not enough — a persisted /model selection
+// overrides it — so the claude agent also passes --model on argv (see
+// codeAgents) to force the session model. The env vars below pin the four CC
+// tier slots so the classifier, subagents, and /compact hit served zen5 SKUs.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
@@ -91,13 +95,15 @@ func openaiWire(base, token, _ string) map[string]string {
 }
 
 type codeAgent struct {
-	bin      string                     // executable to exec
-	wire     wire                       // how it finds the cloud
-	fullAuto []string                   // flags that bypass approval prompts
-	modelArg []string                   // how the model is passed on argv (empty: via env)
-	provider func(base string) []string // agents that need the endpoint declared, not just env'd
-	clear    []string                   // env that would shadow the wire (a stale key in the shell)
-	install  string                     // hint when the binary is missing
+	bin        string                     // executable to exec
+	wire       wire                       // how it finds the cloud
+	fullAuto   []string                   // flags that bypass approval prompts
+	modelArg   []string                   // how the model is passed on argv (empty: via env)
+	provider   func(base string) []string // agents that need the endpoint declared, not just env'd
+	clear      []string                   // env that would shadow the wire (a stale key in the shell)
+	configHome string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
+	seed       func(dir string) error     // one-time defaults for the isolated config dir
+	install    string                     // hint when the binary is missing
 }
 
 // codex and @hanzo/dev share a lineage (dev is a Codex fork), hence a wire.
@@ -127,8 +133,24 @@ var codeAgents = map[string]codeAgent{
 		bin:      "claude",
 		wire:     anthropicWire,
 		fullAuto: []string{"--dangerously-skip-permissions"},
+		// --model forces the session model on argv. Claude Code persists the
+		// user's last /model selection (e.g. the reserved word "best"), and that
+		// persisted choice OVERRIDES ANTHROPIC_MODEL — so the env var alone cannot
+		// pin the model. --model is the per-session override that beats it: CC
+		// sends it as the request's model field verbatim, and api.hanzo.ai serves
+		// the zen5 id. This is what makes `hanzo code claude` always run zen5
+		// regardless of what the user last picked in /model.
+		modelArg: []string{"--model"},
 		clear:    []string{"ANTHROPIC_API_KEY"}, // outranks AUTH_TOKEN: a stale one silently wins
-		install:  "npm i -g @anthropic-ai/claude-code",
+		// Its own config home under ~/.hanzo, not the user's ~/.claude. Claude
+		// Code and `hanzo code claude` are independent products: sharing one
+		// mutable config braids them — the user's saved /model (e.g. "fable")
+		// leaks in as the session identity, and hanzo's zen5 picks leak back out.
+		// A separate home decomplects them; the injected zen5 slots then show
+		// cleanly in /model instead of a stale saved value.
+		configHome: "CLAUDE_CONFIG_DIR",
+		seed:       seedClaudeConfig,
+		install:    "npm i -g @anthropic-ai/claude-code",
 	},
 	"codex": codexLike("codex", "npm i -g @openai/codex"),
 	"dev":   codexLike("dev", "npm i -g @hanzo/dev"),
@@ -223,6 +245,20 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 			return err
 		}
 	}
+	if agent.configHome != "" {
+		dir, err := hanzoDir()
+		if err != nil {
+			return err
+		}
+		if agent.seed != nil {
+			if err := agent.seed(dir); err != nil {
+				return err
+			}
+		}
+		if err := os.Setenv(agent.configHome, dir); err != nil {
+			return err
+		}
+	}
 	for k, v := range agent.wire(base, token, model) {
 		if err := os.Setenv(k, v); err != nil {
 			return err
@@ -248,6 +284,42 @@ func codeArgv(agent codeAgent, base, model string, safe bool, rest []string) []s
 	}
 	argv = append(argv, rest...)
 	return argv
+}
+
+// seedClaudeConfig writes first-run defaults into the isolated config dir so
+// `hanzo code claude` starts clean: auto-approve, high effort, onboarding done,
+// and NO pinned model (the zen5 slots come from the injected env, not saved
+// state). It never overwrites — the user's own later edits in this dir persist.
+func seedClaudeConfig(dir string) error {
+	if err := writeIfAbsent(filepath.Join(dir, "settings.json"), claudeSettingsSeed); err != nil {
+		return err
+	}
+	return writeIfAbsent(filepath.Join(dir, ".claude.json"), "{\"hasCompletedOnboarding\":true}\n")
+}
+
+// claudeSettingsSeed is the initial settings.json for `hanzo code claude`:
+// sensible agent defaults and no model, so the env-injected zen5 slots win.
+// effortLevel is max — the deepest reasoning tier — matching the operator's
+// /effort max session setting; zen folds it into the upstream's reasoning
+// budget (anthropicThinkingBudget → normalizeReasoning) so it reaches the model.
+const claudeSettingsSeed = `{
+  "includeCoAuthoredBy": false,
+  "permissions": { "defaultMode": "auto" },
+  "skipAutoPermissionPrompt": true,
+  "skipDangerousModePermissionPrompt": true,
+  "effortLevel": "max",
+  "theme": "dark",
+  "enableWorkflows": true
+}
+`
+
+// writeIfAbsent creates path with content only when it does not already exist,
+// so seeding a config dir never clobbers a user's later edits.
+func writeIfAbsent(path, content string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	return os.WriteFile(path, []byte(content), 0o600)
 }
 
 // codeToken resolves the credential the agents authenticate with: an explicit
