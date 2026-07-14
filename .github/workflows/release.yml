@@ -303,6 +303,12 @@ jobs:
             done
             return 1
           }
+          # A fresh docker named volume is root:root 0755, but the cloud image runs
+          # NON-ROOT, so it cannot create cek's <db>.cek.lock under /data (the single-boot
+          # smoke only worked because --tmpfs is world-writable). Make the shared volume
+          # writable for BOTH boots, re-opening it between them so the candidate can read
+          # the baseline's files even if their runtime UIDs differ.
+          chmod_vol() { docker run --rm --user 0 -v "$VOL":/data --entrypoint sh "$CANDIDATE" -c 'chmod -R 0777 /data'; }
 
           # Boot 1 — the prior release writes its real schema into the volume. It must
           # reach "listening" (proof every subsystem migrated + its DB is on disk); if
@@ -310,6 +316,7 @@ jobs:
           echo "migration baseline: $BASELINE"
           pulled=0; for _ in 1 2 3; do if docker pull "$BASELINE"; then pulled=1; break; fi; sleep 5; done
           [ "$pulled" = 1 ] || { echo "MIGRATION SMOKE INFRA FAIL: cannot pull baseline $BASELINE"; exit 1; }
+          chmod_vol
           B1="$(boot "$BASELINE" cloudmig_base)"
           if ! wait_listen "$B1"; then
             echo "::group::baseline boot logs"; docker logs "$B1" 2>&1 || true; echo "::endgroup::"
@@ -317,6 +324,7 @@ jobs:
             exit 1
           fi
           docker stop "$B1" >/dev/null
+          chmod_vol
 
           # Boot 2 — the candidate migrates that on-disk schema IN PLACE. This is the gate.
           B2="$(boot "$CANDIDATE" cloudmig_cand)"
