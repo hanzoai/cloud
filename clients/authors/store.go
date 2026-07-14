@@ -110,6 +110,21 @@ type Accrual struct {
 	CreatedAt    int64  `json:"createdAt"`
 }
 
+// LedgerRow is one immutable, on-chain-ready royalty record appended per latched
+// accrual. ComputeProof is nil until a hanzod compute attestation binds the row (a
+// follow-up) — it is never fabricated.
+type LedgerRow struct {
+	ID           string  `json:"id"`
+	AuthorID     string  `json:"authorId"`
+	DeployingOrg string  `json:"deployingOrg"`
+	Period       string  `json:"period"`
+	ShareBps     int64   `json:"shareBps"`
+	SpendCents   int64   `json:"spendCents"`
+	EarningCents int64   `json:"earningCents"`
+	ComputeProof *string `json:"computeProof"` // nullable: hanzod attestation (follow-up)
+	CreatedAt    int64   `json:"createdAt"`
+}
+
 // Payout is one recorded disbursement of accrued royalty. A "credits" method issues
 // a commerce grant (Txn set); cash methods (wire/paypal/…) are record-only.
 type Payout struct {
@@ -216,6 +231,24 @@ CREATE TABLE IF NOT EXISTS author_payouts (
   created_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_author_payouts_author ON author_payouts(author_id, created_at);
+
+-- APPEND-ONLY, on-chain-ready royalty ledger: one immutable row per latched accrual
+-- capturing the per-compute attribution (deploying org's spend → author at share).
+-- compute_proof is NULLABLE and reserved for a hanzod compute attestation (a
+-- follow-up) — it is written NULL here, never fabricated. Rows are only ever
+-- INSERTed, never updated or deleted, so the table is a verifiable ledger.
+CREATE TABLE IF NOT EXISTS author_ledger (
+  id            TEXT PRIMARY KEY,
+  author_id     TEXT NOT NULL,
+  deploying_org TEXT NOT NULL,
+  period        TEXT NOT NULL,
+  share_bps     INTEGER NOT NULL,
+  spend_cents   INTEGER NOT NULL,
+  earning_cents INTEGER NOT NULL,
+  compute_proof TEXT,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_author_ledger_author ON author_ledger(author_id, created_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("authors migrate: %w", err)
@@ -228,12 +261,16 @@ func (s *Store) Close() error { return s.db.Close() }
 
 // ── repo url canonicalization ──────────────────────────────────────────────────
 
-// normalizeRepo reduces any GitHub repo reference to the canonical
-// "github.com/owner/name" (lowercased, no scheme, no .git, no trailing slash, no
-// query/fragment). BOTH sides of a deploy match go through here — the author's
-// claimed repo and hanzo.app's persisted sourceRepo — so attribution never misses
-// on a cosmetic URL difference. Returns "" for anything that isn't a plausible
-// owner/name pair.
+// forgeHosts are the code-forge hosts an author repo can live on: GitHub and GitLab.
+// A bare "owner/name" (no host) defaults to the first (github.com).
+var forgeHosts = []string{"github.com", "gitlab.com"}
+
+// normalizeRepo reduces any GitHub/GitLab repo reference to the canonical
+// "<host>/owner/name" (lowercased, no scheme, no .git, no trailing slash, no
+// query/fragment), host ∈ forgeHosts. BOTH sides of a deploy match go through here —
+// the author's claimed repo and hanzo.app's persisted sourceRepo — so attribution
+// never misses on a cosmetic URL difference. Returns "" for anything that isn't a
+// plausible host/owner/name (or bare owner/name → github.com).
 func normalizeRepo(raw string) string {
 	s := strings.TrimSpace(strings.ToLower(raw))
 	if s == "" {
@@ -244,7 +281,9 @@ func normalizeRepo(raw string) string {
 		s = s[i+3:]
 	}
 	s = strings.TrimPrefix(s, "git@")
-	s = strings.Replace(s, "github.com:", "github.com/", 1) // ssh colon → slash
+	for _, h := range forgeHosts {
+		s = strings.Replace(s, h+":", h+"/", 1) // ssh colon → slash
+	}
 	// Drop query/fragment.
 	if i := strings.IndexAny(s, "?#"); i >= 0 {
 		s = s[:i]
@@ -253,30 +292,45 @@ func normalizeRepo(raw string) string {
 	s = strings.TrimSuffix(s, "/")
 	s = strings.TrimSuffix(s, ".git")
 	// Bare "owner/name" (no host) → assume github.com.
-	if !strings.Contains(s, "github.com/") && strings.Count(s, "/") == 1 {
+	hasHost := false
+	for _, h := range forgeHosts {
+		if strings.Contains(s, h+"/") {
+			hasHost = true
+			break
+		}
+	}
+	if !hasHost && strings.Count(s, "/") == 1 {
 		s = "github.com/" + s
 	}
-	i := strings.Index(s, "github.com/")
-	if i < 0 {
-		return ""
+	for _, h := range forgeHosts {
+		i := strings.Index(s, h+"/")
+		if i < 0 {
+			continue
+		}
+		path := strings.Trim(s[i+len(h)+1:], "/")
+		parts := strings.Split(path, "/")
+		if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+			return ""
+		}
+		owner, name := parts[0], strings.TrimSuffix(parts[1], ".git")
+		return h + "/" + owner + "/" + name
 	}
-	path := strings.Trim(s[i+len("github.com/"):], "/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		return ""
-	}
-	owner, name := parts[0], strings.TrimSuffix(parts[1], ".git")
-	return "github.com/" + owner + "/" + name
+	return ""
 }
 
-// splitOwnerRepo returns (owner, name) for a canonical repo url, or ("","",false).
-func splitOwnerRepo(canonical string) (owner, name string, ok bool) {
-	p := strings.TrimPrefix(canonical, "github.com/")
-	parts := strings.Split(p, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
+// splitRepo returns (host, owner, name) for a canonical repo url, or "","","",false.
+func splitRepo(canonical string) (host, owner, name string, ok bool) {
+	for _, h := range forgeHosts {
+		if !strings.HasPrefix(canonical, h+"/") {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(canonical, h+"/"), "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return "", "", "", false
+		}
+		return h, parts[0], parts[1], true
 	}
-	return parts[0], parts[1], true
+	return "", "", "", false
 }
 
 // parseRepoInput accepts a user-supplied repo string (URL or owner/name), returning
@@ -285,15 +339,11 @@ func parseRepoInput(raw string) (string, error) {
 	if len(raw) > 512 {
 		return "", errInvalidRepo
 	}
-	// Reject control chars / whitespace inside.
-	if strings.ContainsAny(raw, " \t\n\r") && !strings.Contains(strings.TrimSpace(raw), " ") {
-		// allow surrounding whitespace only
-	}
 	canonical := normalizeRepo(raw)
 	if canonical == "" {
 		return "", errInvalidRepo
 	}
-	if _, _, ok := splitOwnerRepo(canonical); !ok {
+	if _, _, _, ok := splitRepo(canonical); !ok {
 		return "", errInvalidRepo
 	}
 	// Final sanity parse of the https form.
@@ -642,11 +692,13 @@ func (s *Store) countBy(ctx context.Context, q string) (map[string]int, error) {
 
 // ── accrual latch (the royalty event, at-most-once per period) ─────────────────
 
-// LatchAccrual atomically records ONE accrual for (author, deployingOrg, period) and
-// adds the earning to the author's accrued balance — in a single transaction. A
-// UNIQUE violation means this period was already accrued (returns false, no error, no
-// double-accrual). Returns won=true only when THIS call created the accrual.
-func (s *Store) LatchAccrual(ctx context.Context, accrualID, authorID, deployingOrg, period string, spendCents, earningCents, now int64) (bool, error) {
+// LatchAccrual atomically records ONE accrual for (author, deployingOrg, period),
+// adds the earning to the author's accrued balance, AND appends the immutable royalty
+// ledger row — all in a single transaction. A UNIQUE violation means this period was
+// already accrued (returns false, no error, no double-accrual). Returns won=true only
+// when THIS call created the accrual. ledgerID/shareBps stamp the ledger row; its
+// compute_proof is written NULL (a hanzod attestation is a follow-up).
+func (s *Store) LatchAccrual(ctx context.Context, accrualID, ledgerID, authorID, deployingOrg, period string, shareBps, spendCents, earningCents, now int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("accrual tx: %w", err)
@@ -667,10 +719,86 @@ func (s *Store) LatchAccrual(ctx context.Context, accrualID, authorID, deploying
 		_ = tx.Rollback()
 		return false, fmt.Errorf("accrue balance: %w", err)
 	}
+	// Append the immutable ledger row (compute_proof NULL — the attestation is a
+	// follow-up). Committed with the accrual so the ledger never diverges from balance.
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO author_ledger (id, author_id, deploying_org, period, share_bps, spend_cents, earning_cents, compute_proof, created_at)
+		 VALUES (?,?,?,?,?,?,?,NULL,?)`,
+		ledgerID, authorID, deployingOrg, period, shareBps, spendCents, earningCents, now); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("append ledger: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("accrual commit: %w", err)
 	}
 	return true, nil
+}
+
+// ── the royalty ledger (append-only, on-chain-ready) ───────────────────────────
+
+const ledgerCols = `id,author_id,deploying_org,period,share_bps,spend_cents,earning_cents,compute_proof,created_at`
+
+func scanLedger(sc interface{ Scan(...any) error }) (LedgerRow, error) {
+	var r LedgerRow
+	err := sc.Scan(&r.ID, &r.AuthorID, &r.DeployingOrg, &r.Period, &r.ShareBps,
+		&r.SpendCents, &r.EarningCents, &r.ComputeProof, &r.CreatedAt)
+	return r, err
+}
+
+// ListLedger returns an author's royalty ledger rows, newest-first, bounded.
+func (s *Store) ListLedger(ctx context.Context, authorID string, limit int) ([]LedgerRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+ledgerCols+` FROM author_ledger WHERE author_id=? ORDER BY created_at DESC LIMIT ?`, authorID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list ledger: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]LedgerRow, 0, 16)
+	for rows.Next() {
+		r, err := scanLedger(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan ledger: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AuthorsDeployedBy returns the DISTINCT APPROVED authors whose VERIFIED repo the
+// given org deployed, EXCLUDING any author whose own org is the deploying org (no
+// self-royalty). This is the per-compute attribution set the unified accrual walk
+// folds over for one source org.
+func (s *Store) AuthorsDeployedBy(ctx context.Context, deployingOrg string, limit int) ([]Author, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT `+authorColsPrefixed("a")+`
+		   FROM authors a
+		   JOIN author_deploy_events d ON d.author_id = a.id
+		   JOIN author_repos r ON r.repo_url = d.repo_url AND r.author_id = a.id AND r.verified = 1
+		  WHERE d.deploying_org = ? AND a.org <> ? AND a.status = ?
+		  ORDER BY a.created_at ASC LIMIT ?`,
+		deployingOrg, deployingOrg, StatusApproved, limit)
+	if err != nil {
+		return nil, fmt.Errorf("authors deployed by %q: %w", deployingOrg, err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]Author, 0, 8)
+	for rows.Next() {
+		a, err := scanAuthor(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan author: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// authorColsPrefixed returns authorCols with each column prefixed by the table alias,
+// for a joined SELECT that must disambiguate columns.
+func authorColsPrefixed(alias string) string {
+	cols := strings.Split(authorCols, ",")
+	for i, c := range cols {
+		cols[i] = alias + "." + c
+	}
+	return strings.Join(cols, ",")
 }
 
 // ── payouts ───────────────────────────────────────────────────────────────────
