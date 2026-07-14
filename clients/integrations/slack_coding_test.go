@@ -37,11 +37,11 @@ func TestParseCoding(t *testing.T) {
 	}{
 		{"api fix the null deref", "api", "fix the null deref", true},
 		{"my-repo.v2   do a thing", "my-repo.v2", "do a thing", true},
-		{"api", "", "", false},              // repo only, no task
-		{"", "", "", false},                 // empty
-		{"bad/repo fix it", "", "", false},  // slash is not a valid repo char
-		{"../etc fix", "", "", false},       // traversal token rejected
-		{"repo    ", "", "", false},         // whitespace-only task
+		{"api", "", "", false},             // repo only, no task
+		{"", "", "", false},                // empty
+		{"bad/repo fix it", "", "", false}, // slash is not a valid repo char
+		{"../etc fix", "", "", false},      // traversal token rejected
+		{"repo    ", "", "", false},        // whitespace-only task
 	}
 	for _, c := range cases {
 		repo, task, ok := parseCoding(c.in)
