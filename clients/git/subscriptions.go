@@ -112,7 +112,7 @@ func subscribe(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listSubscriptions(s *cloud.Service[state], c *zip.Ctx) error {
-	org, _, name, herr := repoScope(s, c)
+	org, project, name, herr := repoScope(s, c)
 	if herr != nil {
 		return herr
 	}
@@ -120,7 +120,7 @@ func listSubscriptions(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	rows, err := store.ListSubscriptions(c.Context(), org, name)
+	rows, err := store.ListSubscriptions(c.Context(), org, project, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
@@ -132,7 +132,7 @@ func listSubscriptions(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func unsubscribe(s *cloud.Service[state], c *zip.Ctx) error {
-	org, _, name, herr := repoScope(s, c)
+	org, project, name, herr := repoScope(s, c)
 	if herr != nil {
 		return herr
 	}
@@ -140,7 +140,7 @@ func unsubscribe(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	deleted, err := store.DeleteSubscription(c.Context(), org, name, strings.TrimSpace(c.Param("id")))
+	deleted, err := store.DeleteSubscription(c.Context(), org, project, name, strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
@@ -214,7 +214,7 @@ func addMirror(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func listMirrors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, _, name, herr := repoScope(s, c)
+	org, project, name, herr := repoScope(s, c)
 	if herr != nil {
 		return herr
 	}
@@ -222,7 +222,7 @@ func listMirrors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	rows, err := store.ListMirrors(c.Context(), org, name)
+	rows, err := store.ListMirrors(c.Context(), org, project, name)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
@@ -234,7 +234,7 @@ func listMirrors(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func deleteMirror(s *cloud.Service[state], c *zip.Ctx) error {
-	org, _, name, herr := repoScope(s, c)
+	org, project, name, herr := repoScope(s, c)
 	if herr != nil {
 		return herr
 	}
@@ -242,7 +242,7 @@ func deleteMirror(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
 	}
-	deleted, err := store.DeleteMirror(c.Context(), org, name, strings.TrimSpace(c.Param("id")))
+	deleted, err := store.DeleteMirror(c.Context(), org, project, name, strings.TrimSpace(c.Param("id")))
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
@@ -255,8 +255,9 @@ func deleteMirror(s *cloud.Service[state], c *zip.Ctx) error {
 // ── validation helpers ───────────────────────────────────────────────────────
 
 // validateMirrorTarget parses + hardens a downstream mirror URL: https only, a
-// host on the mirror allowlist (mirrorHostAllowed), userinfo stripped. Returns the
-// canonical URL + its lowercased host.
+// host on the OUTBOUND-target allowlist (mirrorOutHostAllowed — {github.com,
+// gitlab.com}, the local git host deliberately excluded), userinfo stripped.
+// Returns the canonical URL + its lowercased host.
 func validateMirrorTarget(raw string) (canonical, host string, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -268,24 +269,25 @@ func validateMirrorTarget(raw string) (canonical, host string, err error) {
 	}
 	u.User = nil // credentials ride env-only at push time, never a stored/argv value
 	h := strings.ToLower(u.Hostname())
-	if !mirrorHostAllowed(h) {
+	if !mirrorOutHostAllowed(h) {
 		return "", "", zip.ErrBadRequest("host is not an allowed mirror target")
 	}
 	return u.String(), h, nil
 }
 
-// lifecycleKinds is the wire-name vocabulary a subscription may filter on — the
-// LifecycleEvent.Kind values. A subscription may name any of them; the notifier
-// acts on the subset it delivers (push.landed / deploy.live / deploy.failed).
-var lifecycleKinds = map[string]bool{
+// notifyKinds is the wire-name vocabulary a subscription may filter on — exactly
+// the kinds the notifier DELIVERS. build.started is intentionally absent: it is
+// emitted for other reactors but never posted to Slack, so subscribing to it would
+// be a silent no-op — reject it at subscribe time instead (Red INFO-a).
+var notifyKinds = map[string]bool{
 	string(cloud.LifecyclePushLanded):   true,
-	string(cloud.LifecycleBuildStarted): true,
 	string(cloud.LifecycleDeployLive):   true,
 	string(cloud.LifecycleDeployFailed): true,
 }
 
-// normalizeEvents validates the requested event filter against the known kinds and
-// returns a stable, deduped CSV. Empty (no filter) means every supported kind.
+// normalizeEvents validates the requested event filter against the deliverable
+// kinds and returns a stable, deduped CSV. Empty (no filter) means every
+// deliverable kind.
 func normalizeEvents(events []string) (string, error) {
 	seen := map[string]bool{}
 	var out []string
@@ -294,8 +296,8 @@ func normalizeEvents(events []string) (string, error) {
 		if e == "" {
 			continue
 		}
-		if !lifecycleKinds[e] {
-			return "", zip.ErrBadRequest("unknown event kind: " + e)
+		if !notifyKinds[e] {
+			return "", zip.ErrBadRequest("event kind is not deliverable to Slack: " + e)
 		}
 		if !seen[e] {
 			seen[e] = true
