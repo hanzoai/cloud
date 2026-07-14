@@ -56,60 +56,8 @@ func mcp(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 }
 
-// mcpToolCall dispatches a tool to its connector action's Run. RunContext.Org and
-// the Token closure are pinned to the VALIDATED org — a caller can never invoke a
-// tool against another tenant's credentials. One metered unit + one audit record per
-// call.
-func mcpToolCall(s *cloud.Service[state], c *zip.Ctx, org string, req mcpRequest) error {
-	var p struct {
-		Name      string         `json:"name"`
-		Arguments map[string]any `json:"arguments"`
-	}
-	body, _ := json.Marshal(req.Params)
-	_ = json.Unmarshal(body, &p)
-
-	connector, action, ok := resolveTool(p.Name)
-	if !ok {
-		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32601, "unknown tool: "+p.Name))
-	}
-	_, act, err := lookupAction(connector, action)
-	if err != nil {
-		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32601, err.Error()))
-	}
-
-	// Per-org concurrency bound (LOW-2): the tool executes SYNCHRONOUSLY here, so a
-	// burst of core.delay calls would otherwise pin a goroutine each for up to the
-	// delay cap. Held across Run, released after.
-	if !orgRunLimiter.acquire(org) {
-		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32005, "too many concurrent tool calls for this org"))
-	}
-	defer orgRunLimiter.release(org)
-
-	ctx := c.Context()
-	rc := RunContext{
-		Org:   org,
-		Input: p.Arguments,
-		Token: func(secretName string) ([]byte, error) {
-			return tokenSource(ctx, org, connector, secretName)
-		},
-	}
-
-	// Meter + audit AFTER Run, deriving the outcome from the real result (LOW-1): a
-	// failed / SSRF-blocked / not-connected call is audited as an error and is NOT
-	// billed as a successful unit.
-	out, err := act.Run(ctx, rc)
-	if err != nil {
-		auditEvent(s, c, org, "automations.mcp.call", p.Name, "error", http.StatusFailedDependency)
-		return c.JSON(http.StatusOK, mcpErrorObj(req.ID, -32000, err.Error()))
-	}
-	meterUnit(s, org, c)
-	auditEvent(s, c, org, "automations.mcp.call", p.Name, "ok", http.StatusOK)
-
-	text, _ := json.Marshal(out)
-	return c.JSON(http.StatusOK, mcpResultObj(req.ID, map[string]any{
-		"content": []map[string]any{{"type": "text", "text": string(text)}},
-	}))
-}
+// mcpToolCall (the tools/call arm) lives in invoke.go — it shares the ONE tool
+// dispatch core with the in-process InvokeTool seam.
 
 // mcpTools is the tool catalogue: every connector action, name "<connector>_<action>",
 // with an input schema derived from its Props. Stable order (sorted).
