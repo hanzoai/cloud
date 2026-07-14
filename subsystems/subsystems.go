@@ -86,6 +86,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
 	"github.com/hanzoai/cloud/clients/marketing"
+	"github.com/hanzoai/cloud/clients/marketplace"
 	"github.com/hanzoai/cloud/clients/ml"
 	"github.com/hanzoai/cloud/clients/notify"
 	"github.com/hanzoai/cloud/clients/o11y"
@@ -109,6 +110,7 @@ import (
 	"github.com/hanzoai/cloud/clients/tasks"
 	"github.com/hanzoai/cloud/clients/team"
 	"github.com/hanzoai/cloud/clients/templates"
+	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/hanzoai/cloud/clients/tracker"
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/hanzoai/cloud/clients/usage"
@@ -275,6 +277,15 @@ func Wire() []cloud.MountSpec {
 		// engine is wired.
 		{Name: "cron", Mount: cloud.Typed(cron.Mount)},
 		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
+		// Unified tool plane: /v1/tools/* — the ONE registry (connectors, functions,
+		// agents, skills, external MCP servers, full-cloud-control /v1 routes), per-org
+		// activation, and the unified MCP endpoint. Sources register into it from their
+		// own Mounts, so mount position is not load-bearing (List/Dispatch run at request
+		// time); placed after automations, before the zen/ai catch-all so /v1/tools wins.
+		{Name: "tools", Mount: cloud.Typed(tools.Mount), Shutdown: tools.Shutdown},
+		// Marketplace: /v1/marketplace/* — listing/discovery/install over the tool plane,
+		// with x402-priced monetized listings. Mounts after tools (it fills the price seam).
+		{Name: "marketplace", Mount: cloud.Typed(marketplace.Mount), Shutdown: marketplace.Shutdown},
 		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
