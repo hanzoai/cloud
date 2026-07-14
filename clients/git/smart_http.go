@@ -147,14 +147,15 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 	before := branchTips(c.Context(), bareDir)
 
-	cmd, err := gitCmd(c.Context(), gitProtocolEnv(gitProtocol(c)), packSubcommand(svcReceivePack), "--stateless-rpc", bareDir)
+	cmd, err := gitCmd(c.Context(), gitProtocolEnv(gitProtocol(c)),
+		append(packConfigArgs(svcReceivePack), packSubcommand(svcReceivePack), "--stateless-rpc", bareDir)...)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	var report bytes.Buffer
 	stderr := &cappedBuffer{cap: stderrCap}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = body, &report, stderr
-	runErr := cmd.Run()
+	runErr := withPackSlot(c.Context(), cmd.Run)
 
 	// The pack has landed on disk; meter + fire builds on a cancel-immune context
 	// (the branch diff is ground truth, so it runs even on a non-zero exit).
