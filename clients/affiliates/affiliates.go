@@ -50,12 +50,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/treasury"
@@ -66,8 +68,9 @@ import (
 // payout lands in the commerce Credit/trial bucket (grant:* → Credit per DepositKind),
 // distinct from grant:referral / grant:admin only by its tag.
 const (
-	// defaultRateBps is the commission rate a new affiliate gets, in basis points
-	// (2000 = 20% of a referred org's metered spend).
+	// defaultRateBps is the DIRECT (L1) commission rate a new affiliate gets, in
+	// basis points (2000 = 20% of a referred org's metered spend). It is also the
+	// affiliate's own negotiable rate applied at the first upline level.
 	defaultRateBps int64 = 2000
 	// bpsDenom converts basis points to a fraction (spend × rateBps / 10000).
 	bpsDenom int64 = 10000
@@ -81,6 +84,35 @@ const (
 	// other method (wire/paypal/check/…) is a record-only cash disbursement.
 	methodCredits = "credits"
 )
+
+// The MULTI-LEVEL upline schedule — the ONE place the level economics live. A
+// source org's metered spend pays commission UP its referredBy chain, capped at
+// maxDepth levels. Level 1 (the direct referrer) is paid at the affiliate's OWN
+// rate (defaultRateBps unless negotiated); levels 2 and 3 are paid at these platform
+// constants. Beyond maxDepth, nothing accrues.
+const (
+	// maxDepth is the upline depth cap: L1 (direct), L2, L3.
+	maxDepth = 3
+	// l2RateBps / l3RateBps are the second- and third-level rates (5% / 2%).
+	l2RateBps int64 = 500
+	l3RateBps int64 = 200
+)
+
+// levelRateBps is the commission rate for a source org's spend at upline `level`
+// (1-indexed) accruing to affiliate `a`: L1 uses the affiliate's own rate, L2/L3 use
+// the platform constants. A level outside [1,maxDepth] earns nothing.
+func levelRateBps(level int, a Affiliate) int64 {
+	switch level {
+	case 1:
+		return a.RateBps
+	case 2:
+		return l2RateBps
+	case 3:
+		return l3RateBps
+	default:
+		return 0
+	}
+}
 
 const (
 	// sweepLimit bounds one accrual sweep (admin sweep + lazy-on-read) so an
@@ -140,9 +172,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // /:id/* param routes (distinct segment counts).
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/affiliates", cloud.Handle(s, myAffiliates))
+	app.Get("/v1/affiliates/me", cloud.Handle(s, myAffiliatesMe))
 	app.Post("/v1/affiliates/apply", cloud.Handle(s, apply))
 	app.Post("/v1/affiliates/attribute", cloud.Handle(s, attribute))
 	app.Get("/v1/admin/affiliates", cloud.Handle(s, adminList))
+	// The unified SuperAdmin referral analytics board (cross-tenant): top referrers,
+	// conversion, and the multi-level accrual liability. It reads the ONE attribution
+	// spine the affiliate accrual is built on.
+	app.Get("/v1/admin/referrals", cloud.Handle(s, adminReferrals))
 	app.Post("/v1/admin/affiliates/sweep", cloud.Handle(s, adminSweep))
 	app.Post("/v1/admin/affiliates/:id/approve", cloud.Handle(s, adminApprove))
 	app.Post("/v1/admin/affiliates/:id/suspend", cloud.Handle(s, adminSuspend))
@@ -211,6 +248,94 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
+// levelView is one row of an affiliate's downline broken out by upline level: the
+// level (1=direct, 2, 3), the commission rate paid at that level, and how many orgs
+// sit at that level below the affiliate.
+type levelView struct {
+	Level         int   `json:"level"`
+	RateBps       int64 `json:"rateBps"`
+	DownlineCount int   `json:"downlineCount"`
+}
+
+// myAffiliatesMe answers GET /v1/affiliates/me — the richer self-view the console's
+// affiliate dashboard reads: my code + link, my downline broken out by upline level
+// (L1/L2/L3 with each level's rate + count), and lifetime accrued/pending/paid +
+// payouts. Like GET /v1/affiliates it opportunistically refreshes accrual for an
+// approved affiliate so the dashboard is self-updating.
+func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return zip.ErrForbidden("sign in to view your affiliate program")
+	}
+	ctx := c.Context()
+
+	a, err := s.State.store.GetByOrg(ctx, org)
+	if err == errNotFound {
+		return c.JSON(http.StatusOK, map[string]any{
+			"isAffiliate":    false,
+			"defaultRateBps": defaultRateBps,
+			"schedule":       uplineSchedule(defaultRateBps),
+		})
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "load affiliate: %v", err)
+	}
+
+	if a.Status == StatusApproved {
+		if _, _, serr := sweepAffiliate(s, ctx, a); serr != nil {
+			s.Log.Warn("affiliates: lazy sweep failed", "affiliate", a.ID, "err", serr)
+		}
+		if refreshed, rerr := s.State.store.GetByID(ctx, a.ID); rerr == nil {
+			a = refreshed
+		}
+	}
+
+	downline, err := s.State.store.DownlineByLevel(ctx, a.Org, maxDepth)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "downline: %v", err)
+	}
+	var perLevel [maxDepth]int
+	for _, lvl := range downline {
+		if lvl >= 1 && lvl <= maxDepth {
+			perLevel[lvl-1]++
+		}
+	}
+	levels := make([]levelView, 0, maxDepth)
+	for lvl := 1; lvl <= maxDepth; lvl++ {
+		levels = append(levels, levelView{Level: lvl, RateBps: levelRateBps(lvl, a), DownlineCount: perLevel[lvl-1]})
+	}
+	payouts, err := s.State.store.ListPayouts(ctx, a.ID, payoutLimit)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"isAffiliate":   true,
+		"id":            a.ID,
+		"status":        a.Status,
+		"code":          a.Code,
+		"link":          affiliateLink(s, a.Code),
+		"rateBps":       a.RateBps,
+		"levels":        levels,
+		"downlineTotal": len(downline),
+		"accruedCents":  a.AccruedCents,
+		"pendingCents":  a.PendingCents(),
+		"paidCents":     a.PaidCents,
+		"payouts":       payoutViews(payouts),
+	})
+}
+
+// uplineSchedule renders the level rate schedule for a non-enrolled caller's /me view
+// so the console can show "what you'd earn": L1 at the given direct rate, L2/L3 at
+// the platform constants.
+func uplineSchedule(directRateBps int64) []levelView {
+	return []levelView{
+		{Level: 1, RateBps: directRateBps},
+		{Level: 2, RateBps: l2RateBps},
+		{Level: 3, RateBps: l3RateBps},
+	}
+}
+
 // applyRequest is the POST /v1/affiliates/apply body: an optional requested vanity
 // code (staff approves + mints it).
 type applyRequest struct {
@@ -239,7 +364,7 @@ func apply(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	a, created, err := s.State.store.Apply(ctx, id, org, code, defaultRateBps)
+	a, created, err := s.State.store.Apply(ctx, id, org, strings.TrimSpace(c.User()), code, defaultRateBps)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "apply: %v", err)
 	}
@@ -299,11 +424,25 @@ func attribute(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	edge, created, err := s.State.store.Attribute(ctx, id, aff.ID, referredOrg, aff.Org, code)
 	if err != nil {
-		if err == errSelfAttribution {
+		switch err {
+		case errSelfAttribution:
 			return zip.ErrBadRequest("cannot attribute yourself")
+		case errCycle:
+			return zip.ErrBadRequest("that code would create a cycle in the referral upline")
+		default:
+			return zip.Errorf(http.StatusInternalServerError, "attribute: %v", err)
 		}
-		return zip.Errorf(http.StatusInternalServerError, "attribute: %v", err)
 	}
+
+	// Mirror the edge at the USER level (set-once, cycle-checked): the referee's user
+	// → the affiliate's owner user. Best-effort — a user-graph conflict (self/cycle/
+	// already-referred) never fails the org attribution, which is the money-bearing one.
+	if refereeUser := strings.TrimSpace(c.User()); refereeUser != "" && aff.OwnerUser != "" {
+		if _, uerr := s.State.store.SetUserReferrer(ctx, refereeUser, aff.OwnerUser, code); uerr != nil && uerr != errSelfAttribution && uerr != errCycle {
+			s.Log.Warn("affiliates: user-referral edge failed", "referee", refereeUser, "err", uerr)
+		}
+	}
+
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
@@ -340,6 +479,87 @@ func adminList(s *cloud.Service[state], c *zip.Ctx) error {
 		views = append(views, adminViewOf(a, counts[a.ID]))
 	}
 	return adminOK(c, map[string]any{"affiliates": views, "summary": sum})
+}
+
+// referrerRow is one row of the top-referrers leaderboard on the analytics board.
+type referrerRow struct {
+	Org           string `json:"org"`
+	Code          string `json:"code"`
+	Status        string `json:"status"`
+	ReferredCount int    `json:"referredCount"`
+	AccruedCents  int64  `json:"accruedCents"`
+	PendingCents  int64  `json:"pendingCents"`
+}
+
+// topReferrersLimit bounds the leaderboard on the analytics board.
+const topReferrersLimit = 25
+
+// adminReferrals answers GET /v1/admin/referrals — the unified SuperAdmin, cross-
+// tenant referral analytics over the ONE attribution spine: the top referrers
+// (by lifetime commission), the funnel conversion (referred orgs that have produced
+// commission ÷ all referred orgs), and the accrual LIABILITY the platform owes,
+// broken out by upline level. SuperAdmin only, fail-closed.
+func adminReferrals(s *cloud.Service[state], c *zip.Ctx) error {
+	if !c.IsAdmin() {
+		return zip.ErrForbidden("SuperAdmin required")
+	}
+	ctx := c.Context()
+	rows, err := s.State.store.ListAll(ctx, maxAdminLimit)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list affiliates: %v", err)
+	}
+	counts, err := s.State.store.ReferralCountsByAffiliate(ctx)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "count referrals: %v", err)
+	}
+	total, converted, err := s.State.store.ReferredOrgCounts(ctx)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "conversion: %v", err)
+	}
+	byLevel, err := s.State.store.AccruedByLevel(ctx)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "accrued by level: %v", err)
+	}
+
+	// Fleet totals + the top-referrer leaderboard (by lifetime commission accrued).
+	sum := adminSummary{}
+	leaders := make([]referrerRow, 0, len(rows))
+	for _, a := range rows {
+		sum.add(a)
+		leaders = append(leaders, referrerRow{
+			Org: a.Org, Code: a.Code, Status: a.Status, ReferredCount: counts[a.ID],
+			AccruedCents: a.AccruedCents, PendingCents: a.PendingCents(),
+		})
+	}
+	sort.Slice(leaders, func(i, j int) bool { return leaders[i].AccruedCents > leaders[j].AccruedCents })
+	if len(leaders) > topReferrersLimit {
+		leaders = leaders[:topReferrersLimit]
+	}
+
+	var ratePct float64
+	if total > 0 {
+		ratePct = float64(converted) / float64(total) * 100
+	}
+	return adminOK(c, map[string]any{
+		"summary": map[string]any{
+			"affiliates":            sum.Total,
+			"approved":              sum.Approved,
+			"accruedLifetimeCents":  sum.AccruedCents,
+			"pendingLiabilityCents": sum.PendingCents, // what the platform owes but hasn't paid
+			"paidLifetimeCents":     sum.PaidCents,
+		},
+		"conversion": map[string]any{
+			"referredOrgs":  total,
+			"convertedOrgs": converted,
+			"ratePct":       ratePct,
+		},
+		"accrualByLevel": map[string]any{
+			"l1Cents": byLevel[1],
+			"l2Cents": byLevel[2],
+			"l3Cents": byLevel[3],
+		},
+		"topReferrers": leaders,
+	})
 }
 
 // adminApprove answers POST /v1/admin/affiliates/:id/approve — approve + mint the
@@ -496,59 +716,127 @@ func adminSweep(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("SuperAdmin required")
 	}
 	ctx := c.Context()
-	approved, err := s.State.store.ListApproved(ctx, sweepLimit)
+	sources, err := s.State.store.AllReferredOrgs(ctx, sweepLimit)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list approved: %v", err)
-	}
-	swept, accrued := 0, 0
-	for _, a := range approved {
-		checked, credited, serr := sweepAffiliate(s, ctx, a)
-		swept += checked
-		accrued += credited
-		if serr != nil {
-			s.Log.Warn("affiliates: sweep affiliate failed", "affiliate", a.ID, "err", serr)
-		}
-	}
-	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued})
-}
-
-// ── accrual core (the ONE commission path, shared by sweep + lazy read) ────────
-
-// sweepAffiliate folds over one affiliate's referred orgs and accrues this period's
-// commission for each (spend × rate), latched at-most-once per period. Returns
-// (edges checked, accruals created). A per-edge commerce error is skipped (accrued
-// next sweep) rather than failing the whole fold.
-func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (checked, created int, err error) {
-	edges, err := s.State.store.ListReferrals(ctx, a.ID, sweepLimit)
-	if err != nil {
-		return 0, 0, err
+		return zip.Errorf(http.StatusInternalServerError, "list sources: %v", err)
 	}
 	period := periodKey(time.Now())
 	now := time.Now().Unix()
-	for _, edge := range edges {
-		checked++
-		spend, serr := s.State.commerce.spendCents(ctx, edge.ReferredOrg, orgSubject(edge.ReferredOrg))
+	swept, accrued, royalties := 0, 0, 0
+	for _, src := range sources {
+		swept++
+		// Read the source org's metered spend ONCE, then fan out to BOTH the affiliate
+		// upline and the OSS-author royalty — the one accrual walk, one spend read.
+		spend, serr := s.State.commerce.spendCents(ctx, src, orgSubject(src))
 		if serr != nil {
-			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", serr)
+			s.Log.Warn("affiliates: spend read failed", "source", src, "err", serr)
 			continue
 		}
-		commission := spend * a.RateBps / bpsDenom
+		if spend <= 0 {
+			continue
+		}
+		n, aerr := accrueSource(s, ctx, src, spend, period, now)
+		if aerr != nil {
+			s.Log.Warn("affiliates: upline accrual failed", "source", src, "err", aerr)
+		}
+		accrued += n
+		royalties += authors.AccrueForOrg(ctx, src, spend, period, now)
+	}
+	return adminOK(c, map[string]any{"swept": swept, "accrued": accrued, "royaltiesAccrued": royalties})
+}
+
+// ── accrual core (the ONE multi-level walk, shared by sweep + lazy read) ───────
+
+// accrueSource is the heart of the walk: for ONE source org's already-read metered
+// spend this period, it climbs the source's referredBy chain up to maxDepth and
+// accrues commission to each ancestor's APPROVED affiliate at that level's rate,
+// latched at-most-once per (affiliate, source, period). This is the SAME step the
+// admin sweep runs for every source and the OSS-author royalty folds alongside (the
+// caller reads spend once and drives both). Returns the count of NEW accruals.
+func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string, spend int64, period string, now int64) (created int, err error) {
+	if spend <= 0 {
+		return 0, nil
+	}
+	upline, err := s.State.store.UplineOrgs(ctx, sourceOrg, maxDepth)
+	if err != nil {
+		return 0, err
+	}
+	for i, ancestorOrg := range upline {
+		level := i + 1 // 1 = direct referrer, 2, 3
+		aff, gerr := s.State.store.GetByOrg(ctx, ancestorOrg)
+		if gerr == errNotFound {
+			continue // an ancestor with no affiliate record earns nothing; the climb still counts its level
+		}
+		if gerr != nil {
+			s.Log.Warn("affiliates: upline affiliate load failed", "ancestor", ancestorOrg, "err", gerr)
+			continue
+		}
+		if aff.Status != StatusApproved {
+			continue // only an approved affiliate accrues
+		}
+		commission := spend * levelRateBps(level, aff) / bpsDenom
 		if commission <= 0 {
-			continue // no spend to accrue yet this period
+			continue
 		}
 		accrualID, gerr := genID("aca")
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, edge.ReferredOrg, period, spend, commission, now)
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, commission, now)
 		if lerr != nil {
-			s.Log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "referred", edge.ReferredOrg, "err", lerr)
+			s.Log.Warn("affiliates: accrual latch failed", "affiliate", aff.ID, "source", sourceOrg, "err", lerr)
+			continue
+		}
+		if won {
+			created++
+			emitAudit(s, ctx, "affiliate.accrue", aff, map[string]any{
+				"sourceOrg": sourceOrg, "period": period, "level": level,
+				"spendCents": spend, "commissionCents": commission,
+			})
+		}
+	}
+	return created, nil
+}
+
+// sweepAffiliate refreshes ONE affiliate's accrual for the dashboard read: it walks
+// DOWN the affiliate's referredBy subtree to maxDepth and accrues this period's
+// commission from each downline source at that source's level, latched at-most-once.
+// It is the per-affiliate mirror of the source-centric admin sweep (same latch key,
+// so the two never double-accrue). Returns (sources checked, accruals created).
+func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (checked, created int, err error) {
+	if a.Status != StatusApproved {
+		return 0, 0, nil
+	}
+	downline, err := s.State.store.DownlineByLevel(ctx, a.Org, maxDepth)
+	if err != nil {
+		return 0, 0, err
+	}
+	period := periodKey(time.Now())
+	now := time.Now().Unix()
+	for src, level := range downline {
+		checked++
+		spend, serr := s.State.commerce.spendCents(ctx, src, orgSubject(src))
+		if serr != nil {
+			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "source", src, "err", serr)
+			continue
+		}
+		commission := spend * levelRateBps(level, a) / bpsDenom
+		if commission <= 0 {
+			continue
+		}
+		accrualID, gerr := genID("aca")
+		if gerr != nil {
+			continue
+		}
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, src, period, level, spend, commission, now)
+		if lerr != nil {
+			s.Log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "source", src, "err", lerr)
 			continue
 		}
 		if won {
 			created++
 			emitAudit(s, ctx, "affiliate.accrue", a, map[string]any{
-				"referredOrg": edge.ReferredOrg, "period": period,
+				"sourceOrg": src, "period": period, "level": level,
 				"spendCents": spend, "commissionCents": commission,
 			})
 		}

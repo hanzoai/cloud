@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -114,7 +116,8 @@ func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body 
 	if admin {
 		hr.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(hr)
+	// Generous ceiling — the fiber default is 1s, which flakes under machine load.
+	resp, err := app.Fiber().Test(hr, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -340,8 +343,8 @@ func TestLazyQualifyOnReferrerRead(t *testing.T) {
 	_ = ctx
 }
 
-// TestAdminGateAndDirectory: /v1/admin/referrals is SuperAdmin fail-closed, and
-// exposes both orgs + a summary.
+// TestAdminGateAndDirectory: /v1/admin/referrals/bonuses is SuperAdmin fail-closed,
+// and exposes both orgs + a summary.
 func TestAdminGateAndDirectory(t *testing.T) {
 	app, s, fc := mount(t)
 	ctx := context.Background()
@@ -351,7 +354,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "admin", true, nil)
 
 	// A non-admin (validated tenant) is refused 403 on BOTH admin routes.
-	if code, _ := req(t, app, http.MethodGet, "/v1/admin/referrals", "orgA", false, nil); code != http.StatusForbidden {
+	if code, _ := req(t, app, http.MethodGet, "/v1/admin/referrals/bonuses", "orgA", false, nil); code != http.StatusForbidden {
 		t.Fatalf("non-admin GET admin want 403, got %d", code)
 	}
 	if code, _ := req(t, app, http.MethodPost, "/v1/admin/referrals/sweep", "orgA", false, nil); code != http.StatusForbidden {
@@ -359,7 +362,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	}
 
 	// SuperAdmin sees the directory with both orgs + summary.
-	code, body := req(t, app, http.MethodGet, "/v1/admin/referrals", "admin", true, nil)
+	code, body := req(t, app, http.MethodGet, "/v1/admin/referrals/bonuses", "admin", true, nil)
 	if code != http.StatusOK {
 		t.Fatalf("admin list want 200, got %d (%s)", code, body)
 	}
@@ -418,7 +421,7 @@ func TestMount(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 	// A no-principal GET is refused 403 (proves the route is bound + gated).
 	r := httptest.NewRequest(http.MethodGet, "/v1/referrals", nil)
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}

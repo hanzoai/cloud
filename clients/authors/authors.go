@@ -70,9 +70,9 @@ import (
 // payout lands in the commerce Credit/trial bucket (grant:* → Credit per DepositKind),
 // distinct from grant:referral / grant:affiliate / grant:admin only by its tag.
 const (
-	// defaultShareBps is the royalty a new author earns, in basis points (500 = 5%
+	// defaultShareBps is the royalty a new author earns, in basis points (2500 = 25%
 	// of a deploying org's metered platform spend). The ONE royalty constant.
-	defaultShareBps int64 = 500
+	defaultShareBps int64 = 2500
 	// bpsDenom converts basis points to a fraction (spend × shareBps / 10000).
 	bpsDenom int64 = 10000
 	// grantCurrency is the ledger currency for a credits payout.
@@ -101,13 +101,14 @@ const (
 	repoLimit     = 200
 	deployLimit   = 200
 	payoutLimit   = 100
+	ledgerLimit   = 200
 )
 
 // state is authors' own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	store      *Store
 	commerce   commerce
-	github     github
+	forge      forge
 	badgeBase  string          // https://hanzo.app — the Deploy-on-Hanzo badge/link host
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
@@ -136,7 +137,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		store:      store,
 		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
-		github:     newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
+		forge:      newGitHubClient(os.Getenv("CLOUD_IAM_HTTP_URL"), os.Getenv("IAM_SERVICE_TOKEN")),
 		badgeBase:  badgeBase(deps),
 		auditStore: deps.Audit,
 	}}
@@ -211,6 +212,10 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list payouts: %v", err)
 	}
+	ledger, err := s.State.store.ListLedger(ctx, a.ID, ledgerLimit)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "list ledger: %v", err)
+	}
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"isAuthor":      true,
@@ -229,13 +234,17 @@ func myAuthors(s *cloud.Service[state], c *zip.Ctx) error {
 		"pendingCents":  a.PendingCents(),
 		"paidCents":     a.PaidCents,
 		"payouts":       payoutViews(payouts),
+		"ledger":        ledger,
 	})
 }
 
-// connectRequest is the POST /v1/authors/connect body: an optional GitHub login used
-// only when IAM has no linked GitHub account for the caller.
+// connectRequest is the POST /v1/authors/connect body: the forge provider (github or
+// gitlab, default github) and an optional login used only when IAM has no linked
+// account for that provider.
 type connectRequest struct {
+	Provider    string `json:"provider"`
 	GithubLogin string `json:"githubLogin"`
+	Login       string `json:"login"` // generic alias for githubLogin (any provider)
 }
 
 // connect enrolls the validated caller's org as an author at status=connected,
@@ -253,18 +262,19 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 	userSub := strings.TrimSpace(c.User())
+	provider := normalizeProvider(body.Provider)
 
-	// Prefer IAM's linked GitHub identity (strong proof of the login).
-	login := normalizeLogin(body.GithubLogin)
+	// Prefer IAM's linked forge identity for the provider (strong proof of the login).
+	login := normalizeLogin(firstNonEmpty(body.Login, body.GithubLogin))
 	identityVerified := false
-	if l, _, linked, lerr := s.State.github.linkedAccount(ctx, org, userSub); lerr != nil {
-		s.Log.Warn("authors: linked-account lookup failed", "org", org, "err", lerr)
+	if l, _, linked, lerr := s.State.forge.linkedAccount(ctx, provider, org, userSub); lerr != nil {
+		s.Log.Warn("authors: linked-account lookup failed", "org", org, "provider", provider, "err", lerr)
 	} else if linked && l != "" {
 		login = normalizeLogin(l)
 		identityVerified = true
 	}
 	if login == "" {
-		return zip.ErrBadRequest("githubLogin is required (no linked GitHub account found)")
+		return zip.ErrBadRequest("login is required (no linked " + provider + " account found)")
 	}
 
 	id, err := genID("aut")
@@ -316,24 +326,24 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	repoURL, perr := parseRepoInput(body.RepoURL)
 	if perr != nil {
-		return zip.ErrBadRequest("repoUrl must be a GitHub repo (github.com/owner/name)")
+		return zip.ErrBadRequest("repoUrl must be a GitHub or GitLab repo (github.com/owner/name or gitlab.com/owner/name)")
 	}
 	ctx := c.Context()
 
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
-		return zip.ErrBadRequest("connect GitHub before verifying a repo")
+		return zip.ErrBadRequest("connect a forge account before verifying a repo")
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "load author: %v", err)
 	}
 
-	owner, name, _ := splitOwnerRepo(repoURL)
-	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), owner, name)
+	host, owner, name, _ := splitRepo(repoURL)
+	method, verified := proveOwnership(s, ctx, a, org, strings.TrimSpace(c.User()), host, owner, name)
 	if !verified {
 		return zip.Errorf(http.StatusUnprocessableEntity,
-			"could not verify ownership of %s — grant the Hanzo GitHub app OR add %s containing your verify code (%s) to the default branch",
-			repoURL, verifyFile, a.VerifyCode)
+			"could not verify ownership of %s — grant the Hanzo %s app OR add %s containing your verify code (%s) to the default branch",
+			repoURL, providerForHost(host), verifyFile, a.VerifyCode)
 	}
 
 	repoID, err := genID("arp")
@@ -358,23 +368,24 @@ func verifyRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// proveOwnership tries the two verification methods in order (oauth, then file) and
-// returns the method that succeeded + whether it did.
-func proveOwnership(s *cloud.Service[state], ctx context.Context, a Author, org, userSub, owner, name string) (method string, verified bool) {
-	// Method 1: IAM-linked GitHub token → admin/push permission on the repo.
-	if login, token, linked, lerr := s.State.github.linkedAccount(ctx, org, userSub); lerr == nil && linked && token != "" {
-		if admin, aerr := s.State.github.repoAdmin(ctx, token, owner, name); aerr == nil && admin {
+// proveOwnership tries the two verification methods in order (oauth, then file) on the
+// repo's forge (host → provider) and returns the method that succeeded + whether it did.
+func proveOwnership(s *cloud.Service[state], ctx context.Context, a Author, org, userSub, host, owner, name string) (method string, verified bool) {
+	provider := providerForHost(host)
+	// Method 1: IAM-linked forge token → admin/push permission on the repo.
+	if login, token, linked, lerr := s.State.forge.linkedAccount(ctx, provider, org, userSub); lerr == nil && linked && token != "" {
+		if admin, aerr := s.State.forge.repoAdmin(ctx, host, token, owner, name); aerr == nil && admin {
 			return MethodOAuth, true
 		} else if aerr != nil {
-			s.Log.Warn("authors: repoAdmin check failed", "repo", owner+"/"+name, "err", aerr)
+			s.Log.Warn("authors: repoAdmin check failed", "repo", host+"/"+owner+"/"+name, "err", aerr)
 		}
 		_ = login
 	}
 	// Method 2: hanzo.json on the default branch containing the verify code.
 	for _, branch := range verifyBranches {
-		file, ferr := s.State.github.fetchFile(ctx, owner, name, branch, verifyFile)
+		file, ferr := s.State.forge.fetchFile(ctx, host, owner, name, branch, verifyFile)
 		if ferr != nil {
-			s.Log.Warn("authors: fetch verify file failed", "repo", owner+"/"+name, "branch", branch, "err", ferr)
+			s.Log.Warn("authors: fetch verify file failed", "repo", host+"/"+owner+"/"+name, "branch", branch, "err", ferr)
 			continue
 		}
 		if len(file) > 0 && fileProvesCode(file, a.VerifyCode) {
@@ -382,6 +393,25 @@ func proveOwnership(s *cloud.Service[state], ctx context.Context, a Author, org,
 		}
 	}
 	return "", false
+}
+
+// normalizeProvider trims + lowercases a provider name and defaults empty → github.
+func normalizeProvider(p string) string {
+	p = strings.ToLower(strings.TrimSpace(p))
+	if p == ProviderGitLab {
+		return ProviderGitLab
+	}
+	return ProviderGitHub
+}
+
+// firstNonEmpty returns the first non-empty trimmed string, or "".
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // recordDeployRequest is the POST /v1/authors/deploys/record body: the sourceRepo a
@@ -666,28 +696,69 @@ func sweepAuthor(s *cloud.Service[state], ctx context.Context, a Author) (checke
 			s.Log.Warn("authors: spend read failed", "author", a.ID, "deployingOrg", dorg, "err", serr)
 			continue
 		}
-		earning := spend * a.ShareBps / bpsDenom
-		if earning <= 0 {
-			continue // no spend to accrue yet this period
-		}
-		accrualID, gerr := genID("aca")
-		if gerr != nil {
-			continue
-		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, dorg, period, spend, earning, now)
-		if lerr != nil {
-			s.Log.Warn("authors: accrual latch failed", "author", a.ID, "deployingOrg", dorg, "err", lerr)
-			continue
-		}
-		if won {
+		if accrueOne(s, ctx, a, dorg, spend, period, now) {
 			created++
-			emitAudit(s, ctx, "author.accrue", a, map[string]any{
-				"deployingOrg": dorg, "period": period,
-				"spendCents": spend, "earningCents": earning,
-			})
 		}
 	}
 	return checked, created, nil
+}
+
+// accrueOne latches ONE author's royalty for a deploying org's already-read spend
+// this period (earning = spend × share), appending the immutable ledger row, at-most-
+// once per (author, org, period). Returns true when THIS call created the accrual.
+// It is the ONE royalty step shared by the standalone author sweep, the lazy dashboard
+// read, and the unified affiliate-walk fold (AccrueForOrg).
+func accrueOne(s *cloud.Service[state], ctx context.Context, a Author, deployingOrg string, spend int64, period string, now int64) bool {
+	earning := spend * a.ShareBps / bpsDenom
+	if earning <= 0 {
+		return false // no spend to accrue yet this period
+	}
+	accrualID, err := genID("aca")
+	if err != nil {
+		return false
+	}
+	ledgerID, err := genID("alg")
+	if err != nil {
+		return false
+	}
+	won, lerr := s.State.store.LatchAccrual(ctx, accrualID, ledgerID, a.ID, deployingOrg, period, a.ShareBps, spend, earning, now)
+	if lerr != nil {
+		s.Log.Warn("authors: accrual latch failed", "author", a.ID, "deployingOrg", deployingOrg, "err", lerr)
+		return false
+	}
+	if won {
+		emitAudit(s, ctx, "author.accrue", a, map[string]any{
+			"deployingOrg": deployingOrg, "period": period,
+			"spendCents": spend, "earningCents": earning, "shareBps": a.ShareBps,
+		})
+	}
+	return won
+}
+
+// AccrueForOrg is the seam the unified affiliate accrual walk calls once per source
+// org (with the spend it already read): it accrues royalty to EVERY approved author
+// whose verified repo that org deployed (excluding the author's own org), latched
+// at-most-once per (author, org, period). It resolves the mounted authors singleton;
+// when authors is NOT mounted (a partial deploy, or an affiliates unit test that does
+// not wire authors) it is a no-op returning 0 — the same degrade-gracefully contract
+// treasury.Reserve uses. Returns the number of NEW royalty accruals latched.
+func AccrueForOrg(ctx context.Context, deployingOrg string, spend int64, period string, now int64) int {
+	s := mounted
+	if s == nil || s.State.store == nil || spend <= 0 {
+		return 0
+	}
+	authors, err := s.State.store.AuthorsDeployedBy(ctx, deployingOrg, sweepLimit)
+	if err != nil {
+		s.Log.Warn("authors: AccrueForOrg lookup failed", "deployingOrg", deployingOrg, "err", err)
+		return 0
+	}
+	created := 0
+	for _, a := range authors {
+		if accrueOne(s, ctx, a, deployingOrg, spend, period, now) {
+			created++
+		}
+	}
+	return created
 }
 
 // ── audit ─────────────────────────────────────────────────────────────────────

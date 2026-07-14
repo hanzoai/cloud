@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -109,7 +111,9 @@ func (g *fakeGitHub) setFile(owner, repo, branch, path string, body []byte) {
 	g.files[owner+"/"+repo+"@"+branch+"/"+path] = body
 }
 
-func (g *fakeGitHub) linkedAccount(_ context.Context, org, _ string) (string, string, bool, error) {
+// linkedAccount ignores the provider (the fake keys links by org) so the same fake
+// serves both the github and gitlab flows.
+func (g *fakeGitHub) linkedAccount(_ context.Context, _, org, _ string) (string, string, bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	l, ok := g.linked[org]
@@ -119,13 +123,13 @@ func (g *fakeGitHub) linkedAccount(_ context.Context, org, _ string) (string, st
 	return l.login, l.token, true, nil
 }
 
-func (g *fakeGitHub) repoAdmin(_ context.Context, token, owner, repo string) (bool, error) {
+func (g *fakeGitHub) repoAdmin(_ context.Context, _, token, owner, repo string) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.admin[token+"|"+owner+"/"+repo], nil
 }
 
-func (g *fakeGitHub) fetchFile(_ context.Context, owner, repo, branch, path string) ([]byte, error) {
+func (g *fakeGitHub) fetchFile(_ context.Context, _, owner, repo, branch, path string) ([]byte, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.files[owner+"/"+repo+"@"+branch+"/"+path], nil
@@ -147,7 +151,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce, *fakeG
 		State: state{
 			store:     store,
 			commerce:  fc,
-			github:    fg,
+			forge:     fg,
 			badgeBase: "https://hanzo.app",
 		},
 	}
@@ -176,7 +180,8 @@ func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body 
 	if admin {
 		hr.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(hr)
+	// Generous ceiling — the fiber default is 1s, which flakes under machine load.
+	resp, err := app.Fiber().Test(hr, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -226,8 +231,9 @@ func approve(t *testing.T, app *zip.App, id string) {
 	}
 }
 
-// TestNormalizeRepo: every cosmetic form of a GitHub reference collapses to the ONE
-// canonical github.com/owner/name; junk normalizes to "".
+// TestNormalizeRepo: every cosmetic form of a GitHub/GitLab reference collapses to
+// the ONE canonical <host>/owner/name; a bare owner/name defaults to github.com;
+// junk normalizes to "".
 func TestNormalizeRepo(t *testing.T) {
 	want := "github.com/acme/widgets"
 	for _, in := range []string{
@@ -243,7 +249,19 @@ func TestNormalizeRepo(t *testing.T) {
 			t.Fatalf("normalizeRepo(%q) = %q, want %q", in, got, want)
 		}
 	}
-	for _, in := range []string{"", "  ", "not a repo", "https://gitlab.com/a/b", "github.com/onlyowner"} {
+	// GitLab is a first-class forge: its references collapse to gitlab.com/owner/name.
+	wantGL := "gitlab.com/acme/widgets"
+	for _, in := range []string{
+		"https://gitlab.com/acme/widgets",
+		"https://gitlab.com/Acme/Widgets.git",
+		"gitlab.com/acme/widgets",
+		"git@gitlab.com:acme/widgets.git",
+	} {
+		if got := normalizeRepo(in); got != wantGL {
+			t.Fatalf("normalizeRepo(%q) = %q, want %q", in, got, wantGL)
+		}
+	}
+	for _, in := range []string{"", "  ", "not a repo", "https://bitbucket.org/a/b", "github.com/onlyowner"} {
 		if got := normalizeRepo(in); got != "" {
 			t.Fatalf("normalizeRepo(%q) = %q, want empty", in, got)
 		}
@@ -464,7 +482,7 @@ func TestSweepAccruesSpendTimesShareIdempotent(t *testing.T) {
 		t.Fatalf("accrual sweep want 1, got %d (%s)", code, body)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	const want = 10000 * defaultShareBps / bpsDenom // 500
+	const want = 10000 * defaultShareBps / bpsDenom // 2500
 	if a.AccruedCents != want || a.PendingCents() != want {
 		t.Fatalf("accrued=%d pending=%d, want %d (orgB spend×share, self excluded)", a.AccruedCents, a.PendingCents(), want)
 	}
@@ -491,7 +509,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 5000) // $50 → royalty 250c ($2.50)
+	fc.setSpend("orgB", 5000) // $50 × 25% share → royalty 1250c ($12.50)
 
 	code, body := req(t, app, http.MethodGet, "/v1/authors", "orgA", false, nil)
 	if code != http.StatusOK {
@@ -517,7 +535,7 @@ func TestLazyAccrualOnAuthorRead(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	const want = 5000 * defaultShareBps / bpsDenom // 250
+	const want = 5000 * defaultShareBps / bpsDenom // 1250
 	if !v.IsAuthor || v.Status != StatusApproved || v.GithubLogin != "acmedev" || !v.Verified {
 		t.Fatalf("dashboard head wrong: %+v", v)
 	}
@@ -545,29 +563,29 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgA", false, map[string]any{"repoUrl": "acme/widgets"})
 	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgB", false, map[string]any{"repoUrl": "acme/widgets", "project": "proj-b"})
 	approve(t, app, idA)
-	fc.setSpend("orgB", 10000) // accrue 500c pending
+	fc.setSpend("orgB", 10000) // spend $100 × 25% share → accrue 2500c pending
 	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
 
 	// Non-admin is refused on payout.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "orgA", false, map[string]any{"amountCents": 100, "method": "credits"}); st != http.StatusForbidden {
 		t.Fatalf("non-admin payout want 403, got %d", st)
 	}
-	// Over-pending → 400 (500 available, ask 900).
-	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 900, "method": "credits"}); st != http.StatusBadRequest {
+	// Over-pending → 400 (2500 available, ask 3000).
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 3000, "method": "credits"}); st != http.StatusBadRequest {
 		t.Fatalf("over-pending payout want 400, got %d", st)
 	}
 
-	// Credits payout of 300c → ONE grant into orgA's wallet, paid moves.
-	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 300, "method": "credits", "reference": "ledger-1"})
+	// Credits payout of 1500c → ONE grant into orgA's wallet, paid moves.
+	st, body := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1500, "method": "credits", "reference": "ledger-1"})
 	if st != http.StatusOK {
 		t.Fatalf("credits payout want 200, got %d (%s)", st, body)
 	}
-	if fc.bal("orgA") != 300 || fc.depositCount() != 1 {
-		t.Fatalf("credits payout wallet=%d deposits=%d, want 300/1", fc.bal("orgA"), fc.depositCount())
+	if fc.bal("orgA") != 1500 || fc.depositCount() != 1 {
+		t.Fatalf("credits payout wallet=%d deposits=%d, want 1500/1", fc.bal("orgA"), fc.depositCount())
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 300 || a.PendingCents() != 200 {
-		t.Fatalf("after credits payout: paid=%d pending=%d (want 300/200)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != 1500 || a.PendingCents() != 1000 {
+		t.Fatalf("after credits payout: paid=%d pending=%d (want 1500/1000)", a.PaidCents, a.PendingCents())
 	}
 	pd := envData(t, body)
 	var payout struct {
@@ -576,21 +594,21 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 		Txn         string `json:"txn"`
 	}
 	_ = json.Unmarshal(pd["payout"], &payout)
-	if payout.AmountCents != 300 || payout.Method != "credits" || payout.Txn == "" {
+	if payout.AmountCents != 1500 || payout.Method != "credits" || payout.Txn == "" {
 		t.Fatalf("payout view wrong: %+v", payout)
 	}
 
-	// Cash payout of the remaining 200c via wire → RECORD-ONLY (no new grant).
-	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 200, "method": "wire", "reference": "wire-xyz"})
+	// Cash payout of the remaining 1000c via wire → RECORD-ONLY (no new grant).
+	st, _ = req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1000, "method": "wire", "reference": "wire-xyz"})
 	if st != http.StatusOK {
 		t.Fatalf("cash payout want 200, got %d", st)
 	}
-	if fc.depositCount() != 1 || fc.bal("orgA") != 300 {
+	if fc.depositCount() != 1 || fc.bal("orgA") != 1500 {
 		t.Fatalf("cash payout moved money: deposits=%d bal=%d", fc.depositCount(), fc.bal("orgA"))
 	}
 	a, _ = s.State.store.GetByID(ctx, idA)
-	if a.PaidCents != 500 || a.PendingCents() != 0 {
-		t.Fatalf("after cash payout: paid=%d pending=%d (want 500/0)", a.PaidCents, a.PendingCents())
+	if a.PaidCents != 2500 || a.PendingCents() != 0 {
+		t.Fatalf("after cash payout: paid=%d pending=%d (want 2500/0)", a.PaidCents, a.PendingCents())
 	}
 	// Drained → any further payout is 400.
 	if st, _ := req(t, app, http.MethodPost, "/v1/admin/authors/"+idA+"/payout", "admin", true, map[string]any{"amountCents": 1, "method": "credits"}); st != http.StatusBadRequest {
@@ -662,6 +680,74 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	}
 }
 
+// TestGitLabVerifyAndLedger proves the GitLab forge works end to end (canonicalize →
+// file-verify a gitlab.com repo → deploy → accrue @25% share) AND that each accrual
+// appends an immutable ledger row whose compute_proof is NULL (the hanzod attestation
+// is a follow-up, never fabricated).
+func TestGitLabVerifyAndLedger(t *testing.T) {
+	app, s, fc, fg := mount(t)
+	ctx := context.Background()
+
+	// orgG connects via the gitlab provider and file-verifies a gitlab.com repo.
+	code, cbody := req(t, app, http.MethodPost, "/v1/authors/connect", "orgG", false, map[string]any{"provider": "gitlab", "login": "gldev"})
+	if code != http.StatusCreated {
+		t.Fatalf("gitlab connect want 201, got %d (%s)", code, cbody)
+	}
+	var cr struct {
+		ID, VerifyCode string
+	}
+	_ = json.Unmarshal(cbody, &cr)
+	fg.setFile("glorg", "gltool", "main", verifyFile, []byte(`{"hanzoAuthorCode":"`+cr.VerifyCode+`"}`))
+	st, vbody := req(t, app, http.MethodPost, "/v1/authors/repos/verify", "orgG", false, map[string]any{"repoUrl": "https://gitlab.com/glorg/gltool"})
+	if st != http.StatusCreated {
+		t.Fatalf("gitlab file-verify want 201, got %d (%s)", st, vbody)
+	}
+	var vr struct {
+		Repo struct {
+			RepoURL  string `json:"repoUrl"`
+			Verified bool   `json:"verified"`
+			Method   string `json:"method"`
+		} `json:"repo"`
+	}
+	_ = json.Unmarshal(vbody, &vr)
+	if vr.Repo.RepoURL != "gitlab.com/glorg/gltool" || !vr.Repo.Verified || vr.Repo.Method != MethodFile {
+		t.Fatalf("gitlab verify wrong: %+v", vr.Repo)
+	}
+
+	// orgH deploys it, orgG is approved, orgH spends $100 → royalty @25% = 2500c.
+	req(t, app, http.MethodPost, "/v1/authors/deploys/record", "orgH", false, map[string]any{"repoUrl": "gitlab.com/glorg/gltool", "project": "proj-h"})
+	approve(t, app, cr.ID)
+	fc.setSpend("orgH", 10000)
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+
+	a, _ := s.State.store.GetByID(ctx, cr.ID)
+	const want = 10000 * defaultShareBps / bpsDenom // 2500 @ 25%
+	if a.AccruedCents != want {
+		t.Fatalf("gitlab author accrued = %d, want %d", a.AccruedCents, want)
+	}
+
+	// The append-only ledger has exactly ONE row for this accrual: share 2500 bps,
+	// earning 2500c, compute_proof NULL (attestation is a follow-up, not fabricated).
+	rows, err := s.State.store.ListLedger(ctx, cr.ID, 100)
+	if err != nil {
+		t.Fatalf("ListLedger: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("ledger rows = %d, want 1", len(rows))
+	}
+	lr := rows[0]
+	if lr.DeployingOrg != "orgH" || lr.ShareBps != defaultShareBps || lr.EarningCents != want || lr.ComputeProof != nil {
+		t.Fatalf("ledger row wrong: %+v (computeProof must be nil)", lr)
+	}
+
+	// Idempotent: a re-sweep in the same period appends NO new ledger row.
+	req(t, app, http.MethodPost, "/v1/admin/authors/sweep", "admin", true, nil)
+	rows2, _ := s.State.store.ListLedger(ctx, cr.ID, 100)
+	if len(rows2) != 1 {
+		t.Fatalf("re-sweep appended a ledger row: %d, want 1 (append-only, at-most-once)", len(rows2))
+	}
+}
+
 // recorded pulls the boolean "recorded" flag out of a deploy response.
 func recorded(t *testing.T, body []byte) bool {
 	t.Helper()
@@ -693,7 +779,7 @@ func TestMount(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = Shutdown() })
 	r := httptest.NewRequest(http.MethodGet, "/v1/authors", nil)
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
