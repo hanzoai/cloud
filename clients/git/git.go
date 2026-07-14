@@ -449,11 +449,27 @@ func repoNameParam(c *zip.Ctx) (string, error) {
 	return name, nil
 }
 
+// orgRE constrains the org identifier to a safe path segment: alnum-led, no '/',
+// no '\', no leading '.', so it can never be ".", "..", or "../x". The org
+// becomes a storage PATH segment (absRepoPath), so this is the traversal guard at
+// the git boundary — a SuperAdmin (or any caller) presenting X-Org-Id
+// "../../etc" is rejected here, never reaching the filesystem. 128 chars covers
+// every real IAM org slug.
+var orgRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
 // org resolves the org — the org isolation KEY — from the gateway-minted
 // X-Org-Id (HIP-0026), never lowercased or transformed (normalizing would
-// collapse distinct owners into one bucket). Empty org is a true 403; there is
-// no magic bucket. Mirrors clients/prompts.org.
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// collapse distinct owners into one bucket). Empty OR path-unsafe org is a true
+// 403; there is no magic bucket. The orgRE gate makes absRepoPath's
+// "can never traverse" invariant true for every entry point (HTTP handlers, the
+// SSH key→org binding, mirror/push/create). Mirrors clients/prompts.org.
+func org(c *zip.Ctx) (string, bool) {
+	o, ok := principal.Org(c)
+	if !ok || !orgRE.MatchString(o) {
+		return "", false
+	}
+	return o, true
+}
 
 // projectScope resolves the optional X-Project-Id sub-scope through principal.Project
 // (the ONE project accessor). The default scope — an absent header OR the literal
