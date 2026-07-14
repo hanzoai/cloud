@@ -214,7 +214,13 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # a plaintext libsqlite3 — the binary's -lsqlite3 DT_NEEDED would then bind to
 # plaintext sqlite and silently no-op PRAGMA key. sqlcipher-libs ships
 # libsqlcipher.so.0; alias libsqlite3.so.0 to it so sqlite3_* binds there.
-RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs \
+#
+# `git` backs the git object plane (clients/git): the heavy paths — clone/fetch
+# serve, push receive, mirror-in — shell out to the streaming git CLI
+# (upload-pack / receive-pack --stateless-rpc / fetch) so multi-GB packs stream
+# to and from disk with bounded memory instead of buffering whole packs in RAM.
+# The `git` apk package carries upload-pack/receive-pack/http-backend/git-remote-https.
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git \
     && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
     && test -n "$SC" \
     && ln -sf "$SC" /usr/lib/libsqlite3.so.0
