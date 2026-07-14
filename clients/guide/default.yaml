@@ -1,0 +1,132 @@
+# default.yaml — the built-in Business AI Guide curriculum.
+#
+# This is the minimal launch checklist every Hanzo org completes, seeded so
+# /v1/guide works before the marketing repo's authored checklist.yaml lands. It
+# IS the schema contract: an org-custom or platform-updated curriculum (PUT
+# /v1/guide/curriculum) replaces it wholesale and must parse against the same
+# shape (see curriculum.go — Step / Curriculum).
+#
+# Field contract per step:
+#   id            stable identifier (unique; referenced by dependencies)
+#   title         short imperative name
+#   why           the business reason to do it
+#   how           how to do it ON HANZO (which product/surface)
+#   done          the human done-criteria
+#   dependencies  step ids that must be done/skipped first (gates availability)
+#   signal        OPTIONAL machine detector name; when it reports real org state
+#                 present, the step auto-marks done (acted | analytics)
+#   tool          OPTIONAL "<connector>_<action>" MCP tool the Business AI runs
+#                 for "do it for me"; the action rides /v1/automations/mcp with
+#                 the caller's principal
+#   draft         OPTIONAL prompt the Business AI drafts content from before the
+#                 tool call; the drafted text fills the `draftInto` arg
+#   draftInto     the tool-arg key the drafted text populates (default "brief")
+#   args          default tool arguments
+version: builtin-1
+title: Launch your business on Hanzo
+steps:
+  - id: positioning
+    title: Nail your positioning
+    why: >
+      A sharp one-line positioning statement is the seed every other asset grows
+      from — the landing headline, the email subject, the referral pitch.
+    how: >
+      Draft a positioning Campaign in Hanzo Content (/v1/content). The Business AI
+      can write the first draft for you.
+    done: A positioning statement exists as a Content Campaign draft.
+    dependencies: []
+    signal: acted
+    tool: content_generate
+    draft: >
+      Write a single crisp positioning statement (one sentence) plus three
+      supporting bullets for a company launching on Hanzo. Return plain text.
+    draftInto: brief
+    args:
+      doctype: Campaign
+      title: Positioning
+
+  - id: landing
+    title: Publish a landing page
+    why: >
+      A landing page is where interest converts — it is the destination every
+      channel points at.
+    how: >
+      Generate a landing Asset in Hanzo Content, then publish it. The Business AI
+      drafts the copy and creates the draft asset for you.
+    done: A landing-page Asset exists (draft or published).
+    dependencies: [positioning]
+    signal: acted
+    tool: content_generate
+    draft: >
+      Write landing-page copy — a headline, subheadline, three value props, and a
+      call to action — for the positioning above. Return plain text sections.
+    draftInto: brief
+    args:
+      doctype: Asset
+      title: Landing page
+
+  - id: analytics
+    title: Turn on analytics
+    why: >
+      You cannot improve what you cannot see. Analytics tells you whether the
+      landing page and channels are working.
+    how: >
+      Instrument your site so events flow to Hanzo Analytics (/v1/analytics). Once
+      events arrive for your org this step completes itself.
+    done: Insights events exist for your org (analytics is emitting).
+    dependencies: [landing]
+    signal: analytics
+
+  - id: waitlist
+    title: Open a waitlist
+    why: >
+      A waitlist captures demand before you are fully live and turns visitors into
+      a list you can launch to.
+    how: >
+      Enable the Hanzo waitlist surface (/v1/waitlist) and point your landing-page
+      CTA at it.
+    done: A waitlist is live and collecting entries.
+    dependencies: [landing]
+
+  - id: email
+    title: Draft a welcome email sequence
+    why: >
+      An email sequence nurtures the people who signed up and drives them to the
+      next action.
+    how: >
+      Generate an email Campaign in Hanzo Content targeting the email channel. The
+      Business AI drafts the sequence for you.
+    done: An email Campaign draft exists.
+    dependencies: [positioning]
+    signal: acted
+    tool: content_generate
+    draft: >
+      Write a three-email welcome sequence (subject + body each) for new signups,
+      consistent with the positioning above. Return plain text.
+    draftInto: brief
+    args:
+      doctype: Campaign
+      title: Welcome sequence
+      channels: email
+
+  - id: referral
+    title: Configure a referral program
+    why: >
+      Referrals turn your earliest users into a growth channel — the cheapest,
+      highest-trust acquisition you have.
+    how: >
+      Set up your referral rewards in Hanzo Referrals (/v1/referrals) and share the
+      referral link from your landing page.
+    done: A referral program is configured for your org.
+    dependencies: [landing]
+
+  - id: launch
+    title: Launch
+    why: >
+      Everything above is the runway. Launch is announcing to the world and turning
+      the funnel on.
+    how: >
+      With positioning, landing, analytics, waitlist, email, and referral in place,
+      announce across your channels.
+    done: You have publicly launched.
+    dependencies: [landing, analytics, waitlist, email, referral]
