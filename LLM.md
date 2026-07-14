@@ -42,6 +42,27 @@ package under `clients/<name>` that obeys these seams — nothing more.
   the SOLE driver (blank-imported once, in orgdb.go); subsystems never import a
   SQLite driver themselves. The caller owns its schema/migration and Close.
 
+## Cross-subsystem seams that are values, not places
+
+- **The per-principal MCP plane is callable in-process.** `clients/automations`
+  decomplects tool dispatch from its front doors: `dispatchTool` is the ONE core
+  (resolve `<connector>_<action>` → run with a Token bound to the VALIDATED org),
+  and TWO doors share it — the HTTP JSON-RPC handler (`POST /v1/automations/mcp`)
+  and the exported `automations.InvokeTool(ctx, org, tool, args)`. A sibling
+  subsystem that must ACT AS a caller (the Business AI guide's "do it for me")
+  calls `InvokeTool` with `principal.Org(c)` — same 403 gate, per-org concurrency
+  bound, one metered unit, one audit record as the HTTP door — so it can never
+  exceed the caller's authority. Use this seam; never re-implement tool dispatch.
+- **The Business AI Guide (`clients/guide`, `/v1/guide/*`)** is the on-site launch
+  checklist: a pure engine (`curriculum.go` — parse/validate/next-step/dependency
+  gating over plain data) + per-org progress (`cloud.OrgStore[*Store]`) + an
+  injectable auto-detect registry (`detect.go` — `acted` reads the agent action
+  ledger, `analytics` probes the shared warehouse) + the agent (`agent.go` — drafts
+  with `deps.AI`, executes the step's bound tool via `automations.InvokeTool`). The
+  curriculum is a machine-readable contract (embedded `default.yaml`; org-custom via
+  PUT replaces it) so `hanzoai/marketing` can author the full `checklist.yaml`
+  against the same `Step`/`Curriculum` shape.
+
 ## Identity vocabulary is IAM-native
 
 Identity is expressed ONLY in IAM-native nouns: **org, user, project, billing
