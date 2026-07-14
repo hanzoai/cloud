@@ -23,9 +23,10 @@
 //	POST /v1/git/:org/:repo/git-upload-pack     (clone/fetch)
 //	POST /v1/git/:org/:repo/git-receive-pack    (push)
 //
-// Storage is a go-billy filesystem holding bare go-git repos; go-git's server
-// transport reads/writes it for clone AND push. The billy home is osfs rooted
-// under {DataDir}/git; see storage.go for the hanzoai/vfs (S3) storage seam.
+// Storage is bare git repos on a real filesystem (osfs) rooted under
+// {DataDir}/git; go-git initializes + reads them, while the heavy clone/push/
+// mirror paths stream through the `git` CLI (gitexec.go) so multi-GB packs stay
+// bounded in memory. See storage.go for the hanzoai/vfs (S3) storage seam.
 //
 // Billing: every repo tracks sizeBytes, re-measured on create and after each
 // push. /v1/git/usage exposes per-repo + total bytes per org, and each
@@ -59,12 +60,6 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // defaultBranchName is the default branch a fresh bare repo points HEAD at.
 const defaultBranchName = "main"
-
-// maxBody caps the git protocol request body a single POST accepts (upload-pack
-// wants/haves + receive-pack pack). Bounds memory since handlers buffer the
-// body; a very large monorepo push exceeding this uses git's chunked negotiation
-// which stays under the cap per request.
-const maxBody = 256 << 20 // 256 MiB
 
 // state is git's own data; shared deps live in the embedded cloud.Base (the
 // clone-URL host is s.Domain).
@@ -454,11 +449,27 @@ func repoNameParam(c *zip.Ctx) (string, error) {
 	return name, nil
 }
 
+// orgRE constrains the org identifier to a safe path segment: alnum-led, no '/',
+// no '\', no leading '.', so it can never be ".", "..", or "../x". The org
+// becomes a storage PATH segment (absRepoPath), so this is the traversal guard at
+// the git boundary — a SuperAdmin (or any caller) presenting X-Org-Id
+// "../../etc" is rejected here, never reaching the filesystem. 128 chars covers
+// every real IAM org slug.
+var orgRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
 // org resolves the org — the org isolation KEY — from the gateway-minted
 // X-Org-Id (HIP-0026), never lowercased or transformed (normalizing would
-// collapse distinct owners into one bucket). Empty org is a true 403; there is
-// no magic bucket. Mirrors clients/prompts.org.
-func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }
+// collapse distinct owners into one bucket). Empty OR path-unsafe org is a true
+// 403; there is no magic bucket. The orgRE gate makes absRepoPath's
+// "can never traverse" invariant true for every entry point (HTTP handlers, the
+// SSH key→org binding, mirror/push/create). Mirrors clients/prompts.org.
+func org(c *zip.Ctx) (string, bool) {
+	o, ok := principal.Org(c)
+	if !ok || !orgRE.MatchString(o) {
+		return "", false
+	}
+	return o, true
+}
 
 // projectScope resolves the optional X-Project-Id sub-scope through principal.Project
 // (the ONE project accessor). The default scope — an absent header OR the literal
