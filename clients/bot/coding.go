@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -107,7 +108,15 @@ func RunCodingTask(ctx context.Context, org, userID string, req CodingTaskReques
 	if err != nil {
 		return CodingTaskResult{}, fmt.Errorf("bot: marshal coding request: %w", err)
 	}
-	target := botURL() + "/v1/coding-tasks"
+	// This POST carries the org's hk- git credential AND the shared gateway bearer,
+	// so it must not travel cleartext. Require https by default; a plaintext in-cluster
+	// target is allowed ONLY when the operator asserts the hop is secured by mesh mTLS
+	// (BOT_GATEWAY_ALLOW_PLAINTEXT=1) — an explicit, documented trust decision, never a
+	// silent default.
+	target, terr := codingTaskTarget()
+	if terr != nil {
+		return CodingTaskResult{}, terr
+	}
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return CodingTaskResult{}, fmt.Errorf("bot: build coding request: %w", err)
@@ -173,6 +182,22 @@ func RunCodingTask(ctx context.Context, org, userID string, req CodingTaskReques
 		return CodingTaskResult{}, fmt.Errorf("bot: coding stream ended without a result")
 	}
 	return result, nil
+}
+
+// codingTaskTarget resolves the /v1/coding-tasks endpoint and fails closed on a
+// cleartext http:// target — the request carries the org's git credential and the
+// gateway bearer. BOT_GATEWAY_ALLOW_PLAINTEXT=1 is the explicit, operator-set
+// opt-out for a deployment whose bot-gateway hop is secured by mesh mTLS.
+func codingTaskTarget() (string, error) {
+	base := botURL()
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", fmt.Errorf("bot: invalid gateway url")
+	}
+	if u.Scheme != "https" && getenv("BOT_GATEWAY_ALLOW_PLAINTEXT") != "1" {
+		return "", fmt.Errorf("bot: refusing to send the coding credential over cleartext %q (set BOT_GATEWAY_URL to https, or BOT_GATEWAY_ALLOW_PLAINTEXT=1 if the hop is mesh-mTLS secured)", u.Scheme)
+	}
+	return base + "/v1/coding-tasks", nil
 }
 
 // nonEmpty returns a when non-empty, else b.
