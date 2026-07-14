@@ -66,7 +66,7 @@ type fakeRunner struct {
 	gotReq  RunRequest
 	gotOrg  string
 	gotUser string
-	steps   []Step        // steps to emit before returning
+	steps   []Step // steps to emit before returning
 	result  RunResult
 	err     error
 }
