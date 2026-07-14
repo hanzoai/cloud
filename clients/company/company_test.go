@@ -61,7 +61,7 @@ func (fakeEsign) Request(context.Context, string, []string, []Signer) (string, e
 func (fakeEsign) Status(context.Context, string, string) (bool, error) { return false, nil }
 
 type fakeCapTable struct {
-	seeded    bool
+	seedCount int
 	imported  int
 	roundName string
 }
@@ -70,7 +70,7 @@ func (fc *fakeCapTable) SetIncorporation(context.Context, string, string, string
 	return nil
 }
 func (fc *fakeCapTable) SeedFounders(context.Context, string, string, []Founder) error {
-	fc.seeded = true
+	fc.seedCount++
 	return nil
 }
 func (fc *fakeCapTable) AddStakeholders(_ context.Context, _ string, h []Stakeholder) (int, error) {
@@ -237,8 +237,8 @@ func TestHTTPFormationFlow(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/company/genesis", org, nil); code != http.StatusOK {
 		t.Fatalf("genesis want 200, got %d", code)
 	}
-	if !ct.seeded {
-		t.Fatal("cap table was not seeded at genesis")
+	if ct.seedCount != 1 {
+		t.Fatalf("cap table seeded %d times at genesis, want 1", ct.seedCount)
 	}
 	code, m := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "company"})
 	if code != http.StatusOK {
@@ -346,5 +346,36 @@ func TestHTTPFundraiseRound(t *testing.T) {
 	}
 	if ct.roundName != "Seed" {
 		t.Fatalf("round not recorded, got %q", ct.roundName)
+	}
+}
+
+// TestGenesisIdempotent proves a repeated POST /genesis does NOT re-seed the cap
+// table (which would double-issue founder share certificates).
+func TestGenesisIdempotent(t *testing.T) {
+	app, _, ct := mountFake(t)
+	const org = "acme"
+	do(t, app, http.MethodPost, "/v1/company", org, map[string]any{"structure": "c-corp", "jurisdiction": "DE", "name": "Acme Inc."})
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "founders"})
+	do(t, app, http.MethodPost, "/v1/company/founders", org, map[string]any{
+		"founders": []map[string]any{{"name": "Ada", "email": "ada@acme.com", "equityBps": 10000}},
+	})
+	do(t, app, http.MethodPost, "/v1/company/kyc", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"})
+	do(t, app, http.MethodPost, "/v1/company/payment", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "documents"})
+	do(t, app, http.MethodPost, "/v1/company/documents", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "esign"})
+	do(t, app, http.MethodPost, "/v1/company/esign", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/esign/complete", org, map[string]any{"signed": true})
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "genesis"})
+
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/genesis", org, nil); code != http.StatusOK {
+		t.Fatalf("first genesis want 200, got %d", code)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/genesis", org, nil); code != http.StatusOK {
+		t.Fatalf("second genesis want 200, got %d", code)
+	}
+	if ct.seedCount != 1 {
+		t.Fatalf("genesis must seed the cap table exactly once, got %d", ct.seedCount)
 	}
 }
