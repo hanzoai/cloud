@@ -14,7 +14,41 @@
 
 package cli
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func TestCodeAgentsBypassPermissionsByDefault(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+	}{
+		{name: "claude", flag: "--dangerously-skip-permissions"},
+		{name: "codex", flag: "--dangerously-bypass-approvals-and-sandbox"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agent := codeAgents[tt.name]
+			argv := codeArgv(agent, "https://api.hanzo.ai", defaultCodeModel, false, nil)
+			if !slices.Contains(argv, tt.flag) {
+				t.Fatalf("default argv %q does not contain permission bypass %q", argv, tt.flag)
+			}
+
+			safeArgv := codeArgv(agent, "https://api.hanzo.ai", defaultCodeModel, true, nil)
+			if slices.Contains(safeArgv, tt.flag) {
+				t.Fatalf("--safe argv %q still contains permission bypass %q", safeArgv, tt.flag)
+			}
+		})
+	}
+}
+
+func TestDefaultCodeModelIsToolCapableAlias(t *testing.T) {
+	if defaultCodeModel != "zen5-pro" {
+		t.Fatalf("coding-agent default %q is not the stable tool-capable alias", defaultCodeModel)
+	}
+}
 
 // TestAnthropicWirePinsZen5Tiers locks in the core fix for the Claude Code
 // 403 deadlock: every CC model slot must resolve to a zen5 alias served by
@@ -33,7 +67,7 @@ func TestAnthropicWirePinsZen5Tiers(t *testing.T) {
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-ultra",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-pro",
 	}
 	for k, v := range want {
 		if got := env[k]; got != v {
