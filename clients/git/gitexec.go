@@ -44,6 +44,77 @@ var gitBinary = sync.OnceValues(func() (string, error) { return exec.LookPath("g
 // message — a chatty or hostile child can never balloon memory.
 const stderrCap = 8 << 10
 
+// packSem bounds how many pack subprocesses (upload-pack / receive-pack / fetch)
+// run at once. index-pack / pack-objects each hold O(object-count) state plus
+// delta caches in the SAME pod cgroup, so N concurrent multi-GB clones would
+// multiply RAM and re-OOM the pod. GIT_PACK_MAX_CONCURRENCY tunes it (default 2,
+// floor 1). A cheap ref-list (advertise-refs / for-each-ref / ls-remote) is NOT
+// gated — only the memory-heavy pack ops are.
+var packSem = make(chan struct{}, packConcurrency())
+
+func packConcurrency() int {
+	n := 2
+	if v := strings.TrimSpace(os.Getenv("GIT_PACK_MAX_CONCURRENCY")); v != "" {
+		if p, err := strconv.Atoi(v); err == nil && p >= 1 {
+			n = p
+		}
+	}
+	return n
+}
+
+// acquirePackSlot blocks until a pack slot is free or ctx is done; releasePackSlot
+// returns it. A request that is cancelled while waiting fails fast rather than
+// piling up.
+func acquirePackSlot(ctx context.Context) error {
+	select {
+	case packSem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func releasePackSlot() { <-packSem }
+
+// withPackSlot runs a synchronous pack op (receive-pack, mirror fetch) while
+// holding a slot. The streaming upload-pack holds its slot across the response
+// and releases it in gitPackStream.Close instead.
+func withPackSlot(ctx context.Context, fn func() error) error {
+	if err := acquirePackSlot(ctx); err != nil {
+		return err
+	}
+	defer releasePackSlot()
+	return fn()
+}
+
+// packConfigArgs returns the `-c` config flags for a pack subprocess: memory
+// bounds on EVERY op (single-threaded delta search with capped window /
+// delta-cache and a big-file threshold, so index-pack / pack-objects can't
+// balloon the cgroup during a multi-GB clone/mirror), plus a received-input-size
+// cap for receive-pack so a gzip-amplified or runaway push can't fill the pod
+// disk and evict tenants. These are main git options (before the subcommand).
+func packConfigArgs(service string) []string {
+	args := []string{
+		"-c", "pack.threads=1",
+		"-c", "pack.windowMemory=64m",
+		"-c", "pack.deltaCacheSize=64m",
+		"-c", "core.bigFileThreshold=16m",
+	}
+	if service == svcReceivePack {
+		args = append(args, "-c", "receive.maxInputSize="+receiveMaxInputSize())
+	}
+	return args
+}
+
+// receiveMaxInputSize caps the bytes git receive-pack will read from a push
+// (git size syntax, e.g. "2g"). GIT_RECEIVE_MAX_INPUT_SIZE overrides; default 2g.
+func receiveMaxInputSize() string {
+	if v := strings.TrimSpace(os.Getenv("GIT_RECEIVE_MAX_INPUT_SIZE")); v != "" {
+		return v
+	}
+	return "2g"
+}
+
 // packSubcommand maps the smart-HTTP service name (git-upload-pack /
 // git-receive-pack) to the git subcommand (upload-pack / receive-pack). Only
 // these two are ever spawned; the caller validates the service against the
@@ -149,43 +220,63 @@ func advertiseRefs(ctx context.Context, bareDir, service, protocol string) ([]by
 // killed git), and Close reaps the process. NO pack bytes are buffered in this
 // process — git streams the multi-GB pack from disk through an OS pipe.
 func startPackRPC(ctx context.Context, log luxlog.Logger, bareDir, service, protocol string, stdin io.Reader) (*gitPackStream, error) {
+	if err := acquirePackSlot(ctx); err != nil {
+		return nil, err
+	}
 	sub := packSubcommand(service)
-	cmd, err := gitCmd(ctx, gitProtocolEnv(protocol), sub, "--stateless-rpc", bareDir)
+	cmd, err := gitCmd(ctx, gitProtocolEnv(protocol), append(packConfigArgs(service), sub, "--stateless-rpc", bareDir)...)
 	if err != nil {
+		releasePackSlot()
 		return nil, err
 	}
 	cmd.Stdin = stdin
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		releasePackSlot()
 		return nil, fmt.Errorf("git %s stdout: %w", sub, err)
 	}
 	stderr := &cappedBuffer{cap: stderrCap}
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		releasePackSlot()
 		return nil, fmt.Errorf("start git %s: %w", sub, err)
 	}
-	return &gitPackStream{cmd: cmd, stdout: stdout, stderr: stderr, log: log, sub: sub}, nil
+	return &gitPackStream{cmd: cmd, stdout: stdout, stderr: stderr, log: log, sub: sub, release: releasePackSlot}, nil
 }
 
 // gitPackStream adapts a running `git <sub> --stateless-rpc` subprocess to an
 // io.ReadCloser so fasthttp can stream git stdout straight to the client. Read
 // pulls from git stdout; Close (called by fasthttp after the body is fully sent,
-// or on disconnect) reaps the process. A non-zero exit AFTER streaming began can
-// only be logged — the 200 headers are already on the wire — which is exactly how
-// smart-HTTP surfaces late errors: git writes them into the pack sideband.
+// or on client disconnect) REAPS the process and releases the pack slot. A
+// non-zero exit after streaming began can only be logged — the 200 headers are
+// already on the wire — which is exactly how smart-HTTP surfaces late errors: git
+// writes them into the pack sideband.
 type gitPackStream struct {
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
-	stderr *cappedBuffer
-	log    luxlog.Logger
-	sub    string
+	cmd     *exec.Cmd
+	stdout  io.ReadCloser
+	stderr  *cappedBuffer
+	log     luxlog.Logger
+	sub     string
+	release func() // returns the pack-concurrency slot; runs once in Close
 }
 
 func (g *gitPackStream) Read(p []byte) (int, error) { return g.stdout.Read(p) }
 
 func (g *gitPackStream) Close() error {
+	// The client is done (EOF) or gone (disconnect). On disconnect git may be
+	// blocked writing to a full stdout pipe, so close the read end (EPIPE) AND
+	// Kill to guarantee the process is reaped even if it's wedged — otherwise
+	// Wait() would hang forever and leak the proc/goroutine/FDs (a git host sees
+	// aborted clones constantly). On normal completion git has already exited, so
+	// both are no-ops and Wait reports the true status.
+	_ = g.stdout.Close()
+	_ = g.cmd.Process.Kill()
 	if err := g.cmd.Wait(); err != nil {
-		g.log.Warn("git pack rpc exited non-zero", "sub", g.sub, "err", err, "stderr", strings.TrimSpace(g.stderr.String()))
+		g.log.Debug("git pack stream closed", "sub", g.sub, "err", err)
+	}
+	if g.release != nil {
+		g.release()
 	}
 	return nil
 }
@@ -198,8 +289,12 @@ func (g *gitPackStream) Close() error {
 // off git stdout closing (git exiting). The lingering client→git copy goroutine
 // unblocks when the caller closes the channel after we return.
 func runPackSSH(ctx context.Context, bareDir, service, protocol string, ch io.ReadWriteCloser) error {
+	if err := acquirePackSlot(ctx); err != nil {
+		return err
+	}
+	defer releasePackSlot()
 	sub := packSubcommand(service)
-	cmd, err := gitCmd(ctx, gitProtocolEnv(protocol), sub, bareDir)
+	cmd, err := gitCmd(ctx, gitProtocolEnv(protocol), append(packConfigArgs(service), sub, bareDir)...)
 	if err != nil {
 		return err
 	}
@@ -209,15 +304,23 @@ func runPackSSH(ctx context.Context, bareDir, service, protocol string, ch io.Re
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		_ = stdin.Close()
 		return fmt.Errorf("git %s stdout: %w", sub, err)
 	}
 	stderr := &cappedBuffer{cap: stderrCap}
 	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return fmt.Errorf("start git %s: %w", sub, err)
 	}
 	go func() { _, _ = io.Copy(stdin, ch); _ = stdin.Close() }() // client → git
-	_, _ = io.Copy(ch, stdout)                                   // git → client (until git exits)
+	_, copyErr := io.Copy(ch, stdout)                            // git → client (until git exits)
+	// On an SSH disconnect the channel write fails; git may be blocked writing to
+	// its (now-undrained) stdout, so Kill to guarantee reaping rather than hang.
+	if copyErr != nil {
+		_ = cmd.Process.Kill()
+	}
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("git %s: %w: %s", sub, err, strings.TrimSpace(stderr.String()))
 	}
