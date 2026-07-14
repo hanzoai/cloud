@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	// The ONE Hanzo SQLite driver (registers "sqlite" under both build tags),
 	// identical to every other clients/* store.
@@ -61,6 +62,8 @@ CREATE INDEX IF NOT EXISTS ix_accounts_org ON accounts(org);
 CREATE TABLE IF NOT EXISTS wallets (
   id              TEXT PRIMARY KEY,
   org             TEXT NOT NULL,
+  project         TEXT NOT NULL DEFAULT '',
+  agent           TEXT NOT NULL DEFAULT '',
   account_id      TEXT NOT NULL,
   name            TEXT NOT NULL,
   custody         TEXT NOT NULL,
@@ -72,10 +75,22 @@ CREATE TABLE IF NOT EXISTS wallets (
   created_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_wallets_org     ON wallets(org);
+CREATE INDEX IF NOT EXISTS ix_wallets_scope   ON wallets(org, project, agent, account_id);
 CREATE INDEX IF NOT EXISTS ix_wallets_finance ON wallets(org, finance_account);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("wallets migrate: %w", err)
+	}
+	// Forward-add the scope-narrowing columns to a wallets table created before
+	// scoping existed. On a fresh DB the CREATE above already has them, so the
+	// ALTER's "duplicate column" error is the expected no-op and is tolerated.
+	for _, alter := range []string{
+		`ALTER TABLE wallets ADD COLUMN project TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE wallets ADD COLUMN agent   TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			return fmt.Errorf("wallets migrate scope column: %w", err)
+		}
 	}
 	return nil
 }
@@ -131,9 +146,9 @@ func (s *store) listAccounts(ctx context.Context, org string) ([]Account, error)
 
 func (s *store) createWallet(ctx context.Context, w *Wallet) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO wallets (id, org, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		w.ID, w.Org, w.AccountID, w.Name, string(w.Custody), string(w.Tier), w.Chain, w.Address, w.KeyRef,
+		`INSERT INTO wallets (id, org, project, agent, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		w.ID, w.Org, w.Project, w.Agent, w.AccountID, w.Name, string(w.Custody), string(w.Tier), w.Chain, w.Address, w.KeyRef,
 		nullable(w.FinanceAccount), w.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert wallet: %w", err)
@@ -141,48 +156,79 @@ func (s *store) createWallet(ctx context.Context, w *Wallet) error {
 	return nil
 }
 
-// getWallet fetches a wallet by id SCOPED to org. A wallet owned by a different
-// org returns found=false — the tenant-isolation boundary lives here.
-func (s *store) getWallet(ctx context.Context, org, id string) (*Wallet, bool, error) {
+// walletCols is the ONE column list every wallet row read scans, in the order
+// scanWallet reads them — so the select projection and the scan can never drift.
+const walletCols = `id, org, project, agent, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at`
+
+// scanWallet reads one wallets row (walletCols order) into a Wallet.
+func scanWallet(sc interface{ Scan(...any) error }) (*Wallet, error) {
 	var w Wallet
 	var custody, tier string
 	var finance sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, org, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at
-		   FROM wallets WHERE id=? AND org=?`, id, org).
-		Scan(&w.ID, &w.Org, &w.AccountID, &w.Name, &custody, &tier, &w.Chain, &w.Address, &w.KeyRef, &finance, &w.CreatedAt)
+	if err := sc.Scan(&w.ID, &w.Org, &w.Project, &w.Agent, &w.AccountID, &w.Name, &custody, &tier,
+		&w.Chain, &w.Address, &w.KeyRef, &finance, &w.CreatedAt); err != nil {
+		return nil, err
+	}
+	w.Custody = Kind(custody)
+	w.Tier = Tier(tier)
+	w.FinanceAccount = finance.String
+	return &w, nil
+}
+
+// getWallet fetches a wallet by id SCOPED to org. A wallet owned by a different
+// org returns found=false — the tenant-isolation boundary lives here.
+func (s *store) getWallet(ctx context.Context, org, id string) (*Wallet, bool, error) {
+	w, err := scanWallet(s.db.QueryRowContext(ctx,
+		`SELECT `+walletCols+` FROM wallets WHERE id=? AND org=?`, id, org))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("get wallet: %w", err)
 	}
-	w.Custody = Kind(custody)
-	w.Tier = Tier(tier)
-	w.FinanceAccount = finance.String
-	return &w, true, nil
+	return w, true, nil
 }
 
+// listWallets lists an org's wallets. It is the org-only case of the ONE scope
+// lookup path (listWalletsByScope with just the org bound).
 func (s *store) listWallets(ctx context.Context, org string) ([]Wallet, error) {
+	return s.listWalletsByScope(ctx, Scope{Org: org})
+}
+
+// listWalletsByScope is the ONE scope-filtered lookup path: org is ALWAYS a bound
+// predicate (the isolation boundary), and each non-empty narrowing (project,
+// agent, account) adds a bound equality that narrows WITHIN the org. An empty
+// narrowing is a wildcard, so Scope{Org: x} lists the whole org and a fuller scope
+// lists exactly that sub-scope — the mirror of keyRef's derivation, for reads.
+func (s *store) listWalletsByScope(ctx context.Context, sc Scope) ([]Wallet, error) {
+	where := []string{"org=?"}
+	args := []any{sc.Org}
+	if sc.Project != "" {
+		where = append(where, "project=?")
+		args = append(args, sc.Project)
+	}
+	if sc.Agent != "" {
+		where = append(where, "agent=?")
+		args = append(args, sc.Agent)
+	}
+	if sc.AccountID != "" {
+		where = append(where, "account_id=?")
+		args = append(args, sc.AccountID)
+	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, org, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at
-		   FROM wallets WHERE org=? ORDER BY created_at DESC, id DESC`, org)
+		`SELECT `+walletCols+` FROM wallets WHERE `+strings.Join(where, " AND ")+
+			` ORDER BY created_at DESC, id DESC`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list wallets: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	out := []Wallet{}
 	for rows.Next() {
-		var w Wallet
-		var custody, tier string
-		var finance sql.NullString
-		if err := rows.Scan(&w.ID, &w.Org, &w.AccountID, &w.Name, &custody, &tier, &w.Chain, &w.Address, &w.KeyRef, &finance, &w.CreatedAt); err != nil {
+		w, err := scanWallet(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan wallet: %w", err)
 		}
-		w.Custody = Kind(custody)
-		w.Tier = Tier(tier)
-		w.FinanceAccount = finance.String
-		out = append(out, w)
+		out = append(out, *w)
 	}
 	return out, rows.Err()
 }
@@ -205,23 +251,15 @@ func (s *store) updateWalletKey(ctx context.Context, org, id, address, keyRef st
 // scoped to org. The seam by which a treasury reserve signer later BECOMES an MPC
 // treasury wallet. found=false when unbound.
 func (s *store) walletForFinanceAccount(ctx context.Context, org, financeAccount string) (*Wallet, bool, error) {
-	var w Wallet
-	var custody, tier string
-	var finance sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, org, account_id, name, custody, tier, chain, address, key_ref, finance_account, created_at
-		   FROM wallets WHERE org=? AND finance_account=?`, org, financeAccount).
-		Scan(&w.ID, &w.Org, &w.AccountID, &w.Name, &custody, &tier, &w.Chain, &w.Address, &w.KeyRef, &finance, &w.CreatedAt)
+	w, err := scanWallet(s.db.QueryRowContext(ctx,
+		`SELECT `+walletCols+` FROM wallets WHERE org=? AND finance_account=?`, org, financeAccount))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, fmt.Errorf("wallet for finance account: %w", err)
 	}
-	w.Custody = Kind(custody)
-	w.Tier = Tier(tier)
-	w.FinanceAccount = finance.String
-	return &w, true, nil
+	return w, true, nil
 }
 
 // nullable maps "" to a SQL NULL so the finance_account column stays honestly
