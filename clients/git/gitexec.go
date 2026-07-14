@@ -76,6 +76,19 @@ func acquirePackSlot(ctx context.Context) error {
 
 func releasePackSlot() { <-packSem }
 
+// tryAcquirePackSlot takes a pack slot only if one is immediately free, else
+// reports false without blocking. Opportunistic background housekeeping (post-push
+// auto-gc) uses this to YIELD to active clones/pushes rather than queue behind
+// them — the housekeeping simply runs on a later, quieter push.
+func tryAcquirePackSlot() bool {
+	select {
+	case packSem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
 // withPackSlot runs a synchronous pack op (receive-pack, mirror fetch) while
 // holding a slot. The streaming upload-pack holds its slot across the response
 // and releases it in gitPackStream.Close instead.

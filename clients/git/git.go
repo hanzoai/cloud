@@ -211,6 +211,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
 	app.Post("/v1/git/repos/:name/mirror", cloud.Handle(s, mirror))
+	// Repack a repo with a reachability bitmap + commit-graph so its next clone
+	// serves fast (bitmap reuse, no full object-graph walk). Distinct trailing
+	// segment, like /mirror — never shadows the :org/:repo smart-HTTP routes.
+	app.Post("/v1/git/repos/:name/gc", cloud.Handle(s, maintain))
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
