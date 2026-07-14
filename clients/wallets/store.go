@@ -50,7 +50,11 @@ func openStore(path string) (*store, error) {
 }
 
 func (s *store) migrate() error {
-	const ddl = `
+	// Migrate in dependency order: base tables, then forward-add columns, then the
+	// indexes that reference those columns. A CREATE INDEX on a column that a
+	// pre-existing table lacks fails ("no such column"), so any index over a
+	// forward-added column MUST come after the ALTERs — never in the base DDL.
+	const base = `
 CREATE TABLE IF NOT EXISTS accounts (
   id         TEXT PRIMARY KEY,
   org        TEXT NOT NULL,
@@ -74,23 +78,33 @@ CREATE TABLE IF NOT EXISTS wallets (
   finance_account TEXT,
   created_at      INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_wallets_org     ON wallets(org);
-CREATE INDEX IF NOT EXISTS ix_wallets_scope   ON wallets(org, project, agent, account_id);
-CREATE INDEX IF NOT EXISTS ix_wallets_finance ON wallets(org, finance_account);
+CREATE INDEX IF NOT EXISTS ix_wallets_org ON wallets(org);
 `
-	if _, err := s.db.Exec(ddl); err != nil {
+	if _, err := s.db.Exec(base); err != nil {
 		return fmt.Errorf("wallets migrate: %w", err)
 	}
-	// Forward-add the scope-narrowing columns to a wallets table created before
-	// scoping existed. On a fresh DB the CREATE above already has them, so the
-	// ALTER's "duplicate column" error is the expected no-op and is tolerated.
+	// Forward-add every column introduced after the original wallets schema, so a
+	// table created before they existed gains them before any index needs them. On
+	// a fresh DB the CREATE above already has them, so the "duplicate column" error
+	// is the expected no-op and is tolerated.
 	for _, alter := range []string{
-		`ALTER TABLE wallets ADD COLUMN project TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE wallets ADD COLUMN agent   TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE wallets ADD COLUMN project         TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE wallets ADD COLUMN agent           TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE wallets ADD COLUMN chain           TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE wallets ADD COLUMN finance_account TEXT`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("wallets migrate scope column: %w", err)
 		}
+	}
+	// Indexes over the forward-added columns — safe only now that the ALTERs above
+	// guarantee project/agent/finance_account exist on every wallets table.
+	const scopeIdx = `
+CREATE INDEX IF NOT EXISTS ix_wallets_scope   ON wallets(org, project, agent, account_id);
+CREATE INDEX IF NOT EXISTS ix_wallets_finance ON wallets(org, finance_account);
+`
+	if _, err := s.db.Exec(scopeIdx); err != nil {
+		return fmt.Errorf("wallets migrate scope index: %w", err)
 	}
 	return nil
 }
