@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,6 +40,17 @@ const mirrorRefSpec = "+refs/*:refs/*"
 // hardcoded, never logged — holding the credential for mirroring a PRIVATE
 // https source. Empty means an anonymous fetch (public sources need none).
 const mirrorEnvToken = "GIT_MIRROR_TOKEN"
+
+// mirrorAllowHostsEnv (comma-separated) is the allowlist of hosts the mirror
+// credential (GIT_MIRROR_TOKEN) may be sent to; empty ⇒ the default set
+// {github.com, git.hanzo.ai}. Any other source fetches anonymously so a
+// tenant-supplied URL can never capture the shared token.
+const mirrorAllowHostsEnv = "GIT_MIRROR_ALLOW_HOSTS"
+
+// mirrorAllowPrivateEnv (comma-separated) allowlists hosts that may resolve into
+// an otherwise-blocked internal range (loopback/private/link-local) — for tests
+// and deliberate internal mirrors. Empty ⇒ all internal targets are refused.
+const mirrorAllowPrivateEnv = "GIT_MIRROR_ALLOW_PRIVATE_HOSTS"
 
 type mirrorReq struct {
 	Source  string `json:"source"`
@@ -107,20 +119,22 @@ func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL str
 		return fmt.Errorf("list source: %w", err)
 	}
 
-	// Fetch all refs + tags with mirror semantics, streaming the pack to disk.
-	// protocol.version=2 = cheaper negotiation on large repos; credential.helper=
-	// disables any interactive/leaky helper (gitea). --no-write-fetch-head keeps
-	// a bare mirror clean.
-	fetch, err := gitCmd(ctx, env,
+	// Fetch all refs + tags with mirror semantics, streaming the pack to disk
+	// under a pack-concurrency slot + memory bounds (packConfigArgs) so a multi-GB
+	// mirror can't OOM the pod. protocol.version=2 = cheaper negotiation;
+	// credential.helper= disables any interactive/leaky helper (gitea);
+	// --no-write-fetch-head keeps a bare mirror clean.
+	args := append(packConfigArgs(""),
 		"-c", "protocol.version=2", "-c", "credential.helper=",
 		"--git-dir="+bareDir, "fetch", "--prune", "--tags", "--no-write-fetch-head",
 		srcURL, mirrorRefSpec)
+	fetch, err := gitCmd(ctx, env, args...)
 	if err != nil {
 		return err
 	}
 	stderr := &cappedBuffer{cap: stderrCap}
 	fetch.Stderr = stderr
-	if err := fetch.Run(); err != nil {
+	if err := withPackSlot(ctx, fetch.Run); err != nil {
 		return fmt.Errorf("git fetch: %w: %s", err, sanitizeGitErr(stderr.String()))
 	}
 
@@ -194,11 +208,14 @@ func ensureRepo(s *cloud.Service[state], ctx context.Context, store *Store, org,
 	return store.Get(ctx, org, project, name)
 }
 
-// mirrorSource validates the org-supplied source URL: a well-formed http/https
-// git URL with a host. This is the boundary check for the one place a
-// org-supplied address enters the server's outbound network path; the git
-// subprocess additionally runs under GIT_ALLOW_PROTOCOL=http:https so a source
-// can never smuggle a file:// / ext:: protocol past this check.
+// mirrorSource validates + hardens the org-supplied source URL. It must be a
+// well-formed http/https URL with a host; any embedded userinfo is STRIPPED
+// (credentials go via env only, never a ps-visible argv — LOW-7); and the host
+// is SSRF-guarded (mirrorGuardHost) so a tenant can't point the server's fetch
+// at an internal service (IMDS, SeaweedFS, cluster svcs). The git subprocess
+// additionally runs under GIT_ALLOW_PROTOCOL=http:https + http.followRedirects=
+// false so a source can never smuggle a file:///ext:: protocol or bounce the
+// fetch to an internal host via a redirect.
 func mirrorSource(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -208,39 +225,126 @@ func mirrorSource(raw string) (string, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return "", zip.ErrBadRequest("source must be an http(s) git URL")
 	}
+	u.User = nil // credentials only via env (GIT_MIRROR_TOKEN), never argv
+	if err := mirrorGuardHost(u.Hostname()); err != nil {
+		// Generic message — never confirm whether a host is internal (probe oracle).
+		return "", zip.ErrBadRequest("source host is not permitted")
+	}
 	return u.String(), nil
 }
 
+// mirrorGuardHost is the SSRF gate: it resolves host and rejects any address in
+// a loopback / private / link-local / metadata (IMDS) / unspecified / multicast
+// range, so a mirror can only reach public hosts. Specific internal hosts can be
+// allowlisted via GIT_MIRROR_ALLOW_PRIVATE_HOSTS (tests, or a deliberate
+// internal mirror). git additionally runs with followRedirects=false so a public
+// host can't 302 the fetch onto an internal address past this check.
+func mirrorGuardHost(host string) error {
+	if host == "" {
+		return fmt.Errorf("empty host")
+	}
+	if hostInList(host, mirrorAllowPrivateEnv) {
+		return nil
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("resolve host: %w", err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("no address for host")
+	}
+	for _, ip := range ips {
+		if isInternalIP(ip) {
+			return fmt.Errorf("host resolves to a disallowed address")
+		}
+	}
+	return nil
+}
+
+// isInternalIP reports whether ip is in a range a tenant-supplied mirror must
+// never reach (SSRF): loopback, RFC1918/ULA private, link-local (incl. the
+// 169.254.169.254 cloud metadata endpoint), unspecified, or multicast.
+func isInternalIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast()
+}
+
 // mirrorGitEnv builds the git subprocess environment for a mirror fetch:
-// GIT_ALLOW_PROTOCOL restricts outbound to http/https (blocks file://, ext::,
-// etc.), and a PRIVATE https source's credential is injected via env-only
-// git-config http.extraHeader (GitHub's token-as-basic-auth form) — NEVER on
-// argv (ps-visible) or in logs. A public/http source stays anonymous.
+// GIT_ALLOW_PROTOCOL restricts outbound to http/https; http.followRedirects=
+// false stops a redirect from carrying the token to another host or bouncing the
+// fetch to an internal address; and a PRIVATE https source whose host is on the
+// credential allowlist gets the token via env-only git-config http.extraHeader
+// (GitHub's token-as-basic-auth form) — NEVER on argv or in logs. Everything
+// else fetches anonymously.
 func mirrorGitEnv(srcURL string) []string {
 	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
+	cfg := []string{"http.followRedirects=false"}
 	if hdr := mirrorAuthHeader(srcURL); hdr != "" {
+		cfg = append(cfg, "http.extraHeader=Authorization: Basic "+hdr)
+	}
+	return append(env, gitConfigEnv(cfg...)...)
+}
+
+// gitConfigEnv encodes "key=value" pairs as the git GIT_CONFIG_COUNT/KEY_n/
+// VALUE_n environment so per-invocation config (credentials, redirect policy) is
+// passed WITHOUT argv or a file — the ONE way this package injects git config.
+func gitConfigEnv(kv ...string) []string {
+	env := []string{fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(kv))}
+	for i, pair := range kv {
+		k, v, _ := strings.Cut(pair, "=")
 		env = append(env,
-			"GIT_CONFIG_COUNT=1",
-			"GIT_CONFIG_KEY_0=http.extraHeader",
-			"GIT_CONFIG_VALUE_0=Authorization: Basic "+hdr,
+			fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, k),
+			fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, v),
 		)
 	}
 	return env
 }
 
 // mirrorAuthHeader returns the base64 "x-access-token:<token>" basic-auth
-// credential for an https source from the KMS-injected env token, or "" for http
-// (loopback) / when no token is set — so public mirrors stay anonymous and a
-// token is never sent in cleartext.
+// credential for an https source ONLY when the source host is on the credential
+// allowlist (GIT_MIRROR_ALLOW_HOSTS, default {github.com, git.hanzo.ai}). A
+// tenant-supplied URL to any other host fetches anonymously, so the shared
+// GIT_MIRROR_TOKEN can never be captured by an attacker-controlled source
+// (HIGH-1). Returns "" for http, no token, or a non-allowlisted host.
 func mirrorAuthHeader(srcURL string) string {
 	tok := strings.TrimSpace(os.Getenv(mirrorEnvToken))
 	if tok == "" {
 		return ""
 	}
-	if u, err := url.Parse(srcURL); err != nil || u.Scheme != "https" {
+	u, err := url.Parse(srcURL)
+	if err != nil || u.Scheme != "https" {
+		return ""
+	}
+	if !mirrorHostAllowed(u.Hostname()) {
 		return ""
 	}
 	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+}
+
+// mirrorHostAllowed reports whether host may receive the mirror credential.
+// GIT_MIRROR_ALLOW_HOSTS (comma-separated) overrides the default set.
+func mirrorHostAllowed(host string) bool {
+	if v := strings.TrimSpace(os.Getenv(mirrorAllowHostsEnv)); v != "" {
+		return hostInList(host, mirrorAllowHostsEnv)
+	}
+	host = strings.ToLower(host)
+	return host == "github.com" || host == "git.hanzo.ai"
+}
+
+// hostInList reports whether host (case-insensitive) is a member of the
+// comma-separated allowlist held in env var envName.
+func hostInList(host, envName string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, h := range strings.Split(os.Getenv(envName), ",") {
+		if strings.ToLower(strings.TrimSpace(h)) == host {
+			return true
+		}
+	}
+	return false
 }
 
 // credURLRE matches a "scheme://userinfo@" prefix so any credential embedded in
