@@ -111,6 +111,7 @@ type identityValidator struct {
 	issuers   []string
 	audiences []string
 	cache     *jwksCache
+	keys      keyResolver // resolves an opaque API key to a principal; nil ⟹ keys stay anonymous
 }
 
 // newIdentityValidator builds a validator whose trusted-issuer set is the primary
@@ -122,6 +123,7 @@ func newIdentityValidator(issuer, jwksURL string, audiences []string, ttl time.D
 		issuers:   trustedIssuers(issuer),
 		audiences: audiences,
 		cache:     newJWKSCache(jwksURL, ttl),
+		keys:      newIAMKeys(),
 	}
 }
 
