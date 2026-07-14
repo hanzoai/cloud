@@ -20,10 +20,15 @@
 //
 // Surface:
 //
-//	GET  /v1/referrals               (org)          my code, link, referrals, credits earned
-//	POST /v1/referrals/claim         (org=referee)  record a referral from a ?ref code
-//	GET  /v1/admin/referrals         (SuperAdmin) every referral + a summary
-//	POST /v1/admin/referrals/sweep   (SuperAdmin) qualify-check every pending referral
+//	GET  /v1/referrals                 (org)          my code, link, referrals, credits earned
+//	POST /v1/referrals/claim           (org=referee)  record a referral from a ?ref code
+//	GET  /v1/admin/referrals/bonuses   (SuperAdmin) every one-time bonus referral + a summary
+//	POST /v1/admin/referrals/sweep     (SuperAdmin) qualify-check every pending referral
+//
+// The cross-tenant referral ANALYTICS board (top referrers, conversion, multi-level
+// accrual liability) is GET /v1/admin/referrals, owned by clients/affiliates over the
+// shared attribution spine; this package owns the one-time-bonus ledger at
+// /v1/admin/referrals/bonuses so the two admin surfaces compose without colliding.
 //
 // serve.go auto-registers GET /v1/referrals/health.
 package referrals
@@ -122,7 +127,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/referrals", cloud.Handle(s, myReferrals))
 	app.Post("/v1/referrals/claim", cloud.Handle(s, claim))
-	app.Get("/v1/admin/referrals", cloud.Handle(s, adminList))
+	// The one-time-bonus ledger board. The cross-tenant analytics board at
+	// GET /v1/admin/referrals is owned by clients/affiliates (shared spine).
+	app.Get("/v1/admin/referrals/bonuses", cloud.Handle(s, adminList))
 	app.Post("/v1/admin/referrals/sweep", cloud.Handle(s, adminSweep))
 }
 
