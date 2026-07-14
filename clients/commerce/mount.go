@@ -74,6 +74,16 @@ var commercePrefixes = []string{
 	// retire the standalone pod: pay.hanzo.ai repoints at the cloud binary and
 	// deliveries must land on the SAME verified handler.
 	"/v1/billing/webhooks",
+	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
+	// durable cron's billing-autorecharge poke entry dispatches it over the
+	// cluster wire (POST cloud.hanzo.svc:8000 with the COMMERCE_SERVICE_TOKEN
+	// bearer); without this prefix the request lands on the account-bridge
+	// /v1/billing/* catch-all, whose session gate 403s a service token
+	// ("sign in to view billing"). Mounted like the webhooks: only this route
+	// family reaches gin, where commerce's own TokenRequired service-token
+	// branch + the PlatformOnly mint gate authenticate it — token-is-the-auth,
+	// exactly what the retired standalone CronJob relied on.
+	"/v1/billing/auto-recharge",
 }
 
 // Mount boots the in-process commerce app and attaches its http.Handler to app at
