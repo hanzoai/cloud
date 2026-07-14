@@ -187,3 +187,53 @@ func livePost(t *testing.T, app *zip.App, path, user, org, body string) (int, []
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, b
 }
+
+// TestLiveAnonymousCapture proves the marketing-site path: an ANONYMOUS pageview
+// (no principal) posted to a recognized brand Host lands under that brand's public
+// org, resolved server-side — never from a client field.
+func TestLiveAnonymousCapture(t *testing.T) {
+	aiobject.InitDatastore()
+	deadline := time.Now().Add(20 * time.Second)
+	for !aiobject.DatastoreEnabled() && time.Now().Before(deadline) {
+		time.Sleep(300 * time.Millisecond)
+	}
+	if !aiobject.DatastoreEnabled() {
+		t.Fatal("datastore did not connect")
+	}
+	ctx := context.Background()
+	if err := EnsureEventsTable(ctx); err != nil {
+		t.Fatalf("EnsureEventsTable: %v", err)
+	}
+	app := liveApp(t)
+
+	// A unique marker in properties lets us find exactly this run's row.
+	marker := "anon-" + time.Now().UTC().Format("150405.000")
+	body := `{"batch":[{"type":"pageview","event":"$pageview","distinctId":"visitor-x","product":"site","path":"/","properties":{"marker":"` + marker + `"}}]}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/analytics", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = "hanzo.ai" // recognized brand host; NO principal headers
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("anon POST: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("anon capture = %d, want 200", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+
+	rows, err := aiobject.DatastoreQuery(ctx,
+		"SELECT tenant_id, event, product FROM hanzo.events WHERE JSONExtractString(properties,'marker') = ?", marker)
+	if err != nil {
+		t.Fatalf("readback: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("anon rows = %d, want 1", len(rows))
+	}
+	tenant := aString(rows[0]["tenant_id"])
+	t.Logf("anonymous pageview landed: tenant_id=%q event=%q product=%q",
+		tenant, aString(rows[0]["event"]), aString(rows[0]["product"]))
+	if tenant != "hanzo" {
+		t.Fatalf("anon tenant = %q, want hanzo (brand from Host)", tenant)
+	}
+}
