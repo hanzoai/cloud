@@ -499,18 +499,27 @@ func recordGenesis(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := requireStage(f, StageGenesis); err != nil {
 		return err
 	}
+	// Idempotent: once the genesis root is recorded, do NOT re-seed (which would
+	// double-issue founder share certificates) — just return the recorded state.
+	if f.Genesis != nil && f.Genesis.Root != "" {
+		return ok(c, f)
+	}
 	// Seed the canonical cap table with the founding allocation (stakeholders +
 	// common class + issued shares), then anchor the deterministic root on-chain.
 	if err := s.State.prov.captable.SeedFounders(c.Context(), org, f.Name, f.Founders); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "seed cap table: %v", err)
 	}
-	g, err := s.State.prov.anchor.Anchor(c.Context(), f)
+	g, anchorErr := s.State.prov.anchor.Anchor(c.Context(), f)
 	if g != nil {
+		// Persist the computed root even if the on-chain submit failed — the root is
+		// the tamper-evident witness and must not be recomputed/re-seeded on retry.
 		f.Genesis = g
-		_ = save(s, c, f) // persist the computed root even if the on-chain submit failed
+		if serr := save(s, c, f); serr != nil {
+			return serr
+		}
 	}
-	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "anchor genesis: %v", err)
+	if anchorErr != nil {
+		return zip.Errorf(http.StatusBadGateway, "anchor genesis: %v", anchorErr)
 	}
 	return ok(c, f)
 }
