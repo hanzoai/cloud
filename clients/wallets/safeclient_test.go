@@ -195,7 +195,7 @@ func TestSafeCustody(t *testing.T) {
 // never fabricates a wallet — it fails closed like mpc/treasury.
 func TestSafeCustody_FailClosed(t *testing.T) {
 	sc := safeCustody{mpc: newMPCClient(nil, nil), safe: newSafeClient("", nil)}
-	if _, err := sc.Provision(context.Background(), &Wallet{Org: "acme", Chain: "eip155:36963"}); err != ErrMPCNotConfigured {
+	if _, err := sc.Provision(context.Background(), &Wallet{Scope: Scope{Org: "acme"}, Chain: "eip155:36963"}); err != ErrMPCNotConfigured {
 		t.Fatalf("unconfigured safe Provision err = %v, want ErrMPCNotConfigured", err)
 	}
 }
