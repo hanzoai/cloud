@@ -348,6 +348,92 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) error {
 	return pushBuilder(ctx, ev)
 }
 
+// ---- git lifecycle event stream ----
+//
+// One event, many subscribers. push-to-deploy (OnGitPush) is the deploy
+// subscriber-of-record and stays exactly as it is; this seam generalizes the SAME
+// inversion to N reactors (mirror-out, Slack-notify, …) so git/platform EMIT a
+// lifecycle fact and never import the subscribers. It is deliberately SEPARATE
+// from OnGitPush — the deploy path is single-registrant and synchronous, this
+// stream is many-registrant and best-effort — so adding a reactor can never
+// perturb push→deploy.
+
+// LifecycleKind classifies a git lifecycle event. The value IS the wire name a
+// subscription filters on.
+type LifecycleKind string
+
+const (
+	LifecyclePushLanded   LifecycleKind = "push.landed"
+	LifecycleBuildStarted LifecycleKind = "build.started"
+	LifecycleDeployLive   LifecycleKind = "deploy.live"
+	LifecycleDeployFailed LifecycleKind = "deploy.failed"
+)
+
+// LifecycleEvent is one git lifecycle fact fanned out to every registered
+// subscriber. A plain data value — values, not places:
+//   - Org/Project/Repo    the tenant + repo the fact happened in (the routing key).
+//   - Branch/Before/After  the ref that moved and its old→new tip (a push).
+//   - Pusher              who pushed (best-effort; "" for a client-less push).
+//   - DeployID/Detail     the deployment id + a human one-liner (a deploy transition).
+//   - Origin              "" for a native push; the source host when the refs
+//     arrived via an inbound mirror sync — the loop-prevention seam that lets the
+//     outbound mirror subscriber suppress a re-mirror of refs it just pulled in.
+type LifecycleEvent struct {
+	Kind     LifecycleKind
+	Org      string
+	Project  string
+	Repo     string
+	Branch   string
+	Before   string
+	After    string
+	Pusher   string
+	DeployID string
+	Detail   string
+	Origin   string
+}
+
+// lifecycleSubscribers is the fan-out list. Registration happens at Mount
+// (single-threaded, before any request is served), so a plain slice is correct:
+// EmitLifecycle only ever ranges it after every subsystem's Mount has run.
+var lifecycleSubscribers []func(ctx context.Context, ev LifecycleEvent)
+
+// RegisterLifecycleSubscriber adds a git-lifecycle reactor. Every subsystem that
+// reacts to a push/deploy (mirror-out, Slack-notify) registers ONE here at Mount;
+// git/platform EMIT via EmitLifecycle. The inversion keeps the emitters from
+// importing the subscribers — the same pattern as RegisterPushBuilder, but
+// many-registrant.
+func RegisterLifecycleSubscriber(fn func(ctx context.Context, ev LifecycleEvent)) {
+	if fn == nil {
+		return
+	}
+	lifecycleSubscribers = append(lifecycleSubscribers, fn)
+}
+
+// ResetLifecycleSubscribers clears the registry. TEST-ONLY seam (a test mounts and
+// unmounts repeatedly); production registers once at Mount and never resets.
+func ResetLifecycleSubscribers() { lifecycleSubscribers = nil }
+
+// EmitLifecycle fans one event out to every registered subscriber, best-effort and
+// NON-BLOCKING: each subscriber runs in its own goroutine on a cancel-immune
+// context (the fact already happened — a request cancel must not abort the
+// notify/mirror), so a slow reactor (a mirror push) can never delay the git/deploy
+// path or another reactor. A panicking subscriber is contained so one bad reactor
+// can neither crash the shared multi-tenant process nor starve the others; each
+// subscriber logs its own errors.
+func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
+	subs := lifecycleSubscribers
+	if len(subs) == 0 {
+		return
+	}
+	bg := context.WithoutCancel(ctx)
+	for _, fn := range subs {
+		go func(fn func(context.Context, LifecycleEvent)) {
+			defer func() { _ = recover() }()
+			fn(bg, ev)
+		}(fn)
+	}
+}
+
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetOrgConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS

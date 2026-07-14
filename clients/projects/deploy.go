@@ -111,7 +111,35 @@ func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error
 	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
 		s.Log.Warn("set building failed (continuing)", "slug", p.Slug, "err", err)
 	}
+	emitProjectLifecycle(c.Context(), cloud.LifecycleBuildStarted, org, p, d, "building "+p.Slug)
 	return c.JSON(http.StatusAccepted, toDeploymentView(d))
+}
+
+// emitProjectLifecycle fans a site-deploy transition onto the cloud lifecycle
+// stream so the git-lifecycle reactors (Slack-notify) can post about it. Repo is
+// derived from the project's linked RepoURL (the native repo name a subscription
+// keys on); a project deploying an uploaded artifact with no linked repo carries an
+// empty Repo and routes to nothing. Best-effort + detached inside EmitLifecycle.
+func emitProjectLifecycle(ctx context.Context, kind cloud.LifecycleKind, org string, p Project, d Deployment, detail string) {
+	branch := strings.TrimSpace(p.RepoBranch)
+	if branch == "" {
+		branch = "main"
+	}
+	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
+		Kind: kind, Org: org, Repo: repoFromURL(p.RepoURL), Branch: branch,
+		After: strings.TrimSpace(d.Commit), DeployID: d.ID, Detail: detail,
+	})
+}
+
+// repoFromURL extracts the repo name from a clone URL (last path segment, ".git"
+// stripped) — the key the git subscription store routes a deploy notification on.
+func repoFromURL(u string) string {
+	u = strings.TrimSuffix(strings.TrimSpace(u), "/")
+	u = strings.TrimSuffix(u, ".git")
+	if i := strings.LastIndexByte(u, '/'); i >= 0 {
+		return u[i+1:]
+	}
+	return u
 }
 
 func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error {
@@ -152,6 +180,7 @@ func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) 
 		d.UpdatedAt = time.Now().Unix()
 		_ = s.State.store.UpdateDeployment(c.Context(), d)
 		s.Log.Error("deploy upload failed", "org", org, "slug", p.Slug, "err", upErr)
+		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+upErr.Error())
 		return zip.Errorf(http.StatusBadGateway, "upload failed: %v", upErr)
 	}
 
@@ -160,6 +189,7 @@ func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) 
 	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "finalize deployment: %v", err)
 	}
+	emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+")")
 
 	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
 	onPublish(s, c.Context(), org, &p)
@@ -287,7 +317,20 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "update project: %v", err)
 	}
+	if status == "live" {
+		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
+	} else {
+		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
+	}
 	return c.JSON(http.StatusOK, toDeploymentView(d))
+}
+
+// nonEmptyStr returns s trimmed, or fallback when blank.
+func nonEmptyStr(s, fallback string) string {
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
 }
 
 func listDeployments(s *cloud.Service[state], c *zip.Ctx) error {
