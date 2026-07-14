@@ -47,6 +47,11 @@ const mirrorEnvToken = "GIT_MIRROR_TOKEN"
 // tenant-supplied URL can never capture the shared token.
 const mirrorAllowHostsEnv = "GIT_MIRROR_ALLOW_HOSTS"
 
+// mirrorOutAllowHostsEnv (comma-separated) overrides the OUTBOUND mirror-target
+// allowlist; empty ⇒ the default {github.com, gitlab.com}. The local git host is
+// never a default target (Red MED-1).
+const mirrorOutAllowHostsEnv = "GIT_MIRROR_OUT_ALLOW_HOSTS"
+
 // mirrorAllowPrivateEnv (comma-separated) allowlists hosts that may resolve into
 // an otherwise-blocked internal range (loopback/private/link-local) — for tests
 // and deliberate internal mirrors. Empty ⇒ all internal targets are refused.
@@ -322,24 +327,39 @@ func mirrorAuthHeader(srcURL string) string {
 	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
 }
 
-// mirrorHostAllowed reports whether host may receive the mirror credential AND be
-// a downstream mirror target. GIT_MIRROR_ALLOW_HOSTS (comma-separated) overrides
-// the default set {github.com, gitlab.com, git.hanzo.ai}. The SAME allowlist gates
-// the credential attachment (mirror-in) and the push target (mirror-out), so a
-// tenant-supplied URL can never capture the shared token or push to an internal
-// host.
+// mirrorHostAllowed reports whether host may receive the INBOUND mirror credential
+// (GIT_MIRROR_TOKEN) when fetching a private source. GIT_MIRROR_ALLOW_HOSTS
+// (comma-separated) overrides the default {github.com, git.hanzo.ai}. This gate is
+// DISTINCT from the outbound-target gate (mirrorOutHostAllowed): a host we trust to
+// FETCH from is not automatically a host we will PUSH tenant code to.
 func mirrorHostAllowed(host string) bool {
 	if v := strings.TrimSpace(os.Getenv(mirrorAllowHostsEnv)); v != "" {
 		return hostInList(host, mirrorAllowHostsEnv)
 	}
 	host = strings.ToLower(host)
-	return host == "github.com" || host == "gitlab.com" || host == "git.hanzo.ai"
+	return host == "github.com" || host == "git.hanzo.ai"
+}
+
+// mirrorOutHostAllowed reports whether host is a permitted OUTBOUND mirror TARGET
+// (and may therefore receive the outbound credential). The default set is
+// {github.com, gitlab.com} ONLY and DELIBERATELY EXCLUDES the local git host
+// (git.hanzo.ai): admitting it would let a tenant make the server force-push with
+// the shared token at an arbitrary internal path — an internal SSRF +
+// privileged-credential presentation (Red MED-1). GIT_MIRROR_OUT_ALLOW_HOSTS
+// overrides for a deployment that mirrors to additional external hosts; the local
+// host must never be added.
+func mirrorOutHostAllowed(host string) bool {
+	if v := strings.TrimSpace(os.Getenv(mirrorOutAllowHostsEnv)); v != "" {
+		return hostInList(host, mirrorOutAllowHostsEnv)
+	}
+	host = strings.ToLower(host)
+	return host == "github.com" || host == "gitlab.com"
 }
 
 // mirrorBasicUser maps a downstream host to the basic-auth username its token is
 // presented with over http.extraHeader: GitHub takes "x-access-token", GitLab
-// takes "oauth2"; every other allowlisted host defaults to the GitHub form. The
-// token itself is the password, injected env-only (never argv/logs).
+// takes "oauth2". The token itself is the password, injected env-only (never
+// argv/logs).
 func mirrorBasicUser(host string) string {
 	if strings.ToLower(host) == "gitlab.com" {
 		return "oauth2"
