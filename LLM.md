@@ -79,3 +79,24 @@ HIP-0026); never read a raw request header for scope.
   behind a `// NAMING(gated)` note in `clients/platform/k8s.go`. The surrounding
   identity vocabulary is org-native regardless; only the on-cluster string waits on
   an infrastructure migration.
+
+## Hanzo Company (`clients/company`, `/v1/company`)
+
+The Stripe-Atlas-class incorporation + fundraising product: ONE formation state
+machine per org. `machine.go` is the PURE core — a `transitions` table with a guard
+per edge, `Advance(f, to)` the only mutator — so transitions, the payment gate, and
+the skip path are unit-testable with no I/O. The HTTP surface is decomplected: ACTION
+endpoints populate data (structure/founders/kyc/payment/documents/esign/genesis/
+import), and ONE `POST /v1/company/advance {to}` runs the guarded transition.
+
+Every external dependency is a narrow provider interface (`providers.go`) so the
+machine composes them identically in prod and tests: billing → the shared
+`ResourceMeter` ($999 one-time fee); documents → `dataroom.Ingest` (new in-proc
+facade); cap table → `captable.*` (new in-proc facades: SetIncorporation /
+AddStakeholders / EnsureShareClass / IssueShares / RecordRound); equity genesis →
+a KMS-signed Hanzo-L1 anchor mirroring `clients/treasury` (honest pending when
+unwired); KYC + state filing → honest stubs (no fabricated verification/filing).
+Import path (already-incorporated orgs): Google Drive → data room, a Google Sheet →
+captable, via the `google` OAuth provider now completed in `clients/integrations`
+(token custodied in KMS; the automations `google` connector shares the same token).
+Runbook: `docs/company-dogfood.md`.
