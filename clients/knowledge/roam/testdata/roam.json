@@ -1,0 +1,21 @@
+[
+  {
+    "title": "Project Atlas",
+    "children": [
+      {
+        "string": "Depends on [[Design System]] and [[API Spec]]",
+        "children": [
+          { "string": "Owner is #alice" },
+          { "string": "Blocked until [[API Spec]] is approved" }
+        ]
+      },
+      { "string": "See ((k9fA2bQ)) for the original context" }
+    ]
+  },
+  {
+    "title": "Design System",
+    "children": [
+      { "string": "Tokens, components, and usage guidelines" }
+    ]
+  }
+]
