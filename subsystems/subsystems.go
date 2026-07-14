@@ -79,6 +79,7 @@ import (
 	"github.com/hanzoai/cloud/clients/functions"
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/git"
+	"github.com/hanzoai/cloud/clients/gitops"
 	"github.com/hanzoai/cloud/clients/graph"
 	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/iam"
@@ -214,6 +215,10 @@ func Wire() []cloud.MountSpec {
 		// middleware a marketplace applies to its priced routes.
 		{Name: "x402", Mount: cloud.Typed(x402.Mount), Shutdown: ctxShutdown(x402.Shutdown)},
 		{Name: "paas", Mount: cloud.Typed(paas.Mount), OwnsHealth: true},
+		// GitOps deploy dashboard /v1/gitops/* (the ArgoCD-grade fleet view over the
+		// operator App CRs). After paas so the release seam paas installs is registered
+		// before a gitops rollback delegates to it; owns its own /v1/gitops/health.
+		{Name: "gitops", Mount: cloud.Typed(gitops.Mount), OwnsHealth: true},
 		{Name: "functions", Mount: cloud.Typed(functions.Mount)},
 		{Name: "tracker", Mount: cloud.Typed(tracker.Mount)},
 		{Name: "templates", Mount: cloud.Typed(templates.Mount)},
