@@ -21,11 +21,43 @@ import (
 //
 // kb-connector is intentionally NOT indexed: it is connection metadata, never
 // knowledge text. This is the whole extension surface — kb adds no second hook path.
+//
+// kb-page ALSO maintains wikilink EDGES (links.go): its save reconciles "[[…]]"
+// references into kb-link edges, and its trash removes its outgoing edges. Because
+// runHooks stops at the first erroring hook, indexing and edge maintenance are
+// combined into ONE page hook that runs both INDEPENDENTLY — a vector outage that
+// fails indexing must never skip edge extraction, and vice-versa.
 func registerHooks() {
 	for _, dt := range indexedDocTypes {
+		if dt == DTPage {
+			continue // kb-page uses the combined index+link hooks below
+		}
 		framework.RegisterHook(dt, framework.ActionAfterSave, indexOnSave)
 		framework.RegisterHook(dt, framework.ActionOnTrash, deindexOnTrash)
 	}
+	framework.RegisterHook(DTPage, framework.ActionAfterSave, pageAfterSave)
+	framework.RegisterHook(DTPage, framework.ActionOnTrash, pageOnTrash)
+}
+
+// pageAfterSave runs BOTH the vector index and the wikilink-edge reconciliation for
+// a saved page, isolating a failure of one from the other. Indexing is fail-open
+// (its error is logged here, not propagated) so link extraction always runs; the
+// link error is returned for the framework's after() wrapper to log.
+func pageAfterSave(ctx context.Context, ev *framework.Event) error {
+	if err := indexOnSave(ctx, ev); err != nil {
+		ev.Logger.Warn("kb index on save failed (page write already landed)",
+			"name", ev.Doc.Name, "err", err)
+	}
+	return linkOnSave(ctx, ev)
+}
+
+// pageOnTrash removes BOTH the page's vector point and its outgoing edges. Both
+// halves swallow their own errors (a trash hook must never block the delete), so
+// this always returns nil.
+func pageOnTrash(ctx context.Context, ev *framework.Event) error {
+	_ = deindexOnTrash(ctx, ev) // swallows internally
+	_ = delinkOnTrash(ctx, ev)  // swallows internally
+	return nil
 }
 
 // indexOnSave embeds the just-saved document and upserts it to the org's vector
