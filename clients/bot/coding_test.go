@@ -43,6 +43,7 @@ func TestRunCodingTask_StreamsStepsAndResult(t *testing.T) {
 	srv := ndjsonServer(t, lines, &gotReq, &gotBody)
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 	t.Setenv("BOT_GATEWAY_TOKEN", "svc-token-xyz")
 
 	var steps []CodingStep
@@ -93,6 +94,7 @@ func TestRunCodingTask_ErrorLine(t *testing.T) {
 	srv := ndjsonServer(t, []string{`{"type":"error","message":"dev exec failed","logTail":"boom"}`}, nil, nil)
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 
 	res, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil)
 	if err != nil {
@@ -109,6 +111,7 @@ func TestRunCodingTask_Non2xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 	if _, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil); err == nil {
 		t.Fatal("a 401 must be an error")
 	}
@@ -118,7 +121,27 @@ func TestRunCodingTask_NoTerminalIsError(t *testing.T) {
 	srv := ndjsonServer(t, []string{`{"type":"step","step":"clone"}`}, nil, nil)
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 	if _, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil); err == nil {
 		t.Fatal("a stream with no result/error line must be an error (no fabricated success)")
+	}
+}
+
+func TestRunCodingTask_RefusesCleartextByDefault(t *testing.T) {
+	// The credential-bearing POST must not go cleartext without an explicit mesh
+	// opt-in: an http target with BOT_GATEWAY_ALLOW_PLAINTEXT unset fails closed and
+	// never dials.
+	srv := ndjsonServer(t, []string{`{"type":"result","ok":true}`}, nil, nil)
+	defer srv.Close()
+	t.Setenv("BOT_GATEWAY_URL", srv.URL) // http://
+	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "")
+	_, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{
+		Credential: Credential{Username: "x", Token: "hk-SECRET"},
+	}, nil)
+	if err == nil {
+		t.Fatal("cleartext coding POST must fail closed by default")
+	}
+	if strings.Contains(err.Error(), "hk-SECRET") {
+		t.Fatalf("error must not leak the credential: %v", err)
 	}
 }

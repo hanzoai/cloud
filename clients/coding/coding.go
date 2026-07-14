@@ -208,6 +208,12 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	branch := "agent/" + shortID(sessionID)
 	res.Branch = branch
 
+	// Terminal bookkeeping (final status mirror, session close, PR row) runs on a
+	// cancel-immune context: a run that hit its deadline still transitions the
+	// session out of "running" and files its PR, instead of leaving a zombie
+	// (same discipline receive-pack uses for its post-push side effects).
+	term := context.WithoutCancel(ctx)
+
 	d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{
 		"status": "started", "repo": repo, "branch": branch, "base": baseOr(req.Base),
 	})
@@ -229,7 +235,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	}
 	runRes, rerr := d.Runner.Run(ctx, org, req.UserID, runReq, onStep)
 	if rerr != nil {
-		return d.fail(ctx, org, sessionID, actor, res, "coding run failed: "+rerr.Error(), "")
+		return d.fail(term, org, sessionID, actor, res, "coding run failed: "+rerr.Error(), "")
 	}
 	res.Diffstat = runRes.Diffstat
 	res.Changed = runRes.Changed
@@ -241,13 +247,13 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	res.CommitSha = runRes.CommitSha
 
 	if !runRes.OK {
-		return d.fail(ctx, org, sessionID, actor, res, nonEmpty(runRes.Error, "coding run reported failure"), runRes.LogTail)
+		return d.fail(term, org, sessionID, actor, res, nonEmpty(runRes.Error, "coding run reported failure"), runRes.LogTail)
 	}
 
 	// 3. No changes is a legitimate, non-error outcome — nothing to PR.
 	if !runRes.Changed {
-		d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{"status": "done", "changed": false})
-		_ = d.Sessions.Close(ctx, org, sessionID, statusDone)
+		d.mirror(term, org, sessionID, actor, kindStatus, map[string]any{"status": "done", "changed": false})
+		_ = d.Sessions.Close(term, org, sessionID, statusDone)
 		res.OK = true
 		return res
 	}
@@ -258,7 +264,7 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	if d.VerifyRef != nil {
 		sha, ok := d.VerifyRef(ctx, org, repo, branch)
 		if !ok {
-			return d.fail(ctx, org, sessionID, actor, res,
+			return d.fail(term, org, sessionID, actor, res,
 				"pushed branch "+branch+" was not found in native git", runRes.LogTail)
 		}
 		res.Verified = true
@@ -270,22 +276,22 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	// 5. Open the native PR work item (Kind:pr, Source:agent). A tracker failure
 	// does NOT fail the run — the branch is pushed and verified; the PR row is a
 	// side-effect — but it is recorded.
-	pr, perr := d.Tracker.CreatePR(ctx, PRInput{
+	pr, perr := d.Tracker.CreatePR(term, PRInput{
 		Org: org, Project: strings.TrimSpace(req.Project), Repo: repo,
 		Base: baseOr(req.Base), Head: branch, Title: codingTitle(repo, prompt),
 		Body: prBody(prompt, req.Base, branch, res.CommitSha, runRes.Diffstat, sessionID), Assignee: agentRef,
 	})
 	if perr != nil {
 		d.logf("coding: tracker PR create failed", "org", org, "repo", repo, "err", perr)
-		d.mirror(ctx, org, sessionID, actor, kindLog, map[string]any{"message": "tracker PR not created: " + perr.Error()})
+		d.mirror(term, org, sessionID, actor, kindLog, map[string]any{"message": "tracker PR not created: " + perr.Error()})
 	} else {
 		res.PR = pr
 	}
 
-	d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{
+	d.mirror(term, org, sessionID, actor, kindStatus, map[string]any{
 		"status": "done", "changed": true, "branch": branch, "commit": res.CommitSha, "pr": pr.Identifier,
 	})
-	_ = d.Sessions.Close(ctx, org, sessionID, statusDone)
+	_ = d.Sessions.Close(term, org, sessionID, statusDone)
 	res.OK = true
 	return res
 }
