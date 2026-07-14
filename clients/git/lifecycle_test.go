@@ -478,6 +478,55 @@ func TestNotifyEscapesMrkdwn(t *testing.T) {
 			t.Fatalf("expected escaped %q in block text; got %s", esc, text)
 		}
 	}
+
+	// A hostile BRANCH name is the other sink: git refnames allow < > & !, and the
+	// receive-pack fire path (branchTips → for-each-ref) applies NO branchRE, so the
+	// raw name flows into the summary AND the *Branch* field unless escaped. Push a
+	// branch named x<!channel>y via the real git CLI (go-git rejects such a refspec).
+	const hostileBranch = "x<!channel>y"
+	pushBranchCLI(t, base, "acme", "code", hostileBranch)
+	bgot := waitForNotifyContaining(t, calls, "x&lt;!channel&gt;y", 3*time.Second)
+	btext := allBlockText(bgot.blocks)
+	if strings.Contains(bgot.text, hostileBranch) || strings.Contains(btext, hostileBranch) {
+		t.Fatalf("raw hostile branch leaked (summary=%q blocks=%s)", bgot.text, btext)
+	}
+	if !strings.Contains(bgot.text, "x&lt;!channel&gt;y") {
+		t.Fatalf("branch not escaped in summary: %q", bgot.text)
+	}
+	if !strings.Contains(btext, "x&lt;!channel&gt;y") {
+		t.Fatalf("branch not escaped in the Branch field: %s", btext)
+	}
+}
+
+// pushBranchCLI pushes one commit to an arbitrary (possibly hostile) branch name on
+// <org>/<name> over smart-HTTP with the real git CLI — used to exercise branch
+// names go-git's refspec parser rejects.
+func pushBranchCLI(t *testing.T, base, org, name, branch string) {
+	t.Helper()
+	work := t.TempDir()
+	gitRun(t, work, "init", "-q", "-b", "work")
+	writeFile(t, work, "bfile.txt", "branch payload")
+	gitRun(t, work, "add", "-A")
+	gitRun(t, work, "commit", "-q", "-m", "a safe subject")
+	gitRun(t, work, "remote", "add", "origin", base+"/v1/git/"+org+"/"+name+".git")
+	gitRun(t, work, append(orgHeaderArgs(org), "push", "origin", "HEAD:refs/heads/"+branch)...)
+}
+
+// waitForNotifyContaining blocks until a captured Slack call's summary OR blocks
+// contain needle, or fails.
+func waitForNotifyContaining(t *testing.T, calls *[]notifyCall, needle string, d time.Duration) notifyCall {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		for _, c := range snapshot(calls) {
+			if strings.Contains(c.text, needle) || strings.Contains(allBlockText(c.blocks), needle) {
+				return c
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no Slack notify containing %q within %s", needle, d)
+	return notifyCall{}
 }
 
 // allBlockText collects every mrkdwn "text" string from a Block Kit block slice
