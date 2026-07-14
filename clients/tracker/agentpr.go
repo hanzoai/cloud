@@ -24,14 +24,14 @@ import (
 // four discriminators are set here: Kind is always "pr", Source always "agent",
 // Repo binds the git repo, and Head (the pushed branch) is the ExtRef anchor.
 type AgentPRInput struct {
-	Org       string // tenant (isolation key)
-	Project   string // IAM project slug (physical DB scope); "" = the org default
-	Repo      string // git repo the branch was pushed to (the Repo binding)
-	Base      string // base branch the PR targets (recorded in the body)
-	Head      string // the pushed branch (the ExtRef anchor)
-	Title     string // work-item title (from the task)
-	Body      string // description: summary / diffstat + session link
-	Assignee  string // the agent ref (e.g. "hanzo")
+	Org      string // tenant (isolation key)
+	Project  string // IAM project slug (physical DB scope); "" = the org default
+	Repo     string // git repo the branch was pushed to (the Repo binding)
+	Base     string // base branch the PR targets (recorded in the body)
+	Head     string // the pushed branch (the ExtRef anchor)
+	Title    string // work-item title (from the task)
+	Body     string // description: summary / diffstat + session link
+	Assignee string // the agent ref (e.g. "hanzo")
 }
 
 // AgentPR is the created row's stable handle: KEY-N plus the parts to build it.
