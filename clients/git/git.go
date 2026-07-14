@@ -43,6 +43,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -170,6 +171,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	mounted = s
 
 	routes(app, s)
+	registerLifecycleReactors()
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
@@ -216,6 +218,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// segment, like /mirror — never shadows the :org/:repo smart-HTTP routes.
 	app.Post("/v1/git/repos/:name/gc", cloud.Handle(s, maintain))
 
+	// Repo-lifecycle config: Slack-channel subscriptions (notify.go) + downstream
+	// mirror targets (mirror_out.go). Distinct trailing segments, so they never
+	// shadow the :org/:repo smart-HTTP routes below. Org-scoped like every repo op.
+	app.Post("/v1/git/repos/:name/subscriptions", cloud.Handle(s, subscribe))
+	app.Get("/v1/git/repos/:name/subscriptions", cloud.Handle(s, listSubscriptions))
+	app.Delete("/v1/git/repos/:name/subscriptions/:id", cloud.Handle(s, unsubscribe))
+	app.Post("/v1/git/repos/:name/mirrors", cloud.Handle(s, addMirror))
+	app.Get("/v1/git/repos/:name/mirrors", cloud.Handle(s, listMirrors))
+	app.Delete("/v1/git/repos/:name/mirrors/:id", cloud.Handle(s, deleteMirror))
+
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
 	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
@@ -239,6 +251,32 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// ZAP transport — the SAME control-plane core, reachable by browsers/services
 	// that speak ZAP instead of REST, over the shared /zap plane. See zap.go.
 	mountZAP(app, s)
+}
+
+// lifecycleOnce guards the ONE registration of git's lifecycle reactors into the
+// cloud fan-out. Registration is process-once (the list APPENDS, unlike the
+// single-registrant push builder), so a repeated Mount — e.g. across tests — can
+// never stack duplicate reactors; both closures read the current `mounted` at event
+// time and no-op when the subsystem is unmounted.
+var lifecycleOnce sync.Once
+
+// registerLifecycleReactors wires git's two subscribers onto the cloud lifecycle
+// stream: the Slack-notifier (notify.go) and the outbound mirror (mirror_out.go).
+// Both run detached + best-effort (EmitLifecycle), so neither can block or fail the
+// git/deploy path.
+func registerLifecycleReactors() {
+	lifecycleOnce.Do(func() {
+		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
+			if s := mounted; s != nil {
+				notifyLifecycle(s, ctx, ev)
+			}
+		})
+		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
+			if s := mounted; s != nil {
+				mirrorOutbound(s, ctx, ev)
+			}
+		})
+	})
 }
 
 // onGitHost gates a handler on the request Host matching the git host
