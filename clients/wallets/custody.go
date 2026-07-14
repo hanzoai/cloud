@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -93,14 +94,66 @@ type Account struct {
 	CreatedAt int64  `json:"createdAt"`
 }
 
+// Scope is the ownership+addressing scope of custodied key material and the ONE
+// key both the KMS secret ref (keyRef) and the store lookup derive from. Org is
+// the tenant isolation boundary — always required, never crossed. Project, Agent,
+// and AccountID are optional NARROWINGS within the org: a wallet may belong to the
+// whole org (all narrowings empty), to an org project, to a specific agent, or to
+// a named account grouping. One scope type, one derivation/lookup path — so a
+// wallet's key material and its row are addressed identically at every layer.
+type Scope struct {
+	Org       string `json:"org"`
+	Project   string `json:"project,omitempty"`
+	Agent     string `json:"agent,omitempty"`
+	AccountID string `json:"accountId"`
+}
+
+// keyRef is the KMS secret ref for a KMS-custodied wallet's sealed signing key,
+// derived from the FULL scope so neither another tenant — nor another scope within
+// a tenant — can address this material. The org segment is the hard isolation
+// boundary; each PRESENT narrowing adds a labeled segment in a fixed order (an
+// absent one is omitted, never blank-joined). An org-only scope keeps the exact
+// ref "wallets/<org>/<walletID>"; a scoped one is unambiguous and injection-safe
+// (narrowings are validated to a slash-free charset by validNarrowing).
+func (s Scope) keyRef(walletID string) string {
+	var b strings.Builder
+	b.WriteString("wallets/")
+	b.WriteString(s.Org)
+	if s.Project != "" {
+		b.WriteString("/p/")
+		b.WriteString(s.Project)
+	}
+	if s.Agent != "" {
+		b.WriteString("/a/")
+		b.WriteString(s.Agent)
+	}
+	if s.AccountID != "" {
+		b.WriteString("/c/")
+		b.WriteString(s.AccountID)
+	}
+	b.WriteByte('/')
+	b.WriteString(walletID)
+	return b.String()
+}
+
+// scopePattern is the safe charset for a scope narrowing segment: a leading
+// alphanumeric then alphanumerics/dot/dash/underscore, bounded — so a narrowing
+// can never carry a '/' (which would let a crafted value cross into another
+// wallet's ref) or blow the ref length.
+var scopePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// validNarrowing reports whether a scope narrowing (project/agent/account) is a
+// safe ref segment. Empty is valid — the dimension is simply unused.
+func validNarrowing(s string) bool { return s == "" || scopePattern.MatchString(s) }
+
 // Wallet is one signing identity. Custody selects the backend; KeyRef is the
 // custody-internal HANDLE to the signing material (a KMS secret ref, or the mpc
 // wallet id) — set by Provision, never a private-key VALUE, and never returned
-// over the API.
+// over the API. It embeds Scope, so Org/Project/Agent/AccountID promote (and stay
+// flat in JSON) and the wallet is addressed through the ONE scope type.
 type Wallet struct {
 	ID             string `json:"id"`
-	Org            string `json:"org"`
-	AccountID      string `json:"accountId"`
+	Scope                 // Org, Project, Agent, AccountID — the addressing scope
 	Name           string `json:"name"`
 	Custody        Kind   `json:"custody"`
 	Tier           Tier   `json:"tier"`
@@ -110,6 +163,10 @@ type Wallet struct {
 	FinanceAccount string `json:"financeAccount,omitempty"`
 	CreatedAt      int64  `json:"createdAt"`
 }
+
+// keyRef derives this wallet's KMS secret ref from its scope + id — the ONE
+// derivation path every KMS custody operation goes through.
+func (w *Wallet) keyRef() string { return w.Scope.keyRef(w.ID) }
 
 // Fail-closed sentinels. ErrMPCNotConfigured is returned whenever an MPC/treasury
 // wallet is provisioned or signed without a configured ring + internal API key —
@@ -125,14 +182,10 @@ var (
 // handle for that material.
 type Custody interface {
 	Kind() Kind
-	Provision(ctx context.Context, w *Wallet) (address string, err error)   // create signing material, set w.KeyRef, return address
+	Provision(ctx context.Context, w *Wallet) (address string, err error)       // create signing material, set w.KeyRef, return address
 	Sign(ctx context.Context, w *Wallet, digest []byte) (sig []byte, err error) // sign a 32-byte digest
-	Rotate(ctx context.Context, w *Wallet) (address string, err error)      // roll key material, set w.KeyRef, return address
+	Rotate(ctx context.Context, w *Wallet) (address string, err error)          // roll key material, set w.KeyRef, return address
 }
-
-// keyRef is the org-scoped KMS secret ref for a KMS-custodied wallet's sealed
-// signing key. Org-scoped so no tenant can address another's material.
-func keyRef(w *Wallet) string { return "wallets/" + w.Org + "/" + w.ID }
 
 // ── KMS single-sig custody (the fully-exercised spine) ───────────────────────
 
@@ -152,7 +205,7 @@ func (k kmsCustody) Provision(ctx context.Context, w *Wallet) (string, error) {
 		return "", fmt.Errorf("wallets: generate key: %w", err)
 	}
 	addr := crypto.PubkeyToAddress(priv.PublicKey).Hex()
-	ref := keyRef(w)
+	ref := w.keyRef()
 	// Seal the HEX of the 32-byte private key. crypto.FromECDSA returns the raw
 	// scalar; we store its hex so GetSecret round-trips to HexToECDSA cleanly.
 	if err := k.kms.PutSecret(ctx, ref, []byte(hex.EncodeToString(crypto.FromECDSA(priv)))); err != nil {
@@ -170,7 +223,7 @@ func (k kmsCustody) Sign(ctx context.Context, w *Wallet, digest []byte) ([]byte,
 	}
 	ref := w.KeyRef
 	if ref == "" {
-		ref = keyRef(w)
+		ref = w.keyRef()
 	}
 	raw, err := k.kms.GetSecret(ctx, ref)
 	if err != nil {
