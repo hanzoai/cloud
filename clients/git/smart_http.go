@@ -151,10 +151,11 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	runErr := withPackSlot(c.Context(), cmd.Run)
 
 	// The pack has landed on disk; meter + fire builds on a cancel-immune context
-	// (the branch diff is ground truth, so it runs even on a non-zero exit).
+	// (the branch diff is ground truth, so it runs even on a non-zero exit). The
+	// pusher is the gateway-validated user id (X-User-Id) — best-effort attribution.
 	bg := context.WithoutCancel(c.Context())
 	recordUsage(s, bg, org, project, name)
-	fireBranchBuilds(s, bg, org, project, name, before, branchTips(bg, bareDir))
+	fireBranchBuilds(s, bg, org, project, name, c.User(), before, branchTips(bg, bareDir))
 	// Keep clones fast: opportunistic housekeeping (a no-op until git's own
 	// thresholds trigger a repack). Detached + slot-yielding, never blocks push.
 	go autoMaintain(s.Log, bareDir)
@@ -215,28 +216,40 @@ func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx) (string, string, strin
 // advanced (created or updated) between the before/after snapshots. Deleted
 // branches (present in before, gone in after) and unchanged branches are
 // skipped — matching the old semantics (branch refs created/updated, never
-// deletes/tags). Best-effort and non-fatal: the push already landed.
-func fireBranchBuilds(s *cloud.Service[state], ctx context.Context, org, project, name string, before, after map[string]string) {
+// deletes/tags). Best-effort and non-fatal: the push already landed. pusher is
+// the (best-effort) identity that pushed, threaded onto the lifecycle event.
+func fireBranchBuilds(s *cloud.Service[state], ctx context.Context, org, project, name, pusher string, before, after map[string]string) {
 	for branch, newHash := range after {
 		if before[branch] == newHash {
 			continue // unchanged
 		}
-		fireBranchBuild(s, ctx, org, project, name, branch, newHash)
+		fireBranchBuild(s, ctx, org, project, name, branch, before[branch], newHash, pusher)
 	}
 }
 
-// fireBranchBuild fires push-to-deploy for ONE advanced branch — the ONE place
-// cloud.OnGitPush is called; every push transport (receive-pack over HTTP/SSH,
-// the client-less /push) funnels through here. The org/project/name are cloned
-// because they are subslices of fiber's reused request buffers (a builder that
-// ENQUEUES the event would otherwise see them mutate into a later request's
-// path); branch + commit come from fresh git-output strings.
-func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project, name, branch, commit string) {
-	ev := cloud.GitPushEvent{
-		Org: strings.Clone(org), Project: strings.Clone(project), Repo: strings.Clone(name),
-		Branch: strings.Clone(branch), Commit: commit, CloneURL: cloneURL(s, org, name),
-	}
-	if err := cloud.OnGitPush(ctx, ev); err != nil {
+// fireBranchBuild fires the reactions for ONE advanced branch — the ONE place both
+// cloud.OnGitPush (the single-registrant deploy trigger, UNCHANGED) and
+// cloud.EmitLifecycle (the many-subscriber stream: mirror-out, Slack-notify) are
+// called; every push transport (receive-pack over HTTP/SSH, the client-less /push)
+// funnels through here. The org/project/name/branch/before/pusher are cloned because
+// they are subslices of fiber's reused request buffers (a reactor that ENQUEUES the
+// event would otherwise see them mutate into a later request's path); `after` (the
+// new commit) comes from a fresh git-output string.
+func fireBranchBuild(s *cloud.Service[state], ctx context.Context, org, project, name, branch, before, after, pusher string) {
+	org, project, name = strings.Clone(org), strings.Clone(project), strings.Clone(name)
+	branch, before, pusher = strings.Clone(branch), strings.Clone(before), strings.Clone(pusher)
+	if err := cloud.OnGitPush(ctx, cloud.GitPushEvent{
+		Org: org, Project: project, Repo: name,
+		Branch: branch, Commit: after, CloneURL: cloneURL(s, org, name),
+	}); err != nil {
 		s.Log.Warn("git push-to-deploy trigger failed", "org", org, "repo", name, "branch", branch, "err", err)
 	}
+	// Fan the same fact out to the lifecycle stream (best-effort, detached — never
+	// blocks the push). Origin is "" for a native push (the mirror-out reactor's
+	// loop-prevention seam; a future inbound sync stamps the source host).
+	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
+		Kind: cloud.LifecyclePushLanded,
+		Org:  org, Project: project, Repo: name,
+		Branch: branch, Before: before, After: after, Pusher: pusher,
+	})
 }

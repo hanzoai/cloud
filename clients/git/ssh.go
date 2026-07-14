@@ -225,6 +225,7 @@ func (srv *sshServer) handleConn(nConn net.Conn) {
 	go ssh.DiscardRequests(reqs) // reject global out-of-band requests
 
 	org := sconn.Permissions.Extensions["git-org"]
+	user := sconn.Permissions.Extensions["git-user-id"]
 	for newChan := range chans {
 		if newChan.ChannelType() != "session" {
 			_ = newChan.Reject(ssh.UnknownChannelType, "only session channels are supported")
@@ -234,7 +235,7 @@ func (srv *sshServer) handleConn(nConn net.Conn) {
 		if err != nil {
 			continue
 		}
-		go srv.handleSession(org, ch, chReqs)
+		go srv.handleSession(org, user, ch, chReqs)
 	}
 }
 
@@ -256,7 +257,7 @@ type envPayload struct {
 // request carrying GIT_PROTOCOL is captured so the git subprocess negotiates the
 // requested wire protocol (v2 = cheaper on large repos). Any other request type
 // (shell, pty) is rejected — this is a git-only endpoint.
-func (srv *sshServer) handleSession(org string, ch ssh.Channel, reqs <-chan *ssh.Request) {
+func (srv *sshServer) handleSession(org, user string, ch ssh.Channel, reqs <-chan *ssh.Request) {
 	defer func() { _ = ch.Close() }()
 	var gitProtocol string
 	for req := range reqs {
@@ -269,7 +270,7 @@ func (srv *sshServer) handleSession(org string, ch ssh.Channel, reqs <-chan *ssh
 				return
 			}
 			_ = req.Reply(true, nil)
-			code := srv.runGitCommand(org, p.Command, gitProtocol, ch)
+			code := srv.runGitCommand(org, user, p.Command, gitProtocol, ch)
 			srv.exit(ch, code)
 			return
 		case "env":
@@ -301,7 +302,7 @@ var gitCmdRE = regexp.MustCompile(`^(git-upload-pack|git-receive-pack) '?([^']+?
 // runGitCommand parses the exec command, enforces org scoping (path org == key
 // org), confirms the repo exists, and drives the shared pack code path on the
 // channel's stdin/stdout. Returns the exit code the session reports to the client.
-func (srv *sshServer) runGitCommand(keyOrg, command, gitProtocol string, ch ssh.Channel) int {
+func (srv *sshServer) runGitCommand(keyOrg, keyUser, command, gitProtocol string, ch ssh.Channel) int {
 	m := gitCmdRE.FindStringSubmatch(strings.TrimSpace(command))
 	if m == nil {
 		_, _ = io.WriteString(ch.Stderr(), "unsupported command; only git-upload-pack / git-receive-pack are allowed\n")
@@ -341,7 +342,7 @@ func (srv *sshServer) runGitCommand(keyOrg, command, gitProtocol string, ch ssh.
 			return 1
 		}
 	case svcReceivePack:
-		if err := sshReceivePack(srv.svc, ctx, keyOrg, project, name, gitProtocol, ch); err != nil {
+		if err := sshReceivePack(srv.svc, ctx, keyOrg, project, name, keyUser, gitProtocol, ch); err != nil {
 			srv.svc.Log.Warn("git ssh receive-pack failed", "org", keyOrg, "repo", name, "err", err)
 			return 1
 		}
