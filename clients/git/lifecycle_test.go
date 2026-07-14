@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -46,6 +47,11 @@ func TestSubscriptionCRUDAndIsolation(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/subscriptions", "acme",
 		map[string]any{"channel": "#ok", "events": []string{"nope"}}); code != http.StatusBadRequest {
 		t.Fatalf("bad event want 400, got %d", code)
+	}
+	// build.started is a real kind but never delivered to Slack → reject at subscribe.
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/subscriptions", "acme",
+		map[string]any{"channel": "#ok", "events": []string{"build.started"}}); code != http.StatusBadRequest {
+		t.Fatalf("build.started subscribe want 400, got %d", code)
 	}
 
 	// Create a valid subscription.
@@ -111,6 +117,12 @@ func TestMirrorTargetCRUDAndIsolation(t *testing.T) {
 	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
 		map[string]any{"url": "http://github.com/acme/code.git"}); code != http.StatusBadRequest {
 		t.Fatalf("http target want 400, got %d", code)
+	}
+	// The LOCAL git host is NOT a permitted outbound target (Red MED-1: internal
+	// SSRF + privileged-cred presentation) even though it IS an inbound source.
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
+		map[string]any{"url": "https://git.hanzo.ai/v1/git/acme/code.git"}); code != http.StatusBadRequest {
+		t.Fatalf("local-host target want 400, got %d", code)
 	}
 	// host-vs-url mismatch → 400.
 	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/mirrors", "acme",
@@ -372,4 +384,224 @@ func downstreamRefs(t *testing.T, bare string) map[string]string {
 		}
 	}
 	return refs
+}
+
+// ── MED-2: notify + mirror route on the FULL (org,project,repo) identity ──────
+
+func TestNotifyRoutingIsProjectScoped(t *testing.T) {
+	calls := captureSlack(t)
+	app := mountApp(t)
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("create repo: %d %s", code, b)
+	}
+	store, err := storeFor(mounted, "acme")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := context.Background()
+	// Same repo NAME, two DIFFERENT project scopes → two distinct identities.
+	must(t, store.CreateSubscription(ctx, Subscription{ID: "s_org", Org: "acme", Project: "", Repo: "code", Channel: "#orglevel", CreatedAt: 1}))
+	must(t, store.CreateSubscription(ctx, Subscription{ID: "s_b", Org: "acme", Project: "projB", Repo: "code", Channel: "#projb", CreatedAt: 1}))
+
+	// A push in the ORG-LEVEL scope must reach ONLY #orglevel — never projB's channel
+	// (that would be within-org cross-project code disclosure).
+	notifyLifecycle(mounted, ctx, cloud.LifecycleEvent{
+		Kind: cloud.LifecyclePushLanded, Org: "acme", Project: "", Repo: "code",
+		Branch: "main", After: strings.Repeat("a", 40),
+	})
+	got := snapshot(calls)
+	if len(got) != 1 || got[0].channel != "#orglevel" {
+		t.Fatalf("org-level push must notify ONLY #orglevel, got %+v", got)
+	}
+}
+
+// ── MED-3: repo delete cascades subscriptions + mirrors (no exfil-on-recreate) ─
+
+func TestRepoDeleteCascadesLifecycleConfig(t *testing.T) {
+	app := mountApp(t)
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("create repo: %d %s", code, b)
+	}
+	store, err := storeFor(mounted, "acme")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	ctx := context.Background()
+	must(t, store.CreateSubscription(ctx, Subscription{ID: "s1", Org: "acme", Project: "", Repo: "code", Channel: "#c", CreatedAt: 1}))
+	must(t, store.CreateMirror(ctx, MirrorTarget{ID: "m1", Org: "acme", Project: "", Repo: "code", Host: "github.com", URL: "https://github.com/evil/x.git", CreatedAt: 1}))
+
+	// Delete the repo via the route.
+	if code, _ := do(t, app, http.MethodDelete, "/v1/git/repos/code", "acme", nil); code != http.StatusNoContent {
+		t.Fatalf("delete repo want 204, got %d", code)
+	}
+	// Subscriptions AND mirror targets are gone (cascade).
+	if subs, _ := store.ListSubscriptions(ctx, "acme", "", "code"); len(subs) != 0 {
+		t.Fatalf("subscriptions not cascade-deleted: %+v", subs)
+	}
+	if mirs, _ := store.ListMirrors(ctx, "acme", "", "code"); len(mirs) != 0 {
+		t.Fatalf("mirror targets not cascade-deleted: %+v", mirs)
+	}
+	// Re-create the repo of the same name → it inherits NOTHING (no orphan exfil).
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("recreate repo failed")
+	}
+	if mirs, _ := store.ListMirrors(ctx, "acme", "", "code"); len(mirs) != 0 {
+		t.Fatalf("re-created repo inherited a prior mirror target: %+v", mirs)
+	}
+}
+
+// ── MED-4: user-derived text is Slack-mrkdwn-escaped ─────────────────────────
+
+func TestNotifyEscapesMrkdwn(t *testing.T) {
+	calls := captureSlack(t)
+	app := mountApp(t)
+	base := liveServer(t, app)
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("create repo: %d %s", code, b)
+	}
+	if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/code/subscriptions", "acme",
+		map[string]any{"channel": "#all"}); code != 201 {
+		t.Fatalf("subscribe failed: %d", code)
+	}
+	// A hostile commit subject: a channel broadcast + a disguised link + an ampersand.
+	pushCommit(t, base, "acme", "code", "main", "<!channel> <https://evil.example|invoice> & danger")
+
+	got := waitForNotify(t, calls, "#all", 3*time.Second)
+	text := allBlockText(got.blocks)
+	for _, raw := range []string{"<!channel>", "<https://evil.example|invoice>"} {
+		if strings.Contains(text, raw) {
+			t.Fatalf("unescaped mrkdwn %q leaked into a posted block: %s", raw, text)
+		}
+	}
+	for _, esc := range []string{"&lt;!channel&gt;", "&amp; danger"} {
+		if !strings.Contains(text, esc) {
+			t.Fatalf("expected escaped %q in block text; got %s", esc, text)
+		}
+	}
+}
+
+// allBlockText collects every mrkdwn "text" string from a Block Kit block slice
+// (section text + section fields), so a test can assert on the raw Go strings
+// BEFORE JSON transport (avoiding json.Marshal's separate HTML-escaping).
+func allBlockText(blocks []any) string {
+	var b strings.Builder
+	for _, blk := range blocks {
+		m, ok := blk.(map[string]any)
+		if !ok {
+			continue
+		}
+		if txt, ok := m["text"].(map[string]any); ok {
+			if s, ok := txt["text"].(string); ok {
+				b.WriteString(s + "\n")
+			}
+		}
+		if fields, ok := m["fields"].([]any); ok {
+			for _, f := range fields {
+				if fm, ok := f.(map[string]any); ok {
+					if s, ok := fm["text"].(string); ok {
+						b.WriteString(s + "\n")
+					}
+				}
+			}
+		}
+	}
+	return b.String()
+}
+
+// ── HIGH-1: a stalled downstream cannot starve the shared pack plane ─────────
+
+func TestMirrorOutStalledDownstreamDoesNotStarveClones(t *testing.T) {
+	t.Setenv("GIT_MIRROR_OUT_TIMEOUT", "2") // bound the stalled push tightly for the test
+	app := mountApp(t)
+	base := liveServer(t, app)
+	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
+		t.Fatalf("create repo: %d %s", code, b)
+	}
+	// Seed the repo by a LOCAL push (does not fire the server-side reactors).
+	bareAbs := mounted.State.storage.absRepoPath("acme", "", "code")
+	work := t.TempDir()
+	gitRun(t, work, "init", "-q", "-b", "main")
+	writeFile(t, work, "a.txt", "one")
+	gitRun(t, work, "add", "-A")
+	gitRun(t, work, "commit", "-q", "-m", "seed")
+	commit := gitOut(t, work, "rev-parse", "HEAD")
+	gitRun(t, work, "push", "-q", bareAbs, "main:refs/heads/main")
+
+	// A blackhole downstream: accepts the TCP connection but NEVER responds, so a
+	// push to it hangs until the per-push timeout fires.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	var heldMu sync.Mutex
+	var held []net.Conn
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			heldMu.Lock()
+			held = append(held, c)
+			heldMu.Unlock()
+		}
+	}()
+	t.Cleanup(func() {
+		heldMu.Lock()
+		for _, c := range held {
+			_ = c.Close()
+		}
+		heldMu.Unlock()
+	})
+
+	store, err := storeFor(mounted, "acme")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	must(t, store.CreateMirror(context.Background(), MirrorTarget{
+		ID: "m_bh", Org: "acme", Project: "", Repo: "code", Host: "blackhole",
+		URL: "http://" + ln.Addr().String() + "/x.git", CreatedAt: time.Now().Unix(),
+	}))
+
+	// Fire the outbound mirror — it stalls on the blackhole, holding the dedicated
+	// mirror slot (NOT the pack slot).
+	done := make(chan struct{})
+	go func() {
+		mirrorOutbound(mounted, context.Background(), cloud.LifecycleEvent{
+			Kind: cloud.LifecyclePushLanded, Org: "acme", Repo: "code", Branch: "main", After: commit,
+		})
+		close(done)
+	}()
+
+	// A clone must still succeed promptly — it uses the pack semaphore, untouched by
+	// the stalled mirror push. This is the isolation proof.
+	asTenant("acme")
+	cloneErr := make(chan error, 1)
+	go func() {
+		_, err := gogit.Clone(memory.NewStorage(), memfs.New(), &gogit.CloneOptions{URL: base + "/v1/git/acme/code.git"})
+		cloneErr <- err
+	}()
+	select {
+	case err := <-cloneErr:
+		if err != nil {
+			t.Fatalf("clone failed while a mirror push stalled: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("clone starved by a stalled mirror push (>10s) — semaphores not isolated")
+	}
+
+	// The stalled push is bounded by the timeout — mirrorOutbound returns.
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("mirrorOutbound never returned — stalled push not bounded by timeout")
+	}
+}
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
 }
