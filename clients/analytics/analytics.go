@@ -99,6 +99,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/overview", cloud.Handle(s, overview))
 	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
+
+	// Capture (WRITE) side — the ingest that fills hanzo.events (capture.go). All
+	// POST, all tenant-gated in-handler. /v1/tracker is the page-unload beacon
+	// alias (bare route; never collides with the /v1/tracker/projects* issue tracker).
+	app.Post("/v1/analytics", cloud.Handle(s, capture))
+	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
+	app.Post("/v1/tracker", cloud.Handle(s, capture))
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────
