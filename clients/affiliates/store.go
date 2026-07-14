@@ -18,7 +18,8 @@ import (
 // Sentinel errors mapped to HTTP status by the handlers:
 //
 //	errNotFound → 404, errUnknownCode → 404, errSelfAttribution → 400,
-//	errCodeTaken → 409, errInvalidCode → 400, errInsufficientPending → 400.
+//	errCodeTaken → 409, errInvalidCode → 400, errInsufficientPending → 400,
+//	errCycle → 400.
 var (
 	errNotFound            = errors.New("affiliates: not found")
 	errUnknownCode         = errors.New("affiliates: unknown affiliate code")
@@ -26,7 +27,16 @@ var (
 	errCodeTaken           = errors.New("affiliates: code already taken")
 	errInvalidCode         = errors.New("affiliates: invalid code")
 	errInsufficientPending = errors.New("affiliates: payout exceeds pending commission")
+	// errCycle is returned when setting a referredBy edge would close a loop in the
+	// upline graph (the proposed referrer is already a descendant of the referred
+	// party). Set-once edges + this guard keep the graph a forest.
+	errCycle = errors.New("affiliates: referral would create a cycle in the upline")
 )
+
+// walkCap bounds a cycle check or upline climb over the referredBy graph. The graph
+// is a forest by construction (set-once edges + the cycle guard), so a real chain is
+// short; the cap is only a corruption/DoS backstop.
+const walkCap = 64
 
 // Status values. An affiliate advances applied → approved (and can be suspended).
 // Only an APPROVED affiliate has a code and accrues commission.
@@ -42,10 +52,11 @@ const (
 type Affiliate struct {
 	ID            string `json:"id"`
 	Org           string `json:"-"` // the affiliate's own org; admin view re-exposes it
+	OwnerUser     string `json:"-"` // the user who applied; the head of this affiliate's user-referral chain
 	Code          string `json:"code"`
 	RequestedCode string `json:"-"` // vanity code requested at apply, pending staff approval
 	Status        string `json:"status"`
-	RateBps       int64  `json:"rateBps"`
+	RateBps       int64  `json:"rateBps"`      // the affiliate's DIRECT (L1) commission rate; upline levels use platform constants
 	AccruedCents  int64  `json:"accruedCents"` // lifetime commission accrued
 	PaidCents     int64  `json:"paidCents"`    // lifetime commission paid out
 	CreatedAt     int64  `json:"createdAt"`
@@ -61,13 +72,18 @@ func (a Affiliate) PendingCents() int64 {
 	return a.AccruedCents - a.PaidCents
 }
 
-// AffiliateReferral is one referred_org → affiliate attribution edge. ReferredOrg
-// is UNIQUE across the table (an org is attributed to at most one affiliate, ever
-// — first-touch), which is also the idempotency key for POST /v1/affiliates/attribute.
+// AffiliateReferral is one referred_org → affiliate attribution edge — ALSO the
+// referredBy graph edge. ReferredOrg is UNIQUE across the table (an org is
+// attributed to at most one affiliate, ever — first-touch, i.e. referredBy is
+// set-once/immutable), which is also the idempotency key for POST /v1/affiliates/
+// attribute. ReferrerOrg is the attributing affiliate's own org, denormalized so the
+// upline climb is a pure edge walk (referred_org → referrer_org → …) with no per-hop
+// join. The recursive walk over these edges IS the multi-level upline.
 type AffiliateReferral struct {
 	ID          string `json:"id"`
 	AffiliateID string `json:"affiliateId"`
 	ReferredOrg string `json:"referredOrg"`
+	ReferrerOrg string `json:"referrerOrg"`
 	Code        string `json:"code"`
 	CreatedAt   int64  `json:"createdAt"`
 }
@@ -84,14 +100,17 @@ type Payout struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-// Accrual is one per-period commission event (the affiliate_event): the referred
-// org's spend for that period × the affiliate's rate. UNIQUE(affiliate, referred,
-// period) makes the sweep at-most-once per period — the commission latch.
+// Accrual is one per-period commission event (the affiliate_event): the source
+// org's spend for that period × the level rate. UNIQUE(affiliate, referred, period)
+// makes the sweep at-most-once per period — the commission latch. Level is the
+// upline distance from the source org to this affiliate (1=direct, 2, 3); a given
+// (affiliate, source, period) has exactly one level because the graph is a forest.
 type Accrual struct {
 	ID              string `json:"id"`
 	AffiliateID     string `json:"affiliateId"`
 	ReferredOrg     string `json:"referredOrg"`
 	Period          string `json:"period"`
+	Level           int    `json:"level"`
 	SpendCents      int64  `json:"spendCents"`
 	CommissionCents int64  `json:"commissionCents"`
 	CreatedAt       int64  `json:"createdAt"`
@@ -134,6 +153,7 @@ func (s *Store) migrate() error {
 CREATE TABLE IF NOT EXISTS affiliates (
   id             TEXT PRIMARY KEY,
   org            TEXT NOT NULL UNIQUE,
+  owner_user     TEXT NOT NULL DEFAULT '',
   code           TEXT NOT NULL DEFAULT '',
   requested_code TEXT NOT NULL DEFAULT '',
   status         TEXT NOT NULL,
@@ -148,20 +168,34 @@ CREATE TABLE IF NOT EXISTS affiliates (
 -- can share the '' placeholder while still applied/un-coded).
 CREATE UNIQUE INDEX IF NOT EXISTS ux_affiliates_code ON affiliates(code) WHERE code <> '';
 
+-- The referredBy graph edge (org level). referred_org UNIQUE ⇒ set-once/immutable.
 CREATE TABLE IF NOT EXISTS affiliate_referrals (
   id           TEXT PRIMARY KEY,
   affiliate_id TEXT NOT NULL,
   referred_org TEXT NOT NULL UNIQUE,
+  referrer_org TEXT NOT NULL DEFAULT '',
   code         TEXT NOT NULL,
   created_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_aff_referrals_affiliate ON affiliate_referrals(affiliate_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_aff_referrals_referrer ON affiliate_referrals(referrer_org);
+
+-- The referredBy graph edge (user level): a user's referrer is set-once/immutable
+-- (referred_user PRIMARY KEY) and cycle-checked, mirroring the org edge.
+CREATE TABLE IF NOT EXISTS user_referrals (
+  referred_user TEXT PRIMARY KEY,
+  referrer_user TEXT NOT NULL,
+  code          TEXT NOT NULL DEFAULT '',
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_user_referrals_referrer ON user_referrals(referrer_user);
 
 CREATE TABLE IF NOT EXISTS affiliate_accruals (
   id               TEXT PRIMARY KEY,
   affiliate_id     TEXT NOT NULL,
   referred_org     TEXT NOT NULL,
   period           TEXT NOT NULL,
+  level            INTEGER NOT NULL DEFAULT 1,
   spend_cents      INTEGER NOT NULL,
   commission_cents INTEGER NOT NULL,
   created_at       INTEGER NOT NULL,
@@ -183,7 +217,33 @@ CREATE INDEX IF NOT EXISTS ix_aff_payouts_affiliate ON affiliate_payouts(affilia
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("affiliates migrate: %w", err)
 	}
+	// Forward-only additive migrations for stores created before these columns
+	// existed. ADD COLUMN is idempotent-by-intent: a duplicate-column error means the
+	// column is already present, which is success.
+	for _, alter := range []string{
+		`ALTER TABLE affiliates ADD COLUMN owner_user TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE affiliate_referrals ADD COLUMN referrer_org TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE affiliate_accruals ADD COLUMN level INTEGER NOT NULL DEFAULT 1`,
+	} {
+		if _, err := s.db.Exec(alter); err != nil && !isDuplicateColumn(err) {
+			return fmt.Errorf("affiliates migrate alter: %w", err)
+		}
+	}
+	// Backfill referrer_org for pre-migration edges from the owning affiliate's org.
+	if _, err := s.db.Exec(
+		`UPDATE affiliate_referrals SET referrer_org = (
+		    SELECT org FROM affiliates WHERE affiliates.id = affiliate_referrals.affiliate_id)
+		  WHERE referrer_org = ''`); err != nil {
+		return fmt.Errorf("affiliates migrate backfill: %w", err)
+	}
 	return nil
+}
+
+// isDuplicateColumn reports whether err is the SQLite "duplicate column name" error
+// an ADD COLUMN raises when the column already exists (idempotent migration signal),
+// matched on message text so it holds under both the cgo and pure-Go drivers.
+func isDuplicateColumn(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column")
 }
 
 // Close closes the underlying database. Idempotent-safe via sql.DB.
@@ -230,24 +290,25 @@ func validCode(code string) bool {
 
 // ── affiliate records ─────────────────────────────────────────────────────────
 
-const affiliateCols = `id,org,code,requested_code,status,rate_bps,accrued_cents,paid_cents,created_at,approved_at,suspended_at`
+const affiliateCols = `id,org,owner_user,code,requested_code,status,rate_bps,accrued_cents,paid_cents,created_at,approved_at,suspended_at`
 
 func scanAffiliate(sc interface{ Scan(...any) error }) (Affiliate, error) {
 	var a Affiliate
-	err := sc.Scan(&a.ID, &a.Org, &a.Code, &a.RequestedCode, &a.Status, &a.RateBps,
+	err := sc.Scan(&a.ID, &a.Org, &a.OwnerUser, &a.Code, &a.RequestedCode, &a.Status, &a.RateBps,
 		&a.AccruedCents, &a.PaidCents, &a.CreatedAt, &a.ApprovedAt, &a.SuspendedAt)
 	return a, err
 }
 
 // Apply enrolls org as an affiliate at status=applied with the default rate,
 // idempotently. requestedCode is the optional vanity code (validated + minted at
-// approval). A repeat apply returns the EXISTING record (first apply wins).
-// Returns (affiliate, created).
-func (s *Store) Apply(ctx context.Context, id, org, requestedCode string, rateBps int64) (Affiliate, bool, error) {
+// approval); ownerUser is the applying user (the head of this affiliate's user chain).
+// A repeat apply returns the EXISTING record (first apply wins). Returns (affiliate,
+// created).
+func (s *Store) Apply(ctx context.Context, id, org, ownerUser, requestedCode string, rateBps int64) (Affiliate, bool, error) {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO affiliates (id, org, requested_code, status, rate_bps, created_at)
-		 VALUES (?,?,?,?,?,strftime('%s','now'))`,
-		id, org, requestedCode, StatusApplied, rateBps)
+		`INSERT INTO affiliates (id, org, owner_user, requested_code, status, rate_bps, created_at)
+		 VALUES (?,?,?,?,?,?,strftime('%s','now'))`,
+		id, org, ownerUser, requestedCode, StatusApplied, rateBps)
 	if err == nil {
 		a, gerr := s.getByID(ctx, id)
 		return a, true, gerr
@@ -393,18 +454,27 @@ func (s *Store) queryAffiliates(ctx context.Context, q string, args ...any) ([]A
 
 // ── attribution edges ─────────────────────────────────────────────────────────
 
-// Attribute records a referredOrg → affiliate edge, idempotently. The referred org
-// is the VALIDATED caller (never client-supplied). One-per-referred-org (UNIQUE)
-// makes a repeat attribute a no-op returning the FIRST edge (first-touch wins).
-// Self-attribution (an affiliate's own org) is refused. Returns (edge, created).
+// Attribute records a referredOrg → affiliate edge (referrer = affiliateOrg),
+// idempotently — this is the set-once referredBy edge of the upline graph. The
+// referred org is the VALIDATED caller (never client-supplied). One-per-referred-org
+// (UNIQUE) makes a repeat attribute a no-op returning the FIRST edge (first-touch
+// wins, immutable). Self-attribution is refused; an edge that would close an upline
+// loop is refused (errCycle). Returns (edge, created).
 func (s *Store) Attribute(ctx context.Context, id, affiliateID, referredOrg, affiliateOrg, code string) (AffiliateReferral, bool, error) {
 	if referredOrg == affiliateOrg {
 		return AffiliateReferral{}, false, errSelfAttribution
 	}
+	// Cycle guard: if the proposed referrer (affiliateOrg) can already reach
+	// referredOrg by climbing its own upline, the new edge would close a loop.
+	if cyc, err := s.wouldCycleOrg(ctx, referredOrg, affiliateOrg); err != nil {
+		return AffiliateReferral{}, false, err
+	} else if cyc {
+		return AffiliateReferral{}, false, errCycle
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO affiliate_referrals (id, affiliate_id, referred_org, code, created_at)
-		 VALUES (?,?,?,?,strftime('%s','now'))`,
-		id, affiliateID, referredOrg, normalizeCode(code))
+		`INSERT INTO affiliate_referrals (id, affiliate_id, referred_org, referrer_org, code, created_at)
+		 VALUES (?,?,?,?,?,strftime('%s','now'))`,
+		id, affiliateID, referredOrg, affiliateOrg, normalizeCode(code))
 	if err == nil {
 		r, gerr := s.getReferralByReferred(ctx, referredOrg)
 		return r, true, gerr
@@ -416,12 +486,226 @@ func (s *Store) Attribute(ctx context.Context, id, affiliateID, referredOrg, aff
 	return AffiliateReferral{}, false, fmt.Errorf("attribute: %w", err)
 }
 
-const referralCols = `id,affiliate_id,referred_org,code,created_at`
+const referralCols = `id,affiliate_id,referred_org,referrer_org,code,created_at`
 
 func scanReferral(sc interface{ Scan(...any) error }) (AffiliateReferral, error) {
 	var r AffiliateReferral
-	err := sc.Scan(&r.ID, &r.AffiliateID, &r.ReferredOrg, &r.Code, &r.CreatedAt)
+	err := sc.Scan(&r.ID, &r.AffiliateID, &r.ReferredOrg, &r.ReferrerOrg, &r.Code, &r.CreatedAt)
 	return r, err
+}
+
+// ── the referredBy graph (upline walk + cycle guard) ───────────────────────────
+
+// referrerOrgOf returns the org that referred `org` (its direct upline), or ("",
+// false) when org has no referredBy edge (it is a root).
+func (s *Store) referrerOrgOf(ctx context.Context, org string) (string, bool, error) {
+	var r string
+	err := s.db.QueryRowContext(ctx, `SELECT referrer_org FROM affiliate_referrals WHERE referred_org=?`, org).Scan(&r)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("referrer of %q: %w", org, err)
+	}
+	return r, r != "", nil
+}
+
+// UplineOrgs returns the ancestors of sourceOrg by climbing referredBy edges, up to
+// `depth` levels — index 0 is the direct (L1) referrer, index 1 its referrer (L2),
+// etc. The climb stops at a root, at `depth`, or on a revisited node (forest-safety).
+func (s *Store) UplineOrgs(ctx context.Context, sourceOrg string, depth int) ([]string, error) {
+	out := make([]string, 0, depth)
+	seen := map[string]bool{sourceOrg: true}
+	cur := sourceOrg
+	for len(out) < depth {
+		r, ok, err := s.referrerOrgOf(ctx, cur)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || seen[r] {
+			break
+		}
+		out = append(out, r)
+		seen[r] = true
+		cur = r
+	}
+	return out, nil
+}
+
+// wouldCycleOrg reports whether adding the edge referred→referrer would close a loop:
+// it climbs referrer's existing upline and returns true if it reaches referred.
+func (s *Store) wouldCycleOrg(ctx context.Context, referred, referrer string) (bool, error) {
+	seen := map[string]bool{}
+	cur := referrer
+	for i := 0; i < walkCap; i++ {
+		if cur == referred {
+			return true, nil
+		}
+		if seen[cur] {
+			return false, nil // pre-existing loop guard — stop, don't spin
+		}
+		seen[cur] = true
+		r, ok, err := s.referrerOrgOf(ctx, cur)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+		cur = r
+	}
+	return false, nil
+}
+
+// DownlineByLevel walks DOWN from ancestorOrg over referredBy edges to `depth`,
+// returning source org → its level below ancestorOrg (1=direct child, 2, 3). This is
+// the per-affiliate accrual set for the lazy dashboard sweep (mirror of UplineOrgs).
+func (s *Store) DownlineByLevel(ctx context.Context, ancestorOrg string, depth int) (map[string]int, error) {
+	levels := make(map[string]int)
+	frontier := []string{ancestorOrg}
+	seen := map[string]bool{ancestorOrg: true}
+	for level := 1; level <= depth && len(frontier) > 0; level++ {
+		next := make([]string, 0, len(frontier))
+		for _, parent := range frontier {
+			kids, err := s.childrenOf(ctx, parent)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range kids {
+				if seen[k] {
+					continue
+				}
+				seen[k] = true
+				levels[k] = level
+				next = append(next, k)
+			}
+		}
+		frontier = next
+	}
+	return levels, nil
+}
+
+// childrenOf returns the orgs directly referred by referrerOrg (its L1 downline).
+func (s *Store) childrenOf(ctx context.Context, referrerOrg string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT referred_org FROM affiliate_referrals WHERE referrer_org=?`, referrerOrg)
+	if err != nil {
+		return nil, fmt.Errorf("children of %q: %w", referrerOrg, err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]string, 0, 8)
+	for rows.Next() {
+		var o string
+		if err := rows.Scan(&o); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// AllReferredOrgs returns every org that has a referredBy edge (the source set the
+// admin sweep folds over), oldest-first, bounded.
+func (s *Store) AllReferredOrgs(ctx context.Context, limit int) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT referred_org FROM affiliate_referrals ORDER BY created_at ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("all referred orgs: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]string, 0, 32)
+	for rows.Next() {
+		var o string
+		if err := rows.Scan(&o); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// ── the referredBy graph (user level: set-once + cycle-checked) ─────────────────
+
+// SetUserReferrer records referredUser → referrerUser, set-once (PRIMARY KEY) and
+// cycle-checked (mirrors the org edge). Returns created=false when the user already
+// has a referrer (immutable — first wins) or the pair is a self/cycle no-op signalled
+// by the error. errSelfAttribution when referred==referrer; errCycle on a loop.
+func (s *Store) SetUserReferrer(ctx context.Context, referredUser, referrerUser, code string) (bool, error) {
+	if referredUser == "" || referrerUser == "" {
+		return false, nil // nothing to link (anonymous) — best-effort no-op
+	}
+	if referredUser == referrerUser {
+		return false, errSelfAttribution
+	}
+	if cyc, err := s.wouldCycleUser(ctx, referredUser, referrerUser); err != nil {
+		return false, err
+	} else if cyc {
+		return false, errCycle
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_referrals (referred_user, referrer_user, code, created_at)
+		 VALUES (?,?,?,strftime('%s','now'))`,
+		referredUser, referrerUser, normalizeCode(code))
+	if err == nil {
+		return true, nil
+	}
+	if isUnique(err) {
+		return false, nil // already has a referrer — immutable, first-touch wins
+	}
+	return false, fmt.Errorf("set user referrer: %w", err)
+}
+
+func (s *Store) referrerUserOf(ctx context.Context, user string) (string, bool, error) {
+	var r string
+	err := s.db.QueryRowContext(ctx, `SELECT referrer_user FROM user_referrals WHERE referred_user=?`, user).Scan(&r)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("referrer of user %q: %w", user, err)
+	}
+	return r, r != "", nil
+}
+
+// UplineUsers returns a user's ancestors up to `depth` (index 0 = direct referrer).
+func (s *Store) UplineUsers(ctx context.Context, user string, depth int) ([]string, error) {
+	out := make([]string, 0, depth)
+	seen := map[string]bool{user: true}
+	cur := user
+	for len(out) < depth {
+		r, ok, err := s.referrerUserOf(ctx, cur)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || seen[r] {
+			break
+		}
+		out = append(out, r)
+		seen[r] = true
+		cur = r
+	}
+	return out, nil
+}
+
+func (s *Store) wouldCycleUser(ctx context.Context, referred, referrer string) (bool, error) {
+	seen := map[string]bool{}
+	cur := referrer
+	for i := 0; i < walkCap; i++ {
+		if cur == referred {
+			return true, nil
+		}
+		if seen[cur] {
+			return false, nil
+		}
+		seen[cur] = true
+		r, ok, err := s.referrerUserOf(ctx, cur)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+		cur = r
+	}
+	return false, nil
 }
 
 func (s *Store) getReferralByReferred(ctx context.Context, referredOrg string) (AffiliateReferral, error) {
@@ -485,6 +769,43 @@ func (s *Store) ReferralCountsByAffiliate(ctx context.Context) (map[string]int, 
 	return out, rows.Err()
 }
 
+// ── analytics (the /v1/admin/referrals cross-tenant board) ─────────────────────
+
+// ReferredOrgCounts returns the total number of distinct referred orgs and the
+// number that have CONVERTED (produced at least one positive commission accrual) —
+// the conversion numerator/denominator for the admin analytics board.
+func (s *Store) ReferredOrgCounts(ctx context.Context) (total, converted int, err error) {
+	if err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM affiliate_referrals`).Scan(&total); err != nil {
+		return 0, 0, fmt.Errorf("count referred orgs: %w", err)
+	}
+	if err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT referred_org) FROM affiliate_accruals WHERE commission_cents > 0`).Scan(&converted); err != nil {
+		return 0, 0, fmt.Errorf("count converted orgs: %w", err)
+	}
+	return total, converted, nil
+}
+
+// AccruedByLevel returns level → total commission accrued at that upline level, the
+// analytics breakdown of platform commission liability by depth.
+func (s *Store) AccruedByLevel(ctx context.Context) (map[int]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT level, COALESCE(SUM(commission_cents),0) FROM affiliate_accruals GROUP BY level`)
+	if err != nil {
+		return nil, fmt.Errorf("accrued by level: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[int]int64)
+	for rows.Next() {
+		var level int
+		var cents int64
+		if err := rows.Scan(&level, &cents); err != nil {
+			return nil, err
+		}
+		out[level] = cents
+	}
+	return out, rows.Err()
+}
+
 // ── accrual latch (the commission event, at-most-once per period) ─────────────
 
 // LatchAccrual atomically records ONE accrual for (affiliate, referredOrg, period)
@@ -492,15 +813,16 @@ func (s *Store) ReferralCountsByAffiliate(ctx context.Context) (map[string]int, 
 // transaction. RowsAffected on the INSERT is the latch: a UNIQUE violation means
 // this period was already accrued (returns false, no error, no double-accrual).
 // Returns won=true only when THIS call created the accrual and moved the balance.
-func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referredOrg, period string, spendCents, commissionCents, now int64) (bool, error) {
+// level is the upline distance recorded for analytics (1=direct, 2, 3).
+func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referredOrg, period string, level int, spendCents, commissionCents, now int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("accrual tx: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, spend_cents, commission_cents, created_at)
-		 VALUES (?,?,?,?,?,?,?)`,
-		accrualID, affiliateID, referredOrg, period, spendCents, commissionCents, now)
+		`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, level, spend_cents, commission_cents, created_at)
+		 VALUES (?,?,?,?,?,?,?,?)`,
+		accrualID, affiliateID, referredOrg, period, level, spendCents, commissionCents, now)
 	if err != nil {
 		_ = tx.Rollback()
 		if isUnique(err) {
