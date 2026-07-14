@@ -41,6 +41,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/hanzoai/cloud/types"
 	"github.com/zap-proto/zip"
 	"go.opentelemetry.io/otel"
@@ -301,6 +302,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		s.State.sched = newScheduler(s, log)
 		s.State.sched.start()
 	}
+
+	// Register agents into the unified tool plane (SourceAgent): an agent is callable
+	// as a tool via RunOnBehalf, activation-gated by the plane.
+	tools.Register(agentToolProvider{})
 
 	log.Info("agents mounted", "ai", s.State.ai != nil, "billing", s.State.bill.Enabled(),
 		"scheduler", s.State.sched != nil, "brand", deps.Brand)
