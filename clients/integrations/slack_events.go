@@ -517,8 +517,10 @@ func slackEventKey(raw []byte) string {
 
 // slackChatPost is the shared chat.* poster: JSON body, bot bearer, ok-envelope
 // check. The bot token is never logged on error. It targets slackWebAPIBase (a
-// package var the OAuth provider already exposes, repointable by tests).
-func slackChatPost(ctx context.Context, botToken, method string, fields map[string]string) error {
+// package var the OAuth provider already exposes, repointable by tests). fields is
+// map[string]any so a caller can pass a Block Kit `blocks` array alongside the
+// string channel/text — the ONE chat.* HTTP path for every Slack post in cloud.
+func slackChatPost(ctx context.Context, botToken, method string, fields map[string]any) error {
 	payload, _ := json.Marshal(fields)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, slackWebAPIBase+method, strings.NewReader(string(payload)))
 	if err != nil {
@@ -545,7 +547,7 @@ func slackChatPost(ctx context.Context, botToken, method string, fields map[stri
 
 // slackPostThread posts to a channel, threaded under threadTS when non-empty.
 func slackPostThread(ctx context.Context, botToken, channel, threadTS, text string) error {
-	fields := map[string]string{"channel": channel, "text": text}
+	fields := map[string]any{"channel": channel, "text": text}
 	if threadTS != "" {
 		fields["thread_ts"] = threadTS
 	}
@@ -555,9 +557,39 @@ func slackPostThread(ctx context.Context, botToken, channel, threadTS, text stri
 // slackPostEphemeral posts a message visible ONLY to `user` in `channel` — used
 // for the account-link prompt so a link URL is NEVER shown to a whole channel.
 func slackPostEphemeral(ctx context.Context, botToken, channel, user, text string) error {
-	return slackChatPost(ctx, botToken, "/chat.postEphemeral", map[string]string{
+	return slackChatPost(ctx, botToken, "/chat.postEphemeral", map[string]any{
 		"channel": channel, "user": user, "text": text,
 	})
+}
+
+// ── exported Slack posting (the ONE path other subsystems reuse) ─────────────
+
+// PostSlackBlocks posts a Block Kit message (with a text fallback shown in
+// notifications) to channel using botToken, via the shared chat.postMessage path.
+// blocks is Block Kit JSON (a []any of section/context/… maps); nil posts text
+// only. Exported so a subsystem holding a resolved bot token (an automations
+// connector) posts through the SAME code path as the OAuth bridge — no third
+// chat.postMessage implementation.
+func PostSlackBlocks(ctx context.Context, botToken, channel, text string, blocks []any) error {
+	fields := map[string]any{"channel": channel, "text": text}
+	if len(blocks) > 0 {
+		fields["blocks"] = blocks
+	}
+	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
+}
+
+// NotifySlack posts a Block Kit message to channel on behalf of org's connected
+// Slack workspace. It resolves the org's KMS-sealed bot token (TokenFor —
+// fail-closed: unmounted / org not connected / KMS-down all error, never post) and
+// delivers through PostSlackBlocks. The caller never handles the raw token. This is
+// the door the git-lifecycle notifier (clients/git) uses so token custody stays
+// entirely inside the integrations plane.
+func NotifySlack(ctx context.Context, org, channel, text string, blocks []any) error {
+	tok, err := TokenFor(ctx, org, "slack", slackBotTokenSecret)
+	if err != nil {
+		return err
+	}
+	return PostSlackBlocks(ctx, strings.TrimSpace(string(tok)), channel, text, blocks)
 }
 
 // slackResponseHost is the ONLY host a slash-command response_url may target. A
