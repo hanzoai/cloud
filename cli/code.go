@@ -62,7 +62,7 @@ type wire func(base, token, model string) map[string]string
 //	Haiku         zen5-flash    fast / cheap (classifier, quick tasks)
 //	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
 //	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
-//	Fable         zen5-pro      premium frontier (ultra disabled; falls through to zen5)
+//	Fable         zen5-max      top frontier (largest SKU: Qwen3.5-397B → 1M overflow)
 //	main          <model>       the resolved id, default zen5-pro (see defaultCodeModel)
 //
 // The main slot takes a served, tool-capable id (default zen5-pro), never the
@@ -83,7 +83,7 @@ func anthropicWire(base, token, model string) map[string]string {
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-pro",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-max",
 	}
 }
 
