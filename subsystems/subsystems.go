@@ -65,6 +65,7 @@ import (
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/commerce"
+	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/cron"
@@ -299,6 +300,11 @@ func Wire() []cloud.MountSpec {
 		// automations (whose InvokeTool it drives) and referrals; before the ai
 		// catch-all. Owns per-org SQLite, so its Shutdown closes the stores.
 		{Name: "guide", Mount: cloud.Typed(guide.Mount), Shutdown: ctxShutdown(guide.Shutdown)},
+		// Hanzo Company — the incorporation + fundraising state machine
+		// (/v1/company/*). Mounts after the seams it composes (integrations for the
+		// google token custody; captable/dataroom facades) and before the /v1/* AI
+		// catch-all so its routes resolve here.
+		{Name: "company", Mount: cloud.Typed(company.Mount), Shutdown: company.Shutdown},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
