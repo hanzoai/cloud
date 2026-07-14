@@ -254,6 +254,89 @@ jobs:
 
           echo "SMOKE PASS: cloud:smoke booted to \"listening\" with no crash signature"
 
+      # ── Migration smoke — the gate the v1.800.1 crashloop would have tripped ─────
+      # The plain smoke above boots on a FRESH /data, so every subsystem's migrate()
+      # takes its CREATE-TABLE path and no forward-migration is exercised — which is
+      # exactly why a DDL valid on a fresh store but broken on a pre-existing one (an
+      # index over a not-yet-ADDed column: affiliates referrer_org in v1.800.1, wallets
+      # project/agent before it) sailed through CI and took api.hanzo.ai down. This
+      # step reproduces the REAL prod upgrade path: boot the PRIOR released image to lay
+      # its on-disk (cek-encrypted) SQLite schema into a persistent volume, then boot
+      # the candidate over that SAME volume and require it to still reach "listening".
+      # A migrate() that assumes a fresh store dies here, before any image is pushed.
+      - name: Migration smoke — candidate MUST boot over the PRIOR release's on-disk schema
+        env:
+          # The image whose on-disk schema a prod upgrade migrates FROM — the tag the
+          # fleet runs today. Bump to the last-DEPLOYED tag as releases roll (override
+          # without a code change via the SMOKE_MIGRATION_BASELINE repo/org variable).
+          BASELINE: ${{ vars.SMOKE_MIGRATION_BASELINE }}
+        run: |
+          set -euo pipefail
+          BASELINE="${BASELINE:-ghcr.io/hanzoai/cloud:v1.799.19}"
+          CANDIDATE=cloud:smoke
+          VOL="cloudmig-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          B1=""; B2=""
+          cleanup() { docker rm -f "$B1" "$B2" >/dev/null 2>&1 || true; docker volume rm "$VOL" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker volume create "$VOL" >/dev/null
+
+          # ONE throwaway 32-byte master key for BOTH boots: cek seals each per-db DEK
+          # under it on the baseline boot and unwraps it on the candidate boot. A
+          # mismatched key fails closed (never opens), so sharing it is what puts the
+          # MIGRATE path — not a decrypt error — under test.
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+
+          boot() { # $1=image $2=name -> prints container id
+            docker run -d --name "$2" \
+              -v "$VOL":/data \
+              -e CLOUD_DATA_DIR=/data \
+              -e CLOUD_ENV=smoke \
+              -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+              "$1"
+          }
+          wait_listen() { # $1=container -> 0 if "listening", 1 if it died / timed out
+            for _ in $(seq 1 90); do
+              lg="$(docker logs "$1" 2>&1 || true)"
+              printf '%s' "$lg" | grep -q '"message":"listening"' && return 0
+              [ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || echo false)" != "true" ] && return 1
+              sleep 1
+            done
+            return 1
+          }
+
+          # Boot 1 — the prior release writes its real schema into the volume. It must
+          # reach "listening" (proof every subsystem migrated + its DB is on disk); if
+          # the pinned baseline can't boot in this env the gate is blind, so fail loud.
+          echo "migration baseline: $BASELINE"
+          pulled=0; for _ in 1 2 3; do if docker pull "$BASELINE"; then pulled=1; break; fi; sleep 5; done
+          [ "$pulled" = 1 ] || { echo "MIGRATION SMOKE INFRA FAIL: cannot pull baseline $BASELINE"; exit 1; }
+          B1="$(boot "$BASELINE" cloudmig_base)"
+          if ! wait_listen "$B1"; then
+            echo "::group::baseline boot logs"; docker logs "$B1" 2>&1 || true; echo "::endgroup::"
+            echo "MIGRATION SMOKE INFRA FAIL: baseline $BASELINE did not reach \"listening\" — cannot stage the prior schema (inspect/bump SMOKE_MIGRATION_BASELINE)"
+            exit 1
+          fi
+          docker stop "$B1" >/dev/null
+
+          # Boot 2 — the candidate migrates that on-disk schema IN PLACE. This is the gate.
+          B2="$(boot "$CANDIDATE" cloudmig_cand)"
+          listening=0; wait_listen "$B2" && listening=1
+          logs="$(docker logs "$B2" 2>&1 || true)"
+          echo "::group::candidate migration boot logs"; printf '%s\n' "$logs"; echo "::endgroup::"
+
+          # 'no such column'/'no such table' is the exact index-before-ADD-COLUMN crash;
+          # 'panic' catches any generic Mount failure. The load-bearing check is the
+          # "listening" assertion below — a migrate() crash exits before it.
+          if printf '%s' "$logs" | grep -Eiq 'panic|no such column|no such table'; then
+            echo "MIGRATION SMOKE FAIL: candidate logged a DDL/migration error over the prior schema (the v1.800.1-class regression)"
+            exit 1
+          fi
+          if [ "$listening" -ne 1 ]; then
+            echo "MIGRATION SMOKE FAIL: candidate did NOT reach \"listening\" over the $BASELINE schema — a subsystem's migrate() crashes on a pre-existing store"
+            exit 1
+          fi
+          echo "MIGRATION SMOKE PASS: candidate booted to \"listening\" over the $BASELINE on-disk schema"
+
       - name: Push (cache hit from the smoke build — publishes the tested image)
         id: push
         uses: docker/build-push-action@v6
