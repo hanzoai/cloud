@@ -348,6 +348,58 @@ func OnGitPush(ctx context.Context, ev GitPushEvent) error {
 	return pushBuilder(ctx, ev)
 }
 
+// ---- first-party service release (push→build→image→CR rollout) ----
+
+// ServiceReleaseEvent describes a proven, clean-semver image ready to roll live on
+// an operator-managed first-party service. It is the payload of the release seam
+// that closes push→build→image→CR: after a build produces the image, the CR for
+// this service is patched to it and the operator reconciles the Deployment.
+//
+//   - Service is the target CR metadata.name (the repo/service name ⇒ CR name,
+//     mirroring universe's image-update.yml convention).
+//   - Image is the full registry ref (repository:tag); the tag MUST be clean
+//     semver (vX.Y.Z) — the releaser refuses every mutable/sha/suffixed form.
+//   - SHA is the source commit for provenance (optional; logged, never gated on).
+type ServiceReleaseEvent struct {
+	Service string
+	Image   string
+	SHA     string
+}
+
+// serviceReleaser is the registered first-party CR-rollout seam. clients/paas
+// (the owner of the hanzo.ai/v1 Service CR control plane) installs it in Mount; a
+// proven build calls OnServiceRelease, which patches spec.image on the matching
+// CR. The inversion keeps package cloud from importing clients/paas (which imports
+// cloud) — the same idiom as pushBuilder / kmsClientFactory. Exactly one
+// registration.
+var serviceReleaser func(ctx context.Context, ev ServiceReleaseEvent) error
+
+// RegisterServiceReleaser installs the first-party CR-rollout hook. clients/paas
+// calls this from its Mount when co-resident; it is the ONE inversion point that
+// lets a build-completion path roll a proven image onto its operator Service CR
+// with no cloud⇄paas import cycle.
+func RegisterServiceReleaser(f func(ctx context.Context, ev ServiceReleaseEvent) error) {
+	serviceReleaser = f
+}
+
+// ServiceReleaserRegistered reports whether a first-party CR-rollout hook is
+// installed (the paas control plane is co-resident). A caller uses it to know
+// whether OnServiceRelease actually patches a CR or is a no-op, so it can be
+// honest about which rollout path took effect.
+func ServiceReleaserRegistered() bool { return serviceReleaser != nil }
+
+// OnServiceRelease rolls a proven image live by patching the matching hanzo.ai/v1
+// Service CR's spec.image (the operator then reconciles the Deployment). It is a
+// no-op when no releaser is registered (a binary without the paas control plane
+// co-resident). The releaser enforces the clean-semver gate and CR-name
+// resolution; this is only the dispatch seam.
+func OnServiceRelease(ctx context.Context, ev ServiceReleaseEvent) error {
+	if serviceReleaser == nil {
+		return nil
+	}
+	return serviceReleaser(ctx, ev)
+}
+
 // ---- git lifecycle event stream ----
 //
 // One event, many subscribers. push-to-deploy (OnGitPush) is the deploy
