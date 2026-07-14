@@ -40,5 +40,8 @@ func sshReceivePack(s *cloud.Service[state], ctx context.Context, org, project, 
 	bg := context.WithoutCancel(ctx)
 	recordUsage(s, bg, org, project, name)
 	fireBranchBuilds(s, bg, org, project, name, before, branchTips(bg, bareDir))
+	// Keep clones fast: opportunistic housekeeping (no-op until git's thresholds
+	// trigger a repack). Detached + slot-yielding, never blocks the push.
+	go autoMaintain(s.Log, bareDir)
 	return err
 }

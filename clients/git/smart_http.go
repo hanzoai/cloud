@@ -155,6 +155,9 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	bg := context.WithoutCancel(c.Context())
 	recordUsage(s, bg, org, project, name)
 	fireBranchBuilds(s, bg, org, project, name, before, branchTips(bg, bareDir))
+	// Keep clones fast: opportunistic housekeeping (a no-op until git's own
+	// thresholds trigger a repack). Detached + slot-yielding, never blocks push.
+	go autoMaintain(s.Log, bareDir)
 
 	if runErr != nil {
 		s.Log.Warn("git receive-pack failed", "org", org, "repo", name, "err", runErr, "stderr", strings.TrimSpace(stderr.String()))
