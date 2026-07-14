@@ -96,6 +96,8 @@ var frozen = []struct {
 	{"tasks", false, false},          // was order 147
 	{"cron", false, false},           // durable platform cron on the shared engine (post-freeze add)
 	{"automations", false, true},     // was order 148
+	{"tools", false, true},           // new: unified tool plane (after automations)
+	{"marketplace", false, true},     // new: marketplace over the tool plane (after tools)
 	{"referrals", false, false},      // was order 149
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
