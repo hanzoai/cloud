@@ -143,3 +143,38 @@ func TestClaudeArgvForcesModel(t *testing.T) {
 		t.Fatalf("--safe argv %q must still force --model zen5-pro", safeArgv)
 	}
 }
+
+// TestClaudeAppendsZenIdentityInAllModes locks in the identity fix: the claude
+// agent appends --append-system-prompt <zenIdentityPrompt> so a Hanzo-served
+// model self-identifies as a Hanzo Zen model. Identity is not a permission
+// bypass, so it is present in --safe too (unlike --dangerously-skip-permissions).
+// codex/dev (OpenAI wire) do not carry the Anthropic-only append.
+func TestClaudeAppendsZenIdentityInAllModes(t *testing.T) {
+	agent := codeAgents["claude"]
+
+	check := func(argv []string) {
+		t.Helper()
+		i := slices.Index(argv, "--append-system-prompt")
+		if i < 0 || i+1 >= len(argv) || argv[i+1] != zenIdentityPrompt {
+			t.Fatalf("argv %q missing --append-system-prompt <zenIdentityPrompt>", argv)
+		}
+	}
+
+	// full-auto (default)
+	check(codeArgv(agent, "https://api.hanzo.ai", defaultCodeModel, false, nil))
+
+	// --safe keeps the identity (identity != permission bypass) but drops the bypass
+	safeArgv := codeArgv(agent, "https://api.hanzo.ai", defaultCodeModel, true, nil)
+	check(safeArgv)
+	if slices.Contains(safeArgv, "--dangerously-skip-permissions") {
+		t.Fatalf("--safe must not carry the permission bypass: %v", safeArgv)
+	}
+
+	// codex/dev (OpenAI wire) do not carry the Anthropic-only identity append
+	for _, name := range []string{"codex", "dev"} {
+		argv := codeArgv(codeAgents[name], "https://api.hanzo.ai", defaultCodeModel, false, nil)
+		if slices.Contains(argv, "--append-system-prompt") {
+			t.Fatalf("%s must not carry the claude-only identity append: %v", name, argv)
+		}
+	}
+}
