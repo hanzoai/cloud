@@ -74,7 +74,7 @@ func TestAnthropicWirePinsZen5Tiers(t *testing.T) {
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
 		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-pro",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-max",
 	}
 	for k, v := range want {
 		if got := env[k]; got != v {
