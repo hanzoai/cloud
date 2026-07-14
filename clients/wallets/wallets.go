@@ -248,6 +248,7 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	var body struct {
 		AccountID string `json:"accountId"`
+		Agent     string `json:"agent"`
 		Name      string `json:"name"`
 		Custody   string `json:"custody"`
 		Tier      string `json:"tier"`
@@ -264,6 +265,21 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "get account: %v", err)
 	} else if !found {
 		return zip.ErrNotFound("account not found")
+	}
+
+	// Resolve the wallet's scope within the org. Project is the request's ambient
+	// scope (X-Project-Id via principal); the DEFAULT project collapses to empty so
+	// an org's default-scope wallet keeps the un-suffixed ref (the backward-compat
+	// invariant keyed surfaces honor). Agent + account are explicit narrowings the
+	// caller assigns. All are validated to a slash-free segment so no value can
+	// cross into another wallet's KMS ref.
+	scopeProject := ""
+	if p := principal.Project(c); !principal.IsDefaultProject(p) {
+		scopeProject = p
+	}
+	agent := strings.TrimSpace(body.Agent)
+	if !validNarrowing(scopeProject) || !validNarrowing(agent) || !validNarrowing(accountID) {
+		return zip.ErrBadRequest("project, agent, and accountId must be url-safe segments")
 	}
 
 	kind := Kind(strings.TrimSpace(body.Custody))
@@ -284,8 +300,7 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 
 	w := &Wallet{
 		ID:        newID("wal"),
-		Org:       org,
-		AccountID: accountID,
+		Scope:     Scope{Org: org, Project: scopeProject, Agent: agent, AccountID: accountID},
 		Name:      strings.TrimSpace(body.Name),
 		Custody:   kind,
 		Tier:      tier,
@@ -301,16 +316,30 @@ func createWallet(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "create wallet: %v", err)
 	}
 	emitAudit(s, c.Context(), org, c.User(), "wallets.wallet.create", w.ID,
-		map[string]any{"custody": string(kind), "tier": string(tier), "chain": w.Chain, "address": address})
+		map[string]any{"custody": string(kind), "tier": string(tier), "chain": w.Chain, "address": address,
+			"project": w.Project, "agent": w.Agent, "accountId": w.AccountID})
 	return c.JSON(http.StatusOK, w)
 }
 
+// listWallets lists the caller's wallets, optionally NARROWED within the org by the
+// ?project / ?agent / ?account query params — the API face of the ONE scope lookup
+// path. Org is always the bound isolation boundary; the narrowings only filter
+// within it, so a caller can never widen past its own org.
 func listWallets(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principal.Org(c)
 	if !ok {
 		return zip.ErrForbidden("sign in")
 	}
-	wallets, err := s.State.store.listWallets(c.Context(), org)
+	sc := Scope{
+		Org:       org,
+		Project:   strings.TrimSpace(c.Query("project")),
+		Agent:     strings.TrimSpace(c.Query("agent")),
+		AccountID: strings.TrimSpace(c.Query("account")),
+	}
+	if !validNarrowing(sc.Project) || !validNarrowing(sc.Agent) || !validNarrowing(sc.AccountID) {
+		return zip.ErrBadRequest("project, agent, and account filters must be url-safe segments")
+	}
+	wallets, err := s.State.store.listWalletsByScope(c.Context(), sc)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list wallets: %v", err)
 	}
@@ -469,6 +498,31 @@ func WalletForLedgerAccount(ctx context.Context, org, ledgerAccount string) (add
 		return "", false
 	}
 	return w.Address, true
+}
+
+// PaymentTarget is a wallet resolved for RECEIVING a payment: its on-chain address
+// (the x402 payee) plus the org + ledger subject whose books the earnings credit.
+type PaymentTarget struct {
+	Address string
+	Org     string
+	Subject string // ledger subject for the earnings credit (the wallet id)
+}
+
+// ResolvePaymentTarget resolves a payout wallet {org, walletID} to its address +
+// ledger subject — the seam the x402 settlement uses to route payment to a
+// recipient wallet. The lookup is org-scoped (getWallet), so a resource can only
+// ever name a wallet WITHIN the org it declared: no cross-org payee spoofing.
+// ("", false) when wallets is unmounted or the wallet is not found in that org.
+func ResolvePaymentTarget(ctx context.Context, org, walletID string) (PaymentTarget, bool) {
+	s := mounted
+	if s == nil || strings.TrimSpace(org) == "" || strings.TrimSpace(walletID) == "" {
+		return PaymentTarget{}, false
+	}
+	w, found, err := s.State.store.getWallet(ctx, org, strings.TrimSpace(walletID))
+	if err != nil || !found {
+		return PaymentTarget{}, false
+	}
+	return PaymentTarget{Address: w.Address, Org: w.Org, Subject: w.ID}, true
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
