@@ -34,6 +34,7 @@ import (
 	"regexp"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/zap-proto/zip"
 )
 
@@ -81,6 +82,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get(wellKnown+"/index.json", h.serveIndex)
 	app.Get(wellKnown+"/:skill/SKILL.md", h.serveSkill)
+
+	// Register the deployment brand's skills into the unified tool plane (SourceSkill,
+	// discovery + activation only). Fall back to the default brand's catalogue.
+	skillBrand := h.fallback
+	if !h.brands[skillBrand] {
+		skillBrand = cloud.DefaultBrand
+	}
+	tools.Register(skillToolProvider{fsys: sub, brand: skillBrand})
 
 	if deps.Logger != nil {
 		deps.Logger.New("subsystem", "agentskills").Info(

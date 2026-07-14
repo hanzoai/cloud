@@ -37,6 +37,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/zap-proto/zip"
 )
 
@@ -182,6 +183,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}}
 	mounted = s
 	routes(app, s)
+	// Register user functions into the unified tool plane (SourceFunction).
+	tools.Register(functionToolProvider{})
 	s.Log.Info("functions mounted", "exec", s.State.exec.configured(), "brand", s.Brand, "billing", s.Bill.Enabled())
 	return nil
 }
