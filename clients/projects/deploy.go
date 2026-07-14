@@ -119,27 +119,18 @@ func deployGit(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error
 // stream so the git-lifecycle reactors (Slack-notify) can post about it. Repo is
 // derived from the project's linked RepoURL (the native repo name a subscription
 // keys on); a project deploying an uploaded artifact with no linked repo carries an
-// empty Repo and routes to nothing. Best-effort + detached inside EmitLifecycle.
+// empty Repo and routes to nothing. A site has no git project sub-scope, so Project
+// is the org-level "" the git store keys org-level repos under. Best-effort +
+// detached inside EmitLifecycle.
 func emitProjectLifecycle(ctx context.Context, kind cloud.LifecycleKind, org string, p Project, d Deployment, detail string) {
 	branch := strings.TrimSpace(p.RepoBranch)
 	if branch == "" {
 		branch = "main"
 	}
 	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
-		Kind: kind, Org: org, Repo: repoFromURL(p.RepoURL), Branch: branch,
+		Kind: kind, Org: org, Project: "", Repo: cloud.RepoFromCloneURL(p.RepoURL), Branch: branch,
 		After: strings.TrimSpace(d.Commit), DeployID: d.ID, Detail: detail,
 	})
-}
-
-// repoFromURL extracts the repo name from a clone URL (last path segment, ".git"
-// stripped) — the key the git subscription store routes a deploy notification on.
-func repoFromURL(u string) string {
-	u = strings.TrimSuffix(strings.TrimSpace(u), "/")
-	u = strings.TrimSuffix(u, ".git")
-	if i := strings.LastIndexByte(u, '/'); i >= 0 {
-		return u[i+1:]
-	}
-	return u
 }
 
 func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) error {
