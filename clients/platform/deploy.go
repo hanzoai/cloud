@@ -266,25 +266,21 @@ func startGitBuild(s *cloud.Service[state], ctx context.Context, org string, a A
 // emitDeployLifecycle fans a deploy transition onto the cloud lifecycle stream so
 // the git-lifecycle reactors (Slack-notify) can post about it. Repo is derived from
 // the app's RepoURL — the native repo name a subscription keys on; an app with no
-// repo URL (an image app) carries an empty Repo and routes to nothing. Best-effort
-// + detached inside EmitLifecycle, so it never affects the deploy.
+// repo URL (an image app) carries an empty Repo and routes to nothing. Project is
+// the app's IAM project (the git repo's sub-scope), normalized so the reserved
+// "default" maps to the empty (org-level) scope the git store uses — so a deploy
+// notification routes to the SAME (org,project,repo) a subscription was created
+// under. Best-effort + detached inside EmitLifecycle, so it never affects the deploy.
 func emitDeployLifecycle(ctx context.Context, kind cloud.LifecycleKind, org string, a Application, d Deployment, detail string) {
+	project := a.ProjectID
+	if project == "default" {
+		project = ""
+	}
 	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
-		Kind: kind, Org: org, Repo: repoFromURL(a.RepoURL),
+		Kind: kind, Org: org, Project: project, Repo: cloud.RepoFromCloneURL(a.RepoURL),
 		Branch: firstNonEmpty(a.RepoBranch, "main"), After: d.Commit,
 		DeployID: d.ID, Detail: detail,
 	})
-}
-
-// repoFromURL extracts the repo name from a clone URL (last path segment, ".git"
-// stripped) — the key the git subscription store routes a deploy notification on.
-func repoFromURL(u string) string {
-	u = strings.TrimSuffix(strings.TrimSpace(u), "/")
-	u = strings.TrimSuffix(u, ".git")
-	if i := strings.LastIndexByte(u, '/'); i >= 0 {
-		return u[i+1:]
-	}
-	return u
 }
 
 // failDeployment records the honest failure on the deployment + app and returns
