@@ -32,14 +32,15 @@ func sshUploadPack(s *cloud.Service[state], ctx context.Context, org, project, n
 // for every branch the push advanced — the SAME side effects a smart-HTTP push
 // produces. The branch diff (before/after tips) is ground truth for what changed,
 // so it runs regardless of a non-zero exit; both run on a cancel-immune context.
-func sshReceivePack(s *cloud.Service[state], ctx context.Context, org, project, name, protocol string, ch io.ReadWriteCloser) error {
+// pusher is the SSH key's bound user id (best-effort lifecycle attribution).
+func sshReceivePack(s *cloud.Service[state], ctx context.Context, org, project, name, pusher, protocol string, ch io.ReadWriteCloser) error {
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 	before := branchTips(ctx, bareDir)
 	err := runPackSSH(ctx, bareDir, svcReceivePack, protocol, ch)
 
 	bg := context.WithoutCancel(ctx)
 	recordUsage(s, bg, org, project, name)
-	fireBranchBuilds(s, bg, org, project, name, before, branchTips(bg, bareDir))
+	fireBranchBuilds(s, bg, org, project, name, pusher, before, branchTips(bg, bareDir))
 	// Keep clones fast: opportunistic housekeeping (no-op until git's thresholds
 	// trigger a repack). Detached + slot-yielding, never blocks the push.
 	go autoMaintain(s.Log, bareDir)
