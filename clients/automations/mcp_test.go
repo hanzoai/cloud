@@ -29,7 +29,7 @@ func TestMCPToolsList(t *testing.T) {
 	for _, tl := range out.Result.Tools {
 		names[tl.Name] = true
 	}
-	for _, want := range []string{"slack_send_message", "core_http_request", "core_code", "github_create_issue", "google_sheets_append_row"} {
+	for _, want := range []string{"slack_send_message", "core_http_request", "core_code", "github_create_issue", "google_append_row", "google_list_files"} {
 		if !names[want] {
 			t.Fatalf("tools/list missing %q; got %v", want, names)
 		}

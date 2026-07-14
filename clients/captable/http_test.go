@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -44,7 +46,10 @@ func req(t *testing.T, app *zip.App, method, path, org string, body any) (int, [
 		rq.Header.Set("X-Org-Id", org)
 		rq.Header.Set("X-User-Id", "u_"+org) // validated principal (principal.Org gates on it)
 	}
-	resp, err := app.Fiber().Test(rq)
+	// A generous timeout: fiber's 1s default is too tight for the in-memory harness
+	// under an occasional GC / cold-sqlite pause (the goja dispatch does real DB
+	// work), which would flake this suite.
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
