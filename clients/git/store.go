@@ -72,8 +72,10 @@ CREATE INDEX IF NOT EXISTS ix_repos_org_updated ON repos(org, updated_at);
 
 -- Lifecycle reactors' per-repo config lives in the SAME per-org git.db (no new
 -- DB): a repo→Slack-channel subscription and a repo→downstream mirror target.
--- Both key on (org, repo) — git is org-scoped, project is a display column — so a
--- push and a deploy (whose project namespace differs) route through one key.
+-- Both key on the FULL repo identity (org, project, repo) — the same tuple the
+-- repos table + storage path use — so a repo of the same name under project A and
+-- project B are distinct: a push to B can never mirror-out B's code to A's
+-- downstream or notify A's channel. Rows cascade-delete with their repo.
 CREATE TABLE IF NOT EXISTS repo_subscriptions (
   id         TEXT PRIMARY KEY,
   org        TEXT NOT NULL,
@@ -83,8 +85,8 @@ CREATE TABLE IF NOT EXISTS repo_subscriptions (
   events     TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_repo_subs ON repo_subscriptions(org, repo, channel);
-CREATE INDEX IF NOT EXISTS ix_repo_subs_repo ON repo_subscriptions(org, repo);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_repo_subs ON repo_subscriptions(org, project, repo, channel);
+CREATE INDEX IF NOT EXISTS ix_repo_subs_repo ON repo_subscriptions(org, project, repo);
 
 CREATE TABLE IF NOT EXISTS repo_mirrors (
   id         TEXT PRIMARY KEY,
@@ -95,8 +97,8 @@ CREATE TABLE IF NOT EXISTS repo_mirrors (
   url        TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ux_repo_mirrors ON repo_mirrors(org, repo, host);
-CREATE INDEX IF NOT EXISTS ix_repo_mirrors_repo ON repo_mirrors(org, repo);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_repo_mirrors ON repo_mirrors(org, project, repo, host);
+CREATE INDEX IF NOT EXISTS ix_repo_mirrors_repo ON repo_mirrors(org, project, repo);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -201,14 +203,34 @@ func (s *Store) SetSize(ctx context.Context, org, project, name string, sizeByte
 	return nil
 }
 
-// Delete removes a repo row. Reports whether a row went.
+// Delete removes a repo row AND cascade-deletes its lifecycle config
+// (subscriptions + mirror targets) in one transaction, so a deleted repo can
+// never leave an orphaned external mirror target that a re-created repo of the
+// same name would silently inherit (Red MED-3: exfil-on-recreate). Reports
+// whether the repo row went.
 func (s *Store) Delete(ctx context.Context, org, project, name string) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("delete repo: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM repos WHERE org=? AND project=? AND name=?`, org, project, name)
 	if err != nil {
 		return false, fmt.Errorf("delete repo: %w", err)
 	}
 	n, _ := res.RowsAffected()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM repo_subscriptions WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
+		return false, fmt.Errorf("delete repo subscriptions: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM repo_mirrors WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
+		return false, fmt.Errorf("delete repo mirrors: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("delete repo: commit: %w", err)
+	}
 	return n > 0, nil
 }
 
@@ -257,10 +279,11 @@ func (s *Store) CreateSubscription(ctx context.Context, v Subscription) error {
 	return nil
 }
 
-// ListSubscriptions returns every subscription for (org, repo), newest first.
-func (s *Store) ListSubscriptions(ctx context.Context, org, repo string) ([]Subscription, error) {
+// ListSubscriptions returns every subscription for the repo (org, project, repo),
+// newest first.
+func (s *Store) ListSubscriptions(ctx context.Context, org, project, repo string) ([]Subscription, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+subCols+` FROM repo_subscriptions WHERE org=? AND repo=? ORDER BY created_at DESC, id ASC`, org, repo)
+		`SELECT `+subCols+` FROM repo_subscriptions WHERE org=? AND project=? AND repo=? ORDER BY created_at DESC, id ASC`, org, project, repo)
 	if err != nil {
 		return nil, fmt.Errorf("list subscriptions: %w", err)
 	}
@@ -276,11 +299,12 @@ func (s *Store) ListSubscriptions(ctx context.Context, org, repo string) ([]Subs
 	return out, rows.Err()
 }
 
-// DeleteSubscription removes a subscription by (org, repo, id) — a caller may only
-// delete their own org's subscription of the named repo. Reports whether a row went.
-func (s *Store) DeleteSubscription(ctx context.Context, org, repo, id string) (bool, error) {
+// DeleteSubscription removes a subscription by (org, project, repo, id) — a caller
+// may only delete their own org's subscription of the named repo IN SCOPE. Reports
+// whether a row went.
+func (s *Store) DeleteSubscription(ctx context.Context, org, project, repo, id string) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM repo_subscriptions WHERE org=? AND repo=? AND id=?`, org, repo, id)
+		`DELETE FROM repo_subscriptions WHERE org=? AND project=? AND repo=? AND id=?`, org, project, repo, id)
 	if err != nil {
 		return false, fmt.Errorf("delete subscription: %w", err)
 	}
@@ -324,10 +348,11 @@ func (s *Store) CreateMirror(ctx context.Context, v MirrorTarget) error {
 	return nil
 }
 
-// ListMirrors returns every mirror target for (org, repo), newest first.
-func (s *Store) ListMirrors(ctx context.Context, org, repo string) ([]MirrorTarget, error) {
+// ListMirrors returns every mirror target for the repo (org, project, repo),
+// newest first.
+func (s *Store) ListMirrors(ctx context.Context, org, project, repo string) ([]MirrorTarget, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+mirrorCols+` FROM repo_mirrors WHERE org=? AND repo=? ORDER BY created_at DESC, id ASC`, org, repo)
+		`SELECT `+mirrorCols+` FROM repo_mirrors WHERE org=? AND project=? AND repo=? ORDER BY created_at DESC, id ASC`, org, project, repo)
 	if err != nil {
 		return nil, fmt.Errorf("list mirrors: %w", err)
 	}
@@ -343,10 +368,11 @@ func (s *Store) ListMirrors(ctx context.Context, org, repo string) ([]MirrorTarg
 	return out, rows.Err()
 }
 
-// DeleteMirror removes a mirror target by (org, repo, id). Reports whether a row went.
-func (s *Store) DeleteMirror(ctx context.Context, org, repo, id string) (bool, error) {
+// DeleteMirror removes a mirror target by (org, project, repo, id). Reports whether
+// a row went.
+func (s *Store) DeleteMirror(ctx context.Context, org, project, repo, id string) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`DELETE FROM repo_mirrors WHERE org=? AND repo=? AND id=?`, org, repo, id)
+		`DELETE FROM repo_mirrors WHERE org=? AND project=? AND repo=? AND id=?`, org, project, repo, id)
 	if err != nil {
 		return false, fmt.Errorf("delete mirror: %w", err)
 	}
