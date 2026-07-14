@@ -95,6 +95,12 @@ func openStore(db *sql.DB) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	// Migrate in dependency order: base tables, then the forward-added spine
+	// columns, then the indexes that reference those columns. A CREATE INDEX over a
+	// column a pre-existing (legacy) table lacks fails ("no such column"), which
+	// fails mount and crashloops the pod on deploy — so any index over an
+	// ALTER-added column (kind, repo) MUST come after the ADD COLUMN pass, never in
+	// the base DDL.
 	const ddl = `
 CREATE TABLE IF NOT EXISTS projects (
   id           TEXT PRIMARY KEY,
@@ -128,8 +134,6 @@ CREATE TABLE IF NOT EXISTS issues (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_issues_project_number ON issues(project_id, number);
 CREATE INDEX IF NOT EXISTS ix_issues_org_project_status ON issues(org, project_id, status);
-CREATE INDEX IF NOT EXISTS ix_issues_org_repo ON issues(org, repo);
-CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -147,6 +151,18 @@ CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
 		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate add column: %w", err)
 		}
+	}
+	// Indexes over the ALTER-added spine columns (repo, kind) — created only now
+	// that the ADD COLUMN pass above guarantees they exist on every issues table.
+	// On a legacy DB whose issues table predates the spine, CREATE TABLE IF NOT
+	// EXISTS no-ops, so indexing repo/kind in the base DDL would fail ("no such
+	// column") before the column is added. Column first, then its index.
+	const spineIdx = `
+CREATE INDEX IF NOT EXISTS ix_issues_org_repo ON issues(org, repo);
+CREATE INDEX IF NOT EXISTS ix_issues_org_kind ON issues(org, kind);
+`
+	if _, err := s.db.Exec(spineIdx); err != nil {
+		return fmt.Errorf("migrate spine index: %w", err)
 	}
 	return nil
 }
