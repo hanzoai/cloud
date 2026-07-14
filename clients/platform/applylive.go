@@ -88,6 +88,9 @@ func applyLive(s *cloud.Service[state], ctx context.Context, org, project string
 		// registry miss/failure must never affect the deploy. Own context: the
 		// deploy's ctx is about to end.
 		go sbom.Prefetch(context.WithoutCancel(ctx), s.Log, image)
+		// This deployment is now the live version — the ONE DeployLive funnel for
+		// both the image path (deployTagCore) and the git build reconciler.
+		emitDeployLifecycle(ctx, cloud.LifecycleDeployLive, org, app, d, app.Slug+" live ("+image+")")
 	}
 	return adv, false, nil
 }
