@@ -45,8 +45,15 @@ const (
 
 // slackDefaultScopes is the bot scope set requested when SLACK_BOT_SCOPES is
 // unset. Override the env to widen/narrow per deployment.
+//
+// chat:write.public lets the bot post repo lifecycle notifications to a subscribed
+// PUBLIC channel it has not been manually invited to — so a freshly-connected
+// channel works immediately (GitHub-Slack-app parity). It grants posting to public
+// channels only; private channels/DMs still require an explicit invite, so it is
+// not a broad over-grant. The bot still only posts where a repo owner subscribed.
 var slackDefaultScopes = []string{
-	"app_mentions:read", "chat:write", "channels:history", "groups:history",
+	"app_mentions:read", "chat:write", "chat:write.public",
+	"channels:history", "groups:history",
 	"im:history", "im:read", "im:write", "users:read",
 }
 
