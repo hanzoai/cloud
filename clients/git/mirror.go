@@ -322,14 +322,29 @@ func mirrorAuthHeader(srcURL string) string {
 	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
 }
 
-// mirrorHostAllowed reports whether host may receive the mirror credential.
-// GIT_MIRROR_ALLOW_HOSTS (comma-separated) overrides the default set.
+// mirrorHostAllowed reports whether host may receive the mirror credential AND be
+// a downstream mirror target. GIT_MIRROR_ALLOW_HOSTS (comma-separated) overrides
+// the default set {github.com, gitlab.com, git.hanzo.ai}. The SAME allowlist gates
+// the credential attachment (mirror-in) and the push target (mirror-out), so a
+// tenant-supplied URL can never capture the shared token or push to an internal
+// host.
 func mirrorHostAllowed(host string) bool {
 	if v := strings.TrimSpace(os.Getenv(mirrorAllowHostsEnv)); v != "" {
 		return hostInList(host, mirrorAllowHostsEnv)
 	}
 	host = strings.ToLower(host)
-	return host == "github.com" || host == "git.hanzo.ai"
+	return host == "github.com" || host == "gitlab.com" || host == "git.hanzo.ai"
+}
+
+// mirrorBasicUser maps a downstream host to the basic-auth username its token is
+// presented with over http.extraHeader: GitHub takes "x-access-token", GitLab
+// takes "oauth2"; every other allowlisted host defaults to the GitHub form. The
+// token itself is the password, injected env-only (never argv/logs).
+func mirrorBasicUser(host string) string {
+	if strings.ToLower(host) == "gitlab.com" {
+		return "oauth2"
+	}
+	return "x-access-token"
 }
 
 // hostInList reports whether host (case-insensitive) is a member of the
