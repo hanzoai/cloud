@@ -32,7 +32,7 @@ var frozen = []struct {
 	{"ingress", false, true},         // was order 42
 	{"account", false, false},        // was order 48
 	{"iam", false, false},            // was order 50
-	{"base", true, false},            // was order 60
+	{"base", true, true},             // was order 60; per-org embed added Shutdown (#298)
 	{"o11y", true, true},             // was order 69
 	{"o11y", false, false},           // was order 70
 	{"authz", false, false},          // was order 70
