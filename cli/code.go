@@ -31,14 +31,13 @@ import (
 )
 
 // defaultCodeModel is the model `hanzo code <agent>` runs when no model is
-// named. It must be a concrete, catalog-served id, NOT the virtual `best`:
-// Claude Code treats `best` (like `opus`/`sonnet`/`haiku`) as a reserved alias
-// and rewrites it to a claude-* id that api.hanzo.ai does not serve (403),
-// which kills the CC session. glm-5.2 is the stable GLM-5.2-class frontier
-// (1M ctx); the backend still cascades on rate-limit / out-of-credit / down
-// (server-side, controllers/failover.go). Override per-invocation with an
-// explicit id: `hanzo code claude glm5.2`.
-const defaultCodeModel = "glm-5.2"
+// named. It must be a catalog-served id with working tool calls: coding agents
+// cannot operate on a text-only model even when its SSE transport is healthy.
+// zen5-pro is the stable tool-capable capability alias. Do not use the virtual
+// `best`: Claude Code treats it (like `opus`/`sonnet`/`haiku`) as a reserved
+// alias and rewrites it to a claude-* id that api.hanzo.ai does not serve.
+// Override per invocation with an explicit id: `hanzo code claude glm5.2`.
+const defaultCodeModel = "zen5-pro"
 
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
@@ -63,10 +62,11 @@ type wire func(base, token, model string) map[string]string
 //	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
 //	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
 //	Fable         zen5-pro      premium frontier (ultra disabled; falls through to zen5)
-//	main          <model>       the resolved id, default glm-5.2 (see defaultCodeModel)
+//	main          <model>       the resolved id, default zen5-pro (see defaultCodeModel)
 //
-// The main slot takes a concrete id (default glm-5.2), never the virtual `best`:
-// CC rewrites the reserved word `best` to a claude-* id that 403s.
+// The main slot takes a served, tool-capable id (default zen5-pro), never the
+// virtual `best`: CC rewrites the reserved word `best` to a claude-* id that
+// 403s.
 func anthropicWire(base, token, model string) map[string]string {
 	return map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
@@ -91,13 +91,13 @@ func openaiWire(base, token, _ string) map[string]string {
 }
 
 type codeAgent struct {
-	bin      string   // executable to exec
-	wire     wire     // how it finds the cloud
-	fullAuto []string // flags that bypass approval prompts
-	modelArg []string // how the model is passed on argv (empty: via env)
+	bin      string                     // executable to exec
+	wire     wire                       // how it finds the cloud
+	fullAuto []string                   // flags that bypass approval prompts
+	modelArg []string                   // how the model is passed on argv (empty: via env)
 	provider func(base string) []string // agents that need the endpoint declared, not just env'd
-	clear    []string // env that would shadow the wire (a stale key in the shell)
-	install  string   // hint when the binary is missing
+	clear    []string                   // env that would shadow the wire (a stale key in the shell)
+	install  string                     // hint when the binary is missing
 }
 
 // codex and @hanzo/dev share a lineage (dev is a Codex fork), hence a wire.
@@ -126,7 +126,7 @@ var codeAgents = map[string]codeAgent{
 	"claude": {
 		bin:      "claude",
 		wire:     anthropicWire,
-		fullAuto: []string{"--allow-dangerously-skip-permissions"},
+		fullAuto: []string{"--dangerously-skip-permissions"},
 		clear:    []string{"ANTHROPIC_API_KEY"}, // outranks AUTH_TOKEN: a stale one silently wins
 		install:  "npm i -g @anthropic-ai/claude-code",
 	},
@@ -216,18 +216,7 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 		return err
 	}
 
-	argv := []string{agent.bin}
-	if !safe {
-		argv = append(argv, agent.fullAuto...)
-	}
-	if agent.provider != nil {
-		argv = append(argv, agent.provider(base)...)
-	}
-	if len(agent.modelArg) > 0 { // claude takes the model via env, codex/dev on argv
-		argv = append(argv, agent.modelArg...)
-		argv = append(argv, model)
-	}
-	argv = append(argv, rest...)
+	argv := codeArgv(agent, base, model, safe, rest)
 
 	for _, k := range agent.clear {
 		if err := os.Unsetenv(k); err != nil {
@@ -241,6 +230,24 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 	}
 	fmt.Fprintf(env.out, "%s → %s on %s\n", agent.bin, model, base)
 	return execEngine(bin, argv) // exec: signals + exit code flow straight through
+}
+
+// codeArgv builds the final agent command line. Permission bypass is the
+// launcher default for every agent; --safe is the single explicit opt-out.
+func codeArgv(agent codeAgent, base, model string, safe bool, rest []string) []string {
+	argv := []string{agent.bin}
+	if !safe {
+		argv = append(argv, agent.fullAuto...)
+	}
+	if agent.provider != nil {
+		argv = append(argv, agent.provider(base)...)
+	}
+	if len(agent.modelArg) > 0 { // claude takes the model via env, codex/dev on argv
+		argv = append(argv, agent.modelArg...)
+		argv = append(argv, model)
+	}
+	argv = append(argv, rest...)
+	return argv
 }
 
 // codeToken resolves the credential the agents authenticate with: an explicit
