@@ -135,12 +135,15 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project, name s
 		return "", "", fmt.Errorf("open storer: %w", err)
 	}
 
-	// Resolve the current branch tip (parent commit + base tree), if any.
+	// Resolve the current branch tip (parent commit + base tree), if any. The tip
+	// is also the lifecycle "before" for this branch's advance.
 	branchRef := plumbing.NewBranchReferenceName(branch)
 	var parents []plumbing.Hash
+	var before string
 	var baseTree *object.Tree
 	if ref, rerr := st.Reference(branchRef); rerr == nil && ref.Hash() != plumbing.ZeroHash {
 		parents = append(parents, ref.Hash())
+		before = ref.Hash().String()
 		if pc, cerr := object.GetCommit(st, ref.Hash()); cerr == nil {
 			if bt, terr := pc.Tree(); terr == nil {
 				baseTree = bt
@@ -185,11 +188,12 @@ func corePush(s *cloud.Service[state], ctx context.Context, org, project, name s
 		_ = st.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, branchRef))
 	}
 
-	// Same side effects as a receive-pack push: meter storage + fire the build for
-	// the one branch this push advanced (the ONE fireBranchBuild every push uses).
+	// Same side effects as a receive-pack push: meter storage + fire the reactions
+	// for the one branch this push advanced (the ONE fireBranchBuild every push
+	// uses). A client-less push has no gateway user, so the pusher is "".
 	bg := context.WithoutCancel(ctx)
 	recordUsage(s, bg, org, project, name)
-	fireBranchBuild(s, bg, org, project, name, branch, ch.String())
+	fireBranchBuild(s, bg, org, project, name, branch, before, ch.String(), "")
 
 	return ch.String(), branch, nil
 }
