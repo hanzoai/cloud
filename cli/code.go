@@ -156,17 +156,48 @@ var codeAgents = map[string]codeAgent{
 	"dev":   codexLike("dev", "npm i -g @hanzo/dev"),
 }
 
+// defaultAgent is the agent `hanzo code` (no agent named) and bare `hanzo` launch:
+// HANZO_CODE_TOOL, else the config `code_tool`, else dev — the Hanzo agent. An
+// unknown value falls back to dev rather than failing, so a stale preference never
+// blocks the default flow.
+func defaultAgent(env *Env) codeAgent {
+	name := firstNonEmpty(os.Getenv("HANZO_CODE_TOOL"), env.cfg.CodeTool)
+	if a, ok := codeAgents[name]; ok {
+		return a
+	}
+	return codeAgents["dev"]
+}
+
 func newCodeCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "code <agent> [model] [-- args]",
-		Short: "Launch a coding agent (claude, codex, dev) on a Hanzo cloud model",
-		Long: "Run Claude Code, Codex, or @hanzo/dev against api.hanzo.ai with the endpoint,\n" +
-			"credential and model injected — no env vars to remember. Model ids are resolved\n" +
-			"fuzzily (glm5.2 -> glm-5.2) and agents run full-auto unless you pass --safe.",
-		Example: "  hanzo code claude\n" +
+		Use:   "code [agent] [model] [-- args]",
+		Short: "Launch a coding agent (dev, claude, codex) on a Hanzo cloud model",
+		Long: "Run @hanzo/dev, Claude Code, or Codex against api.hanzo.ai with the endpoint,\n" +
+			"credential and model injected — no env vars to remember. `hanzo code` alone runs\n" +
+			"dev (the Hanzo agent); name an agent to pick another. Model ids resolve fuzzily\n" +
+			"(glm5.2 -> glm-5.2) and agents run full-auto unless you pass --safe.",
+		Example: "  hanzo code                 # dev, the default agent\n" +
+			"  hanzo code claude\n" +
 			"  hanzo code codex deepseek-v4-pro\n" +
 			"  hanzo code dev glm5.2 -- --resume\n" +
 			"  hanzo code ls",
+		// Bare `hanzo code` (or `hanzo code <model>/-- args` with no agent name) runs
+		// the configured default agent (code_tool, else dev). A recognized agent name
+		// (or `ls`) dispatches to its subcommand; anything else is the agent's args, so
+		// `hanzo code glm5.2` works too.
+		DisableFlagParsing: true,
+		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				if _, isAgent := codeAgents[args[0]]; isAgent || args[0] == "ls" {
+					sub, _, err := c.Find(args)
+					if err == nil && sub != c {
+						sub.SetArgs(args[1:])
+						return sub.Execute()
+					}
+				}
+			}
+			return runCode(envOf(), defaultAgent(envOf()), args)
+		},
 	}
 
 	names := make([]string, 0, len(codeAgents))
