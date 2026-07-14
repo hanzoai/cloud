@@ -96,7 +96,7 @@ func ensureReserveWallet(s *cloud.Service[state], ctx context.Context, org, chai
 	}
 	cust := s.State.custody[KindTreasury]
 	w := &Wallet{
-		ID: newID("wal"), Org: org, AccountID: acctID, Name: reserveWalletName,
+		ID: newID("wal"), Scope: Scope{Org: org, AccountID: acctID}, Name: reserveWalletName,
 		Custody: KindTreasury, Tier: TierCold, Chain: chain, CreatedAt: time.Now().Unix(),
 	}
 	addr, err := cust.Provision(ctx, w) // sets w.KeyRef (the ring wallet id)
