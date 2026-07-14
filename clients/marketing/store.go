@@ -52,29 +52,52 @@ func openStore(path string) (*Store, error) {
 	return s, nil
 }
 
-// migrate creates the campaigns table. Idempotent (IF NOT EXISTS). The table
-// leads its lookup indexes with `org` so tenant isolation is a physical
-// property, not just a WHERE clause.
+// migrate is the ONE schema orchestrator: it runs every GTM lane's idempotent
+// migration in order. Each lane owns its own DDL in its own file (campaigns here,
+// suppressions/sequences/audiences/promos/calendar in siblings), so a lane is
+// self-contained — adding one is a new file plus a line here, never a rewrite of
+// a shared blob. Every table leads its `org` column and its lookup indexes with
+// `org`, making tenant isolation a physical property, not just a WHERE clause.
 func (s *Store) migrate() error {
+	for _, m := range []func() error{
+		s.migrateCampaigns,
+		s.migrateSuppressions,
+		s.migrateSequences,
+		s.migrateAudiences,
+		s.migratePromos,
+		s.migrateCalendar,
+	} {
+		if err := m(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateCampaigns creates the campaigns table. Idempotent (IF NOT EXISTS).
+// scheduled_at (unix; 0 = unscheduled) carries a campaign's send time for the
+// "scheduled" lifecycle state.
+func (s *Store) migrateCampaigns() error {
 	const ddl = `
 CREATE TABLE IF NOT EXISTS marketing_campaigns (
-  id          TEXT PRIMARY KEY,
-  org         TEXT NOT NULL,
-  name        TEXT NOT NULL,
-  channel     TEXT NOT NULL DEFAULT 'email',
-  status      TEXT NOT NULL DEFAULT 'draft',
-  objective   TEXT NOT NULL DEFAULT '',
-  budget      INTEGER NOT NULL DEFAULT 0,
-  spend       INTEGER NOT NULL DEFAULT 0,
-  created_at  INTEGER NOT NULL,
-  updated_at  INTEGER NOT NULL
+  id            TEXT PRIMARY KEY,
+  org           TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  channel       TEXT NOT NULL DEFAULT 'email',
+  status        TEXT NOT NULL DEFAULT 'draft',
+  objective     TEXT NOT NULL DEFAULT '',
+  budget        INTEGER NOT NULL DEFAULT 0,
+  spend         INTEGER NOT NULL DEFAULT 0,
+  scheduled_at  INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_updated ON marketing_campaigns(org, updated_at);
 CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_status  ON marketing_campaigns(org, status);
 CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_channel ON marketing_campaigns(org, channel);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
-		return fmt.Errorf("marketing migrate: %w", err)
+		return fmt.Errorf("marketing migrate campaigns: %w", err)
 	}
 	return nil
 }
@@ -87,32 +110,33 @@ func (s *Store) Close() error { return s.db.Close() }
 // Status is the lifecycle (draft/active/paused/completed) — both validated at the
 // write layer against the fixed vocabularies in marketing.go.
 type Campaign struct {
-	ID        string `json:"id"`
-	Org       string `json:"-"`
-	Name      string `json:"name"`
-	Channel   string `json:"channel"`
-	Status    string `json:"status"`
-	Objective string `json:"objective"`
-	Budget    int64  `json:"budget"`
-	Spend     int64  `json:"spend"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	ID          string `json:"id"`
+	Org         string `json:"-"`
+	Name        string `json:"name"`
+	Channel     string `json:"channel"`
+	Status      string `json:"status"`
+	Objective   string `json:"objective"`
+	Budget      int64  `json:"budget"`
+	Spend       int64  `json:"spend"`
+	ScheduledAt int64  `json:"scheduledAt"`
+	CreatedAt   int64  `json:"createdAt"`
+	UpdatedAt   int64  `json:"updatedAt"`
 }
 
-const campaignCols = `id,org,name,channel,status,objective,budget,spend,created_at,updated_at`
+const campaignCols = `id,org,name,channel,status,objective,budget,spend,scheduled_at,created_at,updated_at`
 
 func scanCampaign(sc interface{ Scan(...any) error }) (Campaign, error) {
 	var c Campaign
 	err := sc.Scan(&c.ID, &c.Org, &c.Name, &c.Channel, &c.Status, &c.Objective,
-		&c.Budget, &c.Spend, &c.CreatedAt, &c.UpdatedAt)
+		&c.Budget, &c.Spend, &c.ScheduledAt, &c.CreatedAt, &c.UpdatedAt)
 	return c, err
 }
 
 func (s *Store) CreateCampaign(ctx context.Context, c Campaign) (Campaign, error) {
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO marketing_campaigns (`+campaignCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO marketing_campaigns (`+campaignCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		c.ID, c.Org, c.Name, c.Channel, c.Status, c.Objective, c.Budget, c.Spend,
-		c.CreatedAt, c.UpdatedAt); err != nil {
+		c.ScheduledAt, c.CreatedAt, c.UpdatedAt); err != nil {
 		return Campaign{}, fmt.Errorf("insert campaign: %w", err)
 	}
 	return c, nil
@@ -161,8 +185,8 @@ func (s *Store) ListCampaigns(ctx context.Context, org, status string, limit int
 
 func (s *Store) UpdateCampaign(ctx context.Context, c Campaign) (Campaign, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE marketing_campaigns SET name=?,channel=?,status=?,objective=?,budget=?,spend=?,updated_at=? WHERE org=? AND id=?`,
-		c.Name, c.Channel, c.Status, c.Objective, c.Budget, c.Spend, c.UpdatedAt, c.Org, c.ID)
+		`UPDATE marketing_campaigns SET name=?,channel=?,status=?,objective=?,budget=?,spend=?,scheduled_at=?,updated_at=? WHERE org=? AND id=?`,
+		c.Name, c.Channel, c.Status, c.Objective, c.Budget, c.Spend, c.ScheduledAt, c.UpdatedAt, c.Org, c.ID)
 	if err != nil {
 		return Campaign{}, fmt.Errorf("update campaign: %w", err)
 	}
