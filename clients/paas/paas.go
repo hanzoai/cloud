@@ -125,6 +125,12 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
 	app.Post("/v1/paas/apps/:app/deploy", guard(s, cloud.Handle(s, deploy)))
 	app.Get("/v1/paas/health", cloud.Handle(s, health))
+
+	// Native release seam: install the first-party CR-rollout hook (build.go's
+	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
+	// its Service CR here — the direct-CR replacement for the image-update.yml
+	// GitOps hop (release.go).
+	registerReleaser(s)
 }
 
 // guard wraps a handler with the SuperAdmin gate. Fail-closed: any request whose
