@@ -10,11 +10,12 @@ import (
 	"time"
 )
 
-// Google connectors (Sheets + Drive). Google is NOT yet a provider in
-// clients/integrations, so RunContext.Token — bound to (in.Owner, "google_sheets"
-// / "google_drive") — resolves an UNKNOWN provider and fails closed. Every action
-// therefore returns an honest "google not connected" until a google provider lands
-// in integrations. The API code below is complete; it simply never runs in Phase 1.
+// Google connector (Drive + Sheets). Its Name is the clients/integrations provider
+// id "google", so RunContext.Token resolves the SAME per-org KMS-custodied access
+// token the OAuth plane sealed. ONE Google connection powers every Drive/Sheets
+// action here (and the company import bridge). Before the google provider landed in
+// integrations this failed closed ("google not connected"); now Token("access_token")
+// resolves against the sealed credential.
 
 const googleTokenSecret = "access_token"
 
@@ -27,8 +28,8 @@ var googleClient = &http.Client{Timeout: 15 * time.Second}
 
 func init() {
 	register(&Connector{
-		Name:        "google_sheets",
-		DisplayName: "Google Sheets",
+		Name:        "google",
+		DisplayName: "Google",
 		AuthType:    "oauth2",
 		AuthReq:     true,
 		Actions: map[string]*Action{
@@ -43,17 +44,9 @@ func init() {
 				},
 				Run: runSheetsAppendRow,
 			},
-		},
-	})
-	register(&Connector{
-		Name:        "google_drive",
-		DisplayName: "Google Drive",
-		AuthType:    "oauth2",
-		AuthReq:     true,
-		Actions: map[string]*Action{
 			"list_files": {
 				Name:        "list_files",
-				DisplayName: "List Files",
+				DisplayName: "List Drive Files",
 				Description: "List files matching an optional query.",
 				Props: []PropSpec{
 					{Name: "query", Type: "string", Description: "Drive query, e.g. name contains 'report'."},
