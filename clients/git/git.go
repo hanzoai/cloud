@@ -23,9 +23,10 @@
 //	POST /v1/git/:org/:repo/git-upload-pack     (clone/fetch)
 //	POST /v1/git/:org/:repo/git-receive-pack    (push)
 //
-// Storage is a go-billy filesystem holding bare go-git repos; go-git's server
-// transport reads/writes it for clone AND push. The billy home is osfs rooted
-// under {DataDir}/git; see storage.go for the hanzoai/vfs (S3) storage seam.
+// Storage is bare git repos on a real filesystem (osfs) rooted under
+// {DataDir}/git; go-git initializes + reads them, while the heavy clone/push/
+// mirror paths stream through the `git` CLI (gitexec.go) so multi-GB packs stay
+// bounded in memory. See storage.go for the hanzoai/vfs (S3) storage seam.
 //
 // Billing: every repo tracks sizeBytes, re-measured on create and after each
 // push. /v1/git/usage exposes per-repo + total bytes per org, and each
@@ -59,12 +60,6 @@ var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // defaultBranchName is the default branch a fresh bare repo points HEAD at.
 const defaultBranchName = "main"
-
-// maxBody caps the git protocol request body a single POST accepts (upload-pack
-// wants/haves + receive-pack pack). Bounds memory since handlers buffer the
-// body; a very large monorepo push exceeding this uses git's chunked negotiation
-// which stays under the cap per request.
-const maxBody = 256 << 20 // 256 MiB
 
 // state is git's own data; shared deps live in the embedded cloud.Base (the
 // clone-URL host is s.Domain).
