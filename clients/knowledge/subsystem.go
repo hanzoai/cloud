@@ -7,6 +7,13 @@
 //     OWN vector namespace answers. This is how human wiki + AI memory become
 //     retrievable org knowledge for an agent.
 //
+//   - GET /v1/kb/graph (graph.go) — the org's knowledge as a node/edge graph for a
+//     force-directed renderer: pages/memories/sources as nodes; the parent tree,
+//     wikilinks, and connector provenance as edges.
+//
+//   - POST /v1/kb/import (import.go) — an Obsidian-importer-equivalent that ingests
+//     an Obsidian/Notion/Roam/Evernote export as a kb-page tree with links intact.
+//
 //   - Connectors (connectors.go): per-org OAuth connections to Slack/GitHub/Google
 //     whose synced documents land in the SAME store + SAME index as manual pages.
 //
@@ -53,6 +60,8 @@ func build(b cloud.Base) (state, error) {
 func routes(app *zip.App, s *cloud.Service[state]) {
 	for _, p := range []string{"/v1/knowledge", "/v1/kb"} {
 		app.Post(p+"/search", cloud.Handle(s, search))                 // RAG entry point
+		app.Get(p+"/graph", cloud.Handle(s, graph))                    // force-directed knowledge graph
+		app.Post(p+"/import", cloud.Handle(s, importVault))            // Obsidian/Notion/Roam/Evernote import
 		app.Get(p+"/connectors", cloud.Handle(s, listConnectors))      // per-org OAuth ingestion
 		app.Get(p+"/connectors/catalog", cloud.Handle(s, listCatalog)) // the ONE catalog
 		app.Get(p+"/connectors/:provider/connect", cloud.Handle(s, connectStart))

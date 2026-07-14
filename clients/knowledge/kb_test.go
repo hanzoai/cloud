@@ -14,8 +14,8 @@ import (
 // contract check that the lane installs cleanly into any org.
 func TestDocTypesValidate(t *testing.T) {
 	dts := DocTypes()
-	if len(dts) != 4 {
-		t.Fatalf("expected 4 KB doctypes, got %d", len(dts))
+	if len(dts) != 5 {
+		t.Fatalf("expected 5 KB doctypes, got %d", len(dts))
 	}
 	names := map[string]framework.DocType{}
 	for _, dt := range dts {
@@ -27,9 +27,35 @@ func TestDocTypesValidate(t *testing.T) {
 		}
 		names[dt.Name] = dt
 	}
-	for _, want := range []string{DTPage, DTMemory, DTSource, DTConnector} {
+	for _, want := range []string{DTPage, DTMemory, DTSource, DTConnector, DTLink} {
 		if _, ok := names[want]; !ok {
 			t.Errorf("missing expected doctype %q", want)
+		}
+	}
+}
+
+// TestLinkEdgeIsSourceLinkPlusTitle asserts the kb-link edge is a Link (source) +
+// Data (target_title) reference — the persisted backlink form. source must be a Link
+// to kb-page, and there is no stored resolved-target foreign key (targets resolve by
+// value at graph read), and no knowledge text (so it is never vector-indexed).
+func TestLinkEdgeIsSourceLinkPlusTitle(t *testing.T) {
+	l := link()
+	fields := map[string]framework.DocField{}
+	for _, f := range l.Fields {
+		fields[f.Fieldname] = f
+	}
+	src, ok := fields["source"]
+	if !ok || src.Fieldtype != framework.FieldLink || src.Options != DTPage || !src.Reqd {
+		t.Errorf("kb-link.source must be a required Link to %q, got %+v", DTPage, src)
+	}
+	tt, ok := fields["target_title"]
+	if !ok || tt.Fieldtype != framework.FieldData || !tt.Reqd {
+		t.Errorf("kb-link.target_title must be a required Data field, got %+v", tt)
+	}
+	// kb-link must NOT be in the indexed (vector) set — an edge carries no knowledge.
+	for _, dt := range indexedDocTypes {
+		if dt == DTLink {
+			t.Errorf("kb-link must not be vector-indexed")
 		}
 	}
 }
