@@ -103,7 +103,9 @@ type Config struct {
 	PlatformURL string `json:"platform_url,omitempty"`
 	CloudURL    string `json:"cloud_url,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
-	APIKey      string `json:"apiKey,omitempty"` // hk-… key; what `hanzo code` hands the agents
+	APIKey      string `json:"apiKey,omitempty"`   // hk-… key; what `hanzo code` hands the agents
+	CodeTool    string `json:"code_tool,omitempty"` // default agent for bare `hanzo` / `hanzo code`: dev|claude|codex
+	CodeModel   string `json:"code_model,omitempty"` // default model for `hanzo code` (else defaultCodeModel)
 }
 
 // Credentials holds secret material, ~/.hanzo/credentials.json, mode 0600.
@@ -370,6 +372,17 @@ func newRootCmd() *cobra.Command {
 			env.out = cmd.OutOrStdout()
 			return nil
 		},
+		// Bare `hanzo` gets you coding: log in if needed, then drop into the
+		// configured agent (code_tool, else dev) on a Hanzo cloud model — one word,
+		// billed to your account. `hanzo <cmd>` still runs that command.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if codeToken(env) == "" {
+				if err := runLogin(env, &loginFlags{}, cmd); err != nil {
+					return err
+				}
+			}
+			return runCode(env, defaultAgent(env), nil)
+		},
 	}
 
 	pf := root.PersistentFlags()
@@ -433,7 +446,7 @@ func newConfigCmd() *cobra.Command {
 		PersistentPreRunE: func(*cobra.Command, []string) error { return nil },
 	}
 
-	configKeys := []string{"org", "output", "iam_issuer", "platform_url", "cloud_url", "client_id"}
+	configKeys := []string{"org", "output", "iam_issuer", "platform_url", "cloud_url", "client_id", "code_tool", "code_model"}
 
 	get := &cobra.Command{
 		Use:   "get <key>",
@@ -521,6 +534,10 @@ func (c *Config) field(key string) (string, error) {
 		return c.CloudURL, nil
 	case "client_id":
 		return c.ClientID, nil
+	case "code_tool":
+		return c.CodeTool, nil
+	case "code_model":
+		return c.CodeModel, nil
 	default:
 		return "", fmt.Errorf("unknown config key %q", key)
 	}
@@ -544,6 +561,13 @@ func (c *Config) setField(key, val string) error {
 		c.CloudURL = val
 	case "client_id":
 		c.ClientID = val
+	case "code_tool":
+		if _, ok := codeAgents[val]; !ok {
+			return fmt.Errorf("code_tool must be one of: claude, codex, dev")
+		}
+		c.CodeTool = val
+	case "code_model":
+		c.CodeModel = val
 	default:
 		return fmt.Errorf("unknown config key %q", key)
 	}
