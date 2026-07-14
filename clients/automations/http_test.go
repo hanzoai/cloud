@@ -52,7 +52,7 @@ func TestConnectorsCatalog(t *testing.T) {
 	for _, p := range cat.Connectors {
 		byName[p.Name] = p
 	}
-	for _, want := range []string{"core", "slack", "github", "google_sheets", "google_drive"} {
+	for _, want := range []string{"core", "slack", "github", "google"} {
 		if _, ok := byName[want]; !ok {
 			t.Fatalf("catalogue missing %q: %+v", want, cat.Connectors)
 		}

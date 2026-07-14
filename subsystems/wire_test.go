@@ -50,6 +50,7 @@ var frozen = []struct {
 	{"prompts", false, false},        // was order 126
 	{"agents", false, true},          // was order 127
 	{"wallets", false, true},         // was order 127
+	{"x402", false, true},            // new: x402 pay-per-use settlement (after wallets)
 	{"paas", true, false},            // was order 128
 	{"functions", false, false},      // was order 128
 	{"tracker", false, false},        // was order 129
@@ -100,6 +101,7 @@ var frozen = []struct {
 	{"marketplace", false, true},     // new: marketplace over the tool plane (after tools)
 	{"referrals", false, false},      // was order 149
 	{"guide", false, true},           // new: Business AI Guide (after referrals, before ai)
+	{"company", false, true},         // new: Hanzo Company formation state machine (after guide)
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
 	{"plugins", false, false},        // was order 900
