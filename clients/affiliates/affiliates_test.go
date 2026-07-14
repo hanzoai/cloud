@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -114,7 +116,10 @@ func req(t *testing.T, app *zip.App, method, path, org string, admin bool, body 
 	if admin {
 		hr.Header.Set("X-User-IsAdmin", "true")
 	}
-	resp, err := app.Fiber().Test(hr)
+	// A generous ceiling: a correct request completes in well under 100ms, so 30s
+	// never fires spuriously — it only guards a genuine hang. The fiber default is 1s,
+	// which flakes under CI/machine load, not on request latency.
+	resp, err := app.Fiber().Test(hr, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -558,6 +563,281 @@ func sweptAccrued(t *testing.T, body []byte) int {
 	return out.Data.Accrued
 }
 
+// attributeOK records org←code (org referred with code), asserting a 2xx.
+func attributeOK(t *testing.T, app *zip.App, org, code string) {
+	t.Helper()
+	if st, body := req(t, app, http.MethodPost, "/v1/affiliates/attribute", org, false, map[string]any{"code": code}); st/100 != 2 {
+		t.Fatalf("attribute %s←%s want 2xx, got %d (%s)", org, code, st, body)
+	}
+}
+
+// TestMultiLevelUplineWalk is the CORE proof of the multi-level commission: a source
+// org's spend pays its referredBy chain L1 20% / L2 5% / L3 2%, depth-capped at 3 (a
+// 4th-level ancestor earns nothing). Chain: W←A←B←C←D (each attributed to the one
+// above); orgD spends $100.
+func TestMultiLevelUplineWalk(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+
+	idW, codeW := applyAndApprove(t, app, s, "orgW", "www", "")
+	idA, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	idB, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+	idC, codeC := applyAndApprove(t, app, s, "orgC", "ccc", "")
+
+	// Build the chain: A referred by W, B by A, C by B, D by C (D is a plain spender).
+	attributeOK(t, app, "orgA", codeW)
+	attributeOK(t, app, "orgB", codeA)
+	attributeOK(t, app, "orgC", codeB)
+	attributeOK(t, app, "orgD", codeC)
+
+	// Only orgD spends — $100 (10000c).
+	fc.setSpend("orgD", 10000)
+
+	if st, body := req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil); st != http.StatusOK {
+		t.Fatalf("sweep want 200, got %d (%s)", st, body)
+	}
+
+	want := map[string]struct {
+		id   string
+		want int64
+	}{
+		"orgC": {idC, 10000 * 2000 / 10000},         // L1 @ 20% = 2000
+		"orgB": {idB, 10000 * l2RateBps / bpsDenom}, // L2 @ 5%  = 500
+		"orgA": {idA, 10000 * l3RateBps / bpsDenom}, // L3 @ 2%  = 200
+		"orgW": {idW, 0},                            // L4 — beyond depth cap, earns NOTHING
+	}
+	for org, w := range want {
+		a, err := s.State.store.GetByID(ctx, w.id)
+		if err != nil {
+			t.Fatalf("GetByID(%s): %v", org, err)
+		}
+		if a.AccruedCents != w.want {
+			t.Fatalf("%s accrued = %d, want %d (level rate × $100)", org, a.AccruedCents, w.want)
+		}
+	}
+
+	// The upline walk itself is depth-capped at 3 (C, B, A — NOT W).
+	up, err := s.State.store.UplineOrgs(ctx, "orgD", maxDepth)
+	if err != nil {
+		t.Fatalf("UplineOrgs: %v", err)
+	}
+	if len(up) != 3 || up[0] != "orgC" || up[1] != "orgB" || up[2] != "orgA" {
+		t.Fatalf("upline = %v, want [orgC orgB orgA]", up)
+	}
+
+	// Idempotent: a re-sweep in the same period accrues nothing more.
+	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+	for org, w := range want {
+		a, _ := s.State.store.GetByID(ctx, w.id)
+		if a.AccruedCents != w.want {
+			t.Fatalf("double-accrual for %s: %d, want %d", org, a.AccruedCents, w.want)
+		}
+	}
+}
+
+// TestCycleRejection proves the referredBy edge refuses to close a loop at set time —
+// both a direct 2-node loop and a longer chain loop — while a non-cyclic sibling edge
+// is still allowed.
+func TestCycleRejection(t *testing.T) {
+	app, s, _ := mount(t)
+	_, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	_, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+	_, codeC := applyAndApprove(t, app, s, "orgC", "ccc", "")
+
+	// A←B←C (B referred by A, C referred by B).
+	attributeOK(t, app, "orgB", codeA)
+	attributeOK(t, app, "orgC", codeB)
+
+	// Direct cycle: orgA referred by orgB would close A↔B (B's upline reaches A).
+	if st, _ := req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgA", false, map[string]any{"code": codeB}); st != http.StatusBadRequest {
+		t.Fatalf("direct cycle want 400, got %d", st)
+	}
+	// Long cycle: orgA referred by orgC would close A→B→C→A (C's upline reaches A).
+	if st, _ := req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgA", false, map[string]any{"code": codeC}); st != http.StatusBadRequest {
+		t.Fatalf("long cycle want 400, got %d", st)
+	}
+	// A non-cyclic edge is still fine: orgD referred by orgC.
+	attributeOK(t, app, "orgD", codeC)
+	if cyc, err := s.State.store.wouldCycleOrg(context.Background(), "orgA", "orgB"); err != nil || !cyc {
+		t.Fatalf("wouldCycleOrg(orgA, orgB) = %v,%v — want true", cyc, err)
+	}
+}
+
+// TestReferredByImmutableOrg proves the org referredBy edge is set-once: a second
+// attribution with a DIFFERENT affiliate's code is a no-op that leaves the FIRST
+// referrer intact (first-touch wins).
+func TestReferredByImmutableOrg(t *testing.T) {
+	app, s, _ := mount(t)
+	ctx := context.Background()
+	_, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	_, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+
+	attributeOK(t, app, "orgX", codeA) // X referred by A (first touch)
+	// A second, different code is accepted as a no-op (created=false), edge unchanged.
+	st, body := req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgX", false, map[string]any{"code": codeB})
+	if st != http.StatusOK {
+		t.Fatalf("re-attribute want 200, got %d (%s)", st, body)
+	}
+	var re struct {
+		Created bool `json:"created"`
+	}
+	_ = json.Unmarshal(body, &re)
+	if re.Created {
+		t.Fatalf("re-attribute created a new edge — referredBy must be immutable")
+	}
+	r, ok, err := s.State.store.referrerOrgOf(ctx, "orgX")
+	if err != nil || !ok {
+		t.Fatalf("referrerOrgOf: %q ok=%v err=%v", r, ok, err)
+	}
+	if r != "orgA" {
+		t.Fatalf("referrer of orgX = %q, want orgA (first-touch, immutable)", r)
+	}
+}
+
+// TestReferredByImmutableAndCycleUser proves the USER-level referredBy edge is
+// set-once (immutable, first wins), rejects self, and rejects cycles at set time —
+// the same invariants as the org edge, exercised directly on the store.
+func TestReferredByImmutableAndCycleUser(t *testing.T) {
+	_, s, _ := mount(t)
+	ctx := context.Background()
+
+	// Self-referral refused.
+	if _, err := s.State.store.SetUserReferrer(ctx, "u1", "u1", ""); err != errSelfAttribution {
+		t.Fatalf("self user-referral err = %v, want errSelfAttribution", err)
+	}
+	// First link wins.
+	if created, err := s.State.store.SetUserReferrer(ctx, "u1", "u2", "code"); err != nil || !created {
+		t.Fatalf("first SetUserReferrer = %v,%v — want created,nil", created, err)
+	}
+	// Immutable: a second referrer for u1 is a no-op (first wins), u1's referrer stays u2.
+	if created, err := s.State.store.SetUserReferrer(ctx, "u1", "u3", "code"); err != nil || created {
+		t.Fatalf("second SetUserReferrer = %v,%v — want not-created,nil", created, err)
+	}
+	if r, ok, _ := s.State.store.referrerUserOf(ctx, "u1"); !ok || r != "u2" {
+		t.Fatalf("referrer of u1 = %q,%v — want u2,true", r, ok)
+	}
+	// Cycle: u2 referred by u1 would close u1↔u2 (u1's upline reaches u2).
+	if _, err := s.State.store.SetUserReferrer(ctx, "u2", "u1", ""); err != errCycle {
+		t.Fatalf("user cycle err = %v, want errCycle", err)
+	}
+}
+
+// TestAffiliatesMeSurface proves GET /v1/affiliates/me returns the caller's code,
+// link, per-level downline breakdown (with each level's rate), and accrued totals.
+func TestAffiliatesMeSurface(t *testing.T) {
+	app, s, fc := mount(t)
+	_, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	_, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+
+	// orgB referred by A (L1 below A); orgC referred by B (L2 below A); orgC spends.
+	attributeOK(t, app, "orgB", codeA)
+	attributeOK(t, app, "orgC", codeB)
+	fc.setSpend("orgC", 10000) // pays B (L1 @20%) and A (L2 @5%)
+
+	// A non-enrolled caller sees the schedule.
+	code, body := req(t, app, http.MethodGet, "/v1/affiliates/me", "orgZ", false, nil)
+	if code != http.StatusOK {
+		t.Fatalf("me(orgZ) want 200, got %d", code)
+	}
+	var nz struct {
+		IsAffiliate bool `json:"isAffiliate"`
+	}
+	_ = json.Unmarshal(body, &nz)
+	if nz.IsAffiliate {
+		t.Fatalf("orgZ should not be an affiliate")
+	}
+
+	// orgA's /me: L1 downline = orgB (1), L2 downline = orgC (1); lazy sweep accrues.
+	code, body = req(t, app, http.MethodGet, "/v1/affiliates/me", "orgA", false, nil)
+	if code != http.StatusOK {
+		t.Fatalf("me(orgA) want 200, got %d (%s)", code, body)
+	}
+	var v struct {
+		IsAffiliate   bool   `json:"isAffiliate"`
+		Code          string `json:"code"`
+		Link          string `json:"link"`
+		DownlineTotal int    `json:"downlineTotal"`
+		AccruedCents  int64  `json:"accruedCents"`
+		Levels        []struct {
+			Level         int   `json:"level"`
+			RateBps       int64 `json:"rateBps"`
+			DownlineCount int   `json:"downlineCount"`
+		} `json:"levels"`
+	}
+	if err := json.Unmarshal(body, &v); err != nil {
+		t.Fatalf("decode /me: %v (%s)", err, body)
+	}
+	if !v.IsAffiliate || v.Code != codeA || v.Link != "https://hanzo.ai/?aff="+codeA {
+		t.Fatalf("me head wrong: %+v", v)
+	}
+	if v.DownlineTotal != 2 || len(v.Levels) != maxDepth {
+		t.Fatalf("me downline: total=%d levels=%d", v.DownlineTotal, len(v.Levels))
+	}
+	if v.Levels[0].Level != 1 || v.Levels[0].RateBps != defaultRateBps || v.Levels[0].DownlineCount != 1 {
+		t.Fatalf("L1 row wrong: %+v", v.Levels[0])
+	}
+	if v.Levels[1].Level != 2 || v.Levels[1].RateBps != l2RateBps || v.Levels[1].DownlineCount != 1 {
+		t.Fatalf("L2 row wrong: %+v", v.Levels[1])
+	}
+	// A earns L2 on orgC's $100 = 500c (lazy sweep from the dashboard read).
+	if v.AccruedCents != 10000*l2RateBps/bpsDenom {
+		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, 10000*l2RateBps/bpsDenom)
+	}
+}
+
+// TestAdminReferralsAnalytics proves the unified SuperAdmin board reports top
+// referrers, conversion, and accrual liability by level — and is fail-closed.
+func TestAdminReferralsAnalytics(t *testing.T) {
+	app, s, fc := mount(t)
+	_, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	_, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+	attributeOK(t, app, "orgB", codeA) // B referred by A
+	attributeOK(t, app, "orgC", codeB) // C referred by B
+	fc.setSpend("orgC", 10000)
+	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+
+	// Non-admin is refused.
+	if st, _ := req(t, app, http.MethodGet, "/v1/admin/referrals", "orgA", false, nil); st != http.StatusForbidden {
+		t.Fatalf("non-admin /v1/admin/referrals want 403, got %d", st)
+	}
+
+	code, body := req(t, app, http.MethodGet, "/v1/admin/referrals", "admin", true, nil)
+	if code != http.StatusOK {
+		t.Fatalf("admin referrals want 200, got %d (%s)", code, body)
+	}
+	data := envData(t, body)
+	var conv struct {
+		ReferredOrgs  int     `json:"referredOrgs"`
+		ConvertedOrgs int     `json:"convertedOrgs"`
+		RatePct       float64 `json:"ratePct"`
+	}
+	if err := json.Unmarshal(data["conversion"], &conv); err != nil {
+		t.Fatalf("decode conversion: %v", err)
+	}
+	// Two referred orgs (B, C); one converted (C produced commission).
+	if conv.ReferredOrgs != 2 || conv.ConvertedOrgs != 1 {
+		t.Fatalf("conversion wrong: %+v", conv)
+	}
+	var byLevel struct {
+		L1Cents int64 `json:"l1Cents"`
+		L2Cents int64 `json:"l2Cents"`
+	}
+	if err := json.Unmarshal(data["accrualByLevel"], &byLevel); err != nil {
+		t.Fatalf("decode accrualByLevel: %v", err)
+	}
+	// orgC's $100: L1 to B = 2000, L2 to A = 500.
+	if byLevel.L1Cents != 2000 || byLevel.L2Cents != 500 {
+		t.Fatalf("accrualByLevel wrong: %+v", byLevel)
+	}
+	var leaders []referrerRow
+	if err := json.Unmarshal(data["topReferrers"], &leaders); err != nil {
+		t.Fatalf("decode topReferrers: %v", err)
+	}
+	if len(leaders) != 2 || leaders[0].Org != "orgB" || leaders[0].AccruedCents != 2000 {
+		t.Fatalf("top referrer wrong: %+v", leaders)
+	}
+}
+
 // TestMount exercises the real Mount wiring (store open + route registration)
 // against a temp DataDir, proving the package boots as the binary loads it.
 func TestMount(t *testing.T) {
@@ -568,7 +848,7 @@ func TestMount(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown() })
 	// A no-principal GET is refused 403 (proves the route is bound + gated).
 	r := httptest.NewRequest(http.MethodGet, "/v1/affiliates", nil)
-	resp, err := app.Fiber().Test(r)
+	resp, err := app.Fiber().Test(r, fiber.TestConfig{Timeout: 30 * time.Second, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
