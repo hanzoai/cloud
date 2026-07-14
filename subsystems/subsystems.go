@@ -79,6 +79,7 @@ import (
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/git"
 	"github.com/hanzoai/cloud/clients/graph"
+	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/iam"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/integrations"
@@ -293,6 +294,11 @@ func Wire() []cloud.MountSpec {
 		// with x402-priced monetized listings. Mounts after tools (it fills the price seam).
 		{Name: "marketplace", Mount: cloud.Typed(marketplace.Mount), Shutdown: marketplace.Shutdown},
 		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
+		// Business AI Guide /v1/guide/* — the interactive launch checklist engine +
+		// the agent that executes a step through the per-principal MCP plane. After
+		// automations (whose InvokeTool it drives) and referrals; before the ai
+		// catch-all. Owns per-org SQLite, so its Shutdown closes the stores.
+		{Name: "guide", Mount: cloud.Typed(guide.Mount), Shutdown: ctxShutdown(guide.Shutdown)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
