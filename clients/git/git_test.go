@@ -67,6 +67,9 @@ func mountApp(t *testing.T) *zip.App {
 	// tests never collide on the default :2222 (each Mount gets its own port +
 	// host key under its own TempDir).
 	t.Setenv("GIT_SSH_ADDR", "127.0.0.1:0")
+	// Mirror sources in tests are served on loopback (httptest); allow it past the
+	// SSRF guard, which otherwise refuses loopback/private/link-local targets.
+	t.Setenv("GIT_MIRROR_ALLOW_PRIVATE_HOSTS", "127.0.0.1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), Domain: "api.hanzo.test"}); err != nil {
 		t.Fatalf("Mount: %v", err)
