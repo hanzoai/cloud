@@ -174,7 +174,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "iam", Mount: cloud.Typed(iam.Mount)},
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
-		{Name: "base", Mount: cloud.Typed(base.Mount), OwnsHealth: true},
+		{Name: "base", Mount: cloud.Typed(base.Mount), Shutdown: base.Shutdown, OwnsHealth: true},
 		// In-repo o11y READ plane + the runtime-handler install (o11y.SetHandler). Every
 		// specific /v1/o11y/* route registers INSIDE this one mount, hence BEFORE the
 		// hanzoai/o11y module wildcard (70) — Fiber's in-order match gives them precedence.
