@@ -259,7 +259,28 @@ func startGitBuild(s *cloud.Service[state], ctx context.Context, org string, a A
 	if err := s.State.store.UpdateApplication(ctx, a); err != nil {
 		s.Log.Warn("finalize app failed (continuing)", "app", a.Slug, "err", err)
 	}
+	emitDeployLifecycle(ctx, cloud.LifecycleBuildStarted, org, a, d, "building "+a.Slug+" ("+image+")")
 	return d, jobName, http.StatusAccepted, nil
+}
+
+// emitDeployLifecycle fans a deploy transition onto the cloud lifecycle stream so
+// the git-lifecycle reactors (Slack-notify) can post about it. Repo is derived from
+// the app's RepoURL — the native repo name a subscription keys on; an app with no
+// repo URL (an image app) carries an empty Repo and routes to nothing. Project is
+// the app's IAM project (the git repo's sub-scope), normalized so the reserved
+// "default" maps to the empty (org-level) scope the git store uses — so a deploy
+// notification routes to the SAME (org,project,repo) a subscription was created
+// under. Best-effort + detached inside EmitLifecycle, so it never affects the deploy.
+func emitDeployLifecycle(ctx context.Context, kind cloud.LifecycleKind, org string, a Application, d Deployment, detail string) {
+	project := a.ProjectID
+	if project == "default" {
+		project = ""
+	}
+	cloud.EmitLifecycle(ctx, cloud.LifecycleEvent{
+		Kind: kind, Org: org, Project: project, Repo: cloud.RepoFromCloneURL(a.RepoURL),
+		Branch: firstNonEmpty(a.RepoBranch, "main"), After: d.Commit,
+		DeployID: d.ID, Detail: detail,
+	})
 }
 
 // failDeployment records the honest failure on the deployment + app and returns
@@ -281,6 +302,7 @@ func failDeploymentCtx(s *cloud.Service[state], ctx context.Context, d *Deployme
 	a.UpdatedAt = time.Now().Unix()
 	_ = s.State.store.UpdateApplication(ctx, a)
 	s.Log.Error("deploy failed", "org", d.Org, "app", a.Slug, "status", status, "reason", msg)
+	emitDeployLifecycle(ctx, cloud.LifecycleDeployFailed, d.Org, a, *d, a.Slug+": "+msg)
 }
 
 // deployErrStatus maps a cluster/build error to an honest HTTP status. A tenant
