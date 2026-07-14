@@ -2,7 +2,6 @@ package git
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -110,10 +109,7 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 	if ct := c.Header("Content-Type"); ct != "application/x-"+svcUploadPack+"-request" {
 		return zip.ErrBadRequest("unexpected content-type for " + svcUploadPack)
 	}
-	body, err := packRequestBody(c)
-	if err != nil {
-		return err
-	}
+	body := packRequestBody(c)
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 	stream, err := startPackRPC(c.Context(), s.Log, bareDir, svcUploadPack, gitProtocol(c), body)
 	if err != nil {
@@ -140,10 +136,7 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	if ct := c.Header("Content-Type"); ct != "application/x-"+svcReceivePack+"-request" {
 		return zip.ErrBadRequest("unexpected content-type for " + svcReceivePack)
 	}
-	body, err := packRequestBody(c)
-	if err != nil {
-		return err
-	}
+	body := packRequestBody(c)
 	bareDir := s.State.storage.absRepoPath(org, project, name)
 	before := branchTips(c.Context(), bareDir)
 
@@ -174,22 +167,18 @@ func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.Bytes(http.StatusOK, report.Bytes())
 }
 
-// packRequestBody returns a reader over the pack request body, transparently
-// decoding a gzip-encoded body (some git clients gzip the upload-pack request).
-// The body is copied out of fasthttp's request buffer so it stays valid across
-// the handler boundary while the deferred response stream feeds git stdin. It is
-// bounded by the edge BodyLimit (the OOM vector was the multi-GB RESPONSE pack,
-// now streamed; and SSH carries arbitrarily large pushes unbuffered).
-func packRequestBody(c *zip.Ctx) (io.Reader, error) {
-	raw := append([]byte(nil), c.Body()...)
-	if strings.EqualFold(c.Header("Content-Encoding"), "gzip") {
-		zr, err := gzip.NewReader(bytes.NewReader(raw))
-		if err != nil {
-			return nil, zip.ErrBadRequest("invalid gzip request body")
-		}
-		return zr, nil
-	}
-	return bytes.NewReader(raw), nil
+// packRequestBody returns a reader over the pack request body. The HTTP
+// framework applies Content-Encoding transparently — Fiber's Body() inflates a
+// gzip/deflate/br/zstd request per its header — so c.Body() is the DECODED
+// pkt-line stream and the pack driver reads it verbatim. Decoding again here
+// double-inflated every request the client compressed (git gzips the
+// ref-negotiation once a repo carries enough refs), which failed clone/fetch
+// for all but trivially small repos. The body is copied out of the framework's
+// reused request buffer so it stays valid across the deferred response stream
+// that feeds git stdin. It is bounded by the edge BodyLimit (the OOM vector was
+// the multi-GB RESPONSE pack, now streamed; SSH carries large pushes unbuffered).
+func packRequestBody(c *zip.Ctx) io.Reader {
+	return bytes.NewReader(append([]byte(nil), c.Body()...))
 }
 
 // resolvePackRepo is the shared front-half of every smart-HTTP pack handler:
