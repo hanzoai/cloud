@@ -81,10 +81,15 @@ func subscribedTo(csv string, kind cloud.LifecycleKind) bool {
 // lifecycleMessage renders a lifecycle event as (fallback summary, Block Kit
 // blocks) in the GitHub-Slack-app house style: a header line, a fielded section,
 // and a linked-repo context. summary is the notification/preview text; blocks is
-// the rich body. Both are safe to post — every value is either a validated
-// identifier or a bounded git-output string.
+// the rich body. EVERY user-derived value that lands in a mrkdwn string is
+// slackEscape'd — the org/repo (a deploy event's repo derives from an unconstrained
+// RepoURL), the branch (the receive-pack fire path applies no branchRE, and git
+// refnames legitimately allow < > & !), the pusher, the commit subject, and the
+// deploy detail — so none can smuggle a <!channel> broadcast or a disguised link.
+// The clone URL in the link is server-built from validated identifiers, so it is
+// used verbatim as the link target.
 func lifecycleMessage(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) (string, []any) {
-	repo := ev.Org + "/" + ev.Repo
+	repo := slackEscape(ev.Org + "/" + ev.Repo)
 	link := cloneURL(s, ev.Org, ev.Repo)
 
 	var emoji, title, summary string
@@ -92,7 +97,7 @@ func lifecycleMessage(s *cloud.Service[state], ctx context.Context, ev cloud.Lif
 	switch ev.Kind {
 	case cloud.LifecyclePushLanded:
 		emoji, title = ":arrow_up:", "Push"
-		summary = "Push to " + repo + " (" + ev.Branch + ")"
+		summary = "Push to " + repo + " (" + slackEscape(ev.Branch) + ")"
 		fields = pushFields(s, ctx, ev)
 	case cloud.LifecycleDeployLive:
 		emoji, title = ":rocket:", "Deploy live"
@@ -135,8 +140,8 @@ func pushFields(s *cloud.Service[state], ctx context.Context, ev cloud.Lifecycle
 		commit = "`" + commit + "`"
 	}
 	return []any{
-		mrkdwnField("*Repository*\n" + ev.Org + "/" + ev.Repo),
-		mrkdwnField("*Branch*\n" + ev.Branch),
+		mrkdwnField("*Repository*\n" + slackEscape(ev.Org+"/"+ev.Repo)),
+		mrkdwnField("*Branch*\n" + slackEscape(ev.Branch)),
 		mrkdwnField("*Pushed by*\n" + pusher),
 		mrkdwnField("*Commit*\n" + commit),
 	}
@@ -159,7 +164,7 @@ func deployFields(ev cloud.LifecycleEvent) []any {
 		dep = "—"
 	}
 	fields := []any{
-		mrkdwnField("*Repository*\n" + ev.Org + "/" + ev.Repo),
+		mrkdwnField("*Repository*\n" + slackEscape(ev.Org+"/"+ev.Repo)),
 		mrkdwnField("*Status*\n" + status),
 		mrkdwnField("*Deployment*\n" + dep),
 		mrkdwnField("*Detail*\n" + detail),
