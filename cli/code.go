@@ -95,15 +95,16 @@ func openaiWire(base, token, _ string) map[string]string {
 }
 
 type codeAgent struct {
-	bin        string                     // executable to exec
-	wire       wire                       // how it finds the cloud
-	fullAuto   []string                   // flags that bypass approval prompts
-	modelArg   []string                   // how the model is passed on argv (empty: via env)
-	provider   func(base string) []string // agents that need the endpoint declared, not just env'd
-	clear      []string                   // env that would shadow the wire (a stale key in the shell)
-	configHome string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
-	seed       func(dir string) error     // one-time defaults for the isolated config dir
-	install    string                     // hint when the binary is missing
+	bin          string                     // executable to exec
+	wire         wire                       // how it finds the cloud
+	fullAuto     []string                   // flags that bypass approval prompts
+	modelArg     []string                   // how the model is passed on argv (empty: via env)
+	provider     func(base string) []string // agents that need the endpoint declared, not just env'd
+	clear        []string                   // env that would shadow the wire (a stale key in the shell)
+	configHome   string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
+	seed         func(dir string) error     // one-time defaults for the isolated config dir
+	appendSystem []string                   // --append-system-prompt + text; ALWAYS applied (identity, not a permission bypass — present in --safe too)
+	install      string                     // hint when the binary is missing
 }
 
 // codex and @hanzo/dev share a lineage (dev is a Codex fork), hence a wire.
@@ -128,6 +129,14 @@ func codexLike(bin, install string) codeAgent {
 	}
 }
 
+// zenIdentityPrompt is appended to Claude Code's base system prompt so a model
+// served through the Hanzo cloud self-identifies as a Hanzo Zen model. It is an
+// APPEND, not a replace: Claude Code keeps its base prompt (tool-use, safety,
+// coding conventions); only the model's identity is Hanzo Zen. The model is
+// served as a zen5 alias via api.hanzo.ai. Passed as --append-system-prompt,
+// present in --safe too (identity is not a permission bypass).
+const zenIdentityPrompt = "You are running through the Hanzo AI cloud as a Hanzo Zen model (the `zen5` capability tier, served via api.hanzo.ai). When asked what model or assistant you are, identify as a Hanzo Zen model. You are operating inside the Claude Code harness; keep its tool-use, safety, and coding conventions — only your identity is Hanzo Zen."
+
 var codeAgents = map[string]codeAgent{
 	"claude": {
 		bin:      "claude",
@@ -141,7 +150,11 @@ var codeAgents = map[string]codeAgent{
 		// the zen5 id. This is what makes `hanzo code claude` always run zen5
 		// regardless of what the user last picked in /model.
 		modelArg: []string{"--model"},
-		clear:    []string{"ANTHROPIC_API_KEY"}, // outranks AUTH_TOKEN: a stale one silently wins
+		// Stamp the identity: append the Hanzo Zen identity to CC's base prompt so
+		// the served model says it is a Hanzo Zen model when asked. An append (not
+		// --system-prompt) keeps CC's harness prompt intact; applied in --safe too.
+		appendSystem: []string{"--append-system-prompt", zenIdentityPrompt},
+		clear:        []string{"ANTHROPIC_API_KEY"}, // outranks AUTH_TOKEN: a stale one silently wins
 		// Its own config home under ~/.hanzo, not the user's ~/.claude. Claude
 		// Code and `hanzo code claude` are independent products: sharing one
 		// mutable config braids them — the user's saved /model (e.g. "fable")
@@ -313,6 +326,7 @@ func codeArgv(agent codeAgent, base, model string, safe bool, rest []string) []s
 		argv = append(argv, agent.modelArg...)
 		argv = append(argv, model)
 	}
+	argv = append(argv, agent.appendSystem...) // identity — applies in safe AND full-auto
 	argv = append(argv, rest...)
 	return argv
 }
