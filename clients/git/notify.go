@@ -43,7 +43,7 @@ func notifyLifecycle(s *cloud.Service[state], ctx context.Context, ev cloud.Life
 		s.Log.Warn("git notify: open store", "org", ev.Org, "err", err)
 		return
 	}
-	subs, err := store.ListSubscriptions(ctx, ev.Org, ev.Repo)
+	subs, err := store.ListSubscriptions(ctx, ev.Org, ev.Project, ev.Repo)
 	if err != nil {
 		s.Log.Warn("git notify: list subscriptions", "org", ev.Org, "repo", ev.Repo, "err", err)
 		return
@@ -122,13 +122,15 @@ func lifecycleMessage(s *cloud.Service[state], ctx context.Context, ev cloud.Lif
 // pushFields builds the Repository/Branch/Pushed-by/Commit fields for a push,
 // including the commit's subject line (best-effort — a bounded git read).
 func pushFields(s *cloud.Service[state], ctx context.Context, ev cloud.LifecycleEvent) []any {
-	pusher := ev.Pusher
-	if strings.TrimSpace(pusher) == "" {
+	// Pusher is gateway-validated but still user-derived — escape it, like the
+	// commit subject, so no field can smuggle Slack mrkdwn (links / <!channel>).
+	pusher := slackEscape(strings.TrimSpace(ev.Pusher))
+	if pusher == "" {
 		pusher = "—"
 	}
 	commit := shortSHA(ev.After)
 	if subject := commitSubject(s, ctx, ev); subject != "" {
-		commit = "`" + commit + "` " + subject
+		commit = "`" + commit + "` " + slackEscape(subject)
 	} else if commit != "" {
 		commit = "`" + commit + "`"
 	}
@@ -146,7 +148,9 @@ func deployFields(ev cloud.LifecycleEvent) []any {
 	if ev.Kind == cloud.LifecycleDeployFailed {
 		status = "failed"
 	}
-	detail := strings.TrimSpace(ev.Detail)
+	// Detail carries a build/deploy message that can include a user-derived commit
+	// ref or error text — escape it so it can't inject Slack mrkdwn.
+	detail := slackEscape(strings.TrimSpace(ev.Detail))
 	if detail == "" {
 		detail = "—"
 	}
@@ -161,6 +165,18 @@ func deployFields(ev cloud.LifecycleEvent) []any {
 		mrkdwnField("*Detail*\n" + detail),
 	}
 	return fields
+}
+
+// slackEscape neutralizes the three characters that carry meaning in Slack mrkdwn
+// text — &, <, > — so user-derived content (a commit subject, a pusher id, a deploy
+// detail) can never inject a link, a <!channel> broadcast, or a disguised URL into
+// a posted message (Red MED-4). & is escaped first so the &lt;/&gt; entities aren't
+// double-escaped.
+func slackEscape(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 func mrkdwnSection(text string) map[string]any {
