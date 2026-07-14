@@ -47,6 +47,7 @@ const (
 	DTMemory    = "kb-memory"    // a unit of agent/AI memory (note/fact/observation)
 	DTSource    = "kb-source"    // a document ingested from an app connector or upload
 	DTConnector = "kb-connector" // an app-connector connection (metadata only; token in KMS)
+	DTLink      = "kb-link"      // a wikilink edge extracted from a kb-page body
 )
 
 // indexedDocTypes is the set whose saves/trashes flow to the vector store — the
@@ -68,7 +69,7 @@ func init() {
 // resolves Link targets at document write, so a child may reference a parent
 // defined in any order, and a page tree is just parent chains).
 func DocTypes() []framework.DocType {
-	return []framework.DocType{page(), memory(), source(), connector()}
+	return []framework.DocType{page(), memory(), source(), connector(), link()}
 }
 
 // ---- knowledge DocTypes ----
@@ -163,6 +164,27 @@ func connector() framework.DocType {
 			{Fieldname: "last_sync", Fieldtype: framework.FieldDatetime, Label: "Last Sync", ReadOnly: true},
 			{Fieldname: "doc_count", Fieldtype: framework.FieldInt, Label: "Ingested Docs", ReadOnly: true},
 			{Fieldname: "error", Fieldtype: framework.FieldSmall, Label: "Last Error", ReadOnly: true},
+		},
+		Perms: kbPerms(),
+	}
+}
+
+// link is a wikilink EDGE extracted from a kb-page body: the persisted form of a
+// "[[Page Title]]" reference. It is the ONE store for backlinks (kb.go's "Backlinks
+// are ordinary Link/Data references"): `source` is a Link to the page that contains
+// the wikilink (always a real page — the edge is written by that page's after_save
+// hook), and `target_title` is the raw link text as authored, a Data value. The
+// target is resolved to a page by VALUE at graph-read time (matching a page title
+// or slug), not stored as a foreign key — so a dangling link is representable, and a
+// rename or trash of the target needs no edge rewrite (values, not places). Edges
+// carry NO knowledge text, so kb-link is not in indexedDocTypes and never touches
+// the vector store. Hash-named: an edge needs no stable slug.
+func link() framework.DocType {
+	return framework.DocType{
+		Name: DTLink, Module: Module,
+		Fields: []framework.DocField{
+			{Fieldname: "source", Fieldtype: framework.FieldLink, Label: "Source", Options: DTPage, Reqd: true, InListView: true},
+			{Fieldname: "target_title", Fieldtype: framework.FieldData, Label: "Target", Reqd: true, InListView: true},
 		},
 		Perms: kbPerms(),
 	}
