@@ -392,6 +392,20 @@ type LifecycleEvent struct {
 	Origin   string
 }
 
+// RepoFromCloneURL extracts the repo name from a git clone URL (last path segment,
+// ".git" stripped) — the repo component of the (org,project,repo) routing key that
+// a deploy emitter derives from an app/project's linked RepoURL. The ONE place this
+// derivation lives, shared by the platform + projects deploy paths (no per-package
+// copy).
+func RepoFromCloneURL(u string) string {
+	u = strings.TrimSuffix(strings.TrimSpace(u), "/")
+	u = strings.TrimSuffix(u, ".git")
+	if i := strings.LastIndexByte(u, '/'); i >= 0 {
+		return u[i+1:]
+	}
+	return u
+}
+
 // lifecycleSubscribers is the fan-out list. Registration happens at Mount
 // (single-threaded, before any request is served), so a plain slice is correct:
 // EmitLifecycle only ever ranges it after every subsystem's Mount has run.
