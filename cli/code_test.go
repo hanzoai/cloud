@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 )
@@ -176,5 +177,49 @@ func TestClaudeAppendsZenIdentityInAllModes(t *testing.T) {
 		if slices.Contains(argv, "--append-system-prompt") {
 			t.Fatalf("%s must not carry the claude-only identity append: %v", name, argv)
 		}
+	}
+}
+
+// TestClaudeAutoWiresMCP locks in the fix for "hanzo code wires no tools": the
+// claude agent must opt into MCP auto-wiring, and the resolver must produce an
+// stdio server config that is layered STRICTLY (repo .mcp.json ignored — it could
+// exfiltrate the session bearer).
+func TestClaudeAutoWiresMCP(t *testing.T) {
+	if !codeAgents["claude"].mcp {
+		t.Fatal("claude agent must set mcp:true so `hanzo code claude` starts with the Hanzo tool lattice")
+	}
+	// codex/dev are wired additively by their own provider config, not this seam.
+	for _, name := range []string{"codex", "dev"} {
+		if codeAgents[name].mcp {
+			t.Fatalf("%s must not use the claude MCP seam (it attaches Hanzo additively via -c)", name)
+		}
+	}
+
+	// The --mcp-config document is a valid single-server stdio config.
+	cfg := mcpConfigJSON("/usr/bin/hanzo-mcp", []string{"--project-dir", "/repo"})
+	var doc struct {
+		MCPServers map[string]struct {
+			Type    string   `json:"type"`
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal([]byte(cfg), &doc); err != nil {
+		t.Fatalf("mcpConfigJSON is not valid JSON: %v", err)
+	}
+	h, ok := doc.MCPServers["hanzo"]
+	if !ok || h.Type != "stdio" || h.Command != "/usr/bin/hanzo-mcp" {
+		t.Fatalf("mcpConfigJSON: want one stdio server 'hanzo' → /usr/bin/hanzo-mcp, got %+v", doc.MCPServers)
+	}
+	if !slices.Contains(h.Args, "--project-dir") || !slices.Contains(h.Args, "/repo") {
+		t.Fatalf("mcpConfigJSON: server must be scoped to the project dir, got args %v", h.Args)
+	}
+
+	// mcpArgs writes the config into the isolated dir and returns the strict flags.
+	dir := t.TempDir()
+	t.Setenv("PATH", "/usr/bin/hanzo-mcp-not-here") // force the not-found path deterministically
+	flags, warn := mcpArgs(dir, "/repo")
+	if warn == "" || len(flags) != 0 {
+		t.Fatalf("with no hanzo-mcp on PATH, mcpArgs must warn and inject nothing, got flags=%v warn=%q", flags, warn)
 	}
 }
