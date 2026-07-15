@@ -312,3 +312,67 @@ func TestRevokeStopsSessions(t *testing.T) {
 		t.Fatalf("another org's session must survive acme's revoke, got %q", evilAfter.Status)
 	}
 }
+
+// TestRevokeCannotStopCoTenantSessions is the HIGH-1 regression through the REAL
+// adapter: a login-out is scoped to the REVOKING user, so one org member can never
+// tear down another member's live sessions. Bob has a running claude session; Alice
+// registers her OWN claude link (a different account) and logs it out. Pre-fix the
+// stop matched every claude session in the org (the match carried no actor) and killed
+// Bob's; now it can only reach Alice's own — Bob survives and the revoke honestly
+// reports 0 stopped (Alice had no live session).
+func TestRevokeCannotStopCoTenantSessions(t *testing.T) {
+	dir := t.TempDir()
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: dir}
+	if err := agents.Mount(app, deps); err != nil {
+		t.Fatalf("agents.Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = agents.Shutdown(context.Background()) })
+	if err := Mount(app, deps); err != nil {
+		t.Fatalf("link.Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown(context.Background()) })
+
+	// Bob's live claude session in org acme.
+	code, body := req(t, app, http.MethodPost, "/v1/agents/sessions", "acme", "bob", map[string]any{
+		"agent": "dev", "host": "boxBob", "provider": "claude", "account": "bob@x",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("register bob session want 201, got %d (%s)", code, body)
+	}
+	var bob struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(body, &bob)
+
+	// Alice registers her OWN claude link and logs it out. She could also forge Host
+	// to Bob's box — the actor scope makes it moot, so the minimal case is enough.
+	code, body = req(t, app, http.MethodPost, "/v1/links", "acme", "alice", map[string]any{
+		"machine": "mAlice", "host": "boxBob", "provider": "claude", "account": "alice@x", "kind": "subscription",
+	})
+	if code != http.StatusCreated {
+		t.Fatalf("register alice link want 201, got %d", code)
+	}
+	var l linkView
+	_ = json.Unmarshal(body, &l)
+
+	code, body = req(t, app, http.MethodDelete, "/v1/links/"+l.ID, "acme", "alice", nil)
+	if code != http.StatusOK {
+		t.Fatalf("revoke want 200, got %d (%s)", code, body)
+	}
+	var rev revokeResp
+	_ = json.Unmarshal(body, &rev)
+	if rev.SessionsStopped != 0 {
+		t.Fatalf("Alice's revoke must not reach a co-tenant session, stopped %d", rev.SessionsStopped)
+	}
+
+	// Bob's session is STILL running.
+	_, body = req(t, app, http.MethodGet, "/v1/agents/sessions/"+bob.ID, "acme", "bob", nil)
+	var after struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(body, &after)
+	if after.Status != "running" {
+		t.Fatalf("co-tenant Bob's session must survive Alice's revoke, got %q", after.Status)
+	}
+}

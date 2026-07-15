@@ -992,6 +992,13 @@ func billingActor(org, sub string) string {
 	return org
 }
 
+// BillingActor is the exported form of the actor identity a session is recorded
+// under. The login-manager adapter (the only external caller) uses it to scope a
+// session stop/count to the REVOKING user's own actor, so a revoke can never reach a
+// co-tenant's sessions. It mirrors what sessions.go stamps on Session.Actor, so a
+// stop's actor predicate matches exactly the sessions that user created.
+func BillingActor(org, sub string) string { return billingActor(org, sub) }
+
 func cleanList(xs []string) []string {
 	seen := map[string]bool{}
 	var out []string
