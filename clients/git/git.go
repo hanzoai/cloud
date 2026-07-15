@@ -172,6 +172,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	routes(app, s)
 	registerLifecycleReactors()
+	// Install the git object-plane importer so the integrations plane (GitHub App)
+	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
+	cloud.RegisterGitImporter(githubImporter{})
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
