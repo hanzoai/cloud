@@ -78,6 +78,7 @@ import (
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/featureflags"
+	"github.com/hanzoai/cloud/clients/featuregate"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
 	"github.com/hanzoai/cloud/clients/gateway"
@@ -308,6 +309,12 @@ func Wire() []cloud.MountSpec {
 		{Name: "evals", Mount: cloud.Typed(eval.Mount)},
 		{Name: "treasury", Mount: cloud.Typed(treasury.Mount), Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
+		// Launch-control plane: per-service waitlist-mode registry (global SQLite)
+		// + admin board/toggle (/v1/admin/services*) + the guard's runtime mode read
+		// (/v1/featuregate/mode). Mounts right after admin so its specific routes bind
+		// ahead of the AI /v1/* catch-all; native Enforce middleware (wired in serve.go)
+		// reads the SAME store in-process. Owns a global store, so Shutdown closes it.
+		{Name: "featuregate", Mount: cloud.Typed(featuregate.Mount), Shutdown: ctxShutdown(featuregate.Shutdown)},
 		{Name: "tasks", Mount: cloud.Typed(tasks.Mount)},
 		// Platform cron: durable schedules on the shared tasks engine replacing
 		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
