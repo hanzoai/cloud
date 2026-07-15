@@ -12,7 +12,7 @@
 // the fused cloud control plane.
 //
 // Design — one mechanism, not many. The subsystem set is the explicit list
-// subsystems.Wire() returns — []cloud.MountSpec in mount order (kms first-tier,
+// apps.Wire() returns — []cloud.MountSpec in mount order (kms first-tier,
 // iam 50, commerce 100, …, ai last), no init()-registry. A subcommand is just a
 // *selection* over that slice:
 //
@@ -74,9 +74,9 @@ import (
 	"github.com/hanzoai/iam/iamserver"
 
 	// The subsystem set is defined ONCE in the subsystems bundle (shared with
-	// cmd/cloud). subsystems.Wire() returns it in mount order; main threads that
+	// cmd/cloud). apps.Wire() returns it in mount order; main threads that
 	// slice through dispatch/usage/Serve. Inert at load — see THE BEEGO CRUX.
-	"github.com/hanzoai/cloud/subsystems"
+	"github.com/hanzoai/cloud/apps"
 )
 
 // version is overridden at build time via -ldflags "-X main.version=...".
@@ -102,8 +102,8 @@ func main() {
 	cli.Version = version
 
 	// The composition root's subsystem list, threaded through usage + dispatch +
-	// Serve. Defined ONCE (subsystems.Wire()); cloud never imports it (cycle).
-	specs := subsystems.Wire()
+	// Serve. Defined ONCE (apps.Wire()); cloud never imports it (cycle).
+	specs := apps.Wire()
 
 	if len(os.Args) < 2 {
 		usage(os.Stdout, specs)
