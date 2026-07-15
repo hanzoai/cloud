@@ -98,6 +98,7 @@ var frozen = []struct {
 	{"tasks", false, false},          // was order 147
 	{"cron", false, false},           // durable platform cron on the shared engine (post-freeze add)
 	{"automations", false, true},     // was order 148
+	{"connectorruntime", false, false}, // new: native single-connector exec via goja (after automations, HIP-0126)
 	{"tools", false, true},           // new: unified tool plane (after automations)
 	{"marketplace", false, true},     // new: marketplace over the tool plane (after tools)
 	{"referrals", false, false},      // was order 149
