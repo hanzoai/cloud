@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // TestTenantIgnoresClientProjectID pins the cross-tenant isolation invariant
