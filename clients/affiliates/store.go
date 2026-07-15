@@ -59,9 +59,14 @@ type Affiliate struct {
 	RateBps       int64  `json:"rateBps"`      // the affiliate's DIRECT (L1) commission rate; upline levels use platform constants
 	AccruedCents  int64  `json:"accruedCents"` // lifetime commission accrued
 	PaidCents     int64  `json:"paidCents"`    // lifetime commission paid out
-	CreatedAt     int64  `json:"createdAt"`
-	ApprovedAt    int64  `json:"approvedAt"`
-	SuspendedAt   int64  `json:"suspendedAt"`
+	// Handle is the OPT-IN public leaderboard display name. Empty ⟹ NOT listed on the
+	// public leaderboard by name; the affiliate's own rank stays private-visible to
+	// itself. The org identity is NEVER exposed on the leaderboard — only this
+	// self-chosen handle, for affiliates who opt in.
+	Handle      string `json:"handle,omitempty"`
+	CreatedAt   int64  `json:"createdAt"`
+	ApprovedAt  int64  `json:"approvedAt"`
+	SuspendedAt int64  `json:"suspendedAt"`
 }
 
 // PendingCents is the commission earned but not yet paid (never negative).
@@ -100,20 +105,70 @@ type Payout struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
-// Accrual is one per-period commission event (the affiliate_event): the source
-// org's spend for that period × the level rate. UNIQUE(affiliate, referred, period)
-// makes the sweep at-most-once per period — the commission latch. Level is the
-// upline distance from the source org to this affiliate (1=direct, 2, 3); a given
-// (affiliate, source, period) has exactly one level because the graph is a forest.
+// Accrual is one per-period PROFIT-SHARE event (the affiliate_event) — the derived
+// share-ledger row keyed by referrer. For the source org's period it records the
+// source's gross metered spend (SpendCents, the customer charge, unchanged truth),
+// the MARGIN Hanzo earned on it (MarginCents = spend × the platform margin fraction),
+// and the affiliate's SHARE of that margin (CommissionCents = margin × the level
+// rate). The share comes OUT OF Hanzo's margin — never the customer's bill — so the
+// invariant CommissionCents ≤ MarginCents holds by construction (level rate ≤ 100%).
+// UNIQUE(affiliate, referred, period) makes the sweep at-most-once per period — the
+// commission latch. Level is the upline distance from the source org to this
+// affiliate (1=direct, 2, 3); a given (affiliate, source, period) has exactly one
+// level because the graph is a forest.
 type Accrual struct {
 	ID              string `json:"id"`
 	AffiliateID     string `json:"affiliateId"`
 	ReferredOrg     string `json:"referredOrg"`
 	Period          string `json:"period"`
 	Level           int    `json:"level"`
-	SpendCents      int64  `json:"spendCents"`
+	SpendCents      int64  `json:"spendCents"`  // the source org's gross charge (revenue), unchanged truth
+	MarginCents     int64  `json:"marginCents"` // Hanzo's margin on that spend — the share base
 	CommissionCents int64  `json:"commissionCents"`
 	CreatedAt       int64  `json:"createdAt"`
+}
+
+// Link is one shareable referral link an affiliate created: a unique code (in the
+// SAME global directory as an affiliate's primary code, so either resolves an
+// attribution) plus a label and a click counter. The primary code is mirrored as a
+// link row on approval so click tracking is uniform across every code. Signups and
+// conversions are DERIVED (counted from the attribution + accrual tables by code),
+// never stored, so they can never drift from the ledger.
+type Link struct {
+	ID          string `json:"id"`
+	AffiliateID string `json:"-"`
+	Code        string `json:"code"`
+	Label       string `json:"label"`
+	Clicks      int64  `json:"clicks"`
+	CreatedAt   int64  `json:"createdAt"`
+}
+
+// PeriodEarning is one row of an affiliate's per-period share ledger: the margin base
+// and the share earned in that period, summed over every referred org + level.
+type PeriodEarning struct {
+	Period          string `json:"period"`
+	MarginCents     int64  `json:"marginCents"`
+	CommissionCents int64  `json:"commissionCents"`
+}
+
+// OrgEarning is one row of an affiliate's per-referred-org contribution: AGGREGATE
+// margin + share attributed to that org across all periods. It is the affiliate's OWN
+// downline (orgs it referred) — aggregate only, never the referred org's raw usage.
+type OrgEarning struct {
+	ReferredOrg     string `json:"referredOrg"`
+	MarginCents     int64  `json:"marginCents"`
+	CommissionCents int64  `json:"commissionCents"`
+}
+
+// LeaderboardEntry is one ranked affiliate for the privacy-preserving leaderboard:
+// the opt-in handle (never the org), the aggregate accrued share, and the referred
+// count. The affiliate id is carried only so the handler can flag the caller's OWN
+// row; it is never emitted for other affiliates.
+type LeaderboardEntry struct {
+	AffiliateID   string `json:"-"`
+	Handle        string `json:"handle"`
+	AccruedCents  int64  `json:"accruedCents"`
+	ReferredCount int    `json:"referredCount"`
 }
 
 // Store is the affiliates database. ONE SQLite file holds every org's affiliate
@@ -160,6 +215,7 @@ CREATE TABLE IF NOT EXISTS affiliates (
   rate_bps       INTEGER NOT NULL,
   accrued_cents  INTEGER NOT NULL DEFAULT 0,
   paid_cents     INTEGER NOT NULL DEFAULT 0,
+  handle         TEXT NOT NULL DEFAULT '',
   created_at     INTEGER NOT NULL,
   approved_at    INTEGER NOT NULL DEFAULT 0,
   suspended_at   INTEGER NOT NULL DEFAULT 0
@@ -200,11 +256,25 @@ CREATE TABLE IF NOT EXISTS affiliate_accruals (
   period           TEXT NOT NULL,
   level            INTEGER NOT NULL DEFAULT 1,
   spend_cents      INTEGER NOT NULL,
+  margin_cents     INTEGER NOT NULL DEFAULT 0,
   commission_cents INTEGER NOT NULL,
   created_at       INTEGER NOT NULL,
   UNIQUE(affiliate_id, referred_org, period)
 );
 CREATE INDEX IF NOT EXISTS ix_aff_accruals_affiliate ON affiliate_accruals(affiliate_id, created_at);
+
+-- Shareable referral links: a code namespace SHARED with affiliates.code (either
+-- resolves an attribution). The primary code is mirrored here on approval so click
+-- tracking is uniform. code is globally UNIQUE across links.
+CREATE TABLE IF NOT EXISTS affiliate_links (
+  id           TEXT PRIMARY KEY,
+  affiliate_id TEXT NOT NULL,
+  code         TEXT NOT NULL UNIQUE,
+  label        TEXT NOT NULL DEFAULT '',
+  clicks       INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_aff_links_affiliate ON affiliate_links(affiliate_id, created_at);
 
 CREATE TABLE IF NOT EXISTS affiliate_payouts (
   id           TEXT PRIMARY KEY,
@@ -225,8 +295,10 @@ CREATE INDEX IF NOT EXISTS ix_aff_payouts_affiliate ON affiliate_payouts(affilia
 	// column is already present, which is success.
 	for _, alter := range []string{
 		`ALTER TABLE affiliates ADD COLUMN owner_user TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE affiliates ADD COLUMN handle TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE affiliate_referrals ADD COLUMN referrer_org TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE affiliate_accruals ADD COLUMN level INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE affiliate_accruals ADD COLUMN margin_cents INTEGER NOT NULL DEFAULT 0`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !isDuplicateColumn(err) {
 			return fmt.Errorf("affiliates migrate alter: %w", err)
@@ -299,12 +371,12 @@ func validCode(code string) bool {
 
 // ── affiliate records ─────────────────────────────────────────────────────────
 
-const affiliateCols = `id,org,owner_user,code,requested_code,status,rate_bps,accrued_cents,paid_cents,created_at,approved_at,suspended_at`
+const affiliateCols = `id,org,owner_user,code,requested_code,status,rate_bps,accrued_cents,paid_cents,handle,created_at,approved_at,suspended_at`
 
 func scanAffiliate(sc interface{ Scan(...any) error }) (Affiliate, error) {
 	var a Affiliate
 	err := sc.Scan(&a.ID, &a.Org, &a.OwnerUser, &a.Code, &a.RequestedCode, &a.Status, &a.RateBps,
-		&a.AccruedCents, &a.PaidCents, &a.CreatedAt, &a.ApprovedAt, &a.SuspendedAt)
+		&a.AccruedCents, &a.PaidCents, &a.Handle, &a.CreatedAt, &a.ApprovedAt, &a.SuspendedAt)
 	return a, err
 }
 
@@ -358,7 +430,10 @@ func (s *Store) GetByOrg(ctx context.Context, org string) (Affiliate, error) {
 }
 
 // AffiliateForCode reverse-resolves an affiliate code to its APPROVED owner (an
-// un-approved affiliate has no code). Trims + lower-cases the client-supplied code.
+// un-approved affiliate has no code). It matches the affiliate's PRIMARY code first,
+// then any secondary shareable link code — both live in the ONE global code
+// directory. Trims + lower-cases the client-supplied code. Only an approved
+// affiliate resolves (a suspended/applied affiliate's codes stop attributing).
 func (s *Store) AffiliateForCode(ctx context.Context, code string) (Affiliate, error) {
 	code = normalizeCode(code)
 	if code == "" {
@@ -366,13 +441,29 @@ func (s *Store) AffiliateForCode(ctx context.Context, code string) (Affiliate, e
 	}
 	row := s.db.QueryRowContext(ctx, `SELECT `+affiliateCols+` FROM affiliates WHERE code=? AND status=?`, code, StatusApproved)
 	a, err := scanAffiliate(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Affiliate{}, errUnknownCode
+	if err == nil {
+		return a, nil
 	}
-	if err != nil {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return Affiliate{}, fmt.Errorf("resolve code: %w", err)
 	}
-	return a, nil
+	// Fall back to a secondary link code → its owning affiliate (must be approved).
+	var affID string
+	lerr := s.db.QueryRowContext(ctx, `SELECT affiliate_id FROM affiliate_links WHERE code=?`, code).Scan(&affID)
+	if errors.Is(lerr, sql.ErrNoRows) {
+		return Affiliate{}, errUnknownCode
+	}
+	if lerr != nil {
+		return Affiliate{}, fmt.Errorf("resolve link code: %w", lerr)
+	}
+	owner, gerr := s.getByID(ctx, affID)
+	if gerr != nil {
+		return Affiliate{}, errUnknownCode
+	}
+	if owner.Status != StatusApproved {
+		return Affiliate{}, errUnknownCode
+	}
+	return owner, nil
 }
 
 // Approve moves an affiliate to approved and mints its code: wantCode wins, else
@@ -822,16 +913,18 @@ func (s *Store) AccruedByLevel(ctx context.Context) (map[int]int64, error) {
 // transaction. RowsAffected on the INSERT is the latch: a UNIQUE violation means
 // this period was already accrued (returns false, no error, no double-accrual).
 // Returns won=true only when THIS call created the accrual and moved the balance.
-// level is the upline distance recorded for analytics (1=direct, 2, 3).
-func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referredOrg, period string, level int, spendCents, commissionCents, now int64) (bool, error) {
+// level is the upline distance recorded for analytics (1=direct, 2, 3). marginCents
+// is the share base (Hanzo's margin on the source spend); commissionCents is the
+// affiliate's share of it (≤ marginCents by construction).
+func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referredOrg, period string, level int, spendCents, marginCents, commissionCents, now int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("accrual tx: %w", err)
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, level, spend_cents, commission_cents, created_at)
-		 VALUES (?,?,?,?,?,?,?,?)`,
-		accrualID, affiliateID, referredOrg, period, level, spendCents, commissionCents, now)
+		`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, level, spend_cents, margin_cents, commission_cents, created_at)
+		 VALUES (?,?,?,?,?,?,?,?,?)`,
+		accrualID, affiliateID, referredOrg, period, level, spendCents, marginCents, commissionCents, now)
 	if err != nil {
 		_ = tx.Rollback()
 		if isUnique(err) {
@@ -849,6 +942,41 @@ func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referr
 	}
 	return true, nil
 }
+
+const accrualCols = `id,affiliate_id,referred_org,period,level,spend_cents,margin_cents,commission_cents,created_at`
+
+func scanAccrual(sc interface{ Scan(...any) error }) (Accrual, error) {
+	var a Accrual
+	err := sc.Scan(&a.ID, &a.AffiliateID, &a.ReferredOrg, &a.Period, &a.Level,
+		&a.SpendCents, &a.MarginCents, &a.CommissionCents, &a.CreatedAt)
+	return a, err
+}
+
+// AccrualsForSource returns every accrual generated by ONE source org's spend, across
+// the upline levels — the per-event share-ledger rows for that source. It is the
+// drill-down that proves the invariant Σ(commission) ≤ margin for a source, and each
+// row's MarginCents is the same source margin base. Ordered by level.
+func (s *Store) AccrualsForSource(ctx context.Context, referredOrg string) ([]Accrual, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+accrualCols+` FROM affiliate_accruals WHERE referred_org=? ORDER BY level ASC, created_at ASC`, referredOrg)
+	if err != nil {
+		return nil, fmt.Errorf("accruals for source: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]Accrual, 0, maxDepthCap)
+	for rows.Next() {
+		a, err := scanAccrual(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan accrual: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// maxDepthCap bounds the initial slice for a source's per-level accruals (the handler
+// caps the real upline depth; this is only a make() hint).
+const maxDepthCap = 8
 
 // ── payouts ───────────────────────────────────────────────────────────────────
 
@@ -954,6 +1082,271 @@ func (s *Store) ListPayouts(ctx context.Context, affiliateID string, limit int) 
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// ── self-service profile + admin rate ──────────────────────────────────────────
+
+// SetHandle sets an affiliate's opt-in public leaderboard handle (empty clears it,
+// removing the affiliate from the public board by name). Returns the refreshed row.
+func (s *Store) SetHandle(ctx context.Context, id, handle string) (Affiliate, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE affiliates SET handle=? WHERE id=?`, handle, id)
+	if err != nil {
+		return Affiliate{}, fmt.Errorf("set handle: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Affiliate{}, errNotFound
+	}
+	return s.getByID(ctx, id)
+}
+
+// SetRate sets an affiliate's DIRECT (L1) commission rate in basis points. The admin
+// handler validates the range (it must leave headroom for the L2/L3 upline so the
+// per-event share can never exceed the margin); the store persists it.
+func (s *Store) SetRate(ctx context.Context, id string, rateBps int64) (Affiliate, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE affiliates SET rate_bps=? WHERE id=?`, rateBps, id)
+	if err != nil {
+		return Affiliate{}, fmt.Errorf("set rate: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Affiliate{}, errNotFound
+	}
+	return s.getByID(ctx, id)
+}
+
+// ── shareable links ─────────────────────────────────────────────────────────────
+
+const linkCols = `id,affiliate_id,code,label,clicks,created_at`
+
+func scanLink(sc interface{ Scan(...any) error }) (Link, error) {
+	var l Link
+	err := sc.Scan(&l.ID, &l.AffiliateID, &l.Code, &l.Label, &l.Clicks, &l.CreatedAt)
+	return l, err
+}
+
+// CreateLink records a new shareable link. The code must be valid + free across the
+// ONE global directory (no affiliate primary code, no other link). errInvalidCode on
+// a malformed code, errCodeTaken on a collision. Returns the created row.
+func (s *Store) CreateLink(ctx context.Context, id, affiliateID, code, label string, now int64) (Link, error) {
+	code = normalizeCode(code)
+	if !validCode(code) {
+		return Link{}, errInvalidCode
+	}
+	var exists string
+	switch err := s.db.QueryRowContext(ctx, `SELECT id FROM affiliates WHERE code=?`, code).Scan(&exists); {
+	case err == nil:
+		return Link{}, errCodeTaken // collides with an affiliate's primary code
+	case !errors.Is(err, sql.ErrNoRows):
+		return Link{}, fmt.Errorf("check primary code: %w", err)
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO affiliate_links (id, affiliate_id, code, label, created_at) VALUES (?,?,?,?,?)`,
+		id, affiliateID, code, label, now)
+	if err != nil {
+		if isUnique(err) {
+			return Link{}, errCodeTaken
+		}
+		return Link{}, fmt.Errorf("create link: %w", err)
+	}
+	return Link{ID: id, AffiliateID: affiliateID, Code: code, Label: label, CreatedAt: now}, nil
+}
+
+// EnsureLink idempotently mirrors an affiliate's PRIMARY code as a link row (called on
+// approval so click tracking is uniform across every code). A pre-existing code is a
+// silent no-op — never an error.
+func (s *Store) EnsureLink(ctx context.Context, id, affiliateID, code, label string, now int64) error {
+	code = normalizeCode(code)
+	if code == "" {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO affiliate_links (id, affiliate_id, code, label, created_at) VALUES (?,?,?,?,?)`,
+		id, affiliateID, code, label, now)
+	if err != nil && !isUnique(err) {
+		return fmt.Errorf("ensure link: %w", err)
+	}
+	return nil
+}
+
+// ListLinks returns an affiliate's links, primary first (created_at ASC), bounded.
+func (s *Store) ListLinks(ctx context.Context, affiliateID string, limit int) ([]Link, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+linkCols+` FROM affiliate_links WHERE affiliate_id=? ORDER BY created_at ASC LIMIT ?`, affiliateID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list links: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]Link, 0, 8)
+	for rows.Next() {
+		l, err := scanLink(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan link: %w", err)
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+// CountLinks returns how many links an affiliate has (the per-affiliate cap guard).
+func (s *Store) CountLinks(ctx context.Context, affiliateID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM affiliate_links WHERE affiliate_id=?`, affiliateID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count links: %w", err)
+	}
+	return n, nil
+}
+
+// IncrementLinkClick bumps the click counter for a code (a public link hit). A no-op
+// for an unknown code. Returns whether a row was incremented.
+func (s *Store) IncrementLinkClick(ctx context.Context, code string) (bool, error) {
+	code = normalizeCode(code)
+	if code == "" {
+		return false, nil
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE affiliate_links SET clicks=clicks+1 WHERE code=?`, code)
+	if err != nil {
+		return false, fmt.Errorf("click: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// SignupsByCode returns code → count of orgs THIS affiliate attributed with that code.
+// Scoped by affiliate_id (the leading bound predicate).
+func (s *Store) SignupsByCode(ctx context.Context, affiliateID string) (map[string]int, error) {
+	return s.countByCode(ctx,
+		`SELECT code, COUNT(*) FROM affiliate_referrals WHERE affiliate_id=? GROUP BY code`, affiliateID)
+}
+
+// ConversionsByCode returns code → count of DISTINCT referred orgs (attributed with
+// that code) that produced positive commission for THIS affiliate. Scoped by
+// affiliate_id (the leading bound predicate).
+func (s *Store) ConversionsByCode(ctx context.Context, affiliateID string) (map[string]int, error) {
+	return s.countByCode(ctx,
+		`SELECT ar.code, COUNT(DISTINCT ar.referred_org)
+		   FROM affiliate_referrals ar
+		  WHERE ar.affiliate_id=?
+		    AND EXISTS (SELECT 1 FROM affiliate_accruals acc
+		                 WHERE acc.affiliate_id = ar.affiliate_id
+		                   AND acc.referred_org = ar.referred_org
+		                   AND acc.commission_cents > 0)
+		  GROUP BY ar.code`, affiliateID)
+}
+
+func (s *Store) countByCode(ctx context.Context, q, affiliateID string) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, q, affiliateID)
+	if err != nil {
+		return nil, fmt.Errorf("count by code: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[string]int)
+	for rows.Next() {
+		var code string
+		var n int
+		if err := rows.Scan(&code, &n); err != nil {
+			return nil, fmt.Errorf("scan count by code: %w", err)
+		}
+		out[normalizeCode(code)] = n
+	}
+	return out, rows.Err()
+}
+
+// ── earnings (the per-affiliate share-ledger projection) ────────────────────────
+
+// EarningsByPeriod returns an affiliate's per-period share ledger (margin base +
+// share earned), newest period first, bounded. Scoped by affiliate_id (leading bound).
+func (s *Store) EarningsByPeriod(ctx context.Context, affiliateID string, limit int) ([]PeriodEarning, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT period, COALESCE(SUM(margin_cents),0), COALESCE(SUM(commission_cents),0)
+		   FROM affiliate_accruals WHERE affiliate_id=? GROUP BY period ORDER BY period DESC LIMIT ?`,
+		affiliateID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("earnings by period: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]PeriodEarning, 0, 16)
+	for rows.Next() {
+		var e PeriodEarning
+		if err := rows.Scan(&e.Period, &e.MarginCents, &e.CommissionCents); err != nil {
+			return nil, fmt.Errorf("scan period earning: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// EarningsByReferredOrg returns the AGGREGATE margin + share an affiliate earned per
+// org it DIRECTLY referred (level 1), largest share first, bounded. Restricting to the
+// direct level means the breakdown never exposes a sub-downline org's identity to an
+// upline affiliate that did not refer it (deeper-level earnings still count in the
+// period + lifetime totals). Aggregate totals only — never the referred org's raw
+// usage. Scoped by affiliate_id (leading bound predicate).
+func (s *Store) EarningsByReferredOrg(ctx context.Context, affiliateID string, limit int) ([]OrgEarning, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT referred_org, COALESCE(SUM(margin_cents),0), COALESCE(SUM(commission_cents),0)
+		   FROM affiliate_accruals WHERE affiliate_id=? AND level=1 GROUP BY referred_org
+		  ORDER BY SUM(commission_cents) DESC, referred_org ASC LIMIT ?`,
+		affiliateID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("earnings by org: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]OrgEarning, 0, 16)
+	for rows.Next() {
+		var e OrgEarning
+		if err := rows.Scan(&e.ReferredOrg, &e.MarginCents, &e.CommissionCents); err != nil {
+			return nil, fmt.Errorf("scan org earning: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// ── leaderboard (privacy-preserving) ────────────────────────────────────────────
+
+// LeaderboardTop returns the top approved affiliates by lifetime accrued share
+// (descending, id tiebreak) with handle + referred count, bounded. The handler
+// applies the opt-in privacy filter (only handled rows are public) and flags the
+// caller's own row. NEVER exposes org identity.
+func (s *Store) LeaderboardTop(ctx context.Context, limit int) ([]LeaderboardEntry, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT a.id, a.handle, a.accrued_cents, COUNT(r.id)
+		   FROM affiliates a LEFT JOIN affiliate_referrals r ON r.affiliate_id = a.id
+		  WHERE a.status=?
+		  GROUP BY a.id, a.handle, a.accrued_cents
+		  ORDER BY a.accrued_cents DESC, a.id ASC LIMIT ?`,
+		StatusApproved, limit)
+	if err != nil {
+		return nil, fmt.Errorf("leaderboard: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]LeaderboardEntry, 0, 32)
+	for rows.Next() {
+		var e LeaderboardEntry
+		if err := rows.Scan(&e.AffiliateID, &e.Handle, &e.AccruedCents, &e.ReferredCount); err != nil {
+			return nil, fmt.Errorf("scan leaderboard: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// RankOf returns the exact 1-based rank of an affiliate among all APPROVED affiliates
+// by accrued share (rank 1 = highest), plus the total approved count — computed over
+// the WHOLE set (not a truncated list), so the caller's own rank is always accurate.
+// Ties break by id (a stable, deterministic order). Returns (0,total,nil) if the
+// affiliate is not approved (no rank).
+func (s *Store) RankOf(ctx context.Context, id string, accruedCents int64) (rank, total int, err error) {
+	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM affiliates WHERE status=?`, StatusApproved).Scan(&total); err != nil {
+		return 0, 0, fmt.Errorf("leaderboard total: %w", err)
+	}
+	var ahead int
+	if err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM affiliates
+		  WHERE status=? AND id<>? AND (accrued_cents > ? OR (accrued_cents = ? AND id < ?))`,
+		StatusApproved, id, accruedCents, accruedCents, id).Scan(&ahead); err != nil {
+		return 0, total, fmt.Errorf("leaderboard rank: %w", err)
+	}
+	return ahead + 1, total, nil
 }
 
 // isUnique reports whether err is a SQLite UNIQUE/PRIMARY-KEY constraint violation
