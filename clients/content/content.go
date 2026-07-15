@@ -39,7 +39,7 @@ import (
 // drive the SAME single implementation. The subsystem is a stateless orchestrator over
 // framework (which holds the state) + the AI/social edges — it opens no store of its own.
 //
-// Registration is a one-line cloud.MountSpec in subsystems.Wire() (after framework +
+// Registration is a one-line cloud.MountSpec in apps.Wire() (after framework +
 // knowledge, before the AI /v1/* catch-all); the module fixtures + lifecycle hooks are
 // registered in doctypes.go's init(), process-global and mount-order-independent.
 
