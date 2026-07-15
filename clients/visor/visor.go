@@ -99,6 +99,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
 	// pages show them alongside Visor-provisioned compute.
 	app.Get("/v1/fleet/workers", cloud.Handle(s, listFleetWorkers))
+	// The unified board: every compute source the org has, each with its latest
+	// utilization, plus the series behind it (board.go). The deeper literals
+	// register before the bare /v1/fleet so neither can shadow the other.
+	app.Get("/v1/fleet/samples", cloud.Handle(s, listFleetSamples))
+	app.Get("/v1/fleet", cloud.Handle(s, listFleet))
 
 	app.Get("/v1/clusters", cloud.Handle(s, listClusters))
 	// BYO: attach an existing cluster (kubeconfig) or detach one. Managed clusters
