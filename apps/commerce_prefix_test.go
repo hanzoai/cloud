@@ -1,6 +1,6 @@
 // Copyright © 2026 Hanzo AI. MIT License.
 
-package subsystems
+package apps
 
 import (
 	"io"
