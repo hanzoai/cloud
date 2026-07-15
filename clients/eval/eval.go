@@ -48,6 +48,7 @@ package eval
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -321,13 +322,22 @@ type scoreView struct {
 type traceView struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
+	ProjectID string `json:"projectId,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
 	Dataset   string `json:"datasetName,omitempty"`
 	ItemID    string `json:"datasetItemId,omitempty"`
 	RunName   string `json:"runName,omitempty"`
 	Model     string `json:"model,omitempty"`
 	Input     any    `json:"input,omitempty"`
 	Output    string `json:"output,omitempty"`
-	Timestamp string `json:"timestamp"`
+	// LatencyMs is EndTime-StartTime in milliseconds, nil when the trace carries
+	// no timing (so the console renders "—", never a fabricated 0).
+	LatencyMs *float64 `json:"latencyMs,omitempty"`
+	StartTime string   `json:"startTime,omitempty"`
+	EndTime   string   `json:"endTime,omitempty"`
+	Timestamp string   `json:"timestamp"`
+	// APIKeyHash is the non-reversible credential ref (never a plaintext key).
+	APIKeyHash string `json:"apiKeyHash,omitempty"`
 }
 
 // ── datasets ─────────────────────────────────────────────────────────────────
@@ -800,10 +810,12 @@ func (s *service) listTraces(c *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "evals telemetry (datastore) not configured")
 	}
 	traces, err := s.tel.ListTraces(c.Context(), TraceFilter{
-		Org:     org, // authoritative
-		RunName: strings.TrimSpace(c.Query("runName")),
-		Dataset: strings.TrimSpace(c.Query("datasetName")),
-		Limit:   listLimit(c),
+		Org:       org,                       // authoritative
+		ProjectID: principal.ProjectScope(c), // server-minted; "" for the default project (whole org)
+		SessionID: strings.TrimSpace(c.Query("sessionId")),
+		RunName:   strings.TrimSpace(c.Query("runName")),
+		Dataset:   strings.TrimSpace(c.Query("datasetName")),
+		Limit:     listLimit(c),
 	})
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "list traces: %v", err)
@@ -914,6 +926,11 @@ func (s *service) runHandler(c *zip.Ctx) error {
 	runCtx, cancel := context.WithTimeout(c.Context(), maxRunDuration)
 	defer cancel()
 
+	// Attribution threaded into every item trace: the caller's server-minted
+	// project narrows within the validated org; the credential is stored only as a
+	// non-reversible ref, never in plaintext.
+	attr := runAttribution{projectID: principal.ProjectScope(c), apiKeyHash: hashCredential(authz)}
+
 	summary := runSummary{Dataset: rr.Dataset, Model: rr.Model, JudgeModel: judge.Model, RunName: runName, Items: len(items)}
 	var sum float64
 	for _, it := range items {
@@ -923,7 +940,7 @@ func (s *service) runHandler(c *zip.Ctx) error {
 			summary.Results = append(summary.Results, itemResult{ItemID: it.ID, Error: "run: " + runCtx.Err().Error()})
 			continue
 		}
-		res := s.runItem(runCtx, org, authz, runName, rr.Model, judge, it)
+		res := s.runItem(runCtx, org, authz, runName, rr.Model, judge, attr, it)
 		summary.Results = append(summary.Results, res)
 		if res.Error == "" {
 			sum += res.Score
@@ -954,15 +971,26 @@ func (s *service) runHandler(c *zip.Ctx) error {
 	return c.JSON(status, summary)
 }
 
+// runAttribution is the per-run observability context threaded into every item
+// trace: the caller's server-minted project (principal.Project) and the
+// non-reversible ref of the credential the run drives the model with.
+type runAttribution struct {
+	projectID  string
+	apiKeyHash string
+}
+
 // runItem is the single per-item seam, run synchronously via the pluggable
-// runner: (1) model-under-test, (2) trace → telemetry, (3) LLM-as-judge, (4)
-// validate + record the score. Telemetry writes are best-effort when the
+// runner: (1) model-under-test (timed), (2) trace → telemetry, (3) LLM-as-judge,
+// (4) validate + record the score. Telemetry writes are best-effort when the
 // datastore is present; a persistence miss is recorded as the item error so the
 // summary never claims a score it failed to store.
-func (s *service) runItem(ctx context.Context, org, authz, runName, model string, judge judgeSpec, it DatasetItem) itemResult {
+func (s *service) runItem(ctx context.Context, org, authz, runName, model string, judge judgeSpec, attr runAttribution, it DatasetItem) itemResult {
 	res := itemResult{ItemID: it.ID}
 
+	// Time the model-under-test call so the trace carries real latency.
+	start := time.Now().UTC()
 	output, err := s.runner.Complete(ctx, authz, model, decodeAny(it.Input))
+	end := time.Now().UTC()
 	if err != nil {
 		res.Error = "model: " + err.Error()
 		return res
@@ -973,9 +1001,11 @@ func (s *service) runItem(ctx context.Context, org, authz, runName, model string
 	res.TraceID = traceID
 	if s.tel != nil {
 		if err := s.tel.RecordTrace(ctx, Trace{
-			ID: traceID, Org: org, Name: "eval:" + runName, Dataset: it.Dataset,
-			ItemID: it.ID, RunName: runName, Model: model, Input: it.Input, Output: output,
-			Timestamp: time.Now().UTC(),
+			ID: traceID, Org: org, ProjectID: attr.projectID, Name: "eval:" + runName,
+			Dataset: it.Dataset, ItemID: it.ID, RunName: runName,
+			SessionID: runName, APIKeyHash: attr.apiKeyHash, Model: model,
+			Input: it.Input, Output: output, StartTime: start, EndTime: end,
+			Timestamp: start,
 		}); err != nil {
 			res.Error = "trace: " + err.Error()
 			return res
@@ -1068,11 +1098,44 @@ func toScoreView(sc ScoreEvent) scoreView {
 }
 
 func toTraceView(tr Trace) traceView {
-	return traceView{
-		ID: tr.ID, Name: tr.Name, Dataset: tr.Dataset, ItemID: tr.ItemID, RunName: tr.RunName,
+	v := traceView{
+		ID: tr.ID, Name: tr.Name, ProjectID: tr.ProjectID, SessionID: tr.SessionID,
+		Dataset: tr.Dataset, ItemID: tr.ItemID, RunName: tr.RunName,
 		Model: tr.Model, Input: decodeAny(tr.Input), Output: tr.Output,
-		Timestamp: tr.Timestamp.UTC().Format(time.RFC3339),
+		APIKeyHash: tr.APIKeyHash,
+		Timestamp:  tr.Timestamp.UTC().Format(time.RFC3339),
 	}
+	if !tr.StartTime.IsZero() {
+		v.StartTime = tr.StartTime.UTC().Format(time.RFC3339)
+	}
+	if !tr.EndTime.IsZero() {
+		v.EndTime = tr.EndTime.UTC().Format(time.RFC3339)
+	}
+	if !tr.StartTime.IsZero() && !tr.EndTime.IsZero() && !tr.EndTime.Before(tr.StartTime) {
+		ms := round2ms(tr.EndTime.Sub(tr.StartTime))
+		v.LatencyMs = &ms
+	}
+	return v
+}
+
+// round2ms renders a duration as milliseconds to 2 decimals (the same precision
+// the metrics board's latency percentiles use).
+func round2ms(d time.Duration) float64 {
+	ms := float64(d) / float64(time.Millisecond)
+	return float64(int64(ms*100+0.5)) / 100
+}
+
+// hashCredential returns a non-reversible ref for a caller credential: the SHA-256
+// hex of the bearer token (the "Bearer " prefix stripped). It is NEVER the
+// plaintext key — a trace correlates to a key by this ref without the store ever
+// holding a secret. An empty credential yields "" (no ref), never a hash of "".
+func hashCredential(authz string) string {
+	tok := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(authz), "Bearer "))
+	if tok == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(tok))
+	return hex.EncodeToString(sum[:])
 }
 
 // ── input validation + pure helpers ──────────────────────────────────────────

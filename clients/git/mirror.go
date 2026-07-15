@@ -99,7 +99,10 @@ func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "ensure repo: %v", err)
 	}
-	if err := s.State.storage.mirrorInto(c.Context(), org, project, name, src); err != nil {
+	// The org-supplied /mirror endpoint uses the SHARED, host-allowlisted mirror
+	// credential (empty gitCred ⇒ mirrorGitEnv falls back to the env-token path).
+	// The GitHub-App path passes a per-org installation token instead (github_import.go).
+	if err := s.State.storage.mirrorInto(c.Context(), org, project, name, src, gitCred{}); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mirror fetch: %v", err)
 	}
 	// Meter the mirrored bytes the same way a push is metered (the ONE storage
@@ -109,13 +112,25 @@ func mirror(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, toView(s, r, branches, head))
 }
 
+// gitCred is a per-fetch/push basic-auth credential presented ONLY via the env-
+// only http.extraHeader (never argv, never a log). User is the basic-auth
+// username the host expects (x-access-token for GitHub, oauth2 for GitLab); Token
+// is the secret (an App installation token / OAuth token). A zero gitCred means
+// "no explicit credential" — the shared, host-allowlisted env-token path applies.
+type gitCred struct {
+	User  string
+	Token string
+}
+
 // mirrorInto fetches every ref/object from srcURL into the repo's on-disk bare
 // storage with mirror semantics and points HEAD at the source's default branch
 // so a clone-back resolves a default. Idempotent: an up-to-date source is a
-// no-op. The pack streams to disk via `git fetch` (bounded memory).
-func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL string) error {
+// no-op. The pack streams to disk via `git fetch` (bounded memory). cred is the
+// per-call credential (a GitHub-App installation token); a zero cred falls back
+// to the shared, host-allowlisted env token (the org-supplied /mirror path).
+func (s *storage) mirrorInto(ctx context.Context, org, project, name, srcURL string, cred gitCred) error {
 	bareDir := s.absRepoPath(org, project, name)
-	env := mirrorGitEnv(srcURL)
+	env := mirrorGitEnv(srcURL, cred)
 
 	// Discover the source default branch (HEAD symref) — bounded ls-remote — so a
 	// clone of the mirror resolves the same default the source has.
@@ -282,13 +297,30 @@ func isInternalIP(ip net.IP) bool {
 // credential allowlist gets the token via env-only git-config http.extraHeader
 // (GitHub's token-as-basic-auth form) — NEVER on argv or in logs. Everything
 // else fetches anonymously.
-func mirrorGitEnv(srcURL string) []string {
+func mirrorGitEnv(srcURL string, cred gitCred) []string {
 	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
 	cfg := []string{"http.followRedirects=false"}
-	if hdr := mirrorAuthHeader(srcURL); hdr != "" {
+	if hdr := credAuthHeader(srcURL, cred); hdr != "" {
 		cfg = append(cfg, "http.extraHeader=Authorization: Basic "+hdr)
 	}
 	return append(env, gitConfigEnv(cfg...)...)
+}
+
+// credAuthHeader resolves the basic-auth credential attached to a fetch. An
+// EXPLICIT per-call cred (a GitHub-App installation token) wins — but only over
+// https, so a token can never ride an http URL, and http.followRedirects=false
+// (set by mirrorGitEnv) stops a redirect from carrying it to another host. With no
+// explicit cred it falls back to mirrorAuthHeader — the shared env token, gated to
+// the host allowlist so a tenant-supplied /mirror source can never capture it.
+func credAuthHeader(srcURL string, cred gitCred) string {
+	if cred.Token != "" {
+		u, err := url.Parse(srcURL)
+		if err != nil || u.Scheme != "https" {
+			return "" // never send a token over a non-https source
+		}
+		return base64.StdEncoding.EncodeToString([]byte(cred.User + ":" + cred.Token))
+	}
+	return mirrorAuthHeader(srcURL)
 }
 
 // gitConfigEnv encodes "key=value" pairs as the git GIT_CONFIG_COUNT/KEY_n/
