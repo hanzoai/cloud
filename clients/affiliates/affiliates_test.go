@@ -88,6 +88,7 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 		State: state{
 			store:     store,
 			commerce:  fc,
+			clicks:    newClicks(),
 			linkBase:  "https://hanzo.ai",
 			marginBps: defaultMarginBps, // realistic 40% gross margin — the share base
 		},
