@@ -5,7 +5,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/admin/core"
-	"github.com/hanzoai/cloud/clients/commerce"
+	"github.com/hanzoai/cloud/clients/commerceclient"
 	ledger "github.com/hanzoai/cloud/clients/finance"
 	"github.com/zap-proto/zip"
 )
@@ -30,7 +30,7 @@ func Backfill(s *cloud.Service[core.State], c *zip.Ctx) error {
 	// and reads $0, which would migrate nothing; the native read returns the real figure,
 	// or an ERROR when commerce is not co-resident (never a phantom zero the cutover would
 	// silently carry as "nothing to migrate").
-	balanceCents, err := commerce.BalanceCents(ctx, org, org, "usd", false)
+	balanceCents, err := commerceclient.BalanceCents(ctx, org, org, "usd", false)
 	if err != nil {
 		return core.Fail(c, "read commerce balance: "+err.Error())
 	}

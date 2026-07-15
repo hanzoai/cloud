@@ -6,7 +6,7 @@ package cloud
 // environment, by the resource's OWN org.
 //
 // It is the in-handler analogue of BillingGate (the request-edge LLM gate): both
-// wrap the SAME canonical metering client (github.com/hanzoai/cloud/clients/commerce/metering,
+// wrap the SAME canonical metering client (github.com/hanzoai/cloud/clients/metering,
 // Deps.Metering) and the SAME commerce ledger. The edge gate prices by PATH and
 // runs as middleware; resource billing runs INSIDE a create handler, where the
 // caller's org has already been resolved to the exact slug that namespaces the
@@ -37,7 +37,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
