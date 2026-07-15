@@ -1,2 +1,0 @@
-# scripts/sync-admin-ui.sh populates this directory.
-# Until then, this stub keeps //go:embed satisfied so the binary builds.
