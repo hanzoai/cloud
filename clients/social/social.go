@@ -70,8 +70,10 @@ const (
 	// maxContent caps a post body so an unbounded request can't amplify the shared
 	// DB or a list response. Comfortably above every network's own limit.
 	maxContent = 8192
-	// maxField caps a single short label field (handle, ids).
+	// maxField caps a single short label field (handle, ids, one media URL).
 	maxField = 1024
+	// maxMedia caps how many media URLs one post can carry.
+	maxMedia = 10
 	// defaultLimit / maxLimit bound list responses.
 	defaultLimit = 200
 	maxLimit     = 1000
@@ -254,6 +256,24 @@ func nonNeg(n int64) int64 {
 	return n
 }
 
+// normMedia trims each media URL, drops empties, bounds each to maxField and the
+// whole list to maxMedia, and returns a non-nil slice. This is the ONE place a
+// post's media is sanitized on write (create + update), mirroring how content and
+// channel are normalized — the store just persists what this returns.
+func normMedia(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, u := range in {
+		if u = clip(u); u == "" {
+			continue
+		}
+		out = append(out, u)
+		if len(out) >= maxMedia {
+			break
+		}
+	}
+	return out
+}
+
 // mapErr maps a store sentinel error to the right HTTP error. Non-sentinel errors
 // become a 500 with the wrapped message.
 func mapErr(err error, notFoundMsg string) error {
@@ -400,7 +420,7 @@ func createPost(s *cloud.Service[state], c *zip.Ctx) error {
 	now := time.Now().Unix()
 	post := Post{
 		ID: id, Org: org, Content: content, Channel: channel, Status: status,
-		ScheduleAt: nonNeg(body.ScheduleAt), CreatedAt: now, UpdatedAt: now,
+		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), CreatedAt: now, UpdatedAt: now,
 	}
 	saved, err := s.State.store.CreatePost(c.Context(), post)
 	if err != nil {
@@ -468,7 +488,7 @@ func updatePost(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	post := Post{
 		ID: idParam(c), Org: org, Content: content, Channel: channel, Status: status,
-		ScheduleAt: nonNeg(body.ScheduleAt), UpdatedAt: time.Now().Unix(),
+		ScheduleAt: nonNeg(body.ScheduleAt), Media: normMedia(body.Media), UpdatedAt: time.Now().Unix(),
 	}
 	saved, err := s.State.store.UpdatePost(c.Context(), post)
 	if err != nil {
