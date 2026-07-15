@@ -288,6 +288,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// before :name for the same registration-order reason (and internally the
 	// static /stream precedes /:id).
 	mountSessions(s, app)
+	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
+	// session runs on. Registered before :ref for the same registration-order reason
+	// (and internally /targets precedes /targets/:id).
+	mountTargets(s, app)
 	app.Get("/v1/agents/:ref", cloud.Handle(s, get))
 	app.Patch("/v1/agents/:ref", cloud.Handle(s, update))
 	app.Delete("/v1/agents/:ref", cloud.Handle(s, del))
