@@ -8,12 +8,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/agents"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
+
+// testTimeout bounds one in-process request. It is generous on purpose — see req().
+const testTimeout = 60 * time.Second
 
 func mountLink(t *testing.T) *zip.App {
 	t.Helper()
@@ -46,7 +51,12 @@ func req(t *testing.T, app *zip.App, method, path, org, user string, body any) (
 	if user != "" {
 		rq.Header.Set("X-User-Id", user)
 	}
-	resp, err := app.Fiber().Test(rq)
+	// The default test timeout is ONE SECOND, which measures the build box's load
+	// rather than this package: on a busy machine a handler that returns in
+	// microseconds still reports "i/o timeout", and the suite fails for a reason
+	// that has nothing to do with the code. The bound stays (a hang must still
+	// fail) — it is just far enough out to be a real hang and not a busy CPU.
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
