@@ -121,8 +121,6 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
 CREATE INDEX IF NOT EXISTS ix_sessions_org_root ON agent_sessions(org, root_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_parent ON agent_sessions(org, parent_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_status ON agent_sessions(org, status, updated_at);
-CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target);
-CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
 
 CREATE TABLE IF NOT EXISTS agent_session_events (
   id         TEXT PRIMARY KEY,
@@ -149,6 +147,15 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		"target": "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
+	}
+	// Indexes on the execution-context columns are created AFTER addColumns: on an
+	// upgrade over a prior-release table these columns don't exist until addColumns
+	// runs, and a CREATE INDEX in the table DDL above would reference a not-yet-added
+	// column and fail on the old schema ("no such column: target").
+	if _, err := s.db.Exec(`
+CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);`); err != nil {
+		return fmt.Errorf("migrate sessions indexes: %w", err)
 	}
 	return nil
 }
