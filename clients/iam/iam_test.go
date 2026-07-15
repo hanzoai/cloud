@@ -3,6 +3,8 @@ package iam
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/beego/v2/server/web"
@@ -83,6 +85,42 @@ func TestMountFailClosed503(t *testing.T) {
 			t.Errorf("%s = %d, want 503 (fail-closed)", p, resp.StatusCode)
 		}
 		_ = resp.Body.Close()
+	}
+}
+
+// TestIsolateDatabase proves the co-residence unblock: isolateDatabase pins IAM's
+// SQLite handle to its OWN iam.db under the IAM data dir via IAM_DATABASE_URL —
+// the IAM-scoped key that conf.GetConfigDataSourceName honors ABOVE the shared
+// `dataSourceName` a deployment sets for the sibling `ai` fork. Without this the
+// embedded IAM opens ai's database and the binary crashes at boot (SQLITE_CANTOPEN
+// / casdoor-table auto-migration into ai's store). It must (1) set an iam-owned
+// DSN, (2) NOT collide with ai's dataSourceName, and (3) respect an operator
+// override.
+func TestIsolateDatabase(t *testing.T) {
+	const dataDir = "/data/iam"
+	const aiDSN = "file:/data/ai.db?cache=shared" // what a deployment sets for `ai`
+
+	// (1)+(2): default fills an iam-owned DSN that is NOT ai's.
+	t.Setenv("dataSourceName", aiDSN)
+	os.Unsetenv("IAM_DATABASE_URL")
+	isolateDatabase(dataDir)
+	got := os.Getenv("IAM_DATABASE_URL")
+	if got == "" {
+		t.Fatal("IAM_DATABASE_URL unset after isolateDatabase — IAM would resolve ai's dataSourceName")
+	}
+	if got == aiDSN {
+		t.Fatalf("IAM_DATABASE_URL == ai's dataSourceName (%q) — the collision is NOT isolated", got)
+	}
+	if !strings.Contains(got, "/data/iam/iam.db") {
+		t.Errorf("IAM_DATABASE_URL = %q, want IAM's own iam.db under the data dir", got)
+	}
+
+	// (3): an operator-set IAM_DATABASE_URL (e.g. an external DSN) is respected.
+	const override = "file:/mnt/custom/iam.db?cache=shared"
+	t.Setenv("IAM_DATABASE_URL", override)
+	isolateDatabase(dataDir)
+	if os.Getenv("IAM_DATABASE_URL") != override {
+		t.Errorf("isolateDatabase clobbered operator override: got %q, want %q", os.Getenv("IAM_DATABASE_URL"), override)
 	}
 }
 
