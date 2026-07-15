@@ -215,7 +215,9 @@ func TestMetricsHandlerRequiresPrincipal(t *testing.T) {
 
 func TestMetricsHandlerNonDefaultProjectEmpty(t *testing.T) {
 	app, _ := mountApp(t)
-	code, body := do(t, app, "GET", "/v1/evals/metrics?range=24h&project=alpha", "hanzo", nil)
+	// The project is the server-minted X-Project-Id scope (not a client query
+	// param). A named project is honest-empty until the ledger carries a project.
+	code, body := doProj(t, app, "GET", "/v1/evals/metrics?range=24h", "hanzo", "alpha", "", nil)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d: %s", code, body)
 	}
@@ -228,6 +230,19 @@ func TestMetricsHandlerNonDefaultProjectEmpty(t *testing.T) {
 	}
 	if len(b.ByModel) != 0 || b.Totals.Generations != 0 {
 		t.Fatal("non-default project must be honest-empty (no ledger attribution)")
+	}
+}
+
+// TestUsageWhereProjectScoped: a non-empty Project ANDs the project predicate
+// after org, bound positionally (never interpolated).
+func TestUsageWhereProjectScoped(t *testing.T) {
+	f := MetricsFilter{Org: "hanzo", Project: "alpha", Since: time.Unix(0, 0).UTC(), Until: time.Unix(3600, 0).UTC()}
+	w, args := usageWhere(f)
+	if !strings.Contains(w, "organization = ?") || !strings.Contains(w, "project = ?") {
+		t.Fatalf("where must pin org AND project: %q", w)
+	}
+	if len(args) != 4 || args[2] != "hanzo" || args[3] != "alpha" {
+		t.Fatalf("args = %v (want since,until,hanzo,alpha)", args)
 	}
 }
 
