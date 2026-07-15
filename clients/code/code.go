@@ -99,6 +99,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/index", s.handleIndex)
+	// Repo-inspection primitives (the zread contract over the org's own index):
+	// tree = get_repo_structure, file = read_file.
+	app.Get("/v1/code/tree", s.handleTree)
+	app.Get("/v1/code/file", s.handleFile)
 
 	s.log.Info("code surface mounted (native)",
 		"brand", deps.Brand, "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())
@@ -247,6 +251,66 @@ func (s *service) handleContext(c *zip.Ctx) error {
 		bundle.Spans = []Span{}
 	}
 	return c.JSON(http.StatusOK, bundle)
+}
+
+// handleTree returns a repo's file structure with per-file symbol counts —
+// get_repo_structure over the org's own indexed corpus, no git checkout. An
+// unindexed repo returns an empty tree, never an error.
+func (s *service) handleTree(c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("valid principal required")
+	}
+	repo, err := cleanRepo(c.Query("repo"), true) // required: a tree is repo-scoped
+	if err != nil {
+		return err
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.ErrInternal("open index")
+	}
+	entries, err := store.tree(c.Context(), repo)
+	if err != nil {
+		s.log.Warn("code tree failed", "org", org, "repo", repo, "err", err)
+		return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": []TreeEntry{}})
+	}
+	if entries == nil {
+		entries = []TreeEntry{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": entries})
+}
+
+// handleFile returns the INDEXED content of one file (the chunks the search tiers
+// hold) — a fast "show the code the index knows" for context. It is NOT byte-
+// verbatim (see Store.fileContent): the git object plane (clients/git, S3-backed)
+// is the source of record for exact bytes, history, and blame. A file absent from
+// the index is a 404 so the agent can tell "not indexed" from an empty file.
+func (s *service) handleFile(c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("valid principal required")
+	}
+	repo, err := cleanRepo(c.Query("repo"), true)
+	if err != nil {
+		return err
+	}
+	path := strings.TrimSpace(c.Query("path"))
+	if path == "" {
+		return zip.ErrBadRequest("path is required")
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.ErrInternal("open index")
+	}
+	content, lang, err := store.fileContent(c.Context(), repo, path)
+	if err != nil {
+		s.log.Warn("code file failed", "org", org, "repo", repo, "path", path, "err", err)
+		return zip.ErrInternal("read file")
+	}
+	if content == "" && lang == "" {
+		return zip.ErrNotFound("file not indexed: " + path)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "path": path, "lang": lang, "content": content})
 }
 
 // handleAsk is the cited RAG answer over the org's index.
