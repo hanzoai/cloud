@@ -19,7 +19,7 @@ tasks wave below, which had to reconcile with an in-flight `durable.go`).
 
 The contract for a `mount`: a package exposing `Mount(app *zip.App, deps
 cloud.Deps) error` that registers `/v1/<name>/*` and returns; registered in
-`subsystems/subsystems.go` with an order < 150 (before ai's `/v1/*` catch-all).
+`apps/apps.go` with an order < 150 (before ai's `/v1/*` catch-all).
 Heavy/legacy HTTP frameworks (Beego, Gin) can be adapted with
 `zip.AdaptNetHTTP`, but dragging their ORM/auth/DB substrate into this binary is
 a rewrite, not a mount — see visor.
@@ -60,7 +60,7 @@ tasksvc, templates, visor, websearch, zt.
 
 | Service | Reason |
 |---|---|
-| **iam** (`hanzoai/iam`) | Identity control plane; isolated blast radius by design (subsystems.go: "iam → iam.hanzo.ai, isolated control plane"). The binary CONSUMES it (JWT validation), never hosts it. |
+| **iam** (`hanzoai/iam`) | Identity control plane; isolated blast radius by design (apps.go: "iam → iam.hanzo.ai, isolated control plane"). The binary CONSUMES it (JWT validation), never hosts it. |
 | **gateway** (`hanzoai/gateway/v2`), **ingress** | The edge — they route *to* this binary. Traefik/krakend substrate; fusing the edge into the app defeats the tier separation. |
 | **kms** (`luxfi/kms`, EMBEDDED) | KMS is now embedded in this binary (`clients/kms` store + `/v1/kms`, fail-closed) — the standalone KMS Deployment is collapsed into cloud. Only the MPC signing ring (`luxfi/mpc`) stays a separate node set, the root of trust. |
 | **registry** (`hanzoai/registry`) | OCI distribution data plane (S3-backed fleet registry); a Docker registry protocol server, not a `/v1` control surface. |
