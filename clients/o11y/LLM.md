@@ -33,8 +33,43 @@ impl detail resolved inside the handlers, never leaked into a route:
   to the v3 engine route INTERNALLY (the version-less alias would resolve to v5,
   which 400s the v3 composite payload the console speaks), delegating to the same
   gated runtime handler the wildcard uses.
+- `/v1/o11y/sessions` — the flat, org-gated LLM-obs sessions list (`sessions.go`);
+  pins the runtime's `/api/sessions` route (traces grouped by `session.id` on the
+  gen_ai span plane) and refuses an org-less caller at the cloud boundary. Session
+  DETAIL is composed CLIENT-side (list + traces filtered by session); the runtime
+  serves only the list, so there is deliberately no `/sessions/:id` route.
+- `/v1/o11y/annotation-queues*` — the NATIVE human-review queues (`annotation_queues.go`
+  + `annotation_store.go`); see below.
 - `/v1/o11y/{services,dependency_graph,dashboards,rules,…}` — resolved by the
   upstream module's version-less alias (highest engine version wins).
+
+## Annotation queues (native, relational) — `annotation_queues.go` + `annotation_store.go`
+
+The o11y span plane (llmobs) has flat annotations but NO queue entity, so the
+human-review queues the console's `AnnotationQueuesModule` consumes are a
+cloud-NATIVE relational feature on the o11y surface. Storage is Hanzo Base/SQLite
+(`{DataDir}/o11y_annotations.db`, opened through `cek.Open` — encrypted at rest on
+a capable build), the eval-metastore discipline: `MaxOpenConns(1)`, org column on
+every table + mandatory predicate on every query, `project` narrows within org via
+`principal.ProjectScope`. NOT the datastore span plane (queues are durable config,
+not append-only telemetry). Registered by `mountAnnotationQueues` inside the one
+order-69 mount, so every route precedes the order-70 wildcard.
+
+Surface (lists return the console REST envelope `{data:[…], meta:{page,limit,
+totalItems,totalPages}}`; a cross-org id is a 404, never a cross-tenant read):
+
+- `GET/POST /v1/o11y/annotation-queues` — list (org+project) / create.
+- `GET/PATCH/DELETE /v1/o11y/annotation-queues/:id` — detail (+ pending/completed
+  counts + embedded items) / update name·description·scoreConfigIds / delete (+ items).
+- `GET/POST /v1/o11y/annotation-queues/:id/items` — list (status filter, paged) / add
+  items. An item references a TRACE·OBSERVATION·SESSION (the console-friendly
+  `traceId`/`observationId`/`sessionId` form maps to `objectType`+`objectId`).
+- `PATCH /v1/o11y/annotation-queues/:id/items/:itemId` — update status (PENDING↔
+  COMPLETED, stamps `completedAt`) / assignee.
+
+`scoreConfigIds` reference eval score-configs (`/v1/evals/score-configs`), stored as
+opaque bounded ids (shape-validated only). Shutdown closes the store first in
+`ShutdownO11y`.
 
 Three planes, one datastore:
 
