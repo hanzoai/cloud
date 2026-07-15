@@ -13,6 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
+	github.com/hanzoai/commerce v1.47.1
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.25
@@ -71,12 +72,14 @@ require (
 	github.com/docker/cli v29.5.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
+	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
+	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
 
@@ -511,7 +514,7 @@ require (
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0
 	github.com/hanzoai/search-go v0.36.0
-	github.com/hanzoai/sendgrid-go v1.3.0
+	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible
 	github.com/hanzoai/storage-go v1.0.0
 	github.com/hanzoai/tasks v1.51.0
 	github.com/hanzoai/xorm v1.4.1 // indirect
