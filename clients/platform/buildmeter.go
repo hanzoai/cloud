@@ -10,7 +10,7 @@ package platform
 
 import (
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 )
 
 // buildMinuteFeeEnvPrefix is the operator knob for the per-build-minute rate, in

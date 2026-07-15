@@ -64,7 +64,6 @@ import (
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/code"
-	"github.com/hanzoai/cloud/clients/commerce"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
@@ -186,9 +185,10 @@ func Wire() []cloud.MountSpec {
 		// the in-repo entry above (same name), delegated to via o11y.SetHandler.
 		{Name: "o11y", Mount: cloud.Typed(o11ymod.Mount)},
 		{Name: "authz", Mount: cloud.Typed(authz.Mount)},
-		// Embedded commerce plane /v1/commerce/*, /_/commerce/*. (Its in-process
-		// CommerceClient factory is registered separately via RegisterCommerceClientFactory.)
-		{Name: "commerce", Mount: cloud.Typed(commerce.MountFromDeps)},
+		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
+		// MODULE via the adapter in commerce.go (un-forked; the in-process
+		// CommerceClient is wired directly in pickCommerceClient).
+		{Name: "commerce", Mount: cloud.Typed(mountCommerce)},
 		// hanzoai/licensing. Its Mount is func(any, cloud.Deps) error — a MountFunc
 		// already — so Wire references it DIRECTLY, not through Typed.
 		{Name: "licensing", Mount: licensing.Mount},

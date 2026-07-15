@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/events"
-	"github.com/hanzoai/cloud/clients/commerce/infra"
 	"github.com/hanzoai/cloud/clients/content"
+	"github.com/hanzoai/commerce/events"
+	"github.com/hanzoai/commerce/infra"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
