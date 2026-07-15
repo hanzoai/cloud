@@ -906,39 +906,97 @@ func (s *Store) AccruedByLevel(ctx context.Context) (map[int]int64, error) {
 	return out, rows.Err()
 }
 
-// ── accrual latch (the commission event, at-most-once per period) ─────────────
+// ── accrual (create-or-top-up, converges to the period's month-end spend) ──────
 
-// LatchAccrual atomically records ONE accrual for (affiliate, referredOrg, period)
-// and adds the commission to the affiliate's accrued balance — in a single
-// transaction. RowsAffected on the INSERT is the latch: a UNIQUE violation means
-// this period was already accrued (returns false, no error, no double-accrual).
-// Returns won=true only when THIS call created the accrual and moved the balance.
-// level is the upline distance recorded for analytics (1=direct, 2, 3). marginCents
-// is the share base (Hanzo's margin on the source spend); commissionCents is the
-// affiliate's share of it (≤ marginCents by construction).
-func (s *Store) LatchAccrual(ctx context.Context, accrualID, affiliateID, referredOrg, period string, level int, spendCents, marginCents, commissionCents, now int64) (bool, error) {
+// bump moves an affiliate's accrued balance by delta cents inside tx (0 is a no-op).
+// The one place accrued_cents is advanced by an accrual, so the balance and the accrual
+// rows move together atomically.
+func bump(ctx context.Context, tx *sql.Tx, affiliateID string, delta int64) error {
+	if delta == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE affiliates SET accrued_cents = accrued_cents + ? WHERE id=?`, delta, affiliateID); err != nil {
+		return fmt.Errorf("accrue balance: %w", err)
+	}
+	return nil
+}
+
+// Accrue records — or, for the still-open current period, TOPS UP — the one accrual for
+// (affiliate, referredOrg, period) and moves the affiliate's accrued balance by the
+// change, in a single transaction. UNIQUE(affiliate, referred, period) is the latch key.
+//
+// Why top-up: the period key is monthly and the source spend is MONTH-TO-DATE (commerce's
+// usage rollup), so one period is swept many times as the month fills in. The FIRST sweep
+// inserts the row; each later sweep in the SAME period recomputes the share from the
+// current (higher) month-to-date spend and SETS the row to it, adding only the positive
+// delta to accrued_cents. The share therefore CONVERGES to the true month-end value
+// instead of freezing at whatever partial spend the first sweep happened to read.
+//
+// Monotone + bounded by construction:
+//   - month-to-date spend never decreases, so a later commissionCents is never smaller; a
+//     lower-or-equal recompute (an unchanged, late, or corrected reading) is a NO-OP, so
+//     accrued_cents only ever RISES and never overshoots the month-end value (each reading
+//     ≤ the final month-to-date).
+//   - the row always stores margin + commission from the SAME spend reading, so the
+//     per-event invariant commissionCents ≤ marginCents holds at EVERY step, and the level
+//     schedule cap keeps Σ(commission) over the levels ≤ that source's margin — the money
+//     invariant is untouched by the top-up.
+//
+// Returns moved=true when THIS call changed the balance (an insert or a top-up), so the
+// caller counts real accrual movements and writes one audit row per movement. level is the
+// upline distance recorded for analytics (1=direct, 2, 3), fixed per (affiliate, source)
+// by the forest, so only the spend-derived columns move on a top-up.
+func (s *Store) Accrue(ctx context.Context, accrualID, affiliateID, referredOrg, period string, level int, spendCents, marginCents, commissionCents, now int64) (moved bool, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("accrual tx: %w", err)
 	}
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, level, spend_cents, margin_cents, commission_cents, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?)`,
-		accrualID, affiliateID, referredOrg, period, level, spendCents, marginCents, commissionCents, now)
-	if err != nil {
-		_ = tx.Rollback()
-		if isUnique(err) {
-			return false, nil // already accrued this period — idempotent
+	var existing int64
+	err = tx.QueryRowContext(ctx,
+		`SELECT commission_cents FROM affiliate_accruals WHERE affiliate_id=? AND referred_org=? AND period=?`,
+		affiliateID, referredOrg, period).Scan(&existing)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// First sweep of this period → insert the accrual and add the full share.
+		if _, ierr := tx.ExecContext(ctx,
+			`INSERT INTO affiliate_accruals (id, affiliate_id, referred_org, period, level, spend_cents, margin_cents, commission_cents, created_at)
+			 VALUES (?,?,?,?,?,?,?,?,?)`,
+			accrualID, affiliateID, referredOrg, period, level, spendCents, marginCents, commissionCents, now); ierr != nil {
+			_ = tx.Rollback()
+			if isUnique(ierr) {
+				return false, nil // lost an insert race — the winner already accrued it
+			}
+			return false, fmt.Errorf("insert accrual: %w", ierr)
 		}
-		return false, fmt.Errorf("insert accrual: %w", err)
-	}
-	if _, err = tx.ExecContext(ctx,
-		`UPDATE affiliates SET accrued_cents = accrued_cents + ? WHERE id=?`, commissionCents, affiliateID); err != nil {
+		if berr := bump(ctx, tx, affiliateID, commissionCents); berr != nil {
+			_ = tx.Rollback()
+			return false, berr
+		}
+	case err != nil:
 		_ = tx.Rollback()
-		return false, fmt.Errorf("accrue balance: %w", err)
+		return false, fmt.Errorf("read accrual: %w", err)
+	default:
+		// Period already open → top up toward the current (higher) share only. A lower or
+		// equal recompute leaves the row untouched, so accrued_cents never decreases.
+		if commissionCents <= existing {
+			_ = tx.Rollback()
+			return false, nil
+		}
+		if _, uerr := tx.ExecContext(ctx,
+			`UPDATE affiliate_accruals SET spend_cents=?, margin_cents=?, commission_cents=?
+			  WHERE affiliate_id=? AND referred_org=? AND period=?`,
+			spendCents, marginCents, commissionCents, affiliateID, referredOrg, period); uerr != nil {
+			_ = tx.Rollback()
+			return false, fmt.Errorf("top up accrual: %w", uerr)
+		}
+		if berr := bump(ctx, tx, affiliateID, commissionCents-existing); berr != nil {
+			_ = tx.Rollback()
+			return false, berr
+		}
 	}
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("accrual commit: %w", err)
+	if cerr := tx.Commit(); cerr != nil {
+		return false, fmt.Errorf("accrual commit: %w", cerr)
 	}
 	return true, nil
 }
@@ -1195,19 +1253,33 @@ func (s *Store) CountLinks(ctx context.Context, affiliateID string) (int, error)
 	return n, nil
 }
 
-// IncrementLinkClick bumps the click counter for a code (a public link hit). A no-op
-// for an unknown code. Returns whether a row was incremented.
-func (s *Store) IncrementLinkClick(ctx context.Context, code string) (bool, error) {
-	code = normalizeCode(code)
-	if code == "" {
-		return false, nil
+// FlushClicks folds a batch of coalesced click tallies (code → count) into
+// affiliate_links in ONE transaction (clicks += n per code); an unknown code no-ops.
+// This is the ONLY path that writes the vanity click counter to the money DB, and it is
+// batched + read/shutdown-driven (never per-click), so a public click flood can never
+// contend with the accrual/payout write path. Clicks are never read by any accrual or
+// payout, so a tally lost on a flush error or a crash is harmless.
+func (s *Store) FlushClicks(ctx context.Context, tally map[string]int64) error {
+	if len(tally) == 0 {
+		return nil
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE affiliate_links SET clicks=clicks+1 WHERE code=?`, code)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("click: %w", err)
+		return fmt.Errorf("clicks tx: %w", err)
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+	for code, n := range tally {
+		if n <= 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE affiliate_links SET clicks=clicks+? WHERE code=?`, n, code); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("flush clicks: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("clicks commit: %w", err)
+	}
+	return nil
 }
 
 // SignupsByCode returns code → count of orgs THIS affiliate attributed with that code.
