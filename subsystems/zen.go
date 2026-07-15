@@ -5,6 +5,8 @@ package subsystems
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -186,13 +188,24 @@ const zenService = "ai"
 // (the LLM family zen owns) for internal cost reconciliation vs the raw upstream.
 const zenProvider = "zen"
 
-// zenKeyResolver is zen's credential resolver backed by KMS. zen's catalog
-// names each provider's key by an env-var convention (DO_AI_API_KEY,
-// ANTHROPIC_API_KEY, …); the resolver turns that name into a KMS secret lookup.
-// A missing/empty secret returns "" — zen's upstream call then fails fast at
-// the provider (never silent free usage).
+// zenKeyResolver is zen's upstream-credential resolver. zen's catalog names each
+// provider's key by an env-var convention (DO_AI_API_KEY, ANTHROPIC_API_KEY, …);
+// the resolver turns that name into a concrete secret. It reads the ENVIRONMENT
+// FIRST, then falls back to KMS — the SAME order ai uses (object/kms.go: "the prod
+// hot path resolves DO_AI_API_KEY from the env before any live KMS"). The operator
+// injects these provider keys as env from the KMS-synced K8s secret
+// (cloud-api-llm-keys), so the env is the live value; the embedded KMS store is a
+// fallback that is not always seeded with the provider keys. Reading KMS-only made
+// zen send an EMPTY key whenever the store lacked it, and the upstream (DO GenAI)
+// answered 401 "Unable to authenticate you" — surfacing to the caller as a failed
+// chat while ai (which reads env) worked. Env-first fixes that with one source of
+// truth shared across both zen and ai. An empty result on both still returns "" so
+// the upstream call fails fast (never silent free usage).
 func zenKeyResolver(kms cloud.KMSClient) func(context.Context, string) string {
 	return func(ctx context.Context, envName string) string {
+		if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+			return v
+		}
 		if kms == nil {
 			return ""
 		}
