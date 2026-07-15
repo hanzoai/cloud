@@ -48,18 +48,36 @@ import (
 // metastore + gateway + judge; it owns none of their internals.
 
 // Trace is one model-under-test invocation recorded during a run. Input/Output
-// are opaque JSON/text; metadata carries the run/dataset/item linkage.
+// are opaque JSON/text; the run/dataset/item fields carry the linkage.
+//
+// Attribution (HIP-0106): a trace records WHO/WHERE/WHEN alongside WHAT, so the
+// eval trace list carries the same observability dimensions the production gen_ai
+// span plane does:
+//   - ProjectID  — the org SUB-SCOPE (principal.Project); "" / "default" is the
+//     org's default project. Org stays the tenant-isolation key; project narrows.
+//   - SessionID  — groups the traces of one logical session; an eval run stamps
+//     its RunName so a run's item-traces read back as one session.
+//   - APIKeyHash — a NON-reversible ref (SHA-256 hex) of the caller credential the
+//     run drove the model with. Never the plaintext key: the ref correlates a
+//     trace to a key without the store ever holding a secret.
+//   - StartTime/EndTime — the model-under-test call window; EndTime-StartTime is
+//     the trace latency the view surfaces (LatencyMs).
 type Trace struct {
-	ID        string
-	Org       string
-	Name      string
-	Dataset   string
-	ItemID    string
-	RunName   string
-	Model     string
-	Input     string
-	Output    string
-	Timestamp time.Time
+	ID         string
+	Org        string
+	ProjectID  string
+	Name       string
+	Dataset    string
+	ItemID     string
+	RunName    string
+	SessionID  string
+	APIKeyHash string
+	Model      string
+	Input      string
+	Output     string
+	StartTime  time.Time
+	EndTime    time.Time
+	Timestamp  time.Time
 }
 
 // ScoreEvent is one recorded score (append-only). Value is the numeric score;
@@ -90,12 +108,16 @@ type ScoreFilter struct {
 	Limit   int
 }
 
-// TraceFilter bounds a traces read. Org is MANDATORY.
+// TraceFilter bounds a traces read. Org is MANDATORY; ProjectID/SessionID/RunName/
+// Dataset narrow WITHIN the org. ProjectID is the caller's server-minted project
+// (principal.Project), so a project-scoped caller sees only its project's traces.
 type TraceFilter struct {
-	Org     string
-	RunName string
-	Dataset string
-	Limit   int
+	Org       string
+	ProjectID string
+	SessionID string
+	RunName   string
+	Dataset   string
+	Limit     int
 }
 
 // Telemetry is the append-only event store for eval traces + scores. Every
@@ -170,24 +192,33 @@ func (t *dsTelemetry) ready(ctx context.Context) error {
 	return nil
 }
 
-// ensureTables creates the append-only telemetry tables idempotently. These are
-// the datastore projections of the v3 traces/observations/scores model:
-// MergeTree (insert-only), partitioned by month, ordered org-first so a tenant's
-// reads are a contiguous prefix.
+// ensureTables creates the append-only telemetry tables idempotently, then
+// applies the additive column migrations so a table created before the
+// attribution columns existed converges on the current shape. These are the
+// datastore projections of the v3 traces/observations/scores model: MergeTree
+// (insert-only), partitioned by month, ordered org-first so a tenant's reads are
+// a contiguous prefix. The attribution columns (project/session_id/api_key_hash/
+// start_time/end_time) are additive, so ORDER BY is unchanged (org stays the
+// first key — tenant isolation is a prefix scan regardless).
 func (t *dsTelemetry) ensureTables(ctx context.Context) error {
 	stmts := []string{
 		fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS %s (
-  id         String,
-  org        LowCardinality(String),
-  name       String,
-  dataset    LowCardinality(String),
-  item_id    String,
-  run_name   String,
-  model      LowCardinality(String),
-  input      String,
-  output     String,
-  ts         DateTime64(3, 'UTC')
+  id           String,
+  org          LowCardinality(String),
+  project      LowCardinality(String),
+  name         String,
+  dataset      LowCardinality(String),
+  item_id      String,
+  run_name     String,
+  session_id   String,
+  api_key_hash String,
+  model        LowCardinality(String),
+  input        String,
+  output       String,
+  start_time   DateTime64(3, 'UTC'),
+  end_time     DateTime64(3, 'UTC'),
+  ts           DateTime64(3, 'UTC')
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMM(ts)
 ORDER BY (org, dataset, run_name, ts, id)`, t.table("eval_traces")),
@@ -214,6 +245,22 @@ ORDER BY (org, name, run_name, ts, id)`, t.table("eval_scores")),
 			return fmt.Errorf("evals telemetry: ensure table: %w", err)
 		}
 	}
+	// Additive migrations: CREATE TABLE IF NOT EXISTS is a no-op on a table made
+	// before these columns, so each attribution column also needs an idempotent
+	// ADD COLUMN IF NOT EXISTS. Kept in lockstep with the DDL and the INSERT.
+	et := t.table("eval_traces")
+	migrations := []string{
+		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS project LowCardinality(String)",
+		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS session_id String",
+		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS api_key_hash String",
+		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS start_time DateTime64(3, 'UTC')",
+		"ALTER TABLE " + et + " ADD COLUMN IF NOT EXISTS end_time DateTime64(3, 'UTC')",
+	}
+	for _, ddl := range migrations {
+		if err := aiobject.DatastoreExec(ctx, ddl); err != nil {
+			return fmt.Errorf("evals telemetry: migrate eval_traces: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -228,10 +275,11 @@ func (t *dsTelemetry) RecordTrace(ctx context.Context, tr Trace) error {
 		return err
 	}
 	return aiobject.DatastoreExec(ctx, "INSERT INTO "+t.table("eval_traces")+
-		` (id, org, name, dataset, item_id, run_name, model, input, output, ts)`+
-		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		tr.ID, tr.Org, tr.Name, tr.Dataset, tr.ItemID, tr.RunName,
-		tr.Model, tr.Input, tr.Output, tr.Timestamp.UTC())
+		` (id, org, project, name, dataset, item_id, run_name, session_id, api_key_hash, model, input, output, start_time, end_time, ts)`+
+		` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		tr.ID, tr.Org, tr.ProjectID, tr.Name, tr.Dataset, tr.ItemID, tr.RunName,
+		tr.SessionID, tr.APIKeyHash, tr.Model, tr.Input, tr.Output,
+		tr.StartTime.UTC(), tr.EndTime.UTC(), tr.Timestamp.UTC())
 }
 
 func (t *dsTelemetry) RecordScore(ctx context.Context, sc ScoreEvent) error {
@@ -312,9 +360,17 @@ func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, e
 	if err := t.ready(ctx); err != nil {
 		return nil, err
 	}
-	q := "SELECT id, org, name, dataset, item_id, run_name, model, input, output, ts FROM " +
+	q := "SELECT id, org, project, name, dataset, item_id, run_name, session_id, api_key_hash, model, input, output, start_time, end_time, ts FROM " +
 		t.table("eval_traces") + " WHERE org = ?"
 	args := []any{f.Org}
+	if f.ProjectID != "" {
+		q += " AND project = ?"
+		args = append(args, f.ProjectID)
+	}
+	if f.SessionID != "" {
+		q += " AND session_id = ?"
+		args = append(args, f.SessionID)
+	}
 	if f.RunName != "" {
 		q += " AND run_name = ?"
 		args = append(args, f.RunName)
@@ -333,16 +389,21 @@ func (t *dsTelemetry) ListTraces(ctx context.Context, f TraceFilter) ([]Trace, e
 	out := make([]Trace, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Trace{
-			ID:        asString(r["id"]),
-			Org:       asString(r["org"]),
-			Name:      asString(r["name"]),
-			Dataset:   asString(r["dataset"]),
-			ItemID:    asString(r["item_id"]),
-			RunName:   asString(r["run_name"]),
-			Model:     asString(r["model"]),
-			Input:     asString(r["input"]),
-			Output:    asString(r["output"]),
-			Timestamp: asTime(r["ts"]),
+			ID:         asString(r["id"]),
+			Org:        asString(r["org"]),
+			ProjectID:  asString(r["project"]),
+			Name:       asString(r["name"]),
+			Dataset:    asString(r["dataset"]),
+			ItemID:     asString(r["item_id"]),
+			RunName:    asString(r["run_name"]),
+			SessionID:  asString(r["session_id"]),
+			APIKeyHash: asString(r["api_key_hash"]),
+			Model:      asString(r["model"]),
+			Input:      asString(r["input"]),
+			Output:     asString(r["output"]),
+			StartTime:  asTime(r["start_time"]),
+			EndTime:    asTime(r["end_time"]),
+			Timestamp:  asTime(r["ts"]),
 		})
 	}
 	return out, nil
@@ -429,6 +490,12 @@ func (m *memTelemetry) ListTraces(_ context.Context, f TraceFilter) ([]Trace, er
 	var out []Trace
 	for _, tr := range m.traces {
 		if tr.Org != f.Org {
+			continue
+		}
+		if f.ProjectID != "" && tr.ProjectID != f.ProjectID {
+			continue
+		}
+		if f.SessionID != "" && tr.SessionID != f.SessionID {
 			continue
 		}
 		if f.RunName != "" && tr.RunName != f.RunName {
