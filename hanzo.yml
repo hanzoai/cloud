@@ -1,0 +1,38 @@
+# Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
+# (.github/workflows/cicd.yml) and platform.hanzo.ai.
+#
+# NO images: block by design. release.yml OWNS the cloud image + v* tags (the
+# tag-is-a-receipt invariant: main push → build → smoke → push image → tag).
+# Declaring images here too would double-build and re-open the phantom-tag
+# hole release.yml exists to close. CI's job here is the TEST GATE on every
+# push/PR, on OUR arc pool.
+#
+# NO deploy: cloud is operator-managed — universe records desired state and the
+# operator reconciles the Service CR; release.yml notifies universe with a
+# proven tag.
+test:
+  - name: go-vet
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off
+      go vet ./...
+  - name: go-unit
+    # The money-path + composition-root surface: the packages the unfork/zip
+    # migration made load-bearing. Full ./... needs cek/KMS env; these run
+    # hermetic.
+    run: |
+      set -e
+      export GOPRIVATE='github.com/hanzoai/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off CGO_ENABLED=1
+      go test -count=1 -timeout 15m \
+        ./subsystems/ \
+        ./clients/commerceclient/ \
+        ./clients/commerceinproc/ \
+        ./clients/metering/ \
+        ./clients/catalogsync/ \
+        ./clients/bots/ \
+        ./clients/admin/finance/ \
+        ./clients/ml/
+
+kms:
+  path: /deploy
+  environment: prod
