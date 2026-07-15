@@ -29,6 +29,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/zap-proto/fiber/v3/middleware/adaptor"
+	"github.com/zap-proto/zip"
 )
 
 // PlaceholderBase is the sentinel commerce base URL used when commerce is
@@ -41,8 +44,21 @@ const PlaceholderBase = "http://commerce.inproc"
 // RoundTrip (every request) race-free without a mutex on the hot path.
 var handler atomic.Pointer[http.Handler]
 
-// SetHandler publishes the in-process commerce handler. Called once by
-// commerce.Mount after commerce.Embed returns its gin handler. Passing nil
+// SetApp publishes the co-resident zip app commerce's routes live on (the
+// SharedApp contract). The S2S dispatch enters the app's fasthttp pipeline
+// directly; the http.Handler shape survives only inside this seam for the
+// bridge-building subsystems that still speak *http.Request. Passing nil
+// un-publishes.
+func SetApp(app *zip.App) {
+	if app == nil {
+		SetHandler(nil)
+		return
+	}
+	SetHandler(adaptor.FiberApp(app.Fiber()))
+}
+
+// SetHandler publishes the in-process commerce handler. SetApp is the
+// production path; this remains the seam tests stub. Passing nil
 // un-publishes (used by tests).
 func SetHandler(h http.Handler) {
 	if h == nil {
@@ -79,6 +95,12 @@ type roundTripper struct{ fallback http.RoundTripper }
 
 func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if p := handler.Load(); p != nil {
+		// Callers build CLIENT-style requests (http.NewRequest → empty
+		// RequestURI); the in-process dispatch is SERVER-side, and the fiber
+		// pipeline routes on RequestURI. Normalize here — the one seam.
+		if req.RequestURI == "" {
+			req.RequestURI = req.URL.RequestURI()
+		}
 		rec := httptest.NewRecorder()
 		(*p).ServeHTTP(rec, req)
 		resp := rec.Result()
