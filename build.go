@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	aiobject "github.com/hanzoai/ai/object"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
+	"github.com/hanzoai/cloud/clients/metering"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -503,22 +503,22 @@ func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetOrgConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS
-// client via the factory clients/commerce registers in init() — a direct Go call
-// that reads the embedded commerce datastore + the @hanzo/plans vocabulary, no
-// network hop (the HIP-0106 co-resident default). cloud never imports clients/commerce,
-// so the commerce library, its /v1/commerce subsystem, and this client share ONE
-// package with no cloud⇄commerce cycle — the same inversion KMS uses. Absent the
-// registration (clients/commerce not linked) it fails closed rather than pretending.
+// client via the factory subsystems/commerce.go registers in init() — a direct Go
+// call that reads the embedded commerce datastore (hanzoai/commerce MODULE, since
+// the un-fork) + the @hanzo/plans vocabulary, no network hop (the HIP-0106
+// co-resident default). The factory inversion stays because the concrete client
+// (clients/commerceinproc) imports clients/plan, which imports cloud — a direct
+// call here would be a package cycle. Absent the registration it fails closed
+// rather than pretending.
 //
 // NETWORK PATH PRESERVED: absent co-residency the ZAP-RPC + disabled fallbacks apply
 // (out-of-process commerce, or not wired), so the remote proxy seam
-// (CLOUD_COMMERCE_ZAP_ADDR) is unchanged — this fold does NOT force the in-process
-// cutover; the live default still selects the network client when commerce is not
-// enabled in this process.
+// (CLOUD_COMMERCE_ZAP_ADDR) is unchanged — the live default still selects the
+// network client when commerce is not enabled in this process.
 func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 	if cfg.Enabled("commerce") {
 		if commerceClientFactory == nil {
-			log.Error("deps.Commerce: commerce enabled but no client factory registered (clients/commerce not linked); failing closed")
+			log.Error("deps.Commerce: commerce enabled but no client factory registered (subsystems not linked); failing closed")
 			return clients.DisabledCommerce()
 		}
 		log.Info("deps.Commerce → in-process (embedded commerce)", "brand", cfg.Brand)
@@ -531,17 +531,15 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 	return clients.DisabledCommerce()
 }
 
-// commerceClientFactory constructs the embedded in-process Commerce client from
-// cloud Config. clients/commerce registers it in init(); pickCommerceClient calls it
-// so cloud depends on the CommerceClient interface + this hook, never the concrete
-// commerce package — the same inversion KMS + the subsystem Registry use. Exactly
-// one registration.
+// commerceClientFactory constructs the embedded in-process Commerce client.
+// subsystems/commerce.go registers it in init(); pickCommerceClient calls it so
+// package cloud depends on the CommerceClient interface + this hook, never the
+// concrete commerceinproc package (whose entitlement client pulls clients/plan,
+// which imports cloud — the hook is what keeps the package graph acyclic).
 var commerceClientFactory func(cfg *Config, log luxlog.Logger) CommerceClient
 
 // RegisterCommerceClientFactory installs the embedded-Commerce client constructor.
-// clients/commerce calls this from its init(); it is the ONE inversion point that
-// lets the commerce library and its /v1/commerce subsystem share one package with no
-// cloud⇄commerce cycle.
+// subsystems/commerce.go calls this from its init(); exactly one registration.
 func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) CommerceClient) {
 	commerceClientFactory = f
 }

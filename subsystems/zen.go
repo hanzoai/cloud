@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 	cloudmoney "github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/principal"
 	hmoney "github.com/hanzoai/money"
