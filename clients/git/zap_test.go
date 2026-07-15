@@ -216,7 +216,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	// 3) Cross-transport proof: the ZAP-created repo is present in the SAME store
 	// the REST handler reads, via the SAME core func (coreList) the REST list
 	// handler calls. One implementation, two transports.
-	out, err := coreList(mounted, context.Background(), "acme", "")
+	out, err := coreList(mounted.Load(), context.Background(), "acme", "")
 	if err != nil {
 		t.Fatalf("core list: %v", err)
 	}
