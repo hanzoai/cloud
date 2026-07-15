@@ -14,26 +14,33 @@ import (
 // (org is the ONLY tenant key) and nil-safe (no agents mounted → 0), and neither
 // can fan out to another tenant or to an org's every session by accident.
 
-// SessionMatch selects live (running|paused) sessions to stop or count. Fields are
-// ANDed with the org; an empty field is "any". Host targets a device; Provider +
-// Account target a linked AI account. An all-empty match selects NOTHING, so a
-// stop can never sweep an org's every session by accident.
+// SessionMatch selects live (running|paused) sessions to stop or count. Actor (the
+// owning subject, org/user) is MANDATORY and always ANDed, so a match can only ever
+// affect the caller's OWN sessions — never a co-tenant's. Host/Provider/Account are
+// optional narrowing WITHIN the actor's sessions (empty = any of the actor's). A
+// match with no actor selects NOTHING (fail-closed), so a login-out can never sweep
+// another user's — or an org's every — session, even when Host/Provider/Account are
+// attacker-set at link upsert.
 type SessionMatch struct {
+	Actor    string
 	Host     string
 	Provider string
 	Account  string
 }
 
+// empty reports whether the match lacks its mandatory actor scope. Without an actor
+// the match selects nothing — the fail-closed direction (an under-stop, never a
+// cross-user over-stop).
 func (m SessionMatch) empty() bool {
-	return strings.TrimSpace(m.Host) == "" &&
-		strings.TrimSpace(m.Provider) == "" &&
-		strings.TrimSpace(m.Account) == ""
+	return strings.TrimSpace(m.Actor) == ""
 }
 
-// where builds the ANDed predicate + args for a live-session match under org.
+// where builds the ANDed predicate + args for a live-session match under org. Actor
+// is always in the base predicate (the guard rejects an empty actor before this runs),
+// so a stop/count is bounded to the caller's own sessions before any optional narrowing.
 func (m SessionMatch) where(org string) (string, []any) {
-	where := "org=? AND status IN (?,?)"
-	args := []any{org, StatusRunning, StatusPaused}
+	where := "org=? AND actor=? AND status IN (?,?)"
+	args := []any{org, strings.TrimSpace(m.Actor), StatusRunning, StatusPaused}
 	if h := strings.TrimSpace(m.Host); h != "" {
 		where += " AND host=?"
 		args = append(args, h)
@@ -83,10 +90,12 @@ func (s *Store) countActiveMatch(ctx context.Context, org string, m SessionMatch
 // StopSessions closes every RUNNING|PAUSED session of org matching m — recording a
 // control "stop" event on each and transitioning it to a terminal state — and
 // returns how many it stopped. It is the action a login-out (link revoke) takes so
-// the sessions that ran under a revoked account/device are torn down. Org is the
-// ONLY tenant key; a caller for org A can never stop org B's sessions. An all-empty
-// match stops nothing (never an accidental org-wide stop). Not-mounted → (0, nil),
-// so a revoke tolerates a deployment with no session plane.
+// the sessions that ran under a revoked account/device are torn down. Org AND Actor
+// scope it: the caller passes their own actor (org/user), so a revoke can only ever
+// stop the caller's OWN sessions — never a co-tenant's, never an org's every session
+// — even though m's Host/Provider/Account come from an attacker-controllable link
+// row. A match with no actor stops nothing (fail-closed). Not-mounted → (0, nil), so
+// a revoke tolerates a deployment with no session plane.
 func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) {
 	if mounted == nil {
 		return 0, nil
