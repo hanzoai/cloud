@@ -31,6 +31,11 @@ type Config struct {
 	// Brand is the white-label brand identifier.
 	Brand string
 
+	// Version is the API contract/build version emitted as the X-Api-Version
+	// response header. Sourced from CLOUD_VERSION, else the link-time cloud.Version
+	// default (see version.go).
+	Version string
+
 	// Env is the deployment environment (mainnet|testnet|devnet) per the 3-env
 	// split. Billing fires in EVERY env — test/dev meter against their own
 	// sandbox commerce/Square, never free — so Env is an attribution label, not
@@ -321,6 +326,7 @@ func LoadConfig() *Config {
 
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
+		Version:                 getenv("CLOUD_VERSION", Version),
 		Env:                     getenv("CLOUD_ENV", ""),
 		Role:                    role.Writer, // safe default; Serve refines + validates from CLOUD_ROLE
 
