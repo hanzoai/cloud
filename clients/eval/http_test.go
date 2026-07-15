@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	"github.com/zap-proto/zip"
 )
 
 // mountApp builds the native eval surface with an IN-MEMORY telemetry store and a

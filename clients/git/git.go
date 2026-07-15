@@ -44,6 +44,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -81,8 +82,12 @@ func storeFor(s *cloud.Service[state], org string) (*Store, error) {
 	return s.State.stores.For(org, "")
 }
 
-// mounted is the active service so Shutdown can release the store.
-var mounted *cloud.Service[state]
+// mounted is the active service so Shutdown can release the store. It is read by
+// DETACHED lifecycle-reactor goroutines (notify / mirror-out / index-on-push) and
+// written by Mount/Shutdown, so it is an atomic.Pointer: a reactor goroutine that
+// outlives a Shutdown (or a test's Mount↔Shutdown cycle) reads it race-free (nil ⇒
+// unmounted, no-op) instead of tearing against the Shutdown write.
+var mounted atomic.Pointer[cloud.Service[state]]
 
 // ---- HTTP response shapes ----
 
@@ -168,10 +173,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		gitHost: defaultSSHHost(deps.Domain),
 		keys:    keys,
 	}}
-	mounted = s
+	mounted.Store(s)
 
 	routes(app, s)
 	registerLifecycleReactors()
+	// Install the git object-plane importer so the integrations plane (GitHub App)
+	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
+	cloud.RegisterGitImporter(githubImporter{})
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
@@ -260,20 +268,26 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // time and no-op when the subsystem is unmounted.
 var lifecycleOnce sync.Once
 
-// registerLifecycleReactors wires git's two subscribers onto the cloud lifecycle
-// stream: the Slack-notifier (notify.go) and the outbound mirror (mirror_out.go).
-// Both run detached + best-effort (EmitLifecycle), so neither can block or fail the
-// git/deploy path.
+// registerLifecycleReactors wires git's three subscribers onto the cloud lifecycle
+// stream: the Slack-notifier (notify.go), the outbound mirror (mirror_out.go), and
+// the code-index reactor (index_on_push.go). All run detached + best-effort
+// (EmitLifecycle dispatches each in its own goroutine), so none can block or fail
+// the git/deploy path.
 func registerLifecycleReactors() {
 	lifecycleOnce.Do(func() {
 		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
-			if s := mounted; s != nil {
+			if s := mounted.Load(); s != nil {
 				notifyLifecycle(s, ctx, ev)
 			}
 		})
 		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
-			if s := mounted; s != nil {
+			if s := mounted.Load(); s != nil {
 				mirrorOutbound(s, ctx, ev)
+			}
+		})
+		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
+			if s := mounted.Load(); s != nil {
+				indexOnPush(s, ctx, ev)
 			}
 		})
 	})
@@ -539,18 +553,19 @@ func genID(prefix string) (string, error) {
 // Shutdown stops the SSH listener and closes every open store (per-org repo
 // metadata + the SSH key registry). Idempotent.
 func Shutdown() error {
-	if mounted == nil {
+	s := mounted.Load()
+	if s == nil {
 		return nil
 	}
-	if mounted.State.ssh != nil {
-		mounted.State.ssh.stop()
+	if s.State.ssh != nil {
+		s.State.ssh.stop()
 	}
-	err := mounted.State.stores.CloseAll()
-	if mounted.State.keys != nil {
-		if kerr := mounted.State.keys.Close(); kerr != nil && err == nil {
+	err := s.State.stores.CloseAll()
+	if s.State.keys != nil {
+		if kerr := s.State.keys.Close(); kerr != nil && err == nil {
 			err = kerr
 		}
 	}
-	mounted = nil
+	mounted.Store(nil)
 	return err
 }
