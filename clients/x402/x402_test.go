@@ -15,9 +15,9 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/kms"
+	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/types"
