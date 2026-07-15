@@ -22,7 +22,7 @@ package under `clients/<name>` that obeys these seams — nothing more.
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
   the interface, never the implementation; the seam rides zap-proto/zip. Keep each
   interface minimal — add a method only when a consumer needs it.
-- **Composition root.** `subsystems/subsystems.go` blank-imports every subsystem
+- **Composition root.** `apps/apps.go` blank-imports every subsystem
   (its init runs `cloud.Register`), populating `cloud.Registry`. `MountAll`
   (build.go) sorts the registry by `Order` and calls `Mount` on each ENABLED
   subsystem (`cfg.Enabled`). That ordered blank-import set IS the wiring — there
