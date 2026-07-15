@@ -978,6 +978,8 @@ github.com/gojek/heimdall/v7 v7.0.3 h1:+5sAhl8S0m+qRRL8IVeHCJudFh/XkG3wyO++nvOg+
 github.com/gojek/heimdall/v7 v7.0.3/go.mod h1:Z43HtMid7ysSjmsedPTXAki6jcdcNVnjn5pmsTyiMic=
 github.com/gojek/valkyrie v0.0.0-20180215180059-6aee720afcdf h1:5xRGbUdOmZKoDXkGx5evVLehuCMpuO1hl701bEQqXOM=
 github.com/gojek/valkyrie v0.0.0-20180215180059-6aee720afcdf/go.mod h1:QzhUKaYKJmcbTnCYCAVQrroCOY7vOOI8cSQ4NbuhYf0=
+github.com/golang-jwt/jwt v3.2.2+incompatible h1:IfV12K8xAKAnZqdXVzCZ+TOjboZ2keLg81eXfW3O+oY=
+github.com/golang-jwt/jwt v3.2.2+incompatible/go.mod h1:8pz2t5EyA70fFQQSrl6XZXzqecmYZeUEB8OUGHkxJ+I=
 github.com/golang-jwt/jwt/v4 v4.0.0/go.mod h1:/xlHOz8bRuivTWchD4jCa+NbatV+wEUSzwAxVc6locg=
 github.com/golang-jwt/jwt/v4 v4.5.2 h1:YtQM7lnr8iZ+j5q71MGKkNw9Mn7AjHM68uc9g5fXeUI=
 github.com/golang-jwt/jwt/v4 v4.5.2/go.mod h1:m21LjoU+eqJr34lmDMbreY2eSTRJ1cv77w39/MY0Ch0=
@@ -1203,6 +1205,10 @@ github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo
 github.com/hanzoai/builder v0.3.13/go.mod h1:TWZaiP0Y9tCMwtLH2EvQqBAeT1f3aJI5Y0XPM8S0wcE=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
+github.com/hanzoai/commerce v1.47.0 h1:O76hhEGNGDSoKIaI1rYCN6UwPqeDPO+NTrP4G2H6SH4=
+github.com/hanzoai/commerce v1.47.0/go.mod h1:O7BmLpQpcSmkUOOu3vZ5ozOTACrPQBeW7glv/3E3T3c=
+github.com/hanzoai/commerce v1.47.1 h1:4HtDn8ONrORcx5BTuJglQHgUCoZn2baHt6TdDX2iKVs=
+github.com/hanzoai/commerce v1.47.1/go.mod h1:O7BmLpQpcSmkUOOu3vZ5ozOTACrPQBeW7glv/3E3T3c=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyfjmLYmY344=
@@ -1269,6 +1275,8 @@ github.com/hanzoai/search-go v0.36.0 h1:bQfbAs/bc/s3qZDCtSqEAxp48koHkb0Z4ezUknt2
 github.com/hanzoai/search-go v0.36.0/go.mod h1:jdcYUdG6exMfRfJvilWhaNdAR8XWQRPvZtuRxQBzn34=
 github.com/hanzoai/sendgrid-go v1.3.0 h1:3xobRSrOlJKqB6xWZiRCRXNuSdYlLtWKsso2CGh9viQ=
 github.com/hanzoai/sendgrid-go v1.3.0/go.mod h1:mbvVVFfX6i7VotafBZn2Lw+Nt+hOOajePyTlEs3ZjHo=
+github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible h1:xmFYu3gTLpu78mIx6z0bgpYy3MVdMAEFFeKs2YPybVo=
+github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible/go.mod h1:HTKx0R5LWWt7H1eG4pCpNS4PVO6tZIUVVZN/80sHz9o=
 github.com/hanzoai/sign v1.0.0 h1:xqrMzBHp/m7mxAsYgV/1/kT7x5GEXYOXfu9xbiKDeNg=
 github.com/hanzoai/sign v1.0.0/go.mod h1:pL+4Kwh+W2AsMaU0QUF/OJoe9eV/CWHhO07Z5KV2SOg=
 github.com/hanzoai/sqlite v0.3.0 h1:Siqa7b89CgSCteg5ubXOCQiPRxYIJGb9kMemwjXMIUQ=
@@ -2125,6 +2133,8 @@ github.com/segmentio/ksuid v1.0.4 h1:sBo2BdShXjmcugAMwjugoGUdUV0pcxY5mW4xKRn3v4c
 github.com/segmentio/ksuid v1.0.4/go.mod h1:/XUiZBD3kVx5SmUOl55voK5yeAbBNNIed+2O73XgrPE=
 github.com/sendgrid/rest v2.6.9+incompatible h1:1EyIcsNdn9KIisLW50MKwmSRSK+ekueiEMJ7NEoxJo0=
 github.com/sendgrid/rest v2.6.9+incompatible/go.mod h1:kXX7q3jZtJXK5c5qK83bSGMdV6tsOE70KbHoqJls4lE=
+github.com/sendgrid/sendgrid-go v3.16.1+incompatible h1:zWhTmB0Y8XCDzeWIm2/BIt1GjJohAA0p6hVEaDtHWWs=
+github.com/sendgrid/sendgrid-go v3.16.1+incompatible/go.mod h1:QRQt+LX/NmgVEvmdRw0VT/QgUn499+iza2FnDca9fg8=
 github.com/sergi/go-diff v1.4.0 h1:n/SP9D5ad1fORl+llWyN+D6qoUETXNZARKjyY2/KVCw=
 github.com/sergi/go-diff v1.4.0/go.mod h1:A0bzQcvG0E7Rwjx0REVgAGH58e96+X0MeOfepqsbeW4=
 github.com/sethvargo/go-password v0.2.0 h1:BTDl4CC/gjf/axHMaDQtw507ogrXLci6XRiLc7i/UHI=
