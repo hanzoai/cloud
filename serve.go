@@ -151,6 +151,26 @@ func Serve(specs []MountSpec, enable []string) error {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 
+	// Production response-header posture — the Stripe/Cloudflare/GitHub-grade
+	// signals plus a security floor, from ONE home in the framework so every
+	// service inherits the same wire posture. Registered right after RequestID
+	// (before the site edge and the business chain) so its headers ride out on
+	// every response: success, error, 404, AND the public-site static bytes.
+	//   - Server: the white-label brand of the request Host (BrandForHostOK) — a
+	//     lux/zoo caller is never served "hanzo" and no response leaks the
+	//     framework name; an unmatched Host falls back to this deployment's own
+	//     brand (cfg.Brand), never a framework/single-brand default.
+	//   - X-Api-Version: the build version (brand-neutral key) for support correlation.
+	//   - HSTS + nosniff: the always-safe security floor (no X-Frame-Options/CSP
+	//     here — the console SPA owns its own framing rules).
+	// X-Request-Id stays owned by RequestID above; the two compose.
+	app.Use(middleware.ProductionHeaders(middleware.ProductionHeadersConfig{
+		Brand:   func(host string) string { b, _ := BrandForHostOK(host); return b },
+		Neutral: cfg.Brand,
+		Version: cfg.Version,
+		HSTS:    true,
+	}))
+
 	// Markdown content negotiation. Registered here — outermost of the business
 	// chain, just inside Recover/RequestID — so its post-Continue transform sees
 	// the FINAL response body and re-serializes it via zap-proto/md when the
