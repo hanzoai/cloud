@@ -6,7 +6,7 @@
 // P2b swaps the internals for github.com/argoproj/gitops-engine pkg/health
 // (health.GetResourceHealth) for exact ArgoCD parity; the CODES emitted here are
 // already those strings, so the wire contract the console consumes does not change.
-package gitops
+package deploy
 
 import (
 	"strings"
