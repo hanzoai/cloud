@@ -140,6 +140,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: network=host
 
       - name: Mirror credential (registry.hanzo.ai)
         # Dual-host: pull the KMS deploy kubeconfig (same Universal Auth flow
@@ -171,9 +174,6 @@ jobs:
           echo "::add-mask::${UP#*:}"
           echo "${UP#*:}" | docker login registry.hanzo.ai -u "${UP%%:*}" --password-stdin
           echo "MIRROR_OK=1" >> "$GITHUB_ENV"
-        with:
-          driver: docker-container
-          driver-opts: network=host
 
       - name: Log in to ghcr.io (GH_PAT — writes the cloud package despite its ai-repo linkage)
         uses: docker/login-action@v3
