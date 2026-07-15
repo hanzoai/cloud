@@ -140,6 +140,13 @@ func Serve(specs []MountSpec, enable []string) error {
 		Logger:         deps.Logger,
 		ReadBufferSize: cfg.ReadBufferSize,
 		BodyLimit:      cfg.BodyLimit,
+		// Static Server fallback for responses the ProductionHeaders middleware
+		// cannot reach — the transport's own pre-routing errors (431/400) and any
+		// fiber path that bypasses the chain. Set to this deployment's brand so
+		// those bytes read Server: <brand>, never the framework default "zip" or
+		// "fasthttp" (zip>=v1.8.1 propagates this onto the fasthttp transport).
+		// Handled responses are still branded per-Host by ProductionHeaders.
+		ServerHeader: cfg.Brand,
 	})
 
 	// Canonical middleware pipeline. Order matters:
