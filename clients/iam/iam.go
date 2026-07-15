@@ -97,6 +97,23 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	dataDir := filepath.Join(deps.DataDir, "iam")
 	if deps.DataDir != "" {
 		_ = os.Setenv("IAM_DATA_DIR", dataDir)
+
+		// SHARED-GLOBAL ISOLATION (the reason "iam" was staged): both this Beego
+		// identity fork AND the sibling `ai` casibase/casdoor fork resolve their
+		// SQLite handle from the SAME process-global keys — env `dataSourceName`
+		// (checked first by both forks' conf.GetConfigString) and, failing that, the
+		// one beego web.AppConfig. A deployment sets `dataSourceName` for `ai`; with
+		// IAM enabled, IAM's bootstrap would resolve that SAME value and xorm-open —
+		// then auto-migrate its casdoor tables INTO — ai's database file. That is the
+		// documented co-residence crash ("ai: bootstrap: unable to open database file
+		// (14)") that pinned every post-embed release. IAM's conf already honors an
+		// IAM-scoped override (conf.GetConfigDataSourceName → IAM_DATABASE_URL wins
+		// over the shared `dataSourceName`), so pinning it here to IAM's OWN sqlite
+		// file under DataDir gives the two forks independent stores, order-independent
+		// and with NO fork edit. driverName ("sqlite") is shared harmlessly — both
+		// forks want the one Hanzo sqlite driver. An operator-set IAM_DATABASE_URL
+		// (explicit external DSN) is respected — only the default is filled in.
+		isolateDatabase(dataDir)
 	}
 
 	// cloud owns process shutdown, not Beego's graceful runner.
@@ -200,4 +217,23 @@ func initSessions() error {
 	web.GlobalSessions = mgr
 	go mgr.GC()
 	return nil
+}
+// isolateDatabase pins IAM's SQLite handle to its OWN file under dataDir via the
+// IAM-scoped IAM_DATABASE_URL override, so the embedded IAM never resolves the
+// shared `dataSourceName` (which a deployment sets for the sibling `ai` fork) and
+// the two casdoor-derived forks get independent stores. See the call site for the
+// full rationale (this is the co-residence unblock). An operator-set
+// IAM_DATABASE_URL is respected; only the default is filled in. Idempotent.
+func isolateDatabase(dataDir string) {
+	if _, ok := os.LookupEnv("IAM_DATABASE_URL"); ok {
+		return
+	}
+	_ = os.Setenv("IAM_DATABASE_URL", defaultIAMDatabaseURL(dataDir))
+}
+
+// defaultIAMDatabaseURL is IAM's default embedded SQLite DSN: its own iam.db under
+// the IAM data dir, WAL + a busy-timeout so a co-resident reader never trips
+// SQLITE_BUSY. Pure (no env/IO) so the isolation contract is unit-testable.
+func defaultIAMDatabaseURL(dataDir string) string {
+	return "file:" + filepath.ToSlash(filepath.Join(dataDir, "iam.db")) + "?cache=shared&_busy_timeout=5000&_journal_mode=WAL"
 }
