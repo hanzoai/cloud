@@ -26,7 +26,9 @@ import (
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
+	commercestore "github.com/hanzoai/commerce/api/store"
 	commercemid "github.com/hanzoai/commerce/middleware"
+	"github.com/hanzoai/commerce/middleware/iammiddleware"
 	log "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -41,16 +43,40 @@ func init() {
 	})
 }
 
+// commercePrefixes is every root path the commerce surface owns on the shared
+// app. Under the native SharedApp contract most of these are registered by
+// commerce's own setupRoutes; the list is the fail-closed 503 set AND the wire
+// contract commerce_prefix_test pins — the route families a session gate or the
+// AI /v1/* catch-all must never swallow:
+var commercePrefixes = []string{
+	"/v1/commerce", // public checkout + tenant + catalog + deposits
+	"/_/commerce",  // tenant-admin surface
+	// The BARE store surface: GET /v1/store/current (the org-scoped default
+	// store the admin dashboard AND the content storefront edge resolve), the
+	// per-listing upsert /v1/store/:id/listing/:slug the publish edge writes,
+	// and the public storefront reads karma.style serves at runtime. Without
+	// this owner, /v1/store/* fell through to the bare /v1/* AI catch-all —
+	// whose prepaid BALANCE gate 402'd every store read (a store-metadata read
+	// must never require an LLM balance).
+	"/v1/store",
+	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
+	// Square et al). The provider's HMAC over the registered notification URL +
+	// body IS the auth; a bearer gate is impossible for provider callbacks.
+	"/v1/billing/webhooks",
+	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
+	// durable cron's poke carries the COMMERCE_SERVICE_TOKEN bearer; without
+	// this owner it lands on the account-bridge /v1/billing/* catch-all, whose
+	// session gate 403s a service token. (Landed 5x before the unfork — #274 —
+	// and the pin test lives beside THIS list so it can't silently regress.)
+	"/v1/billing/auto-recharge",
+}
+
 // mountCommerce boots commerce ON the shared zip app (native co-residence).
-// commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/* directly;
-// the standalone-only surfaces (bare /healthz, legacy /admin SPA, checkout SPA
-// root catch-all, Listen) are skipped by the SharedApp contract. This adapter
-// adds the two cloud-edge concerns commerce-standalone got elsewhere:
-//
-//   - /_/commerce/healthz — probe endpoint independent of commerce's own state.
-//   - /v1/billing/webhooks/:provider — the provider-callback path the live
-//     Square registration points at (pay.hanzo.ai). The provider's HMAC IS the
-//     auth; RequestContext gates the ctx exactly as commerce's own chain does.
+// commerce's own setupRoutes registers /v1/commerce/* and /_/commerce/*
+// directly; the standalone-only surfaces (bare /healthz, legacy /admin SPA,
+// checkout SPA root catch-all, Listen) are skipped by the SharedApp contract.
+// This adapter registers the remaining wire-contract families with commerce's
+// own gate chains (see commercePrefixes).
 func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
 		return fmt.Errorf("commerce: nil zip.App")
@@ -96,16 +122,25 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		return nil
 	}
 
+	// The BARE /v1/store surface (see commercePrefixes). Group-scoped chain
+	// mirrors the standalone /v1 bundle: gated request context, host, IAM
+	// resolution; store.Route's own tokenRequired arg gates the CRUD.
+	storeV1 := app.Group("/v1")
+	storeV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commercemid.ErrorHandlerJSON())
+	// Unconditional, exactly like the standalone bundle: IAMTokenRequired
+	// no-ops gracefully when IAM is not initialized.
+	storeV1.Use(iammiddleware.IAMTokenRequired())
+	commercestore.Route(storeV1, commercemid.TokenRequired())
+
 	// Provider webhook intake at the LIVE registered path. Chain mirrors the
 	// commerce-standalone posture: gated request context, then the sessionless
 	// HMAC-verified handler.
 	app.Post("/v1/billing/webhooks/:provider", commercemid.RequestContext(), commercebilling.HandleProviderWebhook)
 
 	// Durable-cron auto-recharge poke (COMMERCE_SERVICE_TOKEN bearer) at its
-	// live path — commercePrefixes pins it; the bridge's session gate would
-	// 403 the poke. Same gate chain the commerce route table uses:
-	// TokenRequired authenticates the service token, PlatformOnly authorizes
-	// the mint.
+	// live path — the bridge's session gate would 403 the poke. Same gate
+	// chain the commerce route table uses: TokenRequired authenticates the
+	// service token, PlatformOnly authorizes the mint.
 	app.Post("/v1/billing/auto-recharge/run-all",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
@@ -129,7 +164,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	return nil
 }
 
-// mountCommerceFailClosed serves an honest JSON 503 on the commerce prefixes when
+// mountCommerceFailClosed serves an honest JSON 503 on every commerce prefix when
 // the embed cannot boot, so /v1/commerce/* answers "commerce unavailable" instead
 // of falling through to another subsystem's catch-all.
 func mountCommerceFailClosed(app *zip.App) {
@@ -140,17 +175,4 @@ func mountCommerceFailClosed(app *zip.App) {
 	for _, p := range commercePrefixes {
 		app.All(p+"/*", failed)
 	}
-}
-
-// commercePrefixes is every root path the commerce surface owns on the shared
-// app — the fail-closed 503 set, and the contract commerce_prefix_test pins.
-var commercePrefixes = []string{
-	"/v1/commerce", // public checkout + tenant + catalog + deposits
-	"/_/commerce",  // tenant-admin surface
-	// Payment-provider webhook receiver — the live Square registration
-	// (pay.hanzo.ai/v1/billing/webhooks/square) points here; HMAC is the auth.
-	"/v1/billing/webhooks",
-	// Durable-cron poke (service-token bearer) — must never hit the bridge's
-	// session gate.
-	"/v1/billing/auto-recharge",
 }
