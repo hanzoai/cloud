@@ -126,7 +126,7 @@ func TestGitHubImportFastForwardAndStatus(t *testing.T) {
 	}
 
 	// The outbound mirror target was registered (so a native push mirrors back).
-	store, err := storeFor(mounted, "acme")
+	store, err := storeFor(mounted.Load(), "acme")
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestInboundNotImportedNoOp(t *testing.T) {
 	if !res.NoOp {
 		t.Fatalf("un-imported inbound must be NoOp, got %+v", res)
 	}
-	store, _ := storeFor(mounted, "acme")
+	store, _ := storeFor(mounted.Load(), "acme")
 	if _, err := store.Get(ctx, "acme", "", "ghost"); !errors.Is(err, errNotFound) {
 		t.Fatalf("inbound must not auto-create the repo; Get err = %v", err)
 	}
