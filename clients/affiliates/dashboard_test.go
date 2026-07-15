@@ -432,6 +432,105 @@ func decodeLeaderboard(t *testing.T, body []byte) leaderboardResp {
 	return lb
 }
 
+// TestAccrualConverges is the top-up proof: because month-to-date spend fills in over the
+// period, sweeping the SAME period repeatedly as spend grows must TRACK the growing
+// month-to-date (converging to the month-end value), never freeze at the first partial
+// reading — while never decreasing on a later lower reading (monotone). At every step the
+// stored share stays ≤ that step's margin, so the money invariant survives the rework.
+func TestAccrualConverges(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+	idA, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	attributeOK(t, app, "orgB", codeA) // B referred by A
+
+	// Month-to-date spend grows across sweeps of the SAME (current) period. The repeated
+	// 3000 also proves an unchanged re-sweep is a no-op (idempotent within the top-up).
+	for _, spend := range []int64{3000, 3000, 6000, 10000} {
+		fc.setSpend("orgB", spend)
+		req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+
+		a, _ := s.State.store.GetByID(ctx, idA)
+		want := share(spend, defaultRateBps)
+		if a.AccruedCents != want {
+			t.Fatalf("spend %d: accrued = %d, want %d (tracks month-to-date, not frozen)", spend, a.AccruedCents, want)
+		}
+		// Per-event invariant at EVERY intermediate step: the stored share ≤ the margin, and
+		// the row's margin base tracks the current spend (row stays internally consistent).
+		acc, _ := s.State.store.AccrualsForSource(ctx, "orgB")
+		if len(acc) != 1 {
+			t.Fatalf("spend %d: want 1 accrual row, got %d", spend, len(acc))
+		}
+		if acc[0].CommissionCents > acc[0].MarginCents {
+			t.Fatalf("spend %d: share %d EXCEEDS margin %d mid-convergence", spend, acc[0].CommissionCents, acc[0].MarginCents)
+		}
+		if acc[0].MarginCents != marginOf(spend, defaultMarginBps) {
+			t.Fatalf("spend %d: margin base = %d, want %d (current spend)", spend, acc[0].MarginCents, marginOf(spend, defaultMarginBps))
+		}
+	}
+	// Converged to the month-end value.
+	final, _ := s.State.store.GetByID(ctx, idA)
+	if final.AccruedCents != share(10000, defaultRateBps) {
+		t.Fatalf("converged accrued = %d, want %d (margin(final)×rate)", final.AccruedCents, share(10000, defaultRateBps))
+	}
+
+	// A DROP in month-to-date (a refund/correction) must NOT reduce accrued — monotone; the
+	// high-water share holds, so the platform never claws back an already-earned share.
+	fc.setSpend("orgB", 4000)
+	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+	held, _ := s.State.store.GetByID(ctx, idA)
+	if held.AccruedCents != share(10000, defaultRateBps) {
+		t.Fatalf("accrued dropped on a lower month-to-date: %d, want held at %d (monotone)", held.AccruedCents, share(10000, defaultRateBps))
+	}
+}
+
+// TestAccrualConvergesAtMaxRate is the tight-boundary top-up proof: a full 3-level chain
+// with the DIRECT rate at the cap (L1+L2+L3 = 100% of margin) swept across a growing
+// month-to-date. At EVERY step the summed share across the levels stays ≤ the margin (and
+// equals it at the cap), so convergence never lets Σ(share) cross the margin — the exact
+// invariant Red brute-forced, now proven to hold at every intermediate sweep too.
+func TestAccrualConvergesAtMaxRate(t *testing.T) {
+	app, s, fc := mount(t)
+	ctx := context.Background()
+	idC, codeC := applyAndApprove(t, app, s, "orgC", "ccc", "")
+	_, codeB := applyAndApprove(t, app, s, "orgB", "bbb", "")
+	_, codeA := applyAndApprove(t, app, s, "orgA", "aaa", "")
+	attributeOK(t, app, "orgC", codeB) // C←B
+	attributeOK(t, app, "orgB", codeA) // B←A
+	attributeOK(t, app, "orgD", codeC) // D←C (D is a plain spender: upline C,B,A)
+	// Push L1 to the cap so the whole schedule equals exactly 100% of the margin.
+	if st, _ := req(t, app, http.MethodPost, "/v1/admin/affiliates/"+idC+"/rate", "admin", true, map[string]any{"rateBps": maxL1RateBps}); st != http.StatusOK {
+		t.Fatalf("set L1 rate to cap failed")
+	}
+
+	for _, spend := range []int64{2500, 2500, 5000, 10000} {
+		fc.setSpend("orgD", spend)
+		req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
+
+		margin := marginOf(spend, defaultMarginBps)
+		accruals, _ := s.State.store.AccrualsForSource(ctx, "orgD")
+		if len(accruals) != maxDepth {
+			t.Fatalf("spend %d: want %d accrual rows, got %d", spend, maxDepth, len(accruals))
+		}
+		var total int64
+		for _, ac := range accruals {
+			if ac.CommissionCents > ac.MarginCents {
+				t.Fatalf("spend %d level %d: share %d EXCEEDS margin %d", spend, ac.Level, ac.CommissionCents, ac.MarginCents)
+			}
+			if ac.MarginCents != margin {
+				t.Fatalf("spend %d level %d: margin base %d, want %d (current spend)", spend, ac.Level, ac.MarginCents, margin)
+			}
+			total += ac.CommissionCents
+		}
+		// Σ(share) ≤ margin at every step; at the cap it equals margin(current spend).
+		if total > margin {
+			t.Fatalf("spend %d: Σ share %d EXCEEDS margin %d — invariant broken mid-convergence", spend, total, margin)
+		}
+		if total != margin {
+			t.Fatalf("spend %d: Σ share %d, want == margin %d at the max schedule", spend, total, margin)
+		}
+	}
+}
+
 // TestLeaderboardPrivacy is the leaderboard proof: only OPT-IN handles are listed (by
 // handle, aggregate share, never an org identity); the caller's OWN exact rank is
 // always visible even when anonymous or outside the list; and no org id ever leaks.
