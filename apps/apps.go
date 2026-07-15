@@ -58,6 +58,7 @@ import (
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/automations"
+	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/bot"
@@ -313,6 +314,11 @@ func Wire() []cloud.MountSpec {
 		// engine is wired.
 		{Name: "cron", Mount: cloud.Typed(cron.Mount)},
 		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
+		// Native single-connector execution (HIP-0126): runs an ActivePieces JS
+		// connector action in-process via goja (clients/connectorruntime), retiring
+		// the standalone auto Node engine. Mounts POST /v1/automations/connectors/:id/run,
+		// paired with the automations catalogue above; STAGED like the rest.
+		{Name: "connectorruntime", Mount: cloud.Typed(connectorruntime.Mount)},
 		// Unified tool plane: /v1/tools/* — the ONE registry (connectors, functions,
 		// agents, skills, external MCP servers, full-cloud-control /v1 routes), per-org
 		// activation, and the unified MCP endpoint. Sources register into it from their
