@@ -34,8 +34,12 @@ import (
 
 // SessionMatch selects the live sessions a revoke stops. Fields are ANDed with the
 // org; an empty field is "any". A link revoke matches {Host,Provider,Account} (the
-// device+account the sessions ran under); a device revoke matches {Host}.
+// device+account the sessions ran under); a device revoke matches {Host}. Subject is
+// the REVOKING user; the adapter turns it into the session Actor so a stop only ever
+// reaches that user's OWN sessions — Host/Provider/Account (attacker-set at link
+// upsert) can then only narrow WITHIN them, never widen to a co-tenant's.
 type SessionMatch struct {
+	Subject  string
 	Host     string
 	Provider string
 	Account  string
@@ -329,7 +333,7 @@ func deviceDetail(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, a := range accounts {
 		d.Accounts = append(d.Accounts, toLinkView(a))
 	}
-	d.ActiveSessions = countActive(s, c.Context(), org, SessionMatch{Host: d.Host})
+	d.ActiveSessions = countActive(s, c.Context(), org, SessionMatch{Subject: user, Host: d.Host})
 	return c.JSON(http.StatusOK, d)
 }
 
@@ -364,7 +368,7 @@ func revokeLink(s *cloud.Service[state], c *zip.Ctx) error {
 	if !found {
 		return zip.ErrNotFound("link not found")
 	}
-	stopped := stopSessions(s, c.Context(), org, SessionMatch{Host: l.Host, Provider: l.Provider, Account: l.Account})
+	stopped := stopSessions(s, c.Context(), org, SessionMatch{Subject: user, Host: l.Host, Provider: l.Provider, Account: l.Account})
 	return c.JSON(http.StatusOK, revokeResp{Revoked: 1, SessionsStopped: stopped, Links: []linkView{toLinkView(l)}})
 }
 
@@ -381,8 +385,8 @@ func revokeDevice(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(revoked) == 0 {
 		return zip.ErrNotFound("device not found or already revoked")
 	}
-	// Stop every session on the device (all accounts).
-	stopped := stopSessions(s, c.Context(), org, SessionMatch{Host: revoked[0].Host})
+	// Stop every session THIS USER ran on the device (all their accounts).
+	stopped := stopSessions(s, c.Context(), org, SessionMatch{Subject: user, Host: revoked[0].Host})
 	views := make([]linkView, 0, len(revoked))
 	for _, l := range revoked {
 		views = append(views, toLinkView(l))
