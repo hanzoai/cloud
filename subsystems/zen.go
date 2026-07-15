@@ -5,6 +5,7 @@ package subsystems
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -50,7 +51,8 @@ import (
 //   - the user (c.User) is the actor for the audit trail.
 //
 // It is wired BEFORE ai in Wire() so Claim's c.Next() falls through to ai's
-// catch-all. zen's catalog reads its upstream keys from KMS via the Key resolver.
+// catch-all. zen's catalog resolves its upstream keys via the Key resolver: a
+// sealed KMS-store value if present, else the KMS-injected environment.
 func mountZen(app any, deps cloud.Deps) error {
 	a, ok := app.(*zip.App)
 	if !ok {
@@ -157,20 +159,20 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		return // never debit an unattributable request
 	}
 	usage := metering.Usage{
-		User:            u.Tenant.BillingOrg,
-		Org:             u.Tenant.BillingOrg,
-		Actor:           u.Tenant.User,
-		Model:           u.Model,
-		Provider:        zenProvider,
-		Service:         zenService,
-		Project:         u.Tenant.Project,
-		PromptTokens:    u.PromptTokens,
+		User:             u.Tenant.BillingOrg,
+		Org:              u.Tenant.BillingOrg,
+		Actor:            u.Tenant.User,
+		Model:            u.Model,
+		Provider:         zenProvider,
+		Service:          zenService,
+		Project:          u.Tenant.Project,
+		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
-		TotalTokens:     u.PromptTokens + u.CompletionTokens,
-		Amount:          cloudmoney.FromInt(u.Cost.Minor()), // exact 18-dp USD, no floor
-		RequestID:       u.RequestID,
-		Currency:        "usd",
-		Status:          "success",
+		TotalTokens:      u.PromptTokens + u.CompletionTokens,
+		Amount:           cloudmoney.FromInt(u.Cost.Minor()), // exact 18-dp USD, no floor
+		RequestID:        u.RequestID,
+		Currency:         "usd",
+		Status:           "success",
 	}
 	// Detached: the request context is recycled once the handler returns, so a
 	// background context carries the debit to commerce without racing the reply.
@@ -186,20 +188,20 @@ const zenService = "ai"
 // (the LLM family zen owns) for internal cost reconciliation vs the raw upstream.
 const zenProvider = "zen"
 
-// zenKeyResolver is zen's credential resolver backed by KMS. zen's catalog
-// names each provider's key by an env-var convention (DO_AI_API_KEY,
-// ANTHROPIC_API_KEY, …); the resolver turns that name into a KMS secret lookup.
-// A missing/empty secret returns "" — zen's upstream call then fails fast at
-// the provider (never silent free usage).
+// zenKeyResolver resolves an upstream provider credential named by the catalog's
+// env-var convention (DO_AI_API_KEY, ANTHROPIC_API_KEY, …). It prefers a value
+// sealed in the co-resident KMS store, then falls back to the KMS-injected
+// environment — the platform convention for upstream provider keys, which arrive
+// as env from the cloud-api-llm-keys secret (the same source clients/commerce/api/costs
+// reads). The value is never logged. Absent from BOTH surfaces it returns "" so
+// zen's upstream call fails fast at the provider (never silent free usage).
 func zenKeyResolver(kms cloud.KMSClient) func(context.Context, string) string {
 	return func(ctx context.Context, envName string) string {
-		if kms == nil {
-			return ""
+		if kms != nil {
+			if b, err := kms.GetSecret(ctx, envName); err == nil && len(b) > 0 {
+				return string(b)
+			}
 		}
-		b, err := kms.GetSecret(ctx, envName)
-		if err != nil || len(b) == 0 {
-			return ""
-		}
-		return string(b)
+		return os.Getenv(envName)
 	}
 }
