@@ -504,7 +504,7 @@ func EmitLifecycle(ctx context.Context, ev LifecycleEvent) {
 // pickCommerceClient resolves deps.Commerce — the typed inter-subsystem client the
 // entitlements/licensing tier calls (GetOrgConfig, CheckEntitlement). When the
 // commerce subsystem is co-resident (Enabled("commerce")) it returns the IN-PROCESS
-// client via the factory subsystems/commerce.go registers in init() — a direct Go
+// client via the factory apps/commerce.go registers in init() — a direct Go
 // call that reads the embedded commerce datastore (hanzoai/commerce MODULE, since
 // the un-fork) + the @hanzo/plans vocabulary, no network hop (the HIP-0106
 // co-resident default). The factory inversion stays because the concrete client
@@ -533,14 +533,14 @@ func pickCommerceClient(cfg *Config, log luxlog.Logger) CommerceClient {
 }
 
 // commerceClientFactory constructs the embedded in-process Commerce client.
-// subsystems/commerce.go registers it in init(); pickCommerceClient calls it so
+// apps/commerce.go registers it in init(); pickCommerceClient calls it so
 // package cloud depends on the CommerceClient interface + this hook, never the
 // concrete commerceinproc package (whose entitlement client pulls clients/plan,
 // which imports cloud — the hook is what keeps the package graph acyclic).
 var commerceClientFactory func(cfg *Config, log luxlog.Logger) CommerceClient
 
 // RegisterCommerceClientFactory installs the embedded-Commerce client constructor.
-// subsystems/commerce.go calls this from its init(); exactly one registration.
+// apps/commerce.go calls this from its init(); exactly one registration.
 func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) CommerceClient) {
 	commerceClientFactory = f
 }
@@ -658,7 +658,7 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 
 // MountFunc is a subsystem's mount contract. app is `any`, not *zip.App, and that
 // is load-bearing: some external modules expose Mount as func(any, Deps) error
-// (e.g. hanzoai/licensing), which subsystems.Wire references DIRECTLY — a
+// (e.g. hanzoai/licensing), which apps.Wire references DIRECTLY — a
 // func(any,…) value is not assignable to a func(*zip.App,…) parameter, so
 // narrowing the type would break them at compile time. The concrete value is
 // always a *zip.App; strongly-typed Mounts (func(*zip.App, Deps) error, what every
@@ -688,7 +688,7 @@ func Typed(mount func(*zip.App, Deps) error) MountFunc {
 type ShutdownFunc func(ctx context.Context) error
 
 // MountSpec describes one subsystem to mount. There is NO Order field: the slice
-// position in subsystems.Wire() IS the mount order — the composition root lists
+// position in apps.Wire() IS the mount order — the composition root lists
 // subsystems in the exact sequence they mount (and, reversed, tear down), so order
 // is data read top-to-bottom in one file, not ints scattered across the tree.
 type MountSpec struct {
@@ -703,7 +703,7 @@ type MountSpec struct {
 }
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
-// the composition root's (subsystems.Wire()); MountAll does NOT sort. app is the
+// the composition root's (apps.Wire()); MountAll does NOT sort. app is the
 // concrete *zip.App from Serve; the MountFunc accepts it as `any` and in-repo
 // subsystems recover it via Typed.
 //
