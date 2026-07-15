@@ -213,6 +213,28 @@ func New(db *datastore.Datastore) *Store {
 	return s
 }
 
+// DefaultSlug is the stable slug of the store every org gets on first use. It is
+// safe to reuse across tenants because each org's merchant rows live in its OWN
+// namespaced store (datastore.NewNamespaced), so the slug never collides.
+const DefaultSlug = "default"
+
+// EnsureDefault returns the org's default store, creating it on first use. This is
+// the ONE canonical way an org gets its commerce store: idempotent (keyed by the
+// stable DefaultSlug), org-scoped (db MUST be a per-org datastore.NewNamespaced),
+// and carrying NO payment credentials — binding Square/Stripe stays a separate
+// business step. It replaces the long-dead commented-out provisioning in
+// util/provision: a store is lazily provisioned at the first authenticated
+// GET /v1/store/current instead of eagerly at org creation.
+func EnsureDefault(db *datastore.Datastore) (*Store, error) {
+	s := New(db)
+	s.Name = "Default Store"
+	s.Slug = DefaultSlug
+	if err := s.GetOrCreate("Slug=", DefaultSlug); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
 func Query(db *datastore.Datastore) datastore.Query {
 	return db.Query("store")
 }

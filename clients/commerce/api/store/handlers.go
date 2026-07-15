@@ -17,8 +17,12 @@ func Route(router router.Router, args ...gin.HandlerFunc) {
 
 	api := rest.New(store.Store{})
 
-	// Admin dashboard expects /store/current to return the default store.
-	api.GET("/current", getCurrent)
+	// Admin dashboard + the content storefront edge expect /store/current to return
+	// the caller org's store. getCurrent resolves the org FROM CONTEXT, so /current
+	// must run behind the same base auth gate (args = tokenRequired) that sets it —
+	// custom sub-routes do NOT inherit the base CRUD middleware (see util/rest.Route).
+	current := append(append([]gin.HandlerFunc{}, args...), getCurrent)
+	api.GET("/current", current...)
 
 	// Mint the org's least-privilege Published storefront read key (design
 	// path b). Admin-gated + org-bound; the returned token is stored in KMS and
