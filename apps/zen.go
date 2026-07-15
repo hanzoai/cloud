@@ -1,6 +1,6 @@
 // Copyright 2026 Hanzo AI Inc. All Rights Reserved.
 
-package subsystems
+package apps
 
 import (
 	"context"
