@@ -52,6 +52,14 @@ type Session struct {
 	Cwd    string
 	Repo   string
 	Target string
+
+	// Provider/Account tag a session with the linked AI account it ran under (the
+	// login-manager tie-in): which provider (claude|codex|hanzo|…) and which
+	// subscription/api account served this run. Optional (a surface that doesn't
+	// know sets ""), surfaced so the cockpit shows "this ran on your Claude Max
+	// acct" and so a login-out (link revoke) can stop the sessions that used it.
+	Provider string
+	Account  string
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -116,7 +124,9 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   host             TEXT NOT NULL DEFAULT '',
   cwd              TEXT NOT NULL DEFAULT '',
   repo             TEXT NOT NULL DEFAULT '',
-  target           TEXT NOT NULL DEFAULT ''
+  target           TEXT NOT NULL DEFAULT '',
+  provider         TEXT NOT NULL DEFAULT '',
+  account          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_sessions_org_root ON agent_sessions(org, root_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_parent ON agent_sessions(org, parent_id, created_at);
@@ -141,10 +151,12 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 	// Forward, idempotent: a sessions table created before the execution-context
 	// columns existed gains them here (the CREATE above only runs on a fresh DB).
 	if err := s.addColumns("agent_sessions", map[string]string{
-		"host":   "TEXT NOT NULL DEFAULT ''",
-		"cwd":    "TEXT NOT NULL DEFAULT ''",
-		"repo":   "TEXT NOT NULL DEFAULT ''",
-		"target": "TEXT NOT NULL DEFAULT ''",
+		"host":     "TEXT NOT NULL DEFAULT ''",
+		"cwd":      "TEXT NOT NULL DEFAULT ''",
+		"repo":     "TEXT NOT NULL DEFAULT ''",
+		"target":   "TEXT NOT NULL DEFAULT ''",
+		"provider": "TEXT NOT NULL DEFAULT ''",
+		"account":  "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
 	}
@@ -154,19 +166,21 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 	// column and fail on the old schema ("no such column: target").
 	if _, err := s.db.Exec(`
 CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target);
-CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);`); err != nil {
+CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provider, account);`); err != nil {
 		return fmt.Errorf("migrate sessions indexes: %w", err)
 	}
 	return nil
 }
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account`
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
-		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target)
+		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target,
+		&x.Provider, &x.Account)
 	return x, err
 }
 
@@ -191,10 +205,10 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
-		x.Host, x.Cwd, x.Repo, x.Target)
+		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
