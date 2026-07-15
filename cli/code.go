@@ -104,6 +104,7 @@ type codeAgent struct {
 	configHome   string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
 	seed         func(dir string) error     // one-time defaults for the isolated config dir
 	appendSystem []string                   // --append-system-prompt + text; ALWAYS applied (identity, not a permission bypass — present in --safe too)
+	mcp          bool                       // auto-wire the Hanzo MCP server (code/vector/web/vision tools) as an stdio server scoped to the cwd
 	install      string                     // hint when the binary is missing
 }
 
@@ -163,7 +164,11 @@ var codeAgents = map[string]codeAgent{
 		// cleanly in /model instead of a stale saved value.
 		configHome: "CLAUDE_CONFIG_DIR",
 		seed:       seedClaudeConfig,
-		install:    "npm i -g @anthropic-ai/claude-code",
+		// Auto-wire the Hanzo MCP server so `hanzo code claude` starts with the
+		// Hanzo tool lattice (code search over the cloud index, web search, vision,
+		// fs/exec/git) instead of a bare model. Resolved + injected in runCode.
+		mcp:     true,
+		install: "npm i -g @anthropic-ai/claude-code",
 	},
 	"codex": codexLike("codex", "npm i -g @openai/codex"),
 	"dev":   codexLike("dev", "npm i -g @hanzo/dev"),
@@ -282,13 +287,14 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 		return err
 	}
 
-	argv := codeArgv(agent, base, model, safe, rest)
-
 	for _, k := range agent.clear {
 		if err := os.Unsetenv(k); err != nil {
 			return err
 		}
 	}
+	// The isolated config dir is resolved BEFORE argv so the MCP config file can be
+	// written into it (and cleaned with the rest of the session state).
+	var configDir string
 	if agent.configHome != "" {
 		dir, err := hanzoDir()
 		if err != nil {
@@ -302,7 +308,22 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 		if err := os.Setenv(agent.configHome, dir); err != nil {
 			return err
 		}
+		configDir = dir
 	}
+	// Auto-wire the Hanzo MCP server (code search over the cloud index, web search,
+	// vision, fs/exec/git) so the agent starts with the tool lattice, not a bare
+	// model. Appended to the agent's own args; a missing server warns, never blocks.
+	if agent.mcp && configDir != "" {
+		cwd, _ := os.Getwd()
+		if flags, warn := mcpArgs(configDir, cwd); warn != "" {
+			fmt.Fprintf(env.out, "hanzo mcp: %s\n", warn)
+		} else {
+			rest = append(rest, flags...)
+		}
+	}
+
+	argv := codeArgv(agent, base, model, safe, rest)
+
 	for k, v := range agent.wire(base, token, model) {
 		if err := os.Setenv(k, v); err != nil {
 			return err
@@ -329,6 +350,63 @@ func codeArgv(agent codeAgent, base, model string, safe bool, rest []string) []s
 	argv = append(argv, agent.appendSystem...) // identity — applies in safe AND full-auto
 	argv = append(argv, rest...)
 	return argv
+}
+
+// mcpArgs resolves the Hanzo MCP server and returns the flags that attach it to a
+// claude session, scoped to cwd. It ports the Rust CLI's resolve_mcp: prefer an
+// installed `hanzo-mcp` on PATH, else `uvx hanzo-mcp` (ephemeral), else nothing —
+// MCP is an enhancement, so a missing server never blocks the session. The Hanzo
+// server is layered via --mcp-config, and --strict-mcp-config makes it the SOLE
+// MCP source: a repo's own .mcp.json is NOT loaded (it can carry a hostile stdio
+// server that would inherit the session's bearer). The config file is written into
+// the isolated config dir so it is cleaned with the rest of the hanzo session state.
+//
+// Returns the argv flags to append (possibly empty) and a warning to surface when
+// no server could be resolved, so the caller can tell the user tools are absent.
+func mcpArgs(configDir, cwd string) (flags []string, warn string) {
+	prog, args := resolveHanzoMCP(cwd)
+	if prog == "" {
+		return nil, "hanzo-mcp not found (install: `uv tool install hanzo-mcp`); launching without Hanzo tools"
+	}
+	cfg := mcpConfigJSON(prog, args)
+	path := filepath.Join(configDir, "mcp.json")
+	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+		return nil, "could not write MCP config; launching without Hanzo tools"
+	}
+	// --strict-mcp-config: the Hanzo server is the ONLY MCP source (a repo
+	// .mcp.json is ignored — it could ship a bearer-exfiltrating stdio server).
+	return []string{"--mcp-config", path, "--strict-mcp-config"}, ""
+}
+
+// resolveHanzoMCP finds how to launch hanzo-mcp as an stdio server scoped to cwd:
+// an installed console script first, else uv's ephemeral runner. Empty program =
+// neither is on PATH.
+func resolveHanzoMCP(cwd string) (prog string, args []string) {
+	if p, err := exec.LookPath("hanzo-mcp"); err == nil {
+		return p, []string{"--project-dir", cwd}
+	}
+	if p, err := exec.LookPath("uvx"); err == nil {
+		return p, []string{"hanzo-mcp", "--project-dir", cwd}
+	}
+	return "", nil
+}
+
+// mcpConfigJSON is the --mcp-config document adding Hanzo's stdio server. Claude
+// requires an explicit "type". Marshaled (not fmt'd) so the cwd/program are
+// correctly escaped.
+func mcpConfigJSON(prog string, args []string) string {
+	doc := map[string]any{
+		"mcpServers": map[string]any{
+			"hanzo": map[string]any{
+				"type":    "stdio",
+				"command": prog,
+				"args":    args,
+				"env":     map[string]string{},
+			},
+		},
+	}
+	b, _ := json.Marshal(doc)
+	return string(b)
 }
 
 // seedClaudeConfig writes first-run defaults into the isolated config dir so
