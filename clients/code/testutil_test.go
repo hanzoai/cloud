@@ -78,6 +78,8 @@ func newTestApp(t *testing.T) (*zip.App, *service) {
 	app.Get("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/index", s.handleIndex)
+	app.Get("/v1/code/tree", s.handleTree)
+	app.Get("/v1/code/file", s.handleFile)
 	return app, s
 }
 
