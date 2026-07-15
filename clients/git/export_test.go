@@ -20,7 +20,7 @@ func TestExport_VerifyRef_OrgScopedTip(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
-	bareAbs := mounted.State.storage.absRepoPath("acme", "", "code")
+	bareAbs := mounted.Load().State.storage.absRepoPath("acme", "", "code")
 	work := t.TempDir()
 	gitRun(t, work, "init", "-q", "-b", "main")
 	writeFile(t, work, "a.txt", "one")
@@ -46,9 +46,9 @@ func TestExport_VerifyRef_OrgScopedTip(t *testing.T) {
 }
 
 func TestExport_NilSafe(t *testing.T) {
-	prev := mounted
-	mounted = nil
-	t.Cleanup(func() { mounted = prev })
+	prev := mounted.Load()
+	mounted.Store(nil)
+	t.Cleanup(func() { mounted.Store(prev) })
 	if CloneURL("a", "b") != "" {
 		t.Fatal("CloneURL must be empty when unmounted")
 	}
