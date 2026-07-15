@@ -33,6 +33,7 @@ func TestProductionHeaders_WiredWithBrandRegistry(t *testing.T) {
 		"api.hanzo.ai":      "hanzo",
 		"hanzo.cloud":       "hanzo", // AltDomain
 		"api.lux.network":   "lux",
+		"api.lux.network.":  "lux", // trailing FQDN dot still resolves (not neutral)
 		"api.lux.cloud":     "lux", // AltDomain
 		"zoo.ngo":           "zoo",
 		"console.zoo.cloud": "zoo", // AltDomain
