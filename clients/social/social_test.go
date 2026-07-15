@@ -79,7 +79,7 @@ func TestPostCRUD(t *testing.T) {
 
 	created, err := s.CreatePost(ctx, Post{
 		ID: "post_1", Org: "hanzo", Content: "launch day", Channel: "linkedin", Status: "draft",
-		CreatedAt: 10, UpdatedAt: 10,
+		Media: []string{"https://s3.hanzo.ai/a.png", "https://s3.hanzo.ai/b.png"}, CreatedAt: 10, UpdatedAt: 10,
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -88,6 +88,10 @@ func TestPostCRUD(t *testing.T) {
 	got, err := s.GetPost(ctx, "hanzo", created.ID)
 	if err != nil || got.Content != "launch day" || got.Channel != "linkedin" {
 		t.Fatalf("get after create: %+v err=%v", got, err)
+	}
+	// Media round-trips as a JSON array through the media column.
+	if len(got.Media) != 2 || got.Media[0] != "https://s3.hanzo.ai/a.png" || got.Media[1] != "https://s3.hanzo.ai/b.png" {
+		t.Fatalf("media not round-tripped on create: %+v", got.Media)
 	}
 
 	// Update: schedule it.
@@ -100,6 +104,11 @@ func TestPostCRUD(t *testing.T) {
 	got, _ = s.GetPost(ctx, "hanzo", created.ID)
 	if got.Status != "scheduled" || got.ScheduleAt != 2000 {
 		t.Fatalf("update not applied: %+v", got)
+	}
+	// Update replaces the media set: this update omitted media, so it is now empty
+	// (non-nil), never null and never a stale carry-over from create.
+	if got.Media == nil || len(got.Media) != 0 {
+		t.Fatalf("update must clear media to [], got %+v", got.Media)
 	}
 
 	// Status filter narrows the list.
