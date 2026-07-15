@@ -1,4 +1,4 @@
-// logs.go — GET /v1/gitops/{name}/logs: the app's current pod logs, streamed from
+// logs.go — GET /v1/deploy/{name}/logs: the app's current pod logs, streamed from
 // the newest running pod via the typed CoreV1 GetLogs subresource. The operator
 // labels the workload it renders for an App CR with
 // app.kubernetes.io/instance=<name>, so that selects the app's pods; the
@@ -6,7 +6,7 @@
 // selects a container; ?tail= bounds the lines. Never fabricates output — an
 // unreachable cluster or absent pod yields an honest 200 with an empty tail + the
 // reason, not invented logs.
-package gitops
+package deploy
 
 import (
 	"context"
