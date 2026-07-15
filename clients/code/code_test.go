@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -122,6 +123,72 @@ func TestIndexSearchContextAsk(t *testing.T) {
 	}
 	if len(ans.Citations) == 0 {
 		t.Error("ask returned no citations")
+	}
+}
+
+// TestTreeAndFile covers the repo-inspection primitives (the zread contract):
+// /v1/code/tree = get_repo_structure, /v1/code/file = read_file — both over the
+// org's own index, with per-org isolation and a 404 for an unindexed file.
+func TestTreeAndFile(t *testing.T) {
+	app, _ := newTestApp(t)
+	indexFixtures(t, app, "acme", "svc")
+
+	// tree: the repo's files with symbol counts.
+	status, b := doAuth(t, app, http.MethodGet, "/v1/code/tree?repo=svc", "acme", nil)
+	if status != http.StatusOK {
+		t.Fatalf("tree status=%d body=%s", status, b)
+	}
+	var tree struct {
+		Repo  string      `json:"repo"`
+		Files []TreeEntry `json:"files"`
+	}
+	mustJSON(t, b, &tree)
+	if len(tree.Files) == 0 {
+		t.Fatal("tree returned no files")
+	}
+	var greeter *TreeEntry
+	for i := range tree.Files {
+		if tree.Files[i].Path == "greeter.go" {
+			greeter = &tree.Files[i]
+		}
+	}
+	if greeter == nil {
+		t.Fatalf("tree missing greeter.go: %+v", tree.Files)
+	}
+	if greeter.Symbols == 0 || greeter.Lang != "go" {
+		t.Errorf("greeter.go entry wrong: %+v", *greeter)
+	}
+
+	// file: the full reconstructed content.
+	status, b = doAuth(t, app, http.MethodGet, "/v1/code/file?repo=svc&path=greeter.go", "acme", nil)
+	if status != http.StatusOK {
+		t.Fatalf("file status=%d body=%s", status, b)
+	}
+	var file struct {
+		Repo, Path, Lang, Content string
+	}
+	mustJSON(t, b, &file)
+	// Indexed content = the symbol chunks (not byte-verbatim; the git plane holds
+	// exact bytes). Assert the symbol bodies the index knows are present.
+	if file.Path != "greeter.go" || file.Lang != "go" ||
+		!strings.Contains(file.Content, "Hello() string") || !strings.Contains(file.Content, "func greet") {
+		t.Errorf("file content missing indexed symbols: path=%s lang=%s len=%d", file.Path, file.Lang, len(file.Content))
+	}
+
+	// an unindexed file 404s (distinct from an empty file).
+	status, _ = doAuth(t, app, http.MethodGet, "/v1/code/file?repo=svc&path=nope.go", "acme", nil)
+	if status != http.StatusNotFound {
+		t.Errorf("unindexed file: got %d want 404", status)
+	}
+
+	// per-org isolation: orgB cannot read orgA's tree (empty, never a leak).
+	status, b = doAuth(t, app, http.MethodGet, "/v1/code/tree?repo=svc", "otherorg", nil)
+	if status != http.StatusOK {
+		t.Fatalf("cross-org tree status=%d", status)
+	}
+	mustJSON(t, b, &tree)
+	if len(tree.Files) != 0 {
+		t.Errorf("cross-org tree leaked %d files", len(tree.Files))
 	}
 }
 

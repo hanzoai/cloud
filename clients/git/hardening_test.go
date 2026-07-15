@@ -52,7 +52,7 @@ func TestUploadPackStreamReapsOnEarlyClose(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "reap"}); code != http.StatusCreated {
 		t.Fatalf("create: %d %s", code, b)
 	}
-	bareAbs := mounted.State.storage.absRepoPath("acme", "", "reap")
+	bareAbs := mounted.Load().State.storage.absRepoPath("acme", "", "reap")
 
 	// Seed ~8 MiB incompressible so upload-pack output far exceeds the ~64 KiB
 	// pipe buffer and git blocks writing once we stop reading.
@@ -72,7 +72,7 @@ func TestUploadPackStreamReapsOnEarlyClose(t *testing.T) {
 
 	// Minimal v0 clone request: want <sha>\n, flush, done\n.
 	body := string(packetWrite("want "+sha+"\n")) + "0000" + string(packetWrite("done\n"))
-	stream, err := startPackRPC(context.Background(), mounted.Log, bareAbs, svcUploadPack, "", strings.NewReader(body))
+	stream, err := startPackRPC(context.Background(), mounted.Load().Log, bareAbs, svcUploadPack, "", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("startPackRPC: %v", err)
 	}
