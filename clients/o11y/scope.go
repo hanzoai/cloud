@@ -59,6 +59,9 @@ func mountScope(a *zip.App) {
 	// composite list query; the upstream engine version (v3) is resolved INTERNALLY.
 	a.Post("/v1/o11y/query", builderQueryHandler("query"))
 	a.Post("/v1/o11y/query_range", builderQueryHandler("query_range"))
+	// Flat, org-gated LLM-obs sessions list (sessions.go): pins the runtime's
+	// /api/sessions route and refuses an org-less caller at the cloud boundary.
+	a.Get("/v1/o11y/sessions", sessionsHandler)
 }
 
 // handleLogs serves org-scoped product logs. The org is the validated tenant; a
