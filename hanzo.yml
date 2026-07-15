@@ -27,7 +27,7 @@ test:
       # CLOUD_KMS_MASTER_KEY_REF on encryption-capable builds) — it runs where
       # that key exists, not in the hermetic gate.
       go test -count=1 -timeout 15m -skip 'TestRecord_DebitsFinanceInProcess' \
-        ./subsystems/ \
+        ./apps/ \
         ./clients/commerceclient/ \
         ./clients/commerceinproc/ \
         ./clients/metering/ \
