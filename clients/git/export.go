@@ -17,10 +17,11 @@ import "context"
 // the sandbox presents it out of band (env-fed http.extraHeader), so this URL is
 // safe to log and to hand to a subprocess on argv.
 func CloneURL(org, name string) string {
-	if mounted == nil {
+	s := mounted.Load()
+	if s == nil {
 		return ""
 	}
-	return cloneURL(mounted, org, name)
+	return cloneURL(s, org, name)
 }
 
 // VerifyRef reports the tip commit of branch in an org's repo, reading the on-disk
@@ -30,12 +31,13 @@ func CloneURL(org, name string) string {
 // remote runner's self-report. ok is false when git is unmounted, the repo/branch is
 // absent, or the read fails (fail-closed: an unverifiable ref is treated as absent).
 func VerifyRef(ctx context.Context, org, repo, branch string) (sha string, ok bool) {
-	if mounted == nil || org == "" || repo == "" || branch == "" {
+	s := mounted.Load()
+	if s == nil || org == "" || repo == "" || branch == "" {
 		return "", false
 	}
 	// git is org-scoped at project "" (storeFor uses ""), so the bare repo lives at
 	// the org/"" /repo path — the same absRepoPath the pack handlers operate on.
-	bareDir := mounted.State.storage.absRepoPath(org, "", repo)
+	bareDir := s.State.storage.absRepoPath(org, "", repo)
 	tips := branchTips(ctx, bareDir)
 	tip, present := tips[branch]
 	if !present || tip == "" {

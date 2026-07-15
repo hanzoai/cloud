@@ -41,7 +41,7 @@ type githubImporter struct{}
 // the first import (empty native) every branch is a create, so the whole repo lands.
 // Idempotent.
 func (githubImporter) ImportRepo(ctx context.Context, req cloud.GitImportReq) error {
-	s := mounted
+	s := mounted.Load()
 	if s == nil {
 		return fmt.Errorf("git: not mounted")
 	}
@@ -98,7 +98,7 @@ func (githubImporter) ImportRepo(ctx context.Context, req cloud.GitImportReq) er
 // suppresses the echo). On a divergence it records a conflict and leaves native
 // UNCHANGED. On an equal tip (the loop echo) it is a no-op.
 func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) (cloud.GitSyncResult, error) {
-	s := mounted
+	s := mounted.Load()
 	if s == nil {
 		return cloud.GitSyncResult{}, fmt.Errorf("git: not mounted")
 	}
@@ -162,7 +162,7 @@ func (githubImporter) InboundSync(ctx context.Context, req cloud.GitInboundReq) 
 // queries regardless of name count: the org's repo rows (Imported + LastSyncedAt)
 // and the set of repos with an unresolved inbound conflict.
 func (githubImporter) RepoStatus(ctx context.Context, org, project string, names []string) (map[string]cloud.GitRepoStatus, error) {
-	s := mounted
+	s := mounted.Load()
 	if s == nil {
 		return nil, fmt.Errorf("git: not mounted")
 	}
