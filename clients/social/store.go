@@ -3,6 +3,7 @@ package social
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS social_posts (
   account_id   TEXT NOT NULL DEFAULT '',
   external_id  TEXT NOT NULL DEFAULT '',
   error        TEXT NOT NULL DEFAULT '',
+  media        TEXT NOT NULL DEFAULT '[]',
   created_at   INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL
 );
@@ -103,6 +105,7 @@ CREATE INDEX IF NOT EXISTS ix_social_posts_status_schedule   ON social_posts(sta
 		{"social_posts", "account_id", "TEXT NOT NULL DEFAULT ''"},
 		{"social_posts", "external_id", "TEXT NOT NULL DEFAULT ''"},
 		{"social_posts", "error", "TEXT NOT NULL DEFAULT ''"},
+		{"social_posts", "media", "TEXT NOT NULL DEFAULT '[]'"},
 	} {
 		if err := s.addColumn(ac.table, ac.col, ac.def); err != nil {
 			return err
@@ -265,6 +268,12 @@ type Post struct {
 	Channel    string `json:"channel"`
 	Status     string `json:"status"`
 	ScheduleAt int64  `json:"scheduleAt"`
+	// Media is the post's attached media as a list of URLs (images today; the
+	// composer's URL field now, an S3 picker later, populate it). Stored as a JSON
+	// array in the media TEXT column and ALWAYS serialized as an array (never null),
+	// so a client can rely on `media` being present. Bounded at the write layer
+	// (normMedia in social.go): each URL clipped to maxField, the list to maxMedia.
+	Media []string `json:"media"`
 	// AccountID / ExternalID / Error are server-managed publish results, set only by
 	// the publish path (never by a client update): the account a post was published
 	// through, the provider's returned external post id (for reconciliation), and the
@@ -276,21 +285,57 @@ type Post struct {
 	UpdatedAt  int64  `json:"updatedAt"`
 }
 
-const postCols = `id,org,content,channel,status,schedule_at,account_id,external_id,error,created_at,updated_at`
+const postCols = `id,org,content,channel,status,schedule_at,account_id,external_id,error,media,created_at,updated_at`
 
 func scanPost(sc interface{ Scan(...any) error }) (Post, error) {
 	var p Post
+	var media string
 	err := sc.Scan(&p.ID, &p.Org, &p.Content, &p.Channel, &p.Status, &p.ScheduleAt,
-		&p.AccountID, &p.ExternalID, &p.Error, &p.CreatedAt, &p.UpdatedAt)
-	return p, err
+		&p.AccountID, &p.ExternalID, &p.Error, &media, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		return p, err
+	}
+	p.Media = decodeMedia(media)
+	return p, nil
+}
+
+// decodeMedia parses the stored JSON media array into a non-nil (possibly empty)
+// slice, so a Post always serializes `media` as [] rather than null. A malformed or
+// empty stored value degrades to [] rather than erroring a read.
+func decodeMedia(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "[]" {
+		return []string{}
+	}
+	out := []string{}
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return []string{}
+	}
+	return out
+}
+
+// encodeMedia serializes a post's media URLs to the JSON stored in the media column.
+// A nil/empty slice stores the canonical "[]" (matching the column default).
+func encodeMedia(m []string) string {
+	if len(m) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 func (s *Store) CreatePost(ctx context.Context, p Post) (Post, error) {
 	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO social_posts (`+postCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO social_posts (`+postCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Content, p.Channel, p.Status, p.ScheduleAt,
-		p.AccountID, p.ExternalID, p.Error, p.CreatedAt, p.UpdatedAt); err != nil {
+		p.AccountID, p.ExternalID, p.Error, encodeMedia(p.Media), p.CreatedAt, p.UpdatedAt); err != nil {
 		return Post{}, fmt.Errorf("insert post: %w", err)
+	}
+	if p.Media == nil {
+		p.Media = []string{}
 	}
 	return p, nil
 }
@@ -338,8 +383,8 @@ func (s *Store) ListPosts(ctx context.Context, org, status string, limit int) ([
 
 func (s *Store) UpdatePost(ctx context.Context, p Post) (Post, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE social_posts SET content=?,channel=?,status=?,schedule_at=?,updated_at=? WHERE org=? AND id=?`,
-		p.Content, p.Channel, p.Status, p.ScheduleAt, p.UpdatedAt, p.Org, p.ID)
+		`UPDATE social_posts SET content=?,channel=?,status=?,schedule_at=?,media=?,updated_at=? WHERE org=? AND id=?`,
+		p.Content, p.Channel, p.Status, p.ScheduleAt, encodeMedia(p.Media), p.UpdatedAt, p.Org, p.ID)
 	if err != nil {
 		return Post{}, fmt.Errorf("update post: %w", err)
 	}
