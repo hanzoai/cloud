@@ -190,7 +190,7 @@ func TestGitCLILargeCloneStreamsBounded(t *testing.T) {
 	}
 	gitRun(t, work, "add", "-A")
 	gitRun(t, work, "commit", "-q", "-m", "big blob")
-	bareAbs := mounted.State.storage.absRepoPath("acme", "", "big")
+	bareAbs := mounted.Load().State.storage.absRepoPath("acme", "", "big")
 	gitRun(t, work, "push", bareAbs, "main:refs/heads/main")
 
 	// Sample the server process's live heap while the git CLI (a separate

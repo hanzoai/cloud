@@ -74,6 +74,7 @@ var (
 func slackBridgeReady(s *cloud.Service[state]) {
 	slackBridgeOnce.Do(func() {
 		slackLim = newOrgLimiter(slackAgentConcurrency(), slackOrgConcurrency())
+		codingLim = newOrgLimiter(codingConcurrency(), codingOrgConcurrency())
 		slackUsedStates = newSeenSet(time.Duration(slackLinkTTLSec) * time.Second)
 	})
 }
@@ -311,6 +312,13 @@ func handleSlackAgent(s *cloud.Service[state], org string, d slackRoute) {
 		s.Log.Warn("slack: bot token fetch", "team", d.TeamID, "err", err)
 		return
 	}
+	// A `code:` prefix branches off the chat-only reply into a durable coding run
+	// (fresh sandbox agent → native git branch → PR, reported back in-thread).
+	// Everything else stays on the existing chat path below, unchanged.
+	if codingText, isCoding := codingIntent(d.Text); isCoding {
+		handleSlackCoding(s, ctx, org, string(tok), d.TeamID, d.Channel, d.ThreadTS, d.User, codingText)
+		return
+	}
 	reply, linkPrompt := slackAgentReply(s, ctx, org, d.TeamID, d.User, d.Text)
 	if reply == "" {
 		return
@@ -335,6 +343,11 @@ func handleSlackSlash(s *cloud.Service[state], org string, d slackRoute, respons
 	defer cancel()
 	if org == "" {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "This Slack workspace isn't connected to Hanzo yet.")
+		return
+	}
+	// A `code:` prefix branches into a durable coding run (see slack_coding.go).
+	if codingText, isCoding := codingIntent(d.Text); isCoding {
+		handleSlackSlashCoding(s, ctx, org, d.TeamID, d.Channel, d.User, codingText, responseURL)
 		return
 	}
 	reply, linkPrompt := slackAgentReply(s, ctx, org, d.TeamID, d.User, d.Text)
@@ -574,6 +587,21 @@ func PostSlackBlocks(ctx context.Context, botToken, channel, text string, blocks
 	fields := map[string]any{"channel": channel, "text": text}
 	if len(blocks) > 0 {
 		fields["blocks"] = blocks
+	}
+	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
+}
+
+// PostSlackBlocksThread posts a Block Kit message threaded under threadTS (when
+// non-empty) via the shared chat.postMessage path — the same door PostSlackBlocks
+// uses, plus in-thread delivery so a coding result lands under the triggering
+// @hanzo message.
+func PostSlackBlocksThread(ctx context.Context, botToken, channel, threadTS, text string, blocks []any) error {
+	fields := map[string]any{"channel": channel, "text": text}
+	if len(blocks) > 0 {
+		fields["blocks"] = blocks
+	}
+	if threadTS != "" {
+		fields["thread_ts"] = threadTS
 	}
 	return slackChatPost(ctx, botToken, "/chat.postMessage", fields)
 }
