@@ -2,7 +2,7 @@ package main
 
 // Real integration tests for the unified Hanzo Cloud binary (HIP-0106).
 // These exercise the actual orchestrator path — BuildDeps -> MountAll over
-// subsystems.Wire() -> serve via the real zip/fiber + jsonenc stack —
+// apps.Wire() -> serve via the real zip/fiber + jsonenc stack —
 // not a hand-rolled smoke harness. app.Fiber().Test drives requests in-process,
 // no listener or external services.
 
@@ -11,12 +11,12 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/subsystems"
+	"github.com/hanzoai/cloud/apps"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/middleware"
 )
 
-// every subsystem the unified binary wires must appear in subsystems.Wire() — this
+// every subsystem the unified binary wires must appear in apps.Wire() — this
 // is the proof Wire() actually assembles the whole matrix.
 var wantSubsystems = []string{
 	"metrics", "base", "authz", "o11y",
@@ -24,14 +24,14 @@ var wantSubsystems = []string{
 }
 
 func TestRegistryAssemblesSubsystems(t *testing.T) {
-	wire := subsystems.Wire()
+	wire := apps.Wire()
 	got := map[string]bool{}
 	for _, s := range wire {
 		got[s.Name] = true
 	}
 	for _, name := range wantSubsystems {
 		if !got[name] {
-			t.Errorf("subsystem %q missing from subsystems.Wire()", name)
+			t.Errorf("subsystem %q missing from apps.Wire()", name)
 		}
 	}
 	t.Logf("Wire() assembled %d subsystems", len(wire))
@@ -52,7 +52,7 @@ func newTestApp(t *testing.T, enable ...string) *zip.App {
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
-	if err := cloud.MountAll(app, subsystems.Wire(), cfg, deps); err != nil {
+	if err := cloud.MountAll(app, apps.Wire(), cfg, deps); err != nil {
 		t.Fatalf("MountAll(%v): %v", enable, err)
 	}
 	return app
