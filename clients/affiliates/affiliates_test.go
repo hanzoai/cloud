@@ -86,14 +86,23 @@ func mount(t *testing.T) (*zip.App, *cloud.Service[state], *fakeCommerce) {
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(cloud.Deps{Logger: luxlog.New("test"), Brand: "hanzo"}, "affiliates"),
 		State: state{
-			store:    store,
-			commerce: fc,
-			linkBase: "https://hanzo.ai",
+			store:     store,
+			commerce:  fc,
+			linkBase:  "https://hanzo.ai",
+			marginBps: defaultMarginBps, // realistic 40% gross margin — the share base
 		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, s)
 	return app, s, fc
+}
+
+// share is the profit-share the accrual computes for a source org's spend at a level
+// rate: Hanzo's margin on that spend × the rate, in the SAME two-step integer division
+// as accrueSource/sweepAffiliate (margin first, then rate), so the test math matches
+// the code exactly. defaultMarginBps is the margin the test mount uses.
+func share(spendCents, rateBps int64) int64 {
+	return marginOf(spendCents, defaultMarginBps) * rateBps / bpsDenom
 }
 
 // req drives one HTTP request. org sets a VALIDATED principal (X-Org-Id +
@@ -356,7 +365,7 @@ func TestSweepAccruesSpendTimesRateIdempotent(t *testing.T) {
 		t.Fatalf("pre-spend sweep accrued=%d, want 0", got)
 	}
 
-	// orgB spends $100 (10000c). Commission @20% = $20 (2000c).
+	// orgB spends $100 (10000c). Commission @20% of the 40% margin = $8 (800c).
 	fc.setSpend("orgB", 10000)
 
 	code, body = req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
@@ -367,9 +376,9 @@ func TestSweepAccruesSpendTimesRateIdempotent(t *testing.T) {
 		t.Fatalf("accrual sweep accrued=%d, want 1", got)
 	}
 	a, _ := s.State.store.GetByID(ctx, idA)
-	const wantCommission = 10000 * defaultRateBps / bpsDenom // = 2000
+	wantCommission := share(10000, defaultRateBps) // margin × rate
 	if a.AccruedCents != wantCommission {
-		t.Fatalf("accrued = %d, want %d (spend×rate)", a.AccruedCents, wantCommission)
+		t.Fatalf("accrued = %d, want %d (margin×rate)", a.AccruedCents, wantCommission)
 	}
 	if a.PendingCents() != wantCommission {
 		t.Fatalf("pending = %d, want %d", a.PendingCents(), wantCommission)
@@ -393,7 +402,7 @@ func TestLazyAccrualOnAffiliateRead(t *testing.T) {
 	app, s, fc := mount(t)
 	_, codeA := applyAndApprove(t, app, s, "orgA", "acme", "")
 	req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgB", false, map[string]any{"code": codeA})
-	fc.setSpend("orgB", 5000) // $50 → commission 1000c ($10)
+	fc.setSpend("orgB", 5000) // $50 → 40% margin $20 → 20% share = 400c ($4)
 
 	code, body := req(t, app, http.MethodGet, "/v1/affiliates", "orgA", false, nil)
 	if code != http.StatusOK {
@@ -417,7 +426,7 @@ func TestLazyAccrualOnAffiliateRead(t *testing.T) {
 	if v.Link != "https://hanzo.ai/?aff="+codeA {
 		t.Fatalf("link = %q", v.Link)
 	}
-	const want = 5000 * defaultRateBps / bpsDenom // 1000
+	want := share(5000, defaultRateBps) // margin × rate
 	if v.ReferredCount != 1 || v.AccruedCents != want || v.PendingCents != want {
 		t.Fatalf("lazy accrual not reflected: %+v (want accrued %d)", v, want)
 	}
@@ -431,7 +440,7 @@ func TestPayoutCreditsOneGrantCashRecordOnlyAndPendingGuard(t *testing.T) {
 	ctx := context.Background()
 	idA, codeA := applyAndApprove(t, app, s, "orgA", "acme", "")
 	req(t, app, http.MethodPost, "/v1/affiliates/attribute", "orgB", false, map[string]any{"code": codeA})
-	fc.setSpend("orgB", 10000) // accrue 2000c pending
+	fc.setSpend("orgB", 25000) // 40% margin = 10000c; @20% share = 2000c pending
 	req(t, app, http.MethodPost, "/v1/admin/affiliates/sweep", "admin", true, nil)
 
 	// Non-admin is refused on payout.
@@ -530,7 +539,7 @@ func TestAdminGateAndDirectory(t *testing.T) {
 	if a0.Org != "orgA" || a0.Code != codeA || a0.Status != StatusApproved || a0.ReferredCount != 1 {
 		t.Fatalf("admin row wrong: %+v", a0)
 	}
-	const wantCommission = 10000 * defaultRateBps / bpsDenom
+	wantCommission := share(10000, defaultRateBps)
 	if a0.AccruedCents != wantCommission || a0.PendingCents != wantCommission {
 		t.Fatalf("admin row accrual: accrued=%d pending=%d, want %d", a0.AccruedCents, a0.PendingCents, wantCommission)
 	}
@@ -601,10 +610,10 @@ func TestMultiLevelUplineWalk(t *testing.T) {
 		id   string
 		want int64
 	}{
-		"orgC": {idC, 10000 * 2000 / 10000},         // L1 @ 20% = 2000
-		"orgB": {idB, 10000 * l2RateBps / bpsDenom}, // L2 @ 5%  = 500
-		"orgA": {idA, 10000 * l3RateBps / bpsDenom}, // L3 @ 2%  = 200
-		"orgW": {idW, 0},                            // L4 — beyond depth cap, earns NOTHING
+		"orgC": {idC, share(10000, 2000)},      // L1 @ 20% of the 40% margin
+		"orgB": {idB, share(10000, l2RateBps)}, // L2 @ 5% of margin
+		"orgA": {idA, share(10000, l3RateBps)}, // L3 @ 2% of margin
+		"orgW": {idW, 0},                       // L4 — beyond depth cap, earns NOTHING
 	}
 	for org, w := range want {
 		a, err := s.State.store.GetByID(ctx, w.id)
@@ -612,7 +621,7 @@ func TestMultiLevelUplineWalk(t *testing.T) {
 			t.Fatalf("GetByID(%s): %v", org, err)
 		}
 		if a.AccruedCents != w.want {
-			t.Fatalf("%s accrued = %d, want %d (level rate × $100)", org, a.AccruedCents, w.want)
+			t.Fatalf("%s accrued = %d, want %d (margin × level rate)", org, a.AccruedCents, w.want)
 		}
 	}
 
@@ -779,9 +788,9 @@ func TestAffiliatesMeSurface(t *testing.T) {
 	if v.Levels[1].Level != 2 || v.Levels[1].RateBps != l2RateBps || v.Levels[1].DownlineCount != 1 {
 		t.Fatalf("L2 row wrong: %+v", v.Levels[1])
 	}
-	// A earns L2 on orgC's $100 = 500c (lazy sweep from the dashboard read).
-	if v.AccruedCents != 10000*l2RateBps/bpsDenom {
-		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, 10000*l2RateBps/bpsDenom)
+	// A earns L2 on orgC's $100 spend = 5% of the 40% margin (lazy sweep from the read).
+	if v.AccruedCents != share(10000, l2RateBps) {
+		t.Fatalf("A accrued via /me = %d, want %d", v.AccruedCents, share(10000, l2RateBps))
 	}
 }
 
@@ -825,15 +834,15 @@ func TestAdminReferralsAnalytics(t *testing.T) {
 	if err := json.Unmarshal(data["accrualByLevel"], &byLevel); err != nil {
 		t.Fatalf("decode accrualByLevel: %v", err)
 	}
-	// orgC's $100: L1 to B = 2000, L2 to A = 500.
-	if byLevel.L1Cents != 2000 || byLevel.L2Cents != 500 {
+	// orgC's $100 spend, 40% margin: L1 to B = 20% of margin, L2 to A = 5% of margin.
+	if byLevel.L1Cents != share(10000, defaultRateBps) || byLevel.L2Cents != share(10000, l2RateBps) {
 		t.Fatalf("accrualByLevel wrong: %+v", byLevel)
 	}
 	var leaders []referrerRow
 	if err := json.Unmarshal(data["topReferrers"], &leaders); err != nil {
 		t.Fatalf("decode topReferrers: %v", err)
 	}
-	if len(leaders) != 2 || leaders[0].Org != "orgB" || leaders[0].AccruedCents != 2000 {
+	if len(leaders) != 2 || leaders[0].Org != "orgB" || leaders[0].AccruedCents != share(10000, defaultRateBps) {
 		t.Fatalf("top referrer wrong: %+v", leaders)
 	}
 }
