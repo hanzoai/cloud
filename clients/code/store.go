@@ -143,6 +143,95 @@ func (s *Store) listFilePaths(ctx context.Context, repo string) ([]string, error
 	return out, rows.Err()
 }
 
+// fileContent returns the INDEXED content of one file: its symbol/definition
+// chunks joined in line order. This is the material the search tiers hold, not a
+// byte-verbatim file — inter-symbol lines (imports, package clause, bare consts a
+// parser did not chunk) are absent. It is a fast "show me the code the index knows
+// about" for context, NOT the source of record. The verbatim file (all bytes, and
+// every historical version + blame) lives in the S3-backed git object plane
+// (clients/git); route read_file/blame there when byte-fidelity matters. Returns
+// ("","",nil) for an unknown (repo,path) so the handler can 404.
+func (s *Store) fileContent(ctx context.Context, repo, path string) (string, string, error) {
+	// lang comes from the files row; content from the chunk blobs.
+	var lang string
+	err := s.db.QueryRowContext(ctx, `SELECT lang FROM files WHERE repo=? AND path=?`, repo, path).Scan(&lang)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("file lang: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT b.content FROM chunks c JOIN blobs b ON b.hash=c.hash
+		 WHERE c.repo=? AND c.path=? ORDER BY c.start_line`, repo, path)
+	if err != nil {
+		return "", "", fmt.Errorf("file chunks: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var b strings.Builder
+	for rows.Next() {
+		var part string
+		if err := rows.Scan(&part); err != nil {
+			return "", "", err
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(part)
+	}
+	return b.String(), lang, rows.Err()
+}
+
+// TreeEntry is one file in a repo's structure: its path, language, and how many
+// top-level symbols it defines — enough for an agent to grasp module layout.
+type TreeEntry struct {
+	Path    string `json:"path"`
+	Lang    string `json:"lang"`
+	Symbols int    `json:"symbols"`
+}
+
+// tree returns the repo's file structure with per-file symbol counts, ordered by
+// path — the get_repo_structure primitive. One query per tier, joined in Go: the
+// files list is authoritative; symbol counts decorate it (a file with no symbols
+// still appears).
+func (s *Store) tree(ctx context.Context, repo string) ([]TreeEntry, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT path, lang FROM files WHERE repo=? ORDER BY path`, repo)
+	if err != nil {
+		return nil, fmt.Errorf("tree files: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []TreeEntry
+	idx := map[string]int{}
+	for rows.Next() {
+		var e TreeEntry
+		if err := rows.Scan(&e.Path, &e.Lang); err != nil {
+			return nil, err
+		}
+		idx[e.Path] = len(out)
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Decorate with symbol counts in one pass.
+	crows, err := s.db.QueryContext(ctx, `SELECT path, COUNT(*) FROM symbols WHERE repo=? GROUP BY path`, repo)
+	if err != nil {
+		return nil, fmt.Errorf("tree symbols: %w", err)
+	}
+	defer func() { _ = crows.Close() }()
+	for crows.Next() {
+		var p string
+		var n int
+		if err := crows.Scan(&p, &n); err != nil {
+			return nil, err
+		}
+		if i, ok := idx[p]; ok {
+			out[i].Symbols = n
+		}
+	}
+	return out, crows.Err()
+}
+
 // deleteFile removes every artifact of one file across all tiers, in one
 // transaction. Called before re-indexing a changed file and by prune.
 func (s *Store) deleteFile(ctx context.Context, repo, path string) error {
