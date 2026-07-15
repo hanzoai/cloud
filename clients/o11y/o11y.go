@@ -249,7 +249,11 @@ func MountO11y(app any, deps cloud.Deps) error {
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
 	}
-	mountScope(a) // GET logs/metrics/status + vm/{query,query_range} + flat builder query
+	mountScope(a) // GET logs/metrics/status + vm/{query,query_range} + flat builder query + sessions
+	// Native annotation-queues surface (SQLite metastore) — /v1/o11y/annotation-queues*.
+	if err := mountAnnotationQueues(a, deps); err != nil {
+		return err
+	}
 	// RUNTIME handler the wildcard delegates to (embed or proxy fallback).
 	if err := mountRuntime(deps); err != nil {
 		return err
@@ -276,6 +280,9 @@ func MountO11y(app any, deps cloud.Deps) error {
 // first error is returned but every teardown still runs. Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
 	var firstErr error
+	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
+		firstErr = err
+	}
 	if err := shutdownTraceSink(ctx); err != nil && firstErr == nil {
 		firstErr = err
 	}
