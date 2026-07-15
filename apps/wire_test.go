@@ -49,6 +49,7 @@ var frozen = []struct {
 	{"projects", false, false},       // was order 125
 	{"prompts", false, false},        // was order 126
 	{"agents", false, true},          // was order 127
+	{"link", false, true},            // new: unified AI login manager (/v1/links), after agents
 	{"wallets", false, true},         // was order 127
 	{"x402", false, true},            // new: x402 pay-per-use settlement (after wallets)
 	{"paas", true, false},            // was order 128
