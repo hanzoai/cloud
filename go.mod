@@ -13,7 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
-	github.com/hanzoai/commerce v1.47.3
+	github.com/hanzoai/commerce v1.48.1
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.25
@@ -40,7 +40,7 @@ require (
 	github.com/zap-proto/http v0.2.0
 	github.com/zap-proto/md v0.1.0
 	github.com/zap-proto/zap2pb v0.2.0
-	github.com/zap-proto/zip v1.8.1
+	github.com/zap-proto/zip v1.8.2
 	go.opentelemetry.io/collector/component v1.54.0
 	go.opentelemetry.io/collector/confmap v1.54.0
 	go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
