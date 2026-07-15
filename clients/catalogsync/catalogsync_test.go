@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hanzoai/cloud/clients/commerce/events"
 	"github.com/hanzoai/cloud/clients/content"
+	"github.com/hanzoai/commerce/events"
 	luxlog "github.com/luxfi/log"
 )
 
