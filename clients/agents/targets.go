@@ -71,15 +71,21 @@ func validTargetStatus(s string) bool {
 
 var errTargetNotFound = errors.New("agents: target not found")
 
-// Target is a registered agent run-target (metadata only). Owned by one org.
+// Target is a registered agent run-target. Owned by one org. Spec is its static
+// capability (os/arch/cpus/memory/gpus) and Metrics its last live heartbeat
+// (loadavg/memory/gpu-util); MetricsAt is the unix second that heartbeat was recorded
+// (0 = never). See targetspec.go for the value plane.
 type Target struct {
 	ID        string
 	Org       string
 	Label     string
 	Kind      string // laptop | cloud | gpu | cluster | machine
 	Status    string // online | offline | draining
-	Capacity  string // free-form ("8 vCPU / 32G", "1× GB10")
+	Capacity  string // free-form ("8 vCPU / 32G", "1× GB10") — human summary
 	Host      string // hostname sessions on this machine report (maps sessions -> target)
+	Spec      Spec   // static capability
+	Metrics   Metrics
+	MetricsAt int64
 	CreatedAt int64
 	UpdatedAt int64
 }
@@ -102,6 +108,9 @@ CREATE TABLE IF NOT EXISTS agent_targets (
   status     TEXT NOT NULL DEFAULT 'online',
   capacity   TEXT NOT NULL DEFAULT '',
   host       TEXT NOT NULL DEFAULT '',
+  spec       TEXT NOT NULL DEFAULT '',
+  metrics    TEXT NOT NULL DEFAULT '',
+  metrics_at INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -110,23 +119,40 @@ CREATE INDEX IF NOT EXISTS ix_targets_org_created ON agent_targets(org, created_
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate targets: %w", err)
 	}
+	// Forward, idempotent upgrade for target rows created before the capability +
+	// metrics columns existed. PRAGMA-guarded, so re-running on an upgraded DB is a
+	// no-op — the DDL above covers fresh installs, this covers pre-existing ones.
+	if err := s.addColumns("agent_targets", map[string]string{
+		"spec":       "TEXT NOT NULL DEFAULT ''",
+		"metrics":    "TEXT NOT NULL DEFAULT ''",
+		"metrics_at": "INTEGER NOT NULL DEFAULT 0",
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 
-const targetCols = `id,org,label,kind,status,capacity,host,created_at,updated_at`
+const targetCols = `id,org,label,kind,status,capacity,host,spec,metrics,metrics_at,created_at,updated_at`
 
 func scanTarget(sc interface{ Scan(...any) error }) (Target, error) {
 	var t Target
+	var spec, metrics string
 	err := sc.Scan(&t.ID, &t.Org, &t.Label, &t.Kind, &t.Status, &t.Capacity, &t.Host,
-		&t.CreatedAt, &t.UpdatedAt)
-	return t, err
+		&spec, &metrics, &t.MetricsAt, &t.CreatedAt, &t.UpdatedAt)
+	if err != nil {
+		return t, err
+	}
+	t.Spec = decodeSpec(spec)
+	t.Metrics = decodeMetrics(metrics)
+	return t, nil
 }
 
 // CreateTarget inserts one target. The id is caller-generated (genID("tgt")).
 func (s *Store) CreateTarget(ctx context.Context, t Target) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.Org, t.Label, t.Kind, t.Status, t.Capacity, t.Host, t.CreatedAt, t.UpdatedAt)
+		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.Org, t.Label, t.Kind, t.Status, t.Capacity, t.Host,
+		encodeSpec(t.Spec), encodeMetrics(t.Metrics), t.MetricsAt, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert target: %w", err)
 	}
@@ -171,9 +197,10 @@ func (s *Store) ListTargets(ctx context.Context, org string) ([]Target, error) {
 // so a cross-tenant id can never mutate another's target.
 func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_targets SET label=?, kind=?, status=?, capacity=?, host=?, updated_at=?
+		`UPDATE agent_targets SET label=?, kind=?, status=?, capacity=?, host=?, spec=?, metrics=?, metrics_at=?, updated_at=?
 		 WHERE org=? AND id=?`,
-		t.Label, t.Kind, t.Status, t.Capacity, t.Host, t.UpdatedAt, t.Org, t.ID)
+		t.Label, t.Kind, t.Status, t.Capacity, t.Host,
+		encodeSpec(t.Spec), encodeMetrics(t.Metrics), t.MetricsAt, t.UpdatedAt, t.Org, t.ID)
 	if err != nil {
 		return fmt.Errorf("update target: %w", err)
 	}
@@ -182,6 +209,28 @@ func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
 		return errTargetNotFound
 	}
 	return nil
+}
+
+// GetTargetByHost returns an org's target reporting the given host, or
+// errTargetNotFound. It is how a re-link of the SAME machine finds its existing target
+// (idempotent register) instead of creating a duplicate. Org-scoped: a host string can
+// never resolve another tenant's target. Newest wins if a host was ever double-listed.
+func (s *Store) GetTargetByHost(ctx context.Context, org, host string) (Target, error) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return Target{}, errTargetNotFound
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+targetCols+` FROM agent_targets WHERE org=? AND host=? ORDER BY created_at DESC, id ASC LIMIT 1`,
+		org, host)
+	t, err := scanTarget(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Target{}, errTargetNotFound
+	}
+	if err != nil {
+		return Target{}, fmt.Errorf("get target by host: %w", err)
+	}
+	return t, nil
 }
 
 // DeleteTarget removes an org's target. Sessions keep their recorded target id (a
@@ -216,25 +265,41 @@ func (s *Store) SessionLoad(ctx context.Context, org, id, host string) (TargetLo
 // ---- HTTP shapes (the published contract) ----
 
 type targetView struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Kind      string `json:"kind"`
-	Status    string `json:"status"`
-	Capacity  string `json:"capacity,omitempty"`
-	Host      string `json:"host,omitempty"`
-	Sessions  int    `json:"sessions"`
-	Running   int    `json:"running"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID        string   `json:"id"`
+	Label     string   `json:"label"`
+	Kind      string   `json:"kind"`
+	Status    string   `json:"status"`
+	Capacity  string   `json:"capacity,omitempty"`
+	Host      string   `json:"host,omitempty"`
+	Spec      *Spec    `json:"spec,omitempty"`
+	Metrics   *Metrics `json:"metrics,omitempty"`
+	MetricsAt string   `json:"metricsAt,omitempty"`
+	Sessions  int      `json:"sessions"`
+	Running   int      `json:"running"`
+	CreatedAt string   `json:"createdAt"`
+	UpdatedAt string   `json:"updatedAt"`
 }
 
 func toTargetView(t Target, load TargetLoad) targetView {
-	return targetView{
+	v := targetView{
 		ID: t.ID, Label: t.Label, Kind: t.Kind, Status: t.Status,
 		Capacity: t.Capacity, Host: t.Host,
 		Sessions: load.Sessions, Running: load.Running,
 		CreatedAt: rfc3339(t.CreatedAt), UpdatedAt: rfc3339(t.UpdatedAt),
 	}
+	if !t.Spec.IsZero() {
+		spec := t.Spec
+		v.Spec = &spec
+	}
+	if !t.Metrics.IsZero() {
+		m := t.Metrics
+		m.At = t.MetricsAt
+		v.Metrics = &m
+	}
+	if t.MetricsAt > 0 {
+		v.MetricsAt = rfc3339(t.MetricsAt)
+	}
+	return v
 }
 
 // mountTargets registers the target routes. Called from Mount BEFORE the
@@ -251,11 +316,13 @@ func mountTargets(s *cloud.Service[state], app *zip.App) {
 // ---- register ----
 
 type targetReq struct {
-	Label    string `json:"label"`
-	Kind     string `json:"kind"`
-	Status   string `json:"status"`
-	Capacity string `json:"capacity"`
-	Host     string `json:"host"`
+	Label    string  `json:"label"`
+	Kind     string  `json:"kind"`
+	Status   string  `json:"status"`
+	Capacity string  `json:"capacity"`
+	Host     string  `json:"host"`
+	Spec     Spec    `json:"spec"`
+	Metrics  Metrics `json:"metrics"`
 }
 
 func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
@@ -296,14 +363,39 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(host) > maxHost {
 		return zip.ErrBadRequest("host too long")
 	}
+	spec := body.Spec.Sanitize()
+	metrics := body.Metrics.Sanitize()
+	now := time.Now().Unix()
+	metricsAt := int64(0)
+	if !metrics.IsZero() {
+		metricsAt = now // the server owns the staleness clock; a client can't forge it
+	}
+
+	// Idempotent re-link: the SAME machine (org+host) refreshes its existing target
+	// rather than piling up duplicates, so mission-control shows one row per machine
+	// with live spec/metrics. Only an explicit host keys this — an anonymous target
+	// (no host) always creates.
+	if host != "" {
+		if existing, err := s.State.store.GetTargetByHost(c.Context(), org, host); err == nil {
+			existing.Label, existing.Kind, existing.Status, existing.Capacity = label, kind, status, capacity
+			existing.Spec, existing.Metrics, existing.MetricsAt = spec, metrics, metricsAt
+			existing.UpdatedAt = now
+			if err := s.State.store.UpdateTarget(c.Context(), existing); err != nil {
+				return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
+			}
+			load, _ := s.State.store.SessionLoad(c.Context(), org, existing.ID, existing.Host)
+			return c.JSON(http.StatusOK, toTargetView(existing, load))
+		}
+	}
+
 	id, err := genID("tgt")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	now := time.Now().Unix()
 	t := Target{
 		ID: id, Org: org, Label: label, Kind: kind, Status: status,
-		Capacity: capacity, Host: host, CreatedAt: now, UpdatedAt: now,
+		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.State.store.CreateTarget(c.Context(), t); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
@@ -355,11 +447,13 @@ func getTarget(s *cloud.Service[state], c *zip.Ctx) error {
 // ---- patch ----
 
 type patchTargetReq struct {
-	Label    *string `json:"label"`
-	Kind     *string `json:"kind"`
-	Status   *string `json:"status"`
-	Capacity *string `json:"capacity"`
-	Host     *string `json:"host"`
+	Label    *string  `json:"label"`
+	Kind     *string  `json:"kind"`
+	Status   *string  `json:"status"`
+	Capacity *string  `json:"capacity"`
+	Host     *string  `json:"host"`
+	Spec     *Spec    `json:"spec"`
+	Metrics  *Metrics `json:"metrics"` // present => a heartbeat; the server stamps its time
 }
 
 func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
@@ -417,7 +511,21 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		t.Host = nh
 	}
-	t.UpdatedAt = time.Now().Unix()
+	now := time.Now().Unix()
+	if body.Spec != nil {
+		t.Spec = body.Spec.Sanitize()
+	}
+	if body.Metrics != nil {
+		// A metrics patch IS a heartbeat: refresh the sample and stamp the server's
+		// own clock (a client can never forge or backdate the staleness time).
+		t.Metrics = body.Metrics.Sanitize()
+		if t.Metrics.IsZero() {
+			t.MetricsAt = 0
+		} else {
+			t.MetricsAt = now
+		}
+	}
+	t.UpdatedAt = now
 	if err := s.State.store.UpdateTarget(c.Context(), t); err != nil {
 		if err == errTargetNotFound {
 			return zip.ErrNotFound("target not found")
