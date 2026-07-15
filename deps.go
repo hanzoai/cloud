@@ -34,6 +34,10 @@ type Deps struct {
 	// Values: "hanzo", "lux", "zoo", "osage", "pars", or any customer brand.
 	Brand string
 
+	// Version is the API contract/build version emitted as the X-Api-Version
+	// response header (see middleware.ProductionHeaders wiring in serve.go).
+	Version string
+
 	// Env is the deployment environment (mainnet|testnet|devnet). Subsystems
 	// that meter usage stamp it for per-env attribution; it never gates or
 	// bypasses billing (every env bills against its own commerce ledger).
