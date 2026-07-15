@@ -1,4 +1,4 @@
-package gitops
+package deploy
 
 import (
 	"context"
@@ -187,8 +187,8 @@ func TestComputeDiff(t *testing.T) {
 		"spec":     map[string]any{"replicas": int64(2), "selector": map[string]any{"matchLabels": map[string]any{"app.kubernetes.io/instance": "iam"}}, "template": map[string]any{"spec": map[string]any{"containers": []any{map[string]any{"name": "app", "image": "ghcr.io/hanzoai/iam:v1"}}}}}}
 	db, _ := json.Marshal(desired)
 	_ = unstructured.SetNestedField(live.Object, map[string]any{lastAppliedAnnotation: string(db)}, "metadata", "annotations")
-	if src, mod, _ := computeDiff(live); src != gitopsDesiredTODO || mod {
-		t.Errorf("identical-desired diff = (%q,%v), want (%q,false)", src, mod, gitopsDesiredTODO)
+	if src, mod, _ := computeDiff(live); src != deployDesiredTODO || mod {
+		t.Errorf("identical-desired diff = (%q,%v), want (%q,false)", src, mod, deployDesiredTODO)
 	}
 	// Annotation with a different image → modified.
 	desired["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)["image"] = "ghcr.io/hanzoai/iam:v2"

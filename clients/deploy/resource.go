@@ -1,4 +1,4 @@
-// resource.go — GET /v1/gitops/{name}/resource/{ref}: one tree node's live
+// resource.go — GET /v1/deploy/{name}/resource/{ref}: one tree node's live
 // manifest plus a desired-vs-live diff.
 //
 // {ref} is the canonical "group:kind:namespace:name" token the tree emits on each
@@ -13,7 +13,7 @@
 // (RegisterPushBuilder → commit → engine sync), desiredSource becomes "git" with
 // the SAME diff shape. P2b replaces the field-strip diff with gitops-engine
 // pkg/diff (three-way) for exact ArgoCD parity.
-package gitops
+package deploy
 
 import (
 	"encoding/json"
@@ -136,7 +136,7 @@ func computeDiff(live *unstructured.Unstructured) (source string, modified bool,
 		return "none", false, nil
 	}
 	modified = !jsonEqual(normalizeForDiff(live.Object), normalizeForDiff(d))
-	return gitopsDesiredTODO, modified, d
+	return deployDesiredTODO, modified, d
 }
 
 // normalizeForDiff strips server-set / volatile fields so a diff reflects only
