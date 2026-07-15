@@ -99,6 +99,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/ask", s.handleAsk)
 	app.Post("/v1/code/index", s.handleIndex)
+	// Repo-inspection primitives (the zread contract over the org's own index):
+	// tree = get_repo_structure, file = read_file.
+	app.Get("/v1/code/tree", s.handleTree)
+	app.Get("/v1/code/file", s.handleFile)
 
 	s.log.Info("code surface mounted (native)",
 		"brand", deps.Brand, "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())
@@ -249,6 +253,66 @@ func (s *service) handleContext(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, bundle)
 }
 
+// handleTree returns a repo's file structure with per-file symbol counts —
+// get_repo_structure over the org's own indexed corpus, no git checkout. An
+// unindexed repo returns an empty tree, never an error.
+func (s *service) handleTree(c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("valid principal required")
+	}
+	repo, err := cleanRepo(c.Query("repo"), true) // required: a tree is repo-scoped
+	if err != nil {
+		return err
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.ErrInternal("open index")
+	}
+	entries, err := store.tree(c.Context(), repo)
+	if err != nil {
+		s.log.Warn("code tree failed", "org", org, "repo", repo, "err", err)
+		return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": []TreeEntry{}})
+	}
+	if entries == nil {
+		entries = []TreeEntry{}
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "files": entries})
+}
+
+// handleFile returns the INDEXED content of one file (the chunks the search tiers
+// hold) — a fast "show the code the index knows" for context. It is NOT byte-
+// verbatim (see Store.fileContent): the git object plane (clients/git, S3-backed)
+// is the source of record for exact bytes, history, and blame. A file absent from
+// the index is a 404 so the agent can tell "not indexed" from an empty file.
+func (s *service) handleFile(c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("valid principal required")
+	}
+	repo, err := cleanRepo(c.Query("repo"), true)
+	if err != nil {
+		return err
+	}
+	path := strings.TrimSpace(c.Query("path"))
+	if path == "" {
+		return zip.ErrBadRequest("path is required")
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return zip.ErrInternal("open index")
+	}
+	content, lang, err := store.fileContent(c.Context(), repo, path)
+	if err != nil {
+		s.log.Warn("code file failed", "org", org, "repo", repo, "path", path, "err", err)
+		return zip.ErrInternal("read file")
+	}
+	if content == "" && lang == "" {
+		return zip.ErrNotFound("file not indexed: " + path)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"repo": repo, "path": path, "lang": lang, "content": content})
+}
+
 // handleAsk is the cited RAG answer over the org's index.
 func (s *service) handleAsk(c *zip.Ctx) error {
 	org, ok := org(c)
@@ -335,6 +399,71 @@ func (s *service) handleIndex(c *zip.Ctx) error {
 		return zip.ErrInternal("index failed")
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+// File is one file to index: its repo-relative path and content. The exported
+// shape the git plane's push→index reactor hands in (it avoids importing the
+// unexported fileInput).
+type File struct {
+	Path    string
+	Content string
+}
+
+// IndexResult reports what an index pass wrote, for the reactor's log line.
+type IndexResult struct {
+	Repo     string
+	Indexed  int
+	Skipped  int
+	Pruned   int
+	Symbols  int
+	Chunks   int
+	Vectors  int
+	Semantic bool
+}
+
+// IndexFiles indexes a repo's files into the org's code index — the package-level
+// seam the git plane's lifecycle reactor calls on push (clients/git owns the repo
+// bytes; clients/code owns the index; neither imports the other, so the reactor
+// reads the tree and hands it here). It reuses the exact per-file pipeline the
+// POST /v1/code/index handler runs, with prune=true so a push is a full-tree
+// reconcile (deleted files leave the index). A nil/unmounted service is a no-op —
+// the reactor is best-effort and must never block the push/deploy path. Over-limit
+// inputs are bounded, not rejected: indexing is a background enrichment, so a huge
+// push indexes what fits rather than failing the whole repo.
+func IndexFiles(ctx context.Context, org, billingOrg, project, repo string, files []File) (IndexResult, error) {
+	s := mounted
+	if s == nil || org == "" || repo == "" {
+		return IndexResult{}, nil
+	}
+	in := make([]fileInput, 0, len(files))
+	var total int
+	for _, f := range files {
+		if strings.TrimSpace(f.Path) == "" || len(f.Content) > maxFileBytes {
+			continue // skip an unnamed or oversized file rather than fail the push
+		}
+		if total += len(f.Content); total > maxTotalBytes {
+			break // index what fits; a giant push is bounded, not dropped
+		}
+		if len(in) >= maxIndexFiles {
+			break
+		}
+		in = append(in, fileInput{Path: f.Path, Content: f.Content})
+	}
+	if len(in) == 0 {
+		return IndexResult{Repo: repo}, nil
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return IndexResult{}, err
+	}
+	res, err := s.indexRepo(ctx, org, billingOrg, project, store, repo, in, true /* prune: full-tree reconcile */)
+	if err != nil {
+		return IndexResult{}, err
+	}
+	return IndexResult{
+		Repo: res.Repo, Indexed: res.Indexed, Skipped: res.Skipped, Pruned: res.Pruned,
+		Symbols: res.Symbols, Chunks: res.Chunks, Vectors: res.Vectors, Semantic: res.Semantic,
+	}, nil
 }
 
 // indexRepo runs the pipeline per file: skip-if-unchanged (content hash) → parse
