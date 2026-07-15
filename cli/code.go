@@ -535,11 +535,21 @@ func writeIfAbsent(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 
-// codeToken resolves the credential the agents authenticate with: an explicit
-// API key wins, then the stored key, then the key the rest of the Hanzo
-// toolchain already keeps in ~/.hanzo/config.json, then the `hanzo login` token.
+// codeToken resolves the credential the agents authenticate with. Precedence:
+// an explicit HANZO_API_KEY always wins (the operator's deliberate override),
+// then the live `hanzo login` JWT, then the hk- API key chain.
+//
+// Why the JWT beats the hk- key: the JWT carries the caller's owner/project/sub
+// claims verbatim, so the identity boundary mints a billing principal on EVERY
+// deployment. The hk- key only mints a principal when the server can resolve it
+// (iamKeys.resolve, which is a no-op without IAM_MINT_CLIENT_ID/SECRET) — on a
+// deployment lacking that credential an hk- request arrives anonymous and zen's
+// billing gate 402s ("a billable tenant is required"). Preferring a FRESH JWT
+// keeps `hanzo code` working everywhere; the hk- key stays the fallback for
+// mint-credentialed servers and the explicit-override case. freshAccessToken
+// skips an expired token so it can't 401 a session a valid hk- key would serve.
 func codeToken(env *Env) string {
-	return firstNonEmpty(os.Getenv("HANZO_API_KEY"), env.cfg.APIKey, storedAPIKey(), env.accessToken())
+	return firstNonEmpty(os.Getenv("HANZO_API_KEY"), env.freshAccessToken(), env.cfg.APIKey, storedAPIKey())
 }
 
 // storedAPIKey reads (never writes) the hk- key that hanzo-mcp and the rest of
