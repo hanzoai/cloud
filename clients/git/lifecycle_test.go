@@ -305,7 +305,7 @@ func TestMirrorOutboundPushesOnlyAdvancedBranch(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
-	bareAbs := mounted.State.storage.absRepoPath("acme", "", "code")
+	bareAbs := mounted.Load().State.storage.absRepoPath("acme", "", "code")
 
 	// Seed the source bare repo with TWO branches (main + feature) by pushing over a
 	// local path (bypasses the edge; we only need on-disk refs).
@@ -329,7 +329,7 @@ func TestMirrorOutboundPushesOnlyAdvancedBranch(t *testing.T) {
 	downBase := serveGitHTTP(t, downRoot)
 	downURL := downBase + "/down.git"
 
-	store, err := storeFor(mounted, "acme")
+	store, err := storeFor(mounted.Load(), "acme")
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestMirrorOutboundPushesOnlyAdvancedBranch(t *testing.T) {
 	}
 
 	// Fire a PushLanded for main ONLY — feature must NOT be mirrored.
-	mirrorOutbound(mounted, context.Background(), cloud.LifecycleEvent{
+	mirrorOutbound(mounted.Load(), context.Background(), cloud.LifecycleEvent{
 		Kind: cloud.LifecyclePushLanded, Org: "acme", Repo: "code", Branch: "main", After: mainHash,
 	})
 	refs := downstreamRefs(t, downBare)
@@ -357,7 +357,7 @@ func TestMirrorOutboundPushesOnlyAdvancedBranch(t *testing.T) {
 	gitRun(t, work, "add", "-A")
 	gitRun(t, work, "commit", "-q", "-m", "loop commit")
 	gitRun(t, work, "push", "-q", bareAbs, "loop:refs/heads/loop")
-	mirrorOutbound(mounted, context.Background(), cloud.LifecycleEvent{
+	mirrorOutbound(mounted.Load(), context.Background(), cloud.LifecycleEvent{
 		Kind: cloud.LifecyclePushLanded, Org: "acme", Repo: "code", Branch: "loop",
 		After: gitOut(t, work, "rev-parse", "loop"), Origin: "127.0.0.1",
 	})
@@ -394,7 +394,7 @@ func TestNotifyRoutingIsProjectScoped(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
-	store, err := storeFor(mounted, "acme")
+	store, err := storeFor(mounted.Load(), "acme")
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestNotifyRoutingIsProjectScoped(t *testing.T) {
 
 	// A push in the ORG-LEVEL scope must reach ONLY #orglevel — never projB's channel
 	// (that would be within-org cross-project code disclosure).
-	notifyLifecycle(mounted, ctx, cloud.LifecycleEvent{
+	notifyLifecycle(mounted.Load(), ctx, cloud.LifecycleEvent{
 		Kind: cloud.LifecyclePushLanded, Org: "acme", Project: "", Repo: "code",
 		Branch: "main", After: strings.Repeat("a", 40),
 	})
@@ -422,7 +422,7 @@ func TestRepoDeleteCascadesLifecycleConfig(t *testing.T) {
 	if code, b := do(t, app, http.MethodPost, "/v1/git/repos", "acme", map[string]any{"name": "code"}); code != 201 {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
-	store, err := storeFor(mounted, "acme")
+	store, err := storeFor(mounted.Load(), "acme")
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -567,7 +567,7 @@ func TestMirrorOutStalledDownstreamDoesNotStarveClones(t *testing.T) {
 		t.Fatalf("create repo: %d %s", code, b)
 	}
 	// Seed the repo by a LOCAL push (does not fire the server-side reactors).
-	bareAbs := mounted.State.storage.absRepoPath("acme", "", "code")
+	bareAbs := mounted.Load().State.storage.absRepoPath("acme", "", "code")
 	work := t.TempDir()
 	gitRun(t, work, "init", "-q", "-b", "main")
 	writeFile(t, work, "a.txt", "one")
@@ -604,7 +604,7 @@ func TestMirrorOutStalledDownstreamDoesNotStarveClones(t *testing.T) {
 		heldMu.Unlock()
 	})
 
-	store, err := storeFor(mounted, "acme")
+	store, err := storeFor(mounted.Load(), "acme")
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -617,7 +617,7 @@ func TestMirrorOutStalledDownstreamDoesNotStarveClones(t *testing.T) {
 	// mirror slot (NOT the pack slot).
 	done := make(chan struct{})
 	go func() {
-		mirrorOutbound(mounted, context.Background(), cloud.LifecycleEvent{
+		mirrorOutbound(mounted.Load(), context.Background(), cloud.LifecycleEvent{
 			Kind: cloud.LifecyclePushLanded, Org: "acme", Repo: "code", Branch: "main", After: commit,
 		})
 		close(done)
