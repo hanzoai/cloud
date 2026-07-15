@@ -363,6 +363,9 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(host) > maxHost {
 		return zip.ErrBadRequest("host too long")
 	}
+	if len(body.Spec.GPUs) > maxGPUs {
+		return zip.ErrBadRequest("too many gpus")
+	}
 	spec := body.Spec.Sanitize()
 	metrics := body.Metrics.Sanitize()
 	now := time.Now().Unix()
@@ -513,6 +516,9 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	now := time.Now().Unix()
 	if body.Spec != nil {
+		if len(body.Spec.GPUs) > maxGPUs {
+			return zip.ErrBadRequest("too many gpus")
+		}
 		t.Spec = body.Spec.Sanitize()
 	}
 	if body.Metrics != nil {
