@@ -17,23 +17,8 @@ func Provision(org *organization.Organization, usr *user.User) {
 		usr.MustCreate()
 	}
 
-	// // Figure out ownership
-	// if usr.Organizations == nil {
-	// 	org.Owners
-	// }
-
-	// // Create default store
-	// stor := store.New(nsdb)
-	// stor.Name = "development"
-	// stor.GetOrCreate("Name=", stor.Name)
-	// stor.MustSetKey("KawdtZuoMY")
-	// stor.Prefix = "/"
-	// stor.Currency = currency.USD
-	// stor.Mailchimp.APIKey = ""
-	// stor.Mailchimp.ListId = "421751eb03"
-	// stor.MustUpdate()
-
-	// org.AddDefaultTokens()
-
-	// org.MustUpdate()
+	// The org's commerce store is NOT provisioned here: it is created lazily and
+	// idempotently on the org's first authenticated GET /v1/store/current, via the
+	// ONE canonical primitive store.EnsureDefault (org-scoped, no payment creds).
+	// See clients/commerce/api/store/current.go.
 }
