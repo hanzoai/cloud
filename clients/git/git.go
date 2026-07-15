@@ -260,10 +260,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // time and no-op when the subsystem is unmounted.
 var lifecycleOnce sync.Once
 
-// registerLifecycleReactors wires git's two subscribers onto the cloud lifecycle
-// stream: the Slack-notifier (notify.go) and the outbound mirror (mirror_out.go).
-// Both run detached + best-effort (EmitLifecycle), so neither can block or fail the
-// git/deploy path.
+// registerLifecycleReactors wires git's three subscribers onto the cloud lifecycle
+// stream: the Slack-notifier (notify.go), the outbound mirror (mirror_out.go), and
+// the code-index reactor (index_on_push.go). All run detached + best-effort
+// (EmitLifecycle dispatches each in its own goroutine), so none can block or fail
+// the git/deploy path.
 func registerLifecycleReactors() {
 	lifecycleOnce.Do(func() {
 		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
@@ -274,6 +275,11 @@ func registerLifecycleReactors() {
 		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
 			if s := mounted; s != nil {
 				mirrorOutbound(s, ctx, ev)
+			}
+		})
+		cloud.RegisterLifecycleSubscriber(func(ctx context.Context, ev cloud.LifecycleEvent) {
+			if s := mounted; s != nil {
+				indexOnPush(s, ctx, ev)
 			}
 		})
 	})
