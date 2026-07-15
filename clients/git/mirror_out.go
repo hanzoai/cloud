@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/integrations"
 )
 
 // mirror_out.go is the OUTBOUND half of the mirror: native → GitHub/GitLab. It is
@@ -108,7 +109,7 @@ func mirrorOutbound(s *cloud.Service[state], ctx context.Context, ev cloud.Lifec
 		if ev.Origin != "" && strings.EqualFold(strings.TrimSpace(ev.Origin), t.Host) {
 			continue
 		}
-		if err := pushBranchToMirror(ctx, bareDir, t, ev.Branch); err != nil {
+		if err := pushBranchToMirror(ctx, ev.Org, bareDir, t, ev.Branch); err != nil {
 			s.Log.Warn("git mirror-out push failed",
 				"org", ev.Org, "repo", ev.Repo, "host", t.Host, "branch", ev.Branch,
 				"err", sanitizeGitErr(err.Error()))
@@ -122,7 +123,7 @@ func mirrorOutbound(s *cloud.Service[state], ctx context.Context, ev cloud.Lifec
 // bare repo to target t, under a hard deadline + dedicated slot. The leading '+' in
 // the refspec forces that ONE ref — never a blanket +refs/*:*, so nothing but the
 // advanced branch is touched downstream.
-func pushBranchToMirror(ctx context.Context, bareDir string, t MirrorTarget, branch string) error {
+func pushBranchToMirror(ctx context.Context, org, bareDir string, t MirrorTarget, branch string) error {
 	if !branchRE.MatchString(branch) {
 		return fmt.Errorf("invalid branch")
 	}
@@ -135,7 +136,7 @@ func pushBranchToMirror(ctx context.Context, bareDir string, t MirrorTarget, bra
 		"-c", "protocol.version=2", "-c", "credential.helper=",
 		"--git-dir="+bareDir, "push", t.URL, refspec)
 	return withMirrorSlot(ctx, func() error {
-		cmd, err := gitCmd(ctx, mirrorPushEnv(t.Host), args...)
+		cmd, err := gitCmd(ctx, mirrorPushEnv(ctx, org, t.Host), args...)
 		if err != nil {
 			return err
 		}
@@ -161,17 +162,40 @@ func pushBranchToMirror(ctx context.Context, bareDir string, t MirrorTarget, bra
 // instead of holding a slot; and — only for an allowlisted host with a configured
 // token — the credential via env-only http.extraHeader (presented with the host's
 // basic-auth username, mirrorBasicUser).
-func mirrorPushEnv(host string) []string {
+func mirrorPushEnv(ctx context.Context, org, host string) []string {
 	env := []string{"GIT_ALLOW_PROTOCOL=http:https"}
 	cfg := []string{
 		"http.followRedirects=false",
 		"http.lowSpeedLimit=1000", // if throughput stays under 1 KB/s ...
 		"http.lowSpeedTime=30",    // ... for 30s, git aborts the transfer
 	}
-	if hdr := mirrorPushAuthHeader(host); hdr != "" {
+	if hdr := outboundAuthHeader(ctx, org, host); hdr != "" {
 		cfg = append(cfg, "http.extraHeader=Authorization: Basic "+hdr)
 	}
 	return append(env, gitConfigEnv(cfg...)...)
+}
+
+// outboundAuthHeader resolves the credential for a downstream mirror push. For a
+// GitHub target it PREFERS the org's own GitHub-App installation token, so a
+// GitHub-App-imported repo mirrors back with THAT org's credential (never one shared
+// token presented to every org's remote). Gated to allowed outbound targets
+// (mirrorOutHostAllowed) so the local git host is never a target; falls back to the
+// shared GIT_MIRROR_TOKEN (still allowlisted) when no per-org token resolves — so an
+// org that has NOT connected the GitHub App keeps the exact prior behavior. Returns
+// "" (anonymous) for a non-allowed host — a private remote then fails closed, never
+// leaking a credential to an untrusted host.
+func outboundAuthHeader(ctx context.Context, org, host string) string {
+	if !mirrorOutHostAllowed(host) {
+		return ""
+	}
+	if strings.ToLower(host) == "github.com" {
+		if tok, err := integrations.InstallationToken(ctx, org); err == nil && tok != "" {
+			return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + tok))
+		}
+	}
+	// No per-org token (or a non-GitHub target) — fall back to the shared env token,
+	// exactly as before this change.
+	return mirrorPushAuthHeader(host)
 }
 
 // mirrorPushAuthHeader returns the base64 "<user>:<token>" basic-auth credential
