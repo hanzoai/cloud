@@ -58,6 +58,9 @@ const (
 	maxControlMsg   = 16 * 1024
 	recentEvents    = 50
 	treeNodeCap     = 10000
+	maxHost         = 256
+	maxCwd          = 1024
+	maxRepo         = 512
 )
 
 func validKind(k string) bool {
@@ -80,12 +83,46 @@ type sessionView struct {
 	Title           string `json:"title,omitempty"`
 	TaskWorkflowID  string `json:"taskWorkflowId,omitempty"`
 	TaskRunID       string `json:"taskRunId,omitempty"`
-	Events          int    `json:"events"`
-	Children        int    `json:"children"`
-	StartedAt       string `json:"startedAt"`
-	EndedAt         string `json:"endedAt,omitempty"`
-	CreatedAt       string `json:"createdAt"`
-	UpdatedAt       string `json:"updatedAt"`
+	// Execution context (mission-control): the machine/repo/cwd a card shows and
+	// the run-target a session is dispatched to. Omitted when a surface didn't report it.
+	Host   string `json:"host,omitempty"`
+	Cwd    string `json:"cwd,omitempty"`
+	Repo   string `json:"repo,omitempty"`
+	Target string `json:"target,omitempty"`
+
+	Events    int    `json:"events"`
+	Children  int    `json:"children"`
+	StartedAt string `json:"startedAt"`
+	EndedAt   string `json:"endedAt,omitempty"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	// LastEvent is the compact latest-activity line for the list projection (nil in
+	// register/patch/tree responses; set by list + detail). It lets a swipe card show
+	// a live one-line preview without fetching full detail.
+	LastEvent *lastEventView `json:"lastEvent,omitempty"`
+}
+
+// lastEventView is the one-line latest-activity a mission-control card renders in
+// the list — kind + actor + a bounded payload preview + timestamp. The full event
+// (unbounded payload) is only ever returned in detail/stream, never the list.
+type lastEventView struct {
+	Seq     int64  `json:"seq"`
+	Kind    string `json:"kind"`
+	Actor   string `json:"actor,omitempty"`
+	Preview string `json:"preview,omitempty"`
+	At      string `json:"at"`
+}
+
+// lastEventPreviewCap bounds the payload snippet carried in a list row so a page of
+// 100 sessions stays small (the full payload rides detail/stream).
+const lastEventPreviewCap = 240
+
+func toLastEventView(e Event) *lastEventView {
+	p := e.Payload
+	if len(p) > lastEventPreviewCap {
+		p = p[:lastEventPreviewCap]
+	}
+	return &lastEventView{Seq: e.Seq, Kind: e.Kind, Actor: e.Actor, Preview: p, At: rfc3339(e.CreatedAt)}
 }
 
 type eventView struct {
@@ -117,6 +154,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		ID: x.ID, Agent: x.Agent, Actor: x.Actor, Status: x.Status,
 		ParentSessionID: x.ParentID, RootSessionID: x.RootID, Title: x.Title,
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
+		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
@@ -164,6 +202,11 @@ type registerReq struct {
 	ParentSessionID string `json:"parentSessionId"`
 	TaskWorkflowID  string `json:"taskWorkflowId"`
 	TaskRunID       string `json:"taskRunId"`
+	// Execution context — where this session runs (all optional).
+	Host   string `json:"host"`
+	Cwd    string `json:"cwd"`
+	Repo   string `json:"repo"`
+	Target string `json:"target"`
 }
 
 func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -202,6 +245,10 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(body.TaskWorkflowID) > maxWorkflowRef || len(body.TaskRunID) > maxWorkflowRef {
 		return zip.ErrBadRequest("task workflow/run reference too long")
 	}
+	host, cwd, repo, target, cerr := sessionContext(s, c, org, body.Host, body.Cwd, body.Repo, body.Target)
+	if cerr != nil {
+		return cerr
+	}
 
 	id, err := genID("sess")
 	if err != nil {
@@ -213,7 +260,8 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 		Title:          strings.TrimSpace(body.Title),
 		TaskWorkflowID: strings.TrimSpace(body.TaskWorkflowID),
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
-		StartedAt:      now, CreatedAt: now, UpdatedAt: now,
+		Host:           host, Cwd: cwd, Repo: repo, Target: target,
+		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
 	if isTerminalStatus(status) {
 		x.EndedAt = now
@@ -247,6 +295,37 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusCreated, toSessionView(x, 0, 0))
 }
 
+// sessionContext validates + binds a session's execution context (host/cwd/repo/
+// target). Target, when set, MUST resolve to a run-target in the SAME org (fail-
+// closed, exactly like a parent session) so a session can never claim to run on
+// another tenant's machine — the #48 dispatch association is tenant-safe.
+func sessionContext(s *cloud.Service[state], c *zip.Ctx, org, host, cwd, repo, target string) (string, string, string, string, error) {
+	host = strings.TrimSpace(host)
+	if len(host) > maxHost {
+		return "", "", "", "", zip.ErrBadRequest("host too long")
+	}
+	cwd = strings.TrimSpace(cwd)
+	if len(cwd) > maxCwd {
+		return "", "", "", "", zip.ErrBadRequest("cwd too long")
+	}
+	repo = strings.TrimSpace(repo)
+	if len(repo) > maxRepo {
+		return "", "", "", "", zip.ErrBadRequest("repo too long")
+	}
+	target = strings.TrimSpace(target)
+	if target != "" {
+		if len(target) > maxSessionID {
+			return "", "", "", "", zip.ErrBadRequest("target too long")
+		}
+		if _, err := s.State.store.GetTarget(c.Context(), org, target); err == errTargetNotFound {
+			return "", "", "", "", zip.ErrBadRequest("target not found in this org")
+		} else if err != nil {
+			return "", "", "", "", zip.Errorf(http.StatusInternalServerError, "target: %v", err)
+		}
+	}
+	return host, cwd, repo, target, nil
+}
+
 // ---- list ----
 
 func listSessions(s *cloud.Service[state], c *zip.Ctx) error {
@@ -271,7 +350,11 @@ func listSessions(s *cloud.Service[state], c *zip.Ctx) error {
 	for _, x := range rows {
 		ev, _ := s.State.store.CountEvents(c.Context(), org, x.ID)
 		ch, _ := s.State.store.CountChildren(c.Context(), org, x.ID)
-		out = append(out, toSessionView(x, ev, ch))
+		v := toSessionView(x, ev, ch)
+		if last, ok, _ := s.State.store.LastEvent(c.Context(), org, x.ID); ok {
+			v.LastEvent = toLastEventView(last)
+		}
+		out = append(out, v)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"sessions": out})
 }
@@ -382,6 +465,8 @@ func buildSubtree(nodes []Session, counts map[string]int, rootAtID string) treeN
 type patchSessionReq struct {
 	Status *string `json:"status"`
 	Title  *string `json:"title"`
+	// Target re-dispatches a session to a run-target (the #48 association). "" detaches.
+	Target *string `json:"target"`
 }
 
 func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -421,6 +506,20 @@ func patchSession(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.ErrBadRequest("title too long")
 		}
 		x.Title = strings.TrimSpace(*body.Title)
+	}
+	if body.Target != nil {
+		nt := strings.TrimSpace(*body.Target)
+		if nt != "" {
+			if len(nt) > maxSessionID {
+				return zip.ErrBadRequest("target too long")
+			}
+			if _, terr := s.State.store.GetTarget(c.Context(), org, nt); terr == errTargetNotFound {
+				return zip.ErrBadRequest("target not found in this org")
+			} else if terr != nil {
+				return zip.Errorf(http.StatusInternalServerError, "target: %v", terr)
+			}
+		}
+		x.Target = nt // "" detaches
 	}
 	x.UpdatedAt = time.Now().Unix()
 	if err := s.State.store.UpdateSession(c.Context(), x); err != nil {
