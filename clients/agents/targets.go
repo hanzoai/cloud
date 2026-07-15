@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/samples"
 	"github.com/zap-proto/zip"
 )
 
@@ -17,10 +19,11 @@ import (
 // box, a GPU host, or a whole cluster. It is the #48 link-a-compute seam over the
 // SAME agents.db (one store, one tenancy column) as sessions/events — NOT a rival
 // device registry. It composes with the compute fleet rather than duplicating it: a
-// session records the target id it runs on (agent_sessions.target), and the mission-
-// control devices view unions these registered targets with the org's BYO workers
-// (GET /v1/fleet/workers) and BYO clusters (GET /v1/clusters) at the view layer — the
-// console's established pattern for folding compute sources.
+// session records the target id it runs on (agent_sessions.target), and the org's
+// unified board (GET /v1/fleet, clients/visor/board.go) unions these registered
+// targets with its BYO workers (GET /v1/fleet/workers), BYO clusters and Visor
+// machines — reading this registry through the in-process seam below rather than
+// copying it.
 //
 //	POST   /v1/agents/targets        register a target -> Target
 //	GET    /v1/agents/targets        list the org's targets (+ live session load)
@@ -30,6 +33,12 @@ import (
 //
 // Every route is org-scoped through principal.Org (tenant), fail-closed — a tenant
 // can never see or mutate another org's targets, exactly like sessions.
+//
+// A write carrying `metrics` IS a heartbeat, and a heartbeat is two facts, not one:
+// the LAST sample (kept on the row, rendered by the views here) and one point in a
+// utilization SERIES (appended to clients/samples). The row answers "is this machine
+// alive and what is it doing now"; the series answers "how hot has it been". The
+// append is best-effort and detached — see recordSample.
 
 // Target kinds — the closed vocabulary of dispatch destinations.
 const (
@@ -233,6 +242,48 @@ func (s *Store) GetTargetByHost(ctx context.Context, org, host string) (Target, 
 	return t, nil
 }
 
+// ---- the in-process seam (org-scoped, fail-closed) ----
+//
+// TargetsForOrg / LoadOn are the exported twins of the list + detail reads above:
+// the ONE way another in-process subsystem (the /v1/fleet board in clients/visor)
+// reads this registry WITHOUT an HTTP hop back through the gateway — the same
+// shape ListForOrg gives the agent registry. They are two ORTHOGONAL values on
+// purpose: a target is what the machine IS, its load is what is running on it, and
+// a caller that only needs the inventory does not pay for the rollups.
+//
+// ISOLATION: org is the ONLY tenant key and is threaded verbatim into the
+// org-scoped store methods, so a caller for org A can never enumerate or resolve
+// org B's targets. The caller MUST pass an org it already validated server-side
+// (principal.Org), never a raw client header.
+
+// TargetsForOrg returns the org's registered run-targets from the in-process
+// store, newest first. Fails closed when the subsystem is not mounted or the org
+// is empty/oversized.
+func TargetsForOrg(ctx context.Context, org string) ([]Target, error) {
+	if mounted == nil || mounted.State.store == nil {
+		return nil, fmt.Errorf("agents: not mounted")
+	}
+	org = strings.TrimSpace(org)
+	if org == "" || len(org) > principal.MaxOrgLen {
+		return nil, fmt.Errorf("agents: invalid org")
+	}
+	return mounted.State.store.ListTargets(ctx, org)
+}
+
+// LoadOn returns the live session load on one of the org's targets — the same
+// (target id OR host) mapping the HTTP views use, so the board and /v1/agents/
+// targets can never disagree about what is running where.
+func LoadOn(ctx context.Context, org, id, host string) (TargetLoad, error) {
+	if mounted == nil || mounted.State.store == nil {
+		return TargetLoad{}, fmt.Errorf("agents: not mounted")
+	}
+	org = strings.TrimSpace(org)
+	if org == "" || len(org) > principal.MaxOrgLen {
+		return TargetLoad{}, fmt.Errorf("agents: invalid org")
+	}
+	return mounted.State.store.SessionLoad(ctx, org, id, host)
+}
+
 // DeleteTarget removes an org's target. Sessions keep their recorded target id (a
 // historical fact); a detached target simply stops appearing in the registry.
 func (s *Store) DeleteTarget(ctx context.Context, org, id string) (bool, error) {
@@ -260,6 +311,83 @@ func (s *Store) SessionLoad(ctx context.Context, org, id, host string) (TargetLo
 		return TargetLoad{}, fmt.Errorf("session load: %w", err)
 	}
 	return TargetLoad{Sessions: total, Running: running}, nil
+}
+
+// ---- the fleet time series ----
+//
+// A heartbeat is the ONE moment this process learns what a linked machine is
+// doing, so it is also where the fleet's utilization series is fed. The target row
+// keeps the LAST sample (the snapshot the views render, unchanged); clients/samples
+// keeps every sample over time. Two different questions — "is it alive now" and
+// "how hot has it been" — so two homes, one write.
+
+// sampleTimeout bounds the warehouse write. Generous (the insert is one small row
+// in-cluster) but finite, so a wedged datastore can never hold the goroutine open.
+const sampleTimeout = 5 * time.Second
+
+// sampleOf projects a target's server-stamped heartbeat into a fleet sample. PURE
+// (no clock, no I/O, no store) so the whole projection is unit-testable and the
+// caller decides when it runs.
+//
+// cost_cents is 0: an agent run-target is the operator's OWN machine (a laptop, a
+// dialed-in box) — the fleet meters its utilization, it does not resell it. A
+// priced source (visor/cloud) fills that column from its own resale price.
+func sampleOf(t Target) samples.Sample {
+	var model string
+	if len(t.Spec.GPUs) > 0 {
+		// The representative accelerator: the count already rides in GPUs, so the
+		// first card's model names the row. A heterogeneous host is rare enough
+		// that naming its first card beats inventing a summary string here.
+		model = t.Spec.GPUs[0].Model
+		if model == "" {
+			model = t.Spec.GPUs[0].Vendor
+		}
+	}
+	return samples.Sample{
+		Org:    t.Org,
+		Source: samples.SourceAgent,
+		Unit:   t.ID,
+		Host:   t.Host,
+		Kind:   t.Kind,
+		At:     time.Unix(t.MetricsAt, 0).UTC(),
+
+		CPUs:     t.Spec.CPUs,
+		Memory:   t.Spec.Memory,
+		MemUsed:  t.Metrics.MemUsed,
+		MemFree:  t.Metrics.MemFree,
+		Load1:    t.Metrics.Load1,
+		Load5:    t.Metrics.Load5,
+		Load15:   t.Metrics.Load15,
+		GPUUtil:  t.Metrics.GPUUtil,
+		GPUs:     len(t.Spec.GPUs),
+		GPUModel: model,
+	}
+}
+
+// recordSample appends a heartbeat to the fleet series. Best-effort and DETACHED
+// on purpose — the warehouse is never in the heartbeat's critical path:
+//
+//   - it runs on its own bounded context, so neither a slow datastore nor the
+//     client hanging up mid-request can stall or cancel the write;
+//   - it never touches the response, so the /v1/agents/targets contract is
+//     byte-identical whether the warehouse is present, absent or on fire;
+//   - a failure is logged, never surfaced — a dropped sample must not cost a
+//     machine its heartbeat.
+//
+// This is the shape the billing warehouse write already uses (`go zapWriteUsage`):
+// the seam is synchronous, the CALLER owns the concurrency.
+func recordSample(s *cloud.Service[state], t Target) {
+	if t.MetricsAt == 0 {
+		return // no heartbeat in this write — nothing to append
+	}
+	sample := sampleOf(t) // project on the caller's goroutine: t must not escape mutably
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), sampleTimeout)
+		defer cancel()
+		if err := samples.Record(ctx, sample); err != nil {
+			s.Log.Warn("fleet sample write failed", "org", sample.Org, "unit", sample.Unit, "err", err)
+		}
+	}()
 }
 
 // ---- HTTP shapes (the published contract) ----
@@ -386,6 +514,7 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 			if err := s.State.store.UpdateTarget(c.Context(), existing); err != nil {
 				return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 			}
+			recordSample(s, existing) // a re-link carrying metrics IS a heartbeat
 			load, _ := s.State.store.SessionLoad(c.Context(), org, existing.ID, existing.Host)
 			return c.JSON(http.StatusOK, toTargetView(existing, load))
 		}
@@ -403,6 +532,7 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := s.State.store.CreateTarget(c.Context(), t); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
+	recordSample(s, t) // a registration carrying metrics is the target's first sample
 	return c.JSON(http.StatusCreated, toTargetView(t, TargetLoad{}))
 }
 
@@ -537,6 +667,9 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.ErrNotFound("target not found")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+	}
+	if body.Metrics != nil {
+		recordSample(s, t) // THE heartbeat: append it to the fleet series too
 	}
 	load, _ := s.State.store.SessionLoad(c.Context(), org, t.ID, t.Host)
 	return c.JSON(http.StatusOK, toTargetView(t, load))
