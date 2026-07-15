@@ -30,7 +30,10 @@ type aiEmbedder struct {
 
 func newEmbedder(ai cloud.AIClient, model string) *aiEmbedder {
 	if model == "" {
-		model = getenv("CLOUD_EMBED_MODEL", "bge-m3")
+		// The gateway serves the SKU (zen-embedding), not the raw upstream name:
+		// a request for "bge-m3" 400s ("model not available"), which silently left
+		// the semantic tier empty (vectors:0). zen-embedding routes to bge-m3.
+		model = getenv("CLOUD_EMBED_MODEL", "zen-embedding")
 	}
 	return &aiEmbedder{ai: ai, model: model}
 }
