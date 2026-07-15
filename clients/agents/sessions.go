@@ -61,6 +61,8 @@ const (
 	maxHost         = 256
 	maxCwd          = 1024
 	maxRepo         = 512
+	maxProvider     = 64
+	maxAccount      = 256
 )
 
 func validKind(k string) bool {
@@ -85,10 +87,12 @@ type sessionView struct {
 	TaskRunID       string `json:"taskRunId,omitempty"`
 	// Execution context (mission-control): the machine/repo/cwd a card shows and
 	// the run-target a session is dispatched to. Omitted when a surface didn't report it.
-	Host   string `json:"host,omitempty"`
-	Cwd    string `json:"cwd,omitempty"`
-	Repo   string `json:"repo,omitempty"`
-	Target string `json:"target,omitempty"`
+	Host     string `json:"host,omitempty"`
+	Cwd      string `json:"cwd,omitempty"`
+	Repo     string `json:"repo,omitempty"`
+	Target   string `json:"target,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Account  string `json:"account,omitempty"`
 
 	Events    int    `json:"events"`
 	Children  int    `json:"children"`
@@ -155,6 +159,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		ParentSessionID: x.ParentID, RootSessionID: x.RootID, Title: x.Title,
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
 		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
+		Provider: x.Provider, Account: x.Account,
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
@@ -207,6 +212,9 @@ type registerReq struct {
 	Cwd    string `json:"cwd"`
 	Repo   string `json:"repo"`
 	Target string `json:"target"`
+	// Account tag — the linked AI account this session ran under (login manager).
+	Provider string `json:"provider"`
+	Account  string `json:"account"`
 }
 
 func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -249,6 +257,14 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	if cerr != nil {
 		return cerr
 	}
+	provider := strings.TrimSpace(body.Provider)
+	account := strings.TrimSpace(body.Account)
+	if len(provider) > maxProvider {
+		return zip.ErrBadRequest("provider too long")
+	}
+	if len(account) > maxAccount {
+		return zip.ErrBadRequest("account too long")
+	}
 
 	id, err := genID("sess")
 	if err != nil {
@@ -261,6 +277,7 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 		TaskWorkflowID: strings.TrimSpace(body.TaskWorkflowID),
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
 		Host:           host, Cwd: cwd, Repo: repo, Target: target,
+		Provider: provider, Account: account,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
 	if isTerminalStatus(status) {
