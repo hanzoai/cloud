@@ -454,12 +454,22 @@ jobs:
               -t "ghcr.io/hanzoai/cloud:${major}.${minor}" \
               "$SHA_IMG"
             # Dual-host: mirror the release tags to OUR fleet registry (server-
-            # side copy) so the cluster never depends on GHCR to deploy. Best-
-            # effort — a mirror hiccup must never block the tag-receipt.
+            # side copy) so the cluster never depends on GHCR to deploy. crane,
+            # not buildx imagetools: the IAM token realm doesn't answer buildx's
+            # multi-scope token request (spec gap, tracked), crane's single-scope
+            # flow works. Best-effort — a mirror hiccup never blocks the receipt.
             if [ "${MIRROR_OK:-}" = "1" ]; then
+              command -v crane >/dev/null 2>&1 || {
+                curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz \
+                  | tar -xz -C "$HOME/.local/bin" crane 2>/dev/null || {
+                    mkdir -p "$HOME/.local/bin"
+                    curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz \
+                      | tar -xz -C "$HOME/.local/bin" crane
+                  }
+                export PATH="$HOME/.local/bin:$PATH"
+              }
               for MT in "${V}" "${VER}" "${major}.${minor}"; do
-                docker buildx imagetools create \
-                  -t "registry.hanzo.ai/hanzoai/cloud:${MT}" "$SHA_IMG" \
+                crane copy "$SHA_IMG" "registry.hanzo.ai/hanzoai/cloud:${MT}" \
                   || echo "::warning::mirror registry.hanzo.ai/hanzoai/cloud:${MT} failed"
               done
             fi
