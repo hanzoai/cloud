@@ -1,6 +1,7 @@
 // Package apps is the composition root: the single, explicit list of which
 // Hanzo cloud subsystems are linked into the binary AND the order they mount in.
 //
+//go:generate go run ../cmd/gen-app-cmds
 // Wire() returns []cloud.MountSpec in mount order (slice position == order). There
 // is no init()-registry and no order-int: adding, removing, or reordering a
 // subsystem is a one-line edit to Wire(), read top-to-bottom. cmd/cloud and
@@ -322,6 +323,25 @@ func Wire() []cloud.MountSpec {
 		// Runtime wasm/proxy plugins — mounts dead last.
 		{Name: "plugins", Mount: cloud.Typed(plugin.Mount)},
 	}
+}
+
+// ServeSingle is the ONE way to run a single app standalone: validate `name`
+// against Wire(), then serve exactly it (cloud.Serve with a one-name enable
+// list — MountAll mounts only it). It is the path `hanzo <name>` already uses;
+// promoting it here lets each cmd/<app>/main.go stub reuse it instead of
+// re-implementing the dispatch, so adding an app in Wire() is still the one edit
+// and its standalone binary comes for free (generated). Returns an error for an
+// unknown name rather than booting a no-op.
+func ServeSingle(name string) error {
+	if name == "" {
+		return fmt.Errorf("ServeSingle: empty app name")
+	}
+	for _, spec := range Wire() {
+		if spec.Name == name {
+			return cloud.Serve(Wire(), []string{name})
+		}
+	}
+	return fmt.Errorf("ServeSingle: unknown app %q — run `hanzo code ls`/`hanzo` for the list", name)
 }
 
 // mountMetrics adapts hanzoai/metrics into a cloud.MountFunc. Unlike the other
