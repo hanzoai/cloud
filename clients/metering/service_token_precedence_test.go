@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/finance"
@@ -45,10 +45,10 @@ func seedInMemDatastore(t *testing.T) {
 // so IAMTokenRequired stamps iam_authenticated=true; it carries NO X-User-Permissions
 // (an S2S call has no per-user scope), so the minted permissions are ZERO. This is
 // the exact context state under which the bug fired.
-func stampIAMForS2S(c *gin.Context) {
-	c.Set("iam_authenticated", true)
-	c.Set("permissions", bit.Field(0))
-	c.Next()
+func stampIAMForS2S(c *zip.Ctx) error {
+	c.Locals("iam_authenticated", true)
+	c.Locals("permissions", bit.Field(0))
+	return c.Next()
 }
 
 // TestInProcMeteringDispatch_ServiceTokenAuthPath exercises the FULL in-process
@@ -62,7 +62,6 @@ func stampIAMForS2S(c *gin.Context) {
 // scope gate. The client is fail-CLOSED, so a scope-gate rejection would surface as a
 // generic error (→ 503), not a silent allow — the prepaid gate stays fail-closed.
 func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	const svc = "svc-token-metering-xyz789"
 	t.Setenv("COMMERCE_SERVICE_TOKEN", svc)
 	seedInMemDatastore(t)
@@ -73,18 +72,18 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 	// through the real commerce middleware chain, exactly like the topology that 500'd.
 	finance.Publish(nil)
 
-	eng := gin.New()
+	eng := zip.New(zip.Config{DisableStartupMessage: true})
 	eng.Use(stampIAMForS2S)
-	grp := eng.Group("v1/billing")
-	grp.Use(commercemid.TokenRequired(permission.Admin)) // the money group: /balance, /tier, /usage
-	grp.GET("/balance", func(c *gin.Context) {
+	grp := eng.Group("/v1/billing")
+	grp.Use(commercemid.RequestContext(), commercemid.TokenRequired(permission.Admin)) // the money group: /balance, /tier, /usage
+	grp.Get("/balance", func(c *zip.Ctx) error {
 		avail := int64(0)
 		if c.Query("user") == "funded" {
 			avail = 500
 		}
-		c.JSON(http.StatusOK, gin.H{"user": c.Query("user"), "currency": "usd", "available": avail})
+		return c.JSON(http.StatusOK, map[string]any{"user": c.Query("user"), "currency": "usd", "available": avail})
 	})
-	commerceinproc.SetHandler(eng)
+	commerceinproc.SetApp(eng)
 	t.Cleanup(func() { commerceinproc.SetHandler(nil) })
 
 	m, err := metering.New(metering.Config{
