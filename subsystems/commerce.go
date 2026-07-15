@@ -61,6 +61,18 @@ var commercePrefixes = []string{
 	// webhook path reaches gin while every other /v1/billing/* route keeps its
 	// existing owner.
 	"/v1/billing/webhooks",
+	// The platform auto-recharge sweep (PlatformOnly, POST .../run-all). The
+	// durable cron's billing-autorecharge poke entry dispatches it over the
+	// cluster wire (POST cloud.hanzo.svc:8000 with the COMMERCE_SERVICE_TOKEN
+	// bearer); without this prefix the request lands on the account-bridge
+	// /v1/billing/* catch-all, whose session gate 403s a service token
+	// ("sign in to view billing"). Mounted like the webhooks: only this route
+	// family reaches gin, where commerce's own TokenRequired service-token
+	// branch + the PlatformOnly mint gate authenticate it — token-is-the-auth.
+	// (Landed 5x before the unfork — #274 + 6dc3c6b — and dropped by the
+	// unfork's pre-fix snapshot of this list; the pin test now lives beside
+	// THIS list so the wire path can't silently regress again.)
+	"/v1/billing/auto-recharge",
 }
 
 // mountCommerce adapts cloud.Deps to the commerce module: boots the embedded gin
