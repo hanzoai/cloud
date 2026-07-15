@@ -199,12 +199,12 @@ func TestRESTPushCrossTenantIsolation(t *testing.T) {
 		t.Fatalf("beta push want 200, got %d %s", code, b)
 	}
 	// acme's repo is still empty (no HEAD) — beta never wrote into it.
-	branches, head := refState(mounted, "acme", "", "shared")
+	branches, head := refState(mounted.Load(), "acme", "", "shared")
 	if head != "" || len(branches) != 0 {
 		t.Fatalf("acme repo must be untouched, got head=%q branches=%v", head, branches)
 	}
 	// beta's repo has the commit.
-	_, betaHead := refState(mounted, "beta", "", "shared")
+	_, betaHead := refState(mounted.Load(), "beta", "", "shared")
 	if betaHead == "" {
 		t.Fatalf("beta repo should have a HEAD after its push")
 	}
