@@ -53,6 +53,21 @@ func init() {
 var commercePrefixes = []string{
 	"/v1/commerce", // public checkout + tenant + catalog + deposits + the api.Route bundle
 	"/_/commerce",  // tenant-admin surface
+	// The BARE store surface api.Route(Group("/v1")) registers on the commerce gin
+	// engine: GET /v1/store/current (the org-scoped default store the admin dashboard
+	// AND the content storefront edge resolve — clients/content/storefront.go), the
+	// per-listing upsert /v1/store/:id/listing/:slug the publish edge writes, and the
+	// public storefront reads karma.style serves at runtime (site/commerce.js: GET
+	// /v1/store/:store/listing). The standalone commerced exposed all of it; the unfork
+	// dropped it from THIS mount list, so /v1/store/* matched no owner and fell through
+	// to the bare /v1/* AI catch-all — whose prepaid BALANCE gate 402'd every store read
+	// (a store-metadata read must never require an LLM balance; org karma's $999.99 of
+	// commerce credit is not an ai-ledger balance). Mounting it here routes /v1/store/*
+	// to the commerce handler, which resolves the org from the gateway X-Org-Id
+	// (TokenRequired → ensureIAMOrg) and lazily provisions the org's store — restoring
+	// standalone parity. Gin still 404s an unknown /v1/store/* path, and each store
+	// route keeps its own permission mask (money paths stay publishedRequired).
+	"/v1/store",
 	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
 	// Square et al). The provider's HMAC over the registered notification URL +
 	// body IS the auth; a bearer gate is impossible for provider callbacks. Only
