@@ -54,8 +54,14 @@ import (
 // validated tenant; AllOrgs (SuperAdmin) drops the org predicate; the window
 // [Since, Until) is closed; Interval is the server-chosen bucket ("hour" | "day");
 // TopN bounds the by-model table (the rest fold into "other").
+//
+// Project is the org SUB-SCOPE (server-minted, "" for the org's default project ==
+// whole-org view). When non-empty it ANDs a project predicate on the ledger and
+// the latency spans, so the board narrows to that project WITHIN the org — org
+// stays the hard tenant boundary regardless.
 type MetricsFilter struct {
 	Org      string
+	Project  string
 	AllOrgs  bool
 	Since    time.Time
 	Until    time.Time
@@ -199,10 +205,13 @@ func (s *service) metricsBoard(c *zip.Ctx) error {
 	if iv := strings.TrimSpace(c.Query("interval")); iv == "hour" || iv == "day" {
 		interval = iv
 	}
-	project := strings.TrimSpace(c.Query("project"))
+	// Project is the server-minted sub-scope ("" for the org's default project ==
+	// whole-org board). Same resolver as the trace path so the two never drift.
+	project := principal.ProjectScope(c)
 
 	f := MetricsFilter{
 		Org:      org, // authoritative — never a client header
+		Project:  project,
 		AllOrgs:  c.IsAdmin(),
 		Since:    since,
 		Until:    until,
@@ -211,7 +220,14 @@ func (s *service) metricsBoard(c *zip.Ctx) error {
 	}
 
 	board := emptyBoard(f)
-	if s.tel != nil && principal.IsDefaultProject(project) {
+	// The default-project (whole-org) board queries the ledger today. A NAMED
+	// project additionally needs the cloud_usage `project` column that the ai write
+	// path populates; until this cloud pins that ai version, a named-project board
+	// is honest-empty (never a fabricated number, never a 500 on a column that does
+	// not yet exist). Activation is one edit — drop the `f.Project == ""` guard —
+	// once the ledger carries project; the query plumbing (usageWhere) is already
+	// project-aware and tested.
+	if s.tel != nil && f.Project == "" {
 		b, err := s.tel.Metrics(c.Context(), f)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "metrics: %v", err)
@@ -322,6 +338,12 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 		where += " AND attributes_string['gen_ai.hanzo.org_id'] = ?"
 		args = append(args, f.Org)
 	}
+	if f.Project != "" {
+		// The ai emit path tags gen_ai.hanzo.project on the span; narrowing here
+		// keeps per-project latency consistent with the per-project ledger board.
+		where += " AND attributes_string['gen_ai.hanzo.project'] = ?"
+		args = append(args, f.Project)
+	}
 
 	perModel := map[string]latPercentiles{}
 	modelSQL := "SELECT attributes_string['gen_ai.request.model'] AS model, " +
@@ -359,16 +381,26 @@ func (t *dsTelemetry) latency(ctx context.Context, f MetricsFilter) (map[string]
 	return perModel, overall
 }
 
-// usageWhere builds the cloud_usage time (+ org) predicate. Times are bound as
-// datastore DateTime string literals (the proven ai/object cloud_usage pattern);
-// the org is bound as a positional parameter (never interpolated). A SuperAdmin
-// (AllOrgs) drops the org predicate for the platform-wide board.
+// usageWhere builds the cloud_usage time (+ org + project) predicate. Times are
+// bound as datastore DateTime string literals (the proven ai/object cloud_usage
+// pattern); the org and project are bound as positional parameters (never
+// interpolated). A SuperAdmin (AllOrgs) drops the org predicate for the
+// platform-wide board; a non-empty Project ANDs the project predicate.
+//
+// The project predicate reads the cloud_usage `project` column, which the ai
+// write path (usageRecord ← X-Project-Id) and DDL populate. Until an org's rows
+// carry a project, a named-project board is honest-empty; the default-project /
+// whole-org board (Project == "") is unaffected.
 func usageWhere(f MetricsFilter) (string, []any) {
 	where := "timestamp >= ? AND timestamp < ?"
 	args := []any{chTime(f.Since), chTime(f.Until)}
 	if !f.AllOrgs {
 		where += " AND organization = ?"
 		args = append(args, f.Org)
+	}
+	if f.Project != "" {
+		where += " AND project = ?"
+		args = append(args, f.Project)
 	}
 	return where, args
 }
