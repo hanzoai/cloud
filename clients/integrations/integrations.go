@@ -277,6 +277,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
+	// GitHub App sync (github_app.go / github_webhook.go). The literal github paths
+	// register BEFORE the /:provider wildcards so they win under registration-order
+	// matching (same discipline as the slack bridge). The webhook is PUBLIC at the
+	// JWT layer — HMAC-verified inside; repos/import are org-authed via the principal.
+	app.Post("/v1/integrations/github/webhook", cloud.Handle(s, githubWebhook))
+	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
+	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
 	app.Get("/v1/integrations/:provider", cloud.Handle(s, get))
 	app.Post("/v1/integrations/:provider/connect", cloud.Handle(s, connect))
 	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
@@ -429,6 +436,13 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		return failRedirect(s, c, p.ID, "authorization denied")
 	}
 	code := strings.TrimSpace(c.Query("code"))
+	if code == "" {
+		// A GitHub App install returns installation_id (+ setup_action), not an OAuth
+		// code, unless "request user authorization during installation" is enabled.
+		// Surface it as the identifier the provider's Exchange trades — the ONE
+		// generalization the App model needs (OAuth providers always have `code`).
+		code = strings.TrimSpace(c.Query("installation_id"))
+	}
 	if code == "" {
 		return failRedirect(s, c, p.ID, "missing authorization code")
 	}
