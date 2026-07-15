@@ -171,6 +171,7 @@ const (
 type state struct {
 	store      *Store
 	commerce   commerce
+	clicks     *clicks         // in-memory coalescing buffer for public link-click pings
 	linkBase   string          // https://hanzo.ai (brand host) — the ?aff link prefix
 	marginBps  int64           // platform gross-margin fraction the share is computed on
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
@@ -201,6 +202,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "affiliates"), State: state{
 		store:      store,
 		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
+		clicks:     newClicks(),
 		linkBase:   linkBase(deps),
 		marginBps:  affiliateMarginBps(),
 		auditStore: deps.Audit,
@@ -466,6 +468,10 @@ func attribute(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	ctx := c.Context()
 
+	// The 404-vs-2xx here is an intended, benign code-existence signal, not a leak: an
+	// affiliate code IS a public, shareable link, so "is this code real" is public by
+	// design, and the referred org (the validated caller) legitimately needs to know its
+	// ?aff code resolved. No org identity or private state is exposed either way.
 	aff, err := s.State.store.AffiliateForCode(ctx, code)
 	if err != nil {
 		if err == errUnknownCode {
@@ -855,12 +861,12 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, margin, commission, now)
+		moved, lerr := s.State.store.Accrue(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, margin, commission, now)
 		if lerr != nil {
-			s.Log.Warn("affiliates: accrual latch failed", "affiliate", aff.ID, "source", sourceOrg, "err", lerr)
+			s.Log.Warn("affiliates: accrual failed", "affiliate", aff.ID, "source", sourceOrg, "err", lerr)
 			continue
 		}
-		if won {
+		if moved {
 			created++
 			emitAudit(s, ctx, "affiliate.accrue", aff, map[string]any{
 				"sourceOrg": sourceOrg, "period": period, "level": level,
@@ -902,12 +908,12 @@ func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, src, period, level, spend, margin, commission, now)
+		moved, lerr := s.State.store.Accrue(ctx, accrualID, a.ID, src, period, level, spend, margin, commission, now)
 		if lerr != nil {
-			s.Log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "source", src, "err", lerr)
+			s.Log.Warn("affiliates: accrual failed", "affiliate", a.ID, "source", src, "err", lerr)
 			continue
 		}
-		if won {
+		if moved {
 			created++
 			emitAudit(s, ctx, "affiliate.accrue", a, map[string]any{
 				"sourceOrg": src, "period": period, "level": level,
@@ -1100,10 +1106,15 @@ func linkBase(deps cloud.Deps) string {
 	}
 }
 
-// Shutdown closes the affiliates store. Idempotent.
+// Shutdown flushes any pending link clicks, then closes the affiliates store. Idempotent.
 func Shutdown() error {
 	if mounted == nil || mounted.State.store == nil {
 		return nil
+	}
+	if mounted.State.clicks != nil {
+		if tally := mounted.State.clicks.drain(); tally != nil {
+			_ = mounted.State.store.FlushClicks(context.Background(), tally)
+		}
 	}
 	err := mounted.State.store.Close()
 	mounted = nil
