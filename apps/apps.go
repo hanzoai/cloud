@@ -1,4 +1,4 @@
-// Package subsystems is the composition root: the single, explicit list of which
+// Package apps is the composition root: the single, explicit list of which
 // Hanzo cloud subsystems are linked into the binary AND the order they mount in.
 //
 // Wire() returns []cloud.MountSpec in mount order (slice position == order). There
@@ -27,7 +27,7 @@
 // composition root fixes). They are wired back at their order-int slots — o11y-ext
 // kept adjacent to the in-repo o11y read-plane (@69); ai as the last /v1/* catch-all
 // before plugins (@900). Do not re-sort; edit positions deliberately.
-package subsystems
+package apps
 
 import (
 	"context"

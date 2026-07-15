@@ -83,7 +83,7 @@ issues SQL against it — column names are the coupling, so keep them in sync.
 
 ## Leaf wiring (register)
 
-Register the leaf and blank-import it in `subsystems/subsystems.go`. It mounts
+Register the leaf and blank-import it in `apps/apps.go`. It mounts
 under the mount-all default (empty `CLOUD_ENABLE`) — the captable/sign/dataroom
 folds are NOT staged (their standalone apps are retired/empty, so the one binary
 is authoritative from first write):
