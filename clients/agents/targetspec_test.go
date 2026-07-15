@@ -199,3 +199,26 @@ func TestHTTPTargetUpsertByHost(t *testing.T) {
 		t.Fatalf("upsert must leave 2 machines (evo, dbc), got %d: %+v", len(list.Targets), list.Targets)
 	}
 }
+
+// TestHTTPTargetRejectsOversizeGPUList proves an absurd GPU array is rejected at the
+// handler (a clean 400) rather than silently truncated after a large allocation — the
+// bound is communicated to the client, and a normal list still registers.
+func TestHTTPTargetRejectsOversizeGPUList(t *testing.T) {
+	app := mountApp(t, &fakeAI{content: "x"})
+	huge := make([]map[string]any, maxGPUs+50)
+	for i := range huge {
+		huge[i] = map[string]any{"vendor": "nvidia", "model": "x"}
+	}
+	if code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+		"label": "box", "host": "box", "spec": map[string]any{"gpus": huge},
+	}); code != http.StatusBadRequest {
+		t.Fatalf("oversize gpu list must be rejected 400, got %d (%s)", code, b)
+	}
+	// A normal-sized list is accepted.
+	ok := []map[string]any{{"vendor": "nvidia", "model": "GB10"}, {"vendor": "amd", "model": "8060S"}}
+	if code, b := do(t, app, http.MethodPost, "/v1/agents/targets", "acme", map[string]any{
+		"label": "box", "host": "box", "spec": map[string]any{"gpus": ok},
+	}); code != http.StatusCreated {
+		t.Fatalf("normal gpu list must be accepted, got %d (%s)", code, b)
+	}
+}
