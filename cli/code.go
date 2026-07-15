@@ -40,51 +40,100 @@ import (
 // explicit id: `hanzo code claude zen5-pro`.
 const defaultCodeModel = "zen5"
 
+// A zenTier bridges a model id Claude Code recognizes (the carrier) to the zen
+// alias api.hanzo.ai serves. CC sizes a model's context window and features only
+// from ids it knows; an unknown id like "zen5-pro" gets a 128K budget and is
+// rejected client-side above it — the "max context 131072" the server never
+// actually imposes. Nothing lets us declare a custom model's window, so the
+// carrier (a known 1M id, [1m] where needed) unlocks the budget and modelOverrides
+// rewrites it back to zen before the request leaves the client — the carrier never
+// reaches the server. Requires Claude Code v2.1.200+.
+type zenTier struct {
+	zen     string // served zen alias — the wire model api.hanzo.ai receives
+	carrier string // recognized id CC budgets from; "" pins zen directly (fast tiers, never >128K)
+	env     string // ANTHROPIC_DEFAULT_*_MODEL slot ("" = selectable, no slot)
+	name    string // /model picker label (via _NAME, gateway-effective)
+	desc    string // /model picker description (via _DESCRIPTION)
+}
+
+// slotID is the tier's wire value: its carrier, or the zen id when direct.
+func (t zenTier) slotID() string {
+	if t.carrier != "" {
+		return t.carrier
+	}
+	return t.zen
+}
+
+// zenTiers is the ONE source of truth for the CC-tier ⇆ zen mapping — the wire
+// env, picker branding, and modelOverrides all derive from it. Every zen id must
+// be one api.hanzo.ai serves (TestZenTiersServeReal); zen5-mini/max/ultra are
+// listed but not served, so fable maps to zen5-pro until zen5-max returns.
+var zenTiers = []zenTier{
+	{zen: "zen5-flash", env: "ANTHROPIC_DEFAULT_HAIKU_MODEL", name: "Zen5 Flash", desc: "Hanzo Zen5 Flash — fast, cheap tier"},
+	{zen: "zen5", carrier: "claude-sonnet-4-6[1m]", env: "ANTHROPIC_DEFAULT_SONNET_MODEL", name: "Zen5", desc: "Hanzo Zen5 — frontier tier (1M context)"},
+	{zen: "zen5-pro", carrier: "claude-opus-4-8[1m]", env: "ANTHROPIC_DEFAULT_OPUS_MODEL", name: "Zen5 Pro", desc: "Hanzo Zen5 Pro — DeepSeek-V4 class (1M context)"},
+	{zen: "zen5-pro", carrier: "claude-fable-5[1m]", env: "ANTHROPIC_DEFAULT_FABLE_MODEL", name: "Zen5 Pro (max effort)", desc: "Hanzo Zen5 Pro, top tier (1M context)"},
+	{zen: "zen5-coder", carrier: "claude-sonnet-5", name: "Zen5 Coder", desc: "Hanzo Zen5 Coder — code-specialized (1M context)"},
+}
+
+// zenCarrier maps a resolved zen alias to the carrier CC budgets from; an unknown
+// id passes through with CC's default budget.
+func zenCarrier(model string) string {
+	for _, t := range zenTiers {
+		if t.zen == model {
+			return t.slotID()
+		}
+	}
+	return model
+}
+
+// stripModelSuffix drops the "[1m]" suffix so a carrier matches its override key.
+func stripModelSuffix(id string) string {
+	if i := strings.IndexByte(id, '['); i >= 0 {
+		return id[:i]
+	}
+	return id
+}
+
+// claudeModelOverrides is the carrier→zen map for settings.json: CC budgets from
+// the carrier key and sends the zen value on the wire. Direct tiers need no entry.
+func claudeModelOverrides() map[string]string {
+	m := make(map[string]string, len(zenTiers))
+	for _, t := range zenTiers {
+		if t.carrier != "" {
+			m[stripModelSuffix(t.carrier)] = t.zen
+		}
+	}
+	return m
+}
+
 // wire builds the env that points an agent's SDK at the Hanzo cloud.
 type wire func(base, token, model string) map[string]string
 
-// anthropicWire builds the env that points Claude Code at the Hanzo cloud AND
-// pins every CC model slot to a zen5 alias — the stable Hanzo capability
-// contract — so CC never routes to a raw claude-* model. api.hanzo.ai does not
-// serve the Anthropic ids CC defaults to (claude-haiku-*, claude-opus-*, …);
-// a request for one 403s, which kills the permission classifier ("auto mode
-// cannot determine safety"), every subagent, and /compact.
-//
-// zen5-* is the STABLE API contract. Each alias is a capability tier, not a
-// model name — the backend maps each to the best upstream it serves (today, on
-// DigitalOcean GenAI; tomorrow, whatever supersedes it). Clients never see the
-// upstream: swap GLM for Qwen 3.6 or a future frontier and every SDK / CLI /
-// Claude Code integration keeps working unchanged. The CC tier → zen5 alias
-// map is fixed here; the zen5 → upstream map lives in models.yaml.
-//
-//	CC tier        zen5 alias    capability
-//	──────────    ──────────    ─────────────────────────────
-//	Haiku         zen5-flash    fast / cheap (classifier, quick tasks)
-//	Sonnet        zen5           default frontier (GLM-5.2 class, 1M ctx)
-//	Opus          zen5-pro      heavy reasoning (DeepSeek-V4 Pro class)
-//	Fable         zen5-max      top frontier (largest SKU: Qwen3.5-397B → 1M overflow)
-//	main          <model>       the resolved id, default zen5-pro (see defaultCodeModel)
-//
-// The main slot takes a served, tool-capable id (default zen5-pro), never the
-// virtual `best`: CC rewrites the reserved word `best` to a claude-* id that
-// 403s. ANTHROPIC_MODEL alone is not enough — a persisted /model selection
-// overrides it — so the claude agent also passes --model on argv (see
-// codeAgents) to force the session model. The env vars below pin the four CC
-// tier slots so the classifier, subagents, and /compact hit served zen5 SKUs.
+// anthropicWire points Claude Code at the Hanzo cloud and pins each CC tier slot
+// to its carrier (see zenTier), so subagents, the classifier, and /compact get
+// the right context budget while modelOverrides rewrites carriers back to zen ids
+// on the wire. `model` arrives already mapped to its carrier (runCode).
 func anthropicWire(base, token, model string) map[string]string {
-	return map[string]string{
+	env := map[string]string{
 		"ANTHROPIC_BASE_URL":   base,
 		"ANTHROPIC_AUTH_TOKEN": token,
 		"ANTHROPIC_MODEL":      model,
-		// The four CC tier slots are FIXED zen5 aliases — the stable contract.
-		// Without these, CC falls back to its built-in claude-* ids and 403s
-		// on every non-main call (subagents, the classifier, compaction).
-		"ANTHROPIC_SMALL_FAST_MODEL":     "zen5-flash",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-max",
 	}
+	for _, t := range zenTiers {
+		if t.env == "" {
+			continue
+		}
+		env[t.env] = t.slotID()
+		env[t.env+"_NAME"] = t.name
+		env[t.env+"_DESCRIPTION"] = t.desc
+		// SMALL_FAST_MODEL is deprecated AND not rewritten by modelOverrides, so
+		// it must hold a served zen id directly — mirror the (direct) haiku slot.
+		if t.env == "ANTHROPIC_DEFAULT_HAIKU_MODEL" {
+			env["ANTHROPIC_SMALL_FAST_MODEL"] = t.slotID()
+		}
+	}
+	return env
 }
 
 func openaiWire(base, token, _ string) map[string]string {
@@ -99,6 +148,7 @@ type codeAgent struct {
 	wire         wire                       // how it finds the cloud
 	fullAuto     []string                   // flags that bypass approval prompts
 	modelArg     []string                   // how the model is passed on argv (empty: via env)
+	carrier      func(model string) string  // maps the resolved model to a client-recognized id (claude: zen→carrier); nil = pass through
 	provider     func(base string) []string // agents that need the endpoint declared, not just env'd
 	clear        []string                   // env that would shadow the wire (a stale key in the shell)
 	configHome   string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
@@ -146,11 +196,14 @@ var codeAgents = map[string]codeAgent{
 		// --model forces the session model on argv. Claude Code persists the
 		// user's last /model selection (e.g. the reserved word "best"), and that
 		// persisted choice OVERRIDES ANTHROPIC_MODEL — so the env var alone cannot
-		// pin the model. --model is the per-session override that beats it: CC
-		// sends it as the request's model field verbatim, and api.hanzo.ai serves
-		// the zen5 id. This is what makes `hanzo code claude` always run zen5
-		// regardless of what the user last picked in /model.
+		// pin the model. --model is the per-session override that beats it. CC
+		// budgets the context window from this (carrier) id, then rewrites it to
+		// the zen alias via modelOverrides before the request leaves the client —
+		// so api.hanzo.ai serves the zen id regardless of what /model last held.
 		modelArg: []string{"--model"},
+		// zen→carrier: hand CC a model it recognizes so it grants the full (1M)
+		// context budget; claudeSettings' modelOverrides maps it back to zen.
+		carrier: zenCarrier,
 		// Stamp the identity: append the Hanzo Zen identity to CC's base prompt so
 		// the served model says it is a Hanzo Zen model when asked. An append (not
 		// --system-prompt) keeps CC's harness prompt intact; applied in --safe too.
@@ -286,6 +339,13 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 	if model, err = resolveModel(env, model); err != nil {
 		return err
 	}
+	// Resolve the served zen id first (above), THEN hand the agent its carrier:
+	// the id its client recognizes for context/feature budgeting. The zen id is
+	// what api.hanzo.ai serves; the carrier is a client-side concern only.
+	served := model
+	if agent.carrier != nil {
+		model = agent.carrier(model)
+	}
 
 	for _, k := range agent.clear {
 		if err := os.Unsetenv(k); err != nil {
@@ -329,7 +389,11 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(env.out, "%s → %s on %s\n", agent.bin, model, base)
+	if served != model {
+		fmt.Fprintf(env.out, "%s → %s (as %s) on %s\n", agent.bin, served, model, base)
+	} else {
+		fmt.Fprintf(env.out, "%s → %s on %s\n", agent.bin, model, base)
+	}
 	return execEngine(bin, argv) // exec: signals + exit code flow straight through
 }
 
@@ -414,27 +478,53 @@ func mcpConfigJSON(prog string, args []string) string {
 // and NO pinned model (the zen5 slots come from the injected env, not saved
 // state). It never overwrites — the user's own later edits in this dir persist.
 func seedClaudeConfig(dir string) error {
-	if err := writeIfAbsent(filepath.Join(dir, "settings.json"), claudeSettingsSeed); err != nil {
+	if err := upsertClaudeSettings(filepath.Join(dir, "settings.json")); err != nil {
 		return err
 	}
 	return writeIfAbsent(filepath.Join(dir, ".claude.json"), "{\"hasCompletedOnboarding\":true}\n")
 }
 
-// claudeSettingsSeed is the initial settings.json for `hanzo code claude`:
-// sensible agent defaults and no model, so the env-injected zen5 slots win.
-// effortLevel is max — the deepest reasoning tier — matching the operator's
-// /effort max session setting; zen folds it into the upstream's reasoning
-// budget (anthropicThinkingBudget → normalizeReasoning) so it reaches the model.
-const claudeSettingsSeed = `{
-  "includeCoAuthoredBy": false,
-  "permissions": { "defaultMode": "auto" },
-  "skipAutoPermissionPrompt": true,
-  "skipDangerousModePermissionPrompt": true,
-  "effortLevel": "max",
-  "theme": "dark",
-  "enableWorkflows": true
+// claudeSettingsBase is the first-run settings.json for `hanzo code claude`:
+// sensible agent defaults and no pinned model, so the env-injected carrier slots
+// win. effortLevel is max — the deepest reasoning tier — matching the operator's
+// /effort max session setting; zen folds it into the upstream's reasoning budget
+// (anthropicThinkingBudget → normalizeReasoning) so it reaches the model. Applied
+// only when settings.json does not yet exist — later user edits to these persist.
+var claudeSettingsBase = map[string]any{
+	"includeCoAuthoredBy":               false,
+	"permissions":                       map[string]any{"defaultMode": "auto"},
+	"skipAutoPermissionPrompt":          true,
+	"skipDangerousModePermissionPrompt": true,
+	"effortLevel":                       "max",
+	"theme":                             "dark",
+	"enableWorkflows":                   true,
 }
-`
+
+// upsertClaudeSettings writes settings.json, (re)applying the operator-owned
+// modelOverrides (carrier→zen) on EVERY launch while preserving the user's own
+// edits to every other key. modelOverrides is policy, not preference: it must
+// track the current zenTiers so Claude Code's context-budgeting carriers keep
+// mapping to the served zen ids — so, unlike the base defaults, it is not
+// write-once. A first run (or an unreadable/corrupt file) starts from the base.
+func upsertClaudeSettings(path string) error {
+	settings := map[string]any{}
+	if b, err := os.ReadFile(path); err != nil || json.Unmarshal(b, &settings) != nil || len(settings) == 0 {
+		settings = map[string]any{}
+		for k, v := range claudeSettingsBase {
+			settings[k] = v
+		}
+	}
+	overrides := make(map[string]any, len(zenTiers))
+	for carrier, zen := range claudeModelOverrides() {
+		overrides[carrier] = zen
+	}
+	settings["modelOverrides"] = overrides
+	b, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0o600)
+}
 
 // writeIfAbsent creates path with content only when it does not already exist,
 // so seeding a config dir never clobbers a user's later edits.
