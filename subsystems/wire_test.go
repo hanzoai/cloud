@@ -52,6 +52,7 @@ var frozen = []struct {
 	{"wallets", false, true},         // was order 127
 	{"x402", false, true},            // new: x402 pay-per-use settlement (after wallets)
 	{"paas", true, false},            // was order 128
+	{"gitops", true, false},          // after paas (release seam), before functions
 	{"functions", false, false},      // was order 128
 	{"tracker", false, false},        // was order 129
 	{"templates", false, false},      // was order 129
