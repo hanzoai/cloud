@@ -212,6 +212,21 @@ func Project(c *zip.Ctx) string {
 	return strings.Clone(project)
 }
 
+// ProjectScope resolves the caller's project as a storage/filter KEY: "" for the
+// org's DEFAULT project (which denotes the whole-org view — the default project ==
+// the org's entire dataset), else the server-minted project slug. It is the ONE
+// way a subsystem derives a project storage key, so the "default == empty ==
+// whole org" convention lives in a single place (eval traces + metrics, o11y
+// annotation queues all read it). Composes Project (server-minted, org-bound), so
+// it is never a raw client value and only ever narrows the caller's OWN org.
+func ProjectScope(c *zip.Ctx) string {
+	p := Project(c)
+	if IsDefaultProject(p) {
+		return ""
+	}
+	return p
+}
+
 // ValidatedProject returns the caller's project AND whether that project is bound
 // to a VALIDATED identity claim — the signal a per-scope spend cap uses to decide
 // whether a project-scoped cap may HARD-enforce (402) or must DEGRADE to a soft
