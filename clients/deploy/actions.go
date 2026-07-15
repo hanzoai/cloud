@@ -1,14 +1,14 @@
 // actions.go — the two GitOps write actions.
 //
-//	POST /v1/gitops/{name}/rollback — pin the CR image tag to a prior clean semver.
+//	POST /v1/deploy/{name}/rollback — pin the CR image tag to a prior clean semver.
 //	  It REUSES the P1 release seam (cloud.OnServiceRelease → clients/paas
 //	  releaseService), so the clean-semver gate + idempotent spec.image patch live
 //	  in exactly ONE place; the operator reconciles the rollout.
-//	POST /v1/gitops/{name}/sync — request an operator reconcile now by touching the
+//	POST /v1/deploy/{name}/sync — request an operator reconcile now by touching the
 //	  CR (an annotation bump the operator's watch observes). Today the CR is the
 //	  desired source, so sync = nudge-reconcile; when git.hanzo.ai is the source it
 //	  becomes apply-desired-from-git, same endpoint.
-package gitops
+package deploy
 
 import (
 	"encoding/json"
