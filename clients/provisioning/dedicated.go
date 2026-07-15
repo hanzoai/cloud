@@ -38,7 +38,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/zap-proto/zip"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

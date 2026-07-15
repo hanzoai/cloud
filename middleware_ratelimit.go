@@ -30,7 +30,7 @@ import (
 
 	"github.com/hanzoai/cloud/clients/gatewaypolicy"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
+	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/zap-proto/zip"
 	zipmw "github.com/zap-proto/zip/middleware"
 )
