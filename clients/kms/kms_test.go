@@ -47,7 +47,7 @@ func masterKeyB64(t *testing.T) string {
 }
 
 // mountSpecs is the kms subsystem's composition-root entry, built locally so these
-// tests mount exactly kms (the same spec subsystems.Wire() carries) without linking
+// tests mount exactly kms (the same spec apps.Wire() carries) without linking
 // the whole bundle. cfg.Enable still gates it, exactly as in production.
 func mountSpecs() []cloud.MountSpec {
 	return []cloud.MountSpec{{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true}}

@@ -26,7 +26,7 @@ import (
 // surface) and every `hanzo <svc>` subcommand share it; no boot logic is
 // duplicated per entrypoint.
 //
-// specs is the composition root's subsystem list (subsystems.Wire()), threaded
+// specs is the composition root's subsystem list (apps.Wire()), threaded
 // in by the caller so cloud never imports subsystems (which would cycle). Serve
 // mounts it in slice order and tears it down in reverse.
 //
