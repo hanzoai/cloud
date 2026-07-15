@@ -62,6 +62,7 @@ var frozen = []struct {
 	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
 	{"ml", true, false},              // was order 130
 	{"usage", false, false},          // was order 131
+	{"leaderboard", false, true},     // new: gamified usage analytics (after usage), owns opt-in SQLite (Shutdown)
 	{"crm", false, false},            // was order 131
 	{"marketing", false, true},       // new: marketing domain fold (after crm)
 	{"ads", false, true},             // new: ads domain fold (after crm)
