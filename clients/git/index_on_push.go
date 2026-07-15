@@ -196,7 +196,7 @@ func IndexRepoWorkflow(ctx workflow.Context, in indexInput) error {
 // reconcile with prune), so a retry or redelivery re-converges. Exported for worker
 // registration; not called directly.
 func IndexRepoActivity(ctx context.Context, in indexInput) error {
-	return readAndIndex(ctx, mounted, in)
+	return readAndIndex(ctx, mounted.Load(), in)
 }
 
 // ---- tree read + index (shared DRY core: activity AND inline fallback) ----
