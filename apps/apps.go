@@ -1,7 +1,6 @@
 // Package apps is the composition root: the single, explicit list of which
 // Hanzo cloud subsystems are linked into the binary AND the order they mount in.
 //
-//go:generate go run ../cmd/gen-app-cmds
 // Wire() returns []cloud.MountSpec in mount order (slice position == order). There
 // is no init()-registry and no order-int: adding, removing, or reordering a
 // subsystem is a one-line edit to Wire(), read top-to-bottom. cmd/cloud and
@@ -28,6 +27,8 @@
 // composition root fixes). They are wired back at their order-int slots — o11y-ext
 // kept adjacent to the in-repo o11y read-plane (@69); ai as the last /v1/* catch-all
 // before plugins (@900). Do not re-sort; edit positions deliberately.
+//
+//go:generate go run ../cmd/gen-app-cmds
 package apps
 
 import (
@@ -58,7 +59,6 @@ import (
 	"github.com/hanzoai/cloud/clients/auditlog"
 	"github.com/hanzoai/cloud/clients/authors"
 	"github.com/hanzoai/cloud/clients/automations"
-	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/bot"
@@ -67,10 +67,12 @@ import (
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
+	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/cron"
 	"github.com/hanzoai/cloud/clients/dataroom"
+	"github.com/hanzoai/cloud/clients/deploy"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
@@ -80,7 +82,6 @@ import (
 	"github.com/hanzoai/cloud/clients/functions"
 	"github.com/hanzoai/cloud/clients/gateway"
 	"github.com/hanzoai/cloud/clients/git"
-	"github.com/hanzoai/cloud/clients/gitops"
 	"github.com/hanzoai/cloud/clients/graph"
 	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/iam"
@@ -239,10 +240,10 @@ func Wire() []cloud.MountSpec {
 		// middleware a marketplace applies to its priced routes.
 		{Name: "x402", Mount: cloud.Typed(x402.Mount), Shutdown: ctxShutdown(x402.Shutdown)},
 		{Name: "paas", Mount: cloud.Typed(paas.Mount), OwnsHealth: true},
-		// GitOps deploy dashboard /v1/gitops/* (the ArgoCD-grade fleet view over the
+		// GitOps deploy dashboard /v1/deploy/* (the ArgoCD-grade fleet view over the
 		// operator App CRs). After paas so the release seam paas installs is registered
-		// before a gitops rollback delegates to it; owns its own /v1/gitops/health.
-		{Name: "gitops", Mount: cloud.Typed(gitops.Mount), OwnsHealth: true},
+		// before a gitops rollback delegates to it; owns its own /v1/deploy/health.
+		{Name: "deploy", Mount: cloud.Typed(deploy.Mount), OwnsHealth: true},
 		{Name: "functions", Mount: cloud.Typed(functions.Mount)},
 		{Name: "tracker", Mount: cloud.Typed(tracker.Mount)},
 		{Name: "templates", Mount: cloud.Typed(templates.Mount)},
