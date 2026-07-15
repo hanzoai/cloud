@@ -13,7 +13,7 @@
 //
 // FAIL-SOFT. A broken Embed does NOT crash the binary: commerce degrades to a 503
 // on its own prefixes while every co-resident subsystem stays up.
-package subsystems
+package apps
 
 import (
 	"context"
