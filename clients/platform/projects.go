@@ -17,12 +17,31 @@ package platform
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	iamobj "github.com/hanzoai/iam/object"
+	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients/principal"
 )
+
+// iamStore runs an embedded-IAM object-store call, converting a nil-store panic
+// into a clean 503. The store's engine (iamobj.ormer) is a package global that
+// is nil until the co-resident IAM subsystem initializes it; a project call
+// against a nil engine would otherwise nil-deref and surface as a 500 "runtime
+// error: invalid memory address". A deployment that enables "platform" is meant
+// to co-mount "iam" (see the package doc) — until it does, this reports the
+// honest "IAM not available" instead of panicking. Never masks a real error.
+func iamStore[T any](fn func() (T, error)) (out T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = zip.Errorf(http.StatusServiceUnavailable,
+				"platform requires the co-resident IAM store, which is not initialized")
+		}
+	}()
+	return fn()
+}
 
 // ProjectStore is platform's org-scoped view of the IAM-owned project lifecycle.
 // Every method is scoped to org (the validated owner) and keyed by the project
@@ -45,11 +64,11 @@ type ProjectStore interface {
 type iamProjects struct{}
 
 func (iamProjects) List(_ context.Context, org string) ([]*iamobj.Project, error) {
-	return iamobj.GetProjects(org)
+	return iamStore(func() ([]*iamobj.Project, error) { return iamobj.GetProjects(org) })
 }
 
 func (iamProjects) Get(_ context.Context, org, name string) (*iamobj.Project, error) {
-	return iamobj.GetProject(org + "/" + name)
+	return iamStore(func() (*iamobj.Project, error) { return iamobj.GetProject(org + "/" + name) })
 }
 
 func (p iamProjects) Create(ctx context.Context, org, name, display, description string) (*iamobj.Project, error) {
@@ -67,7 +86,7 @@ func (p iamProjects) Create(ctx context.Context, org, name, display, description
 		DisplayName: display, Description: description,
 		IsDefault: principal.IsDefaultProject(name),
 	}
-	ok, err := iamobj.AddProject(proj)
+	ok, err := iamStore(func() (bool, error) { return iamobj.AddProject(proj) })
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +97,9 @@ func (p iamProjects) Create(ctx context.Context, org, name, display, description
 }
 
 func (iamProjects) Delete(_ context.Context, org, name string) (bool, error) {
-	return iamobj.DeleteProject(&iamobj.Project{Owner: org, Name: name})
+	return iamStore(func() (bool, error) {
+		return iamobj.DeleteProject(&iamobj.Project{Owner: org, Name: name})
+	})
 }
 
 func (p iamProjects) Exists(ctx context.Context, org, name string) (bool, error) {
