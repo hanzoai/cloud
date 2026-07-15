@@ -1206,6 +1206,8 @@ github.com/hanzoai/commerce v1.47.3 h1:UET8M/SEt88y4d2JLvNw3rckgmQWYaxnfCgKeocGr
 github.com/hanzoai/commerce v1.47.3/go.mod h1:O7BmLpQpcSmkUOOu3vZ5ozOTACrPQBeW7glv/3E3T3c=
 github.com/hanzoai/commerce v1.48.1 h1:Px8CrEA2+ad4gc0DCxtY4HUK3ZY943BVZ1TizMuQ7rk=
 github.com/hanzoai/commerce v1.48.1/go.mod h1:GltAKWRpXqQHjLBzwZ3NsfrFMUfHKktTjOgfFvjQvfs=
+github.com/hanzoai/commerce v1.48.2 h1:5/O4TRO4AUKoPBielgK5vVPHkzvpzK5Dyt95gr72bjg=
+github.com/hanzoai/commerce v1.48.2/go.mod h1:GltAKWRpXqQHjLBzwZ3NsfrFMUfHKktTjOgfFvjQvfs=
 github.com/hanzoai/commerce/thirdparty/ethereum v1.40.0 h1:NZoTbSzGNQsdHTv+A2A3ebbx3NY7o1+8Bf3O+Y5d36s=
 github.com/hanzoai/commerce/thirdparty/ethereum v1.40.0/go.mod h1:y68W0HTIw+aXokik3i8AA2qUToO9GdptcoyUtjodKko=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
