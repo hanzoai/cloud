@@ -16,6 +16,8 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -58,69 +60,88 @@ func TestDefaultCodeModelIsToolCapableAlias(t *testing.T) {
 	}
 }
 
-// TestAnthropicWirePinsZen5Tiers locks in the core fix for the Claude Code
-// 403 deadlock: every CC model slot must resolve to a zen5 alias served by
-// api.hanzo.ai, never a raw claude-* id. A raw claude-opus-4-8 / claude-haiku-*
-// 403s on the Hanzo account (no Anthropic provider configured), which kills
-// the permission classifier, every subagent, and /compact — the exact failure
-// that left session cff690fc unresumable.
-func TestAnthropicWirePinsZen5Tiers(t *testing.T) {
-	env := anthropicWire("https://api.hanzo.ai", "hk-test", "best")
+// TestAnthropicWirePinsCarrierTiers locks in the 1M-context fix: every CC tier
+// slot is pinned to a Claude-Code-recognized CARRIER id (so CC grants the model
+// its true, up-to-1M context budget instead of the 128K fallback it applies to
+// ids it does not know), and settings.json modelOverrides rewrites each carrier
+// back to a served zen alias before the request leaves the client — so the wire
+// model that reaches api.hanzo.ai is always zen, never the carrier. The old
+// deadlock (a raw claude-* id 403ing on the Hanzo account) cannot recur because
+// the carrier never reaches the server; the override guarantees it (asserted in
+// TestCarrierTiersAreOverridden).
+func TestAnthropicWirePinsCarrierTiers(t *testing.T) {
+	env := anthropicWire("https://api.hanzo.ai", "hk-test", "claude-opus-4-8[1m]")
 
 	want := map[string]string{
 		"ANTHROPIC_BASE_URL":             "https://api.hanzo.ai",
 		"ANTHROPIC_AUTH_TOKEN":           "hk-test",
-		"ANTHROPIC_MODEL":                "best",
-		"ANTHROPIC_SMALL_FAST_MODEL":     "zen5-flash",
-		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL": "zen5",
-		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "zen5-pro",
-		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "zen5-max",
+		"ANTHROPIC_MODEL":                "claude-opus-4-8[1m]",
+		"ANTHROPIC_SMALL_FAST_MODEL":     "zen5-flash", // deprecated var: no override applies, so a direct served zen id
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "zen5-flash", // fast tier is carrier-less (never needs >128K)
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6[1m]",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "claude-opus-4-8[1m]",
+		"ANTHROPIC_DEFAULT_FABLE_MODEL":  "claude-fable-5[1m]",
 	}
 	for k, v := range want {
 		if got := env[k]; got != v {
 			t.Errorf("%s: want %q, got %q", k, v, got)
 		}
 	}
+	// Each tier slot carries a Hanzo-branded display name so the picker never
+	// shows the underlying carrier (Opus/Sonnet/Haiku) — only the Zen brand.
+	if env["ANTHROPIC_DEFAULT_OPUS_MODEL_NAME"] != "Zen5 Pro" {
+		t.Errorf("OPUS tier must display the Zen brand, got %q", env["ANTHROPIC_DEFAULT_OPUS_MODEL_NAME"])
+	}
+}
 
-	// Every model slot must be a served zen5 alias or the resolved main model —
-	// none may be a raw claude-* id (those 403 on the Hanzo account).
+// TestCarrierTiersAreOverridden is the safety net that replaces the old
+// "no claude-* in the wire" rule: a claude-* carrier in the env is SAFE only
+// because modelOverrides maps it to a served zen id. Every claude-* value the
+// wire emits must have a modelOverrides entry (keyed by its suffix-stripped id)
+// pointing at a zen alias — otherwise CC would send the raw claude-* id to
+// api.hanzo.ai and reintroduce the 403.
+func TestCarrierTiersAreOverridden(t *testing.T) {
+	env := anthropicWire("https://api.hanzo.ai", "hk-test", "claude-opus-4-8[1m]")
+	overrides := claudeModelOverrides()
 	for k, v := range env {
-		if !isAllowedModel(v) {
-			t.Errorf("%s=%q must not be a raw claude-* model (403s on api.hanzo.ai)", k, v)
+		if len(v) < 6 || v[:6] != "claude" {
+			continue // only carrier ids need an override
+		}
+		zen, ok := overrides[stripModelSuffix(v)]
+		if !ok {
+			t.Errorf("%s=%q is a claude-* carrier with NO modelOverrides entry — it would reach api.hanzo.ai and 403", k, v)
+			continue
+		}
+		if len(zen) < 3 || zen[:3] != "zen" {
+			t.Errorf("%s=%q overrides to %q, which is not a zen alias", k, v, zen)
 		}
 	}
 }
 
-// TestAnthropicWireExplicitModel checks that an explicitly named model flows
-// into the main + OPUS slots while the rest stay on the zen5 ladder.
-func TestAnthropicWireExplicitModel(t *testing.T) {
-	env := anthropicWire("https://api.hanzo.ai", "hk-test", "zen5-max")
-	if env["ANTHROPIC_MODEL"] != "zen5-max" {
-		t.Errorf("ANTHROPIC_MODEL: want zen5-max, got %q", env["ANTHROPIC_MODEL"])
+// TestZenCarrierRoundTrips checks the two-way mapping the fix depends on: every
+// tier's zen id maps to a carrier, and that carrier (suffix-stripped) maps back
+// to a served zen id via modelOverrides. An unknown id passes through unchanged.
+func TestZenCarrierRoundTrips(t *testing.T) {
+	overrides := claudeModelOverrides()
+	for _, tier := range zenTiers {
+		carrier := zenCarrier(tier.zen)
+		if tier.carrier == "" {
+			// Direct tier: zenCarrier returns the served zen id itself, no override.
+			if carrier != tier.zen {
+				t.Errorf("direct tier %q must map to itself, got %q", tier.zen, carrier)
+			}
+			continue
+		}
+		if carrier == tier.zen {
+			t.Errorf("zenCarrier(%q) did not map to a carrier", tier.zen)
+		}
+		if got := overrides[stripModelSuffix(carrier)]; got != tier.zen {
+			t.Errorf("carrier %q for %q overrides to %q, want %q", carrier, tier.zen, got, tier.zen)
+		}
 	}
-	// The tier slots are FIXED zen5 aliases (the stable contract) — they do
-	// NOT track the main model. Only ANTHROPIC_MODEL carries the resolved id.
-	if env["ANTHROPIC_DEFAULT_OPUS_MODEL"] != "zen5-pro" {
-		t.Errorf("OPUS tier is the fixed zen5-pro contract, not the main model: got %q", env["ANTHROPIC_DEFAULT_OPUS_MODEL"])
+	if got := zenCarrier("some-raw-upstream"); got != "some-raw-upstream" {
+		t.Errorf("unknown id must pass through unchanged, got %q", got)
 	}
-	// The fast/classifier tier stays pinned to zen5-flash regardless of main.
-	if env["ANTHROPIC_SMALL_FAST_MODEL"] != "zen5-flash" {
-		t.Errorf("classifier must stay on zen5-flash: got %q", env["ANTHROPIC_SMALL_FAST_MODEL"])
-	}
-}
-
-// isAllowedModel reports whether m is a model api.hanzo.ai serves. The wire
-// may emit the resolved main model (any id the user passed) plus the fixed
-// zen5 ladder aliases. The guard is: never a raw claude-* id.
-func isAllowedModel(m string) bool {
-	// The only forbidden shape is a raw claude-* id (claude-opus-4-8 etc.)
-	// — everything else the wire emits is either a zen5 alias or the
-	// resolved main model the caller explicitly chose.
-	if len(m) >= 6 && m[:6] == "claude" {
-		return false
-	}
-	return true
 }
 
 // TestClaudeArgvForcesModel locks in the fix for "everything shows up as best":
@@ -221,5 +242,100 @@ func TestClaudeAutoWiresMCP(t *testing.T) {
 	flags, warn := mcpArgs(dir, "/repo")
 	if warn == "" || len(flags) != 0 {
 		t.Fatalf("with no hanzo-mcp on PATH, mcpArgs must warn and inject nothing, got flags=%v warn=%q", flags, warn)
+	}
+}
+
+// TestClaudeAgentAppliesCarrier locks in the runCode wiring: the claude agent
+// carries the zen→carrier map (so the resolved zen model is handed to CC as a
+// recognized 1M id), while codex/dev have no carrier (they speak OpenAI directly
+// and must NOT rewrite the model).
+func TestClaudeAgentAppliesCarrier(t *testing.T) {
+	if codeAgents["claude"].carrier == nil {
+		t.Fatal("claude agent must set a carrier so CC budgets the full context window")
+	}
+	if got := codeAgents["claude"].carrier("zen5-pro"); got != "claude-opus-4-8[1m]" {
+		t.Fatalf("claude carrier: zen5-pro must map to the opus carrier, got %q", got)
+	}
+	for _, name := range []string{"codex", "dev"} {
+		if codeAgents[name].carrier != nil {
+			t.Fatalf("%s speaks OpenAI directly and must not remap the model", name)
+		}
+	}
+}
+
+// servedZenIDs is the set of zen aliases api.hanzo.ai actually serves, confirmed
+// live (2026-07). zen5-mini/zen5-max/zen5-ultra are catalog-listed but 404 or
+// time out, so no tier may target them. Adding a tier forces confirming its id
+// serves and listing it here — the guard below fails otherwise.
+var servedZenIDs = map[string]bool{
+	"zen5-flash": true,
+	"zen5":       true,
+	"zen5-pro":   true,
+	"zen5-coder": true,
+}
+
+// TestZenTiersServeReal is the invariant a 1M-carrier is useless without: every
+// tier's zen wire id must be one api.hanzo.ai serves. A carrier that budgets 1M
+// but rewrites to a 404 id just fails later, opaquely.
+func TestZenTiersServeReal(t *testing.T) {
+	for _, tier := range zenTiers {
+		if !servedZenIDs[tier.zen] {
+			t.Errorf("tier %q → zen id %q is not in the confirmed-served set; a carrier to an unserved id 404s", tier.carrier, tier.zen)
+		}
+	}
+}
+
+// TestUpsertClaudeSettings checks the seed: a fresh dir gets base defaults plus
+// the carrier→zen modelOverrides, and a re-seed REFRESHES modelOverrides (policy)
+// while PRESERVING a user's own edits to other keys (preference).
+func TestUpsertClaudeSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+
+	if err := upsertClaudeSettings(path); err != nil {
+		t.Fatalf("first seed failed: %v", err)
+	}
+	read := func() map[string]any {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read settings: %v", err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatalf("settings.json is not valid JSON: %v", err)
+		}
+		return m
+	}
+	s := read()
+	if s["effortLevel"] != "max" {
+		t.Errorf("base defaults missing: effortLevel = %v", s["effortLevel"])
+	}
+	ov, ok := s["modelOverrides"].(map[string]any)
+	if !ok {
+		t.Fatalf("modelOverrides missing or wrong type: %T", s["modelOverrides"])
+	}
+	if ov["claude-opus-4-8"] != "zen5-pro" {
+		t.Errorf("modelOverrides[claude-opus-4-8] = %v, want zen5-pro", ov["claude-opus-4-8"])
+	}
+
+	// User edits a preference and adds a key; re-seed must keep both.
+	s["effortLevel"] = "low"
+	s["userKey"] = "keepme"
+	b, _ := json.Marshal(s)
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertClaudeSettings(path); err != nil {
+		t.Fatalf("re-seed failed: %v", err)
+	}
+	s2 := read()
+	if s2["effortLevel"] != "low" {
+		t.Errorf("re-seed clobbered user edit: effortLevel = %v, want low", s2["effortLevel"])
+	}
+	if s2["userKey"] != "keepme" {
+		t.Errorf("re-seed dropped user key: userKey = %v", s2["userKey"])
+	}
+	ov2, _ := s2["modelOverrides"].(map[string]any)
+	if ov2["claude-opus-4-8"] != "zen5-pro" {
+		t.Errorf("re-seed lost modelOverrides: %v", ov2)
 	}
 }
