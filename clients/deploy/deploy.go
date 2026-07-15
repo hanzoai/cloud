@@ -1,4 +1,4 @@
-// Package gitops mounts the native GitOps control plane at /v1/gitops — the
+// Package gitops mounts the native GitOps control plane at /v1/deploy — the
 // ArgoCD-grade deploy dashboard for the operator-managed fleet, made native to
 // the cloud binary and parallel to /v1/git (the native git server).
 //
@@ -7,16 +7,16 @@
 // Deployment + Service + Ingress (+ HPA/PDB/Pods). This plane OBSERVES that
 // reconciliation the way ArgoCD observes a synced Application —
 //
-//	GET  /v1/gitops/applications        — the fleet list: name, declared version,
+//	GET  /v1/deploy/applications        — the fleet list: name, declared version,
 //	                                      health, sync, per app.
-//	GET  /v1/gitops/{name}/tree         — the owned-resource tree (ownerRef edges)
+//	GET  /v1/deploy/{name}/tree         — the owned-resource tree (ownerRef edges)
 //	                                      with per-node health + sync.
-//	GET  /v1/gitops/{name}/resource/{ref} — one node's live manifest + a
+//	GET  /v1/deploy/{name}/resource/{ref} — one node's live manifest + a
 //	                                      desired-vs-live diff.
-//	GET  /v1/gitops/{name}/logs         — the app's current pod logs.
-//	POST /v1/gitops/{name}/rollback     — pin the CR image tag to a prior semver
+//	GET  /v1/deploy/{name}/logs         — the app's current pod logs.
+//	POST /v1/deploy/{name}/rollback     — pin the CR image tag to a prior semver
 //	                                      (the operator reconciles the rollout).
-//	POST /v1/gitops/{name}/sync         — request an operator reconcile now.
+//	POST /v1/deploy/{name}/sync         — request an operator reconcile now.
 //
 // SECURITY — every route is SUPERADMIN ONLY, fail-closed, on the SAME predicate
 // the rest of cloud uses (c.IsAdmin()): the plane reads and mutates SYSTEM Service
@@ -32,8 +32,8 @@
 // (github.com/hanzoai/git) and this engine syncs that repo → cluster with
 // self-heal. The desired-vs-live diff below is already structured for that: it
 // reads a desired source that is "cluster last-applied" now and becomes the
-// git.hanzo.ai manifest later, with no shape change. See gitopsDesiredTODO.
-package gitops
+// git.hanzo.ai manifest later, with no shape change. See deployDesiredTODO.
+package deploy
 
 import (
 	"context"
@@ -121,13 +121,13 @@ func scanOrder() []string { return []string{"hanzo", "hanzo-testnet", "hanzo-dev
 // CR metadata.name satisfies this) — the injection guard for the CR a route reads.
 var appNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-const userAgent = "hanzo-cloud-gitops"
+const userAgent = "hanzo-cloud-deploy"
 
-// gitopsDesiredTODO documents the desired-state source seam: "last-applied" (the
+// deployDesiredTODO documents the desired-state source seam: "last-applied" (the
 // kubectl last-applied-configuration annotation on the live object) today; the
 // git.hanzo.ai manifest repo once RegisterPushBuilder commits CR changes there.
 // The diff shape does not change when the source flips.
-const gitopsDesiredTODO = "last-applied"
+const deployDesiredTODO = "last-applied"
 
 // state is gitops's own data; shared deps live in the embedded cloud.Base.
 type state struct {
@@ -136,9 +136,9 @@ type state struct {
 	initErr   string
 }
 
-// Mount wires /v1/gitops/* onto app. Every handler gates on c.IsAdmin() first.
+// Mount wires /v1/deploy/* onto app. Every handler gates on c.IsAdmin() first.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "gitops", build, routes)
+	return cloud.Mount(app, deps, "deploy", build, routes)
 }
 
 // build resolves the in-process k8s clients (fail-closed: when no kubeconfig
@@ -148,24 +148,24 @@ func build(b cloud.Base) (state, error) {
 	dyn, cs, err := newClients()
 	if err != nil {
 		st.initErr = err.Error()
-		b.Log.Warn("kubernetes client unavailable; /v1/gitops endpoints will fail closed", "err", err)
+		b.Log.Warn("kubernetes client unavailable; /v1/deploy endpoints will fail closed", "err", err)
 	} else {
 		st.dyn, st.clientset = dyn, cs
 	}
-	b.Log.Info("gitops control plane mounted", "prefix", "/v1/gitops", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
+	b.Log.Info("deploy control plane mounted", "prefix", "/v1/deploy", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
 	return st, nil
 }
 
-// routes registers the /v1/gitops/* surface. Every observing/mutating route is
+// routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/gitops/applications", guard(s, cloud.Handle(s, listApplications)))
-	app.Get("/v1/gitops/health", cloud.Handle(s, health))
-	app.Get("/v1/gitops/:name/tree", guard(s, cloud.Handle(s, appTree)))
-	app.Get("/v1/gitops/:name/resource/:ref", guard(s, cloud.Handle(s, appResource)))
-	app.Get("/v1/gitops/:name/logs", guard(s, cloud.Handle(s, appLogs)))
-	app.Post("/v1/gitops/:name/rollback", guard(s, cloud.Handle(s, rollback)))
-	app.Post("/v1/gitops/:name/sync", guard(s, cloud.Handle(s, sync)))
+	app.Get("/v1/deploy/applications", guard(s, cloud.Handle(s, listApplications)))
+	app.Get("/v1/deploy/health", cloud.Handle(s, health))
+	app.Get("/v1/deploy/:name/tree", guard(s, cloud.Handle(s, appTree)))
+	app.Get("/v1/deploy/:name/resource/:ref", guard(s, cloud.Handle(s, appResource)))
+	app.Get("/v1/deploy/:name/logs", guard(s, cloud.Handle(s, appLogs)))
+	app.Post("/v1/deploy/:name/rollback", guard(s, cloud.Handle(s, rollback)))
+	app.Post("/v1/deploy/:name/sync", guard(s, cloud.Handle(s, sync)))
 }
 
 // guard wraps a handler with the SuperAdmin gate (fail-closed: a non-SuperAdmin is
@@ -183,7 +183,7 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // served. 200 only when both hold; 503 + the real reason otherwise. Not
 // admin-gated — liveness must be probe-able without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
-	res := map[string]any{"service": "gitops", "status": "ok"}
+	res := map[string]any{"service": "deploy", "status": "ok"}
 	if s.State.dyn == nil {
 		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
@@ -215,7 +215,7 @@ func health(s *cloud.Service[state], c *zip.Ctx) error {
 // ready fails closed when no cluster client resolved (503 + the real reason).
 func ready(s *cloud.Service[state]) error {
 	if s.State.dyn == nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "gitops: kubernetes client not configured: %s", s.State.initErr)
+		return zip.Errorf(http.StatusServiceUnavailable, "deploy: kubernetes client not configured: %s", s.State.initErr)
 	}
 	return nil
 }

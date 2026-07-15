@@ -1,4 +1,4 @@
-// tree.go — GET /v1/gitops/{name}/tree: the owned-resource tree for one
+// tree.go — GET /v1/deploy/{name}/tree: the owned-resource tree for one
 // Application, the ArgoCD ApplicationTree shape (a FLAT node list with parentRefs
 // edges; the console renders the DAG). The root is the Service CR; depth-1 nodes
 // are the operator-owned Deployment/Service/Ingress/HPA/PDB/ConfigMap; depth-2 are
@@ -9,7 +9,7 @@
 // P2b swaps buildTree's cluster walk for github.com/argoproj/gitops-engine
 // pkg/cache (ClusterCache.GetManagedLiveObjs / hierarchy) for a watch-backed tree;
 // the Node shape the console consumes does not change.
-package gitops
+package deploy
 
 import (
 	"context"
