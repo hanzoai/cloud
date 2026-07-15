@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	// cek opens the store encrypted at rest (migrate-on-open + shred).
 	"github.com/hanzoai/cloud/cek"
@@ -99,7 +100,32 @@ CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_channel ON marketing_campa
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("marketing migrate campaigns: %w", err)
 	}
+	// Idempotent column upgrades for a pre-existing prod table created before a
+	// column was added to the DDL above. CREATE TABLE IF NOT EXISTS never alters an
+	// existing table, so an old marketing_campaigns is frozen at its original schema
+	// and every write of a newer column 500s ("table marketing_campaigns has no
+	// column named scheduled_at"). ADD COLUMN on a column that already exists is the
+	// only error swallowed (see addColumn). The store is an encrypted single-file
+	// SQLite only the binary can open, so this migrate-on-open is the ONLY way an old
+	// prod table gains the column.
+	for _, ac := range []struct{ table, col, def string }{
+		{"marketing_campaigns", "scheduled_at", "INTEGER NOT NULL DEFAULT 0"},
+	} {
+		if err := s.addColumn(ac.table, ac.col, ac.def); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// addColumn adds a column to an existing table, treating an already-present column
+// as success (SQLite has no ADD COLUMN IF NOT EXISTS). Mirrors clients/social/store.go.
+func (s *Store) addColumn(table, col, def string) error {
+	_, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, def))
+	if err == nil || strings.Contains(err.Error(), "duplicate column name") {
+		return nil
+	}
+	return fmt.Errorf("marketing migrate: add %s.%s: %w", table, col, err)
 }
 
 // Close closes the underlying database. Idempotent-safe via sql.DB.
