@@ -41,6 +41,17 @@ type Session struct {
 	// that consumes control from the event stream instead (today's @hanzo/dev).
 	TaskWorkflowID string
 	TaskRunID      string
+
+	// Execution context — WHERE this session runs. All optional (a surface that
+	// doesn't know sets ""), surfaced by mission-control so a card shows the
+	// machine/repo/cwd it runs on and the devices view maps "which sessions run
+	// where". Host is the machine label; Repo/Cwd are the code context; Target is a
+	// registered run-target id (the #48 dispatch association — resolved same-org at
+	// register/patch so it never points across tenants). Truth the SURFACE reports.
+	Host   string
+	Cwd    string
+	Repo   string
+	Target string
 }
 
 // Event is one entry in a session's ordered log: a model message, a tool call, a
@@ -101,11 +112,17 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   created_at       INTEGER NOT NULL,
   updated_at       INTEGER NOT NULL,
   task_workflow_id TEXT NOT NULL DEFAULT '',
-  task_run_id      TEXT NOT NULL DEFAULT ''
+  task_run_id      TEXT NOT NULL DEFAULT '',
+  host             TEXT NOT NULL DEFAULT '',
+  cwd              TEXT NOT NULL DEFAULT '',
+  repo             TEXT NOT NULL DEFAULT '',
+  target           TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_sessions_org_root ON agent_sessions(org, root_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_parent ON agent_sessions(org, parent_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_status ON agent_sessions(org, status, updated_at);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_target ON agent_sessions(org, target);
+CREATE INDEX IF NOT EXISTS ix_sessions_org_host ON agent_sessions(org, host);
 
 CREATE TABLE IF NOT EXISTS agent_session_events (
   id         TEXT PRIMARY KEY,
@@ -123,16 +140,26 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate sessions: %w", err)
 	}
+	// Forward, idempotent: a sessions table created before the execution-context
+	// columns existed gains them here (the CREATE above only runs on a fresh DB).
+	if err := s.addColumns("agent_sessions", map[string]string{
+		"host":   "TEXT NOT NULL DEFAULT ''",
+		"cwd":    "TEXT NOT NULL DEFAULT ''",
+		"repo":   "TEXT NOT NULL DEFAULT ''",
+		"target": "TEXT NOT NULL DEFAULT ''",
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target`
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
-		&x.TaskWorkflowID, &x.TaskRunID)
+		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target)
 	return x, err
 }
 
@@ -157,9 +184,10 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
-		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID)
+		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
+		x.Host, x.Cwd, x.Repo, x.Target)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -263,9 +291,9 @@ func (s *Store) ListTree(ctx context.Context, org, root string, cap int) ([]Sess
 // Scoped by org so a cross-tenant id can never mutate another's session.
 func (s *Store) UpdateSession(ctx context.Context, x Session) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_sessions SET status=?, title=?, ended_at=?, updated_at=?
+		`UPDATE agent_sessions SET status=?, title=?, ended_at=?, updated_at=?, target=?
 		 WHERE org=? AND id=?`,
-		x.Status, x.Title, x.EndedAt, x.UpdatedAt, x.Org, x.ID)
+		x.Status, x.Title, x.EndedAt, x.UpdatedAt, x.Target, x.Org, x.ID)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)
 	}
@@ -387,4 +415,23 @@ func (s *Store) CountEvents(ctx context.Context, org, sessionID string) (int, er
 		return 0, fmt.Errorf("count events: %w", err)
 	}
 	return n, nil
+}
+
+// LastEvent returns a session's most recent event (highest seq) — the one-line
+// "last activity" a mission-control card shows in the list without fetching full
+// detail. ok=false when the session has no events yet. Org-scoped like every read.
+func (s *Store) LastEvent(ctx context.Context, org, sessionID string) (Event, bool, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id,session_id,org,seq,kind,actor,payload,created_at
+		 FROM agent_session_events WHERE org=? AND session_id=?
+		 ORDER BY seq DESC LIMIT 1`, org, sessionID)
+	var e Event
+	err := row.Scan(&e.ID, &e.SessionID, &e.Org, &e.Seq, &e.Kind, &e.Actor, &e.Payload, &e.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Event{}, false, nil
+	}
+	if err != nil {
+		return Event{}, false, fmt.Errorf("last event: %w", err)
+	}
+	return e, true, nil
 }

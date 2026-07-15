@@ -176,6 +176,10 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 	if err := s.migrateSessions(); err != nil {
 		return err
 	}
+	// Agent targets (the #48 dispatch destinations) live in the SAME agents.db too.
+	if err := s.migrateTargets(); err != nil {
+		return err
+	}
 	return nil
 }
 
