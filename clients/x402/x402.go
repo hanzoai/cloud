@@ -25,8 +25,8 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/clients/commerce/metering"
 	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/wallets"
