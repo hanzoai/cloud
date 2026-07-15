@@ -69,11 +69,19 @@ import (
 // distinct from grant:referral / grant:admin only by its tag.
 const (
 	// defaultRateBps is the DIRECT (L1) commission rate a new affiliate gets, in
-	// basis points (2000 = 20% of a referred org's metered spend). It is also the
-	// affiliate's own negotiable rate applied at the first upline level.
+	// basis points (2000 = 20% of the MARGIN Hanzo earns on a referred org's spend).
+	// It is also the affiliate's own negotiable rate applied at the first upline level.
 	defaultRateBps int64 = 2000
-	// bpsDenom converts basis points to a fraction (spend × rateBps / 10000).
+	// bpsDenom converts basis points to a fraction (base × rateBps / 10000).
 	bpsDenom int64 = 10000
+	// defaultMarginBps is the platform GROSS-MARGIN fraction (basis points) the
+	// profit-share is computed on: the affiliate earns its rate of Hanzo's MARGIN, not
+	// of the customer's gross bill, so a payout can never exceed the margin Hanzo
+	// actually earned — and the customer's charge is never touched. A clearly-named
+	// POLICY default (mirrors metered_ai's price default): ops sets the real gross
+	// margin per deployment via AFFILIATE_MARGIN_BPS, cross-checking the finance board.
+	// 4000 = 40%. 10000 (100%) degrades to a gross-revenue share; 0 accrues nothing.
+	defaultMarginBps int64 = 4000
 	// grantCurrency is the ledger currency for a credits payout.
 	grantCurrency = "usd"
 	// grantTag classifies a credits payout as a non-cash Credit in commerce's
@@ -96,6 +104,12 @@ const (
 	// l2RateBps / l3RateBps are the second- and third-level rates (5% / 2%).
 	l2RateBps int64 = 500
 	l3RateBps int64 = 200
+	// maxL1RateBps caps an affiliate's DIRECT (L1) rate so the WHOLE upline schedule
+	// (L1 + L2 + L3) never exceeds 100% of the margin. This is the structural guarantee
+	// that the SUM of every level's share on ONE source event stays ≤ that event's
+	// margin — i.e. total share ≤ margin, so the platform never pays out more than it
+	// earned. The admin set-rate endpoint enforces it.
+	maxL1RateBps int64 = bpsDenom - l2RateBps - l3RateBps // 9300
 )
 
 // levelRateBps is the commission rate for a source org's spend at upline `level`
@@ -112,6 +126,33 @@ func levelRateBps(level int, a Affiliate) int64 {
 	default:
 		return 0
 	}
+}
+
+// affiliateMarginBps resolves the platform gross-margin fraction (basis points) from
+// AFFILIATE_MARGIN_BPS, clamped to [0,10000], else the policy default. An invalid or
+// out-of-range value falls through to the default so a typo can never silently zero
+// out (or over-inflate) the share base.
+func affiliateMarginBps() int64 {
+	v := strings.TrimSpace(os.Getenv("AFFILIATE_MARGIN_BPS"))
+	if v == "" {
+		return defaultMarginBps
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 || n > bpsDenom {
+		return defaultMarginBps
+	}
+	return n
+}
+
+// marginOf is the share base: Hanzo's MARGIN on a source org's gross spend for the
+// period = spend × the platform margin fraction. An affiliate's share is a rate OF
+// THIS, never of the gross spend — so the customer's bill is untouched and the share
+// is bounded by the margin. Pure; the invariant tests fold over it directly.
+func marginOf(spendCents, marginBps int64) int64 {
+	if spendCents <= 0 || marginBps <= 0 {
+		return 0
+	}
+	return spendCents * marginBps / bpsDenom
 }
 
 const (
@@ -131,6 +172,7 @@ type state struct {
 	store      *Store
 	commerce   commerce
 	linkBase   string          // https://hanzo.ai (brand host) — the ?aff link prefix
+	marginBps  int64           // platform gross-margin fraction the share is computed on
 	auditStore *audit.Recorder // best-effort payout/accrual audit; nil disables it
 }
 
@@ -160,11 +202,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		store:      store,
 		commerce:   newCommerceClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN")),
 		linkBase:   linkBase(deps),
+		marginBps:  affiliateMarginBps(),
 		auditStore: deps.Audit,
 	}}
 	mounted = s
 	routes(app, s)
-	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "commerce", s.State.commerce.configured())
+	s.Log.Info("affiliates mounted", "brand", s.Brand, "linkBase", s.State.linkBase, "marginBps", s.State.marginBps, "commerce", s.State.commerce.configured())
 	return nil
 }
 
@@ -173,8 +216,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/affiliates", cloud.Handle(s, myAffiliates))
 	app.Get("/v1/affiliates/me", cloud.Handle(s, myAffiliatesMe))
+	// Self-service dashboard reads/writes (all org-scoped to the caller's own affiliate).
+	app.Get("/v1/affiliates/me/earnings", cloud.Handle(s, myEarnings))
+	app.Get("/v1/affiliates/me/links", cloud.Handle(s, myLinks))
+	app.Post("/v1/affiliates/me/links", cloud.Handle(s, createLink))
+	app.Post("/v1/affiliates/me/handle", cloud.Handle(s, setHandle))
 	app.Post("/v1/affiliates/apply", cloud.Handle(s, apply))
 	app.Post("/v1/affiliates/attribute", cloud.Handle(s, attribute))
+	// A public link-click ping (no principal — a visitor clicking a shareable link has
+	// no session yet). Bumps the click counter for a known code; unknown codes no-op.
+	app.Post("/v1/affiliates/click", cloud.Handle(s, clickLink))
+	// The privacy-preserving leaderboard any signed-in affiliate can read: opt-in
+	// handles + aggregate share + the caller's OWN rank. Never another org's identity.
+	app.Get("/v1/affiliates/leaderboard", cloud.Handle(s, leaderboard))
 	app.Get("/v1/admin/affiliates", cloud.Handle(s, adminList))
 	// The unified SuperAdmin referral analytics board (cross-tenant): top referrers,
 	// conversion, and the multi-level accrual liability. It reads the ONE attribution
@@ -183,6 +237,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/admin/affiliates/sweep", cloud.Handle(s, adminSweep))
 	app.Post("/v1/admin/affiliates/:id/approve", cloud.Handle(s, adminApprove))
 	app.Post("/v1/admin/affiliates/:id/suspend", cloud.Handle(s, adminSuspend))
+	app.Post("/v1/admin/affiliates/:id/rate", cloud.Handle(s, adminSetRate))
 	app.Post("/v1/admin/affiliates/:id/payout", cloud.Handle(s, adminPayout))
 }
 
@@ -240,6 +295,8 @@ func myAffiliates(s *cloud.Service[state], c *zip.Ctx) error {
 		"requestedCode": a.RequestedCode,
 		"link":          affiliateLink(s, a.Code),
 		"rateBps":       a.RateBps,
+		"marginBps":     s.State.marginBps,
+		"handle":        a.Handle,
 		"referredCount": referred,
 		"accruedCents":  a.AccruedCents,
 		"pendingCents":  a.PendingCents(),
@@ -316,6 +373,8 @@ func myAffiliatesMe(s *cloud.Service[state], c *zip.Ctx) error {
 		"code":          a.Code,
 		"link":          affiliateLink(s, a.Code),
 		"rateBps":       a.RateBps,
+		"marginBps":     s.State.marginBps,
+		"handle":        a.Handle,
 		"levels":        levels,
 		"downlineTotal": len(downline),
 		"accruedCents":  a.AccruedCents,
@@ -588,6 +647,13 @@ func adminApprove(s *cloud.Service[state], c *zip.Ctx) error {
 			return zip.Errorf(http.StatusInternalServerError, "approve: %v", err)
 		}
 	}
+	// Mirror the minted primary code as a link row so click tracking is uniform across
+	// every code (best-effort — a link-mirror hiccup never fails the approval).
+	if lid, gerr := genID("aln"); gerr == nil {
+		if lerr := s.State.store.EnsureLink(ctx, lid, a.ID, a.Code, "primary", time.Now().Unix()); lerr != nil {
+			s.Log.Warn("affiliates: ensure primary link failed", "affiliate", a.ID, "err", lerr)
+		}
+	}
 	emitAudit(s, ctx, "affiliate.approve", a, map[string]any{"code": a.Code, "rateBps": a.RateBps})
 	return adminOK(c, map[string]any{"affiliate": adminViewOf(a, 0)})
 }
@@ -757,6 +823,13 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 	if spend <= 0 {
 		return 0, nil
 	}
+	// The share base is Hanzo's MARGIN on this spend, computed ONCE (level-independent).
+	// Every level's share is a rate of this margin, so their sum ≤ margin (share never
+	// touches the customer's bill). No margin → nothing to share (fail-closed).
+	margin := marginOf(spend, s.State.marginBps)
+	if margin <= 0 {
+		return 0, nil
+	}
 	upline, err := s.State.store.UplineOrgs(ctx, sourceOrg, maxDepth)
 	if err != nil {
 		return 0, err
@@ -774,7 +847,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		if aff.Status != StatusApproved {
 			continue // only an approved affiliate accrues
 		}
-		commission := spend * levelRateBps(level, aff) / bpsDenom
+		commission := margin * levelRateBps(level, aff) / bpsDenom
 		if commission <= 0 {
 			continue
 		}
@@ -782,7 +855,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, commission, now)
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, aff.ID, sourceOrg, period, level, spend, margin, commission, now)
 		if lerr != nil {
 			s.Log.Warn("affiliates: accrual latch failed", "affiliate", aff.ID, "source", sourceOrg, "err", lerr)
 			continue
@@ -791,7 +864,7 @@ func accrueSource(s *cloud.Service[state], ctx context.Context, sourceOrg string
 			created++
 			emitAudit(s, ctx, "affiliate.accrue", aff, map[string]any{
 				"sourceOrg": sourceOrg, "period": period, "level": level,
-				"spendCents": spend, "commissionCents": commission,
+				"spendCents": spend, "marginCents": margin, "commissionCents": commission,
 			})
 		}
 	}
@@ -820,7 +893,8 @@ func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (
 			s.Log.Warn("affiliates: spend read failed", "affiliate", a.ID, "source", src, "err", serr)
 			continue
 		}
-		commission := spend * levelRateBps(level, a) / bpsDenom
+		margin := marginOf(spend, s.State.marginBps)
+		commission := margin * levelRateBps(level, a) / bpsDenom
 		if commission <= 0 {
 			continue
 		}
@@ -828,7 +902,7 @@ func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (
 		if gerr != nil {
 			continue
 		}
-		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, src, period, level, spend, commission, now)
+		won, lerr := s.State.store.LatchAccrual(ctx, accrualID, a.ID, src, period, level, spend, margin, commission, now)
 		if lerr != nil {
 			s.Log.Warn("affiliates: accrual latch failed", "affiliate", a.ID, "source", src, "err", lerr)
 			continue
@@ -837,7 +911,7 @@ func sweepAffiliate(s *cloud.Service[state], ctx context.Context, a Affiliate) (
 			created++
 			emitAudit(s, ctx, "affiliate.accrue", a, map[string]any{
 				"sourceOrg": src, "period": period, "level": level,
-				"spendCents": spend, "commissionCents": commission,
+				"spendCents": spend, "marginCents": margin, "commissionCents": commission,
 			})
 		}
 	}
