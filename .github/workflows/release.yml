@@ -140,6 +140,37 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Mirror credential (registry.hanzo.ai)
+        # Dual-host: pull the KMS deploy kubeconfig (same Universal Auth flow
+        # the hanzoai/ci reusable uses), read the cluster-synced
+        # registry-credentials dockerconfig, and log in. Best-effort: absent
+        # creds → GHCR-only release, never a blocked tag.
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+        run: |
+          set -uo pipefail
+          [ -z "${KMS_CLIENT_ID:-}" ] && { echo "no KMS creds — mirror skipped"; exit 0; }
+          TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json'             -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty')
+          [ -z "$TOKEN" ] && { echo "KMS login failed — mirror skipped"; exit 0; }
+          KC=$(curl -sf "$KMS_ENDPOINT/v1/kms/orgs/hanzo/secrets/deploy/KUBECONFIG?env=prod"                 -H "Authorization: Bearer $TOKEN" | jq -r '.secret.value // empty')
+          [ -z "$KC" ] && { echo "no KUBECONFIG in KMS — mirror skipped"; exit 0; }
+          echo "$KC" | base64 -d > "$RUNNER_TEMP/kubeconfig"
+          command -v kubectl >/dev/null 2>&1 || {
+            KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+            mkdir -p "$HOME/.local/bin"
+            curl -fsSL "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl" -o "$HOME/.local/bin/kubectl" && chmod +x "$HOME/.local/bin/kubectl"
+            export PATH="$HOME/.local/bin:$PATH"
+          }
+          CFG=$(KUBECONFIG="$RUNNER_TEMP/kubeconfig" kubectl -n hanzo get secret registry-credentials                   -o jsonpath='{.data.\.dockerconfigjson}' 2>/dev/null | base64 -d || true)
+          [ -z "$CFG" ] && { echo "registry-credentials unreadable — mirror skipped"; exit 0; }
+          UP=$(echo "$CFG" | jq -r '.auths["registry.hanzo.ai"].auth // empty' | base64 -d)
+          [ -z "$UP" ] && { echo "no registry auth — mirror skipped"; exit 0; }
+          echo "::add-mask::${UP#*:}"
+          echo "${UP#*:}" | docker login registry.hanzo.ai -u "${UP%%:*}" --password-stdin
+          echo "MIRROR_OK=1" >> "$GITHUB_ENV"
         with:
           driver: docker-container
           driver-opts: network=host
@@ -414,6 +445,16 @@ jobs:
               -t "ghcr.io/hanzoai/cloud:${VER}" \
               -t "ghcr.io/hanzoai/cloud:${major}.${minor}" \
               "$SHA_IMG"
+            # Dual-host: mirror the release tags to OUR fleet registry (server-
+            # side copy) so the cluster never depends on GHCR to deploy. Best-
+            # effort — a mirror hiccup must never block the tag-receipt.
+            if [ "${MIRROR_OK:-}" = "1" ]; then
+              for MT in "${V}" "${VER}" "${major}.${minor}"; do
+                docker buildx imagetools create \
+                  -t "registry.hanzo.ai/hanzoai/cloud:${MT}" "$SHA_IMG" \
+                  || echo "::warning::mirror registry.hanzo.ai/hanzoai/cloud:${MT} failed"
+              done
+            fi
             git tag -a "$V" -m "release $V — image ghcr.io/hanzoai/cloud:$V (retagged from sha-${{ steps.ver.outputs.sha_short }}, smoke-passed ${GITHUB_SHA})"
             if git push "$PUSH_URL" "$V" 2>/dev/null; then
               echo "Tagged $V → ghcr.io/hanzoai/cloud:$V"
