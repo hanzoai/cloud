@@ -87,6 +87,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kafka"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
+	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/marketplace"
 	"github.com/hanzoai/cloud/clients/ml"
@@ -226,6 +227,9 @@ func Wire() []cloud.MountSpec {
 		{Name: "projects", Mount: cloud.Typed(projects.Mount)},
 		{Name: "prompts", Mount: cloud.Typed(prompts.Mount)},
 		{Name: "agents", Mount: cloud.Typed(agents.Mount), Shutdown: agents.Shutdown},
+		// The unified AI login manager registry (/v1/links). Mounts AFTER agents so
+		// a link revoke can stop the affected agent sessions in-process.
+		{Name: "link", Mount: cloud.Typed(link.Mount), Shutdown: link.Shutdown},
 		{Name: "wallets", Mount: cloud.Typed(wallets.Mount), Shutdown: ctxShutdown(wallets.Shutdown)},
 		// x402 pay-per-use: settles a signed ERC-3009 authorization to a recipient
 		// wallet through the metering spine. Mounts AFTER wallets (it resolves the
