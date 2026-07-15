@@ -401,6 +401,71 @@ func (s *service) handleIndex(c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, res)
 }
 
+// File is one file to index: its repo-relative path and content. The exported
+// shape the git plane's push→index reactor hands in (it avoids importing the
+// unexported fileInput).
+type File struct {
+	Path    string
+	Content string
+}
+
+// IndexResult reports what an index pass wrote, for the reactor's log line.
+type IndexResult struct {
+	Repo     string
+	Indexed  int
+	Skipped  int
+	Pruned   int
+	Symbols  int
+	Chunks   int
+	Vectors  int
+	Semantic bool
+}
+
+// IndexFiles indexes a repo's files into the org's code index — the package-level
+// seam the git plane's lifecycle reactor calls on push (clients/git owns the repo
+// bytes; clients/code owns the index; neither imports the other, so the reactor
+// reads the tree and hands it here). It reuses the exact per-file pipeline the
+// POST /v1/code/index handler runs, with prune=true so a push is a full-tree
+// reconcile (deleted files leave the index). A nil/unmounted service is a no-op —
+// the reactor is best-effort and must never block the push/deploy path. Over-limit
+// inputs are bounded, not rejected: indexing is a background enrichment, so a huge
+// push indexes what fits rather than failing the whole repo.
+func IndexFiles(ctx context.Context, org, billingOrg, project, repo string, files []File) (IndexResult, error) {
+	s := mounted
+	if s == nil || org == "" || repo == "" {
+		return IndexResult{}, nil
+	}
+	in := make([]fileInput, 0, len(files))
+	var total int
+	for _, f := range files {
+		if strings.TrimSpace(f.Path) == "" || len(f.Content) > maxFileBytes {
+			continue // skip an unnamed or oversized file rather than fail the push
+		}
+		if total += len(f.Content); total > maxTotalBytes {
+			break // index what fits; a giant push is bounded, not dropped
+		}
+		if len(in) >= maxIndexFiles {
+			break
+		}
+		in = append(in, fileInput{Path: f.Path, Content: f.Content})
+	}
+	if len(in) == 0 {
+		return IndexResult{Repo: repo}, nil
+	}
+	store, err := s.storeFor(org)
+	if err != nil {
+		return IndexResult{}, err
+	}
+	res, err := s.indexRepo(ctx, org, billingOrg, project, store, repo, in, true /* prune: full-tree reconcile */)
+	if err != nil {
+		return IndexResult{}, err
+	}
+	return IndexResult{
+		Repo: res.Repo, Indexed: res.Indexed, Skipped: res.Skipped, Pruned: res.Pruned,
+		Symbols: res.Symbols, Chunks: res.Chunks, Vectors: res.Vectors, Semantic: res.Semantic,
+	}, nil
+}
+
 // indexRepo runs the pipeline per file: skip-if-unchanged (content hash) → parse
 // → embed chunks → atomically replace the file's artifacts. prune removes indexed
 // files absent from the payload (a full-tree reconcile).
