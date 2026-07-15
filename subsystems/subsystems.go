@@ -138,6 +138,24 @@ import (
 	_ "github.com/hanzoai/cloud/clients/help"
 )
 
+// init wires the cross-subsystem func seams — the composition root is the one place
+// that may import two leaf subsystems at once, so a connection neither can express
+// alone lives here. git's push→index reactor calls the code index without git
+// importing code: the adapter converts git's IndexedFile to code's File and drops the
+// result (the reactor only needs success/failure). Stored once at load; invoked on
+// push, long after mount, so there is no ordering dependency. Same
+// register-into-a-registry idiom the framework content modules use above.
+func init() {
+	git.SetIndexer(func(ctx context.Context, org, billingOrg, project, repo string, files []git.IndexedFile) error {
+		in := make([]code.File, len(files))
+		for i, f := range files {
+			in[i] = code.File{Path: f.Path, Content: f.Content}
+		}
+		_, err := code.IndexFiles(ctx, org, billingOrg, project, repo, in)
+		return err
+	})
+}
+
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
 // slice position IS the order: cloud.MountAll iterates it as-given, registering each
 // subsystem's teardown as a zip shutdown hook so teardown runs in reverse (LIFO).
