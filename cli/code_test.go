@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestCodeAgentsBypassPermissionsByDefault(t *testing.T) {
@@ -42,6 +43,73 @@ func TestCodeAgentsBypassPermissionsByDefault(t *testing.T) {
 			safeArgv := codeArgv(agent, "https://api.hanzo.ai", defaultCodeModel, true, nil)
 			if slices.Contains(safeArgv, tt.flag) {
 				t.Fatalf("--safe argv %q still contains permission bypass %q", safeArgv, tt.flag)
+			}
+		})
+	}
+}
+
+// TestCodeTokenPrecedence locks in the 402 unblock: a fresh `hanzo login` JWT
+// (which carries owner/project/sub on EVERY deployment) beats the hk- API key
+// (which only mints a billing principal where the server has IAM_MINT_CLIENT_*).
+// On a mint-less deployment an hk- request arrives anonymous and zen 402s; the
+// JWT must win when it is live. An EXPIRED JWT must NOT win — it would 401 a
+// session a valid hk- key would still serve — so it falls through to the key.
+// HANZO_API_KEY stays the deliberate operator override at the top.
+func TestCodeTokenPrecedence(t *testing.T) {
+	// freshExpiry is comfortably in the future without a literal unix timestamp.
+	freshExpiry := time.Now().Add(1 * time.Hour).Unix()
+
+	cases := []struct {
+		name    string
+		envKey  string // HANZO_API_KEY override
+		creds   Credentials
+		want    string
+	}{
+		{
+			name:  "fresh JWT beats hk- key",
+			creds: Credentials{AccessToken: "jwt-live", Expiry: freshExpiry},
+			want:  "jwt-live",
+		},
+		{
+			name:  "expired JWT falls through to stored hk- key",
+			creds: Credentials{AccessToken: "jwt-dead", Expiry: time.Now().Add(-1 * time.Hour).Unix()},
+			want:  "hk-stored",
+		},
+		{
+			name:  "no JWT, no expiry record ⟹ hk- key (mint-credentialed servers)",
+			creds: Credentials{},
+			want:  "hk-stored",
+		},
+		{
+			name:  "HANZO_API_KEY overrides everything (deliberate operator override)",
+			envKey: "hk-explicit",
+			creds: Credentials{AccessToken: "jwt-live", Expiry: freshExpiry},
+			want:  "hk-explicit",
+		},
+		{
+			name:  "HANZO_API_KEY overrides even an expired JWT",
+			envKey: "hk-explicit",
+			creds: Credentials{AccessToken: "jwt-dead", Expiry: time.Now().Add(-1 * time.Hour).Unix()},
+			want:  "hk-explicit",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sandbox(t) // isolates HANZO_HOME + clears HANZO_TOKEN/HANZO_API_KEY
+			if tc.envKey != "" {
+				t.Setenv("HANZO_API_KEY", tc.envKey)
+			}
+			// Put the hk- key where storedAPIKey() reads it (~/.hanzo/config.json),
+			// the same path the rest of the toolchain shares it from.
+			cfgDir, _ := hanzoDir()
+			if err := os.WriteFile(filepath.Join(cfgDir, "config.json"),
+				[]byte(`{"apiKey":"hk-stored"}`), 0o600); err != nil {
+				t.Fatalf("write config.json: %v", err)
+			}
+			env := resolve(&Config{}, &tc.creds, globalFlags{})
+			if got := codeToken(env); got != tc.want {
+				t.Fatalf("codeToken = %q, want %q", got, tc.want)
 			}
 		})
 	}
