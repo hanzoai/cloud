@@ -99,6 +99,23 @@ CREATE TABLE IF NOT EXISTS repo_mirrors (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_repo_mirrors ON repo_mirrors(org, project, repo, host);
 CREATE INDEX IF NOT EXISTS ix_repo_mirrors_repo ON repo_mirrors(org, project, repo);
+
+-- inbound_conflicts records the ONE thing an inbound sync must persist: a branch
+-- whose upstream (GitHub) push DIVERGED from native so the fast-forward-only fetch
+-- was REJECTED and native (canonical) was left unchanged. A repo with no rows here
+-- is "synced"; a row is a split-brain the console surfaces + an operator resolves.
+-- Cleared when a later ff-apply (or a full re-import) reconciles the branch. Keyed
+-- on the full (org, project, repo, branch); cascade-deleted with the repo.
+CREATE TABLE IF NOT EXISTS inbound_conflicts (
+  org        TEXT NOT NULL,
+  project    TEXT NOT NULL DEFAULT '',
+  repo       TEXT NOT NULL,
+  branch     TEXT NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (org, project, repo, branch)
+);
+CREATE INDEX IF NOT EXISTS ix_inbound_conflicts_repo ON inbound_conflicts(org, project, repo);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -227,6 +244,10 @@ func (s *Store) Delete(ctx context.Context, org, project, name string) (bool, er
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM repo_mirrors WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
 		return false, fmt.Errorf("delete repo mirrors: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM inbound_conflicts WHERE org=? AND project=? AND repo=?`, org, project, name); err != nil {
+		return false, fmt.Errorf("delete repo inbound conflicts: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("delete repo: commit: %w", err)
@@ -378,4 +399,64 @@ func (s *Store) DeleteMirror(ctx context.Context, org, project, repo, id string)
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// ── inbound-sync conflicts (GitHub→native fast-forward rejections) ───────────
+
+// RecordConflict upserts the divergence marker for one branch: the upstream push
+// could not fast-forward native, so native was preserved and this row records the
+// split-brain for the console + operator. Upsert (not insert) so a repeated
+// diverging push refreshes the detail/timestamp instead of erroring.
+func (s *Store) RecordConflict(ctx context.Context, org, project, repo, branch, detail string, at int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO inbound_conflicts (org,project,repo,branch,detail,updated_at) VALUES (?,?,?,?,?,?)
+		 ON CONFLICT(org,project,repo,branch) DO UPDATE SET detail=excluded.detail, updated_at=excluded.updated_at`,
+		org, project, repo, branch, detail, at)
+	if err != nil {
+		return fmt.Errorf("record inbound conflict: %w", err)
+	}
+	return nil
+}
+
+// ClearConflict removes one branch's divergence marker — a later ff-apply
+// reconciled it. Idempotent (no row ⇒ no-op).
+func (s *Store) ClearConflict(ctx context.Context, org, project, repo, branch string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM inbound_conflicts WHERE org=? AND project=? AND repo=? AND branch=?`,
+		org, project, repo, branch)
+	if err != nil {
+		return fmt.Errorf("clear inbound conflict: %w", err)
+	}
+	return nil
+}
+
+// ClearRepoConflicts removes every branch's divergence marker for a repo — a full
+// re-import force-fetches every ref, reconciling the repo wholesale. Idempotent.
+func (s *Store) ClearRepoConflicts(ctx context.Context, org, project, repo string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM inbound_conflicts WHERE org=? AND project=? AND repo=?`, org, project, repo)
+	if err != nil {
+		return fmt.Errorf("clear repo inbound conflicts: %w", err)
+	}
+	return nil
+}
+
+// ConflictRepoSet returns the set of repos (by name) with ≥1 unresolved inbound
+// conflict in (org, project) — one query backing the repo-list status roll-up.
+func (s *Store) ConflictRepoSet(ctx context.Context, org, project string) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT repo FROM inbound_conflicts WHERE org=? AND project=?`, org, project)
+	if err != nil {
+		return nil, fmt.Errorf("list conflict repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var repo string
+		if err := rows.Scan(&repo); err != nil {
+			return nil, fmt.Errorf("scan conflict repo: %w", err)
+		}
+		out[repo] = true
+	}
+	return out, rows.Err()
 }
