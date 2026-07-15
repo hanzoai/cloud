@@ -153,8 +153,16 @@ jobs:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
           KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
         run: |
           set -uo pipefail
+          # Direct credential first (repo/org secret — works on private repos,
+          # where the Free plan hides org KMS secrets); KMS kubeconfig fallback.
+          if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_PASSWORD:-}" ]; then
+            echo "$REGISTRY_PASSWORD" | docker login registry.hanzo.ai -u "$REGISTRY_USER" --password-stdin
+            echo "MIRROR_OK=1" >> "$GITHUB_ENV"; exit 0
+          fi
           [ -z "${KMS_CLIENT_ID:-}" ] && { echo "no KMS creds — mirror skipped"; exit 0; }
           TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json'             -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty')
           [ -z "$TOKEN" ] && { echo "KMS login failed — mirror skipped"; exit 0; }
