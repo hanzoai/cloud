@@ -86,7 +86,7 @@ func index() *indexer {
 			vectorURL:   strings.TrimRight(getenv("vectorEndpoint", "http://vector.hanzo.svc.cluster.local:6333"), "/"),
 			vectorKey:   os.Getenv("vectorApiKey"),
 			ai:          kbAI,
-			embedModel:  getenv("CLOUD_EMBED_MODEL", "bge-m3"),
+			embedModel:  getenv("CLOUD_EMBED_MODEL", "zen-embedding"), // the served SKU; raw "bge-m3" 400s at the gateway
 			dims:        dims,
 			http:        &http.Client{Timeout: 20 * time.Second},
 			ensuredOrgs: map[string]bool{},
