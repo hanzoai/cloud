@@ -80,7 +80,7 @@ func TestSSHKeyRegistrationAndAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse authline: %v", err)
 	}
-	perms, err := mounted.State.ssh.authPublicKey(fakeConnMeta{}, pub)
+	perms, err := mounted.Load().State.ssh.authPublicKey(fakeConnMeta{}, pub)
 	if err != nil {
 		t.Fatalf("registered key must authenticate, got: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestSSHKeyRegistrationAndAuth(t *testing.T) {
 
 	// An UNREGISTERED key fails closed.
 	otherPub, _ := genClientKeyPub(t)
-	if _, err := mounted.State.ssh.authPublicKey(fakeConnMeta{}, otherPub); err == nil {
+	if _, err := mounted.Load().State.ssh.authPublicKey(fakeConnMeta{}, otherPub); err == nil {
 		t.Fatalf("unregistered key must be rejected")
 	}
 
@@ -118,7 +118,7 @@ func TestSSHKeyRegistrationAndAuth(t *testing.T) {
 	if code, _ := do(t, app, http.MethodDelete, "/v1/git/keys/"+kv.ID, "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete key want 204, got %d", code)
 	}
-	if _, err := mounted.State.ssh.authPublicKey(fakeConnMeta{}, pub); err == nil {
+	if _, err := mounted.Load().State.ssh.authPublicKey(fakeConnMeta{}, pub); err == nil {
 		t.Fatalf("deleted key must be rejected")
 	}
 }
@@ -140,7 +140,7 @@ func TestSSHClonePushRoundTrip(t *testing.T) {
 		t.Fatalf("create repo: %d %s", code, body)
 	}
 
-	sshURL := fmt.Sprintf("ssh://git@%s/acme/code.git", mounted.State.ssh.addr())
+	sshURL := fmt.Sprintf("ssh://git@%s/acme/code.git", mounted.Load().State.ssh.addr())
 	auth := sshClientAuth(t, privPEM)
 
 	// Build a local repo, commit, and push over SSH.
@@ -203,7 +203,7 @@ func TestSSHCrossTenantRejected(t *testing.T) {
 		t.Fatal("create beta repo failed")
 	}
 
-	sshURL := fmt.Sprintf("ssh://git@%s/beta/secret.git", mounted.State.ssh.addr())
+	sshURL := fmt.Sprintf("ssh://git@%s/beta/secret.git", mounted.Load().State.ssh.addr())
 	auth := sshClientAuth(t, privPEM)
 	// acme's key authenticates, but the beta path is outside its org → the exec
 	// handler denies and the clone fails.

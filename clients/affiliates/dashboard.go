@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -20,6 +21,50 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
+
+// clicks coalesces public link-click pings in memory so a flood never reaches the money
+// DB write path. clickLink folds a ping into pending[code] (O(1), no DB); a bounded map
+// drops the rare overflow. The tallies are flushed to affiliate_links — batched, one tx —
+// lazily on the next authenticated links read and on shutdown, so the worst case is one
+// coalesced UPDATE per code per read, regardless of click volume. Clicks are a pure vanity
+// metric (never read by any accrual or payout path), so a dropped or lost tally is
+// harmless — this trades exact click counts for total isolation of the money write path.
+type clicks struct {
+	mu      sync.Mutex
+	pending map[string]int64
+}
+
+// clicksCap bounds the distinct codes held in memory between flushes; a click on a NEW
+// code past the cap is dropped (existing tallies still accumulate). A tiny map, so the cap
+// is only a backstop against an unbounded distinct-code flood, not a normal limit.
+const clicksCap = 4096
+
+func newClicks() *clicks { return &clicks{pending: map[string]int64{}} }
+
+// add folds one ping into the pending tally, bounded. Returns false only when the buffer
+// is full and the code is new (the ping is dropped — vanity, best-effort).
+func (k *clicks) add(code string) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if _, ok := k.pending[code]; !ok && len(k.pending) >= clicksCap {
+		return false
+	}
+	k.pending[code]++
+	return true
+}
+
+// drain returns the pending tallies and resets the buffer, for a batched flush. nil when
+// empty.
+func (k *clicks) drain() map[string]int64 {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if len(k.pending) == 0 {
+		return nil
+	}
+	out := k.pending
+	k.pending = map[string]int64{}
+	return out
+}
 
 const (
 	// earningsLimit / linkLimit bound the self-service reads; maxLinksPerAffiliate caps
@@ -124,6 +169,9 @@ func myLinks(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("sign in to view your referral links")
 	}
 	ctx := c.Context()
+	// Fold any pending public clicks into the money DB before reading (batched, bounded), so
+	// the counters are current without a per-click money-DB write.
+	flushClicks(s, ctx)
 	a, err := s.State.store.GetByOrg(ctx, org)
 	if err == errNotFound {
 		return c.JSON(http.StatusOK, map[string]any{"isAffiliate": false, "maxLinks": maxLinksPerAffiliate})
@@ -250,10 +298,14 @@ type clickRequest struct {
 }
 
 // clickLink answers POST /v1/affiliates/click — a PUBLIC (no-principal) ping that bumps
-// a link's click counter. Codes are public by design (they live in shareable links);
-// an unknown code is a silent no-op. The counter is a vanity metric only — it never
-// touches accrual or payout (those key on real metered spend), so click inflation is
-// harmless to the money.
+// a link's click counter. The ping folds into an in-memory coalescing buffer and NEVER
+// writes the money DB synchronously, so a click flood cannot contend with the accrual /
+// payout write path; the buffer is flushed, batched, on the next links read + on shutdown.
+// The counter is a vanity metric only — it never touches accrual or payout (those key on
+// real metered spend), so click inflation is harmless to the money. Codes are public by
+// design (they live in shareable links), so this accepts any code without checking
+// existence: it is intentionally NOT a code-existence oracle (an unknown code simply
+// no-ops at flush time), and "counted" reports buffer acceptance, not that the code is real.
 func clickLink(s *cloud.Service[state], c *zip.Ctx) error {
 	var body clickRequest
 	if err := c.Bind(&body); err != nil {
@@ -263,11 +315,18 @@ func clickLink(s *cloud.Service[state], c *zip.Ctx) error {
 	if code == "" {
 		return zip.ErrBadRequest("code is required")
 	}
-	counted, err := s.State.store.IncrementLinkClick(c.Context(), code)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "click: %v", err)
+	return c.JSON(http.StatusOK, map[string]any{"counted": s.State.clicks.add(code)})
+}
+
+// flushClicks folds any pending public clicks into the money DB (batched, one tx) before a
+// links read, so the counters are current without a per-click money-DB write. Best-effort:
+// a flush error is logged, not surfaced, and the (vanity) tally is not restored.
+func flushClicks(s *cloud.Service[state], ctx context.Context) {
+	if tally := s.State.clicks.drain(); tally != nil {
+		if err := s.State.store.FlushClicks(ctx, tally); err != nil {
+			s.Log.Warn("affiliates: click flush failed", "err", err)
+		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{"counted": counted})
 }
 
 // ── opt-in leaderboard handle ───────────────────────────────────────────────────
