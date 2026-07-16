@@ -23,7 +23,7 @@ test:
   - name: go-vet
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off
+      export GOPRIVATE='github.com/hanzoai/*,github.com/hanzoiam/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off
       go vet ./...
   - name: go-unit
     # The money-path + composition-root surface: the packages the unfork/zip
@@ -31,7 +31,7 @@ test:
     # hermetic.
     run: |
       set -e
-      export GOPRIVATE='github.com/hanzoai/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off CGO_ENABLED=1
+      export GOPRIVATE='github.com/hanzoai/*,github.com/hanzoiam/*,github.com/zap-proto/*,github.com/luxfi/*' GOWORK=off CGO_ENABLED=1
       # -skip: TestRecord_DebitsFinanceInProcess is env-gated (cek demands
       # CLOUD_KMS_MASTER_KEY_REF on encryption-capable builds) — it runs where
       # that key exists, not in the hermetic gate.
