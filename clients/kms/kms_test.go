@@ -167,7 +167,9 @@ func TestSecretNotStoredInPlaintext(t *testing.T) {
 	if err := deps.KMS.PutSecret(context.Background(), "svc/DB_URL@main", marker); err != nil {
 		t.Fatalf("PutSecret: %v", err)
 	}
-	// Close so the KV flushes to disk, then scan the store files for the marker.
+	// Close so the per-org SQLite files flush to disk, then scan every store file
+	// under the data dir for the marker (per-org files live at {dir}/orgs/*/kms.db;
+	// an org-less facade ref lands in {dir}/orgs/_platform/kms.db).
 	if c, ok := deps.KMS.(*kms.Client); ok {
 		if err := c.Close(); err != nil {
 			t.Fatalf("close: %v", err)
@@ -175,7 +177,7 @@ func TestSecretNotStoredInPlaintext(t *testing.T) {
 	}
 
 	found := false
-	root := filepath.Join(dir, "kms")
+	root := dir
 	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return err
