@@ -117,6 +117,17 @@ RUN --mount=type=secret,id=gh_token \
     python3 skills.py --no-services --out /catalog && \
     test -s /catalog/hanzo/index.json
 
+# ── Native flags evaluator — hanzo-flags (Rust staticlib, FFI'd into the Go
+# binary by clients/featureflags). Stateless PostHog-compatible evaluation;
+# definitions live in the per-org SQLite stores. musl staticlib links clean
+# against the alpine cgo build below.
+FROM public.ecr.aws/docker/library/rust:1-alpine3.22 AS flagslib
+RUN apk add --no-cache musl-dev
+WORKDIR /src/native/flags
+COPY native/flags/Cargo.toml native/flags/Cargo.lock ./
+COPY native/flags/src ./src
+RUN cargo build --release --locked
+
 FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
 # CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
 # SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
@@ -173,6 +184,9 @@ COPY --from=console /out/ /src/webui/dist/
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
+# The native flags staticlib at the exact ${SRCDIR}-relative path the cgo
+# directive in clients/featureflags/engine.go links.
+COPY --from=flagslib /src/native/flags/target/release/libhanzo_flags.a /src/native/flags/target/release/libhanzo_flags.a
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
 # "sqlite" driver is registered twice (mattn + modernc) → panic at init.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
