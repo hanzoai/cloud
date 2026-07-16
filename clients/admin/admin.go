@@ -109,6 +109,7 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 
 	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
 	app.Get("/v1/admin/flags", core.Guard(s, flags))
+	app.Put("/v1/admin/flags/:key", core.Guard(s, setFlag))
 	app.Get("/v1/admin/waitlist", core.Guard(s, waitlist))
 	app.Post("/v1/admin/waitlist/boost", core.Guard(s, waitlistBoost))
 
