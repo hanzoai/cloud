@@ -11,131 +11,100 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/runtime"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
-// The list/stop half of the control plane, against fake seams. The fakes are
-// GENUINELY org-scoped (a run lives under exactly one org key), so a test that
-// reads another tenant's run has to get past the same boundary the real registry
-// enforces — a handler that forgot to pass the validated org, or passed a
-// client-supplied one, fails here rather than silently passing.
+// The control plane against a fake runtime. The fake is GENUINELY org-scoped (a
+// run lives under exactly one org key), so a test that reads another tenant's run
+// has to get past the same boundary the real runtime enforces by tenant path — a
+// handler that forgot to pass the validated org, or passed a client-supplied one,
+// fails here.
 
 type runKey struct{ org, id string }
 
-type openCall struct{ org, actor, task, surface string }
+type listCall struct{ org string }
 
-type fakeRuns struct {
+type fakeRuntime struct {
 	mu    sync.Mutex
 	rows  map[runKey]Run
-	opens []openCall
-	n     int
-	// Injected failures for the honest-error paths.
-	openErr, listErr, getErr, stopErr error
+	lists []listCall
+	stops []runKey
+	// Injected outcomes for the honest-failure paths.
+	listErr, stopErr error
 }
 
-func newFakeRuns() *fakeRuns { return &fakeRuns{rows: map[runKey]Run{}} }
+func newFake() *fakeRuntime { return &fakeRuntime{rows: map[runKey]Run{}} }
 
-// seed places a run in ONE org's registry.
-func (f *fakeRuns) seed(org string, r Run) {
+func (f *fakeRuntime) seed(org string, r Run) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.rows[runKey{org, r.ID}] = r
 }
 
-func (f *fakeRuns) Open(_ context.Context, org, actor, task, surface string) (string, error) {
+func (f *fakeRuntime) List(_ context.Context, org string) ([]Run, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.openErr != nil {
-		return "", f.openErr
-	}
-	f.opens = append(f.opens, openCall{org, actor, task, surface})
-	f.n++
-	id := fmt.Sprintf("sess_%d", f.n)
-	f.rows[runKey{org, id}] = Run{ID: id, Task: task, Surface: surface, Status: "running", StartedAt: 1700000000}
-	return id, nil
-}
-
-func (f *fakeRuns) List(_ context.Context, org string) ([]Run, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.lists = append(f.lists, listCall{org})
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
 	var out []Run
 	for k, r := range f.rows {
-		if k.org == org && r.Status == "running" {
+		if k.org == org {
 			out = append(out, r)
 		}
 	}
 	return out, nil
 }
 
-func (f *fakeRuns) Get(_ context.Context, org, runID string) (Run, bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.getErr != nil {
-		return Run{}, false, f.getErr
-	}
-	r, ok := f.rows[runKey{org, runID}]
-	return r, ok, nil
-}
-
-func (f *fakeRuns) Stop(_ context.Context, org, runID, _ string) (bool, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.stopErr != nil {
-		return false, f.stopErr
-	}
-	k := runKey{org, runID}
-	r, ok := f.rows[k]
-	if !ok {
-		return false, nil
-	}
-	r.Status = "done"
-	f.rows[k] = r
-	return true, nil
-}
-
-func (f *fakeRuns) statusOf(org, id string) string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.rows[runKey{org, id}].Status
-}
-
-type stopCall struct{ org, runID string }
-
-type fakeRuntime struct {
-	mu    sync.Mutex
-	stops []stopCall
-	err   error
-}
-
 func (f *fakeRuntime) Stop(_ context.Context, org, runID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.stops = append(f.stops, stopCall{org, runID})
-	return f.err
+	f.stops = append(f.stops, runKey{org, runID})
+	if f.stopErr != nil {
+		return f.stopErr
+	}
+	k := runKey{org, runID}
+	if _, ok := f.rows[k]; !ok {
+		// The real runtime resolves under tenants/{org}/ and ANSWERS absent.
+		return runtime.ErrNotFound
+	}
+	delete(f.rows, k)
+	return nil
 }
 
-func (f *fakeRuntime) calls() []stopCall {
+func (f *fakeRuntime) stopCalls() []runKey {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]stopCall(nil), f.stops...)
+	return append([]runKey(nil), f.stops...)
 }
 
-// mountWith builds the surface over injected seams, exactly as Mount does over
-// the real ones — routes() is the shared registration path, so what a test drives
-// is the code that ships.
-func mountWith(t *testing.T, runs Runs, rt Runtime) *zip.App {
+func (f *fakeRuntime) listCalls() []listCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]listCall(nil), f.lists...)
+}
+
+func (f *fakeRuntime) has(org, id string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.rows[runKey{org, id}]
+	return ok
+}
+
+// mountWith builds the surface over an injected runtime, exactly as Mount does over
+// the real one — routes() is the shared registration path, so what a test drives is
+// the code that ships.
+func mountWith(t *testing.T, rt Runtime) *zip.App {
 	t.Helper()
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
-	deps := cloud.Deps{Logger: luxlog.New("test")}
 	s := &cloud.Service[state]{
-		Base:  cloud.NewBase(deps, "bots"),
-		State: state{bill: cloud.NewResourceMeter(deps, meterKind), gateway: gatewayBase(), runs: runs, runtime: rt},
+		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.New("test")}, "bots"),
+		State: state{gateway: gatewayBase(), runtime: rt},
 	}
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	routes(app, s)
 	return app
 }
@@ -149,7 +118,7 @@ func call(t *testing.T, app *zip.App, method, path, org string) (int, []byte) {
 		req.Header.Set("X-Org-Id", org)
 		req.Header.Set("X-User-Id", "u-"+org)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
@@ -171,32 +140,54 @@ func listRunIDs(t *testing.T, body []byte) []string {
 	return ids
 }
 
+// ---- run ----
+
+// Launching is not implemented and must say so rather than charge for a bot that
+// never boots. The runtime has no launch operation, so a 200 here would be a lie
+// with a price on it.
+func TestRunIsNotImplementedAndStartsNothing(t *testing.T) {
+	rt := newFake()
+	app := mountWith(t, rt)
+
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run", "acme"); code != http.StatusNotImplemented {
+		t.Fatalf("launch want 501, got %d", code)
+	}
+	// Nothing was started, so nothing may be listed as started.
+	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	if ids := listRunIDs(t, body); len(ids) != 0 {
+		t.Fatalf("a refused launch must not produce a run, got %v", ids)
+	}
+}
+
 // ---- list ----
 
-// A list returns the CALLER's runs and only those: the other tenant's live run
-// is in the same registry under its own org and must never appear.
+// A list returns the CALLER's runs and only those, scoped by the validated org the
+// runtime is asked with — never a client-supplied one.
 func TestListIsScopedToTheCallerOrg(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_acme", Task: "acme work", Surface: "desktop", Status: "running", StartedAt: 1700000000})
-	runs.seed("globex", Run{ID: "sess_globex", Task: "globex secret", Surface: "terminal", Status: "running", StartedAt: 1700000000})
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_acme", Task: "acme work", Surface: "desktop", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
+	rt.seed("globex", Run{ID: "run_globex", Task: "globex secret", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
+	app := mountWith(t, rt)
 
 	code, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d (%s)", code, body)
 	}
-	ids := listRunIDs(t, body)
-	if len(ids) != 1 || ids[0] != "sess_acme" {
+	if ids := listRunIDs(t, body); len(ids) != 1 || ids[0] != "run_acme" {
 		t.Fatalf("acme must see exactly its own run, got %v (%s)", ids, body)
+	}
+	// The runtime was asked with the caller's validated org, nothing else.
+	if got := rt.listCalls(); len(got) != 1 || got[0].org != "acme" {
+		t.Fatalf("runtime must be asked with the validated org only, got %+v", got)
 	}
 }
 
-// The list row carries the run's real attributes and a sessionUrl derived from
-// its id — the surface is the one recorded, never a fabricated default.
+// The row carries the run's real attributes as the runtime reported them, plus a
+// sessionUrl derived here from the runtime's own id.
 func TestListRowShape(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_1", Task: "ship it", Surface: "terminal", Status: "running", StartedAt: 1700000000})
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_1", Task: "ship it", Surface: "terminal", Status: "running", StartedAt: "2023-11-14T22:13:20Z"})
+	app := mountWith(t, rt)
 
 	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
 	var v botsView
@@ -206,102 +197,107 @@ func TestListRowShape(t *testing.T) {
 	if len(v.Bots) != 1 {
 		t.Fatalf("want 1 row, got %d", len(v.Bots))
 	}
-	got := v.Bots[0]
 	want := botView{
-		RunID: "sess_1", Task: "ship it", Surface: "terminal", Status: "running",
-		SessionURL: "https://bot.example.test/vnc?nodeId=sess_1",
+		RunID: "run_1", Task: "ship it", Surface: "terminal", Status: "running",
+		SessionURL: "https://bot.example.test/vnc?nodeId=run_1",
 		StartedAt:  "2023-11-14T22:13:20Z",
 	}
-	if got != want {
-		t.Fatalf("row\n got %+v\nwant %+v", got, want)
+	if v.Bots[0] != want {
+		t.Fatalf("row\n got %+v\nwant %+v", v.Bots[0], want)
 	}
 }
 
-// No tenant, no read — and the registry is never even consulted.
+// No tenant, no read — and the runtime is never even asked.
 func TestListFailsClosedWithoutTenant(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_acme", Status: "running"})
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_acme", Status: "running"})
+	app := mountWith(t, rt)
 
 	if code, _ := call(t, app, http.MethodGet, "/v1/bots", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant list want 403, got %d", code)
+	}
+	if got := rt.listCalls(); len(got) != 0 {
+		t.Fatalf("runtime asked without a tenant: %+v", got)
 	}
 }
 
 // A forged X-Org-Id with no validated principal (the direct-to-pod path) must not
 // enumerate the victim tenant: principal.Org requires a validated X-User-Id.
 func TestListRefusesForgedOrgWithoutValidatedPrincipal(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_acme", Task: "secret", Status: "running"})
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_acme", Task: "secret", Status: "running"})
+	app := mountWith(t, rt)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/bots", nil)
 	req.Header.Set("X-Org-Id", "acme") // forged: no X-User-Id
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("Test: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("forged-org list want 403, got %d (%s)", resp.StatusCode, b)
+		t.Fatalf("forged-org list want 403, got %d", resp.StatusCode)
+	}
+	if got := rt.listCalls(); len(got) != 0 {
+		t.Fatalf("runtime asked on a forged org: %+v", got)
 	}
 }
 
-// The registry is ours and authoritative, so a read failure is an error — never
-// an empty list, which the caller would read as "my org has no runs".
-func TestListReportsRegistryFailureInsteadOfEmpty(t *testing.T) {
-	runs := newFakeRuns()
-	runs.listErr = fmt.Errorf("store is down")
-	app := mountWith(t, runs, &fakeRuntime{})
+// A runtime that cannot answer is an error, never an empty list: [] would claim
+// "your org has no runs", which is not what we learned.
+func TestListReportsRuntimeFailureInsteadOfEmpty(t *testing.T) {
+	rt := newFake()
+	rt.listErr = fmt.Errorf("runtime is down")
+	app := mountWith(t, rt)
 
 	code, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
-	if code != http.StatusInternalServerError {
-		t.Fatalf("registry failure want 500, got %d (%s)", code, body)
+	if code != http.StatusBadGateway {
+		t.Fatalf("runtime failure want 502, got %d (%s)", code, body)
 	}
 }
 
 // ---- stop ----
 
-// THE crown jewel: one tenant may not stop another's run. The run exists, the id
-// is correct, the caller is validated — and it is still a 404, because it is not
-// THEIRS. The runtime must never be driven for a run the caller does not own.
+// One tenant may not stop another's run. The id is real and the caller is
+// validated — and it is still a 404, because the runtime is asked under the
+// CALLER's org, where that run does not exist.
 func TestStopCannotReachAnotherOrgsRun(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_victim", Task: "acme work", Status: "running"})
-	rt := &fakeRuntime{}
-	app := mountWith(t, runs, rt)
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_victim", Task: "acme work", Status: "running"})
+	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/sess_victim/stop", "globex")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/run_victim/stop", "globex")
 	if code != http.StatusNotFound {
 		t.Fatalf("cross-org stop want 404, got %d (%s)", code, body)
 	}
-	if len(rt.calls()) != 0 {
-		t.Fatalf("runtime must not be driven for a run the caller does not own, got %v", rt.calls())
+	// The runtime was asked under globex — never under the victim's org.
+	for _, s := range rt.stopCalls() {
+		if s.org != "globex" {
+			t.Fatalf("stop escaped the caller's org: %+v", s)
+		}
 	}
-	if got := runs.statusOf("acme", "sess_victim"); got != "running" {
-		t.Fatalf("victim run must stay running, got %q", got)
+	if !rt.has("acme", "run_victim") {
+		t.Fatal("victim run must survive a foreign stop")
 	}
 }
 
 // An unknown id and another tenant's id are indistinguishable: both 404, so the
 // endpoint is not an oracle for which run ids exist.
 func TestStopUnknownRunIsNotFound(t *testing.T) {
-	app := mountWith(t, newFakeRuns(), &fakeRuntime{})
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/sess_nope/stop", "acme"); code != http.StatusNotFound {
+	app := mountWith(t, newFake())
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_nope/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("unknown stop want 404, got %d", code)
 	}
 }
 
-// The happy path: ownership proven, runtime halted with the caller's own org and
-// run id, and only then is the record closed.
-func TestStopHaltsRuntimeThenClosesRecord(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_1", Task: "work", Status: "running"})
-	rt := &fakeRuntime{}
-	app := mountWith(t, runs, rt)
+// The happy path: the runtime is driven with the caller's own org and run id, and
+// the run is gone from its list.
+func TestStopHaltsTheRun(t *testing.T) {
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_1", Task: "work", Status: "running"})
+	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/sess_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme")
 	if code != http.StatusOK {
 		t.Fatalf("stop want 200, got %d (%s)", code, body)
 	}
@@ -309,57 +305,71 @@ func TestStopHaltsRuntimeThenClosesRecord(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if v.RunID != "sess_1" || v.Status != statusStopped {
+	if v.RunID != "run_1" || v.Status != statusStopped {
 		t.Fatalf("stop view %+v", v)
 	}
-	if got := rt.calls(); len(got) != 1 || got[0] != (stopCall{"acme", "sess_1"}) {
+	if got := rt.stopCalls(); len(got) != 1 || got[0] != (runKey{"acme", "run_1"}) {
 		t.Fatalf("runtime must be driven once with the caller's org+run, got %v", got)
 	}
-	if got := runs.statusOf("acme", "sess_1"); got != "done" {
-		t.Fatalf("record must be closed, got %q", got)
+	if _, body := call(t, app, http.MethodGet, "/v1/bots", "acme"); len(listRunIDs(t, body)) != 0 {
+		t.Fatal("a stopped run must leave the list")
 	}
 }
 
-// A stop that could not reach the executor must not claim the run was stopped —
-// and must leave the record live, because it still is.
-func TestStopWithUnreachableRuntimeDoesNotCloseTheRecord(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_1", Status: "running"})
-	rt := &fakeRuntime{err: fmt.Errorf("connection refused")}
-	app := mountWith(t, runs, rt)
+// THE correctness lie this endpoint must never tell: a runtime that does not serve
+// stop reports nothing about the run, so claiming "stopped" would make a stop that
+// cannot fail. It is a 502, and it says the run was NOT stopped.
+func TestStopFailsClosedWhenTheRuntimeDoesNotServeStop(t *testing.T) {
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_1", Status: "running"})
+	rt.stopErr = runtime.ErrNotServed
+	app := mountWith(t, rt)
 
-	code, body := call(t, app, http.MethodPost, "/v1/bots/sess_1/stop", "acme")
+	code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme")
 	if code != http.StatusBadGateway {
-		t.Fatalf("unreachable runtime want 502, got %d (%s)", code, body)
+		t.Fatalf("unserved stop want 502, got %d (%s)", code, body)
 	}
-	if got := runs.statusOf("acme", "sess_1"); got != "running" {
-		t.Fatalf("record must stay live when the halt failed, got %q", got)
+	if !rt.has("acme", "run_1") {
+		t.Fatal("the run must not be treated as gone when the runtime never answered")
 	}
 }
 
-// No tenant, no stop — and neither seam is touched.
-func TestStopFailsClosedWithoutTenant(t *testing.T) {
-	runs := newFakeRuns()
-	runs.seed("acme", Run{ID: "sess_1", Status: "running"})
-	rt := &fakeRuntime{}
-	app := mountWith(t, runs, rt)
+// A stop that could not reach the executor must not claim the run was stopped.
+func TestStopWithUnreachableRuntimeIs502(t *testing.T) {
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_1", Status: "running"})
+	rt.stopErr = fmt.Errorf("connection refused")
+	app := mountWith(t, rt)
 
-	if code, _ := call(t, app, http.MethodPost, "/v1/bots/sess_1/stop", ""); code != http.StatusForbidden {
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme"); code != http.StatusBadGateway {
+		t.Fatalf("unreachable runtime want 502, got %d", code)
+	}
+	if !rt.has("acme", "run_1") {
+		t.Fatal("the run must stay live when the halt failed")
+	}
+}
+
+// No tenant, no stop — and the runtime is never driven.
+func TestStopFailsClosedWithoutTenant(t *testing.T) {
+	rt := newFake()
+	rt.seed("acme", Run{ID: "run_1", Status: "running"})
+	app := mountWith(t, rt)
+
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", ""); code != http.StatusForbidden {
 		t.Fatalf("no-tenant stop want 403, got %d", code)
 	}
-	if len(rt.calls()) != 0 {
-		t.Fatalf("runtime driven without a tenant: %v", rt.calls())
+	if len(rt.stopCalls()) != 0 {
+		t.Fatalf("runtime driven without a tenant: %v", rt.stopCalls())
 	}
-	if got := runs.statusOf("acme", "sess_1"); got != "running" {
-		t.Fatalf("run stopped without a tenant, status %q", got)
+	if !rt.has("acme", "run_1") {
+		t.Fatal("run stopped without a tenant")
 	}
 }
 
-// An oversize id is a miss like any other — it never reaches the registry.
+// An oversize id is a miss like any other — it never reaches the runtime.
 func TestStopOversizeRunIDIsNotFound(t *testing.T) {
-	runs := newFakeRuns()
-	runs.getErr = fmt.Errorf("registry must not be consulted for an oversize id")
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	app := mountWith(t, rt)
 
 	long := make([]byte, maxRunID+1)
 	for i := range long {
@@ -368,18 +378,23 @@ func TestStopOversizeRunIDIsNotFound(t *testing.T) {
 	if code, _ := call(t, app, http.MethodPost, "/v1/bots/"+string(long)+"/stop", "acme"); code != http.StatusNotFound {
 		t.Fatalf("oversize runId want 404, got %d", code)
 	}
+	if len(rt.stopCalls()) != 0 {
+		t.Fatalf("runtime driven for an oversize id: %v", rt.stopCalls())
+	}
 }
 
 // /v1/bots/run is the launch literal, never a run id: the router resolves the
 // static segment over the :runId param regardless of registration order.
 func TestRunLiteralDoesNotBindAsARunID(t *testing.T) {
-	runs := newFakeRuns()
-	app := mountWith(t, runs, &fakeRuntime{})
+	rt := newFake()
+	app := mountWith(t, rt)
 
-	// POST /v1/bots/run with no body reaches the launch handler (400 task required),
-	// NOT the stop handler (which would 404 on a run named "run").
-	code, body := call(t, app, http.MethodPost, "/v1/bots/run", "acme")
-	if code != http.StatusBadRequest {
-		t.Fatalf("POST /v1/bots/run must hit launch (400 no task), got %d (%s)", code, body)
+	// POST /v1/bots/run reaches the launch handler (501), NOT the stop handler
+	// (which would 404 a run named "run" and would have driven the runtime).
+	if code, _ := call(t, app, http.MethodPost, "/v1/bots/run", "acme"); code != http.StatusNotImplemented {
+		t.Fatalf("POST /v1/bots/run must hit launch (501), got %d", code)
+	}
+	if len(rt.stopCalls()) != 0 {
+		t.Fatalf("/v1/bots/run bound as a run id and drove a stop: %v", rt.stopCalls())
 	}
 }
