@@ -5,9 +5,11 @@ package apps
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
+	aicontrollers "github.com/hanzoai/ai/controllers"
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -159,21 +161,39 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 	if u.Tenant.BillingOrg == "" {
 		return // never debit an unattributable request
 	}
-	usage := metering.Usage{
-		User:            u.Tenant.BillingOrg,
-		Org:             u.Tenant.BillingOrg,
-		Actor:           u.Tenant.User,
-		Model:           u.Model,
-		Provider:        zenProvider,
-		Service:         zenService,
-		Project:         u.Tenant.Project,
-		PromptTokens:    u.PromptTokens,
+	// Beside the commerce debit, land the SAME warehouse row + gen_ai span every
+	// native ai path writes (TraceServedUsage = recordTrace WITHOUT recordUsage —
+	// the debit below is the one billing source, never doubled). zen knows its
+	// EXACT per-tier retail (Charge) and upstream COGS (Cost), so the row carries
+	// true margin (atto → nano: Minor()/1e9). Without this, zen* traffic is
+	// warehouse/o11y-blind exactly where prod runs (the unified binary).
+	aicontrollers.TraceServedUsage(context.Background(), aicontrollers.ServedUsage{
+		Owner:            u.Tenant.BillingOrg,
+		User:             u.Tenant.User,
+		Model:            u.Model,
+		Provider:         zenProvider,
+		RequestID:        u.RequestID,
+		Status:           "success",
+		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
-		TotalTokens:     u.PromptTokens + u.CompletionTokens,
-		Amount:          cloudmoney.FromInt(u.Cost.Minor()), // exact 18-dp USD, no floor
-		RequestID:       u.RequestID,
-		Currency:        "usd",
-		Status:          "success",
+		BilledNano:       attoToNano(u.Charge.Minor()),
+		CostNano:         attoToNano(u.Cost.Minor()),
+	})
+	usage := metering.Usage{
+		User:             u.Tenant.BillingOrg,
+		Org:              u.Tenant.BillingOrg,
+		Actor:            u.Tenant.User,
+		Model:            u.Model,
+		Provider:         zenProvider,
+		Service:          zenService,
+		Project:          u.Tenant.Project,
+		PromptTokens:     u.PromptTokens,
+		CompletionTokens: u.CompletionTokens,
+		TotalTokens:      u.PromptTokens + u.CompletionTokens,
+		Amount:           cloudmoney.FromInt(u.Cost.Minor()), // exact 18-dp USD, no floor
+		RequestID:        u.RequestID,
+		Currency:         "usd",
+		Status:           "success",
 	}
 	// Detached: the request context is recycled once the handler returns, so a
 	// background context carries the debit to commerce without racing the reply.
@@ -201,6 +221,16 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		CostCents:        cloudmoney.FromInt(u.Charge.Minor()).Cents(),
 		RouterEndpoint:   os.Getenv("ROUTER_ENDPOINT"),
 	})
+}
+
+// attoToNano folds an exact atto-USD (1e-18) *big.Int to nano-USD (1e-9) for
+// the warehouse margin columns. A single request's cost always fits int64 at
+// nano; nil folds to 0 (the table-recompute fallback).
+func attoToNano(m *big.Int) int64 {
+	if m == nil {
+		return 0
+	}
+	return new(big.Int).Div(m, big.NewInt(1_000_000_000)).Int64()
 }
 
 // zenService is the commerce service axis zen* spend attributes to. zen serves
