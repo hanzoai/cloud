@@ -84,18 +84,8 @@ CREATE TABLE IF NOT EXISTS oauth_nonces (
 );
 CREATE INDEX IF NOT EXISTS ix_nonces_created ON oauth_nonces(created_at);
 
--- slack_events is the Slack agent bridge's durable event-dedupe table (see
--- slack_dedupe.go). Created here in migrate() — fail-loud at Mount, one place —
--- so the billed webhook path never runs against a missing table (a lazy first-use
--- ensure could half-init and permanently disable the path).
-CREATE TABLE IF NOT EXISTS slack_events (
-  event_key  TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_slack_events_created ON slack_events(created_at);
-
 -- bridge_events is the ChatBridge's durable, provider-keyed event-dedupe table
--- (see bridge_dedupe.go) shared by every non-Slack platform (Teams/Discord/Telegram).
+-- (see bridge_dedupe.go) shared by EVERY chat platform (Slack/Teams/Discord/Telegram).
 -- Created here in migrate() — fail-loud at Mount, one place — so the billed webhook
 -- path never runs against a missing table (a lazy first-use ensure could half-init
 -- and permanently disable the path). PK is (provider, event_key) so platform id

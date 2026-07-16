@@ -203,19 +203,19 @@ func TestSlackDedupeIdempotency(t *testing.T) {
 	newApp(t, newKMS(t)) // mounts the store (table created in migrate); sets `mounted`
 	ctx := context.Background()
 
-	fresh, err := mounted.State.store.MarkSlackEvent(ctx, "Ev-1")
+	fresh, err := mounted.State.store.MarkEvent(ctx, "slack", "Ev-1")
 	if err != nil || !fresh {
 		t.Fatalf("first sighting must be fresh (err=%v fresh=%v)", err, fresh)
 	}
-	again, err := mounted.State.store.MarkSlackEvent(ctx, "Ev-1")
+	again, err := mounted.State.store.MarkEvent(ctx, "slack", "Ev-1")
 	if err != nil || again {
 		t.Fatalf("a Slack retry of the same event_id must be a duplicate (err=%v again=%v)", err, again)
 	}
 	// A different id is fresh; an empty key is non-dedupable (always fresh).
-	if f, _ := mounted.State.store.MarkSlackEvent(ctx, "Ev-2"); !f {
+	if f, _ := mounted.State.store.MarkEvent(ctx, "slack", "Ev-2"); !f {
 		t.Fatal("a distinct event_id must be fresh")
 	}
-	if f, _ := mounted.State.store.MarkSlackEvent(ctx, ""); !f {
+	if f, _ := mounted.State.store.MarkEvent(ctx, "slack", ""); !f {
 		t.Fatal("an empty key must be non-dedupable (fresh)")
 	}
 }
@@ -591,15 +591,16 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	slackBridgeReady(mounted)
 
-	// Swap in a cap-1 limiter, then saturate it so the next handler acquire sheds.
-	saved := slackLim
-	slackLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { slackLim = saved })
+	// Swap in a cap-1 limiter on the SHARED bridge pool, then saturate it so the next
+	// handler acquire sheds.
+	saved := bridgeLim
+	bridgeLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { bridgeLim = saved })
 
 	if cb := connectSlack(t, app, "shedorg", "acmecode"); cb.Code != http.StatusFound {
 		t.Fatalf("connect: %d (%s)", cb.Code, cb.Body)
 	}
-	if !slackLim.acquire("shedorg") {
+	if !bridgeLim.acquire("shedorg") {
 		t.Fatal("precondition: fill the cap-1 pool")
 	}
 
@@ -610,7 +611,7 @@ func TestSlackShedReturnsNon2xxAndDoesNotRecord(t *testing.T) {
 	}
 	// The dedupe key was NOT burned: marking it now must be FRESH — else a later
 	// retry would be deduped away and the message lost forever.
-	if fresh, err := mounted.State.store.MarkSlackEvent(context.Background(), "EvShed"); err != nil || !fresh {
+	if fresh, err := mounted.State.store.MarkEvent(context.Background(), "slack", "EvShed"); err != nil || !fresh {
 		t.Fatalf("shed must NOT record the event_id (fresh=%v err=%v)", fresh, err)
 	}
 	// And no reply was posted (the turn never ran).
@@ -630,24 +631,24 @@ func TestSlackTurnPanicRecoveredAndSlotReleased(t *testing.T) {
 	newApp(t, newKMS(t))
 	slackBridgeReady(mounted)
 
-	saved := slackLim
-	slackLim = newOrgLimiter(1, 1)
-	t.Cleanup(func() { slackLim = saved })
+	saved := bridgeLim
+	bridgeLim = newOrgLimiter(1, 1)
+	t.Cleanup(func() { bridgeLim = saved })
 
 	const org = "panicorg"
 	// Simulate the handler acquiring the single slot, then hand a PANICKING turn to
-	// slackSpawn (which owns the release).
-	if !slackLim.acquire(org) {
+	// bridgeSpawn (which owns the release).
+	if !bridgeLim.acquire(org) {
 		t.Fatal("precondition: acquire the single slot")
 	}
-	slackSpawn(mounted, org, func() { panic("boom in a slack turn") })
+	bridgeSpawn(mounted, org, func() { panic("boom in a slack turn") })
 
 	// The recovered goroutine must release its slot; poll until a fresh acquire
 	// succeeds. Reaching here at all proves the panic did not crash the process.
 	released := false
 	for i := 0; i < 400; i++ {
-		if slackLim.acquire(org) {
-			slackLim.release(org)
+		if bridgeLim.acquire(org) {
+			bridgeLim.release(org)
 			released = true
 			break
 		}
