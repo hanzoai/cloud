@@ -542,7 +542,29 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 		fmt.Fprintf(out, "  → failed: %s\n", cause)
 		return nil
 	}
+	// Keep BOTH the claimed activity and this machine's fleet presence alive while
+	// the handler runs. A render blocks this call for minutes (a cold GB10 reloads
+	// ~40GB before sampling); without heartbeats the studio.render activity hits its
+	// heartbeatTimeout AND the fleet presence (120s) goes stale, so the machine
+	// drops offline mid-render and the next dispatch sees no online GPU. A ticker in
+	// a child context heartbeats both every heartbeatEvery until the handler returns.
+	hbCtx, stopHB := context.WithCancel(ctx)
+	go func() {
+		t := time.NewTicker(heartbeatEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-t.C:
+				_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "heartbeat"),
+					map[string]any{"identity": w.identity}, nil)
+				_ = w.heartbeat(ctx) // fleet presence — stays online through the render
+			}
+		}
+	}()
 	result, herr := h(ctx, act.Input)
+	stopHB()
 	if herr != nil {
 		_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "fail"), map[string]any{"cause": herr.Error(), "identity": w.identity}, nil)
 		fmt.Fprintf(out, "  → failed: %v\n", herr)
