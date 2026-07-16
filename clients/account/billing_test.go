@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+
+	aiobject "github.com/hanzoai/ai/object"
 )
 
 // billing_test.go — the per-tenant billing bridge (billing.go). Proves the tenant
@@ -16,37 +18,44 @@ import (
 
 // ── pure scoping ─────────────────────────────────────────────────────────────
 
+// TestBillingSubject proves the top-up subject is resolved through the ONE rule
+// (ai/object.Payer) — so a top-up credits the SAME account the ai gate debits and
+// the console reads. The signup org bills per-person (matching the gate), which is
+// the whole fix: money and gate land on one account.
 func TestBillingSubject(t *testing.T) {
 	cases := []struct{ org, name, want string }{
-		{"acme", "alice", "acme"},  // any member bills the ONE org account
-		{"hanzo", "Dave", "hanzo"}, // no per-user wallet; org, lowercased
-		{"hanzo", "z", "hanzo"},    // another member — same org account
-		{"hanzo", "", "hanzo"},     // no name → org
-		{"Hanzo", "z", "hanzo"},    // lowercased
-		{"", "x", ""},              // no org → empty subject
+		{"acme", "alice", "acme"},       // real org: any member bills the ONE org account
+		{"hanzo", "Dave", "hanzo/dave"}, // signup org: each person bills their OWN account
+		{"hanzo", "z", "hanzo/z"},       // another signup person — their own account
+		{"hanzo", "", "hanzo"},          // no name (org-owned principal) → org pool
+		{"Hanzo", "Z", "hanzo/z"},       // folded
+		{"", "x", ""},                   // no org → empty subject (cannot bill)
 	}
 	for _, c := range cases {
-		if got := billingSubject(c.org, c.name); got != c.want {
-			t.Fatalf("billingSubject(%q,%q): want %q, got %q", c.org, c.name, c.want, got)
+		got := aiobject.Payer(aiobject.Credential{Owner: c.org, Name: c.name}).Subject()
+		if got != c.want {
+			t.Fatalf("Payer(%q,%q).Subject(): want %q, got %q", c.org, c.name, c.want, got)
 		}
 	}
 }
 
 // TestBillingSubject_IgnoresLegacyEnv locks that the killed allowlist envs have NO
-// effect: the subject is ALWAYS the org, whether or not the old PERSONAL_BILLING_ORGS
-// / ORG_BILLING_ORGS knobs are set. This mirrors ai/object.BillingSubject (one rule,
-// no config) so the console view and the gateway gate can never disagree.
+// effect: nothing reads them. Set to values that WOULD have flipped every
+// resolution — the subject is unchanged. This is the console/top-up half of the
+// same proof ai carries (one rule, no config), so the view and the gate can never
+// disagree, and the deleted CR env is a genuine no-op.
 func TestBillingSubject_IgnoresLegacyEnv(t *testing.T) {
-	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo,acme")
-	t.Setenv("ORG_BILLING_ORGS", "hanzo")
+	t.Setenv("PERSONAL_BILLING_ORGS", "hanzo,acme") // would have split acme per-user
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")           // would have pooled the signup org
 	cases := []struct{ org, name, want string }{
-		{"hanzo", "z", "hanzo"},
-		{"acme", "alice", "acme"},
-		{"maxpower", "dave", "maxpower"},
+		{"hanzo", "z", "hanzo/z"},        // env cannot pool the signup org
+		{"acme", "alice", "acme"},        // env cannot split a real org per-user
+		{"maxpower", "dave", "maxpower"}, // untouched
 	}
 	for _, c := range cases {
-		if got := billingSubject(c.org, c.name); got != c.want {
-			t.Fatalf("legacy env must be ignored: billingSubject(%q,%q) want %q, got %q", c.org, c.name, c.want, got)
+		got := aiobject.Payer(aiobject.Credential{Owner: c.org, Name: c.name}).Subject()
+		if got != c.want {
+			t.Fatalf("legacy env must be ignored: Payer(%q,%q).Subject() want %q, got %q", c.org, c.name, c.want, got)
 		}
 	}
 }
