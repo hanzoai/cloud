@@ -179,24 +179,9 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		BilledNano:       attoToNano(u.Charge.Minor()),
 		CostNano:         attoToNano(u.Cost.Minor()),
 	})
-	usage := metering.Usage{
-		User:             u.Tenant.BillingOrg,
-		Org:              u.Tenant.BillingOrg,
-		Actor:            u.Tenant.User,
-		Model:            u.Model,
-		Provider:         zenProvider,
-		Service:          zenService,
-		Project:          u.Tenant.Project,
-		PromptTokens:     u.PromptTokens,
-		CompletionTokens: u.CompletionTokens,
-		TotalTokens:      u.PromptTokens + u.CompletionTokens,
-		Amount:           cloudmoney.FromInt(u.Cost.Minor()), // exact 18-dp USD, no floor
-		RequestID:        u.RequestID,
-		Currency:         "usd",
-		Status:           "success",
-	}
 	// Detached: the request context is recycled once the handler returns, so a
 	// background context carries the debit to commerce without racing the reply.
+	usage := meterUsage(u)
 	go func() { _, _ = g.m.Record(context.Background(), usage) }()
 
 	// Enso learning ledger: the embedded zen mount serves the zen catalog in-process
@@ -221,6 +206,36 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		CostCents:        cloudmoney.FromInt(u.Charge.Minor()).Cents(),
 		RouterEndpoint:   os.Getenv("ROUTER_ENDPOINT"),
 	})
+}
+
+// meterUsage projects a served zen.Usage onto the commerce debit. It is the ONE
+// place the debit's amount is chosen, and it is pure — no ledger, no warehouse —
+// so the money property is a unit test rather than an integration.
+//
+// The amount is the RETAIL Charge: what the caller pays. Cost is the upstream
+// COGS we pay to serve the call; it is never the debit. It rides only the
+// warehouse row (CostNano), where margin = Charge − Cost stays exact. Debiting
+// Cost would collect our own COGS and book zero margin on every zen call — and
+// because the affiliate and OSS payout bases read this debit, it would fund
+// their shares out of principal. This mirrors ai, whose debit is likewise the
+// customer price (usageBilledCents), never its CostIn/CostOut COGS.
+func meterUsage(u zen.Usage) metering.Usage {
+	return metering.Usage{
+		User:             u.Tenant.BillingOrg,
+		Org:              u.Tenant.BillingOrg,
+		Actor:            u.Tenant.User,
+		Model:            u.Model,
+		Provider:         zenProvider,
+		Service:          zenService,
+		Project:          u.Tenant.Project,
+		PromptTokens:     u.PromptTokens,
+		CompletionTokens: u.CompletionTokens,
+		TotalTokens:      u.PromptTokens + u.CompletionTokens,
+		Amount:           cloudmoney.FromInt(u.Charge.Minor()), // exact 18-dp USD, no floor
+		RequestID:        u.RequestID,
+		Currency:         "usd",
+		Status:           "success",
+	}
 }
 
 // attoToNano folds an exact atto-USD (1e-18) *big.Int to nano-USD (1e-9) for
