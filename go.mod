@@ -28,7 +28,6 @@ require (
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
-	github.com/luxfi/zapdb v1.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nats-io/nats.go v1.50.0
@@ -73,6 +72,7 @@ require (
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
+	github.com/luxfi/zapdb v1.10.0 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	rsc.io/qr v0.2.0 // indirect
@@ -821,7 +821,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/ai v1.813.6
+	github.com/hanzoai/ai v1.814.0
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
