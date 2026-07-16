@@ -109,7 +109,7 @@ func TestResourceMeter_GateAllowsFundedCallerOrg(t *testing.T) {
 	}
 }
 
-// payerFor resolves principal.Payer(c) — the HOME org that PAYS — from a request's
+// payerFor resolves principal.HomeOrg(c) — the HOME org that PAYS — from a request's
 // identity headers, exactly as a create-handler does before passing it to Gate.
 func payerFor(t *testing.T, headers map[string]string) string {
 	t.Helper()
@@ -117,7 +117,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 	done := make(chan struct{})
 	app := zip.New(zip.Config{})
 	app.Use(func(c *zip.Ctx) error {
-		payer = principal.Payer(c)
+		payer = principal.HomeOrg(c)
 		close(done)
 		return c.JSON(http.StatusOK, map[string]string{"ok": "true"})
 	})
@@ -133,7 +133,7 @@ func payerFor(t *testing.T, headers map[string]string) string {
 }
 
 // TestResourceMeter_GateKeysOnPayerForMasqueradingAdmin (LOW-1 fast-follow): the ml
-// + provisioning create-handlers pass principal.Payer(c) (the HOME org) to the
+// + provisioning create-handlers pass principal.HomeOrg(c) (the HOME org) to the
 // pre-create balance Gate, matching the paired debit. So a masquerading SuperAdmin
 // (home=admin via X-User-Owner, acting in a victim org via X-Org-Id) is balance-gated
 // on the ADMIN's funds — never the victim's. Before the fix these two Gates keyed on
