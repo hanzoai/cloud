@@ -53,6 +53,13 @@ type Session struct {
 	Repo   string
 	Target string
 
+	// Surface is the modality a session runs ON — the bot sandbox it booted into
+	// (desktop|terminal) or the channel it speaks over. It is the same value the
+	// bot runtime records per session (origin.surface) and the one /v1/bots
+	// projects, so the two models agree. Optional: a session with no modality
+	// (a coding run) leaves it "".
+	Surface string
+
 	// Provider/Account tag a session with the linked AI account it ran under (the
 	// login-manager tie-in): which provider (claude|codex|hanzo|…) and which
 	// subscription/api account served this run. Optional (a surface that doesn't
@@ -126,7 +133,8 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   repo             TEXT NOT NULL DEFAULT '',
   target           TEXT NOT NULL DEFAULT '',
   provider         TEXT NOT NULL DEFAULT '',
-  account          TEXT NOT NULL DEFAULT ''
+  account          TEXT NOT NULL DEFAULT '',
+  surface          TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_sessions_org_root ON agent_sessions(org, root_id, created_at);
 CREATE INDEX IF NOT EXISTS ix_sessions_org_parent ON agent_sessions(org, parent_id, created_at);
@@ -157,6 +165,7 @@ CREATE INDEX IF NOT EXISTS ix_events_org_session_seq ON agent_session_events(org
 		"target":   "TEXT NOT NULL DEFAULT ''",
 		"provider": "TEXT NOT NULL DEFAULT ''",
 		"account":  "TEXT NOT NULL DEFAULT ''",
+		"surface":  "TEXT NOT NULL DEFAULT ''",
 	}); err != nil {
 		return err
 	}
@@ -173,14 +182,14 @@ CREATE INDEX IF NOT EXISTS ix_sessions_org_account ON agent_sessions(org, provid
 	return nil
 }
 
-const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account`
+const sessionCols = `id,org,agent,actor,status,parent_id,root_id,title,started_at,ended_at,created_at,updated_at,task_workflow_id,task_run_id,host,cwd,repo,target,provider,account,surface`
 
 func scanSession(sc interface{ Scan(...any) error }) (Session, error) {
 	var x Session
 	err := sc.Scan(&x.ID, &x.Org, &x.Agent, &x.Actor, &x.Status, &x.ParentID, &x.RootID,
 		&x.Title, &x.StartedAt, &x.EndedAt, &x.CreatedAt, &x.UpdatedAt,
 		&x.TaskWorkflowID, &x.TaskRunID, &x.Host, &x.Cwd, &x.Repo, &x.Target,
-		&x.Provider, &x.Account)
+		&x.Provider, &x.Account, &x.Surface)
 	return x, err
 }
 
@@ -205,10 +214,10 @@ func (s *Store) CreateSession(ctx context.Context, x Session) error {
 		}
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO agent_sessions (`+sessionCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		x.ID, x.Org, x.Agent, x.Actor, x.Status, x.ParentID, x.RootID, x.Title,
 		x.StartedAt, x.EndedAt, x.CreatedAt, x.UpdatedAt, x.TaskWorkflowID, x.TaskRunID,
-		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account)
+		x.Host, x.Cwd, x.Repo, x.Target, x.Provider, x.Account, x.Surface)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
@@ -239,7 +248,11 @@ type SessionFilter struct {
 	Root   string
 	Parent string
 	Status string
-	Limit  int
+	// Agent narrows to one agent label. It is how a product face reads only the
+	// sessions it owns (/v1/bots lists agent="bot"), instead of every session in
+	// the org.
+	Agent string
+	Limit int
 }
 
 // ListSessions returns an org's sessions per filter, newest first, capped.
@@ -263,6 +276,10 @@ func (s *Store) ListSessions(ctx context.Context, org string, f SessionFilter) (
 	if f.Status != "" {
 		where += " AND status=?"
 		args = append(args, f.Status)
+	}
+	if f.Agent != "" {
+		where += " AND agent=?"
+		args = append(args, f.Agent)
 	}
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx,
