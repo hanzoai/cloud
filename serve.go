@@ -103,6 +103,20 @@ func Serve(specs []MountSpec, enable []string) error {
 		"writer_pin", writerpin.Resolve().Kind(),
 		"kms_read_only", cfg.Role.IsReader())
 
+	// Horizontal-scale shard router. When CLOUD_PEERS names >1 pod, each org is
+	// pinned to its rendezvous-hash owner pod: THIS pod is the single writer for the
+	// orgs it owns (writerpin.SingleWriter is correct PER SHARD), and any other org's
+	// request is forwarded to its owner. nil ⇒ single-pod (no-op middleware below).
+	// This is what lifts the deployment off replicas:1 without any shared RWX volume —
+	// per-pod RWO PVC + org→owner routing = one writer per tenant file. See
+	// shardrouter.go.
+	shardRtr := newShardRouter(cfg, deps.Logger)
+	if shardRtr != nil {
+		deps.Logger.Info("shard routing ENABLED (horizontal writer scale)",
+			"self", shardRtr.self, "peers", shardRtr.peerIDs(),
+			"writer_pin", "single-writer-per-shard")
+	}
+
 	// Telemetry bootstrap — the ONE site. Install the process-global OTel tracer
 	// provider (wired to the o11y in-process trace sink by clients/o11y) and ADOPT it
 	// into the embedded ai module, so ai emits its gen_ai span per LLM call through the
@@ -240,6 +254,17 @@ func Serve(specs []MountSpec, enable []string) error {
 	// granted ONLY to a validated SuperAdmin (owner == AdminOrg). See
 	// middleware_identity.go / auth_identity.go.
 	app.Use(IdentityMiddleware(cfg))
+
+	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
+	// — so it keys on the VALIDATED, server-minted X-Org-Id (never a raw client
+	// header) — and BEFORE audit/rate-limit/billing/subsystems, so a request whose
+	// org this pod does not own is forwarded to the owner and NONE of the downstream
+	// per-org work (audit append, per-org rate ceiling, prepaid billing debit, every
+	// per-org SQLite store) runs on the wrong pod. No-op (shardRtr==nil) on a
+	// single-pod deployment: byte-identical to today. See shardrouter.go.
+	if shardRtr != nil {
+		app.Use(shardRtr.Middleware())
+	}
 
 	// Audit trail (FedRAMP AU-* / SOC 2 CC-*). Runs AFTER SanitizeIdentity so the
 	// actor/isAdmin it records come from a VALIDATED principal (never a raw
