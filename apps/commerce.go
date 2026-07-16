@@ -115,6 +115,13 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		// THE native co-residence contract: commerce registers its routes on
 		// cloud's own app — no second engine, no net/http adaptation.
 		App: app,
+		// ONE LEDGER: commerce's POST /v1/billing/credit mints into cloud's native
+		// finance ledger (the SAME per-org account the AI spend-gate reads), so a
+		// granted credit is immediately spendable. commerce.Embed calls
+		// creditledger.Set(this) before routes register; nil would leave commerce on
+		// its own datastore (standalone), but in this unified binary finance is
+		// co-resident, so we inject the ledgercore-backed adapter.
+		Ledger: ledgercoreCredit{},
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
