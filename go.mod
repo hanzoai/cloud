@@ -13,6 +13,7 @@ require (
 	github.com/dop251/goja v0.0.0-20260627200808-0b76000cabdb
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
+	github.com/hanzoai/account v0.2.0
 	github.com/hanzoai/commerce v1.48.5
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
@@ -29,6 +30,7 @@ require (
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
+	github.com/luxfi/zapdb v1.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nats-io/nats.go v1.50.0
@@ -73,7 +75,6 @@ require (
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
 	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
-	github.com/luxfi/zapdb v1.10.0 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	rsc.io/qr v0.2.0 // indirect
