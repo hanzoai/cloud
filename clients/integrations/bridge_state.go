@@ -2,9 +2,11 @@ package integrations
 
 import (
 	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,9 +18,9 @@ import (
 // the SAME s.State.stateKey — one signing key, distinct named subjects.
 //
 // The signing/verifying algebra is the generalized twin of slack_verify.go's
-// signSlackSubject/verifySlackSubject; the shared low-level primitives it composes —
-// the constant-time hmacB64URL, the single-use seenSet, abs64 — live ONCE in
-// slack_verify.go and are reused here (no redeclaration).
+// signSlackSubject/verifySlackSubject. The shared low-level primitives both compose —
+// the constant-time hmacB64URL, the single-use seenSet, abs64 — live ONCE HERE
+// (provider-agnostic) and are reused by the Slack primitives too (no redeclaration).
 
 // linkStateTTLSec is the account-link state lifetime — the browser legs must
 // complete within it. It is ALSO the single-use seen-set TTL (bridgeSeen), so a
@@ -80,4 +82,88 @@ func verifySubject(key []byte, state string, now int64) (subject, nonce string, 
 		return "", "", false
 	}
 	return parts[0], parts[2], true
+}
+
+// ── in-process single-use seen-set (link-state nonces) ──────────────────────
+
+// seenSet is an age-based single-use / seen-set with an atomic test-and-set. It
+// backs every platform's per-user link single-use guarantee (bridgeSeen for the
+// generalized adapters, slackUsedStates for Slack): a signed link state is redeemed
+// exactly once within its TTL.
+//
+// SCOPE: per-PROCESS. In a multi-replica deployment the single-use guarantee here
+// is DEFENSE-IN-DEPTH: the PRIMARY single-use guarantee is the platform's own
+// server-side single-use OAuth `code` (a second exchange of the same code fails at
+// the platform) AND hanzo.id's single-use OIDC `code`, plus the state's HMAC +
+// browser-bound cookie + short TTL. Eviction is strictly age-based (a within-TTL
+// entry is NEVER evicted), which is what forbids an evict-then-replay attack; memory
+// is bounded temporally, not by count.
+type seenSet struct {
+	mu    sync.Mutex
+	ttl   time.Duration
+	at    map[string]time.Time
+	order []string // insertion order, for age-based pruning
+}
+
+func newSeenSet(ttl time.Duration) *seenSet {
+	return &seenSet{ttl: ttl, at: make(map[string]time.Time)}
+}
+
+// prune drops expired entries oldest-first, stopping at the first still-fresh one.
+// Caller holds the lock.
+func (s *seenSet) prune(now time.Time) {
+	i := 0
+	for ; i < len(s.order); i++ {
+		k := s.order[i]
+		t, ok := s.at[k]
+		if !ok {
+			continue // already removed via a re-insert
+		}
+		if now.Sub(t) > s.ttl {
+			delete(s.at, k)
+		} else {
+			break
+		}
+	}
+	if i > 0 {
+		s.order = append(s.order[:0], s.order[i:]...)
+	}
+}
+
+// seenAndAdd atomically tests-and-sets: returns true if k was already seen (a
+// duplicate/replay); otherwise records it and returns false. The empty key is
+// non-dedupable (always unique). `now` zero → time.Now.
+func (s *seenSet) seenAndAdd(k string, now time.Time) bool {
+	if k == "" {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.prune(now)
+	if _, ok := s.at[k]; ok {
+		return true
+	}
+	s.at[k] = now
+	s.order = append(s.order, k)
+	return false
+}
+
+// ── shared low-level helpers ─────────────────────────────────────────────────
+
+// hmacB64URL is the constant-time-composable HMAC-SHA256 of payload under key,
+// base64url-encoded. Composed by every signed-state primitive (bridge + Slack).
+func hmacB64URL(key []byte, payload string) string {
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func abs64(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
