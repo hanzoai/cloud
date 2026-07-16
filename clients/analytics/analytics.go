@@ -106,6 +106,12 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/analytics", cloud.Handle(s, capture))
 	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
 	app.Post("/v1/tracker", cloud.Handle(s, capture))
+
+	// /v1/insights — the unified native surface (insights.go): PostHog-wire
+	// ingest + console reads over the SAME engine. Flags live at /v1/flags.
+	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
+	app.Post("/v1/insights/e", cloud.Handle(s, insightsIngest))
+	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────
