@@ -120,8 +120,8 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		// granted credit is immediately spendable. commerce.Embed calls
 		// creditledger.Set(this) before routes register; nil would leave commerce on
 		// its own datastore (standalone), but in this unified binary finance is
-		// co-resident, so we inject the ledgercore-backed adapter.
-		Ledger: ledgercoreCredit{},
+		// co-resident, so we inject the finance-backed ledger adapter.
+		Ledger: ledger{},
 	})
 	if err != nil {
 		lg.Error("commerce embed failed — serving fail-closed 503 (cloud stays up)", "err", err)
