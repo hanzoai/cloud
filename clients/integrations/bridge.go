@@ -101,8 +101,8 @@ func bridgeReady() {
 // binary this is non-negotiable: middleware.Recover() wraps only the sync request
 // goroutine, so an unrecovered panic here would crash EVERY tenant and subsystem
 // (Red M-2). The recover defer is registered LAST so it runs FIRST (LIFO); release
-// still runs after it — a panicking turn frees its slot. This is the generalized
-// twin of the shipped slackSpawn: ONE spawn+recover for every platform.
+// still runs after it — a panicking turn frees its slot. ONE spawn+recover for
+// every platform (Slack included).
 func bridgeSpawn(s *cloud.Service[state], org string, run func()) {
 	go func() {
 		defer bridgeLim.release(org)
@@ -120,10 +120,65 @@ func bridgeRecover(s *cloud.Service[state], org string) {
 	}
 }
 
-// The bounded agent-turn pool (orgLimiter: GLOBAL cap + PER-ORG sub-limit) and the
-// single-use link seen-set (seenSet) are the SHARED primitives defined once in
-// slack_events.go / slack_verify.go — the bridge reuses them (bridgeLim / bridgeSeen
-// above) rather than redeclaring, so every platform bounds against the SAME types.
+// ── the bounded per-org agent-turn pool (the ONE limiter every adapter binds on) ─
+
+// orgLimiter bounds concurrent agent turns two ways: a GLOBAL cap (total in-flight
+// across all orgs) AND a PER-ORG cap (max in-flight for any single org). Data /
+// token / billing isolation already holds via the resolved org; this adds the
+// AVAILABILITY isolation that stops one tenant exhausting the shared worker pool. It
+// lives here (provider-agnostic): bridgeLim (the shared chat pool) above, the Slack
+// coding pool (codingLim), and every adapter bound against the SAME type.
+type orgLimiter struct {
+	mu       sync.Mutex
+	inflight map[string]int
+	perOrg   int
+	global   chan struct{}
+}
+
+func newOrgLimiter(global, perOrg int) *orgLimiter {
+	if global < 1 {
+		global = 1
+	}
+	if perOrg < 1 {
+		perOrg = 1
+	}
+	if perOrg > global {
+		perOrg = global
+	}
+	return &orgLimiter{inflight: make(map[string]int), perOrg: perOrg, global: make(chan struct{}, global)}
+}
+
+// acquire takes one global + one per-org slot for org, non-blocking. It returns
+// false (nothing acquired, no slot leaked) when the org is at its per-org cap OR
+// the global pool is full — the per-org check precedes the global take, and the
+// global take only bumps the per-org count on a successful send.
+func (l *orgLimiter) acquire(org string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inflight[org] >= l.perOrg {
+		return false
+	}
+	select {
+	case l.global <- struct{}{}:
+		l.inflight[org]++
+		return true
+	default:
+		return false
+	}
+}
+
+// release returns the org's slot and the global slot. Called exactly once per
+// successful acquire.
+func (l *orgLimiter) release(org string) {
+	l.mu.Lock()
+	if n := l.inflight[org]; n > 1 {
+		l.inflight[org] = n - 1
+	} else {
+		delete(l.inflight, org)
+	}
+	l.mu.Unlock()
+	<-l.global
+}
 
 // ── the ONE agent brain (shared by every platform + its @mention/DM/slash) ──
 
