@@ -18,7 +18,7 @@ require (
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.25
-	github.com/hanzoai/iam2 v0.1.1
+	github.com/hanzoai/iam2 v0.1.4
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
@@ -28,6 +28,9 @@ require (
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.3.0
 	github.com/hanzoai/stream v1.2.0
+	github.com/hanzoiam/ldap v0.0.0-20260716212256-74c7d18fdcb6
+	github.com/hanzoiam/saml v0.0.0-20260716214859-60fbc02b0d9a
+	github.com/hanzoiam/scim v0.0.0-20260716213619-417be3ccce62
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
@@ -57,7 +60,7 @@ require (
 	go.opentelemetry.io/collector/service v0.144.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0
 	go.opentelemetry.io/proto/otlp v1.10.0
-	golang.org/x/term v0.44.0
+	golang.org/x/term v0.45.0
 	k8s.io/apimachinery v0.35.3
 	k8s.io/client-go v0.35.3
 	sigs.k8s.io/controller-runtime v0.23.3
@@ -414,7 +417,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0 // indirect
 	github.com/go-acme/alidns-20150109/v4 v4.7.0 // indirect
 	github.com/go-acme/lego/v4 v4.34.0 // indirect
-	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
+	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-faster/city v1.0.1 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect
@@ -424,7 +427,7 @@ require (
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-lark/lark v1.15.1 // indirect
-	github.com/go-ldap/ldap/v3 v3.4.6 // indirect
+	github.com/go-ldap/ldap/v3 v3.4.14 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -503,7 +506,7 @@ require (
 	github.com/hanzoai/iamsdk/v2 v2.1.2 // indirect
 	github.com/hanzoai/idv v1.0.3 // indirect
 	github.com/hanzoai/kv-go/v9 v9.18.0 // indirect
-	github.com/hanzoai/ldapserver v1.2.1 // indirect
+	github.com/hanzoai/ldapserver v1.2.2 // indirect
 	github.com/hanzoai/notify2 v1.6.3 // indirect
 	github.com/hanzoai/orm v0.6.1
 	github.com/hanzoai/oss v1.8.5 // indirect
@@ -572,7 +575,7 @@ require (
 	github.com/likexian/whois-parser v1.24.9 // indirect
 	github.com/line/line-bot-sdk-go v7.8.0+incompatible // indirect
 	github.com/lithammer/shortuuid v3.0.0+incompatible // indirect
-	github.com/lor00x/goldap v0.0.0-20180618054307-a546dffdd1a3 // indirect
+	github.com/lor00x/goldap v0.0.0-20240304151906-8d785c64d1c8 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260216142805-b3301c5f2a88 // indirect
 	github.com/luthermonson/go-proxmox v0.4.0 // indirect
 	github.com/luxfi/accel v1.2.4 // indirect
@@ -780,9 +783,9 @@ require (
 	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.46.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	google.golang.org/api v0.275.0 // indirect
 	google.golang.org/genai v1.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20260406210006-6f92a3bedf2d // indirect
@@ -839,10 +842,10 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.70.0
-	golang.org/x/crypto v0.53.0
-	golang.org/x/net v0.56.0
-	golang.org/x/sys v0.46.0
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/crypto v0.54.0
+	golang.org/x/net v0.57.0
+	golang.org/x/sys v0.47.0
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 
