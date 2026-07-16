@@ -491,25 +491,9 @@ jobs:
           echo "::error::could not acquire a free version tag after 8 attempts"
           exit 1
 
-  # Notify universe so the GitOps pipeline rolls the new image to prod — same
-  # image-update contract every service uses (gateway, iam, …). Runs ONLY after
-  # build-amd64 succeeds, i.e. only for a version whose image is proven pushed and
-  # tagged. A failed release never reaches here, so universe is never asked to
-  # deploy a phantom tag.
-  notify-universe:
-    needs: build-amd64
-    runs-on: [hanzo-build-linux-amd64]
-    steps:
-      - name: Repository dispatch (image-update)
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.UNIVERSE_DISPATCH_TOKEN }}
-          repository: hanzoai/universe
-          event-type: image-update
-          client-payload: |
-            {
-              "service": "cloud",
-              "image":   "ghcr.io/hanzoai/cloud:${{ needs.build-amd64.outputs.version_v }}",
-              "sha":     "${{ github.sha }}",
-              "env":     "all"
-            }
+  # Deploy = a declared-tag bump in hanzoai/universe crs/cloud.yaml — Hanzo CD
+  # (the ArgoCD instance in ns hanzo-cd) syncs universe→cluster and the operator
+  # reconciles the CR. The old notify-universe repository_dispatch hub is retired
+  # (its flagged-sender dispatches were silently suppressed anyway); the native
+  # release path (release.go rolloutRelease) and deliberate promote commits own
+  # the bump.
