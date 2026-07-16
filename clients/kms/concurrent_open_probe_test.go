@@ -1,94 +1,89 @@
 package kms
 
-// Concurrent-open invariant (HA carve evidence — a REGRESSION GUARD, not a feature).
+// Concurrent-open invariant (HORIZONTAL-SCALE evidence — a REGRESSION GUARD).
 //
-// blue_readonly_test.go proves the SEQUENTIAL reader path (write, CLOSE the
-// writer, THEN reopen RO). That is a red herring for HA: in a shared-PVC
-// same-node topology the writer pod holds the ZapDB store open for WRITE (an
-// actively-growing memtable WAL) while a reader pod would open the SAME on-disk
-// files. This test proves that scenario is NOT supported and, deliberately,
-// asserts the FAILURE so the constraint is enforced in CI:
+// This test replaces the former ZapDB probe, which ASSERTED that a second opener
+// of the single embedded ZapDB (Badger fork) store FAILED — the exclusive OS lock
+// that pinned cloud to replicas=1 and forced the reader tier to reverse-proxy KMS.
+// The KMS store is now PER-ORG SQLite ({DataDir}/orgs/{org}/kms.db via cloud.OrgDB
+// → cek), which has NO single-opener lock. This test pins the property that makes
+// cloud horizontally scalable OUT OF THE BOX:
 //
-//	Opening a live ZapDB (Badger fork) store READ-ONLY while the writer is
-//	mid-write fails with "Log truncate required to run DB" — Badger's RO open
-//	replays the current memtable WAL, finds it partially written
-//	(end offset < preallocated size), and REFUSES to truncate it (truncation
-//	is a write, forbidden in RO mode). There is no torn read; there is no open.
+//  1. Two independent Clients open the SAME data dir CONCURRENTLY and both work —
+//     there is no exclusive lock, so a second pod can open the store (impossible
+//     with the old ZapDB store).
+//  2. Distinct orgs land in distinct files, so two "pods" writing DIFFERENT
+//     tenants never contend — the file IS the tenant boundary.
+//  3. The SAME org's file is openable by a second handle (SQLite is WAL-shareable
+//     for reads), which is what lets a reader serve KMS locally instead of
+//     proxying. Concurrent WRITERS to one org still require the consistent-hash
+//     org→pod routing documented in the package report; this guard is about the
+//     absence of the hard OS lock, not a license for uncoordinated writes.
 //
-// CONSEQUENCE (the design this guards): a reader-role pod must NOT open the KMS
-// ZapDB store off the live writer's PVC. The KMS store is the ONE cloud store
-// that is NOT concurrently shareable (unlike the audit SQLite store — see
-// audit/shareability_probe_test.go — which shares cleanly over WAL). Therefore a
-// reader serves KMS by REVERSE-PROXYING /v1/kms/* (and every mutation +
-// /v1/admin/*) to the writer, never by opening the store locally. If a future
-// zapdb release makes live concurrent RO-open work, THIS TEST WILL FAIL — that is
-// the signal to revisit the reader-serves-KMS-locally option.
+// If a future change reintroduces a single global, OS-locked KMS store, THIS TEST
+// WILL FAIL — the signal that the replicas=1 constraint has crept back in.
 //
 // Run:
 //   CGO_ENABLED=0 GOWORK=off GOFLAGS=-mod=mod go test ./clients/kms/ -run ConcurrentOpen -v
 
 import (
 	"fmt"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	luxlog "github.com/luxfi/log"
 )
 
-func TestConcurrentOpen_LiveWriterStoreIsNotROShareable(t *testing.T) {
+func TestConcurrentOpen_PerOrgSQLiteHasNoExclusiveLock(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
 	key := b64key(t, 0x5A)
 
-	// Writer: create the encrypted store and seed baseline secrets, then keep
-	// writing so the current memtable WAL is genuinely mid-flight (not flushed,
-	// not closed) when the reader attempts to open.
-	w, err := New(Config{DataDir: dir, MasterKeyB64: key}, log)
+	// Two independent Clients over the SAME data dir — the two-pods-one-PVC shape.
+	// With the old ZapDB store the second open would fail on the exclusive lock;
+	// per-org SQLite has none, so both open.
+	a, err := New(Config{DataDir: dir, MasterKeyB64: key}, log)
 	if err != nil {
-		t.Fatalf("writer New: %v", err)
+		t.Fatalf("client A New: %v", err)
 	}
-	defer w.Close()
-	for i := 0; i < 200; i++ {
-		if err := w.Put("/orgs/acme", fmt.Sprintf("K%d", i), "default", []byte(fmt.Sprintf("v%d", i))); err != nil {
-			t.Fatalf("writer seed Put %d: %v", i, err)
-		}
+	defer a.Close()
+	b, err := New(Config{DataDir: dir, MasterKeyB64: key}, log)
+	if err != nil {
+		t.Fatalf("client B New (second opener must succeed — no exclusive lock): %v", err)
 	}
+	defer b.Close()
 
-	var stop atomic.Bool
+	// Distinct orgs → distinct files → no cross-tenant contention. Each client
+	// writes a different org concurrently; both succeed.
 	var wg sync.WaitGroup
-	wg.Add(1)
+	errs := make(chan error, 2)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 200; !stop.Load(); i++ {
-			if err := w.Put("/orgs/acme", fmt.Sprintf("K%d", i), "default", []byte(fmt.Sprintf("v%d", i))); err != nil {
-				return // writer wound down; not the subject of this assertion
-			}
-			time.Sleep(200 * time.Microsecond)
+		if err := a.Put("/orgs/acme", "K", "prod", []byte("acme-secret")); err != nil {
+			errs <- fmt.Errorf("A Put acme: %w", err)
 		}
 	}()
-	time.Sleep(50 * time.Millisecond) // ensure the WAL is actively mid-write
-
-	// Reader: attempt to open the SAME files READ-ONLY (BypassLockGuard) while the
-	// writer is live. INVARIANT: this must fail (no torn read, no silent success).
-	r, err := New(Config{DataDir: dir, MasterKeyB64: key, ReadOnly: true}, log)
-	stop.Store(true)
-	wg.Wait()
-
-	if err == nil {
-		if r != nil {
-			_ = r.Close()
+	go func() {
+		defer wg.Done()
+		if err := b.Put("/orgs/globex", "K", "prod", []byte("globex-secret")); err != nil {
+			errs <- fmt.Errorf("B Put globex: %w", err)
 		}
-		t.Fatal("EXPECTED concurrent RO-open of a live ZapDB writer to FAIL, but it " +
-			"succeeded. If zapdb now supports live concurrent RO-open, the reader " +
-			"tier may serve KMS locally instead of proxying — revisit the design.")
+	}()
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Fatalf("concurrent per-org write failed: %v", e)
 	}
-	// The failure is the WAL-truncation refusal, confirming Badger's RO open cannot
-	// coexist with a live writer's unflushed memtable.
-	if !strings.Contains(err.Error(), "truncate") && !strings.Contains(err.Error(), "Log truncate") {
-		t.Logf("concurrent RO-open failed (as required) with a different error: %v", err)
+
+	// Cross-read: A reads globex (written by B, same shared dir) — the files are
+	// shared on disk, only the WRITER should be one pod per org.
+	if got, err := a.Get("/orgs/globex", "K", "prod"); err != nil || string(got) != "globex-secret" {
+		t.Fatalf("A cross-read globex = %q err=%v, want globex-secret", got, err)
 	}
-	t.Logf("INVARIANT HELD: live ZapDB store is NOT RO-shareable (%v) — reader must proxy /v1/kms/*", err)
+	if got, err := b.Get("/orgs/acme", "K", "prod"); err != nil || string(got) != "acme-secret" {
+		t.Fatalf("B cross-read acme = %q err=%v, want acme-secret", got, err)
+	}
+	t.Log("INVARIANT HELD: per-org SQLite has no exclusive-opener lock — two clients " +
+		"open the same data dir concurrently; distinct orgs never contend. replicas=1 lifted.")
 }
