@@ -169,14 +169,21 @@ func BillingOrg(c *zip.Ctx) (string, bool) {
 	return Org(c) // rollout fallback: no home header yet ⟹ today's effective-org billing.
 }
 
-// Payer is the bare-string form of BillingOrg for the in-handler resource meters
+// HomeOrg is the bare-string form of BillingOrg for the in-handler resource meters
 // (ResourceMeter.Gate/Meter/MeterUsage), which take an org string rather than the
 // ctx. It returns the HOME org that PAYS (X-User-Owner, effective-org fallback), or
 // "" when unvalidated. Call it ONLY after the caller has already resolved AND gated
 // the effective org via Org (every resource handler does), so "" cannot occur on a
 // live path; the meter also no-ops on an empty org, so an unexpected "" bills nothing
 // rather than mis-billing. Use it for the billing key; keep Org for the data namespace.
-func Payer(c *zip.Ctx) string {
+//
+// It was called Payer, which now means something else: hanzoai/account.Payer returns
+// the ACCOUNT that pays, and this returns the ORG whose ledger holds it. Those are
+// different values on the same request — a person in the shared signup org pays from
+// account "hanzo/alice" held in ledger "hanzo" — so one name for both invited exactly
+// the confusion that let the gate key the pool while the debit spent the person.
+// An org names a ledger; an account names a wallet within it.
+func HomeOrg(c *zip.Ctx) string {
 	if org, ok := BillingOrg(c); ok {
 		return org
 	}
