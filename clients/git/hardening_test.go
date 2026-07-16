@@ -33,8 +33,17 @@ func TestOrgTraversalRejected(t *testing.T) {
 		if code, _ := do(t, app, http.MethodPost, "/v1/git/repos/x/push", o, map[string]any{"files": []map[string]any{{"path": "a", "content": "x"}}}); code != http.StatusForbidden {
 			t.Fatalf("push org=%q want 403, got %d", o, code)
 		}
-		if code, _ := do(t, app, http.MethodGet, "/v1/git/x/x.git/info/refs?service=git-upload-pack", o, nil); code != http.StatusForbidden {
-			t.Fatalf("info/refs org=%q want 403, got %d", o, code)
+		// Push advertisement: a malformed org is never authenticated → 403.
+		if code, _ := do(t, app, http.MethodGet, "/v1/git/x/x.git/info/refs?service=git-receive-pack", o, nil); code != http.StatusForbidden {
+			t.Fatalf("receive info/refs org=%q want 403, got %d", o, code)
+		}
+		// Fetch advertisement: a malformed org degrades to the ANONYMOUS public-
+		// read path, where the traversal string is DISCARDED in favor of the
+		// orgRE-validated :org path segment ("x") — the repo doesn't exist (and
+		// would be private), so the uniform 404. The traversal never reaches
+		// storage on either branch.
+		if code, _ := do(t, app, http.MethodGet, "/v1/git/x/x.git/info/refs?service=git-upload-pack", o, nil); code != http.StatusNotFound {
+			t.Fatalf("fetch info/refs org=%q want 404, got %d", o, code)
 		}
 	}
 	// A valid org still works — the gate rejects only unsafe segments.
