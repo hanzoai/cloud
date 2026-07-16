@@ -18,9 +18,8 @@ import (
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/money"
 	"github.com/hanzoai/cloud/clients/finance"
-	finmoney "github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/commerce/billing/creditledger"
 	"github.com/zap-proto/zip"
 )
 
@@ -183,22 +182,39 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 // one shape regardless of which path moved the money.
 func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
 	ctx := c.Context()
-	if fin := finance.Current(); fin != nil {
-		if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
-			before = bal.Cents()
+	// ONE credit path: prefer the in-proc commerce credit ledger (creditledger) — the
+	// SAME injected ledgercore adapter commerce's POST /v1/billing/credit mints through
+	// and the ai prepaid gate reads. An admin grant and a self-serve credit thus move
+	// money the ONE way, into the ONE ledger; the admin path no longer carries its own
+	// parallel finance.Deposit. The operator-nonce idempotency key rides through so a
+	// retried grant dedupes (finance dedups on Ref). Before/after balances are read from
+	// the SAME co-resident finance ledger for the audit trail (exact, sub-cent visible).
+	if led := creditledger.Get(); led != nil {
+		if fin := finance.Current(); fin != nil {
+			if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
+				before = bal.Cents()
+			}
 		}
-		id, derr := fin.Deposit(ctx, types.DepositInput{
-			Org: org, Subject: org, Amount: finmoney.FromCents(amountCents), Currency: currency, Notes: notes, Tags: tag,
+		id, balCents, cerr := led.Credit(ctx, creditledger.CreditInput{
+			Org:            org,
+			Currency:       currency,
+			Reason:         notes,
+			Tag:            tag,
+			IdempotencyKey: grantIdempotencyKey(c, org, currency, source, amountCents),
+			AmountCents:    amountCents,
 		})
-		if derr != nil {
-			return before, "", before, "", derr
+		if cerr != nil {
+			return before, "", before, "", cerr
 		}
-		if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
-			after, afterExact = bal.Cents(), bal.IntString() // afterExact = the EXACT balance (sub-cent visible)
+		after = balCents
+		if fin := finance.Current(); fin != nil {
+			if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
+				afterExact = bal.IntString() // afterExact = the EXACT balance (sub-cent visible)
+			}
 		}
 		return before, id, after, afterExact, nil
 	}
-	// Split deploy: no co-resident finance ledger → the commerce billing HTTP deposit, with
+	// Split deploy: no co-resident credit ledger → the commerce billing HTTP deposit, with
 	// its operator-nonce idempotency key so a retried grant dedupes at commerce.
 	beforeC, _ := s.State.Commerce.Credits(ctx, org)
 	idem := grantIdempotencyKey(c, org, currency, source, amountCents)
