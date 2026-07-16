@@ -211,8 +211,6 @@ github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b h1:mimo19zliBX/vS
 github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b/go.mod h1:fvzegU4vN3H1qMT+8wDmzjAcDONcgo2/SZ/TyfdUOFs=
 github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74 h1:Kk6a4nehpJ3UuJRqlA3JxYxBZEqCeOmATOvrbT4p9RA=
 github.com/alexbrainman/sspi v0.0.0-20210105120005-909beea2cc74/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
-github.com/alexedwards/argon2id v0.0.0-20211130144151-3585854a6387 h1:loy0fjI90vF44BPW4ZYOkE3tDkGTy7yHURusOJimt+I=
-github.com/alexedwards/argon2id v0.0.0-20211130144151-3585854a6387/go.mod h1:GuR5j/NW7AU7tDAQUDGCtpiPxWIOy/c3kiRDnlwiCHc=
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
 github.com/alibabacloud-go/alibabacloud-gateway-pop v0.0.6 h1:eIf+iGJxdU4U9ypaUfbtOWCsZSbTb8AUHvyPrxu6mAA=
@@ -1184,6 +1182,8 @@ github.com/hanzo-ds/sqlbuilder v1.42.2 h1:739sudcAav513tsIj57CUjADCcEUzrztpOPYHy
 github.com/hanzo-ds/sqlbuilder v1.42.2/go.mod h1:Nk+F+SDxtsqAeI63jT7JPACZQ60top3rQCmKXUhfKQw=
 github.com/hanzo-ds/sqlparser v0.4.16 h1:OeWiLSL6u/I/RzhUKHHbE33MevQ2b0QVyDgSJur6OTs=
 github.com/hanzo-ds/sqlparser v0.4.16/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
+github.com/hanzoai/account v0.2.0 h1:WxIut3YMz8JNdHerlRIqP1a+k3P79BIKM1mjfRFDG0Y=
+github.com/hanzoai/account v0.2.0/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/ai v1.814.0 h1:BeYA+dcX5vyW233F1Bee2njW+8kz2xeqFwTmIo4dAGQ=
 github.com/hanzoai/ai v1.814.0/go.mod h1:lsPqo5gFh70Cv2ewLLUVAWbj+DeO7RNGLOVBBPvmHgI=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
@@ -1425,8 +1425,6 @@ github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsI
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
-github.com/jackc/pgx/v5 v5.9.1 h1:uwrxJXBnx76nyISkhr33kQLlUqjv7et7b9FjCen/tdc=
-github.com/jackc/pgx/v5 v5.9.1/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
 github.com/jackc/pgx/v5 v5.9.2 h1:3ZhOzMWnR4yJ+RW1XImIPsD1aNSz4T4fyP7zlQb56hw=
 github.com/jackc/pgx/v5 v5.9.2/go.mod h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=
 github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
@@ -1613,8 +1611,6 @@ github.com/luxfi/container v0.0.4 h1:BXhF82WyfqVP5mjlNcr7tP0Fcnvl0Ap1rkiu+rq5XuM
 github.com/luxfi/container v0.0.4/go.mod h1:Z3SpmMF5d4t77MM0nHYXURpn+EMVaeu1fhbd/3BGaek=
 github.com/luxfi/corona v0.10.3 h1:Yi1oAkW0HEsf5fvst/tUN0AjRVg6DoNHB/IC0qrFWZE=
 github.com/luxfi/corona v0.10.3/go.mod h1:xe5qRir0p+FA6eETpyGDv4LjYySg1zVB13kmHpy9x94=
-github.com/luxfi/crypto v1.20.0 h1:JNsQ25sVO6T8XuIHRue4akOpnt5pNmk1xg5hzmU6dNE=
-github.com/luxfi/crypto v1.20.0/go.mod h1:bLCBuIV/KDjPytld7jSYe1WbfWknPQXcivq88Qo96QU=
 github.com/luxfi/crypto v1.20.1 h1:d0/jW7vVVQZbeGJNVmtMKkrhjTM6BtqEOWH234iUghM=
 github.com/luxfi/crypto v1.20.1/go.mod h1:bLCBuIV/KDjPytld7jSYe1WbfWknPQXcivq88Qo96QU=
 github.com/luxfi/crypto/ipa v1.2.4 h1:6xfwhI9/HrcDkF3Ti5/NxsNQIWbwYDJmRSNIHRQ/xfU=
@@ -2378,8 +2374,6 @@ github.com/zap-proto/md v0.1.0 h1:1R6w/i1FYAdGIIiOvNggKO0RjikzhWWRodQUOgzEEpc=
 github.com/zap-proto/md v0.1.0/go.mod h1:pmMx2F4Dwj1H48PIuLzRZxB2R5qVvqeg8ZScKQIntyQ=
 github.com/zap-proto/zap2pb v0.2.0 h1:sos6HnayhGMGLRO54px1InzimDzTZ2o5TSMEatYBjzs=
 github.com/zap-proto/zap2pb v0.2.0/go.mod h1:wD97Z2VTPabDq/4AMNL++PWnQ0YwEtajiuNkLGg3/18=
-github.com/zap-proto/zip v1.8.2 h1:PFas8rqy0Qvh7iL5JjV5NovkCDBeDEoWkUI/kfd0lEQ=
-github.com/zap-proto/zip v1.8.2/go.mod h1:TJ8ZwpwLQphqr1pYRr2cjzL8DbMmUljRKmrAPzM9S+4=
 github.com/zap-proto/zip v1.8.3 h1:oSDtwtgOGaQJPwolZ/Ga4YRR/Mips+n6CpowX4V9BW4=
 github.com/zap-proto/zip v1.8.3/go.mod h1:TJ8ZwpwLQphqr1pYRr2cjzL8DbMmUljRKmrAPzM9S+4=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
@@ -2677,7 +2671,6 @@ golang.org/x/crypto v0.0.0-20210915214749-c084706c2272/go.mod h1:GvvjBRRGRdwPK5y
 golang.org/x/crypto v0.0.0-20210920023735-84f357641f63/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
 golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
-golang.org/x/crypto v0.0.0-20211117183948-ae814b36b871/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/crypto v0.6.0/go.mod h1:OFC/31mSvZgRz0V1QTNCzfAI1aIRzbiufJtkMIlEp58=
