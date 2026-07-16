@@ -101,6 +101,30 @@ func openOrgDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
+// reservedPlatformSlug is the org directory holding a per-org subsystem's
+// genuinely DEPLOYMENT-WIDE (non-tenant) records. It contains '_', a rune
+// SanitizeOrg never emits (it folds '_'→'-'), so no tenant owner can ever resolve
+// to this directory — the platform partition can never collide with a real org's
+// file. See PlatformDB.
+const reservedPlatformSlug = "_platform"
+
+// PlatformDB opens the deployment's reserved, NON-tenant partition of an
+// otherwise per-org subsystem at {DataDir}/orgs/_platform/{subsystem}.db, through
+// the SAME cek + single-writer + WAL path as OrgDB. It is the home for records a
+// per-org subsystem holds that belong to no single tenant (e.g. a platform-wide
+// HMAC key): everything tenant-scoped stays in its own {DataDir}/orgs/{slug}/…
+// file. Because the slug carries a '_' that SanitizeOrg never produces, this file
+// is guaranteed disjoint from every tenant's. The caller owns migration + Close.
+func PlatformDB(dataDir, subsystem string) (*sql.DB, error) {
+	if dataDir == "" {
+		return nil, fmt.Errorf("cloud: PlatformDB empty dataDir")
+	}
+	if subsystem == "" {
+		return nil, fmt.Errorf("cloud: PlatformDB empty subsystem")
+	}
+	return openOrgDB(filepath.Join(dataDir, "orgs", reservedPlatformSlug, subsystem+".db"))
+}
+
 // OrgStore is the lazily-opened, cached set of per-org stores of type T
 // for one subsystem, each keyed by its resolved DB path so an org's SQLite
 // file is opened (and migrated) exactly once. It is the caching layer over
