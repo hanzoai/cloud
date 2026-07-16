@@ -4,17 +4,18 @@ import (
 	"context"
 
 	"github.com/hanzoai/cloud/clients/agents"
-	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/tracker"
 )
 
-// adapters.go binds the coding seams to the real in-process packages. This is the
-// ONLY file in clients/coding that imports agents/tracker/bot; coding.go stays
-// pure so the orchestration is unit-tested against fakes. None of agents/tracker/
-// bot imports clients/git or clients/integrations, so these imports are cycle-free.
+// adapters.go binds the session + tracker seams to the real in-process packages.
+// This is the ONLY file in clients/coding that imports agents/tracker; coding.go
+// stays pure so the orchestration is unit-tested against fakes. Neither agents nor
+// tracker imports clients/git or clients/integrations, so these imports are
+// cycle-free. The third seam, Runner, is bound in task.go — coding's own wire
+// contract with the bot runtime.
 
 // NewDispatcher assembles the production Dispatcher: sessions on the live agent
-// registry, PRs on the tracker, the runner on the bot-gateway client, plus the
+// registry, PRs on the tracker, the runner on coding's own runtime stub, plus the
 // two git seams (cloneURL, verifyRef) the composition root passes from clients/git
 // (which coding cannot import directly). log is the structured logger for
 // best-effort mirror failures.
@@ -26,7 +27,7 @@ func NewDispatcher(
 	return Dispatcher{
 		Sessions:  sessionAdapter{},
 		Tracker:   trackerAdapter{},
-		Runner:    botAdapter{},
+		Runner:    runner{},
 		CloneURL:  cloneURL,
 		VerifyRef: verifyRef,
 		Log:       log,
@@ -37,7 +38,7 @@ func NewDispatcher(
 type sessionAdapter struct{}
 
 func (sessionAdapter) Open(ctx context.Context, org, actor, agent, title string) (string, error) {
-	return agents.OpenSession(ctx, agents.SessionOpen{Org: org, Actor: actor, Agent: agent, Title: title})
+	return agents.OpenSession(ctx, org, actor, agent, title)
 }
 func (sessionAdapter) Log(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error {
 	return agents.LogSessionEvent(ctx, org, sessionID, kind, actor, payload)
@@ -58,27 +59,4 @@ func (trackerAdapter) CreatePR(ctx context.Context, in PRInput) (PRRef, error) {
 		return PRRef{}, err
 	}
 	return PRRef{Identifier: pr.Identifier, ProjectKey: pr.ProjectKey, Number: pr.Number}, nil
-}
-
-// botAdapter forwards to the bot-gateway coding-task client (bot/coding.go),
-// bridging the coding Step/RunResult shapes to the bot ones.
-type botAdapter struct{}
-
-func (botAdapter) Run(ctx context.Context, org, userID string, req RunRequest, onStep func(Step)) (RunResult, error) {
-	res, err := bot.RunCodingTask(ctx, org, userID, bot.CodingTaskRequest{
-		CloneURL: req.CloneURL, BaseBranch: req.BaseBranch, Branch: req.Branch,
-		Prompt: req.Prompt, SessionID: req.SessionID, RunTimeoutSeconds: req.RunTimeoutSeconds,
-		Credential: bot.Credential{Username: req.CredUser, Token: req.CredToken},
-	}, func(s bot.CodingStep) {
-		if onStep != nil {
-			onStep(Step{Type: s.Type, Step: s.Step, Message: s.Message, Status: s.Status})
-		}
-	})
-	if err != nil {
-		return RunResult{}, err
-	}
-	return RunResult{
-		Branch: res.Branch, CommitSha: res.CommitSha, Diffstat: res.Diffstat,
-		Changed: res.Changed, OK: res.OK, LogTail: res.LogTail, Error: res.Error,
-	}, nil
 }
