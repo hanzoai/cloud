@@ -16,13 +16,13 @@
 //     opened on first use and cached.
 //
 // It CONSUMES the treasury's canonical Base opener (Open, over github.com/hanzoai/
-// sqlite — the ONE Hanzo Base driver) rather than importing ledgercore's per-tenant
+// sqlite — the ONE Hanzo Base driver) rather than importing the ledger's per-tenant
 // opener: that opener is a test-only helper deliberately kept unexported because it
 // registers modernc's database/sql "sqlite" driver, which would COLLIDE with the
-// hanzoai/sqlite registration this store already carries. ledgercore's own contract
+// hanzoai/sqlite registration this store already carries. the ledger's own contract
 // is "production callers supply their own *bun.DB to New" — which Open does — so the
 // per-tenant file selection lives HERE, over Open, and the slug guard matches
-// ledgercore's per-tenant guard exactly.
+// the ledger's per-tenant guard exactly.
 package sqlstore
 
 import (
@@ -53,7 +53,7 @@ const maxTenantLen = 128
 // disjoint (two distinct tenants can never resolve to the same file).
 const hashMarker = "h-"
 
-// tenantSlugPattern is the safe file-stem shape — IDENTICAL to ledgercore's
+// tenantSlugPattern is the safe file-stem shape — IDENTICAL to the ledger's
 // per-tenant opener guard: a leading alphanumeric then [a-z0-9_-], no path
 // separators, no dots, no traversal, at most 64 chars. A tenant that already
 // matches is used verbatim (a readable file); anything else is hashed.
