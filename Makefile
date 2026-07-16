@@ -24,7 +24,7 @@ OPENAPI_DIR    ?= ../openapi
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
 CGO_ENABLED     ?= 0
 
-.PHONY: help webui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help native webui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -84,3 +84,6 @@ docker-push: docker ## Push the Docker image to ghcr.io. Requires docker login.
 
 clean: ## Remove built artifacts.
 	rm -rf bin
+
+native: ## Build the native flags evaluator staticlib (required for CGO=1 builds/tests).
+	cargo build --release --manifest-path native/flags/Cargo.toml

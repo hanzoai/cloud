@@ -1,31 +1,33 @@
-// Package featureflags is cloud's runtime evaluation seam over the Hanzo Insights
-// feature-flag engine (hanzoai/insights `rust/feature-flags`, the PostHog-compatible
-// /flags + /decide evaluator). It is NOT a second flag store: Insights OWNS flag
-// definitions, targeting, rollout %, and the change/activity log; cloud only EVALUATES
-// flags at runtime and surfaces the platform switches to the admin cockpit.
+// Package featureflags is cloud's NATIVE feature-flag engine: definitions live in
+// per-(org, project) SQLite (cloud.OrgDB — {DataDir}/orgs/{org}/projects/{project}/
+// flags.db, encrypted at rest via cek) and evaluation runs in-process through the
+// embedded hanzo-flags Rust evaluator (native/flags, FFI) with PostHog-compatible
+// semantics: rollout hash, full property-operator set, variants, payloads. Stateless
+// and scalable by construction — no KV, no network hop, every pod evaluates from its
+// own hot in-memory copy of the definitions.
 //
-// ONE flag engine, EVERY switch. The PLATFORM launch switches (waitlist, public
-// signup, subsystem activation, gateway limits, network ids) are Insights feature
-// flags; this package NAMES them (the registry below — key + category + the env var
-// that supplies the fallback default) and reads their live value. Env is only the
-// FALLBACK default; the Insights flag overrides. A subsystem calls Bool/Int/String and
-// gets the hot value — a flip in the Insights flag UI takes effect within one cache TTL
-// (default 15s) with NO redeploy.
+// TWO surfaces, ONE engine:
 //
-// FAIL-SAFE. When Insights is not configured (INSIGHTS_FLAGS_URL / INSIGHTS_PROJECT_
-// TOKEN unset) OR unreachable, evaluation degrades to the env fallback -> literal
-// default — exactly today's behavior, zero regression. No secret is read here; the
-// project token is injected from KMS into the process env by the deployment (the same
-// WAITLIST_URL env convention clients/base's waitlist plugin reads), never hardcoded.
+//   - /v1/flags — the product API (org-scoped via the gateway principal): evaluate
+//     flags for a distinct_id + properties, manage definitions, read the activity
+//     log. PostHog-shaped responses so existing SDK consumers port 1:1.
+//
+//   - the PLATFORM switches — the launch/ops knobs the SuperAdmin flips from
+//     admin.hanzo.ai (registry below). They evaluate from the reserved
+//     platform/platform store through the same engine. A switch with no stored
+//     definition falls back env -> literal default — exactly the pre-engine
+//     behavior, zero regression; the first cockpit write creates the definition
+//     and takes effect within one cache TTL (default 15s), no redeploy.
+//
+// FAIL-SAFE. When the native engine is absent (!cgo) or a store read fails,
+// evaluation degrades to env fallback -> literal default and the HTTP surface says
+// so honestly — never fail-wrong.
 package featureflags
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -45,17 +47,23 @@ const (
 	TypeString Type = "string"
 )
 
-// Def is ONE platform switch: an Insights feature-flag key qualified by the metadata
-// the cockpit shows and the env var that provides the fallback default. This table is
-// the ONE place the platform switches are named; Insights evaluates them.
+// The reserved store the platform switches evaluate from.
+const (
+	platformOrg     = "platform"
+	platformProject = "platform"
+)
+
+// Def is ONE platform switch: a flag key qualified by the metadata the cockpit shows
+// and the env var that provides the fallback default. This table is the ONE place the
+// platform switches are named; the embedded engine evaluates them.
 type Def struct {
-	Key      string // the Insights feature-flag key (snake_case)
+	Key      string // the flag key (snake_case)
 	Category string // Launch | Signup | Subsystems | Gateway | Network
 	Label    string
 	Desc     string
 	Type     Type
 	Env      string // env var supplying the fallback default (may be "")
-	Default  string // literal fallback when neither Insights nor env has a value
+	Default  string // literal fallback when neither the store nor env has a value
 	ReadOnly bool   // surfaced read-only (boot-time activation, network ids)
 }
 
@@ -101,7 +109,7 @@ func lookupDef(key string) (Def, bool) {
 
 // ── evaluation client ──────────────────────────────────────────────────────────
 
-// snapshot is one cached read of the Insights /flags response.
+// snapshot is one cached evaluation of the platform project's flags.
 type snapshot struct {
 	flags    map[string]json.RawMessage // featureFlags[key]  (bool | variant string)
 	payloads map[string]json.RawMessage // featureFlagPayloads[key] (arbitrary JSON)
@@ -109,14 +117,12 @@ type snapshot struct {
 	ok       bool
 }
 
-// Client evaluates Insights feature flags over the PostHog-compatible /flags endpoint,
-// caching the whole response for one TTL (the hot-apply bound). Reads are lock-guarded
-// and degrade to env/default when Insights is unconfigured or unreachable.
+// Client is the in-process evaluation seam: per-(org, project) SQLite definition
+// stores + the embedded native evaluator, with the platform project's evaluation
+// cached for one TTL (the hot-apply bound).
 type Client struct {
-	base       string
-	token      string
+	stores     *cloud.OrgStore[*Store]
 	distinctID string
-	hc         *http.Client
 	ttl        time.Duration
 
 	mu   sync.RWMutex
@@ -125,10 +131,31 @@ type Client struct {
 
 var mounted *Client
 
-func (c *Client) configured() bool { return c != nil && c.base != "" && c.token != "" }
+func (c *Client) configured() bool { return c != nil && c.stores != nil && engineAvailable }
 
-// resolve returns a switch's live string value and its source. Insights wins when it
-// has a value; else the env fallback; else the literal default. Nil-safe.
+// evaluateProject runs the native engine over one (org, project) store for one
+// evaluation context. The definitions read is a local SQLite scan; the evaluation
+// is a pure in-memory FFI call.
+func (c *Client) evaluateProject(org, project string, ctx []byte) (json.RawMessage, error) {
+	if !c.configured() {
+		return nil, fmt.Errorf("featureflags: engine not configured")
+	}
+	st, err := c.stores.For(org, project)
+	if err != nil {
+		return nil, err
+	}
+	defsJSON, n, err := st.DefsJSON()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return json.RawMessage(`{"featureFlags":{},"featureFlagPayloads":{},"errorsWhileComputingFlags":false}`), nil
+	}
+	return engineEvaluate(defsJSON, ctx)
+}
+
+// resolve returns a switch's live string value and its source. A stored platform flag
+// wins when it has a value; else the env fallback; else the literal default. Nil-safe.
 func (c *Client) resolve(def Def) (value string, source string) {
 	if c.configured() {
 		fv, pv, present := c.lookup(def.Key)
@@ -136,21 +163,21 @@ func (c *Client) resolve(def Def) (value string, source string) {
 			switch def.Type {
 			case TypeBool:
 				if b, ok := asBool(fv); ok {
-					return strconv.FormatBool(b), "insights"
+					return strconv.FormatBool(b), "flags"
 				}
 			case TypeInt:
 				if n, ok := asInt(pv); ok {
-					return strconv.Itoa(n), "insights"
+					return strconv.Itoa(n), "flags"
 				}
 				if n, ok := asInt(fv); ok {
-					return strconv.Itoa(n), "insights"
+					return strconv.Itoa(n), "flags"
 				}
 			case TypeString:
 				if s, ok := asString(pv); ok && s != "" {
-					return s, "insights"
+					return s, "flags"
 				}
 				if s, ok := asString(fv); ok && s != "" {
-					return s, "insights"
+					return s, "flags"
 				}
 			}
 		}
@@ -173,9 +200,9 @@ func (c *Client) lookup(key string) (fv, pv json.RawMessage, present bool) {
 	return fv, pv, inFlags || inPayloads
 }
 
-// ensureFresh refreshes the cached snapshot when older than the TTL. On a fetch error
-// the previous snapshot is kept (graceful degradation) and the clock is stamped so a
-// persistent failure is retried at most once per TTL, never on every read.
+// ensureFresh re-evaluates the platform project when the snapshot is older than the
+// TTL. On an evaluation error the previous snapshot is kept (graceful degradation)
+// and the clock is stamped so a persistent failure is retried at most once per TTL.
 func (c *Client) ensureFresh() {
 	c.mu.RLock()
 	fresh := c.snap.ok && time.Since(c.snap.at) < c.ttl
@@ -188,38 +215,19 @@ func (c *Client) ensureFresh() {
 	if c.snap.ok && time.Since(c.snap.at) < c.ttl {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-	defer cancel()
-	snap, err := c.fetch(ctx)
+	ctx, _ := json.Marshal(map[string]string{"distinct_id": c.distinctID})
+	res, err := c.evaluateProject(platformOrg, platformProject, ctx)
 	if err != nil {
 		c.snap.at = time.Now() // keep last values; bound retry to one per TTL
 		return
-	}
-	c.snap = snap
-}
-
-func (c *Client) fetch(ctx context.Context) (snapshot, error) {
-	body, _ := json.Marshal(map[string]string{"token": c.token, "distinct_id": c.distinctID})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/flags", bytes.NewReader(body))
-	if err != nil {
-		return snapshot{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return snapshot{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return snapshot{}, fmt.Errorf("insights /flags: status %d", resp.StatusCode)
 	}
 	var out struct {
 		FeatureFlags        map[string]json.RawMessage `json:"featureFlags"`
 		FeatureFlagPayloads map[string]json.RawMessage `json:"featureFlagPayloads"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
-		return snapshot{}, err
+	if err := json.Unmarshal(res, &out); err != nil {
+		c.snap.at = time.Now()
+		return
 	}
 	if out.FeatureFlags == nil {
 		out.FeatureFlags = map[string]json.RawMessage{}
@@ -227,7 +235,33 @@ func (c *Client) fetch(ctx context.Context) (snapshot, error) {
 	if out.FeatureFlagPayloads == nil {
 		out.FeatureFlagPayloads = map[string]json.RawMessage{}
 	}
-	return snapshot{flags: out.FeatureFlags, payloads: out.FeatureFlagPayloads, at: time.Now(), ok: true}, nil
+	c.snap = snapshot{flags: out.FeatureFlags, payloads: out.FeatureFlagPayloads, at: time.Now(), ok: true}
+}
+
+// invalidate drops the cached platform snapshot so the next read re-evaluates
+// (a cockpit write applies immediately in this pod; peers converge within TTL).
+func (c *Client) invalidate() {
+	c.mu.Lock()
+	c.snap = snapshot{}
+	c.mu.Unlock()
+}
+
+// SetPlatformSwitch stores/overwrites a platform switch's definition (the admin
+// cockpit's ONE write path) and applies it immediately in this pod.
+func SetPlatformSwitch(key string, definition json.RawMessage, actor string) error {
+	c := mounted
+	if c == nil || c.stores == nil {
+		return fmt.Errorf("featureflags: not mounted")
+	}
+	st, err := c.stores.For(platformOrg, platformProject)
+	if err != nil {
+		return err
+	}
+	if err := st.Upsert(key, definition, actor); err != nil {
+		return err
+	}
+	c.invalidate()
+	return nil
 }
 
 // ── value parsers (tolerant of PostHog bool/variant/payload shapes) ─────────────
@@ -296,7 +330,7 @@ func asString(raw json.RawMessage) (string, bool) {
 
 // ── typed live accessors (the in-process evaluation seam) ───────────────────────
 
-// Bool returns the live boolean value of a registered switch (Insights -> env -> default).
+// Bool returns the live boolean value of a registered switch (flags -> env -> default).
 func Bool(key string) bool {
 	def, ok := lookupDef(key)
 	if !ok {
@@ -331,7 +365,7 @@ func String(key string) string {
 // ── admin control-plane board ──────────────────────────────────────────────────
 
 // SwitchView is one platform switch as the admin cockpit renders it: the live value +
-// where it came from (insights | env | default).
+// where it came from (flags | env | default).
 type SwitchView struct {
 	Key         string `json:"key"`
 	Category    string `json:"category"`
@@ -344,9 +378,9 @@ type SwitchView struct {
 	ReadOnly    bool   `json:"readOnly"`
 }
 
-// BoardView is the full control-plane read board: the engine status + a deep-link to
-// the Insights flag manager (the ONE place a switch is edited) and its activity log
-// (the native change audit), plus every switch's live value.
+// BoardView is the full control-plane read board: the engine status plus every
+// switch's live value. Definitions are edited in place over /v1/flags (the cockpit
+// writes through SetPlatformSwitch); the activity log is the native change audit.
 type BoardView struct {
 	Engine     string       `json:"engine"`
 	Configured bool         `json:"configured"`
@@ -357,13 +391,6 @@ type BoardView struct {
 
 // Board evaluates every registered switch live and returns the cockpit read board.
 func Board() BoardView {
-	appURL := strings.TrimRight(strings.TrimSpace(os.Getenv("INSIGHTS_APP_URL")), "/")
-	proj := firstNonEmpty(os.Getenv("INSIGHTS_PROJECT_ID"), "1")
-	var manage, audit string
-	if appURL != "" {
-		manage = fmt.Sprintf("%s/project/%s/feature_flags", appURL, proj)
-		audit = fmt.Sprintf("%s/project/%s/activity?scope=FeatureFlag", appURL, proj)
-	}
 	list := Defs()
 	sw := make([]SwitchView, 0, len(list))
 	for _, d := range list {
@@ -373,34 +400,50 @@ func Board() BoardView {
 			Type: string(d.Type), Value: val, Source: src, Env: d.Env, ReadOnly: d.ReadOnly,
 		})
 	}
-	return BoardView{Engine: "insights", Configured: mounted.configured(), ManageURL: manage, AuditURL: audit, Switches: sw}
+	return BoardView{Engine: "hanzo-flags", Configured: mounted.configured(), ManageURL: "/v1/flags/defs", AuditURL: "/v1/flags/activity", Switches: sw}
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
 
-// Mount builds the evaluation client from env (Insights base + KMS-injected project
-// token) and installs it as the process-wide seam. It serves NO HTTP routes — it is the
-// in-process read plane that subsystems and clients/admin consume. Disabled config is a
-// no-op (env fallback only), never an error.
-func Mount(_ *zip.App, deps cloud.Deps) error {
+type state struct {
+	client *Client
+}
+
+// Mount opens the per-org definition stores, installs the process-wide evaluation
+// seam, and registers the /v1/flags surface. The native engine being absent (!cgo)
+// degrades every switch to env/default and the HTTP surface reports it — never an
+// error at boot.
+func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
 		return fmt.Errorf("featureflags.Mount: nil deps.Logger")
 	}
+	if deps.DataDir == "" {
+		return fmt.Errorf("featureflags.Mount: empty deps.DataDir")
+	}
 	log := deps.Logger.New("subsystem", "featureflags")
 	c := &Client{
-		base:       strings.TrimRight(strings.TrimSpace(os.Getenv("INSIGHTS_FLAGS_URL")), "/"),
-		token:      strings.TrimSpace(os.Getenv("INSIGHTS_PROJECT_TOKEN")),
-		distinctID: firstNonEmpty(os.Getenv("INSIGHTS_FLAGS_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
-		hc:         &http.Client{Timeout: 4 * time.Second},
+		stores:     cloud.NewOrgStore[*Store](deps.DataDir, "flags", openStore),
+		distinctID: firstNonEmpty(os.Getenv("FLAGS_PLATFORM_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
 	mounted = c
-	log.Info("featureflags evaluation seam ready", "engine", "insights", "configured", c.configured(), "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
+	b := cloud.NewBase(deps, "featureflags")
+	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
+	routes(app, svc)
+	log.Info("featureflags engine ready", "engine", "hanzo-flags", "native", engineAvailable, "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }
 
+// Shutdown closes every open per-org definitions store.
+func Shutdown(_ context.Context) error {
+	if mounted == nil || mounted.stores == nil {
+		return nil
+	}
+	return mounted.stores.CloseAll()
+}
+
 func ttlFromEnv() time.Duration {
-	if v := strings.TrimSpace(os.Getenv("INSIGHTS_FLAGS_TTL_SECONDS")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("FLAGS_TTL_SECONDS")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return time.Duration(n) * time.Second
 		}
