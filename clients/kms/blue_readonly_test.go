@@ -6,10 +6,11 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-// TestReaderReadOnlyRoundTrip proves the reader HA path: a store written by the
-// writer (writable, keyed) can be reopened READ-ONLY with the lock guard bypassed
-// and its secrets read back — without taking the exclusive write lock. This is
-// the mechanism that lets read replicas serve KMS reads off a restored store.
+// TestReaderReadOnlyRoundTrip proves the reader HA path: a per-org file written by
+// the writer (keyed) can be reopened in READ-ONLY mode and its secrets read back,
+// while mutations fail closed. Per-org SQLite is WAL-shareable (no exclusive
+// opener lock), so a reader can serve KMS reads off the shared/restored files
+// locally — it no longer needs to reverse-proxy KMS to the writer.
 func TestReaderReadOnlyRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
@@ -27,7 +28,7 @@ func TestReaderReadOnlyRoundTrip(t *testing.T) {
 		t.Fatalf("writer Close: %v", err)
 	}
 
-	// Reader: reopen the SAME store read-only (BypassLockGuard), same key.
+	// Reader: reopen the SAME per-org store read-only, same key.
 	r, err := New(Config{DataDir: dir, MasterKeyB64: key, ReadOnly: true}, log)
 	if err != nil {
 		t.Fatalf("reader New (read-only): %v", err)
@@ -65,7 +66,7 @@ func TestReaderWithoutRestoredStoreFailsClosed(t *testing.T) {
 func TestReaderWithoutKeyFailsClosed(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
-	// Seed an encrypted store so storeExistsOnDisk is true.
+	// Seed a per-org store so a restored store exists on disk.
 	w, err := New(Config{DataDir: dir, MasterKeyB64: b64key(t, 0x5A)}, log)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
