@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud/audit"
@@ -57,6 +58,18 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, err
 		return nil, fmt.Errorf("open audit store: %w", err)
 	}
 
+	// PER-SHARD audit under horizontal scale. The trail lives at {DataDir}/audit.db on
+	// THIS pod's own RWO PVC, so under shard routing each pod's chain covers ONLY the
+	// tenants routed to it (its shard) — and org-scoped audit queries route to the
+	// owning shard where those records live. Soundness: the chain is a per-FILE hash
+	// chain whose head is recovered at open; because no two pods share the file, there
+	// is no cross-pod head to fork (the very failure that pinned cloud to replicas:1 was
+	// two pods on ONE audit file). Integrity is preserved WITHIN each partition; a
+	// deployment-wide view is the union of the N per-shard chains. The shard id is
+	// stamped on the AU-9 checkpoint stream below so the external tail-truncation monitor
+	// tracks N heads (one per shard) rather than expecting a single global head.
+	shard := strings.TrimSpace(cfg.ShardSelf) // "" when single-pod — a harmless empty tag
+
 	// AU-9 tail-truncation anchor: emit a periodic head-digest checkpoint to the
 	// append-only observability log (and, when a mirror supports it, an
 	// independent digest store). An external o11y monitor compares consecutive
@@ -67,7 +80,7 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, err
 	if logger != nil {
 		rec.StartCheckpoints(interval, func(cp audit.Checkpoint) {
 			logger.Info("audit_head_checkpoint",
-				"count", cp.Count, "head", cp.Head, "ts", cp.Time.Format(time.RFC3339Nano))
+				"shard", shard, "count", cp.Count, "head", cp.Head, "ts", cp.Time.Format(time.RFC3339Nano))
 		})
 	} else {
 		rec.StartCheckpoints(interval, nil)
@@ -76,7 +89,7 @@ func buildAuditRecorder(cfg *Config, logger luxlog.Logger) (*audit.Recorder, err
 	if logger != nil {
 		count, head := rec.Head()
 		logger.Info("audit trail ready (tamper-evident, append-only)",
-			"store", dbPath, "records", count, "head", head,
+			"store", dbPath, "shard", shard, "records", count, "head", head,
 			"mirror", mirror != nil, "checkpoint_interval", interval.String())
 	}
 	return rec, nil
