@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -152,85 +151,4 @@ func verifySlackLink(key []byte, state string, now int64) (teamID, slackUserID, 
 		return "", "", "", false
 	}
 	return parts[0], parts[1], n, true
-}
-
-// ── in-process single-use seen-set (link-state nonces) ──────────────────────
-
-// seenSet is an age-based single-use / seen-set with an atomic test-and-set. It
-// backs the per-user link's single-use guarantee: a signed link state is redeemed
-// exactly once within its TTL.
-//
-// SCOPE: per-PROCESS. In a multi-replica deployment the single-use guarantee here
-// is DEFENSE-IN-DEPTH: the PRIMARY single-use guarantee is Slack's own server-side
-// single-use OAuth `code` (a second exchange of the same code fails at Slack) AND
-// hanzo.id's single-use OIDC `code`, plus the state's HMAC + browser-bound cookie
-// + short TTL. Eviction is strictly age-based (a within-TTL entry is NEVER
-// evicted), which is what forbids an evict-then-replay attack; memory is bounded
-// temporally, not by count.
-type seenSet struct {
-	mu    sync.Mutex
-	ttl   time.Duration
-	at    map[string]time.Time
-	order []string // insertion order, for age-based pruning
-}
-
-func newSeenSet(ttl time.Duration) *seenSet {
-	return &seenSet{ttl: ttl, at: make(map[string]time.Time)}
-}
-
-// prune drops expired entries oldest-first, stopping at the first still-fresh one.
-// Caller holds the lock.
-func (s *seenSet) prune(now time.Time) {
-	i := 0
-	for ; i < len(s.order); i++ {
-		k := s.order[i]
-		t, ok := s.at[k]
-		if !ok {
-			continue // already removed via a re-insert
-		}
-		if now.Sub(t) > s.ttl {
-			delete(s.at, k)
-		} else {
-			break
-		}
-	}
-	if i > 0 {
-		s.order = append(s.order[:0], s.order[i:]...)
-	}
-}
-
-// seenAndAdd atomically tests-and-sets: returns true if k was already seen (a
-// duplicate/replay); otherwise records it and returns false. The empty key is
-// non-dedupable (always unique). `now` zero → time.Now.
-func (s *seenSet) seenAndAdd(k string, now time.Time) bool {
-	if k == "" {
-		return false
-	}
-	if now.IsZero() {
-		now = time.Now()
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.prune(now)
-	if _, ok := s.at[k]; ok {
-		return true
-	}
-	s.at[k] = now
-	s.order = append(s.order, k)
-	return false
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-func hmacB64URL(key []byte, payload string) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(payload))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
-
-func abs64(x int64) int64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
