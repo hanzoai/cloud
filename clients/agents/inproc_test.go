@@ -25,7 +25,7 @@ func TestInproc_OpenLogClose_Lifecycle(t *testing.T) {
 	mountInproc(t)
 	ctx := context.Background()
 
-	id, err := OpenSession(ctx, SessionOpen{Org: "acme", Actor: "acme/u1", Agent: "hanzo", Title: "code: api — fix bug"})
+	id, err := OpenSession(ctx, "acme", "acme/u1", "hanzo", "code: api — fix bug")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestInproc_OpenLogClose_Lifecycle(t *testing.T) {
 func TestInproc_TenantIsolation_ForeignOrgCannotTouchSession(t *testing.T) {
 	mountInproc(t)
 	ctx := context.Background()
-	id, err := OpenSession(ctx, SessionOpen{Org: "acme", Actor: "acme/u1", Agent: "hanzo", Title: "t"})
+	id, err := OpenSession(ctx, "acme", "acme/u1", "hanzo", "t")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -88,13 +88,13 @@ func TestInproc_TenantIsolation_ForeignOrgCannotTouchSession(t *testing.T) {
 func TestInproc_Validation_FailClosed(t *testing.T) {
 	mountInproc(t)
 	ctx := context.Background()
-	if _, err := OpenSession(ctx, SessionOpen{Org: "", Actor: "a", Agent: "hanzo", Title: "t"}); err == nil {
+	if _, err := OpenSession(ctx, "", "a", "hanzo", "t"); err == nil {
 		t.Fatal("empty org must fail")
 	}
-	if _, err := OpenSession(ctx, SessionOpen{Org: "acme", Actor: "a", Agent: "", Title: "t"}); err == nil {
+	if _, err := OpenSession(ctx, "acme", "a", "", "t"); err == nil {
 		t.Fatal("empty agent must fail")
 	}
-	id, _ := OpenSession(ctx, SessionOpen{Org: "acme", Actor: "a", Agent: "hanzo", Title: "t"})
+	id, _ := OpenSession(ctx, "acme", "a", "hanzo", "t")
 	if err := LogSessionEvent(ctx, "acme", id, "not-a-kind", "a", []byte(`{}`)); err == nil {
 		t.Fatal("invalid kind must fail")
 	}
@@ -110,7 +110,7 @@ func TestInproc_NotMounted_FailsClosed(t *testing.T) {
 	prev := mounted
 	mounted = nil
 	t.Cleanup(func() { mounted = prev })
-	if _, err := OpenSession(context.Background(), SessionOpen{Org: "acme", Actor: "a", Agent: "hanzo", Title: "t"}); err == nil {
+	if _, err := OpenSession(context.Background(), "acme", "a", "hanzo", "t"); err == nil {
 		t.Fatal("unmounted OpenSession must fail closed")
 	}
 }
