@@ -236,6 +236,17 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/repos/:name/mirrors", cloud.Handle(s, listMirrors))
 	app.Delete("/v1/git/repos/:name/mirrors/:id", cloud.Handle(s, deleteMirror))
 
+	// Read/browse surface (JSON) for the console repo-browser: refs, tree, blob,
+	// commits, readme. ref + path ride as ?ref=&path= query params (the UI's own
+	// convention), so a slashed branch is unambiguous. Distinct trailing segments —
+	// they never shadow the :org/:repo smart-HTTP routes below. Org-scoped like every
+	// repo op; the JSON twin of the HTML browser in ui.go (one set of read helpers).
+	app.Get("/v1/git/repos/:name/refs", cloud.Handle(s, browseRefs))
+	app.Get("/v1/git/repos/:name/tree", cloud.Handle(s, browseTree))
+	app.Get("/v1/git/repos/:name/blob", cloud.Handle(s, browseBlob))
+	app.Get("/v1/git/repos/:name/commits", cloud.Handle(s, browseCommits))
+	app.Get("/v1/git/repos/:name/readme", cloud.Handle(s, browseReadme))
+
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
 	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
