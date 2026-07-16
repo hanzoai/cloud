@@ -236,13 +236,13 @@ func TestBotsGatedNoPrincipal(t *testing.T) {
 	cases := []struct {
 		method, path string
 	}{
-		{http.MethodGet, "/v1/bots"},
-		{http.MethodPost, "/v1/bots/launch"},
-		{http.MethodGet, "/v1/bots/launch"}, // matches /v1/bots/:id — still gated
-		{http.MethodGet, "/v1/bots/drop-x"},
-		{http.MethodDelete, "/v1/bots/drop-x"},
-		{http.MethodPost, "/v1/bots/drop-x/stop"},
-		{http.MethodPost, "/v1/bots/drop-x/message"},
+		{http.MethodGet, "/v1/compute/bots"},
+		{http.MethodPost, "/v1/compute/bots/launch"},
+		{http.MethodGet, "/v1/compute/bots/launch"}, // matches /v1/compute/bots/:id — still gated
+		{http.MethodGet, "/v1/compute/bots/drop-x"},
+		{http.MethodDelete, "/v1/compute/bots/drop-x"},
+		{http.MethodPost, "/v1/compute/bots/drop-x/stop"},
+		{http.MethodPost, "/v1/compute/bots/drop-x/message"},
 		{http.MethodPost, "/v1/machines/drop-x/bind-agent"},
 		{http.MethodGet, "/v1/machines/drop-x/agent-binding"},
 		{http.MethodDelete, "/v1/machines/drop-x/agent-binding"},
@@ -261,7 +261,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	app := mountBots(t, f, fa.server(t).URL)
 
 	// dryRun → the price quote verbatim, no machine, no bind, NO agent created.
-	code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper", "dryRun": true})
 	if code != http.StatusOK || !strings.Contains(string(body), `"priceHourly"`) {
 		t.Fatalf("dryRun want 200 quote, got %d %s", code, body)
@@ -272,7 +272,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// A real launch → 201 botView with the agent bound (agent defaults to name).
-	code, body = do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	code, body = do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"})
 	if code != http.StatusCreated {
 		t.Fatalf("launch want 201, got %d %s", code, body)
@@ -293,7 +293,7 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// An explicit agent overrides the name default.
-	_, body = do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	_, body = do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "sup", "agent": "support"})
 	_ = json.Unmarshal(body, &bv)
 	if f.lastBindName != "support" || bv.Agent != "support" {
@@ -301,10 +301,10 @@ func TestBotLaunchQuoteAndReal(t *testing.T) {
 	}
 
 	// size required; real launch requires a name.
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme", map[string]any{"region": "sfo3"}); code != http.StatusBadRequest {
 		t.Fatalf("launch without size want 400, got %d", code)
 	}
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme", map[string]any{"size": "s-2vcpu-4gb"}); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme", map[string]any{"size": "s-2vcpu-4gb"}); code != http.StatusBadRequest {
 		t.Fatalf("real launch without name want 400, got %d", code)
 	}
 }
@@ -314,14 +314,14 @@ func TestBotListGetDelete(t *testing.T) {
 	app := mountBots(t, f, newFakeAgents().server(t).URL)
 	// Launch two bots for acme.
 	for _, n := range []string{"a", "b"} {
-		if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+		if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 			map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": n}); code != http.StatusCreated {
 			t.Fatalf("seed launch %s: %d %s", n, code, body)
 		}
 	}
 
 	// list → both bots, kind=bot, each joined with its binding.
-	code, body := do(t, app, http.MethodGet, "/v1/bots", "acme", nil)
+	code, body := do(t, app, http.MethodGet, "/v1/compute/bots", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("list want 200, got %d %s", code, body)
 	}
@@ -341,7 +341,7 @@ func TestBotListGetDelete(t *testing.T) {
 	}
 
 	// get one → botView.
-	code, body = do(t, app, http.MethodGet, "/v1/bots/drop-a", "acme", nil)
+	code, body = do(t, app, http.MethodGet, "/v1/compute/bots/drop-a", "acme", nil)
 	if code != http.StatusOK {
 		t.Fatalf("get want 200, got %d %s", code, body)
 	}
@@ -353,12 +353,12 @@ func TestBotListGetDelete(t *testing.T) {
 
 	// a non-bot machine (no kind tag, no binding) is not a bot → 404.
 	f.bots["plain"] = map[string]any{"owner": "acme", "name": "plain", "id": "plain", "state": "running"}
-	if code, _ := do(t, app, http.MethodGet, "/v1/bots/plain", "acme", nil); code != http.StatusNotFound {
+	if code, _ := do(t, app, http.MethodGet, "/v1/compute/bots/plain", "acme", nil); code != http.StatusNotFound {
 		t.Fatalf("get non-bot want 404, got %d", code)
 	}
 
 	// delete → 204, and the bot unbinds AND the machine is gone.
-	if code, _ := do(t, app, http.MethodDelete, "/v1/bots/drop-a", "acme", nil); code != http.StatusNoContent {
+	if code, _ := do(t, app, http.MethodDelete, "/v1/compute/bots/drop-a", "acme", nil); code != http.StatusNoContent {
 		t.Fatalf("delete want 204, got %d", code)
 	}
 	if f.lastUnbind != "drop-a" {
@@ -372,12 +372,12 @@ func TestBotListGetDelete(t *testing.T) {
 func TestBotStopPause(t *testing.T) {
 	f := newBotVM()
 	app := mountBots(t, f, newFakeAgents().server(t).URL)
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "c"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
 	}
 	// stop → unbind (halt the agent), 200 {status:stopped}. Machine stays.
-	code, body := do(t, app, http.MethodPost, "/v1/bots/drop-c/stop", "acme", nil)
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/stop", "acme", nil)
 	if code != http.StatusOK || !strings.Contains(string(body), `"stopped"`) {
 		t.Fatalf("stop want 200 stopped, got %d %s", code, body)
 	}
@@ -389,14 +389,14 @@ func TestBotStopPause(t *testing.T) {
 	}
 	// pause routes to the same halt.
 	f.lastUnbind = ""
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/drop-c/pause", "acme", nil); code != http.StatusOK {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/pause", "acme", nil); code != http.StatusOK {
 		t.Fatalf("pause want 200, got %d", code)
 	}
 	if f.lastUnbind != "drop-c" {
 		t.Fatalf("pause must unbind, lastUnbind=%q", f.lastUnbind)
 	}
 	// an unknown action is a clean 400.
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/drop-c/frobnicate", "acme", nil); code != http.StatusBadRequest {
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/drop-c/frobnicate", "acme", nil); code != http.StatusBadRequest {
 		t.Fatalf("unknown action want 400, got %d", code)
 	}
 }
@@ -407,7 +407,7 @@ func TestBotMessageRunsAgent(t *testing.T) {
 	app := mountBots(t, f, fa.server(t).URL)
 
 	// Launch a bot with an explicit agent name — launch auto-creates that agent.
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "chat", "agent": "concierge"}); code != http.StatusCreated {
 		t.Fatal("seed launch")
 	}
@@ -417,7 +417,7 @@ func TestBotMessageRunsAgent(t *testing.T) {
 
 	// message → runs the BOUND agent with the caller's input; because launch
 	// created it, Resolve succeeds and the response passes through (200 pong).
-	code, body := do(t, app, http.MethodPost, "/v1/bots/drop-chat/message", "acme",
+	code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-chat/message", "acme",
 		map[string]any{"input": "ping"})
 	if code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
 		t.Fatalf("message want 200 pong, got %d %s", code, body)
@@ -448,25 +448,25 @@ func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
 	if fa.wasCreated("ghost") {
 		t.Fatalf("precondition: a direct bind must NOT create the agent")
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/bots/drop-ghost/message", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-ghost/message", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusNotFound {
 		t.Fatalf("bug repro: messaging an uncreated agent must 404, got %d %s", code, body)
 	}
 
 	// NEW path (the fix): launchBot auto-creates the bound agent, so the very same
 	// message now Resolves and runs → 200. launch → message works.
-	if code, _ := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	if code, _ := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
 		t.Fatal("launch")
 	}
-	if code, body := do(t, app, http.MethodPost, "/v1/bots/drop-helper/message", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/drop-helper/message", "acme",
 		map[string]any{"input": "hi"}); code != http.StatusOK || !strings.Contains(string(body), `"pong"`) {
 		t.Fatalf("launched bot must be messageable, got %d %s", code, body)
 	}
 
 	// Idempotent: relaunching the same bot (agent already exists → 409 create) is
 	// NOT an error — launch still 201s and the bot stays messageable.
-	if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "helper"}); code != http.StatusCreated {
 		t.Fatalf("relaunch (idempotent create) want 201, got %d %s", code, body)
 	}
@@ -474,7 +474,7 @@ func TestBotLaunchAutoCreateClosesTheGap(t *testing.T) {
 	// Model validation propagates: a launch naming a non-catalog model fails fast
 	// with the agent surface's 400 — and provisions NO machine (fail-fast order).
 	botsBefore := len(f.bots)
-	if code, body := do(t, app, http.MethodPost, "/v1/bots/launch", "acme",
+	if code, body := do(t, app, http.MethodPost, "/v1/compute/bots/launch", "acme",
 		map[string]any{"size": "s-2vcpu-4gb", "region": "sfo3", "name": "badmodel", "model": "claude-sonnet-4-5"}); code != http.StatusBadRequest {
 		t.Fatalf("launch with non-catalog model want 400, got %d %s", code, body)
 	}

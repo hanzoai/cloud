@@ -2,11 +2,12 @@ package bots
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -68,12 +69,20 @@ func waitForDebit(cond func() bool) bool {
 	return cond()
 }
 
-// mount builds the bots surface. commerceURL=="" mounts with no billing
-// (Gate allows, Meter is a no-op — the unconfigured deployment path).
+// mount builds the bots surface over a fake registry + runtime. commerceURL==""
+// mounts with no billing (Gate allows, Meter is a no-op — the unconfigured
+// deployment path). The seams are fakes so the money path is exercised without a
+// session store; the real bindings are proven in bots_registry_test.go.
 func mount(t *testing.T, commerceURL string) *zip.App {
 	t.Helper()
+	return mountBilled(t, commerceURL, newFakeRuns())
+}
+
+// mountBilled is mount with the registry exposed, for launch assertions.
+func mountBilled(t *testing.T, commerceURL string, runs Runs) *zip.App {
+	t.Helper()
 	// Pin a deterministic gateway base so the session URL is assertable. Set
-	// BEFORE Mount, which snapshots gatewayBase() once.
+	// BEFORE gatewayBase(), which is snapshotted once here.
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
 	deps := cloud.Deps{Logger: luxlog.New("test")}
 	if commerceURL != "" {
@@ -85,10 +94,15 @@ func mount(t *testing.T, commerceURL string) *zip.App {
 		}
 		deps.Metering = m
 	}
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	if err := Mount(app, deps); err != nil {
-		t.Fatalf("Mount: %v", err)
+	s := &cloud.Service[state]{
+		Base: cloud.NewBase(deps, "bots"),
+		State: state{
+			bill: cloud.NewResourceMeter(deps, meterKind), gateway: gatewayBase(),
+			runs: runs, runtime: &fakeRuntime{},
+		},
 	}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	routes(app, s)
 	return app
 }
 
@@ -162,9 +176,12 @@ func TestRunValidatesInput(t *testing.T) {
 
 // TestRunResponseShapeAndSessionURL: a launch (billing unconfigured → un-gated)
 // returns {runId, status, sessionUrl}, with the session URL derived from the
-// configured gateway base + nodeId=<runId>.
+// configured gateway base + nodeId=<runId>. The run id IS the registry record's
+// id — one identity per run, so the id a client holds is the id list/stop
+// authorize against. It is opaque to clients: only that it round-trips matters.
 func TestRunResponseShapeAndSessionURL(t *testing.T) {
-	app := mount(t, "")
+	runs := newFakeRuns()
+	app := mountBilled(t, "", runs)
 	code, body := do(t, app, "acme", map[string]any{"task": "summarize my inbox", "surface": "desktop"})
 	if code != http.StatusOK {
 		t.Fatalf("launch want 200, got %d (%s)", code, body)
@@ -173,8 +190,8 @@ func TestRunResponseShapeAndSessionURL(t *testing.T) {
 	if err := json.Unmarshal(body, &rv); err != nil {
 		t.Fatalf("shape: %v (%s)", err, body)
 	}
-	if !strings.HasPrefix(rv.RunID, "bot_") {
-		t.Fatalf("runId want bot_ prefix, got %q", rv.RunID)
+	if rv.RunID == "" {
+		t.Fatal("runId must be set")
 	}
 	if rv.Status != statusRunning {
 		t.Fatalf("status want %q, got %q", statusRunning, rv.Status)
@@ -182,6 +199,52 @@ func TestRunResponseShapeAndSessionURL(t *testing.T) {
 	want := "https://bot.example.test/vnc?nodeId=" + rv.RunID
 	if rv.SessionURL != want {
 		t.Fatalf("sessionUrl want %q, got %q", want, rv.SessionURL)
+	}
+	// The returned id is the one the registry minted, and it is immediately
+	// resolvable as one of THIS org's runs.
+	if _, found, _ := runs.Get(context.Background(), "acme", rv.RunID); !found {
+		t.Fatalf("launched run %q is not resolvable under the caller org", rv.RunID)
+	}
+}
+
+// A launch RECORDS the run under the CALLER's org with the task and surface it
+// asked for — the control plane owns the record, so the run is listable and
+// stoppable the moment it is returned.
+func TestRunRecordsTheRunUnderTheCallerOrg(t *testing.T) {
+	runs := newFakeRuns()
+	app := mountBilled(t, "", runs)
+	if code, body := do(t, app, "acme", map[string]any{"task": "book a flight", "surface": "terminal"}); code != http.StatusOK {
+		t.Fatalf("launch want 200, got %d (%s)", code, body)
+	}
+	if len(runs.opens) != 1 {
+		t.Fatalf("want exactly one recorded run, got %d", len(runs.opens))
+	}
+	got := runs.opens[0]
+	if got.org != "acme" || got.task != "book a flight" || got.surface != "terminal" {
+		t.Fatalf("run recorded wrong: %+v", got)
+	}
+	if got.actor != "acme/u-acme" {
+		t.Fatalf("actor want the acting principal, got %q", got.actor)
+	}
+	// It lists as the caller's own run, with the surface it was launched with.
+	_, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
+	var v botsView
+	if err := json.Unmarshal(body, &v); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(v.Bots) != 1 || v.Bots[0].Surface != "terminal" || v.Bots[0].Task != "book a flight" {
+		t.Fatalf("launched run must list truthfully, got %+v", v.Bots)
+	}
+}
+
+// A launch that cannot be recorded is a 500, not a phantom run: an id handed back
+// without a record would be unlistable and unstoppable.
+func TestRunFailsWhenTheRunCannotBeRecorded(t *testing.T) {
+	runs := newFakeRuns()
+	runs.openErr = errors.New("registry down")
+	app := mountBilled(t, "", runs)
+	if code, _ := do(t, app, "acme", map[string]any{"task": "x"}); code != http.StatusInternalServerError {
+		t.Fatalf("unrecordable run want 500, got %d", code)
 	}
 }
 
