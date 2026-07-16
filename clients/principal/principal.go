@@ -260,17 +260,20 @@ func ValidatedProject(c *zip.Ctx) (string, bool) {
 	return project, Validated(c) && !IsDefaultProject(project)
 }
 
-// BillingAccount resolves the caller's funding BillingAccount id — the GCP-style
-// account (models/billingaccount) that pays for this request's usage. It mirrors
-// Project: a zero-copy read of the gateway-minted X-Billing-Account-Id header (in
-// production the gateway mints it from the validated IAM `billing_account` claim;
-// off-gateway, SanitizeIdentity re-injects the caller's own value).
+// BillingAccount resolves the account that PAYS for this request — the IAM
+// `billing_account` claim, as the `<kind>:<subject>` string ai/object.ParseAccount
+// reads back. It mirrors Project: a zero-copy read of a SERVER-MINTED header.
 //
-// It is an ATTRIBUTION hint ONLY. The account that is actually debited is resolved
-// SERVER-SIDE by commerce from the org's ProjectBinding (resolveAccountId), never
-// from this header — so a mislabelled account can only ever misattribute the
-// caller's OWN spend within its own org and can NEVER redirect spend to another
-// tenant's account. Empty when no account is in scope (the org-wide default pool).
+// It is AUTHORITATIVE, not a hint. Both minters bind it from the validated claim
+// and strip any client copy first — the gateway (iamauth.Claims.MintedBillingAccount)
+// and, on the in-cluster path, cloud's own SanitizeIdentity (idClaims.mintedBillingAccount)
+// — so a surviving value is IAM's signed statement of who pays, never a caller
+// naming its own payer. Hand it to Payer as Credential.Account; Payer bounds it to
+// the caller's own org and falls back when it is absent.
+//
+// Empty when IAM minted no account: a token from before the claim shipped, or an
+// opaque hk-/sk- key that never carried claims. Payer's legacy rule answers for
+// those, so an empty value bills the same account it always did — never nothing.
 // The value is CLONED because it is retained past the request for telemetry.
 func BillingAccount(c *zip.Ctx) string {
 	acct := strings.TrimSpace(c.Header("X-Billing-Account-Id"))
