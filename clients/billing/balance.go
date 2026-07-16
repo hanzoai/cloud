@@ -6,6 +6,7 @@ import (
 
 	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -57,7 +58,14 @@ import (
 // production tokens carry one. Called out for review rather than papered over.
 func subjectFor(c *zip.Ctx, org string) string {
 	if name := strings.TrimSpace(c.Header("X-User-Name")); name != "" {
-		return account.Payer(account.Credential{Owner: org, Name: name}).Subject()
+		// Hand Payer the account the credential NAMES (the validated `billing_account`
+		// claim, minted into X-Billing-Account-Id). The ai gate reads the same claim,
+		// so this view and that gate resolve one wallet. Reading it here is what keeps
+		// them from drifting the way the org-vs-"org/user" split once did — except
+		// that split was two rules, and this would be one rule fed two different
+		// credentials, which reads the same to a user: a funded balance the gate
+		// refuses. Absent ⟹ Payer's legacy rule, exactly today's answer.
+		return account.Payer(account.Credential{Owner: org, Name: name, Account: principal.BillingAccount(c)}).Subject()
 	}
 	return account.PayerOf(org, strings.TrimSpace(c.User())).Subject()
 }
