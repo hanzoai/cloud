@@ -482,25 +482,61 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 
 func slugParam(c *zip.Ctx) string { return strings.ToLower(strings.TrimSpace(c.Param("slug"))) }
 
-// org resolves the org for a request. Empty org is allowed only for admins
-// (bucketed under the literal "admin" org), matching the provisioning control
-// plane. The gateway strips client-supplied identity headers and sets X-Org-Id
-// / X-User-IsAdmin only on the JWT-validated path (HIP-0026), so neither is
-// spoofable from the edge.
+// org resolves the org for a request — the tenant-isolation KEY, and also an
+// S3-key segment (sitePrefix = org+"/"+slug). Empty org is allowed only for a
+// verified GLOBAL admin (bucketed under the literal "admin" org), matching the
+// provisioning control plane. The gateway strips client-supplied identity headers
+// and mints X-Org-Id / X-User-IsAdmin only on the JWT-validated path (HIP-0026),
+// so neither is spoofable from the edge.
+//
+// The key comes from principal.Org — the ONE canonical resolver (crm, prompts,
+// agents, framework key off the same one), which returns the VALIDATED IAM owner
+// VERBATIM (trimmed, ≤128, cloned). Verbatim is load-bearing: the old sanitizeOrg
+// FOLD (lowercase + non-alnum→'-' + truncate-32) is NON-injective — two DISTINCT
+// validated owners ("acme"/"Acme", or names differing only past 32 chars) collapse
+// onto ONE key and thus ONE S3 prefix, itself a cross-tenant collision (one org
+// can overwrite/read another's deployed site). Keying off the verbatim owner makes
+// the key injective with no lock-out. Since that owner is an S3-key segment,
+// orgPathSafe refuses ONLY the traversal class ('/', '\\', or a "."/".." segment)
+// → 403, so it can never escape its prefix; SanitizeIdentity already strips
+// whitespace/control/format runes upstream, so no legitimate owner is refused.
 func org(c *zip.Ctx) (string, bool) {
-	if !principal.Validated(c) {
-		return "", false // no validated principal — refuse the forgeable data path
-	}
-	org := sanitizeOrg(c.Org())
-	if org != "" {
+	if org, ok := principal.Org(c); ok {
+		if !orgPathSafe(org) {
+			return "", false // org can't be a safe S3-key segment — refuse, don't escape the prefix
+		}
 		return org, true
 	}
-	if c.IsAdmin() {
+	// No validated org. Only a verified GLOBAL admin gets the shared "admin" bucket:
+	// principal.Org already required a validated principal, and c.IsAdmin() is set
+	// only for a verified global admin (never restored from client input) — require
+	// both, so an unvalidated request can never reach the admin namespace.
+	if principal.Validated(c) && c.IsAdmin() {
 		return "admin", true
 	}
 	return "", false
 }
 
+// orgPathSafe reports whether org is safe to embed VERBATIM as a single S3-key
+// path segment (sitePrefix = org+"/"+slug). Because the key is verbatim (no fold),
+// this is the guard that keeps a path-hostile owner from escaping its own prefix:
+// it refuses ONLY the traversal class — a path separator ('/' or '\\') or a "." /
+// ".." relative segment — so case/dots/underscores/length are all preserved and
+// distinct owners stay distinct (the non-injective fold is never applied). Empty
+// is unsafe. A real IAM owner claim is a single safe token, so nothing legitimate
+// is refused here.
+func orgPathSafe(org string) bool {
+	if org == "" || org == "." || org == ".." {
+		return false
+	}
+	return !strings.ContainsAny(org, "/\\")
+}
+
+// sanitizeOrg folds a string to a DNS-ish label (lowercase + non-alnum→'-' +
+// truncate-32). It is NOT the tenant key — folding is non-injective and would
+// collide distinct tenants (see org, which keys off the verbatim principal.Org).
+// It survives only for domains.go's brand/label derivation, where a lossy,
+// display-oriented fold is exactly what's wanted.
 func sanitizeOrg(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	var b strings.Builder
