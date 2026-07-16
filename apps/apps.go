@@ -61,7 +61,6 @@ import (
 	"github.com/hanzoai/cloud/clients/automations"
 	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/billing"
-	"github.com/hanzoai/cloud/clients/bot"
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
@@ -108,6 +107,7 @@ import (
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/clients/pubsub"
 	"github.com/hanzoai/cloud/clients/referrals"
+	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
 	"github.com/hanzoai/cloud/clients/security"
 	"github.com/hanzoai/cloud/clients/settings"
@@ -298,7 +298,9 @@ func Wire() []cloud.MountSpec {
 		{Name: "exec", Mount: cloud.Typed(exec.Mount)},
 		{Name: "websearch", Mount: cloud.Typed(websearch.Mount)},
 		{Name: "world", Mount: cloud.Typed(world.Mount), Shutdown: ctxShutdown(world.Shutdown)},
-		{Name: "bot", Mount: cloud.Typed(bot.Mount)},
+		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
+		// the run control plane is "bots" below.
+		{Name: "runtime", Mount: cloud.Typed(runtime.Mount)},
 		{Name: "authors", Mount: cloud.Typed(authors.Mount), Shutdown: ctxShutdown(authors.Shutdown)},
 		{Name: "bots", Mount: cloud.Typed(bots.Mount)},
 		{Name: "audit", Mount: cloud.Typed(auditlog.Mount)},

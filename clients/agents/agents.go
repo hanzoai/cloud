@@ -278,19 +278,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	app.Get("/v1/agents", cloud.Handle(s, list))
 	app.Post("/v1/agents", cloud.Handle(s, create))
-	// Static org-wide surfaces MUST register before the :ref wildcard: Fiber
-	// matches routes in registration order, so a bare `/v1/agents/:ref` would
-	// otherwise capture "metrics"/"activity"/"sessions" as a ref and 404 them
-	// (Red route audit). Registering the literals first makes them win.
+	// The static org-wide surfaces are listed before the :ref wildcard for reading
+	// order, not for matching: the router resolves by SPECIFICITY, so a literal
+	// beats a param whatever order they register in ("metrics" is never captured as
+	// a ref). Registration order decides nothing here — it only decides which
+	// handler silently wins when two patterns are byte-identical, which is a
+	// collision, not a precedence.
 	app.Get("/v1/agents/metrics", cloud.Handle(s, metrics))
 	app.Get("/v1/agents/activity", cloud.Handle(s, activity))
-	// Live agent-session control plane: /v1/agents/sessions[/...]. Registered
-	// before :name for the same registration-order reason (and internally the
-	// static /stream precedes /:id).
+	// Live agent-session control plane: /v1/agents/sessions[/...].
 	mountSessions(s, app)
 	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
-	// session runs on. Registered before :ref for the same registration-order reason
-	// (and internally /targets precedes /targets/:id).
+	// session runs on.
 	mountTargets(s, app)
 	app.Get("/v1/agents/:ref", cloud.Handle(s, get))
 	app.Patch("/v1/agents/:ref", cloud.Handle(s, update))
