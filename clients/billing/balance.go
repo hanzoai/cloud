@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/zap-proto/zip"
 )
@@ -45,7 +45,7 @@ import (
 // X-User-Id. Both are authorityHeaders — stripped on ingress and re-injected only from
 // verified claims — so neither is a client value.
 //
-// The X-User-Id fallback goes through ai's own PayerOf because that header's shape is
+// The X-User-Id fallback goes through the shared account.PayerOf because that header's shape is
 // path-dependent: the gateway historically minted X-User-Id == the username, while the
 // in-binary direct-Bearer path mints the UUID subject, and callers hold it as an
 // "<owner>/<name>" key. PayerOf is the parse ai already uses to fold that key form back
@@ -57,9 +57,9 @@ import (
 // production tokens carry one. Called out for review rather than papered over.
 func subjectFor(c *zip.Ctx, org string) string {
 	if name := strings.TrimSpace(c.Header("X-User-Name")); name != "" {
-		return aiobject.Payer(aiobject.Credential{Owner: org, Name: name}).Subject()
+		return account.Payer(account.Credential{Owner: org, Name: name}).Subject()
 	}
-	return aiobject.PayerOf(org, strings.TrimSpace(c.User())).Subject()
+	return account.PayerOf(org, strings.TrimSpace(c.User())).Subject()
 }
 
 // availableCents returns the caller's spendable prepaid balance from the co-resident

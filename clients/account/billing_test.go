@@ -2,14 +2,13 @@ package account
 
 import (
 	"encoding/json"
+	"github.com/hanzoai/account"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
-
-	aiobject "github.com/hanzoai/ai/object"
 )
 
 // billing_test.go — the per-tenant billing bridge (billing.go). Proves the tenant
@@ -32,7 +31,7 @@ func TestBillingSubject(t *testing.T) {
 		{"", "x", ""},                   // no org → empty subject (cannot bill)
 	}
 	for _, c := range cases {
-		got := aiobject.Payer(aiobject.Credential{Owner: c.org, Name: c.name}).Subject()
+		got := account.Payer(account.Credential{Owner: c.org, Name: c.name}).Subject()
 		if got != c.want {
 			t.Fatalf("Payer(%q,%q).Subject(): want %q, got %q", c.org, c.name, c.want, got)
 		}
@@ -53,7 +52,7 @@ func TestBillingSubject_IgnoresLegacyEnv(t *testing.T) {
 		{"maxpower", "dave", "maxpower"}, // untouched
 	}
 	for _, c := range cases {
-		got := aiobject.Payer(aiobject.Credential{Owner: c.org, Name: c.name}).Subject()
+		got := account.Payer(account.Credential{Owner: c.org, Name: c.name}).Subject()
 		if got != c.want {
 			t.Fatalf("legacy env must be ignored: Payer(%q,%q).Subject() want %q, got %q", c.org, c.name, c.want, got)
 		}
