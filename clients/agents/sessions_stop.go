@@ -110,7 +110,7 @@ func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) 
 	}
 	stopped := 0
 	for _, x := range live {
-		if err := stopOne(ctx, x); err != nil {
+		if err := stopOne(ctx, x, StatusError, "account logged out via login manager"); err != nil {
 			// Best-effort per session: a failure on one does not abort the rest, so a
 			// revoke tears down as many as it can and reports the true count.
 			mounted.Log.Warn("agents: stop session", "org", org, "session", x.ID, "err", err)
@@ -121,16 +121,19 @@ func StopSessions(ctx context.Context, org string, m SessionMatch) (int, error) 
 	return stopped, nil
 }
 
-// stopOne records a stop control event on a live session and moves it to a
-// terminal (error) state — the forced-teardown transition. A session already
-// terminal is skipped (monotonic terminal rule).
-func stopOne(ctx context.Context, x Session) error {
+// stopOne records a stop control event carrying reason on a live session and
+// moves it to the given terminal state — the forced-teardown transition, and the
+// ONE write path every forced stop takes (the login-revoke sweep below, and the
+// single-session StopSession). A session already terminal is skipped (monotonic
+// terminal rule). status must be terminal; reason rides the control event so the
+// stream records WHY the run ended.
+func stopOne(ctx context.Context, x Session, status, reason string) error {
 	if isTerminalStatus(x.Status) {
 		return nil
 	}
 	now := time.Now().Unix()
 	if evID, err := genID("evt"); err == nil {
-		payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: "account logged out via login manager"})
+		payload, _ := json.Marshal(controlPayload{Command: CmdStop, Message: reason})
 		e, aerr := mounted.State.store.AppendEvent(ctx, Event{
 			ID: evID, SessionID: x.ID, Org: x.Org, Kind: KindControl,
 			Actor: billingActor(x.Org, ""), Payload: string(payload), CreatedAt: now,
@@ -139,7 +142,7 @@ func stopOne(ctx context.Context, x Session) error {
 			publishEvent(mounted, x.Org, x.RootID, e)
 		}
 	}
-	x.Status = StatusError
+	x.Status = status
 	x.EndedAt = now
 	x.UpdatedAt = now
 	if err := mounted.State.store.UpdateSession(ctx, x); err != nil {
