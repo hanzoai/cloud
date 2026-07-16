@@ -195,14 +195,16 @@ func canonicalService(path string) string {
 }
 
 // identityFromCtx builds the commerce billing identity from the gateway-minted
-// headers zip exposes. It mirrors metering.IdentityFromGatewayHeaders exactly so
-// cloud and every other product key the SAME ledger entry:
+// headers zip exposes. It agrees with metering.IdentityFromGatewayHeaders because
+// both call the SAME rule (hanzoai/account.Payer), not because two copies are kept
+// in step — so cloud and every other product key the SAME ledger entry:
 //
-//   - User is the per-org billing key — the org slug alone (e.g. "maxpower"),
-//     falling back to the bare sub only when org is absent. Prepaid balance is
-//     per-org (one credit covers the whole org); keying it on "{org}/{sub}"
-//     would query an empty per-user ledger and 402 a fully funded org.
-//   - Org is the org namespace (X-Org-Id) commerce resolves the ledger in.
+//   - User is the ACCOUNT that pays, resolved from the credential by the shared
+//     rule: the org's pool for a real tenant, the person's own account for a
+//     member of the shared signup org, or whatever the signed billing_account
+//     claim names. It is NOT "the org, always" — that premise gated a balance
+//     nobody drained (see the resolution below).
+//   - Org is the HOME org whose ledger holds that account.
 //
 // The full "{org}/{sub}" actor identity belongs on the usage audit trail, not
 // the gate — but metering v0.1.0's AuthInput/Usage carry no Actor field, so it

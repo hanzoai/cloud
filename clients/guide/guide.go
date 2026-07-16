@@ -359,7 +359,7 @@ func doStep(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	payer := principal.Payer(c)
+	payer := principal.HomeOrg(c)
 	id := idParam(c)
 	store, cur, _, rows, err := snapshotFor(s, c.Context(), org)
 	if err != nil {
