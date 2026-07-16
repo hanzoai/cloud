@@ -185,6 +185,16 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	if keyErr != nil {
 		c.log.Warn("kms master key not configured; secret ops fail closed (health-only mode)", "err", keyErr)
 	}
+	// One-time cutover from the legacy embedded ZapDB store to per-org SQLite. Writer
+	// + keyed only: a reader must not migrate, and the encrypted-at-rest legacy store
+	// can only be read with the master key. FATAL on error — booting the empty per-org
+	// store while legacy secrets sit unmigrated would orphan every secret (cloud KMS is
+	// the source the kms-operator syncs out), so refuse to serve rather than lose them.
+	if !cfg.ReadOnly && keyErr == nil {
+		if err := migrateLegacyZapDB(dir, masterKey, c.store, c.log); err != nil {
+			return nil, fmt.Errorf("kms.New: legacy ZapDB migration: %w", err)
+		}
+	}
 	return c, nil
 }
 
