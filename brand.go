@@ -113,6 +113,17 @@ func BrandForHost(host string) string {
 	return DefaultBrand
 }
 
+// brandDisplay is a brand id's human display name: the id with an upper-cased
+// first letter (lux → "Lux", hanzo → "Hanzo"). Derived from the id — one source
+// of truth with the brands registry, no hand-maintained display list. Used to
+// build the white-label console <title> (webui.go).
+func brandDisplay(id string) string {
+	if id == "" {
+		id = DefaultBrand
+	}
+	return strings.ToUpper(id[:1]) + id[1:]
+}
+
 // BrandIssuers returns the OIDC issuer of every configured white-label brand. The
 // in-binary identity validator (auth_identity.go) trusts a token whose `iss` is
 // any of these, so ONE cloud binary validates hanzo AND lux/zoo/pars tokens. One
