@@ -13,7 +13,7 @@
 #
 # ── console UI stage ─────────────────────────────────────────────────────────
 # Builds the console SPA and emits a STATIC bundle at /out. console is fetched
-# at a pinned ref (CONSOLE_REF) using the same gh_token BuildKit secret the Go
+# at a pinned ref (CONSOLE_REF) using the same GIT_AUTH_TOKEN BuildKit secret the Go
 # build uses for private modules.
 #
 # console exposes `npm run build:embed` (scripts/build-embed.mjs): it prunes the
@@ -51,9 +51,9 @@ ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192
 # the next cloud build. GA4/Pixel stay off (unset). Public id, not a KMS secret.
 ARG NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=7dce54ee-41f6-4751-96bf-fe005067c7c7
 ENV NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=$NEXT_PUBLIC_ANALYTICS_WEBSITE_ID
-RUN --mount=type=secret,id=gh_token \
-    if [ -s /run/secrets/gh_token ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
+    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     echo ">> embedding console ${CONSOLE_REF} (cachebust ${CONSOLE_CACHEBUST})" && \
     git clone --depth 1 --branch "${CONSOLE_REF}" "${CONSOLE_REPO}" . && \
@@ -109,9 +109,9 @@ ARG OPENAPI_REPO=https://github.com/hanzoai/openapi.git
 ARG OPENAPI_REF=main
 RUN apk add --no-cache git && pip install --no-cache-dir pyyaml
 WORKDIR /openapi
-RUN --mount=type=secret,id=gh_token \
-    if [ -s /run/secrets/gh_token ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
+    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     git clone --depth 1 --branch "${OPENAPI_REF}" "${OPENAPI_REPO}" . && \
     python3 skills.py --no-services --out /catalog && \
@@ -171,10 +171,10 @@ COPY go.mod go.sum ./
 # and resolves fine from a clean cache. That is exactly what wedged the release
 # on otel-collector v0.144.10. BUMP THE SUFFIX (-v4 -> -v5) to force a cold
 # module cache the next time a phantom pin poisons it.
-RUN --mount=type=secret,id=gh_token \
+RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
     --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
-    if [ -s /run/secrets/gh_token ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/gh_token)@github.com/".insteadOf "https://github.com/"; \
+    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
+      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
     fi && \
     go mod download
 COPY . .
