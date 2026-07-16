@@ -54,7 +54,12 @@ type runnerBuildResp struct {
 
 // allowedImageRegistries bounds where a privileged /v1/runner build may push.
 // Only the org registries we own — a build token cannot push elsewhere.
+// registry.hanzo.ai is the self-hosted fleet registry (the native CI/CD home);
+// ghcr stays during the migration as the public mirror.
 var allowedImageRegistries = []string{
+	"registry.hanzo.ai/hanzoai/",
+	"registry.hanzo.ai/luxfi/",
+	"registry.hanzo.ai/zooai/",
 	"ghcr.io/hanzoai/",
 	"ghcr.io/luxfi/",
 	"ghcr.io/zooai/",
