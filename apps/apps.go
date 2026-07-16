@@ -64,6 +64,7 @@ import (
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
+	"github.com/hanzoai/cloud/clients/chat"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/connectorruntime"
@@ -349,6 +350,14 @@ func Wire() []cloud.MountSpec {
 		// google token custody; captable/dataroom facades) and before the /v1/* AI
 		// catch-all so its routes resolve here.
 		{Name: "company", Mount: cloud.Typed(company.Mount), Shutdown: company.Shutdown},
+		// Chat orchestrator — POST /v1/chat: ONE LLM tool-calling round over the tool
+		// plane. It COMPOSES the ai completion path (in-process, so per-org billing
+		// runs) + the unified tool registry, and splits the model's tool calls into
+		// server-executed actions and client-applied ops. Mounts BEFORE the zen/ai
+		// catch-all so /v1/chat resolves here (Fiber first-match); the ai module's
+		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
+		// keeps /v1/chat/completions + /v1/completions.
+		{Name: "chat", Mount: cloud.Typed(chat.Mount)},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
