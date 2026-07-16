@@ -234,7 +234,10 @@ LABEL org.opencontainers.image.revision="${REVISION}" \
 # (upload-pack / receive-pack --stateless-rpc / fetch) so multi-GB packs stream
 # to and from disk with bounded memory instead of buffering whole packs in RAM.
 # The `git` apk package carries upload-pack/receive-pack/http-backend/git-remote-https.
-RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git \
+# libgcc: the hanzo-flags Rust staticlib (clients/featureflags FFI) references the
+# _Unwind_* unwinder symbols; musl needs libgcc_s at load time or the binary fails
+# relocation ("Error relocating /cloud: _Unwind_GetIP: symbol not found").
+RUN apk add --no-cache ca-certificates tzdata sqlcipher-libs git libgcc \
     && SC="$(find /usr/lib /lib -name 'libsqlcipher.so*' 2>/dev/null | sort | head -1)" \
     && test -n "$SC" \
     && ln -sf "$SC" /usr/lib/libsqlite3.so.0
