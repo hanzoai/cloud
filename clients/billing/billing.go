@@ -267,10 +267,39 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.Bytes(status, body)
 }
 
-// balance → commerce GET /v1/billing/balance: the org's prepaid credit balance
-// ({balance,holds,available} in USD cents), the SAME wallet the gateway debits.
+// balance answers the caller's prepaid credit balance ({balance,holds,available} in USD
+// cents) — the SAME wallet the ai prepaid gate reads, the edge meter debits, and an admin
+// grant credits.
+//
+// Co-resident it reads cloud's own finance ledger DIRECTLY (balance.go explains why this
+// is NOT a commerce proxy: proxying "/v1/billing/balance" re-enters THIS handler, because
+// commerceinproc dispatches the shared app by path and commerce's own billing routes are
+// never registered in this binary — the proxy called itself and answered "sign in to view
+// billing"). Off the co-resident path the commerce S2S proxy is unchanged.
+//
+// Holds are the ai gate's in-pod reservations, not a persisted ledger position (see
+// types.FinanceClient.Balance), so the settled balance IS the available balance here.
 func balance(s *cloud.Service[state], c *zip.Ctx) error {
-	return proxy(s, c, "/v1/billing/balance", "currency")
+	org, ok := principal.Org(c)
+	if !ok {
+		// A customer's OWN billing — never admin-gate it; an absent identity is a
+		// true "not signed in" (401), matching usage/gpuCharge.
+		return zip.ErrUnauthorized("sign in to view billing")
+	}
+	cents, coResident, err := availableCents(c.Context(), org, balanceSubject(c, org))
+	if err != nil {
+		// A balance that cannot be READ is unknown — surface it as an upstream failure.
+		// It must never render as a zero balance: unknown is not "broke".
+		s.Log.Warn("finance balance read failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	}
+	if !coResident {
+		return proxy(s, c, "/v1/billing/balance", "currency") // split deploy
+	}
+	c.SetHeader("Content-Type", "application/json")
+	// Per-tenant money must never be cached by the browser or an intermediary.
+	c.SetHeader("Cache-Control", "no-store")
+	return c.JSON(http.StatusOK, commerceBalance{Balance: cents, Holds: 0, Available: cents})
 }
 
 // gpuEligibility → commerce GET /v1/billing/gpu-eligibility: the read-only launch gate
