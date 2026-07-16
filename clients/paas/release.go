@@ -81,15 +81,24 @@ func releaseService(s *cloud.Service[state], ctx context.Context, service, image
 	if err != nil {
 		return "", "", false, err
 	}
-	ns, err = resolveNamespace(s, ctx, service)
+	ns, gvr, err := resolveTarget(s, ctx, service)
 	if err != nil {
 		return "", "", false, err
+	}
+	// A git-declared workload already has a declarer. Hanzo CD syncs the App CRs
+	// in these namespaces from universe `infra/k8s/operator/crs/` with selfHeal on,
+	// so a patch here is reverted on the next sync — the release would look applied
+	// and then silently roll back. Refuse, and name the one way to release it.
+	if gvr == appsGVR {
+		return ns, tag, false, fmt.Errorf(
+			"service %q is declared in git (App/%s, universe infra/k8s/operator/crs/%s.yaml) and reconciled by Hanzo CD with selfHeal — a patch here would be reverted on the next sync; release it by committing the tag to that file",
+			service, service, service)
 	}
 
 	// Idempotency: skip the patch (and the operator churn) when the CR already
 	// declares this exact image. A get error other than the terminal states falls
 	// through to the patch, which is itself the source of truth.
-	if cur, gErr := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, service, metav1.GetOptions{}); gErr == nil {
+	if cur, gErr := s.State.dyn.Resource(gvr).Namespace(ns).Get(ctx, service, metav1.GetOptions{}); gErr == nil {
 		curRepo, _, _ := unstructured.NestedString(cur.Object, "spec", "image", "repository")
 		curTag, _, _ := unstructured.NestedString(cur.Object, "spec", "image", "tag")
 		if curRepo == repository && curTag == tag {
@@ -102,13 +111,13 @@ func releaseService(s *cloud.Service[state], ctx context.Context, service, image
 		"tag":        tag,
 		"pullPolicy": "Always",
 	}}})
-	if _, e := s.State.dyn.Resource(servicesGVR).Namespace(ns).Patch(ctx, service, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); e != nil {
+	if _, e := s.State.dyn.Resource(gvr).Namespace(ns).Patch(ctx, service, k8stypes.MergePatchType, patch, metav1.PatchOptions{}); e != nil {
 		if apierrors.IsNotFound(e) {
 			return ns, tag, false, fmt.Errorf("service %q has no operator CR in namespace %s", service, ns)
 		}
 		return ns, tag, false, k8sErr(s, "patch", e)
 	}
-	s.Log.Info("released via operator Service CR patch (native, no ArgoCD)",
+	s.Log.Info("released via operator Service CR patch",
 		"service", service, "namespace", ns, "repository", repository, "tag", tag)
 	return ns, tag, true, nil
 }
