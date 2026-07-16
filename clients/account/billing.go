@@ -39,6 +39,7 @@ import (
 	"github.com/hanzoai/account"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -277,11 +278,12 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// Scope EVERY request to the caller's OWN subject — query AND write body — so
 	// commerce's per-tenant isolation can never be crossed from the browser. The
-	// subject comes from the ONE rule (ai/object.Payer), keyed on the IAM username
-	// (cr.username = X-User-Name) the gate also keys on — so a top-up credits the
-	// SAME account the gate debits. Keying on cr.name (X-User-Id, a UUID on the
-	// direct-bearer path) would fund an account the gate never reads: the split.
-	subject := account.Payer(account.Credential{Owner: cr.owner, Name: cr.username}).Subject()
+	// subject comes from the ONE rule (ai/object.Payer), fed the account the
+	// credential NAMES (the validated `billing_account` claim) — the same claim the
+	// ai gate reads, so a top-up credits the SAME account the gate debits. Feeding
+	// Payer a different credential here than the gate gets is the modern shape of
+	// the old split: money landing in an account the gate never reads.
+	subject := account.Payer(account.Credential{Owner: cr.owner, Name: cr.username, Account: principal.BillingAccount(c)}).Subject()
 	inQuery, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
 	q := scopedBillingSearch(inQuery, subject)
 
