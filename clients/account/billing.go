@@ -28,7 +28,8 @@ import (
 	"strings"
 	"unicode"
 
-	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/account"
+
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
@@ -162,7 +163,7 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	// (cr.username = X-User-Name) the gate also keys on — so a top-up credits the
 	// SAME account the gate debits. Keying on cr.name (X-User-Id, a UUID on the
 	// direct-bearer path) would fund an account the gate never reads: the split.
-	subject := aiobject.Payer(aiobject.Credential{Owner: cr.owner, Name: cr.username}).Subject()
+	subject := account.Payer(account.Credential{Owner: cr.owner, Name: cr.username}).Subject()
 	inQuery, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
 	q := scopedBillingSearch(inQuery, subject)
 

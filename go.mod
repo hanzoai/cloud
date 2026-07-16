@@ -17,7 +17,7 @@ require (
 	github.com/hanzoai/commerce v1.48.5
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
-	github.com/hanzoai/iam v1.31.25
+	github.com/hanzoai/iam v1.31.27-0.20260716191958-4400762928a2
 	github.com/hanzoai/iam2 v0.1.4
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
@@ -68,6 +68,7 @@ require (
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
+	github.com/beego/beego v1.12.14 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
 	github.com/docker/cli v29.5.3+incompatible // indirect
@@ -826,7 +827,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/ai v1.814.0
+	github.com/hanzoai/ai v1.816.0
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.4
@@ -873,3 +874,5 @@ replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13
 replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
+
+replace github.com/hanzoai/iam => github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d
