@@ -11,15 +11,18 @@
 //	             calls, mounted onto cloud's Fiber app: JWT-gated, org-scoped
 //	             secrets CRUD + a real health probe + the SPA admin config (mount.go).
 //
-// STORAGE — luxfi/kms's SecretStore is an embedded ZapDB (github.com/luxfi/zapdb)
-// KV opened UNDER CLOUD_DATA_DIR/kms (the RWO PVC where per-tenant SQLite lives),
-// so there is no PostgreSQL and no external DB. cloud runs replicas=1/Recreate, so
-// the single-writer KV is safe. Secrets are sealed with AES-256-GCM envelope
-// encryption (store.Seal: a fresh per-secret DEK sealed under the 32-byte master
-// key) BEFORE they hit the store — plaintext never touches disk. The KV itself is
-// ALSO opened with ZapDB block-level encryption under the same key (defense in
-// depth). See New for the fail-secure open strategy across the health-only↔keyed
-// transition.
+// STORAGE — sealed secrets persist to PER-ORG SQLite (store.go): each org's
+// secrets live in ITS OWN encrypted file {CLOUD_DATA_DIR}/orgs/{org}/kms.db via
+// the canonical cloud.OrgDB → cek seam, mirroring clients/finance. This REPLACES
+// the single embedded ZapDB KV, whose exclusive OS lock pinned cloud to
+// replicas=1: a per-org SQLite file has no single-opener lock, so different pods
+// can serve different tenants and cloud scales horizontally (consistent-hash
+// org→pod; see the package report). Two layers of at-rest protection, both rooted
+// in the SAME env-only master key: (1) each secret is sealed with an AES-256-GCM
+// envelope (store.Seal: a fresh per-secret DEK wrapped by the master key) BEFORE
+// it reaches SQLite — plaintext never touches disk; (2) cek opens each file
+// SQLCipher-encrypted under a per-db DEK wrapped by the master key (defense in
+// depth). No PostgreSQL, no external DB, no ZapDB.
 //
 // BOOTSTRAP — cloud hosting the secret store is a chicken-and-egg: cloud cannot
 // fetch its OWN master key from the KMS it hosts. The 32-byte master key is
@@ -55,18 +58,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/hanzoai/cloud/types"
 	kmsstore "github.com/luxfi/kms/pkg/store"
 	luxlog "github.com/luxfi/log"
-	// zapdb is the canonical Lux embedded KV engine (github.com/luxfi/zapdb). Its
-	// Go package is still named `badger` (it is a hardened Badger fork), so we
-	// alias it to zapdb to keep call sites self-documenting: this is ZapDB, NOT
-	// raw dgraph-io/badger. There is no dgraph-io/badger anywhere in cloud.
-	zapdb "github.com/luxfi/zapdb"
 )
 
 // masterKeyLen is the AES-256 KEK size store.Seal/Open require (32 bytes).
@@ -109,11 +106,10 @@ const (
 //
 // The zero value is not usable; construct with New.
 type Client struct {
-	db        *zapdb.DB // held so Close can release the KV (SecretStore does not expose it)
-	store     *kmsstore.SecretStore
-	masterKey []byte // 32-byte KEK; nil ⇒ health-only fail-closed mode
-	mpcAddr   string // MPC daemon address; "" ⇒ Sign fails closed
-	vaultID   string // MPC vault id; "" ⇒ Sign fails closed
+	store     *secretStore // per-org SQLite persistence (store.go); no OS lock
+	masterKey []byte       // 32-byte KEK; nil ⇒ health-only fail-closed mode
+	mpcAddr   string       // MPC daemon address; "" ⇒ Sign fails closed
+	vaultID   string       // MPC vault id; "" ⇒ Sign fails closed
 	log       luxlog.Logger
 }
 
@@ -128,17 +124,12 @@ type Config struct {
 	MPCAddr      string // MPC daemon host:port(,...) — CLOUD_KMS_MPC_ADDR
 	MPCVaultID   string // MPC vault id — CLOUD_KMS_MPC_VAULT_ID
 
-	// ReadOnly opens the store in reader mode: READ-ONLY, with the ZapDB lock
-	// guard BYPASSED so it coexists with the writer's replication stream without
-	// ever taking the exclusive write lock. Set by the reader HA role. The store
-	// must already be hydrated on disk (restored from S3/vfs via zapdb-replicate);
-	// a reader with no restored store fails closed rather than serving nothing.
-	//
-	// FRESHNESS CAVEAT: ZapDB (a Badger fork) is single-process for live writes —
-	// a read-only handle sees the snapshot present at open time, not increments a
-	// separate restore process applies afterward. Readers therefore periodically
-	// re-hydrate + reopen (or proxy writes-sensitive reads to the writer). This is
-	// acceptable for slowly-changing secrets; see the reader deployment notes.
+	// ReadOnly opens the store in reader mode: mutations fail closed so a replica
+	// never forks the authoritative writer's state, and a reader with no restored
+	// store under {DataDir}/orgs fails closed at New rather than serving nothing.
+	// Set by the reader HA role. Unlike the former ZapDB store, per-org SQLite is
+	// RO-shareable over WAL, so a reader CAN open the files locally — the reader
+	// no longer needs to reverse-proxy KMS to the writer (see the package report).
 	ReadOnly bool
 }
 
@@ -158,71 +149,34 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("kms.New: empty DataDir")
 	}
-	dbDir := filepath.Join(dir, "kms")
 
 	masterKey, keyErr := decodeMasterKey(cfg.MasterKeyB64)
 
-	// Store-open strategy, fail-SECURE across the health-only↔keyed transition:
+	// Fail-SECURE across the health-only↔keyed transition. There is no single store
+	// to open here: per-org files open LAZILY on first access (store.go), each via
+	// cloud.OrgDB → cek. So the health-only↔keyed distinction is purely the presence
+	// of a valid master key (Ready()): with a key, secret ops seal/open and cek
+	// encrypts each file at rest; without one, every secret op fails closed with
+	// ErrMasterKeyMissing and NO org file is created (nothing to persist, nothing to
+	// brick). The former ZapDB KEYREGISTRY brick foot-gun is gone: cek rotates by
+	// re-wrapping a per-file sidecar (no page is rewritten), and a wrong/absent key
+	// makes cek.Open FAIL at first access — never a silent plaintext downgrade.
 	//
-	//   keyed            → open the on-disk store ENCRYPTED at rest with the master
-	//                      key (WithEncryptionKey), on top of the per-secret Seal
-	//                      envelope. zapdb rejects a WRONG key at open (rotation
-	//                      without re-encrypt fails closed, not a silent downgrade).
-	//   no key, no store → open an EPHEMERAL IN-MEMORY store, never touching disk.
-	//   no key, store    → FAIL: an encrypted store already exists but its key is
-	//   present            absent (the operator dropped CLOUD_KMS_MASTER_KEY_REF).
-	//                      Refuse loudly rather than silently ignore encrypted data.
-	//
-	// Why in-memory for the fresh health-only case (no store yet): a disk-backed
-	// zapdb opened WITHOUT a key writes a PLAINTEXT KEYREGISTRY. If the operator
-	// then injects the real key on the next boot, zapdb's registry sanity check
-	// rejects the now-mismatched registry and zapdb.Open fails PERMANENTLY —
-	// bricking KMS until the data dir is wiped. Health-only mode can serve no
-	// secret op anyway (every Get/Put fails closed without the key), so there is
-	// nothing to persist; an ephemeral in-memory KV lets health/metadata work while
-	// leaving the on-disk dir untouched, so the first KEYED boot opens a clean
-	// encrypted store. No unencrypted secret store is ever written to disk.
-	var opts zapdb.Options
-	switch {
-	case keyErr == nil && cfg.ReadOnly:
-		// Reader HA role: open the hydrated on-disk store READ-ONLY, bypassing the
-		// lock guard so it never contends with the writer (which owns the RWO PVC)
-		// or a co-located restore process. No exclusive write lock is ever taken —
-		// this is what lets N readers run without violating the single-writer
-		// invariant. The store must already exist (restored from the replication
-		// stream); refuse to serve if it does not, rather than open an empty store.
-		if !storeExistsOnDisk(dbDir) {
-			return nil, fmt.Errorf("kms.New: reader mode but no restored store at %s — hydrate via zapdb-replicate restore before serving KMS reads", dbDir)
+	// Reader HA role fails CLOSED at New (not at first read) so a mis-provisioned
+	// reader never boots "healthy" over nothing:
+	//   no master key → cannot decrypt any file at rest → refuse.
+	//   no restored store under {DataDir}/orgs → nothing to serve → refuse.
+	if cfg.ReadOnly {
+		if keyErr != nil {
+			return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)
 		}
-		opts = zapdb.DefaultOptions(dbDir).WithLogger(nil).
-			WithEncryptionKey(masterKey).WithIndexCacheSize(16 << 20).
-			WithReadOnly(true)
-		opts.BypassLockGuard = true
-	case keyErr == nil:
-		if err := os.MkdirAll(dbDir, 0o700); err != nil {
-			return nil, fmt.Errorf("kms.New: create store dir: %w", err)
+		if !hasRestoredStore(dir) {
+			return nil, fmt.Errorf("kms.New: reader mode but no restored store under %s — hydrate before serving KMS reads", filepath.Join(dir, "orgs"))
 		}
-		opts = zapdb.DefaultOptions(dbDir).WithLogger(nil).
-			WithEncryptionKey(masterKey).WithIndexCacheSize(16 << 20)
-	case cfg.ReadOnly:
-		// Reader with no master key: cannot decrypt the store at rest. Fail closed
-		// (health-only) rather than pretend to serve secrets.
-		return nil, fmt.Errorf("kms.New: reader mode requires a master key to open the encrypted store: %w", keyErr)
-	case storeExistsOnDisk(dbDir):
-		// An encrypted store is present but no key was supplied: do not silently
-		// open a fresh in-memory store and pretend the on-disk secrets are gone.
-		return nil, fmt.Errorf("kms.New: encrypted store present at %s but no master key configured: %w", dbDir, keyErr)
-	default:
-		opts = zapdb.DefaultOptions("").WithLogger(nil).WithInMemory(true)
-	}
-	db, err := zapdb.Open(opts)
-	if err != nil {
-		return nil, fmt.Errorf("kms.New: open store %s: %w", dbDir, err)
 	}
 
 	c := &Client{
-		db:        db,
-		store:     kmsstore.NewSecretStore(db),
+		store:     newSecretStore(dir, cfg.ReadOnly),
 		masterKey: masterKey, // nil when keyErr != nil
 		mpcAddr:   strings.TrimSpace(cfg.MPCAddr),
 		vaultID:   strings.TrimSpace(cfg.MPCVaultID),
@@ -232,17 +186,6 @@ func New(cfg Config, log luxlog.Logger) (*Client, error) {
 		c.log.Warn("kms master key not configured; secret ops fail closed (health-only mode)", "err", keyErr)
 	}
 	return c, nil
-}
-
-// storeExistsOnDisk reports whether a zapdb store was already initialized under
-// dir. zapdb writes a MANIFEST at the store root on first open, so its presence
-// marks an existing (encrypted) store — used to refuse a keyless boot over real
-// data rather than silently shadow it with an in-memory KV.
-func storeExistsOnDisk(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, "MANIFEST")); err == nil {
-		return true
-	}
-	return false
 }
 
 // decodeMasterKey decodes and validates the base64 master key. A key that is
@@ -336,7 +279,7 @@ func (c *Client) Get(path, name, env string) ([]byte, error) {
 	if err := validCoords(path, name, env); err != nil {
 		return nil, err
 	}
-	sec, err := c.store.Get(path, name, env)
+	sec, err := c.store.get(path, name, env)
 	if err != nil {
 		if errors.Is(err, kmsstore.ErrSecretNotFound) {
 			return nil, kmsstore.ErrSecretNotFound
@@ -364,7 +307,7 @@ func (c *Client) Put(path, name, env string, value []byte) error {
 	if err != nil {
 		return fmt.Errorf("kms: seal secret: %w", err)
 	}
-	if err := c.store.Put(sec); err != nil {
+	if err := c.store.put(sec); err != nil {
 		return fmt.Errorf("kms: write secret: %w", err)
 	}
 	return nil
@@ -376,7 +319,7 @@ func (c *Client) List(path, env string) ([]SecretMeta, error) {
 	if !ValidSegment(env, maxEnvLen) {
 		return nil, ErrInvalidKey
 	}
-	secs, err := c.store.List(path, env)
+	secs, err := c.store.list(path, env)
 	if err != nil {
 		return nil, fmt.Errorf("kms: list secrets: %w", err)
 	}
@@ -392,7 +335,7 @@ func (c *Client) Delete(path, name, env string) error {
 	if err := validCoords(path, name, env); err != nil {
 		return err
 	}
-	if err := c.store.Delete(path, name, env); err != nil {
+	if err := c.store.del(path, name, env); err != nil {
 		if errors.Is(err, kmsstore.ErrSecretNotFound) {
 			return kmsstore.ErrSecretNotFound
 		}
@@ -468,10 +411,10 @@ const (
 
 // Close releases the embedded store. Safe to call once at shutdown.
 func (c *Client) Close() error {
-	if c == nil || c.db == nil {
+	if c == nil || c.store == nil {
 		return nil
 	}
-	return c.db.Close()
+	return c.store.close()
 }
 
 // ── ref parsing ──────────────────────────────────────────────────────────────

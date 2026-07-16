@@ -165,9 +165,9 @@ func newEmbeddedClient(cfg *cloud.Config, log luxlog.Logger) (cloud.KMSClient, e
 		MasterKeyB64: cfg.KMSMasterKeyRef,
 		MPCAddr:      cfg.KMSMPCAddr,
 		MPCVaultID:   cfg.KMSMPCVaultID,
-		// Reader HA role opens the KMS store READ-ONLY (BypassLockGuard) off a
-		// restored replica — never the exclusive write lock. Writer (default) opens
-		// writable exactly as before.
+		// Reader HA role opens the per-org KMS files READ-ONLY (mutations fail
+		// closed); per-org SQLite is WAL-shareable, so no exclusive lock is taken.
+		// Writer (default) opens writable exactly as before.
 		ReadOnly: cfg.Role.IsReader(),
 	}, log)
 	if err != nil {
