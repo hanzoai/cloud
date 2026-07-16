@@ -23,6 +23,12 @@
 //	GET    /v1/projects/:slug/deployments/:id one deployment
 //	POST   /v1/projects/:slug/deployments/:id/complete  CI completion hook
 //
+// Sites surface (the surface-agnostic deploy_site capability, shared with agents):
+//
+//	POST   /v1/sites                         generate a responsive site from a brief + deploy
+//	POST   /v1/sites/deploy                  deploy a raw file manifest (the deploy_site tool)
+//	GET    /v1/sites                         list the org's live sites
+//
 // Deploy pipeline: a deploy uploads the built static site to OUR S3
 // (CLOUD_PROJECTS_BUCKET on s3.hanzo.ai) under "<org>/<slug>/", marks the
 // bucket public-read, and records a live URL. The hanzoai/static container
@@ -77,6 +83,19 @@ type state struct {
 	// brand org (hanzo). A bound domain only SERVES once its owner points DNS at
 	// this edge, so binding without DNS control is inert — the real gate is DNS.
 	operatorOrgs map[string]bool
+	// ai generates static sites from a natural-language brief for POST /v1/sites.
+	// It is the SAME shared inference client the agents surface uses (deps.AI) and
+	// may be nil when no gateway is configured — buildSite then answers 503 honestly.
+	ai cloud.AIClient
+	// bill is the ONE per-org gate+meter for product:hosting (reuses deps.Metering,
+	// the single commerce client). Every deploy entrypoint gates through it before
+	// any work and debits once on success; nil/!Enabled() makes both no-ops so an
+	// unconfigured deployment still deploys, just unbilled.
+	bill *cloud.ResourceMeter
+	// apex is the published-site zone (CLOUD_SITES_APEX, default hanzo.app). The
+	// canonical live URL of every deployed site is https://<slug>.<apex>, the pretty
+	// host the sites edge (clients/sites) serves — never a raw S3 URL.
+	apex string
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -173,6 +192,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		blob:         openBlobStore(),
 		cf:           sites.NewPurger(b.Log),
 		operatorOrgs: operatorOrgsFromEnv(deps.Brand),
+		ai:           deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
+		bill:         cloud.NewResourceMeter(deps, hostingProvider),
+		apex:         env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
 	}}
 	mounted = s
 
@@ -191,7 +213,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	routes(app, s)
 
-	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(), "brand", deps.Brand)
+	b.Log.Info("projects mounted", "bucket", s.State.blob.bucket, "s3", s.State.blob.configured(),
+		"ai", s.State.ai != nil, "apex", s.State.apex, "billing", s.State.bill.Enabled(), "brand", deps.Brand)
 	return nil
 }
 
@@ -210,6 +233,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
 	app.Get("/v1/projects/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/projects/:slug/domains", cloud.Handle(s, setDomains))
+
+	// /v1/sites — the surface-agnostic deploy_site capability, shared with agents.
+	// /v1/sites builds a responsive static site from a brief and deploys it;
+	// /v1/sites/deploy is the raw file-manifest deploy; both funnel through the SAME
+	// publishSite core as the tar path, so there is one deploy pipeline, one host
+	// binding, one metering. Org scope is the IAM-minted X-Org-Id, exactly as
+	// /v1/projects.
+	app.Post("/v1/sites", cloud.Handle(s, buildSite))
+	app.Post("/v1/sites/deploy", cloud.Handle(s, deploySiteFiles))
+	app.Get("/v1/sites", cloud.Handle(s, listSites))
 
 	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
 	// S3-backed part of the platform (container apps live at /v1/platform/projects,
