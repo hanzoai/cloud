@@ -11,6 +11,15 @@
 # operator reconciles the Service CR; release.yml notifies universe with a
 # proven tag.
 test:
+  - name: native-flags
+    # The flags evaluator staticlib clients/featureflags links under CGO=1.
+    run: |
+      set -e
+      if ! command -v cargo >/dev/null 2>&1; then
+        curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+      fi
+      . "$HOME/.cargo/env" 2>/dev/null || true
+      cargo build --release --locked --manifest-path native/flags/Cargo.toml
   - name: go-vet
     run: |
       set -e
@@ -34,6 +43,7 @@ test:
         ./clients/catalogsync/ \
         ./clients/bots/ \
         ./clients/admin/finance/ \
+        ./clients/featureflags/ \
         ./clients/ml/
 
 kms:
