@@ -86,7 +86,7 @@ var frozen = []struct {
 	{"exec", false, false},             // was order 140
 	{"websearch", false, false},        // was order 141
 	{"world", false, true},             // was order 142
-	{"bot", false, false},              // was order 143
+	{"runtime", false, false},          // was order 143; was "bot" until the transport was named for what it is
 	{"authors", false, true},           // was order 143
 	{"bots", false, false},             // was order 143
 	{"audit", false, false},            // was order 144

@@ -63,7 +63,6 @@ const (
 	maxRepo         = 512
 	maxProvider     = 64
 	maxAccount      = 256
-	maxSurface      = 64
 )
 
 func validKind(k string) bool {
@@ -94,7 +93,6 @@ type sessionView struct {
 	Target   string `json:"target,omitempty"`
 	Provider string `json:"provider,omitempty"`
 	Account  string `json:"account,omitempty"`
-	Surface  string `json:"surface,omitempty"`
 
 	Events    int    `json:"events"`
 	Children  int    `json:"children"`
@@ -161,7 +159,7 @@ func toSessionView(x Session, events, children int) sessionView {
 		ParentSessionID: x.ParentID, RootSessionID: x.RootID, Title: x.Title,
 		TaskWorkflowID: x.TaskWorkflowID, TaskRunID: x.TaskRunID,
 		Host: x.Host, Cwd: x.Cwd, Repo: x.Repo, Target: x.Target,
-		Provider: x.Provider, Account: x.Account, Surface: x.Surface,
+		Provider: x.Provider, Account: x.Account,
 		Events: events, Children: children,
 		StartedAt: rfc3339(x.StartedAt), EndedAt: rfc3339(x.EndedAt),
 		CreatedAt: rfc3339(x.CreatedAt), UpdatedAt: rfc3339(x.UpdatedAt),
@@ -217,8 +215,6 @@ type registerReq struct {
 	// Account tag — the linked AI account this session ran under (login manager).
 	Provider string `json:"provider"`
 	Account  string `json:"account"`
-	// Surface — the modality this session runs on (desktop|terminal|a channel).
-	Surface string `json:"surface"`
 }
 
 func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
@@ -269,10 +265,6 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(account) > maxAccount {
 		return zip.ErrBadRequest("account too long")
 	}
-	surface := strings.TrimSpace(body.Surface)
-	if len(surface) > maxSurface {
-		return zip.ErrBadRequest("surface too long")
-	}
 
 	id, err := genID("sess")
 	if err != nil {
@@ -285,7 +277,7 @@ func registerSession(s *cloud.Service[state], c *zip.Ctx) error {
 		TaskWorkflowID: strings.TrimSpace(body.TaskWorkflowID),
 		TaskRunID:      strings.TrimSpace(body.TaskRunID),
 		Host:           host, Cwd: cwd, Repo: repo, Target: target,
-		Provider: provider, Account: account, Surface: surface,
+		Provider: provider, Account: account,
 		StartedAt: now, CreatedAt: now, UpdatedAt: now,
 	}
 	if isTerminalStatus(status) {
