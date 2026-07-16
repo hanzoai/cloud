@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -356,6 +357,88 @@ func TestIdentityFromCtx_RolloutFallbackNoHomeHeader(t *testing.T) {
 	})
 	if billOrg != "acme" || dataOrg != "acme" {
 		t.Errorf("rollout fallback: bill=%q data=%q, want both %q", billOrg, dataOrg, "acme")
+	}
+}
+
+// TestIdentityFromCtx_AgreesWithTheDebit is the split-brain proof for the EDGE.
+//
+// This gate authorizes a request; ai's meter debits the usage it authorized. If the
+// two key different accounts, the gate green-lights against a balance that is never
+// drained and denies against one that is never funded. It used to key `user := home`
+// — the org pool, always — so a person in the shared signup org was gated on the
+// pool while their usage came out of their own account: fund the pool, still 402;
+// fund the person, and an empty pool blocks them anyway.
+//
+// They now agree because both call the ONE rule on the same credential. Assert
+// against the rule itself, so this test cannot drift the way the premise did.
+func TestIdentityFromCtx_AgreesWithTheDebit(t *testing.T) {
+	cases := []struct {
+		name             string
+		home, sub, claim string
+		want             string
+	}{
+		{
+			// The case the old premise got wrong: the shared signup org's members are
+			// strangers, not a team, so each holds their own account.
+			name: "signup-org person is gated on their OWN account, not the pool",
+			home: "hanzo", sub: "alice",
+			want: "hanzo/alice",
+		},
+		{
+			name: "a real org pools — every member gates on the one balance",
+			home: "acme", sub: "bob",
+			want: "acme",
+		},
+		{
+			name: "the claim names a person in a real org — the signature wins",
+			home: "acme", sub: "bob", claim: "person:acme/bob",
+			want: "acme/bob",
+		},
+		{
+			name: "the claim names a project — a project is a first-class payer",
+			home: "acme", sub: "bob", claim: "project:acme/website",
+			want: "acme/website",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := map[string]string{"X-User-Id": tc.sub, "X-Org-Id": tc.home, "X-User-Owner": tc.home}
+			if tc.claim != "" {
+				h["X-Billing-Account-Id"] = tc.claim
+			}
+			_, billUser, _ := billingProbe(t, h)
+			if billUser != tc.want {
+				t.Errorf("gate keys %q, want %q", billUser, tc.want)
+			}
+			// The account ai's meter debits, from the same credential. One function,
+			// so this can only fail if the edge stopped calling it.
+			debit := account.Payer(account.Credential{Owner: tc.home, Name: tc.sub, Account: tc.claim}).Subject()
+			if billUser != debit {
+				t.Errorf("gate keys %q, the debit keys %q — the gate authorizes a balance nobody drains", billUser, debit)
+			}
+		})
+	}
+}
+
+// TestIdentityFromCtx_MasqueradeKeepsTheAdminsLedger: resolving the account within
+// the home org must not weaken the masquerade split. A SuperAdmin acting in another
+// org still bills their OWN ledger — the account is resolved WITHIN the home org, so
+// Account.Org is the home org by construction and a victim org can never be charged.
+func TestIdentityFromCtx_MasqueradeKeepsTheAdminsLedger(t *testing.T) {
+	billOrg, billUser, dataOrg := billingProbe(t, map[string]string{
+		"X-User-Id":            "u_admin",
+		"X-Org-Id":             "victim",     // EFFECTIVE — the org being acted on
+		"X-User-Owner":         "admin",      // HOME — who pays
+		"X-Billing-Account-Id": "org:victim", // a claim naming the VICTIM's ledger
+	})
+	if billOrg == "victim" || billUser == "victim" {
+		t.Fatalf("masquerade billed the acted-on org (org=%q user=%q) — cross-tenant debit", billOrg, billUser)
+	}
+	if billOrg != "admin" || billUser != "admin" {
+		t.Errorf("bill=%q/%q, want admin/admin (the HOME ledger pays; a foreign claim is refused)", billOrg, billUser)
+	}
+	if dataOrg != "victim" {
+		t.Errorf("data scope = %q, want victim (DATA stays on the EFFECTIVE org)", dataOrg)
 	}
 }
 
