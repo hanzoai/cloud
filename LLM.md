@@ -53,6 +53,36 @@ package under `clients/<name>` that obeys these seams — nothing more.
   calls `InvokeTool` with `principal.Org(c)` — same 403 gate, per-org concurrency
   bound, one metered unit, one audit record as the HTTP door — so it can never
   exceed the caller's authority. Use this seam; never re-implement tool dispatch.
+- **"Bot" is three values; each has one home and one namespace.** Do not merge
+  them and do not let them share a route prefix — they did once, and the router
+  resolves byte-identical patterns by first-registration with no panic (it MERGES
+  the handlers, so counting `GetRoutes()` entries cannot see it), and visor's
+  machine list silently answered the console's run list.
+  (1) A bot RUN — a task the runtime executes on a surface — is `clients/bots` at
+  `/v1/bots`. (2) A bot MACHINE — visor-provisioned compute of kind=bot plus its
+  agent binding — is `clients/visor` at `/v1/compute/bots`; what it rents you is
+  compute, so it nests in visor's domain. (3) The runtime SERVICE — the TS bot
+  (channels/skills), never reimplemented in Go — is reached through
+  `clients/runtime`, which is a TRANSPORT, not a domain: base address, identity,
+  framing, cleartext policy, and the `/v1/bot/*` ops face. It is named for what it
+  does, not for the host it dials, and it must never import `bots`/`coding` — each
+  of those owns its own wire stub (`bots/wire.go`, `coding/task.go`) and speaks
+  through the seam. That isolation is what makes the HIP-0106/HIP-0120 ZAP swap a
+  seam swap instead of a rewrite.
+- **Cloud owns policy; the runtime owns the run. Do not copy state you do not
+  own.** `clients/bots` holds NO store. The sandbox lives in the bot runtime,
+  keyed in the runtime's own tenant store, which is the only thing that knows
+  whether a run is alive — so list and stop PROXY it, gated by cloud's
+  principal/org. A cloud-side registry was tried and was wrong: it minted an id
+  the runtime had never heard of, so it listed runs that did not exist and
+  "stopped" runs that were never started. Isolation holds because the org is the
+  validated one cloud sends, never a client's, and the runtime keys every run
+  under `tenants/{org}/`.
+- **Absence is only meaningful from a callee that could have said otherwise.**
+  `runtime.ErrNotFound` (the operation ANSWERED "no such target") is separate from
+  `runtime.ErrNotServed` (the operation does not exist). Conflating them makes a
+  stop that cannot fail: a runtime without the route reports absent for EVERY run,
+  so "already gone" becomes permanently true. A bare 404 is 502, never success.
 - **The Business AI Guide (`clients/guide`, `/v1/guide/*`)** is the on-site launch
   checklist: a pure engine (`curriculum.go` — parse/validate/next-step/dependency
   gating over plain data) + per-org progress (`cloud.OrgStore[*Store]`) + an
