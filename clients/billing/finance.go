@@ -46,7 +46,6 @@ import (
 	"strings"
 	"time"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -203,7 +202,7 @@ func financeBalance(s *cloud.Service[state], c *zip.Ctx) error {
 	// The ONE balance read (balance.go) — the same wallet /v1/billing/balance answers, so
 	// the two surfaces can never disagree. Co-resident this is the finance ledger; only a
 	// split deploy falls through to the commerce S2S read below.
-	if cents, coResident, err := availableCents(c.Context(), org, balanceSubject(c, org)); err != nil {
+	if cents, coResident, err := availableCents(c.Context(), org, subjectFor(c, org)); err != nil {
 		s.Log.Warn("finance balance read failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
 	} else if coResident {
@@ -355,7 +354,7 @@ func financePaymentMethods(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
 	// Portal read filters on customerId; the subject is pinned to the caller's own org.
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(financeSubjectKey(c, org), nil))
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/portal/payment-methods", org, financeSubject(subjectFor(c, org), nil))
 	if err != nil {
 		s.Log.Warn("commerce payment-methods read failed", "org", org, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -437,20 +436,6 @@ func financeCaller(s *cloud.Service[state], c *zip.Ctx) (string, bool) {
 	return principal.Org(c)
 }
 
-// financeSubjectKey resolves the caller's billing subject through the ONE rule
-// (ai/object.Payer) — the SAME account the ai gate debits and the top-up credits,
-// so the console view can never show a funded org while the gate refuses the
-// member (the split the deleted allowlists caused). org is the validated
-// namespace; the name half prefers X-User-Name (the IAM username the identity
-// boundary mints from the verified `name` claim — the value the gate keys on),
-// falling back to the "<owner>/<name>" form of X-User-Id via PayerOf.
-func financeSubjectKey(c *zip.Ctx, org string) string {
-	if name := strings.TrimSpace(c.Header("X-User-Name")); name != "" {
-		return aiobject.Payer(aiobject.Credential{Owner: org, Name: name}).Subject()
-	}
-	return aiobject.PayerOf(org, strings.TrimSpace(c.User())).Subject()
-}
-
 // financeSubject builds the commerce query with every billing-subject key PINNED to
 // subject (the client can never widen scope), plus any extra passthrough params.
 func financeSubject(subject string, extra url.Values) url.Values {
@@ -469,7 +454,7 @@ func financeSubject(subject string, extra url.Values) url.Values {
 // financeGet does one org-scoped commerce GET and decodes the 2xx body into out. A
 // non-2xx or unreachable upstream is surfaced honestly (never masked as empty data).
 func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url.Values, out any) error {
-	body, status, err := s.State.commerce.get(c.Context(), path, org, financeSubject(financeSubjectKey(c, org), extra))
+	body, status, err := s.State.commerce.get(c.Context(), path, org, financeSubject(subjectFor(c, org), extra))
 	if err != nil {
 		s.Log.Warn("commerce finance read failed", "org", org, "path", path, "err", err)
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
@@ -487,7 +472,7 @@ func financeGet(s *cloud.Service[state], c *zip.Ctx, path, org string, extra url
 // credits/usage/ledger projections share). Tolerates the wrapped {transactions:[…]}
 // shape and a bare array.
 func financeTxns(s *cloud.Service[state], c *zip.Ctx, org string) ([]commerceTxn, error) {
-	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(financeSubjectKey(c, org), url.Values{"limit": {"2000"}}))
+	body, status, err := s.State.commerce.get(c.Context(), "/v1/billing/transactions", org, financeSubject(subjectFor(c, org), url.Values{"limit": {"2000"}}))
 	if err != nil {
 		s.Log.Warn("commerce transactions read failed", "org", org, "err", err)
 		return nil, zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
