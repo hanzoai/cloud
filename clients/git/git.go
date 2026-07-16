@@ -98,6 +98,7 @@ type repoView struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description,omitempty"`
 	DefaultBranch string   `json:"defaultBranch"`
+	Public        bool     `json:"public"`
 	Branches      []string `json:"branches,omitempty"`
 	Head          string   `json:"head,omitempty"`
 	CloneURL      string   `json:"cloneUrl"`
@@ -136,7 +137,7 @@ func sshURL(s *cloud.Service[state], org, name string) string {
 func toView(s *cloud.Service[state], r Repo, branches []string, head string) repoView {
 	return repoView{
 		ID: r.ID, Org: r.Org, Project: r.Project, Name: r.Name, Description: r.Description,
-		DefaultBranch: r.DefaultBranch, Branches: branches, Head: head,
+		DefaultBranch: r.DefaultBranch, Public: r.Public, Branches: branches, Head: head,
 		CloneURL:  cloneURL(s, r.Org, r.Name),
 		SSHURL:    sshURL(s, r.Org, r.Name),
 		SizeBytes: r.SizeBytes, CreatedAt: rfc3339(r.CreatedAt), UpdatedAt: rfc3339(r.UpdatedAt),
@@ -209,6 +210,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/git/repos", cloud.Handle(s, list))
 	app.Get("/v1/git/usage", cloud.Handle(s, usage))
 	app.Get("/v1/git/repos/:name", cloud.Handle(s, get))
+	app.Patch("/v1/git/repos/:name", cloud.Handle(s, patchRepo))
 	app.Delete("/v1/git/repos/:name", cloud.Handle(s, del))
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
@@ -327,6 +329,7 @@ type createReq struct {
 	Name        string `json:"name"`
 	Project     string `json:"project"`
 	Description string `json:"description"`
+	Public      bool   `json:"public"`
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
@@ -343,6 +346,37 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		return createErr(err)
 	}
 	return c.JSON(http.StatusCreated, view)
+}
+
+// patchReq carries the mutable repo settings. Pointer fields distinguish
+// "absent" from "zero" so a PATCH changes exactly what the caller sent.
+type patchReq struct {
+	Public *bool `json:"public"`
+}
+
+// patchRepo serves PATCH /v1/git/repos/:name — today that is the visibility
+// bit. Org-authed like every control-plane op; a public repo grants anonymous
+// READ only (smart_http.go), never write.
+func patchRepo(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	var body patchReq
+	if err := c.Bind(&body); err != nil {
+		return err
+	}
+	if body.Public == nil {
+		return zip.ErrBadRequest("nothing to update (supported: public)")
+	}
+	view, err := coreSetVisibility(s, c.Context(), org, projectScope(c), c.Param("name"), *body.Public)
+	if errors.Is(err, errNotFound) {
+		return zip.ErrNotFound("repo not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
+	}
+	return c.JSON(http.StatusOK, view)
 }
 
 // createErr maps a coreCreate error to its HTTP status. The ONE mapping the REST
