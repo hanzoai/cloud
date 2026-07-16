@@ -53,6 +53,26 @@ package under `clients/<name>` that obeys these seams — nothing more.
   calls `InvokeTool` with `principal.Org(c)` — same 403 gate, per-org concurrency
   bound, one metered unit, one audit record as the HTTP door — so it can never
   exceed the caller's authority. Use this seam; never re-implement tool dispatch.
+- **"Bot" is three values; each has one home and one namespace.** Do not merge
+  them and do not let them share a route prefix — they did once, and the router
+  resolves byte-identical patterns by first-registration with no panic, so
+  visor's machine list silently answered the console's run list.
+  (1) A bot RUN — a task the runtime executes on a surface — is `clients/bots` at
+  `/v1/bots`. (2) A bot MACHINE — visor-provisioned compute of kind=bot plus its
+  agent binding — is `clients/visor` at `/v1/compute/bots`; what it rents you is
+  compute, so it nests in visor's domain. (3) The runtime SERVICE — the TS bot
+  (channels/skills), never reimplemented in Go — is `clients/bot`: the `/v1/bot/*`
+  passthrough for its own ops paths, plus the clients cloud calls it through
+  (`RunCodingTask`, `StopRun`).
+- **A bot run is a session; the runtime is an executor, never an authority.**
+  `clients/bots` owns auth, tenancy, billing and the contract; it holds NO store.
+  A run is recorded on the agents session plane (`agents.OpenSession`, agent
+  label `bot`) so its id IS the run id and one registry serves every kind of
+  agent work. Two seams (`Runs`, `Runtime`) are injected in `adapters.go` — the
+  only file there that imports `agents`/`bot` — so the handlers unit-test against
+  fakes. List and stop authorize against the org-scoped RECORD first and drive the
+  runtime only after; a run of another tenant is not found, so a compromised
+  runtime cannot widen a caller's reach.
 - **The Business AI Guide (`clients/guide`, `/v1/guide/*`)** is the on-site launch
   checklist: a pure engine (`curriculum.go` — parse/validate/next-step/dependency
   gating over plain data) + per-org progress (`cloud.OrgStore[*Store]`) + an
