@@ -725,6 +725,12 @@ const platformBuildOrg = "platform"
 // explicit Dockerfile uses dockerfile.v0; otherwise hanzoai/pack detects and
 // builds with zero config. The output image is FORCED here as its own argv
 // element, so a caller can never redirect --output to another repo.
+//
+// The GIT_AUTH_TOKEN build secret (sourced from the Job env, which buildJobSpec
+// wires from the gitTokenSecret Secret when present) is what lets the git
+// context fetch PRIVATE repos — BuildKit's gitsource presents it as the HTTPS
+// credential. Public repos ignore it; without the Secret the env is empty and
+// fetches are anonymous, exactly as before.
 func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 	cmd := []any{"buildctl-daemonless.sh", "build"}
 	if strings.TrimSpace(dockerfile) != "" {
@@ -740,8 +746,14 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 			"--opt", "context="+buildCtx,
 		)
 	}
+	cmd = append(cmd, "--secret", "id=GIT_AUTH_TOKEN,env=GIT_AUTH_TOKEN")
 	return append(cmd, "--output", "type=image,name="+image+",push=true")
 }
+
+// gitTokenSecret is the Secret (same namespace as the build Jobs) whose `token`
+// key authenticates the fabric's git fetches for private repos. Optional by
+// design: absent Secret ⇒ empty env ⇒ anonymous fetch (public repos only).
+const gitTokenSecret = "console-git-token"
 
 // buildJobSpec is the shared moby/buildkit Job (arcd model): privileged buildkit
 // on the CI runner pool, pushing to GHCR via the kaniko-ghcr pull secret. Both
@@ -778,6 +790,12 @@ func (k *k8sClient) buildJobSpec(jobName, org, app string, command []any) *unstr
 						"securityContext": map[string]any{"privileged": true},
 						"env": []any{
 							map[string]any{"name": "DOCKER_CONFIG", "value": "/ghcr"},
+							// Private-repo fetch credential, surfaced to the solve as the
+							// GIT_AUTH_TOKEN build secret (buildFrontendCmd). optional: a
+							// cluster without the Secret builds public repos exactly as before.
+							map[string]any{"name": "GIT_AUTH_TOKEN", "valueFrom": map[string]any{
+								"secretKeyRef": map[string]any{"name": gitTokenSecret, "key": "token", "optional": true},
+							}},
 						},
 						"volumeMounts": []any{
 							map[string]any{"name": "ghcr", "mountPath": "/ghcr", "readOnly": true},
