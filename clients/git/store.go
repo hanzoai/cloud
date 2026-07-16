@@ -28,6 +28,7 @@ type Repo struct {
 	Name          string
 	Description   string
 	DefaultBranch string
+	Public        bool // public repos allow ANONYMOUS read (upload-pack); writes stay org-authed
 	SizeBytes     int64
 	CreatedAt     int64
 	UpdatedAt     int64
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS repos (
   name           TEXT NOT NULL,
   description    TEXT NOT NULL DEFAULT '',
   default_branch TEXT NOT NULL DEFAULT 'main',
+  public         INTEGER NOT NULL DEFAULT 0,
   size_bytes     INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -120,18 +122,25 @@ CREATE INDEX IF NOT EXISTS ix_inbound_conflicts_repo ON inbound_conflicts(org, p
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// public: visibility bit added after the initial schema. Fresh DBs get it
+	// from the CREATE TABLE above; pre-existing DBs gain it here. The duplicate-
+	// column error on fresh DBs is the expected no-op.
+	if _, err := s.db.Exec(`ALTER TABLE repos ADD COLUMN public INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate public column: %w", err)
+	}
 	return nil
 }
 
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const repoCols = `id,org,project,name,description,default_branch,size_bytes,created_at,updated_at`
+const repoCols = `id,org,project,name,description,default_branch,public,size_bytes,created_at,updated_at`
 
 func scanRepo(sc interface{ Scan(...any) error }) (Repo, error) {
 	var r Repo
 	err := sc.Scan(&r.ID, &r.Org, &r.Project, &r.Name, &r.Description,
-		&r.DefaultBranch, &r.SizeBytes, &r.CreatedAt, &r.UpdatedAt)
+		&r.DefaultBranch, &r.Public, &r.SizeBytes, &r.CreatedAt, &r.UpdatedAt)
 	return r, err
 }
 
@@ -139,9 +148,9 @@ func scanRepo(sc interface{ Scan(...any) error }) (Repo, error) {
 // already exists in the org.
 func (s *Store) Create(ctx context.Context, r Repo) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO repos (`+repoCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO repos (`+repoCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.Org, r.Project, r.Name, r.Description, r.DefaultBranch,
-		r.SizeBytes, r.CreatedAt, r.UpdatedAt)
+		r.Public, r.SizeBytes, r.CreatedAt, r.UpdatedAt)
 	if err != nil {
 		if isUnique(err) {
 			return errConflict
@@ -213,6 +222,21 @@ func (s *Store) SetSize(ctx context.Context, org, project, name string, sizeByte
 		sizeBytes, updatedAt, org, project, name)
 	if err != nil {
 		return fmt.Errorf("set size: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// SetPublic flips a repo's visibility and bumps updated_at. Public grants
+// ANONYMOUS READ (upload-pack) only — receive-pack stays org-authed always.
+func (s *Store) SetPublic(ctx context.Context, org, project, name string, public bool, updatedAt int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE repos SET public=?, updated_at=? WHERE org=? AND project=? AND name=?`,
+		public, updatedAt, org, project, name)
+	if err != nil {
+		return fmt.Errorf("set public: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
