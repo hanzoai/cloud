@@ -175,7 +175,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 			d.Ref = label
 			d.Entries = treeEntries(commit, "", o, r.Name, label)
 			d.Commits = recentCommits(repo, commit, 10)
-			if readme := findReadme(commit); readme != "" {
+			if _, readme, ok := readmeAt(commit); ok {
 				d.Readme = readme
 			}
 		} else {
@@ -349,24 +349,6 @@ func recentCommits(repo *gogit.Repository, from *object.Commit, n int) []commitR
 		})
 	}
 	return out
-}
-
-// findReadme returns the rendered-as-text README at the tree root, if any.
-func findReadme(commit *object.Commit) string {
-	tree, err := commit.Tree()
-	if err != nil {
-		return ""
-	}
-	for _, cand := range []string{"README.md", "README.MD", "Readme.md", "README", "readme.md"} {
-		if f, err := tree.File(cand); err == nil {
-			if bin, _ := f.IsBinary(); !bin {
-				if txt, e := f.Contents(); e == nil {
-					return txt
-				}
-			}
-		}
-	}
-	return ""
 }
 
 // crumbs builds path breadcrumbs, each linking to its tree.
