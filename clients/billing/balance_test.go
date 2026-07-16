@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hanzoai/account"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/types"
@@ -93,7 +93,7 @@ func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
 	// The gate's subject for this principal, from ai itself — not a value this test invents.
 	// This is what routers/filter_balance.go resolveBillingKey computes from the JWT claims:
 	// a person in the signup org bills their OWN account, hanzo/z.
-	want := aiobject.Payer(aiobject.Credential{Owner: "hanzo", Name: "z"}).Subject()
+	want := account.Payer(account.Credential{Owner: "hanzo", Name: "z"}).Subject()
 	if want != "hanzo/z" {
 		t.Fatalf("precondition: ai resolves a signup-org person to %q, want hanzo/z", want)
 	}
