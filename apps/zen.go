@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/metering"
 	cloudmoney "github.com/hanzoai/cloud/clients/money"
@@ -177,6 +178,29 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 	// Detached: the request context is recycled once the handler returns, so a
 	// background context carries the debit to commerce without racing the reply.
 	go func() { _, _ = g.m.Record(context.Background(), usage) }()
+
+	// Enso learning ledger: the embedded zen mount serves the zen catalog in-process
+	// and never reaches ai's pipeToFamily, so ai's family-event writer never runs for
+	// zen traffic. Write the SAME RoutingEvent here (source="family") through the ONE
+	// shared writer, keyed on the client-visible response id (zen.Usage.ResponseID), so
+	// zen* calls land in the same ledger — stats, world, spark retrain, and /v1/feedback
+	// all read these rows. No prompt text; no shadow (zen.Usage carries no request
+	// text — that stays the auto/enso-proxy path's job). Fire-and-forget.
+	owner := u.Tenant.Org
+	if owner == "" {
+		owner = u.Tenant.BillingOrg
+	}
+	go aiobject.RecordFamilyRouting(aiobject.FamilyRoutingInput{
+		Owner:            owner,
+		User:             u.Tenant.User,
+		RequestedModel:   u.Model,
+		RoutedModel:      u.Upstream,
+		ResponseId:       u.ResponseID,
+		PromptTokens:     u.PromptTokens,
+		CompletionTokens: u.CompletionTokens,
+		CostCents:        cloudmoney.FromInt(u.Charge.Minor()).Cents(),
+		RouterEndpoint:   os.Getenv("ROUTER_ENDPOINT"),
+	})
 }
 
 // zenService is the commerce service axis zen* spend attributes to. zen serves
