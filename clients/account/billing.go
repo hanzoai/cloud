@@ -28,6 +28,7 @@ import (
 	"strings"
 	"unicode"
 
+	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
@@ -46,17 +47,6 @@ func isSubjectKey(k string) bool {
 		}
 	}
 	return false
-}
-
-// billingSubject — the commerce billing subject for an org+user: ALWAYS the org
-// (`org`), lowercased. Every member of an org reads/scopes to the ONE org billing
-// account — the same subject the gateway gate reads and debits. `name` is recorded
-// for metrics, never for the billing key. This is the ONE rule; the former
-// PERSONAL_BILLING_ORGS / ORG_BILLING_ORGS allowlists are gone. Keep in lockstep
-// with ai/object.BillingSubject so the console view and the gate never disagree.
-func billingSubject(org, name string) string {
-	_ = name
-	return strings.ToLower(strings.TrimSpace(org))
 }
 
 // scopedBillingSearch — pin every billingSubjectKey to subject (OVERWRITING any client
@@ -167,8 +157,12 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Scope EVERY request to the caller's OWN subject — query AND write body — so
-	// commerce's per-tenant isolation can never be crossed from the browser.
-	subject := billingSubject(cr.owner, cr.name)
+	// commerce's per-tenant isolation can never be crossed from the browser. The
+	// subject comes from the ONE rule (ai/object.Payer), keyed on the IAM username
+	// (cr.username = X-User-Name) the gate also keys on — so a top-up credits the
+	// SAME account the gate debits. Keying on cr.name (X-User-Id, a UUID on the
+	// direct-bearer path) would fund an account the gate never reads: the split.
+	subject := aiobject.Payer(aiobject.Credential{Owner: cr.owner, Name: cr.username}).Subject()
 	inQuery, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
 	q := scopedBillingSearch(inQuery, subject)
 
