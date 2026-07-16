@@ -199,6 +199,21 @@ func financeBalance(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view finance")
 	}
+	// The ONE balance read (balance.go) — the same wallet /v1/billing/balance answers, so
+	// the two surfaces can never disagree. Co-resident this is the finance ledger; only a
+	// split deploy falls through to the commerce S2S read below.
+	if cents, coResident, err := availableCents(c.Context(), org, balanceSubject(c, org)); err != nil {
+		s.Log.Warn("finance balance read failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	} else if coResident {
+		return financeJSON(s, c, financeBalanceView{
+			Currency:       "usd",
+			AvailableCents: cents,
+			PendingCents:   0,
+			DueCents:       0,
+			AsOf:           time.Now().UTC().Format(time.RFC3339),
+		})
+	}
 	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
