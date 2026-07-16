@@ -13,10 +13,11 @@ import (
 func TestRootSmartHTTP_HostGuard(t *testing.T) {
 	app := mountApp(t) // Domain api.hanzo.test → gitHost git.hanzo.test
 
-	// On the git host the root route reaches infoRefs, whose first gate rejects
-	// a missing X-Org-Id with 403 — proving the route matched and the handler
-	// ran (not a routing miss).
-	req := httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-upload-pack", nil)
+	// On the git host the root route reaches infoRefs; the PUSH advertisement
+	// rejects a missing X-Org-Id with 403 (anonymous read exists only for
+	// upload-pack on public repos) — proving the route matched and the handler
+	// ran (not a routing miss, which would be 404).
+	req := httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-receive-pack", nil)
 	req.Host = "git.hanzo.test"
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
@@ -29,7 +30,7 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 	// On the api host the identical path has no /v1/git prefix, so the guard
 	// falls through (c.Next()) and nothing matches → 404. Proves the root route
 	// never serves off the git host.
-	req = httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-upload-pack", nil)
+	req = httptest.NewRequest(http.MethodGet, "/acme/repo.git/info/refs?service=git-receive-pack", nil)
 	req.Host = "api.hanzo.test"
 	resp, err = app.Fiber().Test(req, testCfg)
 	if err != nil {
