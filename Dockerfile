@@ -27,7 +27,24 @@
 # console — a missing/broken build:embed is a build ERROR, never a silent degrade
 # to the placeholder shell. The one escape hatch is --build-arg ALLOW_PLACEHOLDER=1
 # (pure-Go dev image with no Node console), which is NEVER set for prod.
-FROM public.ecr.aws/docker/library/node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS console
+# ── base images: mirrored to ghcr.io/hanzoai/mirror/* (NOT public.ecr.aws) ────
+# Every FROM below pulls from our own GHCR mirror, pinned by digest. WHY:
+# public.ecr.aws (ECR Public) rate-limits anonymous pulls with HTTP 429 (Too
+# Many Requests) on shared CI runners, and a 429 on ANY base pull aborts the
+# whole release — a release died on a 429 pulling python:3.12-alpine, which is
+# what motivated this. ghcr.io/hanzoai/mirror/* are 1:1 mirrors of the upstream
+# public images (node/python/rust/golang/alpine), copied linux/amd64-only (the
+# only platform this release builds) and digest-pinned for immutability. These
+# FROM pulls resolve because release.yml logs the build into ghcr.io (GH_PAT)
+# before building; the mirror packages can also be flipped public for anonymous
+# pulls (one-time, via the GitHub UI — there is no REST API for package
+# visibility).
+# REFRESH when bumping a toolchain: crane/regctl copy the new upstream image into
+# ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below (manual today;
+# a CI job may automate it). Canonical long-term home is
+# registry.hanzo.ai/hanzoai/mirror/* — repoint there once the runners carry its
+# IAM pull credentials (follow-up).
+FROM ghcr.io/hanzoai/mirror/node:24-alpine@sha256:0cb0e7c3195bce740b6c8d8b27432c92360e3b7f1528087f2c50640b177950c6 AS console
 ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
 ARG CONSOLE_REF=main
 # CONSOLE_CACHEBUST busts this stage's BuildKit layer cache every build. WHY it must
@@ -104,7 +121,7 @@ RUN mkdir -p /out; \
 # BEFORE `go build`, the SAME way the console bundle is produced. The committed
 # catalog is only the tiny `ai` fallback; prod must embed the full set. FAIL-HARD:
 # if the clone/generation can't produce the master index, the image is not built.
-FROM public.ecr.aws/docker/library/python:3.12-alpine AS skills
+FROM ghcr.io/hanzoai/mirror/python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS skills
 ARG OPENAPI_REPO=https://github.com/hanzoai/openapi.git
 ARG OPENAPI_REF=main
 RUN apk add --no-cache git && pip install --no-cache-dir pyyaml
@@ -121,14 +138,14 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
 # binary by clients/featureflags). Stateless PostHog-compatible evaluation;
 # definitions live in the per-org SQLite stores. musl staticlib links clean
 # against the alpine cgo build below.
-FROM public.ecr.aws/docker/library/rust:1-alpine3.22 AS flagslib
+FROM ghcr.io/hanzoai/mirror/rust:1-alpine3.22@sha256:b348cb409ac0a73de15065997a360063cf87465574a15e3e4469862cb8996f02 AS flagslib
 RUN apk add --no-cache musl-dev
 WORKDIR /src/native/flags
 COPY native/flags/Cargo.toml native/flags/Cargo.lock ./
 COPY native/flags/src ./src
 RUN cargo build --release --locked
 
-FROM public.ecr.aws/docker/library/golang:1.26-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS build
+FROM ghcr.io/hanzoai/mirror/golang:1.26-alpine3.22@sha256:47d47cb5cc3c7dac409dcb6c3a98a6263571218046cd02d709527feef804a77c AS build
 # CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
 # SQLCipher pages in a fixed on-disk format (cipher_compatibility 4). An at-open
 # compat pin is infeasible (mattn keys via URI before any pragma), so the format
@@ -220,7 +237,7 @@ RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL:
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
 
 # ── final image (alpine, NOT scratch — CGO needs libc + libsqlcipher) ─────────
-FROM public.ecr.aws/docker/library/alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+FROM ghcr.io/hanzoai/mirror/alpine:3.22@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
 ARG REVISION=unknown
 LABEL org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.source="https://github.com/hanzoai/cloud"
