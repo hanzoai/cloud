@@ -1,4 +1,4 @@
-package bot
+package coding
 
 import (
 	"context"
@@ -9,6 +9,11 @@ import (
 	"strings"
 	"testing"
 )
+
+// These pin coding's wire contract with the runtime through the REAL transport
+// (clients/runtime) against a stub server — so the credential-custody and
+// fail-closed properties are proven end to end over the seam, not against a fake
+// of it.
 
 // ndjsonServer streams the given lines as application/x-ndjson and records the
 // request it received, so a test can assert the wire contract (path, headers,
@@ -31,7 +36,7 @@ func ndjsonServer(t *testing.T, lines []string, capture *http.Request, capBody *
 	}))
 }
 
-func TestRunCodingTask_StreamsStepsAndResult(t *testing.T) {
+func TestTask_StreamsStepsAndResult(t *testing.T) {
 	lines := []string{
 		`{"type":"step","step":"clone","status":"ok"}`,
 		`{"type":"log","message":"editing handler.go"}`,
@@ -46,11 +51,11 @@ func TestRunCodingTask_StreamsStepsAndResult(t *testing.T) {
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 	t.Setenv("BOT_GATEWAY_TOKEN", "svc-token-xyz")
 
-	var steps []CodingStep
-	res, err := RunCodingTask(context.Background(), "acme", "u-1", CodingTaskRequest{
+	var steps []Step
+	res, err := runner{}.Run(context.Background(), "acme", "u-1", RunRequest{
 		CloneURL: "https://git.test/v1/git/acme/api.git", Branch: "agent/x", Prompt: "fix",
-		Credential: Credential{Username: "x-access-token", Token: "hk-SECRETtoken"},
-	}, func(s CodingStep) { steps = append(steps, s) })
+		CredUser: "x-access-token", CredToken: "hk-SECRETtoken",
+	}, func(s Step) { steps = append(steps, s) })
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -81,7 +86,7 @@ func TestRunCodingTask_StreamsStepsAndResult(t *testing.T) {
 	if strings.Contains(gotReq.URL.RawQuery, "SECRETtoken") || strings.Contains(gotReq.Header.Get("Authorization"), "SECRETtoken") {
 		t.Fatal("credential leaked onto URL/header")
 	}
-	var body CodingTaskRequest
+	var body taskRequest
 	if err := json.Unmarshal(gotBody, &body); err != nil {
 		t.Fatalf("body decode: %v", err)
 	}
@@ -90,13 +95,13 @@ func TestRunCodingTask_StreamsStepsAndResult(t *testing.T) {
 	}
 }
 
-func TestRunCodingTask_ErrorLine(t *testing.T) {
+func TestTask_ErrorLine(t *testing.T) {
 	srv := ndjsonServer(t, []string{`{"type":"error","message":"dev exec failed","logTail":"boom"}`}, nil, nil)
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
 
-	res, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil)
+	res, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{}, nil)
 	if err != nil {
 		t.Fatalf("a clean error line is a terminal result, not a transport error: %v", err)
 	}
@@ -105,29 +110,29 @@ func TestRunCodingTask_ErrorLine(t *testing.T) {
 	}
 }
 
-func TestRunCodingTask_Non2xxIsError(t *testing.T) {
+func TestTask_Non2xxIsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	}))
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
-	if _, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil); err == nil {
+	if _, err := (runner{}).Run(context.Background(), "acme", "u", RunRequest{}, nil); err == nil {
 		t.Fatal("a 401 must be an error")
 	}
 }
 
-func TestRunCodingTask_NoTerminalIsError(t *testing.T) {
+func TestTask_NoTerminalIsError(t *testing.T) {
 	srv := ndjsonServer(t, []string{`{"type":"step","step":"clone"}`}, nil, nil)
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL)
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "1") // httptest is http://; assert-plaintext guard tested separately
-	if _, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{}, nil); err == nil {
+	if _, err := (runner{}).Run(context.Background(), "acme", "u", RunRequest{}, nil); err == nil {
 		t.Fatal("a stream with no result/error line must be an error (no fabricated success)")
 	}
 }
 
-func TestRunCodingTask_RefusesCleartextByDefault(t *testing.T) {
+func TestTask_RefusesCleartextByDefault(t *testing.T) {
 	// The credential-bearing POST must not go cleartext without an explicit mesh
 	// opt-in: an http target with BOT_GATEWAY_ALLOW_PLAINTEXT unset fails closed and
 	// never dials.
@@ -135,8 +140,8 @@ func TestRunCodingTask_RefusesCleartextByDefault(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("BOT_GATEWAY_URL", srv.URL) // http://
 	t.Setenv("BOT_GATEWAY_ALLOW_PLAINTEXT", "")
-	_, err := RunCodingTask(context.Background(), "acme", "u", CodingTaskRequest{
-		Credential: Credential{Username: "x", Token: "hk-SECRET"},
+	_, err := runner{}.Run(context.Background(), "acme", "u", RunRequest{
+		CredUser: "x", CredToken: "hk-SECRET",
 	}, nil)
 	if err == nil {
 		t.Fatal("cleartext coding POST must fail closed by default")
