@@ -121,8 +121,28 @@ type Config struct {
 	// same-node podAffinity) so the new writer opens the exclusive-lock ZapDB/
 	// audit stores only after the old one released them — never a double-open.
 	// Default OFF, so an unset variable is byte-identical to today's Recreate
-	// single-writer (which never overlaps and needs no lease).
+	// single-writer (which never overlaps and needs no lease). With per-pod RWO
+	// PVCs (the sharded StatefulSet below) the lease is pod-local and never
+	// contends across peers, so it stays OFF there — the shard router, not the
+	// lease, is the cross-pod single-writer guarantee.
 	WriterLease bool
+
+	// ShardPeers is the CLOUD_PEERS membership list ("id@addr,id2@addr2") of the
+	// horizontal-scale StatefulSet: the full, STABLE set of writer pods (each a
+	// cloud-N ordinal at its headless per-pod DNS cloud-N.<svc>:8000). Every org is
+	// pinned to exactly one owner pod by rendezvous hashing (ha.Owner over this set),
+	// so each org's per-org SQLite files are written by ONE pod only; a request whose
+	// org this pod does not own is forwarded to the owner (shardrouter.go). Empty or a
+	// single entry ⇒ sharding OFF, byte-identical to the single-pod deployment. The
+	// set is identical on every pod (static env), so all pods agree on every org's
+	// owner — no split-brain dual-writer, no routing loop.
+	ShardPeers string
+
+	// ShardSelf is THIS pod's stable id — the StatefulSet ordinal name cloud-N, from
+	// CLOUD_POD_NAME (or the downward-API POD_NAME). When sharding is on it MUST be one
+	// of ShardPeers' ids (Validate refuses otherwise, so a misconfigured ordinal cannot
+	// black-hole every request by forwarding it away with no shard of its own).
+	ShardSelf string
 
 	// ListenAddr is the public HTTP listener (default :8080).
 	ListenAddr string
@@ -355,6 +375,8 @@ func LoadConfig() *Config {
 		WriterURL:         strings.TrimRight(getenv("CLOUD_WRITER_URL", ""), "/"),
 		ReaderRetryBudget: getenvDuration("CLOUD_READER_RETRY_BUDGET", 25*time.Second),
 		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
+		ShardPeers:        getenv("CLOUD_PEERS", ""),
+		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
 		PaymentsZAPAddr:   getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:      getenv("CLOUD_VAULT_ZAP_ADDR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
@@ -713,6 +735,24 @@ func (c *Config) Validate() error {
 	// sessions to a shared store to lift this.
 	if c.Enabled("iam") && c.Replicas > 1 {
 		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a process-local session store and requires replicas=1 (pin the Deployment to 1 replica or migrate IAM sessions to a shared store)", c.Replicas)
+	}
+	// Horizontal shard routing (CLOUD_PEERS names >1 pod). Two fail-closed guards:
+	//   1. THIS pod must be one of the peers, else it owns no shard and would forward
+	//      every request away (a silent black-hole) — refuse to boot.
+	//   2. Embedded IAM cannot be sharded: its process-local login/authorize session,
+	//      minted on the pod that received the OAuth step, is unreachable on the owner
+	//      pod a later request routes to. Disable iam (use external iam.hanzo.svc).
+	// Both are boot errors, never guesses — a wrong shard topology must fail loud.
+	if peers := parsePeers(c.ShardPeers); len(peers) >= 2 {
+		if c.ShardSelf == "" {
+			return fmt.Errorf("CLOUD_PEERS names %d pods but POD_NAME/CLOUD_POD_NAME is empty: a shard member must know its own ordinal id", len(peers))
+		}
+		if !peersContain(peers, c.ShardSelf) {
+			return fmt.Errorf("shard self %q is not in CLOUD_PEERS %q: this pod is not a member of its own ring (it would forward every request away and own no shard)", c.ShardSelf, c.ShardPeers)
+		}
+		if c.Enabled("iam") {
+			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing: embedded IAM uses a process-local session store and cannot be sharded; disable iam (use external iam.hanzo.svc) or run a single pod")
+		}
 	}
 	return nil
 }
