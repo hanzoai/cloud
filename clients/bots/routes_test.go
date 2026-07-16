@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/agents"
-	"github.com/hanzoai/cloud/clients/bot"
+	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/visor"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -19,7 +21,7 @@ import (
 // clients/visor once registered GET /v1/bots for its bot MACHINES and this
 // package registered GET /v1/bots for bot RUNS. The router resolves byte-identical
 // patterns by first-registration — silently, with no panic — and visor mounts
-// first (apps.Wire: visor, then bot, then bots), so visor's machine list answered
+// first (apps.Wire: visor, then runtime, then bots), so visor's machine list answered
 // the console's run list and this package's handler was unreachable. Two values
 // sharing one name, one namespace.
 //
@@ -27,21 +29,63 @@ import (
 // register the same method+path) and behaviourally (GET /v1/bots serves RUNS),
 // with the subsystems mounted in the real Wire order that produced the bug.
 
+// stubRuntime stands in for the bot runtime, serving its documented contract and
+// recording the paths + org it was asked with. Real Mounts talk to it through the
+// real transport, so these tests exercise the shipping path end to end.
+type stubRuntime struct {
+	mu    sync.Mutex
+	runs  map[string][]map[string]any // org -> rows
+	paths []string
+	orgs  []string
+}
+
+func (s *stubRuntime) start(t *testing.T) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/bots", func(w http.ResponseWriter, r *http.Request) {
+		org := r.Header.Get("X-Org-Id")
+		s.mu.Lock()
+		s.paths, s.orgs = append(s.paths, r.URL.Path), append(s.orgs, org)
+		rows := s.runs[org]
+		s.mu.Unlock()
+		if rows == nil {
+			rows = []map[string]any{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"bots": rows})
+	})
+	mux.HandleFunc("/v1/bots/", func(w http.ResponseWriter, r *http.Request) { // {id}/stop
+		s.mu.Lock()
+		s.paths, s.orgs = append(s.paths, r.URL.Path), append(s.orgs, r.Header.Get("X-Org-Id"))
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"stopped"}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	t.Setenv("BOT_GATEWAY_URL", srv.URL)
+}
+
+func (s *stubRuntime) seen() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.paths...)
+}
+
 // mountFleet mounts, in apps.Wire order, the three subsystems that shared the
-// /v1/bot* namespace, plus the session plane the run registry reads through.
-func mountFleet(t *testing.T) *zip.App {
+// /v1/bot* namespace, over a stub runtime.
+func mountFleet(t *testing.T, rt *stubRuntime) *zip.App {
 	t.Helper()
 	t.Setenv(gatewayURLEnv, "https://bot.example.test")
+	rt.start(t)
 	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
 	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
-	if err := agents.Mount(app, deps); err != nil {
-		t.Fatalf("agents.Mount: %v", err)
-	}
 	if err := visor.Mount(app, deps); err != nil { // Wire order: visor first — the shadowing mount
 		t.Fatalf("visor.Mount: %v", err)
 	}
-	if err := bot.Mount(app, deps); err != nil {
-		t.Fatalf("bot.Mount: %v", err)
+	if err := runtime.Mount(app, deps); err != nil {
+		t.Fatalf("runtime.Mount: %v", err)
 	}
 	if err := Mount(app, deps); err != nil { // …bots last, as in Wire
 		t.Fatalf("bots.Mount: %v", err)
@@ -49,29 +93,64 @@ func mountFleet(t *testing.T) *zip.App {
 	return app
 }
 
-// No two subsystems may claim the same method+path. The router does not panic on
-// a byte-identical duplicate — it silently keeps the first — so nothing but a
-// test catches this class of bug.
-func TestSubsystemsDoNotRegisterDuplicateRoutes(t *testing.T) {
-	app := mountFleet(t)
-
+// collisions reports every route claimed by more than one registration.
+//
+// Counting GetRoutes() entries is NOT enough and looking only at that is how this
+// guard was blind at first: the router MERGES byte-identical patterns into ONE
+// Route carrying both handlers chained, so the second registration leaves the
+// entry count at one and shows up only as a handler count above one. Every real
+// route in the fleet registers exactly one handler, so >1 is the collision. The
+// entry count is kept as well, for any overlap the router does not merge.
+func collisions(app *zip.App) []string {
+	var out []string
 	seen := map[string]int{}
 	for _, r := range app.Fiber().GetRoutes() {
-		seen[r.Method+" "+r.Path]++
-	}
-	for route, n := range seen {
-		if n > 1 {
-			t.Errorf("route %s registered %d times — one handler silently shadows the other", route, n)
+		key := r.Method + " " + r.Path
+		if n := len(r.Handlers); n > 1 {
+			out = append(out, fmt.Sprintf("%s — %d handlers chained on one route", key, n))
+			continue
 		}
+		if seen[key]++; seen[key] > 1 {
+			out = append(out, fmt.Sprintf("%s — %d separate registrations", key, seen[key]))
+		}
+	}
+	return out
+}
+
+// The guard itself must be shown to FIRE on the bug, or it is decoration. This
+// reproduces the original collision — two subsystems, one pattern — and asserts
+// collisions() sees it, through the SAME function the real check below uses.
+func TestDuplicateRouteGuardDetectsACollision(t *testing.T) {
+	app := zip.New(zip.Config{Logger: luxlog.New("test"), DisableStartupMessage: true})
+	app.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, map[string]any{"bots": []string{"machine"}}) })
+	app.Get("/v1/bots", func(c *zip.Ctx) error { return c.JSON(200, map[string]any{"bots": []string{"run"}}) })
+
+	got := collisions(app)
+	if len(got) == 0 {
+		t.Fatal("the guard cannot see the very collision it guards: two GET /v1/bots handlers are registered and collisions() reported none")
+	}
+	if !strings.Contains(got[0], "GET /v1/bots") {
+		t.Fatalf("guard named the wrong route: %v", got)
 	}
 }
 
-// The behavioural half: GET /v1/bots serves bot RUNS. A launched run must come
-// back out of the list — which it cannot do if visor's machine list is answering
-// this route, since a machine list has no knowledge of runs.
+// No two subsystems may claim the same method+path. The router does not panic on
+// a byte-identical duplicate — it silently merges and keeps the first — so
+// nothing but this catches the class of bug.
+func TestSubsystemsDoNotRegisterDuplicateRoutes(t *testing.T) {
+	for _, c := range collisions(mountFleet(t, &stubRuntime{})) {
+		t.Errorf("route collision: %s — one handler silently shadows the other", c)
+	}
+}
+
+// The behavioural half: GET /v1/bots serves bot RUNS from the runtime. The run the
+// runtime holds must come back out — which it cannot do if visor's machine list is
+// answering this route, since a machine list never asks the runtime anything.
 func TestGetBotsServesRunsNotMachines(t *testing.T) {
-	app := mountFleet(t)
-	id := launch(t, app, "acme", "prove the route", "desktop")
+	rt := &stubRuntime{runs: map[string][]map[string]any{
+		"acme": {{"runId": "run_1", "task": "prove the route", "surface": "desktop", "status": "running", "startedAt": "2023-11-14T22:13:20Z"}},
+	}}
+	app := mountFleet(t, rt)
 
 	code, body := call(t, app, http.MethodGet, "/v1/bots", "acme")
 	if code != http.StatusOK {
@@ -81,19 +160,23 @@ func TestGetBotsServesRunsNotMachines(t *testing.T) {
 	if err := json.Unmarshal(body, &v); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
-	if len(v.Bots) != 1 || v.Bots[0].RunID != id {
-		t.Fatalf("GET /v1/bots must serve the org's runs (want %s), got %s", id, body)
+	if len(v.Bots) != 1 || v.Bots[0].RunID != "run_1" {
+		t.Fatalf("GET /v1/bots must serve the org's runs, got %s", body)
 	}
 	// A run row, not a machine row: the fields the console reads are populated.
-	if v.Bots[0].Task != "prove the route" || v.Bots[0].SessionURL == "" {
+	if v.Bots[0].Task != "prove the route" || v.Bots[0].SessionURL != "https://bot.example.test/vnc?nodeId=run_1" {
 		t.Fatalf("row is not a run: %+v", v.Bots[0])
+	}
+	// It reached the RUNTIME — the only place a run has ever existed.
+	if got := rt.seen(); len(got) != 1 || got[0] != "/v1/bots" {
+		t.Fatalf("bots must read the runtime's run list, saw %v", got)
 	}
 }
 
 // The bot MACHINE surface still exists — under visor's own namespace, where a
 // machine belongs. It is reachable and it is NOT /v1/bots.
 func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
-	app := mountFleet(t)
+	app := mountFleet(t, &stubRuntime{})
 
 	paths := map[string]bool{}
 	for _, r := range app.Fiber().GetRoutes() {
@@ -122,7 +205,7 @@ func TestBotMachineSurfaceMovedToCompute(t *testing.T) {
 // /v1/compute/bots, and the runtime passthrough at /v1/bot/*. Nothing in the run
 // namespace may be a wildcard, which would swallow every run id.
 func TestRunNamespaceHasNoWildcard(t *testing.T) {
-	app := mountFleet(t)
+	app := mountFleet(t, &stubRuntime{})
 	for _, r := range app.Fiber().GetRoutes() {
 		if r.Path == "/v1/bots/*" {
 			t.Fatalf("%s /v1/bots/* would swallow every run id", r.Method)
@@ -130,19 +213,20 @@ func TestRunNamespaceHasNoWildcard(t *testing.T) {
 	}
 }
 
-// The runtime passthrough is a sibling namespace, not a parent: /v1/bot/* must
-// never match a /v1/bots path, or the control plane would be proxied away.
+// The runtime ops face is a SIBLING namespace, not a parent: /v1/bot/* must never
+// match a /v1/bots path, or the control plane would be relayed away.
 //
-// The discriminator is the own-key guard, which only the native handler has: a
-// run belonging to ANOTHER org is refused 404 here, decided locally. A relay
-// would instead forward the request and report on the (absent) runtime, so any
-// answer but 404 means /v1/bots/:runId/stop is no longer served natively.
-func TestRuntimePassthroughDoesNotSwallowTheRunNamespace(t *testing.T) {
-	app := mountFleet(t)
-	victim := launch(t, app, "acme", "still mine", "desktop")
+// The discriminator is the op the runtime is asked for. bots' stub addresses
+// /v1/bots/{id}/stop; the ops face strips its own /v1/bot prefix and would ask for
+// something else entirely. So the path the runtime SAW names which handler ran.
+func TestRuntimeOpsFaceDoesNotSwallowTheRunNamespace(t *testing.T) {
+	rt := &stubRuntime{}
+	app := mountFleet(t, rt)
 
-	code, body := call(t, app, http.MethodPost, fmt.Sprintf("/v1/bots/%s/stop", victim), "globex")
-	if code != http.StatusNotFound {
-		t.Fatalf("POST /v1/bots/:runId/stop must be served natively (404 for a foreign run), got %d (%s)", code, body)
+	if code, body := call(t, app, http.MethodPost, "/v1/bots/run_1/stop", "acme"); code != http.StatusOK {
+		t.Fatalf("stop want 200, got %d (%s)", code, body)
+	}
+	if got := rt.seen(); len(got) != 1 || got[0] != "/v1/bots/run_1/stop" {
+		t.Fatalf("the run namespace must be served by bots' own stub, runtime saw %v", got)
 	}
 }
