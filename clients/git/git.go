@@ -215,6 +215,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
 	app.Post("/v1/git/repos/:name/push", cloud.Handle(s, pushFiles))
+	// Gitea push-webhook ingest (git.hanzo.ai). A static segment that never
+	// shadows the :org/:repo smart-HTTP routes; HMAC-authed, drives the same
+	// fireBranchBuild core a native push does (webhook.go).
+	app.Post("/v1/git/webhook", cloud.Handle(s, webhook))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
 	app.Post("/v1/git/keys", cloud.Handle(s, registerKey))
 	app.Get("/v1/git/keys", cloud.Handle(s, listKeys))
