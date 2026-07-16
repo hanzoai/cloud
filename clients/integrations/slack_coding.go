@@ -15,7 +15,7 @@ import (
 
 // slack_coding.go turns the @hanzo Slack front-door into an ENGINEER: a message
 // `@hanzo code: <repo> <task>` (or `/hanzo code: <repo> <task>`) branches off the
-// chat-only reply path (slack_events.go slackAgentReply) into a durable coding
+// chat reply path (slack_events.go → the shared bridge brain) into a durable coding
 // run — a fresh agent works a NATIVE /v1/git repo in a sandbox, pushes a branch,
 // opens a native PR work item, and reports back IN THE SAME THREAD. Everything
 // that is NOT the `code:` trigger stays on the existing chat path, unchanged.
@@ -33,7 +33,7 @@ import (
 
 const (
 	// codingTaskTimeout bounds one detached coding run end to end. It is far longer
-	// than slackAgentTimeout (a chat turn) because a real coding run clones, runs a
+	// than a chat turn (bridgeAgentTimeout) because a real coding run clones, runs a
 	// model-driven edit loop, and pushes. Overridable via SLACK_CODING_TIMEOUT_SEC.
 	codingTaskDefaultTimeout = 25 * time.Minute
 	// codingDefaultConcurrency / codingDefaultOrgConcurrency bound simultaneous
@@ -57,8 +57,8 @@ const (
 var codingRepoRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 // codingLim bounds detached coding runs (global + per-org), separate from the
-// chat-turn pool (slackLim) because a coding run is long-lived. Initialized once
-// alongside slackLim in slackBridgeReady.
+// shared chat-turn pool (bridgeLim) because a coding run is long-lived. Initialized
+// once in slackBridgeReady.
 var codingLim *orgLimiter
 
 // codingDispatcher is the assembled coding orchestrator, injected by the
