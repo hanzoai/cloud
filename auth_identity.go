@@ -42,6 +42,7 @@ type idClaims struct {
 
 	Owner             string `json:"owner"`              // org slug (the org)
 	Project           string `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
+	BillingAccount    string `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
 	Name              string `json:"name"`               // display name (id fallback)
 	PreferredUsername string `json:"preferred_username"` // id fallback
 	Email             string `json:"email"`
@@ -60,6 +61,20 @@ func (c *idClaims) mintedProject() string {
 		return ""
 	}
 	return strings.TrimSpace(c.Project)
+}
+
+// mintedBillingAccount returns the funding account to stamp into
+// X-Billing-Account-Id, or "" when the header must be OMITTED (a token minted
+// before IAM shipped the claim, or one IAM could not attribute).
+//
+// WHO PAYS IS NOT A CLIENT'S TO NAME. This rides the validated `billing_account`
+// claim — IAM's signed statement, resolved at the identity boundary from the real
+// grant context — exactly like `owner` and `project`. It mirrors the edge
+// (iamauth.Claims.MintedBillingAccount) byte-for-byte, so the in-binary path binds
+// the same header the gateway would, and ai/object.Payer reads the same payer on
+// both. The raw client copy is deleted on ingress and NEVER restored.
+func (c *idClaims) mintedBillingAccount() string {
+	return strings.TrimSpace(c.BillingAccount)
 }
 
 // userID resolves the canonical user id: sub, then preferred_username, then
