@@ -32,6 +32,17 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+
+	// Enterprise IAM features (Apache-2.0), blank-imported for the init() that
+	// self-registers each into iam2's feature registry (the database/sql driver
+	// pattern). iam2server.Mount already calls feature.MountAll, so a registered
+	// feature auto-mounts whenever CLOUD_IAM_IMPL=iam2 — no feature.Register call
+	// belongs here (that would double-register → double-mount → route collision).
+	// LDAP is deliberately absent: it links goldap (GPL-2.0), so it is opt-in only
+	// under -tags iam2_ldap (see ldap_enabled.go), keeping the default binary
+	// copyleft-free.
+	_ "github.com/hanzoiam/saml" // SAML IdP + SP SSO — self-registers into feature
+	_ "github.com/hanzoiam/scim" // SCIM 2.0 provisioning — self-registers into feature
 )
 
 // iam2Prefixes are the canonical absolute prefixes the iam2 identity surface owns,
@@ -78,12 +89,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	} else {
 		log.Info("iam2 seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
 	}
-
-	// TODO(iam2 enterprise): feature.Register(scim.New()); feature.Register(saml.New());
-	// feature.Register(ldap.New()) — the hanzoiam/{scim,saml,ldap} modules land in a
-	// parallel lane. iam2server.Mount already calls feature.MountAll, so enabling them is
-	// these 3 register lines + a go.mod bump; do NOT add the imports until the modules
-	// are pushed (an unresolved import breaks the build).
 
 	// iam2server.Mount registers the whole surface at the canonical absolute paths. It
 	// PANICS only if a registered enterprise feature fails to mount (none today); recover
