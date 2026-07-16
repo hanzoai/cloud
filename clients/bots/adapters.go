@@ -30,6 +30,13 @@ func (sessionRuns) Open(ctx context.Context, org, actor, task, surface string) (
 	})
 }
 
+// listCap bounds the list. The published contract has no pagination, so SOME cap
+// is unavoidable; this states it rather than inheriting the store's default. It
+// is the store's maximum, so an org sees every live run it could plausibly have —
+// past it the list truncates newest-first, which is the direction that keeps the
+// runs a caller is most likely to act on.
+const listCap = 500
+
 // List returns the org's RUNNING bot runs, newest first. Terminal runs are not
 // listed: the contract is the live runs a caller can attach to or stop, and the
 // finished ones stay readable on the session plane that owns their history.
@@ -37,6 +44,7 @@ func (sessionRuns) List(ctx context.Context, org string) ([]Run, error) {
 	rows, err := agents.ListSessions(ctx, org, agents.SessionFilter{
 		Agent:  agentLabel,
 		Status: agents.StatusRunning,
+		Limit:  listCap,
 	})
 	if err != nil {
 		return nil, err
