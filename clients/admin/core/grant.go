@@ -183,7 +183,7 @@ func ApplyGrant(s *cloud.Service[State], c *zip.Ctx, org string, req CreditReque
 func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag, source string, amountCents int64) (before int64, txID string, after int64, afterExact string, err error) {
 	ctx := c.Context()
 	// ONE credit path: prefer the in-proc commerce credit ledger (creditledger) — the
-	// SAME injected ledgercore adapter commerce's POST /v1/billing/credit mints through
+	// SAME injected ledger adapter commerce's POST /v1/billing/credit mints through
 	// and the ai prepaid gate reads. An admin grant and a self-serve credit thus move
 	// money the ONE way, into the ONE ledger; the admin path no longer carries its own
 	// parallel finance.Deposit. The operator-nonce idempotency key rides through so a
