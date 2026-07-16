@@ -74,6 +74,7 @@ func coreCreate(s *cloud.Service[state], ctx context.Context, org, headerProject
 	r := Repo{
 		ID: id, Org: org, Project: project, Name: name,
 		Description: strings.TrimSpace(in.Description), DefaultBranch: defaultBranchName,
+		Public:    in.Public,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := provision(s, ctx, store, r); err != nil {
@@ -83,6 +84,29 @@ func coreCreate(s *cloud.Service[state], ctx context.Context, org, headerProject
 		return repoView{}, fmt.Errorf("provision: %w", err)
 	}
 	r.SizeBytes = recordUsage(s, ctx, org, project, name)
+	return toView(s, r, nil, ""), nil
+}
+
+// coreSetVisibility flips a repo's public bit — the ONE mutation behind
+// PATCH /v1/git/repos/:name. Public grants anonymous READ (upload-pack) only;
+// receive-pack and the whole control plane stay org-authed. Returns the
+// updated view, or errNotFound.
+func coreSetVisibility(s *cloud.Service[state], ctx context.Context, org, project, name string, public bool) (repoView, error) {
+	store, err := storeFor(s, org)
+	if err != nil {
+		return repoView{}, fmt.Errorf("open store: %w", err)
+	}
+	name = normalizeName(name)
+	if err := store.SetPublic(ctx, org, project, name, public, time.Now().Unix()); err != nil {
+		if errors.Is(err, errNotFound) {
+			return repoView{}, errNotFound
+		}
+		return repoView{}, fmt.Errorf("set visibility: %w", err)
+	}
+	r, err := store.Get(ctx, org, project, name)
+	if err != nil {
+		return repoView{}, fmt.Errorf("get: %w", err)
+	}
 	return toView(s, r, nil, ""), nil
 }
 
