@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -41,6 +42,70 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 	p.LastPurgeAt = now
 }
 
+// siteURL is the canonical public URL of a deployed site: the pretty host
+// https://<slug>.<apex> the sites edge (clients/sites) serves from S3. It is the
+// ONE live-URL form on both the Deployment and the Project — a redeploy to the
+// same slug returns the SAME URL because the slug and apex are stable.
+func siteURL(s *cloud.Service[state], slug string) string {
+	return "https://" + slug + "." + s.State.apex
+}
+
+// publishSite is the ONE shared deploy core: given a parsed site artifact and its
+// target project, it versions and records a deployment, uploads the files to S3,
+// flips the deployment and project "live" at the pretty <slug>.<apex> host, and
+// runs the go-live side effects (first-come host binding + edge purge). Every
+// deploy write-path — the tar-artifact path (deployArtifact) and both /v1/sites
+// paths — funnels through here, so versioning, the S3 write, host binding, the
+// lifecycle emit, and the status transitions live in exactly one place (DRY).
+// source records how the artifact was produced ("upload" | "generated" | "deploy").
+// On an upload failure it marks the deployment "error" and returns the error
+// WITHOUT touching the project or billing — a failed deploy is never billed and
+// never flips a live site.
+func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Project, st *site, source string) (Deployment, error) {
+	now := time.Now().Unix()
+	version, err := s.State.store.NextVersion(ctx, p.ID)
+	if err != nil {
+		return Deployment{}, fmt.Errorf("version: %w", err)
+	}
+	id, err := genID("dep")
+	if err != nil {
+		return Deployment{}, fmt.Errorf("rng: %w", err)
+	}
+	d := Deployment{
+		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "uploading",
+		Source: source, Bucket: s.State.blob.bucket, Prefix: sitePrefix(org, p.Slug),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.State.store.InsertDeployment(ctx, d); err != nil {
+		return Deployment{}, fmt.Errorf("persist deployment: %w", err)
+	}
+
+	prefix, files, total, upErr := s.State.blob.uploadSite(ctx, org, p.Slug, p.CacheControl, st)
+	if upErr != nil {
+		d.Status = "error"
+		d.Message = upErr.Error()
+		d.UpdatedAt = time.Now().Unix()
+		_ = s.State.store.UpdateDeployment(ctx, d)
+		s.Log.Error("deploy upload failed", "org", org, "slug", p.Slug, "err", upErr)
+		emitProjectLifecycle(ctx, cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+upErr.Error())
+		return d, fmt.Errorf("upload failed: %w", upErr)
+	}
+
+	live := siteURL(s, p.Slug)
+	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
+	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
+		return d, fmt.Errorf("finalize deployment: %w", err)
+	}
+	emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+")")
+
+	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
+	onPublish(s, ctx, org, &p)
+	if err := s.State.store.UpdateProject(ctx, p); err != nil {
+		return d, fmt.Errorf("finalize project: %w", err)
+	}
+	return d, nil
+}
+
 // deploy ships a project live. Two modes, one endpoint:
 //
 //   - Artifact (default): the request body is a zip OR tar(.gz) of the BUILT site
@@ -69,10 +134,24 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
 
+	// Fail-closed hosting gate BEFORE any deploy work (both modes are billable):
+	// an unfunded org is 402, an unreachable commerce is 503, and nothing is
+	// uploaded or enqueued. The debit lands later — after the work succeeds.
+	fee, gErr := gateHosting(s, c)
+	if gErr != nil {
+		return cloud.DenyResource(c, gErr)
+	}
+
 	if strings.Contains(strings.ToLower(c.Header("Content-Type")), "application/json") {
+		// Git/CI path: enqueue now (gated), debit on the CI completion that flips
+		// the deployment live — never on a queued/failed build.
 		return deployGit(s, c, org, p)
 	}
-	return deployArtifact(s, c, org, p)
+	if err := deployArtifact(s, c, org, p); err != nil {
+		return err // failed deploy — surface it, do NOT bill failed work.
+	}
+	meterDeploy(s, c, fee)
+	return nil
 }
 
 type gitDeployReq struct {
@@ -145,47 +224,14 @@ func deployArtifact(s *cloud.Service[state], c *zip.Ctx, org string, p Project) 
 	if err != nil {
 		return zip.ErrBadRequest("invalid artifact: " + err.Error())
 	}
-
-	now := time.Now().Unix()
-	version, err := s.State.store.NextVersion(c.Context(), p.ID)
+	d, err := publishSite(s, c.Context(), org, p, st, "upload")
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "version: %v", err)
-	}
-	id, err := genID("dep")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-	}
-	d := Deployment{
-		ID: id, ProjectID: p.ID, Org: org, Version: version, Status: "uploading",
-		Source: "upload", Bucket: s.State.blob.bucket, Prefix: sitePrefix(org, p.Slug),
-		CreatedAt: now, UpdatedAt: now,
-	}
-	if err := s.State.store.InsertDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist deployment: %v", err)
-	}
-
-	prefix, files, total, upErr := s.State.blob.uploadSite(c.Context(), org, p.Slug, p.CacheControl, st)
-	if upErr != nil {
-		d.Status = "error"
-		d.Message = upErr.Error()
-		d.UpdatedAt = time.Now().Unix()
-		_ = s.State.store.UpdateDeployment(c.Context(), d)
-		s.Log.Error("deploy upload failed", "org", org, "slug", p.Slug, "err", upErr)
-		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+upErr.Error())
-		return zip.Errorf(http.StatusBadGateway, "upload failed: %v", upErr)
-	}
-
-	live := s.State.blob.liveURL(org, p.Slug)
-	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
-	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "finalize deployment: %v", err)
-	}
-	emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+")")
-
-	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
-	onPublish(s, c.Context(), org, &p)
-	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "finalize project: %v", err)
+		// An upload failure marks the deployment "error"; anything else is a store
+		// finalize failure. Preserve the historical status codes: 502 upstream vs 500.
+		if d.Status == "error" {
+			return zip.Errorf(http.StatusBadGateway, "%v", err)
+		}
+		return zip.Errorf(http.StatusInternalServerError, "%v", err)
 	}
 	return c.JSON(http.StatusOK, toDeploymentView(d))
 }
@@ -291,7 +337,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	if status == "live" {
 		d.LiveURL = strings.TrimSpace(body.LiveURL)
 		if d.LiveURL == "" {
-			d.LiveURL = s.State.blob.liveURL(org, p.Slug)
+			d.LiveURL = siteURL(s, p.Slug)
 		}
 	}
 	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
@@ -310,6 +356,10 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if status == "live" {
 		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+d.LiveURL+")")
+		// Bill the git/CI path HERE — this is where the deploy actually goes live. The
+		// enqueue (deployGit, via deploy's gate) already passed the gate; a "live"
+		// completion is the one billable success, an "error" completion bills nothing.
+		meterDeploy(s, c, cloud.ResourceFeeCents(deployFeeEnvPrefix, deployKind))
 	} else {
 		emitProjectLifecycle(c.Context(), cloud.LifecycleDeployFailed, org, p, d, p.Slug+": "+nonEmptyStr(d.Message, "deploy failed"))
 	}

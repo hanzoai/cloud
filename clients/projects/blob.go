@@ -36,18 +36,14 @@ const (
 // /v1/s3 file-manager and the whole cloud binary use); blobStore adds only the
 // projects-specific bucket + public URL bases on top.
 type blobStore struct {
-	admin     s3admin.Admin
-	bucket    string
-	publicURL string // public base for built sites, e.g. https://s3.hanzo.ai
-	sitesURL  string // optional pretty base served by the static container, e.g. https://sites.hanzo.app
+	admin  s3admin.Admin
+	bucket string
 }
 
 func openBlobStore() *blobStore {
 	return &blobStore{
-		admin:     s3admin.New(),
-		bucket:    env("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
-		publicURL: strings.TrimRight(env("CLOUD_PROJECTS_PUBLIC_URL", "https://s3.hanzo.ai"), "/"),
-		sitesURL:  strings.TrimRight(os.Getenv("CLOUD_PROJECTS_SITES_URL"), "/"),
+		admin:  s3admin.New(),
+		bucket: env("CLOUD_PROJECTS_BUCKET", "hanzo-sites"),
 	}
 }
 
@@ -55,21 +51,12 @@ func (b *blobStore) configured() bool { return b.admin.Configured() }
 
 func (b *blobStore) client() (*minio.Client, error) { return b.admin.Client() }
 
-// prefix is the deterministic S3 key prefix for a project's current live site:
+// sitePrefix is the deterministic S3 key prefix for a project's current live site:
 // "<org>/<slug>". org and slug are both validated slugs, so the join is
-// unambiguous and globally unique (slug is unique per org).
+// unambiguous and globally unique (slug is unique per org). The canonical PUBLIC
+// URL of a deployed site is siteURL (the pretty <slug>.<apex> host the sites edge
+// serves), not a raw S3 URL — this only names the storage layout.
 func sitePrefix(org, slug string) string { return org + "/" + slug }
-
-// liveURL is the canonical public URL for a deployed project. Prefer the pretty
-// static-container base when configured; otherwise the direct S3 object URL,
-// which is reachable as soon as the bucket has a public-read policy.
-func (b *blobStore) liveURL(org, slug string) string {
-	pfx := sitePrefix(org, slug)
-	if b.sitesURL != "" {
-		return b.sitesURL + "/" + pfx + "/"
-	}
-	return b.publicURL + "/" + b.bucket + "/" + pfx + "/index.html"
-}
 
 // site is the in-memory representation of a deploy artifact: relative path →
 // bytes. walkTarGz produces it; uploadSite consumes it. Splitting the tar walk
