@@ -284,6 +284,26 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/integrations/github/webhook", cloud.Handle(s, githubWebhook))
 	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
 	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
+	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
+	// the slack bridge: the literal paths register BEFORE the /:provider wildcards so
+	// they win under registration-order matching. All PUBLIC at the JWT layer — auth
+	// is done INSIDE each handler: Discord Ed25519 interaction verify, Teams Bot
+	// Framework JWT, Telegram secret-token; the link legs use signed __Host- cookies +
+	// state. Telegram's /connect is org-authed via the principal (like the framework
+	// connect). They must NOT sit behind any principal/tenant gate.
+	app.Post("/v1/integrations/discord/interactions", cloud.Handle(s, discordInteractions))
+	app.Get("/v1/integrations/discord/link", cloud.Handle(s, discordLink))
+	app.Get("/v1/integrations/discord/link/discord", cloud.Handle(s, discordLinkDiscord))
+	app.Get("/v1/integrations/discord/link/callback", cloud.Handle(s, discordLinkCallback))
+	app.Post("/v1/integrations/teams/events", cloud.Handle(s, teamsEvents))
+	app.Get("/v1/integrations/teams/link", cloud.Handle(s, teamsLink))
+	app.Get("/v1/integrations/teams/link/aad", cloud.Handle(s, teamsLinkAAD))
+	app.Get("/v1/integrations/teams/link/callback", cloud.Handle(s, teamsLinkCallback))
+	app.Post("/v1/integrations/telegram/connect", cloud.Handle(s, telegramConnect))
+	app.Post("/v1/integrations/telegram/webhook", cloud.Handle(s, telegramWebhook))
+	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
+	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
+	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
 	app.Get("/v1/integrations/:provider", cloud.Handle(s, get))
 	app.Post("/v1/integrations/:provider/connect", cloud.Handle(s, connect))
 	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
