@@ -286,7 +286,7 @@ func balance(s *cloud.Service[state], c *zip.Ctx) error {
 		// true "not signed in" (401), matching usage/gpuCharge.
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	cents, coResident, err := availableCents(c.Context(), org, balanceSubject(c, org))
+	cents, coResident, err := availableCents(c.Context(), org, subjectFor(c, org))
 	if err != nil {
 		// A balance that cannot be READ is unknown — surface it as an upstream failure.
 		// It must never render as a zero balance: unknown is not "broke".
