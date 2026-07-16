@@ -81,21 +81,21 @@ func TestBalance_ReadsFinanceLedgerNotCommerce(t *testing.T) {
 
 // TestBalance_SubjectIsTheGateSubject pins the invariant this incident broke: the wallet
 // the console SHOWS must be the wallet the ai prepaid gate READS. Both derive it from the
-// one function, ai/object.BillingSubject, so they cannot drift apart again — cloud keeping
-// its own copy of this rule is exactly what let the console show a funded org while the
-// gate refused the member.
+// one function, ai/object.Payer, so they cannot drift apart again — cloud keeping its own
+// copy of this rule is exactly what let the console show a funded org while the gate
+// refused the member.
 func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
-	// Reproduce the live pod env: both allowlists present-but-empty. Under ai v1.809.2
-	// PERSONAL_BILLING_ORGS defaults to "hanzo", so "hanzo" is a PERSONAL-billing org and
-	// the gate reads the per-user wallet.
+	// The allowlists are gone; set them to values that WOULD have flipped the resolution
+	// to prove they are inert — nothing reads them, the signup org still bills per-person.
 	t.Setenv("PERSONAL_BILLING_ORGS", "")
-	t.Setenv("ORG_BILLING_ORGS", "")
+	t.Setenv("ORG_BILLING_ORGS", "hanzo")
 
 	// The gate's subject for this principal, from ai itself — not a value this test invents.
-	// This is what routers/filter_balance.go resolveBillingKey computes from the JWT claims.
-	want := aiobject.BillingSubject("hanzo", "z")
+	// This is what routers/filter_balance.go resolveBillingKey computes from the JWT claims:
+	// a person in the signup org bills their OWN account, hanzo/z.
+	want := aiobject.Payer(aiobject.Credential{Owner: "hanzo", Name: "z"}).Subject()
 	if want != "hanzo/z" {
-		t.Fatalf("precondition: ai v1.809.2 resolves the live env to %q, want hanzo/z", want)
+		t.Fatalf("precondition: ai resolves a signup-org person to %q, want hanzo/z", want)
 	}
 
 	// Every identity shape a validated principal can arrive in must land on that ONE wallet.
@@ -104,7 +104,7 @@ func TestBalance_SubjectIsTheGateSubject(t *testing.T) {
 		{"gateway mints X-User-Name", "z", "8f14e45f-ea1b-4c2a-9f3d-000000000001"},
 		// In-binary direct-Bearer: X-User-Id is the UUID subject, X-User-Name carries the name.
 		{"in-binary direct bearer", "z", "hanzo/z"},
-		// No X-User-Name: the "<owner>/<name>" key form folds back via FromUserKey.
+		// No X-User-Name: the "<owner>/<name>" key form folds back via PayerOf.
 		{"owner/name id, no X-User-Name", "", "hanzo/z"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

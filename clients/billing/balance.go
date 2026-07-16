@@ -30,12 +30,14 @@ import (
 // self-dispatch, and the number shown is the number that admits or refuses a request.
 // The commerce S2S read stays as the split-deploy fallback, unchanged.
 
-// balanceSubject resolves the wallet key for the caller by CALLING ai/object.BillingSubject
-// — the same function the ai prepaid gate (routers/filter_balance.go resolveBillingKey) and
-// the usage debit resolve. It is deliberately not re-implemented here: cloud and ai each
-// keeping their own copy of this rule is what let them drift apart (cloud's console view
-// scoping to the org while the gate scoped to "org/user"), so the view showed a funded org
-// while the gate refused the member. One function, one rule, one wallet.
+// subjectFor resolves the billing subject for the caller by CALLING the ONE rule,
+// ai/object.Payer — the same function the ai prepaid gate (routers/filter_balance.go
+// resolveBillingKey) and the usage debit resolve. It is the SHARED resolver for every
+// commerce-projected read in this package (the balance read AND the finance reads), so
+// there is exactly one copy of the rule. cloud and ai each keeping their own copy is
+// what let them drift apart (cloud's console view scoping to the org while the gate
+// scoped to "org/user"), so the view showed a funded org while the gate refused the
+// member. One function, one rule, one wallet.
 //
 // org is the VALIDATED principal org. The name half uses the SAME precedence as
 // clients/account.resolveCaller: X-User-Name (the IAM username the identity boundary mints
@@ -43,22 +45,21 @@ import (
 // X-User-Id. Both are authorityHeaders — stripped on ingress and re-injected only from
 // verified claims — so neither is a client value.
 //
-// The X-User-Id fallback goes through ai's own BillingSubjectFromUserKey because that
-// header's shape is path-dependent: the gateway historically minted X-User-Id == the
-// username, while the in-binary direct-Bearer path mints the UUID subject, and callers
-// hold it as an "<owner>/<name>" key. FromUserKey is the function ai already uses to fold
-// that key form back to a subject, so the two agree by construction instead of by a
-// re-implemented split here.
+// The X-User-Id fallback goes through ai's own PayerOf because that header's shape is
+// path-dependent: the gateway historically minted X-User-Id == the username, while the
+// in-binary direct-Bearer path mints the UUID subject, and callers hold it as an
+// "<owner>/<name>" key. PayerOf is the parse ai already uses to fold that key form back
+// to the payer, so the two agree by construction instead of by a re-implemented split.
 //
 // KNOWN RESIDUAL: a validated principal carrying NEITHER X-User-Name NOR an "<owner>/<name>"
 // X-User-Id (i.e. a bare username id) folds to the org pool. That requires a JWT with no
 // `name` and no `preferred_username`, since the boundary mints X-User-Name from either;
 // production tokens carry one. Called out for review rather than papered over.
-func balanceSubject(c *zip.Ctx, org string) string {
+func subjectFor(c *zip.Ctx, org string) string {
 	if name := strings.TrimSpace(c.Header("X-User-Name")); name != "" {
-		return aiobject.BillingSubject(org, name)
+		return aiobject.Payer(aiobject.Credential{Owner: org, Name: name}).Subject()
 	}
-	return aiobject.BillingSubjectFromUserKey(org, strings.TrimSpace(c.User()))
+	return aiobject.PayerOf(org, strings.TrimSpace(c.User())).Subject()
 }
 
 // availableCents returns the caller's spendable prepaid balance from the co-resident
