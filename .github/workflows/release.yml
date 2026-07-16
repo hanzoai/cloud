@@ -221,10 +221,10 @@ jobs:
           # frozen snapshot the persistent BuildKit cache would otherwise serve forever.
           build-args: |
             CONSOLE_CACHEBUST=${{ steps.ver.outputs.cachebust }}
-          # gh_token: BuildKit secret the Dockerfile consumes to fetch private
+          # GIT_AUTH_TOKEN: BuildKit secret the Dockerfile consumes to fetch private
           # cross-org Go modules (hanzoai/*, luxfi/*) over authenticated git.
           secrets: |
-            gh_token=${{ secrets.GH_PAT }}
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
 
       - name: Smoke test — the binary MUST boot to "listening" with no crash signature
         run: |
@@ -406,7 +406,7 @@ jobs:
           build-args: |
             CONSOLE_CACHEBUST=${{ steps.ver.outputs.cachebust }}
           secrets: |
-            gh_token=${{ secrets.GH_PAT }}
+            GIT_AUTH_TOKEN=${{ secrets.GH_PAT }}
 
       # THE RECEIPT + ATOMIC VERSION ASSIGNMENT (race-safe). Reached only because
       # build + smoke + push all succeeded, so a proven image exists under the unique
