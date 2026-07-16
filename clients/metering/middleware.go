@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/hanzoai/account"
 )
 
 // Identity headers minted by the Hanzo gateway (the trust boundary). A product
@@ -11,8 +13,9 @@ import (
 // client-supplied value (the gateway strips them on ingress). See
 // commerce/CLAUDE.md "Gateway Trust Headers".
 const (
-	HeaderUserID = "X-User-Id"
-	HeaderOrgID  = "X-Org-Id"
+	HeaderUserID  = "X-User-Id"
+	HeaderOrgID   = "X-Org-Id"
+	HeaderAccount = "X-Billing-Account-Id"
 )
 
 // PriceFunc computes the cost (in cents) to record for a completed request.
@@ -132,9 +135,12 @@ func (c *Client) recordAsync(r *http.Request, u Usage, onErr func(*http.Request,
 }
 
 // IdentityFromGatewayHeaders builds an AuthInput from the gateway-minted
-// identity headers. Prepaid billing is per-org, so the billing key (User) is
-// the org slug (X-Org-Id) — the same key the LLM gate uses (user.Owner). The
-// full "{org}/{sub}" identity is recorded as Actor for the audit trail only.
+// identity headers. User — the account this request pays from — is resolved by
+// the ONE rule every layer that touches money shares (hanzoai/account.Payer), so
+// this client cannot key a different account than the gate that authorizes the
+// request or the ledger that records it. The full "{org}/{sub}" identity is
+// recorded as Actor for the audit trail only; it never decides which balance is
+// gated.
 //
 // When there is no org (anonymous / org-less token) User falls back to the bare
 // sub so a per-user balance can still gate; without either, User is empty and
@@ -143,9 +149,18 @@ func IdentityFromGatewayHeaders(r *http.Request) AuthInput {
 	org := strings.TrimSpace(r.Header.Get(HeaderOrgID))
 	sub := strings.TrimSpace(r.Header.Get(HeaderUserID))
 
-	user := org // per-org billing key
+	// Which ACCOUNT pays is resolved by the ONE rule every layer that touches money
+	// shares (hanzoai/account.Payer), reading the gateway-minted billing_account
+	// claim. This was `user := org` — the pool, always — on the premise that prepaid
+	// billing is per-org. A person in the shared signup org holds their OWN account,
+	// so that premise gated a balance nobody drained.
+	user := account.Payer(account.Credential{
+		Owner:   org,
+		Name:    sub,
+		Account: strings.TrimSpace(r.Header.Get(HeaderAccount)),
+	}).Subject()
 	if user == "" {
-		user = sub // org-less fallback
+		user = sub // org-less fallback: no org names no account, but a sub can still gate
 	}
 	actor := sub
 	if org != "" && sub != "" {

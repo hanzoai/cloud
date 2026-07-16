@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/metering"
 )
 
@@ -93,8 +94,14 @@ func TestMiddleware_GatesAndRecords(t *testing.T) {
 	if n != 1 || amt != 7 {
 		t.Fatalf("recorded (count=%d amount=%d), want (1, 7)", n, amt)
 	}
-	if usr != "hanzo" {
-		t.Errorf("recorded user = %q, want hanzo (per-org billing key, not org/sub)", usr)
+	// gatewayReq is a person in the SHARED SIGNUP org, who holds their own account:
+	// its members are strangers, not a team, so a shared org is not a shared wallet.
+	// This asserted "hanzo" — the org pool — while ai's gate debited "hanzo/alice",
+	// which is the funded-pool-then-402 split. The account is whatever the one rule
+	// says, so assert against the rule rather than restating a premise it disproved.
+	want := account.Payer(account.Credential{Owner: "hanzo", Name: "alice"}).Subject()
+	if usr != want {
+		t.Errorf("recorded user = %q, want %q (the account the shared rule resolves)", usr, want)
 	}
 }
 

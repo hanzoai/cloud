@@ -197,7 +197,7 @@ func enforce(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Ledger settlement debits an ORG ledger, so a validated payer is required.
-	payer := principal.Payer(c)
+	payer := principal.HomeOrg(c)
 	if payer == "" {
 		return zip.ErrForbidden("sign in")
 	}
@@ -318,7 +318,7 @@ func settleLedger(s *cloud.Service[state], ctx context.Context, st *Settlement, 
 // getSettlement is the receipt lookup: GET /v1/x402/settlements/:id, scoped to the
 // caller's payer org so one tenant can never read another's settlement.
 func getSettlement(s *cloud.Service[state], c *zip.Ctx) error {
-	payer := principal.Payer(c)
+	payer := principal.HomeOrg(c)
 	if payer == "" {
 		return zip.ErrForbidden("sign in")
 	}
