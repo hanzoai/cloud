@@ -37,7 +37,7 @@ func NewDispatcher(
 type sessionAdapter struct{}
 
 func (sessionAdapter) Open(ctx context.Context, org, actor, agent, title string) (string, error) {
-	return agents.OpenSession(ctx, org, actor, agent, title)
+	return agents.OpenSession(ctx, agents.SessionOpen{Org: org, Actor: actor, Agent: agent, Title: title})
 }
 func (sessionAdapter) Log(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error {
 	return agents.LogSessionEvent(ctx, org, sessionID, kind, actor, payload)
