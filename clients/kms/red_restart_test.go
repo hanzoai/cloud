@@ -1,13 +1,19 @@
 package kms
 
-// RED tests for the embedded KMS client internals: encryption-key restart
-// semantics (rotation / downgrade), Sign fail-closed, and master-key non-leakage.
-// White-box (same package) so we can drive New/Get/Put with explicit keys.
+// RED tests for the embedded KMS client internals: master-key restart semantics
+// over the PER-ORG SQLite backend (wrong-key confidentiality, health-only fail
+// closed, the clean health-only→key transition), Sign fail-closed, and master-key
+// non-leakage. White-box (same package) so we can drive New/Get/Put with explicit
+// keys. The confidentiality boundary is now the per-secret AES-256-GCM Seal
+// envelope (bound to the master key), not a store-level key registry — so these
+// vectors assert the REAL boundary and confirm the former ZapDB KEYREGISTRY brick
+// foot-gun is gone.
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
@@ -32,12 +38,13 @@ func randB64Key(t *testing.T) string {
 	return base64.StdEncoding.EncodeToString(k)
 }
 
-// VECTOR 8a: restart with a DIFFERENT master key (rotation without re-encrypt).
-// zapdb's KEYREGISTRY sanity-text check must make badger.Open FAIL — so the
-// store does NOT silently open with a wrong key (which would corrupt/lose data
-// or, worse, appear to work). We assert New returns an error → pickKMSClient
-// falls back to DisabledKMS (fail-closed). Proof it is not a silent downgrade.
-func TestVector8a_RestartWrongKeyFailsClosed(t *testing.T) {
+// VECTOR 8a: restart with a DIFFERENT master key. Per-org SQLite has no KEYREGISTRY,
+// so the store REOPENS without a brick — but the per-secret AES-256-GCM Seal is
+// bound to key A, so key B CANNOT Open the record: Get fails closed, returning no
+// plaintext. Confidentiality holds on the REAL boundary (the Seal envelope), and
+// in production cek additionally refuses to unwrap the per-file DEK under the wrong
+// key at open. Proof it is not a silent downgrade AND not an availability brick.
+func TestVector8a_WrongKeyCannotReadSealedSecret(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
 
@@ -53,24 +60,29 @@ func TestVector8a_RestartWrongKeyFailsClosed(t *testing.T) {
 		t.Fatalf("close1: %v", err)
 	}
 
-	// Boot 2: key B (rotation, store still encrypted with A's datakey registry).
-	// zapdb sanity check should reject B → New errors.
+	// Boot 2: key B. New/open succeeds (no registry to brick); the read must fail
+	// closed because the Seal envelope is bound to key A.
 	c2, err := New(Config{DataDir: dir, MasterKeyB64: b64key(t, 0xBB)}, log)
-	if err == nil {
-		// If it did NOT error, prove it at least cannot read A's secret with B.
-		defer c2.Close()
-		_, gErr := c2.Get("/orgs/x", "K", "default")
-		t.Fatalf("SILENT-DOWNGRADE RISK: reopened store with WRONG key without error "+
-			"(Get err=%v). Expected badger.Open to fail on KEYREGISTRY sanity mismatch.", gErr)
+	if err != nil {
+		t.Fatalf("boot2 New should succeed (no brick): %v", err)
 	}
-	t.Logf("rotation w/o re-encrypt fails closed: New(wrong key) → %v", err)
+	defer c2.Close()
+	pt, gErr := c2.Get("/orgs/x", "K", "default")
+	if gErr == nil {
+		t.Fatalf("BREACH: wrong key READ the sealed secret: got %q", pt)
+	}
+	if pt != nil {
+		t.Fatalf("BREACH: wrong-key Get returned %d plaintext bytes — must be nil", len(pt))
+	}
+	t.Logf("wrong-key read fails closed via the Seal envelope (no plaintext), no brick: %v", gErr)
 }
 
-// VECTOR 8b: store first created ENCRYPTED (key A), then restarted with NO key
-// (health-only). zapdb must reject the plaintext-open of an encrypted registry —
-// so you cannot silently DOWNGRADE an encrypted store to unencrypted. New should
-// error (→ DisabledKMS), never open an encrypted store as plaintext.
-func TestVector8b_EncryptedThenNoKeyFailsClosed(t *testing.T) {
+// VECTOR 8b: store created with a key, then restarted with NO key. The keyless
+// process runs HEALTH-ONLY (not Ready): every secret op fails closed with
+// ErrMasterKeyMissing BEFORE the store is touched, so it can never read or shadow
+// the encrypted secrets. (In production cek would also refuse to open the
+// encrypted file without the key.) No silent plaintext downgrade.
+func TestVector8b_NoKeyIsHealthOnlyFailClosed(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
 
@@ -81,29 +93,34 @@ func TestVector8b_EncryptedThenNoKeyFailsClosed(t *testing.T) {
 	_ = c1.Put("/orgs/x", "K", "default", []byte("v"))
 	c1.Close()
 
-	// Boot 2: NO key. Store dir already has an encrypted KEYREGISTRY.
+	// Boot 2: NO key → health-only.
 	c2, err := New(Config{DataDir: dir, MasterKeyB64: ""}, log)
-	if err == nil {
-		defer c2.Close()
-		if c2.Ready() {
-			t.Fatalf("BREACH: encrypted store reopened in READY mode with no key")
-		}
-		// It opened but is health-only. Is that a silent downgrade of the encrypted KV?
-		t.Fatalf("SILENT-DOWNGRADE RISK: encrypted store reopened WITHOUT key did not error "+
-			"(Ready=%v). Expected badger.Open to fail decrypting the KEYREGISTRY.", c2.Ready())
+	if err != nil {
+		t.Fatalf("boot2 (no key) New: %v", err)
 	}
-	t.Logf("encrypted→no-key fails closed: New(no key on encrypted dir) → %v", err)
+	defer c2.Close()
+	if c2.Ready() {
+		t.Fatal("BREACH: keyless client reports Ready")
+	}
+	if _, gErr := c2.Get("/orgs/x", "K", "default"); !errors.Is(gErr, ErrMasterKeyMissing) {
+		t.Fatalf("keyless Get = %v, want ErrMasterKeyMissing (fail closed before store)", gErr)
+	}
+	if pErr := c2.Put("/orgs/x", "K2", "default", []byte("v")); !errors.Is(pErr, ErrMasterKeyMissing) {
+		t.Fatalf("keyless Put = %v, want ErrMasterKeyMissing (fail closed before store)", pErr)
+	}
+	t.Logf("no-key boot is health-only; every secret op fails closed before the store")
 }
 
-// VECTOR 8c: the FOOT-GUN — store first created in HEALTH-ONLY (no key, plaintext
-// KEYREGISTRY), then the operator injects the real key on the next boot. Does
-// badger.Open reject the now-mismatched (plaintext) registry, bricking the store
-// until wiped? This is the availability trap Blue flagged as untested.
-func TestVector8c_HealthOnlyThenKeyBricks(t *testing.T) {
+// VECTOR 8c: the former FOOT-GUN, now ELIMINATED. A health-only boot (no key)
+// writes NOTHING (Put fails closed), so it leaves no half-initialized/plaintext
+// store to poison the next boot. When the operator injects the real key, the store
+// opens CLEAN and roundtrips — no brick, no data-dir wipe required. The ZapDB
+// health-only→key brick is gone.
+func TestVector8c_HealthOnlyThenKeyIsClean(t *testing.T) {
 	dir := t.TempDir()
 	log := luxlog.NewNoOpLogger()
 
-	// Boot 1: NO key → health-only, plaintext KEYREGISTRY created.
+	// Boot 1: NO key → health-only; writes are refused, so nothing lands on disk.
 	c1, err := New(Config{DataDir: dir, MasterKeyB64: ""}, log)
 	if err != nil {
 		t.Fatalf("boot1 (health-only): %v", err)
@@ -111,29 +128,28 @@ func TestVector8c_HealthOnlyThenKeyBricks(t *testing.T) {
 	if c1.Ready() {
 		t.Fatal("health-only client should not be Ready")
 	}
+	if err := c1.Put("/orgs/x", "K", "default", []byte("v")); !errors.Is(err, ErrMasterKeyMissing) {
+		t.Fatalf("health-only Put = %v, want ErrMasterKeyMissing (writes nothing)", err)
+	}
 	c1.Close()
 
-	// Boot 2: operator injects the real key. Plaintext registry now mismatches.
+	// Boot 2: operator injects the real key. Clean open + roundtrip, no brick.
 	c2, err := New(Config{DataDir: dir, MasterKeyB64: b64key(t, 0xDD)}, log)
 	if err != nil {
-		t.Logf("FOOT-GUN CONFIRMED: after a health-only boot, injecting the real key BRICKS "+
-			"the store (New → %v). Operator must wipe {DataDir}/kms before first real boot, "+
-			"or the KMS never comes up. Availability trap, not a data-confidentiality breach.", err)
-		return
+		t.Fatalf("health-only→key New: %v", err)
 	}
-	// If it opened, is it usable (Ready + roundtrip)?
 	defer c2.Close()
 	if !c2.Ready() {
-		t.Fatalf("after health-only→key boot: client not Ready (err=nil but unusable)")
+		t.Fatalf("after health-only→key boot: client not Ready")
 	}
 	if err := c2.Put("/orgs/x", "K", "default", []byte("v")); err != nil {
-		t.Fatalf("FOOT-GUN: Ready but Put fails after health-only→key transition: %v", err)
+		t.Fatalf("Put after health-only→key transition: %v", err)
 	}
 	got, err := c2.Get("/orgs/x", "K", "default")
 	if err != nil || string(got) != "v" {
-		t.Fatalf("FOOT-GUN: roundtrip broken after health-only→key transition: got=%q err=%v", got, err)
+		t.Fatalf("roundtrip broken after health-only→key transition: got=%q err=%v", got, err)
 	}
-	t.Logf("health-only→key transition is CLEAN: store upgrades to encrypted and roundtrips OK")
+	t.Logf("health-only→key transition is CLEAN: no brick (foot-gun eliminated), roundtrips OK")
 }
 
 // VECTOR 8d: clean restart with the SAME key must preserve + decrypt secrets
