@@ -49,33 +49,15 @@ func setGitNoCache(c *zip.Ctx) {
 // selected by the ?service= query param; both upload-pack (fetch) and
 // receive-pack (push) advertise here.
 func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := org(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
-	}
-	name, err := repoNameParam(c)
-	if err != nil {
-		return err
-	}
-	project := projectScope(c)
-
-	// The org path segment must match the authenticated org. A caller may only
-	// reach their own org's namespace, never another's, even if they craft a
-	// different :org in the URL (Red: path-vs-identity confusion).
-	if p := c.Param("org"); p != "" && p != org {
-		return zip.ErrForbidden("org path does not match authenticated org")
-	}
-
 	service := c.Query("service")
 	if service != svcUploadPack && service != svcReceivePack {
 		return zip.ErrBadRequest("service must be git-upload-pack or git-receive-pack")
 	}
-	store, err := storeFor(s, org)
+	// Anonymous read is allowed ONLY for the fetch advertisement of a PUBLIC
+	// repo; the push advertisement (receive-pack) always requires the org.
+	org, project, name, err := resolvePackRepo(s, c, service == svcUploadPack)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "open store: %v", err)
-	}
-	if _, err := store.Get(c.Context(), org, project, name); err != nil {
-		return zip.ErrNotFound("repo not found")
+		return err
 	}
 
 	// Advertisement is bounded by ref count (not pack size) — safe to buffer.
@@ -102,7 +84,7 @@ func infoRefs(s *cloud.Service[state], c *zip.Ctx) error {
 // `git upload-pack --stateless-rpc` stdin and git's stdout is handed to fasthttp
 // as the response body — no pack bytes are buffered in this process.
 func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, err := resolvePackRepo(s, c)
+	org, project, name, err := resolvePackRepo(s, c, true) // public repos fetch anonymously
 	if err != nil {
 		return err
 	}
@@ -129,7 +111,7 @@ func uploadPack(s *cloud.Service[state], c *zip.Ctx) error {
 // push returns. Memory stays bounded: the pack streams to disk, only the tiny
 // report is buffered.
 func receivePack(s *cloud.Service[state], c *zip.Ctx) error {
-	org, project, name, err := resolvePackRepo(s, c)
+	org, project, name, err := resolvePackRepo(s, c, false) // push is NEVER anonymous
 	if err != nil {
 		return err
 	}
@@ -186,19 +168,35 @@ func packRequestBody(c *zip.Ctx) io.Reader {
 }
 
 // resolvePackRepo is the shared front-half of every smart-HTTP pack handler:
-// resolve the org from X-Org-Id, validate the repo name, enforce the URL org
-// segment matches the authenticated org (path-vs-identity guard), and confirm
-// the repo exists. Returns the (org, project, name) the pack driver operates on.
-func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx) (string, string, string, error) {
-	orgID, ok := org(c)
-	if !ok {
-		return "", "", "", zip.ErrForbidden("X-Org-Id required")
+// resolve the org, validate the repo name, enforce the URL org segment matches
+// the authenticated org (path-vs-identity guard), and confirm the repo exists.
+// Returns the (org, project, name) the pack driver operates on.
+//
+// allowPublic is the READ concession: with no authenticated org, a fetch-side
+// caller (upload-pack) may still resolve a repo that is (a) addressed by an
+// explicit, orgRE-safe :org path segment, (b) org-level (no project sub-scope —
+// anonymous callers have no validated project identity), and (c) marked Public.
+// A private or missing repo answers the SAME 404, so anonymous probing cannot
+// distinguish existence. Push (receive-pack) never passes allowPublic.
+func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx, allowPublic bool) (string, string, string, error) {
+	orgID, authed := org(c)
+	if !authed {
+		if !allowPublic {
+			return "", "", "", zip.ErrForbidden("X-Org-Id required")
+		}
+		orgID = c.Param("org")
+		if orgID == "" || !orgRE.MatchString(orgID) {
+			return "", "", "", zip.ErrForbidden("X-Org-Id required")
+		}
 	}
 	name, err := repoNameParam(c)
 	if err != nil {
 		return "", "", "", err
 	}
 	project := projectScope(c)
+	if !authed {
+		project = "" // anonymous has no validated sub-scope; public repos are org-level
+	}
 	if p := c.Param("org"); p != "" && p != orgID {
 		return "", "", "", zip.ErrForbidden("org path does not match authenticated org")
 	}
@@ -206,7 +204,8 @@ func resolvePackRepo(s *cloud.Service[state], c *zip.Ctx) (string, string, strin
 	if serr != nil {
 		return "", "", "", zip.Errorf(http.StatusInternalServerError, "open store: %v", serr)
 	}
-	if _, gerr := store.Get(c.Context(), orgID, project, name); gerr != nil {
+	r, gerr := store.Get(c.Context(), orgID, project, name)
+	if gerr != nil || (!authed && !r.Public) {
 		return "", "", "", zip.ErrNotFound("repo not found")
 	}
 	return orgID, project, name, nil
