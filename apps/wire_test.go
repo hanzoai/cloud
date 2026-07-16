@@ -26,7 +26,7 @@ var frozen = []struct {
 	{"pubsub", false, true},            // was order 5
 	{"kafka", false, true},             // was order 6
 	{"agentskills", false, false},      // was order 8
-	{"featureflags", false, false},     // was order 9
+	{"featureflags", true, true},       // was order 9; native engine: /v1/flags health + store shutdown
 	{"kms", true, false},               // was order 10
 	{"metrics", false, false},          // was order 40
 	{"ingress", false, true},           // was order 42

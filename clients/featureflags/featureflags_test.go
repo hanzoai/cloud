@@ -1,36 +1,52 @@
 package featureflags
 
 import (
+	"crypto/rand"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 )
 
-// newTestClient points a Client at a fake Insights /flags server and installs it as the
-// process seam, restoring the prior seam on cleanup.
-func newTestClient(t *testing.T, base string) *Client {
+// The cek data plane fail-closes without a master key on encryption-capable
+// builds; tests supply one process-wide (SetMasterKey is once-only).
+var cekOnce sync.Once
+
+func testMasterKey(t *testing.T) {
 	t.Helper()
+	cekOnce.Do(func() {
+		k := make([]byte, 32)
+		if _, err := rand.Read(k); err != nil {
+			t.Fatalf("rng: %v", err)
+		}
+		cek.SetMasterKey(k)
+	})
+}
+
+// newTestClient builds a Client over a temp-dir store tree and installs it as the
+// process seam, restoring the prior seam on cleanup.
+func newTestClient(t *testing.T) *Client {
+	t.Helper()
+	testMasterKey(t)
 	prev := mounted
-	c := &Client{base: base, token: "phc_test", distinctID: "test", hc: &http.Client{Timeout: 2 * time.Second}, ttl: time.Minute}
+	c := &Client{
+		stores:     cloud.NewOrgStore[*Store](t.TempDir(), "flags", openStore),
+		distinctID: "test",
+		ttl:        time.Minute,
+	}
 	mounted = c
-	t.Cleanup(func() { mounted = prev })
+	t.Cleanup(func() {
+		_ = c.stores.CloseAll()
+		mounted = prev
+	})
 	return c
 }
 
-// flagServer returns an httptest server serving a controllable /flags response.
-func flagServer(t *testing.T, body func() map[string]any) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(body())
-	}))
-	t.Cleanup(srv.Close)
-	return srv
-}
-
 func TestEnvFallbackAndDefault(t *testing.T) {
-	// No Insights configured -> env fallback, then literal default.
+	// No engine/store configured -> env fallback, then literal default.
 	prev := mounted
 	mounted = &Client{} // not configured
 	t.Cleanup(func() { mounted = prev })
@@ -63,117 +79,182 @@ func TestEnvFallbackAndDefault(t *testing.T) {
 	}
 }
 
-func TestEvaluateFromInsights(t *testing.T) {
-	srv := flagServer(t, func() map[string]any {
-		return map[string]any{
-			"featureFlags":        map[string]any{"waitlist_open": true, "public_signup": false},
-			"featureFlagPayloads": map[string]any{"waitlist_access_capacity": 500},
+func TestStoreBackedSwitchOverridesEnv(t *testing.T) {
+	if !engineAvailable {
+		t.Skip("native engine not built (cgo off)")
+	}
+	newTestClient(t)
+	t.Setenv("WAITLIST_OPEN", "true")
+
+	// Cockpit flips the switch OFF: active=false evaluates to false and WINS.
+	if err := SetPlatformSwitch("waitlist_open", json.RawMessage(`{"active": false}`), "z@hanzo.ai"); err != nil {
+		t.Fatalf("SetPlatformSwitch: %v", err)
+	}
+	if Bool("waitlist_open") {
+		t.Fatalf("stored flag false must override env true")
+	}
+
+	// Flip back ON — SetPlatformSwitch invalidates, applies immediately.
+	if err := SetPlatformSwitch("waitlist_open", json.RawMessage(`{"active": true}`), "z@hanzo.ai"); err != nil {
+		t.Fatalf("SetPlatformSwitch: %v", err)
+	}
+	if !Bool("waitlist_open") {
+		t.Fatalf("stored flag true must evaluate true")
+	}
+}
+
+func TestIntSwitchRidesThePayload(t *testing.T) {
+	if !engineAvailable {
+		t.Skip("native engine not built (cgo off)")
+	}
+	newTestClient(t)
+	def := `{
+		"active": true,
+		"filters": {
+			"groups": [{"properties": [], "rollout_percentage": 100}],
+			"payloads": {"true": 42}
 		}
-	})
-	newTestClient(t, srv.URL)
-
-	if !Bool("waitlist_open") {
-		t.Fatalf("insights waitlist_open should be true")
+	}`
+	if err := SetPlatformSwitch("waitlist_access_capacity", json.RawMessage(def), "z@hanzo.ai"); err != nil {
+		t.Fatalf("SetPlatformSwitch: %v", err)
 	}
-	if Bool("public_signup") {
-		t.Fatalf("insights public_signup should be false")
-	}
-	if got := Int("waitlist_access_capacity"); got != 500 {
-		t.Fatalf("insights payload capacity should be 500, got %d", got)
+	if got := Int("waitlist_access_capacity"); got != 42 {
+		t.Fatalf("want 42 from payload, got %d", got)
 	}
 }
 
-func TestInsightsOverridesEnv(t *testing.T) {
-	srv := flagServer(t, func() map[string]any {
-		return map[string]any{"featureFlags": map[string]any{"waitlist_open": false}}
-	})
-	newTestClient(t, srv.URL)
-	t.Setenv("WAITLIST_OPEN", "true") // env says open, insights says closed -> insights wins
-	if Bool("waitlist_open") {
-		t.Fatalf("insights (false) must override env (true)")
+func TestProjectEvaluationRolloutAndVariants(t *testing.T) {
+	if !engineAvailable {
+		t.Skip("native engine not built (cgo off)")
+	}
+	c := newTestClient(t)
+	st, err := c.stores.For("acme", "web")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	def := `{
+		"active": true,
+		"filters": {
+			"groups": [
+				{"properties": [{"key": "plan", "value": "pro", "operator": "exact", "type": "person"}],
+				 "rollout_percentage": 100}
+			],
+			"multivariate": {"variants": [
+				{"key": "control", "rollout_percentage": 50},
+				{"key": "treatment", "rollout_percentage": 50}
+			]},
+			"payloads": {"treatment": {"cta": "buy"}}
+		}
+	}`
+	if err := st.Upsert("checkout-exp", json.RawMessage(def), "t"); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	eval := func(distinct string, props string) map[string]json.RawMessage {
+		t.Helper()
+		ctx := []byte(`{"distinct_id":"` + distinct + `","person_properties":` + props + `}`)
+		res, err := c.evaluateProject("acme", "web", ctx)
+		if err != nil {
+			t.Fatalf("evaluate: %v", err)
+		}
+		var out struct {
+			FeatureFlags map[string]json.RawMessage `json:"featureFlags"`
+		}
+		if err := json.Unmarshal(res, &out); err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		return out.FeatureFlags
+	}
+
+	// pro users get a stable variant; the same user always gets the same one
+	a := eval("user-1", `{"plan":"pro"}`)
+	b := eval("user-1", `{"plan":"pro"}`)
+	if string(a["checkout-exp"]) != string(b["checkout-exp"]) {
+		t.Fatalf("variant not sticky: %s vs %s", a["checkout-exp"], b["checkout-exp"])
+	}
+	v := string(a["checkout-exp"])
+	if v != `"control"` && v != `"treatment"` {
+		t.Fatalf("unexpected variant %s", v)
+	}
+	// non-pro users are off
+	if got := string(eval("user-1", `{"plan":"free"}`)["checkout-exp"]); got != "false" {
+		t.Fatalf("free plan must be off, got %s", got)
 	}
 }
 
-func TestHotApplyAfterTTL(t *testing.T) {
-	open := true
-	srv := flagServer(t, func() map[string]any {
-		return map[string]any{"featureFlags": map[string]any{"waitlist_open": open}}
-	})
-	c := newTestClient(t, srv.URL)
-
-	if !Bool("waitlist_open") {
-		t.Fatalf("first read should be true")
+func TestStoreCRUDAndActivity(t *testing.T) {
+	c := newTestClient(t)
+	st, err := c.stores.For("acme", "")
+	if err != nil {
+		t.Fatalf("store: %v", err)
 	}
-	// Flip the flag at the source, then expire the cache -> next read reflects it (hot-apply).
-	open = false
-	c.mu.Lock()
-	c.snap.at = time.Now().Add(-time.Hour)
-	c.mu.Unlock()
-	if Bool("waitlist_open") {
-		t.Fatalf("after TTL expiry the flip must be visible (hot-apply)")
+	if err := st.Upsert("k1", json.RawMessage(`{"active": true}`), "alice"); err != nil {
+		t.Fatalf("upsert: %v", err)
 	}
-}
-
-func TestGracefulDegradeOnError(t *testing.T) {
-	// Unreachable base -> fetch fails -> env/default, never a panic.
-	prev := mounted
-	mounted = &Client{base: "http://127.0.0.1:0", token: "phc_test", hc: &http.Client{Timeout: 200 * time.Millisecond}, ttl: time.Minute}
-	t.Cleanup(func() { mounted = prev })
-	t.Setenv("WAITLIST_OPEN", "false")
-	if Bool("waitlist_open") {
-		t.Fatalf("unreachable insights must fall back to env=false")
+	if err := st.Upsert("k1", json.RawMessage(`{"active": false}`), "bob"); err != nil {
+		t.Fatalf("upsert 2: %v", err)
+	}
+	row, found, err := st.Get("k1")
+	if err != nil || !found {
+		t.Fatalf("get: %v found=%v", err, found)
+	}
+	if row.Version != 2 || row.UpdatedBy != "bob" {
+		t.Fatalf("version/actor wrong: %+v", row)
+	}
+	rows, err := st.List()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("list: %v n=%d", err, len(rows))
+	}
+	deleted, err := st.Delete("k1", "carol")
+	if err != nil || !deleted {
+		t.Fatalf("delete: %v deleted=%v", err, deleted)
+	}
+	acts, err := st.Activity(10)
+	if err != nil || len(acts) != 3 {
+		t.Fatalf("activity: %v n=%d", err, len(acts))
+	}
+	if acts[0].Action != "deleted" || acts[0].Actor != "carol" {
+		t.Fatalf("latest activity wrong: %+v", acts[0])
 	}
 }
 
 func TestBoard(t *testing.T) {
-	srv := flagServer(t, func() map[string]any {
-		return map[string]any{"featureFlags": map[string]any{"waitlist_open": true}}
-	})
-	newTestClient(t, srv.URL)
-	t.Setenv("INSIGHTS_APP_URL", "https://insights.hanzo.ai/")
-	t.Setenv("INSIGHTS_PROJECT_ID", "7")
-
+	newTestClient(t)
 	b := Board()
-	if b.Engine != "insights" || !b.Configured {
-		t.Fatalf("board engine/configured wrong: %+v", b)
+	if b.Engine != "hanzo-flags" {
+		t.Fatalf("engine name: %s", b.Engine)
 	}
-	if b.ManageURL != "https://insights.hanzo.ai/project/7/feature_flags" {
-		t.Fatalf("manage url wrong: %s", b.ManageURL)
+	if len(b.Switches) == 0 {
+		t.Fatalf("board must surface the registered switches")
 	}
-	var open, netID *SwitchView
-	for i := range b.Switches {
-		switch b.Switches[i].Key {
-		case "waitlist_open":
-			open = &b.Switches[i]
-		case "network_id_mainnet":
-			netID = &b.Switches[i]
+	seen := map[string]bool{}
+	for _, s := range b.Switches {
+		seen[s.Key] = true
+	}
+	for _, want := range []string{"waitlist_open", "public_signup", "gateway_rate_limit_rpm"} {
+		if !seen[want] {
+			t.Fatalf("board missing %s", want)
 		}
-	}
-	if open == nil || open.Source != "insights" || open.Value != "true" {
-		t.Fatalf("waitlist_open switch view wrong: %+v", open)
-	}
-	if netID == nil || !netID.ReadOnly || netID.Value != "1" {
-		t.Fatalf("network_id_mainnet should be read-only default 1: %+v", netID)
 	}
 }
 
 func TestParsers(t *testing.T) {
-	if b, ok := asBool(json.RawMessage("true")); !b || !ok {
+	if b, ok := asBool(json.RawMessage(`true`)); !ok || !b {
 		t.Fatal("asBool true")
 	}
-	if b, ok := asBool(json.RawMessage(`"on"`)); !b || !ok {
-		t.Fatal("asBool variant on")
+	if b, ok := asBool(json.RawMessage(`"variant-a"`)); !ok || !b {
+		t.Fatal("variant string should read as enabled")
 	}
-	if _, ok := asBool(json.RawMessage("")); ok {
-		t.Fatal("asBool empty not present")
+	if _, ok := asBool(json.RawMessage(`null`)); ok {
+		t.Fatal("null is absent")
 	}
-	if n, ok := asInt(json.RawMessage("500")); n != 500 || !ok {
-		t.Fatal("asInt number")
+	if n, ok := asInt(json.RawMessage(`42`)); !ok || n != 42 {
+		t.Fatal("asInt 42")
 	}
-	if n, ok := asInt(json.RawMessage(`"42"`)); n != 42 || !ok {
-		t.Fatal("asInt string number")
+	if n, ok := asInt(json.RawMessage(`"17"`)); !ok || n != 17 {
+		t.Fatal("asInt string")
 	}
-	if s, ok := asString(json.RawMessage(`"hi"`)); s != "hi" || !ok {
+	if s, ok := asString(json.RawMessage(`"hi"`)); !ok || s != "hi" {
 		t.Fatal("asString")
 	}
 }
