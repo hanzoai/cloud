@@ -175,7 +175,7 @@ func Wire() []cloud.MountSpec {
 		// /.well-known/agent-skills/* — before IAM's /.well-known/* wildcard (50).
 		{Name: "agentskills", Mount: cloud.Typed(agentskills.Mount)},
 		// Insights feature-flag evaluation seam (no routes; a hot value plane).
-		{Name: "featureflags", Mount: cloud.Typed(featureflags.Mount)},
+		{Name: "featureflags", Mount: cloud.Typed(featureflags.Mount), Shutdown: featureflags.Shutdown, OwnsHealth: true},
 		// Embedded KMS secrets plane /v1/kms/*. OwnsHealth: serves its own fail-closed
 		// /v1/kms/health (the generic always-ok route must not shadow it). Fails closed
 		// until the operator injects CLOUD_KMS_MASTER_KEY_REF. (Its in-process client
