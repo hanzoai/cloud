@@ -28,11 +28,11 @@
 //	GET    /v1/machines/:id/agent-binding          the machine's agent binding    -> agentBinding (404 if none)
 //	DELETE /v1/machines/:id/agent-binding          unbind the agent               -> 204
 //	GET    /v1/agent-bindings                     the org's agent bindings        -> {agentBindings:[agentBinding]}
-//	GET    /v1/bots                               the org's bots (kind=bot)       -> {bots:[botView]}
-//	POST   /v1/bots/launch                        launch a bot (machine+bind)     -> botView | quote
-//	GET    /v1/bots/:id                            one bot by id                  -> botView (404 if not a bot)
-//	DELETE /v1/bots/:id                            terminate a bot (unbind+delete) -> 204
-//	POST   /v1/bots/:id/:action                   stop|pause|message the bot      -> action result
+//	GET    /v1/compute/bots                       the org's bot machines (kind=bot) -> {bots:[botView]}
+//	POST   /v1/compute/bots/launch                launch a bot machine (machine+bind) -> botView | quote
+//	GET    /v1/compute/bots/:id                    one bot machine by id          -> botView (404 if not a bot)
+//	DELETE /v1/compute/bots/:id                    terminate a bot machine        -> 204
+//	POST   /v1/compute/bots/:id/:action           stop|pause|message the bot      -> action result
 //
 // The tenant (principal.Org) is passed to Visor as ?owner=<org>, so a caller
 // can only ever read or mutate their OWN tenant's compute; the org is taken from
@@ -125,14 +125,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Delete("/v1/machines/:id/agent-binding", cloud.Handle(s, unbindMachineAgent))
 	app.Get("/v1/agent-bindings", cloud.Handle(s, listAgentBindings))
 
-	// Bots — a Bot is a kind=bot machine + an agent binding, composed from the vm
-	// compute + binding surface (bots.go). The sibling of /v1/machines. launch is
-	// an explicit literal, registered before :id so it never binds as an id.
-	app.Get("/v1/bots", cloud.Handle(s, listBots))
-	app.Post("/v1/bots/launch", cloud.Handle(s, launchBot))
-	app.Get("/v1/bots/:id", cloud.Handle(s, getBot))
-	app.Delete("/v1/bots/:id", cloud.Handle(s, deleteBot))
-	app.Post("/v1/bots/:id/:action", cloud.Handle(s, botAction))
+	// Bot machines — a kind=bot machine + an agent binding, composed from the vm
+	// compute + binding surface (bots.go). The value is a MACHINE that hosts a bot
+	// runtime, not the bot itself: /v1/bots is the bot RUN (clients/bots), a
+	// different noun. It nests under /v1/compute (visor's domain) so the two never
+	// share a route namespace. launch is an explicit literal, registered before :id
+	// so it never binds as an id.
+	app.Get("/v1/compute/bots", cloud.Handle(s, listBots))
+	app.Post("/v1/compute/bots/launch", cloud.Handle(s, launchBot))
+	app.Get("/v1/compute/bots/:id", cloud.Handle(s, getBot))
+	app.Delete("/v1/compute/bots/:id", cloud.Handle(s, deleteBot))
+	app.Post("/v1/compute/bots/:id/:action", cloud.Handle(s, botAction))
 
 	s.Log.Info("visor compute surface mounted", "target", s.State.cl.target,
 		"serviceAuth", serviceClientID() != "", "brand", deps.Brand)
