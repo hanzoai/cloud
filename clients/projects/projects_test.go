@@ -8,6 +8,8 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+
+	"github.com/hanzoai/cloud"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -301,17 +303,20 @@ func TestWalkTarGzRejects(t *testing.T) {
 	}
 }
 
-func TestSitePrefixAndLiveURL(t *testing.T) {
+// TestSitePrefixAndSiteURL pins the storage layout (sitePrefix) and the ONE
+// canonical public URL of a deployed site: the pretty <slug>.<apex> host. The old
+// raw-S3 liveURL form is gone (forward-perfection) — a published site is only ever
+// addressed by its pretty host, which is stable across redeploys of the same slug.
+func TestSitePrefixAndSiteURL(t *testing.T) {
 	if got := sitePrefix("hanzo", "maxpower"); got != "hanzo/maxpower" {
 		t.Fatalf("sitePrefix=%q", got)
 	}
-	b := &blobStore{bucket: "hanzo-sites", publicURL: "https://s3.hanzo.ai"}
-	want := "https://s3.hanzo.ai/hanzo-sites/hanzo/maxpower/index.html"
-	if got := b.liveURL("hanzo", "maxpower"); got != want {
-		t.Fatalf("liveURL=%q want %q", got, want)
+	s := &cloud.Service[state]{State: state{apex: "hanzo.app"}}
+	if got := siteURL(s, "maxpower"); got != "https://maxpower.hanzo.app" {
+		t.Fatalf("siteURL=%q want %q", got, "https://maxpower.hanzo.app")
 	}
-	b.sitesURL = "https://sites.hanzo.app"
-	if got := b.liveURL("hanzo", "maxpower"); got != "https://sites.hanzo.app/hanzo/maxpower/" {
-		t.Fatalf("pretty liveURL=%q", got)
+	// Deterministic across calls — the redeploy URL-invariant at the URL layer.
+	if siteURL(s, "maxpower") != siteURL(s, "maxpower") {
+		t.Fatal("siteURL must be deterministic for a given slug")
 	}
 }
