@@ -51,6 +51,12 @@ func do(t *testing.T, app *zip.App, method, target string, headers map[string]st
 		t.Fatalf("new request %s %s: %v", method, target, err)
 	}
 	for k, v := range headers {
+		// Host is not a normal client header (net/http reads it from req.Host);
+		// honor it so tests can drive the per-host white-label title.
+		if strings.EqualFold(k, "Host") {
+			req.Host = v
+			continue
+		}
 		req.Header.Set(k, v)
 	}
 	// Timeout: 0 disables the per-request deadline (Fiber v3), so a slow CI host
@@ -209,6 +215,64 @@ func TestPathTraversal_CannotEscapeEmbedFS(t *testing.T) {
 		if bytes.Contains(body, []byte("module github.com/hanzoai/cloud")) ||
 			bytes.Contains(body, []byte("func Serve(")) {
 			t.Errorf("GET %s leaked repo source outside the embed FS", evil)
+		}
+	}
+}
+
+// TestRoot_TitleIsHostBranded: the embedded console is a STATIC export whose
+// <title> is baked to the default (Hanzo) brand at build time. serveIndex must
+// rewrite it to the REQUEST host's white-label brand, so console.lux.cloud never
+// renders "Hanzo Cloud Console" in the browser tab (a white-label violation) —
+// while console.hanzo.ai still reads "Hanzo Cloud Console" (no regression). The
+// SPA shell (GET / and every client-side deep link) carries the branded title.
+func TestRoot_TitleIsHostBranded(t *testing.T) {
+	app := newConsoleApp(t)
+	cases := []struct{ host, wantTitle string }{
+		{"console.lux.cloud", "Lux Cloud Console"},
+		{"console.hanzo.ai", "Hanzo Cloud Console"},
+		{"console.zoo.cloud", "Zoo Cloud Console"},
+		{"api.lux.network", "Lux Cloud Console"}, // primary Domain match, not just .cloud
+	}
+	// GET / AND a representative client-side deep link both serve the shell.
+	for _, target := range []string{"/", "/orgs"} {
+		for _, tc := range cases {
+			status, body, _ := do(t, app, http.MethodGet, target, map[string]string{"Host": tc.host})
+			if status != http.StatusOK {
+				t.Errorf("GET %s Host=%s status=%d, want 200", target, tc.host, status)
+				continue
+			}
+			want := []byte("<title>" + tc.wantTitle + "</title>")
+			if !bytes.Contains(body, want) {
+				t.Errorf("GET %s Host=%s: served shell missing %s", target, tc.host, want)
+			}
+			// No host may leak a DIFFERENT brand's <title>.
+			for _, other := range []string{"Hanzo Cloud Console", "Lux Cloud Console", "Zoo Cloud Console"} {
+				if other != tc.wantTitle && bytes.Contains(body, []byte("<title>"+other+"</title>")) {
+					t.Errorf("GET %s Host=%s leaked <title>%s</title>", target, tc.host, other)
+				}
+			}
+		}
+	}
+}
+
+// TestConsoleTitle: the pure host→title mapping. "<Brand> Cloud Console",
+// matching hanzoai/console's `${brandName} Console`, with the Hanzo default for
+// an unbranded host.
+func TestConsoleTitle(t *testing.T) {
+	cases := map[string]string{
+		"console.lux.cloud":     "Lux Cloud Console",
+		"console.hanzo.ai":      "Hanzo Cloud Console",
+		"console.zoo.cloud":     "Zoo Cloud Console",
+		"console.pars.ai":       "Pars Cloud Console",
+		"api.lux.network":       "Lux Cloud Console",
+		"lux.cloud":             "Lux Cloud Console",
+		"console.lux.cloud:443": "Lux Cloud Console",   // port stripped
+		"example.com":           "Hanzo Cloud Console", // unbranded → default
+		"":                      "Hanzo Cloud Console", // empty → default
+	}
+	for host, want := range cases {
+		if got := consoleTitle(host); got != want {
+			t.Errorf("consoleTitle(%q) = %q, want %q", host, got, want)
 		}
 	}
 }

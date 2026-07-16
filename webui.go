@@ -1,12 +1,14 @@
 package cloud
 
 import (
+	"bytes"
 	"embed"
 	"io"
 	"io/fs"
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/zap-proto/zip"
@@ -41,6 +43,21 @@ var consoleFS embed.FS
 // it must fall through to the SPA shell, not 404. One surface per port: :8000 =
 // product API + SPA, :9090 = ops (health + Prometheus /metrics).
 var apiPrefixes = []string{"/v1/", "/zap", "/healthz", "/readyz"}
+
+// consoleTitleRe matches the single <head> <title>…</title> element (any
+// attributes, any inner text, across newlines) so serveIndex can rewrite it to
+// the request host's white-label brand.
+var consoleTitleRe = regexp.MustCompile(`(?is)<title[^>]*>.*?</title>`)
+
+// consoleTitle is the white-label document <title> for a request Host:
+// "<Brand> Cloud Console" (console.lux.cloud → "Lux Cloud Console",
+// console.hanzo.ai → "Hanzo Cloud Console"). It mirrors hanzoai/console's own
+// `${brandName} Console` SSR output so the embedded static console and the
+// standalone app render an identical per-host tab title. Brand is resolved from
+// the same brands registry as every other white-label surface (brand.go).
+func consoleTitle(host string) string {
+	return brandDisplay(BrandForHost(host)) + " Cloud Console"
+}
 
 // mountConsole registers the embedded console at the web root as the app's
 // terminal handler. It is called LAST in Serve — after every /v1 subsystem
@@ -169,14 +186,36 @@ func (h *consoleHandler) serveAsset(w http.ResponseWriter, r *http.Request, name
 
 // serveIndex writes the SPA shell. index.html is never cached (clients must pick
 // up a new build immediately); the fingerprinted assets it references are cached
-// hard by setCacheHeaders.
+// hard by setCacheHeaders. The shell's <title> is rewritten to the request
+// host's white-label brand (indexFor).
 func (h *consoleHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
-		_, _ = w.Write(h.index)
+		_, _ = w.Write(h.indexFor(r.Host))
 	}
+}
+
+// indexFor returns the SPA shell with its document <title> rewritten to the
+// request host's white-label brand. The shipped shell is a STATIC export whose
+// <title> is baked to the default (Hanzo) brand at BUILD time; a static export
+// cannot read the request Host, so the SERVING layer injects the brand here —
+// otherwise a Lux/Zoo host leaks "Hanzo Cloud Console" in the browser tab, a
+// white-label violation. When the baked title already equals the brand title
+// (the Hanzo/default host) or there is no <title> to rewrite, the embedded bytes
+// are returned unchanged.
+func (h *consoleHandler) indexFor(host string) []byte {
+	repl := []byte("<title>" + consoleTitle(host) + "</title>")
+	loc := consoleTitleRe.FindIndex(h.index)
+	if loc == nil || bytes.Equal(h.index[loc[0]:loc[1]], repl) {
+		return h.index
+	}
+	out := make([]byte, 0, len(h.index)-(loc[1]-loc[0])+len(repl))
+	out = append(out, h.index[:loc[0]]...)
+	out = append(out, repl...)
+	out = append(out, h.index[loc[1]:]...)
+	return out
 }
 
 // setCacheHeaders applies cache policy by asset kind. Fingerprinted build assets
