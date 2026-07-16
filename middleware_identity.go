@@ -174,7 +174,6 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			cliOrg = ""
 		}
 		cliApp := strings.TrimSpace(string(req.Header.Peek("X-App-Id")))
-		cliBillingAccount := strings.TrimSpace(string(req.Header.Peek("X-Billing-Account-Id")))
 		for _, h := range authorityHeaders {
 			req.Header.Del(h)
 		}
@@ -265,7 +264,7 @@ func SanitizeIdentity(v *identityValidator, adminOrg string) zip.Handler {
 			if claims.IsAdmin && !isKMSMachinePrincipal(claims) {
 				req.Header.Set("X-User-IsOrgAdmin", "true")
 			}
-			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, cliBillingAccount)
+			sanitizeSubScopes(c, effOrg, claims.mintedProject(), cliApp, claims.mintedBillingAccount())
 			return c.Continue()
 		}
 
@@ -322,11 +321,14 @@ func sanitizeSubScopes(c *zip.Ctx, org, project, app, billingAccount string) {
 	if app != "" {
 		req.Header.Set("X-App-Id", app)
 	}
-	// X-Billing-Account-Id is an ATTRIBUTION hint only: the debit account is always
-	// resolved SERVER-SIDE by commerce from the org's ProjectBinding (never trusted
-	// from this header), so a mislabelled account can only ever misattribute the
-	// caller's OWN spend within its own org — it can never redirect spend to another
-	// tenant's account. Forwarded as-is on the validated path, dropped when anonymous.
+	// X-Billing-Account-Id names WHO PAYS, so it is minted from the validated
+	// `billing_account` claim (claims.mintedBillingAccount) and never from a client
+	// value — the raw copy is deleted on ingress and not restored here. It used to
+	// be forwarded as-is, which was defensible only while it was a mere attribution
+	// hint that no debit read. It is not one anymore: ai/object.Payer now resolves
+	// the paying Account from this claim, so a restored client copy would be a caller
+	// naming its own payer — the whole thing the claim exists to prevent. Absent when
+	// IAM minted no account (a pre-claim token); Payer then falls back.
 	if billingAccount != "" {
 		req.Header.Set("X-Billing-Account-Id", billingAccount)
 	}
