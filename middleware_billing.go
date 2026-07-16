@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hanzoai/account"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -220,11 +221,25 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	// the admin org's ledger, never the org being acted on. BillingOrg resolves home
 	// (X-User-Owner) with an effective-org fallback, and is Validated-gated (true here,
 	// checked above). Data scope elsewhere keeps reading c.Org() (effective).
-	payer, _ := principal.BillingOrg(c)
+	home, _ := principal.BillingOrg(c)
 	sub := strings.TrimSpace(c.User())
-	user := payer // per-org billing key = home org
+	// Which ACCOUNT within that home org pays is resolved by the ONE rule every
+	// layer that touches money shares (hanzoai/account.Payer), reading the
+	// gateway-minted `billing_account` claim. This used to be `user := home` — the
+	// org pool, always — on the premise that prepaid billing is per-org. That
+	// premise is false for a person in the shared signup org, who holds their OWN
+	// account: this gate checked the pool's balance while ai debited the person's,
+	// so a funded pool green-lit a request whose usage drained an empty personal
+	// wallet, and an empty pool 402'd a funded person. Resolving through Payer
+	// removes the premise instead of restating it. The home org still names the
+	// LEDGER (masquerade must debit the admin's own), which is exactly Account.Org.
+	user := account.Payer(account.Credential{
+		Owner:   home,
+		Name:    sub,
+		Account: principal.BillingAccount(c),
+	}).Subject()
 	if user == "" {
-		user = sub // org-less fallback
+		user = sub // org-less fallback: no org names no account, but a sub can still gate
 	}
 	// Scope axes for the per-scope spend cap (issue #70). Service is SERVER-DERIVED
 	// from the route (canonicalService), so it cannot be spoofed. Project is the
@@ -234,7 +249,7 @@ func identityFromCtx(c *zip.Ctx) metering.AuthInput {
 	project, projectValidated := principal.ValidatedProject(c)
 	return metering.AuthInput{
 		User:             user,
-		Org:              payer, // balance check + debit → HOME org (who pays)
+		Org:              home, // balance check + debit → the HOME org's ledger (who pays)
 		Project:          project,
 		ProjectValidated: projectValidated,
 		Service:          canonicalService(c.Path()),
