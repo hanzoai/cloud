@@ -1,11 +1,11 @@
-package flags
+package featuregate
 
-// The waitlist REGISTRY — the host→service map + service metadata folded in from
-// the former clients/featuregate SQLite store. It is deliberately MODE-FREE: a
-// service's waitlist mode is NOT a column here, it is the platform switch
-// waitlist.<svc> evaluated through the ONE native engine (waitlist.go). This store
-// answers only "which service owns this host, and what is its display metadata" —
-// the config the decide needs, with the decision itself owned by the flag engine.
+// The launch-registry — the host→service map + service display metadata. It is
+// deliberately MODE-FREE: a service's waitlist mode is NOT a column here, it is the
+// platform switch waitlist.<svc> evaluated through the ONE flag engine (clients/flags,
+// composed one-way from waitlist.go). This store answers only "which service owns this
+// host, and what is its display metadata" — the config the decide needs, with the
+// decision itself owned by the flag engine.
 //
 // It rides the SAME per-(org,project) OrgDB machinery as the flag defs (opened via
 // cloud.OrgStore, encrypted at rest via cek); the registry is PLATFORM-global, so it
@@ -21,7 +21,7 @@ import (
 )
 
 // ErrServiceNotFound is returned when a service slug is not in the registry.
-var ErrServiceNotFound = errors.New("flags: waitlist service not found")
+var ErrServiceNotFound = errors.New("featuregate: waitlist service not found")
 
 // ServiceRow is one hosted service in the registry (host→service + metadata). The
 // waitlist MODE is intentionally absent — it is the platform switch waitlist.<svc>,
@@ -45,7 +45,7 @@ type waitlistStore struct {
 }
 
 // openWaitlistStore migrates the registry schema over an already-opened (pragma'd,
-// cek-wrapped) OrgDB handle — the same open contract as openStore for flag defs.
+// cek-wrapped) OrgDB handle — the same open contract as flags' openStore for flag defs.
 func openWaitlistStore(db *sql.DB) (*waitlistStore, error) {
 	const schema = `
 CREATE TABLE IF NOT EXISTS wl_services (
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS wl_hosts (
 CREATE INDEX IF NOT EXISTS ix_wl_hosts_service ON wl_hosts(service);
 `
 	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("flags: waitlist migrate: %w", err)
+		return nil, fmt.Errorf("featuregate: waitlist migrate: %w", err)
 	}
 	return &waitlistStore{db: db}, nil
 }
@@ -210,7 +210,7 @@ func (s *waitlistStore) Get(ctx context.Context, service string) (ServiceRow, er
 func (s *waitlistStore) Upsert(ctx context.Context, in ServiceRow, by string, now int64) (ServiceRow, error) {
 	svc := strings.ToLower(strings.TrimSpace(in.Service))
 	if svc == "" {
-		return ServiceRow{}, fmt.Errorf("flags: waitlist service slug required")
+		return ServiceRow{}, fmt.Errorf("featuregate: waitlist service slug required")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

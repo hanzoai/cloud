@@ -1,9 +1,9 @@
-package flags
+package featuregate
 
-// Registry coverage for the folded host→service store. It drives the store over a raw
-// sqlite handle (the same driver OrgDB uses), so it exercises the fold WITHOUT the cek
+// Registry coverage for the host→service store. It drives the store over a raw sqlite
+// handle (the same driver OrgDB uses), so it exercises the registry WITHOUT the cek
 // at-rest layer — runnable under CGO=0. The MODE is out of scope here by design (it is
-// the waitlist.<svc> switch, evaluated by the native engine, covered separately).
+// the waitlist.<svc> switch, evaluated by the flag engine, covered separately).
 
 import (
 	"context"
