@@ -80,13 +80,18 @@ func Shutdown() error {
 // routes registers the /v1/sync control plane: the record and the service share the
 // one word "sync". Org-scoped like every tenant surface (the gateway-validated
 // principal selects the org).
+//
+// Every handler is wrapped in cloud.Terminal: sync mounts AFTER the commerce embed,
+// whose /v1 ErrorHandlerJSON filter flattens any PROPAGATED handler error to HTTP
+// 500. Terminal writes the reject status (401 no-principal, 400 bad body, 404
+// not-found) in-band, so the filter has nothing to flatten and the real 4xx stands.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/sync", cloud.Handle(s, createSync))
-	app.Get("/v1/sync", cloud.Handle(s, listSyncs))
-	app.Get("/v1/sync/:id", cloud.Handle(s, getSync))
-	app.Patch("/v1/sync/:id", cloud.Handle(s, patchSync))
-	app.Delete("/v1/sync/:id", cloud.Handle(s, deleteSync))
+	app.Post("/v1/sync", cloud.Terminal(cloud.Handle(s, createSync)))
+	app.Get("/v1/sync", cloud.Terminal(cloud.Handle(s, listSyncs)))
+	app.Get("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, getSync)))
+	app.Patch("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, patchSync)))
+	app.Delete("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, deleteSync)))
 	// Manual run: reconcile one sync now (initial import, or a re-sync after an
 	// upstream you couldn't webhook). A distinct trailing segment, never shadows :id.
-	app.Post("/v1/sync/:id/run", cloud.Handle(s, runSync))
+	app.Post("/v1/sync/:id/run", cloud.Terminal(cloud.Handle(s, runSync)))
 }
