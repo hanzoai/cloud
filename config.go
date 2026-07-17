@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hanzoai/cloud/role"
@@ -343,6 +344,13 @@ type Config struct {
 	ControlPlaneQuorum int
 }
 
+// flagsOnce guards the ONE registration of the CLI overrides on the process-global
+// flag.CommandLine. LoadConfig runs once in production (main) but many times across a
+// test binary (body_limit_test, brand_test, …); a second flag.StringVar of the same
+// name panics ("flag redefined: enable"). Flags are a command-line concern orthogonal
+// to the env resolution every call performs, so bind + parse them exactly once.
+var flagsOnce sync.Once
+
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
@@ -409,15 +417,20 @@ func LoadConfig() *Config {
 		ControlPlaneQuorum: getenvInt("CONTROL_PLANE_QUORUM", 0),
 	}
 
-	var enableCSV string
-	flag.StringVar(&enableCSV, "enable", getenv("CLOUD_ENABLE", ""), "comma-separated subsystem list (empty=all)")
-	flag.StringVar(&cfg.Brand, "brand", cfg.Brand, "white-label brand")
-	flag.StringVar(&cfg.Domain, "domain", cfg.Domain, "primary domain")
-	flag.StringVar(&cfg.IAMIssuer, "iam-issuer", cfg.IAMIssuer, "JWKS issuer")
-	flag.StringVar(&cfg.KMSMasterKeyRef, "kms-master-key-ref", cfg.KMSMasterKeyRef, "KMS master key reference")
-	flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "data root")
-	flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
-	flag.Parse()
+	enableCSV := getenv("CLOUD_ENABLE", "")
+	// Bind the CLI overrides once (see flagsOnce). A later call keeps its env-derived
+	// cfg unchanged — tests set env via t.Setenv, never argv — so guarding the
+	// registration loses nothing while making LoadConfig re-entrant.
+	flagsOnce.Do(func() {
+		flag.StringVar(&enableCSV, "enable", enableCSV, "comma-separated subsystem list (empty=all)")
+		flag.StringVar(&cfg.Brand, "brand", cfg.Brand, "white-label brand")
+		flag.StringVar(&cfg.Domain, "domain", cfg.Domain, "primary domain")
+		flag.StringVar(&cfg.IAMIssuer, "iam-issuer", cfg.IAMIssuer, "JWKS issuer")
+		flag.StringVar(&cfg.KMSMasterKeyRef, "kms-master-key-ref", cfg.KMSMasterKeyRef, "KMS master key reference")
+		flag.StringVar(&cfg.DataDir, "data-dir", cfg.DataDir, "data root")
+		flag.StringVar(&cfg.ListenAddr, "listen", cfg.ListenAddr, "HTTP listener")
+		flag.Parse()
+	})
 
 	if enableCSV != "" {
 		for _, name := range strings.Split(enableCSV, ",") {

@@ -189,12 +189,9 @@ func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := store.Upsert(c.Context(), cur); err != nil { // endpoints unchanged → updates in place
 		return zip.Errorf(http.StatusInternalServerError, "update sync: %v", err)
 	}
-	// Reconcile the derived outbound mirror to the (possibly new) direction.
+	// Reconcile the derived outbound Gitea push-mirror to the (possibly new) direction.
 	if cur.Kind == "git" {
-		native := repoNameFromLocator(cur.Target.Locator)
-		if err := cloud.EnsureGitMirror(c.Context(), org, "", native, cur.Source.Locator, dirPushes(cur.Direction)); err != nil {
-			s.Log.Warn("sync: patch mirror reconcile", "sync", cur.ID, "err", err)
-		}
+		reconcileOutboundMirror(c.Context(), s, cur, dirPushes(cur.Direction))
 	}
 	stored, err := store.Get(c.Context(), org, cur.ID)
 	if err != nil {
@@ -257,12 +254,10 @@ func deleteSync(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrNotFound("sync not found")
 	}
-	// Remove the outbound mirror (best-effort — the git plane may be unmounted).
+	// Tear down the outbound Gitea push-mirror (best-effort) so an unsynced repo never
+	// keeps pushing to the upstream.
 	if sy.Kind == "git" {
-		native := repoNameFromLocator(sy.Target.Locator)
-		if err := cloud.EnsureGitMirror(c.Context(), org, "", native, sy.Source.Locator, false); err != nil {
-			s.Log.Warn("sync: delete mirror teardown", "sync", id, "err", err)
-		}
+		reconcileOutboundMirror(c.Context(), s, sy, false)
 	}
 	if _, err := store.Delete(c.Context(), org, id); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "%v", err)
@@ -337,6 +332,35 @@ func principalOrg(c *zip.Ctx) (string, bool) {
 		return "", false
 	}
 	return o, true
+}
+
+// reconcileOutboundMirror ensures (push) or tears down (!push) the derived Gitea
+// push-mirror for a git sync — the Gitea-native replacement for the embedded
+// EnsureGitMirror, so the sync's outbound target lives in the ONE git store (Gitea),
+// never split across two. Best-effort: an unconfigured Gitea or a token miss is logged,
+// never fatal to the CRUD op (a webhook / re-run reconciles). push=false removes the
+// mirror; push=true ensures it (sync_on_commit) with a freshly-minted upstream token.
+func reconcileOutboundMirror(ctx context.Context, s *cloud.Service[state], sy Sync, push bool) {
+	gt, err := giteaFromEnv()
+	if err != nil {
+		s.Log.Warn("sync: outbound mirror (gitea unconfigured)", "sync", sy.ID, "err", err)
+		return
+	}
+	native := normalizeGitName(sy.Target.Locator)
+	if !push {
+		if err := gt.removePushMirror(ctx, sy.Org, native, sy.Source.Locator); err != nil {
+			s.Log.Warn("sync: outbound mirror teardown", "sync", sy.ID, "err", err)
+		}
+		return
+	}
+	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, "")
+	if err != nil {
+		s.Log.Warn("sync: outbound mirror token", "sync", sy.ID, "err", err)
+		return
+	}
+	if err := gt.ensurePushMirror(ctx, sy.Org, native, sy.Source.Locator, tok); err != nil {
+		s.Log.Warn("sync: outbound mirror ensure", "sync", sy.ID, "err", err)
+	}
 }
 
 // reconcileSem bounds concurrent background reconciles across all orgs so an import
