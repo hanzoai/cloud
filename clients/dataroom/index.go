@@ -19,7 +19,7 @@ import (
 type linkIndex struct{ db *sql.DB }
 
 func openLinkIndex(dataDir string) (*linkIndex, error) {
-	// Its OWN dir, distinct from gojabase's per-tenant tree ({dataDir}/dataroom/):
+	// Its OWN dir, distinct from NewBase's per-tenant tree ({dataDir}/dataroom/):
 	// this global routing table must never collide with a tenant's DB file.
 	dir := filepath.Join(dataDir, "dataroom_index")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
