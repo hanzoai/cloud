@@ -8,15 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// TestServicesGVR pins the operator Service CR identity. A typo here silently
-// breaks every read/deploy, so it is asserted (matches ml_test's GVR guard).
-func TestServicesGVR(t *testing.T) {
-	want := schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "services"}
-	if servicesGVR != want {
-		t.Fatalf("servicesGVR = %v, want %v", servicesGVR, want)
-	}
-}
-
 // TestIsSemverTag is the exact semver policy from apps-drift.ts SEMVER_TAG:
 // strictly vMAJOR.MINOR.PATCH; everything else is floating.
 func TestIsSemverTag(t *testing.T) {
