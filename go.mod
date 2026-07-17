@@ -513,7 +513,7 @@ require (
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
 	github.com/hanzoai/storage-go v1.0.0 // indirect
-	github.com/hanzoai/tasks v1.51.0
+	github.com/hanzoai/tasks v1.51.1
 	github.com/hanzoai/xorm v1.4.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
