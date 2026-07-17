@@ -7,6 +7,14 @@
 // read/act on its OWN ledger (balance / usage / invoices / subscriptions /
 // payment-methods / spend-alerts / …), never another's.
 //
+// TWO INDEPENDENT BOUNDS, because the token makes this a privileged forwarder:
+//  1. WHICH ENDPOINT — billingForwardable, the per-method allowlist below. It is the
+//     authorization gate: an unlisted path is 404'd before the token is ever attached, so
+//     no money-MINT route (deposit/credit/refund/…) can be reached through this bridge.
+//  2. WHOSE DATA — the subject-pinning below. It aims a permitted call at the caller's own
+//     ledger. It is an IDOR control and NOT an authority control: on a mint route it would
+//     have pinned the CREDIT to the attacker's own account. (1) is what stops that.
+//
 // WHY A SERVER HANDLER (not a same-origin passthrough). Commerce's billing surface is
 // service-token-gated and filters DIFFERENT endpoints on DIFFERENT subject params —
 // subscriptions on ?userId, payment-methods on ?customerId, usage on ?user. Pinning
@@ -33,6 +41,109 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
+
+// billingForwardable — THE allowlist of billing endpoints this bridge may forward, keyed
+// by method. It is the whole authorization story of the bridge, because forwarding IS
+// authorization here: every forwarded request carries the admin COMMERCE_SERVICE_TOKEN,
+// and commerce's money gate is MayMintMoney(c) = IsServiceToken(c) || IsSuperAdmin(c)
+// (middleware/platformonly.go). The token satisfies IsServiceToken, so ANY subpath that
+// reaches commerce is executed with PLATFORM authority — not the caller's. Commerce 403s
+// an org admin who calls POST /v1/billing/deposit directly; without this table the bridge
+// handed that same person the platform's own credential and minted it for them, scoped —
+// by the subject-pinning below — to their OWN account. That is the escalation, and
+// subject-pinning is what AIMS it, not what stops it. Only a path gate stops it.
+//
+// It is an ALLOWLIST, never a denylist: a denylist must enumerate every mint route
+// (deposit/credit/refund/credit-grants/payouts/husd/allotment…) and stays correct only
+// until commerce adds the next one — a route this file has never heard of is then
+// forwarded by default. Here the default is REFUSE, so a new commerce mint route is
+// unreachable the day it lands, with no change on this side. One table, one place; a path
+// not in it cannot reach commerce, by construction.
+//
+// GET and POST are SEPARATE sets because a read bridge and a write bridge are different
+// concerns: `payouts` is a legitimate read and a money-MINT write (api/billing/handlers.go
+// `api.Get("/payouts", ListPayouts)` vs `api.Post("/payouts", mintRequired, CreatePayout)`),
+// so one method-blind set would hand the mint to every reader. The POST set is therefore
+// deliberately tiny and holds NOTHING that creates spendable balance from a client-named
+// amount: cancel/reactivate a subscription, vault a card, create a budget, and a top-up
+// that CHARGES a real card (money in, not minted). Every entry is a call the console
+// actually makes; `{}` matches exactly one opaque id segment.
+//
+// EVIDENCE — each entry is a live console call (repo hanzoai/console):
+//
+//	GET  balance             src/lib/api/billing.ts:397   sidebar wallet + billing overview
+//	GET  usage               src/lib/api/billing.ts:415   cost reports / AI metrics
+//	GET  invoices            src/lib/api/billing.ts:419   invoice history table
+//	GET  invoices/{}/pdf     src/components/products/billing/BillingInvoices.tsx:31
+//	GET  subscriptions       src/lib/api/billing.ts:423   subscriptions list
+//	GET  payment-methods     src/lib/api/billing.ts:450   saved cards (masked)
+//	GET  spend-alerts        src/lib/api/billing.ts:482   budgets / spend caps
+//	GET  payment-config      src/lib/api/billing.ts:552   public Square app/location id
+//	GET  plans               src/lib/api/plans.ts:126     published tiers
+//	GET  payouts             src/components/products/SettlementModule.tsx:61  settlement view
+//	POST subscriptions/{}/cancel      src/lib/api/billing.ts:434
+//	POST subscriptions/{}/reactivate  src/lib/api/billing.ts:444
+//	POST payment-methods              src/lib/api/billing.ts:461  vault a Square nonce (no PAN)
+//	POST spend-alerts                 src/lib/api/billing.ts:500  create a budget
+//	POST topup/token                  src/lib/api/billing.ts:565  charge a card → credit
+//
+// balance/usage/payment-methods are ALSO served natively by clients/billing (order 121),
+// which wins over this catch-all (122), so those entries are reached only on a deploy
+// where that subsystem is disabled. They are listed because they are legitimate reads of
+// the caller's own ledger, not because this bridge is their primary route.
+//
+// NOT LISTED, deliberately: `me/welcome` and `grant-starter` (console calls the first at
+// billing.ts:407 and the second server-side at src/lib/server/billing-grant.ts:35) exist
+// in NEITHER the pinned commerce (v1.48.5) route table — both 404 today whether or not
+// this bridge forwards them, and grant-starter is mint-gated and browser-unreachable by
+// design. The console's PATCH/DELETE calls (spend-alerts/{}, payment-methods/{}) are absent
+// because routesBridge mounts GET+POST only, so they never reached this handler.
+var billingForwardable = map[string][]string{
+	http.MethodGet: {
+		"balance",
+		"usage",
+		"invoices",
+		"invoices/{}/pdf",
+		"subscriptions",
+		"payment-methods",
+		"spend-alerts",
+		"payment-config",
+		"plans",
+		"payouts",
+	},
+	http.MethodPost: {
+		"subscriptions/{}/cancel",
+		"subscriptions/{}/reactivate",
+		"payment-methods",
+		"spend-alerts",
+		"topup/token",
+	},
+}
+
+// isForwardableBilling reports whether method+sub is in billingForwardable. sub has
+// already passed isSafeSegment, so no segment can contain a slash, a percent-escape, or a
+// traversal — a pattern segment therefore matches exactly one real segment and `{}` cannot
+// swallow a path. Fail-closed: an unknown method or an unlisted path is false.
+func isForwardableBilling(method, sub string) bool {
+	got := strings.Split(sub, "/")
+	for _, pattern := range billingForwardable[method] {
+		want := strings.Split(pattern, "/")
+		if len(want) != len(got) {
+			continue
+		}
+		match := true
+		for i, seg := range want {
+			if seg != "{}" && seg != got[i] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
 
 // billingSubjectKeys — every query/body param through which a commerce billing endpoint
 // identifies its subject. Kept identical to commerce's edge-auth billingSubjectKeys
@@ -155,6 +266,13 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 		if !isSafeSegment(seg) {
 			return zip.ErrBadRequest("invalid billing path")
 		}
+	}
+	// THE authorization gate. Forwarding is authorization: the request below carries the
+	// admin service token, which satisfies commerce's MayMintMoney. So refuse anything the
+	// console does not actually call — BEFORE the token is attached. Fail closed (404, the
+	// same answer an unrouted path gives, so this leaks no map of the money surface).
+	if !isForwardableBilling(method, sub) {
+		return zip.Errorf(http.StatusNotFound, "not a forwardable billing endpoint")
 	}
 
 	// Scope EVERY request to the caller's OWN subject — query AND write body — so
