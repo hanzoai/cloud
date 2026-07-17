@@ -53,16 +53,17 @@ func mountApp(t *testing.T) *zip.App {
 // fakeK8s returns a k8s client backed by an in-memory fake dynamic client so the
 // deploy SUCCESS path (Service CR create in tenant-<org>) is exercised
 // deterministically without a real cluster.
-func fakeK8s() *k8sClient {
+func fakeK8s(objs ...runtime.Object) *k8sClient {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		appsGVR:           "AppList",
 		servicesGVR:       "ServiceList",
 		jobsGVR:           "JobList",
 		namespacesGVR:     "NamespaceList",
 		resourceQuotasGVR: "ResourceQuotaList",
 		limitRangesGVR:    "LimitRangeList",
 		kmsSecretsGVR:     "KMSSecretList",
-	})
+	}, objs...)
 	// Model a cluster where cloud-api's per-tenant RBAC is already present: the
 	// SelfSubjectAccessReview readiness probe (waitForTenantRBAC) resolves
 	// allowed=true on the first call, so the deploy fast path is exercised with no
@@ -228,7 +229,7 @@ func TestHTTPDeploySucceedsIntoTenantNamespace(t *testing.T) {
 	}
 
 	// The operator Service CR must exist in tenant-maxpower with the app's image.
-	obj, err := k.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Service CR not created in tenant-maxpower: %v", err)
 	}
