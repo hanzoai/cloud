@@ -246,6 +246,24 @@ func usage(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
+
+	// Co-resident, read the usage ledger DIRECTLY from cloud's own finance ledger
+	// (usage_coresident.go explains why this is NOT a commerce proxy: proxying
+	// "/v1/billing/usage" re-enters THIS handler — commerce's own /v1/billing/usage
+	// route is behind //go:build cloud and never compiled here, so the only
+	// registration of that path is this handler — and the in-proc S2S hop carries no
+	// validated principal, so usage() self-answered "sign in to view billing"; that
+	// self-dispatch is the 500 a valid caller saw). This is the exact move balance()
+	// already makes. Off the co-resident path the commerce S2S proxy is unchanged.
+	if body, coResident, err := coResidentUsage(c.Context(), org, strings.TrimSpace(c.Query("product")), strings.TrimSpace(c.Query("groupBy"))); err != nil {
+		s.Log.Warn("finance usage read failed", "org", org, "err", err)
+		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable")
+	} else if coResident {
+		c.SetHeader("Content-Type", "application/json")
+		c.SetHeader("Cache-Control", "no-store")
+		return c.Bytes(http.StatusOK, body)
+	}
+
 	if !s.State.commerce.configured() {
 		return zip.Errorf(http.StatusNotImplemented, "billing is not configured")
 	}
