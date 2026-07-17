@@ -557,8 +557,12 @@ jobs:
                 export PATH="$HOME/.local/bin:$PATH"
               }
               for MT in "${V}" "${VER}" "${major}.${minor}"; do
-                crane copy "$SHA_IMG" "registry.hanzo.ai/hanzoai/cloud:${MT}" \
-                  || echo "::warning::mirror registry.hanzo.ai/hanzoai/cloud:${MT} failed"
+                # Bounded: registry.hanzo.ai can *hang* (not just fail), and this
+                # is best-effort — an unbounded crane copy once livelocked the whole
+                # tag step and held the serialized release lane. timeout makes the
+                # mirror truly best-effort so the git-tag receipt below always runs.
+                timeout 120 crane copy "$SHA_IMG" "registry.hanzo.ai/hanzoai/cloud:${MT}" \
+                  || echo "::warning::mirror registry.hanzo.ai/hanzoai/cloud:${MT} failed or timed out"
               done
             fi
             git tag -a "$V" -m "release $V — image ghcr.io/hanzoai/cloud:$V (retagged from sha-${{ steps.ver.outputs.sha_short }}, smoke-passed ${GITHUB_SHA})"
