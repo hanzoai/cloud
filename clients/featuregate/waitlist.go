@@ -1,19 +1,23 @@
-package flags
+package featuregate
 
-// The waitlist LENS on the ONE flag engine — the launch-control plane folded in from
-// the former clients/featuregate. Decomplected into the two orthogonal axes it always
-// was, now with a single decision plane:
+// The launch-control gate — the COMPLETE waitlist feature, COMPOSING the ONE flag
+// engine (clients/flags) one-way. Decomplected into the two orthogonal axes it always
+// was, with a single decision plane:
 //
 //   - MODE (per service):  waitlist.<svc> IS a platform switch, evaluated through the
-//     SAME native engine as every other platform flag. There is no second mode store.
-//   - HOST MAP + metadata:  the registry (waitlist_store.go) resolves a request host
-//     to the service whose switch governs it, and carries display metadata.
+//     flag engine (flags.Bool / flags.SetPlatformSwitch / flags.Register). There is no
+//     second mode store.
+//   - HOST MAP + metadata:  the registry (registry.go) resolves a request host to the
+//     service whose switch governs it, and carries display metadata.
 //
 // The decide is WaitlistModeForHost(host) → (mode, service, known): resolve host→svc,
-// then read waitlist.<svc>. featuregate.Enforce is now a CONSUMER of this decide, and
-// /v1/flags/waitlist + the /v1/admin/services board read it too. Per-user approval
-// (pending|approved) stays IAM's (featuregate/approval.go) — the second, orthogonal
-// axis, unchanged.
+// then read waitlist.<svc>. Enforce (middleware.go) consumes this decide; the admin
+// board (/v1/admin/services) and the guard's runtime mode read (/v1/flags/waitlist,
+// served here) read it too. Per-user approval (pending|approved) is the second,
+// orthogonal axis — IAM's, in approval.go.
+//
+// flags NEVER imports this package; this package imports flags. That one-way arrow is
+// the whole point of the decomplection: the engine is pure, the feature composes it.
 
 import (
 	"context"
@@ -25,9 +29,28 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/flags"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// The reserved platform tenant the launch registry rides in — the SAME reserved
+// (org, project) the flag engine uses for its platform switches, so the registry and
+// the waitlist.<svc> switches co-locate. One waitlist.db for the deployment.
+const (
+	platformOrg     = "platform"
+	platformProject = "platform"
+)
+
+// registryState is featuregate's process-wide launch state: the platform-tenant
+// host→service registry store + the deployment brand it was seeded for. Installed by
+// Mount, torn down by Shutdown.
+type registryState struct {
+	store *cloud.OrgStore[*waitlistStore]
+	brand string
+}
+
+var mounted *registryState
 
 // SeedService is one row of the launch registry (a hosted service + its hosts). Mode
 // is intentionally absent — the launch posture (gated) is waitlistDef's Default "true".
@@ -61,16 +84,16 @@ func waitlistKey(svc string) string { return "waitlist." + strings.ToLower(strin
 // waitlistDef is the platform switch for one service's mode. Default "true" = the
 // launch posture (gated until an admin opens it), so a deployment with no stored flag
 // behaves exactly as the old featuregate seed (waitlistMode ON).
-func waitlistDef(svc, display string) Def {
+func waitlistDef(svc, display string) flags.Def {
 	if strings.TrimSpace(display) == "" {
 		display = svc
 	}
-	return Def{
+	return flags.Def{
 		Key:      waitlistKey(svc),
 		Category: "Launch",
 		Label:    "Waitlist · " + display,
 		Desc:     "Waitlist mode for " + display + ": ON gates the service to APPROVED users; OFF opens it.",
-		Type:     TypeBool,
+		Type:     flags.TypeBool,
 		Default:  "true",
 	}
 }
@@ -78,9 +101,13 @@ func waitlistDef(svc, display string) Def {
 // ensureWaitlistDef registers a service's switch if it is not already registered
 // (Mount registers the seed set with nicer labels; this covers runtime onboards).
 func ensureWaitlistDef(svc, display string) {
-	if _, ok := lookupDef(waitlistKey(svc)); !ok {
-		Register(waitlistDef(svc, display))
+	key := waitlistKey(svc)
+	for _, d := range flags.Defs() {
+		if d.Key == key {
+			return
+		}
 	}
+	flags.Register(waitlistDef(svc, display))
 }
 
 // boolDef is the minimal PostHog flag definition for a boolean switch value.
@@ -92,26 +119,24 @@ func boolDef(on bool) json.RawMessage {
 }
 
 // requireRegistry resolves the platform-tenant registry store, or an error when the
-// engine is not mounted (writes need it; the decide fail-opens instead).
+// gate is not mounted (writes need it; the decide fail-opens instead).
 func requireRegistry() (*waitlistStore, error) {
-	c := mounted
-	if c == nil || c.registry == nil {
-		return nil, fmt.Errorf("flags: waitlist registry not mounted")
+	if mounted == nil || mounted.store == nil {
+		return nil, fmt.Errorf("featuregate: waitlist registry not mounted")
 	}
-	return c.registry.For(platformOrg, platformProject)
+	return mounted.store.For(platformOrg, platformProject)
 }
 
 // WaitlistModeForHost is THE decide the Enforce consumer, /v1/flags/waitlist, and
 // the admin board call: resolve host→service, then read the waitlist.<svc> switch
-// through the engine. FAIL-OPEN by construction — an unmounted registry, a store
+// through the flag engine. FAIL-OPEN by construction — an unmounted registry, a store
 // error, or an un-governed host all return known=false, so a request is NEVER gated
 // pre-boot or on a registry fault (availability over a hard gate, matching the guard).
 func WaitlistModeForHost(ctx context.Context, host string) (mode bool, service string, known bool) {
-	c := mounted
-	if c == nil || c.registry == nil {
+	if mounted == nil || mounted.store == nil {
 		return false, "", false
 	}
-	st, err := c.registry.For(platformOrg, platformProject)
+	st, err := mounted.store.For(platformOrg, platformProject)
 	if err != nil {
 		return false, "", false
 	}
@@ -119,7 +144,7 @@ func WaitlistModeForHost(ctx context.Context, host string) (mode bool, service s
 	if err != nil || !known {
 		return false, "", false
 	}
-	return Bool(waitlistKey(svc)), svc, true
+	return flags.Bool(waitlistKey(svc)), svc, true
 }
 
 // ListWaitlistServices returns the admin board: every registered service with its LIVE
@@ -135,19 +160,19 @@ func ListWaitlistServices(ctx context.Context) ([]ServiceView, error) {
 	}
 	out := make([]ServiceView, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, ServiceView{ServiceRow: r, WaitlistMode: Bool(waitlistKey(r.Service))})
+		out = append(out, ServiceView{ServiceRow: r, WaitlistMode: flags.Bool(waitlistKey(r.Service))})
 	}
 	return out, nil
 }
 
 // SetWaitlistMode flips one service's waitlist switch — the launch lever — and returns
-// the updated view. It is the ONE write path (through SetPlatformSwitch, audited in the
-// flag activity log); the flip is hot (this pod applies immediately, peers converge
-// within the eval TTL). ErrServiceNotFound when the slug is unknown.
+// the updated view. It is the ONE write path (through flags.SetPlatformSwitch, audited
+// in the flag activity log); the flip is hot (this pod applies immediately, peers
+// converge within the eval TTL). ErrServiceNotFound when the slug is unknown.
 func SetWaitlistMode(ctx context.Context, service string, mode bool, actor string) (ServiceView, error) {
 	service = strings.ToLower(strings.TrimSpace(service))
 	if service == "" {
-		return ServiceView{}, fmt.Errorf("flags: service is required")
+		return ServiceView{}, fmt.Errorf("featuregate: service is required")
 	}
 	st, err := requireRegistry()
 	if err != nil {
@@ -158,10 +183,10 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 		return ServiceView{}, err
 	}
 	ensureWaitlistDef(service, row.DisplayName)
-	if err := SetPlatformSwitch(waitlistKey(service), boolDef(mode), actor); err != nil {
+	if err := flags.SetPlatformSwitch(waitlistKey(service), boolDef(mode), actor); err != nil {
 		return ServiceView{}, err
 	}
-	return ServiceView{ServiceRow: row, WaitlistMode: Bool(waitlistKey(service))}, nil
+	return ServiceView{ServiceRow: row, WaitlistMode: flags.Bool(waitlistKey(service))}, nil
 }
 
 // UpsertWaitlistService onboards or edits a hosted service so a new host is governed
@@ -170,7 +195,7 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (ServiceView, error) {
 	svc := strings.ToLower(strings.TrimSpace(in.Service))
 	if svc == "" {
-		return ServiceView{}, fmt.Errorf("flags: service slug is required")
+		return ServiceView{}, fmt.Errorf("featuregate: service slug is required")
 	}
 	st, err := requireRegistry()
 	if err != nil {
@@ -192,43 +217,44 @@ func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (
 	}
 	ensureWaitlistDef(svc, row.DisplayName)
 	if isNew {
-		if err := SetPlatformSwitch(waitlistKey(svc), boolDef(in.WaitlistMode), actor); err != nil {
+		if err := flags.SetPlatformSwitch(waitlistKey(svc), boolDef(in.WaitlistMode), actor); err != nil {
 			return ServiceView{}, err
 		}
 	}
-	return ServiceView{ServiceRow: row, WaitlistMode: Bool(waitlistKey(svc))}, nil
+	return ServiceView{ServiceRow: row, WaitlistMode: flags.Bool(waitlistKey(svc))}, nil
 }
 
-// mountWaitlist seeds the registry and registers a waitlist.<svc> switch per known
-// service. Best-effort + fail-safe: a registry error (e.g. cek master key not yet
-// injected) degrades to the in-memory seed switches — the decide then fail-opens,
-// exactly the flag engine's own boot posture. Called from Mount.
-func mountWaitlist(c *Client, brand string, log luxlog.Logger) {
+// seedRegistry seeds the registry and registers a waitlist.<svc> switch per known
+// service, COMPOSING the flag engine (flags.Register). Best-effort + fail-safe: a
+// registry error (e.g. cek master key not yet injected) degrades to the in-memory seed
+// switches — the decide then fail-opens, exactly the flag engine's own boot posture.
+// Returns the number of seeded services (for the mount log). Called from Mount.
+func seedRegistry(brand string, log luxlog.Logger) int {
 	seed := seedWaitlist(brand)
 	for _, sv := range seed { // in-memory switches — always succeeds
-		Register(waitlistDef(sv.Service, sv.DisplayName))
+		flags.Register(waitlistDef(sv.Service, sv.DisplayName))
 	}
-	st, err := c.registry.For(platformOrg, platformProject)
+	st, err := mounted.store.For(platformOrg, platformProject)
 	if err != nil {
 		log.Warn("waitlist registry unavailable — modes degrade to seed defaults", "err", err)
-		return
+		return len(seed)
 	}
 	if _, err := st.Seed(context.Background(), seed, time.Now().Unix()); err != nil {
 		log.Warn("waitlist registry seed failed", "err", err)
-		return
+		return len(seed)
 	}
 	if rows, err := st.List(context.Background()); err == nil {
 		for _, r := range rows { // register any persisted onboard beyond the seed
 			ensureWaitlistDef(r.Service, r.DisplayName)
 		}
 	}
+	return len(seed)
 }
 
 // waitlistModeRoute answers GET /v1/flags/waitlist?host=<h> — the runtime lookup the
 // @file waitlist-guard caches. Public (in-cluster) read: it returns ONLY the boolean
-// mode for the ONE queried host, never an enumeration. Same wire shape as the former
-// featuregate route, so the interim guard ports 1:1.
-func waitlistModeRoute(_ *cloud.Service[state], c *zip.Ctx) error {
+// mode for the ONE queried host, never an enumeration.
+func waitlistModeRoute(c *zip.Ctx) error {
 	host := strings.TrimSpace(c.Query("host"))
 	if host == "" {
 		host = c.Fiber().Hostname()
@@ -242,7 +268,50 @@ func waitlistModeRoute(_ *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// ── brand seed (moved verbatim from the former featuregate/seed.go) ──────────────
+// ── lifecycle ────────────────────────────────────────────────────────────────
+
+// Mount installs the launch-control gate: it opens the platform-tenant host→service
+// registry, seeds it for the deployment brand, registers a waitlist.<svc> switch per
+// service in the flag engine (flags.Register), and serves the guard's public mode read
+// at the CURRENT frozen path (/v1/flags/waitlist) plus the /v1/featuregate/mode compat
+// alias. Fail-safe: a registry error (e.g. cek master key not yet injected) degrades to
+// the in-memory seed switches — WaitlistModeForHost then fail-opens. Mounts AFTER flags
+// so the engine's platform-switch plane is installed first.
+func Mount(app *zip.App, deps cloud.Deps) error {
+	if deps.Logger == nil {
+		return fmt.Errorf("featuregate.Mount: nil deps.Logger")
+	}
+	if deps.DataDir == "" {
+		return fmt.Errorf("featuregate.Mount: empty deps.DataDir")
+	}
+	log := deps.Logger.New("subsystem", "featuregate")
+	mounted = &registryState{
+		store: cloud.NewOrgStore[*waitlistStore](deps.DataDir, "waitlist", openWaitlistStore),
+		brand: deps.Brand,
+	}
+	n := seedRegistry(deps.Brand, log)
+	// The guard's public runtime mode read (host→service→waitlist.<svc>), one namespace
+	// under /v1/flags. Exempt from the Enforce gate (see defaultExemptPrefixes) so a
+	// gated user can still resolve mode.
+	app.Get("/v1/flags/waitlist", waitlistModeRoute)
+	// Compat alias (TEMPORARY): the former /v1/featuregate/mode path, same handler — kept
+	// only so an unverified external caller can't 404 while the namespace collapse rolls
+	// out. Delete this (and its exempt entry in middleware.go) once every caller is
+	// confirmed on /v1/flags/waitlist.
+	app.Get("/v1/featuregate/mode", waitlistModeRoute)
+	log.Info("featuregate launch gate ready", "services", n)
+	return nil
+}
+
+// Shutdown closes the launch registry's per-org store handles.
+func Shutdown() error {
+	if mounted == nil || mounted.store == nil {
+		return nil
+	}
+	return mounted.store.CloseAll()
+}
+
+// ── brand seed (moved verbatim from the former flags/waitlist.go) ────────────────
 
 // seedWaitlist returns the launch registry for a brand. White-labeled so a Lux/Zoo/Pars
 // deployment governs its OWN hosts. New hosted services onboard at runtime via
