@@ -3,6 +3,7 @@ package apps
 import (
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	commercemid "github.com/hanzoai/commerce/middleware"
@@ -41,18 +42,26 @@ func TestCommerceErrorScope(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 
+	// The invariant the scope guards: a typed zip.HTTPError (403) a subsystem returns
+	// is NEVER flattened to a 500 — not before commerce, not after it. (commerce
+	// >=1.48.10 honors the status itself; the scope keeps commerce's error handler off
+	// other subsystems' routes regardless, so a future commerce regression can't
+	// re-clobber them.)
 	for _, tc := range []struct {
 		path     string
 		wantCode int
 	}{
-		{"/v1/kms/health", 403},
-		{"/v1/projects", 403},      // was 500 before the scope — the release-smoke failure
-		{"/v1/store/current", 500}, // commerce envelope still owns its route (always-500 by design)
+		{"/v1/kms/health", 403},    // before commerce
+		{"/v1/projects", 403},      // after commerce — must NOT be clobbered to 500
+		{"/v1/store/current", 403}, // commerce's own route — its handler still honors 403
 	} {
 		code, body := probe(tc.path)
 		t.Logf("%-20s -> %d  %s", tc.path, code, body)
 		if code != tc.wantCode {
 			t.Errorf("%s: got %d, want %d (%s)", tc.path, code, tc.wantCode, body)
+		}
+		if strings.Contains(body, "\"status\":5") || code >= 500 {
+			t.Errorf("%s: a typed 403 was flattened to a 5xx (%s)", tc.path, body)
 		}
 	}
 
