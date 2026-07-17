@@ -279,10 +279,12 @@ func billingEnabled(m *metering.Client) bool { return m != nil && m.Enabled() }
 //   - other subsystems that already self-meter their units (commerce billing
 //     itself, o11y telemetry, mcp tool dispatch),
 //
-// and a non-zero flat price only on the generic agent/compute edge that has no
-// finer-grained meter of its own. Tune per path as cloud grows its own metered
-// surfaces; keep self-metering subsystems at 0 to preserve single-charge
-// accounting.
+//   - /v1/agent* : the agent orchestrator self-meters, billing through the
+//     completion it runs in-process, so an edge charge would double-bill.
+//
+// Every billable surface meters its own units downstream, so the edge charges
+// nothing on its own; it stays wired as a uniform passthrough. Keep self-metering
+// subsystems at 0 to preserve single-charge accounting.
 func DefaultPrice(c *zip.Ctx) int64 {
 	path := c.Path()
 
@@ -300,21 +302,18 @@ func DefaultPrice(c *zip.Ctx) int64 {
 		}
 	}
 
-	// Legacy singular /v1/agent/* edge (the bot reverse-proxy) has no finer
-	// meter of its own: a flat per-request charge. The canonical plural
-	// /v1/agents/* is self-metered (above) and never reaches here.
-	if strings.HasPrefix(path, "/v1/agent/") {
-		return cloudEdgePriceCents
+	// The agent orchestrator owns /v1/agent (the POST round) and /v1/agent/* (the
+	// preset and conversation reads). It self-meters: the reads are free, and the
+	// round bills through the /v1/chat/completions it runs in-process (gated and
+	// metered downstream), so the edge stays 0 or a round is billed twice.
+	if path == "/v1/agent" || strings.HasPrefix(path, "/v1/agent/") {
+		return 0
 	}
 
 	// Default: do not charge unknown/unpriced paths. Metering is opt-in per
 	// path so a new route never silently starts billing.
 	return 0
 }
-
-// cloudEdgePriceCents is the flat charge for the generic agent/compute edge.
-// Conservative single cent; revise alongside the pricing subsystem.
-const cloudEdgePriceCents int64 = 1
 
 // selfMeteredPrefixes are path prefixes whose subsystem records its own usage to
 // commerce via the shared cloud.ResourceMeter (in-handler Gate+Meter). The edge
