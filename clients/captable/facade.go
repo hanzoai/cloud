@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 )
 
 // facade.go is the in-process cap-table seam: it lets a sibling subsystem (Hanzo
@@ -74,7 +74,7 @@ type RoundInput struct {
 // response. The body is round-tripped through JSON to a generic value so the goja
 // bundle sees the SAME wire shape (lower-case json keys) the HTTP path produces —
 // passing a typed Go struct straight to goja would expose Go field names instead.
-func facadeDispatch(ctx context.Context, org, route string, params map[string]string, body any) (*gojabase.Response, error) {
+func facadeDispatch(ctx context.Context, org, route string, params map[string]string, body any) (*goja.Response, error) {
 	if mounted == nil || mounted.State.host == nil {
 		return nil, ErrNotMounted
 	}
@@ -85,7 +85,7 @@ func facadeDispatch(ctx context.Context, org, route string, params map[string]st
 	if err != nil {
 		return nil, err
 	}
-	return mounted.State.host.Dispatch(ctx, org, gojabase.Request{Route: route, Params: params, Body: wire})
+	return mounted.State.host.Dispatch(ctx, org, goja.BaseRequest{Route: route, Params: params, Body: wire})
 }
 
 // toWire normalizes a typed value to a generic JSON value (map[string]any /
@@ -107,7 +107,7 @@ func toWire(body any) (any, error) {
 
 // okBody checks the response is 2xx and returns the body bytes, else a descriptive
 // error carrying the bundle's own message.
-func okBody(resp *gojabase.Response, route string) ([]byte, error) {
+func okBody(resp *goja.Response, route string) ([]byte, error) {
 	if resp.Status/100 != 2 {
 		return nil, fmt.Errorf("captable %s: status %d: %s", route, resp.Status, string(resp.Body))
 	}
