@@ -181,6 +181,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// Install the git object-plane importer so the integrations plane (GitHub App)
 	// can create + mirror-in + fast-forward-sync repos with no integrations⇄git cycle.
 	cloud.RegisterGitImporter(githubImporter{})
+	// Install the outbound-mirror controller so the universal sync engine's git
+	// provider can ensure/remove a repo's mirror target through the SAME store the
+	// mirror_out reactor pushes from — no syncsvc⇆git cycle (mirror_control.go).
+	cloud.RegisterGitMirrorController(gitMirrorController{})
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is
 	// a per-process goroutine started here and stopped by Shutdown. The host key
