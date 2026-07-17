@@ -691,8 +691,7 @@ type MountSpec struct {
 
 // MountAll mounts every ENABLED subsystem in specs, in slice order — the order is
 // the composition root's (apps.Wire()); MountAll does NOT sort. app is the
-// concrete *zip.App from Serve; the MountFunc accepts it as `any` and in-repo
-// subsystems recover it via Typed.
+// concrete *zip.App from Serve, handed to each MountFunc as itself.
 //
 // Teardown is wired HERE, at mount time: right after a subsystem mounts, its
 // ShutdownFunc (if any) is registered via app.OnShutdown. zip drains those hooks
