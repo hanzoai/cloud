@@ -4,7 +4,7 @@
 // CR into the caller's OWN tenant namespace; the Hanzo operator reconciles it
 // into a Deployment + Service + Ingress (+ HPA/PDB) on DOKS. cloud never
 // reimplements a deployer — it writes one CR, exactly like clients/paas
-// patches system CRs, but here every object lives in `tenant-<org>` where the
+// reads system CRs, but here every object lives in `tenant-<org>` where the
 // org is the gateway-minted, IAM-VALIDATED tenant (c.Org()), never a value from
 // the request body or path. That derivation is the whole cross-tenant isolation
 // boundary: a caller cannot name another org's namespace because the namespace
@@ -36,61 +36,32 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// appsGVR is the operator App CR — the collapsed workload kind, and the kind a
-// tenant app is written as. A role-less App dispatches to the operator's service
-// profile (controllers/app.rs `classify("") => Dispatch::Service`), which is the
-// same reconcile the Service kind ran, so an App carries a tenant workload
-// verbatim — same spec, same Deployment, same core Service.
+// appsGVR is the operator App CR — the workload kind a tenant app is written as.
+// A role-less App dispatches to the operator's service profile
+// (controllers/app.rs `classify("") => Dispatch::Service`), so an App carries a
+// tenant workload with the default profile: one Deployment + one core Service.
+// A user app is one of these CRs in its tenant namespace.
 var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
-// servicesGVR is the kind tenant apps were written as before the collapse. Still
-// served, still reconciled, and still the sole declarer of the tenant CRs written
-// before this cutover — so reads, patches and deletes resolve it as a fallback.
-// It is not written to any more: nothing here mints a new Service CR.
-//
-// REMOVABLE once no Service CR remains in any tenant namespace: drop it from
-// crGVRs(), drop the delete-both in deleteService, and this file is App-only.
-// A user app is one of these CRs in its tenant namespace.
-var servicesGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "services"}
-
-// crGVRs is the tenant workload-CR resolution order: the kind we write first, the
-// kind we used to write second. Every read/patch/delete walks this list.
-func crGVRs() []schema.GroupVersionResource {
-	return []schema.GroupVersionResource{appsGVR, servicesGVR}
-}
-
-// resolveCR reports the kind the named tenant workload CR exists under, and
-// whether it exists at all. A lookup error other than not-found is returned as-is
-// — a tenant write must never proceed on an unknown cluster state.
+// resolveCR reports whether the named tenant App CR exists (and, for the caller's
+// patch, its GVR). A lookup error other than not-found is returned as-is — a
+// tenant write must never proceed on an unknown cluster state.
 func (k *k8sClient) resolveCR(ctx context.Context, ns, name string) (schema.GroupVersionResource, bool, error) {
-	for _, gvr := range crGVRs() {
-		_, err := k.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
-		if err == nil {
-			return gvr, true, nil
-		}
-		if !apierrors.IsNotFound(err) {
-			return schema.GroupVersionResource{}, false, err
-		}
+	_, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return appsGVR, true, nil
+	}
+	if !apierrors.IsNotFound(err) {
+		return schema.GroupVersionResource{}, false, err
 	}
 	return schema.GroupVersionResource{}, false, nil
 }
 
-// getCR fetches the named tenant workload CR under whichever kind holds it.
-// Callers are read-only observers, so a not-found under both kinds is returned as
-// the last error — an honest "unknown", never an invented object.
+// getCR fetches the named tenant App CR. Callers are read-only observers, so a
+// not-found is returned as the error — an honest "unknown", never an invented
+// object.
 func (k *k8sClient) getCR(ctx context.Context, ns, name string) (*unstructured.Unstructured, error) {
-	var err error
-	for _, gvr := range crGVRs() {
-		var obj *unstructured.Unstructured
-		obj, err = k.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
-		if err == nil {
-			return obj, nil
-		}
-		if !apierrors.IsNotFound(err) {
-			return nil, err
-		}
-	}
-	return nil, err
+	return k.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
 // jobsGVR is the batch/v1 Job used to launch an in-cluster BuildKit build.
@@ -567,10 +538,8 @@ func (k *k8sClient) applyService(ctx context.Context, org, project string, a App
 		_, cErr := k.dyn.Resource(appsGVR).Namespace(ns).Create(ctx, desired, metav1.CreateOptions{})
 		return cErr
 	}
-	// Redeploy: merge-patch only .spec (+ labels), leaving the operator status
-	// and resourceVersion intact. Patch the kind the CR actually is — an app
-	// deployed before the collapse is still a Service CR, and re-declaring it as
-	// an App twin would leave two CRs claiming one Deployment.
+	// Redeploy: merge-patch only .spec (+ labels), leaving the operator status and
+	// resourceVersion intact.
 	patch, _ := json.Marshal(map[string]any{
 		"metadata": map[string]any{"labels": desired.Object["metadata"].(map[string]any)["labels"]},
 		"spec":     desired.Object["spec"],
@@ -606,23 +575,16 @@ func (k *k8sClient) scaleService(ctx context.Context, org, name string, replicas
 	return err
 }
 
-// deleteService removes an app's workload CR under EVERY kind (best-effort
-// teardown on app/project delete). A NotFound is success (already gone).
-//
-// Both kinds are deleted, not just the one that resolves first. Either kind alone
-// re-materializes the Deployment: they are the same reconcile behind two names,
-// so a leftover Service CR would rebuild an app the tenant just deleted — the app
-// would come back minutes later, still billing.
+// deleteService removes an app's App CR (best-effort teardown on app/project
+// delete). A NotFound is success (already gone).
 func (k *k8sClient) deleteService(ctx context.Context, org, name string) error {
 	if err := k.ready(); err != nil {
 		return err
 	}
 	ns := tenantNamespace(org)
-	for _, gvr := range crGVRs() {
-		err := k.dyn.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
+	err := k.dyn.Resource(appsGVR).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
 	}
 	return nil
 }

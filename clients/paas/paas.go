@@ -1,29 +1,28 @@
 // paas.go — the cluster-facing half of the native Hanzo PaaS control plane.
 //
-// It mounts /v1/paas/* on the unified cloud binary and speaks to the SAME
-// operator surface the standalone platform's deploy-executor drove: the
-// `hanzo.ai/v1` `services` CustomResource. Two responsibilities, both a straight
-// port of the Node platform:
+// It mounts /v1/paas/* on the unified cloud binary and reads the operator's
+// `hanzo.ai/v1` `App` CustomResource — the one workload kind the fleet runs on:
 //
 //	GET  /v1/paas/apps            — the fleet drift board (inventory.ts): list every
-//	                                operator Service CR across the platform
-//	                                namespaces, read declared vs running tag +
-//	                                health from the CR (+ its status), and attach
-//	                                the drift verdict (drift.go / apps-drift.ts).
-//	GET  /v1/paas/apps/:app       — one service row by CR name.
-//	POST /v1/paas/apps/:app/deploy— deploy a new image tag by merge-patching the
-//	                                Service CR's `.spec.image` (deploy-executor.ts).
-//	                                The operator reconciles the rollout; cloud never
-//	                                reimplements a deployer.
-//	GET  /v1/paas/health          — real k8s reachability + Service CRD presence.
+//	                                operator App CR across the platform namespaces,
+//	                                read declared vs running tag + health from the CR
+//	                                (+ its status), and attach the drift verdict
+//	                                (drift.go / apps-drift.ts).
+//	GET  /v1/paas/apps/:app       — one app row by CR name.
+//	POST /v1/paas/apps/:app/deploy— refuse (409): an App CR is declared in universe
+//	                                git (infra/k8s/operator/crs/) and reconciled by
+//	                                Hanzo CD with selfHeal, so a patch here is
+//	                                reverted on the next sync. The response names the
+//	                                git path to commit the tag to.
+//	GET  /v1/paas/health          — real k8s reachability + App CRD presence.
 //
 // SECURITY — every route is SUPERADMIN ONLY, fail-closed, gated on the SAME
 // predicate the rest of cloud uses: c.IsAdmin() (true only for a JWT-validated
 // principal whose org is the admin org, matching the gateway's admin-guard — see
 // clients/admin). Unlike clients/ml (per-tenant namespaces), the PaaS control
-// plane reads and mutates SYSTEM Service CRs across the whole fleet, so it is
-// admin-only: a tenant must never patch another org's — or a platform — service.
-// The user-facing PaaS view lives in console; users never call this surface.
+// plane reads SYSTEM App CRs across the whole fleet, so it is admin-only: a tenant
+// must never observe another org's — or a platform — app. The user-facing PaaS
+// view lives in console; users never call this surface.
 //
 // k8s client: built in-process from the in-cluster service account
 // (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev — the identical
@@ -34,7 +33,6 @@ package paas
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -48,34 +46,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// The operator's workload CRs. `App` is the collapsed kind the fleet runs on;
-// `Service` is the kind it collapsed from and is still served, still reconciled,
-// and still the kind cloud writes for tenant workloads (clients/platform). Both
-// carry the same spec, so a reader that knows only one is blind to the other.
-//
-// Reading `services` alone made this board blind to the fleet: 69 Apps run in the
-// scanned namespaces against 7 Service CRs (1 in `hanzo`), so the drift board
-// rendered 7 rows for a 69-app fleet and every read of an App-declared service
-// 404'd. The read order below mirrors clients/deploy's appCRGVRs(): App first
-// (the fleet's kind), Service second (tenant + untransitioned CRs).
-//
-// Asserted in the tests; a typo here silently breaks the whole board.
-var (
-	appsGVR     = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
-	servicesGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "services"}
-)
-
-// crGVRs is the workload-CR read order: the fleet's kind first, the kind it
-// collapsed from second. Every read walks this list.
-func crGVRs() []schema.GroupVersionResource {
-	return []schema.GroupVersionResource{appsGVR, servicesGVR}
-}
+// appsGVR is the operator App CR — the one workload kind the fleet runs on. The
+// drift board reads it across the platform namespaces. Asserted in the tests; a
+// typo here silently breaks the whole board.
+var appsGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
 // deploymentsGVR is the live Deployment behind each Service — the source of the
 // RUNNING tag (the operator Service CR status does not surface the running image,
@@ -247,30 +226,22 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	for _, ns := range scanOrder() {
-		for _, gvr := range crGVRs() {
-			obj, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					continue
-				}
-				return k8sErr(s, "get", err)
+		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
 			}
-			repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-			return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
+			return k8sErr(s, "get", err)
 		}
+		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
+		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
 	}
-	return zip.ErrNotFound("service not found in the platform namespaces")
+	return zip.ErrNotFound("app not found in the platform namespaces")
 }
 
-// observeFleet lists every workload CR across the scanned namespaces and maps
-// each to an AppView. A namespace that does not exist / is empty is skipped,
-// never fatal (the fleet board must still render the reachable namespaces).
-//
-// Both kinds are listed, in crGVRs() order, deduped by name within a namespace:
-// one workload is one row even when an App CR and a Service CR both claim the
-// name. That collision is real — a Deployment can only have one controller
-// ownerRef, so the operator's Claim guard makes the App the owner — and the board
-// reports the owner rather than rendering the workload twice.
+// observeFleet lists every App CR across the scanned namespaces and maps each to
+// an AppView. A namespace that does not exist / is empty is skipped, never fatal
+// (the fleet board must still render the reachable namespaces).
 func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, error) {
 	var views []AppView
 	for _, ns := range scanOrder() {
@@ -280,23 +251,16 @@ func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, erro
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
 		env := nsEnv[ns]
-		seen := make(map[string]bool)
-		for _, gvr := range crGVRs() {
-			list, err := s.State.dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				if apierrors.IsNotFound(err) {
-					continue
-				}
-				return nil, k8sErr(s, "list", err)
+		list, err := s.State.dyn.Resource(appsGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
 			}
-			for i := range list.Items {
-				cr := &list.Items[i]
-				if seen[cr.GetName()] {
-					continue
-				}
-				seen[cr.GetName()] = true
-				views = append(views, observeCR(cr, ns, env, running[cr.GetName()]))
-			}
+			return nil, k8sErr(s, "list", err)
+		}
+		for i := range list.Items {
+			cr := &list.Items[i]
+			views = append(views, observeCR(cr, ns, env, running[cr.GetName()]))
 		}
 	}
 	sort.Slice(views, func(i, j int) bool {
@@ -311,13 +275,14 @@ func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, erro
 	return views, nil
 }
 
-// ── deploy: merge-patch the Service CR image (deploy-executor.ts) ─────────────
+// ── deploy: refuse a git-declared App ────────────────────────────────────────
 
-// deploy rolls a new image tag onto a service by merge-patching ONLY the Service
-// CR's `.spec.image`. The operator reconciles the rollout (Deployment update,
-// rolling restart) — this is the exact contract deploy-executor.ts implemented,
-// now native. Content-Type is JSON merge-patch (application/merge-patch+json),
-// which the operator CRD accepts; the dynamic client's MergePatchType sets it.
+// deploy refuses. Every App CR in the platform namespaces is declared in universe
+// git (infra/k8s/operator/crs/) and reconciled by Hanzo CD with selfHeal, so a
+// direct patch here is reverted on the next sync — the tag would appear to deploy
+// and then silently roll back. The endpoint confirms the app exists (404 if not)
+// and returns 409 naming the git path to commit the tag to, the one way to deploy
+// it.
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := ready(s); err != nil {
 		return err
@@ -326,139 +291,35 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-
-	var req struct {
-		Tag        string `json:"tag"`        // required — the new image tag (e.g. v1.1.3)
-		Repository string `json:"repository"` // optional — override image repo; else keep the CR's
-		Namespace  string `json:"namespace"`  // optional — target ns; else resolve to where the CR lives
+	if _, err := resolveTarget(s, c.Context(), name); err != nil {
+		return err
 	}
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return zip.Errorf(http.StatusBadRequest, "invalid JSON body: %v", err)
-	}
-	tag := strings.TrimSpace(req.Tag)
-	if tag == "" {
-		return zip.ErrBadRequest("'tag' is required (the image tag to deploy)")
-	}
-	if strings.ContainsAny(tag, " \t\n/") || len(tag) > 128 {
-		return zip.ErrBadRequest("'tag' must be a single image tag (no whitespace or '/')")
-	}
-	repo := strings.TrimSpace(req.Repository)
-	if repo != "" && !imageRepoRE.MatchString(repo) {
-		return zip.ErrBadRequest("'repository' is not a valid image repository path")
-	}
-
-	ns := strings.TrimSpace(req.Namespace)
-	var gvr schema.GroupVersionResource
-	if ns != "" {
-		if _, ok := nsEnv[ns]; !ok {
-			return zip.ErrBadRequest("'namespace' must be a platform namespace (hanzo|hanzo-testnet|hanzo-devnet)")
-		}
-		found, err := kindAt(s, c.Context(), ns, name)
-		if err != nil {
-			return err
-		}
-		gvr = found
-	} else {
-		resolvedNS, resolvedGVR, err := resolveTarget(s, c.Context(), name)
-		if err != nil {
-			return err
-		}
-		ns, gvr = resolvedNS, resolvedGVR
-	}
-
-	// A git-declared workload has a declarer already, and it is not this endpoint.
-	// The App CRs in these namespaces are synced from universe `infra/k8s/operator/
-	// crs/` by Hanzo CD with selfHeal on, so a patch here is reverted on the next
-	// sync — the tag would appear to deploy and then silently roll back. Refuse
-	// instead, and name the one way to deploy it. Service CRs carry no git
-	// declarer (cloud and kubectl write them directly), so they still patch.
-	if gvr == appsGVR {
-		return zip.Errorf(http.StatusConflict,
-			"%s is declared in git (App/%s, universe infra/k8s/operator/crs/%s.yaml) and reconciled by Hanzo CD with selfHeal — a patch here would be reverted on the next sync. Deploy it by committing the tag to that file.",
-			name, name, name)
-	}
-
-	// Build the merge-patch. When repository is omitted we patch only the tag +
-	// pullPolicy so an existing repo is preserved (JSON merge-patch merges keys,
-	// so omitting `repository` leaves the CR's value intact).
-	image := map[string]any{"tag": tag, "pullPolicy": "Always"}
-	if repo != "" {
-		image["repository"] = repo
-	}
-	patch, err := json.Marshal(map[string]any{"spec": map[string]any{"image": image}})
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "encode patch: %v", err)
-	}
-
-	out, err := s.State.dyn.Resource(gvr).Namespace(ns).
-		Patch(c.Context(), name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
-	if err != nil {
-		switch {
-		case apierrors.IsNotFound(err):
-			return zip.ErrNotFound("service not found in namespace " + ns)
-		case apierrors.IsInvalid(err), apierrors.IsBadRequest(err):
-			return zip.Errorf(http.StatusUnprocessableEntity, "patch rejected by kubernetes: %v", err)
-		default:
-			return k8sErr(s, "patch", err)
-		}
-	}
-
-	s.Log.Info("deployed via Service CR patch",
-		"app", name, "namespace", ns, "tag", tag, "repository", repo,
-		"actor", c.User(), "requestID", c.RequestID())
-
-	// Read the effective repo from the patched CR (the caller may have omitted
-	// repository to keep the CR's existing value) so the running-tag container
-	// match uses the real declared repo.
-	effRepo, _, _ := unstructured.NestedString(out.Object, "spec", "image", "repository")
-	view := observeCR(out, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, effRepo))
-	return c.JSON(http.StatusOK, map[string]any{
-		"rolledOut": true,
-		"target":    ns + "/" + name,
-		"reason":    "patched Service/" + name + " image to " + tag,
-		"app":       view,
-	})
+	return zip.Errorf(http.StatusConflict,
+		"%s is declared in git (App/%s, universe infra/k8s/operator/crs/%s.yaml) and reconciled by Hanzo CD with selfHeal — a patch here would be reverted on the next sync. Deploy it by committing the tag to that file.",
+		name, name, name)
 }
 
-// resolveTarget finds the namespace AND the kind a workload CR lives under,
-// scanning in env order (main→test→dev) so a bare deploy targets production, and
-// in crGVRs() order within a namespace. Returns a clean 404 when the CR exists
-// under neither kind in any of them.
-func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (string, schema.GroupVersionResource, error) {
+// resolveTarget finds the namespace an App CR lives in, scanning in env order
+// (main→test→dev) so a bare lookup targets production. Returns a clean 404 when
+// the App exists in none of them.
+func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
 	for _, ns := range scanOrder() {
-		for _, gvr := range crGVRs() {
-			if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
-				return ns, gvr, nil
-			} else if !apierrors.IsNotFound(err) {
-				return "", schema.GroupVersionResource{}, k8sErr(s, "get", err)
-			}
-		}
-	}
-	return "", schema.GroupVersionResource{}, zip.ErrNotFound("service " + name + " not found in the platform namespaces")
-}
-
-// kindAt reports the workload kind present at (ns, name), or an empty GVR when
-// the workload exists under neither kind there.
-func kindAt(s *cloud.Service[state], ctx context.Context, ns, name string) (schema.GroupVersionResource, error) {
-	for _, gvr := range crGVRs() {
-		if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
-			return gvr, nil
+		if _, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+			return ns, nil
 		} else if !apierrors.IsNotFound(err) {
-			return schema.GroupVersionResource{}, k8sErr(s, "get", err)
+			return "", k8sErr(s, "get", err)
 		}
 	}
-	return schema.GroupVersionResource{}, zip.ErrNotFound("service " + name + " not found in namespace " + ns)
+	return "", zip.ErrNotFound("app " + name + " not found in the platform namespaces")
 }
 
 // ── health ────────────────────────────────────────────────────────────────
 
 // health is a REAL probe: it verifies the API server is reachable and that the
-// App CRD — the kind the fleet runs on, and the kind the board is useless
-// without — is served, and reports the actual state. 200 only when everything is
-// ok; 503 + the real reason otherwise (never status-theater). Probing the
-// Service CRD alone reported ok while the board rendered 7 rows for a 69-app
-// fleet: the CRD it probed was served, just not the one the fleet uses. Not
-// admin-gated — liveness must be probe-able by the platform/operator without a JWT.
+// App CRD — the kind the fleet runs on, and the kind the board is useless without
+// — is served, and reports the actual state. 200 only when everything is ok; 503
+// + the real reason otherwise (never status-theater). Not admin-gated — liveness
+// must be probe-able by the platform/operator without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "paas", "status": "ok"}
 	if s.State.dyn == nil {
@@ -484,15 +345,15 @@ func ready(s *cloud.Service[state]) error {
 
 // k8sErr maps a raw API error to an honest gateway-level error. RBAC denials name
 // the missing access so the operator knows exactly what to grant the cloud service
-// account (get/list/patch on services.hanzo.ai). Mirrors ml.k8sErr.
+// account (get/list on apps.hanzo.ai). Mirrors ml.k8sErr.
 func k8sErr(s *cloud.Service[state], op string, err error) error {
-	s.Log.Error("k8s op failed", "op", op, "resource", servicesGVR.Resource, "err", err)
+	s.Log.Error("k8s op failed", "op", op, "resource", appsGVR.Resource, "err", err)
 	if apierrors.IsForbidden(err) {
 		return zip.Errorf(http.StatusBadGateway,
-			"%s services: kubernetes RBAC denied (cloud service account needs %s on services.hanzo.ai): %v",
+			"%s apps: kubernetes RBAC denied (cloud service account needs %s on apps.hanzo.ai): %v",
 			op, op, err)
 	}
-	return zip.Errorf(http.StatusBadGateway, "%s services failed: %v", op, err)
+	return zip.Errorf(http.StatusBadGateway, "%s apps failed: %v", op, err)
 }
 
 // newDynamic builds the dynamic client from the in-cluster service account,
@@ -588,9 +449,9 @@ func healthFromStatus(status map[string]any) string {
 	return "red"
 }
 
-// observeCR maps one Service CR (+ its operator-reconciled status + the running
-// tag observed from the live Deployment) into an AppView, attaching the drift
-// verdict. This is inventory.ts observeService fused with apps-api.ts toAppView:
+// observeCR maps one App CR (+ its operator-reconciled status + the running tag
+// observed from the live Deployment) into an AppView, attaching the drift verdict.
+// This is inventory.ts observeService fused with apps-api.ts toAppView:
 // declared tag from the CR spec, running tag from the Deployment (passed in),
 // health + phase + endpoints from the operator-reconciled CR status.
 func observeCR(obj *unstructured.Unstructured, namespace, env, runningTag string) AppView {
