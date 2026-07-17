@@ -57,7 +57,7 @@ func TestFirstDeployWaitsForOrgRBAC(t *testing.T) {
 	if _, err := fake.Resource(resourceQuotasGVR).Namespace(ns).Get(context.Background(), tenantQuotaName, metav1.GetOptions{}); err != nil {
 		t.Fatalf("ResourceQuota must be created once RBAC is ready: %v", err)
 	}
-	if _, err := fake.Resource(servicesGVR).Namespace(ns).Get(context.Background(), app.Slug, metav1.GetOptions{}); err != nil {
+	if _, err := fake.Resource(appsGVR).Namespace(ns).Get(context.Background(), app.Slug, metav1.GetOptions{}); err != nil {
 		t.Fatalf("Service CR must be created in %s: %v", ns, err)
 	}
 }
@@ -92,7 +92,7 @@ func TestFirstDeployFailsClosedWhenRBACNeverLands(t *testing.T) {
 	if _, gErr := fake.Resource(resourceQuotasGVR).Namespace(ns).Get(context.Background(), tenantQuotaName, metav1.GetOptions{}); !apierrors.IsNotFound(gErr) {
 		t.Fatalf("no ResourceQuota may be written when RBAC is not ready, get err=%v", gErr)
 	}
-	if _, gErr := fake.Resource(servicesGVR).Namespace(ns).Get(context.Background(), app.Slug, metav1.GetOptions{}); !apierrors.IsNotFound(gErr) {
+	if _, gErr := fake.Resource(appsGVR).Namespace(ns).Get(context.Background(), app.Slug, metav1.GetOptions{}); !apierrors.IsNotFound(gErr) {
 		t.Fatalf("no Service CR may be written when RBAC is not ready, get err=%v", gErr)
 	}
 }
@@ -180,7 +180,7 @@ func TestFreshOrgDeployFailsClosedOn503NotCreate502(t *testing.T) {
 		t.Fatalf("fresh-org deploy must CREATE the namespace (503 = RBAC pending, not create-502): %v", err)
 	}
 	// No Service CR was written past the readiness gate (fail-closed).
-	if _, err := k.dyn.Resource(servicesGVR).Namespace(ns).Get(context.Background(), "api", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+	if _, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(context.Background(), "api", metav1.GetOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("no Service CR may exist when RBAC never lands, get err=%v", err)
 	}
 	// The failed attempt is recorded honestly as an 'error' deployment (not fabricated).
