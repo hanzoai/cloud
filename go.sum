@@ -1206,10 +1206,6 @@ github.com/hanzoai/account v0.2.0 h1:WxIut3YMz8JNdHerlRIqP1a+k3P79BIKM1mjfRFDG0Y
 github.com/hanzoai/account v0.2.0/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v0.1.1 h1:RuNhj6e/gj+2c/E8aJqzRYLHype5C5FQnebLk5TWQPs=
 github.com/hanzoai/agent v0.1.1/go.mod h1:BDPLRQpX8JWQ2ku6GhqgJ4OKEuOQa5iZo6RqjyP/oBI=
-github.com/hanzoai/ai v1.817.0 h1:xosn8bCHaXyXxYfaP1J3oOEor0AHRzZ+54M6E9c/RVg=
-github.com/hanzoai/ai v1.817.0/go.mod h1:5BMihLoYRts/P1TsYFu3woHQdsNU5vTN6MbCtAUd/4Q=
-github.com/hanzoai/ai v1.817.1-0.20260717030744-767dcbf24292 h1:x+OoDwu+LYOHK68RxHa0N98JmHmiJwAtP7IOgTDLvRg=
-github.com/hanzoai/ai v1.817.1-0.20260717030744-767dcbf24292/go.mod h1:5BMihLoYRts/P1TsYFu3woHQdsNU5vTN6MbCtAUd/4Q=
 github.com/hanzoai/ai v1.818.0 h1:mxB0ZRpOgcmeh956VLkyevLNoFDf/QCyK6PvRM67ayc=
 github.com/hanzoai/ai v1.818.0/go.mod h1:5BMihLoYRts/P1TsYFu3woHQdsNU5vTN6MbCtAUd/4Q=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
@@ -1226,8 +1222,8 @@ github.com/hanzoai/builder v0.3.13 h1:tAOJ+0Q0xrrovk7lkvaZxuKZ4lqENIB6tE0Rr9+6Bo
 github.com/hanzoai/builder v0.3.13/go.mod h1:TWZaiP0Y9tCMwtLH2EvQqBAeT1f3aJI5Y0XPM8S0wcE=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
-github.com/hanzoai/commerce v1.48.5 h1:jeo5MQzvYiMEdOOX+U6/ivZGEtnxi+jQ7nxOPeHBlk4=
-github.com/hanzoai/commerce v1.48.5/go.mod h1:XA98b7QGEBV42YFOJjhzKojfdR7wGti0yiJemJV9QVI=
+github.com/hanzoai/commerce v1.48.10 h1:TeTCszEpholNbkUQwm9uE1owu+aP2Xw+yHyuk2TXa7w=
+github.com/hanzoai/commerce v1.48.10/go.mod h1:AWuEZA7Sr5nkyFVTKZoN0wzFQXCZwQxN1NjMxoBoG4o=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyfjmLYmY344=
@@ -1252,12 +1248,8 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
 github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
-github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d h1:ewC//4HSfWmnFyH+Jg673ZeoqucpPhLg+IjNTVdqp8Y=
-github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
 github.com/hanzoai/iam v1.31.28 h1:bEKm4x7Ghy0LQD+GeMjeMhzBwIYjJV+6UlGwCkHCi4U=
 github.com/hanzoai/iam v1.31.28/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
-github.com/hanzoai/iam2 v0.1.1 h1:AxyKwD70nDjBQ49GMdX6hp5DkYJUEVs/N99u8+l8Pog=
-github.com/hanzoai/iam2 v0.1.1/go.mod h1:w/+GVimy/HLeiSFnHSFSgKDgBTz5s/cBJcg1tJ1qpag=
 github.com/hanzoai/iam2 v0.14.0 h1:98muJ394y7Yt5zTcZaPJ/teR6Uo5rZ+GCsOcjNicJBM=
 github.com/hanzoai/iam2 v0.14.0/go.mod h1:40YxnxnRgEH+ARZs+qL2An+B1HhOVkbtohr0KJtbtFg=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
@@ -1268,8 +1260,6 @@ github.com/hanzoai/kv-go/v9 v9.18.0 h1:vO2SD8dV0+H9WWCVKV9KHaWZq4yeMsZruohrsZN94
 github.com/hanzoai/kv-go/v9 v9.18.0/go.mod h1:S+Li20E6Bskpw6r+c8WWhfi4hCr8SVV32qPXO0wdl+E=
 github.com/hanzoai/ldapserver v1.2.2 h1:Q7czg70ybz7NwUunoqR87emMQfneO3mzZuJNOulb29U=
 github.com/hanzoai/ldapserver v1.2.2/go.mod h1:mPwAbPBw9YeXfC2hfg1QSAw6CiGt6o2oF2pi9VR+j3U=
-github.com/hanzoai/licensing v0.1.4 h1:pSsHfBMkECPh6ZrZMbPRyRPXeDxgD9Yrvh+FxmJE8Yk=
-github.com/hanzoai/licensing v0.1.4/go.mod h1:0SWQBAvGuhL7IRM5bTIPRhhOebLmfhjK+ppx/83uWPo=
 github.com/hanzoai/licensing v0.1.5 h1:9x58nD42lZyjVsA/z4fCfEonUiyfrAkS+Vji6Alyi/U=
 github.com/hanzoai/licensing v0.1.5/go.mod h1:XcAj+BqXuCIT72OHfjph5e0ryckoPOcow7jUlgBoZ/8=
 github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwTwQ=
