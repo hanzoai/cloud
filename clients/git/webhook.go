@@ -33,6 +33,15 @@ const (
 	webhookSecretEnv = "GIT_WEBHOOK_SECRET"
 	giteaEventHeader = "X-Gitea-Event"
 	giteaSigHeader   = "X-Gitea-Signature"
+	// syncActorEnv names the login the universal sync engine's inbound relay pushes
+	// AS when it lands an upstream push into native git. A native push webhook whose
+	// pusher equals it is the ECHO of our own relay — re-driving the build/mirror
+	// would ping-pong straight back to the upstream it came from. Unset ⇒ no login is
+	// treated as the sync bot (no push is suppressed), so a deployment without the
+	// relay keeps today's behavior; set it to the relay's Gitea login to arm the
+	// guard. Idempotent SHAs already make the echo a no-op downstream; this skips it
+	// early and explicitly (loop guard, engine-level twin in syncsvc).
+	syncActorEnv = "GIT_SYNC_ACTOR"
 	// zeroSHA is git's all-zero object id — the `after` of a branch delete and
 	// the `before` of a branch create.
 	zeroSHA = "0000000000000000000000000000000000000000"
@@ -95,6 +104,16 @@ func webhook(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("missing repository owner or name")
 	}
 	pusher := firstNonEmptyStr(ev.Pusher.Login, ev.Pusher.Username)
+
+	// Loop guard: a push made by the sync service account is the ECHO of an inbound
+	// relay this cloud just performed (it landed the upstream push into native AS
+	// this login). Re-driving the build/mirror for it would ping-pong back to the
+	// upstream. Skip it — acknowledged 204, no build. Unset GIT_SYNC_ACTOR ⇒ nothing
+	// is suppressed (today's behavior); the SHA is already identical so the outbound
+	// mirror would no-op regardless, but the skip is explicit + early.
+	if actor := strings.TrimSpace(os.Getenv(syncActorEnv)); actor != "" && strings.EqualFold(pusher, actor) {
+		return c.NoContent(http.StatusNoContent)
+	}
 
 	// The SAME funnel receive-pack drives (fireBranchBuilds → fireBranchBuild):
 	// cloud.OnGitPush deploy trigger + EmitLifecycle. project is "" — Gitea repos
