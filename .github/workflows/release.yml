@@ -529,12 +529,25 @@ jobs:
             # newest-first and version tags are monotonic, so the highest version
             # is always among the most-recent versions; paginating the WHOLE
             # registry history is what livelocked this step as tags accumulated.
+            # Fail-CLOSED. An ORPHANED container tag — image pushed by a run that
+            # died or was cancelled after imagetools-create but before its git tag —
+            # MUST raise the floor, or a later run reassigns that same number to a
+            # different image (an ambiguous mutable prod tag; the v1.801.50 flip). A
+            # git-only floor can't see the orphan, so if the container-tag lookup
+            # ERRORS (vs legitimately returning no tags) we retry the whole attempt
+            # rather than silently proceeding — a version with a pushed image is never
+            # reused. (Reordering git-tag before imagetools-create is the WRONG fix: it
+            # reintroduces the phantom "tag ⇔ no image" this workflow exists to prevent.)
             cont_max=""
             if command -v gh >/dev/null 2>&1; then
-              cont_max="$(GH_TOKEN="$GH_PAT" gh api \
-                '/orgs/hanzoai/packages/container/cloud/versions?per_page=100' \
-                --jq '.[].metadata.container.tags[]?' 2>/dev/null \
-                | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+              if cont_raw="$(GH_TOKEN="$GH_PAT" gh api \
+                  '/orgs/hanzoai/packages/container/cloud/versions?per_page=100' \
+                  --jq '.[].metadata.container.tags[]?' 2>/dev/null)"; then
+                cont_max="$(printf '%s\n' "$cont_raw" \
+                  | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+              else
+                echo "  container-tag lookup failed — retry so an orphaned tag can't be reused (attempt $attempt)"; sleep 3; continue
+              fi
             fi
             max="$(printf '%s\n%s\n%s\n' "1.786.0" "$git_max" "$cont_max" \
               | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
