@@ -37,8 +37,8 @@ func newDualApp(t *testing.T, mk string) *zip.App {
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(deps.Logger))
 	specs := []cloud.MountSpec{
-		{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true},
-		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
+		{Name: "kms", Mount: kms.Mount, OwnsHealth: true},
+		{Name: "admin", Mount: admin.Mount},
 	}
 	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
