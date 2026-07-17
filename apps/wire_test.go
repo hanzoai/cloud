@@ -26,7 +26,7 @@ var frozen = []struct {
 	{"pubsub", false, true},            // was order 5
 	{"kafka", false, true},             // was order 6
 	{"agentskills", false, false},      // was order 8
-	{"featureflags", true, true},       // was order 9; native engine: /v1/flags health + store shutdown
+	{"flags", true, true},              // was order 9; native engine: /v1/flags health + store shutdown
 	{"kms", true, false},               // was order 10
 	{"metrics", false, false},          // was order 40
 	{"ingress", false, true},           // was order 42
@@ -96,7 +96,6 @@ var frozen = []struct {
 	{"evals", false, false},            // was order 145
 	{"treasury", false, true},          // was order 146
 	{"admin", false, false},            // was order 146
-	{"featuregate", false, true},       // new: launch-control waitlist-mode plane (after admin, was order 147)
 	{"tasks", false, false},            // was order 147
 	{"cron", false, false},             // durable platform cron on the shared engine (post-freeze add)
 	{"automations", false, true},       // was order 148
