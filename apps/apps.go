@@ -67,7 +67,6 @@ import (
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
-	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
@@ -348,12 +347,11 @@ func Wire() []cloud.MountSpec {
 		// Wire entry; it mounts no routes and only registers schedules, so it is folded
 		// in as a sub-mount of tasks.Mount — ONE tasks subsystem.
 		{Name: "tasks", Mount: tasks.Mount},
+		// Automations: the connector catalogue + flow engine AND native single-connector
+		// execution (POST /v1/automations/connectors/:id/run, HIP-0126). The connector
+		// runner mounts no other routes, so it is folded in as a sub-mount of
+		// automations.Mount (was a separate "connectorruntime" entry) — ONE subsystem.
 		{Name: "automations", Mount: automations.Mount, Shutdown: automations.Shutdown},
-		// Native single-connector execution (HIP-0126): runs an ActivePieces JS
-		// connector action in-process via goja (clients/connectorruntime), retiring
-		// the standalone auto Node engine. Mounts POST /v1/automations/connectors/:id/run,
-		// paired with the automations catalogue above; STAGED like the rest.
-		{Name: "connectorruntime", Mount: connectorruntime.Mount},
 		// Unified tool plane: /v1/tools/* — the ONE registry (connectors, functions,
 		// agents, skills, external MCP servers, full-cloud-control /v1 routes), per-org
 		// activation, and the unified MCP endpoint. Sources register into it from their
