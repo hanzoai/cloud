@@ -24,11 +24,24 @@ func serviceCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
 	}}
 }
 
+// appCRObj builds a real-shaped operator App CR — the kind the fleet runs on —
+// for the fake cluster.
+func appCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "hanzo.ai/v1",
+		"kind":       "App",
+		"metadata":   map[string]any{"name": name, "namespace": ns},
+		"spec":       map[string]any{"image": map[string]any{"repository": repo, "tag": tag, "pullPolicy": "Always"}},
+	}}
+}
+
 // fakeService builds a hermetic paas Service backed by an in-memory fake dynamic
 // client seeded with objs — the release patch is exercised without a real cluster.
+// Both workload kinds are registered, so a test can seed either.
 func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		appsGVR:        "AppList",
 		servicesGVR:    "ServiceList",
 		deploymentsGVR: "DeploymentList",
 	}, objs...)

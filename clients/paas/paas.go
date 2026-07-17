@@ -54,10 +54,28 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// servicesGVR is the operator Service CR — the single source of truth for the
-// declared image of every Hanzo service. Asserted in the tests; a typo here
-// silently breaks the whole board.
-var servicesGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "services"}
+// The operator's workload CRs. `App` is the collapsed kind the fleet runs on;
+// `Service` is the kind it collapsed from and is still served, still reconciled,
+// and still the kind cloud writes for tenant workloads (clients/platform). Both
+// carry the same spec, so a reader that knows only one is blind to the other.
+//
+// Reading `services` alone made this board blind to the fleet: 69 Apps run in the
+// scanned namespaces against 7 Service CRs (1 in `hanzo`), so the drift board
+// rendered 7 rows for a 69-app fleet and every read of an App-declared service
+// 404'd. The read order below mirrors clients/deploy's appCRGVRs(): App first
+// (the fleet's kind), Service second (tenant + untransitioned CRs).
+//
+// Asserted in the tests; a typo here silently breaks the whole board.
+var (
+	appsGVR     = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
+	servicesGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "services"}
+)
+
+// crGVRs is the workload-CR read order: the fleet's kind first, the kind it
+// collapsed from second. Every read walks this list.
+func crGVRs() []schema.GroupVersionResource {
+	return []schema.GroupVersionResource{appsGVR, servicesGVR}
+}
 
 // deploymentsGVR is the live Deployment behind each Service — the source of the
 // RUNNING tag (the operator Service CR status does not surface the running image,
@@ -229,41 +247,56 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
 	for _, ns := range scanOrder() {
-		obj, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
+		for _, gvr := range crGVRs() {
+			obj, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					continue
+				}
+				return k8sErr(s, "get", err)
 			}
-			return k8sErr(s, "get", err)
+			repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
+			return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
 		}
-		repository, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "repository")
-		return c.JSON(http.StatusOK, observeCR(obj, ns, nsEnv[ns], runningTagOf(s, c.Context(), ns, name, repository)))
 	}
 	return zip.ErrNotFound("service not found in the platform namespaces")
 }
 
-// observeFleet lists every Service CR across the scanned namespaces and maps each
-// to an AppView. A namespace that does not exist / is empty is skipped, never
-// fatal (the fleet board must still render the reachable namespaces).
+// observeFleet lists every workload CR across the scanned namespaces and maps
+// each to an AppView. A namespace that does not exist / is empty is skipped,
+// never fatal (the fleet board must still render the reachable namespaces).
+//
+// Both kinds are listed, in crGVRs() order, deduped by name within a namespace:
+// one workload is one row even when an App CR and a Service CR both claim the
+// name. That collision is real — a Deployment can only have one controller
+// ownerRef, so the operator's Claim guard makes the App the owner — and the board
+// reports the owner rather than rendering the workload twice.
 func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, error) {
 	var views []AppView
 	for _, ns := range scanOrder() {
-		list, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			return nil, k8sErr(s, "list", err)
-		}
 		// Running state: one Deployment list per namespace, indexed by name — the
 		// running-tag source (inventory.ts). Best-effort: a Deployment RBAC/list
 		// error leaves runningTag empty (an honest unknown) rather than failing the
 		// whole board, so the declared/health/phase columns still render.
 		running := runningTagsIn(s, ctx, ns)
 		env := nsEnv[ns]
-		for i := range list.Items {
-			cr := &list.Items[i]
-			views = append(views, observeCR(cr, ns, env, running[cr.GetName()]))
+		seen := make(map[string]bool)
+		for _, gvr := range crGVRs() {
+			list, err := s.State.dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					continue
+				}
+				return nil, k8sErr(s, "list", err)
+			}
+			for i := range list.Items {
+				cr := &list.Items[i]
+				if seen[cr.GetName()] {
+					continue
+				}
+				seen[cr.GetName()] = true
+				views = append(views, observeCR(cr, ns, env, running[cr.GetName()]))
+			}
 		}
 	}
 	sort.Slice(views, func(i, j int) bool {
@@ -315,16 +348,34 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	ns := strings.TrimSpace(req.Namespace)
+	var gvr schema.GroupVersionResource
 	if ns != "" {
 		if _, ok := nsEnv[ns]; !ok {
 			return zip.ErrBadRequest("'namespace' must be a platform namespace (hanzo|hanzo-testnet|hanzo-devnet)")
 		}
-	} else {
-		resolved, err := resolveNamespace(s, c.Context(), name)
+		found, err := kindAt(s, c.Context(), ns, name)
 		if err != nil {
 			return err
 		}
-		ns = resolved
+		gvr = found
+	} else {
+		resolvedNS, resolvedGVR, err := resolveTarget(s, c.Context(), name)
+		if err != nil {
+			return err
+		}
+		ns, gvr = resolvedNS, resolvedGVR
+	}
+
+	// A git-declared workload has a declarer already, and it is not this endpoint.
+	// The App CRs in these namespaces are synced from universe `infra/k8s/operator/
+	// crs/` by Hanzo CD with selfHeal on, so a patch here is reverted on the next
+	// sync — the tag would appear to deploy and then silently roll back. Refuse
+	// instead, and name the one way to deploy it. Service CRs carry no git
+	// declarer (cloud and kubectl write them directly), so they still patch.
+	if gvr == appsGVR {
+		return zip.Errorf(http.StatusConflict,
+			"%s is declared in git (App/%s, universe infra/k8s/operator/crs/%s.yaml) and reconciled by Hanzo CD with selfHeal — a patch here would be reverted on the next sync. Deploy it by committing the tag to that file.",
+			name, name, name)
 	}
 
 	// Build the merge-patch. When repository is omitted we patch only the tag +
@@ -339,7 +390,7 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "encode patch: %v", err)
 	}
 
-	out, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).
+	out, err := s.State.dyn.Resource(gvr).Namespace(ns).
 		Patch(c.Context(), name, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		switch {
@@ -369,33 +420,52 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
-// resolveNamespace finds the platform namespace a Service CR lives in, scanning
-// in env order (main→test→dev) so a bare deploy targets production. Returns a
-// clean 404 when the CR exists in none of them.
-func resolveNamespace(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
+// resolveTarget finds the namespace AND the kind a workload CR lives under,
+// scanning in env order (main→test→dev) so a bare deploy targets production, and
+// in crGVRs() order within a namespace. Returns a clean 404 when the CR exists
+// under neither kind in any of them.
+func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (string, schema.GroupVersionResource, error) {
 	for _, ns := range scanOrder() {
-		if _, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
-			return ns, nil
-		} else if !apierrors.IsNotFound(err) {
-			return "", k8sErr(s, "get", err)
+		for _, gvr := range crGVRs() {
+			if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+				return ns, gvr, nil
+			} else if !apierrors.IsNotFound(err) {
+				return "", schema.GroupVersionResource{}, k8sErr(s, "get", err)
+			}
 		}
 	}
-	return "", zip.ErrNotFound("service " + name + " not found in the platform namespaces")
+	return "", schema.GroupVersionResource{}, zip.ErrNotFound("service " + name + " not found in the platform namespaces")
+}
+
+// kindAt reports the workload kind present at (ns, name), or an empty GVR when
+// the workload exists under neither kind there.
+func kindAt(s *cloud.Service[state], ctx context.Context, ns, name string) (schema.GroupVersionResource, error) {
+	for _, gvr := range crGVRs() {
+		if _, err := s.State.dyn.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
+			return gvr, nil
+		} else if !apierrors.IsNotFound(err) {
+			return schema.GroupVersionResource{}, k8sErr(s, "get", err)
+		}
+	}
+	return schema.GroupVersionResource{}, zip.ErrNotFound("service " + name + " not found in namespace " + ns)
 }
 
 // ── health ────────────────────────────────────────────────────────────────
 
 // health is a REAL probe: it verifies the API server is reachable and that the
-// Service CRD is served, and reports the actual state. 200 only when everything is
-// ok; 503 + the real reason otherwise (never status-theater). Not admin-gated —
-// liveness must be probe-able by the platform/operator without a JWT.
+// App CRD — the kind the fleet runs on, and the kind the board is useless
+// without — is served, and reports the actual state. 200 only when everything is
+// ok; 503 + the real reason otherwise (never status-theater). Probing the
+// Service CRD alone reported ok while the board rendered 7 rows for a 69-app
+// fleet: the CRD it probed was served, just not the one the fleet uses. Not
+// admin-gated — liveness must be probe-able by the platform/operator without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
 	res := map[string]any{"service": "paas", "status": "ok"}
 	if s.State.dyn == nil {
 		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
-	if _, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
+	if _, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
 		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
