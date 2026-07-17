@@ -160,24 +160,21 @@ type loginFlags struct {
 }
 
 func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
-	creds, err := LoadCredentials()
-	if err != nil {
-		return err
-	}
+	var creds *Credentials
 
 	switch {
 	case lf.token != "":
 		// Paste an externally-minted token. Decode claims for identity.
-		tr := &tokenResp{AccessToken: lf.token, TokenType: "Bearer"}
-		creds = credsFromToken(tr)
+		creds = credsFromToken(&tokenResp{AccessToken: lf.token, TokenType: "Bearer"})
 	case lf.username != "" || lf.passwordStdin:
 		// Password grant — kept for automation (--username/--password-stdin).
 		username := lf.username
 		if username == "" {
-			username, err = prompt(cmd, "Email: ")
+			u, err := prompt(cmd, "Email: ")
 			if err != nil {
 				return err
 			}
+			username = u
 		}
 		password, err := readPassword(cmd, lf.passwordStdin)
 		if err != nil {
@@ -192,14 +189,15 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 	default:
 		// The ONE interactive way: RFC 8628 device flow — link + QR + code,
 		// approve from any signed-in browser or phone. Headless-safe.
-		creds, err = runDeviceLogin(cmd, env, lf.scope)
+		c, err := runDeviceLogin(cmd, env, lf.scope)
 		if err != nil {
 			return err
 		}
+		creds = c
 	}
 
 	// Optional machine-to-machine tokens for the platform control plane,
-	// stored alongside the identity so apps/deploy work post-login.
+	// stored with this identity so apps/deploy work post-login.
 	if lf.platformToken != "" {
 		creds.PlatformToken = lf.platformToken
 	}
@@ -207,14 +205,23 @@ func runLogin(env *Env, lf *loginFlags, cmd *cobra.Command) error {
 		creds.BuildToken = lf.buildToken
 	}
 
-	if err := creds.Save(); err != nil {
+	// Persist under this identity's stable key and make it active. A second
+	// login as a different owner (e.g. admin vs hanzo for the same email, via a
+	// different --client-id) is stored beside the first, never over it;
+	// credentials.json mirrors whichever is active for legacy readers.
+	store, err := LoadIdentities()
+	if err != nil {
+		return err
+	}
+	key := store.Put(creds)
+	if err := store.Save(); err != nil {
 		return err
 	}
 	who := firstNonEmpty(creds.Subject, "(unknown)")
 	if creds.Owner != "" {
 		who += " @ " + creds.Owner
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s (token expires %s)\n", who, shortTime(creds.Expiry))
+	fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s [%s] (token expires %s)\n", who, key, shortTime(creds.Expiry))
 	return nil
 }
 
@@ -249,28 +256,92 @@ func bindLoginFlags(cmd *cobra.Command, lf *loginFlags) {
 
 func newLogoutCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:               "logout",
-		Short:             "Remove stored credentials",
-		Args:              cobra.NoArgs,
+		Use:               "logout [<owner>]",
+		Short:             "Remove a stored identity (the active one, or the named owner)",
+		Args:              cobra.MaximumNArgs(1),
 		PersistentPreRunE: func(*cobra.Command, []string) error { return nil },
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := DeleteCredentials(); err != nil {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := LoadIdentities()
+			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+			if len(store.Identities) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "Not logged in.")
+				return nil
+			}
+			target := store.Active
+			if len(args) == 1 {
+				if target, err = store.resolve(args[0]); err != nil {
+					return err
+				}
+			}
+			store.Remove(target)
+			if err := store.Save(); err != nil {
+				return err
+			}
+			msg := "Logged out of " + target + "."
+			if store.Active != "" {
+				msg += " Active is now " + store.Active + "."
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), msg)
 			return nil
 		},
 	}
 }
 
+// identityRow is the JSON/table projection of one stored identity.
+type identityRow struct {
+	Key     string `json:"key"`
+	Owner   string `json:"owner"`
+	Subject string `json:"subject"`
+	Expiry  int64  `json:"expiry,omitempty"`
+	Active  bool   `json:"active"`
+}
+
+// listIdentities renders every stored identity (active marked with *) — the
+// shared body of `hanzo auth list` and `hanzo whoami --all`.
+func listIdentities(env *Env, _ *cobra.Command) error {
+	store, err := LoadIdentities()
+	if err != nil {
+		return err
+	}
+	rows := make([]identityRow, 0, len(store.Identities))
+	for _, k := range store.keys() {
+		c := store.Identities[k]
+		rows = append(rows, identityRow{
+			Key: k, Owner: c.Owner, Subject: c.Subject, Expiry: c.Expiry,
+			Active: k == store.Active,
+		})
+	}
+	return env.emit(rows, func(w io.Writer) {
+		if len(rows) == 0 {
+			fmt.Fprintln(w, "No stored identities. Run `hanzo login`.")
+			return
+		}
+		tw := newTab(w)
+		fmt.Fprintln(tw, "ACTIVE\tKEY\tOWNER\tSUBJECT\tEXPIRES")
+		for _, r := range rows {
+			active := ""
+			if r.Active {
+				active = "*"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", active, r.Key, r.Owner, r.Subject, shortTime(r.Expiry))
+		}
+		tw.Flush()
+	})
+}
+
 func newWhoamiCmd(envOf func() *Env) *cobra.Command {
-	var verify bool
+	var verify, all bool
 	cmd := &cobra.Command{
 		Use:   "whoami",
-		Short: "Show the current identity from the stored token",
+		Short: "Show the active identity from the stored token (--all lists every stored identity)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			env := envOf()
+			if all {
+				return listIdentities(env, cmd)
+			}
 			tok := env.accessToken()
 			if tok == "" {
 				return fmt.Errorf("not logged in: run `hanzo login`")
@@ -300,6 +371,7 @@ func newWhoamiCmd(envOf func() *Env) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&verify, "verify", false, "verify the token against the IAM userinfo endpoint")
+	cmd.Flags().BoolVar(&all, "all", false, "list every stored identity (active marked with *)")
 	return cmd
 }
 
@@ -329,11 +401,11 @@ func verifyUserInfo(ctx context.Context, env *Env, token string) error {
 func newAuthCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Manage authentication",
+		Short: "Manage authentication and stored identities",
 	}
 	tokenCmd := &cobra.Command{
 		Use:   "token",
-		Short: "Print the stored access token",
+		Short: "Print the active access token",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			tok := envOf().accessToken()
@@ -344,7 +416,41 @@ func newAuthCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.AddCommand(newLoginCmd(envOf, gf), newLogoutCmd(), newWhoamiCmd(envOf), tokenCmd)
+	listCmd := &cobra.Command{
+		Use:     "list",
+		Aliases: []string{"ls", "identities"},
+		Short:   "List stored identities (active marked with *)",
+		Args:    cobra.NoArgs,
+		RunE:    func(cmd *cobra.Command, _ []string) error { return listIdentities(envOf(), cmd) },
+	}
+	switchCmd := &cobra.Command{
+		Use:     "switch <owner>",
+		Aliases: []string{"use"},
+		Short:   "Make a stored identity active (accepts an owner, or a full owner/name key)",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store, err := LoadIdentities()
+			if err != nil {
+				return err
+			}
+			key, err := store.resolve(args[0])
+			if err != nil {
+				return err
+			}
+			store.Active = key
+			if err := store.Save(); err != nil {
+				return err
+			}
+			c := store.Identities[key]
+			who := firstNonEmpty(c.Subject, "(unknown)")
+			if c.Owner != "" {
+				who += " @ " + c.Owner
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Switched to %s [%s] (token expires %s)\n", who, key, shortTime(c.Expiry))
+			return nil
+		},
+	}
+	cmd.AddCommand(newLoginCmd(envOf, gf), newLogoutCmd(), newWhoamiCmd(envOf), tokenCmd, listCmd, switchCmd)
 	return cmd
 }
 
