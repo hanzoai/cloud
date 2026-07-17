@@ -1,7 +1,16 @@
-// Package usage mounts the Hanzo Cloud UNIFIED USAGE surface (GET /v1/usage/summary):
-// one org-scoped roll-up answering "what am I running and what does it cost" — the
-// flagship footprint view. It is a native-Go composition over the two canonical
-// shared cost sources, and exists because NO single endpoint aggregates this today:
+// Package usage is the ONE Hanzo Cloud usage surface (/v1/usage). It owns ALL usage
+// — clients/link owns links and nothing usage — as one coherent plane over one
+// window grammar:
+//
+//   - POST /v1/usage          record account-usage samples (the collector's data
+//     plane; write path over the hanzo.account_usage warehouse series, datastore.go).
+//   - GET  /v1/usage/samples  one provider account's own lane dash (the time series).
+//   - GET  /v1/usage/summary  the flagship own-scoped footprint roll-up (below).
+//   - GET  /v1/usage/analytics{,/access}  the entitlement-gated rich per-org read.
+//
+// The summary answers "what am I running and what does it cost" by composing THREE
+// complementary sources, each degrading independently to honest zeros (a source
+// marker says which answered — a partial deploy never fabricates spend or usage):
 //
 //   - Spend (the genuinely-missing categorized cost roll-up): the commerce ledger —
 //     usage-rollup (authoritative month-to-date consumed + prepaid wallet) plus the
@@ -12,24 +21,26 @@
 //   - LLM usage totals: hanzo.cloud_usage, the per-org warehouse ledger (the same
 //     table /v1/analytics/* and the o11y board read). Totals only here — the
 //     per-model / timeseries detail stays at /v1/analytics/*.
+//   - The account board: the caller's OWN linked provider accounts (a Claude Max
+//     plan's window %, metered from the provider's own login) beside the org's
+//     Hanzo-routed usage, every row labelled by source/scope and NEVER summed. This
+//     is the account-usage global view, unified here from clients/link.
 //
-// The console Usage view composes THIS (cost roll-up + LLM totals) with the existing
-// org-scoped inventory endpoints (/v1/machines, /v1/gpus, /v1/agents, provisioning
-// lists) for the per-kind counts — one screen, this one authoritative money source.
+// The console Usage view composes THIS with the existing org-scoped inventory
+// endpoints (/v1/machines, /v1/gpus, /v1/agents, provisioning lists) for the
+// per-kind counts — one screen, this one authoritative money source.
 //
-// TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim
-// (principal.Org — the trusted X-Org-Id the identity middleware minted from the
-// caller's verified bearer, HIP-0026; NEVER a client header) AND a validated
-// principal is required (c.User() set only for a verified bearer). The commerce
-// subject is pinned server-side to that org; the warehouse query binds it
-// POSITIONALLY. A caller can only ever read its OWN org. Fail-closed: no principal
-// → 401. Every source degrades independently to honest zeros (source markers say
-// which answered) — a partial deploy never fabricates spend or usage.
+// TENANT ISOLATION (the bar). The org is the VALIDATED IAM owner claim (principal.Org
+// — the trusted X-Org-Id the identity middleware minted from the caller's verified
+// bearer, HIP-0026; NEVER a client header) AND a validated principal is required
+// (c.User() set only for a verified bearer). The commerce subject is pinned
+// server-side to that org; every warehouse query binds org (and, for the account
+// board, subject) POSITIONALLY. A caller can only ever read/write its OWN org —
+// fail-closed: no principal → 401.
 //
-// Registered as "usagesvc" (NOT "usage") + order 131: the name diverges from the
-// /v1/usage route so serve.go's generic GET /v1/<name>/health parks at
-// /v1/usagesvc/health and never shadows the summary. Order 131 binds /v1/usage/*
-// before the ai subsystem's /v1/* catch-all (150).
+// Registered as "usage" (order 131, OwnsHealth=false): the generic GET
+// /v1/usage/health liveness route is a distinct path and never shadows these; order
+// 131 binds /v1/usage/* before the ai subsystem's /v1/* catch-all (150).
 package usage
 
 import (
@@ -56,11 +67,13 @@ import (
 // unbounded read.
 const maxLedgerRows = 1000
 
-// state is the usage subsystem's own data: the commerce S2S reader. The shared
-// deps (logger, billing, brand) live in the embedded cloud.Base, reached as
-// s.Log / s.Bill — never re-plumbed here.
+// state is the usage subsystem's own data: the commerce S2S reader (spend) and the
+// account-usage warehouse projection (samples + account board). The shared deps
+// (logger, billing, brand) live in the embedded cloud.Base, reached as s.Log /
+// s.Bill — never re-plumbed here.
 type state struct {
-	commerce *commerceReader
+	commerce  *commerceReader
+	warehouse *warehouse
 }
 
 // Mount wires the usage surface onto app per HIP-0106 — one line over the generic
@@ -70,21 +83,31 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // build constructs the usage state: the commerce S2S reader from its env
-// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env,
-// never hard-coded).
+// (COMMERCE_SERVICE_TOKEN is a KMS-sourced secret already on the cloud env, never
+// hard-coded) and the account-usage warehouse (a DDL latch over aiobject's shared
+// datastore — no handle of its own, so the subsystem needs no Shutdown).
 func build(b cloud.Base) (state, error) {
 	cr := newCommerceReader(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
-	b.Log.Info("usage summary surface", "prefix", "/v1/usage", "commerce", cr.configured())
-	return state{commerce: cr}, nil
+	b.Log.Info("usage surface", "prefix", "/v1/usage", "commerce", cr.configured())
+	return state{commerce: cr, warehouse: &warehouse{}}, nil
 }
 
-// routes registers the usage surface.
-//   - /summary — basic own-org usage roll-up, UNGATED.
-//   - /analytics/access echoes a plan's resolved AnalyticsAccess (always 200, free
-//     floor on error) so dashboards self-configure against the live @hanzo/plans
-//     catalog.
-//   - /analytics is the rich per-org read, entitlement-gated (access.Datastore).
+// routes registers the ONE usage surface — the read faces plus the account-usage
+// data plane (moved here from clients/link so usage owns ALL usage).
+//   - POST /usage          record account-usage samples (the collector).
+//   - GET  /usage/samples  one provider account's own lane dash (time series).
+//   - GET  /summary        the own-scoped footprint roll-up (spend + LLM + the
+//     account board), UNGATED.
+//   - GET  /analytics/access echoes a plan's resolved AnalyticsAccess (always 200,
+//     free floor on error) so dashboards self-configure against the live catalog.
+//   - GET  /analytics is the rich per-org read, entitlement-gated (access.Datastore).
+//
+// No :param routes here, so registration order is irrelevant; the generic
+// /v1/usage/health liveness route (OwnsHealth=false) is a distinct path and never
+// shadows these.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/usage", cloud.Handle(s, record))
+	app.Get("/v1/usage/samples", cloud.Handle(s, samples))
 	app.Get("/v1/usage/summary", cloud.Handle(s, summary))
 	app.Get("/v1/usage/analytics/access", cloud.Handle(s, analyticsAccess))
 	app.Get("/v1/usage/analytics", cloud.Handle(s, analytics))
@@ -95,11 +118,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 // grammar, no drift). Composes commerce spend + warehouse LLM totals, each
 // degrading independently to honest zeros.
 func summary(s *cloud.Service[state], c *zip.Ctx) error {
-	// principal.Org requires a VALIDATED principal (c.User() set only for a
-	// verified bearer) and returns the trusted, minted X-Org-Id — refusing a forged
-	// header on the no-principal path. This is the "org from validated bearer ONLY"
-	// contract.
-	org, ok := principal.Org(c)
+	// caller composes principal.Org (a VALIDATED principal — c.User() set only for a
+	// verified bearer — returning the trusted, minted X-Org-Id, refusing a forged
+	// header) with the subject. This is the "org from validated bearer ONLY" contract;
+	// user scopes the account board to the caller's OWN linked accounts.
+	org, user, ok := caller(c)
 	if !ok {
 		return zip.ErrUnauthorized("sign in to view usage")
 	}
@@ -119,6 +142,10 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 	// ── LLM totals (warehouse) ── honest-empty when the datastore is not connected.
 	llm, warehouseOK := buildLLMBlock(s, ctx, org, start, end)
 
+	// ── Account board ── the caller's own linked provider accounts beside the org's
+	// Hanzo-routed usage, over the SAME window; each side degrades independently.
+	accounts := buildAccountsBlock(s, ctx, org, user, start, end)
+
 	// Per-tenant money must never be cached by the browser or an intermediary.
 	c.SetHeader("Cache-Control", "no-store")
 	return c.JSON(http.StatusOK, Summary{
@@ -126,9 +153,10 @@ func summary(s *cloud.Service[state], c *zip.Ctx) error {
 		Start:    start.UTC().Format(time.RFC3339),
 		End:      end.UTC().Format(time.RFC3339),
 		Interval: interval,
-		Scope:    Scope{Org: org},
+		Scope:    Scope{Org: org, User: user},
 		Spend:    spend,
 		LLM:      llm,
+		Accounts: accounts,
 		Sources:  Sources{Commerce: spend.Available, Warehouse: warehouseOK},
 	})
 }
@@ -282,7 +310,7 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	out := ProviderBreakdown{Available: true, Items: make([]ProviderRow, 0, len(rows)), Source: llmTable}
 	for _, r := range rows {
 		out.Items = append(out.Items, ProviderRow{
-			Provider:  aString(r["provider"]),
+			Provider:  dsString(r["provider"]),
 			Requests:  aInt64(r["requests"]),
 			Tokens:    aInt64(r["tokens"]),
 			CostCents: aInt64(r["cost_cents"]),
@@ -291,13 +319,34 @@ func buildAnalyticsBlock(s *cloud.Service[state], ctx context.Context, org strin
 	return out
 }
 
-// aString coerces a datastore string cell to string across the driver/JSON
-// transports (mirrors aInt64 in query.go). Non-string → "".
-func aString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
+// buildAccountsBlock reads the caller's OWN linked-account usage (AccountTotals,
+// user-scoped) beside the org's Hanzo-routed usage (HanzoTotals, org-scoped) over
+// [start,end), folding both into the labelled account board. Each side degrades
+// independently to honest-unavailable (Available=false), so half a warehouse never
+// fabricates the other half. The two row sets are concatenated, NEVER summed — a
+// plan's percent is not money, a provider's own spend is not a Hanzo charge — and
+// each row is stamped with its source/scope server-side.
+func buildAccountsBlock(s *cloud.Service[state], ctx context.Context, org, user string, start, end time.Time) Accounts {
+	a := Accounts{
+		Rows: []TotalView{},
+		Account: SourceState{Scope: ScopeUser, Source: accountUsageTable,
+			Note: "your own linked accounts, metered from each provider's own login; plan consumption, not a Hanzo charge"},
+		Hanzo: SourceState{Scope: ScopeOrg, Source: llmTable,
+			Note: "your org's Hanzo-routed inference; cost of record"},
 	}
-	return ""
+	if rows, ok := s.State.warehouse.AccountTotals(ctx, org, user, start, end); ok {
+		a.Account.Available = true
+		for _, t := range rows {
+			a.Rows = append(a.Rows, toTotalView(t))
+		}
+	}
+	if rows, ok := s.State.warehouse.HanzoTotals(ctx, org, start, end); ok {
+		a.Hanzo.Available = true
+		for _, t := range rows {
+			a.Rows = append(a.Rows, toTotalView(t))
+		}
+	}
+	return a
 }
 
 // buildSpendBlock reads the commerce rollup + ledger for org and rolls them into
