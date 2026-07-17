@@ -13,7 +13,7 @@ import (
 
 // The cek data plane fail-closes without a master key on encryption-capable
 // builds; supply one process-wide so the per-org git.db opens in local runs
-// exactly as it does in CI (mirrors clients/featureflags).
+// exactly as it does in CI (mirrors clients/flags).
 func TestMain(m *testing.M) {
 	k := make([]byte, 32)
 	if _, err := rand.Read(k); err != nil {
