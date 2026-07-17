@@ -16,7 +16,7 @@ import (
 )
 
 // github_webhook.go is the GitHub trigger of the universal sync engine: the org's
-// GitHub App POSTs a push event to /v1/github-webhook, we HMAC-verify it, resolve
+// GitHub App POSTs a push event to /v1/connector/github/webhook, we HMAC-verify it, resolve
 // the org from the (signed) installation id, mint the installation token, and hand
 // the push to cloud.Sync. The engine resolves the SyncLink(s) for the repo and the
 // git provider fast-forward-only advances native. PUBLIC at the JWT layer (GitHub
