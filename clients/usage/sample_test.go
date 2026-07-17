@@ -1,4 +1,4 @@
-package link
+package usage
 
 import (
 	"math"
@@ -137,8 +137,8 @@ func TestSanitizeBounds(t *testing.T) {
 	}
 }
 
-// TestSanitizePercentIsClamped covers the percent range specifically: it drives
-// the route policy's headroom, so a nonsense value must never order candidates.
+// TestSanitizePercentIsClamped covers the percent range specifically: it drives a
+// headroom ordering, so a nonsense value must never order candidates.
 func TestSanitizePercentIsClamped(t *testing.T) {
 	for _, tc := range []struct{ in, want float64 }{
 		{-10, 0}, {0, 0}, {47.5, 47.5}, {100, 100}, {1e9, 100},
