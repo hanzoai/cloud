@@ -270,10 +270,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // passes through) — because their auth is done INSIDE the handler: HMAC-SHA256 over
 // the raw body for the events/commands webhooks, and signed __Host- cookie + state
 // for the link legs. They must NOT be placed behind any principal/tenant gate.
+//
+// Every verify-inside inbound webhook (slack events/commands, discord interactions,
+// teams events, telegram webhook — like /v1/connector/github/webhook) is
+// cloud.Terminal-wrapped so its bad-signature 401 / malformed-body 400 is written
+// in-band and survives the commerce /v1 ErrorHandlerJSON (co-mounted ahead of us),
+// which would otherwise flatten a propagated 4xx to 500. Uniform reject codes.
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations", cloud.Handle(s, list))
-	app.Post("/v1/integrations/slack/events", cloud.Handle(s, slackEvents))
-	app.Post("/v1/integrations/slack/commands", cloud.Handle(s, slackCommands))
+	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
+	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
@@ -296,16 +302,16 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// Framework JWT, Telegram secret-token; the link legs use signed __Host- cookies +
 	// state. Telegram's /connect is org-authed via the principal (like the framework
 	// connect). They must NOT sit behind any principal/tenant gate.
-	app.Post("/v1/integrations/discord/interactions", cloud.Handle(s, discordInteractions))
+	app.Post("/v1/integrations/discord/interactions", cloud.Terminal(cloud.Handle(s, discordInteractions)))
 	app.Get("/v1/integrations/discord/link", cloud.Handle(s, discordLink))
 	app.Get("/v1/integrations/discord/link/discord", cloud.Handle(s, discordLinkDiscord))
 	app.Get("/v1/integrations/discord/link/callback", cloud.Handle(s, discordLinkCallback))
-	app.Post("/v1/integrations/teams/events", cloud.Handle(s, teamsEvents))
+	app.Post("/v1/integrations/teams/events", cloud.Terminal(cloud.Handle(s, teamsEvents)))
 	app.Get("/v1/integrations/teams/link", cloud.Handle(s, teamsLink))
 	app.Get("/v1/integrations/teams/link/aad", cloud.Handle(s, teamsLinkAAD))
 	app.Get("/v1/integrations/teams/link/callback", cloud.Handle(s, teamsLinkCallback))
 	app.Post("/v1/integrations/telegram/connect", cloud.Handle(s, telegramConnect))
-	app.Post("/v1/integrations/telegram/webhook", cloud.Handle(s, telegramWebhook))
+	app.Post("/v1/integrations/telegram/webhook", cloud.Terminal(cloud.Handle(s, telegramWebhook)))
 	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
 	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
 	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
