@@ -12,6 +12,7 @@ import (
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/internal/storagelock"
+	"github.com/hanzoai/cloud/openapi"
 	"github.com/hanzoai/cloud/role"
 	"github.com/hanzoai/cloud/writerpin"
 	"github.com/hanzoai/cloud/zapface"
@@ -305,6 +306,26 @@ func Serve(specs []MountSpec, enable []string) error {
 		OriginPatterns: cfg.ZAPWebOrigins,
 		Logger:         deps.Logger,
 	}))
+
+	// GET /v1/openapi.json — the THIRD projection of the same route table. ZAP
+	// replays the /v1 handlers, the console renders them, and this DESCRIBES
+	// them; all three read the one router, so none can drift from it. Mounted
+	// beside /zap and for the same reason: after MountAll, so the document is
+	// generated from a complete table. What it describes is therefore exactly
+	// what THIS deployment mounted — enablement scopes the spec for free.
+	//
+	// Unauthenticated by design (it grants no capability, and `hanzo --help`
+	// must build its command tree before login) — see openapi.Mount.
+	openapi.Mount(app,
+		openapi.Info{
+			Title:   deps.Brand + " cloud API",
+			Version: deps.Version,
+			Description: "Generated from the live router at request time — every operation " +
+				"below is a route this process actually serves. Tagged by product: the first " +
+				"path segment after /v1/.",
+		},
+		openapi.Server{URL: "https://" + cfg.Domain},
+	)
 
 	// Unified console UI — the SAME binary serves the @hanzo/gui console (built
 	// from hanzoai/console and embedded via //go:embed) at the web root. Mounted
