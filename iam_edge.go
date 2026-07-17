@@ -36,6 +36,18 @@ var (
 	iamKeyed = words("get-organization-projects", "add-project", "delete-project")
 	// meta: the object is owned by the "admin" org, so it is guarded by NAME, not owner.
 	iamMeta = words("get-organization", "update-organization")
+	// public: the sign-in surface — unauthenticated BY DESIGN on IAM. Forwarded
+	// verbatim BEFORE the tenant gate so the console can reach sign-in before a
+	// session exists (without this, /v1/iam/get-app-login and /v1/iam/login 401
+	// "sign in to continue" — a chicken-and-egg that bricks console login when the
+	// console SPA is served one-binary off cloud, not the standalone IAM host).
+	// These carry NO tenant data: login-page config, credential submit, the OAuth
+	// token exchange, OIDC discovery, and the login-flow captcha/verification aids.
+	iamPublic = words("get-app-login", "login", "signin", "signup",
+		"get-captcha", "send-verification-code", "verify-code")
+	// publicPrefixes: multi-segment public sign-in routes (the OAuth token endpoint
+	// and OIDC discovery live under these).
+	iamPublicPrefixes = []string{"oauth/", "login/oauth/", ".well-known/"}
 )
 
 type iamEdge struct {
@@ -56,11 +68,17 @@ func (e *iamEdge) mount(app *zip.App) { app.Group("/v1/iam").All("/*", e.pass) }
 // pass gates the request to the caller's own org, then forwards it to IAM under
 // cloud's service credential, returning IAM's envelope verbatim.
 func (e *iamEdge) pass(c *zip.Ctx) error {
+	seg := strings.Trim(c.Param("*"), "/")
+	// The public sign-in surface forwards to IAM BEFORE the tenant gate — a caller
+	// has no session (hence no org) until it signs in. No tenant data crosses here.
+	if e.public(seg) {
+		q, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
+		return e.forward(c, seg, q, c.Method() == http.MethodPost, c.Body())
+	}
 	org, ok := principal.Org(c)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, e.fail("sign in to continue"))
 	}
-	seg := strings.Trim(c.Param("*"), "/")
 	write := c.Method() == http.MethodPost
 	if write && !iamWrites[seg] || !write && !iamReads[seg] {
 		return c.JSON(http.StatusNotFound, e.fail("unknown iam route"))
@@ -137,6 +155,22 @@ func (e *iamEdge) forward(c *zip.Ctx, seg string, q url.Values, write bool, body
 	return c.Bytes(res.StatusCode, out)
 }
 
+// public reports whether seg is an unauthenticated-by-design sign-in route that
+// must be reachable before a session exists — an exact match in iamPublic or a
+// multi-segment route under a public prefix (the OAuth token endpoint / OIDC
+// discovery). Everything else stays behind the tenant gate.
+func (e *iamEdge) public(seg string) bool {
+	if iamPublic[seg] {
+		return true
+	}
+	for _, p := range iamPublicPrefixes {
+		if strings.HasPrefix(seg, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // own reports whether the caller may NAME org v: empty is a no-op, a super admin
 // crosses, "admin" is allowed only where the segment scopes to the caller itself
 // (metadata reads), and otherwise v must equal the caller's scope.
@@ -176,7 +210,9 @@ func (e *iamEdge) field(body []byte, key string) string {
 	return ""
 }
 
-func (e *iamEdge) fail(msg string) map[string]any { return map[string]any{"status": "error", "msg": msg} }
+func (e *iamEdge) fail(msg string) map[string]any {
+	return map[string]any{"status": "error", "msg": msg}
+}
 
 func words(xs ...string) map[string]bool {
 	m := make(map[string]bool, len(xs))
