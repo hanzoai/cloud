@@ -123,8 +123,8 @@ func TestMigrateCentsToUnits(t *testing.T) {
 	if reserve.Cmp(money.FromCents(6000)) != 0 {
 		t.Fatalf("reserve after migrate = %s, want $60", reserve)
 	}
-	if reserve.IntString() != "60000000000000000000" { // 6000 cents × 1e16
-		t.Fatalf("reserve 18-dec = %s, want 6000×1e16", reserve.IntString())
+	if reserve.AttoString() != "60000000000000000000" { // 6000 cents × 1e16
+		t.Fatalf("reserve 18-dec = %s, want 6000×1e16", reserve.AttoString())
 	}
 	if payout, _ := s.Balance(ctx, ledger.PayoutAccount("referral")); payout.Cmp(money.FromCents(4000)) != 0 {
 		t.Fatalf("payout:referral after migrate = %s, want $40", payout)
