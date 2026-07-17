@@ -95,6 +95,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	var engineEndpoint string
 	var registerProvider bool
 	var studioDir string
+	var studioURL string
 	connect := &cobra.Command{
 		Use:   "connect",
 		Short: "Register this GPU and run the outbound worker loop",
@@ -107,6 +108,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 				engineEndpoint:   engineEndpoint,
 				registerProvider: registerProvider,
 				studioDir:        studioDir,
+				studioURL:        studioURL,
 			}
 			if daemon {
 				return installDaemon(cmd, opts)
@@ -121,6 +123,7 @@ func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	connect.Flags().StringVar(&engineEndpoint, "engine-endpoint", "", "public URL to advertise for gateway routing (defaults to --engine-url; a BYO node needs a reachable URL/tunnel)")
 	connect.Flags().BoolVar(&registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
 	connect.Flags().StringVar(&studioDir, "studio-dir", os.Getenv("HANZO_STUDIO_DIR"), "local Hanzo Studio checkout; when set, connect launches and supervises the render backend on 127.0.0.1:8188")
+	connect.Flags().StringVar(&studioURL, "studio-url", firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL), "studio base URL the render mirror uploads finished images to (POST /v1/library/upload)")
 
 	status := &cobra.Command{
 		Use:   "status",
@@ -370,6 +373,7 @@ type connectOpts struct {
 	engineEndpoint   string // public URL to advertise (defaults to engineURL)
 	registerProvider bool   // auto POST /v1/add-provider for the engine
 	studioDir        string // local Studio checkout to launch + supervise on :8188
+	studioURL        string // studio base the render mirror uploads finished images to
 }
 
 func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
@@ -422,6 +426,25 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	poll := time.NewTicker(claimPoll)
 	defer poll.Stop()
 
+	// Render mirror — independent of claims by design. It scans the local studio
+	// output tree every heartbeatEvery and uploads every image to the org's library
+	// (POST /v1/library/upload), so EVERY render lands in studio.hanzo.ai even when
+	// it was produced outside the job path — a graph hand-run on this node, or a
+	// render that finished after its activity was reaped (the stranded-late-render
+	// class). Active only when a studio checkout is named (there is local output to
+	// mirror); a nil channel case never fires when it is not.
+	w.studioUploadURL = firstNonEmpty(opts.studioURL, w.studioUploadURL)
+	mirrorBase := w.studioUploadURL
+	mirrorDir := ""
+	seen := map[string]int64{}
+	var mirC <-chan time.Time
+	if opts.studioDir != "" {
+		mirrorDir = filepath.Join(opts.studioDir, "output")
+		mir := time.NewTicker(heartbeatEvery)
+		defer mir.Stop()
+		mirC = mir.C
+	}
+
 	// Heartbeat once immediately so the machine reports online without waiting a
 	// full interval.
 	_ = w.heartbeat(ctx)
@@ -449,6 +472,8 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 			if err := w.claimAndRun(ctx, out); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "claim: %v\n", err)
 			}
+		case <-mirC:
+			w.mirrorRenders(ctx, out, mirrorDir, mirrorBase, seen)
 		}
 	}
 }
@@ -959,6 +984,114 @@ func (w *worker) postGalleryOutput(ctx context.Context, base, tok, org, name, su
 		return filepath.Join(subfolder, name), nil
 	}
 	return filepath.Join(out.Subfolder, out.Name), nil
+}
+
+// isImageFile reports whether name carries a render image extension the library accepts.
+func isImageFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".png", ".jpg", ".jpeg", ".webp":
+		return true
+	}
+	return false
+}
+
+// mirrorRenders scans dir (the local studio output tree) for image files new or
+// changed since the last scan and POSTs each to base/v1/library/upload with the
+// worker's bearer, tagged with this node's identity, so EVERY render lands in the
+// org's studio library — including ones produced OUTSIDE the job path. seen (rel
+// path -> size) skips unchanged files; the endpoint dedupes, so a re-scan after a
+// restart is cheap and harmless. One log line per newly stored file; upload
+// failures are summarized once per scan and retried next tick (no 5xx log spam).
+func (w *worker) mirrorRenders(ctx context.Context, out io.Writer, dir, base string, seen map[string]int64) {
+	tok, err := w.env.ensureToken(ctx)
+	if err != nil {
+		return
+	}
+	base = strings.TrimRight(base, "/")
+	failed := 0
+	var firstErr error
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, werr error) error {
+		if werr != nil || info == nil || info.IsDir() || !isImageFile(p) {
+			return nil
+		}
+		rel, rerr := filepath.Rel(dir, p)
+		if rerr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if seen[rel] == info.Size() {
+			return nil
+		}
+		data, derr := os.ReadFile(p)
+		if derr != nil || len(data) == 0 {
+			return nil
+		}
+		sub, name := "", rel
+		if i := strings.LastIndex(rel, "/"); i >= 0 {
+			sub, name = rel[:i], rel[i+1:]
+		}
+		existed, perr := w.postLibraryUpload(ctx, base, tok, sub, name, data)
+		if perr != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = perr
+			}
+			return nil
+		}
+		seen[rel] = info.Size()
+		if !existed {
+			fmt.Fprintf(out, "mirrored %s (%d bytes) -> %s\n", rel, len(data), base)
+		}
+		return nil
+	})
+	if failed > 0 {
+		fmt.Fprintf(out, "mirror: %d file(s) failed to upload, will retry: %v\n", failed, firstErr)
+	}
+}
+
+// postLibraryUpload multipart-POSTs one image to base/v1/library/upload with the
+// worker's IAM bearer, landing it in the org's library (orgs/{org}/output). The
+// file's subfolder rides as ?subpath and this node's identity as ?node so the
+// render is filterable by its source in Queue & History. Returns whether the
+// endpoint already had a byte-identical copy (dedup).
+func (w *worker) postLibraryUpload(ctx context.Context, base, tok, sub, name string, data []byte) (bool, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("image", name)
+	if err != nil {
+		return false, err
+	}
+	if _, err := part.Write(data); err != nil {
+		return false, err
+	}
+	if err := mw.Close(); err != nil {
+		return false, err
+	}
+	q := url.Values{"node": {w.identity}}
+	if sub != "" {
+		q.Set("subpath", sub)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/v1/library/upload?"+q.Encode(), &buf)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode/100 != 2 {
+		return false, fmt.Errorf("POST /v1/library/upload HTTP %d: %s", resp.StatusCode, serverMessage(raw))
+	}
+	var out struct {
+		Existed bool `json:"existed"`
+	}
+	_ = json.Unmarshal(raw, &out)
+	return out.Existed, nil
 }
 
 // inputImage is one uploaded input shipped with the job: a base64 blob plus the
