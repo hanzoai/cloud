@@ -1,6 +1,6 @@
 //go:build cgo
 
-package featureflags
+package flags
 
 // The native evaluator — hanzo-flags (native/flags), a stateless Rust staticlib
 // with PostHog-compatible semantics (rollout hash, property operators, variants,
@@ -41,7 +41,7 @@ func engineEvaluate(defsJSON, ctxJSON []byte) (json.RawMessage, error) {
 
 	out := C.hanzo_flags_evaluate(cDefs, cCtx)
 	if out == nil {
-		return nil, fmt.Errorf("featureflags: native evaluator returned nil")
+		return nil, fmt.Errorf("flags: native evaluator returned nil")
 	}
 	defer C.hanzo_flags_free(out)
 	res := []byte(C.GoString(out))
@@ -51,7 +51,7 @@ func engineEvaluate(defsJSON, ctxJSON []byte) (json.RawMessage, error) {
 		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(res, &probe); err == nil && probe.Error != "" {
-		return nil, fmt.Errorf("featureflags: %s", probe.Error)
+		return nil, fmt.Errorf("flags: %s", probe.Error)
 	}
 	return json.RawMessage(res), nil
 }
