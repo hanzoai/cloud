@@ -70,7 +70,6 @@ import (
 	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
-	"github.com/hanzoai/cloud/clients/cron"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
 	"github.com/hanzoai/cloud/clients/do"
@@ -344,12 +343,11 @@ func Wire() []cloud.MountSpec {
 		// and /v1/featuregate/mode is served by flags. featuregate is no longer a mounted
 		// subsystem — it exposes only the native Enforce middleware (wired in serve.go),
 		// a consumer of flags.WaitlistModeForHost.
+		// Tasks: the durable workflow/UI surface AND platform cron (durable schedules
+		// on the same shared engine, replacing every k8s CronJob). cron was a separate
+		// Wire entry; it mounts no routes and only registers schedules, so it is folded
+		// in as a sub-mount of tasks.Mount — ONE tasks subsystem.
 		{Name: "tasks", Mount: tasks.Mount},
-		// Platform cron: durable schedules on the shared tasks engine replacing
-		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
-		// runs visible in the Tasks console. Mounts no routes; starts after the
-		// engine is wired.
-		{Name: "cron", Mount: cron.Mount},
 		{Name: "automations", Mount: automations.Mount, Shutdown: automations.Shutdown},
 		// Native single-connector execution (HIP-0126): runs an ActivePieces JS
 		// connector action in-process via goja (clients/connectorruntime), retiring
