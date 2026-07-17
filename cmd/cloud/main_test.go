@@ -20,7 +20,7 @@ import (
 // is the proof Wire() actually assembles the whole matrix.
 var wantSubsystems = []string{
 	"metrics", "base", "authz", "o11y",
-	"licensing", "plans", "pricing", "ai",
+	"licensing", "plan", "pricing", "ai",
 }
 
 func TestRegistryAssemblesSubsystems(t *testing.T) {
@@ -61,17 +61,29 @@ func newTestApp(t *testing.T, enable ...string) *zip.App {
 // The self-contained subsystems mount in-process (per-tenant SQLite / in-mem,
 // HIP-0302) and serve a healthy /v1/<name>/health with no external deps.
 func TestMountAllAndServeHealth(t *testing.T) {
-	healthy := []string{"base", "authz", "metrics", "plans", "pricing"}
-	app := newTestApp(t, healthy...)
-	for _, name := range healthy {
-		path := "/v1/" + name + "/health"
+	// enable id -> the health path its Mount serves. For most, id == route prefix;
+	// "plan" is the exception (enable id normalized to match clients/plan, but its
+	// product routes — incl. /v1/plans/health — stay under the plural /v1/plans/*).
+	healthy := map[string]string{
+		"base":    "/v1/base/health",
+		"authz":   "/v1/authz/health",
+		"metrics": "/v1/metrics/health",
+		"plan":    "/v1/plans/health",
+		"pricing": "/v1/pricing/health",
+	}
+	enable := make([]string, 0, len(healthy))
+	for name := range healthy {
+		enable = append(enable, name)
+	}
+	app := newTestApp(t, enable...)
+	for name, path := range healthy {
 		req := httptest.NewRequest("GET", path, nil)
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
-			t.Fatalf("GET %s: %v", path, err)
+			t.Fatalf("enable %q: GET %s: %v", name, path, err)
 		}
 		if resp.StatusCode != 200 {
-			t.Errorf("GET %s = %d, want 200", path, resp.StatusCode)
+			t.Errorf("enable %q: GET %s = %d, want 200", name, path, resp.StatusCode)
 		}
 	}
 }
