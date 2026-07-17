@@ -208,3 +208,178 @@ func TestAuthTokenCommand(t *testing.T) {
 		t.Fatalf("auth token output: %q", out)
 	}
 }
+
+// TestMultiIdentityLoginSwitch is the full multi-identity story: two logins for
+// the same email under different owners (admin vs hanzo — the privilege-
+// separation case) coexist, `auth list` shows both, `switch` flips the active
+// pointer and rewrites credentials.json, and legacy single-file readers always
+// see the active identity.
+func TestMultiIdentityLoginSwitch(t *testing.T) {
+	sandbox(t)
+	adminTok := makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "admin", "sub": "u-admin", "exp": float64(2000000000)})
+	hanzoTok := makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "hanzo", "sub": "u-hanzo", "exp": float64(2000000001)})
+
+	// First login → admin/z is stored and active.
+	out, err := runRoot(t, "", "login", "--token", adminTok)
+	if err != nil {
+		t.Fatalf("login admin: %v", err)
+	}
+	if !strings.Contains(out, "admin/z") {
+		t.Fatalf("login should report the key: %q", out)
+	}
+	if c, _ := LoadCredentials(); c.Owner != "admin" || c.Subject != "z@hanzo.ai" {
+		t.Fatalf("active not admin after first login: %+v", c)
+	}
+
+	// Second login (different owner) → added beside admin/z, becomes active,
+	// does NOT clobber the first.
+	if _, err := runRoot(t, "", "login", "--token", hanzoTok); err != nil {
+		t.Fatalf("login hanzo: %v", err)
+	}
+	store, err := LoadIdentities()
+	if err != nil {
+		t.Fatalf("load identities: %v", err)
+	}
+	if len(store.Identities) != 2 {
+		t.Fatalf("want 2 identities, got %d: %v", len(store.Identities), store.keys())
+	}
+	if store.Identities["admin/z"] == nil || store.Identities["hanzo/z"] == nil {
+		t.Fatalf("both identities must persist, got %v", store.keys())
+	}
+	if store.Active != "hanzo/z" {
+		t.Fatalf("active = %q, want hanzo/z (last login)", store.Active)
+	}
+	// Legacy reader sees the active (hanzo) identity.
+	if c, _ := LoadCredentials(); c.Owner != "hanzo" {
+		t.Fatalf("credentials.json not mirroring active: %+v", c)
+	}
+
+	// auth list shows both, with the active row marked.
+	out, err = runRoot(t, "", "auth", "list")
+	if err != nil {
+		t.Fatalf("auth list: %v", err)
+	}
+	for _, want := range []string{"admin/z", "hanzo/z", "z@hanzo.ai", "*"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("auth list missing %q in:\n%s", want, out)
+		}
+	}
+
+	// switch admin → active flips + credentials.json is rewritten to admin.
+	if _, err := runRoot(t, "", "auth", "switch", "admin"); err != nil {
+		t.Fatalf("auth switch admin: %v", err)
+	}
+	if st, _ := LoadIdentities(); st.Active != "admin/z" {
+		t.Fatalf("active after switch = %q, want admin/z", st.Active)
+	}
+	if c, _ := LoadCredentials(); c.Owner != "admin" || c.Subject != "z@hanzo.ai" {
+		t.Fatalf("switch did not rewrite credentials.json: %+v", c)
+	}
+
+	// whoami (top-level, reads the active token) reflects admin.
+	out, err = runRoot(t, "", "whoami")
+	if err != nil {
+		t.Fatalf("whoami: %v", err)
+	}
+	if !strings.Contains(out, "admin") || !strings.Contains(out, "z@hanzo.ai") {
+		t.Fatalf("whoami not reflecting the switched-to identity: %q", out)
+	}
+
+	// switch by the full owner/name key works too.
+	if _, err := runRoot(t, "", "auth", "switch", "hanzo/z"); err != nil {
+		t.Fatalf("auth switch hanzo/z: %v", err)
+	}
+	if c, _ := LoadCredentials(); c.Owner != "hanzo" {
+		t.Fatalf("switch by full key failed: %+v", c)
+	}
+}
+
+// TestAuthListJSON checks the machine-readable projection.
+func TestAuthListJSON(t *testing.T) {
+	sandbox(t)
+	tok := makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "admin", "sub": "a"})
+	if _, err := runRoot(t, "", "login", "--token", tok); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	out, err := runRoot(t, "", "auth", "list", "-o", "json")
+	if err != nil {
+		t.Fatalf("auth list json: %v", err)
+	}
+	var rows []identityRow
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("json unmarshal: %v\n%s", err, out)
+	}
+	if len(rows) != 1 || rows[0].Key != "admin/z" || rows[0].Owner != "admin" || !rows[0].Active {
+		t.Fatalf("json rows wrong: %+v", rows)
+	}
+}
+
+// TestLogoutOneOfMany removes a single identity and, only when the last one is
+// gone, clears the store entirely.
+func TestLogoutOneOfMany(t *testing.T) {
+	sandbox(t)
+	admin := makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "admin", "sub": "a"})
+	hanzo := makeJWT(map[string]any{"email": "z@hanzo.ai", "owner": "hanzo", "sub": "h"})
+	if _, err := runRoot(t, "", "login", "--token", admin); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runRoot(t, "", "login", "--token", hanzo); err != nil { // active = hanzo/z
+		t.Fatal(err)
+	}
+
+	// logout of the named owner (admin) leaves hanzo/z active.
+	if _, err := runRoot(t, "", "logout", "admin"); err != nil {
+		t.Fatalf("logout admin: %v", err)
+	}
+	store, _ := LoadIdentities()
+	if store.Identities["admin/z"] != nil {
+		t.Fatalf("admin/z not removed: %v", store.keys())
+	}
+	if store.Active != "hanzo/z" {
+		t.Fatalf("active = %q, want hanzo/z", store.Active)
+	}
+	if c, _ := LoadCredentials(); c.Owner != "hanzo" {
+		t.Fatalf("credentials.json not mirroring survivor: %+v", c)
+	}
+
+	// logout of the active (no arg) removes the last identity → both files gone.
+	if _, err := runRoot(t, "", "logout"); err != nil {
+		t.Fatalf("logout active: %v", err)
+	}
+	if c, _ := LoadCredentials(); c.AccessToken != "" {
+		t.Fatalf("credentials.json not cleared: %+v", c)
+	}
+	if st, _ := LoadIdentities(); len(st.Identities) != 0 {
+		t.Fatalf("identity store not cleared: %v", st.keys())
+	}
+}
+
+// TestMigrateLegacyCredentials proves a pre-multi-identity credentials.json is
+// adopted into the store and preserved when a new identity is added.
+func TestMigrateLegacyCredentials(t *testing.T) {
+	sandbox(t)
+	// Simulate an old single-file login: only credentials.json exists.
+	legacy := credsFromToken(&tokenResp{AccessToken: makeJWT(map[string]any{
+		"email": "z@hanzo.ai", "owner": "hanzo", "sub": "h",
+	})})
+	if err := legacy.Save(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadIdentities()
+	if err != nil {
+		t.Fatalf("load identities: %v", err)
+	}
+	if store.Identities["hanzo/z"] == nil || store.Active != "hanzo/z" {
+		t.Fatalf("legacy credentials not migrated: active=%q keys=%v", store.Active, store.keys())
+	}
+	// A fresh login as a different owner preserves the migrated identity.
+	if _, err := runRoot(t, "", "login", "--token", makeJWT(map[string]any{
+		"email": "z@hanzo.ai", "owner": "admin", "sub": "a",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	st2, _ := LoadIdentities()
+	if len(st2.Identities) != 2 || st2.Identities["hanzo/z"] == nil {
+		t.Fatalf("migrated identity lost after new login: %v", st2.keys())
+	}
+}
