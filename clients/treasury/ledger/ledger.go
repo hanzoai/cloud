@@ -498,12 +498,12 @@ func ComputeRoot(entries []Entry, reserve money.Amount) [32]byte {
 	})
 	h := sha256.New()
 	for _, e := range sorted {
-		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.Amount.IntString(), e.CreatedAt)
+		fmt.Fprintf(h, "%s|%s|%s|%s|%s|%d\n", e.ID, e.Kind, e.Program, e.Ref, e.Amount.AttoString(), e.CreatedAt)
 		for _, p := range e.Postings {
-			fmt.Fprintf(h, "\t%s|%s\n", p.Account, p.Amount.IntString())
+			fmt.Fprintf(h, "\t%s|%s\n", p.Account, p.Amount.AttoString())
 		}
 	}
-	fmt.Fprintf(h, "reserve|%s\n", reserve.IntString())
+	fmt.Fprintf(h, "reserve|%s\n", reserve.AttoString())
 	var root [32]byte
 	copy(root[:], h.Sum(nil))
 	return root
