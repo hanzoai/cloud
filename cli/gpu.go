@@ -732,7 +732,7 @@ func (e *Env) ensureToken(ctx context.Context) (string, error) {
 				nc.RefreshToken = e.creds.RefreshToken
 			}
 			*e.creds = *nc
-			_ = e.creds.Save()
+			_ = SaveActive(e.creds) // refresh the active identity in the store + mirror
 		}
 		// On refresh failure fall through: the current token may still be valid
 		// (clock skew) and the server is the authority.

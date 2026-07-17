@@ -55,7 +55,7 @@ var controlCommands = map[string]string{
 	"login":    "authenticate against Hanzo IAM (hanzo.id) and store a token",
 	"logout":   "remove stored credentials",
 	"whoami":   "show the current identity from the stored token",
-	"auth":     "manage authentication (login, logout, whoami, token)",
+	"auth":     "manage authentication + stored identities (login, logout, whoami, list, switch, token)",
 	"apps":     "list/get the platform apps board (declared/running/drift)",
 	"deploy":   "drive a platform redeploy (rolling restart, zero-downtime)",
 	"clusters": "provision/list/select dedicated DOKS clusters",
@@ -232,6 +232,170 @@ func DeleteCredentials() error {
 	}
 	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Identity store — ~/.hanzo/identities.json. Holds EVERY logged-in identity
+// keyed by its stable "<owner>/<name>" key, with an Active pointer. On every
+// write the active identity is mirrored into credentials.json (above), so every
+// legacy single-file reader keeps seeing the current identity unchanged. This
+// is the ONE credential store; credentials.json is its active-view mirror.
+// ---------------------------------------------------------------------------
+
+// IdentityStore is the on-disk shape of ~/.hanzo/identities.json.
+type IdentityStore struct {
+	Active     string                  `json:"active,omitempty"`
+	Identities map[string]*Credentials `json:"identities,omitempty"`
+}
+
+// key is the stable per-identity store key "<owner>/<name>", where name is the
+// email local-part (else the raw subject). The same identity yields the same
+// key every login, so re-login updates in place; the same email under a
+// different org (privilege separation) yields a distinct key (admin/z vs
+// hanzo/z) and is stored side by side rather than clobbering.
+func (c *Credentials) key() string {
+	name := c.Subject
+	if i := strings.IndexByte(name, '@'); i > 0 {
+		name = name[:i]
+	}
+	return firstNonEmpty(c.Owner, "-") + "/" + firstNonEmpty(name, "-")
+}
+
+func identitiesPath() (string, error) {
+	dir, err := hanzoDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "identities.json"), nil
+}
+
+// LoadIdentities reads the store. A pre-existing single-file credentials.json
+// with no store yet is migrated in (read-only) as the sole, active identity, so
+// upgrades are seamless — the first write persists it into the store.
+func LoadIdentities() (*IdentityStore, error) {
+	p, err := identitiesPath()
+	if err != nil {
+		return nil, err
+	}
+	s := &IdentityStore{Identities: map[string]*Credentials{}}
+	if err := loadJSON(p, s); err != nil {
+		return nil, err
+	}
+	if s.Identities == nil {
+		s.Identities = map[string]*Credentials{}
+	}
+	if len(s.Identities) == 0 {
+		if c, err := LoadCredentials(); err == nil && c.AccessToken != "" {
+			k := c.key()
+			s.Identities[k] = c
+			s.Active = k
+		}
+	}
+	return s, nil
+}
+
+// keys returns the identity keys, sorted, for deterministic output.
+func (s *IdentityStore) keys() []string {
+	ks := make([]string, 0, len(s.Identities))
+	for k := range s.Identities {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+// Put stores c under its key and makes it active, returning the key.
+func (s *IdentityStore) Put(c *Credentials) string {
+	if s.Identities == nil {
+		s.Identities = map[string]*Credentials{}
+	}
+	k := c.key()
+	s.Identities[k] = c
+	s.Active = k
+	return k
+}
+
+// Remove deletes an identity; Save re-points Active if it was the one removed.
+func (s *IdentityStore) Remove(key string) { delete(s.Identities, key) }
+
+// resolve turns a user selector into a stored key: an exact key wins; otherwise
+// a bare owner matches iff exactly one identity carries it.
+func (s *IdentityStore) resolve(sel string) (string, error) {
+	if _, ok := s.Identities[sel]; ok {
+		return sel, nil
+	}
+	var match []string
+	for _, k := range s.keys() {
+		if s.Identities[k].Owner == sel {
+			match = append(match, k)
+		}
+	}
+	switch len(match) {
+	case 1:
+		return match[0], nil
+	case 0:
+		return "", fmt.Errorf("no stored identity for %q (see `hanzo auth list`)", sel)
+	default:
+		return "", fmt.Errorf("%q is ambiguous across %s — pass the full owner/name key", sel, strings.Join(match, ", "))
+	}
+}
+
+// Save persists the store (0600) and mirrors the active identity into
+// credentials.json for legacy single-file readers. When the store is empty it
+// removes both files. Active is normalized to a real key first.
+func (s *IdentityStore) Save() error {
+	if _, ok := s.Identities[s.Active]; !ok {
+		s.Active = ""
+		if ks := s.keys(); len(ks) > 0 {
+			s.Active = ks[0]
+		}
+	}
+	if len(s.Identities) == 0 {
+		return clearCredentialStore()
+	}
+	p, err := identitiesPath()
+	if err != nil {
+		return err
+	}
+	if err := writeJSON(p, s, 0o600); err != nil {
+		return err
+	}
+	return s.Identities[s.Active].Save() // mirror active → credentials.json (0600)
+}
+
+// SaveActive writes c back as the active identity (store + mirror), keeping the
+// two consistent after an in-place token refresh. With no store yet it falls
+// back to the single-file write.
+func SaveActive(c *Credentials) error {
+	s, err := LoadIdentities()
+	if err != nil {
+		return err
+	}
+	if len(s.Identities) == 0 {
+		return c.Save()
+	}
+	k := s.Active
+	if k == "" || s.Identities[k] == nil {
+		k = c.key()
+	}
+	s.Identities[k] = c
+	s.Active = k
+	return s.Save()
+}
+
+// clearCredentialStore removes the identity store and its credentials.json
+// mirror (used by logout when the last identity is removed).
+func clearCredentialStore() error {
+	for _, pathOf := range []func() (string, error){credentialsPath, identitiesPath} {
+		p, err := pathOf()
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 	return nil
 }
