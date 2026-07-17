@@ -1,4 +1,4 @@
-package featureflags
+package flags
 
 // The canonical PLATFORM launch switches — the runtime knobs the SuperAdmin flips from
 // admin.hanzo.ai. Each is an Insights feature flag (the engine); this table names it,

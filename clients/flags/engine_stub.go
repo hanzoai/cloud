@@ -1,6 +1,6 @@
 //go:build !cgo
 
-package featureflags
+package flags
 
 // Pure-Go builds carry no native evaluator (the same posture as the SQLCipher
 // at-rest layer: cgo builds get the real engine, !cgo builds degrade loudly).
@@ -15,5 +15,5 @@ import (
 const engineAvailable = false
 
 func engineEvaluate(_, _ []byte) (json.RawMessage, error) {
-	return nil, fmt.Errorf("featureflags: native evaluator not built (cgo disabled)")
+	return nil, fmt.Errorf("flags: native evaluator not built (cgo disabled)")
 }

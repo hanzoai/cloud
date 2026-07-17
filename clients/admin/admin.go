@@ -108,8 +108,13 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/bases", core.GuardScoped(s, bases))
 
 	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
-	app.Get("/v1/admin/flags", core.Guard(s, flags))
+	app.Get("/v1/admin/flags", core.Guard(s, flagsBoard))
 	app.Put("/v1/admin/flags/:key", core.Guard(s, setFlag))
+	// Launch-control services board — the waitlist-mode lens on the flag engine (twin
+	// of /v1/admin/flags), folded in from the former featuregate control plane.
+	app.Get("/v1/admin/services", core.Guard(s, services))
+	app.Post("/v1/admin/services", core.Guard(s, upsertService))
+	app.Post("/v1/admin/services/:service/mode", core.Guard(s, setServiceMode))
 	app.Get("/v1/admin/waitlist", core.Guard(s, waitlist))
 	app.Post("/v1/admin/waitlist/boost", core.Guard(s, waitlistBoost))
 
