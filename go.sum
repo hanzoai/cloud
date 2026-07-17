@@ -1254,6 +1254,8 @@ github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
 github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
 github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d h1:ewC//4HSfWmnFyH+Jg673ZeoqucpPhLg+IjNTVdqp8Y=
 github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
+github.com/hanzoai/iam v1.31.28 h1:bEKm4x7Ghy0LQD+GeMjeMhzBwIYjJV+6UlGwCkHCi4U=
+github.com/hanzoai/iam v1.31.28/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
 github.com/hanzoai/iam2 v0.1.1 h1:AxyKwD70nDjBQ49GMdX6hp5DkYJUEVs/N99u8+l8Pog=
 github.com/hanzoai/iam2 v0.1.1/go.mod h1:w/+GVimy/HLeiSFnHSFSgKDgBTz5s/cBJcg1tJ1qpag=
 github.com/hanzoai/iam2 v0.14.0 h1:98muJ394y7Yt5zTcZaPJ/teR6Uo5rZ+GCsOcjNicJBM=
@@ -1268,6 +1270,8 @@ github.com/hanzoai/ldapserver v1.2.2 h1:Q7czg70ybz7NwUunoqR87emMQfneO3mzZuJNOulb
 github.com/hanzoai/ldapserver v1.2.2/go.mod h1:mPwAbPBw9YeXfC2hfg1QSAw6CiGt6o2oF2pi9VR+j3U=
 github.com/hanzoai/licensing v0.1.4 h1:pSsHfBMkECPh6ZrZMbPRyRPXeDxgD9Yrvh+FxmJE8Yk=
 github.com/hanzoai/licensing v0.1.4/go.mod h1:0SWQBAvGuhL7IRM5bTIPRhhOebLmfhjK+ppx/83uWPo=
+github.com/hanzoai/licensing v0.1.5 h1:9x58nD42lZyjVsA/z4fCfEonUiyfrAkS+Vji6Alyi/U=
+github.com/hanzoai/licensing v0.1.5/go.mod h1:XcAj+BqXuCIT72OHfjph5e0ryckoPOcow7jUlgBoZ/8=
 github.com/hanzoai/metrics v1.110.2 h1:Q79loK4YKNF255hIaf0CJsd5oq+yMRTsxZyoZREwTwQ=
 github.com/hanzoai/metrics v1.110.2/go.mod h1:+XOENte7ldQwSEsY/ASrvCifQqhIG+PFqTGzLxBLvYY=
 github.com/hanzoai/money v0.2.1 h1:w2Fi2aP9bBYY+Zk1jyYfCOT3QhaswGzXQUmoZIjwIHM=

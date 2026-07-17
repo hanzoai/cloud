@@ -656,30 +656,17 @@ func pickVaultClient(cfg *Config, log luxlog.Logger) VaultClient {
 	return clients.DisabledVault()
 }
 
-// MountFunc is a subsystem's mount contract. app is `any`, not *zip.App, and that
-// is load-bearing: some external modules expose Mount as func(any, Deps) error
-// (e.g. hanzoai/licensing), which apps.Wire references DIRECTLY — a
-// func(any,…) value is not assignable to a func(*zip.App,…) parameter, so
-// narrowing the type would break them at compile time. The concrete value is
-// always a *zip.App; strongly-typed Mounts (func(*zip.App, Deps) error, what every
-// in-repo subsystem exports) are adapted by Typed, which recovers it in ONE place.
-type MountFunc func(app any, deps Deps) error
-
-// Typed adapts a strongly-typed subsystem Mount — func(*zip.App, Deps) error,
-// the signature every in-repo subsystem already exports — into the registry's
-// MountFunc. It performs the *zip.App recovery in ONE place, fail-closed with a
-// clear error, so no subsystem repeats the `a, ok := app.(*zip.App)` boilerplate.
-// The concrete value MountAll passes is always a *zip.App, so the assertion is
-// total in practice; it stays as a defensive, self-documenting guard.
-func Typed(mount func(*zip.App, Deps) error) MountFunc {
-	return func(app any, deps Deps) error {
-		a, ok := app.(*zip.App)
-		if !ok {
-			return fmt.Errorf("cloud.Mount: app is %T, want *zip.App", app)
-		}
-		return mount(a, deps)
-	}
-}
+// MountFunc is a subsystem's mount contract: register your routes on app, using
+// deps for everything shared. Every subsystem in the fleet exports exactly this
+// signature, so Wire references each one directly and the compiler checks it.
+//
+// app was once `any`, on the stated grounds that an external module (licensing)
+// exposed func(any, Deps) error and narrowing would break it — while licensing
+// said it used `any` to avoid an import cycle in pkg/cloud. Each cited the other,
+// and the cycle could not exist: this package already imports zip, and zip does
+// not import cloud. The `any` bought nothing and cost every subsystem a Typed()
+// wrapper plus a runtime type assertion whose failure branch was unreachable.
+type MountFunc func(app *zip.App, deps Deps) error
 
 // ShutdownFunc releases a subsystem's process-lifetime resources (background
 // goroutines, open DB handles) on graceful shutdown. It must be idempotent and
