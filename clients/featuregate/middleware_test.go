@@ -16,7 +16,7 @@ import (
 
 // testGate is the injected decide (the flags engine's WaitlistModeForHost seam):
 // hanzo.chat is gated, api.hanzo.ai is open, everything else is un-governed. This is
-// exactly what flags.WaitlistModeForHost returns for the equivalent registry, without
+// exactly what WaitlistModeForHost returns for the equivalent registry, without
 // standing up the native flag engine (cgo) in a middleware unit test.
 func testGate(_ context.Context, host string) (mode bool, service string, known bool) {
 	switch host {
@@ -205,7 +205,7 @@ func TestRule_ForwardHeaderApproved_ThroughWithoutLookup(t *testing.T) {
 	}
 }
 
-// The DEFAULT gate (nil Gate → flags.WaitlistModeForHost) fail-opens before the flags
+// The DEFAULT gate (nil Gate → WaitlistModeForHost) fail-opens before the flag
 // engine has mounted: with no engine, WaitlistModeForHost returns known=false for every
 // host, so Enforce never gates pre-boot.
 func TestEnforce_DefaultGate_FailsOpenPreBoot(t *testing.T) {
