@@ -1,4 +1,4 @@
-// Hanzo Dataroom — goja bundle (read-WRITE, on clients/gojabase).
+// Hanzo Dataroom — goja bundle (read-WRITE, on clients/goja).
 //
 // SELF-CONTAINED, NO ESM, NO node: imports. The complete dataroom business
 // logic (documents, data rooms, shareable links with access controls, viewers,
@@ -8,7 +8,7 @@
 // data model becomes Base/SQLite tables (see the leaf's schema.go), the handlers
 // become the route table below. No Postgres, no Next.js.
 //
-// Host contract (clients/gojabase injects these per dispatch; each dispatch runs
+// Host contract (clients/goja injects these per dispatch; each dispatch runs
 // inside ONE per-tenant SQLite transaction that commits iff status < 400):
 //   globalThis.__db.query(sql, args)   -> [ {col: val, ...}, ... ]
 //   globalThis.__db.exec(sql, args)    -> { changes, lastId }
@@ -49,7 +49,7 @@
   }
 
   // err builds a route result carrying a non-200 status via __status. A >=400
-  // status also rolls back the dispatch transaction (gojabase), so a rejected
+  // status also rolls back the dispatch transaction (NewBase), so a rejected
   // request leaves the tenant DB untouched.
   function err(status, message) { return { __status: status, error: message }; }
 
@@ -121,7 +121,7 @@
   }
 
   // === route handlers ========================================================
-  // Admin routes are org-scoped by the per-tenant DB gojabase selects; the Go
+  // Admin routes are org-scoped by the per-tenant DB NewBase selects; the Go
   // leaf refuses any request without a validated principal before dispatching.
   // Viewer routes run under the org resolved from the public link id.
 

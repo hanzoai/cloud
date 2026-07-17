@@ -8,12 +8,12 @@
 // business LOGIC (ported to a self-contained goja bundle in github.com/hanzoai/
 // captable) and gives it PERSISTENCE over per-tenant Base/SQLite. The bundle
 // carries logic; the Go host carries storage. The seam between them is the
-// REUSABLE clients/gojabase binding (the RW-Base goja host), which esign (#100)
+// REUSABLE clients/goja binding (the RW-Base goja host), which esign (#100)
 // and dataroom (#101) reuse unchanged — this leaf is just:
 //
 //	captable bundle (github.com/hanzoai/captable.Bundle)  +  the per-tenant Schema
 //	                         │
-//	                  clients/gojabase.New(...)   ← injects __db/__newId/__now,
+//	                  clients/goja.NewBase(...)   ← injects __db/__newId/__now,
 //	                         │                       one SQLite file per tenant,
 //	                  /v1/captable/* zip routes     one transaction per request
 //
@@ -37,7 +37,7 @@ import (
 
 	hcaptable "github.com/hanzoai/captable"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -48,7 +48,7 @@ const maxBody = 1 << 20 // 1 MiB
 
 // state is captable's own data; shared deps live in the embedded cloud.Base.
 type state struct {
-	host *gojabase.Host
+	host *goja.BaseHost
 }
 
 // mounted is the active service so Shutdown can release the per-tenant stores.
@@ -72,7 +72,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("captable.Mount: load bundle: %w", err)
 	}
-	host, err := gojabase.New(gojabase.Config{
+	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "captable",
 		Bundle:  bundle,
 		Schema:  schema,
@@ -80,7 +80,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		OnOpen:  seedCompany,
 	})
 	if err != nil {
-		return fmt.Errorf("captable.Mount: gojabase host: %w", err)
+		return fmt.Errorf("captable.Mount: goja NewBase host: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "captable"), State: state{host: host}}
 	mounted = s
@@ -176,7 +176,7 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route string, params map[stri
 			}
 		}
 	}
-	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route:  route,
 		Params: params,
 		Body:   body,
