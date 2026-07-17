@@ -48,9 +48,9 @@ const widgetsURL = "https://github.com/acme-gh/widgets.git"
 func TestSyncCRUD(t *testing.T) {
 	app := mountSync(t)
 
-	// No org → 403.
-	if code, _ := do(t, app, http.MethodGet, "/v1/sync", "", nil); code != http.StatusForbidden {
-		t.Fatalf("no-org list want 403, got %d", code)
+	// No validated principal → 401 (an authentication failure, not a permission one).
+	if code, _ := do(t, app, http.MethodGet, "/v1/sync", "", nil); code != http.StatusUnauthorized {
+		t.Fatalf("no-principal list want 401, got %d", code)
 	}
 
 	// Create a github→native link (run:false so no background git work in the test).
