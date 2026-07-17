@@ -96,6 +96,7 @@ var frozen = []struct {
 	{"evals", false, false},            // was order 145
 	{"treasury", false, true},          // was order 146
 	{"admin", false, false},            // was order 146
+	{"featuregate", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
 	{"tasks", false, false},            // was order 147; platform cron folded in as a sub-mount of tasks.Mount (was a separate entry)
 	{"automations", false, true},       // was order 148; connectorruntime (POST /v1/automations/connectors/:id/run) folded in as a sub-mount of automations.Mount
 	{"tools", false, true},             // new: unified tool plane (after automations)
