@@ -431,7 +431,7 @@ func TestSecretEnvEndToEndDeploy(t *testing.T) {
 	}
 
 	// Service CR: secret env rendered as secretKeyRef, plaintext nowhere.
-	svcCR, err := s.State.k8s.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
+	svcCR, err := s.State.k8s.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("service CR: %v", err)
 	}
