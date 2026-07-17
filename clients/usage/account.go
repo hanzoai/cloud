@@ -1,37 +1,54 @@
-package link
+package usage
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
-// usage.go mounts the ACCOUNT-USAGE surface under /v1/links/usage — the three views
-// a developer who connected their own AI accounts asks for:
+// account.go is the ACCOUNT-USAGE HTTP layer: the collector's record endpoint and
+// the per-provider sample dash. It moved here from clients/link's usage plane so the
+// ONE usage subsystem owns ALL usage. It records what a developer's OWN AI accounts
+// have consumed of their OWN plans (metered from each provider's own login) into the
+// warehouse series (datastore.go); the READ faces are summary (usage.go), this dash
+// (samples), and analytics.
 //
-//	POST /v1/links/usage          report samples (the collector) -> {accepted, links}
-//	GET  /v1/links/usage          ONE provider account's own dash -> {current, windows}
-//	GET  /v1/links/usage/summary  the GLOBAL view: every account + Hanzo-routed
+//	POST /v1/usage          report samples (the collector) -> {accepted, stored}
+//	GET  /v1/usage/samples  ONE provider account's own dash -> {current, windows}
 //
-// The third view is the point of the plane: "my Claude Max plan" and "what I spend
-// through Hanzo" on one board. They come from different ledgers with different
-// meanings, so every row is LABELLED — by source (whose meter), by scope (whose
-// usage), and by confidence (how real the numbers are) — and the two are never
-// added together. A plan's percent is not money; a provider's own spend is not a
-// Hanzo charge. The rows sit side by side and say what they are.
+// It records usage and NOTHING else: keeping the link REGISTRY current (which
+// accounts are signed in, their latest snapshot) is clients/link's own concern,
+// refreshed by POST /v1/links. Recording a sample and registering a link are two
+// orthogonal operations, each with exactly one home — a usage report no longer
+// writes a Link row, so there is one and only one way to set an account's snapshot.
 //
-// Every route is org+subject scoped through the same caller() gate as the rest of
-// the package: a validated principal and a non-empty org, else 403. A caller reads
-// and writes only their OWN accounts. The org is NEVER a parameter.
+// Every route is org+subject scoped through the same caller() gate as summary: a
+// validated principal and a non-empty org, else 401. A caller reads and writes only
+// their OWN accounts. The org is NEVER a parameter.
 
-// Ranges — the closed allowlist for a read window. ONE resolver serves both sides
-// of the global view, so the account rows and the Hanzo rows always cover the SAME
-// period; two resolvers could drift and turn the union into a lie.
+// caller resolves the (org, subject) scope for a request: the VALIDATED IAM owner
+// claim (principal.Org — the trusted minted X-Org-Id, never a client header) plus
+// c.User() (the owning subject, non-empty once principal.Org returns ok, since Org
+// composes Validated). Every account-usage handler and the summary's account block
+// gate on it — an off-gateway forge with no validated user is refused fail-closed.
+func caller(c *zip.Ctx) (org, user string, ok bool) {
+	org, ok = principal.Org(c)
+	if !ok {
+		return "", "", false
+	}
+	return org, trim(c.User()), true
+}
+
+// Ranges — the closed allowlist for a sample-dash read window. This is the
+// FINE-GRAINED account-usage grammar (a live lane dash cares about the 1h/6h
+// scale); the coarser cost/analytics grammar (aiobject.ResolveCloudUsageWindow:
+// 24h/7d/30d/custom + a bucket interval) drives summary and analytics. Two lanes,
+// two grammars, each complete for its read.
 const (
 	Range1h  = "1h"
 	Range24h = "24h"
@@ -107,9 +124,9 @@ func rfc3339Of(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
-// totalView is one row of the global view. Source and scope are what keep the board
-// honest — see the Source/Scope const blocks.
-type totalView struct {
+// TotalView is one row of the account-usage board (the summary's `accounts.rows`).
+// Source and scope are what keep the board honest — see the Source/Scope consts.
+type TotalView struct {
 	Source     string  `json:"source"` // account | hanzo
 	Scope      string  `json:"scope"`  // user | org
 	Provider   string  `json:"provider"`
@@ -122,8 +139,8 @@ type totalView struct {
 	Windows    int64   `json:"windows,omitempty"`
 }
 
-func toTotalView(t Total) totalView {
-	return totalView{
+func toTotalView(t Total) TotalView {
+	return TotalView{
 		Source: t.Source, Scope: t.Scope, Provider: t.Provider, Window: t.Window,
 		Requests: t.Requests, Tokens: t.Tokens, CostCents: t.CostCents,
 		UsedPct: t.UsedPct, Confidence: t.Confidence, Windows: t.Windows,
@@ -235,24 +252,23 @@ func parseInstant(s string) (time.Time, error) {
 	return time.Parse(time.RFC3339, trim(s))
 }
 
+// reportResp answers a record: how many samples were accepted, and — honestly —
+// whether the warehouse stored them. `stored:false` means the datastore was
+// unavailable; the samples were validated and accepted but not persisted, so a
+// device can retry without being blocked.
 type reportResp struct {
-	Accepted int        `json:"accepted"`
-	Stored   bool       `json:"stored"` // false = warehouse unavailable; Links still updated
-	Links    []linkView `json:"links"`
+	Accepted int  `json:"accepted"`
+	Stored   bool `json:"stored"`
 }
 
-// reportUsage ingests a batch of samples: it refreshes the Link rows (the DURABLE
-// truth the accounts overview renders) and appends the samples to the warehouse
-// series (history).
-//
-// The order is deliberate. The Link upsert is the transaction that must not be
-// lost; the warehouse write is fail-soft beside it. A datastore outage costs a poll
-// of history and nothing else — the report still succeeds and the account still
-// shows as live and current.
-func reportUsage(s *cloud.Service[state], c *zip.Ctx) error {
+// record ingests a batch of samples and appends them to the warehouse series. It is
+// FAIL-SOFT: a datastore outage costs a poll of history (stored:false), never a
+// failed request. It records usage ONLY — the link registry is refreshed separately
+// via POST /v1/links, so there is one and only one way to update an account row.
+func record(s *cloud.Service[state], c *zip.Ctx) error {
 	org, user, ok := caller(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return zip.ErrUnauthorized("sign in to report usage")
 	}
 	var body reportReq
 	if err := c.Bind(&body); err != nil {
@@ -275,153 +291,14 @@ func reportUsage(s *cloud.Service[state], c *zip.Ctx) error {
 		samples = append(samples, x)
 	}
 
-	// Refresh one Link per distinct account the batch reported. This is the
-	// existing upsert with its existing identity — a report keeps the accounts
-	// overview current without a second registration step.
-	links := make([]linkView, 0, 4)
-	for _, g := range groupByAccount(samples) {
-		id, err := genID("link")
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
-		}
-		unix := now.Unix()
-		stored, err := s.State.store.Upsert(c.Context(), Link{
-			ID: id, Org: org, User: user, Machine: g.Machine, Provider: g.Provider,
-			Account: g.Account, Plan: g.Plan, Kind: g.Kind, Status: StatusLinked,
-			LastSeen: unix, Usage: g.Usage, CreatedAt: unix, UpdatedAt: unix,
-		})
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
-		}
-		links = append(links, toLinkView(stored))
-	}
-
 	// History is fail-soft: a warehouse outage must never fail a report or block a
 	// device. `stored` tells the caller which happened — honestly.
 	stored := true
-	if err := s.State.store.WriteSamples(c.Context(), org, user, samples, now); err != nil {
+	if err := s.State.warehouse.WriteSamples(c.Context(), org, user, samples, now); err != nil {
 		s.Log.Debug("account usage write skipped", "org", org, "err", err)
 		stored = false
 	}
-	return c.JSON(http.StatusAccepted, reportResp{Accepted: len(samples), Stored: stored, Links: links})
-}
-
-// account is one account's slice of a reported batch, folded into the shape the
-// Link row carries.
-type account struct {
-	Machine, Provider, Account, Plan, Kind, Usage string
-}
-
-// groupByAccount folds a batch into one Link refresh per (machine, provider,
-// account) — the Link's own identity — with a usage snapshot projected from that
-// account's lanes. Deterministic order, so a report is reproducible.
-func groupByAccount(samples []Sample) []account {
-	type key struct{ machine, provider, acct string }
-	order := make([]key, 0, 4)
-	byKey := map[key][]Sample{}
-	for _, x := range samples {
-		k := key{x.Machine, x.Provider, x.Account}
-		if _, seen := byKey[k]; !seen {
-			order = append(order, k)
-		}
-		byKey[k] = append(byKey[k], x)
-	}
-	out := make([]account, 0, len(order))
-	for _, k := range order {
-		group := byKey[k]
-		a := account{Machine: k.machine, Provider: k.provider, Account: k.acct, Kind: KindSubscription}
-		// The plan/kind of the freshest lane describes the account.
-		newest := newestOf(group)
-		a.Plan, a.Kind = newest.Plan, newest.Kind
-		a.Usage = snapshotOf(group)
-		out = append(out, a)
-	}
-	return out
-}
-
-// newestOf returns the sample measuring the most recent window instance.
-func newestOf(group []Sample) Sample {
-	best := group[0]
-	for _, x := range group[1:] {
-		if x.WindowStart.After(best.WindowStart) {
-			best = x
-		}
-	}
-	return best
-}
-
-// windowRank orders the window classes by breadth, so a projection can pick the
-// WIDEST lane a meter reported rather than mixing lanes.
-func windowRank(w string) int {
-	switch w {
-	case Window6h:
-		return 1
-	case WindowDay:
-		return 2
-	case WindowWeek:
-		return 3
-	case WindowMonth:
-		return 4
-	}
-	return 0
-}
-
-// snapshotOf projects an account's lanes into the Usage snapshot the accounts
-// overview renders and the route policy reads for headroom. Pure.
-//
-// It NEVER sums across window classes: they NEST (a 6h lane's consumption is also
-// inside the week lane's), so adding them would count the same work twice. The
-// percents come from their own lanes — 6h drives SessionPct, week drives WeeklyPct,
-// which is exactly what headroomPct compares — and the absolute counters come from
-// the WIDEST single lane reported, carrying that same lane's confidence with them,
-// so a number and the flag that qualifies it always come from ONE meter.
-func snapshotOf(group []Sample) string {
-	var u Usage
-	var widest Sample
-	// Percents: the freshest instance of each lane class.
-	if s, ok := freshest(group, Window6h); ok {
-		u.SessionPct = clampPct(s.UsedPct)
-		u.ResetsAt = rfc3339Of(s.ResetsAt)
-	}
-	if w, ok := freshest(group, WindowWeek); ok {
-		u.WeeklyPct = clampPct(w.UsedPct)
-		if u.ResetsAt == "" {
-			u.ResetsAt = rfc3339Of(w.ResetsAt)
-		}
-	}
-	// Counters + money: the widest single lane, never a mix.
-	for _, x := range group {
-		if windowRank(x.Window) > windowRank(widest.Window) {
-			widest = x
-		}
-	}
-	u.Tokens = widest.TotalTokens
-	u.InputTokens = widest.InputTokens
-	u.OutputTokens = widest.OutputTokens
-	u.SpendCents = widest.CostCents
-	u.Currency = widest.Currency
-	u.Confidence = widest.Confidence
-	u.UpdatedAt = rfc3339Of(time.Now())
-	b, err := json.Marshal(u)
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
-// freshest returns the most recent instance of one window class, if the batch has one.
-func freshest(group []Sample, window string) (Sample, bool) {
-	var best Sample
-	found := false
-	for _, x := range group {
-		if x.Window != window {
-			continue
-		}
-		if !found || x.WindowStart.After(best.WindowStart) {
-			best, found = x, true
-		}
-	}
-	return best, found
+	return c.JSON(http.StatusAccepted, reportResp{Accepted: len(samples), Stored: stored})
 }
 
 // ── reads ────────────────────────────────────────────────────────────────────
@@ -439,15 +316,15 @@ type dashResp struct {
 	Windows   []sampleView `json:"windows"`   // every instance in range, newest first
 }
 
-// usageDash is the PER-PROVIDER view: one connected account's own consumption of
-// its own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
+// samples is the PER-PROVIDER view: one connected account's own consumption of its
+// own plan — "my Claude Max plan is 47% through its 6h window, resets at 14:20".
 //
 // `current` is the newest instance of each lane (the headline); `windows` is the
 // history behind it. Both are computed from ONE deduped read — no second query.
-func usageDash(s *cloud.Service[state], c *zip.Ctx) error {
+func samples(s *cloud.Service[state], c *zip.Ctx) error {
 	org, user, ok := caller(c)
 	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+		return zip.ErrUnauthorized("sign in to view usage")
 	}
 	provider := trim(c.Query("provider"))
 	if provider == "" {
@@ -478,7 +355,7 @@ func usageDash(s *cloud.Service[state], c *zip.Ctx) error {
 		Source: SourceAccount, Scope: ScopeUser,
 		Current: []sampleView{}, Windows: []sampleView{},
 	}
-	rows, ok := s.State.store.Series(c.Context(), org, user, provider, acct, window, from, to)
+	rows, ok := s.State.warehouse.Series(c.Context(), org, user, provider, acct, window, from, to)
 	if !ok {
 		return c.JSON(http.StatusOK, out) // Available=false: honest "unavailable"
 	}
@@ -514,65 +391,18 @@ func currentOf(rows []Sample) []Sample {
 	return out
 }
 
-type summaryResp struct {
-	Range string      `json:"range"`
-	From  string      `json:"from"`
-	To    string      `json:"to"`
-	Rows  []totalView `json:"rows"`
-	// Per-source availability: a partial warehouse never fabricates the other half.
-	Account sourceState `json:"account"`
-	Hanzo   sourceState `json:"hanzo"`
-}
-
-type sourceState struct {
-	Available bool   `json:"available"`
-	Scope     string `json:"scope"`
-	Source    string `json:"source"` // the table of record
-	Note      string `json:"note"`
-}
-
-// usageSummary is the GLOBAL view: every provider account the caller connected,
-// beside what the org routed through Hanzo — one board.
-//
-// The union is honest by construction:
-//   - each row says its SOURCE (whose meter) and SCOPE (whose usage)
-//   - the two are concatenated, NEVER added: a plan's percent is not money, and a
-//     provider's own spend is not a Hanzo charge
-//   - each side reports its own availability, so half a warehouse never turns the
-//     other half into zeros
-//   - both sides resolve the SAME [from, to) from ONE resolver, so the comparison
-//     is over one period
-func usageSummary(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, ok := caller(c)
-	if !ok {
-		return zip.ErrForbidden("X-Org-Id required")
+// windowRank orders the window classes by breadth, so the dash renders the lanes
+// narrowest-first (6h before week) rather than in read order.
+func windowRank(w string) int {
+	switch w {
+	case Window6h:
+		return 1
+	case WindowDay:
+		return 2
+	case WindowWeek:
+		return 3
+	case WindowMonth:
+		return 4
 	}
-	rangeLabel := trim(c.Query("range"))
-	from, to, err := resolveRange(rangeLabel, time.Now())
-	if err != nil {
-		return zip.ErrBadRequest(err.Error())
-	}
-	if rangeLabel == "" {
-		rangeLabel = Range24h
-	}
-	out := summaryResp{
-		Range: rangeLabel, From: rfc3339Of(from), To: rfc3339Of(to), Rows: []totalView{},
-		Account: sourceState{Scope: ScopeUser, Source: accountUsageTable,
-			Note: "your own linked accounts, metered from each provider's own login; plan consumption, not a Hanzo charge"},
-		Hanzo: sourceState{Scope: ScopeOrg, Source: cloudUsageTable,
-			Note: "your org's Hanzo-routed inference; cost of record"},
-	}
-	if rows, ok := s.State.store.AccountTotals(c.Context(), org, user, from, to); ok {
-		out.Account.Available = true
-		for _, t := range rows {
-			out.Rows = append(out.Rows, toTotalView(t))
-		}
-	}
-	if rows, ok := s.State.store.HanzoTotals(c.Context(), org, from, to); ok {
-		out.Hanzo.Available = true
-		for _, t := range rows {
-			out.Rows = append(out.Rows, toTotalView(t))
-		}
-	}
-	return c.JSON(http.StatusOK, out)
+	return 0
 }
