@@ -54,6 +54,10 @@ const (
 	heartbeatEvery = 30 * time.Second
 	claimPoll      = 2 * time.Second
 	claimLeaseSecs = 120
+	// renderWindow matches the dispatch cap (studio gpu_dispatch sets
+	// startToCloseTimeout 14400s). The old 10m local poll undercut it and
+	// marked live renders failed while they kept sampling (observed 8-70m).
+	renderWindow = 4 * time.Hour
 	// localComfyUI is the studio render backend the studio.render handler drives.
 	localComfyUI = "http://127.0.0.1:8188"
 	// defaultStudioUploadURL is where finished render outputs are POSTed so they
@@ -848,7 +852,7 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		return nil, fmt.Errorf("studio.render: no prompt_id in /prompt response")
 	}
 	// Poll history until the prompt shows up (completed).
-	deadline := time.Now().Add(10 * time.Minute)
+	deadline := time.Now().Add(renderWindow)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -872,6 +876,11 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 			if uerr != nil {
 				return nil, fmt.Errorf("studio.render: prompt %s rendered but gallery upload failed: %w", pr.PromptID, uerr)
 			}
+			// The engine leaks ~58GB per render; recycling after each completed
+			// render caps it at one render's worth. Boot (~20s) is noise next to
+			// 8-70m renders. Never recycle on the timeout path — the engine may
+			// still be sampling and the mirror rescues late finishes.
+			requestStudioRecycle()
 			return map[string]any{"promptId": pr.PromptID, "outputs": outputs, "gallery": gallery}, nil
 		}
 	}
@@ -1012,6 +1021,12 @@ func (w *worker) mirrorRenders(ctx context.Context, out io.Writer, dir, base str
 	var firstErr error
 	_ = filepath.Walk(dir, func(p string, info os.FileInfo, werr error) error {
 		if werr != nil || info == nil || info.IsDir() || !isImageFile(p) {
+			return nil
+		}
+		// Hidden files and AppleDouble forks (`._*`, `.DS_Store`) ride along with
+		// mac scp and are not renders — `._foo.png` passes the extension check
+		// but is a 4KB resource fork that poisons the library.
+		if strings.HasPrefix(filepath.Base(p), ".") {
 			return nil
 		}
 		rel, rerr := filepath.Rel(dir, p)
