@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 )
 
 // ingest.go is the in-process ingestion seam: it lets a sibling subsystem (Hanzo
@@ -48,11 +48,11 @@ func Ingest(ctx context.Context, org, name, contentType string, data []byte) (st
 	if err != nil {
 		return "", fmt.Errorf("dataroom.Ingest: storage key: %w", err)
 	}
-	key := "dataroom/" + gojabase.TenantSegment(org) + "/" + rk
+	key := "dataroom/" + goja.TenantSegment(org) + "/" + rk
 	if err := mounted.State.blob.Put(ctx, key, data); err != nil {
 		return "", fmt.Errorf("dataroom.Ingest: blob put: %w", err)
 	}
-	resp, err := mounted.State.host.Dispatch(ctx, org, gojabase.Request{
+	resp, err := mounted.State.host.Dispatch(ctx, org, goja.BaseRequest{
 		Route: "documents.create",
 		Body:  map[string]any{"name": name, "fileKey": key, "contentType": contentType, "fileSize": len(data)},
 	})

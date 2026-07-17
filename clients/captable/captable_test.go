@@ -6,22 +6,22 @@ import (
 	"testing"
 
 	hcaptable "github.com/hanzoai/captable"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 )
 
 // TestFullLifecycle drives the REAL embedded captable bundle against a REAL
-// per-tenant SQLite through gojabase — the end-to-end proof that the bundle's SQL
+// per-tenant SQLite through NewBase — the end-to-end proof that the bundle's SQL
 // matches the Go host schema and that the whole cap-table fold round-trips
 // through Base: company → stakeholders → share class → equity plan → share
 // issuance → options → SAFE → priced round + investment (dilution) → transfer →
 // computed cap table. Any column/route drift fails here, not in production.
-func newHost(t *testing.T) *gojabase.Host {
+func newHost(t *testing.T) *goja.BaseHost {
 	t.Helper()
 	bundle, err := hcaptable.Bundle()
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := gojabase.New(gojabase.Config{
+	h, err := goja.NewBase(goja.BaseConfig{
 		Name:    "captable",
 		Bundle:  bundle,
 		Schema:  schema,
@@ -36,9 +36,9 @@ func newHost(t *testing.T) *gojabase.Host {
 }
 
 // do dispatches a route and returns (status, decoded body).
-func do(t *testing.T, h *gojabase.Host, org, route string, params map[string]string, body any) (int, any) {
+func do(t *testing.T, h *goja.BaseHost, org, route string, params map[string]string, body any) (int, any) {
 	t.Helper()
-	resp, err := h.Dispatch(context.Background(), org, gojabase.Request{Route: route, Params: params, Body: body})
+	resp, err := h.Dispatch(context.Background(), org, goja.BaseRequest{Route: route, Params: params, Body: body})
 	if err != nil {
 		t.Fatalf("dispatch %s: %v", route, err)
 	}
@@ -300,7 +300,7 @@ func TestDilutiveOptionsExcludeTerminal(t *testing.T) {
 }
 
 // firstShareID returns the founder's original certificate share id.
-func firstShareID(t *testing.T, h *gojabase.Host, org string) string {
+func firstShareID(t *testing.T, h *goja.BaseHost, org string) string {
 	t.Helper()
 	_, body := do(t, h, org, "shares.list", nil, nil)
 	data := body.(map[string]any)["data"].([]any)
