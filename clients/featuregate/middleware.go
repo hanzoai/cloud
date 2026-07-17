@@ -12,16 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package featuregate is the launch-control ENFORCEMENT for Hanzo's hosted services:
-// the native middleware (Enforce) + the per-user approval predicate (Approvals, reused
-// from IAM). It is a CONSUMER of the ONE policy engine — the per-service waitlist MODE
-// and the host→service registry live in clients/flags (a service's mode IS the
-// switch waitlist.<svc>, evaluated through the native engine); the admin board is the
-// /v1/admin/services lens and the guard's runtime mode read is /v1/flags/waitlist,
-// both served there. This package owns only enforcement, decomplected into two axes:
+// Package featuregate is the launch-control GATE for Hanzo's hosted services — the
+// COMPLETE waitlist feature, COMPOSING the ONE flag engine (clients/flags) one-way. It
+// owns:
 //
-//   - PER-SERVICE  waitlist mode on|off  — the flags switch waitlist.<svc>,
-//     resolved for a request host via flags.WaitlistModeForHost (the decide).
+//   - the host→service registry (registry.go) + the brand seed (waitlist.go),
+//   - the per-service MODE decide WaitlistModeForHost — a service's mode IS the switch
+//     waitlist.<svc>, evaluated through the flag engine (flags.Bool),
+//   - the admin control funcs (List/Set/Upsert) the /v1/admin/services board calls,
+//   - the guard's public mode read /v1/flags/waitlist (+ /v1/featuregate/mode compat), Mount,
+//   - the native enforcement middleware (Enforce, this file),
+//   - the per-user approval predicate (Approvals, reused from IAM — approval.go).
+//
+// flags NEVER imports featuregate; featuregate imports flags. The engine is the pure
+// (Principal, context) -> verdict primitive; this package is its first composed tenant.
+// Enforcement is decomplected into two orthogonal axes:
+//
+//   - PER-SERVICE  waitlist mode on|off  — the switch waitlist.<svc>, resolved for a
+//     request host via WaitlistModeForHost (the decide, waitlist.go).
 //   - PER-USER     approvalStatus pending|approved — owned by IAM (approval.go), REUSED.
 //
 // THE RULE, applied at ONE native enforcement point (Enforce):
@@ -36,7 +44,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/zap-proto/zip"
 )
 
@@ -65,7 +72,7 @@ import (
 // IdentityMiddleware minted, so it MUST run after it and (like BillingGate) before
 // the subsystem handlers. It is deliberately NOT wired here — the unified-binary
 // agent owns serve.go's boot chain; this package exposes Enforce so the one-line
-// app.Use lands without a merge collision. The decide (flags.WaitlistModeForHost) is
+// app.Use lands without a merge collision. The decide (WaitlistModeForHost) is
 // resolved PER REQUEST and fail-opens until the flags engine has mounted, so Enforce
 // can be constructed before Mount runs.
 //
@@ -102,7 +109,7 @@ type EnforceConfig struct {
 	ExemptPrefixes []string
 
 	// Gate is THE decide: it resolves whether a request host is in waitlist mode,
-	// via the ONE policy engine. When nil it is flags.WaitlistModeForHost —
+	// via the ONE policy engine. When nil it is WaitlistModeForHost —
 	// host→service→waitlist.<svc>. Injected only in tests. Fail-open by contract:
 	// known=false (unmounted / registry error / un-governed host) → not gated.
 	Gate func(ctx context.Context, host string) (mode bool, service string, known bool)
@@ -132,7 +139,7 @@ func Enforce(cfg EnforceConfig) zip.Handler {
 	}
 	gate := cfg.Gate
 	if gate == nil {
-		gate = flags.WaitlistModeForHost // the ONE decide: host→service→waitlist.<svc>
+		gate = WaitlistModeForHost // the ONE decide: host→service→waitlist.<svc>
 	}
 	exempt := cfg.ExemptPrefixes
 	if len(exempt) == 0 {

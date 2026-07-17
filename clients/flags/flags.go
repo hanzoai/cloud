@@ -26,20 +26,22 @@
 // ── THE POLICY PRIMITIVE ─────────────────────────────────────────────────────────
 //
 // This engine IS Hanzo's runtime decision primitive: (Principal, context) -> verdict,
-// evaluated in-process, stateless, hot. Feature flags, rollouts, and the launch
-// waitlist (waitlist.go — folded in from the former clients/featuregate: a service's
-// mode IS the switch waitlist.<svc>) are its first tenants. The aspirational end-state
-// — NOT built here, flagged for the next step — is that the platform's OTHER runtime
-// decisions are the SAME shape and could COMPOSE this one engine rather than each
-// re-deriving it:
+// evaluated in-process, stateless, hot. It knows ONLY flags — definitions, evaluation,
+// and the platform-switch registry. It has ZERO knowledge of any specific policy that
+// rides on it: no host→service map, no waitlist, no service registry. Those COMPOSE
+// this engine from the OUTSIDE, one-way (they import flags; flags imports none of them):
 //
-//   - authz        (access policy)         — (Principal, resource+action) -> allow/deny
-//   - entitlements (product-access policy)  — (Principal, feature/plan)    -> granted/denied
+//   - the launch waitlist gate (clients/featuregate) — a service's mode IS the switch
+//     waitlist.<svc>; featuregate owns the host→service registry + Enforce and reads the
+//     mode through flags.Bool. It USED to live in this package; extracting it is the
+//     PROOF the engine composes its tenants rather than absorbing them.
+//   - authz        (access policy)          — (Principal, resource+action) -> allow/deny
+//   - entitlements (product-access policy)   — (Principal, feature/plan)    -> granted/denied
 //
-// Both are (Principal, context) -> verdict. Folding them onto this evaluator would make
-// Policy ONE composable primitive with one audit log and one hot-apply path. DO NOT
-// touch authz/entitlements now — this note only names the target so the seam is
-// visible; the launch waitlist is the first fold, done here.
+// Every one is (Principal, context) -> verdict. Folding them onto this evaluator makes
+// Policy ONE composable primitive with one audit log and one hot-apply path. authz and
+// entitlements are NOT built on it yet — this note only names the target so the seam
+// stays visible; the launch waitlist (now external) is the first, proven composition.
 package flags
 
 import (
@@ -140,7 +142,6 @@ type snapshot struct {
 // cached for one TTL (the hot-apply bound).
 type Client struct {
 	stores     *cloud.OrgStore[*Store]
-	registry   *cloud.OrgStore[*waitlistStore] // waitlist host→service map (platform tenant)
 	distinctID string
 	ttl        time.Duration
 
@@ -442,7 +443,6 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "flags")
 	c := &Client{
 		stores:     cloud.NewOrgStore[*Store](deps.DataDir, "flags", openStore),
-		registry:   cloud.NewOrgStore[*waitlistStore](deps.DataDir, "waitlist", openWaitlistStore),
 		distinctID: firstNonEmpty(os.Getenv("FLAGS_PLATFORM_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
@@ -450,26 +450,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
-	mountWaitlist(c, deps.Brand, log) // fold: seed the host→service registry + register the waitlist.<svc> switches
 	log.Info("flags engine ready", "engine", "hanzo-flags", "native", engineAvailable, "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }
 
-// Shutdown closes every open per-org definitions store and the waitlist registry.
+// Shutdown closes every open per-org definitions store.
 func Shutdown(_ context.Context) error {
-	if mounted == nil {
+	if mounted == nil || mounted.stores == nil {
 		return nil
 	}
-	var first error
-	if mounted.stores != nil {
-		first = mounted.stores.CloseAll()
-	}
-	if mounted.registry != nil {
-		if err := mounted.registry.CloseAll(); err != nil && first == nil {
-			first = err
-		}
-	}
-	return first
+	return mounted.stores.CloseAll()
 }
 
 func ttlFromEnv() time.Duration {
