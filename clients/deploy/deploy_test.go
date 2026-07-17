@@ -20,7 +20,6 @@ func fakeSvc(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		appsCRGVR:      "AppList",
-		servicesCRGVR:  "ServiceCRList",
 		deploymentsGVR: "DeploymentList",
 		replicaSetsGVR: "ReplicaSetList",
 		podsGVR:        "PodList",
@@ -128,12 +127,9 @@ func TestSyncStatus(t *testing.T) {
 // ── ref parsing ─────────────────────────────────────────────────────────────
 
 func TestParseRef(t *testing.T) {
-	// forward App kind and transition Service kind both resolve.
+	// The App CR resolves; the core/v1 Service (a child object) resolves distinctly.
 	if _, gvr, err := parseRef("hanzo.ai:App:hanzo:iam"); err != nil || gvr != appsCRGVR {
 		t.Errorf("App ref → (%v, %v), want appsCRGVR", gvr, err)
-	}
-	if _, gvr, err := parseRef("hanzo.ai:Service:hanzo:iam"); err != nil || gvr != servicesCRGVR {
-		t.Errorf("Service ref → (%v, %v), want servicesCRGVR", gvr, err)
 	}
 	if _, gvr, err := parseRef("apps:Deployment:hanzo:iam"); err != nil || gvr != deploymentsGVR {
 		t.Errorf("Deployment ref → (%v, %v), want deploymentsGVR", gvr, err)
@@ -141,7 +137,8 @@ func TestParseRef(t *testing.T) {
 	if _, _, err := parseRef(":Service:hanzo:iam"); err != nil {
 		t.Errorf("core Service ref err = %v, want nil", err)
 	}
-	bad := []string{"", "a:b:c", "unknown/Kind:hanzo:iam:x", "apps:Deployment:evil-ns:iam", "apps:Deployment:hanzo:Bad_Name"}
+	// hanzo.ai:Service is not a kind this plane reads — the operator CR is App.
+	bad := []string{"", "a:b:c", "hanzo.ai:Service:hanzo:iam", "unknown/Kind:hanzo:iam:x", "apps:Deployment:evil-ns:iam", "apps:Deployment:hanzo:Bad_Name"}
 	for _, r := range bad {
 		if _, _, err := parseRef(r); err == nil {
 			t.Errorf("parseRef(%q) = nil err, want rejection", r)
@@ -215,49 +212,37 @@ func TestObserveApplication(t *testing.T) {
 	}
 }
 
-// ── CR resolution shim (App forward, Service fallback) ───────────────────────
+// ── CR resolution ────────────────────────────────────────────────────────────
 
-func TestGetAppCRAppFirst(t *testing.T) {
-	s := fakeSvc(
-		appCR("App", "hanzo", "iam", "u-app", "ghcr.io/hanzoai/iam", "v2.0.0", "Running", 1, 1),
-		appCR("Service", "hanzo", "iam", "u-svc", "ghcr.io/hanzoai/iam", "v1.0.0", "Running", 1, 1),
-	)
+func TestGetAppCR(t *testing.T) {
+	s := fakeSvc(appCR("App", "hanzo", "iam", "u-app", "ghcr.io/hanzoai/iam", "v2.0.0", "Running", 1, 1))
 	obj, gvr, err := getAppCR(s, context.Background(), "hanzo", "iam")
 	if err != nil {
 		t.Fatalf("getAppCR: %v", err)
 	}
 	if gvr != appsCRGVR {
-		t.Fatalf("gvr = %v, want appsCRGVR (App must win)", gvr)
+		t.Fatalf("gvr = %v, want appsCRGVR", gvr)
 	}
 	if tag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag"); tag != "v2.0.0" {
-		t.Fatalf("resolved tag = %q, want v2.0.0 (App copy)", tag)
+		t.Fatalf("resolved tag = %q, want v2.0.0", tag)
 	}
-}
-
-func TestGetAppCRServiceFallback(t *testing.T) {
-	s := fakeSvc(appCR("Service", "hanzo", "iam", "u-svc", "ghcr.io/hanzoai/iam", "v1.0.0", "Running", 1, 1))
-	_, gvr, err := getAppCR(s, context.Background(), "hanzo", "iam")
-	if err != nil || gvr != servicesCRGVR {
-		t.Fatalf("getAppCR fallback → (%v, %v), want servicesCRGVR", gvr, err)
-	}
-	// Missing everywhere → IsNotFound.
+	// Missing → IsNotFound.
 	if _, _, err := getAppCR(s, context.Background(), "hanzo", "ghost"); err == nil {
 		t.Fatal("getAppCR(ghost) = nil err, want NotFound")
 	}
 }
 
-func TestListAppCRsMergeDedup(t *testing.T) {
+func TestListAppCRs(t *testing.T) {
 	s := fakeSvc(
-		appCR("App", "hanzo", "iam", "u1", "r", "v2.0.0", "Running", 1, 1),     // App copy of iam
-		appCR("Service", "hanzo", "iam", "u2", "r", "v1.0.0", "Running", 1, 1), // stale Service copy — deduped out
-		appCR("Service", "hanzo", "cloud", "u3", "r", "v1.799.0", "Running", 1, 1),
+		appCR("App", "hanzo", "iam", "u1", "r", "v2.0.0", "Running", 1, 1),
+		appCR("App", "hanzo", "cloud", "u3", "r", "v1.799.0", "Running", 1, 1),
 	)
 	crs, err := listAppCRs(s, context.Background(), "hanzo")
 	if err != nil {
 		t.Fatalf("listAppCRs: %v", err)
 	}
 	if len(crs) != 2 {
-		t.Fatalf("listAppCRs len = %d, want 2 (iam deduped, cloud)", len(crs))
+		t.Fatalf("listAppCRs len = %d, want 2 (iam, cloud)", len(crs))
 	}
 	byName := map[string]string{}
 	for i := range crs {
@@ -265,7 +250,7 @@ func TestListAppCRsMergeDedup(t *testing.T) {
 		byName[crs[i].GetName()] = tag
 	}
 	if byName["iam"] != "v2.0.0" {
-		t.Errorf("iam tag = %q, want v2.0.0 (App wins the dedupe)", byName["iam"])
+		t.Errorf("iam tag = %q, want v2.0.0", byName["iam"])
 	}
 	if byName["cloud"] != "v1.799.0" {
 		t.Errorf("cloud tag = %q", byName["cloud"])

@@ -57,7 +57,6 @@ func fakeK8s(objs ...runtime.Object) *k8sClient {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		appsGVR:           "AppList",
-		servicesGVR:       "ServiceList",
 		jobsGVR:           "JobList",
 		namespacesGVR:     "NamespaceList",
 		resourceQuotasGVR: "ResourceQuotaList",
