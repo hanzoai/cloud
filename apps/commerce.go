@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerceclient"
@@ -133,7 +134,7 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// mirrors the standalone /v1 bundle: gated request context, host, IAM
 	// resolution; store.Route's own tokenRequired arg gates the CRUD.
 	storeV1 := app.Group("/v1")
-	storeV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commercemid.ErrorHandlerJSON())
+	storeV1.Use(commercemid.AddHost(), commercemid.RequestContext(), commerceErrorScope())
 	// Unconditional, exactly like the standalone bundle: IAMTokenRequired
 	// no-ops gracefully when IAM is not initialized.
 	storeV1.Use(iammiddleware.IAMTokenRequired())
@@ -173,6 +174,37 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 
 // mountCommerceFailClosed serves an honest JSON 503 on every commerce prefix when
 // the embed cannot boot, so /v1/commerce/* answers "commerce unavailable" instead
+// commerceErrorScope confines commerce's JSON error envelope to commerce's OWN
+// routes. commercemid.ErrorHandlerJSON is a `/v1` GROUP middleware, and fiber
+// matches group middleware by PREFIX, not by the handle a route registered on —
+// so on the shared `/v1` it wraps every subsystem mounted AFTER commerce and
+// flattens their typed zip.HTTPError (403/400/…) into a blanket 500 (the store
+// envelope always renders 500). Guarded by commercePrefixes, the envelope stays on
+// commerce and every other subsystem renders its own status via zip's default
+// handler — the pre-commerce subsystems (kms, o11y, …) already do; this makes the
+// post-commerce ones (projects, agents, wallets, …) match.
+func commerceErrorScope() zip.Handler {
+	envelope := commercemid.ErrorHandlerJSON()
+	return func(c *zip.Ctx) error {
+		if hasCommercePrefix(c.Path()) {
+			return envelope(c)
+		}
+		return c.Next()
+	}
+}
+
+// hasCommercePrefix reports whether path is a commerce-owned root (an exact prefix
+// or a child of one), the SAME ownership commercePrefixes encodes for the
+// fail-closed mount.
+func hasCommercePrefix(path string) bool {
+	for _, p := range commercePrefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // of falling through to another subsystem's catch-all.
 func mountCommerceFailClosed(app *zip.App) {
 	failed := func(c *zip.Ctx) error {
