@@ -53,6 +53,7 @@ import (
 	"github.com/hanzoai/cloud/clients/admin"
 	"github.com/hanzoai/cloud/clients/ads"
 	"github.com/hanzoai/cloud/clients/affiliates"
+	"github.com/hanzoai/cloud/clients/agent"
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/agentskills"
 	"github.com/hanzoai/cloud/clients/analytics"
@@ -64,7 +65,6 @@ import (
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
-	"github.com/hanzoai/cloud/clients/agent"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/connectorruntime"
@@ -175,9 +175,9 @@ func init() {
 // the deliberate, off-by-default opt-in that keeps iam2 inert until a canary flips it.
 func identitySpec() cloud.MountSpec {
 	if os.Getenv("CLOUD_IAM_IMPL") == "iam2" {
-		return cloud.MountSpec{Name: "iam2", Mount: cloud.Typed(iam2.Mount)}
+		return cloud.MountSpec{Name: "iam2", Mount: iam2.Mount}
 	}
-	return cloud.MountSpec{Name: "iam", Mount: cloud.Typed(iam.Mount)}
+	return cloud.MountSpec{Name: "iam", Mount: iam.Mount}
 }
 
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
@@ -188,29 +188,29 @@ func identitySpec() cloud.MountSpec {
 func Wire() []cloud.MountSpec {
 	return []cloud.MountSpec{
 		// embedded NATS :4222 + JetStream.
-		{Name: "pubsub", Mount: cloud.Typed(pubsub.Mount), Shutdown: pubsub.Shutdown},
+		{Name: "pubsub", Mount: pubsub.Mount, Shutdown: pubsub.Shutdown},
 		// embedded Kafka adaptor :9092.
-		{Name: "kafka", Mount: cloud.Typed(kafka.Mount), Shutdown: kafka.Shutdown},
+		{Name: "kafka", Mount: kafka.Mount, Shutdown: kafka.Shutdown},
 		// /.well-known/agent-skills/* — before IAM's /.well-known/* wildcard (50).
-		{Name: "agentskills", Mount: cloud.Typed(agentskills.Mount)},
+		{Name: "agentskills", Mount: agentskills.Mount},
 		// Insights feature-flag evaluation seam (no routes; a hot value plane).
-		{Name: "featureflags", Mount: cloud.Typed(featureflags.Mount), Shutdown: featureflags.Shutdown, OwnsHealth: true},
+		{Name: "featureflags", Mount: featureflags.Mount, Shutdown: featureflags.Shutdown, OwnsHealth: true},
 		// Embedded KMS secrets plane /v1/kms/*. OwnsHealth: serves its own fail-closed
 		// /v1/kms/health (the generic always-ok route must not shadow it). Fails closed
 		// until the operator injects CLOUD_KMS_MASTER_KEY_REF. (Its in-process client
 		// factory is registered separately via cloud.RegisterKMSClientFactory.)
-		{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true},
+		{Name: "kms", Mount: kms.Mount, OwnsHealth: true},
 		// hanzoai/metrics — native o11y. It declares its OWN narrow metrics.Deps (no
 		// hanzoai/cloud import), so Typed cannot adapt it; mountMetrics builds that Deps
 		// from cloud.Deps and calls metrics.Mount explicitly.
 		{Name: "metrics", Mount: mountMetrics},
 		// Embedded runtime edge (/v1/ingress/*). STAGED — edge listeners stay off unless
 		// the operator names "ingress" in CLOUD_ENABLE.
-		{Name: "ingress", Mount: cloud.Typed(ingress.Mount), Shutdown: ingress.Shutdown},
+		{Name: "ingress", Mount: ingress.Mount, Shutdown: ingress.Shutdown},
 		// SPECIFIC self-service routes (/v1/iam/{keys,onboard}, /v1/csrf, /v1/embed-status,
 		// /v1/commerce/topup/wallet). MUST mount before the IAM /v1/iam/* wildcard (50) so
 		// they win Fiber's first-match scan (framework-guaranteed since zip v1.3.0).
-		{Name: "account", Mount: cloud.Typed(account.MountAccount)},
+		{Name: "account", Mount: account.MountAccount},
 		// Embedded IAM identity plane (/v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*,
 		// /cas/*, /scim/*) — the identity authority, mounts before its dependents. STAGED:
 		// the operator adds "iam" to --enable only after IAM config + the fold are verified.
@@ -222,7 +222,7 @@ func Wire() []cloud.MountSpec {
 		identitySpec(),
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
-		{Name: "base", Mount: cloud.Typed(base.Mount), Shutdown: base.Shutdown, OwnsHealth: true},
+		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown, OwnsHealth: true},
 		// The ONE observability subsystem: the in-repo o11y READ plane + runtime-handler
 		// install (o11y.SetHandler), with the hanzoai/o11y module wildcard /v1/o11y/*
 		// folded in as the TERMINAL sub-mount INSIDE o11y.MountO11y. Every specific
@@ -231,152 +231,150 @@ func Wire() []cloud.MountSpec {
 		// route (registered before MountAll), exactly as when the former module co-entry —
 		// which also set OwnsHealth=false — triggered it.
 		{Name: "o11y", Mount: o11y.MountO11y, Shutdown: o11y.ShutdownO11y},
-		{Name: "authz", Mount: cloud.Typed(authz.Mount)},
+		{Name: "authz", Mount: authz.Mount},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process
 		// CommerceClient is wired directly in pickCommerceClient).
-		{Name: "commerce", Mount: cloud.Typed(mountCommerce)},
-		// hanzoai/licensing. Its Mount is func(any, cloud.Deps) error — a MountFunc
-		// already — so Wire references it DIRECTLY, not through Typed.
+		{Name: "commerce", Mount: mountCommerce},
 		{Name: "licensing", Mount: licensing.Mount},
-		{Name: "plans", Mount: cloud.Typed(plan.Mount), OwnsHealth: true},
-		{Name: "pricing", Mount: cloud.Typed(pricing.Mount), OwnsHealth: true},
+		{Name: "plans", Mount: plan.Mount, OwnsHealth: true},
+		{Name: "pricing", Mount: pricing.Mount, OwnsHealth: true},
 		// /v1/s3/buckets/* + /v1/s3/health. Mounts BEFORE provisioning (120) so its static
 		// routes win over provisioning's /v1/s3/:name. OwnsHealth (real fail-closed probe).
-		{Name: "storage", Mount: cloud.Typed(storage.Mount), OwnsHealth: true},
+		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},
 		// Provisioning control plane: /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb.
-		{Name: "provisioning", Mount: cloud.Typed(provisioning.Mount)},
-		{Name: "billing", Mount: cloud.Typed(billing.Mount)},
+		{Name: "provisioning", Mount: provisioning.Mount},
+		{Name: "billing", Mount: billing.Mount},
 		// CATCH-ALL /v1/billing/* + /v1/commerce/* data bridges — AFTER clients/billing
 		// (121) + the commerce embed (100). Same clients/account package as "account" (48).
-		{Name: "account-bridge", Mount: cloud.Typed(account.MountBridge)},
-		{Name: "do", Mount: cloud.Typed(do.Mount)},
-		{Name: "platform", Mount: cloud.Typed(platform.Mount), OwnsHealth: true},
-		{Name: "projects", Mount: cloud.Typed(projects.Mount)},
-		{Name: "prompts", Mount: cloud.Typed(prompts.Mount)},
-		{Name: "agents", Mount: cloud.Typed(agents.Mount), Shutdown: agents.Shutdown},
+		{Name: "account-bridge", Mount: account.MountBridge},
+		{Name: "do", Mount: do.Mount},
+		{Name: "platform", Mount: platform.Mount, OwnsHealth: true},
+		{Name: "projects", Mount: projects.Mount},
+		{Name: "prompts", Mount: prompts.Mount},
+		{Name: "agents", Mount: agents.Mount, Shutdown: agents.Shutdown},
 		// The unified AI login manager registry (/v1/links). Mounts AFTER agents so
 		// a link revoke can stop the affected agent sessions in-process.
-		{Name: "link", Mount: cloud.Typed(link.Mount), Shutdown: link.Shutdown},
-		{Name: "wallets", Mount: cloud.Typed(wallets.Mount), Shutdown: ctxShutdown(wallets.Shutdown)},
+		{Name: "link", Mount: link.Mount, Shutdown: link.Shutdown},
+		{Name: "wallets", Mount: wallets.Mount, Shutdown: ctxShutdown(wallets.Shutdown)},
 		// x402 pay-per-use: settles a signed ERC-3009 authorization to a recipient
 		// wallet through the metering spine. Mounts AFTER wallets (it resolves the
 		// recipient via wallets.ResolvePaymentTarget) and provides the Enforce
 		// middleware a marketplace applies to its priced routes.
-		{Name: "x402", Mount: cloud.Typed(x402.Mount), Shutdown: ctxShutdown(x402.Shutdown)},
-		{Name: "paas", Mount: cloud.Typed(paas.Mount), OwnsHealth: true},
+		{Name: "x402", Mount: x402.Mount, Shutdown: ctxShutdown(x402.Shutdown)},
+		{Name: "paas", Mount: paas.Mount, OwnsHealth: true},
 		// GitOps deploy dashboard /v1/deploy/* (the ArgoCD-grade fleet view over the
 		// operator App CRs). After paas so the release seam paas installs is registered
 		// before a gitops rollback delegates to it; owns its own /v1/deploy/health.
-		{Name: "deploy", Mount: cloud.Typed(deploy.Mount), OwnsHealth: true},
-		{Name: "functions", Mount: cloud.Typed(functions.Mount)},
-		{Name: "tracker", Mount: cloud.Typed(tracker.Mount)},
-		{Name: "templates", Mount: cloud.Typed(templates.Mount)},
-		{Name: "framework", Mount: cloud.Typed(framework.Mount), Shutdown: ctxShutdown(framework.Shutdown)},
-		{Name: "knowledge", Mount: cloud.Typed(knowledge.Mount)},
+		{Name: "deploy", Mount: deploy.Mount, OwnsHealth: true},
+		{Name: "functions", Mount: functions.Mount},
+		{Name: "tracker", Mount: tracker.Mount},
+		{Name: "templates", Mount: templates.Mount},
+		{Name: "framework", Mount: framework.Mount, Shutdown: ctxShutdown(framework.Shutdown)},
+		{Name: "knowledge", Mount: knowledge.Mount},
 		// Marketing content loop /v1/content/* (generate → CMS → transition → publish).
 		// After framework (its DocType store the ops read/write) + knowledge (the sibling
 		// framework lane); before the AI /v1/* catch-all so /v1/content/* resolves here.
 		// CRUD/tenancy/install are framework's; this adds the board, lifecycle transition,
 		// and the generate/publish orchestration over the zen5 + studio + social edges.
-		{Name: "content", Mount: cloud.Typed(content.Mount), Shutdown: ctxShutdown(content.Shutdown)},
+		{Name: "content", Mount: content.Mount, Shutdown: ctxShutdown(content.Shutdown)},
 		// Reverse storefront loop: consume the commerce COMMERCE stream (product.created)
 		// → content.EnsureCatalogAsset (render the new product's ecom asset, design==slug).
 		// After content (whose EnsureCatalogAsset it drives). Inert until CLOUD_COMMERCE_NATS_URL
 		// names the NATS carrying commerce catalog events — the reverse of the forward edge.
-		{Name: "catalogsync", Mount: cloud.Typed(catalogsync.Mount), Shutdown: catalogsync.Shutdown},
-		{Name: "ml", Mount: cloud.Typed(ml.Mount), OwnsHealth: true},
-		{Name: "usage", Mount: cloud.Typed(usage.Mount)},
-		{Name: "crm", Mount: cloud.Typed(crm.Mount)},
+		{Name: "catalogsync", Mount: catalogsync.Mount, Shutdown: catalogsync.Shutdown},
+		{Name: "ml", Mount: ml.Mount, OwnsHealth: true},
+		{Name: "usage", Mount: usage.Mount},
+		{Name: "crm", Mount: crm.Mount},
 		// Native /v1/marketing/* — the in-process fold of github.com/hanzoai/marketing
 		// (per-org campaign store on Base/SQLite), twin of crm. Owns a DB handle, so
 		// its Shutdown closes it cleanly on SIGTERM (ctxShutdown adapts func() error).
-		{Name: "marketing", Mount: cloud.Typed(marketing.Mount), Shutdown: ctxShutdown(marketing.Shutdown)},
+		{Name: "marketing", Mount: marketing.Mount, Shutdown: ctxShutdown(marketing.Shutdown)},
 		// Native /v1/ads/* — the net-new per-org ad-campaign store on Base/SQLite,
 		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
 		// on SIGTERM (ctxShutdown adapts func() error).
-		{Name: "ads", Mount: cloud.Typed(ads.Mount), Shutdown: ctxShutdown(ads.Shutdown)},
+		{Name: "ads", Mount: ads.Mount, Shutdown: ctxShutdown(ads.Shutdown)},
 		// Native /v1/social/* — the in-process fold of the live social stack
 		// (github.com/hanzoai/social: social-backend/frontend/orchestrator, a Postiz-style
 		// scheduler), a per-org accounts+posts store on Base/SQLite, twin of crm. Owns a DB
 		// handle, so its Shutdown closes it cleanly on SIGTERM (ctxShutdown adapts func() error).
-		{Name: "social", Mount: cloud.Typed(social.Mount), Shutdown: ctxShutdown(social.Shutdown)},
-		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
-		{Name: "git", Mount: cloud.Typed(git.Mount)},
+		{Name: "social", Mount: social.Mount, Shutdown: ctxShutdown(social.Shutdown)},
+		{Name: "analytics", Mount: analytics.Mount, OwnsHealth: true},
+		{Name: "git", Mount: git.Mount},
 		// Universal sync (/v1/sync/links + engine). Registers the cloud.SyncEngine the
 		// GitHub/Gitea webhooks enqueue to; git is its first provider. Owns per-org
 		// DB handles, so its Shutdown closes them on SIGTERM.
-		{Name: "sync", Mount: cloud.Typed(sync.Mount), Shutdown: ctxShutdown(sync.Shutdown)},
-		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
+		{Name: "sync", Mount: sync.Mount, Shutdown: ctxShutdown(sync.Shutdown)},
+		{Name: "visor", Mount: visor.Mount},
 		// Cap table on Base via goja. STAGED behind CLOUD_ENABLE.
-		{Name: "captable", Mount: cloud.Typed(captable.Mount), Shutdown: captable.Shutdown},
-		{Name: "code", Mount: cloud.Typed(code.Mount), Shutdown: code.Shutdown},
-		{Name: "zero-trust", Mount: cloud.Typed(zt.Mount)},
+		{Name: "captable", Mount: captable.Mount, Shutdown: captable.Shutdown},
+		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
+		{Name: "zero-trust", Mount: zt.Mount},
 		// Data rooms via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
-		{Name: "dataroom", Mount: cloud.Typed(dataroom.Mount), Shutdown: dataroom.Shutdown, OwnsHealth: true},
-		{Name: "graph", Mount: cloud.Typed(graph.Mount)},
-		{Name: "security", Mount: cloud.Typed(security.Mount), Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
-		{Name: "integrations", Mount: cloud.Typed(integrations.Mount), Shutdown: integrations.Shutdown},
-		{Name: "sbom", Mount: cloud.Typed(sbom.Mount), OwnsHealth: true},
-		{Name: "team", Mount: cloud.Typed(team.Mount), Shutdown: ctxShutdown(team.Shutdown)},
-		{Name: "settings", Mount: cloud.Typed(settings.Mount), Shutdown: settings.Shutdown},
-		{Name: "notify", Mount: cloud.Typed(notify.Mount), OwnsHealth: true},
-		{Name: "gateway", Mount: cloud.Typed(gateway.Mount)},
-		{Name: "entitlements", Mount: cloud.Typed(entitlements.Mount), Shutdown: entitlements.Shutdown},
-		{Name: "exec", Mount: cloud.Typed(exec.Mount)},
-		{Name: "websearch", Mount: cloud.Typed(websearch.Mount)},
-		{Name: "world", Mount: cloud.Typed(world.Mount), Shutdown: ctxShutdown(world.Shutdown)},
+		{Name: "dataroom", Mount: dataroom.Mount, Shutdown: dataroom.Shutdown, OwnsHealth: true},
+		{Name: "graph", Mount: graph.Mount},
+		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
+		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
+		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
+		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
+		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
+		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},
+		{Name: "gateway", Mount: gateway.Mount},
+		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
+		{Name: "exec", Mount: exec.Mount},
+		{Name: "websearch", Mount: websearch.Mount},
+		{Name: "world", Mount: world.Mount, Shutdown: ctxShutdown(world.Shutdown)},
 		// The bot runtime's ops face (/v1/bot/*). The transport itself is domain-free;
 		// the run control plane is "bots" below.
-		{Name: "runtime", Mount: cloud.Typed(runtime.Mount)},
-		{Name: "authors", Mount: cloud.Typed(authors.Mount), Shutdown: ctxShutdown(authors.Shutdown)},
-		{Name: "bots", Mount: cloud.Typed(bots.Mount)},
-		{Name: "audit", Mount: cloud.Typed(auditlog.Mount)},
-		{Name: "affiliates", Mount: cloud.Typed(affiliates.Mount)},
+		{Name: "runtime", Mount: runtime.Mount},
+		{Name: "authors", Mount: authors.Mount, Shutdown: ctxShutdown(authors.Shutdown)},
+		{Name: "bots", Mount: bots.Mount},
+		{Name: "audit", Mount: auditlog.Mount},
+		{Name: "affiliates", Mount: affiliates.Mount},
 		// Hanzo Sign (e-signature) via goja + per-tenant Base. STAGED behind CLOUD_ENABLE. OwnsHealth.
-		{Name: "sign", Mount: cloud.Typed(sign.Mount), Shutdown: sign.Shutdown, OwnsHealth: true},
-		{Name: "product", Mount: cloud.Typed(product.Mount)},
-		{Name: "evals", Mount: cloud.Typed(eval.Mount)},
-		{Name: "treasury", Mount: cloud.Typed(treasury.Mount), Shutdown: ctxShutdown(treasury.Shutdown)},
-		{Name: "admin", Mount: cloud.Typed(admin.Mount)},
+		{Name: "sign", Mount: sign.Mount, Shutdown: sign.Shutdown, OwnsHealth: true},
+		{Name: "product", Mount: product.Mount},
+		{Name: "evals", Mount: eval.Mount},
+		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
+		{Name: "admin", Mount: admin.Mount},
 		// Launch-control plane: per-service waitlist-mode registry (global SQLite)
 		// + admin board/toggle (/v1/admin/services*) + the guard's runtime mode read
 		// (/v1/featuregate/mode). Mounts right after admin so its specific routes bind
 		// ahead of the AI /v1/* catch-all; native Enforce middleware (wired in serve.go)
 		// reads the SAME store in-process. Owns a global store, so Shutdown closes it.
-		{Name: "featuregate", Mount: cloud.Typed(featuregate.Mount), Shutdown: ctxShutdown(featuregate.Shutdown)},
-		{Name: "tasks", Mount: cloud.Typed(tasks.Mount)},
+		{Name: "featuregate", Mount: featuregate.Mount, Shutdown: ctxShutdown(featuregate.Shutdown)},
+		{Name: "tasks", Mount: tasks.Mount},
 		// Platform cron: durable schedules on the shared tasks engine replacing
 		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
 		// runs visible in the Tasks console. Mounts no routes; starts after the
 		// engine is wired.
-		{Name: "cron", Mount: cloud.Typed(cron.Mount)},
-		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
+		{Name: "cron", Mount: cron.Mount},
+		{Name: "automations", Mount: automations.Mount, Shutdown: automations.Shutdown},
 		// Native single-connector execution (HIP-0126): runs an ActivePieces JS
 		// connector action in-process via goja (clients/connectorruntime), retiring
 		// the standalone auto Node engine. Mounts POST /v1/automations/connectors/:id/run,
 		// paired with the automations catalogue above; STAGED like the rest.
-		{Name: "connectorruntime", Mount: cloud.Typed(connectorruntime.Mount)},
+		{Name: "connectorruntime", Mount: connectorruntime.Mount},
 		// Unified tool plane: /v1/tools/* — the ONE registry (connectors, functions,
 		// agents, skills, external MCP servers, full-cloud-control /v1 routes), per-org
 		// activation, and the unified MCP endpoint. Sources register into it from their
 		// own Mounts, so mount position is not load-bearing (List/Dispatch run at request
 		// time); placed after automations, before the zen/ai catch-all so /v1/tools wins.
-		{Name: "tools", Mount: cloud.Typed(tools.Mount), Shutdown: tools.Shutdown},
+		{Name: "tools", Mount: tools.Mount, Shutdown: tools.Shutdown},
 		// Marketplace: /v1/marketplace/* — listing/discovery/install over the tool plane,
 		// with x402-priced monetized listings. Mounts after tools (it fills the price seam).
-		{Name: "marketplace", Mount: cloud.Typed(marketplace.Mount), Shutdown: marketplace.Shutdown},
-		{Name: "referrals", Mount: cloud.Typed(referrals.Mount)},
+		{Name: "marketplace", Mount: marketplace.Mount, Shutdown: marketplace.Shutdown},
+		{Name: "referrals", Mount: referrals.Mount},
 		// Business AI Guide /v1/guide/* — the interactive launch checklist engine +
 		// the agent that executes a step through the per-principal MCP plane. After
 		// automations (whose InvokeTool it drives) and referrals; before the ai
 		// catch-all. Owns per-org SQLite, so its Shutdown closes the stores.
-		{Name: "guide", Mount: cloud.Typed(guide.Mount), Shutdown: ctxShutdown(guide.Shutdown)},
+		{Name: "guide", Mount: guide.Mount, Shutdown: ctxShutdown(guide.Shutdown)},
 		// Hanzo Company — the incorporation + fundraising state machine
 		// (/v1/company/*). Mounts after the seams it composes (integrations for the
 		// google token custody; captable/dataroom facades) and before the /v1/* AI
 		// catch-all so its routes resolve here.
-		{Name: "company", Mount: cloud.Typed(company.Mount), Shutdown: company.Shutdown},
+		{Name: "company", Mount: company.Mount, Shutdown: company.Shutdown},
 		// Chat orchestrator — POST /v1/chat: ONE LLM tool-calling round over the tool
 		// plane. It COMPOSES the ai completion path (in-process, so per-org billing
 		// runs) + the unified tool registry, and splits the model's tool calls into
@@ -384,7 +382,7 @@ func Wire() []cloud.MountSpec {
 		// catch-all so /v1/chat resolves here (Fiber first-match); the ai module's
 		// beego /v1/chat alias behind its /v1/* glob is thereby shadowed, while ai
 		// keeps /v1/chat/completions + /v1/completions.
-		{Name: "agent", Mount: cloud.Typed(agent.Mount)},
+		{Name: "agent", Mount: agent.Mount},
 		// The bare /v1/* AI catch-all — the LAST route position. Every owning subsystem above
 		// wins its own namespace (Fiber first-match); AI is the fallback for the rest of /v1/*.
 		// zen mounts as a /v1-scoped Claim middleware BEFORE ai: it routes zen* models
@@ -393,9 +391,9 @@ func Wire() []cloud.MountSpec {
 		// other model and the /v1/models list. Order is load-bearing — Claim must
 		// run before ai's catch-all. (See hip-00NN.)
 		{Name: "zen", Mount: mountZen},
-		{Name: "ai", Mount: cloud.Typed(ai.Mount)},
+		{Name: "ai", Mount: ai.Mount},
 		// Runtime wasm/proxy plugins — mounts dead last.
-		{Name: "plugins", Mount: cloud.Typed(plugin.Mount)},
+		{Name: "plugins", Mount: plugin.Mount},
 	}
 }
 
@@ -422,11 +420,7 @@ func ServeSingle(name string) error {
 // externals, metrics declares its OWN narrow Deps (Logger, DataDir, Brand) and does
 // not import hanzoai/cloud, so cloud.Typed cannot bridge it: the composition root
 // builds metrics.Deps from cloud.Deps and calls metrics.Mount explicitly here.
-func mountMetrics(app any, deps cloud.Deps) error {
-	a, ok := app.(*zip.App)
-	if !ok {
-		return fmt.Errorf("metrics.Mount: app is %T, want *zip.App", app)
-	}
+func mountMetrics(a *zip.App, deps cloud.Deps) error {
 	return metrics.Mount(a, metrics.Deps{Logger: deps.Logger, DataDir: deps.DataDir, Brand: deps.Brand})
 }
 
