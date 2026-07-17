@@ -17,7 +17,7 @@
 // from IAM). It is a CONSUMER of the ONE policy engine — the per-service waitlist MODE
 // and the host→service registry live in clients/flags (a service's mode IS the
 // switch waitlist.<svc>, evaluated through the native engine); the admin board is the
-// /v1/admin/services lens and the guard's runtime mode read is /v1/featuregate/mode,
+// /v1/admin/services lens and the guard's runtime mode read is /v1/flags/waitlist,
 // both served there. This package owns only enforcement, decomplected into two axes:
 //
 //   - PER-SERVICE  waitlist mode on|off  — the flags switch waitlist.<svc>,
@@ -112,9 +112,9 @@ type EnforceConfig struct {
 // health, the auth/OIDC handshake, and the waitlist join API itself (so a gated
 // user can still submit the waitlist form).
 var defaultExemptPrefixes = []string{
-	"/v1/featuregate/", // the mode read + the health route
-	"/v1/iam/",         // auth / OIDC / approval-status / get-account handshake
-	"/v1/waitlist",     // the waitlist join API (a gated user must reach it)
+	"/v1/flags/waitlist", // the guard's public mode read (flags engine)
+	"/v1/iam/",           // auth / OIDC / approval-status / get-account handshake
+	"/v1/waitlist",       // the waitlist join API (a gated user must reach it)
 	"/health",
 	"/healthz",
 	"/__guard/", // the @file guard's own callback surface (defense in depth)
