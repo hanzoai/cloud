@@ -68,8 +68,8 @@ func newApp(t *testing.T, creds bool) *zip.App {
 	app := zip.New(zip.Config{Logger: deps.Logger})
 	app.Use(middleware.Recover())
 	specs := []cloud.MountSpec{
-		{Name: "storage", Mount: cloud.Typed(storage.Mount), OwnsHealth: true},
-		{Name: "provisioning", Mount: cloud.Typed(provisioning.Mount)},
+		{Name: "storage", Mount: storage.Mount, OwnsHealth: true},
+		{Name: "provisioning", Mount: provisioning.Mount},
 	}
 	if err := cloud.MountAll(app, specs, cfg, deps); err != nil {
 		t.Fatalf("MountAll: %v", err)
