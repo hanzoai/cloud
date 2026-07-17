@@ -1256,6 +1256,8 @@ github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d h1:ewC//4HSfWmnFyH
 github.com/hanzoai/iam v1.31.28-0.20260716211807-8fef61e0812d/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
 github.com/hanzoai/iam2 v0.1.1 h1:AxyKwD70nDjBQ49GMdX6hp5DkYJUEVs/N99u8+l8Pog=
 github.com/hanzoai/iam2 v0.1.1/go.mod h1:w/+GVimy/HLeiSFnHSFSgKDgBTz5s/cBJcg1tJ1qpag=
+github.com/hanzoai/iam2 v0.14.0 h1:98muJ394y7Yt5zTcZaPJ/teR6Uo5rZ+GCsOcjNicJBM=
+github.com/hanzoai/iam2 v0.14.0/go.mod h1:40YxnxnRgEH+ARZs+qL2An+B1HhOVkbtohr0KJtbtFg=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=
 github.com/hanzoai/iamsdk/v2 v2.1.2/go.mod h1:oBI91+bAbrIt2MEPYuXUM6NinpjwcREz85sccdDkUY4=
 github.com/hanzoai/idv v1.0.3 h1:x4v5VjCv8onxLsWRSOrRifxLdYEvYBQjYzgnv1NNeKg=
