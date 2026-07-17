@@ -262,7 +262,7 @@ func credit(a hmoney.Amount) cloudmoney.Amount { return cloudmoney.FromDecimal(a
 // carried by the type: a cents integer is not a cloudmoney.Amount and can no
 // longer be passed here. A single request's cost always fits int64 at nano.
 func nano(a cloudmoney.Amount) int64 {
-	return new(big.Int).Div(a.Int(), big.NewInt(1_000_000_000)).Int64()
+	return new(big.Int).Div(a.Atto(), big.NewInt(1_000_000_000)).Int64()
 }
 
 // zenService is the commerce service axis zen* spend attributes to. zen serves

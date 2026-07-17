@@ -503,7 +503,7 @@ func (u Usage) amountMoney() money.Amount {
 	}
 	if u.AmountMicros > 0 {
 		// micro-USD (1e6 = $1) → 18-dp USD: scale the integer micros by 1e12.
-		return money.FromInt(new(big.Int).Mul(big.NewInt(u.AmountMicros), big.NewInt(1_000_000_000_000)))
+		return money.FromAtto(new(big.Int).Mul(big.NewInt(u.AmountMicros), big.NewInt(1_000_000_000_000)))
 	}
 	if u.AmountCents > 0 {
 		return money.FromCents(u.AmountCents)
