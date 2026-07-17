@@ -1300,8 +1300,8 @@ github.com/hanzoai/storage-go v1.0.0 h1:c5EO04oGQY67VzZYaiA2Dtc/swTc5k5x8Ts/fpw5
 github.com/hanzoai/storage-go v1.0.0/go.mod h1:IPXouQWTki5LKa9Y3qfOr6o8Qwlmc4sGObJnGMNKCOM=
 github.com/hanzoai/stream v1.2.0 h1:AVKg/YBgzZ/x8hGjg+bnpldMR34x1FzSp84GVdAPhfI=
 github.com/hanzoai/stream v1.2.0/go.mod h1:mn5cnMQYzdGh5vlslCnh1fdI79qFvbet4MpvY0ME5YU=
-github.com/hanzoai/tasks v1.51.0 h1:Mf1dyL8Y2EQ/m8cIc5+i8BdYvob6fZek9bj8O8sHJ3Y=
-github.com/hanzoai/tasks v1.51.0/go.mod h1:+Oqq+L3nY4uKeLyPanimlbcym/HoIUDaBezgIs6v4Hk=
+github.com/hanzoai/tasks v1.51.1 h1:bikFmbynC+Tw7yvj0hmtlT8Ai3yVKj8FufdwXEUw/zM=
+github.com/hanzoai/tasks v1.51.1/go.mod h1:+Oqq+L3nY4uKeLyPanimlbcym/HoIUDaBezgIs6v4Hk=
 github.com/hanzoai/thinking v0.1.0 h1:i1FHh0qcbfFz1oqjOwIXCvLXaXKPNivw5oeeB8VUXNU=
 github.com/hanzoai/thinking v0.1.0/go.mod h1:2lkNDDi+7mAipRhZZ57uqoqrzLKGBdoU5Rb6fGSOoR4=
 github.com/hanzoai/vfs v0.6.4 h1:7T1b/ONc2/3RhYwIAYB8MYAjXbP5fqnqsK2gZ3yQOSU=
