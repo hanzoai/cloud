@@ -1,15 +1,22 @@
-package link
+package usage
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 )
 
-// usage_test.go is the gate on the account-usage plane. The bar it holds:
+// account_test.go is the gate on the account-usage plane, moved here with the plane
+// from clients/link. The bar it holds:
 //
 //	ISOLATION   org+subject lead EVERY query as BOUND args; a co-tenant is
 //	            unreachable, a blank tenancy fails closed.
@@ -23,6 +30,46 @@ import (
 // that ClickHouse's ReplacingMergeTree collapses these keys and that argMax reads
 // them back — is UNPROVEN LIVE and needs a warehouse smoke before the plane is
 // trusted for anything that bills.
+//
+// The plane records usage ONLY (POST /v1/usage → the warehouse series); keeping the
+// link REGISTRY current is clients/link's own concern (POST /v1/links), tested in
+// that package — so the former "a report also upserts a Link" tests do not live here.
+
+const usageTestTimeout = 60 * time.Second
+
+// mountBare mounts the usage subsystem with NO commerce configured — the account
+// plane never touches commerce, and the summary degrades to honest zeros.
+func mountBare(t *testing.T) *zip.App { return mountApp(t, "", "") }
+
+// drive runs one in-process request with a principal: X-Org-Id (the tenant) +
+// X-User-Id (the validated subject the gateway sets ONLY from a verified credential).
+// An empty user is the anonymous forge (org header, no validated principal) that
+// every route must refuse.
+func drive(t *testing.T, app *zip.App, method, path, org, user string, body any) (int, []byte) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		rq.Header.Set("X-Org-Id", org)
+	}
+	if user != "" {
+		rq.Header.Set("X-User-Id", user)
+	}
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: usageTestTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
 
 // ── isolation ────────────────────────────────────────────────────────────────
 
@@ -93,81 +140,42 @@ func TestNoTenantValueIsInterpolated(t *testing.T) {
 // warehouse at all. If it did, the WHERE would match rows with a blank tenant
 // rather than none.
 func TestReadsFailClosedOnBlankTenancy(t *testing.T) {
-	st := &Store{}
+	w := &warehouse{}
 	ctx := t.Context()
 	for _, tc := range []struct{ org, subject string }{
 		{"", "alice"}, {"acme", ""}, {"", ""},
 	} {
-		if _, ok := st.Series(ctx, tc.org, tc.subject, "claude", "", "", now.Add(-time.Hour), now); ok {
+		if _, ok := w.Series(ctx, tc.org, tc.subject, "claude", "", "", now.Add(-time.Hour), now); ok {
 			t.Fatalf("Series(%q,%q) must fail closed", tc.org, tc.subject)
 		}
-		if _, ok := st.AccountTotals(ctx, tc.org, tc.subject, now.Add(-time.Hour), now); ok {
+		if _, ok := w.AccountTotals(ctx, tc.org, tc.subject, now.Add(-time.Hour), now); ok {
 			t.Fatalf("AccountTotals(%q,%q) must fail closed", tc.org, tc.subject)
 		}
-		if err := st.WriteSamples(ctx, tc.org, tc.subject, []Sample{{Provider: "claude"}}, now); err == nil {
+		if err := w.WriteSamples(ctx, tc.org, tc.subject, []Sample{{Provider: "claude"}}, now); err == nil {
 			t.Fatalf("WriteSamples(%q,%q) must fail closed", tc.org, tc.subject)
 		}
 	}
-	if _, ok := st.HanzoTotals(ctx, "", now.Add(-time.Hour), now); ok {
+	if _, ok := w.HanzoTotals(ctx, "", now.Add(-time.Hour), now); ok {
 		t.Fatal("HanzoTotals(\"\") must fail closed")
 	}
 }
 
 // TestFailClosedNoPrincipalOnUsage: an org header with NO validated user (the
-// off-gateway forge) is refused on every usage route — read AND write.
+// off-gateway forge) is refused on every usage route — read AND write. The usage
+// subsystem's contract is 401 (sign in), the same as summary/analytics.
 func TestFailClosedNoPrincipalOnUsage(t *testing.T) {
-	app := mountLink(t)
+	app := mountBare(t)
 	for _, tc := range []struct {
 		method, path string
 		body         any
 	}{
-		{http.MethodGet, "/v1/links/usage?provider=claude", nil},
-		{http.MethodGet, "/v1/links/usage/summary", nil},
-		{http.MethodPost, "/v1/links/usage", map[string]any{
+		{http.MethodGet, "/v1/usage/samples?provider=claude", nil},
+		{http.MethodGet, "/v1/usage/summary", nil},
+		{http.MethodPost, "/v1/usage", map[string]any{
 			"provider": "claude", "machine": "m1", "window": "6h", "usedPct": 42}},
 	} {
-		if code, _ := req(t, app, tc.method, tc.path, "acme", "", tc.body); code != http.StatusForbidden {
-			t.Fatalf("%s %s with no validated principal want 403, got %d", tc.method, tc.path, code)
-		}
-	}
-}
-
-// TestReportIsolatesTenants drives the DURABLE half end-to-end: two orgs and two
-// users report usage for the SAME provider+account+machine. Each must get their
-// OWN Link, and no one may see another's. (The warehouse half of the same isolation
-// is held by TestQueriesAreTenantScoped, since no datastore is reachable here.)
-func TestReportIsolatesTenants(t *testing.T) {
-	app := mountLink(t)
-	body := map[string]any{
-		"provider": "claude", "account": "shared@x", "machine": "m1",
-		"window": "6h", "lane": "five_hour", "windowMinutes": 300,
-		"usedPct": 42, "confidence": "percentOnly", "plan": "Claude Max",
-	}
-	for _, who := range []struct{ org, user string }{
-		{"acme", "alice"}, {"acme", "bob"}, {"evil", "mallory"},
-	} {
-		if code, b := req(t, app, http.MethodPost, "/v1/links/usage", who.org, who.user, body); code != http.StatusAccepted {
-			t.Fatalf("%s/%s report want 202, got %d (%s)", who.org, who.user, code, b)
-		}
-	}
-	// Each identity sees exactly ONE link: their own.
-	for _, who := range []struct{ org, user string }{
-		{"acme", "alice"}, {"acme", "bob"}, {"evil", "mallory"},
-	} {
-		code, b := req(t, app, http.MethodGet, "/v1/links", who.org, who.user, nil)
-		if code != http.StatusOK {
-			t.Fatalf("list %s/%s want 200, got %d", who.org, who.user, code)
-		}
-		var got struct {
-			Links []linkView `json:"links"`
-		}
-		_ = json.Unmarshal(b, &got)
-		if len(got.Links) != 1 {
-			t.Fatalf("%s/%s sees %d links, want exactly its own 1 — cross-scope leak",
-				who.org, who.user, len(got.Links))
-		}
-		if got.Links[0].User != who.user {
-			t.Fatalf("%s/%s got another subject's link (%q)", who.org, who.user, got.Links[0].User)
+		if code, _ := drive(t, app, tc.method, tc.path, "acme", "", tc.body); code != http.StatusUnauthorized {
+			t.Fatalf("%s %s with no validated principal want 401, got %d", tc.method, tc.path, code)
 		}
 	}
 }
@@ -309,12 +317,12 @@ func TestInsertBindsEveryColumn(t *testing.T) {
 // ── fail-soft ────────────────────────────────────────────────────────────────
 
 // TestReportSucceedsWithoutTheWarehouse is the availability gate: with NO datastore
-// (this suite's real condition), a report must still be accepted and the Link row —
-// the durable truth the accounts overview renders — must still be refreshed. Losing
-// a poll of history may never fail a report or block a device.
+// (this suite's real condition), a record must still be ACCEPTED — losing a poll of
+// history may never fail a report or block a device — and it must SAY so honestly
+// (stored:false), never claim history it does not have.
 func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
-	app := mountLink(t)
-	code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", map[string]any{
+	app := mountBare(t)
+	code, b := drive(t, app, http.MethodPost, "/v1/usage", "acme", "alice", map[string]any{
 		"provider": "claude", "account": "alice@x", "machine": "m1", "plan": "Claude Max",
 		"kind": "subscription", "window": "6h", "lane": "five_hour", "windowMinutes": 300,
 		"usedPct": 47.5, "confidence": "percentOnly",
@@ -327,42 +335,8 @@ func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 	if got.Accepted != 1 {
 		t.Fatalf("accepted = %d, want 1", got.Accepted)
 	}
-	// Honest: it says the history was NOT stored rather than implying it was.
 	if got.Stored {
 		t.Fatal("stored must be false with no warehouse — the report must not claim history it does not have")
-	}
-	if len(got.Links) != 1 {
-		t.Fatalf("the report must refresh the Link row, got %d links", len(got.Links))
-	}
-
-	// The durable truth is live and current, with the snapshot the dash renders.
-	code, b = req(t, app, http.MethodGet, "/v1/links", "acme", "alice", nil)
-	if code != http.StatusOK {
-		t.Fatalf("list want 200, got %d", code)
-	}
-	var list struct {
-		Links []linkView `json:"links"`
-	}
-	_ = json.Unmarshal(b, &list)
-	if len(list.Links) != 1 || list.Links[0].Provider != "claude" {
-		t.Fatalf("the accounts overview must show the reported account: %+v", list.Links)
-	}
-	if list.Links[0].Status != StatusLinked || list.Links[0].LastSeen == "" {
-		t.Fatalf("the report must mark the account live + seen: %+v", list.Links[0])
-	}
-	var u Usage
-	if err := json.Unmarshal(list.Links[0].Usage, &u); err != nil {
-		t.Fatalf("usage snapshot: %v (%s)", err, list.Links[0].Usage)
-	}
-	if u.SessionPct != 47.5 {
-		t.Fatalf("the 6h lane must drive sessionPct (headroom), got %v", u.SessionPct)
-	}
-	if u.Confidence != ConfidencePercentOnly {
-		t.Fatalf("confidence must survive to the snapshot, got %q", u.Confidence)
-	}
-	// A subscription account bills the PLAN — a usage report never creates a charge.
-	if list.Links[0].Billing != BillingPlan {
-		t.Fatalf("a subscription must bill the plan, got %q", list.Links[0].Billing)
 	}
 }
 
@@ -370,8 +344,8 @@ func TestReportSucceedsWithoutTheWarehouse(t *testing.T) {
 // `available:false` is the difference between "we cannot tell you" and the lie "you
 // used nothing".
 func TestDashIsUnavailableNotEmpty(t *testing.T) {
-	app := mountLink(t)
-	code, b := req(t, app, http.MethodGet, "/v1/links/usage?provider=claude", "acme", "alice", nil)
+	app := mountBare(t)
+	code, b := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude", "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("dash want 200, got %d (%s)", code, b)
 	}
@@ -388,33 +362,33 @@ func TestDashIsUnavailableNotEmpty(t *testing.T) {
 	}
 }
 
-// ── the global view ──────────────────────────────────────────────────────────
+// ── the global view (now the summary's account board) ────────────────────────
 
 // TestSummaryLabelsItsSources is the honesty gate on the union: the two ledgers mean
 // different things, so every row must say which it came from and whose usage it
 // covers — and the response must report each side's availability independently, so
-// half a warehouse never turns the other half into zeros.
+// half a warehouse never turns the other half into zeros. It now rides the ONE
+// /v1/usage/summary (accounts block), beside spend + LLM.
 func TestSummaryLabelsItsSources(t *testing.T) {
-	app := mountLink(t)
-	code, b := req(t, app, http.MethodGet, "/v1/links/usage/summary?range=7d", "acme", "alice", nil)
+	app := mountBare(t)
+	code, b := drive(t, app, http.MethodGet, "/v1/usage/summary?range=7d", "acme", "alice", nil)
 	if code != http.StatusOK {
 		t.Fatalf("summary want 200, got %d (%s)", code, b)
 	}
-	var got summaryResp
-	_ = json.Unmarshal(b, &got)
+	got := decodeSummary(t, b)
 	if got.Range != "7d" {
 		t.Fatalf("range = %q, want 7d", got.Range)
 	}
-	if got.Account.Scope != ScopeUser || got.Account.Source != accountUsageTable {
-		t.Fatalf("the account side must be labelled user-scoped: %+v", got.Account)
+	if got.Accounts.Account.Scope != ScopeUser || got.Accounts.Account.Source != accountUsageTable {
+		t.Fatalf("the account side must be labelled user-scoped: %+v", got.Accounts.Account)
 	}
-	if got.Hanzo.Scope != ScopeOrg || got.Hanzo.Source != cloudUsageTable {
-		t.Fatalf("the hanzo side must be labelled org-scoped: %+v", got.Hanzo)
+	if got.Accounts.Hanzo.Scope != ScopeOrg || got.Accounts.Hanzo.Source != llmTable {
+		t.Fatalf("the hanzo side must be labelled org-scoped: %+v", got.Accounts.Hanzo)
 	}
-	if got.Account.Available || got.Hanzo.Available {
+	if got.Accounts.Account.Available || got.Accounts.Hanzo.Available {
 		t.Fatal("both sides must report unavailable with no warehouse")
 	}
-	if got.Rows == nil {
+	if got.Accounts.Rows == nil {
 		t.Fatal("rows must serialize as [], never null")
 	}
 }
@@ -461,7 +435,7 @@ func TestBothSidesShareOneRange(t *testing.T) {
 		if aArgs[2] != from.UTC() || aArgs[3] != to.UTC() {
 			t.Fatalf("account side lost the range: %v", aArgs)
 		}
-		if hArgs[1] != dsTime(from) || hArgs[2] != dsTime(to) {
+		if hArgs[1] != tsLiteral(from) || hArgs[2] != tsLiteral(to) {
 			t.Fatalf("hanzo side lost the range: %v", hArgs)
 		}
 	}
@@ -476,8 +450,8 @@ func TestUnknownRangeIsRefused(t *testing.T) {
 			t.Fatalf("range %q must be refused", bad)
 		}
 	}
-	app := mountLink(t)
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage/summary?range=90d", "acme", "alice", nil); code != http.StatusBadRequest {
+	app := mountBare(t)
+	if code, _ := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&range=90d", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("an unknown range want 400, got %d", code)
 	}
 }
@@ -488,7 +462,7 @@ func TestUnknownRangeIsRefused(t *testing.T) {
 // silently rewritten — a caller whose window we did not understand must be told, or
 // their dash quietly fills with a class they never reported.
 func TestReportRejectsUnknownVocabulary(t *testing.T) {
-	app := mountLink(t)
+	app := mountBare(t)
 	for _, tc := range []struct {
 		name string
 		body map[string]any
@@ -503,14 +477,14 @@ func TestReportRejectsUnknownVocabulary(t *testing.T) {
 		{"bad windowStart", map[string]any{"provider": "claude", "machine": "m1", "window": "6h", "windowStart": "yesterday"}},
 		{"bad resetsAt", map[string]any{"provider": "claude", "machine": "m1", "window": "6h", "resetsAt": "soon"}},
 	} {
-		if code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", tc.body); code != http.StatusBadRequest {
+		if code, b := drive(t, app, http.MethodPost, "/v1/usage", "acme", "alice", tc.body); code != http.StatusBadRequest {
 			t.Fatalf("%s: want 400, got %d (%s)", tc.name, code, b)
 		}
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage?provider=claude&window=weekly", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := drive(t, app, http.MethodGet, "/v1/usage/samples?provider=claude&window=weekly", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("dash with a non-canonical window want 400, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodGet, "/v1/links/usage", "acme", "alice", nil); code != http.StatusBadRequest {
+	if code, _ := drive(t, app, http.MethodGet, "/v1/usage/samples", "acme", "alice", nil); code != http.StatusBadRequest {
 		t.Fatalf("dash with no provider want 400, got %d", code)
 	}
 }
@@ -518,7 +492,7 @@ func TestReportRejectsUnknownVocabulary(t *testing.T) {
 // TestBatchIsBounded: one report is capped, so a hostile client cannot bloat the
 // warehouse in a single call.
 func TestBatchIsBounded(t *testing.T) {
-	app := mountLink(t)
+	app := mountBare(t)
 	batch := make([]map[string]any, 0, maxSamples+1)
 	for i := 0; i <= maxSamples; i++ {
 		batch = append(batch, map[string]any{
@@ -526,23 +500,23 @@ func TestBatchIsBounded(t *testing.T) {
 			"lane": fmt.Sprintf("lane-%d", i), "usedPct": 1,
 		})
 	}
-	if code, _ := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice",
+	if code, _ := drive(t, app, http.MethodPost, "/v1/usage", "acme", "alice",
 		map[string]any{"samples": batch}); code != http.StatusBadRequest {
 		t.Fatalf("an over-cap batch want 400, got %d", code)
 	}
-	if code, _ := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice",
+	if code, _ := drive(t, app, http.MethodPost, "/v1/usage", "acme", "alice",
 		map[string]any{"samples": []map[string]any{}}); code != http.StatusBadRequest {
 		t.Fatalf("an empty batch want 400, got %d", code)
 	}
 }
 
 // TestReportAcceptsOneOrMany: a poller reports its lanes in ONE call; a simple
-// client posts one sample. Both are the same route.
+// client posts one sample. Both are the same route, and every lane is accepted.
 func TestReportAcceptsOneOrMany(t *testing.T) {
-	app := mountLink(t)
+	app := mountBare(t)
 	// Claude's real shape: four lanes, three of them the SAME 10080 minutes — they
 	// must survive as three distinct meters.
-	code, b := req(t, app, http.MethodPost, "/v1/links/usage", "acme", "alice", map[string]any{
+	code, b := drive(t, app, http.MethodPost, "/v1/usage", "acme", "alice", map[string]any{
 		"samples": []map[string]any{
 			{"provider": "claude", "account": "a@x", "machine": "m1", "window": "6h",
 				"lane": "five_hour", "windowMinutes": 300, "usedPct": 47, "confidence": "percentOnly"},
@@ -561,10 +535,6 @@ func TestReportAcceptsOneOrMany(t *testing.T) {
 	_ = json.Unmarshal(b, &got)
 	if got.Accepted != 4 {
 		t.Fatalf("accepted = %d, want 4", got.Accepted)
-	}
-	// Four lanes on ONE account fold into ONE Link — the identity is the account.
-	if len(got.Links) != 1 {
-		t.Fatalf("four lanes of one account must refresh ONE link, got %d", len(got.Links))
 	}
 }
 
@@ -591,49 +561,6 @@ func TestLanesSharingAWindowKeepDistinctKeys(t *testing.T) {
 }
 
 // ── projections ──────────────────────────────────────────────────────────────
-
-// TestSnapshotNeverSumsAcrossWindows: window classes NEST — a 6h lane's tokens are
-// also inside the week lane's. The snapshot takes the widest single lane, never a
-// sum, or an account's tokens inflate with every extra lane its meter reports.
-func TestSnapshotNeverSumsAcrossWindows(t *testing.T) {
-	group := []Sample{
-		{Window: Window6h, Lane: "five_hour", UsedPct: 47, TotalTokens: 1000, Confidence: ConfidenceExact},
-		{Window: WindowWeek, Lane: "seven_day", UsedPct: 12, TotalTokens: 9000, Confidence: ConfidenceExact},
-	}
-	var u Usage
-	if err := json.Unmarshal([]byte(snapshotOf(group)), &u); err != nil {
-		t.Fatalf("snapshot: %v", err)
-	}
-	if u.Tokens != 9000 {
-		t.Fatalf("tokens = %d, want the WIDEST lane's 9000 — never the 10000 sum", u.Tokens)
-	}
-	if u.SessionPct != 47 || u.WeeklyPct != 12 {
-		t.Fatalf("each percent must come from its own lane: %+v", u)
-	}
-	// headroomPct (the route policy) reads the tighter lane — 100-47.
-	if h := headroomPct(&u); h != 53 {
-		t.Fatalf("headroom = %v, want 53", h)
-	}
-}
-
-// TestSnapshotKeepsNumbersAndFlagTogether: a count and the confidence that
-// qualifies it must come from ONE meter, or the console trusts a number the flag
-// never covered.
-func TestSnapshotKeepsNumbersAndFlagTogether(t *testing.T) {
-	group := []Sample{
-		{Window: Window6h, Lane: "five_hour", UsedPct: 47, Confidence: ConfidencePercentOnly},
-		{Window: WindowMonth, Lane: "month", TotalTokens: 500, CostCents: 250,
-			Currency: "USD", Confidence: ConfidenceExact},
-	}
-	var u Usage
-	_ = json.Unmarshal([]byte(snapshotOf(group)), &u)
-	if u.Tokens != 500 || u.SpendCents != 250 || u.Currency != "USD" {
-		t.Fatalf("counters must come from the widest lane: %+v", u)
-	}
-	if u.Confidence != ConfidenceExact {
-		t.Fatalf("confidence must be the widest lane's own (%q), got %q", ConfidenceExact, u.Confidence)
-	}
-}
 
 // TestCurrentIsTheNewestInstancePerLane: the dash headline is each lane's live
 // state — the newest instance, one per lane.

@@ -1,34 +1,45 @@
-package link
+package usage
 
 import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
 )
 
 // datastore.go is the WAREHOUSE projection of account usage: the hanzo.account_usage
-// time series, its daily rollup, and the org-scoped reads over them. It is the only
-// file in this package that talks to the datastore.
+// time series, its daily rollup, and the org-scoped reads over them. It moved here
+// from clients/link with the rest of the usage plane so the ONE usage subsystem owns
+// ALL usage.
 //
 // WHY A SECOND SOURCE. hanzo.cloud_usage already records every HANZO-ROUTED
-// inference (our gateway's own ledger, cost of record). This table records
-// something different in kind: what a user's OWN provider account has consumed of
-// its OWN plan, metered by @hanzo/usage reading that provider's own login. Nobody
-// else can know that a Claude Max plan is 47% through its 6h window — no Hanzo
-// request produced it. The two are never conflated: they are separate tables, read
-// separately, and labelled by source wherever they appear together.
+// inference (our gateway's own ledger, cost of record — the same llmTable the
+// summary and analytics faces read). This table records something different in
+// kind: what a user's OWN provider account has consumed of its OWN plan, metered by
+// @hanzo/usage reading that provider's own login. Nobody else can know that a Claude
+// Max plan is 47% through its 6h window — no Hanzo request produced it. The two are
+// never conflated: they are separate tables, read separately, and labelled by source
+// wherever they appear together.
 //
 // FAIL-SOFT IS THE CONTRACT. Every function here degrades to a no-op (writes) or an
 // honest "unavailable" (reads) when the datastore is absent — never an error that
-// reaches a caller, never a fabricated zero that reads as truth. The durable truth
-// of "which accounts are linked and what is their latest usage" is the Link row in
-// SQLite; this table is the history beside it.
+// reaches a caller, never a fabricated zero that reads as truth.
 //
 // TENANCY. Every statement leads with `org = ? AND subject = ?` as BOUND
 // parameters. No value a client controls is ever concatenated into SQL.
+
+// warehouse is the account-usage datastore projection. It holds ONLY the
+// idempotent-DDL latch; the connection itself is aiobject's (a package global), so
+// the warehouse owns no closable handle and the usage subsystem needs no Shutdown.
+// dsReady latches the DDL on success only, so a datastore still connecting at boot
+// is retried on the next call rather than permanently written off.
+type warehouse struct {
+	dsMu    sync.Mutex
+	dsReady bool
+}
 
 const (
 	accountUsageTable = "hanzo.account_usage"
@@ -169,13 +180,13 @@ GROUP BY org, subject, provider, account, day, lane, ` + "`window`" + `, window_
 // ensureAccountUsage creates the account-usage objects idempotently. It latches
 // only on success, so a datastore that is still connecting at boot is retried on
 // the next call rather than permanently poisoned.
-func (s *Store) ensureAccountUsage(ctx context.Context) error {
+func (w *warehouse) ensureAccountUsage(ctx context.Context) error {
 	if !aiobject.DatastoreEnabled() {
 		return fmt.Errorf("account usage: datastore not connected")
 	}
-	s.dsMu.Lock()
-	defer s.dsMu.Unlock()
-	if s.dsReady {
+	w.dsMu.Lock()
+	defer w.dsMu.Unlock()
+	if w.dsReady {
 		return nil
 	}
 	for _, stmt := range accountUsageDDL {
@@ -183,7 +194,7 @@ func (s *Store) ensureAccountUsage(ctx context.Context) error {
 			return fmt.Errorf("account usage ddl: %w", err)
 		}
 	}
-	s.dsReady = true
+	w.dsReady = true
 	return nil
 }
 
@@ -202,17 +213,16 @@ const accountUsageInsert = `INSERT INTO ` + accountUsageTable + ` (
 // so it cannot forge them.
 //
 // It is FAIL-SOFT by contract: an absent or blocked datastore is not an error the
-// caller sees. The Link row that the same request refreshes is the durable truth;
-// this series is history beside it, and losing a poll of it must never fail a
-// report or block a device.
-func (s *Store) WriteSamples(ctx context.Context, org, subject string, samples []Sample, now time.Time) error {
+// caller must surface to a device — losing a poll of history must never fail a
+// report. The record handler turns this error into an honest `stored:false`.
+func (w *warehouse) WriteSamples(ctx context.Context, org, subject string, samples []Sample, now time.Time) error {
 	if org == "" || subject == "" {
 		return fmt.Errorf("account usage: blank tenancy")
 	}
 	if len(samples) == 0 {
 		return nil
 	}
-	if err := s.ensureAccountUsage(ctx); err != nil {
+	if err := w.ensureAccountUsage(ctx); err != nil {
 		return err
 	}
 	ts := now.UTC()
@@ -366,9 +376,9 @@ LIMIT ?`
 }
 
 // hanzoQuery builds the global view's HANZO side: the org's Hanzo-routed usage per
-// provider over the same window, from hanzo.cloud_usage — the same ledger and the
-// same `provider` grouping /v1/usage/analytics reads, so the two faces can never
-// disagree about what Hanzo charged.
+// provider over the same window, from hanzo.cloud_usage — the same ledger (llmTable)
+// and the same `provider` grouping the summary/analytics faces read, so the two can
+// never disagree about what Hanzo charged.
 //
 // It is ORG-scoped, not user-scoped, and every row it produces says so (ScopeOrg).
 // cloud_usage identifies a user as the qualified `<org>/<name>` form, which is not
@@ -377,26 +387,20 @@ LIMIT ?`
 // truth. The scope label is the honest alternative until that equality is proven.
 func hanzoQuery(org string, from, to time.Time) (string, []any) {
 	q := `SELECT provider, count() AS requests, sum(total_tokens) AS total_tokens, ` +
-		`sum(cost_cents) AS cost_cents FROM ` + cloudUsageTable + ` ` +
+		`sum(cost_cents) AS cost_cents FROM ` + llmTable + ` ` +
 		`WHERE organization = ? AND timestamp >= ? AND timestamp < ? ` +
 		`GROUP BY provider ORDER BY total_tokens DESC LIMIT ?`
-	return q, []any{org, dsTime(from), dsTime(to), maxReadRows}
+	return q, []any{org, tsLiteral(from), tsLiteral(to), maxReadRows}
 }
-
-const cloudUsageTable = "hanzo.cloud_usage"
-
-// dsTime renders an instant as the datastore's DateTime literal (UTC), bound as a
-// string arg — identical to the transport ai/object and clients/usage already use.
-func dsTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04:05") }
 
 // Series reads one provider account's window instances. It returns (rows, true) when
 // the warehouse answered and (nil, false) when it is unavailable, so the caller can
 // say "unavailable" instead of showing zeros that read as "you used nothing".
-func (s *Store) Series(ctx context.Context, org, subject, provider, account, window string, from, to time.Time) ([]Sample, bool) {
+func (w *warehouse) Series(ctx context.Context, org, subject, provider, account, window string, from, to time.Time) ([]Sample, bool) {
 	if org == "" || subject == "" || provider == "" {
 		return nil, false
 	}
-	if err := s.ensureAccountUsage(ctx); err != nil {
+	if err := w.ensureAccountUsage(ctx); err != nil {
 		return nil, false
 	}
 	q, args := seriesQuery(org, subject, provider, account, window, from, to)
@@ -454,11 +458,11 @@ type Total struct {
 }
 
 // AccountTotals reads the caller's own account usage per (provider, window).
-func (s *Store) AccountTotals(ctx context.Context, org, subject string, from, to time.Time) ([]Total, bool) {
+func (w *warehouse) AccountTotals(ctx context.Context, org, subject string, from, to time.Time) ([]Total, bool) {
 	if org == "" || subject == "" {
 		return nil, false
 	}
-	if err := s.ensureAccountUsage(ctx); err != nil {
+	if err := w.ensureAccountUsage(ctx); err != nil {
 		return nil, false
 	}
 	q, args := summaryQuery(org, subject, from, to)
@@ -494,7 +498,7 @@ func accountTotalOf(r map[string]any) Total {
 
 // HanzoTotals reads the org's Hanzo-routed usage per provider over the same window.
 // Its rows are always `exact` — cloud_usage counts real calls we billed.
-func (s *Store) HanzoTotals(ctx context.Context, org string, from, to time.Time) ([]Total, bool) {
+func (w *warehouse) HanzoTotals(ctx context.Context, org string, from, to time.Time) ([]Total, bool) {
 	if org == "" {
 		return nil, false
 	}
