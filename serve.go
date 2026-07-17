@@ -331,6 +331,15 @@ func Serve(specs []MountSpec, enable []string) error {
 		Logger:         deps.Logger,
 	}))
 
+	// IAM edge — front the standalone Hanzo IAM at /v1/iam/* (org-scoped) so the
+	// one-binary console can read org members + projects. Mounted ONLY when IAM is
+	// not folded in-process (else that subsystem already owns /v1/iam/*, via
+	// MountAll above — no double-mount) and an IAM origin is configured. Before the
+	// console catch-all, so a real IAM segment answers JSON, not the SPA shell.
+	if !cfg.Enabled("iam") && iamHost() != "" {
+		newIamEdge().mount(app)
+	}
+
 	// Unified console UI — the SAME binary serves the @hanzo/gui console (built
 	// from hanzoai/console and embedded via //go:embed) at the web root. Mounted
 	// LAST, after every /v1 route + the /zap plane + the health contract, so
