@@ -1,4 +1,4 @@
-package gojabase
+package goja
 
 import (
 	"context"
@@ -42,9 +42,9 @@ const tinySchema = `CREATE TABLE IF NOT EXISTS kv(
   org TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL, at INTEGER NOT NULL,
   PRIMARY KEY(org,k));`
 
-func newTinyHost(t *testing.T, onOpen func(context.Context, string, *sql.DB) error) *Host {
+func newTinyHost(t *testing.T, onOpen func(context.Context, string, *sql.DB) error) *BaseHost {
 	t.Helper()
-	h, err := New(Config{
+	h, err := NewBase(BaseConfig{
 		Name:    "tiny",
 		Bundle:  []byte(tinyBundle),
 		Schema:  tinySchema,
@@ -63,7 +63,7 @@ func TestRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// write
-	resp, err := h.Dispatch(ctx, "acme", Request{Route: "put", Body: map[string]any{"k": "founder", "v": "ada"}})
+	resp, err := h.Dispatch(ctx, "acme", BaseRequest{Route: "put", Body: map[string]any{"k": "founder", "v": "ada"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestRoundTrip(t *testing.T) {
 	}
 
 	// read it back (a fresh dispatch → committed data must be visible)
-	resp, err = h.Dispatch(ctx, "acme", Request{Route: "get", Params: map[string]string{"k": "founder"}})
+	resp, err = h.Dispatch(ctx, "acme", BaseRequest{Route: "get", Params: map[string]string{"k": "founder"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,14 +90,14 @@ func TestPerRequestRollback(t *testing.T) {
 	ctx := context.Background()
 
 	// (a) caught-error path: write then return 500 → status >= 400 → rollback.
-	resp, err := h.Dispatch(ctx, "acme", Request{Route: "boom"})
+	resp, err := h.Dispatch(ctx, "acme", BaseRequest{Route: "boom"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.Status != 500 {
 		t.Fatalf("boom status=%d, want 500", resp.Status)
 	}
-	resp, err = h.Dispatch(ctx, "acme", Request{Route: "get", Params: map[string]string{"k": "ghost"}})
+	resp, err = h.Dispatch(ctx, "acme", BaseRequest{Route: "get", Params: map[string]string{"k": "ghost"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,10 +106,10 @@ func TestPerRequestRollback(t *testing.T) {
 	}
 
 	// (b) uncaught-throw path: surfaces as a host error, and still rolls back.
-	if _, err := h.Dispatch(ctx, "acme", Request{Route: "throw"}); err == nil {
+	if _, err := h.Dispatch(ctx, "acme", BaseRequest{Route: "throw"}); err == nil {
 		t.Fatal("expected a host error from an uncaught JS throw")
 	}
-	resp, err = h.Dispatch(ctx, "acme", Request{Route: "get", Params: map[string]string{"k": "ghost2"}})
+	resp, err = h.Dispatch(ctx, "acme", BaseRequest{Route: "get", Params: map[string]string{"k": "ghost2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,11 +122,11 @@ func TestTenantIsolation(t *testing.T) {
 	h := newTinyHost(t, nil)
 	ctx := context.Background()
 
-	if _, err := h.Dispatch(ctx, "acme", Request{Route: "put", Body: map[string]any{"k": "secret", "v": "acme-only"}}); err != nil {
+	if _, err := h.Dispatch(ctx, "acme", BaseRequest{Route: "put", Body: map[string]any{"k": "secret", "v": "acme-only"}}); err != nil {
 		t.Fatal(err)
 	}
 	// A different tenant must not see acme's row (separate DB file).
-	resp, err := h.Dispatch(ctx, "globex", Request{Route: "get", Params: map[string]string{"k": "secret"}})
+	resp, err := h.Dispatch(ctx, "globex", BaseRequest{Route: "get", Params: map[string]string{"k": "secret"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestOnOpenSeed(t *testing.T) {
 		return err
 	})
 	ctx := context.Background()
-	resp, err := h.Dispatch(ctx, "acme", Request{Route: "get", Params: map[string]string{"k": "seed"}})
+	resp, err := h.Dispatch(ctx, "acme", BaseRequest{Route: "get", Params: map[string]string{"k": "seed"}})
 	if err != nil {
 		t.Fatal(err)
 	}

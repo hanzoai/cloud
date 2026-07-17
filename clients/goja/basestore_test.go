@@ -1,4 +1,4 @@
-package gojabase
+package goja
 
 import (
 	"context"
@@ -84,7 +84,7 @@ func TestLRUEvictionReopen(t *testing.T) {
 
 	orgs := []string{"one", "two", "three", "four", "five"}
 	for _, org := range orgs {
-		resp, err := h.Dispatch(ctx, org, Request{Route: "put", Body: map[string]any{"k": "name", "v": org + "-val"}})
+		resp, err := h.Dispatch(ctx, org, BaseRequest{Route: "put", Body: map[string]any{"k": "name", "v": org + "-val"}})
 		if err != nil {
 			t.Fatalf("put %s: %v", org, err)
 		}
@@ -102,7 +102,7 @@ func TestLRUEvictionReopen(t *testing.T) {
 	// Every tenant — including the ones long since evicted — still reads back its
 	// own committed row (data persisted to disk; reopen re-migrated + re-read).
 	for _, org := range orgs {
-		resp, err := h.Dispatch(ctx, org, Request{Route: "get", Params: map[string]string{"k": "name"}})
+		resp, err := h.Dispatch(ctx, org, BaseRequest{Route: "get", Params: map[string]string{"k": "name"}})
 		if err != nil {
 			t.Fatalf("get %s: %v", org, err)
 		}
@@ -147,7 +147,7 @@ func TestConcurrentMultiTenantDispatch(t *testing.T) {
 			go func(org string, i int) {
 				defer wg.Done()
 				k := "k" + strconv.Itoa(i)
-				resp, err := h.Dispatch(ctx, org, Request{
+				resp, err := h.Dispatch(ctx, org, BaseRequest{
 					Route: "put",
 					Body:  map[string]any{"k": k, "v": org + "|" + k},
 				})
@@ -170,7 +170,7 @@ func TestConcurrentMultiTenantDispatch(t *testing.T) {
 	// Integrity: each tenant holds EXACTLY its own perTenant rows, values intact,
 	// none leaked from a sibling (esp. the case/separator-variant pairs).
 	for _, org := range tenants {
-		resp, err := h.Dispatch(ctx, org, Request{Route: "list"})
+		resp, err := h.Dispatch(ctx, org, BaseRequest{Route: "list"})
 		if err != nil {
 			t.Fatalf("list %s: %v", org, err)
 		}

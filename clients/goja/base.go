@@ -1,15 +1,16 @@
-// Package gojabase is the REUSABLE read-write-Base goja host: it runs a Hanzo
-// subsystem's self-contained JS bundle (globalThis.handle) inside dop251/goja and
-// gives that bundle PERSISTENCE over per-tenant Base/SQLite, injected as native
-// host globals. It is the storage-bearing sibling of clients/goja (which is the
-// pure JS engine that plans/pricing use with a read-only catalog).
+// base.go is the REUSABLE read-write-Base variant of this goja host: NewBase runs
+// a Hanzo subsystem's self-contained JS bundle (globalThis.handle) inside
+// dop251/goja and gives that bundle PERSISTENCE over per-tenant Base/SQLite,
+// injected as native host globals. It is the storage-bearing constructor of THIS
+// package — the Base binding is an OPTION: reach for New (above) for a read-only
+// catalog bundle (plans/pricing), NewBase here when the bundle stores data.
 //
 // ONE-AND-ONLY-ONE-WAY. Any subsystem that wants "run my TS business logic in
-// goja, persist to Base per tenant" uses THIS package: pass a Bundle + a per-
-// tenant Schema (DDL) + the DataDir, get a Host, and Dispatch(ctx, tenant, req).
+// goja, persist to Base per tenant" uses NewBase: pass a Bundle + a per-tenant
+// Schema (DDL) + the DataDir, get a *BaseHost, and Dispatch(ctx, tenant, req).
 // captable is the pilot; esign (#100) and dataroom (#101) reuse it unchanged —
 // the binding carries ZERO domain logic (no cap-table, no signatures, no rooms),
-// only the engine + the Base bridge.
+// only the engine (goja.Host) + the Base bridge.
 //
 // # Host contract (what the binding injects onto the runtime per dispatch)
 //
@@ -33,7 +34,8 @@
 // So a request is all-or-nothing without any JS-visible transaction API — a
 // multi-statement mutation (e.g. a share transfer: delete source + insert target)
 // is atomic for free, and a validation 400 leaves the DB untouched.
-package gojabase
+
+package goja
 
 import (
 	"context"
@@ -44,34 +46,29 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/hanzoai/cloud/clients/goja"
 )
 
 // BlobStore is the ONE object-storage seam a bundle uses to persist large binary
 // payloads OUTSIDE its per-tenant SQLite (e.g. sign's PDFs — a 32 MiB base64 blob
 // in a TEXT column would bloat the tenant DB and get copied on every read). The
 // cloud VFS/S3 data plane (deps.VFS) satisfies it, exactly as clients/dataroom
-// already uses it for document bytes. Keys are opaque; gojabase tenant-scopes them.
+// already uses it for document bytes. Keys are opaque; the binding tenant-scopes them.
 type BlobStore interface {
 	Put(ctx context.Context, key string, payload []byte) error
 	Get(ctx context.Context, key string) ([]byte, error)
 }
 
-// Response mirrors the JS-side {status, body} (reused from clients/goja).
-type Response = goja.Response
-
-// Request is the dispatch envelope. The binding adds the tenant (as orgId) and
+// BaseRequest is the dispatch envelope. The binding adds the tenant (as orgId) and
 // the Base bridge; the caller supplies route/params/query/body.
-type Request struct {
+type BaseRequest struct {
 	Route  string
 	Params map[string]string
 	Query  map[string]string
 	Body   any
 }
 
-// Config configures a Host.
-type Config struct {
+// BaseConfig configures a BaseHost.
+type BaseConfig struct {
 	// Name identifies the subsystem ("captable", "esign", "dataroom"). It names
 	// the goja host AND the per-tenant data subdir ({DataDir}/{Name}/).
 	Name string
@@ -82,7 +79,7 @@ type Config struct {
 	Schema string
 	// DataDir is the deployment data root; per-tenant files land at
 	// {DataDir}/{Name}/{TenantSegment(tenant)}.db (injective, traversal-safe
-	// base32 of the raw org bytes — see gojabase/store.go TenantSegment).
+	// base32 of the raw org bytes — see basestore.go TenantSegment).
 	DataDir string
 	// OnOpen is an optional per-tenant seed hook run ONCE after migration (e.g.
 	// captable seeds the tenant's company row). It runs outside the per-request
@@ -93,31 +90,32 @@ type Config struct {
 	// provide that a subsystem implements in Go (e.g. esign injects __pdf =
 	// { stamp, sign } for PDF rendering + x509/PKCS#7 signing). Values are Go
 	// funcs or map[string]any of Go funcs (goja exposes them as callable JS). They
-	// are process-global (set once at New), not per-tenant; the binding stays
+	// are process-global (set once at NewBase), not per-tenant; the binding stays
 	// domain-free. May be nil. A key MUST NOT collide with __db/__newId/__now/__blob.
 	HostFns map[string]any
-	// Blob is the OPTIONAL object-storage seam (see BlobStore). When set, gojabase
+	// Blob is the OPTIONAL object-storage seam (see BlobStore). When set, the binding
 	// injects globalThis.__blob = { put(key, b64), get(key) -> b64 } on every
 	// Dispatch, bound to the tenant: keys are prefixed with {Name}/{TenantSegment}
 	// so a bundle can NEVER address another tenant's blob. Payloads cross as base64
-	// strings (goja-friendly); gojabase decodes/encodes at the boundary so the
+	// strings (goja-friendly); the binding decodes/encodes at the boundary so the
 	// bundle never handles raw bytes. nil ⇒ no __blob is injected. This is the ONE
 	// way a bundle keeps big binaries out of its per-tenant SQLite.
 	Blob BlobStore
 }
 
-// Host is a compiled bundle + its per-tenant Base stores. Safe for concurrent use.
-type Host struct {
+// BaseHost is a compiled bundle + its per-tenant Base stores. Safe for concurrent use.
+type BaseHost struct {
 	name    string
-	engine  *goja.Host
+	engine  *Host
 	stores  *stores
 	hostFns map[string]any
 	blob    BlobStore
 }
 
-// New compiles the bundle (via clients/goja) and prepares the per-tenant store
-// manager. It does NOT open any tenant DB — those open lazily on first Dispatch.
-func New(cfg Config) (*Host, error) {
+// NewBase compiles the bundle (via the goja engine, New) and prepares the
+// per-tenant store manager. It does NOT open any tenant DB — those open lazily on
+// first Dispatch.
+func NewBase(cfg BaseConfig) (*BaseHost, error) {
 	if cfg.Name == "" {
 		return nil, errors.New("gojabase: Config.Name required")
 	}
@@ -127,11 +125,11 @@ func New(cfg Config) (*Host, error) {
 	if cfg.DataDir == "" {
 		return nil, fmt.Errorf("gojabase[%s]: Config.DataDir required", cfg.Name)
 	}
-	engine, err := goja.New(goja.Config{Name: cfg.Name, Bundle: cfg.Bundle})
+	engine, err := New(Config{Name: cfg.Name, Bundle: cfg.Bundle})
 	if err != nil {
 		return nil, err
 	}
-	return &Host{
+	return &BaseHost{
 		name:    cfg.Name,
 		engine:  engine,
 		stores:  newStores(cfg.Name, cfg.DataDir, cfg.Schema, cfg.OnOpen),
@@ -145,7 +143,7 @@ func New(cfg Config) (*Host, error) {
 // globalThis.handle. It commits on a <400 non-throwing response and rolls back
 // otherwise. tenant MUST be a validated principal's org (the caller resolves it,
 // e.g. via clients/principal.Org) — the binding does not itself authenticate.
-func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Response, error) {
+func (h *BaseHost) Dispatch(ctx context.Context, tenant string, req BaseRequest) (*Response, error) {
 	db, release, err := h.stores.acquire(ctx, tenant)
 	if err != nil {
 		return nil, err
@@ -178,7 +176,7 @@ func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Respo
 	for k, v := range h.hostFns {
 		globals[k] = v
 	}
-	resp, err := h.engine.DispatchWith(ctx, goja.Request{
+	resp, err := h.engine.DispatchWith(ctx, Request{
 		Route:  req.Route,
 		Params: req.Params,
 		Query:  req.Query,
@@ -198,7 +196,7 @@ func (h *Host) Dispatch(ctx context.Context, tenant string, req Request) (*Respo
 }
 
 // Close closes every open tenant DB and drops the goja engine. Idempotent.
-func (h *Host) Close() error {
+func (h *BaseHost) Close() error {
 	err := h.stores.closeAll()
 	if h.engine != nil {
 		_ = h.engine.Close()
@@ -229,8 +227,8 @@ func newBridge(ctx context.Context, q execQuerier) map[string]any {
 // tenant. Keys are namespaced to {name}/{TenantSegment(tenant)}/ so a bundle can
 // only ever address its OWN tenant's objects — cross-tenant isolation is a host
 // property, using the same injective encoding the per-tenant DB file uses. The
-// bundle handles base64 strings only; gojabase decodes/encodes at the boundary.
-func (h *Host) blobBridge(ctx context.Context, tenant string) map[string]any {
+// bundle handles base64 strings only; the binding decodes/encodes at the boundary.
+func (h *BaseHost) blobBridge(ctx context.Context, tenant string) map[string]any {
 	prefix := h.name + "/" + TenantSegment(tenant) + "/"
 	return map[string]any{
 		"put": func(key, b64 string) error {
