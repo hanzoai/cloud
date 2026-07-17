@@ -20,7 +20,8 @@ const llmTable = "hanzo.cloud_usage"
 // ── Response shape ──────────────────────────────────────────────────────────
 
 type Scope struct {
-	Org string `json:"org"`
+	Org  string `json:"org"`
+	User string `json:"user,omitempty"` // the caller's subject; whose linked-account rows the accounts block carries
 }
 
 // CategorySpend is one row of the spend-by-category breakdown: a friendly category
@@ -78,17 +79,43 @@ type Sources struct {
 	Warehouse bool `json:"warehouse"`
 }
 
-// Summary is the whole org-scoped usage footprint roll-up: the cost roll-up
-// (spend) + the LLM usage totals, over one window, for one org.
+// Accounts is the account-usage board folded into the summary: the caller's OWN
+// linked provider accounts (metered from each provider's own login — a Claude Max
+// plan's window %) beside the org's Hanzo-routed usage. Every row is labelled by
+// source/scope/confidence and the two are NEVER summed together — a plan's percent
+// is not money, and a provider's own spend is not a Hanzo charge. Each side reports
+// its own availability, so half a warehouse never turns the other half into zeros.
+// This is the account-usage plane's global view (moved from clients/link) unified
+// under the ONE /v1/usage/summary; the per-account time series is GET /v1/usage/samples.
+type Accounts struct {
+	Rows    []TotalView `json:"rows"`
+	Account SourceState `json:"account"`
+	Hanzo   SourceState `json:"hanzo"`
+}
+
+// SourceState is one side of the account board's availability + labelling: which
+// ledger answered, at what scope, and a human note.
+type SourceState struct {
+	Available bool   `json:"available"`
+	Scope     string `json:"scope"`
+	Source    string `json:"source"` // the table of record
+	Note      string `json:"note"`
+}
+
+// Summary is the whole own-scoped usage footprint roll-up over one window: the cost
+// roll-up (spend) + the org's LLM usage totals (llm) + the caller's linked-account
+// board (accounts). Spend/LLM are org-scoped; the account board is the caller's own
+// (org+subject). One screen, one authoritative money source, one window.
 type Summary struct {
-	Range    string  `json:"range"`
-	Start    string  `json:"start"`
-	End      string  `json:"end"`
-	Interval string  `json:"interval"`
-	Scope    Scope   `json:"scope"`
-	Spend    Spend   `json:"spend"`
-	LLM      LLM     `json:"llm"`
-	Sources  Sources `json:"sources"`
+	Range    string   `json:"range"`
+	Start    string   `json:"start"`
+	End      string   `json:"end"`
+	Interval string   `json:"interval"`
+	Scope    Scope    `json:"scope"`
+	Spend    Spend    `json:"spend"`
+	LLM      LLM      `json:"llm"`
+	Accounts Accounts `json:"accounts"`
+	Sources  Sources  `json:"sources"`
 }
 
 // ── Commerce ledger row (mirrors commerce GET /v1/billing/transactions) ──────
