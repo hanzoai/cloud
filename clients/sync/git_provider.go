@@ -6,21 +6,20 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/integrations"
 )
 
-// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ native Hanzo Git. It
-// carries no git logic of its own — Reconcile composes the existing git object-plane
-// seams, so there is one implementation of each git operation:
+// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (Gitea). It
+// carries no git logic of its own — Reconcile composes Gitea's own primitives (gitea.go),
+// so Gitea is the ONE git store and no byte transits the retired cloud embedded server:
 //
-//   - INBOUND (a source push): cloud.InboundGitSync — the fast-forward-only advance
-//     that never overwrites native (the split-brain guard lives there).
-//   - RECONCILE (a manual run / initial sync): cloud.ImportGitRepo mirror-ins the
-//     current upstream AND (for a pushing direction) registers the outbound mirror.
-//   - PUSH ensure/remove: cloud.EnsureGitMirror — declares the outbound target the
-//     mirror_out reactor force-pushes on the native push lifecycle. The engine only
-//     ENSURES the mirror; mirror_out does the pushing (one outbound path).
+//   - INBOUND (a source push): gitea.mirrorIn advances the matching branch fast-forward
+//     only — a diverged Gitea ref is a conflict, never overwritten (the split-brain
+//     guard, now on Gitea).
+//   - RECONCILE (a manual run / initial sync): for a pulling direction, gitea.mirrorIn
+//     mirrors every branch of the upstream INTO Gitea; for a pushing direction,
+//     gitea.ensurePushMirror declares a Gitea push-mirror (sync_on_commit) so Gitea
+//     itself propagates every later commit to the upstream — no cloud-side reactor.
 //
 // The short-lived GitHub App installation token rides IN the event when a webhook
 // already minted it; for a manual run the provider mints a fresh one per org. It is
@@ -66,13 +65,18 @@ func resolve(sy Sync, ev Event) act {
 	return act{do: true, inbound: true}
 }
 
-// Reconcile drives sy's endpoints toward agreement for ev, returning whether native
-// (the target) changed.
+// Reconcile drives sy's endpoints toward agreement for ev on Gitea (the one git store),
+// returning whether Gitea (the target) changed.
 func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, error) {
 	a := resolve(sy, ev)
 	if !a.do {
 		return false, nil
 	}
+	gt, err := giteaFromEnv()
+	if err != nil {
+		return false, err // fail closed when the Gitea store is unconfigured
+	}
+	owner := sy.Org
 	native := normalizeGitName(sy.Target.Locator)
 	source := sy.Source.Locator
 	tok, err := gitToken(ctx, sy.Source.Provider, sy.Org, ev.Token)
@@ -80,35 +84,28 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		return false, err
 	}
 	if a.inbound {
-		res, err := cloud.InboundGitSync(ctx, cloud.GitInboundReq{
-			Org: sy.Org, Repo: native, Branch: ev.Branch,
-			CloneURL: source, Token: tok, Origin: hostOf(source),
-		})
-		if err != nil {
-			return false, err
-		}
-		// Conflict (native diverged, preserved) and up-to-date are both "no change".
-		return res.Applied, nil
+		// Advance the pushed branch fast-forward only; a diverged Gitea ref is a
+		// conflict (preserved) and an up-to-date ref is a no-op — both "no change".
+		return gt.mirrorIn(ctx, owner, native, source, tok, ev.Branch)
 	}
-	// Manual reconcile toward the direction. Pull/both mirror-in the whole repo (and,
-	// for both, register the outbound mirror); push-only just declares the mirror;
-	// off would not reach here.
+	// Manual reconcile toward the direction. Pull/both mirror EVERY branch in; push/both
+	// declare the outbound Gitea push-mirror so Gitea propagates later commits. Off would
+	// not reach here.
+	changed := false
 	if dirPulls(sy.Direction) {
-		mirror := ""
-		if dirPushes(sy.Direction) {
-			mirror = source
+		c, err := gt.mirrorIn(ctx, owner, native, source, tok, "")
+		if err != nil {
+			return false, fmt.Errorf("mirror-in: %w", err)
 		}
-		if err := cloud.ImportGitRepo(ctx, cloud.GitImportReq{
-			Org: sy.Org, Repo: native, CloneURL: source, Token: tok, MirrorURL: mirror,
-		}); err != nil {
-			return false, fmt.Errorf("import: %w", err)
+		changed = c
+	}
+	if dirPushes(sy.Direction) {
+		if err := gt.ensurePushMirror(ctx, owner, native, source, tok); err != nil {
+			return false, fmt.Errorf("ensure push-mirror: %w", err)
 		}
-		return true, nil
+		changed = true
 	}
-	if err := cloud.EnsureGitMirror(ctx, sy.Org, "", native, source, dirPushes(sy.Direction)); err != nil {
-		return false, fmt.Errorf("ensure mirror: %w", err)
-	}
-	return true, nil
+	return changed, nil
 }
 
 // gitToken resolves the credential for a source fetch: the webhook-supplied token
