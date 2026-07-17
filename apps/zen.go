@@ -113,11 +113,17 @@ func commerceGate(m *metering.Client) zen.Gate {
 		if t.BillingOrg == "" {
 			return fmt.Errorf("a billable tenant is required (no anonymous usage)")
 		}
-		// zen's estimate is exact 18-dp atto-USD (hanzoai/money). Fold to whole
-		// cents for the balance check via cloud's typed money.Amount.Cents() — a
-		// sub-cent estimate gates as 0 (any-positive-balance), matching the edge
-		// gate's AmountCents contract. The post-serve Meter debits the exact 18-dp.
-		cents := cloudmoney.FromInt(est.Minor()).Cents()
+		// zen's estimate is an exact 18-dp USD value. Fold it to whole cents for
+		// the balance check via cloud's typed money.Amount.Cents() — a sub-cent
+		// estimate gates as 0 (any-positive-balance), matching the edge gate's
+		// AmountCents contract. The post-serve Meter debits the exact 18-dp.
+		//
+		// The fold is Cents() on the CREDIT amount, never Minor() on the zen one:
+		// Minor() renders money.USD's 2 decimals, so it returned cents that FromInt
+		// then read as atto — every estimate came back 0, and AuthorizeVerdict skips
+		// its `available >= AmountCents` check when AmountCents is 0, admitting a
+		// request of ANY size against any positive balance.
+		cents := credit(est).Cents()
 		v, err := m.AuthorizeVerdict(ctx, metering.AuthInput{
 			User:        t.BillingOrg,
 			Org:         t.BillingOrg,
@@ -165,7 +171,7 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 	// native ai path writes (TraceServedUsage = recordTrace WITHOUT recordUsage —
 	// the debit below is the one billing source, never doubled). zen knows its
 	// EXACT per-tier retail (Charge) and upstream COGS (Cost), so the row carries
-	// true margin (atto → nano: Minor()/1e9). Without this, zen* traffic is
+	// true margin (credit → nano). Without this, zen* traffic is
 	// warehouse/o11y-blind exactly where prod runs (the unified binary).
 	aicontrollers.TraceServedUsage(context.Background(), aicontrollers.ServedUsage{
 		Owner:            u.Tenant.BillingOrg,
@@ -176,8 +182,8 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		Status:           "success",
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
-		BilledNano:       attoToNano(u.Charge.Minor()),
-		CostNano:         attoToNano(u.Cost.Minor()),
+		BilledNano:       nano(credit(u.Charge)),
+		CostNano:         nano(credit(u.Cost)),
 	})
 	// Detached: the request context is recycled once the handler returns, so a
 	// background context carries the debit to commerce without racing the reply.
@@ -203,7 +209,7 @@ func (g commerceMeterImpl) Record(ctx context.Context, u zen.Usage) {
 		ResponseId:       u.ResponseID,
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
-		CostCents:        cloudmoney.FromInt(u.Charge.Minor()).Cents(),
+		CostCents:        credit(u.Charge).Cents(),
 		RouterEndpoint:   os.Getenv("ROUTER_ENDPOINT"),
 	})
 }
@@ -231,21 +237,36 @@ func meterUsage(u zen.Usage) metering.Usage {
 		PromptTokens:     u.PromptTokens,
 		CompletionTokens: u.CompletionTokens,
 		TotalTokens:      u.PromptTokens + u.CompletionTokens,
-		Amount:           cloudmoney.FromInt(u.Charge.Minor()), // exact 18-dp USD, no floor
+		Amount:           credit(u.Charge), // exact 18-dp USD, no floor
 		RequestID:        u.RequestID,
 		Currency:         "usd",
 		Status:           "success",
 	}
 }
 
-// attoToNano folds an exact atto-USD (1e-18) *big.Int to nano-USD (1e-9) for
-// the warehouse margin columns. A single request's cost always fits int64 at
-// nano; nil folds to 0 (the table-recompute fallback).
-func attoToNano(m *big.Int) int64 {
-	if m == nil {
-		return 0
-	}
-	return new(big.Int).Div(m, big.NewInt(1_000_000_000)).Int64()
+// credit re-denominates a zen price into cloud's credit unit. It is the ONE
+// conversion at this seam — every site below goes through it, so the unit is
+// decided once rather than re-derived per call site.
+//
+// zen prices every SKU as an exact 18-dp value tagged money.USD (meter.go:
+// money.New(<18-dp decimal>, money.USD)), and cloud's credit unit is the SAME USD
+// value at 18-dp storage scale. So the conversion carries the exact decimal across
+// and changes only the minor-unit convention: no rescale, no rounding, no factor.
+// It is right by construction because the decimal is the value — the currency's
+// Decimals is a rendering convention, not part of it.
+//
+// It must NEVER go through Amount.Minor(). money.USD declares 2 decimals, so
+// Minor() rescales zen's 18-dp value to CENTS; feeding cents to the 18-dp
+// FromInt understates the debit by 10^16 (a $17.376 charge debits $0.0000000000000017),
+// and folds every sub-cent charge to a zero the ledger drops entirely.
+func credit(a hmoney.Amount) cloudmoney.Amount { return cloudmoney.FromDecimal(a.Decimal()) }
+
+// nano folds an exact credit Amount to nano-USD (1e-9) for the warehouse margin
+// columns. It takes the typed Amount rather than a bare *big.Int so the unit is
+// carried by the type: a cents integer is not a cloudmoney.Amount and can no
+// longer be passed here. A single request's cost always fits int64 at nano.
+func nano(a cloudmoney.Amount) int64 {
+	return new(big.Int).Div(a.Int(), big.NewInt(1_000_000_000)).Int64()
 }
 
 // zenService is the commerce service axis zen* spend attributes to. zen serves
