@@ -52,6 +52,17 @@ func FromInt(units *big.Int) Amount {
 	return Amount{a: hz.FromMinorBig(units, creditUSD)}
 }
 
+// FromDecimal wraps an exact decimal USD value in the credit unit — the typed counterpart
+// of ParseUSD, with no string round-trip. The decimal IS the value; the credit unit's 18
+// decimals are its storage scale, so nothing is rescaled and nothing is rounded here.
+//
+// This is the ONE way to carry a value priced as a shared money.Amount (whose Currency may
+// declare a COARSER minor unit — money.USD declares 2) into the credit unit. Take the
+// decimal, never Amount.Minor(): Minor() rescales the value to the CURRENCY's minor unit,
+// so an 18-dp value tagged money.USD comes back as CENTS, and cents fed to an 18-dp
+// constructor understate by 10^16.
+func FromDecimal(d decimal.Decimal) Amount { return Amount{a: hz.New(d, creditUSD)} }
+
 // ParseInt parses a signed 18-decimal integer string (the storage/on-chain form). An empty
 // string is 0.
 func ParseInt(s string) (Amount, error) {
