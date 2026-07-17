@@ -339,7 +339,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control (per-service waitlist mode) folded into the flags engine: the
 		// mode IS the switch waitlist.<svc>, the board is the /v1/admin/services lens,
-		// and /v1/featuregate/mode is served by flags. featuregate is no longer a mounted
+		// and /v1/flags/waitlist is served by flags. featuregate is no longer a mounted
 		// subsystem — it exposes only the native Enforce middleware (wired in serve.go),
 		// a consumer of flags.WaitlistModeForHost.
 		// Tasks: the durable workflow/UI surface AND platform cron (durable schedules
