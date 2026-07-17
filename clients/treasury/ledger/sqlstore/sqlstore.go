@@ -171,7 +171,7 @@ func (s *Store) migrateCentsToUnits() error {
 			}
 			_, err := tx.Exec(
 				`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
-				id, kind, program, ref, memo, money.FromCents(cents).IntString(), created)
+				id, kind, program, ref, memo, money.FromCents(cents).AttoString(), created)
 			return err
 		}); err != nil {
 		return err
@@ -190,7 +190,7 @@ func (s *Store) migrateCentsToUnits() error {
 			amt := money.FromCents(cents)
 			if _, err := tx.Exec(
 				`INSERT INTO treasury_postings (entry_id,account,amount,created_at) VALUES (?,?,?,?)`,
-				entryID, account, amt.IntString(), created); err != nil {
+				entryID, account, amt.AttoString(), created); err != nil {
 				return err
 			}
 			balances[account] = balances[account].Add(amt)
@@ -210,7 +210,7 @@ func (s *Store) migrateCentsToUnits() error {
 			}
 			_, err := tx.Exec(
 				`INSERT INTO treasury_accounts (id,kind,balance,created_at) VALUES (?,?,?,?)`,
-				id, kind, balances[id].IntString(), created)
+				id, kind, balances[id].AttoString(), created)
 			return err
 		}); err != nil {
 		return err
@@ -443,13 +443,13 @@ func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
 	}
 	if _, err := t.tx.ExecContext(t.ctx,
 		`INSERT INTO treasury_entries (id,kind,program,ref,memo,amount,created_at) VALUES (?,?,?,?,?,?,?)`,
-		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.Amount.IntString(), e.CreatedAt); err != nil {
+		e.ID, e.Kind, e.Program, e.Ref, e.Memo, e.Amount.AttoString(), e.CreatedAt); err != nil {
 		return fmt.Errorf("insert entry: %w", err)
 	}
 	for _, p := range postings {
 		if _, err := t.tx.ExecContext(t.ctx,
 			`INSERT INTO treasury_postings (entry_id, account, amount, created_at) VALUES (?,?,?,?)`,
-			e.ID, p.Account, p.Amount.IntString(), e.CreatedAt); err != nil {
+			e.ID, p.Account, p.Amount.AttoString(), e.CreatedAt); err != nil {
 			return fmt.Errorf("insert posting: %w", err)
 		}
 		// Maintain the account's running balance in the SAME tx, so a read never re-sums
@@ -460,7 +460,7 @@ func (t *txAdapter) Insert(e ledger.Entry, postings []ledger.Posting) error {
 			return err
 		}
 		if _, err := t.tx.ExecContext(t.ctx,
-			`UPDATE treasury_accounts SET balance=? WHERE id=?`, cur.Add(p.Amount).IntString(), p.Account); err != nil {
+			`UPDATE treasury_accounts SET balance=? WHERE id=?`, cur.Add(p.Amount).AttoString(), p.Account); err != nil {
 			return fmt.Errorf("update balance %q: %w", p.Account, err)
 		}
 	}

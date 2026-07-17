@@ -209,7 +209,7 @@ func grantDeposit(s *cloud.Service[State], c *zip.Ctx, org, currency, notes, tag
 		after = balCents
 		if fin := finance.Current(); fin != nil {
 			if bal, berr := fin.Balance(ctx, org, org, currency, false); berr == nil {
-				afterExact = bal.IntString() // afterExact = the EXACT balance (sub-cent visible)
+				afterExact = bal.AttoString() // afterExact = the EXACT balance (sub-cent visible)
 			}
 		}
 		return before, id, after, afterExact, nil
