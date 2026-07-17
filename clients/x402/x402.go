@@ -260,7 +260,7 @@ func settle(s *cloud.Service[state], ctx context.Context, req PaymentRequirement
 	st := &Settlement{
 		ID: id, PayerOrg: payerOrg, From: proof.From, Nonce: proof.Nonce,
 		Resource: req.Resource, Payee: req.Payee, PayeeOrg: target.Org,
-		Amount: terms.Amount.IntString(), SettledVia: "ledger", CreatedAt: nowUnix(),
+		Amount: terms.Amount.AttoString(), SettledVia: "ledger", CreatedAt: nowUnix(),
 	}
 
 	if ex, found, err := s.State.store.get(ctx, id); err != nil {
@@ -368,7 +368,7 @@ func settlementID(from, nonce string) string {
 // (e.g. USDC 6-dp) for the challenge the client signs. The LEDGER settlement uses
 // the exact money.Amount, so no precision is lost where money actually moves.
 func tokenUnits(amount money.Amount, decimals int) string {
-	i := amount.Int() // 18-dp magnitude
+	i := amount.Atto() // 18-dp magnitude
 	if decimals >= money.Decimals {
 		return i.String()
 	}

@@ -6,14 +6,14 @@ import (
 )
 
 func TestFromCentsAndBack(t *testing.T) {
-	if got := FromCents(1).IntString(); got != "10000000000000000" { // 1e16
+	if got := FromCents(1).AttoString(); got != "10000000000000000" { // 1e16
 		t.Fatalf("1 cent = %s (18-dec), want 1e16", got)
 	}
 	if got := FromCents(1).Cents(); got != 1 {
 		t.Fatalf("round-trip cents = %d, want 1", got)
 	}
 	// $100k prefund migrates cents→18-dec exactly: 10,000,000 cents × 1e16 = 1e23.
-	if got := FromCents(10_000_000).IntString(); got != "100000000000000000000000" {
+	if got := FromCents(10_000_000).AttoString(); got != "100000000000000000000000" {
 		t.Fatalf("$100k = %s (18-dec)", got)
 	}
 	if got := FromCents(10_000_000).String(); got != "100000" {
@@ -35,8 +35,8 @@ func TestParseUSDExact(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseUSD(%q): %v", in, err)
 		}
-		if a.IntString() != wantInt {
-			t.Errorf("ParseUSD(%q) = %s (18-dec), want %s", in, a.IntString(), wantInt)
+		if a.AttoString() != wantInt {
+			t.Errorf("ParseUSD(%q) = %s (18-dec), want %s", in, a.AttoString(), wantInt)
 		}
 		// round-trips through the human string form
 		if in == "6.60" && a.String() != "6.6" {
@@ -56,8 +56,8 @@ func TestTokenCostNeverFloorsToZero(t *testing.T) {
 	if got.IsZero() {
 		t.Fatal("200-token cost floored to zero — the leak is back")
 	}
-	if got.IntString() != "1320000000000000" { // 200 × 6.6e18 / 1e6 = 1.32e15
-		t.Errorf("TokenCost(200,$6.60) = %s (18-dec), want 1.32e15", got.IntString())
+	if got.AttoString() != "1320000000000000" { // 200 × 6.6e18 / 1e6 = 1.32e15
+		t.Errorf("TokenCost(200,$6.60) = %s (18-dec), want 1.32e15", got.AttoString())
 	}
 	if got.String() != "0.00132" {
 		t.Errorf("TokenCost(200,$6.60) = %q USD, want 0.00132", got.String())
@@ -65,8 +65,8 @@ func TestTokenCostNeverFloorsToZero(t *testing.T) {
 
 	// Even a single cheap token bills a positive, exact amount.
 	one := TokenCost(1, mustUSD(t, "0.30"))
-	if one.IsZero() || one.IntString() != "300000000000" { // 1 × 0.3e18 / 1e6 = 3e11
-		t.Errorf("TokenCost(1,$0.30) = %s (18-dec), want 3e11 (never zero)", one.IntString())
+	if one.IsZero() || one.AttoString() != "300000000000" { // 1 × 0.3e18 / 1e6 = 3e11
+		t.Errorf("TokenCost(1,$0.30) = %s (18-dec), want 3e11 (never zero)", one.AttoString())
 	}
 }
 
@@ -120,8 +120,8 @@ func TestStorageRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseInt(%q): %v", prodBalance, err)
 	}
-	if a.IntString() != prodBalance {
-		t.Errorf("round-trip = %s, want %s", a.IntString(), prodBalance)
+	if a.AttoString() != prodBalance {
+		t.Errorf("round-trip = %s, want %s", a.AttoString(), prodBalance)
 	}
 	if a.String() != "100003.01" {
 		t.Errorf("String = %q, want 100003.01", a.String())
@@ -144,8 +144,8 @@ func TestJSONExactString(t *testing.T) {
 	if err := json.Unmarshal([]byte(`"6.60"`), &back); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if back.IntString() != "6600000000000000000" {
-		t.Errorf("unmarshal round-trip = %s, want 6.6e18", back.IntString())
+	if back.AttoString() != "6600000000000000000" {
+		t.Errorf("unmarshal round-trip = %s, want 6.6e18", back.AttoString())
 	}
 }
 
