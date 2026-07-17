@@ -9,7 +9,7 @@ import (
 // schema is the per-tenant SQLite DDL — the Go host owns migrations; the goja
 // bundle only issues SQL against these tables. Column names MUST match the SQL in
 // the captable bundle (github.com/hanzoai/captable goja/src/routes/*). Idempotent
-// (IF NOT EXISTS), so it runs on every tenant DB open via gojabase.
+// (IF NOT EXISTS), so it runs on every tenant DB open via NewBase.
 //
 // This is the Prisma data model (prisma/schema.prisma) translated to SQLite:
 // DateTime → TEXT (ISO strings stored verbatim; the bundle never parses them),
@@ -217,7 +217,7 @@ CREATE INDEX IF NOT EXISTS ix_investment_company ON investment(company_id);
 CREATE INDEX IF NOT EXISTS ix_investment_round   ON investment(round_id);
 `
 
-// seedCompany is the gojabase OnOpen hook: it ensures the tenant's cap-table
+// seedCompany is the NewBase OnOpen hook: it ensures the tenant's cap-table
 // company row exists (id == the validated tenant), so the bundle's companyId
 // always resolves. The name defaults to the tenant and is renamed via
 // PUT /v1/captable/company. INSERT OR IGNORE makes it idempotent across reopens.

@@ -18,10 +18,10 @@
 // READ-WRITE variant: this package hosts bundles with a read-only catalog
 // injected once at New (plans/pricing). Subsystems that need PERSISTENCE — a
 // bundle that reads AND writes per-tenant Base/SQLite (captable #97, esign #100,
-// dataroom #101) — use the sibling clients/gojabase, which builds on THIS engine
-// (via DispatchWith) and injects a tenant-bound __db bridge per request. Reach
-// for gojabase when your bundle stores data; reach for goja directly only for a
-// read-only bundle.
+// dataroom #101) — use NewBase (base.go / basestore.go), the Base binding folded
+// into THIS package: it builds on this engine (via DispatchWith) and injects a
+// tenant-bound __db bridge per request. Reach for NewBase when your bundle stores
+// data; reach for New directly only for a read-only bundle.
 package goja
 
 import (
@@ -184,7 +184,7 @@ func (h *Host) Dispatch(ctx context.Context, req Request) (*Response, error) {
 // DispatchWith is Dispatch plus a set of per-call NATIVE globals installed on the
 // runtime immediately before handle() runs (left in place until the next
 // dispatch on that slot overwrites them). This is the read-WRITE extension of
-// the read-only plan/pricing pattern: clients/gojabase passes a tenant-bound
+// the read-only plan/pricing pattern: the NewBase binding passes a tenant-bound
 // __db bridge (+ __newId/__now) here so a bundle's SQL calls hit the right
 // per-tenant Base. The slot is held exclusively for the whole call (withSlot
 // serializes it), so installing globals on the shared runtime is race-free, and
@@ -256,7 +256,7 @@ func (h *Host) DispatchWith(ctx context.Context, req Request, hostGlobals map[st
 			return fmt.Errorf("gojahost[%s]: handle(%s) returned %T, want object", h.name, req.Route, exported)
 		}
 		// Fail closed: a response with no EXPLICIT, valid numeric status must NOT
-		// be treated as success. gojabase's per-request transaction commits iff
+		// be treated as success. NewBase's per-request transaction commits iff
 		// status < 400, so a defaulted 200 would silently PERSIST a bundle that
 		// forgot to set a status — on a boundary whose safety IS the status gate.
 		// Default 500 (which rolls the transaction back); only a bundle-provided
