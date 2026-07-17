@@ -1204,6 +1204,8 @@ github.com/hanzo-ds/sqlparser v0.4.16 h1:OeWiLSL6u/I/RzhUKHHbE33MevQ2b0QVyDgSJur
 github.com/hanzo-ds/sqlparser v0.4.16/go.mod h1:b+9oCGF3WYGz4FfVo9eZ4wJiF7fiLa9aCWFGCcbqQbY=
 github.com/hanzoai/account v0.2.0 h1:WxIut3YMz8JNdHerlRIqP1a+k3P79BIKM1mjfRFDG0Y=
 github.com/hanzoai/account v0.2.0/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
+github.com/hanzoai/agent v0.1.1 h1:RuNhj6e/gj+2c/E8aJqzRYLHype5C5FQnebLk5TWQPs=
+github.com/hanzoai/agent v0.1.1/go.mod h1:BDPLRQpX8JWQ2ku6GhqgJ4OKEuOQa5iZo6RqjyP/oBI=
 github.com/hanzoai/ai v1.817.0 h1:xosn8bCHaXyXxYfaP1J3oOEor0AHRzZ+54M6E9c/RVg=
 github.com/hanzoai/ai v1.817.0/go.mod h1:5BMihLoYRts/P1TsYFu3woHQdsNU5vTN6MbCtAUd/4Q=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
@@ -1662,8 +1664,8 @@ github.com/luxfi/lattice/v7 v7.1.4 h1:hQR02M6cHTAV5+joOPi9gb9Gm+z/hKJnhJF4IlciIJ
 github.com/luxfi/lattice/v7 v7.1.4/go.mod h1:DmIQFi3mJiehVsR235l1NKYEU0JhU649OX5p7gMEW2c=
 github.com/luxfi/lens v0.1.4 h1:goGjGDXx2BNdjzXDunL5QT8elK2ZyCcc0z8TAbtWYrg=
 github.com/luxfi/lens v0.1.4/go.mod h1:mL+G8IK+9L41d78/2FYRgfhEzAjcr5+VEXB8SGuHbus=
-github.com/luxfi/log v1.4.3 h1:xkUKRWvQ4ZwvlUC2e0/RTtHYZOYSMvSQ9W9lbjwBmiI=
-github.com/luxfi/log v1.4.3/go.mod h1:myIkufyiQomSQH34K981kbz6cG4WUoerRUh7F4XhlQI=
+github.com/luxfi/log v1.5.0 h1:zC0cE9ICThVd8NOxp1h1M1TgpiZ+ZbTgguHGqlxU17k=
+github.com/luxfi/log v1.5.0/go.mod h1:7EqCd7gmIpIPMEV7YPMFH3YqbrlcV2hwiPWUssJaF5c=
 github.com/luxfi/magnetar v1.2.3 h1:n4UrJZLK+mhDDZr1HLl2H/KgA6o6v62r5oiC61R7awE=
 github.com/luxfi/magnetar v1.2.3/go.mod h1:z9PLkqzzYiaFGT/qFBQSnNoHmZrg8y7JlYGiNnHAAdk=
 github.com/luxfi/math v1.4.1 h1:1t9bCCsEqnl9yIKrShlbs80DBKyYTWdnzkVfBqEeO7Q=
