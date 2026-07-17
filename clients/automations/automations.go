@@ -43,6 +43,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/audit"
+	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/tools"
 	"github.com/zap-proto/zip"
@@ -138,6 +139,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	tools.Register(connectorToolProvider{})
 
 	b.Log.Info("automations mounted", "connectors", catalog.ConnectorCount, "runtime", len(registry), "brand", deps.Brand)
+
+	// Native single-connector execution (HIP-0126): POST /v1/automations/connectors/:id/run,
+	// the in-process goja runner paired with the connector catalogue above. It mounts one
+	// route DISTINCT from every automations route (no /v1/automations/* wildcard here, so no
+	// shadow), and was a separate Wire entry purely for that one route — fold it in as a
+	// terminal sub-mount so connector catalogue + execution are ONE automations subsystem.
+	if err := connectorruntime.Mount(app, deps); err != nil {
+		return err
+	}
 	return nil
 }
 
