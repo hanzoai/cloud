@@ -18,21 +18,6 @@ func TestAppsGVR(t *testing.T) {
 	}
 }
 
-// TestCRGVRsOrder pins the resolution order: the kind we write first, the kind we
-// used to write second.
-func TestCRGVRsOrder(t *testing.T) {
-	got := crGVRs()
-	want := []schema.GroupVersionResource{appsGVR, servicesGVR}
-	if len(got) != len(want) {
-		t.Fatalf("crGVRs() = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("crGVRs()[%d] = %v, want %v", i, got[i], want[i])
-		}
-	}
-}
-
 // TestTenantCRIsWrittenAsApp — a tenant app is declared as an App CR, and no
 // Service CR is minted for it.
 func TestTenantCRIsWrittenAsApp(t *testing.T) {
@@ -51,64 +36,48 @@ func TestTenantCRIsWrittenAsApp(t *testing.T) {
 	}
 }
 
-// TestRedeployOfALegacyServiceCRDoesNotMintATwin — an app deployed before the
-// collapse is still a Service CR. Re-declaring it as an App would leave two CRs
-// claiming one Deployment, which the operator resolves only by flipping its
-// ownerRef. Patch the kind it actually is.
-func TestRedeployOfALegacyServiceCRDoesNotMintATwin(t *testing.T) {
-	legacy := &unstructured.Unstructured{Object: map[string]any{
+// TestRedeployPatchesTheAppInPlace — a redeploy over an existing App CR
+// merge-patches it (new image) rather than minting a twin.
+func TestRedeployPatchesTheAppInPlace(t *testing.T) {
+	app := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "hanzo.ai/v1",
-		"kind":       "Service",
+		"kind":       "App",
 		"metadata":   map[string]any{"name": "api", "namespace": "tenant-maxpower"},
 		"spec":       map[string]any{"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.26"}},
 	}}
-	k := fakeK8s(legacy)
+	k := fakeK8s(app)
 	ctx := context.Background()
 
 	if err := k.applyService(ctx, "maxpower", "proj", Application{Slug: "api", Replicas: 1}, "ghcr.io/hanzoai/nginx:1.27"); err != nil {
-		t.Fatalf("applyService over a legacy Service CR: %v", err)
+		t.Fatalf("applyService redeploy: %v", err)
 	}
-	// No App twin.
-	if _, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{}); err == nil {
-		t.Fatal("minted an App twin next to the live Service CR — two declarers for one Deployment")
-	}
-	// The legacy CR carries the new image.
-	obj, err := k.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
+	obj, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("legacy Service CR: %v", err)
+		t.Fatalf("App CR: %v", err)
 	}
 	tag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
 	if tag != "1.27" {
-		t.Fatalf("legacy CR tag = %q, want 1.27 — the redeploy must patch the kind it is", tag)
+		t.Fatalf("App CR tag = %q, want 1.27 — the redeploy must patch it in place", tag)
 	}
 }
 
-// TestDeleteRemovesBothKinds — either kind alone re-materializes the Deployment,
-// so a teardown that removes only one brings the app back minutes later, still
-// billing.
-func TestDeleteRemovesBothKinds(t *testing.T) {
-	legacy := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1",
-		"kind":       "Service",
-		"metadata":   map[string]any{"name": "api", "namespace": "tenant-maxpower"},
-		"spec":       map[string]any{"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.26"}},
-	}}
+// TestDeleteRemovesTheApp — teardown removes the tenant's App CR so it stops
+// reconciling (and stops billing).
+func TestDeleteRemovesTheApp(t *testing.T) {
 	app := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "hanzo.ai/v1",
 		"kind":       "App",
 		"metadata":   map[string]any{"name": "api", "namespace": "tenant-maxpower"},
 		"spec":       map[string]any{"image": map[string]any{"repository": "ghcr.io/hanzoai/nginx", "tag": "1.27"}},
 	}}
-	k := fakeK8s(legacy, app)
+	k := fakeK8s(app)
 	ctx := context.Background()
 
 	if err := k.deleteService(ctx, "maxpower", "api"); err != nil {
 		t.Fatalf("deleteService: %v", err)
 	}
-	for _, gvr := range crGVRs() {
-		if _, err := k.dyn.Resource(gvr).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{}); err == nil {
-			t.Errorf("%s CR survived the delete — it would rebuild the app the tenant deleted", gvr.Resource)
-		}
+	if _, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(ctx, "api", metav1.GetOptions{}); err == nil {
+		t.Error("App CR survived the delete — it would rebuild the app the tenant deleted")
 	}
 }
 
@@ -120,36 +89,23 @@ func TestDeleteOfAnAbsentAppIsSuccess(t *testing.T) {
 	}
 }
 
-// TestResolveCRFindsEitherKind — resolution reports the kind that holds the CR,
-// and reports absence honestly.
-func TestResolveCRFindsEitherKind(t *testing.T) {
+// TestResolveCRFindsTheApp — resolution reports the App CR that holds the tenant
+// workload, and reports absence honestly.
+func TestResolveCRFindsTheApp(t *testing.T) {
 	app := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "hanzo.ai/v1", "kind": "App",
 		"metadata": map[string]any{"name": "new", "namespace": "tenant-maxpower"},
 		"spec":     map[string]any{},
 	}}
-	legacy := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1", "kind": "Service",
-		"metadata": map[string]any{"name": "old", "namespace": "tenant-maxpower"},
-		"spec":     map[string]any{},
-	}}
-	k := fakeK8s(app, legacy)
+	k := fakeK8s(app)
 	ctx := context.Background()
 
-	for _, tc := range []struct {
-		name string
-		want schema.GroupVersionResource
-	}{
-		{"new", appsGVR},
-		{"old", servicesGVR},
-	} {
-		gvr, found, err := k.resolveCR(ctx, "tenant-maxpower", tc.name)
-		if err != nil || !found {
-			t.Fatalf("resolveCR(%s): found=%v err=%v", tc.name, found, err)
-		}
-		if gvr != tc.want {
-			t.Errorf("resolveCR(%s) = %v, want %v", tc.name, gvr, tc.want)
-		}
+	gvr, found, err := k.resolveCR(ctx, "tenant-maxpower", "new")
+	if err != nil || !found {
+		t.Fatalf("resolveCR(new): found=%v err=%v", found, err)
+	}
+	if gvr != appsGVR {
+		t.Errorf("resolveCR(new) = %v, want appsGVR", gvr)
 	}
 	if _, found, err := k.resolveCR(ctx, "tenant-maxpower", "ghost"); found || err != nil {
 		t.Errorf("resolveCR(ghost): found=%v err=%v, want found=false err=nil", found, err)
