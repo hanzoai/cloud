@@ -19,11 +19,19 @@ import (
 // shows, and can be made to fail so a test can prove an unreadable balance is never
 // rendered as zero.
 type fakeFinance struct {
-	wallets map[string]int64 // "org|subject" -> cents
-	err     error
-	gotOrg  string
-	gotSubj string
-	calls   int
+	wallets   map[string]int64 // "org|subject" -> cents
+	usageRows []finance.UsageRow
+	err       error
+	gotOrg    string
+	gotSubj   string
+	calls     int
+}
+
+// ListUsage satisfies the optional co-resident usage-read capability coResidentUsage
+// resolves; returns the seeded rows so a test can prove the usage view answers from the
+// ledger instead of the self-dispatching commerce hop.
+func (f *fakeFinance) ListUsage(context.Context, string, int) ([]finance.UsageRow, error) {
+	return f.usageRows, f.err
 }
 
 func (f *fakeFinance) Balance(_ context.Context, org, subject, _ string, _ bool) (money.Amount, error) {
