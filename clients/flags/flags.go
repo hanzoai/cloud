@@ -1,4 +1,4 @@
-// Package featureflags is cloud's NATIVE feature-flag engine: definitions live in
+// Package flags is cloud's NATIVE feature-flag engine: definitions live in
 // per-(org, project) SQLite (cloud.OrgDB — {DataDir}/orgs/{org}/projects/{project}/
 // flags.db, encrypted at rest via cek) and evaluation runs in-process through the
 // embedded hanzo-flags Rust evaluator (native/flags, FFI) with PostHog-compatible
@@ -22,7 +22,25 @@
 // FAIL-SAFE. When the native engine is absent (!cgo) or a store read fails,
 // evaluation degrades to env fallback -> literal default and the HTTP surface says
 // so honestly — never fail-wrong.
-package featureflags
+//
+// ── THE POLICY PRIMITIVE ─────────────────────────────────────────────────────────
+//
+// This engine IS Hanzo's runtime decision primitive: (Principal, context) -> verdict,
+// evaluated in-process, stateless, hot. Feature flags, rollouts, and the launch
+// waitlist (waitlist.go — folded in from the former clients/featuregate: a service's
+// mode IS the switch waitlist.<svc>) are its first tenants. The aspirational end-state
+// — NOT built here, flagged for the next step — is that the platform's OTHER runtime
+// decisions are the SAME shape and could COMPOSE this one engine rather than each
+// re-deriving it:
+//
+//   - authz        (access policy)         — (Principal, resource+action) -> allow/deny
+//   - entitlements (product-access policy)  — (Principal, feature/plan)    -> granted/denied
+//
+// Both are (Principal, context) -> verdict. Folding them onto this evaluator would make
+// Policy ONE composable primitive with one audit log and one hot-apply path. DO NOT
+// touch authz/entitlements now — this note only names the target so the seam is
+// visible; the launch waitlist is the first fold, done here.
+package flags
 
 import (
 	"context"
@@ -122,6 +140,7 @@ type snapshot struct {
 // cached for one TTL (the hot-apply bound).
 type Client struct {
 	stores     *cloud.OrgStore[*Store]
+	registry   *cloud.OrgStore[*waitlistStore] // waitlist host→service map (platform tenant)
 	distinctID string
 	ttl        time.Duration
 
@@ -138,7 +157,7 @@ func (c *Client) configured() bool { return c != nil && c.stores != nil && engin
 // is a pure in-memory FFI call.
 func (c *Client) evaluateProject(org, project string, ctx []byte) (json.RawMessage, error) {
 	if !c.configured() {
-		return nil, fmt.Errorf("featureflags: engine not configured")
+		return nil, fmt.Errorf("flags: engine not configured")
 	}
 	st, err := c.stores.For(org, project)
 	if err != nil {
@@ -251,7 +270,7 @@ func (c *Client) invalidate() {
 func SetPlatformSwitch(key string, definition json.RawMessage, actor string) error {
 	c := mounted
 	if c == nil || c.stores == nil {
-		return fmt.Errorf("featureflags: not mounted")
+		return fmt.Errorf("flags: not mounted")
 	}
 	st, err := c.stores.For(platformOrg, platformProject)
 	if err != nil {
@@ -415,31 +434,42 @@ type state struct {
 // error at boot.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
-		return fmt.Errorf("featureflags.Mount: nil deps.Logger")
+		return fmt.Errorf("flags.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("featureflags.Mount: empty deps.DataDir")
+		return fmt.Errorf("flags.Mount: empty deps.DataDir")
 	}
-	log := deps.Logger.New("subsystem", "featureflags")
+	log := deps.Logger.New("subsystem", "flags")
 	c := &Client{
 		stores:     cloud.NewOrgStore[*Store](deps.DataDir, "flags", openStore),
+		registry:   cloud.NewOrgStore[*waitlistStore](deps.DataDir, "waitlist", openWaitlistStore),
 		distinctID: firstNonEmpty(os.Getenv("FLAGS_PLATFORM_DISTINCT_ID"), "hanzo-platform:"+firstNonEmpty(deps.Brand, "hanzo")),
 		ttl:        ttlFromEnv(),
 	}
 	mounted = c
-	b := cloud.NewBase(deps, "featureflags")
+	b := cloud.NewBase(deps, "flags")
 	svc := &cloud.Service[state]{Base: b, State: state{client: c}}
 	routes(app, svc)
-	log.Info("featureflags engine ready", "engine", "hanzo-flags", "native", engineAvailable, "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
+	mountWaitlist(c, deps.Brand, log) // fold: seed the host→service registry + register the waitlist.<svc> switches
+	log.Info("flags engine ready", "engine", "hanzo-flags", "native", engineAvailable, "ttlSeconds", int(c.ttl.Seconds()), "switches", len(Defs()))
 	return nil
 }
 
-// Shutdown closes every open per-org definitions store.
+// Shutdown closes every open per-org definitions store and the waitlist registry.
 func Shutdown(_ context.Context) error {
-	if mounted == nil || mounted.stores == nil {
+	if mounted == nil {
 		return nil
 	}
-	return mounted.stores.CloseAll()
+	var first error
+	if mounted.stores != nil {
+		first = mounted.stores.CloseAll()
+	}
+	if mounted.registry != nil {
+		if err := mounted.registry.CloseAll(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func ttlFromEnv() time.Duration {
