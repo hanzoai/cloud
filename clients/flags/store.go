@@ -1,4 +1,4 @@
-package featureflags
+package flags
 
 // The definitions store — SQLite per (org, project) via cloud.OrgDB (HIP-0302
 // physical isolation: {DataDir}/orgs/{org}/projects/{project}/flags.db). Flag
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS flag_activity (
 CREATE INDEX IF NOT EXISTS idx_flag_activity_key ON flag_activity(key, id);
 `
 	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("featureflags: migrate: %w", err)
+		return nil, fmt.Errorf("flags: migrate: %w", err)
 	}
 	return &Store{db: db}, nil
 }
@@ -116,7 +116,7 @@ func (s *Store) Get(key string) (DefRow, bool, error) {
 func (s *Store) Upsert(key string, definition json.RawMessage, actor string) error {
 	var def map[string]any
 	if err := json.Unmarshal(definition, &def); err != nil {
-		return fmt.Errorf("featureflags: definition not an object: %w", err)
+		return fmt.Errorf("flags: definition not an object: %w", err)
 	}
 	def["key"] = key
 	norm, err := json.Marshal(def)
