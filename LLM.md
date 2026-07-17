@@ -12,25 +12,34 @@ One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
 package under `clients/<name>` that obeys these seams — nothing more.
 
 - **Subsystem shape.** A subsystem exposes `func Mount(app *zip.App, deps cloud.Deps) error`
-  and self-registers at init with `cloud.Register("<name>", <order>, cloud.Typed(Mount))`
-  (or `RegisterWithShutdown`). `Mount` wires that subsystem's `/v1/<name>/*` routes
-  onto the shared `*zip.App`; `cloud.Deps` carries the process-wide handles
-  (Logger, DataDir, the subsystem `Client` seams). No subsystem reaches into
-  another's internals.
+  and is listed in `apps.Wire()` as a `cloud.MountSpec{Name, Mount: cloud.Typed(Mount)}`
+  (plus `Shutdown`/`OwnsHealth` where it owns them). `Mount` wires that subsystem's
+  `/v1/<name>/*` routes onto the shared `*zip.App`; `cloud.Deps` carries the
+  process-wide handles (Logger, DataDir, the subsystem `Client` seams). No
+  subsystem reaches into another's internals. There is no init()-registry and no
+  `cloud.Register` — subsystems do NOT self-register.
 - **Client seams.** Cross-subsystem calls go through a narrow in-process interface
   published in `types` and aliased at the provider, e.g. `commerce.Client =
   types.CommerceClient` (`GetOrgConfig` + `CheckEntitlement`). Consumers depend on
   the interface, never the implementation; the seam rides zap-proto/zip. Keep each
   interface minimal — add a method only when a consumer needs it.
-- **Composition root.** `apps/apps.go` blank-imports every subsystem
-  (its init runs `cloud.Register`), populating `cloud.Registry`. `MountAll`
-  (build.go) sorts the registry by `Order` and calls `Mount` on each ENABLED
-  subsystem (`cfg.Enabled`). That ordered blank-import set IS the wiring — there
-  is no separate `Wire()` function; to add a subsystem you add one import line.
-- **Route precedence is a framework guarantee.** The router is zap-proto/fiber
-  (zip v1.3.0). Most-specific route wins regardless of mount order; a genuine
-  route CONFLICT panics at mount rather than resolving ambiguously. Subsystems may
-  therefore mount in any order and still compose deterministically.
+- **Composition root.** `apps/apps.go:Wire()` returns `[]cloud.MountSpec` — every
+  linked subsystem, in mount order, as ONE explicit slice read top-to-bottom.
+  Slice position IS the order: there is no `Order` field and `MountAll`
+  (build.go) does NOT sort; it iterates as-given and mounts each ENABLED spec
+  (`cfg.Enabled`). To add a subsystem you add one line to `Wire()`.
+  `apps/wire_test.go` freezes the sequence, so a reorder/drop/add fails there.
+- **Route precedence.** The router is zap-proto/fiber (zip v1.8.3). Most-specific
+  route wins regardless of mount order, so subsystems may mount in any order and
+  still compose deterministically. But precedence is NOT a conflict guard: two
+  registrations of a byte-identical pattern do NOT panic — fiber MERGES them into
+  ONE route with both handlers chained, resolving by first-registration. That is
+  invisible to a `GetRoutes()` entry count (see the bots note below), and it is
+  NOT distinguishable from a legitimate middleware chain: `app.Post(path, mw1,
+  mw2, mw3, handler)` is one registration with four handlers (apps/commerce.go:151),
+  and the whole `/v1/store/*` surface is that shape. A high handler count is
+  therefore evidence of nothing on its own; only a subsystem that never chains
+  middleware (bots/visor/runtime) can read `len(Handlers) > 1` as a collision.
 - **Per-org data.** The ONE way any subsystem opens a per-org SQLite file is
   `cloud.OrgDB(dataDir, org, project, sub)` — or the cached `cloud.OrgStore[T]`
   (`NewOrgStore` + `For(org, project)`). Path convention:
@@ -41,6 +50,51 @@ package under `clients/<name>` that obeys these seams — nothing more.
   folded through `SanitizeOrg`, the ONE injective org slugger. hanzoai/sqlite is
   the SOLE driver (blank-imported once, in orgdb.go); subsystems never import a
   SQLite driver themselves. The caller owns its schema/migration and Close.
+
+## The route table has three projections, and the router is the source
+
+`serve.go` composes ONE route table and projects it three ways, all after
+`MountAll` so each sees a complete table: `/zap` REPLAYS the /v1 handlers
+(zapface), the console RENDERS them, and `GET /v1/openapi.json` DESCRIBES them
+(`openapi.Mount`). None holds a second copy of anything; none can drift.
+
+- **The spec IS the router.** `openapi.Live(app)` reads
+  `app.Fiber().GetRoutes(true)` — fiber's own filter drops `Use()` middleware —
+  and every other function in `openapi/` is a pure function of that `[]Route`.
+  There is NO checked-in spec file to hand-maintain and no second registry. The
+  drift guard is `cmd/cloud/openapi_test.go`: a BIJECTION over the fully-mounted
+  `apps.Wire()` (983 operations / 692 paths / 109 products) — every live route
+  appears as an operation, every operation is backed by a live route. It is the
+  only test whose failure means the document lies.
+- **Reading the LIVE router is the only total source.** `POST /v1/kms/auth/login`
+  is registered as `Group("/v1/kms/auth").Post("/login")` — no grep can find that
+  path; only the assembled router knows it. And the route set is a function of
+  deployment config (`cfg.Enabled`, plus internal gates like kms's `if kc != nil`),
+  so **the spec VARIES PER DEPLOYMENT** — correctly: a deployment that does not
+  mount admin does not advertise it. That is why the document is generated
+  per-process at request time, not built once in CI.
+- **The product axis is mechanical.** The first path segment after `/v1/` IS the
+  product (`openapi.Product`), tagged onto each operation so a CLI can build
+  `hanzo <product> <resource> <verb>` with no judgment. It is deliberately NOT the
+  subsystem name: `clients/billing` also serves `/v1/finance/*`.
+- **What the router CANNOT tell you — do not try to fix this in the generator.**
+  Method, path, path params, and product are derivable; request/response schemas,
+  query/header params, status codes, and auth are NOT. The router holds a
+  `func(*zip.Ctx) error`; the request type is a LOCAL inside the handler
+  (`var req secretPutRequest; json.Unmarshal(ctx.Body(), &req)`), and Go cannot
+  reflect from a func value into its body. `cloud.Handle[S]` does not help — `S`
+  is the SERVICE (service.go:90), not the payload; `cloud.Typed` is an
+  `any→*zip.App` mount adapter. The ONE path to schemas is zip's typed ops
+  (`zip.Get[In,Out]`), which carry the In/Out types and also yield an MCP tool
+  from the same registry (zip/openapi.go, zip/mcp.go — today `len(a.ops) == 0`,
+  so zip's own generator emits nothing here). `GetRoutes()` is a superset of
+  `app.ops`, so migrating a handler to a typed op adds schema without changing
+  this pipeline.
+- **Catch-alls are opaque, by construction.** `app.Post("/v1/billing/*")` proxies
+  to another service, so `POST /v1/billing/deposit` is NOT a route in this process
+  and cannot appear. Measured on the live table: 3 products are wholly opaque
+  (`bot`, `licensing`, `sentry` — the catch-all IS the product) and 12 more mix
+  concrete ops with a catch-all hiding an unknown remainder.
 
 ## Cross-subsystem seams that are values, not places
 
