@@ -17,7 +17,7 @@ import (
 	baseapp "github.com/hanzoai/base"
 	"github.com/hanzoai/base/apis"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 )
 
 // Pool sizing (env-overridable). A full Base app is heavier than a bare *sql.DB
@@ -35,7 +35,7 @@ const (
 // ({DataDir}/base/{TenantSegment}/), the "prod = SQLite per tenant" rule
 // (HIP-0302). Apps open lazily on first request, migrate once, and are pooled
 // (LRU-capped, idle-evicted). Concurrent opens of the same org are
-// single-flighted under mu. The org→segment encoding is gojabase.TenantSegment —
+// single-flighted under mu. The org→segment encoding is goja.TenantSegment —
 // the ONE injective, traversal-safe tenant→path encoder, shared so an org maps
 // to exactly one physical identity everywhere in the binary.
 type pool struct {
@@ -85,7 +85,7 @@ func (p *pool) acquire(org string) (http.Handler, func(), error) {
 	if strings.TrimSpace(org) == "" {
 		return nil, nil, fmt.Errorf("base: empty org")
 	}
-	seg := gojabase.TenantSegment(org)
+	seg := goja.TenantSegment(org)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -111,7 +111,7 @@ func (p *pool) acquire(org string) (http.Handler, func(), error) {
 // for in-process callers that drive the engine's Go API directly (collection
 // provisioning, seeding) rather than the HTTP path.
 func (p *pool) appFor(org string) (*baseapp.Base, error) {
-	seg := gojabase.TenantSegment(org)
+	seg := goja.TenantSegment(org)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e, ok := p.m[seg]; ok {
