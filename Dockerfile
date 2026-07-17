@@ -166,18 +166,21 @@ RUN set -eux; \
     ln -sf "$SC" /usr/lib/libsqlite3.so; \
     ln -sf "$SC" /usr/lib/libsqlite3.so.0
 WORKDIR /src
-# hanzoai/* and luxfi/* are PUBLIC and resolve via the IMMUTABLE public proxy +
-# sumdb — go.sum pins those canonical hashes, so a force-re-pointed tag can never
-# break the build. GOSUMDB stays ON (a money image must not blanket-disable the
-# checksum database); only zap-proto/* is exempt (first-party-direct via GOPRIVATE,
-# authenticated git over gh_token). -mod=readonly means the committed go.sum is the
-# SOLE source of truth: any drift (a needed hash not present) FAILS the build
-# instead of being silently re-recorded. CGO_CFLAGS/LDFLAGS enable the SQLCipher
-# codec + URI keying.
+# zap-proto/* (all 55 repos) and luxfi/* (all 37 deps here) are PUBLIC and resolve
+# via the IMMUTABLE public proxy + sumdb — go.sum pins those canonical hashes, so a
+# force-re-pointed tag can never break the build. GOSUMDB stays ON (a money image
+# must not blanket-disable the checksum database); github.com/hanzoai/* is the
+# exempt namespace — ai, account, commerce, orm, xorm, beego, csqlite and ~30 more
+# are PRIVATE repos, so they resolve direct+authenticated (git over gh_token) and
+# skip a sumdb that cannot see them. GOPRIVATE named zap-proto until now, which is
+# public and was never the reason anything was direct; the private namespace it
+# stood for went unnamed and worked only on the GOPROXY `direct` fallback.
+# -mod=readonly means the committed go.sum is the SOLE source of truth: any drift
+# (a needed hash not present) FAILS the build instead of being silently
+# re-recorded. CGO_CFLAGS/LDFLAGS enable the SQLCipher codec + URI keying.
 ENV CGO_CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_USE_URI=1 -I/usr/include/sqlcipher" \
     CGO_LDFLAGS="-lsqlcipher" \
-    GOPRIVATE=github.com/zap-proto/* \
-    GONOSUMDB=github.com/zap-proto/* \
+    GOPRIVATE=github.com/hanzoai/* \
     GOPROXY=https://proxy.golang.org,direct \
     GOFLAGS=-mod=readonly
 COPY go.mod go.sum ./
