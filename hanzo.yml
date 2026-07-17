@@ -1,15 +1,24 @@
 # Canonical CI config for hanzoai/cloud — read by the hanzoai/ci reusable
 # (.github/workflows/cicd.yml) and platform.hanzo.ai.
 #
-# NO images: block by design. release.yml OWNS the cloud image + v* tags (the
-# tag-is-a-receipt invariant: main push → build → smoke → push image → tag).
-# Declaring images here too would double-build and re-open the phantom-tag
-# hole release.yml exists to close. CI's job here is the TEST GATE on every
-# push/PR, on OUR arc pool.
+# The cloud MAIN image has NO images: entry — release.yml OWNS it + the v* tags
+# (the tag-is-a-receipt invariant: main push → build → smoke → push image → tag).
+# Declaring the cloud image here too would double-build and re-open the
+# phantom-tag hole release.yml exists to close. The images: block below is ONLY
+# the decoupled native flags staticlib (cloud-flags) — a distinct artifact on
+# its own version, never a v* git tag — so cloud's Dockerfile pulls it (FROM
+# ${FLAGS_IMAGE} AS flagslib) instead of recompiling Rust every release. CI's
+# other job here is the TEST GATE on every push/PR, on OUR arc pool.
 #
 # NO deploy: cloud is operator-managed — universe records desired state and the
 # operator reconciles the Service CR; release.yml notifies universe with a
 # proven tag.
+images:
+  - name: cloud-flags
+    context: native/flags
+    dockerfile: native/flags/Dockerfile
+    repo: ghcr.io/hanzoai/cloud-flags
+
 test:
   - name: native-flags
     # The flags evaluator staticlib clients/featureflags links under CGO=1.
@@ -19,6 +28,10 @@ test:
         curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
       fi
       . "$HOME/.cargo/env" 2>/dev/null || true
+      # zccache: drop-in compiler cache — no-op unless the runner carries it, so
+      # it never breaks the gate; where present (arc/gitea + Actions cache) it
+      # warms the Rust compile cross-run.
+      command -v zccache >/dev/null 2>&1 && export RUSTC_WRAPPER=zccache || true
       cargo build --release --locked --manifest-path native/flags/Cargo.toml
   - name: go-vet
     run: |
