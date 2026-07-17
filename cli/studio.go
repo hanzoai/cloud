@@ -107,6 +107,17 @@ func stopStudio(cmd *exec.Cmd) {
 	}
 }
 
+// studioRecycle carries at most one pending recycle request; the render
+// handler signals it after each completed render (see gpu.go).
+var studioRecycle = make(chan struct{}, 1)
+
+func requestStudioRecycle() {
+	select {
+	case studioRecycle <- struct{}{}:
+	default:
+	}
+}
+
 // superviseStudio keeps the local render backend on :8188 alive until ctx
 // ends. Quiet by design: one line per restart event, not a probe firehose.
 func superviseStudio(ctx context.Context, dir string, out io.Writer) {
@@ -145,6 +156,8 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 			}
 			return
+		case <-studioRecycle:
+			restart("recycle")
 		case <-tick.C:
 			if studioHealthy(ctx) {
 				continue
