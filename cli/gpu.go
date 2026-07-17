@@ -1023,6 +1023,12 @@ func (w *worker) mirrorRenders(ctx context.Context, out io.Writer, dir, base str
 		if werr != nil || info == nil || info.IsDir() || !isImageFile(p) {
 			return nil
 		}
+		// Hidden files and AppleDouble forks (`._*`, `.DS_Store`) ride along with
+		// mac scp and are not renders — `._foo.png` passes the extension check
+		// but is a 4KB resource fork that poisons the library.
+		if strings.HasPrefix(filepath.Base(p), ".") {
+			return nil
+		}
 		rel, rerr := filepath.Rel(dir, p)
 		if rerr != nil {
 			return nil
