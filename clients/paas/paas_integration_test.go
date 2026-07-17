@@ -91,7 +91,7 @@ func TestIntegrationIdempotentDeploy(t *testing.T) {
 	s := itClient(t)
 	ctx := context.Background()
 
-	before, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").Get(ctx, itService, metav1.GetOptions{})
+	before, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").Get(ctx, itService, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get %s before: %v", itService, err)
 	}
@@ -105,7 +105,7 @@ func TestIntegrationIdempotentDeploy(t *testing.T) {
 
 	// Same-image merge-patch (the identical body the deploy handler builds).
 	patch := []byte(`{"spec":{"image":{"tag":"` + tag + `","repository":"` + repo + `","pullPolicy":"Always"}}}`)
-	after, err := s.State.dyn.Resource(servicesGVR).Namespace("hanzo").
+	after, err := s.State.dyn.Resource(appsGVR).Namespace("hanzo").
 		Patch(ctx, itService, k8stypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		t.Fatalf("idempotent patch: %v", err)
