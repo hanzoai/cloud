@@ -293,6 +293,67 @@ jobs:
 
           echo "SMOKE PASS: cloud:smoke booted to \"listening\" with no crash signature"
 
+      # ── Functional smoke — authenticated per-subsystem probe (the REAL gate) ─────
+      # The boot check above proves the process REACHES "listening"; this proves the
+      # mounted HTTP surface actually WORKS. /smoke (cmd/smoke, baked into the image)
+      # hits ONE side-effect-free read per core subsystem and FAILS the release on any
+      # broken code — above all a 402 on a READ (the balance-gate-over-blocks-reads
+      # regression) or a 5xx (a crash, e.g. the /v1/billing/usage self-dispatch 500).
+      # So a release can never ship with chat/billing/projects/kms/... down.
+      - name: Functional smoke — per-subsystem probe (fails the release if a core endpoint is broken)
+        env:
+          KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
+          KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
+          KMS_ENDPOINT: ${{ vars.KMS_ENDPOINT || 'https://kms.hanzo.ai' }}
+          # A KMS-provisioned short-lived smoke bearer, injected as a secret (NEVER
+          # hardcoded). Absent → the anonymous matrix still gates public/authed and
+          # catches every 402-on-read / 5xx.
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
+        run: |
+          set -euo pipefail
+          IMAGE=cloud:smoke
+          CID=""
+          cleanup() { [ -n "$CID" ] && docker rm -f "$CID" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+          CID="$(docker run -d \
+            --tmpfs /data:rw,size=64m \
+            -e CLOUD_DATA_DIR=/data -e CLOUD_ENV=smoke -e CLOUD_KMS_MASTER_KEY_REF="$KEY" \
+            "$IMAGE")"
+
+          # Wait for the HTTP listener to bind (or the process to die).
+          up=0
+          for _ in $(seq 1 60); do
+            lg="$(docker logs "$CID" 2>&1 || true)"
+            printf '%s' "$lg" | grep -q '"message":"listening"' && { up=1; break; }
+            [ "$(docker inspect -f '{{.State.Running}}' "$CID" 2>/dev/null || echo false)" != "true" ] && break
+            sleep 1
+          done
+          if [ "$up" != 1 ]; then
+            echo "::group::boot logs"; docker logs "$CID" 2>&1 || true; echo "::endgroup::"
+            echo "FUNCTIONAL SMOKE INFRA FAIL: image never reached \"listening\""
+            exit 1
+          fi
+
+          # Token: prefer the injected secret; else mint from KMS (a provisioned smoke
+          # identity); else run the anonymous matrix. Never hardcoded.
+          if [ -z "${SMOKE_TOKEN:-}" ] && [ -n "${KMS_CLIENT_ID:-}" ]; then
+            KT=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json' \
+              -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty' || true)
+            [ -n "$KT" ] && SMOKE_TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/orgs/hanzo/secrets/smoke/TOKEN?env=prod" \
+              -H "Authorization: Bearer $KT" | jq -r '.secret.value // empty' || true)
+          fi
+          if [ -n "${SMOKE_TOKEN:-}" ]; then echo "::add-mask::$SMOKE_TOKEN"; echo "smoke: AUTHENTICATED matrix"; else echo "smoke: ANONYMOUS matrix (no SMOKE_TOKEN wired)"; fi
+
+          # /smoke is baked into the image (Dockerfile) — exec it INSIDE the container,
+          # so it probes the real mounted surface at localhost:8080 with no port/network
+          # plumbing. A non-zero exit here fails the release BEFORE any image is pushed.
+          docker exec \
+            -e SMOKE_BASE_URL=http://127.0.0.1:8080 \
+            -e SMOKE_TOKEN="${SMOKE_TOKEN:-}" \
+            "$CID" /smoke
+
       # ── Migration smoke — the gate the v1.800.1 crashloop would have tripped ─────
       # The plain smoke above boots on a FRESH /data, so every subsystem's migrate()
       # takes its CREATE-TABLE path and no forward-migration is exercised — which is
