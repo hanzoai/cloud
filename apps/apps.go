@@ -117,6 +117,7 @@ import (
 	"github.com/hanzoai/cloud/clients/sign"
 	"github.com/hanzoai/cloud/clients/social"
 	"github.com/hanzoai/cloud/clients/storage"
+	"github.com/hanzoai/cloud/clients/sync"
 	"github.com/hanzoai/cloud/clients/tasks"
 	"github.com/hanzoai/cloud/clients/team"
 	"github.com/hanzoai/cloud/clients/templates"
@@ -303,6 +304,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "social", Mount: cloud.Typed(social.Mount), Shutdown: ctxShutdown(social.Shutdown)},
 		{Name: "analytics", Mount: cloud.Typed(analytics.Mount), OwnsHealth: true},
 		{Name: "git", Mount: cloud.Typed(git.Mount)},
+		// Universal sync (/v1/sync/links + engine). Registers the cloud.SyncEngine the
+		// GitHub/Gitea webhooks enqueue to; git is its first provider. Owns per-org
+		// DB handles, so its Shutdown closes them on SIGTERM.
+		{Name: "sync", Mount: cloud.Typed(sync.Mount), Shutdown: ctxShutdown(sync.Shutdown)},
 		{Name: "visor", Mount: cloud.Typed(visor.Mount)},
 		// Cap table on Base via goja. STAGED behind CLOUD_ENABLE.
 		{Name: "captable", Mount: cloud.Typed(captable.Mount), Shutdown: captable.Shutdown},

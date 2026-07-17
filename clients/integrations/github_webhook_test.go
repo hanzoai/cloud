@@ -76,6 +76,38 @@ func useImporter(t *testing.T) *recordingImporter {
 	return f
 }
 
+// syncCapture records the events the webhook hands cloud.Sync: the webhook now
+// enqueues every verified push to the universal engine (the one place a sync
+// happens), so the test asserts the ENQUEUED event rather than a direct git call.
+type syncCapture struct {
+	mu     sync.Mutex
+	events []cloud.SyncEvent
+}
+
+func (e *syncCapture) count() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.events)
+}
+func (e *syncCapture) last() cloud.SyncEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.events[len(e.events)-1]
+}
+
+func useSyncEngine(t *testing.T) *syncCapture {
+	t.Helper()
+	e := &syncCapture{}
+	cloud.RegisterSync(func(_ context.Context, ev cloud.SyncEvent) (cloud.SyncResult, error) {
+		e.mu.Lock()
+		e.events = append(e.events, ev)
+		e.mu.Unlock()
+		return cloud.SyncResult{Ran: 1}, nil
+	})
+	t.Cleanup(func() { cloud.RegisterSync(nil) })
+	return e
+}
+
 // pushPayload builds a GitHub push event body.
 func pushPayload(t *testing.T, inst int64, repo, ref string) []byte {
 	t.Helper()
@@ -97,7 +129,7 @@ func pushPayload(t *testing.T, inst int64, repo, ref string) []byte {
 // non-empty; org, when non-empty, sets a (would-be-spoofed) X-Org-Id header.
 func webhookPost(t *testing.T, app *zip.App, event, sig, org string, payload []byte) httpResult {
 	t.Helper()
-	rq := httptest.NewRequest(http.MethodPost, "/v1/integrations/github/webhook", bytes.NewReader(payload))
+	rq := httptest.NewRequest(http.MethodPost, "/v1/github-webhook", bytes.NewReader(payload))
 	rq.Header.Set("Content-Type", "application/json")
 	rq.Header.Set("X-GitHub-Event", event)
 	if sig != "" {
@@ -148,7 +180,7 @@ func TestVerifyGitHubSignature(t *testing.T) {
 // installation id (a spoofed X-Org-Id is ignored), each installation maps to its
 // OWN org, and ping/non-branch/delete/unknown-install are benign no-ops.
 func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
-	fake := useImporter(t)
+	eng := useSyncEngine(t)
 	srv := mockGitHub(t, nil)
 	withGithubApp(t, srv)
 	const secret = "wh_secret_xyz"
@@ -160,35 +192,38 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 	_ = mounted.State.store.Upsert(ctx, Connection{Org: "acme", Provider: "github", ExternalID: "111"})
 	_ = mounted.State.store.Upsert(ctx, Connection{Org: "beta", Provider: "github", ExternalID: "222"})
 
-	// 1) Valid push for installation 111 → org acme, delegated to the git plane.
+	// 1) Valid push for installation 111 → org acme, enqueued to the sync engine.
 	p := pushPayload(t, 111, "widgets", "refs/heads/main")
 	if r := webhookPost(t, app, "push", ghSign(secret, p), "", p); r.Code != http.StatusOK {
 		t.Fatalf("valid push want 200, got %d (%s)", r.Code, r.Body)
 	}
-	if fake.inboundN() != 1 {
-		t.Fatalf("valid push must call InboundSync once, got %d", fake.inboundN())
+	if eng.count() != 1 {
+		t.Fatalf("valid push must enqueue one sync event, got %d", eng.count())
 	}
-	in := fake.lastInbound()
-	if in.Org != "acme" || in.Repo != "widgets" || in.Branch != "main" || in.Origin != "github.com" {
-		t.Fatalf("wrong inbound req: %+v", in)
+	in := eng.last()
+	if in.Kind != "git" || in.Provider != "github" || in.Org != "acme" || in.Repo != "widgets" || in.Branch != "main" {
+		t.Fatalf("wrong sync event: %+v", in)
+	}
+	if in.Locator != "https://github.com/acme-gh/widgets.git" {
+		t.Fatalf("event must carry the source clone URL, got %q", in.Locator)
 	}
 
 	// 2) A SPOOFED X-Org-Id must NOT override the installation-derived org.
 	p = pushPayload(t, 111, "widgets", "refs/heads/main")
 	webhookPost(t, app, "push", ghSign(secret, p), "beta", p) // attacker claims beta
-	if got := fake.lastInbound().Org; got != "acme" {
+	if got := eng.last().Org; got != "acme" {
 		t.Fatalf("spoofed X-Org-Id must be ignored; org resolved to %q (want acme)", got)
 	}
 
 	// 3) Installation 222 → org beta (each install isolated to its own org).
 	p = pushPayload(t, 222, "secret-svc", "refs/heads/main")
 	webhookPost(t, app, "push", ghSign(secret, p), "", p)
-	if got := fake.lastInbound(); got.Org != "beta" || got.Repo != "secret-svc" {
+	if got := eng.last(); got.Org != "beta" || got.Repo != "secret-svc" {
 		t.Fatalf("installation 222 must resolve to beta, got %+v", got)
 	}
 
-	// 4) BAD signature → 401, git plane never touched.
-	before := fake.inboundN()
+	// 4) BAD signature → 401, engine never touched.
+	before := eng.count()
 	p = pushPayload(t, 111, "widgets", "refs/heads/main")
 	if r := webhookPost(t, app, "push", "sha256=deadbeef", "", p); r.Code != http.StatusUnauthorized {
 		t.Fatalf("bad signature want 401, got %d", r.Code)
@@ -197,25 +232,25 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 	if r := webhookPost(t, app, "push", "", "", p); r.Code != http.StatusUnauthorized {
 		t.Fatalf("absent signature want 401, got %d", r.Code)
 	}
-	if fake.inboundN() != before {
-		t.Fatalf("an unsigned/bad-signed push must NEVER reach the git plane")
+	if eng.count() != before {
+		t.Fatalf("an unsigned/bad-signed push must NEVER reach the sync engine")
 	}
 
-	// 6) Unknown installation → 200 ignored, not delegated.
-	before = fake.inboundN()
+	// 6) Unknown installation → 200 ignored, not enqueued.
+	before = eng.count()
 	p = pushPayload(t, 999, "widgets", "refs/heads/main")
 	if r := webhookPost(t, app, "push", ghSign(secret, p), "", p); r.Code != http.StatusOK {
 		t.Fatalf("unknown install want 200, got %d", r.Code)
 	}
-	if fake.inboundN() != before {
-		t.Fatal("unknown installation must not delegate to the git plane")
+	if eng.count() != before {
+		t.Fatal("unknown installation must not enqueue a sync event")
 	}
 
 	// 7) ping → 200. 8) tag (non-branch) → 200 ignored. 9) branch delete → 200 ignored.
 	if r := webhookPost(t, app, "ping", ghSign(secret, []byte(`{"zen":"x"}`)), "", []byte(`{"zen":"x"}`)); r.Code != http.StatusOK {
 		t.Fatalf("ping want 200, got %d", r.Code)
 	}
-	before = fake.inboundN()
+	before = eng.count()
 	tag := pushPayload(t, 111, "widgets", "refs/tags/v1.0.0")
 	webhookPost(t, app, "push", ghSign(secret, tag), "", tag)
 	del, _ := json.Marshal(map[string]any{
@@ -224,8 +259,8 @@ func TestWebhookOrgIsolationAndFailClosed(t *testing.T) {
 		"installation": map[string]any{"id": 111},
 	})
 	webhookPost(t, app, "push", ghSign(secret, del), "", del)
-	if fake.inboundN() != before {
-		t.Fatal("tag push and branch delete must NOT drive an inbound sync")
+	if eng.count() != before {
+		t.Fatal("tag push and branch delete must NOT enqueue a sync event")
 	}
 }
 
