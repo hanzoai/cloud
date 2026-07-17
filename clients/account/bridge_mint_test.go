@@ -2,7 +2,12 @@ package account
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+
+	commercebilling "github.com/hanzoai/commerce/api/billing"
+	commercemid "github.com/hanzoai/commerce/middleware"
+	"github.com/zap-proto/zip"
 )
 
 // bridge_mint_test.go — the privilege-escalation boundary of the /v1/billing/*
@@ -33,30 +38,55 @@ import (
 // possession of the service token IS authority to create spendable balance. None
 // may leave cloud. A request that never reaches commerce cannot mint, so the
 // assertion is twofold: the caller is refused AND upstream saw nothing.
-func TestBridge_OrgUserCannotReachMint(t *testing.T) {
-	// Every money-MINT route commerce gates on PlatformOnly. Kept in lockstep with
-	// api/billing/handlers.go's `mintRequired` routes.
-	mintPaths := []struct{ method, path, body string }{
-		{http.MethodPost, "/v1/billing/deposit", `{"amount":100000000,"currency":"usd"}`},
-		{http.MethodPost, "/v1/billing/credit", `{"amountCents":100000000}`},
-		{http.MethodPost, "/v1/billing/refund", `{"amount":100000000}`},
-		{http.MethodPost, "/v1/billing/credit-grants", `{"amount":100000000}`},
-		{http.MethodPost, "/v1/billing/credit-grants/g1/void", ``},
-		{http.MethodPost, "/v1/billing/allotment/grant", `{"plan":"enterprise"}`},
-		{http.MethodPost, "/v1/billing/allotment/run", ``},
-		{http.MethodPost, "/v1/billing/husd/sync", ``},
-		{http.MethodPost, "/v1/billing/husd/settle", ``},
-		{http.MethodPost, "/v1/billing/husd/migrate", ``},
+// mintSurface asks COMMERCE which routes it gates, rather than keeping a copy.
+//
+// The list used to live here by hand under "kept in lockstep with
+// api/billing/handlers.go" — and it had already drifted: 10 paths here against
+// 16 commerce actually gates. A comment cannot hold two lists together. Now
+// commerce DECLARES its gated surface (middleware.Mint records what it gates)
+// and we read that declaration, so a mint route added there is covered here with
+// nobody remembering to do anything.
+//
+// Registration is what populates the registry, so register first, then read.
+func mintSurface(t *testing.T) []commercemid.MintRoute {
+	t.Helper()
+	commercebilling.Route(zip.New(zip.Config{DisableStartupMessage: true}).Group("/v1"))
+
+	var out []commercemid.MintRoute
+	for _, r := range commercemid.MintRoutes() {
+		// Only what THIS bridge can address: it forwards /v1/billing/* alone.
+		if !strings.HasPrefix(r.Path, "/v1/billing/") {
+			continue
+		}
+		// A wildcard segment needs some concrete value to be requestable; which
+		// one is irrelevant, since a refused call never reaches an id.
+		parts := strings.Split(r.Path, "/")
+		for i, seg := range parts {
+			if strings.HasPrefix(seg, ":") || seg == "{}" {
+				parts[i] = "probe"
+			}
+		}
+		r.Path = strings.Join(parts, "/")
+		out = append(out, r)
 	}
+	if len(out) == 0 {
+		t.Fatal("commerce declared no /v1/billing mint routes — the registry is not being populated")
+	}
+	return out
+}
+
+func TestBridge_OrgUserCannotReachMint(t *testing.T) {
+	mintPaths := mintSurface(t)
+	t.Logf("commerce declares %d gated /v1/billing mint routes", len(mintPaths))
 
 	for _, m := range mintPaths {
-		t.Run(m.path, func(t *testing.T) {
+		t.Run(m.Method+" "+m.Path, func(t *testing.T) {
 			f := &fakeBilling{}
 			t.Setenv("COMMERCE_URL", f.server(t).URL)
 			t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
 			app := mountApp(t, "http://iam.invalid", "", "")
 
-			code, body := callH(t, app, m.method, m.path, alice, m.body)
+			code, body := callH(t, app, m.Method, m.Path, alice, `{}`)
 
 			// The mint request must NEVER reach commerce: arriving there at all means
 			// it arrived bearing the admin service token, which IS the authority to
@@ -65,11 +95,11 @@ func TestBridge_OrgUserCannotReachMint(t *testing.T) {
 				t.Fatalf("ESCALATION: an ordinary org user's %s %s reached commerce at %q "+
 					"carrying %q — the service token that satisfies MayMintMoney. "+
 					"Minted subject=%v amount=%v in org=%q.",
-					m.method, m.path, f.path, f.auth, f.body["user"], f.body["amount"], f.org)
+					m.Method, m.Path, f.path, f.auth, f.body["user"], f.body["amount"], f.org)
 			}
 			if code != http.StatusNotFound {
 				t.Fatalf("%s %s: want 404 (not a forwardable billing endpoint), got %d (%s)",
-					m.method, m.path, code, body)
+					m.Method, m.Path, code, body)
 			}
 		})
 	}
