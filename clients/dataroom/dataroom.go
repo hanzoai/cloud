@@ -8,7 +8,7 @@
 // business logic (documents, data rooms, shareable links with access controls,
 // viewers, per-page view analytics) is a self-contained goja bundle (bundle.js, the
 // ESM-free port of the Papermark API handlers). It runs in-process on the REUSABLE
-// clients/gojabase host — the SAME RW-Base binding captable (#97) pilots and esign
+// clients/goja host — the SAME RW-Base binding captable (#97) pilots and esign
 // (#100) reuses — which injects __db/__newId/__now and one SQLite file per tenant,
 // one transaction per request. This leaf adds only: the per-tenant Schema, the
 // object-storage seam for document bytes, a bcrypt HostFn for link passwords, and
@@ -16,7 +16,7 @@
 //
 //	dataroom bundle (bundle.js, go:embed)  +  per-tenant Schema  +  __bcrypt HostFn
 //	                    │
-//	             clients/gojabase.New(...)   ← __db/__newId/__now, per-tenant Base,
+//	             clients/goja.NewBase(...)   ← __db/__newId/__now, per-tenant Base,
 //	                    │                       one transaction per request
 //	             /v1/dataroom/* zip routes
 //
@@ -29,7 +29,7 @@
 // AUTH. Admin routes require a validated cloud principal (principal.Org → org);
 // public viewer routes carry no principal and resolve their org from the link index
 // (a link id → org routing table — the one cross-tenant piece). Tenant isolation is
-// the per-org SQLite file gojabase selects from that org.
+// the per-org SQLite file NewBase selects from that org.
 //
 // ACTIVATION: dataroom is NOT staged — it mounts under the mount-all default
 // (empty CLOUD_ENABLE), so the one binary serves /v1/dataroom/* from first boot.
@@ -51,7 +51,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	hcloud "github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
@@ -75,7 +75,7 @@ type blobStore interface {
 // state is dataroom's own data; shared deps live in the embedded cloud.Base,
 // reached as s.Log.
 type state struct {
-	host  *gojabase.Host
+	host  *goja.BaseHost
 	index *linkIndex
 	blob  blobStore
 }
@@ -105,7 +105,7 @@ func Mount(app *zip.App, deps hcloud.Deps) error {
 		return c.JSON(http.StatusOK, map[string]string{"service": "dataroom", "status": "ok"})
 	})
 
-	host, err := gojabase.New(gojabase.Config{
+	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "dataroom",
 		Bundle:  bundleJS,
 		Schema:  schema,
@@ -233,7 +233,7 @@ func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
 		ct = "application/octet-stream"
 	}
 	// ONE tenant encoding everywhere: the object-store key prefix uses the SAME
-	// injective, path-safe gojabase.TenantSegment the per-tenant SQLite filename
+	// injective, path-safe goja.TenantSegment the per-tenant SQLite filename
 	// does — never the raw org (which could carry a '/' and traverse the key
 	// namespace, and would drift from the DB's encoding).
 	rk, err := randKey()
@@ -241,7 +241,7 @@ func uploadDocument(s *hcloud.Service[state], c *zip.Ctx) error {
 		s.Log.Error("dataroom: crypto/rand unavailable", "err", err)
 		return zip.Errorf(http.StatusInternalServerError, "storage key generation failed")
 	}
-	key := "dataroom/" + gojabase.TenantSegment(org) + "/" + rk
+	key := "dataroom/" + goja.TenantSegment(org) + "/" + rk
 	if err := s.State.blob.Put(c.Context(), key, raw); err != nil {
 		s.Log.Error("dataroom storage put failed", "err", err)
 		return zip.Errorf(http.StatusBadGateway, "document storage unavailable")
@@ -259,7 +259,7 @@ func adminDownload(s *hcloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route: "documents.file", Params: map[string]string{"id": c.Param("id")},
 	})
 	if err != nil {
@@ -275,7 +275,7 @@ func viewerDownload(s *hcloud.Service[state], c *zip.Ctx) error {
 	if err != nil || !ok {
 		return zip.ErrNotFound("link not found")
 	}
-	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route:  "view.file",
 		Params: map[string]string{"linkId": linkID, "documentId": c.Param("documentId")},
 		Query:  map[string]string{"viewId": c.Query("viewId"), "download": c.Query("download")},
@@ -288,7 +288,7 @@ func viewerDownload(s *hcloud.Service[state], c *zip.Ctx) error {
 
 // streamFile turns a {fileKey,contentType,name} bundle result into a byte stream
 // from object storage. A non-200 bundle result (404/403) passes through as JSON.
-func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *gojabase.Response) error {
+func streamFile(s *hcloud.Service[state], c *zip.Ctx, resp *goja.Response) error {
 	if resp.Status != http.StatusOK {
 		c.SetHeader("Content-Type", "application/json")
 		return c.Bytes(resp.Status, resp.Body)
@@ -325,7 +325,7 @@ func createLink(s *hcloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{Route: "links.create", Body: body})
+	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{Route: "links.create", Body: body})
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "dataroom dispatch failed")
 	}
@@ -349,7 +349,7 @@ func createLink(s *hcloud.Service[state], c *zip.Ctx) error {
 // write dispatches one bundle route on the tenant's Base store (one transaction
 // per request) and writes {status, body}.
 func write(s *hcloud.Service[state], c *zip.Ctx, org, route string, params, query map[string]string, body any) error {
-	resp, err := s.State.host.Dispatch(c.Context(), org, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), org, goja.BaseRequest{
 		Route: route, Params: params, Query: query, Body: body,
 	})
 	if err != nil {
