@@ -18,7 +18,7 @@ import (
 	baseapp "github.com/hanzoai/base"
 	"github.com/hanzoai/base/core"
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -170,8 +170,8 @@ func TestPerOrgIsolatedCRUD(t *testing.T) {
 	}
 
 	// The isolation is physical: distinct on-disk data dirs per org segment.
-	acmeDir := filepath.Join(dataDir, "base", gojabase.TenantSegment("acme"))
-	globexDir := filepath.Join(dataDir, "base", gojabase.TenantSegment("globex"))
+	acmeDir := filepath.Join(dataDir, "base", goja.TenantSegment("acme"))
+	globexDir := filepath.Join(dataDir, "base", goja.TenantSegment("globex"))
 	if acmeDir == globexDir {
 		t.Fatalf("orgs share a data dir: %s", acmeDir)
 	}
