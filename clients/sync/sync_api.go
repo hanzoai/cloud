@@ -82,7 +82,7 @@ func syncToView(v Sync) syncView {
 func createSync(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	var body syncReq
 	if err := c.Bind(&body); err != nil {
@@ -150,7 +150,7 @@ func createSync(s *cloud.Service[state], c *zip.Ctx) error {
 func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -207,7 +207,7 @@ func patchSync(s *cloud.Service[state], c *zip.Ctx) error {
 func listSyncs(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -228,7 +228,7 @@ func listSyncs(s *cloud.Service[state], c *zip.Ctx) error {
 func getSync(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -246,7 +246,7 @@ func getSync(s *cloud.Service[state], c *zip.Ctx) error {
 func deleteSync(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
@@ -275,7 +275,7 @@ func deleteSync(s *cloud.Service[state], c *zip.Ctx) error {
 func runSync(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := principalOrg(c)
 	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
+		return zip.ErrUnauthorized("a validated principal is required")
 	}
 	store, err := storeFor(s, org)
 	if err != nil {
