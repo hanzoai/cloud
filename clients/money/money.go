@@ -43,9 +43,15 @@ func Zero() Amount { return Amount{a: hz.Zero(creditUSD)} }
 // FromCents converts integer cents (a human/legacy unit) to an exact credit Amount.
 func FromCents(cents int64) Amount { return Amount{a: hz.New(decimal.New(cents, 2), creditUSD)} }
 
-// FromInt wraps a raw 18-decimal integer magnitude — the storage/on-chain form (the value
-// an EVM uint256 credit balance holds). A nil magnitude is 0.
-func FromInt(units *big.Int) Amount {
+// FromAtto wraps a raw atto-USD magnitude — 18 decimals, the storage/on-chain form (the
+// value an EVM uint256 credit balance holds). A nil magnitude is 0.
+//
+// It is named for the UNIT it takes, not for its Go type. As FromInt it read as "make an
+// Amount from an integer", and money.Amount.Minor() also returns an integer — so
+// FromInt(x.Minor()) type-checked, read fine, and fed CENTS to an 18-decimal constructor,
+// understating every zen debit by 10^16 until v1.801.44. FromAtto(x.Cents()) cannot read
+// fine. A name that states the unit refuses the bug the type system cannot see.
+func FromAtto(units *big.Int) Amount {
 	if units == nil {
 		return Zero()
 	}
@@ -129,12 +135,15 @@ func (a Amount) IsZero() bool { return a.a.IsZero() }
 // IsNeg reports whether a < 0.
 func (a Amount) IsNeg() bool { return a.a.Sign() < 0 }
 
-// Int returns a fresh big.Int of the 18-decimal magnitude — the on-chain uint256 value.
-func (a Amount) Int() *big.Int { return a.a.Minor() }
+// Atto returns a fresh big.Int of the atto-USD magnitude — 18 decimals, the on-chain
+// uint256 value. The unit is in the name: this is NOT interchangeable with
+// money.Amount.Minor(), which renders the CURRENCY's minor unit (money.USD declares 2, so
+// it returns cents). Both are "an integer"; they differ by 10^16.
+func (a Amount) Atto() *big.Int { return a.a.Minor() }
 
-// IntString is the canonical STORAGE form: the signed 18-decimal integer as a decimal
+// AttoString is the canonical STORAGE form: the signed atto-USD integer as a decimal
 // string (exact, on-chain-identical, sortable at fixed width by the caller).
-func (a Amount) IntString() string { return a.a.MinorString() }
+func (a Amount) AttoString() string { return a.a.MinorString() }
 
 // Cents rounds the value to whole cents (half-away-from-zero) — a human/legacy display unit
 // ONLY; never use it inside money math (it is lossy by construction).

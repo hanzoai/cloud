@@ -150,7 +150,7 @@ func TestCreditIsNotTheMinorUnit(t *testing.T) {
 	}
 
 	// The conversion that shipped, spelled out.
-	old := cloudmoney.FromInt(charge.Minor())
+	old := cloudmoney.FromAtto(charge.Minor())
 	if old.Cmp(credit(charge)) == 0 {
 		t.Fatal("FromInt(Minor()) agrees with credit() — the fixture can no longer tell the units apart, so these tests prove nothing")
 	}
