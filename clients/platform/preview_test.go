@@ -15,7 +15,7 @@ import (
 // crImage reads the operator Service CR's spec.image repo:tag from tenant-<org>.
 func crImage(t *testing.T, k *k8sClient, ns, name string) string {
 	t.Helper()
-	obj, err := k.dyn.Resource(servicesGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	obj, err := k.dyn.Resource(appsGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Service CR %s/%s: %v", ns, name, err)
 	}
@@ -74,14 +74,14 @@ func TestPreviewDeploysBranchTargetIsolatedFromProd(t *testing.T) {
 	if got := crImage(t, k, "tenant-maxpower", "api-feat-x"); got != "ghcr.io/hanzoai/nginx:pr-42" {
 		t.Fatalf("preview CR image wrong: %s", got)
 	}
-	obj, _ := k.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(context.Background(), "api-feat-x", metav1.GetOptions{})
+	obj, _ := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api-feat-x", metav1.GetOptions{})
 	hosts, _, _ := unstructured.NestedStringSlice(obj.Object, "spec", "ingress", "hosts")
 	if len(hosts) != 1 || hosts[0] != "api-feat-x.maxpower.hanzo.app" {
 		t.Fatalf("preview ingress host wrong: %v", hosts)
 	}
 
 	// Isolation: prod's app CR ("api") was never written by the preview.
-	if _, err := k.dyn.Resource(servicesGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{}); err == nil {
+	if _, err := k.dyn.Resource(appsGVR).Namespace("tenant-maxpower").Get(context.Background(), "api", metav1.GetOptions{}); err == nil {
 		t.Fatal("preview must NOT create/modify the prod Service CR")
 	}
 
