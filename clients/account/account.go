@@ -161,6 +161,10 @@ func routesBridge(s *cloud.Service[state], app *zip.App) {
 	// console calls, forwarded to commerce with the admin service token and SCOPED to the
 	// validated caller's own subject (billing.go). Registered AFTER clients/billing's
 	// specific routes (121 < 122) so those win and this catches the rest. GET+POST only.
+	// The wildcard is what the ROUTER matches; it is NOT the forwardable set — billing.go's
+	// billingForwardable allowlist decides that, per method, and 404s everything else
+	// BEFORE the admin service token is attached. Widening this pattern grants nothing on
+	// its own; adding a line to that table is the only way to expose an endpoint.
 	app.Get("/v1/billing/*", cloud.Handle(s, billingData))
 	app.Post("/v1/billing/*", requireCSRF(s, cloud.Handle(s, billingData)))
 	// Per-tenant STORE DATA bridge — the canonical /v1/commerce/* the console calls,
