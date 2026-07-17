@@ -236,7 +236,10 @@ func Wire() []cloud.MountSpec {
 		// CommerceClient is wired directly in pickCommerceClient).
 		{Name: "commerce", Mount: mountCommerce},
 		{Name: "licensing", Mount: licensing.Mount},
-		{Name: "plans", Mount: plan.Mount, OwnsHealth: true},
+		// clients/plan.Mount. Enable id normalized "plans" -> "plan" to match the
+		// package + generated cmd/plan (one subsystem, one name). Its product routes
+		// stay /v1/plans/* (incl. the OwnsHealth /v1/plans/health probe) — unchanged.
+		{Name: "plan", Mount: plan.Mount, OwnsHealth: true},
 		{Name: "pricing", Mount: pricing.Mount, OwnsHealth: true},
 		// /v1/s3/buckets/* + /v1/s3/health. Mounts BEFORE provisioning (120) so its static
 		// routes win over provisioning's /v1/s3/:name. OwnsHealth (real fail-closed probe).
