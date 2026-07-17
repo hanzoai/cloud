@@ -29,7 +29,7 @@ require (
 	github.com/hanzoai/sqlite v0.3.0
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
-	github.com/luxfi/log v1.4.3
+	github.com/luxfi/log v1.5.0
 	github.com/luxfi/zapdb v1.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/minio/minio-go/v7 v7.0.100
@@ -695,7 +695,7 @@ require (
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
-	github.com/shopspring/decimal v1.4.0
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
@@ -824,6 +824,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
+	github.com/hanzoai/agent v0.1.1
 	github.com/hanzoai/ai v1.817.0
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
