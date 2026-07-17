@@ -70,7 +70,6 @@ import (
 	"github.com/hanzoai/cloud/clients/connectorruntime"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
-	"github.com/hanzoai/cloud/clients/cron"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
 	"github.com/hanzoai/cloud/clients/do"
@@ -348,12 +347,11 @@ func Wire() []cloud.MountSpec {
 		// ahead of the AI /v1/* catch-all; native Enforce middleware (wired in serve.go)
 		// reads the SAME store in-process. Owns a global store, so Shutdown closes it.
 		{Name: "featuregate", Mount: cloud.Typed(featuregate.Mount), Shutdown: ctxShutdown(featuregate.Shutdown)},
+		// Tasks: the durable workflow/UI surface AND platform cron (durable schedules
+		// on the same shared engine, replacing every k8s CronJob). cron was a separate
+		// Wire entry; it mounts no routes and only registers schedules, so it is folded
+		// in as a sub-mount of tasks.Mount — ONE tasks subsystem.
 		{Name: "tasks", Mount: cloud.Typed(tasks.Mount)},
-		// Platform cron: durable schedules on the shared tasks engine replacing
-		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
-		// runs visible in the Tasks console. Mounts no routes; starts after the
-		// engine is wired.
-		{Name: "cron", Mount: cloud.Typed(cron.Mount)},
 		{Name: "automations", Mount: cloud.Typed(automations.Mount), Shutdown: automations.Shutdown},
 		// Native single-connector execution (HIP-0126): runs an ActivePieces JS
 		// connector action in-process via goja (clients/connectorruntime), retiring
