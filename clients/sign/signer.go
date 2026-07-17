@@ -309,7 +309,7 @@ func sanitizeText(s string) string {
 // ---- host-function objects injected into the goja runtime -------------------
 
 // pdfHostObject builds the __pdf = { stamp, sign } host object (injected via
-// gojabase Config.HostFns) over base64 PDF strings — the PDF/PKI primitive goja
+// NewBase Config.HostFns) over base64 PDF strings — the PDF/PKI primitive goja
 // cannot do. A returned Go error surfaces in JS as a thrown Error the bundle
 // catches. Signing ORCHESTRATION stays in the TS bundle; only stamp+seal is Go.
 func (s *signer) pdfHostObject() map[string]any {

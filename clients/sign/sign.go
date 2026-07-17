@@ -7,13 +7,13 @@
 // (the #96 pilot) established: the server-side domain (documents, recipients,
 // fields, the signing flow/state machine, audit trail, completion) is ported to
 // a self-contained goja bundle in github.com/hanzoai/sign; the REUSABLE
-// clients/gojabase binding runs it and gives it PERSISTENCE over per-tenant
+// clients/goja binding runs it and gives it PERSISTENCE over per-tenant
 // Base/SQLite (__db/__newId/__now, one SQLite file per tenant, ONE transaction
 // per request). This leaf adds ZERO storage glue of its own.
 //
 // THE HARD PART — PDF + PKI — is the one capability goja cannot provide: it is
 // implemented as Go host-functions (signer.go: pdfcpu render + digitorus/pdfsign
-// x509/PKCS#7 seal) and injected via the additive gojabase Config.HostFns as
+// x509/PKCS#7 seal) and injected via the additive goja BaseConfig.HostFns as
 // __pdf = { stamp, sign }. The signing-request/recipient/field/audit LOGIC and
 // the seal ORCHESTRATION stay in the TS bundle; only the crypto/PDF primitive is
 // Go. A real signed PDF comes out.
@@ -22,7 +22,7 @@
 // VALIDATED cloud principal (principal.Org), never a client header. Recipient
 // token routes (/v1/sign/o/:org/sign/:token) are unauthenticated capability
 // links: the :org segment selects the tenant DB and the crypto-random token
-// authorizes — a wrong org simply cannot hold a valid token. gojabase pre-routes
+// authorizes — a wrong org simply cannot hold a valid token. NewBase pre-routes
 // the bundle's db to that tenant, so isolation is a host property.
 //
 // ACTIVATION: sign is NOT staged — it mounts under the mount-all default (empty
@@ -40,7 +40,7 @@ import (
 	"net/http"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gojabase"
+	"github.com/hanzoai/cloud/clients/goja"
 	"github.com/hanzoai/cloud/clients/principal"
 	signbundle "github.com/hanzoai/sign"
 	"github.com/zap-proto/zip"
@@ -52,7 +52,7 @@ const maxBody = 32 << 20
 
 // state is sign's own data; shared deps live in the embedded cloud.Base.
 type state struct {
-	host *gojabase.Host
+	host *goja.BaseHost
 }
 
 // mounted is the active service so shutdown can release the per-tenant stores.
@@ -79,7 +79,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Sign persists PDF BYTES on the object-storage seam (deps.VFS), NOT inline in
 	// the per-tenant SQLite — a 32 MiB base64 PDF in a TEXT column would bloat the
-	// tenant DB and be re-copied on every read. gojabase injects it as __blob,
+	// tenant DB and be re-copied on every read. NewBase injects it as __blob,
 	// tenant-scoped. Without VFS sign cannot store documents, so serve health-only
 	// (cloud stays up) rather than write PDFs into the tenant DB.
 	if deps.VFS == nil {
@@ -95,7 +95,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("sign.Mount: load bundle: %w", err)
 	}
-	host, err := gojabase.New(gojabase.Config{
+	host, err := goja.NewBase(goja.BaseConfig{
 		Name:    "sign",
 		Bundle:  bundle,
 		Schema:  schema,
@@ -104,7 +104,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		HostFns: map[string]any{"__pdf": sg.pdfHostObject()},
 	})
 	if err != nil {
-		return fmt.Errorf("sign.Mount: gojabase host: %w", err)
+		return fmt.Errorf("sign.Mount: goja NewBase host: %w", err)
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "sign"), State: state{host: host}}
 	mounted = s
@@ -179,7 +179,7 @@ func token(s *cloud.Service[state], route string, readBody bool) zip.Handler {
 }
 
 // dispatch decodes the body, runs the bundle route on the tenant's Base store
-// (one transaction per request via gojabase), and writes {status, body}.
+// (one transaction per request via NewBase), and writes {status, body}.
 func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params map[string]string, readBody bool) error {
 	var body any
 	if readBody {
@@ -193,7 +193,7 @@ func dispatch(s *cloud.Service[state], c *zip.Ctx, route, tenant string, params 
 			}
 		}
 	}
-	resp, err := s.State.host.Dispatch(c.Context(), tenant, gojabase.Request{
+	resp, err := s.State.host.Dispatch(c.Context(), tenant, goja.BaseRequest{
 		Route:  route,
 		Params: params,
 		Body:   body,

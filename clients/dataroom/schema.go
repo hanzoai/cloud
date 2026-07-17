@@ -1,6 +1,6 @@
 package dataroom
 
-// schema is the per-tenant SQLite DDL — the Go host owns migrations (gojabase
+// schema is the per-tenant SQLite DDL — the Go host owns migrations (NewBase
 // runs this on every tenant DB open); the goja bundle only issues SQL against
 // these tables. Column names MUST match the SQL in bundle.js. Idempotent
 // (IF NOT EXISTS).
