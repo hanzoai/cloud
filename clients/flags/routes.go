@@ -1,4 +1,4 @@
-package featureflags
+package flags
 
 // /v1/flags — the product flag API, org-scoped through the gateway principal
 // (HIP-0026) and project-scoped through the principal's project. Evaluation is
@@ -25,6 +25,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Put("/v1/flags/defs/:key", cloud.Handle(s, putDef))
 	app.Delete("/v1/flags/defs/:key", cloud.Handle(s, deleteDef))
 	app.Get("/v1/flags/activity", cloud.Handle(s, listActivity))
+	// Repointed from the former featuregate: the guard's public runtime mode read,
+	// now answered by the engine decide (host→service→waitlist.<svc>). Exempt from the
+	// Enforce gate (/v1/featuregate/ prefix), so a gated user can still resolve mode.
+	app.Get("/v1/featuregate/mode", cloud.Handle(s, waitlistModeRoute))
 }
 
 // tenant resolves the org — the tenant-isolation KEY — from the validated
