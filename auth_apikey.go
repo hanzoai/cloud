@@ -47,19 +47,28 @@ type iamKeys struct {
 // credential it returns a resolver that resolves nothing (keys stay anonymous —
 // never a fabricated principal), so a deployment lacking the credential is safe.
 func newIAMKeys() *iamKeys {
-	base := strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/")
-	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
-	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
-	var auth string
-	if id != "" && secret != "" {
-		auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
-	}
 	return &iamKeys{
-		base:  base,
-		auth:  auth,
+		base:  iamHost(),
+		auth:  iamCred(),
 		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
 	}
+}
+
+// iamHost is the standalone IAM origin cloud talks to; iamCred is the service
+// credential (client_secret_basic) it presents — the ONE IAM identity, shared by
+// the API-key resolver here and the /v1/iam edge (iam_edge.go), so both
+// authenticate to IAM the same way. Empty cred → a deployment lacking the
+// credential stays safe (the caller treats "" as unconfigured).
+func iamHost() string { return strings.TrimRight(env("IAM_URL", "IAM_INTERNAL_URL"), "/") }
+
+func iamCred() string {
+	id := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_ID"))
+	secret := strings.TrimSpace(os.Getenv("IAM_MINT_CLIENT_SECRET"))
+	if id == "" || secret == "" {
+		return ""
+	}
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(id+":"+secret))
 }
 
 func env(names ...string) string {
