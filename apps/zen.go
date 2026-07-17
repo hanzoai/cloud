@@ -56,11 +56,7 @@ import (
 //
 // It is wired BEFORE ai in Wire() so Claim's c.Next() falls through to ai's
 // catch-all. zen's catalog reads its upstream keys from KMS via the Key resolver.
-func mountZen(app any, deps cloud.Deps) error {
-	a, ok := app.(*zip.App)
-	if !ok {
-		return fmt.Errorf("zen.Mount: app is %T, want *zip.App", app)
-	}
+func mountZen(a *zip.App, deps cloud.Deps) error {
 	z, err := zen.New(zen.Config{
 		Logger: deps.Logger,
 		Key:    zenKeyResolver(deps.KMS),
