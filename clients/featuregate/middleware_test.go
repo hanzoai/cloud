@@ -14,27 +14,31 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// gateApp mounts Enforce over a seeded registry and a catch-all "ok" handler. The
-// injected approval status decides whether the caller is off the waitlist. Returns
-// a driver that issues one request (host + path + identity + Accept).
+// testGate is the injected decide (the flags engine's WaitlistModeForHost seam):
+// hanzo.chat is gated, api.hanzo.ai is open, everything else is un-governed. This is
+// exactly what flags.WaitlistModeForHost returns for the equivalent registry, without
+// standing up the native flag engine (cgo) in a middleware unit test.
+func testGate(_ context.Context, host string) (mode bool, service string, known bool) {
+	switch host {
+	case "hanzo.chat":
+		return true, "chat", true // gated
+	case "api.hanzo.ai":
+		return false, "api", true // open
+	default:
+		return false, "", false // un-governed
+	}
+}
+
+// gateApp mounts Enforce over the injected decide and a catch-all "ok" handler. The
+// injected approval status decides whether the caller is off the waitlist.
 func gateApp(t *testing.T, approvalStatus string) *zip.App {
 	t.Helper()
-	st := newTestStore(t)
-	if _, err := st.Seed(context.Background(), []SeedService{
-		{Service: "chat", Hosts: []string{"hanzo.chat"}, WaitlistMode: true},   // gated
-		{Service: "api", Hosts: []string{"api.hanzo.ai"}, WaitlistMode: false}, // open
-	}, 100); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	setModuleStore(st)
-	t.Cleanup(func() { setModuleStore(nil) })
-
 	approvals := newApprovalsWithLookup(func(context.Context, string, string) (string, bool) {
 		return approvalStatus, true
 	}, time.Minute)
 
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai", Approvals: approvals}))
+	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai", Approvals: approvals, Gate: testGate}))
 	app.Get("/*", func(c *zip.Ctx) error { return c.String(200, "ok") })
 	return app
 }
@@ -141,16 +145,17 @@ func TestRule_UnauthenticatedBrowser_BouncedToWaitlist(t *testing.T) {
 }
 
 // MONEY-CRITICAL: a paid inference request with a Hanzo API key MUST flow through
-// Enforce even on the seeded waitlist-ON `api` host — it is possession-gated + billed
-// downstream, never waitlist-gated. Without the exemption THE RULE would 401 it and
-// break inference cluster-wide.
+// Enforce even on a waitlist-ON host — it is possession-gated + billed downstream,
+// never waitlist-gated. Without the exemption THE RULE would 401 it and break
+// inference cluster-wide.
 func TestRule_APIKeyInference_NeverGated(t *testing.T) {
-	app := gateApp(t, "pending") // api.hanzo.ai is seeded waitlist ON
+	app := gateApp(t, "pending")
 	for _, key := range []string{"hk-43f50b6b", "sk-hz-abc", "pk-hz-obs", "fw_live_x", "hz_secret"} {
-		// The exact paid-inference shape: Bearer key, JSON accept, NO session/user.
+		// The exact paid-inference shape: Bearer key, JSON accept, NO session/user, on a
+		// GATED host — the exemption, not mode, must carry it through.
 		for _, p := range []string{"/v1/chat/completions", "/v1/models", "/v1/embeddings"} {
 			code, _ := drive(t, app, greq{
-				host: "api.hanzo.ai", path: p, accept: "application/json",
+				host: "hanzo.chat", path: p, accept: "application/json",
 				authorization: "Bearer " + key,
 			})
 			if code != 200 {
@@ -159,7 +164,7 @@ func TestRule_APIKeyInference_NeverGated(t *testing.T) {
 		}
 	}
 	// The api-key / x-api-key header form is exempt too.
-	code, _ := drive(t, app, greq{host: "api.hanzo.ai", path: "/v1/chat/completions", accept: "application/json", apiKeyHeader: "hk-headerform"})
+	code, _ := drive(t, app, greq{host: "hanzo.chat", path: "/v1/chat/completions", accept: "application/json", apiKeyHeader: "hk-headerform"})
 	if code != 200 {
 		t.Fatalf("api-key header inference = %d, want 200", code)
 	}
@@ -200,14 +205,16 @@ func TestRule_ForwardHeaderApproved_ThroughWithoutLookup(t *testing.T) {
 	}
 }
 
-func TestEnforce_NoStore_IsPassthrough(t *testing.T) {
-	setModuleStore(nil)
+// The DEFAULT gate (nil Gate → flags.WaitlistModeForHost) fail-opens before the flags
+// engine has mounted: with no engine, WaitlistModeForHost returns known=false for every
+// host, so Enforce never gates pre-boot.
+func TestEnforce_DefaultGate_FailsOpenPreBoot(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	app.Use(Enforce(EnforceConfig{WaitlistURL: "https://waitlist.hanzo.ai",
 		Approvals: newApprovalsWithLookup(func(context.Context, string, string) (string, bool) { return "pending", true }, time.Minute)}))
 	app.Get("/*", func(c *zip.Ctx) error { return c.String(200, "ok") })
 	code, _ := drive(t, app, greq{host: "hanzo.chat", path: "/dashboard", user: "u", org: "acme", accept: html})
 	if code != 200 {
-		t.Fatalf("no registry mounted = %d, want 200 (never gate pre-boot)", code)
+		t.Fatalf("default gate pre-boot = %d, want 200 (never gate before flags mounts)", code)
 	}
 }

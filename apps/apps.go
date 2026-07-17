@@ -77,8 +77,7 @@ import (
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
-	"github.com/hanzoai/cloud/clients/featureflags"
-	"github.com/hanzoai/cloud/clients/featuregate"
+	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
 	"github.com/hanzoai/cloud/clients/gateway"
@@ -194,7 +193,7 @@ func Wire() []cloud.MountSpec {
 		// /.well-known/agent-skills/* — before IAM's /.well-known/* wildcard (50).
 		{Name: "agentskills", Mount: agentskills.Mount},
 		// Insights feature-flag evaluation seam (no routes; a hot value plane).
-		{Name: "featureflags", Mount: featureflags.Mount, Shutdown: featureflags.Shutdown, OwnsHealth: true},
+		{Name: "flags", Mount: flags.Mount, Shutdown: flags.Shutdown, OwnsHealth: true},
 		// Embedded KMS secrets plane /v1/kms/*. OwnsHealth: serves its own fail-closed
 		// /v1/kms/health (the generic always-ok route must not shadow it). Fails closed
 		// until the operator injects CLOUD_KMS_MASTER_KEY_REF. (Its in-process client
@@ -337,12 +336,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "evals", Mount: eval.Mount},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
-		// Launch-control plane: per-service waitlist-mode registry (global SQLite)
-		// + admin board/toggle (/v1/admin/services*) + the guard's runtime mode read
-		// (/v1/featuregate/mode). Mounts right after admin so its specific routes bind
-		// ahead of the AI /v1/* catch-all; native Enforce middleware (wired in serve.go)
-		// reads the SAME store in-process. Owns a global store, so Shutdown closes it.
-		{Name: "featuregate", Mount: featuregate.Mount, Shutdown: ctxShutdown(featuregate.Shutdown)},
+		// Launch-control (per-service waitlist mode) folded into the flags engine: the
+		// mode IS the switch waitlist.<svc>, the board is the /v1/admin/services lens,
+		// and /v1/featuregate/mode is served by flags. featuregate is no longer a mounted
+		// subsystem — it exposes only the native Enforce middleware (wired in serve.go),
+		// a consumer of flags.WaitlistModeForHost.
 		{Name: "tasks", Mount: tasks.Mount},
 		// Platform cron: durable schedules on the shared tasks engine replacing
 		// every k8s CronJob — entries are cron.hanzo.ai ConfigMaps (universe git),
