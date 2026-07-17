@@ -98,8 +98,7 @@ var frozen = []struct {
 	{"admin", false, false},            // was order 146
 	{"featuregate", false, true},       // new: launch-control waitlist-mode plane (after admin, was order 147)
 	{"tasks", false, false},            // was order 147; platform cron folded in as a sub-mount of tasks.Mount (was a separate entry)
-	{"automations", false, true},       // was order 148
-	{"connectorruntime", false, false}, // new: native single-connector exec via goja (after automations, HIP-0126)
+	{"automations", false, true},       // was order 148; connectorruntime (POST /v1/automations/connectors/:id/run) folded in as a sub-mount of automations.Mount
 	{"tools", false, true},             // new: unified tool plane (after automations)
 	{"marketplace", false, true},       // new: marketplace over the tool plane (after tools)
 	{"referrals", false, false},        // was order 149
