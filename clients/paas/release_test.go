@@ -2,6 +2,7 @@ package paas
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -13,16 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
-
-// serviceCRObj builds a real-shaped operator Service CR for the fake cluster.
-func serviceCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "hanzo.ai/v1",
-		"kind":       "Service",
-		"metadata":   map[string]any{"name": name, "namespace": ns},
-		"spec":       map[string]any{"image": map[string]any{"repository": repo, "tag": tag, "pullPolicy": "Always"}},
-	}}
-}
 
 // appCRObj builds a real-shaped operator App CR — the kind the fleet runs on —
 // for the fake cluster.
@@ -36,22 +27,20 @@ func appCRObj(name, ns, repo, tag string) *unstructured.Unstructured {
 }
 
 // fakeService builds a hermetic paas Service backed by an in-memory fake dynamic
-// client seeded with objs — the release patch is exercised without a real cluster.
-// Both workload kinds are registered, so a test can seed either.
+// client seeded with objs — the release path is exercised without a real cluster.
 func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		appsGVR:        "AppList",
-		servicesGVR:    "ServiceList",
 		deploymentsGVR: "DeploymentList",
 	}, objs...)
 	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
 }
 
-// declaredImage reads spec.image.{repository,tag} off the live CR in the fake.
+// declaredImage reads spec.image.{repository,tag} off the live App CR in the fake.
 func declaredImage(t *testing.T, s *cloud.Service[state], ns, name string) (repo, tag, pull string) {
 	t.Helper()
-	obj, err := s.State.dyn.Resource(servicesGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
+	obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("get CR %s/%s: %v", ns, name, err)
 	}
@@ -98,40 +87,31 @@ func TestSplitReleaseImage(t *testing.T) {
 	}
 }
 
-// TestReleaseServicePatchesCR proves the keystone: a proven image patches the
-// matching Service CR's spec.image.tag so the operator rolls it out.
-func TestReleaseServicePatchesCR(t *testing.T) {
-	s := fakeService(serviceCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
+// TestReleaseServiceRefusesAGitDeclaredApp proves the seam refuses a real App CR
+// (git-declared, selfHeal-reverted): a valid semver image yields the refusal that
+// names where to commit the tag, and the CR is left untouched.
+func TestReleaseServiceRefusesAGitDeclaredApp(t *testing.T) {
+	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
 	ns, tag, changed, err := releaseService(s, context.Background(), "cloud", "ghcr.io/hanzoai/cloud:v1.800.0")
-	if err != nil {
-		t.Fatalf("releaseService: %v", err)
+	if err == nil || changed {
+		t.Fatalf("git-declared App: got (changed=%v,err=%v), want (false, refusal)", changed, err)
 	}
-	if ns != "hanzo" || tag != "v1.800.0" || !changed {
-		t.Fatalf("releaseService = (ns=%q,tag=%q,changed=%v), want (hanzo,v1.800.0,true)", ns, tag, changed)
+	if ns != "hanzo" || tag != "v1.800.0" {
+		t.Errorf("refusal should still report (ns=hanzo,tag=v1.800.0), got (%q,%q)", ns, tag)
 	}
-	repo, gotTag, pull := declaredImage(t, s, "hanzo", "cloud")
-	if repo != "ghcr.io/hanzoai/cloud" || gotTag != "v1.800.0" || pull != "Always" {
-		t.Errorf("CR image = (%q,%q,%q), want (ghcr.io/hanzoai/cloud,v1.800.0,Always)", repo, gotTag, pull)
+	if !strings.Contains(err.Error(), "declared in git") || !strings.Contains(err.Error(), "crs/cloud.yaml") {
+		t.Errorf("refusal must name where to commit; got %q", err)
 	}
-}
-
-// TestReleaseServiceIdempotent proves re-firing the SAME image is a no-op (no
-// operator churn): changed=false, no error.
-func TestReleaseServiceIdempotent(t *testing.T) {
-	s := fakeService(serviceCRObj("iam", "hanzo", "ghcr.io/hanzoai/iam", "v1.28.16"))
-	ns, tag, changed, err := releaseService(s, context.Background(), "iam", "ghcr.io/hanzoai/iam:v1.28.16")
-	if err != nil {
-		t.Fatalf("releaseService: %v", err)
-	}
-	if ns != "hanzo" || tag != "v1.28.16" || changed {
-		t.Fatalf("idempotent release = (ns=%q,tag=%q,changed=%v), want (hanzo,v1.28.16,false)", ns, tag, changed)
+	// CR must be unchanged.
+	if _, gotTag, _ := declaredImage(t, s, "hanzo", "cloud"); gotTag != "v1.799.16" {
+		t.Errorf("CR tag mutated to %q on a refused release", gotTag)
 	}
 }
 
-// TestReleaseServiceRejectsFloating proves a non-semver image is refused BEFORE
-// any patch — the CR is left untouched.
+// TestReleaseServiceRejectsFloating proves a non-semver image is refused by the
+// clean-semver gate BEFORE the App is even resolved — the CR is left untouched.
 func TestReleaseServiceRejectsFloating(t *testing.T) {
-	s := fakeService(serviceCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
+	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
 	if _, _, changed, err := releaseService(s, context.Background(), "cloud", "ghcr.io/hanzoai/cloud:latest"); err == nil || changed {
 		t.Fatalf("floating tag: got (changed=%v,err=%v), want (false, error)", changed, err)
 	}
@@ -144,29 +124,26 @@ func TestReleaseServiceRejectsFloating(t *testing.T) {
 // TestReleaseServiceUnknown proves a service with no operator CR is an honest
 // error, never a silent success.
 func TestReleaseServiceUnknown(t *testing.T) {
-	s := fakeService(serviceCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
+	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
 	if _, _, changed, err := releaseService(s, context.Background(), "ghost", "ghcr.io/hanzoai/ghost:v1.0.0"); err == nil || changed {
 		t.Fatalf("unknown service: got (changed=%v,err=%v), want (false, error)", changed, err)
 	}
 }
 
 // TestReleaseServiceMainFirst proves a bare release resolves the production
-// namespace (hanzo) before test/dev, even when the CR exists in several.
+// namespace (hanzo) before test/dev, even when the App exists in several — the
+// refusal reports that namespace.
 func TestReleaseServiceMainFirst(t *testing.T) {
 	s := fakeService(
-		serviceCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"),
-		serviceCRObj("cloud", "hanzo-testnet", "ghcr.io/hanzoai/cloud", "v1.799.16"),
+		appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"),
+		appCRObj("cloud", "hanzo-testnet", "ghcr.io/hanzoai/cloud", "v1.799.16"),
 	)
-	ns, _, _, err := releaseService(s, context.Background(), "cloud", "ghcr.io/hanzoai/cloud:v1.800.0")
-	if err != nil {
-		t.Fatalf("releaseService: %v", err)
+	ns, _, changed, err := releaseService(s, context.Background(), "cloud", "ghcr.io/hanzoai/cloud:v1.800.0")
+	if err == nil || changed {
+		t.Fatalf("git-declared App: got (changed=%v,err=%v), want (false, refusal)", changed, err)
 	}
 	if ns != "hanzo" {
 		t.Fatalf("resolved ns = %q, want hanzo (main first)", ns)
-	}
-	// testnet CR must be untouched (bare release targets production only).
-	if _, tag, _ := declaredImage(t, s, "hanzo-testnet", "cloud"); tag != "v1.799.16" {
-		t.Errorf("testnet CR mutated to %q by a production release", tag)
 	}
 }
 
@@ -180,22 +157,24 @@ func TestReleaseServiceFailClosed(t *testing.T) {
 }
 
 // TestRegisterReleaserRoundTrip proves the build.go inversion seam: after
-// registerReleaser, cloud.OnServiceRelease dispatches to the paas primitive and
-// patches the CR — the path clients/platform/release.go drives on a self-release.
+// registerReleaser, cloud.OnServiceRelease dispatches to the paas primitive — the
+// path clients/platform/release.go drives on a self-release. The App is
+// git-declared, so the dispatch surfaces the refusal and the CR is untouched.
 func TestRegisterReleaserRoundTrip(t *testing.T) {
-	s := fakeService(serviceCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
+	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.799.16"))
 	registerReleaser(s)
 	t.Cleanup(func() { cloud.RegisterServiceReleaser(nil) })
 
 	if !cloud.ServiceReleaserRegistered() {
 		t.Fatal("ServiceReleaserRegistered() = false after registerReleaser")
 	}
-	if err := cloud.OnServiceRelease(context.Background(), cloud.ServiceReleaseEvent{
+	err := cloud.OnServiceRelease(context.Background(), cloud.ServiceReleaseEvent{
 		Service: "cloud", Image: "ghcr.io/hanzoai/cloud:v1.801.0", SHA: "deadbeef",
-	}); err != nil {
-		t.Fatalf("OnServiceRelease: %v", err)
+	})
+	if err == nil {
+		t.Fatal("OnServiceRelease dispatched to a git-declared App; want the refusal error")
 	}
-	if _, tag, _ := declaredImage(t, s, "hanzo", "cloud"); tag != "v1.801.0" {
-		t.Errorf("CR tag = %q after OnServiceRelease, want v1.801.0", tag)
+	if _, tag, _ := declaredImage(t, s, "hanzo", "cloud"); tag != "v1.799.16" {
+		t.Errorf("CR tag = %q after OnServiceRelease, want v1.799.16 (untouched)", tag)
 	}
 }
