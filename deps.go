@@ -135,6 +135,14 @@ type Claims = types.Claims
 type User = types.User
 type Org = types.Org
 type DBHandle = types.DBHandle
+
+// OrgConfig and LicenseEntitlement are the two values CommerceClient's methods
+// name. Both are aliased here for the same reason the interface is: a subsystem
+// that implements CommerceClient (or fakes it in a test) must be able to spell
+// its signature using only this package. LicenseEntitlement was aliased and
+// OrgConfig was not, which made the exported interface unimplementable from
+// outside without reaching into cloud/types — an omission, not a boundary.
+type OrgConfig = types.OrgConfig
 type LicenseEntitlement = types.LicenseEntitlement
 type ChatRequest = types.ChatRequest
 type ChatResponse = types.ChatResponse
