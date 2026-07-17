@@ -1,4 +1,4 @@
-package featureflags
+package flags
 
 import (
 	"crypto/rand"

@@ -12,12 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package featuregate is the launch-control ENFORCEMENT for Hanzo's hosted services:
+// the native middleware (Enforce) + the per-user approval predicate (Approvals, reused
+// from IAM). It is a CONSUMER of the ONE policy engine — the per-service waitlist MODE
+// and the host→service registry live in clients/flags (a service's mode IS the
+// switch waitlist.<svc>, evaluated through the native engine); the admin board is the
+// /v1/admin/services lens and the guard's runtime mode read is /v1/featuregate/mode,
+// both served there. This package owns only enforcement, decomplected into two axes:
+//
+//   - PER-SERVICE  waitlist mode on|off  — the flags switch waitlist.<svc>,
+//     resolved for a request host via flags.WaitlistModeForHost (the decide).
+//   - PER-USER     approvalStatus pending|approved — owned by IAM (approval.go), REUSED.
+//
+// THE RULE, applied at ONE native enforcement point (Enforce):
+//
+//	if waitlistMode[host] AND NOT user.approved → bounce to the waitlist
+//	if approved OR mode=off                     → allow
+//	unauthenticated                             → login first
 package featuregate
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
+	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/zap-proto/zip"
 )
 
@@ -45,9 +64,10 @@ import (
 // It reads the sanitized X-User-Id / X-User-IsAdmin / X-User-Approved that
 // IdentityMiddleware minted, so it MUST run after it and (like BillingGate) before
 // the subsystem handlers. It is deliberately NOT wired here — the unified-binary
-// agent owns serve.go's boot chain; this package exposes Enforce + the store so the
-// one-line app.Use lands without a merge collision. The store is resolved lazily
-// (moduleStore()) so Enforce can be constructed before Mount runs.
+// agent owns serve.go's boot chain; this package exposes Enforce so the one-line
+// app.Use lands without a merge collision. The decide (flags.WaitlistModeForHost) is
+// resolved PER REQUEST and fail-opens until the flags engine has mounted, so Enforce
+// can be constructed before Mount runs.
 //
 // WHY NATIVE IS CANONICAL (in-cluster-bypass). The @file edge guard only gates
 // traffic arriving THROUGH the ingress — a pod reaching another service's pod
@@ -80,6 +100,12 @@ type EnforceConfig struct {
 	// ExemptPrefixes are request-path prefixes never gated (health/metrics/auth).
 	// A sensible default set is used when empty.
 	ExemptPrefixes []string
+
+	// Gate is THE decide: it resolves whether a request host is in waitlist mode,
+	// via the ONE policy engine. When nil it is flags.WaitlistModeForHost —
+	// host→service→waitlist.<svc>. Injected only in tests. Fail-open by contract:
+	// known=false (unmounted / registry error / un-governed host) → not gated.
+	Gate func(ctx context.Context, host string) (mode bool, service string, known bool)
 }
 
 // defaultExemptPrefixes are the paths enforcement must never touch — HIP-0106
@@ -94,13 +120,18 @@ var defaultExemptPrefixes = []string{
 	"/__guard/", // the @file guard's own callback surface (defense in depth)
 }
 
-// Enforce builds the native enforcement middleware. It is a no-op passthrough when
-// no registry store is resolved yet (moduleStore() nil, i.e. Mount hasn't run) —
-// so a request before boot completes is never wrongly gated.
+// Enforce builds the native enforcement middleware. It is a no-op passthrough when the
+// decide reports the host is not governed (gate known=false — the flags registry not
+// mounted yet, a store error, or an un-governed host), so a request before boot
+// completes is never wrongly gated.
 func Enforce(cfg EnforceConfig) zip.Handler {
 	approvals := cfg.Approvals
 	if approvals == nil {
 		approvals = NewApprovals(cfg.IAMBase, 0)
+	}
+	gate := cfg.Gate
+	if gate == nil {
+		gate = flags.WaitlistModeForHost // the ONE decide: host→service→waitlist.<svc>
 	}
 	exempt := cfg.ExemptPrefixes
 	if len(exempt) == 0 {
@@ -109,10 +140,6 @@ func Enforce(cfg EnforceConfig) zip.Handler {
 	waitlistURL := strings.TrimRight(strings.TrimSpace(cfg.WaitlistURL), "/")
 
 	return func(c *zip.Ctx) error {
-		store := moduleStore()
-		if store == nil {
-			return c.Next() // registry not mounted yet — never gate pre-boot
-		}
 		path := c.Path()
 		for _, p := range exempt {
 			if strings.HasPrefix(path, p) {
@@ -134,14 +161,13 @@ func Enforce(cfg EnforceConfig) zip.Handler {
 			return c.Next()
 		}
 
-		host := c.Fiber().Hostname()
-		mode, _, known, err := store.ModeForHost(c.Context(), host)
-		if err != nil || !known || !mode {
-			// Un-governed host, mode OFF, or a registry read error → allow. A
-			// governed host is opened by flipping mode OFF; an unknown host is
-			// not ours to gate at the shared cloud edge (fail-open on a read
-			// error keeps the API available — the guard is the belt-and-braces
-			// gate for the hosts that must stay closed).
+		mode, _, known := gate(c.Context(), c.Fiber().Hostname())
+		if !known || !mode {
+			// Un-governed host, mode OFF, or a registry read error (the decide folds
+			// all three into known=false) → allow. A governed host is opened by
+			// flipping its waitlist.<svc> switch OFF; an unknown host is not ours to
+			// gate at the shared cloud edge — the @file guard is the belt-and-braces
+			// gate for the hosts that must stay closed.
 			return c.Next()
 		}
 
@@ -230,15 +256,4 @@ func isAPIClient(c *zip.Ctx) bool {
 		return true
 	}
 	return false
-}
-
-// ── package-level store resolution (lazy, for Enforce constructed before Mount) ──
-
-// moduleStore returns the registry store once Mount has opened it, else nil. The
-// Enforce closure calls it PER REQUEST, so serve.go can construct Enforce before
-// MountAll runs (the store is set during Mount, well before the first request).
-func moduleStore() *Store {
-	moduleMu.RLock()
-	defer moduleMu.RUnlock()
-	return moduleStoreRef
 }
