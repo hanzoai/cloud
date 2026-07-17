@@ -20,22 +20,6 @@ func TestAppsGVR(t *testing.T) {
 	}
 }
 
-// TestCRGVRsOrder pins the read order: the fleet's kind first, the kind it
-// collapsed from second. Order is load-bearing — when both kinds claim a name,
-// the first one wins the row, and App is the kind that owns the Deployment.
-func TestCRGVRsOrder(t *testing.T) {
-	got := crGVRs()
-	want := []schema.GroupVersionResource{appsGVR, servicesGVR}
-	if len(got) != len(want) {
-		t.Fatalf("crGVRs() = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("crGVRs()[%d] = %v, want %v", i, got[i], want[i])
-		}
-	}
-}
-
 // TestObserveFleetSeesAppCRs is the regression that matters: the live fleet is
 // declared as App CRs, and the board rendered none of them. Seed only App CRs —
 // the shape of the real `hanzo` namespace — and the board must list them.
@@ -63,97 +47,24 @@ func TestObserveFleetSeesAppCRs(t *testing.T) {
 	}
 }
 
-// TestObserveFleetSeesBothKinds — the fleet is mid-collapse: system workloads are
-// App CRs, untransitioned ones are still Service CRs. The board must show every
-// workload regardless of which kind declares it.
-func TestObserveFleetSeesBothKinds(t *testing.T) {
-	s := fakeService(
-		appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.801.38"),
-		serviceCRObj("legacy", "hanzo", "ghcr.io/hanzoai/legacy", "v0.1.0"),
-	)
-	views, err := observeFleet(s, context.Background())
-	if err != nil {
-		t.Fatalf("observeFleet: %v", err)
-	}
-	if len(views) != 2 {
-		t.Fatalf("got %d rows, want 2 (one App + one Service)", len(views))
-	}
-}
-
-// TestObserveFleetDedupesACollidingName — when an App CR and a Service CR both
-// claim one name, there is still only ONE workload: a Deployment has one
-// controller ownerRef, and the operator's Claim guard gives it to the App. The
-// board reports one row, from the App.
-func TestObserveFleetDedupesACollidingName(t *testing.T) {
-	s := fakeService(
-		appCRObj("commerce-admin", "hanzo", "ghcr.io/hanzoai/commerce-admin", "0.2.0-amd64"),
-		serviceCRObj("commerce-admin", "hanzo", "ghcr.io/hanzoai/commerce-admin", "0.1.0-amd64"),
-	)
-	views, err := observeFleet(s, context.Background())
-	if err != nil {
-		t.Fatalf("observeFleet: %v", err)
-	}
-	if len(views) != 1 {
-		t.Fatalf("got %d rows for one workload, want 1 — a colliding name is one workload, not two", len(views))
-	}
-	if views[0].DeclaredTag != "0.2.0-amd64" {
-		t.Fatalf("declaredTag = %q, want the App's 0.2.0-amd64 — the App owns the Deployment", views[0].DeclaredTag)
-	}
-}
-
-// TestResolveTargetPrefersTheAppKind — resolution reports which kind holds the
-// workload, because the deploy path's behavior depends on it.
-func TestResolveTargetPrefersTheAppKind(t *testing.T) {
+// TestResolveTargetFindsTheApp — resolution reports the namespace an App lives in,
+// scanning production first.
+func TestResolveTargetFindsTheApp(t *testing.T) {
 	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.801.38"))
-	ns, gvr, err := resolveTarget(s, context.Background(), "cloud")
+	ns, err := resolveTarget(s, context.Background(), "cloud")
 	if err != nil {
 		t.Fatalf("resolveTarget: %v", err)
 	}
 	if ns != "hanzo" {
 		t.Errorf("ns = %q, want hanzo", ns)
 	}
-	if gvr != appsGVR {
-		t.Errorf("gvr = %v, want appsGVR", gvr)
-	}
-}
-
-// TestResolveTargetFindsAServiceKind — a Service-declared workload still resolves,
-// and reports the Service kind so the deploy path patches it.
-func TestResolveTargetFindsAServiceKind(t *testing.T) {
-	s := fakeService(serviceCRObj("legacy", "hanzo-devnet", "ghcr.io/hanzoai/legacy", "v0.1.0"))
-	ns, gvr, err := resolveTarget(s, context.Background(), "legacy")
-	if err != nil {
-		t.Fatalf("resolveTarget: %v", err)
-	}
-	if ns != "hanzo-devnet" {
-		t.Errorf("ns = %q, want hanzo-devnet", ns)
-	}
-	if gvr != servicesGVR {
-		t.Errorf("gvr = %v, want servicesGVR", gvr)
-	}
 }
 
 // TestResolveTargetIsNotFoundForAnAbsentWorkload — fail closed, no silent default.
 func TestResolveTargetIsNotFoundForAnAbsentWorkload(t *testing.T) {
 	s := fakeService()
-	if _, _, err := resolveTarget(s, context.Background(), "ghost"); err == nil {
+	if _, err := resolveTarget(s, context.Background(), "ghost"); err == nil {
 		t.Fatal("resolveTarget on an absent workload returned nil error, want not-found")
-	}
-}
-
-// TestKindAtPinsTheNamespace — an explicit namespace must not silently fall back
-// to another namespace's workload of the same name.
-func TestKindAtPinsTheNamespace(t *testing.T) {
-	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.801.38"))
-	if _, err := kindAt(s, context.Background(), "hanzo-devnet", "cloud"); err == nil {
-		t.Fatal("kindAt found `cloud` in hanzo-devnet, where it does not exist — an explicit namespace must be honored")
-	}
-	gvr, err := kindAt(s, context.Background(), "hanzo", "cloud")
-	if err != nil {
-		t.Fatalf("kindAt(hanzo, cloud): %v", err)
-	}
-	if gvr != appsGVR {
-		t.Errorf("gvr = %v, want appsGVR", gvr)
 	}
 }
 
@@ -183,19 +94,6 @@ func TestReleaseRefusesAGitDeclaredWorkload(t *testing.T) {
 	tag, _, _ := unstructured.NestedString(obj.Object, "spec", "image", "tag")
 	if tag != "v1.801.38" {
 		t.Errorf("refused release still mutated the CR: tag = %q, want v1.801.38", tag)
-	}
-}
-
-// TestReleaseStillPatchesAServiceDeclaredWorkload — a Service CR has no git
-// declarer (cloud and kubectl write them directly), so the release still patches.
-func TestReleaseStillPatchesAServiceDeclaredWorkload(t *testing.T) {
-	s := fakeService(serviceCRObj("legacy", "hanzo-devnet", "ghcr.io/hanzoai/legacy", "v0.1.0"))
-	ns, tag, changed, err := releaseService(s, context.Background(), "legacy", "ghcr.io/hanzoai/legacy:v0.2.0")
-	if err != nil {
-		t.Fatalf("releaseService on a Service-declared workload: %v", err)
-	}
-	if !changed || ns != "hanzo-devnet" || tag != "v0.2.0" {
-		t.Fatalf("got (ns=%q tag=%q changed=%v), want (hanzo-devnet, v0.2.0, true)", ns, tag, changed)
 	}
 }
 
