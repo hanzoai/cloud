@@ -46,7 +46,6 @@ package o11y
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -240,11 +239,7 @@ func mountSentry(a *zip.App) {
 // name. Every cloud-native /v1/o11y/* route is registered here — inside this one
 // order-69 mount, hence BEFORE the hanzoai/o11y wildcard (order 70) — so Fiber's
 // in-order match gives the specific routes precedence over the runtime proxy.
-func MountO11y(app any, deps cloud.Deps) error {
-	a, ok := app.(*zip.App)
-	if !ok {
-		return fmt.Errorf("o11y.Mount: app is %T, want *zip.App", app)
-	}
+func MountO11y(a *zip.App, deps cloud.Deps) error {
 	// READ/SERVE plane — specific routes before the wildcard.
 	if err := mountEventIngest(a, deps); err != nil { // POST /v1/o11y/ingestion
 		return err
@@ -275,7 +270,7 @@ func MountO11y(app any, deps cloud.Deps) error {
 	// route surface, delegating to the SAME gated handler mountRuntime installed via
 	// o11y.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so
 	// Fiber's in-order match gives those routes precedence over this catch-all. Folded
-	// in HERE — it was a second, co-named Wire entry (cloud.Typed(o11ymod.Mount)) — so
+	// in HERE — it was a second, co-named Wire entry (o11ymod.Mount) — so
 	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
 	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
 	// registered before MountAll and thus ahead of this wildcard.

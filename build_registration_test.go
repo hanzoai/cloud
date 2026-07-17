@@ -1,49 +1,28 @@
 package cloud_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
-// TestTyped_RecoversZipApp verifies cloud.Typed adapts a strongly-typed
-// func(*zip.App, Deps) into the registry MountFunc: it hands the concrete
-// *zip.App straight through to the wrapped mount.
-func TestTyped_RecoversZipApp(t *testing.T) {
-	app := zip.New(zip.Config{})
-	var got *zip.App
-	mf := cloud.Typed(func(a *zip.App, _ cloud.Deps) error {
-		got = a
-		return nil
-	})
-	if err := mf(app, cloud.Deps{}); err != nil {
-		t.Fatalf("Typed mount returned error: %v", err)
-	}
-	if got != app {
-		t.Fatalf("Typed did not pass the concrete *zip.App through (got %p, want %p)", got, app)
-	}
-}
-
-// TestTyped_WrongTypeFailsClosed verifies cloud.Typed fails closed with a clear
-// error — never a panic — when the registry passes a value that is not a
-// *zip.App. This is the single, central replacement for the per-subsystem
-// assertion boilerplate.
-func TestTyped_WrongTypeFailsClosed(t *testing.T) {
-	called := false
-	mf := cloud.Typed(func(*zip.App, cloud.Deps) error {
-		called = true
-		return nil
-	})
-	err := mf("not-a-zip-app", cloud.Deps{})
-	if err == nil {
-		t.Fatal("Typed must return an error on a non-*zip.App value")
-	}
-	if called {
-		t.Fatal("Typed must NOT invoke the wrapped mount on a type mismatch")
-	}
-	if !strings.Contains(err.Error(), "*zip.App") {
-		t.Errorf("error should name the wanted type *zip.App, got: %v", err)
-	}
+// TestMountFunc_IsTheSubsystemSignature pins the registry's mount contract: the
+// signature every subsystem exports IS a cloud.MountFunc, checked by the compiler.
+//
+// This file used to test cloud.Typed, the adapter that took a MountFunc's `any`
+// app and asserted it back to *zip.App. Both of its tests went with it, and
+// neither is a loss:
+//
+//   - "Typed recovers the *zip.App" only ever proved the adapter handed through
+//     the value it was given. MountFunc now names *zip.App, so there is no
+//     recovery step left to get wrong.
+//   - "Typed fails closed on a wrong type" can no longer be written: passing
+//     "not-a-zip-app" to a MountFunc is a compile error, so the runtime branch it
+//     exercised does not exist. A test asserting a wrong type is rejected is
+//     precisely what a type already is.
+//
+// What remains is the only claim worth making, and the build enforces it.
+func TestMountFunc_IsTheSubsystemSignature(t *testing.T) {
+	var _ cloud.MountFunc = func(*zip.App, cloud.Deps) error { return nil }
 }
