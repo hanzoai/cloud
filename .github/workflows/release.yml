@@ -146,8 +146,12 @@ jobs:
           # Direct credential first (repo/org secret — works on private repos,
           # where the Free plan hides org KMS secrets); KMS kubeconfig fallback.
           if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_PASSWORD:-}" ]; then
-            echo "$REGISTRY_PASSWORD" | docker login registry.hanzo.ai -u "$REGISTRY_USER" --password-stdin
-            echo "MIRROR_OK=1" >> "$GITHUB_ENV"; exit 0
+            if echo "$REGISTRY_PASSWORD" | docker login registry.hanzo.ai -u "$REGISTRY_USER" --password-stdin; then
+              echo "MIRROR_OK=1" >> "$GITHUB_ENV"
+            else
+              echo "mirror login failed (registry.hanzo.ai unreachable) — mirror skipped, release continues"
+            fi
+            exit 0
           fi
           [ -z "${KMS_CLIENT_ID:-}" ] && { echo "no KMS creds — mirror skipped"; exit 0; }
           TOKEN=$(curl -sf "$KMS_ENDPOINT/v1/kms/auth/login" -H 'Content-Type: application/json'             -d "{\"clientId\":\"$KMS_CLIENT_ID\",\"clientSecret\":\"$KMS_CLIENT_SECRET\"}" | jq -r '.accessToken // empty')
@@ -166,8 +170,11 @@ jobs:
           UP=$(echo "$CFG" | jq -r '.auths["registry.hanzo.ai"].auth // empty' | base64 -d)
           [ -z "$UP" ] && { echo "no registry auth — mirror skipped"; exit 0; }
           echo "::add-mask::${UP#*:}"
-          echo "${UP#*:}" | docker login registry.hanzo.ai -u "${UP%%:*}" --password-stdin
-          echo "MIRROR_OK=1" >> "$GITHUB_ENV"
+          if echo "${UP#*:}" | docker login registry.hanzo.ai -u "${UP%%:*}" --password-stdin; then
+            echo "MIRROR_OK=1" >> "$GITHUB_ENV"
+          else
+            echo "mirror login failed (registry.hanzo.ai unreachable) — mirror skipped, release continues"
+          fi
 
       - name: Log in to ghcr.io (GH_PAT — writes the cloud package despite its ai-repo linkage)
         uses: docker/login-action@v3
