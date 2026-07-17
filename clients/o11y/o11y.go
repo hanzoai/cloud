@@ -271,6 +271,17 @@ func MountO11y(app any, deps cloud.Deps) error {
 	if err := mountTraceSink(deps); err != nil { // in-process trace sink
 		return err
 	}
+	// TERMINAL sub-mount: the hanzoai/o11y module wildcard /v1/o11y/* — the runtime
+	// route surface, delegating to the SAME gated handler mountRuntime installed via
+	// o11y.SetHandler. Registered LAST (after every specific /v1/o11y/* route above) so
+	// Fiber's in-order match gives those routes precedence over this catch-all. Folded
+	// in HERE — it was a second, co-named Wire entry (cloud.Typed(o11ymod.Mount)) — so
+	// the observability plane is ONE `o11y` subsystem. /v1/o11y/health is unaffected:
+	// it stays the generic always-ok route (the o11y Wire entry keeps OwnsHealth=false),
+	// registered before MountAll and thus ahead of this wildcard.
+	if err := o11y.Mount(a, deps); err != nil {
+		return err
+	}
 	return nil
 }
 
