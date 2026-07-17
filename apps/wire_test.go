@@ -37,7 +37,7 @@ var frozen = []struct {
 	{"authz", false, false},            // was order 70
 	{"commerce", false, false},         // was order 100
 	{"licensing", false, false},        // was order 110
-	{"plans", true, false},             // was order 111
+	{"plan", true, false},              // was order 111; enable id normalized plans->plan (routes stay /v1/plans/*)
 	{"pricing", true, false},           // was order 112
 	{"storage", true, false},           // was order 118
 	{"provisioning", false, false},     // was order 120
