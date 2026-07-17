@@ -50,7 +50,7 @@ func masterKeyB64(t *testing.T) string {
 // tests mount exactly kms (the same spec apps.Wire() carries) without linking
 // the whole bundle. cfg.Enable still gates it, exactly as in production.
 func mountSpecs() []cloud.MountSpec {
-	return []cloud.MountSpec{{Name: "kms", Mount: cloud.Typed(kms.Mount), OwnsHealth: true}}
+	return []cloud.MountSpec{{Name: "kms", Mount: kms.Mount, OwnsHealth: true}}
 }
 
 // newApp wires BuildDeps + the canonical middleware + MountAll for the kms
