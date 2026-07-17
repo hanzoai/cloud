@@ -151,6 +151,39 @@ func TestWebhookMissingSecretFailsClosed(t *testing.T) {
 	}
 }
 
+// TestWebhookLoopGuardSkipsSyncActor proves the loop guard: a push BY the
+// configured sync service account (GIT_SYNC_ACTOR) is the echo of an inbound relay
+// and is acknowledged 204 with NO build, while a push by any other actor still
+// drives the build — so a relay can never ping-pong back to the upstream it came
+// from.
+func TestWebhookLoopGuardSkipsSyncActor(t *testing.T) {
+	t.Setenv(webhookSecretEnv, testWebhookSecret)
+	t.Setenv(syncActorEnv, "hanzo-sync")
+	got := captureBuilder(t)
+	app := mountApp(t)
+
+	after := "1111111111111111111111111111111111111111"
+	// A push BY the sync actor is our own relay's echo → skipped, no build.
+	bot := pushPayload("acme", "code", "refs/heads/main", zeroSHA, after, "hanzo-sync")
+	if code := postHook(t, app, "push", signHook(testWebhookSecret, bot), bot); code != http.StatusNoContent {
+		t.Fatalf("sync-actor push want 204, got %d", code)
+	}
+	// A push by anyone else still drives the build.
+	human := pushPayload("acme", "code", "refs/heads/main", zeroSHA, after, "alice")
+	if code := postHook(t, app, "push", signHook(testWebhookSecret, human), human); code != http.StatusNoContent {
+		t.Fatalf("human push want 204, got %d", code)
+	}
+
+	got.Lock()
+	defer got.Unlock()
+	if len(got.events) != 1 {
+		t.Fatalf("only the non-sync-actor push must build, got %d: %+v", len(got.events), got.events)
+	}
+	if ev := got.events[0]; ev.Org != "acme" || ev.Branch != "main" {
+		t.Fatalf("unexpected build event: %+v", got.events[0])
+	}
+}
+
 // TestWebhookEventFilter proves a non-push Gitea event is an acknowledged 204
 // no-op that fires no build (even with a valid signature).
 func TestWebhookEventFilter(t *testing.T) {

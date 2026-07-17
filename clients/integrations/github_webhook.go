@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -15,16 +15,19 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// github_webhook.go is the INBOUND half of the bidirectional sync: GitHub POSTs a
-// push event to /v1/integrations/github/webhook, we HMAC-verify it, resolve the org
-// from the (signed) installation id, and fast-forward-only advance the native
-// branch. PUBLIC at the JWT layer (GitHub has no Hanzo session) — auth is the
-// signature, verified fail-closed here, exactly like the Slack events webhook.
+// github_webhook.go is the GitHub trigger of the universal sync engine: the org's
+// GitHub App POSTs a push event to /v1/github-webhook, we HMAC-verify it, resolve
+// the org from the (signed) installation id, mint the installation token, and hand
+// the push to cloud.Sync. The engine resolves the SyncLink(s) for the repo and the
+// git provider fast-forward-only advances native. PUBLIC at the JWT layer (GitHub
+// has no Hanzo session) — auth is the signature, verified fail-closed here, exactly
+// like the Slack events webhook.
 //
-// SPLIT-BRAIN GUARD lives in the git object plane (cloud.InboundGitSync →
-// fast-forward-only fetch): a divergence never overwrites native. LOOP PREVENTION
-// is the Origin stamp: an inbound advance re-emits push.landed with Origin == the
-// source host, so the outbound mirror skips that target and no ping-pong occurs.
+// SPLIT-BRAIN GUARD lives in the git object plane (the fast-forward-only fetch): a
+// divergence never overwrites native. LOOP PREVENTION is the engine's cursor
+// (identical SHAs are a no-op) + actor guard (a push our own mirror made is
+// skipped), so no ping-pong occurs. This handler stays thin: verify, resolve, mint,
+// enqueue — the engine is the one place the sync happens.
 
 // githubMaxWebhookBody bounds the payload we read + sign over. GitHub caps webhook
 // bodies well under this; a hostile/oversized body can neither exhaust memory nor
@@ -63,6 +66,14 @@ type githubPushEvent struct {
 	Installation struct {
 		ID int64 `json:"id"`
 	} `json:"installation"`
+	// Sender/Pusher identify who pushed — the App/bot login for a push our own
+	// outbound mirror made, which the engine's loop guard fast-skips.
+	Sender struct {
+		Login string `json:"login"`
+	} `json:"sender"`
+	Pusher struct {
+		Name string `json:"name"`
+	} `json:"pusher"`
 }
 
 // githubWebhook verifies + processes an inbound GitHub webhook. It ALWAYS answers a
@@ -112,6 +123,8 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	branch := strings.TrimPrefix(ev.Ref, "refs/heads/")
 
+	// Mint the installation token HERE (the App plane owns token custody) and pass
+	// it THROUGH the event, so the engine's git provider fetches without re-minting.
 	tok, err := InstallationToken(c.Context(), org)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "mint github installation token: %v", err)
@@ -120,25 +133,30 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 	if clone == "" && ev.Repository.FullName != "" {
 		clone = "https://github.com/" + ev.Repository.FullName + ".git"
 	}
-	res, err := cloud.InboundGitSync(c.Context(), cloud.GitInboundReq{
-		Org: org, Repo: ev.Repository.Name, Branch: branch,
-		CloneURL: clone, Token: tok, Origin: hostOf(clone),
+	// The universal sync engine is the ONE place a sync happens: it resolves the
+	// SyncLink(s) whose source is this GitHub repo and applies each (the git
+	// provider fast-forward-advances native, honoring the link's direction + loop
+	// guard + cursor). Fail-closed when the engine is unmounted — never a fake OK.
+	res, err := cloud.Sync(c.Context(), cloud.SyncEvent{
+		Kind: "git", Provider: "github", Org: org,
+		Locator: clone, Repo: ev.Repository.Name, Branch: branch,
+		Before: ev.Before, After: ev.After, Actor: actorOf(ev), Token: tok,
 	})
 	if err != nil {
-		return zip.Errorf(http.StatusBadGateway, "inbound sync: %v", err)
+		if errors.Is(err, cloud.ErrSyncUnavailable) {
+			return zip.Errorf(http.StatusServiceUnavailable, "sync engine not available")
+		}
+		return zip.Errorf(http.StatusBadGateway, "sync: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
-		"applied": res.Applied, "conflict": res.Conflict, "noop": res.NoOp, "detail": res.Detail,
-	})
+	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
 }
 
-// hostOf returns the lowercased host of a URL (for the loop-prevention Origin
-// stamp, which must match the outbound mirror target's stored host). "" on a
-// parse miss — the git plane then never suppresses a mirror it can't attribute.
-func hostOf(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return ""
+// actorOf returns the login that pushed on GitHub — the App/bot for a push our own
+// outbound mirror made (the loop-guard fast-path; cursor idempotency is the real
+// guarantee).
+func actorOf(ev githubPushEvent) string {
+	if ev.Sender.Login != "" {
+		return ev.Sender.Login
 	}
-	return strings.ToLower(u.Hostname())
+	return ev.Pusher.Name
 }

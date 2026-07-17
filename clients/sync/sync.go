@@ -1,0 +1,92 @@
+// Package syncsvc is the universal sync service (/v1/sync): cloud↔cloud data
+// sync between connected platforms, expressed as Syncs the engine runs. Git
+// (GitHub/GitLab ⇆ native Hanzo Git) is the FIRST provider; storage, db, and other
+// kinds are new providers at their own kind with nothing in the engine to change.
+//
+// Shape (decomplected):
+//   - store.go        ONE table, syncs — the sync intent + engine cursor state.
+//   - engine.go       the ONE place a sync happens: resolve → loop-guard → cursor
+//     dedupe → provider.Apply → chain (hop-bounded). Kind-agnostic.
+//   - provider.go     the engine↔provider contract (Plan/Apply per kind) + registry.
+//   - git_provider.go the git provider, composing the existing git object-plane seams.
+//   - sync_api.go     /v1/sync CRUD + /v1/sync/:id/run (manual).
+//
+// Triggers (GitHub App webhook, Gitea push webhook) resolve to Syncs and call
+// cloud.Sync — they never sync directly, so the engine is the single seam.
+package sync
+
+import (
+	"fmt"
+	"sync/atomic"
+
+	"github.com/hanzoai/cloud"
+	"github.com/zap-proto/zip"
+)
+
+// state is the subsystem's mounted state: the per-org syncs store cache.
+type state struct {
+	stores *cloud.OrgStore[*store]
+}
+
+// mounted is the active service, read by the reconcile func (registered as the
+// cloud.SyncFunc, reached from webhook goroutines) and written once at Mount/
+// Shutdown — an atomic.Pointer so a detached run reads it race-free (nil ⇒ unmounted).
+var mounted atomic.Pointer[cloud.Service[state]]
+
+// storeFor resolves the caller's org-scoped syncs store (one SQLite file at
+// {DataDir}/orgs/{org}/sync.db). Sync is org-scoped, not project-scoped — a link
+// binds two endpoints within one org.
+func storeFor(s *cloud.Service[state], org string) (*store, error) {
+	return s.State.stores.For(org, "")
+}
+
+// Mount wires /v1/sync, registers the git provider, and installs the reconcile func
+// as the cloud.SyncFunc so triggers (cloud.Sync) reach it.
+func Mount(app *zip.App, deps cloud.Deps) error {
+	if app == nil {
+		return fmt.Errorf("sync.Mount: nil zip.App")
+	}
+	if deps.Logger == nil {
+		return fmt.Errorf("sync.Mount: nil deps.Logger")
+	}
+	if deps.DataDir == "" {
+		return fmt.Errorf("sync.Mount: empty DataDir")
+	}
+	b := cloud.NewBase(deps, "sync")
+	s := &cloud.Service[state]{Base: b, State: state{
+		stores: cloud.NewOrgStore(deps.DataDir, "sync", openStore),
+	}}
+	mounted.Store(s)
+
+	routes(app, s)
+	registerProvider(gitProvider{})
+	cloud.RegisterSync(reconcileEvent)
+
+	b.Log.Info("sync mounted", "brand", deps.Brand, "providers", "git")
+	return nil
+}
+
+// Shutdown closes every open per-org store. Idempotent.
+func Shutdown() error {
+	s := mounted.Load()
+	if s == nil {
+		return nil
+	}
+	err := s.State.stores.CloseAll()
+	mounted.Store(nil)
+	return err
+}
+
+// routes registers the /v1/sync control plane: the record and the service share the
+// one word "sync". Org-scoped like every tenant surface (the gateway-validated
+// principal selects the org).
+func routes(app *zip.App, s *cloud.Service[state]) {
+	app.Post("/v1/sync", cloud.Handle(s, createSync))
+	app.Get("/v1/sync", cloud.Handle(s, listSyncs))
+	app.Get("/v1/sync/:id", cloud.Handle(s, getSync))
+	app.Patch("/v1/sync/:id", cloud.Handle(s, patchSync))
+	app.Delete("/v1/sync/:id", cloud.Handle(s, deleteSync))
+	// Manual run: reconcile one sync now (initial import, or a re-sync after an
+	// upstream you couldn't webhook). A distinct trailing segment, never shadows :id.
+	app.Post("/v1/sync/:id/run", cloud.Handle(s, runSync))
+}
