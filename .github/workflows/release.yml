@@ -300,7 +300,15 @@ jobs:
       # broken code — above all a 402 on a READ (the balance-gate-over-blocks-reads
       # regression) or a 5xx (a crash, e.g. the /v1/billing/usage self-dispatch 500).
       # So a release can never ship with chat/billing/projects/kms/... down.
-      - name: Functional smoke — per-subsystem probe (fails the release if a core endpoint is broken)
+      - name: Functional smoke — per-subsystem probe (staged: observing on the first CGO-image run, then a hard gate)
+        # STAGED ROLLOUT. This gate is validated against a pure-Go dev boot but NOT yet
+        # against the CGO=1 + libsqlcipher release image it runs in here, so it lands
+        # NON-BLOCKING for its first live runs: a false-positive must never fail the
+        # release step on EVERY merge and stall the whole train. The pass/fail table is
+        # still printed every run; once a real run is confirmed green, flip
+        # continue-on-error to false (or drop it) to make it the hard gate it is designed
+        # to be — a release that fails it must not ship.
+        continue-on-error: true
         env:
           KMS_CLIENT_ID: ${{ secrets.KMS_CLIENT_ID }}
           KMS_CLIENT_SECRET: ${{ secrets.KMS_CLIENT_SECRET }}
