@@ -15,7 +15,7 @@
 //	LANE 2 — managed Base hosting (what superbase/PocketHost provided). ONE Base
 //	app PER ORG, opened lazily and pooled, each on its OWN SQLite under
 //	{DataDir}/base/{orgSegment}/ — the same "prod = SQLite per tenant" model
-//	(HIP-0302) the gojabase leaves (captable/sign/dataroom) use, so an org's
+//	(HIP-0302) the NewBase leaves (captable/sign/dataroom) use, so an org's
 //	collections/records are PHYSICALLY isolated. Served AUTHENTICATED under
 //	/v1/base/*, the org resolved from the VALIDATED cloud principal (never a
 //	client header). This is the console Bases manager's backend.
