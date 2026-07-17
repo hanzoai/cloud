@@ -1,4 +1,4 @@
-package link
+package usage
 
 import (
 	"math"
@@ -8,7 +8,8 @@ import (
 
 // sample.go is the ACCOUNT-USAGE value plane: ONE metering lane of ONE provider
 // account, as observed at one instant. It is the atom hanzo.account_usage stores
-// and the usage faces read.
+// and the usage faces read. It moved here from clients/link so the ONE usage
+// subsystem owns ALL usage — link owns links, and nothing usage.
 //
 // IT IS SHAPED TO WHAT @hanzo/usage's METER CAN ACTUALLY REPORT — never more. The
 // meter reads each provider's OWN login (no API key) and yields a UsageSnapshot:
@@ -35,8 +36,8 @@ import (
 // yet are THREE DIFFERENT METERS — only Lane tells them apart, so only Lane can key
 // them. Collapsing them onto the class would silently overwrite two of the three.
 //
-// NO SECRET LIVES HERE (the package rule): a sample is counters and percents. The
-// provider token never leaves the device.
+// NO SECRET LIVES HERE: a sample is counters and percents. The provider token never
+// leaves the device.
 
 // The CANONICAL window value: the ONE closed vocabulary that rate limits, quotas,
 // and usage rollups all share, platform-wide. Lowercase, no case variants, no
@@ -89,10 +90,23 @@ const (
 	ScopeOrg  = "org"  // the whole org's Hanzo-routed usage
 )
 
-// Field bounds. A sample is a handful of numbers plus short identifiers; the caps
-// keep a hostile or buggy client from bloating the warehouse. Provider/Account/
-// Plan/Machine reuse the Link caps — the same values, one bound each.
+// Account-kind vocabulary — how a metered account is credentialed. It mirrors the
+// link registry's Kind (subscription | apikey) so a Sample and its Link agree, but
+// each package validates its OWN inputs: the value is a fact about the account, not
+// a shared place, so the two are decoupled and neither can force a change on the
+// other.
 const (
+	KindSubscription = "subscription"
+	KindAPIKey       = "apikey"
+)
+
+// Field bounds. A sample is a handful of numbers plus short identifiers; the caps
+// keep a hostile or buggy client from bloating the warehouse.
+const (
+	maxProvider = 64
+	maxAccount  = 256
+	maxPlan     = 128
+	maxMachine  = 256
 	maxLane     = 64
 	maxCurrency = 8
 	// maxSamples caps ONE report. A machine's meter yields a few lanes per provider
@@ -192,6 +206,9 @@ func validConfidence(c string) bool {
 	}
 	return false
 }
+
+// validKind reports whether k is a known account kind.
+func validKind(k string) bool { return k == KindSubscription || k == KindAPIKey }
 
 // confidenceRank orders the confidences by HOW MUCH A READER MAY BELIEVE THEM —
 // exact is 0, unknown is the worst. It exists so an aggregate can pick the WEAKEST
@@ -380,6 +397,18 @@ func finite(f float64) float64 {
 	return f
 }
 
+// clampPct bounds a percent to [0,100]; a provider that reports a nonsense value
+// can never poison a headroom ordering.
+func clampPct(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
+
 // clampInt64 returns a non-negative int64 no larger than hi.
 func clampInt64(v, hi int64) int64 {
 	if v < 0 {
@@ -400,3 +429,6 @@ func clampStr(s string, n int) string {
 	}
 	return s
 }
+
+// trim is strings.TrimSpace, aliased for terse boundary code.
+func trim(s string) string { return strings.TrimSpace(s) }
