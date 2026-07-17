@@ -79,7 +79,11 @@ func (a aiCompleter) Complete(ctx context.Context, cred map[string]string, req o
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxCompletionResponse))
 	if resp.StatusCode/100 != 2 {
-		return openai.ChatCompletionResponse{}, fmt.Errorf("ai completion status %d: %s", resp.StatusCode, clip(raw))
+		// Carry the completion's OWN status + body so the round can pass a
+		// caller-facing refusal (402 insufficient_balance, 429, 403) straight
+		// through instead of masking it as a gateway 502. hz.UpstreamError is the
+		// agent's typed seam for exactly this.
+		return openai.ChatCompletionResponse{}, &hz.UpstreamError{Status: resp.StatusCode, Body: raw}
 	}
 	var out openai.ChatCompletionResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -134,12 +138,4 @@ func credential(c *zip.Ctx) map[string]string {
 		}
 	}
 	return cred
-}
-
-func clip(b []byte) string {
-	const max = 256
-	if len(b) > max {
-		return string(b[:max])
-	}
-	return string(b)
 }
