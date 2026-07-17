@@ -11,7 +11,7 @@ package flags
 //
 // The decide is WaitlistModeForHost(host) → (mode, service, known): resolve host→svc,
 // then read waitlist.<svc>. featuregate.Enforce is now a CONSUMER of this decide, and
-// /v1/featuregate/mode + the /v1/admin/services board read it too. Per-user approval
+// /v1/flags/waitlist + the /v1/admin/services board read it too. Per-user approval
 // (pending|approved) stays IAM's (featuregate/approval.go) — the second, orthogonal
 // axis, unchanged.
 
@@ -101,7 +101,7 @@ func requireRegistry() (*waitlistStore, error) {
 	return c.registry.For(platformOrg, platformProject)
 }
 
-// WaitlistModeForHost is THE decide the Enforce consumer, /v1/featuregate/mode, and
+// WaitlistModeForHost is THE decide the Enforce consumer, /v1/flags/waitlist, and
 // the admin board call: resolve host→service, then read the waitlist.<svc> switch
 // through the engine. FAIL-OPEN by construction — an unmounted registry, a store
 // error, or an un-governed host all return known=false, so a request is NEVER gated
@@ -224,7 +224,7 @@ func mountWaitlist(c *Client, brand string, log luxlog.Logger) {
 	}
 }
 
-// waitlistModeRoute answers GET /v1/featuregate/mode?host=<h> — the runtime lookup the
+// waitlistModeRoute answers GET /v1/flags/waitlist?host=<h> — the runtime lookup the
 // @file waitlist-guard caches. Public (in-cluster) read: it returns ONLY the boolean
 // mode for the ONE queried host, never an enumeration. Same wire shape as the former
 // featuregate route, so the interim guard ports 1:1.
