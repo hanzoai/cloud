@@ -12,6 +12,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -118,6 +119,31 @@ func requestStudioRecycle() {
 	}
 }
 
+// studioBusy reports whether the engine holds queued or running prompts.
+// A generous timeout: a saturated GB10 answers slowly mid-render — slow is
+// alive, and killing a live render costs 8-70 minutes of GPU work.
+func studioBusy(ctx context.Context) (busy, ok bool) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+studioAddr+"/queue", nil)
+	if err != nil {
+		return false, false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+	var q struct {
+		Running []json.RawMessage `json:"queue_running"`
+		Pending []json.RawMessage `json:"queue_pending"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&q); err != nil {
+		return false, false
+	}
+	return len(q.Running)+len(q.Pending) > 0, true
+}
+
 // superviseStudio keeps the local render backend on :8188 alive until ctx
 // ends. Quiet by design: one line per restart event, not a probe firehose.
 func superviseStudio(ctx context.Context, dir string, out io.Writer) {
@@ -149,6 +175,12 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 
 	tick := time.NewTicker(studioProbeEvery)
 	defer tick.Stop()
+	// recyclePending defers the post-render recycle until the queue is EMPTY:
+	// short jobs complete while a long render is mid-sample, and recycling on
+	// their completion killed the live render (observed: every direct render
+	// died within ~6 minutes while probe jobs cycled).
+	recyclePending := false
+	unhealthy := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -157,20 +189,31 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 			}
 			return
 		case <-studioRecycle:
-			restart("recycle")
+			recyclePending = true
 		case <-tick.C:
+			busy, ok := studioBusy(ctx)
+			if recyclePending && ok && !busy {
+				recyclePending = false
+				unhealthy = 0
+				restart("recycle")
+				continue
+			}
 			if studioHealthy(ctx) {
+				unhealthy = 0
 				continue
 			}
-			// Grace re-check: it may be momentarily busy mid-render.
-			select {
-			case <-ctx.Done():
+			if ok && busy {
+				// Alive-busy: slow health under render load is not death.
+				unhealthy = 0
 				continue
-			case <-time.After(studioGraceWait):
 			}
-			if !studioHealthy(ctx) {
-				restart("unresponsive")
+			// Sustained silence with an idle or unreadable queue = actually dead.
+			unhealthy++
+			if unhealthy < 3 {
+				continue
 			}
+			unhealthy = 0
+			restart("unresponsive")
 		}
 	}
 }
