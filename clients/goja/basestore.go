@@ -1,4 +1,4 @@
-package gojabase
+package goja
 
 import (
 	"container/list"
