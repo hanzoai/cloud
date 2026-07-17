@@ -219,7 +219,8 @@ func TestBillingGate_NilClientIsNoop(t *testing.T) {
 }
 
 // DefaultPrice must return 0 for self-metered and health paths (no gating, no
-// double-billing) and a positive charge only for the generic agent edge.
+// double-billing). Every billable surface meters its own units downstream, so
+// the edge charges nothing on its own.
 func TestDefaultPrice(t *testing.T) {
 	cases := []struct {
 		path     string
@@ -235,7 +236,9 @@ func TestDefaultPrice(t *testing.T) {
 		{"/healthz", true, "liveness probe"},
 		{"/v1/iam/health", true, "subsystem health suffix"},
 		{"/v1/base/health", true, "subsystem health suffix"},
-		{"/v1/agent/run", false, "legacy singular agent edge has no finer meter"},
+		{"/v1/agent", true, "agent orchestrator round bills through its in-process completion — edge must not double-bill"},
+		{"/v1/agent/presets", true, "agent preset read is free — never gate it"},
+		{"/v1/agent/conversations", true, "agent conversation read is free — never gate it"},
 		{"/v1/agents/list", true, "agents subsystem self-meters per-run fee — must not double-bill"},
 		{"/v1/agents/x/run", true, "agent run self-metered by the agents subsystem"},
 		{"/v1/unknown/thing", true, "unpriced path defaults to 0 (opt-in metering)"},
