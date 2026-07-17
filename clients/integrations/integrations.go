@@ -277,11 +277,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
 	app.Get("/v1/integrations/slack/link/slack", cloud.Handle(s, slackLinkSlack))
 	app.Get("/v1/integrations/slack/link/callback", cloud.Handle(s, slackLinkCallback))
-	// GitHub App sync (github_app.go / github_webhook.go). The literal github paths
-	// register BEFORE the /:provider wildcards so they win under registration-order
-	// matching (same discipline as the slack bridge). The webhook is PUBLIC at the
-	// JWT layer — HMAC-verified inside; repos/import are org-authed via the principal.
-	app.Post("/v1/integrations/github/webhook", cloud.Handle(s, githubWebhook))
+	// GitHub App sync (github_app.go / github_webhook.go). The App is configured to
+	// POST push events to the SHORT top-level /v1/github-webhook (what the org's App
+	// hook fires at — the nested /v1/integrations/github/webhook was a 404 in prod);
+	// it is PUBLIC at the JWT layer, HMAC-verified inside, and hands the push to the
+	// universal sync engine (cloud.Sync). repos/import register BEFORE the /:provider
+	// wildcards (registration-order matching) and are org-authed via the principal.
+	app.Post("/v1/github-webhook", cloud.Handle(s, githubWebhook))
 	app.Get("/v1/integrations/github/repos", cloud.Handle(s, githubRepos))
 	app.Post("/v1/integrations/github/repos/import", cloud.Handle(s, githubImport))
 	// ChatBridge adapters (bridge.go + discord/teams/telegram). Same discipline as
