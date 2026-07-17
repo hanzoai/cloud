@@ -46,7 +46,6 @@ import (
 	"github.com/hanzoai/authz"
 	"github.com/hanzoai/licensing"
 	"github.com/hanzoai/metrics"
-	o11ymod "github.com/hanzoai/o11y"
 
 	// In-repo subsystem packages (clients/*). Each exports a Mount (and, where it
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
@@ -224,14 +223,14 @@ func Wire() []cloud.MountSpec {
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
 		{Name: "base", Mount: cloud.Typed(base.Mount), Shutdown: base.Shutdown, OwnsHealth: true},
-		// In-repo o11y READ plane + the runtime-handler install (o11y.SetHandler). Every
-		// specific /v1/o11y/* route registers INSIDE this one mount, hence BEFORE the
-		// hanzoai/o11y module wildcard (70) — Fiber's in-order match gives them precedence.
-		// OwnsHealth: the module's order-70 co-entry below owns the single /v1/o11y/health.
-		{Name: "o11y", Mount: o11y.MountO11y, Shutdown: o11y.ShutdownO11y, OwnsHealth: true},
-		// hanzoai/o11y module wildcard /v1/o11y/* — co-owner of the ONE o11y concept with
-		// the in-repo entry above (same name), delegated to via o11y.SetHandler.
-		{Name: "o11y", Mount: cloud.Typed(o11ymod.Mount)},
+		// The ONE observability subsystem: the in-repo o11y READ plane + runtime-handler
+		// install (o11y.SetHandler), with the hanzoai/o11y module wildcard /v1/o11y/*
+		// folded in as the TERMINAL sub-mount INSIDE o11y.MountO11y. Every specific
+		// /v1/o11y/* route registers before that wildcard, so Fiber's in-order match gives
+		// them precedence. NOT OwnsHealth: /v1/o11y/health stays the generic always-ok
+		// route (registered before MountAll), exactly as when the former module co-entry —
+		// which also set OwnsHealth=false — triggered it.
+		{Name: "o11y", Mount: o11y.MountO11y, Shutdown: o11y.ShutdownO11y},
 		{Name: "authz", Mount: cloud.Typed(authz.Mount)},
 		// Embedded commerce plane /v1/commerce/*, /_/commerce/* — the hanzoai/commerce
 		// MODULE via the adapter in commerce.go (un-forked; the in-process

@@ -16,8 +16,8 @@ import "testing"
 // origin/main @c504d2b: 68 specs from the live init()-registry, PLUS the two the
 // wave-2 external bumps (ai v1.805.2, o11y v1.5.12) stopped self-registering — ai
 // (@150 catch-all) and the hanzoai/o11y module wildcard (@70), which main currently
-// DROPS and this PR restores at their order-int slots. "o11y" therefore appears
-// twice: the in-repo read plane (order 69) and the module wildcard (70), co-owners.
+// DROPS and this PR restores. The module wildcard (order 70) is now folded in as the
+// terminal sub-mount of the in-repo o11y read plane (order 69), so "o11y" is ONE spec.
 var frozen = []struct {
 	name        string
 	ownsHealth  bool
@@ -33,8 +33,7 @@ var frozen = []struct {
 	{"account", false, false},          // was order 48
 	{"iam", false, false},              // was order 50
 	{"base", true, true},               // was order 60; per-org embed added Shutdown (#298)
-	{"o11y", true, true},               // was order 69
-	{"o11y", false, false},             // was order 70
+	{"o11y", false, true},              // ONE observability subsystem (was co-owned orders 69+70): read plane + the hanzoai/o11y module wildcard folded in as MountO11y's terminal sub-mount. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route the module co-entry used to trigger.
 	{"authz", false, false},            // was order 70
 	{"commerce", false, false},         // was order 100
 	{"licensing", false, false},        // was order 110
@@ -137,17 +136,18 @@ func TestWireOrderMatchesFrozen(t *testing.T) {
 	}
 }
 
-// TestWireNoDuplicateEnablement guards the ONE intentional duplicate: only "o11y"
-// may appear twice (the two co-owners of the observability concept). Any other
-// duplicate name is a copy-paste bug — two specs would both mount under one enable id.
+// TestWireNoDuplicateEnablement guards that every subsystem name is unique: a name
+// maps 1:1 to an enable id, so a duplicate would mount two specs under one id. (The
+// former o11y co-ownership was collapsed — the module wildcard is now a sub-mount of
+// the in-repo o11y read plane — so there is no longer any exempt duplicate.)
 func TestWireNoDuplicateEnablement(t *testing.T) {
 	seen := map[string]int{}
 	for _, s := range Wire() {
 		seen[s.Name]++
 	}
 	for name, n := range seen {
-		if n > 1 && name != "o11y" {
-			t.Errorf("subsystem %q wired %d times (only o11y may be a co-owned duplicate)", name, n)
+		if n > 1 {
+			t.Errorf("subsystem %q wired %d times (each enable id must be unique)", name, n)
 		}
 	}
 }
