@@ -106,7 +106,7 @@ var frozen = []struct {
 	{"referrals", false, false},        // was order 149
 	{"guide", false, true},             // new: Business AI Guide (after referrals, before ai)
 	{"company", false, true},           // new: Hanzo Company formation state machine (after guide)
-	{"chat", false, false},             // new: /v1/chat tool-calling round (before zen/ai catch-all)
+	{"agent", false, false},             // new: /v1/chat tool-calling round (before zen/ai catch-all)
 	{"zen", false, false},              // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},               // was order 150
 	{"plugins", false, false},          // was order 900
