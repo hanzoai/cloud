@@ -18,7 +18,7 @@ require (
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.27-0.20260716191958-4400762928a2
-	github.com/hanzoai/iam2 v0.1.4
+	github.com/hanzoai/iam2 v0.1.1
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
@@ -28,9 +28,6 @@ require (
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.3.0
 	github.com/hanzoai/stream v1.2.0
-	github.com/hanzoiam/ldap v0.0.0-20260716212256-74c7d18fdcb6
-	github.com/hanzoiam/saml v0.0.0-20260716214859-60fbc02b0d9a
-	github.com/hanzoiam/scim v0.0.0-20260716213619-417be3ccce62
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.4.3
 	github.com/luxfi/zapdb v1.10.0
@@ -698,7 +695,7 @@ require (
 	github.com/shiena/ansicolor v0.0.0-20230509054315-a9deabde6e02 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
 	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/shopspring/decimal v1.4.0
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
