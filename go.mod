@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.48.5
+	github.com/hanzoai/commerce v1.48.10
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.28
