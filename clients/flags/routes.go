@@ -25,15 +25,6 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Put("/v1/flags/defs/:key", cloud.Handle(s, putDef))
 	app.Delete("/v1/flags/defs/:key", cloud.Handle(s, deleteDef))
 	app.Get("/v1/flags/activity", cloud.Handle(s, listActivity))
-	// The guard's public runtime mode read, answered by the engine decide
-	// (host→service→waitlist.<svc>). One namespace — it lives under /v1/flags. Exempt
-	// from the Enforce gate (/v1/flags/waitlist), so a gated user can still resolve mode.
-	app.Get("/v1/flags/waitlist", cloud.Handle(s, waitlistModeRoute))
-	// Compat alias (TEMPORARY): the former /v1/featuregate/mode path, same handler,
-	// kept only so an unverified external caller can't 404 while the namespace collapse
-	// rolls out. Delete this line (and its exempt entry in featuregate/middleware.go)
-	// once every caller is confirmed on /v1/flags/waitlist.
-	app.Get("/v1/featuregate/mode", cloud.Handle(s, waitlistModeRoute))
 }
 
 // tenant resolves the org — the tenant-isolation KEY — from the validated
