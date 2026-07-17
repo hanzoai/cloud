@@ -2,148 +2,48 @@
 #
 # This image is a SINGLE artifact that serves BOTH the /v1 API AND the console
 # UI from one process: the console is compiled into the Go binary via
-# //go:embed (see webui.go). The pipeline is:
+# //go:embed (see webui.go). The final `/cloud` binary already carries the UI —
+# no separate console Service, no second origin; the embedded console calls /v1
+# on its own host.
 #
-#   1. console  stage → build the hanzoai/console static bundle
-#   2. (copied) → into  webui/dist/  of the Go build context
-#   3. build    stage → `go build` bakes webui/dist into the binary (go:embed)
-#
-# so the final `/cloud` binary already carries the UI. No separate console
-# Service, no second origin — the embedded console calls /v1 on its own host.
-#
-# ── console UI stage ─────────────────────────────────────────────────────────
-# Builds the console SPA and emits a STATIC bundle at /out. console is fetched
-# at a pinned ref (CONSOLE_REF) using the same GIT_AUTH_TOKEN BuildKit secret the Go
-# build uses for private modules.
-#
-# console exposes `npm run build:embed` (scripts/build-embed.mjs): it prunes the
-# Next server route handlers (BFF proxies — they collapse to the cloud /v1/* the
-# SPA calls same-origin), wraps the client catch-all pages for output:'export',
-# and neutralizes the root layout's request-time headers() read (the per-host
-# <title>, resolved client-side in the embed) so the STATIC export prerenders
-# clean — emitting out/. This stage runs it and copies out/ into /out, which the
-# Go build drops into webui/dist so //go:embed bakes the FULL @hanzo/gui console
-# into the ONE binary. This stage FAILS HARD: the prod image MUST carry the real
-# console — a missing/broken build:embed is a build ERROR, never a silent degrade
-# to the placeholder shell. The one escape hatch is --build-arg ALLOW_PLACEHOLDER=1
-# (pure-Go dev image with no Node console), which is NEVER set for prod.
-# ── base images: mirrored to ghcr.io/hanzoai/mirror/* (NOT public.ecr.aws) ────
-# Every FROM below pulls from our own GHCR mirror, pinned by digest. WHY:
-# public.ecr.aws (ECR Public) rate-limits anonymous pulls with HTTP 429 (Too
-# Many Requests) on shared CI runners, and a 429 on ANY base pull aborts the
-# whole release — a release died on a 429 pulling python:3.12-alpine, which is
-# what motivated this. ghcr.io/hanzoai/mirror/* are 1:1 mirrors of the upstream
-# public images (node/python/rust/golang/alpine), copied linux/amd64-only (the
-# only platform this release builds) and digest-pinned for immutability. These
-# FROM pulls resolve because release.yml logs the build into ghcr.io (GH_PAT)
-# before building; the mirror packages can also be flipped public for anonymous
-# pulls (one-time, via the GitHub UI — there is no REST API for package
-# visibility).
-# REFRESH when bumping a toolchain: crane/regctl copy the new upstream image into
-# ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below (manual today;
-# a CI job may automate it). Canonical long-term home is
-# registry.hanzo.ai/hanzoai/mirror/* — repoint there once the runners carry its
-# IAM pull credentials (follow-up).
-FROM ghcr.io/hanzoai/mirror/node:24-alpine@sha256:0cb0e7c3195bce740b6c8d8b27432c92360e3b7f1528087f2c50640b177950c6 AS console
-ARG CONSOLE_REPO=https://github.com/hanzoai/console.git
-ARG CONSOLE_REF=main
-# CONSOLE_CACHEBUST busts this stage's BuildKit layer cache every build. WHY it must
-# exist: the clone+build layer's cache key is derived from the RUN text + build args.
-# With only a static `git clone --branch main`, the key NEVER changes, so on the
-# persistent ARC dind BuildKit cache every cloud image re-embedded the SAME frozen
-# console snapshot — new console work (the native Tracker, …) silently never shipped,
-# even on a freshly-built+deployed image. release.yml feeds this the cloud commit sha
-# (unique per push) so the clone RUN re-runs each build and re-fetches console
-# ${CONSOLE_REF} (main HEAD) fresh. Correctness over cache reuse: the console stage
-# rebuilds every time, but the embed is never stale.
-ARG CONSOLE_CACHEBUST=none
-RUN apk add --no-cache git
-WORKDIR /console
-# The static export prerenders every page (webpack compile + export prerender);
-# give the heap headroom so a large @hanzo/gui build never OOMs into the stub.
-ENV NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=8192
-# Hanzo Analytics: the console's <HanzoAnalytics/> (env-gated) renders the one
-# native analytics.hanzo.ai tag only when a website-id is baked in. Default to the
-# console.hanzo.ai property (7dce54ee, public per-site) so console+team track on
-# the next cloud build. GA4/Pixel stay off (unset). Public id, not a KMS secret.
-ARG NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=7dce54ee-41f6-4751-96bf-fe005067c7c7
-ENV NEXT_PUBLIC_ANALYTICS_WEBSITE_ID=$NEXT_PUBLIC_ANALYTICS_WEBSITE_ID
-RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
-    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
-    fi && \
-    echo ">> embedding console ${CONSOLE_REF} (cachebust ${CONSOLE_CACHEBUST})" && \
-    git clone --depth 1 --branch "${CONSOLE_REF}" "${CONSOLE_REPO}" . && \
-    echo ">> console @ $(git rev-parse HEAD)" && \
-    npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-timeout=120000
-# FAIL-HARD. build:embed MUST emit a REAL bundle — a non-empty out/index.html AND
-# an out/_next/ chunk dir — and /out then carries it into the Go embed path. If the
-# target is absent, the export fails, or the output is the placeholder shape, this
-# is a build ERROR (exit 1): the prod image can NEVER silently ship the committed
-# fallback shell. Escape hatch: --build-arg ALLOW_PLACEHOLDER=1 leaves /out empty
-# (Go build keeps the committed shell) for a pure-Go dev image — NEVER set in prod.
-ARG ALLOW_PLACEHOLDER=0
-RUN mkdir -p /out; \
-    ok=0; \
-    if npm run 2>/dev/null | grep -q ' build:embed'; then \
-      if npm run build:embed && [ -s out/index.html ] && [ -d out/_next ]; then \
-        cp -r out/. /out/; \
-        echo ">> embedded REAL console static bundle: $(wc -c < out/index.html)-byte index.html, $(du -sh out/_next | cut -f1) _next/"; \
-        ok=1; \
-      else \
-        echo ">> console build:embed produced NO real bundle (missing/empty out/index.html or out/_next)"; \
-      fi; \
-    else \
-      echo ">> console exposes no build:embed target"; \
-    fi; \
-    if [ "$ok" != "1" ]; then \
-      if [ "$ALLOW_PLACEHOLDER" = "1" ]; then \
-        echo ">> ALLOW_PLACEHOLDER=1 — keeping committed fallback shell (DEV image only; NEVER prod)"; \
-      else \
-        echo ">> FATAL: refusing to ship the placeholder console. Fix the console build:embed, or pass --build-arg ALLOW_PLACEHOLDER=1 for a pure-Go dev image."; \
-        exit 1; \
-      fi; \
-    fi
+# ── prebuilt decomplection artifacts (cloud compiles ONLY Go) ────────────────
+# The console SPA, the agent-skills catalog, and the native flags staticlib are
+# each built by THEIR OWN CI as a versioned immutable image and PULLED here,
+# instead of rebuilding node + python + rust from scratch every cloud release.
+# The heavy one (console: a cold `npm install` + full Next.js static export,
+# force-cache-busted every build) used to dominate the ~20-min build; it is now
+# a registry pull.
+#   console-embed (hanzoai/console Dockerfile.embed)  → /dist             → webui/dist                  (go:embed)
+#   agent-skills  (hanzoai/openapi Dockerfile.skills) → /catalog          → clients/agentskills/catalog (go:embed)
+#   cloud-flags   (native/flags    Dockerfile)        → /libhanzo_flags.a → CGO link (clients/featureflags)
+# Pinned to ghcr.io so BOTH buildx lanes (release.yml + platform arcbuild) pull
+# it directly; the SAME tags are mirrored to registry.hanzo.ai (S3-backed) for
+# GET-flow consumers (docker/kaniko/crane). Override any pin with
+# --build-arg <NAME>_IMAGE=…  — release.yml resolves CONSOLE_IMAGE to a fresh
+# console-embed digest, exactly as CONSOLE_CACHEBUST re-fetched console before.
+ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:latest
+ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:latest
+ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:latest
 
-# ── Go build stage (CGO=1 + SQLCipher — REAL at-rest encryption) ─────────────
-# The unified binary embeds IAM (clients/iam) whose per-org store is SQLCipher-
-# encrypted (orgIsolation=sqlite), and commerce's per-tenant money DBs likewise.
-# A CGO=0 modernc build SILENTLY SHIPS PLAINTEXT. So this builds CGO=1 against
-# system libsqlcipher — hanzoai/iam's proven recipe: the `libsqlite3` tag + a
-# libsqlcipher symlink + -DSQLITE_HAS_CODEC, with the modernc double-registration
-# guard, TestEncryptionProof, and the cek.go golden-vector KAT baked in — so a
-# build that fails to link REAL SQLCipher, or that would decrypt existing stores
-# differently, produces NO image. alpine3.22 MATCHES the runtime base so the
-# libsqlcipher soname the binary links is the SAME one present at runtime. ECR
-# Public mirror avoids Docker Hub's 429 rate-limit on shared CI runners.
-# ---- agent-skills stage: regenerate the FULL /.well-known/agent-skills catalog
-# from the hanzoai/openapi SOT (skills.py) and carry it into the Go embed path
-# BEFORE `go build`, the SAME way the console bundle is produced. The committed
-# catalog is only the tiny `ai` fallback; prod must embed the full set. FAIL-HARD:
-# if the clone/generation can't produce the master index, the image is not built.
-FROM ghcr.io/hanzoai/mirror/python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS skills
-ARG OPENAPI_REPO=https://github.com/hanzoai/openapi.git
-ARG OPENAPI_REF=main
-RUN apk add --no-cache git && pip install --no-cache-dir pyyaml
-WORKDIR /openapi
-RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
-    if [ -s /run/secrets/GIT_AUTH_TOKEN ]; then \
-      git config --global url."https://x-access-token:$(cat /run/secrets/GIT_AUTH_TOKEN)@github.com/".insteadOf "https://github.com/"; \
-    fi && \
-    git clone --depth 1 --branch "${OPENAPI_REF}" "${OPENAPI_REPO}" . && \
-    python3 skills.py --no-services --out /catalog && \
-    test -s /catalog/hanzo/index.json
+# ── toolchain base images: the golang + alpine FROMs below pull from our own
+# GHCR mirror (ghcr.io/hanzoai/mirror/*), pinned by digest. WHY: public.ecr.aws
+# rate-limits anonymous pulls (HTTP 429) on shared CI runners and a 429 on ANY
+# base pull aborts the release. The mirror packages are 1:1 amd64 copies of the
+# upstream public images, digest-pinned for immutability; release.yml logs the
+# build into ghcr.io (GH_PAT) before building so they resolve. REFRESH on a
+# toolchain bump: crane/regctl copy the new upstream into
+# ghcr.io/hanzoai/mirror/<name>:<tag> and repoint the digest below. Canonical
+# long-term home is registry.hanzo.ai/hanzoai/mirror/* — repoint once the runners
+# carry its IAM pull credentials (follow-up).
 
-# ── Native flags evaluator — hanzo-flags (Rust staticlib, FFI'd into the Go
-# binary by clients/featureflags). Stateless PostHog-compatible evaluation;
-# definitions live in the per-org SQLite stores. musl staticlib links clean
-# against the alpine cgo build below.
-FROM ghcr.io/hanzoai/mirror/rust:1-alpine3.22@sha256:b348cb409ac0a73de15065997a360063cf87465574a15e3e4469862cb8996f02 AS flagslib
-RUN apk add --no-cache musl-dev
-WORKDIR /src/native/flags
-COPY native/flags/Cargo.toml native/flags/Cargo.lock ./
-COPY native/flags/src ./src
-RUN cargo build --release --locked
+# ── console SPA static export (prebuilt → /dist) ─────────────────────────────
+FROM ${CONSOLE_IMAGE} AS console
+
+# ── agent-skills catalog (prebuilt → /catalog) ──────────────────────────────
+FROM ${SKILLS_IMAGE} AS skills
+
+# ── native flags evaluator staticlib (prebuilt → /libhanzo_flags.a) ──────────
+FROM ${FLAGS_IMAGE} AS flagslib
 
 FROM ghcr.io/hanzoai/mirror/golang:1.26-alpine3.22@sha256:47d47cb5cc3c7dac409dcb6c3a98a6263571218046cd02d709527feef804a77c AS build
 # CIPHER-FORMAT FREEZE (cek depends on this). The data-plane stores are
@@ -200,13 +100,13 @@ RUN --mount=type=secret,id=GIT_AUTH_TOKEN \
 COPY . .
 # Drop the console static bundle into the embed path BEFORE `go build`, so
 # //go:embed all:webui/dist bakes it into the binary (same-origin console).
-COPY --from=console /out/ /src/webui/dist/
+COPY --from=console /dist/ /src/webui/dist/
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
 # The native flags staticlib at the exact ${SRCDIR}-relative path the cgo
 # directive in clients/featureflags/engine.go links.
-COPY --from=flagslib /src/native/flags/target/release/libhanzo_flags.a /src/native/flags/target/release/libhanzo_flags.a
+COPY --from=flagslib /libhanzo_flags.a /src/native/flags/target/release/libhanzo_flags.a
 # RED gate — modernc double-registration guard: 0 modernc under CGO=1, else the
 # "sqlite" driver is registered twice (mattn + modernc) → panic at init.
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
