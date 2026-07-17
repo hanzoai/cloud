@@ -35,6 +35,7 @@ import (
 	"sync"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/cron"
 	tasksui "github.com/hanzoai/cloud/clients/tasks/ui"
 	tasksauth "github.com/hanzoai/tasks/pkg/auth"
 	tasks "github.com/hanzoai/tasks/pkg/tasks"
@@ -66,6 +67,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.All("/tasks/*", ui)
 
 	deps.Logger.New("subsystem", "tasks").Info("tasks HTTP+UI surface mounted (shared in-process engine)", "brand", deps.Brand)
+
+	// Platform cron is a FACET of tasks, not its own subsystem: it mounts NO routes,
+	// only registers durable schedules on the SAME shared engine (cloud.EmbeddedTasks)
+	// this surface fronts. Folded in here as a terminal sub-mount (was a separate Wire
+	// entry) so there is ONE tasks subsystem. cron.Mount just launches a background
+	// starter that waits for the engine wired after MountAll — no ordering dependency.
+	if err := cron.Mount(app, deps); err != nil {
+		return err
+	}
 	return nil
 }
 
