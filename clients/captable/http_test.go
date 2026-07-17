@@ -19,7 +19,7 @@ import (
 // mountApp builds a bare zip.App (no SanitizeIdentity middleware, so X-Org-Id +
 // X-User-Id are trusted verbatim — the standard cloud leaf test harness) and
 // mounts the captable leaf on it. This exercises the REAL HTTP path: routing →
-// body decode → principal gate → gojabase dispatch → per-tenant Base → response,
+// body decode → principal gate → NewBase dispatch → per-tenant Base → response,
 // the same path the live binary serves under CLOUD_ENABLE=captable.
 func mountApp(t *testing.T) *zip.App {
 	t.Helper()

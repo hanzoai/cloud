@@ -1,16 +1,16 @@
 package sign
 
-// schema is the per-tenant SQLite DDL gojabase runs (idempotently) on first open
+// schema is the per-tenant SQLite DDL NewBase runs (idempotently) on first open
 // of each tenant's {DataDir}/sign/{org}.db. It is a faithful, lean projection of
 // the Documenso Envelope/DocumentData/Recipient/Field/Signature/DocumentAuditLog
 // models onto one PDF per document — the complete single-document signing flow.
-// Ids are application-generated TEXT (via the gojabase __newId() host-fn), so no
+// Ids are application-generated TEXT (via the NewBase __newId() host-fn), so no
 // autoincrement crosses the host boundary. Tenant isolation is the per-tenant
-// FILE (gojabase), so there is no org column — the bundle only ever sees its own
+// FILE (NewBase), so there is no org column — the bundle only ever sees its own
 // tenant's DB.
 // PDF BYTES do NOT live in this DB: document_data.data / initial_data hold the
 // opaque object-storage blob KEY (type 'BLOB_KEY'), and the bytes live on the
-// gojabase __blob seam (deps.VFS / S3). A 32 MiB base64 PDF in a TEXT column would
+// NewBase __blob seam (deps.VFS / S3). A 32 MiB base64 PDF in a TEXT column would
 // bloat the per-tenant SQLite and be copied on every read — the same object-store
 // seam clients/dataroom uses for document bytes. `data` points at the current
 // (sealed once completed) PDF; `initial_data` keeps the original.

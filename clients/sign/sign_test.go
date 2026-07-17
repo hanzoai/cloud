@@ -128,7 +128,7 @@ func decode(t *testing.T, b []byte) map[string]any {
 }
 
 // TestFullSigningFlow is the end-to-end wire proof of the COMPLETE e-sign flow on
-// the reusable gojabase RW-Base host: create document → add recipient → add
+// the reusable NewBase RW-Base host: create document → add recipient → add
 // fields → send → recipient signs each field → complete → the document seals to
 // COMPLETED with a REAL x509/PKCS#7 signed PDF, and the audit trail records every
 // step. All per-tenant Base/SQLite-backed.
@@ -310,7 +310,7 @@ func TestFullSigningFlow(t *testing.T) {
 
 // TestTenantIsolation proves two orgs never see each other's documents (the DB is
 // per-tenant; a wrong token/org combination cannot resolve) and that a validation
-// error rolls the request transaction back (gojabase atomicity).
+// error rolls the request transaction back (NewBase atomicity).
 func TestTenantIsolation(t *testing.T) {
 	app, _ := mountApp(t)
 	pdf, _ := os.ReadFile("testdata/example.pdf")
