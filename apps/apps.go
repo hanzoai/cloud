@@ -75,6 +75,7 @@ import (
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
+	"github.com/hanzoai/cloud/clients/featuregate"
 	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
@@ -337,11 +338,14 @@ func Wire() []cloud.MountSpec {
 		{Name: "evals", Mount: eval.Mount},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
-		// Launch-control (per-service waitlist mode) folded into the flags engine: the
-		// mode IS the switch waitlist.<svc>, the board is the /v1/admin/services lens,
-		// and /v1/flags/waitlist is served by flags. featuregate is no longer a mounted
-		// subsystem — it exposes only the native Enforce middleware (wired in serve.go),
-		// a consumer of flags.WaitlistModeForHost.
+		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
+		// registry + brand seed + the waitlist.<svc> switch registration + the
+		// /v1/flags/waitlist (and /v1/featuregate/mode compat) mode read + the Enforce
+		// middleware — COMPOSING the flags engine one-way (flags.Bool/Register/
+		// SetPlatformSwitch; flags never imports featuregate). Mounts AFTER flags so the
+		// engine's platform-switch plane is installed first; the admin board is the
+		// /v1/admin/services lens over it. Owns the registry store handle → Shutdown.
+		{Name: "featuregate", Mount: featuregate.Mount, Shutdown: ctxShutdown(featuregate.Shutdown)},
 		// Tasks: the durable workflow/UI surface AND platform cron (durable schedules
 		// on the same shared engine, replacing every k8s CronJob). cron was a separate
 		// Wire entry; it mounts no routes and only registers schedules, so it is folded
