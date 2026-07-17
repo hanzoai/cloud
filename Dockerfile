@@ -235,6 +235,12 @@ RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
 RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=1 go build -tags "libsqlite3 sqlite_fts5" -ldflags="-s -w" -o /cloud ./cmd/cloud
+# The functional smoke prober (cmd/smoke) — a stdlib-only, static binary shipped
+# alongside /cloud so the release gate can `docker exec` it against the freshly-built
+# image (and any deployment can be smoked via `docker run --entrypoint /smoke ...`).
+RUN --mount=type=cache,id=cloud-gomod-v4,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,id=cloud-gobuild-v4,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /smoke ./cmd/smoke
 # Prove the SHIPPED binary binds sqlite3_* to libsqlcipher, not a plaintext libsqlite3.
 RUN readelf -d /cloud | grep -qE 'NEEDED.*(sqlcipher|sqlite3)' || { echo "FATAL: /cloud links no sqlite/sqlcipher .so"; exit 1; }; \
     ! ldd /cloud 2>/dev/null | grep -E 'libsqlite3' | grep -vq 'libsqlcipher' || { echo "FATAL: /cloud resolves a NON-sqlcipher libsqlite3 (plaintext risk)"; exit 1; }
@@ -266,6 +272,7 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 COPY --from=build /cloud /cloud
+COPY --from=build /smoke /smoke
 EXPOSE 8080 9090 9653
 USER 65532:65532
 ENTRYPOINT ["/cloud"]
