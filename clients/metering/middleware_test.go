@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -128,6 +129,41 @@ func TestMiddleware_Denies402_WhenNoBalance(t *testing.T) {
 	}
 	if n, _, _ := stub.records(); n != 0 {
 		t.Fatalf("denied request must not record usage, got %d records", n)
+	}
+}
+
+// A FUNDED caller over a per-scope spend cap must get a DISTINCT 402
+// spend_cap_exceeded (the balance is fine; the tenant's own ceiling is not) — NOT
+// the 503 the pre-fix defaultOnDenied fell through to, and NOT insufficient_balance.
+func TestMiddleware_Denies402_SpendCap_WhenFundedButOverCap(t *testing.T) {
+	// Balance is healthy; the authorize endpoint returns the spend_cap verdict.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/billing/spend-alerts/authorize" {
+			_, _ = io.WriteString(w, `{"allow":false,"reason":"spend_cap","capCents":100,"spentCents":100}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"available":100000}`) // funded
+	}))
+	defer srv.Close()
+
+	c, _ := metering.New(metering.Config{BaseURL: srv.URL, Token: "t", Org: "hanzo"})
+	handlerHit := false
+	h := c.Middleware(metering.MiddlewareConfig{
+		Provider: "search",
+		Price:    func(*http.Request, int, metering.AuthInput) int64 { return 7 },
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { handlerHit = true }))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, gatewayReq())
+
+	if handlerHit {
+		t.Fatal("handler must NOT run when over the spend cap")
+	}
+	if rr.Code != http.StatusPaymentRequired {
+		t.Fatalf("status = %d, want 402 (spend_cap is a 402, not a 503)", rr.Code)
+	}
+	if body := rr.Body.String(); !strings.Contains(body, "spend_cap_exceeded") {
+		t.Fatalf("body = %q, want spend_cap_exceeded code (distinct from insufficient_balance)", body)
 	}
 }
 
