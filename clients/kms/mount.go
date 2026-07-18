@@ -10,9 +10,9 @@
 //	GET    /v1/kms/health                 — real probe (503 in health-only mode); public
 //	GET    /v1/kms/config                 — SPA runtime config;                    public
 //	GET    /v1/kms/orgs/:org/secrets      — list a path's secret metadata;         JWT, org-scoped
-//	GET    /v1/kms/orgs/:org/secrets/*    — read one secret value;                 JWT, org-scoped
+//	GET    /v1/kms/orgs/:org/secrets/+    — read one secret value;                 JWT, org-scoped
 //	POST   /v1/kms/orgs/:org/secrets      — upsert a secret (sealed);              JWT, org-scoped
-//	DELETE /v1/kms/orgs/:org/secrets/*    — delete a secret;                       JWT, org-scoped
+//	DELETE /v1/kms/orgs/:org/secrets/+    — delete a secret;                       JWT, org-scoped
 //
 // ORG SCOPING — {org} must equal the caller's validated org (c.Org()); a global
 // admin (c.IsAdmin()) may act on any org. The org is folded into the store PATH
@@ -121,10 +121,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return nil
 	}
 
+	// Value routes use the REQUIRED-greedy `+` (one-or-more), not the
+	// optional-greedy `*`: fiber's `*` also matches an empty tail, so
+	// `/secrets/*` swallows the bare `GET .../secrets` list path and answers it
+	// from getSecret (400 "secret name is required"), leaving listSecrets
+	// unreachable. `+` requires a non-empty name, so the bare path falls through
+	// to the exact list route.
 	app.Get("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, listSecrets)))
-	app.Get("/v1/kms/orgs/:org/secrets/*", guard(s, cloud.Handle(s, getSecret)))
+	app.Get("/v1/kms/orgs/:org/secrets/+", guard(s, cloud.Handle(s, getSecret)))
 	app.Post("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, putSecret)))
-	app.Delete("/v1/kms/orgs/:org/secrets/*", guard(s, cloud.Handle(s, deleteSecret)))
+	app.Delete("/v1/kms/orgs/:org/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
 
 	s.Log.Info(
 		"kms subsystem mounted",
@@ -364,10 +370,10 @@ func deleteSecret(s *cloud.Service[state], ctx *zip.Ctx) error {
 
 func reqOrg(ctx *zip.Ctx) string { return strings.TrimSpace(ctx.Param("org")) }
 
-// reqWildcard returns the trailing "*" segment of a /secrets/* route, trimmed of
+// reqWildcard returns the trailing "+" segment of a /secrets/+ route, trimmed of
 // surrounding slashes. This is the secret's sub-path + name under the org.
 func reqWildcard(ctx *zip.Ctx) string {
-	return strings.Trim(strings.TrimSpace(ctx.Param("*")), "/")
+	return strings.Trim(strings.TrimSpace(ctx.Param("+")), "/")
 }
 
 // validOrg accepts a DNS-1123-ish label. It is the tenant-isolation boundary
@@ -404,7 +410,7 @@ func orgPath(org, sub string) string {
 	return base + "/" + sub
 }
 
-// targetOf splits a /secrets/* wildcard (sub-path + name) into the validated
+// targetOf splits a /secrets/+ wildcard (sub-path + name) into the validated
 // store (path, name): the last segment is the name, the rest is the sub-path
 // folded under the org. "DB" → (/orgs/{org}, DB); "ci/DB" → (/orgs/{org}/ci, DB).
 // Returns ok=false when the name or sub-path fails the boundary validators, so
