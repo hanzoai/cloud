@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -227,6 +228,14 @@ func TestEscapedPathIsRefusedAndNeverReachesUpstream(t *testing.T) {
 		"/v1/dns/../../admin",
 		"/v1/dns/..%2f..%2fadmin",
 		"/v1/dns/../../../metrics",
+		// Double-encoding: fasthttp URI().Path() decodes ONE layer, leaving a
+		// literal `%2e`/`%2f` that KEEPS the /v1/dns/ prefix (so a prefix-only
+		// check passes) yet the UPSTREAM decodes the second layer and resolves
+		// outside /v1/dns. A surviving `%` or `..` in the normalized path is the
+		// tell -- neither appears in a legitimate DNS-API path.
+		"/v1/dns/%252e%252e/admin",
+		"/v1/dns/%252e%252e%252fadmin",
+		"/v1/dns/..%252fadmin",
 	} {
 		t.Run(target, func(t *testing.T) {
 			up := newStubDNS()
@@ -242,6 +251,32 @@ func TestEscapedPathIsRefusedAndNeverReachesUpstream(t *testing.T) {
 				t.Fatalf("upstream reached %d time(s) for %q, want 0 -- traversal must be refused before forwarding", up.hits, target)
 			}
 		})
+	}
+}
+
+// An upstream 3xx is NOT followed: the head relays it verbatim (status + Location)
+// so a redirect can never silently re-target the request onto another host or path.
+func TestUpstreamRedirectIsNotFollowedAndPassesThrough(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		// If the head followed this, the client would re-request /v1/dns/elsewhere
+		// on this same host and bump hits to 2.
+		w.Header().Set("Location", "/v1/dns/elsewhere")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer srv.Close()
+	app := dnsApp(t, srv.URL)
+
+	res, _ := do(t, app, as(httptest.NewRequest(http.MethodGet, "/v1/dns/zones", nil), "orgA", "orgA/dave", "tokenA"))
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302 (upstream 3xx must pass through, not be followed)", res.StatusCode)
+	}
+	if loc := res.Header.Get("Location"); loc != "/v1/dns/elsewhere" {
+		t.Fatalf("Location = %q, want /v1/dns/elsewhere relayed verbatim", loc)
+	}
+	if n := atomic.LoadInt32(&hits); n != 1 {
+		t.Fatalf("upstream reached %d time(s), want 1 -- a 3xx must NOT be followed", n)
 	}
 }
 
