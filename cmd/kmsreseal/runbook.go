@@ -13,9 +13,13 @@ package main
 
 const runbookText = `KMS EMBED — standalone (kms.hanzo.svc) → cloud embedded /v1/kms — ordered cutover
 ================================================================================
-SCOPE: the 518 prod (org,path,env,key) rows across ~113 explicit-key + 12 folder
-CRs whose hostAPI is the main standalone. The 12 devnet rows (kms.hanzo-devnet.svc,
-org=hanzo-vector) are a SEPARATE KMS — NOT in this cutover.
+SCOPE (authoritative counts: run 'kmsreseal inventory --kubectl'; 2026-07 snapshot):
+125 CRs -> 490 unique targets across 4 hosts. Stage per host with --only-host:
+  * http://kms.hanzo.svc                    477 targets + 6 folders  <- THIS cutover
+  * http://kms.hanzo.svc.cluster.local/api    1 target  + 5 folders  (same backend, /api base)
+  * http://kms.hanzo-devnet.svc              12 targets              (SEPARATE devnet KMS)
+  * http://kms.lux-kms-go.svc.cluster.local             1 folder     (SEPARATE lux KMS)
+The devnet + lux + /api hosts are their own cutovers -- NOT this one.
 
 INVARIANTS (hold at every step):
   * The standalone is READ-ONLY. Its ZapDB is never written. It is the rollback.
