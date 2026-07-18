@@ -97,16 +97,25 @@ func (e *edge) forward(c *zip.Ctx) error {
 	}
 
 	// Path + query pass through verbatim, but ONLY within /v1/dns. uri.Path() is
-	// normalized and percent-decoded, so any dot-segment or encoded-dot traversal
+	// normalized and decoded by ONE layer, so a single-encoded dot-segment traversal
 	// (which Fiber's raw wildcard still matches) has ALREADY been resolved here --
-	// e.g. /v1/dns/../../admin normalizes to /admin. Guard the normalized path so
-	// the forward is LOCKED under /v1/dns; the caller can never walk the request
-	// onto another path of the DNS host. Fail closed: anything outside is refused
-	// before a byte leaves cloud. The upstream host still comes ONLY from env
-	// (never caller-influenced), so a path can never re-target another host: no SSRF.
+	// e.g. /v1/dns/../../admin normalizes to /admin -- and fails the prefix check.
+	// Guard the normalized path so the forward is LOCKED under /v1/dns; the caller
+	// can never walk the request onto another path of the DNS host.
 	uri := c.Fiber().Request().URI()
 	p := string(uri.Path())
 	if p != "/v1/dns" && !strings.HasPrefix(p, "/v1/dns/") {
+		return c.JSON(http.StatusBadRequest, fail("bad_request", "path must be under /v1/dns"))
+	}
+	// Second layer: a DOUBLE-encoded traversal survives one decode as a literal `%2e`
+	// (e.g. /v1/dns/%252e%252e/admin -> /v1/dns/%2e%2e/admin) that KEEPS the prefix,
+	// so the upstream would decode the second layer and resolve outside /v1/dns. A
+	// residual `%` (still-encoded byte) or `..` (residual traversal) in the
+	// once-decoded path is the tell -- neither occurs in a legitimate DNS-API path
+	// (zone labels are DNS names / punycode xn--). Fail closed before a byte leaves
+	// cloud. The upstream host still comes ONLY from env (never caller-influenced),
+	// so a path can never re-target another host: no SSRF.
+	if strings.ContainsRune(p, '%') || strings.Contains(p, "..") {
 		return c.JSON(http.StatusBadRequest, fail("bad_request", "path must be under /v1/dns"))
 	}
 	target := e.base + p
@@ -149,6 +158,11 @@ func (e *edge) forward(c *zip.Ctx) error {
 		ct = "application/json"
 	}
 	c.SetHeader("Content-Type", ct)
+	// Relay Location so an upstream 3xx (never followed -- see CheckRedirect) passes
+	// back verbatim: status + Location, for the caller to act on.
+	if loc := res.Header.Get("Location"); loc != "" {
+		c.SetHeader("Location", loc)
+	}
 	return c.Bytes(res.StatusCode, out)
 }
 
