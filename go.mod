@@ -18,7 +18,7 @@ require (
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.28
-	github.com/hanzoai/iam2 v0.15.4
+	github.com/hanzoai/iam2 v0.16.0
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
