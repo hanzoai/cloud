@@ -16,6 +16,7 @@ require (
 	github.com/hanzoai/account v0.2.0
 	github.com/hanzoai/commerce v1.49.0
 	github.com/hanzoai/decimal v0.1.1
+	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
 	github.com/hanzoai/iam v1.31.28
 	github.com/hanzoai/iam2 v0.16.0
@@ -682,7 +683,6 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.9.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
-	github.com/sashabaranov/go-openai v1.32.0
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/scim2/filter-parser/v2 v2.2.0 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
@@ -825,8 +825,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
-	github.com/hanzoai/agent v0.1.2
-	github.com/hanzoai/ai v1.821.1
+	github.com/hanzoai/agent v0.1.3
+	github.com/hanzoai/ai v1.822.2
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
@@ -866,10 +866,5 @@ replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 v2.0.0-2026012609
 // "sqlite" driver is registered exactly once.
 
 replace github.com/krakend/krakend-otel => github.com/hanzoai/krakend-otel v0.13.1
-
-// hanzoai/ai's reasoning-model path reads Delta.ReasoningContent, a field only
-// the Hanzo go-openai fork carries; upstream sashabaranov/go-openai lacks it.
-// Dependency-module replaces are ignored by Go, so the main module must pin it.
-replace github.com/sashabaranov/go-openai => github.com/hanzoai/go-openai v1.40.0
 
 exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
