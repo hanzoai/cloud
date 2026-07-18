@@ -207,14 +207,16 @@ func TestPlatformError401Hint(t *testing.T) {
 	})
 	defer done()
 	_, err := p.Apps(context.Background(), AppsQuery{})
-	if err == nil || !strings.Contains(err.Error(), "HTTP 401") || !strings.Contains(err.Error(), "platform service token") {
-		t.Fatalf("401 error should carry a token hint, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "HTTP 401") || !strings.Contains(err.Error(), "hanzo login") {
+		t.Fatalf("401 error should point at `hanzo login`, got %v", err)
 	}
 }
 
 func TestPlatformNoTokenError(t *testing.T) {
 	p := newPlatform("https://platform.hanzo.ai", "")
-	if _, err := p.Apps(context.Background(), AppsQuery{}); err == nil || !strings.Contains(err.Error(), "no platform token") {
-		t.Fatalf("expected no-token error, got %v", err)
+	// After unify-infra, the "no credential" error points at `hanzo login` — the one
+	// identity that authorizes the platform — not a separate platform token.
+	if _, err := p.Apps(context.Background(), AppsQuery{}); err == nil || !strings.Contains(err.Error(), "hanzo login") {
+		t.Fatalf("expected a `hanzo login` hint, got %v", err)
 	}
 }
