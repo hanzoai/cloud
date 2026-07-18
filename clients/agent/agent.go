@@ -22,7 +22,7 @@ import (
 	hz "github.com/hanzoai/agent"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/tools"
-	openai "github.com/sashabaranov/go-openai"
+	openai "github.com/hanzoai/go-openai"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
