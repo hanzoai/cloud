@@ -99,19 +99,84 @@ func (r *reconciler) stamp(objs []*unstructured.Unstructured) {
 	}
 }
 
+// PruneFuse bounds how much a single reconcile may delete — the circuit breaker
+// against a silent empty/partial render sweeping the fleet. Both limits are
+// checked; either one trips the fuse. Zero disables that check.
+type PruneFuse struct {
+	MaxDeletions int     // absolute cap on objects pruned in one reconcile
+	MaxRatio     float64 // cap as a fraction of the managed set (0..1)
+}
+
+// isProtectedKind is the data-anchor exclusion: PersistentVolumeClaim (delete =
+// irreversible data loss) and KMSSecret (kms.hanzo.ai) are NEVER prune
+// candidates, even when absent from the desired set. They are still applied
+// (target side); they are only removed from the prune decision.
+func isProtectedKind(group, kind string) bool {
+	if group == "" && kind == "PersistentVolumeClaim" {
+		return true
+	}
+	if kind == "KMSSecret" {
+		return true
+	}
+	return false
+}
+
+// managed is the prune predicate: an object is a prune candidate only if it
+// carries THIS instance's tracking label AND is not a protected data anchor.
+func (r *reconciler) managed(res *cache.Resource) bool {
+	ri, ok := res.Info.(*engineResInfo)
+	if !ok || !ri.tracked {
+		return false
+	}
+	k := res.ResourceKey()
+	return !isProtectedKind(k.Group, k.Kind)
+}
+
 // reconcile syncs `target` → cluster at `revision`. With prune, a live object
-// carrying THIS instance's tracking label but absent from `target` is deleted;
-// an UNTRACKED object is never touched. `defaultNS` is applied to namespaced
-// objects that omit their namespace.
-func (r *reconciler) reconcile(ctx context.Context, target []*unstructured.Unstructured, revision, defaultNS string, prune bool) ([]synccommon.ResourceSyncResult, error) {
+// carrying THIS instance's tracking label but absent from `target` is deleted —
+// UNLESS it is a protected data anchor (PVC/KMSSecret) or the PruneFuse trips.
+// An UNTRACKED object is never touched.
+//
+// Prune safety (RED HIGH-1), all enforced here:
+//   - refuse an EMPTY desired set (a silent target=[] would sweep everything);
+//   - pre-flight DRY-RUN sizes the prune set before any deletion;
+//   - the PruneFuse caps the prune set by count and by ratio;
+//   - protected data anchors (PVC/KMSSecret) are excluded from prune entirely.
+func (r *reconciler) reconcile(ctx context.Context, target []*unstructured.Unstructured, revision, defaultNS string, prune bool, fuse PruneFuse) ([]synccommon.ResourceSyncResult, error) {
+	// (i) Never reconcile nothing — an empty render must not delete the fleet.
+	if len(target) == 0 {
+		return nil, fmt.Errorf("prune fuse: refusing to reconcile an empty desired set (render produced 0 objects)")
+	}
 	r.stamp(target)
-	return r.engine.Sync(ctx, target,
-		func(res *cache.Resource) bool {
-			ri, ok := res.Info.(*engineResInfo)
-			return ok && ri.tracked
-		},
-		revision, defaultNS,
+
+	if prune {
+		// (ii)/(iii) Size the prune set with a dry-run BEFORE any deletion, then
+		// apply the fuse. A partial render that would prune most of the fleet is
+		// refused here, before a single object is removed.
+		dry, err := r.engine.Sync(ctx, target, r.managed, revision, defaultNS,
+			enginesync.WithOperationSettings(true /*dryRun*/, true /*prune*/, false, false),
+			enginesync.WithLogr(r.log))
+		if err != nil {
+			return nil, fmt.Errorf("prune fuse dry-run: %w", err)
+		}
+		pruneN, managedN := 0, 0
+		for _, rr := range dry {
+			managedN++
+			if rr.Status == synccommon.ResultCodePruned {
+				pruneN++
+			}
+		}
+		if fuse.MaxDeletions > 0 && pruneN > fuse.MaxDeletions {
+			return nil, fmt.Errorf("prune fuse tripped: reconcile would prune %d object(s) (> max %d); refusing — fix the git source or raise DEPLOY_ENGINE_PRUNE_MAX", pruneN, fuse.MaxDeletions)
+		}
+		if fuse.MaxRatio > 0 && managedN > 0 && float64(pruneN)/float64(managedN) > fuse.MaxRatio {
+			return nil, fmt.Errorf("prune fuse tripped: reconcile would prune %d/%d managed (> %.0f%%); refusing", pruneN, managedN, fuse.MaxRatio*100)
+		}
+	}
+
+	return r.engine.Sync(ctx, target, r.managed, revision, defaultNS,
 		enginesync.WithPrune(prune),
+		enginesync.WithPruneConfirmed(prune), // prune only after the fuse above confirms it
 		enginesync.WithServerSideApply(true),
 		enginesync.WithServerSideApplyManager(engineFieldManager),
 		enginesync.WithLogr(r.log),
@@ -164,35 +229,42 @@ func (g gitSource) render(ctx context.Context) ([]*unstructured.Unstructured, st
 	return objs, revision, nil
 }
 
-// parseManifestDir reads every *.yaml/*.yml/*.json in dir (non-recursive) and
-// splits multi-doc YAML into typed objects, skipping kustomization inputs.
+// parseManifestDir walks dir RECURSIVELY and splits every *.yaml/*.yml/*.json
+// into typed objects, skipping kustomization inputs. Recursive on purpose (RED
+// HIGH-1 (v)): a non-recursive read silently drops manifests in subdirectories,
+// which — combined with prune — would delete the objects those nested files
+// declare. Walking every subdir means the desired set is complete, so prune
+// never mistakes a nested-but-present object for a removed one.
 func parseManifestDir(dir string) ([]*unstructured.Unstructured, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("read manifest dir %s: %w", dir, err)
-	}
 	var objs []*unstructured.Unstructured
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		name := e.Name()
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
 		if name == "kustomization.yaml" || name == "kustomization.yml" {
-			continue
+			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(name))
 		if ext != ".yaml" && ext != ".yml" && ext != ".json" {
-			continue
+			return nil
 		}
-		data, err := os.ReadFile(filepath.Join(dir, name))
+		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", name, err)
+			return fmt.Errorf("read %s: %w", path, err)
 		}
 		items, err := kube.SplitYAML(data)
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", name, err)
+			return fmt.Errorf("parse %s: %w", path, err)
 		}
 		objs = append(objs, items...)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk manifest dir %s: %w", dir, err)
 	}
 	return objs, nil
 }
