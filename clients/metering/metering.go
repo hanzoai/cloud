@@ -443,6 +443,39 @@ func (c *Client) fetchAvailable(ctx context.Context, user, org, cur string) (int
 	return br.Available, nil
 }
 
+// Tier resolves the subject's commerce subscription-plan NAME
+// (free | starter | pro | enterprise) via GET /v1/billing/tier?user=<subject>,
+// scoped to org (X-Org-Id). This is the in-process (co-resident) — or S2S HTTP —
+// read the embedded ai module's per-tier SKU gate consumes (via
+// aiobject.SetTierReader) INSTEAD of an authed self-call to the cloud edge: the edge
+// 401/403s a service call to /v1/billing/*, so the ai module's own HTTP path always
+// returned "" in-cluster and the gate failed OPEN. This rides the SAME transport and
+// service token the metering gate already bills over, so it reaches commerce's OWN
+// service-token middleware (which reads the tenant from X-Org-Id), never the cloud edge.
+//
+// Empty subject or a not-configured client returns ("", nil): the gate treats an
+// unknown tier as ALLOW (fail-safe), so a commerce hiccup never locks out a paying
+// caller. Unlike fetchAvailable this does NOT short-circuit to the finance ledger —
+// the plan tier is a commerce subscription fact, not a wallet balance.
+func (c *Client) Tier(ctx context.Context, subject, org string) (string, error) {
+	if !c.Enabled() || strings.TrimSpace(subject) == "" {
+		return "", nil
+	}
+	body, err := c.get(ctx, pathTier, url.Values{"user": {subject}}, c.orgFor(org))
+	if err != nil {
+		return "", err
+	}
+	var tr struct {
+		Tier struct {
+			Name string `json:"name"`
+		} `json:"tier"`
+	}
+	if err := json.Unmarshal(body, &tr); err != nil {
+		return "", fmt.Errorf("metering: decode tier name: %w", err)
+	}
+	return strings.TrimSpace(tr.Tier.Name), nil
+}
+
 // Usage is one usage event to record. The amount (the cost to debit) is the
 // essential beside the billing key (User); the rest is descriptive metadata
 // commerce stores on the transaction.
