@@ -343,44 +343,7 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 	if v == nil {
 		return nil
 	}
-	tok := bearerFromAuth(c.Header("Authorization"))
-	if tok == "" {
-		tok = bearerFromAuth(c.Header("X-Authorization"))
-	}
-	if tok == "" {
-		tok = basicFromAuth(c.Header("Authorization"))
-	}
-	if tok == "" {
-		for _, name := range cookieTokenNames {
-			if val := c.Fiber().Cookies(name); val != "" {
-				tok = val
-				break
-			}
-		}
-	}
-	// EMBED first-party bridge (last resort, cookie path). The go:embed console
-	// (console.hanzo.ai → this binary) authenticates against its OWN in-process
-	// IAM, which sets an OPAQUE, httpOnly session id (never a bearer) and stores
-	// the user's IAM-minted access-token JWT SERVER-SIDE against that session. The
-	// console's Next BFF token-minting routes are stripped by the static export, so
-	// a browser request carries only the session cookie. Resolve it to that
-	// server-stored JWT so the embed uses the SAME validated-JWT identity path as
-	// every other client. Binds identity to the VALIDATED session: the client only
-	// SELECTS which server-minted token to check (via an unguessable, httpOnly sid);
-	// v.validate below still independently verifies sig/iss/aud/exp, and the session
-	// never asserts identity itself. No-op on gateway-fronted binaries (a bearer is
-	// already present, so this is never reached) and on binaries with no in-process
-	// IAM session manager (web.GlobalSessions == nil).
-	//
-	// GATED SAME-ORIGIN (RED H3): the session cookie is ambient — a cross-site or
-	// sibling-subdomain request would carry it and could drive the victim's own
-	// (correctly-scoped) money action via a state-changing GET the SameSite=Lax cookie
-	// still rides. So the bridge fires ONLY for a same-origin request. The Bearer/JWT
-	// -cookie paths above are unaffected (a token is not ambient). Non-browser and
-	// gateway-fronted callers use a bearer and never reach here.
-	if tok == "" && sessionBridgeSameOrigin(c) {
-		tok = sessionAccessToken(c)
-	}
+	tok := callerToken(c)
 	if tok == "" {
 		return nil
 	}
@@ -451,4 +414,69 @@ func sessionBridgeSameOrigin(c *zip.Ctx) bool {
 		}
 	}
 	return true
+}
+
+// callerToken resolves the credential token a request presents, in the SAME
+// precedence SanitizeIdentity trusts, and returns it UNCHANGED (validation is the
+// caller's job). It is the ONE token-resolution both the identity boundary
+// (validatedPrincipal) and the downstream bearer relay (CallerBearer) read, so the
+// two can never disagree on which credential identifies the caller:
+//
+//  1. request Bearer (Authorization), then X-Authorization Bearer, then Basic
+//     password (the go/.netrc proxy idiom),
+//  2. a JWT-bearing session cookie (cookieTokenNames),
+//  3. EMBED first-party bridge (last resort). The go:embed console
+//     (console.hanzo.ai -> this binary) authenticates against its OWN in-process
+//     IAM, which sets an OPAQUE, httpOnly session id (never a bearer) and stores the
+//     user's IAM-minted access-token JWT SERVER-SIDE against that session. The
+//     console's Next BFF token-minting routes are stripped by the static export, so
+//     a browser request carries only the session cookie; resolve it to that
+//     server-stored JWT so the embed uses the SAME identity path as every other
+//     client. GATED SAME-ORIGIN (RED H3): the session cookie is ambient, so the
+//     bridge fires ONLY for a same-origin request -- a cross-site / sibling-subdomain
+//     request that merely rides the cookie can never reach it. No-op with no
+//     in-process IAM session manager (web.GlobalSessions == nil).
+//
+// The returned token is NOT trusted here: validatedPrincipal feeds it through
+// v.validate (sig/iss/aud/exp), and CallerBearer relays it to a target that
+// re-validates it. Empty when the request carries no credential.
+func callerToken(c *zip.Ctx) string {
+	tok := bearerFromAuth(c.Header("Authorization"))
+	if tok == "" {
+		tok = bearerFromAuth(c.Header("X-Authorization"))
+	}
+	if tok == "" {
+		tok = basicFromAuth(c.Header("Authorization"))
+	}
+	if tok == "" {
+		for _, name := range cookieTokenNames {
+			if val := c.Fiber().Cookies(name); val != "" {
+				tok = val
+				break
+			}
+		}
+	}
+	if tok == "" && sessionBridgeSameOrigin(c) {
+		tok = sessionAccessToken(c)
+	}
+	return tok
+}
+
+// CallerBearer returns the caller's validated JWT bearer for RELAY to a downstream
+// org-scoped service (e.g. the DNS control plane) that authorizes on the caller's
+// OWN identity and derives the org from the token's `owner` claim. It returns the
+// SAME token SanitizeIdentity validated the principal with (callerToken), UNCHANGED
+// -- cloud substitutes NO service credential of its own, so tenant isolation carries
+// across the hop: a caller in org A relays an org-A token and can reach only org A.
+//
+// An opaque API key (hk-/sk-/...) is NOT a relayable bearer -- an OIDC target cannot
+// validate it and forwarding it would leak the key -- so it returns "". Empty when
+// the request carries no validatable bearer; the relay then sends no Authorization
+// and the downstream fails closed on its own gate.
+func CallerBearer(c *zip.Ctx) string {
+	tok := callerToken(c)
+	if tok == "" || isAPIKey(tok) {
+		return ""
+	}
+	return tok
 }
