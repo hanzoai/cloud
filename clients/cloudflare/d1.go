@@ -42,7 +42,7 @@ func d1DatabaseList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func d1DatabaseCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func d1DatabaseCreate(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func d1DatabaseDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
