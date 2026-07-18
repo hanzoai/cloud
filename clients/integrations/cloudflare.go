@@ -45,10 +45,10 @@ const (
 // scopes (a least-privilege token cannot read its own token object), so this is
 // recorded as the REQUESTED/expected set — connection metadata, not a read-back.
 //
-// The set grows with the /v1/cloudflare asset plane, one capability at a time — a
+// The set grows with the /v1/integrations/cloudflare asset plane, one capability at a time — a
 // scope is added ONLY when its endpoint is actually callable, never speculatively.
-// DNS+Pages back /v1/dns and /v1/cloudflare/pages; Workers Scripts/Routes back the
-// wired /v1/cloudflare/workers. R2/KV/D1 are Phase-2 stubs (their handlers answer
+// DNS+Pages back /v1/dns and /v1/integrations/cloudflare/pages; Workers Scripts/Routes back the
+// wired /v1/integrations/cloudflare/workers. R2/KV/D1 are Phase-2 stubs (their handlers answer
 // 501), so their scopes are NOT requested yet — add them alongside their wiring:
 //
 //	R2  → "Account:Workers R2 Storage:Edit"
