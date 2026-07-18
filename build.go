@@ -90,6 +90,7 @@ func BuildDeps(cfg *Config) Deps {
 	// commerce URL yields a !Enabled() client, so the wrap is a transparent
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
+	wireTierReader(deps.Metering, logger)
 	deps.AI = meteredAIClient(pickAIClient(cfg, logger), deps)
 	wireFinance(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
@@ -188,6 +189,28 @@ func boolStr(b bool, t, f string) string {
 		return t
 	}
 	return f
+}
+
+// wireTierReader installs the embedded ai module's per-tier SKU gate reader so it
+// resolves the caller's commerce subscription tier through the SAME co-resident
+// commerce client the metering gate bills over — in-process (commerceinproc) when
+// commerce is folded in, S2S HTTP with the service token otherwise — NEVER an authed
+// self-call to the cloud edge. That self-call is the toothless-gate bug: the edge
+// 401/403s a service call to /v1/billing/*, so the ai module's own HTTP lookup always
+// returned "" in-cluster and every tier-gated SKU failed OPEN. This mirrors
+// wireFinance's SetBalanceReader: cloud owns the co-resident read, ai stays
+// transport-agnostic. Fail-safe is preserved — Client.Tier folds a commerce error or
+// an unknown plan to "", which the gate treats as ALLOW, so a commerce blip never
+// locks out a paying caller. No-op when commerce is unreachable (metering !Enabled),
+// leaving ai's standalone HTTP fallback in place.
+func wireTierReader(m *metering.Client, log luxlog.Logger) {
+	if m == nil || !m.Enabled() {
+		return
+	}
+	aiobject.SetTierReader(func(ctx context.Context, subject, namespace string) (string, error) {
+		return m.Tier(ctx, subject, namespace)
+	})
+	log.Info("ai per-tier SKU gate wired to co-resident commerce (in-process tier read, fail-safe)")
 }
 
 // wireFinance constructs the ONE in-process finance ledger (per-org SQLite

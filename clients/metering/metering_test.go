@@ -386,3 +386,65 @@ func TestContractMatchesGateway(t *testing.T) {
 		t.Errorf("URL %q must carry currency=usd", gotURL)
 	}
 }
+
+// Tier is the plan-NAME read the embedded ai per-tier SKU gate consumes over the
+// co-resident commerce transport (aiobject.SetTierReader) — the fix for the toothless
+// gate. It must GET /v1/billing/tier?user=<subject> with the service token + X-Org-Id
+// (commerce's own middleware, never the cloud edge) and decode tier.name.
+func TestTier_ResolvesPlanName(t *testing.T) {
+	fc := &fakeCommerce{reply: `{"user":"hanzo/alice","tier":{"name":"pro","displayName":"Pro"},"balance":{"effectiveAvailable":5000}}`}
+	srv := httptest.NewServer(fc.handler())
+	defer srv.Close()
+
+	c := newClient(t, srv, metering.Config{})
+	name, err := c.Tier(context.Background(), "hanzo/alice", "hanzo")
+	if err != nil {
+		t.Fatalf("Tier: %v", err)
+	}
+	if name != "pro" {
+		t.Errorf("tier name = %q, want pro", name)
+	}
+	if fc.method != http.MethodGet || fc.path != "/v1/billing/tier" {
+		t.Errorf("request = %s %s, want GET /v1/billing/tier", fc.method, fc.path)
+	}
+	if got := fc.query.Get("user"); got != "hanzo/alice" {
+		t.Errorf("user query = %q, want hanzo/alice", got)
+	}
+	if fc.auth != "Bearer svc-token" {
+		t.Errorf("auth = %q, want Bearer svc-token", fc.auth)
+	}
+	if fc.org != "hanzo" {
+		t.Errorf("X-Org-Id = %q, want hanzo", fc.org)
+	}
+}
+
+// An empty subject resolves to ("", nil) without touching commerce — the ai gate reads
+// "" as unknown → ALLOW (fail-safe), so there is nothing to ask.
+func TestTier_EmptySubject_NoCall(t *testing.T) {
+	fc := &fakeCommerce{reply: `{"tier":{"name":"pro"}}`}
+	srv := httptest.NewServer(fc.handler())
+	defer srv.Close()
+
+	c := newClient(t, srv, metering.Config{})
+	name, err := c.Tier(context.Background(), "  ", "hanzo")
+	if err != nil || name != "" {
+		t.Fatalf("empty subject: got (%q,%v), want (\"\",nil)", name, err)
+	}
+	if fc.path != "" {
+		t.Errorf("empty subject must not call commerce, hit %s", fc.path)
+	}
+}
+
+// A commerce error SURFACES from Tier (it is not swallowed here). The fail-safe lives
+// one layer up: the ai reader folds any error to "" → ALLOW, so a commerce blip never
+// locks a paying caller out of a SKU. Proving the error propagates keeps that contract honest.
+func TestTier_PropagatesCommerceError(t *testing.T) {
+	fc := &fakeCommerce{status: 500, reply: `boom`}
+	srv := httptest.NewServer(fc.handler())
+	defer srv.Close()
+
+	c := newClient(t, srv, metering.Config{})
+	if _, err := c.Tier(context.Background(), "hanzo/alice", "hanzo"); err == nil {
+		t.Fatal("commerce 500 must surface as error (the ai reader folds it to allow)")
+	}
+}
