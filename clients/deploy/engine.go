@@ -1,4 +1,4 @@
-// engine.go embeds the argo gitops-engine (github.com/argoproj/argo-cd/
+// engine.go embeds the argo gitops-engine (github.com/hanzoai/deploy/
 // gitops-engine, the fork's independently-importable submodule) in-process, so
 // the cloud binary reconciles git → cluster the way the retired argocd
 // application-controller did — three-way merge (server-side apply), scoped
@@ -31,12 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/rest"
 
-	"github.com/argoproj/argo-cd/gitops-engine/pkg/cache"
-	"github.com/argoproj/argo-cd/gitops-engine/pkg/engine"
-	enginehealth "github.com/argoproj/argo-cd/gitops-engine/pkg/health"
-	enginesync "github.com/argoproj/argo-cd/gitops-engine/pkg/sync"
-	synccommon "github.com/argoproj/argo-cd/gitops-engine/pkg/sync/common"
-	"github.com/argoproj/argo-cd/gitops-engine/pkg/utils/kube"
+	"github.com/hanzoai/deploy/gitops-engine/pkg/cache"
+	"github.com/hanzoai/deploy/gitops-engine/pkg/engine"
+	enginehealth "github.com/hanzoai/deploy/gitops-engine/pkg/health"
+	enginesync "github.com/hanzoai/deploy/gitops-engine/pkg/sync"
+	synccommon "github.com/hanzoai/deploy/gitops-engine/pkg/sync/common"
+	"github.com/hanzoai/deploy/gitops-engine/pkg/utils/kube"
 )
 
 // engineTrackingLabel scopes an apply-set. Every object the engine declares
