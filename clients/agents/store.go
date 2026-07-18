@@ -180,6 +180,10 @@ CREATE INDEX IF NOT EXISTS ix_runs_org_agent_created ON agent_runs(org, agent_na
 	if err := s.migrateTargets(); err != nil {
 		return err
 	}
+	// Per-target claim keys + serving liveness (the #48 route-work machine plane).
+	if err := s.migrateClaimKeys(); err != nil {
+		return err
+	}
 	return nil
 }
 
