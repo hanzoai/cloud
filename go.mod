@@ -25,6 +25,7 @@ require (
 	github.com/hanzoai/plans v1.4.0
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
+	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
 	github.com/hanzoai/sqlite v0.3.0
 	github.com/hanzoai/stream v1.2.0
@@ -32,7 +33,6 @@ require (
 	github.com/luxfi/log v1.5.0
 	github.com/luxfi/zapdb v1.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
-	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nats-io/nats.go v1.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
 	github.com/spf13/cobra v1.10.2
@@ -77,6 +77,7 @@ require (
 	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
+	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
