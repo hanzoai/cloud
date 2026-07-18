@@ -140,22 +140,24 @@ func TestSiteSlug(t *testing.T) {
 			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site", host, slug)
 		}
 	}
-	site("maxpower.hanzo.app", "maxpower")
-	site("MaxPower.Hanzo.App", "maxpower") // case-insensitive
-	site("my-cool-site.hanzo.app", "my-cool-site")
-	site("maxpower.hanzo.app:443", "maxpower") // port stripped
+	// Org-scoped: a site host is <slug>.<org>.<apex>; the returned key is <slug>.<org>.
+	site("myapp.maxpower.hanzo.app", "myapp.maxpower")
+	site("MyApp.MaxPower.Hanzo.App", "myapp.maxpower") // case-insensitive
+	site("my-cool-site.acme.hanzo.app", "my-cool-site.acme")
+	site("myapp.maxpower.hanzo.app:443", "myapp.maxpower") // port stripped
 
-	notSite("hanzo.app")           // apex, no label
-	notSite("www.hanzo.app")       // reserved
-	notSite("app.hanzo.app")       // reserved (real app host)
-	notSite("api.hanzo.app")       // reserved
-	notSite("a.b.hanzo.app")       // multi-label
-	notSite("api.hanzo.ai")        // different zone → normal pipeline
-	notSite("console.hanzo.ai")    // different zone
-	notSite("-bad.hanzo.app")      // invalid slug
-	notSite("UPPER_bad.hanzo.app") // underscore invalid
-	notSite("../orgb.hanzo.app")   // traversal-shaped label rejected
-	notSite("evil.hanzo.app.evil.com")
+	notSite("hanzo.app")                // apex, no label
+	notSite("maxpower.hanzo.app")       // single label — not org-scoped
+	notSite("www.acme.hanzo.app")       // reserved slug label
+	notSite("app.acme.hanzo.app")       // reserved (real app host)
+	notSite("api.acme.hanzo.app")       // reserved
+	notSite("a.b.c.hanzo.app")          // >2 labels
+	notSite("api.hanzo.ai")             // different zone → normal pipeline
+	notSite("console.hanzo.ai")         // different zone
+	notSite("-bad.acme.hanzo.app")      // invalid slug
+	notSite("UPPER_bad.acme.hanzo.app") // underscore invalid
+	notSite("../orgb.acme.hanzo.app")   // traversal-shaped label rejected
+	notSite("myapp.evil.hanzo.app.evil.com")
 }
 
 // ---- middleware: passthrough vs terminal + resolver keying --------------
@@ -199,10 +201,10 @@ func TestMiddlewareTenantKeyedByHostNotPath(t *testing.T) {
 	defer SetResolver(nil)
 	app := newTestApp(testServer())
 
-	req := httptest.NewRequest("GET", "http://victim.hanzo.app/index.html", nil)
+	req := httptest.NewRequest("GET", "http://victim.acme.hanzo.app/index.html", nil)
 	// Attacker-controlled headers that must be ignored by the site server.
 	req.Header.Set("X-Org-Id", "attacker-org")
-	req.Header.Set("X-Forwarded-Host", "otherorg.hanzo.app")
+	req.Header.Set("X-Forwarded-Host", "otherorg.evil.hanzo.app")
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
@@ -210,22 +212,22 @@ func TestMiddlewareTenantKeyedByHostNotPath(t *testing.T) {
 	if resp.Header.Get("X-Sentinel") == "hit" {
 		t.Fatal("site host leaked into the normal API pipeline")
 	}
-	if resp.Header.Get("X-Hanzo-Site") != "victim" {
-		t.Errorf("X-Hanzo-Site = %q, want victim", resp.Header.Get("X-Hanzo-Site"))
+	if resp.Header.Get("X-Hanzo-Site") != "victim.acme" {
+		t.Errorf("X-Hanzo-Site = %q, want victim.acme", resp.Header.Get("X-Hanzo-Site"))
 	}
 	if resp.StatusCode != 404 {
 		t.Errorf("status = %d, want 404 (not found)", resp.StatusCode)
 	}
 	got := fr.slugs()
-	if len(got) != 1 || got[0] != "victim" {
-		t.Fatalf("resolver called with %v, want exactly [victim] — tenant must be keyed by host only", got)
+	if len(got) != 1 || got[0] != "victim.acme" {
+		t.Fatalf("resolver called with %v, want exactly [victim.acme] — tenant must be keyed by host only", got)
 	}
 }
 
 func TestMiddlewareNoResolverIs404(t *testing.T) {
 	SetResolver(nil)
 	app := newTestApp(testServer())
-	req := httptest.NewRequest("GET", "http://x.hanzo.app/", nil)
+	req := httptest.NewRequest("GET", "http://x.acme.hanzo.app/", nil)
 	resp, err := app.Fiber().Test(req)
 	if err != nil {
 		t.Fatalf("test: %v", err)
@@ -312,7 +314,7 @@ func TestReservedHostNeverServes(t *testing.T) {
 	SetResolver(&fakeResolver{found: true, site: Site{Org: "x", Slug: "api", Bucket: "b", Prefix: "x/api", Status: "live"}})
 	defer SetResolver(nil)
 	app := newTestApp(testServer())
-	for _, host := range []string{"api.hanzo.app", "admin.hanzo.app", "login.hanzo.app", "wallet.hanzo.app", "www.hanzo.app"} {
+	for _, host := range []string{"api.acme.hanzo.app", "admin.acme.hanzo.app", "login.acme.hanzo.app", "wallet.acme.hanzo.app", "www.acme.hanzo.app"} {
 		req := httptest.NewRequest("GET", "http://"+host+"/", nil)
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
@@ -331,7 +333,7 @@ func TestSiteRejectsNonGet(t *testing.T) {
 	defer SetResolver(nil)
 	app := newTestApp(testServer())
 	for _, m := range []string{"POST", "PUT", "DELETE", "PATCH"} {
-		req := httptest.NewRequest(m, "http://x.hanzo.app/", nil)
+		req := httptest.NewRequest(m, "http://x.acme.hanzo.app/", nil)
 		resp, err := app.Fiber().Test(req)
 		if err != nil {
 			t.Fatalf("test %s: %v", m, err)
