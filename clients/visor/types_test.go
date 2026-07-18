@@ -78,6 +78,22 @@ func TestToMachineViewMemAndVcpu(t *testing.T) {
 		t.Errorf("slug vcpu fallback with explicit mem: got %v, want 4", v.Vcpu)
 	}
 
+	// GPU slug: its gb is VRAM (gpu-h100x8-640gb -> 640 = VRAM), NEVER system RAM.
+	// With no explicit MemSize, mem stays empty rather than surfacing the VRAM figure.
+	v = toMachineView(visorMachine{Name: "g1", Size: "gpu-h100x8-640gb"})
+	if v.Mem != "" {
+		t.Errorf("gpu slug mem: got %q, want empty (640gb is VRAM, not system RAM)", v.Mem)
+	}
+	if v.GPU != "H100" {
+		t.Errorf("gpu slug model: got %q, want H100", v.GPU)
+	}
+
+	// A GPU node with a real MemSize still reports its true system RAM.
+	v = toMachineView(visorMachine{Name: "g2", Size: "gpu-h100x8-640gb", MemSize: "1920gb"})
+	if v.Mem != "1920 GB" {
+		t.Errorf("gpu slug + real memSize: got %q, want %q", v.Mem, "1920 GB")
+	}
+
 	// Neither a numeric CpuSize nor a slug figure -> honest omission, no fabrication.
 	v = toMachineView(visorMachine{Name: "n4", Type: "custom-node"})
 	if v.Vcpu != nil {
