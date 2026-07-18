@@ -100,15 +100,21 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/timeseries", cloud.Handle(s, timeseries))
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 
-	// Capture (WRITE) side — the ingest that fills hanzo.events (capture.go). All
-	// POST, all tenant-gated in-handler. /v1/tracker is the page-unload beacon
-	// alias (bare route; never collides with the /v1/tracker/projects* issue tracker).
+	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
+	// (event.go) is the ONE canonical front door: body Event | [Event], org
+	// resolved IAM-only and fail-closed, into the ONE write core (ingestEvents).
+	app.Post("/v1/event", cloud.Handle(s, eventIngest))
+
+	// DEPRECATED ingest aliases — thin wire adapters that normalize onto the SAME
+	// write core (log a one-shot deprecation, keep working). /v1/analytics{,/batch}
+	// and /v1/tracker speak the Segment/beacon CaptureBatch wire; /v1/tracker is a
+	// bare route (never collides with the /v1/tracker/projects* issue tracker).
 	app.Post("/v1/analytics", cloud.Handle(s, capture))
 	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
 	app.Post("/v1/tracker", cloud.Handle(s, capture))
 
-	// /v1/insights — the unified native surface (insights.go): PostHog-wire
-	// ingest + console reads over the SAME engine. Flags live at /v1/flags.
+	// /v1/insights — console reads over the SAME engine + the DEPRECATED PostHog-
+	// wire ingest adapter (/v1/insights/e → the ONE write core). Flags live at /v1/flags.
 	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
 	app.Post("/v1/insights/e", cloud.Handle(s, insightsIngest))
 	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
