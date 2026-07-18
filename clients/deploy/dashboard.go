@@ -3,16 +3,16 @@
 // repo-server, NO redis, NO stored Application/AppProject CRD — every response
 // is synthesized from our operator App CRs. The FRONTEND is NOT here: the
 // monochrome dashboard ships as the `hanzoai/spa`-based `cd-ui` App CR served at
-// cd.hanzo.ai/ (base-href /); this plane is only the same-origin API it calls:
+// cd.hanzo.ai/ (base-href /); this plane is only the same-origin API it calls (no /api/, no inner /v1):
 //
-//	GET  /v1/deploy/api/v1/settings          → AuthSettings (auth disabled; IAM gates at the edge)
-//	GET  /v1/deploy/api/v1/session/userinfo  → {loggedIn:true,...}
-//	GET  /v1/deploy/api/version              → VersionMessage
-//	GET  /v1/deploy/api/v1/account/can-i/*   → {"value":"yes"}
-//	GET  /v1/deploy/api/v1/applications                          → ApplicationList (projected)
-//	GET  /v1/deploy/api/v1/applications/{name}                   → Application (projected)
-//	GET  /v1/deploy/api/v1/applications/{name}/resource-tree     → ApplicationTree
-//	POST /v1/deploy/api/v1/applications/{name}/{sync,rollback}   → request App-CR reconcile
+//	GET  /v1/deploy/settings          → AuthSettings (auth disabled; IAM gates at the edge)
+//	GET  /v1/deploy/session/userinfo  → {loggedIn:true,...}
+//	GET  /v1/deploy/version              → VersionMessage
+//	GET  /v1/deploy/account/can-i/*   → {"value":"yes"}
+//	GET  /v1/deploy/applications                          → ApplicationList (projected)
+//	GET  /v1/deploy/applications/{name}                   → Application (projected)
+//	GET  /v1/deploy/applications/{name}/resource-tree     → ApplicationTree
+//	POST /v1/deploy/applications/{name}/{sync,rollback}   → request App-CR reconcile
 //
 // Every route is SuperAdmin-gated (c.IsAdmin), fail-closed; the argocd UI's own
 // auth is disabled because IAM owns identity at the edge (the SPA is public
@@ -41,19 +41,19 @@ const dashPrefix = "/v1/deploy"
 // the SPA is a separate hanzoai/spa App). Called from routes() (deploy.go).
 func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	// Bootstrap (the SPA awaits settings + userinfo before first render).
-	app.Get(dashPrefix+"/api/v1/settings", guard(s, cloud.Handle(s, dashSettings)))
-	app.Get(dashPrefix+"/api/v1/session/userinfo", guard(s, cloud.Handle(s, dashUserInfo)))
-	app.Get(dashPrefix+"/api/version", guard(s, cloud.Handle(s, dashVersion)))
-	app.Get(dashPrefix+"/api/v1/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
+	app.Get(dashPrefix+"/settings", guard(s, cloud.Handle(s, dashSettings)))
+	app.Get(dashPrefix+"/session/userinfo", guard(s, cloud.Handle(s, dashUserInfo)))
+	app.Get(dashPrefix+"/version", guard(s, cloud.Handle(s, dashVersion)))
+	app.Get(dashPrefix+"/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
 
 	// Applications projection (read).
-	app.Get(dashPrefix+"/api/v1/applications", guard(s, cloud.Handle(s, dashAppList)))
-	app.Get(dashPrefix+"/api/v1/applications/:name", guard(s, cloud.Handle(s, dashApp)))
-	app.Get(dashPrefix+"/api/v1/applications/:name/resource-tree", guard(s, cloud.Handle(s, dashResourceTree)))
+	app.Get(dashPrefix+"/applications", guard(s, cloud.Handle(s, dashAppList)))
+	app.Get(dashPrefix+"/applications/:name", guard(s, cloud.Handle(s, dashApp)))
+	app.Get(dashPrefix+"/applications/:name/resource-tree", guard(s, cloud.Handle(s, dashResourceTree)))
 
 	// Actions → App-CR reconcile ops.
-	app.Post(dashPrefix+"/api/v1/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
-	app.Post(dashPrefix+"/api/v1/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
+	app.Post(dashPrefix+"/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
+	app.Post(dashPrefix+"/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
 }
 
 // ── bootstrap ────────────────────────────────────────────────────────────────

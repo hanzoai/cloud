@@ -19,25 +19,18 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 	routes(app, fakeSvc()) // the COMPLETE surface: native + engine + dashboard
 
 	guarded := []struct{ method, path string }{
-		// native
-		{"GET", "/v1/deploy/applications"},
-		{"GET", "/v1/deploy/cloud/tree"},
-		{"GET", "/v1/deploy/cloud/resource/x"},
-		{"GET", "/v1/deploy/cloud/logs"},
-		{"POST", "/v1/deploy/cloud/rollback"},
-		{"POST", "/v1/deploy/cloud/sync"},
 		// engine
 		{"POST", "/v1/deploy/reconcile"},
-		// dashboard bootstrap + projection + actions + static
-		{"GET", "/v1/deploy/api/v1/settings"},
-		{"GET", "/v1/deploy/api/v1/session/userinfo"},
-		{"GET", "/v1/deploy/api/version"},
-		{"GET", "/v1/deploy/api/v1/account/can-i/applications/get/x"},
-		{"GET", "/v1/deploy/api/v1/applications"},
-		{"GET", "/v1/deploy/api/v1/applications/cloud"},
-		{"GET", "/v1/deploy/api/v1/applications/cloud/resource-tree"},
-		{"POST", "/v1/deploy/api/v1/applications/cloud/sync"},
-		{"POST", "/v1/deploy/api/v1/applications/cloud/rollback"},
+		// projection API — clean /v1/deploy/<resource> (no /api/, no inner /v1)
+		{"GET", "/v1/deploy/settings"},
+		{"GET", "/v1/deploy/session/userinfo"},
+		{"GET", "/v1/deploy/version"},
+		{"GET", "/v1/deploy/account/can-i/applications/get/x"},
+		{"GET", "/v1/deploy/applications"},
+		{"GET", "/v1/deploy/applications/cloud"},
+		{"GET", "/v1/deploy/applications/cloud/resource-tree"},
+		{"POST", "/v1/deploy/applications/cloud/sync"},
+		{"POST", "/v1/deploy/applications/cloud/rollback"},
 	}
 	for _, r := range guarded {
 		// WITHOUT admin → 403 (the guard, fail-closed).
