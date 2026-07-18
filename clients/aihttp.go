@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	openai "github.com/sashabaranov/go-openai"
+	openai "github.com/hanzoai/go-openai"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
