@@ -14,6 +14,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/integrations"
 )
 
 // testAccountID is a valid 32-hex Cloudflare account id the stub discovers.
@@ -38,7 +39,7 @@ func (c *capture) add(r *http.Request) {
 	c.mu.Unlock()
 }
 
-// find returns the first captured request whose path contains sub.
+// find returns the first captured request whose path CONTAINS sub.
 func (c *capture) find(sub string) (capturedReq, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -48,6 +49,20 @@ func (c *capture) find(sub string) (capturedReq, bool) {
 		}
 	}
 	return capturedReq{}, false
+}
+
+// hasExact reports whether any captured request hit EXACTLY path p — used to detect
+// the account-discovery call (GET /accounts), which "/accounts/{id}/..." contains as
+// a substring but is not.
+func (c *capture) hasExact(p string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, r := range c.reqs {
+		if r.path == p {
+			return true
+		}
+	}
+	return false
 }
 
 // fakeCF is a minimal Cloudflare API v4 stub: it answers account discovery and
@@ -99,9 +114,10 @@ func harness(t *testing.T, tokens map[string]string, rec *capture, resultFor fun
 	return app
 }
 
-// do drives one request through the mounted app with the given minted identity
-// headers (as SanitizeIdentity would have set them) and returns status + body.
-func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, string) {
+// doReq drives one request with the given minted identity headers (as
+// SanitizeIdentity would set them): user!="" makes a validated principal; admin sets
+// X-User-IsOrgAdmin. Returns status + body + response headers.
+func doReq(t *testing.T, app *zip.App, method, path, user, org string, admin bool, body string) (int, string, http.Header) {
 	t.Helper()
 	var rdr io.Reader
 	if body != "" {
@@ -114,6 +130,9 @@ func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, 
 	if org != "" {
 		req.Header.Set("X-Org-Id", org)
 	}
+	if admin {
+		req.Header.Set("X-User-IsOrgAdmin", "true")
+	}
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -123,7 +142,13 @@ func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, string(b)
+	return resp.StatusCode, string(b), resp.Header
+}
+
+// do is the common non-admin read/driver: validated principal, no admin bit.
+func do(t *testing.T, app *zip.App, method, path, user, org, body string) (int, string) {
+	status, b, _ := doReq(t, app, method, path, user, org, false, body)
+	return status, b
 }
 
 // ── tenant isolation (the crown jewel) ──────────────────────────────────────────
@@ -134,7 +159,6 @@ func TestForgedOrgWithoutPrincipalIs403(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"victim": "tok-victim"}, rec, nil)
 
-	// No X-User-Id, but a client-supplied X-Org-Id naming another org.
 	status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "", "victim", "")
 	if status != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", status, body)
@@ -154,7 +178,6 @@ func TestTokenScopedToCallerOrg(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A", "orgb": "tok-B"}, rec, nil)
 
-	// orgA drives Pages list; assert the /pages request carried orgA's token.
 	if status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", ""); status != 200 {
 		t.Fatalf("orgA status=%d body=%s", status, body)
 	}
@@ -167,7 +190,6 @@ func TestTokenScopedToCallerOrg(t *testing.T) {
 	}
 
 	rec.reqs = nil
-	// orgB drives the SAME route; assert it carried orgB's token, never orgA's.
 	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ub", "orgb", ""); status != 200 {
 		t.Fatalf("orgB status=%d", status)
 	}
@@ -184,14 +206,14 @@ func TestTokenScopedToCallerOrg(t *testing.T) {
 }
 
 // A body/query field naming another org is IGNORED: the token is the caller-org's,
-// proving the handler derives the org only from the validated principal.
+// proving the handler derives the org only from the validated principal. (Mutation →
+// org-admin driver.)
 func TestBodyOrgFieldCannotRedirectToken(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A", "orgb": "tok-B"}, rec, nil)
 
-	// orgA creates a project with a hostile body carrying org/account fields for orgB.
 	body := `{"name":"site","org":"orgb","organizationId":"orgb","account":"ffffffffffffffffffffffffffffffff"}`
-	if status, resp := do(t, app, http.MethodPost, "/v1/cloudflare/pages/projects", "ua", "orga", body); status != 200 {
+	if status, resp, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/pages/projects", "ua", "orga", true, body); status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
 	r, ok := rec.find("/pages/projects")
@@ -217,10 +239,59 @@ func TestNotConnectedIs503(t *testing.T) {
 	}
 }
 
+// Every served response stamps X-Hanzo-Org with the org whose token was used, so a
+// per-org caller can detect a pinned/comingled org (fix for the non-SuperAdmin
+// platform-token misdeploy).
+func TestResponseStampsActingOrg(t *testing.T) {
+	rec := &capture{}
+	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
+	status, _, hdr := doReq(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", false, "")
+	if status != 200 {
+		t.Fatalf("status=%d", status)
+	}
+	if got := hdr.Get(actingOrgHeader); got != "orga" {
+		t.Fatalf("%s = %q, want orga", actingOrgHeader, got)
+	}
+}
+
+// ── mutation authorization (least privilege) ────────────────────────────────────
+
+// Mutations (POST/PUT/DELETE) require org admin; reads do not. A refused non-admin
+// mutation never reaches Cloudflare (rejected before the token read).
+func TestMutationRequiresOrgAdmin(t *testing.T) {
+	rec := &capture{}
+	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
+
+	mutations := []struct{ method, path, body string }{
+		{http.MethodPost, "/v1/cloudflare/pages/projects", `{"name":"site"}`},
+		{http.MethodDelete, "/v1/cloudflare/pages/projects/site", ""},
+		{http.MethodPost, "/v1/cloudflare/pages/projects/site/deployments", ""},
+		{http.MethodPut, "/v1/cloudflare/workers/scripts/hello", `{"script":"export default {}"}`},
+		{http.MethodDelete, "/v1/cloudflare/workers/scripts/hello", ""},
+		{http.MethodPost, "/v1/cloudflare/r2/buckets", `{"name":"b"}`},
+	}
+	for _, m := range mutations {
+		if s, _, _ := doReq(t, app, m.method, m.path, "member", "orga", false, m.body); s != http.StatusForbidden {
+			t.Fatalf("non-admin %s %s: status=%d, want 403", m.method, m.path, s)
+		}
+	}
+	// A refused non-admin mutation must not have reached Cloudflare at all.
+	if len(rec.reqs) != 0 {
+		t.Fatalf("refused non-admin mutations reached Cloudflare %d time(s); must be 0", len(rec.reqs))
+	}
+
+	// An org ADMIN is allowed through to Cloudflare.
+	if s, b, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/pages/projects", "admin", "orga", true, `{"name":"site"}`); s != 200 {
+		t.Fatalf("org-admin create: status=%d body=%s, want 200", s, b)
+	}
+	// A read stays open to a non-admin member.
+	if s, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "member", "orga", ""); s != 200 {
+		t.Fatalf("non-admin read: status=%d, want 200", s)
+	}
+}
+
 // ── wired behavior ──────────────────────────────────────────────────────────────
 
-// Pages list relays the Cloudflare result verbatim and addresses the resolved
-// account path.
 func TestPagesListHappyPath(t *testing.T) {
 	rec := &capture{}
 	resultFor := func(path string) (int, string) {
@@ -246,13 +317,13 @@ func TestPagesListHappyPath(t *testing.T) {
 	}
 }
 
-// Worker script PUT sends the modern multipart module upload (metadata + module
-// parts) with the caller-org token.
+// Worker script PUT sends the modern multipart module upload with the caller-org
+// token (org-admin driver).
 func TestWorkersScriptPutMultipart(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	body := `{"script":"export default { fetch(){ return new Response('hi') } }","mainModule":"worker.js"}`
-	status, resp := do(t, app, http.MethodPut, "/v1/cloudflare/workers/scripts/hello", "ua", "orga", body)
+	status, resp, _ := doReq(t, app, http.MethodPut, "/v1/cloudflare/workers/scripts/hello", "ua", "orga", true, body)
 	if status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
@@ -274,13 +345,13 @@ func TestWorkersScriptPutMultipart(t *testing.T) {
 	}
 }
 
-// Zone routes are zone-scoped and do NOT resolve an account.
+// Zone routes are zone-scoped and do NOT resolve an account (org-admin driver).
 func TestWorkersRouteBindZoneScoped(t *testing.T) {
 	rec := &capture{}
 	zone := "abcdef0123456789abcdef0123456789"
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	body := `{"pattern":"example.com/*","script":"hello"}`
-	status, resp := do(t, app, http.MethodPost, "/v1/cloudflare/workers/zones/"+zone+"/routes", "ua", "orga", body)
+	status, resp, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/workers/zones/"+zone+"/routes", "ua", "orga", true, body)
 	if status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
@@ -289,16 +360,15 @@ func TestWorkersRouteBindZoneScoped(t *testing.T) {
 	} else if r.auth != "Bearer tok-A" {
 		t.Fatalf("route bind used %q, want Bearer tok-A", r.auth)
 	}
-	// zone-scoped: no account discovery call was made.
-	if _, ok := rec.find("/accounts"); ok {
+	if rec.hasExact("/accounts") {
 		t.Fatal("route bind resolved an account; zone routes must not")
 	}
 }
 
 // ── stubs never lie ─────────────────────────────────────────────────────────────
 
-// R2/KV/D1 stub routes answer an honest 501 for a CONNECTED org — never a fake 200
-// — and still enforce the validated-principal gate.
+// R2/KV/D1 stub READ routes answer an honest 501 for a CONNECTED org — never a fake
+// 200 — and still enforce the validated-principal gate.
 func TestStubRoutesReturn501NeverSuccess(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
@@ -314,26 +384,23 @@ func TestStubRoutesReturn501NeverSuccess(t *testing.T) {
 		if strings.Contains(strings.ToLower(body), `"success":true`) || strings.Contains(strings.ToLower(body), `"ok":true`) {
 			t.Fatalf("%s: stub returned a misleading success: %s", path, body)
 		}
-		// gate: unvalidated caller is refused even on a stub route.
 		if s, _ := do(t, app, http.MethodGet, path, "", "orga", ""); s != http.StatusForbidden {
 			t.Fatalf("%s: unvalidated status=%d, want 403", path, s)
 		}
 	}
 }
 
-// ── input hardening ─────────────────────────────────────────────────────────────
+// ── input hardening + account resolution ────────────────────────────────────────
 
 // An explicit ?account= override must be a 32-hex id (defense against path
-// injection into /accounts/{id}/...).
+// injection), and it skips discovery.
 func TestAccountOverrideValidated(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 
-	// A hostile override is rejected 400 before any CF call.
 	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects?account=../../evil", "ua", "orga", ""); status != http.StatusBadRequest {
 		t.Fatalf("hostile account override status=%d, want 400", status)
 	}
-	// A valid override is honored (no discovery call needed).
 	rec.reqs = nil
 	override := "ffffffffffffffffffffffffffffffff"
 	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects?account="+override, "ua", "orga", ""); status != 200 {
@@ -343,7 +410,37 @@ func TestAccountOverrideValidated(t *testing.T) {
 	if r.path != "/accounts/"+override+"/pages/projects" {
 		t.Fatalf("override not honored: addressed %q", r.path)
 	}
-	if _, ok := rec.find("/accounts?"); ok {
+	if rec.hasExact("/accounts") {
 		t.Fatal("discovery call made despite an explicit account override")
+	}
+}
+
+// The account captured at connect time (ConnectionFor.ExternalID) is used without a
+// live discovery round-trip.
+func TestStoredAccountSkipsDiscovery(t *testing.T) {
+	rec := &capture{}
+	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
+	stored := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	prev := connectionFor
+	connectionFor = func(org, provider string) (integrations.Connection, bool) {
+		if org == "orga" && provider == providerCloudflare {
+			return integrations.Connection{ExternalID: stored}, true
+		}
+		return integrations.Connection{}, false
+	}
+	t.Cleanup(func() { connectionFor = prev })
+
+	if s, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", ""); s != 200 {
+		t.Fatalf("status=%d", s)
+	}
+	r, ok := rec.find("/pages/projects")
+	if !ok {
+		t.Fatal("no pages request reached Cloudflare")
+	}
+	if r.path != "/accounts/"+stored+"/pages/projects" {
+		t.Fatalf("addressed %q, want the stored-account path", r.path)
+	}
+	if rec.hasExact("/accounts") {
+		t.Fatal("live discovery happened despite a stored account id")
 	}
 }
