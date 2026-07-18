@@ -159,7 +159,7 @@ func TestForgedOrgWithoutPrincipalIs403(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"victim": "tok-victim"}, rec, nil)
 
-	status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "", "victim", "")
+	status, body := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "", "victim", "")
 	if status != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", status, body)
 	}
@@ -178,7 +178,7 @@ func TestTokenScopedToCallerOrg(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A", "orgb": "tok-B"}, rec, nil)
 
-	if status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", ""); status != 200 {
+	if status, body := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ua", "orga", ""); status != 200 {
 		t.Fatalf("orgA status=%d body=%s", status, body)
 	}
 	rA, ok := rec.find("/pages/projects")
@@ -190,7 +190,7 @@ func TestTokenScopedToCallerOrg(t *testing.T) {
 	}
 
 	rec.reqs = nil
-	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ub", "orgb", ""); status != 200 {
+	if status, _ := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ub", "orgb", ""); status != 200 {
 		t.Fatalf("orgB status=%d", status)
 	}
 	rB, ok := rec.find("/pages/projects")
@@ -213,7 +213,7 @@ func TestBodyOrgFieldCannotRedirectToken(t *testing.T) {
 	app := harness(t, map[string]string{"orga": "tok-A", "orgb": "tok-B"}, rec, nil)
 
 	body := `{"name":"site","org":"orgb","organizationId":"orgb","account":"ffffffffffffffffffffffffffffffff"}`
-	if status, resp, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/pages/projects", "ua", "orga", true, body); status != 200 {
+	if status, resp, _ := doReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/pages/projects", "ua", "orga", true, body); status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
 	r, ok := rec.find("/pages/projects")
@@ -230,7 +230,7 @@ func TestBodyOrgFieldCannotRedirectToken(t *testing.T) {
 func TestNotConnectedIs503(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
-	status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ux", "stranger", "")
+	status, body := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ux", "stranger", "")
 	if status != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d, want 503; body=%s", status, body)
 	}
@@ -245,7 +245,7 @@ func TestNotConnectedIs503(t *testing.T) {
 func TestResponseStampsActingOrg(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
-	status, _, hdr := doReq(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", false, "")
+	status, _, hdr := doReq(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ua", "orga", false, "")
 	if status != 200 {
 		t.Fatalf("status=%d", status)
 	}
@@ -263,12 +263,12 @@ func TestMutationRequiresOrgAdmin(t *testing.T) {
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 
 	mutations := []struct{ method, path, body string }{
-		{http.MethodPost, "/v1/cloudflare/pages/projects", `{"name":"site"}`},
-		{http.MethodDelete, "/v1/cloudflare/pages/projects/site", ""},
-		{http.MethodPost, "/v1/cloudflare/pages/projects/site/deployments", ""},
-		{http.MethodPut, "/v1/cloudflare/workers/scripts/hello", `{"script":"export default {}"}`},
-		{http.MethodDelete, "/v1/cloudflare/workers/scripts/hello", ""},
-		{http.MethodPost, "/v1/cloudflare/r2/buckets", `{"name":"b"}`},
+		{http.MethodPost, "/v1/integrations/cloudflare/pages/projects", `{"name":"site"}`},
+		{http.MethodDelete, "/v1/integrations/cloudflare/pages/projects/site", ""},
+		{http.MethodPost, "/v1/integrations/cloudflare/pages/projects/site/deployments", ""},
+		{http.MethodPut, "/v1/integrations/cloudflare/workers/scripts/hello", `{"script":"export default {}"}`},
+		{http.MethodDelete, "/v1/integrations/cloudflare/workers/scripts/hello", ""},
+		{http.MethodPost, "/v1/integrations/cloudflare/r2/buckets", `{"name":"b"}`},
 	}
 	for _, m := range mutations {
 		if s, _, _ := doReq(t, app, m.method, m.path, "member", "orga", false, m.body); s != http.StatusForbidden {
@@ -281,11 +281,11 @@ func TestMutationRequiresOrgAdmin(t *testing.T) {
 	}
 
 	// An org ADMIN is allowed through to Cloudflare.
-	if s, b, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/pages/projects", "admin", "orga", true, `{"name":"site"}`); s != 200 {
+	if s, b, _ := doReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/pages/projects", "admin", "orga", true, `{"name":"site"}`); s != 200 {
 		t.Fatalf("org-admin create: status=%d body=%s, want 200", s, b)
 	}
 	// A read stays open to a non-admin member.
-	if s, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "member", "orga", ""); s != 200 {
+	if s, _ := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "member", "orga", ""); s != 200 {
 		t.Fatalf("non-admin read: status=%d, want 200", s)
 	}
 }
@@ -301,7 +301,7 @@ func TestPagesListHappyPath(t *testing.T) {
 		return 0, ""
 	}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, resultFor)
-	status, body := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", "")
+	status, body := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ua", "orga", "")
 	if status != 200 {
 		t.Fatalf("status=%d body=%s", status, body)
 	}
@@ -323,7 +323,7 @@ func TestWorkersScriptPutMultipart(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	body := `{"script":"export default { fetch(){ return new Response('hi') } }","mainModule":"worker.js"}`
-	status, resp, _ := doReq(t, app, http.MethodPut, "/v1/cloudflare/workers/scripts/hello", "ua", "orga", true, body)
+	status, resp, _ := doReq(t, app, http.MethodPut, "/v1/integrations/cloudflare/workers/scripts/hello", "ua", "orga", true, body)
 	if status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
@@ -351,7 +351,7 @@ func TestWorkersRouteBindZoneScoped(t *testing.T) {
 	zone := "abcdef0123456789abcdef0123456789"
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	body := `{"pattern":"example.com/*","script":"hello"}`
-	status, resp, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/workers/zones/"+zone+"/routes", "ua", "orga", true, body)
+	status, resp, _ := doReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/workers/zones/"+zone+"/routes", "ua", "orga", true, body)
 	if status != 200 {
 		t.Fatalf("status=%d resp=%s", status, resp)
 	}
@@ -373,9 +373,9 @@ func TestStubRoutesReturn501NeverSuccess(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 	for _, path := range []string{
-		"/v1/cloudflare/r2/buckets",
-		"/v1/cloudflare/kv/namespaces",
-		"/v1/cloudflare/d1/databases",
+		"/v1/integrations/cloudflare/r2/buckets",
+		"/v1/integrations/cloudflare/kv/namespaces",
+		"/v1/integrations/cloudflare/d1/databases",
 	} {
 		status, body := do(t, app, http.MethodGet, path, "ua", "orga", "")
 		if status != http.StatusNotImplemented {
@@ -398,12 +398,12 @@ func TestAccountOverrideValidated(t *testing.T) {
 	rec := &capture{}
 	app := harness(t, map[string]string{"orga": "tok-A"}, rec, nil)
 
-	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects?account=../../evil", "ua", "orga", ""); status != http.StatusBadRequest {
+	if status, _ := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects?account=../../evil", "ua", "orga", ""); status != http.StatusBadRequest {
 		t.Fatalf("hostile account override status=%d, want 400", status)
 	}
 	rec.reqs = nil
 	override := "ffffffffffffffffffffffffffffffff"
-	if status, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects?account="+override, "ua", "orga", ""); status != 200 {
+	if status, _ := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects?account="+override, "ua", "orga", ""); status != 200 {
 		t.Fatalf("valid account override status=%d", status)
 	}
 	r, _ := rec.find("/pages/projects")
@@ -430,7 +430,7 @@ func TestStoredAccountSkipsDiscovery(t *testing.T) {
 	}
 	t.Cleanup(func() { connectionFor = prev })
 
-	if s, _ := do(t, app, http.MethodGet, "/v1/cloudflare/pages/projects", "ua", "orga", ""); s != 200 {
+	if s, _ := do(t, app, http.MethodGet, "/v1/integrations/cloudflare/pages/projects", "ua", "orga", ""); s != 200 {
 		t.Fatalf("status=%d", s)
 	}
 	r, ok := rec.find("/pages/projects")
