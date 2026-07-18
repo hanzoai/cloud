@@ -887,15 +887,22 @@ func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command [
 						"name":    "buildkit",
 						"image":   buildkitRootlessImage,
 						"command": command,
+						// Rootless (user-namespaced) — NOT privileged. This is the documented
+						// moby/buildkit rootless posture for Kubernetes: no host root, no
+						// device access; the build is confined to uid 1000 and its sub-uid
+						// range. allowPrivilegeEscalation and the default capability set are
+						// LEFT at the k8s defaults on purpose — rootlesskit's setuid
+						// newuidmap/newgidmap (which set up the sub-uid mapping) require them;
+						// dropping ALL caps or setting no-new-privs breaks the user-namespace
+						// setup (proven by an on-cluster canary). The isolation win over the
+						// previous privileged=true is already decisive.
 						"securityContext": map[string]any{
-							"privileged":               false,
-							"runAsNonRoot":             true,
-							"runAsUser":                int64(1000),
-							"runAsGroup":               int64(1000),
-							"allowPrivilegeEscalation": false,
-							"seccompProfile":           map[string]any{"type": "Unconfined"},
-							"appArmorProfile":          map[string]any{"type": "Unconfined"},
-							"capabilities":             map[string]any{"drop": []any{"ALL"}},
+							"privileged":      false,
+							"runAsUser":       int64(1000),
+							"runAsGroup":      int64(1000),
+							"runAsNonRoot":    true,
+							"seccompProfile":  map[string]any{"type": "Unconfined"},
+							"appArmorProfile": map[string]any{"type": "Unconfined"},
 						},
 						"env": []any{
 							// --oci-worker-no-process-sandbox lets buildkitd run rootless with
