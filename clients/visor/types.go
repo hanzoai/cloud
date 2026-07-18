@@ -145,7 +145,8 @@ type clusterView struct {
 // toMachineView maps a Visor machine to the console view. vcpu prefers a clean
 // integer CpuSize and otherwise recovers the count from a provider size slug
 // (s-4vcpu-8gb) — still no fabricated core count, just an honest read of the slug.
-// mem is the trustworthy MemSize, or the slug's gb figure, else empty. gpu is
+// mem is the trustworthy MemSize, or a NON-GPU slug's gb figure, else empty — a
+// GPU slug's gb is VRAM, never system RAM, so it is never surfaced as mem. gpu is
 // filled only when the size slug parses as a GPU accelerator.
 func toMachineView(m visorMachine) machineView {
 	v := machineView{
@@ -163,6 +164,7 @@ func toMachineView(m visorMachine) machineView {
 	}
 	slug := firstNonEmpty(m.Size, m.Type)
 	slugVcpu, slugMemGB := parseSizeSlug(slug)
+	spec, isGpu := gpuSpecOf(slug)
 	if n, err := strconv.Atoi(strings.TrimSpace(m.CpuSize)); err == nil && n > 0 {
 		v.Vcpu = &n
 	} else if slugVcpu > 0 {
@@ -170,10 +172,10 @@ func toMachineView(m visorMachine) machineView {
 	}
 	if mem := normalizeMem(m.MemSize); mem != "" {
 		v.Mem = mem
-	} else if slugMemGB > 0 {
+	} else if slugMemGB > 0 && !isGpu { // a GPU slug's gb is VRAM, never system RAM
 		v.Mem = strconv.Itoa(slugMemGB) + " GB"
 	}
-	if spec, ok := gpuSpecOf(slug); ok {
+	if isGpu {
 		v.GPU = spec.model
 	}
 	return v
