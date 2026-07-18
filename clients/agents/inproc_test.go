@@ -114,3 +114,50 @@ func TestInproc_NotMounted_FailsClosed(t *testing.T) {
 		t.Fatal("unmounted OpenSession must fail closed")
 	}
 }
+
+// ResolveTarget turns a human's reference (id or friendly label) into the org's
+// target, org-scoped and fail-closed: an id wins, else an exact case-folded label,
+// and a reference matching neither — or another org's machine — is not found.
+func TestResolveTarget_IdThenLabel_OrgScoped(t *testing.T) {
+	mountInproc(t)
+	ctx := context.Background()
+	now := int64(1000)
+	acme := Target{ID: "tgt_acme1", Org: "acme", Label: "evo", Kind: TargetGPU, Status: TargetOnline, Host: "evo", CreatedAt: now, UpdatedAt: now}
+	evil := Target{ID: "tgt_evil1", Org: "evil", Label: "evo", Kind: TargetGPU, Status: TargetOnline, Host: "evo", CreatedAt: now, UpdatedAt: now}
+	if err := mounted.State.store.CreateTarget(ctx, acme); err != nil {
+		t.Fatal(err)
+	}
+	if err := mounted.State.store.CreateTarget(ctx, evil); err != nil {
+		t.Fatal(err)
+	}
+
+	// By id.
+	if got, err := ResolveTarget(ctx, "acme", "tgt_acme1"); err != nil || got.ID != "tgt_acme1" {
+		t.Fatalf("resolve by id: %+v %v", got, err)
+	}
+	// By label (case-folded), scoped to the caller's org — never evil's same-labelled box.
+	if got, err := ResolveTarget(ctx, "acme", "EVO"); err != nil || got.ID != "tgt_acme1" {
+		t.Fatalf("resolve by label must find acme's own, got %+v %v", got, err)
+	}
+	// Another org's id is not found (no cross-tenant leak).
+	if _, err := ResolveTarget(ctx, "acme", "tgt_evil1"); err != errTargetNotFound {
+		t.Fatalf("cross-org id must be not-found, got %v", err)
+	}
+	// An unknown reference is not found — the caller renders an honest error.
+	if _, err := ResolveTarget(ctx, "acme", "nope"); err != errTargetNotFound {
+		t.Fatalf("unknown ref must be not-found, got %v", err)
+	}
+	// Empty ref is not found (never resolves to "some" machine).
+	if _, err := ResolveTarget(ctx, "acme", ""); err != errTargetNotFound {
+		t.Fatalf("empty ref must be not-found, got %v", err)
+	}
+}
+
+func TestResolveTarget_NotMounted_FailsClosed(t *testing.T) {
+	prev := mounted
+	mounted = nil
+	t.Cleanup(func() { mounted = prev })
+	if _, err := ResolveTarget(context.Background(), "acme", "evo"); err == nil {
+		t.Fatal("unmounted ResolveTarget must fail closed")
+	}
+}
