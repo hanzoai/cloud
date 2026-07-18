@@ -222,3 +222,15 @@ Import path (already-incorporated orgs): Google Drive → data room, a Google Sh
 captable, via the `google` OAuth provider now completed in `clients/integrations`
 (token custodied in KMS; the automations `google` connector shares the same token).
 Runbook: `docs/company-dogfood.md`.
+
+## Deploy plane (`clients/deploy`, `/v1/deploy`)
+
+Native ArgoCD-grade GitOps console over the operator-managed fleet, parallel to
+`/v1/git`: each `hanzo.ai/v1` App CR IS the Application, and the plane OBSERVES the
+operator's reconcile — `GET /v1/deploy/applications` (fleet list), `/{name}/tree`
+(ownerRef resource tree + per-node health/sync), `/{name}/resource/{ref}` (live
+manifest + desired-vs-live diff), `/{name}/logs`; `POST /{name}/rollback` pins the CR
+image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only on
+`c.IsAdmin()`, fail-closed; Secret nodes are never surfaced. `engine.go` embeds the argo
+`gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
+reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
