@@ -49,6 +49,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/kms"
@@ -101,12 +103,37 @@ type ExchangeResult struct {
 	AccountLabel string            // human label (Slack team.name / GitHub org login)
 	BotUserID    string            // Slack bot_user_id (non-secret)
 	Scopes       []string          // granted scopes
+	ExpiresAt    int64             // access-token expiry, unix seconds; 0 = non-expiring/unknown. Set by user-plane device/refresh providers; the org plane ignores it.
 }
 
 // apiKeyKind marks a Provider whose credential is supplied by the customer and
 // verified live, rather than acquired via the 3-legged OAuth flow (the default
 // for an empty Kind). See Provider.Kind.
 const apiKeyKind = "apikey"
+
+const (
+	// userScope marks a Provider on the per-user /v1/connectors plane. User-scoped
+	// providers are invisible on /v1/integrations; their rows are keyed
+	// (org,user,provider,label) and their secrets live under userPath.
+	userScope = "user"
+	// accessSecret / refreshSecret are the canonical KMS secret names for OAuth
+	// token pairs (shared by the google/gitlab org providers and every user-plane
+	// provider). A Provider with Refresh != nil MUST custody its refresh token
+	// under refreshSecret — sealTokens and the refresh engine key on the name.
+	accessSecret  = "access_token"
+	refreshSecret = "refresh_token"
+	// defaultLabel names a user's first connection to a provider when the client
+	// supplies no label.
+	defaultLabel = "default"
+	// refreshSkew: refresh when the access token expires within this window, so a
+	// token handed to a caller is never seconds from death.
+	refreshSkew = 60 * time.Second
+	// maxConnectors bounds connectors per (org,user,provider): it caps the
+	// storage/KMS amplification an authenticated user can create. Enforced at
+	// intake (device start / credential), never at save — a completing device
+	// flow or a reconnect to an existing label must not dead-end.
+	maxConnectors = 10
+)
 
 // VerifyInput is what an apikey provider's Verify receives: the customer's
 // credential (from the /connect body, originally read on STDIN by `hanzo
@@ -116,6 +143,46 @@ const apiKeyKind = "apikey"
 type VerifyInput struct {
 	Token     string
 	AccountID string
+}
+
+// Bundle is an externally obtained OAuth token set (CLI local PKCE) submitted
+// for adoption. Access/Refresh are secret; Account is a non-secret hint.
+type Bundle struct{ Access, Refresh, Account string }
+
+// DeviceStart is the non-secret-facing half of a started device authorization.
+// Code is the provider device handle (secret-adjacent; persisted only in the
+// cek-encrypted grants table, never a response). Interval is the raw wire
+// value; begin() is the sole normalizer.
+type DeviceStart struct {
+	Code, UserCode, VerifyURL string
+	Interval                  int64 // seconds between polls, raw from the provider
+	ExpiresAt                 int64 // unix seconds
+}
+
+// Device poll outcomes — closed set.
+const (
+	pollPending = "pending"
+	pollSlow    = "slow"
+	pollDone    = "done"
+	pollExpired = "expired"
+	pollDenied  = "denied"
+)
+
+// DevicePoll is one poll outcome. Interval is set for pollSlow (the new poll
+// cadence) and on server-throttled pending answers (current cadence, no
+// upstream call). Result is set for pollDone and MUST be live-proven by the
+// provider (a real token exchange or verify call) — saveUser trusts it.
+// Errors returned by Device funcs never carry token or device-code material.
+type DevicePoll struct {
+	Status   string
+	Interval int64           // seconds; pollSlow and throttled pending
+	Result   *ExchangeResult // pollDone only
+}
+
+// Device is a provider's RFC-8628-style device authorization capability.
+type Device struct {
+	Start func(ctx context.Context) (*DeviceStart, error)
+	Poll  func(ctx context.Context, g Grant) (*DevicePoll, error)
 }
 
 // SyncHook pulls provider-side state INTO Hanzo (e.g. a GitHub App installation's
@@ -154,13 +221,34 @@ type Provider struct {
 	// token(s) to seal + non-secret account metadata. It MUST fail closed (a
 	// bad/inactive credential returns an error and NOTHING is stored) and its error
 	// MUST NOT contain the credential value (it is logged). nil for oauth providers.
+	// On the user plane it doubles as the token/apikey intake method.
 	Verify func(ctx context.Context, in VerifyInput) (*ExchangeResult, error)
+
+	// Scope selects the custody plane: "" = org-scoped /v1/integrations (default);
+	// userScope = per-user /v1/connectors (rows keyed (org,user,provider,label),
+	// KMS under /orgs/{org}/users/{user}/connectors/...). The planes are disjoint:
+	// a user-scoped provider 404s on the org surface and vice versa; Mount asserts
+	// scope coherence at boot.
+	Scope string
+	// Device: device-code sign-in (user scope). nil = unsupported.
+	Device *Device
+	// Adopt verifies an externally obtained OAuth bundle (CLI local PKCE) before
+	// custody. Implementations MUST live-verify (e.g. one refresh) and return the
+	// rotated material — custody owns the canonical refresh token afterwards.
+	// nil = unsupported.
+	Adopt func(ctx context.Context, b Bundle) (*ExchangeResult, error)
+	// Refresh trades a refresh token for rotated material. The result MUST carry
+	// Secrets[0] and refreshSecret entries and an ExpiresAt. nil = static credential.
+	Refresh func(ctx context.Context, refresh string) (*ExchangeResult, error)
 
 	// Configured reports whether the provider's APP creds are present in ENV.
 	// When false: available=false in the card, and connect/callback fail closed
 	// with an honest 503 / failure redirect (never a dead-end, never a fake OK).
+	// Org plane only — nil for Scope == userScope (nothing on the user plane
+	// calls it; list() skips user providers before providerViewFor).
 	Configured func() bool
 	// Creds resolves the APP creds from ENV. Called only when Configured is true.
+	// Org plane only — nil for Scope == userScope.
 	Creds func() OAuthConfig
 	// Authorize builds the provider's consent URL for (creds, redirectURI, state).
 	Authorize func(creds OAuthConfig, redirectURI, state string) (string, error)
@@ -203,6 +291,7 @@ type state struct {
 	consoleURL string      // where the callback 302s the user back to
 	stateKey   []byte      // HMAC-SHA256 key for the CSRF/org-binding state
 	providers  map[string]*Provider
+	flight     *flight // keyed in-process mutex: refresh + device-poll serialization
 }
 
 var mounted *cloud.Service[state]
@@ -257,10 +346,29 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	kc, _ := deps.KMS.(*kms.Client)
 
 	providers := snapshotRegistry()
-	// Fail LOUD at boot if a provider's RedirectPath is not the path the generic
-	// dispatcher actually serves — otherwise its OAuth callback would 404 silently
-	// and the connect flow would dead-end. One route, one truth.
+	// Fail LOUD at boot on an incoherent provider — the plane split is structural,
+	// not discipline-based. A user-scoped provider must declare NO org-plane
+	// OAuth/config surface (nothing on /v1/connectors calls them) and at least one
+	// user intake method; an org provider must declare its config surface, and its
+	// RedirectPath must be the path the generic callback dispatcher actually
+	// serves — otherwise its OAuth callback would 404 silently. One route, one truth.
 	for id, p := range providers {
+		if p.Scope == userScope {
+			if p.Authorize != nil || p.Exchange != nil || p.Revoke != nil ||
+				p.RedirectPath != "" || p.Configured != nil || p.Creds != nil {
+				_ = store.Close()
+				return fmt.Errorf("integrations.Mount: user-scoped provider %q must not declare org OAuth/config fields", id)
+			}
+			if p.Device == nil && p.Adopt == nil && p.Verify == nil {
+				_ = store.Close()
+				return fmt.Errorf("integrations.Mount: user-scoped provider %q needs at least one of Device/Adopt/Verify", id)
+			}
+			continue
+		}
+		if p.Configured == nil || p.Creds == nil {
+			_ = store.Close()
+			return fmt.Errorf("integrations.Mount: org provider %q must declare Configured and Creds", id)
+		}
 		if p.Kind == apiKeyKind {
 			// apikey providers have no OAuth callback; RedirectPath is unused.
 			continue
@@ -280,6 +388,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			consoleURL: consoleURL(),
 			stateKey:   resolveStateKey(os.Getenv(stateKeyEnv), b.Log),
 			providers:  providers,
+			flight:     &flight{m: map[string]*hold{}},
 		},
 	}
 	mounted = s
@@ -359,6 +468,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
 	// apikey connectors: re-verify a stored credential live (`hanzo connector verify`).
 	app.Post("/v1/integrations/:provider/verify", cloud.Handle(s, verifyConn))
+	// Per-USER connector plane (/v1/connectors — connectors.go). Own prefix, so no
+	// shadowing interplay with the /:provider wildcards above.
+	connectorRoutes(app, s)
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
@@ -401,7 +513,11 @@ func list(s *cloud.Service[state], c *zip.Ctx) error {
 	ids := sortedProviderIDs(s)
 	out := make([]providerView, 0, len(ids))
 	for _, id := range ids {
-		v, err := providerViewFor(s, c.Context(), org, s.State.providers[id])
+		p := s.State.providers[id]
+		if p.Scope == userScope {
+			continue // user-plane providers are invisible on the org surface
+		}
+		v, err := providerViewFor(s, c.Context(), org, p)
 		if err != nil {
 			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
 		}
@@ -419,7 +535,7 @@ func get(s *cloud.Service[state], c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.State.providers[providerParam(c)]
+	p, ok := orgProvider(s, providerParam(c))
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
@@ -443,7 +559,7 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.State.providers[providerParam(c)]
+	p, ok := orgProvider(s, providerParam(c))
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
@@ -528,18 +644,12 @@ func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Pro
 	}
 	// Harden provider-supplied NON-secret metadata (strip control chars, bound
 	// length) — never the secret token, which goes straight to the KMS seal.
-	res.ExternalID = sanitizeMeta(res.ExternalID)
-	res.AccountLabel = sanitizeMeta(res.AccountLabel)
-	res.BotUserID = sanitizeMeta(res.BotUserID)
-	res.Scopes = sanitizeScopes(res.Scopes)
+	sanitizeResult(res)
 	// Seal every verified secret into the org's KMS namespace BEFORE the row, so a
 	// KMS failure leaves NO half-connected row advertising a token that was never
 	// stored (same ordering discipline as the OAuth callback).
-	for name, value := range res.Tokens {
-		if err := kmsPut(s, org, p.ID, name, []byte(value)); err != nil {
-			s.Log.Warn("kms seal failed", "provider", p.ID, "org", org, "secret", name, "err", err)
-			return zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
-		}
+	if err := sealTokens(s, kmsPath(org, p.ID), res.Tokens); err != nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
 	}
 	conn := Connection{
 		Org:          org,
@@ -577,7 +687,7 @@ func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.State.providers[providerParam(c)]
+	p, ok := orgProvider(s, providerParam(c))
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
@@ -594,7 +704,7 @@ func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
 	if !kmsReady(s) {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
-	tok, err := kmsGet(s, org, p.ID, p.Secrets[0])
+	tok, err := kmsGet(s, kmsPath(org, p.ID), p.Secrets[0])
 	if err != nil || len(tok) == 0 {
 		return zip.ErrBadRequest("stored credential unavailable")
 	}
@@ -616,7 +726,7 @@ func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
 // org comes ONLY from the signed, single-use state; no header is trusted here.
 func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	pid := providerParam(c)
-	p, ok := s.State.providers[pid]
+	p, ok := orgProvider(s, pid)
 	if !ok {
 		return failRedirect(s, c, pid, "unknown provider")
 	}
@@ -666,21 +776,14 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// Harden the provider-supplied NON-secret metadata at the framework ingest
 	// boundary — ONE place, every provider — before it is logged, stored, or
-	// reflected in the redirect. Strips control chars (kills log-line/separator
-	// injection via e.g. a crafted Slack workspace name) and bounds length. Secret
-	// token VALUES are never passed through here; they go straight to the KMS seal.
-	res.ExternalID = sanitizeMeta(res.ExternalID)
-	res.AccountLabel = sanitizeMeta(res.AccountLabel)
-	res.BotUserID = sanitizeMeta(res.BotUserID)
-	res.Scopes = sanitizeScopes(res.Scopes)
+	// reflected in the redirect. Secret token VALUES are never passed through
+	// here; they go straight to the KMS seal.
+	sanitizeResult(res)
 	// Seal every returned token into the org's KMS namespace BEFORE writing the
 	// connection row, so a KMS failure leaves NO half-connected state advertising a
 	// token that was never stored.
-	for name, value := range res.Tokens {
-		if err := kmsPut(s, payload.Org, p.ID, name, []byte(value)); err != nil {
-			s.Log.Warn("kms seal failed", "provider", p.ID, "org", payload.Org, "secret", name, "err", err)
-			return failRedirect(s, c, p.ID, "secret custody failed")
-		}
+	if err := sealTokens(s, kmsPath(payload.Org, p.ID), res.Tokens); err != nil {
+		return failRedirect(s, c, p.ID, "secret custody failed")
 	}
 	conn := Connection{
 		Org:          payload.Org,
@@ -709,7 +812,7 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 	if !validOrg(org) {
 		return zip.ErrBadRequest("org must be a DNS-1123 label")
 	}
-	p, ok := s.State.providers[providerParam(c)]
+	p, ok := orgProvider(s, providerParam(c))
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
@@ -727,7 +830,7 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 	// Best-effort provider-side revoke using the primary custodied secret. Never
 	// fails the disconnect: local forgetting is authoritative for the tenant.
 	if found && p.Revoke != nil && len(p.Secrets) > 0 && kmsReady(s) && p.Configured() {
-		if tok, gerr := kmsGet(s, org, p.ID, p.Secrets[0]); gerr == nil {
+		if tok, gerr := kmsGet(s, kmsPath(org, p.ID), p.Secrets[0]); gerr == nil {
 			if rerr := p.Revoke(c.Context(), p.Creds(), string(tok)); rerr != nil {
 				s.Log.Warn("provider revoke failed (continuing)", "provider", p.ID, "org", org, "err", rerr)
 			}
@@ -736,7 +839,7 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 	// Delete every custodied secret from KMS (ignore not-found — idempotent).
 	if s.State.kms != nil {
 		for _, name := range p.Secrets {
-			if derr := kmsDelete(s, org, p.ID, name); derr != nil {
+			if derr := kmsDelete(s, kmsPath(org, p.ID), name); derr != nil {
 				s.Log.Warn("kms delete failed (continuing)", "provider", p.ID, "org", org, "secret", name, "err", derr)
 			}
 		}
@@ -828,20 +931,100 @@ func kmsPath(org, provider string) string {
 	return "/orgs/" + org + "/integrations/" + provider
 }
 
-func kmsPut(s *cloud.Service[state], org, provider, name string, value []byte) error {
-	return s.State.kms.Put(kmsPath(org, provider), name, kmsEnv, value)
+// userPath is the per-user connector namespace:
+// /orgs/{org}/users/{user}/connectors/{provider}/{label}. Segments are
+// pre-validated (validOrg/validUser/registry slug/validLabel) but the COMBINED
+// path can exceed the KMS 253-byte cap (a 128-char user + 64-char label
+// overflows), so the full path is checked with kms.ValidSubpath — failure is a
+// ready-made 400 *zip.HTTPError (client input, never a 503).
+func userPath(org, user, provider, label string) (string, error) {
+	p := "/orgs/" + org + "/users/" + user + "/connectors/" + provider + "/" + label
+	if !kms.ValidSubpath(p) {
+		return "", zip.ErrBadRequest("user and label combine into a custody path that is too long")
+	}
+	return p, nil
 }
 
-func kmsGet(s *cloud.Service[state], org, provider, name string) ([]byte, error) {
-	return s.State.kms.Get(kmsPath(org, provider), name, kmsEnv)
+// The wrappers are path-first: org callers pass kmsPath(org, provider), user
+// callers a validated userPath — ONE seal/open/delete implementation, two planes.
+func kmsPut(s *cloud.Service[state], path, name string, value []byte) error {
+	return s.State.kms.Put(path, name, kmsEnv, value)
 }
 
-func kmsDelete(s *cloud.Service[state], org, provider, name string) error {
-	err := s.State.kms.Delete(kmsPath(org, provider), name, kmsEnv)
+func kmsGet(s *cloud.Service[state], path, name string) ([]byte, error) {
+	return s.State.kms.Get(path, name, kmsEnv)
+}
+
+func kmsDelete(s *cloud.Service[state], path, name string) error {
+	err := s.State.kms.Delete(path, name, kmsEnv)
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return nil // idempotent — deleting an absent secret is not an error
 	}
 	return err
+}
+
+// sealTokens seals every verified secret at path BEFORE any row is written
+// (seal-before-row: a KMS failure must leave no half-connected row).
+// Deterministic order, refreshSecret FIRST then sorted rest: the refresh token
+// is the recovery root — on rotation the provider already invalidated the old
+// one, so a partial failure must never leave a new access token beside a dead
+// refresh token. Logs path + secret NAME on failure, never a value.
+func sealTokens(s *cloud.Service[state], path string, tokens map[string]string) error {
+	names := make([]string, 0, len(tokens))
+	for name := range tokens {
+		if name != refreshSecret {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	if _, ok := tokens[refreshSecret]; ok {
+		names = append([]string{refreshSecret}, names...)
+	}
+	for _, name := range names {
+		if err := kmsPut(s, path, name, []byte(tokens[name])); err != nil {
+			s.Log.Warn("kms seal failed", "path", path, "secret", name, "err", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// saveUser admits a VERIFIED result into per-user custody — the SINGLE
+// user-plane admission point (credential intake, device-flow completion, and
+// token refresh all land here): sanitizeResult, then seal-before-row at
+// userPath (deterministic, refresh-first), then UpsertConnector. Errors are
+// ready-made *zip.HTTPError values (400 invalid path / 503 "secret custody
+// failed" / 500 "persist failed") so callers propagate them untouched.
+func saveUser(ctx context.Context, s *cloud.Service[state], org, user, label string, p *Provider, res *ExchangeResult) (Connector, error) {
+	sanitizeResult(res)
+	path, err := userPath(org, user, p.ID, label)
+	if err != nil {
+		return Connector{}, err
+	}
+	if err := sealTokens(s, path, res.Tokens); err != nil {
+		return Connector{}, zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
+	}
+	conn := Connector{
+		Org:          org,
+		User:         user,
+		Provider:     p.ID,
+		Label:        label,
+		ExternalID:   res.ExternalID,
+		AccountLabel: res.AccountLabel,
+		Scopes:       res.Scopes,
+		ExpiresAt:    res.ExpiresAt,
+	}
+	if err := s.State.store.UpsertConnector(ctx, conn); err != nil {
+		s.Log.Warn("connector upsert failed", "provider", p.ID, "org", org, "user", user, "label", label, "err", err)
+		return Connector{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
+	}
+	saved, found, err := s.State.store.GetConnector(ctx, org, user, p.ID, label)
+	if err != nil || !found {
+		s.Log.Warn("connector readback failed", "provider", p.ID, "org", org, "user", user, "label", label, "err", err)
+		return Connector{}, zip.Errorf(http.StatusInternalServerError, "persist failed")
+	}
+	s.Log.Info("connector connected", "provider", p.ID, "org", org, "user", user, "label", label, "account", res.AccountLabel)
+	return saved, nil
 }
 
 // ── in-process seam (mirror agents `var mounted *cloud.Service`) ───────────────
@@ -876,7 +1059,7 @@ func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name 
 	if !kmsReady(s) {
 		return nil, kms.ErrMasterKeyMissing
 	}
-	return kmsGet(s, org, provider, name)
+	return kmsGet(s, kmsPath(org, provider), name)
 }
 
 // OrgForExternalID resolves a provider account id (Slack team_id / GitHub
@@ -915,6 +1098,25 @@ func ConnectionFor(org, provider string) (Connection, bool) {
 
 func providerParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("provider")) }
 
+// orgProvider / userProvider keep the two custody planes disjoint: the org
+// surface (/v1/integrations) never resolves a user-scoped provider and vice
+// versa — the other plane's ids are simply 404s.
+func orgProvider(s *cloud.Service[state], id string) (*Provider, bool) {
+	p, ok := s.State.providers[id]
+	if !ok || p.Scope == userScope {
+		return nil, false
+	}
+	return p, true
+}
+
+func userProvider(s *cloud.Service[state], id string) (*Provider, bool) {
+	p, ok := s.State.providers[id]
+	if !ok || p.Scope != userScope {
+		return nil, false
+	}
+	return p, true
+}
+
 // callbackPath is the ONE generic OAuth callback route for a provider — the path
 // the dispatcher serves AND the value every provider's RedirectPath must equal.
 func callbackPath(provider string) string { return "/v1/integrations/" + provider + "/callback" }
@@ -938,6 +1140,39 @@ func validOrg(org string) bool {
 	for _, r := range org {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// validUser mirrors the kms.ValidSubpath per-segment rule: the user id is a
+// platform identity fact keyed verbatim (clients/link parity) — gateway
+// usernames, emails ("z@zoo.ngo"), and bearer UUIDs all pass. Bounded at
+// principal.MaxOrgLen (the same IAM identity cap).
+func validUser(u string) bool {
+	if u == "" || len(u) > principal.MaxOrgLen || u == "." || u == ".." {
+		return false
+	}
+	for _, r := range u {
+		if r == '/' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// validLabel accepts a client-chosen connector label: [A-Za-z0-9._-], 1..64
+// bytes, not "."/"..". The charset forbids ':' so provider+":"+label is an
+// unambiguous connector id, and '/' so a label can never add path structure.
+func validLabel(l string) bool {
+	if l == "" || len(l) > 64 || l == "." || l == ".." {
+		return false
+	}
+	for _, r := range l {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
 		default:
 			return false
 		}
@@ -991,4 +1226,56 @@ func sanitizeScopes(xs []string) []string {
 		}
 	}
 	return out
+}
+
+// sanitizeResult hardens every provider-supplied NON-secret metadata field
+// (sanitizeMeta/sanitizeScopes) in place — both planes, one rule. Token VALUES
+// are untouched: they go straight to the KMS seal.
+func sanitizeResult(res *ExchangeResult) {
+	res.ExternalID = sanitizeMeta(res.ExternalID)
+	res.AccountLabel = sanitizeMeta(res.AccountLabel)
+	res.BotUserID = sanitizeMeta(res.BotUserID)
+	res.Scopes = sanitizeScopes(res.Scopes)
+}
+
+// ── keyed single-flight (refresh + device-poll serialization) ──────────────────
+
+// hold is one flight entry: a mutex plus a waiter refcount so the map entry is
+// removed when the last holder releases (bounded, no leak).
+type hold struct {
+	mu sync.Mutex
+	n  int
+}
+
+// flight is a keyed in-process mutex: at most one holder per key. Keys:
+// "refresh\x00"+userPath and "poll\x00"+grantID. Deliberately NOT
+// x/sync/singleflight: waiters must re-read state under their own ctx after
+// acquiring (adopt-after-lock), and force/non-force refresh callers cannot
+// share one result. Process-local is correct because integrations state is
+// per-pod SQLite (MaxOpenConns(1)); revisit if storage ever goes shared.
+type flight struct {
+	mu sync.Mutex
+	m  map[string]*hold
+}
+
+// lock blocks until the caller holds key, returning the paired unlock.
+func (f *flight) lock(key string) (unlock func()) {
+	f.mu.Lock()
+	h := f.m[key]
+	if h == nil {
+		h = &hold{}
+		f.m[key] = h
+	}
+	h.n++
+	f.mu.Unlock()
+	h.mu.Lock()
+	return func() {
+		h.mu.Unlock()
+		f.mu.Lock()
+		h.n--
+		if h.n == 0 {
+			delete(f.m, key)
+		}
+		f.mu.Unlock()
+	}
 }
