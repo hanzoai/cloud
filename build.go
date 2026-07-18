@@ -14,7 +14,7 @@ import (
 
 	"github.com/hanzoai/cloud/clients"
 	"github.com/hanzoai/cloud/clients/finance"
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/hanzoai/cloud/clients/money"
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/types"
@@ -107,7 +107,7 @@ func BuildDeps(cfg *Config) Deps {
 	// working *Store (static-only if the SQLite file can't open), so the edge
 	// middleware is never left without a policy source — a store-open error is
 	// logged, not fatal.
-	gp, err := gatewaypolicy.New(cfg.DataDir, cfg.AdminOrg, staticEdgePolicy(cfg))
+	gp, err := edge.New(cfg.DataDir, cfg.AdminOrg, staticEdgePolicy(cfg))
 	if err != nil {
 		logger.Warn("gateway policy store degraded to static-only", "err", err)
 	}
@@ -117,10 +117,10 @@ func BuildDeps(cfg *Config) Deps {
 }
 
 // staticEdgePolicy projects the static env/flag edge config into the boot-default
-// policy the gatewaypolicy.Store layers runtime overrides on top of. A disabled
+// policy the edge.Store layers runtime overrides on top of. A disabled
 // per-IP limiter (CLOUD_EDGE_RATELIMIT=false) maps to PerIPRPM 0 (a live no-op).
-func staticEdgePolicy(cfg *Config) gatewaypolicy.Policy {
-	p := gatewaypolicy.Policy{
+func staticEdgePolicy(cfg *Config) edge.Policy {
+	p := edge.Policy{
 		CORSOrigins: cfg.CORSOrigins,
 		WindowSec:   cfg.EdgeRateWindowSec,
 	}
