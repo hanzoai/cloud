@@ -172,13 +172,19 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 // 200 only when both hold; 503 + the real reason otherwise. Not admin-gated —
 // liveness must be probe-able without a JWT.
 func health(s *cloud.Service[state], c *zip.Ctx) error {
+	// This route is UNAUTHENTICATED (liveness must be probe-able without a JWT),
+	// so it reports booleans only — never the raw k8s error string, which can
+	// disclose the apiserver address / RBAC detail. The detail is logged
+	// server-side (RED INFO-1).
 	res := map[string]any{"service": "deploy", "status": "ok"}
 	if s.State.dyn == nil {
-		res["status"], res["k8s"], res["error"] = "degraded", false, s.State.initErr
+		s.Log.Warn("deploy health: kubernetes client unavailable", "err", s.State.initErr)
+		res["status"], res["k8s"] = "degraded", false
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	if _, err := s.State.dyn.Resource(appsCRGVR).Namespace("hanzo").List(c.Context(), metav1.ListOptions{Limit: 1}); err != nil {
-		res["status"], res["k8s"], res["crd"], res["error"] = "degraded", true, false, err.Error()
+		s.Log.Warn("deploy health: App CRD list failed", "err", err)
+		res["status"], res["k8s"], res["crd"] = "degraded", true, false
 		return c.JSON(http.StatusServiceUnavailable, res)
 	}
 	res["k8s"], res["crd"] = true, true
