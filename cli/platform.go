@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
-// Platform is a thin client over the platform.hanzo.ai /v1 control plane. That
-// surface is machine-to-machine (service-token, "No OIDC" — it cannot validate
-// IAM user tokens), so the token here is the platform service token, resolved
-// from flag/env/credential store by the caller; the build endpoint takes its
-// own token per call.
+// Platform is a thin client over the LIVE Hanzo Cloud control plane
+// (platform.hanzo.ai / api.hanzo.ai → svc `cloud`, the Go binary). Every route it
+// calls is served by that one binary and authorized off ONE IAM identity: after
+// `hanzo login` the CLI sends the IAM access token as the bearer, and the cloud's
+// identity middleware (SanitizeIdentity) validates the JWT and org-scopes the
+// caller — no separate platform/service token. A purpose-minted machine token
+// still works (flag > env > credential store > IAM login) for automation.
 type Platform struct {
 	baseURL string
 	token   string
@@ -46,7 +48,7 @@ func (e *apiError) Error() string {
 	}
 	hint := ""
 	if e.status == http.StatusUnauthorized || e.status == http.StatusForbidden {
-		hint = " (run `hanzo login` — your IAM identity authorizes the platform; or set a machine token: --platform-token / HANZO_PLATFORM_TOKEN)"
+		hint = " (run `hanzo login` — your IAM identity authorizes the platform; admin ops need an org-admin or superadmin identity)"
 	}
 	return fmt.Sprintf("platform %s: HTTP %d: %s%s", e.path, e.status, msg, hint)
 }
@@ -94,8 +96,8 @@ func (p *Platform) do(ctx context.Context, method, path, token string, body, out
 	return nil
 }
 
-// serverMessage pulls the `{ "message": … }` field platform errors use, falling
-// back to the raw (truncated) body.
+// serverMessage pulls the `{ "message": … }` / `{ "error": … }` field the cloud's
+// errors use, falling back to the raw (truncated) body.
 func serverMessage(raw []byte) string {
 	var e struct {
 		Message string `json:"message"`
@@ -117,33 +119,35 @@ func serverMessage(raw []byte) string {
 }
 
 // ---------------------------------------------------------------------------
-// Apps board — GET /v1/apps, GET /v1/apps/{id}, POST /v1/apps/sync.
+// Apps board — GET /v1/paas/apps, GET /v1/paas/apps/{app}. The live Go cloud's
+// fleet drift board (clients/paas): the operator App CRs across the platform
+// namespaces, declared/running/latest tags + health + the drift verdict. It is
+// org-confined server-side (a SuperAdmin sees the fleet; an OrgAdmin only its own
+// org), so the CLI sends NO org filter — identity scopes the view.
 // ---------------------------------------------------------------------------
 
-// AppView mirrors the platform apps-lifecycle DTO. Nullable columns are *string
-// so JSON null round-trips; Drift is kept raw so --json is byte-faithful and
-// the drift schema can evolve without a client bump.
+// AppView mirrors clients/paas.AppView (the LIVE board DTO). Tags/health are plain
+// strings ("" == unknown, rendered "-"); Drift is kept raw so --json is
+// byte-faithful and the drift schema can evolve without a client bump.
 type AppView struct {
-	ID            string          `json:"id"`
-	Org           string          `json:"org"`
-	App           string          `json:"app"`
-	Env           string          `json:"env"`
-	Repo          string          `json:"repo"`
-	Registry      string          `json:"registry"`
-	DeclaredTag   *string         `json:"declaredTag"`
-	RunningTag    *string         `json:"runningTag"`
-	LatestTag     *string         `json:"latestTag"`
-	ReleaseURL    *string         `json:"releaseUrl"`
-	ReleaseAssets int             `json:"releaseAssets"`
-	Health        *string         `json:"health"`
-	Cluster       *string         `json:"cluster"`
-	Namespace     *string         `json:"namespace"`
-	LastObserved  *string         `json:"lastObserved"`
-	UpdatedAt     string          `json:"updatedAt"`
-	Drift         json.RawMessage `json:"drift"`
+	ID          string          `json:"id"`  // <org>/<app>/<env>, e.g. hanzoai/iam/main
+	Org         string          `json:"org"` // image namespace, e.g. hanzoai
+	App         string          `json:"app"`
+	Env         string          `json:"env"`
+	Repo        string          `json:"repo"`
+	Registry    string          `json:"registry"`
+	DeclaredTag string          `json:"declaredTag"`
+	RunningTag  string          `json:"runningTag"`
+	LatestTag   string          `json:"latestTag"`
+	Health      string          `json:"health"`
+	Phase       string          `json:"phase"`
+	Cluster     string          `json:"cluster"`
+	Namespace   string          `json:"namespace"`
+	Endpoints   []string        `json:"endpoints"`
+	Drift       json.RawMessage `json:"drift"`
 }
 
-// AppsList is the /v1/apps envelope: ordered rows + a drift summary.
+// AppsList is the /v1/paas/apps envelope: ordered rows + a drift summary.
 type AppsList struct {
 	Apps    []AppView `json:"apps"`
 	Summary struct {
@@ -152,9 +156,10 @@ type AppsList struct {
 	} `json:"summary"`
 }
 
-// AppsQuery are the optional /v1/apps filters.
+// AppsQuery are the optional /v1/paas/apps filters (server-honored). Env/Health/
+// Drift narrow the board; there is deliberately no org filter — the board is
+// confined to the caller's org by the validated identity, never a client value.
 type AppsQuery struct {
-	Org    string
 	Env    string
 	Health string
 	Drift  bool
@@ -162,9 +167,6 @@ type AppsQuery struct {
 
 func (p *Platform) Apps(ctx context.Context, q AppsQuery) (*AppsList, error) {
 	v := url.Values{}
-	if q.Org != "" {
-		v.Set("org", q.Org)
-	}
 	if q.Env != "" {
 		v.Set("env", q.Env)
 	}
@@ -174,7 +176,7 @@ func (p *Platform) Apps(ctx context.Context, q AppsQuery) (*AppsList, error) {
 	if q.Drift {
 		v.Set("drift", "1")
 	}
-	path := "/v1/apps"
+	path := "/v1/paas/apps"
 	if len(v) > 0 {
 		path += "?" + v.Encode()
 	}
@@ -182,17 +184,11 @@ func (p *Platform) Apps(ctx context.Context, q AppsQuery) (*AppsList, error) {
 	return out, p.do(ctx, http.MethodGet, path, p.token, nil, out)
 }
 
-func (p *Platform) App(ctx context.Context, id, org string) (*AppView, error) {
-	path := "/v1/apps/" + id
-	if org != "" {
-		path += "?org=" + url.QueryEscape(org)
-	}
+// App gets one app row by its <app> CR name (production by default; the server
+// scans the caller's authorized namespaces main→test→dev).
+func (p *Platform) App(ctx context.Context, app string) (*AppView, error) {
 	out := &AppView{}
-	return out, p.do(ctx, http.MethodGet, path, p.token, nil, out)
-}
-
-func (p *Platform) SyncApps(ctx context.Context) error {
-	return p.do(ctx, http.MethodPost, "/v1/apps/sync", p.token, nil, nil)
+	return out, p.do(ctx, http.MethodGet, "/v1/paas/apps/"+url.PathEscape(app), p.token, nil, out)
 }
 
 // driftSeverity extracts the severity string from the raw drift object.
@@ -207,110 +203,92 @@ func driftSeverity(raw json.RawMessage) string {
 }
 
 // ---------------------------------------------------------------------------
-// Dedicated clusters — /v1/org/{org}/cluster[ /select | /{id}/install-baseline ].
+// Clusters — GET /v1/clusters. The live Go cloud's compute fleet (clients/visor):
+// Visor-managed node pools + the org's BYO clusters, tenant-scoped server-side by
+// the validated org (?owner is the caller's IAM org). No org in the path.
 // ---------------------------------------------------------------------------
 
-// Cluster mirrors a doks_cluster record. `status` is DigitalOcean state; `phase`
-// is the platform provisioning lifecycle — orthogonal (a DO-running cluster is
-// not a usable target until phase=ready).
+// NodePool mirrors clients/visor.nodePoolView.
+type NodePool struct {
+	PoolID    string `json:"poolId"`
+	Name      string `json:"name"`
+	Size      string `json:"size"`
+	Count     int    `json:"count"`
+	MinNodes  int    `json:"minNodes"`
+	MaxNodes  int    `json:"maxNodes"`
+	AutoScale bool   `json:"autoScale"`
+}
+
+// Cluster mirrors clients/visor.clusterView — the LIVE cluster DTO. `kind` is
+// "managed" (Visor-provisioned) or "byo" (attached kubeconfig).
 type Cluster struct {
-	DoksClusterID     string          `json:"doksClusterId"`
-	Name              string          `json:"name"`
-	DoClusterID       *string         `json:"doClusterId"`
-	Region            string          `json:"region"`
-	Status            string          `json:"status"`
-	Endpoint          *string         `json:"endpoint"`
-	K8sVersion        *string         `json:"k8sVersion"`
-	HA                bool            `json:"ha"`
-	Phase             string          `json:"phase"`
-	OperatorInstalled bool            `json:"operatorInstalled"`
-	BaselineInstalled bool            `json:"baselineInstalled"`
-	Active            bool            `json:"active"`
-	BaselineError     *string         `json:"baselineError"`
-	OrganizationID    string          `json:"organizationId"`
-	CreatedAt         string          `json:"createdAt"`
-	Tags              []string        `json:"tags"`
-	MaintenancePolicy json.RawMessage `json:"maintenancePolicy,omitempty"`
+	DoksClusterID string     `json:"doksClusterId"`
+	DoClusterID   string     `json:"doClusterId"`
+	Name          string     `json:"name"`
+	Region        string     `json:"region"`
+	Status        string     `json:"status"`
+	NodePools     []NodePool `json:"nodePools"`
+	NodeSize      string     `json:"nodeSize"`
+	NodeCount     int        `json:"nodeCount"`
+	CreatedAt     string     `json:"createdAt"`
+	Kind          string     `json:"kind"`
+	NvidiaGPU     int        `json:"nvidiaGpu"`
+	AmdGPU        int        `json:"amdGpu"`
 }
 
-// ProvisionReq is the dedicated-cluster provisioning body (org forced by path).
-type ProvisionReq struct {
-	Region    string `json:"region,omitempty"`
-	HA        bool   `json:"ha,omitempty"`
-	NodeSize  string `json:"nodeSize,omitempty"`
-	NodeCount int    `json:"nodeCount,omitempty"`
+// ID is the stable cluster identifier for display/lookup: the DOKS id when managed,
+// else the name (a BYO cluster keys on its attached name).
+func (c Cluster) ID() string {
+	if c.DoksClusterID != "" {
+		return c.DoksClusterID
+	}
+	return c.Name
 }
 
-// Target is the redacted ClusterTargetView — the kubeconfig is never present.
-type Target struct {
-	Cluster    string            `json:"cluster"`
-	Namespaces map[string]string `json:"namespaces"`
-	Dedicated  bool              `json:"dedicated"`
-}
-
-func (p *Platform) Clusters(ctx context.Context, org string) ([]Cluster, error) {
+func (p *Platform) Clusters(ctx context.Context) ([]Cluster, error) {
 	var out struct {
 		Clusters []Cluster `json:"clusters"`
 	}
-	err := p.do(ctx, http.MethodGet, "/v1/org/"+url.PathEscape(org)+"/cluster", p.token, nil, &out)
+	err := p.do(ctx, http.MethodGet, "/v1/clusters", p.token, nil, &out)
 	return out.Clusters, err
 }
 
-func (p *Platform) ProvisionCluster(ctx context.Context, org string, req ProvisionReq) (*Cluster, error) {
-	var out struct {
-		Cluster Cluster `json:"cluster"`
-	}
-	err := p.do(ctx, http.MethodPost, "/v1/org/"+url.PathEscape(org)+"/cluster", p.token, req, &out)
-	return &out.Cluster, err
-}
-
-func (p *Platform) Target(ctx context.Context, org string) (*Target, error) {
-	var out struct {
-		Target Target `json:"target"`
-	}
-	err := p.do(ctx, http.MethodGet, "/v1/org/"+url.PathEscape(org)+"/cluster/select", p.token, nil, &out)
-	return &out.Target, err
-}
-
-// SelectTarget activates a dedicated cluster as the org's deploy target, or
-// reverts to the shared cluster when clusterID is nil.
-func (p *Platform) SelectTarget(ctx context.Context, org string, clusterID *string) (*Target, error) {
-	var out struct {
-		Target Target `json:"target"`
-	}
-	body := map[string]any{"doksClusterId": clusterID}
-	err := p.do(ctx, http.MethodPost, "/v1/org/"+url.PathEscape(org)+"/cluster/select", p.token, body, &out)
-	return &out.Target, err
-}
-
-func (p *Platform) InstallBaseline(ctx context.Context, org, clusterID string) error {
-	path := "/v1/org/" + url.PathEscape(org) + "/cluster/" + url.PathEscape(clusterID) + "/install-baseline"
-	return p.do(ctx, http.MethodPost, path, p.token, nil, nil)
-}
-
 // ---------------------------------------------------------------------------
-// Deploy — POST …/container/{id}/redeploy (rolling restart, zero-downtime).
+// Deploy — POST /v1/paas/apps/{app}/deploy: a zero-downtime ROLLING RESTART of the
+// app's Deployment (re-pulls the declared image, recreates pods). Org-confined
+// server-side; an optional env selects the lifecycle namespace (main|test|dev).
 // ---------------------------------------------------------------------------
 
-// Redeploy triggers a rolling restart of the container's k8s Deployment. The
-// coordinates are exact (the platform validates org+project+env+container scope).
-func (p *Platform) Redeploy(ctx context.Context, org, project, env, container string) error {
-	path := fmt.Sprintf("/v1/org/%s/project/%s/env/%s/container/%s/redeploy",
-		url.PathEscape(org), url.PathEscape(project), url.PathEscape(env), url.PathEscape(container))
-	var out struct {
-		OK bool `json:"ok"`
+// Redeploy triggers a rolling restart of the named app. env is optional
+// (main|test|dev); empty targets production (the first match, main→test→dev).
+func (p *Platform) Redeploy(ctx context.Context, app, env string) (*DeployResult, error) {
+	path := "/v1/paas/apps/" + url.PathEscape(app) + "/deploy"
+	if env != "" {
+		path += "?env=" + url.QueryEscape(env)
 	}
-	if err := p.do(ctx, http.MethodPost, path, p.token, nil, &out); err != nil {
-		return err
+	out := &DeployResult{}
+	if err := p.do(ctx, http.MethodPost, path, p.token, nil, out); err != nil {
+		return nil, err
 	}
 	if !out.OK {
-		return fmt.Errorf("redeploy did not report ok")
+		return nil, fmt.Errorf("redeploy did not report ok")
 	}
-	return nil
+	return out, nil
+}
+
+// DeployResult is the /deploy acceptance (202): the restarted app + its namespace.
+type DeployResult struct {
+	OK          bool   `json:"ok"`
+	App         string `json:"app"`
+	Namespace   string `json:"namespace"`
+	Env         string `json:"env"`
+	RestartedAt string `json:"restartedAt"`
 }
 
 // ---------------------------------------------------------------------------
-// Build — POST /v1/runner (platform-native CI, no GitHub builders).
+// Build — POST /v1/runner (platform-native CI, no GitHub builders). Authorized off
+// the IAM login exactly like the surfaces above (or a dedicated build token for
+// machine automation). Unchanged wire contract.
 // ---------------------------------------------------------------------------
 
 // BuildReq is the direct-enqueue body. Repo/SHA/Image are required.
@@ -337,8 +315,8 @@ type BuildJob struct {
 	Target     string `json:"target"`
 }
 
-// EnqueueBuild enqueues a native build. It authenticates with the dedicated
-// build-callback token, not the service token.
+// EnqueueBuild enqueues a native build. buildToken is resolved by the caller (IAM
+// login is the final fallback; a dedicated build token wins when present).
 func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, buildToken string) (*BuildJob, error) {
 	if buildToken == "" {
 		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login now authorizes builds; HANZO_BUILD_TOKEN / --build-token still works for machine automation)")
