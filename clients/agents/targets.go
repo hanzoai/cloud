@@ -270,6 +270,48 @@ func TargetsForOrg(ctx context.Context, org string) ([]Target, error) {
 	return mounted.State.store.ListTargets(ctx, org)
 }
 
+// ResolveTarget resolves a human's target REFERENCE — a target id or its friendly
+// label (the hostname the CLI registers) — to the org's target, org-scoped and
+// fail-closed. It is the ONE way a trigger surface (the Slack `code: <repo> on
+// <target>` grammar, a console picker) turns "on evo" into a target id without
+// leaking another tenant's inventory: an id or label that resolves to no target in
+// THIS org returns errTargetNotFound, never another org's machine.
+//
+// Precedence: an exact id match wins (ids are unambiguous), else an exact,
+// case-folded label match (newest first, so a re-registered machine's live row is
+// preferred). A reference that matches neither is not found — the caller renders an
+// honest error and NEVER falls back to a local run.
+func ResolveTarget(ctx context.Context, org, ref string) (Target, error) {
+	if mounted == nil || mounted.State.store == nil {
+		return Target{}, fmt.Errorf("agents: not mounted")
+	}
+	org = strings.TrimSpace(org)
+	ref = strings.TrimSpace(ref)
+	if org == "" || len(org) > principal.MaxOrgLen {
+		return Target{}, fmt.Errorf("agents: invalid org")
+	}
+	if ref == "" || len(ref) > maxTargetID {
+		return Target{}, errTargetNotFound
+	}
+	// An id is exact and unambiguous — try it first.
+	if t, err := mounted.State.store.GetTarget(ctx, org, ref); err == nil {
+		return t, nil
+	} else if err != errTargetNotFound {
+		return Target{}, err
+	}
+	// Else an exact, case-folded label match within this org.
+	rows, err := mounted.State.store.ListTargets(ctx, org)
+	if err != nil {
+		return Target{}, err
+	}
+	for _, t := range rows { // ListTargets is newest-first: the live row wins a label tie
+		if strings.EqualFold(strings.TrimSpace(t.Label), ref) {
+			return t, nil
+		}
+	}
+	return Target{}, errTargetNotFound
+}
+
 // LoadOn returns the live session load on one of the org's targets — the same
 // (target id OR host) mapping the HTTP views use, so the board and /v1/agents/
 // targets can never disagree about what is running where.
@@ -439,6 +481,10 @@ func mountTargets(s *cloud.Service[state], app *zip.App) {
 	app.Get("/v1/agents/targets/:id", cloud.Handle(s, getTarget))
 	app.Patch("/v1/agents/targets/:id", cloud.Handle(s, patchTarget))
 	app.Delete("/v1/agents/targets/:id", cloud.Handle(s, deleteTarget))
+	// The #48 route-work machine surface (claim-key, claim long-poll, report)
+	// lives on the same target routes; register after the CRUD so the
+	// extra-segment paths are unambiguous.
+	mountRouting(s, app)
 }
 
 // ---- register ----

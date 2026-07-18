@@ -31,6 +31,11 @@ func NewDispatcher(
 		CloneURL:  cloneURL,
 		VerifyRef: verifyRef,
 		Log:       log,
+		// #48 route-work: enqueue a routed run on the ONE embedded tasks engine,
+		// gated by the agents liveness check. Both bind to the real in-process
+		// packages; a routed run with no live engine/target fails closed.
+		Route:      enqueueRoutedRun,
+		TargetGate: agents.TargetDispatchable,
 	}
 }
 
@@ -39,6 +44,9 @@ type sessionAdapter struct{}
 
 func (sessionAdapter) Open(ctx context.Context, org, actor, agent, title string) (string, error) {
 	return agents.OpenSession(ctx, org, actor, agent, title)
+}
+func (sessionAdapter) OpenOn(ctx context.Context, org, actor, agent, title, target string) (string, error) {
+	return agents.OpenSessionOn(ctx, org, actor, agent, title, target)
 }
 func (sessionAdapter) Log(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error {
 	return agents.LogSessionEvent(ctx, org, sessionID, kind, actor, payload)
