@@ -53,22 +53,85 @@ type runnerBuildResp struct {
 	Target     string `json:"target,omitempty"`
 }
 
-// allowedImageRegistries bounds where a privileged /v1/runner build may push.
-// Only the org registries we own — a build token cannot push elsewhere.
-// registry.hanzo.ai is the self-hosted fleet registry (the native CI/CD home);
-// ghcr stays during the migration as the public mirror.
-var allowedImageRegistries = []string{
-	"registry.hanzo.ai/hanzoai/",
-	"registry.hanzo.ai/luxfi/",
-	"registry.hanzo.ai/zooai/",
-	"ghcr.io/hanzoai/",
-	"ghcr.io/luxfi/",
-	"ghcr.io/zooai/",
+// ownedRegistryHosts are the registry hosts the fabric operates. An image on any
+// other host is NEVER allowed on the privileged build path. registry.hanzo.ai is
+// the self-hosted fleet registry (the native CI/CD home); ghcr stays during the
+// migration as the public mirror.
+var ownedRegistryHosts = []string{"registry.hanzo.ai", "ghcr.io"}
+
+// orgRegistryNamespaces maps an IAM org (the validated `owner` claim) to the
+// registry namespace(s) that org OWNS. Only the three brands that own a registry
+// appear (hanzo→hanzoai, lux→luxfi, zoo→zooai); an org absent here owns NO push
+// target, so an org-admin of it is refused on the IAM build path (fail-closed) —
+// nobody pushes to a brand they do not own. The UNION of the values is the set of
+// namespaces the fabric owns (ownedNamespaces), which the machine-token (fabric)
+// path may push to freely and a real SuperAdmin may cross into.
+//
+// This is the ONE place the org→registry trust is expressed, and it is the fix
+// for H1: imageAllowed proves an image targets an owned registry, but only
+// imageInOrgRegistry proves the CALLER owns that namespace — without the second
+// check any org-admin could overwrite another brand's production image via the
+// shared push credential.
+var orgRegistryNamespaces = map[string][]string{
+	"hanzo": {"hanzoai"},
+	"lux":   {"luxfi"},
+	"zoo":   {"zooai"},
 }
 
+// ownedNamespaces is the set of registry namespaces the fabric owns — the union
+// of every org's namespaces. Derived once from orgRegistryNamespaces so there is
+// no second hand-maintained list to drift.
+var ownedNamespaces = func() map[string]bool {
+	m := map[string]bool{}
+	for _, nss := range orgRegistryNamespaces {
+		for _, ns := range nss {
+			m[ns] = true
+		}
+	}
+	return m
+}()
+
+// imageRegistryNamespace returns the owned-registry namespace an image pushes to
+// (ghcr.io/luxfi/x → "luxfi", registry.hanzo.ai/hanzoai/y → "hanzoai") and
+// ok=false when the image is not on an owned host, has no namespace/repo split, or
+// carries an empty repo. The parse is strict: <owned-host>/<namespace>/<repo…>.
+// It assumes the image has already passed validateImageRef (a single clean OCI
+// ref), so the host and namespace are the first two '/'-separated components.
+func imageRegistryNamespace(image string) (string, bool) {
+	for _, h := range ownedRegistryHosts {
+		prefix := h + "/"
+		if !strings.HasPrefix(image, prefix) {
+			continue
+		}
+		rest := image[len(prefix):]
+		i := strings.IndexByte(rest, '/')
+		if i <= 0 || i+1 >= len(rest) {
+			return "", false // no namespace, or nothing after it (no repo)
+		}
+		return rest[:i], true
+	}
+	return "", false
+}
+
+// imageAllowed reports whether image targets a registry namespace the fabric owns
+// (the OUTER bound shared by the machine and IAM paths). It does NOT bind the
+// namespace to any caller — imageInOrgRegistry does that on the IAM path.
 func imageAllowed(image string) bool {
-	for _, p := range allowedImageRegistries {
-		if strings.HasPrefix(image, p) {
+	ns, ok := imageRegistryNamespace(image)
+	return ok && ownedNamespaces[ns]
+}
+
+// imageInOrgRegistry reports whether image pushes to a namespace the given org
+// OWNS (H1). Used to confine an IAM org-admin to its own brand's registry: a
+// hanzo admin may push ghcr.io/hanzoai/* but never ghcr.io/luxfi/*. A caller whose
+// org owns no namespace (not one of the three registry brands) always fails here.
+func imageInOrgRegistry(image, org string) bool {
+	ns, ok := imageRegistryNamespace(image)
+	if !ok {
+		return false
+	}
+	for _, owned := range orgRegistryNamespaces[strings.ToLower(strings.TrimSpace(org))] {
+		if ns == owned {
 			return true
 		}
 	}
@@ -162,8 +225,30 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	if req.Repo == "" || req.Image == "" {
 		return zip.ErrBadRequest("repo and image are required")
 	}
+	// Validate the output image as a single, well-formed OCI ref BEFORE any
+	// registry/authz decision reads it — so imageRegistryNamespace parses a clean
+	// ref and a comma/space/`=` can never inject a BuildKit `--output` exporter
+	// attribute (M1). launchDirectBuild re-validates at the k8s choke point
+	// (validateBuildInputs); this is the early, user-facing 400.
+	if _, err := validateImageRef(req.Image); err != nil {
+		return zip.ErrBadRequest(err.Error())
+	}
 	if !imageAllowed(req.Image) {
 		return zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
+	}
+
+	// H1 — bind the image's registry-org to the caller's VALIDATED org on the IAM
+	// path. imageAllowed proved the image targets an owned registry; this proves
+	// the CALLER owns that registry namespace, so an org-admin can only push into
+	// its own brand and can never overwrite another brand's image via the shared
+	// push credential. A real platform SuperAdmin may cross (disabled in prod); the
+	// machine-token path is fabric-trusted and keeps full owned-registry latitude
+	// (it is how cloud self-releases ghcr.io/hanzoai/cloud and the operator builds).
+	if viaIAM && !principal.IsSuperAdmin(c) {
+		callerOrg, _ := principal.Org(c)
+		if !imageInOrgRegistry(req.Image, callerOrg) {
+			return zip.ErrForbidden("image registry-org must match your organization")
+		}
 	}
 
 	// Attribute the build to an org. On the IAM path the org is the caller's

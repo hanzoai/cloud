@@ -212,6 +212,16 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 		return nil, err
 	}
 
+	// Fail SECURE on a misconfigured (empty) trust set: an empty issuer OR audience
+	// allowlist must REJECT every token, never silently disable that axis. In
+	// production both are always resolved non-empty (BrandIssuers + the baked
+	// audience defaults, unioned in config.go so they are "never empty"), so this
+	// fires ONLY on an operator misconfiguration (CLOUD_JWT_AUDIENCES="" emptying the
+	// resolved set, or an empty issuer set) — and then it denies, it never admits (I2).
+	if len(v.issuers) == 0 || len(v.audiences) == 0 {
+		return nil, fmt.Errorf("identity validator misconfigured: empty issuer or audience allowlist")
+	}
+
 	// Reject a missing issuer: an empty issuer must never pass the set check.
 	if claims.Issuer == "" {
 		return nil, fmt.Errorf("missing issuer")
@@ -236,14 +246,13 @@ func (v *identityValidator) validate(raw string) (*idClaims, error) {
 	// gates on owner == :org. Without this, a real client_credentials machine token
 	// (aud == its per-org clientId, never in the allowlist) fails here and the
 	// sync silently stays pending — the activation blocker.
-	expected := jwt.Expected{}
-	if len(v.audiences) > 0 {
-		auds := v.audiences
-		if mach := kmsMachineAudience(claims.Owner); mach != "" {
-			auds = append(append(make([]string, 0, len(v.audiences)+1), v.audiences...), mach)
-		}
-		expected.AnyAudience = jwt.Audience(auds)
+	// The audience allowlist is guaranteed non-empty (checked above), so the
+	// audience axis is ALWAYS enforced — never silently skipped.
+	auds := v.audiences
+	if mach := kmsMachineAudience(claims.Owner); mach != "" {
+		auds = append(append(make([]string, 0, len(v.audiences)+1), v.audiences...), mach)
 	}
+	expected := jwt.Expected{AnyAudience: jwt.Audience(auds)}
 	if err := claims.Claims.ValidateWithLeeway(expected, 2*time.Minute); err != nil {
 		return nil, fmt.Errorf("claims: %w", err)
 	}
@@ -440,14 +449,11 @@ func trustedIssuers(primary string) []string {
 	return out
 }
 
-// issuerAllowed reports whether iss is one of the trusted issuers. An empty set
-// (no primary, no brands — never the case in production) skips the check, matching
-// the prior "empty issuer disables the check" behavior; a non-empty set is
-// fail-secure (a token whose iss is not in the set is rejected).
+// issuerAllowed reports whether iss is one of the trusted issuers. It is
+// fail-secure in BOTH directions: an empty trusted set matches NOTHING (deny), so
+// a misconfiguration that empties the issuer allowlist rejects every token instead
+// of silently disabling the check (I2); a non-empty set rejects any iss not in it.
 func issuerAllowed(iss string, trusted []string) bool {
-	if len(trusted) == 0 {
-		return true
-	}
 	for _, t := range trusted {
 		if iss == t {
 			return true
