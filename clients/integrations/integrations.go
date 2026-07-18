@@ -261,8 +261,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// dispatcher actually serves — otherwise its OAuth callback would 404 silently
 	// and the connect flow would dead-end. One route, one truth.
 	for id, p := range providers {
-		if p.Kind == apiKeyKind {
-			// apikey providers have no OAuth callback; RedirectPath is unused.
+		if p.Authorize == nil {
+			// No OAuth capability → no callback route to validate; RedirectPath is
+			// unused (a pure-apikey provider). A provider that offers OAuth — even
+			// one that ALSO offers apikey — MUST declare the exact callback path.
 			continue
 		}
 		if want := callbackPath(id); p.RedirectPath != want {
@@ -459,11 +461,24 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if !kmsReady(s) {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
 	}
-	// apikey connectors submit a customer-held credential to /connect (no OAuth
-	// dance): verify-before-store, then seal to KMS. A bad credential is refused
-	// and NOTHING is persisted (see connectByCredential).
-	if p.Kind == apiKeyKind {
+	// Pick the credential-acquisition path by REQUEST. A provider may offer an
+	// apikey path (Verify) and/or an OAuth path (Authorize). A credential in the
+	// /connect body seals via apikey (verify-before-store; NOTHING persisted on a
+	// bad credential); its absence starts the OAuth flow below. A provider with only
+	// one path always takes it — an apikey-only provider with no token still returns
+	// connectByCredential's helpful "token required" 400.
+	if p.Verify != nil && (p.Authorize == nil || bodyHasCredential(c)) {
 		return connectByCredential(s, c, org, p)
+	}
+	if p.Authorize == nil {
+		return zip.Errorf(http.StatusServiceUnavailable, "%s: no connect method configured", p.ID)
+	}
+	// The OAuth leg needs Hanzo's registered app creds. A dual-path provider keeps
+	// Configured()==true for its always-available apikey path, so gate OAuth on its
+	// OWN creds here — an honest 503 that points the caller at the token path rather
+	// than a dead consent URL with an empty client_id.
+	if p.Creds().ClientID == "" {
+		return zip.Errorf(http.StatusServiceUnavailable, "%s OAuth is not configured on this deployment; connect with a scoped API token instead", p.ID)
 	}
 
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
@@ -493,6 +508,21 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 // API tokens are short (a Cloudflare token is ~40 chars); anything over 8 KiB is
 // hostile and rejected before it reaches Verify or KMS.
 const maxCredentialLen = 8192
+
+// bodyHasCredential reports whether the /connect body carries an apikey credential
+// INTENT — the signal that selects the apikey seal over the OAuth flow for a
+// provider that offers both. The signal is PRESENCE of the "token" key, not its
+// value: {"token":"…"} (even empty/whitespace) is an apikey attempt (→ verify,
+// which answers the "token required" 400 on an empty value); a body with no token
+// key (the console "Connect" button, `hanzo connector add` with no --token) starts
+// OAuth. A malformed body reads as "no credential" (→ OAuth). Never logs the token.
+func bodyHasCredential(c *zip.Ctx) bool {
+	var b struct {
+		Token *string `json:"token"`
+	}
+	_ = json.Unmarshal(c.Body(), &b)
+	return b.Token != nil
+}
 
 // connectByCredential completes an apikey connector. The caller submits the
 // provider credential in the request body (from `hanzo connector add`, read on
