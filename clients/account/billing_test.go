@@ -232,3 +232,65 @@ func TestBilling_RejectsTraversalSegment(t *testing.T) {
 		t.Fatalf("a traversal must never reach commerce, but upstream saw %q", f.path)
 	}
 }
+
+// ── S2S service-token admission (the auth fix; 4 security invariants) ─────────
+
+// Invariant #4 — THE SECURITY GATE: a public/unauthenticated caller (no validated
+// principal AND not the service token) STILL gets 403 on the spend-alert routes, incl.
+// a WRONG bearer. The fix must NEVER open billing to the world.
+func TestBilling_S2S_PublicStill403(t *testing.T) {
+	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
+	app := mountApp(t, "http://iam.invalid", "", "")
+	for _, path := range []string{
+		"/v1/billing/spend-alerts",
+		"/v1/billing/spend-alerts/authorize?user=acme&amount=1",
+	} {
+		// forged X-Org-Id, no validated principal, no service token
+		if code, body := callH(t, app, http.MethodGet, path, map[string]string{"X-Org-Id": "victim"}, ""); code != http.StatusForbidden {
+			t.Fatalf("public caller to %s: want 403, got %d (%s)", path, code, body)
+		}
+	}
+	// a WRONG bearer is still just a public caller → 403
+	if code, _ := callH(t, app, http.MethodGet, "/v1/billing/spend-alerts/authorize?user=acme&amount=1",
+		map[string]string{"X-Org-Id": "acme", "Authorization": "Bearer not-the-token"}, ""); code != http.StatusForbidden {
+		t.Fatalf("wrong bearer: want 403")
+	}
+}
+
+// The trusted in-proc S2S caller (verified COMMERCE_SERVICE_TOKEN + X-Org-Id) is admitted
+// and its authorize query is forwarded to commerce VERBATIM (a trusted caller names its
+// own subject), scoped by X-Org-Id — this is what lets the cap gate reach AuthorizeSpendCap.
+func TestBilling_S2S_ServiceTokenForwardsVerbatim(t *testing.T) {
+	f := &fakeBilling{}
+	t.Setenv("COMMERCE_URL", f.server(t).URL)
+	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
+	app := mountApp(t, "http://iam.invalid", "", "")
+
+	code, body := callH(t, app, http.MethodGet,
+		"/v1/billing/spend-alerts/authorize?user=acme&amount=100&project=P",
+		map[string]string{"Authorization": "Bearer svc-tok", "X-Org-Id": "acme"}, "")
+	if code != http.StatusOK {
+		t.Fatalf("S2S authorize: want 200, got %d (%s)", code, body)
+	}
+	if f.path != "/v1/billing/spend-alerts/authorize" {
+		t.Fatalf("forwarded path = %q", f.path)
+	}
+	// VERBATIM: the S2S caller's ?user/?amount/?project reach commerce un-pinned.
+	if f.query.Get("user") != "acme" || f.query.Get("amount") != "100" || f.query.Get("project") != "P" {
+		t.Fatalf("S2S query must forward verbatim, got %v", f.query)
+	}
+	if f.org != "acme" || f.auth != "Bearer svc-tok" {
+		t.Fatalf("S2S must send X-Org-Id=acme + service token, got org=%q auth=%q", f.org, f.auth)
+	}
+}
+
+// S2S with the verified token but NO X-Org-Id → 403 (no org to scope the privileged
+// forward to; never fall back to a client value).
+func TestBilling_S2S_NoOrg403(t *testing.T) {
+	t.Setenv("COMMERCE_SERVICE_TOKEN", "svc-tok")
+	app := mountApp(t, "http://iam.invalid", "", "")
+	if code, _ := callH(t, app, http.MethodGet, "/v1/billing/spend-alerts/authorize?user=acme&amount=1",
+		map[string]string{"Authorization": "Bearer svc-tok"}, ""); code != http.StatusForbidden {
+		t.Fatalf("S2S without X-Org-Id: want 403")
+	}
+}

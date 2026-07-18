@@ -30,6 +30,7 @@ package account
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -108,6 +109,7 @@ var billingForwardable = map[string][]string{
 		"subscriptions",
 		"payment-methods",
 		"spend-alerts",
+		"spend-alerts/authorize", // the S2S cap-verdict read (metering gate); 2 segments need their own entry
 		"payment-config",
 		"plans",
 		"payouts",
@@ -242,9 +244,26 @@ func commerceCreds() (base, token string) {
 func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	// IDOR boundary: the subject is the VALIDATED caller's own org/user, never a client
 	// value. requireOwner=true — billing is always org-scoped (a zero-org user has none).
+	// Auth. A browser caller is the VALIDATED principal (customer path — subject-pinned
+	// below). An IN-PROC S2S caller carries the verified COMMERCE_SERVICE_TOKEN (the
+	// metering cap-gate's authorize + the SuperAdmin cap-oversight Forward). The gateway
+	// 401s a public Bearer that is not an IAM JWT / hk-|pk-|sk- key (the 64-hex service
+	// token fails JWT parse at the edge), so an EXTERNAL client can NEVER present it here —
+	// an unauthenticated caller still hits the 403 below. On the S2S path the caller
+	// legitimately names its own subject, so its query is forwarded as-is (no pin), scoped
+	// only by the EdgeAuth-controlled X-Org-Id.
 	cr, ok := resolveCaller(c, true)
+	s2s := false
+	owner := cr.owner
 	if !ok {
-		return zip.ErrForbidden("sign in to view billing")
+		if !s2sBillingCall(c) {
+			return zip.ErrForbidden("sign in to view billing")
+		}
+		owner = strings.TrimSpace(c.Org()) // trusted X-Org-Id (never a client value on a public call)
+		if owner == "" {
+			return zip.ErrForbidden("sign in to view billing")
+		}
+		s2s = true
 	}
 
 	method := c.Method()
@@ -283,16 +302,27 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	// ai gate reads, so a top-up credits the SAME account the gate debits. Feeding
 	// Payer a different credential here than the gate gets is the modern shape of
 	// the old split: money landing in an account the gate never reads.
-	subject := account.Payer(account.Credential{Owner: cr.owner, Name: cr.username, Account: principal.BillingAccount(c)}).Subject()
 	inQuery, _ := url.ParseQuery(string(c.Fiber().Request().URI().QueryString()))
-	q := scopedBillingSearch(inQuery, subject)
-
+	var q url.Values
 	var body []byte
-	if method == http.MethodPost {
-		body = scopedBillingBody(c.Body(), subject)
+	if s2s {
+		// Trusted S2S caller: forward its query/body VERBATIM — it legitimately names the
+		// subject (e.g. the metering gate's ?user=<org>&amount=). Scoped by X-Org-Id.
+		q = inQuery
+		if method == http.MethodPost {
+			body = c.Body()
+		}
+	} else {
+		// Browser customer: pin EVERY subject key to the caller's OWN account so commerce's
+		// per-tenant isolation can never be crossed from the client.
+		subject := account.Payer(account.Credential{Owner: cr.owner, Name: cr.username, Account: principal.BillingAccount(c)}).Subject()
+		q = scopedBillingSearch(inQuery, subject)
+		if method == http.MethodPost {
+			body = scopedBillingBody(c.Body(), subject)
+		}
 	}
 
-	raw, status, err := commerceDo(c.Context(), base, token, method, "/v1/billing/"+sub, q, cr.owner, body)
+	raw, status, err := commerceDo(c.Context(), base, token, method, "/v1/billing/"+sub, q, owner, body)
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "billing upstream unreachable: %v", err)
 	}
@@ -301,4 +331,22 @@ func billingData(s *cloud.Service[state], c *zip.Ctx) error {
 	c.SetHeader("Content-Type", "application/json")
 	c.SetHeader("Cache-Control", "no-store, must-revalidate")
 	return c.Bytes(status, raw)
+}
+
+// s2sBillingCall reports whether the request carries the verified COMMERCE_SERVICE_TOKEN
+// as its Bearer — a trusted IN-PROC service-to-service caller (the metering cap-gate's
+// authorize, the SuperAdmin cap-oversight Forward). It is the SAME secret this bridge
+// already forwards WITH, so admitting a caller who already holds it grants no authority it
+// could not otherwise wield. Safety rests on the edge: the gateway 401s a public Bearer
+// that is not an IAM JWT / hk-|pk-|sk- API key (the 64-hex service token is a JWT
+// candidate that fails to parse), so an EXTERNAL client can never reach this handler
+// holding it — only in-proc commerceinproc dispatch does. Constant-time compare; the token
+// is never logged.
+func s2sBillingCall(c *zip.Ctx) bool {
+	_, token := commerceCreds()
+	if token == "" {
+		return false
+	}
+	bearer := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
+	return bearer != "" && subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) == 1
 }
