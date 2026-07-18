@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+func TestNormalizeRepoURL(t *testing.T) {
+	cases := map[string]string{
+		"luxfi/wallet":                        "https://github.com/luxfi/wallet",
+		"hanzoai/cloud":                       "https://github.com/hanzoai/cloud",
+		"https://github.com/luxfi/wallet":     "https://github.com/luxfi/wallet",   // full URL untouched
+		"git@github.com:luxfi/wallet.git":     "git@github.com:luxfi/wallet.git",   // scp-style untouched
+		"https://gitlab.com/org/repo":         "https://gitlab.com/org/repo",       // non-github URL untouched
+		"owner/name/extra":                    "owner/name/extra",                  // not a bare owner/name
+		"single":                              "single",                            // not two segments
+		"":                                    "",                                  // empty
+	}
+	for in, want := range cases {
+		if got := normalizeRepoURL(in); got != want {
+			t.Errorf("normalizeRepoURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // withPlatform points the CLI at an httptest platform via env (HANZO_PLATFORM_URL
 // + HANZO_PLATFORM_TOKEN), the same resolution path the real binary uses.
 func withPlatform(t *testing.T, h http.HandlerFunc) string {
