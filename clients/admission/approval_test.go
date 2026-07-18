@@ -1,7 +1,7 @@
 // Copyright 2023-2026 Hanzo AI Inc. All Rights Reserved.
 // Licensed under the Apache License, Version 2.0.
 
-package featuregate
+package admission
 
 import (
 	"context"

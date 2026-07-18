@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package featuregate
+package admission
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 // approval is FAIL-OPEN: a user is approved unless properties.approvalStatus is
 // EXACTLY "pending" (absent / "approved" / "rejected" all read approved via
 // IsApproved). Only "pending" holds a user on the waitlist. Keeping the literal
-// here (not importing IAM) keeps featuregate self-contained.
+// here (not importing IAM) keeps admission self-contained.
 const approvalStatusPending = "pending"
 
 // approvedHeader is the FORWARD-PERFECT path: once IAM carries approvalStatus in
