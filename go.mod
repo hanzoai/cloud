@@ -75,7 +75,6 @@ require (
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
-	github.com/hanzoai/beego v1.12.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
@@ -829,7 +828,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.822.3
+	github.com/hanzoai/ai v1.824.1
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
