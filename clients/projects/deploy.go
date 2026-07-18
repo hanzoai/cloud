@@ -17,23 +17,32 @@ import (
 	"github.com/zap-proto/zip"
 )
 
+// siteHost is the org-scoped host key a published project binds and resolves on:
+// `<slug>.<org>`. Org-scoping is STRUCTURAL — the org lives in the hostname, so
+// two orgs can each own the same slug and their sites can never collide or shadow
+// one another (the slug alone was a single global first-come namespace). It is the
+// exact string bound into site_hosts (onPublish) AND the key the sites edge
+// resolves after stripping the apex (sites.siteSlug), so bind and resolve agree.
+func siteHost(org, slug string) string { return slug + "." + org }
+
 // onPublish runs the go-live side effects for a project whose new build just
-// landed at its S3 prefix: it claims the public subdomain (first-come, idempotent
-// for the owner) and purges the Cloudflare edge by cache-tag so the new publish
-// is instantly live at the edge. Both are best-effort — a host already owned by
-// another project, or an unconfigured/failing CF token, must NOT fail the deploy
-// (the site is already live at its S3 URL). It stamps LastPurgeAt on the project
-// (the caller persists it in the same UpdateProject that flips status to live).
+// landed at its S3 prefix: it claims the org-scoped public host (first-come per
+// (org,slug), idempotent for the owner) and purges the Cloudflare edge by
+// cache-tag so the new publish is instantly live at the edge. Both are
+// best-effort — an unconfigured/failing CF token must NOT fail the deploy (the
+// site is already live at its S3 URL). It stamps LastPurgeAt on the project (the
+// caller persists it in the same UpdateProject that flips status to live).
 func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Project) {
 	now := time.Now().Unix()
-	if err := s.State.store.BindHost(ctx, p.Slug, org, p.Slug, now); err != nil {
+	host := siteHost(org, p.Slug)
+	if err := s.State.store.BindHost(ctx, host, org, p.Slug, now); err != nil {
 		switch {
 		case errors.Is(err, errHostTaken):
-			s.Log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug)
+			s.Log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug, "host", host)
 		case errors.Is(err, errReservedHost):
-			s.Log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug)
+			s.Log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug, "host", host)
 		default:
-			s.Log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+			s.Log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "host", host, "err", err)
 		}
 	}
 	if err := s.State.cf.PurgeTags(ctx, sites.CacheTag(org, p.Slug)); err != nil {
@@ -42,12 +51,12 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 	p.LastPurgeAt = now
 }
 
-// siteURL is the canonical public URL of a deployed site: the pretty host
-// https://<slug>.<apex> the sites edge (clients/sites) serves from S3. It is the
-// ONE live-URL form on both the Deployment and the Project — a redeploy to the
-// same slug returns the SAME URL because the slug and apex are stable.
-func siteURL(s *cloud.Service[state], slug string) string {
-	return "https://" + slug + "." + s.State.apex
+// siteURL is the canonical public URL of a deployed site: the pretty org-scoped
+// host https://<slug>.<org>.<apex> the sites edge (clients/sites) serves from S3.
+// It is the ONE live-URL form on both the Deployment and the Project — a redeploy
+// to the same slug returns the SAME URL because slug, org, and apex are stable.
+func siteURL(s *cloud.Service[state], org, slug string) string {
+	return "https://" + slug + "." + org + "." + s.State.apex
 }
 
 // publishSite is the ONE shared deploy core: given a parsed site artifact and its
@@ -91,7 +100,7 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 		return d, fmt.Errorf("upload failed: %w", upErr)
 	}
 
-	live := siteURL(s, p.Slug)
+	live := siteURL(s, org, p.Slug)
 	d.Status, d.LiveURL, d.Prefix, d.Files, d.Bytes, d.UpdatedAt = "live", live, prefix, files, total, time.Now().Unix()
 	if err := s.State.store.UpdateDeployment(ctx, d); err != nil {
 		return d, fmt.Errorf("finalize deployment: %w", err)
@@ -337,7 +346,7 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	if status == "live" {
 		d.LiveURL = strings.TrimSpace(body.LiveURL)
 		if d.LiveURL == "" {
-			d.LiveURL = siteURL(s, p.Slug)
+			d.LiveURL = siteURL(s, org, p.Slug)
 		}
 	}
 	if err := s.State.store.UpdateDeployment(c.Context(), d); err != nil {
