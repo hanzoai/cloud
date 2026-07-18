@@ -9,20 +9,26 @@
 //	                                (+ its status), and attach the drift verdict
 //	                                (drift.go / apps-drift.ts).
 //	GET  /v1/paas/apps/:app       — one app row by CR name.
-//	POST /v1/paas/apps/:app/deploy— refuse (409): an App CR is declared in universe
-//	                                git (infra/k8s/operator/crs/) and reconciled by
-//	                                Hanzo CD with selfHeal, so a patch here is
-//	                                reverted on the next sync. The response names the
-//	                                git path to commit the tag to.
+//	POST /v1/paas/apps/:app/deploy— zero-downtime ROLLING RESTART of the app's
+//	                                Deployment (the `kubectl rollout restart`
+//	                                mechanism): re-pulls the DECLARED image, recreates
+//	                                pods gracefully. It never changes the declared
+//	                                TAG (that stays a git commit, the one thing Hanzo
+//	                                CD's selfHeal reconciles), so there is no drift to
+//	                                revert. This is `hanzo deploy`.
 //	GET  /v1/paas/health          — real k8s reachability + App CRD presence.
 //
-// SECURITY — every route is SUPERADMIN ONLY, fail-closed, gated on the SAME
-// predicate the rest of cloud uses: c.IsAdmin() (true only for a JWT-validated
-// principal whose org is the admin org, matching the gateway's admin-guard — see
-// clients/admin). Unlike clients/ml (per-tenant namespaces), the PaaS control
-// plane reads SYSTEM App CRs across the whole fleet, so it is admin-only: a tenant
-// must never observe another org's — or a platform — app. The user-facing PaaS
-// view lives in console; users never call this surface.
+// SECURITY — every route is authorized off ONE IAM identity, exactly like the
+// /v1/runner build path (clients/platform/runner.go): the guard admits a validated
+// principal (principal.Validated) who is a SuperAdmin OR an OrgAdmin, and each
+// handler then CONFINES a non-super caller to its own org's platform namespaces
+// (scopedNamespaces, keyed on principal.Org — never a client header). A SuperAdmin
+// observes/acts on the whole fleet; an OrgAdmin only on the namespaces its org owns;
+// a plain member or an unauthenticated caller is refused 403. So a tenant admin can
+// never observe — or restart — another org's, or a platform, app, and the platform
+// operator drives the board off a plain `hanzo login` with no shared token. The
+// user-facing per-app PaaS view still lives in console; this is the CLI/operator
+// surface.
 //
 // k8s client: built in-process from the in-cluster service account
 // (rest.InClusterConfig) with a KUBECONFIG fallback for local/dev — the identical
@@ -38,14 +44,17 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -93,9 +102,9 @@ type state struct {
 	initErr string            // why dyn is nil, surfaced by health + ready()
 }
 
-// Mount wires the /v1/paas/* surface onto app. Every handler gates on
-// c.IsAdmin() first (SuperAdmin only), then reads/patches the operator Service
-// CRs.
+// Mount wires the /v1/paas/* surface onto app. Every handler is behind the IAM
+// guard (SuperAdmin or OrgAdmin, org-confined), then reads/patches the operator
+// App CRs + their Deployments.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	return cloud.Mount(app, deps, "paas", build, routes)
 }
@@ -116,7 +125,8 @@ func build(b cloud.Base) (state, error) {
 }
 
 // routes registers the /v1/paas/* surface. Every mutating/observing route is behind
-// the SuperAdmin guard; the health probe is public (real k8s reachability).
+// the IAM guard (SuperAdmin or org-confined OrgAdmin); the health probe is public
+// (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/apps", guard(s, cloud.Handle(s, listApps)))
 	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
@@ -130,16 +140,84 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	registerReleaser(s)
 }
 
-// guard wraps a handler with the SuperAdmin gate. Fail-closed: any request whose
-// validated identity is not a SuperAdmin is refused 403 before the handler — no
-// cluster object is read or mutated, matching clients/admin.guard.
+// guard authorizes the PaaS fleet board off ONE IAM identity, exactly like the
+// /v1/runner build path (clients/platform/runner.go runnerIAMAdmin): a validated
+// principal (principal.Validated — X-User-Id minted from a signature-verified JWT,
+// unforgeable off-gateway) who is a SuperAdmin OR an OrgAdmin. Fail-closed: any
+// other request is refused 403 before the handler — no cluster object is read or
+// mutated.
+//
+// The ROLE only opens the door; the TENANT boundary is enforced inside each
+// handler by scopedNamespaces(c): a SuperAdmin observes the whole fleet, an
+// OrgAdmin is CONFINED to the platform namespaces its own validated org owns, so a
+// tenant admin can never observe — or restart — another org's, or a platform, app.
+// This mirrors runner.go's org attribution (default to the caller's org, refuse a
+// foreign one) for a READ/RESTART surface. Broadening from SuperAdmin-only lets the
+// platform operator drive the board off a plain `hanzo login` with no shared token.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
-		if !c.IsAdmin() {
-			return zip.ErrForbidden("SuperAdmin required")
+		if !principal.Validated(c) {
+			return zip.ErrForbidden("authentication required (run `hanzo login`)")
 		}
-		return h(c)
+		if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) {
+			return h(c)
+		}
+		return zip.ErrForbidden("admin required")
 	}
+}
+
+// scopedNamespaces returns the platform namespaces the caller may observe/act on —
+// the TENANT confinement for the fleet board. A SuperAdmin sees every scanned
+// namespace (the whole fleet). A non-super OrgAdmin sees ONLY the namespaces its
+// own validated org owns (nsOrg(ns) == principal.Org), so it is bounded to its own
+// tenant exactly as /v1/runner bounds a build to the caller's org. The org is taken
+// from the validated principal — never a client header — so it cannot be widened by
+// a forged X-Org-Id. An OrgAdmin whose org owns no scanned namespace gets an empty
+// set (an empty board / a clean 404), never another org's data.
+func scopedNamespaces(c *zip.Ctx) []string {
+	all := scanOrder()
+	if principal.IsSuperAdmin(c) {
+		return all
+	}
+	org, ok := principal.Org(c)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(all))
+	for _, ns := range all {
+		if nsOrg(ns) == org {
+			out = append(out, ns)
+		}
+	}
+	return out
+}
+
+// targetNamespaces narrows the caller's authorized namespaces (scopedNamespaces)
+// to a single lifecycle env when ?env=main|test|dev is given, else returns them all
+// in prod-first scan order. It composes the AUTH confinement (scopedNamespaces) with
+// the optional env SELECTION — orthogonal: env can only narrow WITHIN the caller's
+// own authorized set, never reach outside it.
+func targetNamespaces(c *zip.Ctx) []string {
+	nss := scopedNamespaces(c)
+	env := strings.TrimSpace(c.Query("env"))
+	if env == "" {
+		return nss
+	}
+	out := make([]string, 0, len(nss))
+	for _, ns := range nss {
+		if nsEnv[ns] == env {
+			out = append(out, ns)
+		}
+	}
+	return out
+}
+
+// nsOrg returns the platform org that OWNS a scanned namespace: the namespace with
+// its lifecycle-env suffix removed ("hanzo"→hanzo, "hanzo-testnet"→hanzo,
+// "hanzo-devnet"→hanzo). It is the tenant key a namespace belongs to — the axis
+// scopedNamespaces confines a non-super OrgAdmin to. Kept in lockstep with nsEnv.
+func nsOrg(ns string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(ns, "-devnet"), "-testnet")
 }
 
 // ── observe: the drift board (inventory.ts) ──────────────────────────────────
@@ -172,7 +250,11 @@ func listApps(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := ready(s); err != nil {
 		return err
 	}
-	views, err := observeFleet(s, c.Context())
+	// Observe only the namespaces this caller is authorized for: the whole fleet for
+	// a SuperAdmin, the caller's own org namespaces for an OrgAdmin (empty board for
+	// an org that owns none). The tenant boundary is applied at the scan, before any
+	// CR is read, so a non-super caller never even lists another org's apps.
+	views, err := observeFleet(s, c.Context(), scopedNamespaces(c))
 	if err != nil {
 		return err
 	}
@@ -225,7 +307,7 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	for _, ns := range scanOrder() {
+	for _, ns := range targetNamespaces(c) {
 		obj, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(c.Context(), name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -239,12 +321,13 @@ func getApp(s *cloud.Service[state], c *zip.Ctx) error {
 	return zip.ErrNotFound("app not found in the platform namespaces")
 }
 
-// observeFleet lists every App CR across the scanned namespaces and maps each to
-// an AppView. A namespace that does not exist / is empty is skipped, never fatal
-// (the fleet board must still render the reachable namespaces).
-func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, error) {
+// observeFleet lists every App CR across the given namespaces (the caller's
+// authorized set, per scopedNamespaces) and maps each to an AppView. A namespace
+// that does not exist / is empty is skipped, never fatal (the board must still
+// render the reachable namespaces).
+func observeFleet(s *cloud.Service[state], ctx context.Context, namespaces []string) ([]AppView, error) {
 	var views []AppView
-	for _, ns := range scanOrder() {
+	for _, ns := range namespaces {
 		// Running state: one Deployment list per namespace, indexed by name — the
 		// running-tag source (inventory.ts). Best-effort: a Deployment RBAC/list
 		// error leaves runningTag empty (an honest unknown) rather than failing the
@@ -275,14 +358,24 @@ func observeFleet(s *cloud.Service[state], ctx context.Context) ([]AppView, erro
 	return views, nil
 }
 
-// ── deploy: refuse a git-declared App ────────────────────────────────────────
+// ── deploy: rolling restart (zero-downtime) ──────────────────────────────────
 
-// deploy refuses. Every App CR in the platform namespaces is declared in universe
-// git (infra/k8s/operator/crs/) and reconciled by Hanzo CD with selfHeal, so a
-// direct patch here is reverted on the next sync — the tag would appear to deploy
-// and then silently roll back. The endpoint confirms the app exists (404 if not)
-// and returns 409 naming the git path to commit the tag to, the one way to deploy
-// it.
+// restartedAtAnnotation is the pod-template annotation a rolling restart stamps —
+// the exact key/mechanism `kubectl rollout restart` uses, so the deploy path is a
+// first-class rollout, not a bespoke trigger.
+const restartedAtAnnotation = "hanzo.ai/restartedAt"
+
+// deploy performs a zero-downtime ROLLING RESTART of the app's Deployment: it
+// stamps the pod-template restartedAt annotation (the `kubectl rollout restart`
+// mechanism), which the default RollingUpdate strategy turns into a graceful
+// pod-by-pod recreate that re-pulls the declared image. It targets ONLY the
+// namespaces the caller is authorized for (targetNamespaces: the caller's own org,
+// optionally narrowed by ?env=), so an OrgAdmin can restart only its own apps.
+//
+// It deliberately does NOT change the declared image TAG: that is the one property
+// Hanzo CD's selfHeal reconciles from universe git, so a tag change is still a git
+// commit (the one way to change WHAT runs). A restart re-runs WHAT IS DECLARED with
+// no drift for CD to revert — the honest, GitOps-compatible "redeploy this app".
 func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := ready(s); err != nil {
 		return err
@@ -291,19 +384,40 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
 	}
-	if _, err := resolveTarget(s, c.Context(), name); err != nil {
+	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(c))
+	if err != nil {
 		return err
 	}
-	return zip.Errorf(http.StatusConflict,
-		"%s is declared in git (App/%s, universe infra/k8s/operator/crs/%s.yaml) and reconciled by Hanzo CD with selfHeal — a patch here would be reverted on the next sync. Deploy it by committing the tag to that file.",
-		name, name, name)
+	restartedAt := time.Now().UTC().Format(time.RFC3339)
+	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`, restartedAtAnnotation, restartedAt)
+	if _, err := s.State.dyn.Resource(deploymentsGVR).Namespace(ns).Patch(
+		c.Context(), name, k8stypes.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return zip.ErrNotFound("app " + name + " has no Deployment to restart in " + ns)
+		}
+		return k8sErr(s, "restart", err)
+	}
+	s.Log.Info("paas rolling restart", "app", name, "namespace", ns, "restartedAt", restartedAt, "actor", principal.Owner(c))
+	return c.JSON(http.StatusAccepted, map[string]any{
+		"ok": true, "app": name, "namespace": ns, "env": nsEnv[ns], "restartedAt": restartedAt,
+	})
 }
 
-// resolveTarget finds the namespace an App CR lives in, scanning in env order
-// (main→test→dev) so a bare lookup targets production. Returns a clean 404 when
-// the App exists in none of them.
+// resolveTarget finds the namespace an App CR lives in, scanning ALL platform
+// namespaces in env order (main→test→dev) so a bare lookup targets production. The
+// release path (release.go) uses this — it is a machine rollout with no per-caller
+// identity to confine — so it keeps the full scan. Returns a clean 404 when the App
+// exists in none of them.
 func resolveTarget(s *cloud.Service[state], ctx context.Context, name string) (string, error) {
-	for _, ns := range scanOrder() {
+	return resolveTargetIn(s, ctx, name, scanOrder())
+}
+
+// resolveTargetIn is resolveTarget's core over an EXPLICIT namespace list — the
+// identity-scoped deploy/getApp pass the caller's authorized set so an OrgAdmin can
+// never resolve (and thus restart/read) an app outside its own org. An empty list
+// (an OrgAdmin owning no scanned namespace) resolves to a clean 404, never a leak.
+func resolveTargetIn(s *cloud.Service[state], ctx context.Context, name string, namespaces []string) (string, error) {
+	for _, ns := range namespaces {
 		if _, err := s.State.dyn.Resource(appsGVR).Namespace(ns).Get(ctx, name, metav1.GetOptions{}); err == nil {
 			return ns, nil
 		} else if !apierrors.IsNotFound(err) {

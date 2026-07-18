@@ -16,12 +16,12 @@ func (e *Env) platform(gf *globalFlags) *Platform {
 	return newPlatform(e.PlatformURL, e.platformToken(gf.platformToken))
 }
 
-// deref renders a *string for a table cell, "-" when nil/empty.
-func deref(p *string) string {
-	if p == nil || *p == "" {
+// dashIfEmpty renders a string cell, "-" when empty.
+func dashIfEmpty(s string) string {
+	if s == "" {
 		return "-"
 	}
-	return *p
+	return s
 }
 
 // yesno renders a bool for a table cell.
@@ -38,7 +38,8 @@ func newTab(w io.Writer) *tabwriter.Writer {
 }
 
 // ---------------------------------------------------------------------------
-// apps — the observe surface.
+// apps — the fleet drift board (GET /v1/paas/apps). Org-confined server-side by
+// the IAM identity: a superadmin sees the whole fleet, an org-admin only its own.
 // ---------------------------------------------------------------------------
 
 func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
@@ -57,7 +58,6 @@ func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := envOf()
 			res, err := e.platform(gf).Apps(cmd.Context(), AppsQuery{
-				Org:    e.Org, // empty == all (single-tenant default)
 				Env:    envFilter,
 				Health: healthFilter,
 				Drift:  driftOnly,
@@ -70,8 +70,8 @@ func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 				fmt.Fprintln(tw, "ORG\tAPP\tENV\tDECLARED\tRUNNING\tHEALTH\tDRIFT")
 				for _, a := range res.Apps {
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-						a.Org, a.App, a.Env, deref(a.DeclaredTag), deref(a.RunningTag),
-						deref(a.Health), driftSeverity(a.Drift))
+						a.Org, a.App, a.Env, dashIfEmpty(a.DeclaredTag), dashIfEmpty(a.RunningTag),
+						dashIfEmpty(a.Health), driftSeverity(a.Drift))
 				}
 				tw.Flush()
 				fmt.Fprintf(w, "\n%d apps  (ok=%d yellow=%d red=%d)\n",
@@ -80,17 +80,17 @@ func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			})
 		},
 	}
-	list.Flags().StringVar(&envFilter, "env", "", "filter by env: dev|test|main")
+	list.Flags().StringVar(&envFilter, "env", "", "filter by env: main|test|dev")
 	list.Flags().StringVar(&healthFilter, "health", "", "filter by health: green|yellow|red")
 	list.Flags().BoolVar(&driftOnly, "drift", false, "only rows that are drifting")
 
 	get := &cobra.Command{
-		Use:   "get <org/app/env>",
-		Short: "Get one app row by its <org>/<app>/<env> id",
+		Use:   "get <app>",
+		Short: "Get one app row by its CR name (production by default)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := envOf()
-			a, err := e.platform(gf).App(cmd.Context(), args[0], e.Org)
+			a, err := e.platform(gf).App(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
@@ -102,109 +102,89 @@ func newAppsCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 				fmt.Fprintf(tw, "env:\t%s\n", a.Env)
 				fmt.Fprintf(tw, "repo:\t%s\n", a.Repo)
 				fmt.Fprintf(tw, "registry:\t%s\n", a.Registry)
-				fmt.Fprintf(tw, "declared:\t%s\n", deref(a.DeclaredTag))
-				fmt.Fprintf(tw, "running:\t%s\n", deref(a.RunningTag))
-				fmt.Fprintf(tw, "latest:\t%s\n", deref(a.LatestTag))
-				fmt.Fprintf(tw, "health:\t%s\n", deref(a.Health))
+				fmt.Fprintf(tw, "declared:\t%s\n", dashIfEmpty(a.DeclaredTag))
+				fmt.Fprintf(tw, "running:\t%s\n", dashIfEmpty(a.RunningTag))
+				fmt.Fprintf(tw, "health:\t%s\n", dashIfEmpty(a.Health))
+				fmt.Fprintf(tw, "phase:\t%s\n", dashIfEmpty(a.Phase))
 				fmt.Fprintf(tw, "drift:\t%s\n", driftSeverity(a.Drift))
-				fmt.Fprintf(tw, "cluster:\t%s\n", deref(a.Cluster))
-				fmt.Fprintf(tw, "namespace:\t%s\n", deref(a.Namespace))
-				fmt.Fprintf(tw, "updated:\t%s\n", a.UpdatedAt)
+				fmt.Fprintf(tw, "cluster:\t%s\n", dashIfEmpty(a.Cluster))
+				fmt.Fprintf(tw, "namespace:\t%s\n", dashIfEmpty(a.Namespace))
+				if len(a.Endpoints) > 0 {
+					fmt.Fprintf(tw, "endpoints:\t%s\n", strings.Join(a.Endpoints, ", "))
+				}
 				tw.Flush()
 			})
 		},
 	}
 
-	sync := &cobra.Command{
-		Use:   "sync",
-		Short: "Trigger an inventory refresh of the apps board",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			e := envOf()
-			if err := e.platform(gf).SyncApps(cmd.Context()); err != nil {
-				return err
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "apps sync triggered")
-			return nil
-		},
-	}
-
-	cmd.AddCommand(list, get, sync)
+	cmd.AddCommand(list, get)
 	return cmd
 }
 
 // ---------------------------------------------------------------------------
-// deploy — the drive surface (rolling restart, zero-downtime).
+// deploy — POST /v1/paas/apps/{app}/deploy: a zero-downtime rolling restart.
 // ---------------------------------------------------------------------------
 
 func newDeployCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
-	var project, environment string
+	var environment string
 	cmd := &cobra.Command{
-		Use:   "deploy <container>",
-		Short: "Redeploy a container (rolling restart, zero-downtime)",
-		Long: "Drive a platform redeploy: a rolling restart of the container's k8s\n" +
-			"Deployment (re-pulls the image, recreates pods, zero downtime). Coordinates\n" +
-			"are exact — org (--org/config), project (--project), env (--env) and the\n" +
-			"container id (positional). This is the canonical PaaS-driven deploy.",
+		Use:   "deploy <app>",
+		Short: "Redeploy an app (rolling restart, zero-downtime)",
+		Long: "Drive a platform redeploy: a rolling restart of the app's k8s Deployment\n" +
+			"(re-pulls the declared image, recreates pods, zero downtime). The app is the\n" +
+			"operator App CR name; the org comes from your IAM identity (org-scoped). Use\n" +
+			"--env to target test/dev (default: production). This is the canonical\n" +
+			"PaaS-driven deploy — a TAG change is still a git commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := envOf()
-			org, err := e.requireOrg()
+			res, err := e.platform(gf).Redeploy(cmd.Context(), args[0], environment)
 			if err != nil {
 				return err
 			}
-			if project == "" || environment == "" {
-				return fmt.Errorf("--project and --env are required (the container's project/environment ids)")
-			}
-			container := args[0]
-			if err := e.platform(gf).Redeploy(cmd.Context(), org, project, environment, container); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "redeployed %s (org=%s project=%s env=%s)\n", container, org, project, environment)
-			return nil
+			return e.emit(res, func(w io.Writer) {
+				fmt.Fprintf(w, "restarted %s (namespace=%s env=%s at %s)\n",
+					res.App, res.Namespace, dashIfEmpty(res.Env), res.RestartedAt)
+			})
 		},
 	}
-	cmd.Flags().StringVar(&project, "project", "", "project id")
-	cmd.Flags().StringVar(&environment, "env", "", "environment id")
+	cmd.Flags().StringVar(&environment, "env", "", "lifecycle env: main|test|dev (default production)")
 	return cmd
 }
 
 // ---------------------------------------------------------------------------
-// clusters — dedicated DOKS cluster lifecycle.
+// clusters — GET /v1/clusters: the org's compute fleet (Visor-managed + BYO),
+// tenant-scoped server-side by the IAM identity.
 // ---------------------------------------------------------------------------
 
 func newClustersCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "clusters",
 		Aliases: []string{"cluster"},
-		Short:   "Provision/list/select dedicated DOKS clusters",
+		Short:   "List the org's clusters (managed + BYO)",
 	}
 
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List the org's dedicated clusters",
+		Short: "List the org's clusters",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			cs, err := e.platform(gf).Clusters(cmd.Context(), org)
+			cs, err := e.platform(gf).Clusters(cmd.Context())
 			if err != nil {
 				return err
 			}
 			return e.emit(cs, func(w io.Writer) {
 				tw := newTab(w)
-				fmt.Fprintln(tw, "NAME\tID\tREGION\tSTATUS\tPHASE\tACTIVE\tOPERATOR\tBASELINE")
+				fmt.Fprintln(tw, "NAME\tID\tREGION\tSTATUS\tKIND\tNODES\tSIZE\tGPUS")
 				for _, c := range cs {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-						c.Name, c.DoksClusterID, c.Region, c.Status, c.Phase,
-						yesno(c.Active), yesno(c.OperatorInstalled), yesno(c.BaselineInstalled))
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
+						c.Name, dashIfEmpty(c.ID()), dashIfEmpty(c.Region), dashIfEmpty(c.Status),
+						dashIfEmpty(c.Kind), c.NodeCount, dashIfEmpty(c.NodeSize), gpuCell(c))
 				}
 				tw.Flush()
 				if len(cs) == 0 {
-					fmt.Fprintln(w, "(no dedicated clusters)")
+					fmt.Fprintln(w, "(no clusters)")
 				}
 			})
 		},
@@ -216,151 +196,51 @@ func newClustersCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			cs, err := e.platform(gf).Clusters(cmd.Context(), org)
+			cs, err := e.platform(gf).Clusters(cmd.Context())
 			if err != nil {
 				return err
 			}
 			for _, c := range cs {
-				if c.DoksClusterID == args[0] || c.Name == args[0] {
+				if c.ID() == args[0] || c.Name == args[0] {
 					return e.emit(c, func(w io.Writer) { printCluster(w, c) })
 				}
 			}
-			return fmt.Errorf("cluster %q not found in org %s", args[0], org)
+			return fmt.Errorf("cluster %q not found", args[0])
 		},
 	}
 
-	var region, nodeSize string
-	var ha bool
-	var nodeCount int
-	create := &cobra.Command{
-		Use:   "create",
-		Short: "Provision a new dedicated DOKS cluster for the org",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			c, err := e.platform(gf).ProvisionCluster(cmd.Context(), org, ProvisionReq{
-				Region: region, HA: ha, NodeSize: nodeSize, NodeCount: nodeCount,
-			})
-			if err != nil {
-				return err
-			}
-			return e.emit(c, func(w io.Writer) {
-				fmt.Fprintf(w, "provisioning cluster %s (%s)\n", c.Name, c.DoksClusterID)
-				printCluster(w, *c)
-			})
-		},
-	}
-	create.Flags().StringVar(&region, "region", "", "DO region (default sfo3)")
-	create.Flags().BoolVar(&ha, "ha", false, "highly-available control plane")
-	create.Flags().StringVar(&nodeSize, "node-size", "", "node size slug (e.g. s-2vcpu-4gb)")
-	create.Flags().IntVar(&nodeCount, "node-count", 0, "node count")
-
-	var shared bool
-	selectCmd := &cobra.Command{
-		Use:   "select <cluster-id>",
-		Short: "Set the org's active deploy target (or --shared to revert)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			var clusterID *string
-			switch {
-			case shared:
-				clusterID = nil
-			case len(args) == 1:
-				clusterID = &args[0]
-			default:
-				return fmt.Errorf("give a cluster id, or --shared to revert to the shared cluster")
-			}
-			t, err := e.platform(gf).SelectTarget(cmd.Context(), org, clusterID)
-			if err != nil {
-				return err
-			}
-			return e.emit(t, func(w io.Writer) { printTarget(w, t) })
-		},
-	}
-	selectCmd.Flags().BoolVar(&shared, "shared", false, "revert to the shared cluster")
-
-	installBaseline := &cobra.Command{
-		Use:   "install-baseline <cluster-id>",
-		Short: "Install the hanzo-operator + per-tenant baseline on a cluster",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			if err := e.platform(gf).InstallBaseline(cmd.Context(), org, args[0]); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "baseline install requested for %s\n", args[0])
-			return nil
-		},
-	}
-
-	target := &cobra.Command{
-		Use:   "target",
-		Short: "Show the org's current resolved deploy target",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			t, err := e.platform(gf).Target(cmd.Context(), org)
-			if err != nil {
-				return err
-			}
-			return e.emit(t, func(w io.Writer) { printTarget(w, t) })
-		},
-	}
-
-	cmd.AddCommand(list, get, create, selectCmd, installBaseline, target)
+	cmd.AddCommand(list, get)
 	return cmd
+}
+
+// gpuCell renders the live GPU inventory of a cluster ("-" when none).
+func gpuCell(c Cluster) string {
+	var parts []string
+	if c.NvidiaGPU > 0 {
+		parts = append(parts, fmt.Sprintf("%d nvidia", c.NvidiaGPU))
+	}
+	if c.AmdGPU > 0 {
+		parts = append(parts, fmt.Sprintf("%d amd", c.AmdGPU))
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, "+")
 }
 
 func printCluster(w io.Writer, c Cluster) {
 	tw := newTab(w)
-	fmt.Fprintf(tw, "id:\t%s\n", c.DoksClusterID)
+	fmt.Fprintf(tw, "id:\t%s\n", dashIfEmpty(c.ID()))
 	fmt.Fprintf(tw, "name:\t%s\n", c.Name)
-	fmt.Fprintf(tw, "region:\t%s\n", c.Region)
-	fmt.Fprintf(tw, "status:\t%s\n", c.Status)
-	fmt.Fprintf(tw, "phase:\t%s\n", c.Phase)
-	fmt.Fprintf(tw, "active:\t%s\n", yesno(c.Active))
-	fmt.Fprintf(tw, "operatorInstalled:\t%s\n", yesno(c.OperatorInstalled))
-	fmt.Fprintf(tw, "baselineInstalled:\t%s\n", yesno(c.BaselineInstalled))
-	fmt.Fprintf(tw, "endpoint:\t%s\n", deref(c.Endpoint))
-	fmt.Fprintf(tw, "k8sVersion:\t%s\n", deref(c.K8sVersion))
-	fmt.Fprintf(tw, "created:\t%s\n", c.CreatedAt)
-	if c.BaselineError != nil && *c.BaselineError != "" {
-		fmt.Fprintf(tw, "baselineError:\t%s\n", *c.BaselineError)
-	}
-	tw.Flush()
-}
-
-func printTarget(w io.Writer, t *Target) {
-	tw := newTab(w)
-	kind := "shared"
-	if t.Dedicated {
-		kind = "dedicated"
-	}
-	fmt.Fprintf(tw, "cluster:\t%s\n", t.Cluster)
-	fmt.Fprintf(tw, "kind:\t%s\n", kind)
-	for ns, env := range t.Namespaces {
-		fmt.Fprintf(tw, "namespace:\t%s -> %s\n", ns, env)
+	fmt.Fprintf(tw, "region:\t%s\n", dashIfEmpty(c.Region))
+	fmt.Fprintf(tw, "status:\t%s\n", dashIfEmpty(c.Status))
+	fmt.Fprintf(tw, "kind:\t%s\n", dashIfEmpty(c.Kind))
+	fmt.Fprintf(tw, "nodeCount:\t%d\n", c.NodeCount)
+	fmt.Fprintf(tw, "nodeSize:\t%s\n", dashIfEmpty(c.NodeSize))
+	fmt.Fprintf(tw, "gpus:\t%s\n", gpuCell(c))
+	fmt.Fprintf(tw, "created:\t%s\n", dashIfEmpty(c.CreatedAt))
+	for _, np := range c.NodePools {
+		fmt.Fprintf(tw, "pool:\t%s (%s x%d, autoscale=%s)\n", np.Name, np.Size, np.Count, yesno(np.AutoScale))
 	}
 	tw.Flush()
 }
@@ -444,34 +324,4 @@ func normalizeRepoURL(repo string) string {
 		return "https://github.com/" + parts[0] + "/" + parts[1]
 	}
 	return r
-}
-
-// ---------------------------------------------------------------------------
-// k8s — deploy-target helpers.
-// ---------------------------------------------------------------------------
-
-func newK8sCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "k8s",
-		Short: "Kubernetes deploy-target helpers",
-	}
-	target := &cobra.Command{
-		Use:   "target",
-		Short: "Show the org's current resolved deploy target (cluster + namespaces)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			e := envOf()
-			org, err := e.requireOrg()
-			if err != nil {
-				return err
-			}
-			t, err := e.platform(gf).Target(cmd.Context(), org)
-			if err != nil {
-				return err
-			}
-			return e.emit(t, func(w io.Writer) { printTarget(w, t) })
-		},
-	}
-	cmd.AddCommand(target)
-	return cmd
 }
