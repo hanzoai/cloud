@@ -23,91 +23,91 @@ var frozen = []struct {
 	ownsHealth  bool
 	hasShutdown bool
 }{
-	{"pubsub", false, true},            // was order 5
-	{"kafka", false, true},             // was order 6
-	{"agentskills", false, false},      // was order 8
-	{"flags", true, true},              // was order 9; native engine: /v1/flags health + store shutdown
-	{"kms", true, false},               // was order 10
-	{"metrics", false, false},          // was order 40
-	{"ingress", false, true},           // was order 42
-	{"account", false, false},          // was order 48
-	{"iam", false, false},              // was order 50
-	{"base", true, true},               // was order 60; per-org embed added Shutdown (#298)
-	{"o11y", false, true},              // ONE observability subsystem (was co-owned orders 69+70): read plane + the hanzoai/o11y module wildcard folded in as MountO11y's terminal sub-mount. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route the module co-entry used to trigger.
-	{"authz", false, false},            // was order 70
-	{"commerce", false, false},         // was order 100
-	{"licensing", false, false},        // was order 110
-	{"plan", true, false},              // was order 111; enable id normalized plans->plan (routes stay /v1/plans/*)
-	{"pricing", true, false},           // was order 112
-	{"storage", true, false},           // was order 118
-	{"provisioning", false, false},     // was order 120
-	{"billing", false, false},          // was order 121
-	{"account-bridge", false, false},   // was order 122
-	{"do", false, false},               // was order 123
-	{"platform", true, false},          // was order 124
-	{"projects", false, false},         // was order 125
-	{"prompts", false, false},          // was order 126
-	{"agents", false, true},            // was order 127
-	{"link", false, true},              // new: unified AI login manager (/v1/links), after agents
-	{"wallets", false, true},           // was order 127
-	{"x402", false, true},              // new: x402 pay-per-use settlement (after wallets)
-	{"paas", true, false},              // was order 128
-	{"deploy", true, false},            // after paas (release seam), before functions
-	{"functions", false, false},        // was order 128
-	{"tracker", false, false},          // was order 129
-	{"templates", false, false},        // was order 129
-	{"framework", false, true},         // was order 129
-	{"knowledge", false, false},        // was order 130
-	{"content", false, true},           // new: marketing content loop (after knowledge)
-	{"catalogsync", false, true},       // new: reverse loop (product.created → render) after content
-	{"ml", true, false},                // was order 130
-	{"usage", false, false},            // was order 131
-	{"crm", false, false},              // was order 131
-	{"marketing", false, true},         // new: marketing domain fold (after crm)
-	{"ads", false, true},               // new: ads domain fold (after crm)
-	{"social", false, true},            // new: /v1/social fold (after crm)
-	{"analytics", true, false},         // was order 132
-	{"git", false, false},              // was order 132
-	{"sync", false, true},              // /v1/sync engine (owns per-org DB handles → Shutdown)
-	{"visor", false, false},            // was order 133
-	{"captable", false, true},          // was order 133
-	{"code", false, true},              // was order 134
-	{"zero-trust", false, false},       // was order 134
-	{"dataroom", true, true},           // was order 134
-	{"graph", false, false},            // was order 135
-	{"security", true, true},           // was order 136
-	{"integrations", false, true},      // was order 137
-	{"sbom", true, false},              // was order 137
-	{"team", false, true},              // was order 138
-	{"settings", false, true},          // was order 138
-	{"notify", true, false},            // was order 139
-	{"gateway", false, false},          // was order 139
-	{"entitlements", false, true},      // was order 139
-	{"exec", false, false},             // was order 140
-	{"websearch", false, false},        // was order 141
-	{"world", false, true},             // was order 142
-	{"runtime", false, false},          // was order 143; was "bot" until the transport was named for what it is
-	{"authors", false, true},           // was order 143
-	{"bots", false, false},             // was order 143
-	{"audit", false, false},            // was order 144
-	{"affiliates", false, false},       // was order 144
-	{"sign", true, true},               // was order 145
-	{"product", false, false},          // was order 145
-	{"evals", false, false},            // was order 145
-	{"treasury", false, true},          // was order 146
-	{"admin", false, false},            // was order 146
-	{"featuregate", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
-	{"tasks", false, false},            // was order 147; platform cron folded in as a sub-mount of tasks.Mount (was a separate entry)
-	{"automations", false, true},       // was order 148; connectorruntime (POST /v1/automations/connectors/:id/run) folded in as a sub-mount of automations.Mount
-	{"tools", false, true},             // new: unified tool plane (after automations)
-	{"marketplace", false, true},       // new: marketplace over the tool plane (after tools)
-	{"referrals", false, false},        // was order 149
-	{"guide", false, true},             // new: Business AI Guide (after referrals, before ai)
-	{"company", false, true},           // new: Hanzo Company formation state machine (after guide)
-	{"agent", false, false},             // new: /v1/agent tool-calling round (before zen/ai catch-all)
-	{"zen", false, false},              // zen* claim middleware before ai's catch-all (hip-00NN)
-	{"ai", false, false},               // was order 150
-	{"plugins", false, false},          // was order 900
+	{"pubsub", false, true},          // was order 5
+	{"kafka", false, true},           // was order 6
+	{"agentskills", false, false},    // was order 8
+	{"flags", true, true},            // was order 9; native engine: /v1/flags health + store shutdown
+	{"kms", true, false},             // was order 10
+	{"metrics", false, false},        // was order 40
+	{"ingress", false, true},         // was order 42
+	{"account", false, false},        // was order 48
+	{"iam", false, false},            // was order 50
+	{"base", true, true},             // was order 60; per-org embed added Shutdown (#298)
+	{"o11y", false, true},            // ONE observability subsystem (was co-owned orders 69+70): read plane + the hanzoai/o11y module wildcard folded in as MountO11y's terminal sub-mount. OwnsHealth=false keeps /v1/o11y/health the generic always-ok route the module co-entry used to trigger.
+	{"authz", false, false},          // was order 70
+	{"commerce", false, false},       // was order 100
+	{"licensing", false, false},      // was order 110
+	{"plan", true, false},            // was order 111; enable id normalized plans->plan (routes stay /v1/plans/*)
+	{"pricing", true, false},         // was order 112
+	{"storage", true, false},         // was order 118
+	{"provisioning", false, false},   // was order 120
+	{"billing", false, false},        // was order 121
+	{"account-bridge", false, false}, // was order 122
+	{"do", false, false},             // was order 123
+	{"platform", true, false},        // was order 124
+	{"projects", false, false},       // was order 125
+	{"prompts", false, false},        // was order 126
+	{"agents", false, true},          // was order 127
+	{"link", false, true},            // new: unified AI login manager (/v1/links), after agents
+	{"wallets", false, true},         // was order 127
+	{"x402", false, true},            // new: x402 pay-per-use settlement (after wallets)
+	{"paas", true, false},            // was order 128
+	{"deploy", true, false},          // after paas (release seam), before functions
+	{"functions", false, false},      // was order 128
+	{"tracker", false, false},        // was order 129
+	{"templates", false, false},      // was order 129
+	{"framework", false, true},       // was order 129
+	{"knowledge", false, false},      // was order 130
+	{"content", false, true},         // new: marketing content loop (after knowledge)
+	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
+	{"ml", true, false},              // was order 130
+	{"usage", false, false},          // was order 131
+	{"crm", false, false},            // was order 131
+	{"marketing", false, true},       // new: marketing domain fold (after crm)
+	{"ads", false, true},             // new: ads domain fold (after crm)
+	{"social", false, true},          // new: /v1/social fold (after crm)
+	{"analytics", true, false},       // was order 132
+	{"git", false, false},            // was order 132
+	{"sync", false, true},            // /v1/sync engine (owns per-org DB handles → Shutdown)
+	{"visor", false, false},          // was order 133
+	{"captable", false, true},        // was order 133
+	{"code", false, true},            // was order 134
+	{"zero-trust", false, false},     // was order 134
+	{"dataroom", true, true},         // was order 134
+	{"graph", false, false},          // was order 135
+	{"security", true, true},         // was order 136
+	{"integrations", false, true},    // was order 137
+	{"sbom", true, false},            // was order 137
+	{"team", false, true},            // was order 138
+	{"settings", false, true},        // was order 138
+	{"notify", true, false},          // was order 139
+	{"gateway", false, false},        // was order 139
+	{"entitlements", false, true},    // was order 139
+	{"exec", false, false},           // was order 140
+	{"websearch", false, false},      // was order 141
+	{"world", false, true},           // was order 142
+	{"runtime", false, false},        // was order 143; was "bot" until the transport was named for what it is
+	{"authors", false, true},         // was order 143
+	{"bots", false, false},           // was order 143
+	{"audit", false, false},          // was order 144
+	{"affiliates", false, false},     // was order 144
+	{"sign", true, true},             // was order 145
+	{"product", false, false},        // was order 145
+	{"evals", false, false},          // was order 145
+	{"treasury", false, true},        // was order 146
+	{"admin", false, false},          // was order 146
+	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
+	{"tasks", false, false},          // was order 147; platform cron folded in as a sub-mount of tasks.Mount (was a separate entry)
+	{"automations", false, true},     // was order 148; connectorruntime (POST /v1/automations/connectors/:id/run) folded in as a sub-mount of automations.Mount
+	{"tools", false, true},           // new: unified tool plane (after automations)
+	{"marketplace", false, true},     // new: marketplace over the tool plane (after tools)
+	{"referrals", false, false},      // was order 149
+	{"guide", false, true},           // new: Business AI Guide (after referrals, before ai)
+	{"company", false, true},         // new: Hanzo Company formation state machine (after guide)
+	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
+	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
+	{"ai", false, false},             // was order 150
+	{"plugins", false, false},        // was order 900
 }
 
 // TestWireOrderMatchesFrozen proves the composition root's mount order is
