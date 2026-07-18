@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/coding"
 )
 
@@ -24,6 +25,13 @@ import (
 // stripped) begins, case-insensitively, with `code:`. The first whitespace token
 // after it is the target repo; the rest is the task. No repo => a usage reply,
 // fail-closed (we never guess a repo).
+//
+// OPTIONAL MACHINE ROUTING (#48): `code: <repo> on <machine> <task>` routes the run
+// to a registered run-target (a `hanzo code --serve` daemon) instead of the cloud
+// sandbox. `<machine>` is a target id or its friendly label, resolved org-scoped;
+// an unknown/foreign machine is an HONEST error, never a silent local fallback. The
+// bare `on` keyword must be the token immediately after the repo to route — a task
+// that merely contains "on" later is untouched.
 //
 // ISOLATION: the run executes strictly in the caller's org (resolved server-side
 // from the Slack-verified team_id, exactly like the chat path). The sandbox is
@@ -89,27 +97,46 @@ func codingIntent(text string) (rest string, ok bool) {
 	return strings.TrimSpace(t[len("code:"):]), true
 }
 
-// parseCoding splits `<repo> <task...>` — the first whitespace token is the repo
-// (validated), the rest is the task. ok is false when the repo is missing/invalid
-// or the task is empty. Pure.
-func parseCoding(rest string) (repo, task string, ok bool) {
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
-		return "", "", false
+// parseCoding splits `<repo> [on <machine>] <task...>` — the first whitespace token
+// is the repo (validated); if the NEXT token is exactly `on`, the token after it is
+// the run-target reference (id or label) and the remainder is the task; otherwise
+// the remainder from the repo is the task and target is empty. ok is false when the
+// repo is missing/invalid, the `on` form names no machine, or the task is empty.
+// Pure — target RESOLUTION (org-scoped) is the caller's job.
+func parseCoding(rest string) (repo, target, task string, ok bool) {
+	repo, rem, ok := firstToken(strings.TrimSpace(rest))
+	if !ok || !codingRepoRE.MatchString(repo) {
+		return "", "", "", false
 	}
-	i := strings.IndexFunc(rest, func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' })
-	if i < 0 {
-		return "", "", false // repo only, no task
+	// Optional `on <machine>` routing prefix — only when `on` is the very next token.
+	if tok, after, hasTok := firstToken(rem); hasTok && strings.EqualFold(tok, "on") {
+		machine, taskRem, hasMachine := firstToken(after)
+		if !hasMachine || strings.TrimSpace(taskRem) == "" {
+			return "", "", "", false // `on` with no machine, or no task after it
+		}
+		return repo, machine, strings.TrimSpace(taskRem), true
 	}
-	repo = strings.TrimSpace(rest[:i])
-	task = strings.TrimSpace(rest[i+1:])
-	if !codingRepoRE.MatchString(repo) || task == "" {
-		return "", "", false
+	if strings.TrimSpace(rem) == "" {
+		return "", "", "", false // repo only, no task
 	}
-	return repo, task, true
+	return repo, "", strings.TrimSpace(rem), true
 }
 
-const codingUsage = "To start a coding task: `@hanzo code: <repo> <what to do>` — name a native git repo and the change."
+// firstToken splits s into its first whitespace-delimited token and the remainder.
+// ok is false only when s has no token. Pure.
+func firstToken(s string) (token, rest string, ok bool) {
+	s = strings.TrimLeft(s, " \t\n")
+	if s == "" {
+		return "", "", false
+	}
+	i := strings.IndexFunc(s, func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' })
+	if i < 0 {
+		return s, "", true
+	}
+	return s[:i], strings.TrimSpace(s[i+1:]), true
+}
+
+const codingUsage = "To start a coding task: `@hanzo code: <repo> <what to do>` — name a native git repo and the change. Add `on <machine>` to run it on one of your linked machines."
 
 // handleSlackCoding runs the @mention/DM coding path for a PRE-RESOLVED org: it
 // resolves the caller's linked identity, parses the request, acks in-thread, and
@@ -130,14 +157,36 @@ func handleSlackCoding(s *cloud.Service[state], ctx context.Context, org, botTok
 		}
 		return
 	}
-	repo, task, ok := parseCoding(codingText)
+	repo, target, task, ok := parseCoding(codingText)
 	if !ok {
 		_ = slackPostThread(ctx, botToken, channel, threadTS, codingUsage)
 		return
 	}
-	ack, started := startCodingJob(s, org, link.Subject, botToken, channel, threadTS, repo, task)
+	targetID, terr := resolveCodingTarget(ctx, org, target)
+	if terr != nil {
+		_ = slackPostThread(ctx, botToken, channel, threadTS, terr.Error())
+		return
+	}
+	ack, started := startCodingJob(s, org, link.Subject, botToken, channel, threadTS, repo, task, targetID)
 	_ = slackPostThread(ctx, botToken, channel, threadTS, ack)
 	_ = started
+}
+
+// resolveCodingTarget turns the parsed machine reference into a target id, org-
+// scoped and fail-closed: an empty reference is the ordinary sandbox run (""), a
+// non-empty reference that resolves to no target in THIS org is an honest error
+// (never a silent local fallback, never another tenant's machine). The returned
+// error's message is the user-facing text.
+func resolveCodingTarget(ctx context.Context, org, ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", nil // no `on <machine>` — the ordinary cloud-sandbox run
+	}
+	t, err := agents.ResolveTarget(ctx, org, ref)
+	if err != nil {
+		return "", fmt.Errorf("No linked machine named `%s` — check `hanzo code --serve` is running and the name is right.", slackEscape(ref))
+	}
+	return t.ID, nil
 }
 
 // handleSlackSlashCoding runs the slash-command coding path: the ack is delivered
@@ -158,9 +207,14 @@ func handleSlackSlashCoding(s *cloud.Service[state], ctx context.Context, org, t
 		}
 		return
 	}
-	repo, task, ok := parseCoding(codingText)
+	repo, target, task, ok := parseCoding(codingText)
 	if !ok {
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", codingUsage)
+		return
+	}
+	targetID, rerr := resolveCodingTarget(ctx, org, target)
+	if rerr != nil {
+		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", rerr.Error())
 		return
 	}
 	tok, terr := TokenFor(ctx, org, "slack", slackBotTokenSecret)
@@ -169,7 +223,7 @@ func handleSlackSlashCoding(s *cloud.Service[state], ctx context.Context, org, t
 		_ = slackPostResponseURL(ctx, responseURL, "ephemeral", "Sorry — I couldn't post back to this channel. Please try again shortly.")
 		return
 	}
-	ack, _ := startCodingJob(s, org, link.Subject, strings.TrimSpace(string(tok)), channel, "", repo, task)
+	ack, _ := startCodingJob(s, org, link.Subject, strings.TrimSpace(string(tok)), channel, "", repo, task, targetID)
 	_ = slackPostResponseURL(ctx, responseURL, "in_channel", ack)
 }
 
@@ -178,14 +232,22 @@ func handleSlackSlashCoding(s *cloud.Service[state], ctx context.Context, org, t
 // It returns the ack to post and whether a run actually started. A missing
 // dispatcher, a missing credential, or a full pool each returns a specific ack
 // and started=false — never a silent drop.
-func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, threadTS, repo, task string) (ack string, started bool) {
+//
+// A ROUTED run (targetID != "") needs NO org credential: the machine authenticates
+// git with its own already-held credential, so the KMS agent-credential fetch is
+// skipped and a workspace without one can still route to a linked machine.
+func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, threadTS, repo, task, targetID string) (ack string, started bool) {
 	if !codingConfigured {
 		return "Coding tasks aren't enabled on this deployment yet.", false
 	}
-	user, token, err := agentGitCredential(s, context.Background(), org)
-	if err != nil {
-		s.Log.Warn("slack coding: agent credential", "org", org, "err", err) // never logs the token
-		return "This workspace has no coding-agent git credential provisioned yet. Ask an admin to seal one in KMS.", false
+	var user, token string
+	if strings.TrimSpace(targetID) == "" {
+		var err error
+		user, token, err = agentGitCredential(s, context.Background(), org)
+		if err != nil {
+			s.Log.Warn("slack coding: agent credential", "org", org, "err", err) // never logs the token
+			return "This workspace has no coding-agent git credential provisioned yet. Ask an admin to seal one in KMS.", false
+		}
 	}
 	if codingLim == nil || !codingLim.acquire(org) {
 		return "I'm at capacity on coding tasks right now — please try again in a few minutes.", false
@@ -194,11 +256,12 @@ func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, th
 	// the request (they are subslices of reused request buffers).
 	org, userSub = strings.Clone(org), strings.Clone(userSub)
 	botToken, channel, threadTS = strings.Clone(botToken), strings.Clone(channel), strings.Clone(threadTS)
-	repo, task = strings.Clone(repo), strings.Clone(task)
+	repo, task, targetID = strings.Clone(repo), strings.Clone(task), strings.Clone(targetID)
 	req := coding.Req{
 		Org: org, UserID: userSub, AgentRef: slackAgentRef(), Repo: repo,
 		Prompt: task, CredUser: user, CredToken: token,
 		TimeoutSeconds: int(codingTaskTimeout().Seconds()),
+		TargetID:       targetID,
 	}
 	go func() {
 		defer codingLim.release(org)
@@ -215,6 +278,9 @@ func startCodingJob(s *cloud.Service[state], org, userSub, botToken, channel, th
 			s.Log.Warn("slack coding: result post", "org", org, "repo", repo, "err", perr)
 		}
 	}()
+	if targetID != "" {
+		return "🛰️ On it — routing `" + repo + "` to your machine `" + slackEscape(targetID) + "`. Follow it live in mission-control.", true
+	}
 	return "🛠️ On it — working `" + repo + "`. I'll post the branch + PR here when the run finishes.", true
 }
 
@@ -252,6 +318,28 @@ func agentGitCredential(s *cloud.Service[state], ctx context.Context, org string
 // diffstat, branch, or error can never inject Slack mrkdwn. Pure.
 func codingResultCard(brand, org, repo string, res coding.Result) (string, []any) {
 	repoLabel := slackEscape(org + "/" + repo)
+	// A ROUTED run is ACCEPTED here, not finished: the machine drives it to terminal
+	// and streams into the session, so the card reports "queued on <machine>, follow
+	// it live" rather than a premature pass/fail. A routed run that failed to enqueue
+	// (Routed && !OK) still falls through to the failure card below.
+	if res.Routed && res.OK {
+		machine := slackEscape(res.TargetID)
+		summary := "Routed " + repoLabel + " to " + machine
+		blocks := []any{
+			mrkdwnSection(":satellite: *Routed to a machine* — " + repoLabel),
+			map[string]any{"type": "section", "fields": []any{
+				mrkdwnField("*Repository*\n" + repoLabel),
+				mrkdwnField("*Machine*\n`" + machine + "`"),
+			}},
+		}
+		if res.SessionID != "" {
+			blocks = append(blocks, map[string]any{
+				"type":     "context",
+				"elements": []any{map[string]any{"type": "mrkdwn", "text": "Follow it live · session `" + slackEscape(res.SessionID) + "` · " + brandLabel(brand) + " coding"}},
+			})
+		}
+		return summary, blocks
+	}
 	var emoji, title, summary string
 	switch {
 	case !res.OK:
