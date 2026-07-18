@@ -419,7 +419,7 @@ func listSites(s *cloud.Service[state], c *zip.Ctx) error {
 			continue
 		}
 		out = append(out, siteView{
-			Slug: p.Slug, URL: siteURL(s, p.Slug), Name: p.Name,
+			Slug: p.Slug, URL: siteURL(s, org, p.Slug), Name: p.Name,
 			Status: p.Status, UpdatedAt: p.UpdatedAt,
 		})
 	}
