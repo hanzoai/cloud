@@ -9,7 +9,7 @@ import (
 
 // ---- fakes recording every seam call for isolation + contract assertions ----
 
-type openCall struct{ org, actor, agent, title string }
+type openCall struct{ org, actor, agent, title, target string }
 type eventCall struct {
 	org, session, kind, actor string
 	payload                   string
@@ -28,7 +28,16 @@ type fakeSessions struct {
 func (f *fakeSessions) Open(_ context.Context, org, actor, agent, title string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.opened = append(f.opened, openCall{org, actor, agent, title})
+	f.opened = append(f.opened, openCall{org, actor, agent, title, ""})
+	if f.openErr != nil {
+		return "", f.openErr
+	}
+	return f.id, nil
+}
+func (f *fakeSessions) OpenOn(_ context.Context, org, actor, agent, title, target string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.opened = append(f.opened, openCall{org, actor, agent, title, target})
 	if f.openErr != nil {
 		return "", f.openErr
 	}
