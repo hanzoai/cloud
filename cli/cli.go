@@ -474,11 +474,14 @@ func (e *Env) freshAccessToken() string {
 	return tok
 }
 
-// platformToken resolves the platform control-plane service token. The
-// platform REST surface is machine-to-machine (it cannot validate IAM user
-// tokens), so apps/clusters/redeploy authenticate with this, sourced from
-// (in precedence) the bound --platform-token flag, the environment, then the
-// credential store. Never hardcoded.
+// platformToken resolves the bearer the platform control plane authenticates
+// apps/clusters/redeploy with. ONE identity authorizes everything: after a plain
+// `hanzo login` the IAM access token is the FINAL fallback, so no separate
+// --platform-token is needed — the platform verifies the IAM JWT (signature,
+// issuer, expiry) and org-scopes the caller. A dedicated service token still
+// wins when present (flag > env > credential store > IAM login), so purpose-minted
+// machine tokens keep their precedence and internal automation is unchanged.
+// Never hardcoded.
 func (e *Env) platformToken(flagVal string) string {
 	return firstNonEmpty(
 		flagVal,
@@ -486,17 +489,22 @@ func (e *Env) platformToken(flagVal string) string {
 		os.Getenv("PLATFORM_SERVICE_TOKEN"),
 		os.Getenv("PAAS_SERVICE_TOKEN"),
 		e.creds.PlatformToken,
+		e.accessToken(), // IAM login is the one identity that authorizes control-plane ops
 	)
 }
 
-// buildToken resolves the platform build-enqueue token (a distinct credential
-// from the service token — see /v1/runner).
+// buildToken resolves the bearer `hanzo build` sends to the platform build
+// enqueue (/v1/runner). Same unify-infra contract as platformToken: a dedicated
+// build token wins when present, but a plain IAM login is the FINAL fallback, so
+// `hanzo build` works off the one identity with no separate --build-token — the
+// platform verifies the IAM JWT and authorizes the build by org + role.
 func (e *Env) buildToken(flagVal string) string {
 	return firstNonEmpty(
 		flagVal,
 		os.Getenv("HANZO_BUILD_TOKEN"),
 		os.Getenv("PLATFORM_BUILD_CALLBACK_TOKEN"),
 		e.creds.BuildToken,
+		e.accessToken(), // IAM login is the one identity that authorizes builds
 	)
 }
 
