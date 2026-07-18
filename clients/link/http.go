@@ -97,6 +97,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// and the global view across every account + Hanzo-routed usage.
 	app.Post("/v1/links/usage", cloud.Handle(s, reportUsage))
 	app.Get("/v1/links/usage/summary", cloud.Handle(s, usageSummary))
+	// The per-account SERVER-ROUTED breakdown (usage_accounts.go). Static, so it must
+	// register before the "/v1/links/usage" catch and the ":id" param.
+	app.Get("/v1/links/usage/accounts", cloud.Handle(s, usageAccounts))
 	app.Get("/v1/links/usage", cloud.Handle(s, usageDash))
 	app.Get("/v1/links/devices/:machine", cloud.Handle(s, deviceDetail))
 	app.Post("/v1/links/devices/:machine/revoke", cloud.Handle(s, revokeDevice))
