@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/hanzoai/cloud/clients/agents"
 )
 
 // fakeRouter records every routed run handed to the Route seam.
@@ -227,5 +229,151 @@ func TestRun_RoutedButRoutingUnwired_FailsClosed(t *testing.T) {
 	}
 	if run.gotOrg != "" {
 		t.Fatal("must not run locally when routing is unwired but a target was chosen")
+	}
+}
+
+// ---- routed completion parity (#48 I2): verify + PR + session close ----
+
+func finalizeDispatcher(sess *fakeSessions, tr *fakeTracker, verifyOK bool) Dispatcher {
+	return Dispatcher{
+		Sessions: sess, Tracker: tr,
+		VerifyRef: func(_ context.Context, _, _, _ string) (string, bool) {
+			if verifyOK {
+				return "verifiedsha", true
+			}
+			return "", false
+		},
+	}
+}
+
+// A routed run that reported CHANGES and whose branch verifies gets the SAME cloud-
+// side completion as the local path: the PR is filed and the session is closed done.
+func TestFinalizeRouted_ChangedVerifyPasses_FilesPR_ClosesDone(t *testing.T) {
+	sess := &fakeSessions{}
+	tr := &fakeTracker{ref: PRRef{Identifier: "API-9"}}
+	d := finalizeDispatcher(sess, tr, true)
+	in := RoutedRun{Org: "acme", SessionID: "sess_r", Repo: "api", Base: "main", Branch: "agent/r", Prompt: "add a test", Actor: "u-1", AgentRef: "hanzo"}
+
+	d.finalizeRouted(context.Background(), in, RoutedResult{OK: true, Changed: true, Branch: "agent/r", CommitSha: "cafe", Diffstat: "1 file changed"})
+
+	if len(tr.inputs) != 1 {
+		t.Fatalf("a verified changed run must file exactly one PR, got %d", len(tr.inputs))
+	}
+	pr := tr.inputs[0]
+	if pr.Org != "acme" || pr.Repo != "api" || pr.Head != "agent/r" || pr.Assignee != "hanzo" {
+		t.Fatalf("routed PR mis-filed: %+v", pr)
+	}
+	// The verified tip from OUR storage wins over the machine's self-report.
+	if !strings.Contains(pr.Body, "verifiedsha") {
+		t.Fatalf("PR body should carry the verified tip: %q", pr.Body)
+	}
+	if len(sess.closes) != 1 || sess.closes[0].org != "acme" || sess.closes[0].status != statusDone {
+		t.Fatalf("routed session must close done, got %+v", sess.closes)
+	}
+	// No event carries a secret-shaped field (structural: RoutedRun has none).
+	for _, e := range sess.events {
+		if e.org != "acme" || e.session != "sess_r" {
+			t.Fatalf("routed completion event escaped tenant/session scope: %+v", e)
+		}
+	}
+}
+
+// A routed run whose branch does NOT verify fails closed: no PR, session closed error
+// — trust the tips we can read, not the machine's self-report.
+func TestFinalizeRouted_VerifyFails_NoPR_ClosesError(t *testing.T) {
+	sess := &fakeSessions{}
+	tr := &fakeTracker{}
+	d := finalizeDispatcher(sess, tr, false) // verify fails
+	in := RoutedRun{Org: "acme", SessionID: "s", Repo: "api", Branch: "agent/r"}
+
+	d.finalizeRouted(context.Background(), in, RoutedResult{OK: true, Changed: true, Branch: "agent/r", CommitSha: "cafe"})
+
+	if len(tr.inputs) != 0 {
+		t.Fatalf("a routed run whose branch did not land must file no PR, got %d", len(tr.inputs))
+	}
+	if len(sess.closes) != 1 || sess.closes[0].status != statusError {
+		t.Fatalf("verify-fail must close the session error, got %+v", sess.closes)
+	}
+}
+
+// A routed run that reported NO changes closes the session done with no PR.
+func TestFinalizeRouted_NoChanges_NoPR_ClosesDone(t *testing.T) {
+	sess := &fakeSessions{}
+	tr := &fakeTracker{}
+	d := finalizeDispatcher(sess, tr, true)
+	d.finalizeRouted(context.Background(), RoutedRun{Org: "acme", SessionID: "s", Repo: "api"}, RoutedResult{OK: true, Changed: false})
+
+	if len(tr.inputs) != 0 {
+		t.Fatalf("no-changes must file no PR, got %d", len(tr.inputs))
+	}
+	if len(sess.closes) != 1 || sess.closes[0].status != statusDone {
+		t.Fatalf("no-changes must close done, got %+v", sess.closes)
+	}
+}
+
+// A routed run the machine reported as FAILED closes the session error, no PR — and
+// even VerifyRef is never consulted (there is nothing to verify).
+func TestFinalizeRouted_ReportedError_ClosesError_NoPR(t *testing.T) {
+	sess := &fakeSessions{}
+	tr := &fakeTracker{}
+	verifyCalled := false
+	d := Dispatcher{Sessions: sess, Tracker: tr, VerifyRef: func(context.Context, string, string, string) (string, bool) {
+		verifyCalled = true
+		return "", true
+	}}
+	d.finalizeRouted(context.Background(), RoutedRun{Org: "acme", SessionID: "s", Repo: "api"}, RoutedResult{OK: false, Error: "the agent crashed"})
+
+	if len(tr.inputs) != 0 {
+		t.Fatalf("a failed routed run must file no PR, got %d", len(tr.inputs))
+	}
+	if verifyCalled {
+		t.Fatal("a failed run has nothing to verify — VerifyRef must not run")
+	}
+	if len(sess.closes) != 1 || sess.closes[0].status != statusError {
+		t.Fatalf("a failed routed run must close error, got %+v", sess.closes)
+	}
+	// The machine's error text reaches the session, never lost.
+	sawErr := false
+	for _, e := range sess.events {
+		if strings.Contains(e.payload, "the agent crashed") {
+			sawErr = true
+		}
+	}
+	if !sawErr {
+		t.Fatalf("the reported error must be mirrored into the session: %+v", sess.events)
+	}
+}
+
+// NewDispatcher wires the routed completion seam, so the durable delivery activity
+// reaches this dispatcher's verify/PR/session seams. Without it, a routed run's
+// session would never close.
+func TestNewDispatcher_WiresRoutedFinalizer(t *testing.T) {
+	prev := routedFinalizer
+	t.Cleanup(func() { routedFinalizer = prev })
+	routedFinalizer = nil
+	_ = NewDispatcher(
+		func(_, _ string) string { return "https://git.test" },
+		func(context.Context, string, string, string) (string, bool) { return "", true },
+		nil,
+	)
+	if routedFinalizer == nil {
+		t.Fatal("NewDispatcher must wire the routed completion seam (else routed sessions never close)")
+	}
+}
+
+// finalizeRoutedDurable bridges the durable agents types to coding's without dropping
+// the attribution the completion needs.
+func TestFinalizeRoutedDurable_BridgesFields(t *testing.T) {
+	sess := &fakeSessions{}
+	tr := &fakeTracker{ref: PRRef{Identifier: "API-1"}}
+	d := finalizeDispatcher(sess, tr, true)
+	d.finalizeRoutedDurable(context.Background(),
+		agents.RoutedRun{Org: "acme", SessionID: "s", Repo: "api", Branch: "agent/b", AgentRef: "hanzo", Actor: "u-9"},
+		agents.RoutedResult{OK: true, Changed: true, Branch: "agent/b", CommitSha: "beef"})
+	if len(tr.inputs) != 1 || tr.inputs[0].Assignee != "hanzo" || tr.inputs[0].Head != "agent/b" {
+		t.Fatalf("bridge dropped attribution: %+v", tr.inputs)
+	}
+	if len(sess.closes) != 1 || sess.closes[0].status != statusDone {
+		t.Fatalf("bridge must drive the session to done: %+v", sess.closes)
 	}
 }
