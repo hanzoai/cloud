@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Hanzo CD</title><base href="/v1/deploy/"></head>
+<body>
+<!-- Committed fallback shell. The build pipeline runs the hanzoai/deploy
+     rebrand/hanzo-monochrome `yarn build` (webpack) and OVERWRITES this
+     webui/dist with the real monochrome ArgoCD bundle BEFORE `go build`
+     (the Dockerfile deploy-ui stage / `make deploy-ui`), exactly as webui.go
+     does for the console. Until then the projection API at
+     /v1/deploy/api/v1/* is live and the shell reports readiness. -->
+<div id="app">Hanzo CD dashboard — projection API live at /v1/deploy/api/v1. Monochrome bundle built by CI.</div>
+</body>
+</html>
