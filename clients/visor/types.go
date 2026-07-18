@@ -41,6 +41,10 @@ type visorMachine struct {
 	PublicIp    string `json:"publicIp"`
 	PrivateIp   string `json:"privateIp"`
 	CpuSize     string `json:"cpuSize"`
+	// MemSize is the machine's system RAM as reported upstream. Providers send it in
+	// mixed forms (a DO CPU droplet as "8gb", the resell surface as raw "8192" MB),
+	// so normalizeMem renders only the trustworthy shapes and drops the ambiguous.
+	MemSize string `json:"memSize"`
 	// Tag is the comma-joined provider tag list (the resell /v1/machines surface
 	// carries it). It records `hanzo-kind:<kind>` (kind=bot for a Bot) and, once
 	// the launch cloud-init installs the runtime, `hanzo-bot:<agentName>`. bots.go
@@ -78,6 +82,7 @@ type machineView struct {
 	PrivateIp   string `json:"privateIp,omitempty"`
 	CreatedTime string `json:"createdTime,omitempty"`
 	Vcpu        *int   `json:"vcpu,omitempty"`
+	Mem         string `json:"mem,omitempty"`
 	GPU         string `json:"gpu,omitempty"`
 	Image       string `json:"image,omitempty"`
 	Os          string `json:"os,omitempty"`
@@ -137,9 +142,11 @@ type clusterView struct {
 
 // ---- mapping (PURE); firstNonEmpty lives in client.go (one helper, one place) ----
 
-// toMachineView maps a Visor machine to the console view. vcpu is filled ONLY
-// when CpuSize is a clean integer (no fabricated core count); gpu is filled only
-// when the size slug parses as a GPU accelerator.
+// toMachineView maps a Visor machine to the console view. vcpu prefers a clean
+// integer CpuSize and otherwise recovers the count from a provider size slug
+// (s-4vcpu-8gb) — still no fabricated core count, just an honest read of the slug.
+// mem is the trustworthy MemSize, or the slug's gb figure, else empty. gpu is
+// filled only when the size slug parses as a GPU accelerator.
 func toMachineView(m visorMachine) machineView {
 	v := machineView{
 		ID:          firstNonEmpty(m.Name, m.Id),
@@ -154,10 +161,19 @@ func toMachineView(m visorMachine) machineView {
 		Image:       m.Image,
 		Os:          m.Os,
 	}
+	slug := firstNonEmpty(m.Size, m.Type)
+	slugVcpu, slugMemGB := parseSizeSlug(slug)
 	if n, err := strconv.Atoi(strings.TrimSpace(m.CpuSize)); err == nil && n > 0 {
 		v.Vcpu = &n
+	} else if slugVcpu > 0 {
+		v.Vcpu = &slugVcpu
 	}
-	if spec, ok := gpuSpecOf(firstNonEmpty(m.Size, m.Type)); ok {
+	if mem := normalizeMem(m.MemSize); mem != "" {
+		v.Mem = mem
+	} else if slugMemGB > 0 {
+		v.Mem = strconv.Itoa(slugMemGB) + " GB"
+	}
+	if spec, ok := gpuSpecOf(slug); ok {
 		v.GPU = spec.model
 	}
 	return v
@@ -247,6 +263,54 @@ func clustersFromPools(pools []visorNodePool) []clusterView {
 		out = append(out, *cv)
 	}
 	return out
+}
+
+// ---- CPU/mem size-slug parsing (PURE) ----
+
+var (
+	slugVcpuRE = regexp.MustCompile(`(\d+)vcpu`)
+	slugGbRE   = regexp.MustCompile(`(\d+)gb`)
+	memRE      = regexp.MustCompile(`^(\d+)\s*(gib|gb|g|mib|mb|m)?$`)
+)
+
+// parseSizeSlug extracts the vCPU and memory-GB integers embedded in a provider
+// size slug (s-4vcpu-8gb -> 4, 8; g-8vcpu-32gb -> 8, 32). Each figure is 0 when
+// the slug does not carry it — the caller decides whether to use it.
+func parseSizeSlug(slug string) (vcpu int, memGB int) {
+	s := strings.ToLower(strings.TrimSpace(slug))
+	if mm := slugVcpuRE.FindStringSubmatch(s); mm != nil {
+		vcpu, _ = strconv.Atoi(mm[1])
+	}
+	if mm := slugGbRE.FindStringSubmatch(s); mm != nil {
+		memGB, _ = strconv.Atoi(mm[1])
+	}
+	return vcpu, memGB
+}
+
+// normalizeMem renders system RAM as "N GB" ONLY for values it can trust: explicit
+// GB ("8gb"/"8 GB"/"8gib") pass through; explicit MB ("8192mb"/"8192 MB") convert
+// with rounding; a bare integer is treated as MB when >= 1024, else as GB. Anything
+// ambiguous or unparseable returns "" — an honest omission, never a fabricated number.
+func normalizeMem(raw string) string {
+	mm := memRE.FindStringSubmatch(strings.ToLower(strings.TrimSpace(raw)))
+	if mm == nil {
+		return ""
+	}
+	n, err := strconv.Atoi(mm[1])
+	if err != nil || n <= 0 {
+		return ""
+	}
+	switch mm[2] {
+	case "gb", "gib", "g":
+		return strconv.Itoa(n) + " GB"
+	case "mb", "mib", "m":
+		return strconv.Itoa((n+512)/1024) + " GB"
+	default: // bare integer: MB when large enough to be a byte-count, else already GB
+		if n >= 1024 {
+			return strconv.Itoa((n+512)/1024) + " GB"
+		}
+		return strconv.Itoa(n) + " GB"
+	}
 }
 
 // ---- GPU size-slug parsing (PURE, ported from console compute.ts gpuSpecOf) ----
