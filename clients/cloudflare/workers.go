@@ -1,9 +1,10 @@
 package cloudflare
 
 // workers.go — Cloudflare Workers, WIRED: script put/list/delete, the account
-// workers.dev subdomain + per-script enable, and zone route bind/list/delete. Script
-// upload is the modern multipart module format (a metadata part + the module part).
-// Scripts + subdomain are account-scoped (/accounts/{id}/workers/*); routes are
+// workers.dev subdomain + per-script enable, and zone route bind/list/delete. Reads
+// use authClient (validated org); mutations use authWrite (validated org + org admin).
+// Script upload is the modern multipart module format (a metadata part + the module
+// part). Scripts + subdomain are account-scoped (/accounts/{id}/workers/*); routes are
 // zone-scoped (/zones/{zone_id}/workers/routes).
 
 import (
@@ -39,11 +40,11 @@ type WorkerRouteCreate struct {
 // ── scripts ─────────────────────────────────────────────────────────────────────
 
 func workersScriptList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, org, err := authClient(s, c)
 	if err != nil {
 		return err
 	}
-	acct, err := cl.resolveAccount(c.Context(), c)
+	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -51,11 +52,11 @@ func workersScriptList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, org, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
-	acct, err := cl.resolveAccount(c.Context(), c)
+	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -82,11 +83,11 @@ func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersScriptDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, org, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
-	acct, err := cl.resolveAccount(c.Context(), c)
+	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -157,11 +158,11 @@ func buildWorkerUpload(in WorkerScriptPut) ([]byte, string, error) {
 // ── workers.dev subdomain ───────────────────────────────────────────────────────
 
 func workersSubdomainGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, org, err := authClient(s, c)
 	if err != nil {
 		return err
 	}
-	acct, err := cl.resolveAccount(c.Context(), c)
+	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -171,11 +172,11 @@ func workersSubdomainGet(s *cloud.Service[state], c *zip.Ctx) error {
 // workersScriptSubdomainSet enables/disables a script on the account workers.dev
 // subdomain (POST .../scripts/{script}/subdomain {enabled}).
 func workersScriptSubdomainSet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, org, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
-	acct, err := cl.resolveAccount(c.Context(), c)
+	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -207,7 +208,7 @@ func workersRouteList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersRouteCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -231,7 +232,7 @@ func workersRouteCreate(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersRouteDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
