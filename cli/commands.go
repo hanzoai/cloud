@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -387,6 +388,10 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			if br.Repo == "" || br.SHA == "" || br.Image == "" {
 				return fmt.Errorf("--repo (or positional), --sha and --image are required")
 			}
+			// The platform build muscle clones an https git URL; accept the
+			// idiomatic `owner/name` shorthand and expand it to GitHub (the host
+			// for every hanzoai/luxfi/zooai repo). A full URL passes through.
+			br.Repo = normalizeRepoURL(br.Repo)
 			if br.OrganizationID == "" {
 				br.OrganizationID = e.Org // optional; server defaults to DEFAULT_BUILD_ORG_ID
 			}
@@ -417,6 +422,28 @@ func newBuildCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	f.StringVar(&br.Arch, "arch", "", "amd64|arm64 (default amd64)")
 	f.StringVar(&buildToken, "build-token", "", "platform build-enqueue token (else env/credential store)")
 	return cmd
+}
+
+// normalizeRepoURL expands the idiomatic `owner/name` shorthand to a full GitHub
+// https URL (the platform build muscle clones https), and leaves an explicit URL
+// (http/https/git/ssh scheme, or a scp-style git@host:owner/name) untouched. Only
+// a bare single-segment `owner/name` — two path parts, no scheme, no host — is
+// expanded; anything else is the caller's explicit choice and passes through.
+func normalizeRepoURL(repo string) string {
+	r := strings.TrimSpace(repo)
+	if r == "" {
+		return r
+	}
+	// Already a URL or scp-style remote → leave as-is.
+	if strings.Contains(r, "://") || strings.Contains(r, "@") {
+		return r
+	}
+	// Bare owner/name (exactly two non-empty segments, no host dot in the first).
+	parts := strings.Split(strings.Trim(r, "/"), "/")
+	if len(parts) == 2 && parts[0] != "" && parts[1] != "" && !strings.Contains(parts[0], ".") {
+		return "https://github.com/" + parts[0] + "/" + parts[1]
+	}
+	return r
 }
 
 // ---------------------------------------------------------------------------
