@@ -1,4 +1,4 @@
-// Package gatewaypolicy is the runtime-mutable store for the cloud edge ("gateway
+// Package edge is the runtime-mutable store for the cloud edge ("gateway
 // role") policy: the CORS allowlist, the pre-auth per-client-IP flood cap, and the
 // authenticated per-org rate ceiling. It is a LEAF package (stdlib + the Hanzo
 // SQLite driver only, no import of the root cloud package) so BOTH consumers can
@@ -27,7 +27,7 @@
 // Fail-soft: every resolver (Platform/OrgRPM/CacheTTL/Methods) returns the static/platform default
 // on any store error, so a policy-store outage never takes the edge down. Writes
 // fail loud (an unavailable store returns an error to the PUT handler).
-package gatewaypolicy
+package edge
 
 import (
 	"context"
@@ -179,14 +179,14 @@ type cacheEntry struct {
 func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	s := &Store{adminOrg: adminOrg, static: static, cache: map[string]cacheEntry{}}
 	if dataDir == "" {
-		return s, fmt.Errorf("gatewaypolicy: empty dataDir; running static-only")
+		return s, fmt.Errorf("edge: empty dataDir; running static-only")
 	}
 	if err := os.MkdirAll(dataDir, 0o750); err != nil {
-		return s, fmt.Errorf("gatewaypolicy: mkdir %s: %w", dataDir, err)
+		return s, fmt.Errorf("edge: mkdir %s: %w", dataDir, err)
 	}
 	db, err := cek.Open(filepath.Join(dataDir, "gateway.db"))
 	if err != nil {
-		return s, fmt.Errorf("gatewaypolicy: open: %w", err)
+		return s, fmt.Errorf("edge: open: %w", err)
 	}
 	db.SetMaxOpenConns(1) // one writer; the file lock serializes.
 	for _, pragma := range []string{
@@ -194,7 +194,7 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 	} {
 		if _, err := db.Exec(pragma); err != nil {
 			_ = db.Close()
-			return s, fmt.Errorf("gatewaypolicy: pragma: %w", err)
+			return s, fmt.Errorf("edge: pragma: %w", err)
 		}
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS policy (
@@ -203,7 +203,7 @@ func New(dataDir, adminOrg string, static Policy) (*Store, error) {
 		updated_at INTEGER NOT NULL DEFAULT 0
 	)`); err != nil {
 		_ = db.Close()
-		return s, fmt.Errorf("gatewaypolicy: migrate: %w", err)
+		return s, fmt.Errorf("edge: migrate: %w", err)
 	}
 	s.db = db
 	return s, nil
@@ -229,11 +229,11 @@ func (s *Store) Get(ctx context.Context, org string) (Policy, bool, error) {
 		return Policy{}, false, nil
 	}
 	if err != nil {
-		return Policy{}, false, fmt.Errorf("gatewaypolicy: get %q: %w", org, err)
+		return Policy{}, false, fmt.Errorf("edge: get %q: %w", org, err)
 	}
 	var p Policy
 	if err := json.Unmarshal([]byte(doc), &p); err != nil {
-		return Policy{}, false, fmt.Errorf("gatewaypolicy: decode %q: %w", org, err)
+		return Policy{}, false, fmt.Errorf("edge: decode %q: %w", org, err)
 	}
 	return p, true, nil
 }
@@ -243,7 +243,7 @@ func (s *Store) Get(ctx context.Context, org string) (Policy, bool, error) {
 // a write must never silently vanish.
 func (s *Store) Put(ctx context.Context, org string, p Policy) (Policy, error) {
 	if s == nil || s.db == nil {
-		return Policy{}, fmt.Errorf("gatewaypolicy: store unavailable")
+		return Policy{}, fmt.Errorf("edge: store unavailable")
 	}
 	cur, _, err := s.Get(ctx, org)
 	if err != nil {
@@ -254,13 +254,13 @@ func (s *Store) Put(ctx context.Context, org string, p Policy) (Policy, error) {
 	next.UpdatedBy = p.UpdatedBy
 	doc, err := json.Marshal(next)
 	if err != nil {
-		return Policy{}, fmt.Errorf("gatewaypolicy: encode: %w", err)
+		return Policy{}, fmt.Errorf("edge: encode: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx,
 		`INSERT INTO policy (org, doc, updated_at) VALUES (?,?,?)
 		 ON CONFLICT(org) DO UPDATE SET doc=excluded.doc, updated_at=excluded.updated_at`,
 		org, string(doc), next.UpdatedAt); err != nil {
-		return Policy{}, fmt.Errorf("gatewaypolicy: put %q: %w", org, err)
+		return Policy{}, fmt.Errorf("edge: put %q: %w", org, err)
 	}
 	s.invalidate()
 	return next, nil
@@ -274,7 +274,7 @@ func (s *Store) Put(ctx context.Context, org string, p Policy) (Policy, error) {
 // platform row regardless of which tenant they are currently viewing.
 func (s *Store) PutPlatform(ctx context.Context, p Policy) (Policy, error) {
 	if s == nil {
-		return Policy{}, fmt.Errorf("gatewaypolicy: nil store")
+		return Policy{}, fmt.Errorf("edge: nil store")
 	}
 	return s.Put(ctx, s.adminOrg, p)
 }

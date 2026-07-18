@@ -14,7 +14,7 @@ import (
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud/audit"
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/hanzoai/cloud/types"
 )
 
@@ -103,8 +103,8 @@ type Deps struct {
 	// middleware read its PLATFORM policy live and ScopeRateLimit reads its
 	// per-org OrgRPM, and the clients/gateway subsystem serves GET/PUT over the
 	// SAME store. Never nil — New always returns a working (static-only on store
-	// error) *Store, so the edge is never blocked. See clients/gatewaypolicy.
-	GatewayPolicy *gatewaypolicy.Store
+	// error) *Store, so the edge is never blocked. See clients/edge.
+	GatewayPolicy *edge.Store
 }
 
 // Per-subsystem client interfaces live in cloud/types so the
