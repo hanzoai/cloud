@@ -40,6 +40,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -102,6 +103,21 @@ type ExchangeResult struct {
 	Scopes       []string          // granted scopes
 }
 
+// apiKeyKind marks a Provider whose credential is supplied by the customer and
+// verified live, rather than acquired via the 3-legged OAuth flow (the default
+// for an empty Kind). See Provider.Kind.
+const apiKeyKind = "apikey"
+
+// VerifyInput is what an apikey provider's Verify receives: the customer's
+// credential (from the /connect body, originally read on STDIN by `hanzo
+// connector add`) plus an OPTIONAL non-secret account hint the caller may supply
+// when the provider's own verify response cannot disclose it (e.g. a Cloudflare
+// least-privilege token that can list neither its own name nor its account).
+type VerifyInput struct {
+	Token     string
+	AccountID string
+}
+
 // SyncHook pulls provider-side state INTO Hanzo (e.g. a GitHub App installation's
 // repo list). It is a #51 seam: DECLARED on Provider, nil for every provider
 // today, and NOT wired to any route. When GitHub creds land, github.go sets this
@@ -123,6 +139,22 @@ type Provider struct {
 	Scopes       []string // requested scopes (display + authorize URL)
 	RedirectPath string   // OAuth redirect path; MUST equal /v1/integrations/{id}/callback
 	Secrets      []string // KMS secret names this provider custodies (deleted on disconnect)
+
+	// Kind selects credential acquisition. Empty/"oauth" (default) uses the
+	// 3-legged Authorize/Exchange flow. "apikey" (apiKeyKind) takes a
+	// customer-held credential submitted to /connect (from `hanzo connector add`,
+	// read on STDIN — never argv/URL), VERIFIES it live, and seals it to KMS; such
+	// providers use Verify, not Authorize/Exchange, and have no OAuth callback.
+	Kind string
+	// AdminOnly gates /connect and /disconnect on the caller being an admin of its
+	// OWN org (principal.IsOrgAdmin — NOT SuperAdmin), parity with the platform
+	// deploy-provider adminProcedure. OAuth social/chat providers leave it false.
+	AdminOnly bool
+	// Verify validates an apikey credential against the provider and returns the
+	// token(s) to seal + non-secret account metadata. It MUST fail closed (a
+	// bad/inactive credential returns an error and NOTHING is stored) and its error
+	// MUST NOT contain the credential value (it is logged). nil for oauth providers.
+	Verify func(ctx context.Context, in VerifyInput) (*ExchangeResult, error)
 
 	// Configured reports whether the provider's APP creds are present in ENV.
 	// When false: available=false in the card, and connect/callback fail closed
@@ -229,6 +261,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// dispatcher actually serves — otherwise its OAuth callback would 404 silently
 	// and the connect flow would dead-end. One route, one truth.
 	for id, p := range providers {
+		if p.Kind == apiKeyKind {
+			// apikey providers have no OAuth callback; RedirectPath is unused.
+			continue
+		}
 		if want := callbackPath(id); p.RedirectPath != want {
 			_ = store.Close()
 			return fmt.Errorf("integrations.Mount: provider %q RedirectPath %q must equal %q", id, p.RedirectPath, want)
@@ -321,6 +357,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// in Mount), so this single generic route serves every provider's OAuth callback.
 	app.Get("/v1/integrations/:provider/callback", cloud.Handle(s, callback))
 	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
+	// apikey connectors: re-verify a stored credential live (`hanzo connector verify`).
+	app.Post("/v1/integrations/:provider/verify", cloud.Handle(s, verifyConn))
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.
@@ -409,11 +447,23 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
+	// Mutating a connector is an org-admin action for providers that declare it
+	// (parity with the platform deploy-provider adminProcedure). The predicate is
+	// the caller's OWN-org isAdmin bit (principal.IsOrgAdmin) — NOT SuperAdmin.
+	if p.AdminOnly && !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("connecting the " + p.ID + " connector requires org admin")
+	}
 	if !p.Configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s integration is not configured on this deployment", p.ID)
 	}
 	if !kmsReady(s) {
 		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+	}
+	// apikey connectors submit a customer-held credential to /connect (no OAuth
+	// dance): verify-before-store, then seal to KMS. A bad credential is refused
+	// and NOTHING is persisted (see connectByCredential).
+	if p.Kind == apiKeyKind {
+		return connectByCredential(s, c, org, p)
 	}
 
 	// Opportunistic GC of expired nonces (best-effort; never fails the request).
@@ -437,6 +487,128 @@ func connect(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "authorize: %v", err)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"authorizeUrl": authorizeURL})
+}
+
+// maxCredentialLen bounds the credential an apikey /connect accepts. Real provider
+// API tokens are short (a Cloudflare token is ~40 chars); anything over 8 KiB is
+// hostile and rejected before it reaches Verify or KMS.
+const maxCredentialLen = 8192
+
+// connectByCredential completes an apikey connector. The caller submits the
+// provider credential in the request body (from `hanzo connector add`, read on
+// STDIN — never argv/URL); the provider VERIFIES it live; and ONLY on success is
+// the token sealed into the org's KMS namespace with non-secret metadata written
+// to the connection row. FAIL-CLOSED: a bad/inactive credential is refused and
+// NOTHING is stored (no KMS write, no row). The credential value never appears in
+// a log line, the response, or the store — only in the KMS seal input.
+func connectByCredential(s *cloud.Service[state], c *zip.Ctx, org string, p *Provider) error {
+	if p.Verify == nil {
+		return zip.Errorf(http.StatusInternalServerError, "%s: apikey provider without Verify", p.ID)
+	}
+	var body struct {
+		Token     string `json:"token"`
+		AccountID string `json:"accountId"`
+	}
+	if err := json.Unmarshal(c.Body(), &body); err != nil {
+		return zip.ErrBadRequest("invalid request body")
+	}
+	token := strings.TrimSpace(body.Token)
+	if token == "" {
+		return zip.ErrBadRequest("a credential token is required (pipe it on stdin: `hanzo connector add --provider " + p.ID + " --token -`)")
+	}
+	if len(token) > maxCredentialLen {
+		return zip.ErrBadRequest("credential too large")
+	}
+	res, err := p.Verify(c.Context(), VerifyInput{Token: token, AccountID: sanitizeMeta(strings.TrimSpace(body.AccountID))})
+	if err != nil || res == nil {
+		// Verify FAILED → refuse; store NOTHING. err is provider-authored and must
+		// not carry the credential value (only its status/reason).
+		s.Log.Warn("connector verify failed", "provider", p.ID, "org", org, "err", err)
+		return zip.ErrBadRequest("credential verification failed")
+	}
+	// Harden provider-supplied NON-secret metadata (strip control chars, bound
+	// length) — never the secret token, which goes straight to the KMS seal.
+	res.ExternalID = sanitizeMeta(res.ExternalID)
+	res.AccountLabel = sanitizeMeta(res.AccountLabel)
+	res.BotUserID = sanitizeMeta(res.BotUserID)
+	res.Scopes = sanitizeScopes(res.Scopes)
+	// Seal every verified secret into the org's KMS namespace BEFORE the row, so a
+	// KMS failure leaves NO half-connected row advertising a token that was never
+	// stored (same ordering discipline as the OAuth callback).
+	for name, value := range res.Tokens {
+		if err := kmsPut(s, org, p.ID, name, []byte(value)); err != nil {
+			s.Log.Warn("kms seal failed", "provider", p.ID, "org", org, "secret", name, "err", err)
+			return zip.Errorf(http.StatusServiceUnavailable, "secret custody failed")
+		}
+	}
+	conn := Connection{
+		Org:          org,
+		Provider:     p.ID,
+		ExternalID:   res.ExternalID,
+		AccountLabel: res.AccountLabel,
+		BotUserID:    res.BotUserID,
+		Scopes:       res.Scopes,
+	}
+	if err := s.State.store.Upsert(c.Context(), conn); err != nil {
+		s.Log.Warn("connection upsert failed", "provider", p.ID, "org", org, "err", err)
+		return zip.Errorf(http.StatusInternalServerError, "persist failed")
+	}
+	s.Log.Info("connector connected", "provider", p.ID, "org", org, "account", res.AccountLabel, "externalId", res.ExternalID)
+	return c.JSON(http.StatusOK, map[string]any{
+		"connected":  true,
+		"provider":   p.ID,
+		"account":    res.AccountLabel,
+		"externalId": res.ExternalID,
+		"scopes":     nonNil(res.Scopes),
+	})
+}
+
+// verifyConn re-checks a CONNECTED apikey connector's stored credential against the
+// provider, live (`hanzo connector verify`). Org-scoped (any member may check
+// status); the credential is read from KMS, verified, and NEVER returned or logged.
+// A verification failure is reported as {active:false}, not an error — the console/
+// CLI renders it. Only apikey providers support verify (OAuth tokens are checked at
+// use, not re-verified here).
+func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := principal.Org(c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	if !validOrg(org) {
+		return zip.ErrBadRequest("org must be a DNS-1123 label")
+	}
+	p, ok := s.State.providers[providerParam(c)]
+	if !ok {
+		return zip.ErrNotFound("unknown provider")
+	}
+	if p.Kind != apiKeyKind || p.Verify == nil || len(p.Secrets) == 0 {
+		return zip.ErrBadRequest("verify is only supported for credential connectors")
+	}
+	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "lookup: %v", err)
+	}
+	if !found {
+		return zip.ErrNotFound("connector not connected")
+	}
+	if !kmsReady(s) {
+		return zip.Errorf(http.StatusServiceUnavailable, "%s", kms.ErrMasterKeyMissing.Error())
+	}
+	tok, err := kmsGet(s, org, p.ID, p.Secrets[0])
+	if err != nil || len(tok) == 0 {
+		return zip.ErrBadRequest("stored credential unavailable")
+	}
+	res, verr := p.Verify(c.Context(), VerifyInput{Token: string(tok)})
+	if verr != nil || res == nil {
+		return c.JSON(http.StatusOK, map[string]any{"provider": p.ID, "active": false, "reason": "verification failed"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"provider":   p.ID,
+		"active":     true,
+		"account":    sanitizeMeta(res.AccountLabel),
+		"externalId": sanitizeMeta(res.ExternalID),
+		"scopes":     nonNil(sanitizeScopes(res.Scopes)),
+	})
 }
 
 // callback is the PUBLIC, state-authed OAuth return. It ALWAYS 302s the user back
@@ -540,6 +712,11 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 	p, ok := s.State.providers[providerParam(c)]
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
+	}
+	// Symmetric with connect: disconnecting an admin-only connector requires the
+	// caller be an admin of its OWN org (principal.IsOrgAdmin — NOT SuperAdmin).
+	if p.AdminOnly && !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("disconnecting the " + p.ID + " connector requires org admin")
 	}
 
 	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
