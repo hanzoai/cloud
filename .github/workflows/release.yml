@@ -599,9 +599,86 @@ jobs:
           echo "::error::could not acquire a free version tag after 8 attempts"
           exit 1
 
-  # Deploy = a declared-tag bump in hanzoai/universe crs/cloud.yaml — Hanzo CD
-  # (the ArgoCD instance in ns hanzo-cd) syncs universe→cluster and the operator
-  # reconciles the CR. The old notify-universe repository_dispatch hub is retired
-  # (its flagged-sender dispatches were silently suppressed anyway); the native
-  # release path (release.go rolloutRelease) and deliberate promote commits own
-  # the bump.
+  # ── Promote: the declared-tag bump that makes the release DEPLOY ─────────────
+  # The tag minted above is the receipt for a pushed, smoke-passed image; THIS job
+  # records it as the desired state Hanzo CD reconciles. The universe-crs ArgoCD
+  # Application (ns hanzo-cd, `automated` sync + selfHeal) syncs
+  # infra/k8s/operator/crs/*.yaml → cluster and the operator rolls the Deployment,
+  # so a tag bump committed here reaches api.hanzo.ai with NO hand-dispatch and NO
+  # hand-edit of the CR.
+  #
+  # This is the SAME yq-bump → `deploy(<svc>): <tag>` universe commit the hanzoai/ci
+  # reusable (build.yml deploy step) does for every other service. cloud owns it
+  # HERE because its image is built by this workflow, not the ci reusable — its
+  # hanzo.yml carries no main `images:` entry and `# NO deploy`, so the shared
+  # deploy step never bumps cloud's CR. A direct in-cluster CR patch is NOT enough:
+  # ArgoCD selfHeal reverts any live edit not also recorded in git within ~45s.
+  # The retired notify-universe repository_dispatch had no receiver after the
+  # image-update.yml deploy hub was deleted in the Hanzo CD cutover; the git commit
+  # IS the sanctioned path now.
+  promote:
+    needs: build-amd64
+    # Only a real release promotes: build+smoke+push+tag all succeeded, so a
+    # proven v* image exists. A failure earlier leaves version_v empty → skipped.
+    if: ${{ needs.build-amd64.outputs.version_v != '' }}
+    runs-on: [hanzo-build-linux-amd64]
+    steps:
+      - name: Record the proven tag in universe crs/cloud.yaml (Hanzo CD rolls it)
+        env:
+          # GH_PAT already pushes this repo's git tags above (contents:write on the
+          # hanzoai org), so it writes hanzoai/universe too — the SAME token the ci
+          # reusable falls back to for the universe deploy commit.
+          GH_PAT: ${{ secrets.GH_PAT }}
+          VERSION_V: ${{ needs.build-amd64.outputs.version_v }}
+        run: |
+          set -euo pipefail
+          [ -n "${GH_PAT:-}" ] || { echo "::error::no GH_PAT — cannot record the declared-tag bump in universe"; exit 1; }
+
+          # Bare arc runners ship no yq — provision the static binary (sudo-free,
+          # same pattern the ci reusable and this workflow's kubectl/crane fetches use).
+          if ! command -v yq >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"; export PATH="$HOME/.local/bin:$PATH"
+            curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+              -o "$HOME/.local/bin/yq" && chmod +x "$HOME/.local/bin/yq"
+          fi
+
+          git clone -q --depth 1 \
+            "https://x-access-token:${GH_PAT}@github.com/hanzoai/universe.git" \
+            "$RUNNER_TEMP/universe"
+          CR="$RUNNER_TEMP/universe/infra/k8s/operator/crs/cloud.yaml"
+          [ -f "$CR" ] || { echo "::error::crs/cloud.yaml not found in universe"; exit 1; }
+
+          CUR="$(yq -r '.spec.image.tag // ""' "$CR")"
+          echo "cloud CR: ${CUR:-<empty>} → ${VERSION_V}"
+
+          # Monotonic guard: never roll the CR BACKWARD. Release runs finish under a
+          # serialized lane but a slow older run must never overwrite a newer promote.
+          # Skip iff the CR already holds a semver >= the version we just cut.
+          CURN="${CUR#v}"; NEWN="${VERSION_V#v}"
+          if printf '%s' "$CURN" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            top="$(printf '%s\n%s\n' "$CURN" "$NEWN" | sort -V | tail -1)"
+            if [ "$top" = "$CURN" ] && [ "$CURN" != "$NEWN" ]; then
+              echo "::notice::cloud CR already at v${CURN} (≥ ${VERSION_V}) — not rolling back"; exit 0
+            fi
+          fi
+
+          yq -i ".spec.image.tag = \"${VERSION_V}\"" "$CR"
+          if git -C "$RUNNER_TEMP/universe" diff --quiet; then
+            echo "::notice::crs/cloud.yaml already at ${VERSION_V} — nothing to record"; exit 0
+          fi
+          git -C "$RUNNER_TEMP/universe" -c user.name=hanzo-ci -c user.email=dev@hanzo.ai \
+            commit -qam "deploy(cloud): ${VERSION_V} (${GITHUB_REPOSITORY}@$(echo "${GITHUB_SHA}" | cut -c1-7))"
+
+          # Rebase-safe push: universe main advances on every service's deploy, so a
+          # concurrent commit must not make cloud's promote lose the whole roll. Retry
+          # a few times, rebasing between attempts.
+          for attempt in $(seq 1 5); do
+            if git -C "$RUNNER_TEMP/universe" push -q origin HEAD:main; then
+              echo "recorded deploy(cloud): ${VERSION_V} — Hanzo CD (universe-crs) will roll it to api.hanzo.ai"
+              exit 0
+            fi
+            echo "  universe push lost the race — rebasing (attempt ${attempt})"
+            git -C "$RUNNER_TEMP/universe" pull -q --rebase origin main || true
+            sleep 3
+          done
+          echo "::error::could not record the cloud tag bump in universe after 5 attempts"; exit 1
