@@ -139,6 +139,13 @@ const platformUserAgent = "hanzo-cloud-platform"
 // or leak across orgs. Overridable by the operator via CLOUD_PLATFORM_IMAGE_PREFIX.
 const defaultBuildImagePrefix = "ghcr.io/hanzoai"
 
+// defaultBuildNamespace is the ISOLATED namespace privileged-input build Jobs run
+// in when CLOUD_PLATFORM_BUILD_NS is unset. It is deliberately NOT the platform
+// namespace: builds mount a per-org push credential + the git-fetch token and run
+// attacker-authored Dockerfiles, so they are quarantined away from cloud's own
+// secret set (H2). The operator provisions this namespace + its scoped creds.
+const defaultBuildNamespace = "hanzo-build"
+
 // k8sClient wraps the dynamic client + the resolved build image prefix + the
 // per-tenant resource policy. nil dyn ⇒ no cluster resolved; every cluster op
 // fails closed with initErr.
@@ -152,7 +159,7 @@ type k8sClient struct {
 	clientset   kubernetes.Interface
 	initErr     string
 	imagePrefix string
-	buildNS     string         // namespace CI Jobs run in (default "hanzo")
+	buildNS     string         // ISOLATED namespace CI Jobs run in (default defaultBuildNamespace, off the platform ns)
 	limits      resourceLimits // per-tenant replica/quota/build bounds (MED-3)
 	kmsSync     kmsSyncConfig  // KMSSecret CR operator config (secrets.go)
 	// First-deploy tenant-RBAC readiness wait (waitForTenantRBAC). Zero ⇒ the
@@ -702,10 +709,11 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	if strings.TrimSpace(ref) == "" {
 		ref = firstNonEmpty(a.RepoBranch, "main")
 	}
-	cleanURL, cleanDockerfile, cleanRef, err := validateBuildInputs(a.RepoURL, a.Dockerfile, ref)
+	cleanURL, cleanDockerfile, cleanRef, cleanImage, err := validateBuildInputs(a.RepoURL, a.Dockerfile, ref, image)
 	if err != nil {
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
+	image = cleanImage
 	dockerfile := cleanDockerfile
 	if dockerfile == "" {
 		dockerfile = "Dockerfile"
@@ -741,7 +749,11 @@ func (k *k8sClient) launchBuildJob(ctx context.Context, org string, a Applicatio
 	// its own fixed argv element, so a client can never override --output/--opt to
 	// push to another tenant's repo.
 	command := buildFrontendCmd(buildCtx, dockerfile, image)
-	job := k.buildJobSpec(jobName, org, a.Slug, command)
+	pushSecret, err := buildPushSecret(image)
+	if err != nil {
+		return "", err
+	}
+	job := k.buildJobSpec(jobName, org, a.Slug, pushSecret, command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}
@@ -792,11 +804,48 @@ func buildFrontendCmd(buildCtx, dockerfile, image string) []any {
 // design: absent Secret ⇒ empty env ⇒ anonymous fetch (public repos only).
 const gitTokenSecret = "console-git-token"
 
-// buildJobSpec is the shared moby/buildkit Job (arcd model): privileged buildkit
-// on the CI runner pool, pushing to GHCR via the kaniko-ghcr pull secret. Both
-// the tenant build (launchBuildJob) and the direct build (launchDirectBuild)
-// construct their Job through here — one spec, one place.
-func (k *k8sClient) buildJobSpec(jobName, org, app string, command []any) *unstructured.Unstructured {
+// buildkitRootlessImage is the UNPRIVILEGED buildkit variant. The build Job runs
+// it rootless (uid 1000, no privileged, process sandbox disabled) so a hostile
+// Dockerfile has no host-root / device / privileged-syscall surface to escape
+// from (H2). It is a public image on Docker Hub — no pull secret needed.
+const buildkitRootlessImage = "moby/buildkit:v0.16.0-rootless"
+
+// buildPushSecretPrefix + buildPushSecret select the PER-ORG push credential a
+// build mounts. The Secret is named push-<namespace> (push-hanzoai / push-luxfi /
+// push-zooai) and holds ONLY that one org's registry write token, so a build for
+// one brand can never read another brand's push credential (H2). Combined with H1
+// (a non-SuperAdmin build's target namespace already equals the caller's own org),
+// a malicious Dockerfile can exfiltrate at most the SAME org's push token it was
+// authorized to push with — never the shared 3-org credential. Fail-closed: an
+// image not on an owned namespace yields an error and NO Job is launched
+// (imageAllowed has already passed on every live path, so this only fires on a
+// logic error, and it fails closed rather than falling back to a broad cred).
+const buildPushSecretPrefix = "push-"
+
+func buildPushSecret(image string) (string, error) {
+	ns, ok := imageRegistryNamespace(image)
+	if !ok || !ownedNamespaces[ns] {
+		return "", fmt.Errorf("no owned registry namespace for image %q", image)
+	}
+	return buildPushSecretPrefix + ns, nil
+}
+
+// buildJobSpec is the shared build Job for both the tenant build (launchBuildJob)
+// and the direct build (launchDirectBuild) — one spec, one place. It is ROOTLESS
+// and defense-in-depth hardened (H2):
+//
+//   - moby/buildkit:*-rootless as uid/gid 1000, runAsNonRoot, privileged=false,
+//     allowPrivilegeEscalation=false, all capabilities dropped. The unprivileged
+//     rootless worker needs seccomp/AppArmor unconfined + --oci-worker-no-process-
+//     sandbox (it user-namespaces the build instead of relying on host privilege),
+//     which is the documented way to run buildkit with NO host-root escape surface.
+//   - pushSecret is the caller-resolved PER-ORG push credential (push-<namespace>),
+//     mounted read-only as the only registry credential in the pod — never the
+//     shared 3-org credential.
+//   - runs in the ISOLATED build namespace (k.buildNS, defaulted off the main
+//     platform namespace) with automountServiceAccountToken=false and pinned to the
+//     dedicated CI runner pool (taint + nodeSelector) — retained from before.
+func (k *k8sClient) buildJobSpec(jobName, org, app, pushSecret string, command []any) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "batch/v1",
 		"kind":       "Job",
@@ -814,18 +863,44 @@ func (k *k8sClient) buildJobSpec(jobName, org, app string, command []any) *unstr
 			"backoffLimit":            int64(0),
 			"ttlSecondsAfterFinished": int64(3600),
 			"template": map[string]any{
+				"metadata": map[string]any{
+					// AppArmor unconfined for the rootless worker. The beta annotation is
+					// honored on older nodes; securityContext.appArmorProfile (below) is the
+					// GA form on k8s ≥1.30 — both set so ONE spec is correct across versions.
+					"annotations": map[string]any{
+						"container.apparmor.security.beta.kubernetes.io/buildkit": "unconfined",
+					},
+				},
 				"spec": map[string]any{
 					"restartPolicy":                "Never",
 					"nodeSelector":                 map[string]any{"runner-pool": "32g"},
 					"tolerations":                  []any{map[string]any{"key": "dedicated", "operator": "Equal", "value": "ci-runner", "effect": "NoSchedule"}},
-					"imagePullSecrets":             []any{map[string]any{"name": "kaniko-ghcr"}},
 					"automountServiceAccountToken": false,
+					// Pod-level: run the whole pod as the non-root buildkit user.
+					"securityContext": map[string]any{
+						"runAsUser":      int64(1000),
+						"runAsGroup":     int64(1000),
+						"runAsNonRoot":   true,
+						"seccompProfile": map[string]any{"type": "Unconfined"},
+					},
 					"containers": []any{map[string]any{
-						"name":            "buildkit",
-						"image":           "moby/buildkit:v0.16.0",
-						"command":         command,
-						"securityContext": map[string]any{"privileged": true},
+						"name":    "buildkit",
+						"image":   buildkitRootlessImage,
+						"command": command,
+						"securityContext": map[string]any{
+							"privileged":               false,
+							"runAsNonRoot":             true,
+							"runAsUser":                int64(1000),
+							"runAsGroup":               int64(1000),
+							"allowPrivilegeEscalation": false,
+							"seccompProfile":           map[string]any{"type": "Unconfined"},
+							"appArmorProfile":          map[string]any{"type": "Unconfined"},
+							"capabilities":             map[string]any{"drop": []any{"ALL"}},
+						},
 						"env": []any{
+							// --oci-worker-no-process-sandbox lets buildkitd run rootless with
+							// no privileged process sandbox (it user-namespaces the build).
+							map[string]any{"name": "BUILDKITD_FLAGS", "value": "--oci-worker-no-process-sandbox"},
 							map[string]any{"name": "DOCKER_CONFIG", "value": "/ghcr"},
 							// Private-repo fetch credential, surfaced to the solve as the
 							// GIT_AUTH_TOKEN build secret (buildFrontendCmd). optional: a
@@ -836,12 +911,18 @@ func (k *k8sClient) buildJobSpec(jobName, org, app string, command []any) *unstr
 						},
 						"volumeMounts": []any{
 							map[string]any{"name": "ghcr", "mountPath": "/ghcr", "readOnly": true},
+							// Rootless buildkitd state (worker cache + snapshots) under the
+							// buildkit user's home — a writable emptyDir, required rootless.
+							map[string]any{"name": "buildkitd", "mountPath": "/home/user/.local/share/buildkit"},
 						},
 					}},
-					"volumes": []any{map[string]any{
-						"name":   "ghcr",
-						"secret": map[string]any{"secretName": "kaniko-ghcr", "items": []any{map[string]any{"key": ".dockerconfigjson", "path": "config.json"}}},
-					}},
+					"volumes": []any{
+						map[string]any{
+							"name":   "ghcr",
+							"secret": map[string]any{"secretName": pushSecret, "items": []any{map[string]any{"key": ".dockerconfigjson", "path": "config.json"}}},
+						},
+						map[string]any{"name": "buildkitd", "emptyDir": map[string]any{}},
+					},
 				},
 			},
 		},
@@ -862,10 +943,11 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	if strings.TrimSpace(ref) == "" {
 		ref = "main"
 	}
-	cleanURL, cleanDockerfile, cleanRef, err := validateBuildInputs(repoURL, dockerfile, ref)
+	cleanURL, cleanDockerfile, cleanRef, cleanImage, err := validateBuildInputs(repoURL, dockerfile, ref, image)
 	if err != nil {
 		return "", fmt.Errorf("invalid build input: %w", err)
 	}
+	image = cleanImage
 	active, err := k.countActiveBuilds(ctx, platformBuildOrg)
 	if err != nil {
 		return "", fmt.Errorf("count active builds: %w", err)
@@ -876,7 +958,11 @@ func (k *k8sClient) launchDirectBuild(ctx context.Context, repoURL, ref, image, 
 	jobName := truncate("pf-runner-"+jobIDSuffix(buildID), 63)
 	buildCtx := strings.TrimSuffix(cleanURL, ".git") + ".git#" + cleanRef
 	command := buildFrontendCmd(buildCtx, cleanDockerfile, image)
-	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", command)
+	pushSecret, err := buildPushSecret(image)
+	if err != nil {
+		return "", err
+	}
+	job := k.buildJobSpec(jobName, platformBuildOrg, "runner", pushSecret, command)
 	if _, err := k.dyn.Resource(jobsGVR).Namespace(k.buildNS).Create(ctx, job, metav1.CreateOptions{}); err != nil {
 		return "", err
 	}

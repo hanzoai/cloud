@@ -107,7 +107,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("platform.Mount: open store: %w", err)
 	}
 
-	k := newK8sClient(getenv("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), getenv("CLOUD_PLATFORM_BUILD_NS", "hanzo"))
+	// Build Jobs run in a DEDICATED, isolated namespace — NOT the main platform
+	// namespace (which holds cloud's own ~hundreds of secrets). The default is
+	// fail-secure: an unset CLOUD_PLATFORM_BUILD_NS lands privileged-ish builds in
+	// the isolated build ns (holding only the per-org push creds + git token), never
+	// alongside the platform secrets (H2). The operator provisions this namespace and
+	// its scoped credentials (like every other build credential today).
+	k := newK8sClient(getenv("CLOUD_PLATFORM_IMAGE_PREFIX", defaultBuildImagePrefix), getenv("CLOUD_PLATFORM_BUILD_NS", defaultBuildNamespace))
 	if k.initErr != "" {
 		log.Warn("kubernetes client unavailable; deploy/build will fail closed", "err", k.initErr)
 	}
