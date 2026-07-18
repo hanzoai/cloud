@@ -55,7 +55,16 @@ type edge struct {
 func Mount(app *zip.App, deps cloud.Deps) error {
 	e := &edge{
 		base: strings.TrimRight(strings.TrimSpace(dnsURL()), "/"),
-		http: &http.Client{Timeout: forwardTimeout},
+		http: &http.Client{
+			Timeout: forwardTimeout,
+			// Do NOT follow upstream 3xx. Relay the redirect response verbatim
+			// (status + Location) so responses pass through as claimed and a
+			// redirect can never silently re-target the request onto another host
+			// or path under this head's own (fresh-request, bearer-relay) identity.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 	app.Group("/v1/dns").All("/*", e.forward)
 	if deps.Logger != nil {
@@ -87,12 +96,20 @@ func (e *edge) forward(c *zip.Ctx) error {
 		return c.JSON(http.StatusServiceUnavailable, fail("unconfigured", "dns control plane is not configured"))
 	}
 
-	// Path + query pass through verbatim. The normalized path is locked under
-	// /v1/dns by the route match and the upstream host comes ONLY from env (never
-	// caller-influenced), so a path can never redirect the request to another host:
-	// no SSRF.
+	// Path + query pass through verbatim, but ONLY within /v1/dns. uri.Path() is
+	// normalized and percent-decoded, so any dot-segment or encoded-dot traversal
+	// (which Fiber's raw wildcard still matches) has ALREADY been resolved here --
+	// e.g. /v1/dns/../../admin normalizes to /admin. Guard the normalized path so
+	// the forward is LOCKED under /v1/dns; the caller can never walk the request
+	// onto another path of the DNS host. Fail closed: anything outside is refused
+	// before a byte leaves cloud. The upstream host still comes ONLY from env
+	// (never caller-influenced), so a path can never re-target another host: no SSRF.
 	uri := c.Fiber().Request().URI()
-	target := e.base + string(uri.Path())
+	p := string(uri.Path())
+	if p != "/v1/dns" && !strings.HasPrefix(p, "/v1/dns/") {
+		return c.JSON(http.StatusBadRequest, fail("bad_request", "path must be under /v1/dns"))
+	}
+	target := e.base + p
 	if qs := uri.QueryString(); len(qs) > 0 {
 		target += "?" + string(qs)
 	}
