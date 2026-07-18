@@ -160,20 +160,80 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 
 // ---- machines ----
 
+// managedMachines is the org's Visor-provisioned machines: the deduped UNION of
+// Visor's TWO machine sources, so every real machine appears exactly once.
+//
+//   - REGISTRY (GET /v1/get-machines → GetMachines): Visor's DB-backed, masked
+//     machine records — they carry whatever Visor has synced/enriched.
+//   - LIVE DigitalOcean reseller list (GET /v1/machines → ListComputeMachines →
+//     service.ListOrgMachines): every droplet currently tagged to the org in
+//     Hanzo's house DO account, straight from the live DO API.
+//
+// A droplet that was provisioned but is NOT (yet) in the registry lives ONLY in
+// the live list; sourcing the registry alone made it invisible on the world admin
+// fleet (the bug this fixes). Dedup is by provider id OR name; the REGISTRY entry
+// WINS a collision so any enrichment/masking it carries is preserved. Each source
+// is independently resilient — an outage of either is logged and skipped, never
+// hiding the other (or the caller's BYO fold). Nothing is fabricated: only
+// machines Visor actually returns are surfaced.
+func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMachine {
+	var registry, live []visorMachine
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &registry); err != nil {
+		// A Visor blip must not hide the org's OTHER machine source (or its BYO fold).
+		s.Log.Warn("visor get-machines failed; registry machines omitted", "org", org, "err", err)
+		registry = nil
+	}
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/machines", q("owner", org), nil, &live); err != nil {
+		s.Log.Warn("visor list-compute-machines failed; live DO machines omitted", "org", org, "err", err)
+		live = nil
+	}
+
+	out := make([]visorMachine, 0, len(registry)+len(live))
+	seen := make(map[string]struct{}, 2*(len(registry)+len(live)))
+	claim := func(m visorMachine) {
+		if m.Id != "" {
+			seen["id:"+m.Id] = struct{}{}
+		}
+		if m.Name != "" {
+			seen["name:"+m.Name] = struct{}{}
+		}
+	}
+	claimed := func(m visorMachine) bool {
+		if m.Id != "" {
+			if _, ok := seen["id:"+m.Id]; ok {
+				return true
+			}
+		}
+		if m.Name != "" {
+			if _, ok := seen["name:"+m.Name]; ok {
+				return true
+			}
+		}
+		return false
+	}
+	// Registry first so it WINS every id/name collision; the live list then
+	// contributes only the droplets the registry has not already surfaced (and is
+	// deduped against itself).
+	for _, m := range registry {
+		out = append(out, m)
+		claim(m)
+	}
+	for _, m := range live {
+		if claimed(m) {
+			continue
+		}
+		out = append(out, m)
+		claim(m)
+	}
+	return out
+}
+
 func listMachines(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(c)
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	var machines []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
-		// Visor (the DOKS/reseller provider) is unreachable — do not hide the
-		// tenant's OWN bring-your-own compute behind an upstream blip. Log and
-		// fall through with no Visor rows; the BYO fold-in below still lists the
-		// dialed-in GPUs. In production Visor is up and both sets return.
-		s.Log.Warn("visor get-machines failed; returning BYO-only machine list", "org", org, "err", err)
-		machines = nil
-	}
+	machines := managedMachines(s, c, org)
 	out := make([]machineView, 0, len(machines))
 	for _, m := range machines {
 		out = append(out, toMachineView(m))
@@ -302,15 +362,10 @@ func listGPUs(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
-	var machines []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
-		// Resilient union (see listMachines): a Visor outage must not hide the
-		// tenant's BYO accelerators. Log and continue with the BYO fold-in.
-		s.Log.Warn("visor get-machines failed; returning BYO-only gpu list", "org", org, "err", err)
-		machines = nil
-	}
 	out := make([]gpuView, 0)
-	for _, m := range machines {
+	// Same managed-machine union as listMachines (registry + live DO, deduped), so
+	// a GPU droplet present only in the live DO list is not hidden from the GPUs page.
+	for _, m := range managedMachines(s, c, org) {
 		out = append(out, gpusFromMachine(m)...)
 	}
 	// Fold in the org's BYO accelerators (provider="byo") so the console's GPUs
