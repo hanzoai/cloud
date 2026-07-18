@@ -1,4 +1,4 @@
-package gatewaypolicy
+package edge
 
 import (
 	"context"
