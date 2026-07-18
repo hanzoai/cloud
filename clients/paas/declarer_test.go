@@ -29,7 +29,7 @@ func TestObserveFleetSeesAppCRs(t *testing.T) {
 		appCRObj("console", "hanzo", "ghcr.io/hanzoai/console", "v8.4.0"),
 		appCRObj("iam", "hanzo", "ghcr.io/hanzoai/iam", "v1.28.16"),
 	)
-	views, err := observeFleet(s, context.Background())
+	views, err := observeFleet(s, context.Background(), scanOrder())
 	if err != nil {
 		t.Fatalf("observeFleet: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestReleaseRefusesAGitDeclaredWorkload(t *testing.T) {
 // error; the board still renders the reachable ones.
 func TestObserveFleetSkipsAnEmptyNamespace(t *testing.T) {
 	s := fakeService(appCRObj("cloud", "hanzo", "ghcr.io/hanzoai/cloud", "v1.801.38"))
-	views, err := observeFleet(s, context.Background())
+	views, err := observeFleet(s, context.Background(), scanOrder())
 	if err != nil {
 		t.Fatalf("observeFleet must tolerate empty namespaces: %v", err)
 	}

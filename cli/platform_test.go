@@ -18,16 +18,21 @@ func platformStub(t *testing.T, token string, h http.HandlerFunc) (*Platform, fu
 	return newPlatform(srv.URL, token), srv.Close
 }
 
+// Apps hits the LIVE board /v1/paas/apps with the IAM bearer; it sends NO org
+// filter (the board is org-confined server-side by the validated identity).
 func TestPlatformAuthHeaderAndApps(t *testing.T) {
 	p, done := platformStub(t, "svc-tok", func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer svc-tok" {
 			t.Errorf("auth header = %q", got)
 		}
-		if r.URL.Path != "/v1/apps" {
-			t.Errorf("path = %s", r.URL.Path)
+		if r.URL.Path != "/v1/paas/apps" {
+			t.Errorf("path = %s, want /v1/paas/apps", r.URL.Path)
 		}
 		if r.URL.Query().Get("env") != "main" || r.URL.Query().Get("drift") != "1" {
 			t.Errorf("query = %s", r.URL.RawQuery)
+		}
+		if r.URL.Query().Has("org") {
+			t.Errorf("client must NOT send an org filter (identity confines the board): %s", r.URL.RawQuery)
 		}
 		_ = json.NewEncoder(w).Encode(AppsList{
 			Apps: []AppView{{ID: "hanzoai/iam/main", Org: "hanzoai", App: "iam", Env: "main", Drift: json.RawMessage(`{"severity":"red"}`)}},
@@ -47,126 +52,75 @@ func TestPlatformAuthHeaderAndApps(t *testing.T) {
 	}
 }
 
+// App hits /v1/paas/apps/{app}; no org query (identity scopes it).
 func TestPlatformApp(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/apps/hanzoai/iam/main" {
-			t.Errorf("path = %s", r.URL.Path)
+		if r.URL.Path != "/v1/paas/apps/iam" {
+			t.Errorf("path = %s, want /v1/paas/apps/iam", r.URL.Path)
 		}
-		if r.URL.Query().Get("org") != "hanzoai" {
-			t.Errorf("org query = %s", r.URL.RawQuery)
+		if r.URL.RawQuery != "" {
+			t.Errorf("app get must carry no query, got %s", r.URL.RawQuery)
 		}
-		_ = json.NewEncoder(w).Encode(AppView{ID: "hanzoai/iam/main", App: "iam"})
+		_ = json.NewEncoder(w).Encode(AppView{ID: "hanzoai/iam/main", App: "iam", Phase: "Running"})
 	})
 	defer done()
-	a, err := p.App(context.Background(), "hanzoai/iam/main", "hanzoai")
+	a, err := p.App(context.Background(), "iam")
 	if err != nil || a.App != "iam" {
 		t.Fatalf("App: %v %+v", err, a)
 	}
 }
 
-func TestPlatformSyncApps(t *testing.T) {
+// Clusters hits the LIVE /v1/clusters (org from identity, not the path).
+func TestPlatformClusters(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/sync" {
-			t.Errorf("sync = %s %s", r.Method, r.URL.Path)
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/clusters" {
+			t.Errorf("clusters = %s %s, want GET /v1/clusters", r.Method, r.URL.Path)
 		}
-		w.WriteHeader(200)
-	})
-	defer done()
-	if err := p.SyncApps(context.Background()); err != nil {
-		t.Fatalf("SyncApps: %v", err)
-	}
-}
-
-func TestPlatformClustersAndProvision(t *testing.T) {
-	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/org/acme/cluster":
-			_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Phase: "ready", Active: true}}})
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/org/acme/cluster":
-			body, _ := io.ReadAll(r.Body)
-			var req ProvisionReq
-			_ = json.Unmarshal(body, &req)
-			if req.Region != "sfo3" || !req.HA {
-				t.Errorf("provision body = %+v", req)
-			}
-			w.WriteHeader(201)
-			_ = json.NewEncoder(w).Encode(map[string]any{"cluster": Cluster{DoksClusterID: "c2", Name: "new", Phase: "requested"}})
-		default:
-			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
-		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{
+			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Kind: "managed", NodeCount: 3},
+		}})
 	})
 	defer done()
 
-	cs, err := p.Clusters(context.Background(), "acme")
-	if err != nil || len(cs) != 1 || cs[0].DoksClusterID != "c1" {
+	cs, err := p.Clusters(context.Background())
+	if err != nil || len(cs) != 1 || cs[0].ID() != "c1" || cs[0].Kind != "managed" {
 		t.Fatalf("Clusters: %v %+v", err, cs)
 	}
-	c, err := p.ProvisionCluster(context.Background(), "acme", ProvisionReq{Region: "sfo3", HA: true})
-	if err != nil || c.DoksClusterID != "c2" {
-		t.Fatalf("ProvisionCluster: %v %+v", err, c)
+}
+
+// A BYO cluster with no DOKS id keys on its name via ID().
+func TestClusterIDFallsBackToName(t *testing.T) {
+	c := Cluster{Name: "byo-1", Kind: "byo"}
+	if c.ID() != "byo-1" {
+		t.Fatalf("ID() = %q, want byo-1", c.ID())
 	}
 }
 
-func TestPlatformTargetAndSelect(t *testing.T) {
-	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/org/acme/cluster/select" {
-			t.Errorf("path = %s", r.URL.Path)
-		}
-		if r.Method == http.MethodPost {
-			body, _ := io.ReadAll(r.Body)
-			var m map[string]any
-			_ = json.Unmarshal(body, &m)
-			if m["doksClusterId"] != "c1" {
-				t.Errorf("select body = %v", m)
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"target": Target{Cluster: "hanzo-acme", Dedicated: true, Namespaces: map[string]string{"acme": "main"}}})
-	})
-	defer done()
-
-	tg, err := p.Target(context.Background(), "acme")
-	if err != nil || tg.Cluster != "hanzo-acme" || !tg.Dedicated {
-		t.Fatalf("Target: %v %+v", err, tg)
-	}
-	id := "c1"
-	if _, err := p.SelectTarget(context.Background(), "acme", &id); err != nil {
-		t.Fatalf("SelectTarget: %v", err)
-	}
-}
-
-func TestPlatformInstallBaseline(t *testing.T) {
-	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/org/acme/cluster/c1/install-baseline" {
-			t.Errorf("install-baseline = %s %s", r.Method, r.URL.Path)
-		}
-		w.WriteHeader(200)
-	})
-	defer done()
-	if err := p.InstallBaseline(context.Background(), "acme", "c1"); err != nil {
-		t.Fatalf("InstallBaseline: %v", err)
-	}
-}
-
+// Redeploy hits /v1/paas/apps/{app}/deploy (rolling restart), org from identity.
 func TestPlatformRedeploy(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, r *http.Request) {
-		want := "/v1/org/acme/project/p1/env/e1/container/app-x/redeploy"
-		if r.Method != http.MethodPost || r.URL.Path != want {
-			t.Errorf("redeploy path = %s %s", r.Method, r.URL.Path)
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/paas/apps/app-x/deploy" {
+			t.Errorf("redeploy = %s %s, want POST /v1/paas/apps/app-x/deploy", r.Method, r.URL.Path)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		if r.URL.Query().Get("env") != "test" {
+			t.Errorf("env query = %s", r.URL.RawQuery)
+		}
+		w.WriteHeader(202)
+		_ = json.NewEncoder(w).Encode(DeployResult{OK: true, App: "app-x", Namespace: "hanzo-testnet", Env: "test", RestartedAt: "2026-07-18T00:00:00Z"})
 	})
 	defer done()
-	if err := p.Redeploy(context.Background(), "acme", "p1", "e1", "app-x"); err != nil {
-		t.Fatalf("Redeploy: %v", err)
+	res, err := p.Redeploy(context.Background(), "app-x", "test")
+	if err != nil || res.Namespace != "hanzo-testnet" {
+		t.Fatalf("Redeploy: %v %+v", err, res)
 	}
 }
 
 func TestPlatformRedeployNotOK(t *testing.T) {
 	p, done := platformStub(t, "t", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": false})
+		_ = json.NewEncoder(w).Encode(DeployResult{OK: false})
 	})
 	defer done()
-	if err := p.Redeploy(context.Background(), "o", "p", "e", "c"); err == nil {
+	if _, err := p.Redeploy(context.Background(), "c", ""); err == nil {
 		t.Fatalf("expected error when ok=false")
 	}
 }
