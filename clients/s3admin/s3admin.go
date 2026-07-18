@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"strings"
 
-	minio "github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	minio "github.com/hanzoai/s3-go"
+	"github.com/hanzoai/s3-go/pkg/credentials"
 )
 
 // Admin holds the shared S3 admin connection parameters, sourced once from the
