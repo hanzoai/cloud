@@ -138,7 +138,7 @@ func newIdentityValidator(issuer, jwksURL string, audiences []string, ttl time.D
 		issuers:   trustedIssuers(issuer),
 		audiences: audiences,
 		cache:     newJWKSCache(jwksURL, ttl),
-		keys:      newIAMKeys(),
+		keys:      sharedKeys(), // ONE resolver+cache, shared with OrgForKey (analytics capture)
 	}
 }
 
