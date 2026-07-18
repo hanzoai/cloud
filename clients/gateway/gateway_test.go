@@ -9,16 +9,16 @@ import (
 	"testing"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
 // mountApp wires /v1/gateway over a real temp-dir store and returns both so a test
 // can assert the HTTP surface and the persisted state.
-func mountApp(t *testing.T) (*zip.App, *gatewaypolicy.Store) {
+func mountApp(t *testing.T) (*zip.App, *edge.Store) {
 	t.Helper()
-	st, err := gatewaypolicy.New(t.TempDir(), "admin", gatewaypolicy.Policy{PerIPRPM: 100, WindowSec: 1})
+	st, err := edge.New(t.TempDir(), "admin", edge.Policy{PerIPRPM: 100, WindowSec: 1})
 	if err != nil {
 		t.Fatalf("store: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestOrgAdmin_SetsOwnOrgRPM(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("GET: %d", code)
 	}
-	var p gatewaypolicy.Policy
+	var p edge.Policy
 	if err := json.Unmarshal([]byte(body), &p); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
@@ -132,13 +132,13 @@ func TestPut_EmptyBodyRejected(t *testing.T) {
 }
 
 // getPolicy GETs the effective config for the given identity and decodes it.
-func getPolicy(t *testing.T, app *zip.App, hdr map[string]string) gatewaypolicy.Policy {
+func getPolicy(t *testing.T, app *zip.App, hdr map[string]string) edge.Policy {
 	t.Helper()
 	code, body := call(t, app, http.MethodGet, "/v1/gateway/config", "", hdr)
 	if code != 200 {
 		t.Fatalf("GET: %d (%s)", code, body)
 	}
-	var p gatewaypolicy.Policy
+	var p edge.Policy
 	if err := json.Unmarshal([]byte(body), &p); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}

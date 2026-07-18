@@ -1,6 +1,6 @@
 // Package gateway is the /v1/gateway subsystem: the RUNTIME config plane for
 // the cloud edge ("gateway role"). It serves GET/PUT over the SAME
-// gatewaypolicy.Store the EdgeCORS/EdgeRateLimit middleware and ScopeRateLimit
+// edge.Store the EdgeCORS/EdgeRateLimit middleware and ScopeRateLimit
 // read live, so an operator retunes the CORS allowlist, the pre-auth per-IP flood
 // cap, or a tenant's authenticated rate ceiling with NO redeploy — replacing the
 // gateway's baked-into-an-image KrakenD config.
@@ -30,14 +30,14 @@ import (
 	"fmt"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
 // state is gatewaysvc's own data; shared deps live in the embedded cloud.Base.
 type state struct {
-	store *gatewaypolicy.Store
+	store *edge.Store
 }
 
 var mounted *cloud.Service[state]
@@ -96,7 +96,7 @@ func put(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("a validated principal is required")
 	}
-	var in gatewaypolicy.Policy
+	var in edge.Policy
 	if err := json.Unmarshal(c.Body(), &in); err != nil {
 		return zip.ErrBadRequest("invalid JSON body")
 	}
@@ -125,7 +125,7 @@ func put(s *cloud.Service[state], c *zip.Ctx) error {
 	// method allowlist. Only the per-org fields are forwarded, so a tenant can never
 	// smuggle a platform knob into its own row. Scoped to the caller's org (never a
 	// body-supplied org); a SuperAdmin may target a specific tenant with ?org=<slug>.
-	orgCfg := gatewaypolicy.Policy{
+	orgCfg := edge.Policy{
 		OrgRPM:      in.OrgRPM,
 		CacheTTLSec: in.CacheTTLSec,
 		CachePaths:  in.CachePaths,

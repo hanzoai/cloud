@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/zap-proto/zip"
 )
 
 // staticPol builds a static-only (no SQLite) policy store for the middleware tests.
-func staticPol(t *testing.T, p gatewaypolicy.Policy) *gatewaypolicy.Store {
+func staticPol(t *testing.T, p edge.Policy) *edge.Store {
 	t.Helper()
-	s, _ := gatewaypolicy.New("", "admin", p) // "" dataDir ⇒ static-only, no file.
+	s, _ := edge.New("", "admin", p) // "" dataDir ⇒ static-only, no file.
 	return s
 }
 
@@ -61,7 +61,7 @@ func TestOriginMatcher(t *testing.T) {
 // corsApp mounts EdgeCORS for the given origins with a trivial /probe handler.
 func corsApp(t *testing.T, origins []string) *zip.App {
 	app := zip.New(zip.Config{})
-	app.Use(EdgeCORS(staticPol(t, gatewaypolicy.Policy{CORSOrigins: origins})))
+	app.Use(EdgeCORS(staticPol(t, edge.Policy{CORSOrigins: origins})))
 	app.Get("/probe", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 	return app
 }
@@ -107,7 +107,7 @@ func TestEdgeCORS_ReflectsAllowlistedOrigin(t *testing.T) {
 func TestEdgeCORS_PreflightShortCircuits(t *testing.T) {
 	reached := false
 	app := zip.New(zip.Config{})
-	app.Use(EdgeCORS(staticPol(t, gatewaypolicy.Policy{CORSOrigins: []string{"*.hanzo.ai"}})))
+	app.Use(EdgeCORS(staticPol(t, edge.Policy{CORSOrigins: []string{"*.hanzo.ai"}})))
 	app.Use(func(c *zip.Ctx) error { reached = true; return c.Continue() })
 	app.Get("/probe", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 
@@ -157,7 +157,7 @@ func edgeRateApp(t *testing.T, limit int, enabled bool) *zip.App {
 		perIP = 0 // disabled ⇒ no cap
 	}
 	app := zip.New(zip.Config{})
-	app.Use(EdgeRateLimit(staticPol(t, gatewaypolicy.Policy{PerIPRPM: perIP, WindowSec: 60})))
+	app.Use(EdgeRateLimit(staticPol(t, edge.Policy{PerIPRPM: perIP, WindowSec: 60})))
 	app.Get("/probe", func(c *zip.Ctx) error { return c.JSON(200, map[string]string{"ok": "1"}) })
 	return app
 }
