@@ -37,10 +37,10 @@ type keyResolver interface {
 // A brief cache keeps the hot auth path off the network; it caches misses too, so a
 // bad key cannot hammer IAM.
 type iamKeys struct {
-	base   string
-	auth   string // client_secret_basic, or "" when unconfigured
-	http   *http.Client
-	cache  cache[string, *idClaims]
+	base  string
+	auth  string // client_secret_basic, or "" when unconfigured
+	http  *http.Client
+	cache cache[string, *idClaims]
 }
 
 // newIAMKeys reads the same IAM env clients/account does. With no confidential
@@ -53,6 +53,52 @@ func newIAMKeys() *iamKeys {
 		http:  &http.Client{Timeout: 5 * time.Second},
 		cache: newCache[string, *idClaims](60 * time.Second),
 	}
+}
+
+// sharedKeys memoizes ONE API-key resolver (and its 60s cache) for the whole
+// binary. The identity boundary (SanitizeIdentity, via newIdentityValidator) and
+// any subsystem that must resolve a key OUT-OF-BAND of the Authorization header
+// (analytics capture: a project key posted in the SDK body/query) both go through
+// this ONE seam, so a key resolves to the SAME org either way and IAM sees one
+// warm cache — never a second, drifting resolver.
+var (
+	sharedKeysOnce sync.Once
+	sharedKeysInst *iamKeys
+)
+
+func sharedKeys() *iamKeys {
+	sharedKeysOnce.Do(func() { sharedKeysInst = newIAMKeys() })
+	return sharedKeysInst
+}
+
+// maxKeyOrgLen bounds a resolved org key the same way principal.MaxOrgLen does: the
+// org becomes a warehouse partition key, so an over-long value (malformed / hostile)
+// is refused rather than stored.
+const maxKeyOrgLen = 128
+
+// OrgForKey resolves an opaque Hanzo API key (hk-/sk-/pk-/fw_/hz_) to the org it
+// belongs to — the SAME owner org SanitizeIdentity mints when that key arrives as a
+// bearer — through the ONE IAM key seam (get-user?accessKey). It is the exported
+// door a keyed, bearer-less SDK path uses to attribute a project key to a tenant.
+//
+// FAILS CLOSED: ("", false) for a non-key-shaped string, an unknown/unresolvable
+// key, an unconfigured resolver, or an out-of-bounds org — never a fabricated or
+// default tenant, so a bad key can never be written into another org's partition.
+// The isAPIKey prefix gate keeps garbage strings off the IAM network path.
+func OrgForKey(ctx context.Context, key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if !isAPIKey(key) {
+		return "", false
+	}
+	claims := sharedKeys().resolve(ctx, key)
+	if claims == nil {
+		return "", false
+	}
+	owner := strings.TrimSpace(claims.Owner)
+	if owner == "" || len(owner) > maxKeyOrgLen {
+		return "", false
+	}
+	return owner, true
 }
 
 // iamHost is the standalone IAM origin cloud talks to; iamCred is the service
