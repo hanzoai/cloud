@@ -80,9 +80,13 @@ func (e insightsEvent) toCapture() CaptureEvent {
 	}
 }
 
-// insightsIngest answers POST /v1/insights/e — the PostHog-compatible front
-// door. Same tenant gate, same normalize/scrub, same warehouse as /v1/analytics.
+// insightsIngest answers POST /v1/insights/e — the DEPRECATED PostHog-wire
+// adapter. It normalizes the PostHog single/batch shape onto CaptureEvent and
+// funnels through the ONE write core (ingestEvents, source=posthog); it keeps
+// captureTenant's brand-host path so anonymous PostHog-wire traffic is unbroken.
+// New callers post the canonical Event to /v1/event.
 func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
+	deprecated(s, c, "/v1/event")
 	org, ok := captureTenant(c)
 	if !ok {
 		return zip.ErrForbidden("valid bearer or a recognized brand host required")
@@ -95,39 +99,15 @@ func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(events) == 0 && body.Event != "" {
 		events = []insightsEvent{body.insightsEvent}
 	}
-	if len(events) == 0 {
-		return c.JSON(http.StatusOK, CaptureResult{})
+	caps := make([]CaptureEvent, len(events))
+	for i, e := range events {
+		caps[i] = e.toCapture()
 	}
-	if len(events) > maxBatch {
-		return zip.ErrBadRequest("batch too large")
-	}
-	if err := requireDatastore(); err != nil {
+	res, err := ingestEvents(c.Context(), org, sourcePostHog, caps)
+	if err != nil {
 		return err
 	}
-	ctx := c.Context()
-	if err := EnsureEventsTable(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
-	}
-
-	now := time.Now().UTC()
-	rows := make([]eventRow, 0, len(events))
-	dropped := 0
-	for _, e := range events {
-		row, ok := normalizeEvent(org, now, e.toCapture())
-		if !ok {
-			dropped++
-			continue
-		}
-		rows = append(rows, row)
-	}
-	if len(rows) == 0 {
-		return c.JSON(http.StatusOK, CaptureResult{Dropped: dropped})
-	}
-	stmt, args := buildEventsInsert(rows)
-	if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse write failed: %v", err)
-	}
-	return c.JSON(http.StatusOK, CaptureResult{Accepted: len(rows), Dropped: dropped})
+	return c.JSON(http.StatusOK, res)
 }
 
 // insightsEvents answers GET /v1/insights/events — the console's recent-events
