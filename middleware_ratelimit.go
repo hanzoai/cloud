@@ -28,9 +28,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
-	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 	zipmw "github.com/zap-proto/zip/middleware"
 )
@@ -51,7 +51,7 @@ const rateConfigTTL = 5 * time.Second
 //
 // It is a no-op passthrough only when BOTH are absent (no commerce AND no policy
 // store), so an unwired deployment is never blocked — mirroring BillingGate.
-func ScopeRateLimit(m *metering.Client, gp *gatewaypolicy.Store) zip.Handler {
+func ScopeRateLimit(m *metering.Client, gp *edge.Store) zip.Handler {
 	if !billingEnabled(m) && gp == nil {
 		return func(c *zip.Ctx) error { return c.Next() }
 	}
@@ -72,7 +72,7 @@ type scopeCacheEntry struct {
 
 type scopeRateLimiter struct {
 	m   *metering.Client
-	gp  *gatewaypolicy.Store // /v1/gateway per-org OrgRPM override (nil-safe).
+	gp  *edge.Store // /v1/gateway per-org OrgRPM override (nil-safe).
 	ttl time.Duration
 
 	mu      sync.Mutex
