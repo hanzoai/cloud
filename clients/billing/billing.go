@@ -152,6 +152,12 @@ func build(b cloud.Base) (state, error) {
 // /v1/finance/* projection (same commerceProxy).
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/billing/usage", cloud.Handle(s, usage))
+	// The per-account routed-usage breakdown the dashboard reads, in the billing
+	// namespace beside /v1/billing/usage. The data is owned by clients/link (the
+	// linked-account plane); this thin handler asks it, scoped to the caller's OWN
+	// (org, subject). Registered here — not from link — so it shadows the console
+	// pkg's /v1/billing/* wildcard exactly like the other specific customer routes.
+	app.Get("/v1/billing/usage/accounts", cloud.Handle(s, usageAccounts))
 	app.Get("/v1/billing/balance", cloud.Handle(s, balance))
 	// GPU launch gate + saved cards — the customer half of the prepay-only GPU rule
 	// commerce enforces server-side (api/billing/gpu_charge.go). Same org-scoping as
