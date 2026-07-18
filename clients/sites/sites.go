@@ -31,7 +31,7 @@ import (
 	"strings"
 	"sync"
 
-	minio "github.com/minio/minio-go/v7"
+	minio "github.com/hanzoai/s3-go"
 	"github.com/zap-proto/zip"
 
 	luxlog "github.com/luxfi/log"
