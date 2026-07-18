@@ -171,11 +171,11 @@ func TestDeploymentVersioning(t *testing.T) {
 
 func TestSlugify(t *testing.T) {
 	cases := map[string]string{
-		"MaxPower":            "maxpower",
-		"Max Power":           "max-power",
+		"MaxPower":             "maxpower",
+		"Max Power":            "max-power",
 		"  Dave's MaxPower!! ": "dave-s-maxpower",
-		"a/b\\c":              "a-b-c",
-		"---weird---":         "weird",
+		"a/b\\c":               "a-b-c",
+		"---weird---":          "weird",
 	}
 	for in, want := range cases {
 		if got := slugify(in); got != want {
@@ -192,12 +192,12 @@ func TestSlugify(t *testing.T) {
 
 func TestProviderFromURL(t *testing.T) {
 	cases := map[string]string{
-		"":                                  "",
-		"https://github.com/hanzoai/x":      "github",
-		"git@github.com:hanzoai/x.git":      "github",
-		"https://gitlab.com/g/x":            "gitlab",
-		"https://bitbucket.org/b/x":         "bitbucket",
-		"https://git.example.com/x":         "git",
+		"":                             "",
+		"https://github.com/hanzoai/x": "github",
+		"git@github.com:hanzoai/x.git": "github",
+		"https://gitlab.com/g/x":       "gitlab",
+		"https://bitbucket.org/b/x":    "bitbucket",
+		"https://git.example.com/x":    "git",
 	}
 	for in, want := range cases {
 		if got := providerFromURL(in); got != want {
@@ -260,8 +260,8 @@ func buildTar(t *testing.T, gz bool, files map[string]string) []byte {
 
 func TestWalkTarGz(t *testing.T) {
 	files := map[string]string{
-		"index.html":      "<!doctype html><title>MaxPower</title>",
-		"assets/app.js":   "console.log('hi')",
+		"index.html":       "<!doctype html><title>MaxPower</title>",
+		"assets/app.js":    "console.log('hi')",
 		"assets/style.css": "body{}",
 	}
 
@@ -296,15 +296,15 @@ func TestWalkTarGzRejects(t *testing.T) {
 	}
 	// Path traversal entry.
 	if _, err := walkTarGz(bytes.NewReader(buildTar(t, false, map[string]string{
-		"index.html":     "ok",
-		"../../etc/x":    "evil",
+		"index.html":  "ok",
+		"../../etc/x": "evil",
 	}))); err == nil {
 		t.Fatal("expected error for path traversal")
 	}
 }
 
 // TestSitePrefixAndSiteURL pins the storage layout (sitePrefix) and the ONE
-// canonical public URL of a deployed site: the pretty <slug>.<apex> host. The old
+// canonical public URL of a deployed site: the pretty <slug>.<org>.<apex> host. The old
 // raw-S3 liveURL form is gone (forward-perfection) — a published site is only ever
 // addressed by its pretty host, which is stable across redeploys of the same slug.
 func TestSitePrefixAndSiteURL(t *testing.T) {
@@ -312,11 +312,16 @@ func TestSitePrefixAndSiteURL(t *testing.T) {
 		t.Fatalf("sitePrefix=%q", got)
 	}
 	s := &cloud.Service[state]{State: state{apex: "hanzo.app"}}
-	if got := siteURL(s, "maxpower"); got != "https://maxpower.hanzo.app" {
-		t.Fatalf("siteURL=%q want %q", got, "https://maxpower.hanzo.app")
+	// Org-scoped: the org lives in the hostname (<slug>.<org>.<apex>), so two orgs
+	// can each own slug "myapp" and their public URLs never collide.
+	if got := siteURL(s, "maxpower", "myapp"); got != "https://myapp.maxpower.hanzo.app" {
+		t.Fatalf("siteURL=%q want %q", got, "https://myapp.maxpower.hanzo.app")
+	}
+	if siteURL(s, "acme", "myapp") == siteURL(s, "maxpower", "myapp") {
+		t.Fatal("same slug in different orgs must yield DIFFERENT URLs (org-scoped)")
 	}
 	// Deterministic across calls — the redeploy URL-invariant at the URL layer.
-	if siteURL(s, "maxpower") != siteURL(s, "maxpower") {
-		t.Fatal("siteURL must be deterministic for a given slug")
+	if siteURL(s, "maxpower", "myapp") != siteURL(s, "maxpower", "myapp") {
+		t.Fatal("siteURL must be deterministic for a given (org,slug)")
 	}
 }
