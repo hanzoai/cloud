@@ -45,8 +45,8 @@ func (e *apiError) Error() string {
 		msg = http.StatusText(e.status)
 	}
 	hint := ""
-	if e.status == http.StatusUnauthorized {
-		hint = " (set the platform service token: --platform-token, HANZO_PLATFORM_TOKEN, or `hanzo login --platform-token`)"
+	if e.status == http.StatusUnauthorized || e.status == http.StatusForbidden {
+		hint = " (run `hanzo login` — your IAM identity authorizes the platform; or set a machine token: --platform-token / HANZO_PLATFORM_TOKEN)"
 	}
 	return fmt.Sprintf("platform %s: HTTP %d: %s%s", e.path, e.status, msg, hint)
 }
@@ -55,7 +55,7 @@ func (e *apiError) Error() string {
 // into out (when non-nil) and mapping a non-2xx into an *apiError.
 func (p *Platform) do(ctx context.Context, method, path, token string, body, out any) error {
 	if token == "" {
-		return fmt.Errorf("no platform token: pass --platform-token, set HANZO_PLATFORM_TOKEN, or run `hanzo login --platform-token <tok>`")
+		return fmt.Errorf("not authenticated: run `hanzo login` (an IAM login now authorizes the platform; a --platform-token / HANZO_PLATFORM_TOKEN still works for machine automation)")
 	}
 	var rdr io.Reader
 	if body != nil {
@@ -341,7 +341,7 @@ type BuildJob struct {
 // build-callback token, not the service token.
 func (p *Platform) EnqueueBuild(ctx context.Context, req BuildReq, buildToken string) (*BuildJob, error) {
 	if buildToken == "" {
-		return nil, fmt.Errorf("no build token: set HANZO_BUILD_TOKEN / PLATFORM_BUILD_CALLBACK_TOKEN or `hanzo login --build-token <tok>`")
+		return nil, fmt.Errorf("not authenticated: run `hanzo login` (an IAM login now authorizes builds; HANZO_BUILD_TOKEN / --build-token still works for machine automation)")
 	}
 	out := &BuildJob{}
 	return out, p.do(ctx, http.MethodPost, "/v1/runner", buildToken, req, out)
