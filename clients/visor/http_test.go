@@ -25,7 +25,10 @@ type fakeVisor struct {
 	// liveByOwner is the per-tenant LIVE DigitalOcean reseller list
 	// (/v1/machines → ListComputeMachines) — the live droplet inventory that
 	// listMachines now unions with the registry.
-	liveByOwner  map[string][]map[string]any
+	liveByOwner map[string][]map[string]any
+	// nodesByOwner is the per-tenant DOKS worker NODES list (/v1/kubernetes-nodes →
+	// ListComputeKubernetesNodes) — the THIRD machine source managedMachines unions.
+	nodesByOwner map[string][]map[string]any
 	poolsByOwner map[string][]map[string]any
 }
 
@@ -48,6 +51,12 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
 		envelope200(w, f.liveByOwner[owner])
+	})
+	// DOKS worker nodes (ListComputeKubernetesNodes) — the third machine source.
+	mux.HandleFunc("/v1/kubernetes-nodes", func(w http.ResponseWriter, r *http.Request) {
+		owner := r.URL.Query().Get("owner")
+		f.lastOwner = owner
+		envelope200(w, f.nodesByOwner[owner])
 	})
 	mux.HandleFunc("/v1/get-machine", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id") // owner/name
@@ -248,6 +257,82 @@ func TestMachinesMergeLiveDOAndRegistry(t *testing.T) {
 		if m.Name != w.name || m.Region != w.region || m.Type != w.typ || m.Provider != "DigitalOcean" || m.Status != "running" {
 			t.Fatalf("machine %q view mismatch: got %+v want name=%q region=%q type=%q", w.id, m, w.name, w.region, w.typ)
 		}
+	}
+}
+
+// TestMachinesMergeDOKSNodes proves the THIRD source: listMachines unions DOKS
+// worker NODES (/v1/kubernetes-nodes) with the live droplet list so a cluster's
+// nodes appear on the fleet — while a DOKS node whose droplet is ALSO in the live
+// list is deduped by droplet id (never listed twice). This is the visor backport's
+// payoff: cluster NODES show, not just standalone droplets.
+func TestMachinesMergeDOKSNodes(t *testing.T) {
+	f := &fakeVisor{
+		// Live DO reseller list: one standalone droplet, plus a DOKS worker droplet
+		// (drop-node-1) that DO also surfaced under the org tag — so its droplet id
+		// appears in BOTH the live list and the kubernetes-nodes list.
+		liveByOwner: map[string][]map[string]any{
+			"acme": {
+				{"owner": "acme", "name": "standalone-1", "id": "drop-1",
+					"provider": "DigitalOcean", "size": "s-2vcpu-4gb", "region": "sfo3", "state": "running"},
+				{"owner": "acme", "name": "prod-default-aaa", "id": "drop-node-1",
+					"provider": "DigitalOcean", "size": "s-4vcpu-8gb", "region": "sfo3", "state": "running"},
+			},
+		},
+		// DOKS nodes: drop-node-1 again but under a DIFFERENT name ("node-alias") so
+		// only DROPLET-ID dedup can collapse it (name dedup could not) — this pins
+		// that a node whose droplet is already listed dedupes BY ID. drop-node-2
+		// lives ONLY in the cluster (never a standalone droplet) and must surface.
+		nodesByOwner: map[string][]map[string]any{
+			"acme": {
+				{"owner": "acme", "name": "node-alias", "id": "drop-node-1",
+					"provider": "DigitalOcean", "size": "s-4vcpu-8gb", "region": "sfo3", "state": "running", "tag": "doks-cluster:prod"},
+				{"owner": "acme", "name": "prod-default-bbb", "id": "drop-node-2",
+					"provider": "DigitalOcean", "size": "s-4vcpu-8gb", "region": "sfo3", "state": "running", "tag": "doks-cluster:prod"},
+			},
+		},
+	}
+	app := mountApp(t, f)
+
+	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list want 200, got %d (%s)", code, body)
+	}
+	var listed struct {
+		Machines []machineView `json:"machines"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+
+	// machineView.ID is the machine NAME (see TestMachinesMergeLiveDOAndRegistry).
+	byName := map[string]machineView{}
+	for _, m := range listed.Machines {
+		byName[m.ID] = m
+	}
+	// Deduped union: 3 machines, not 4. standalone-1, the shared droplet drop-node-1
+	// (deduped BY ID — the "node-alias" row collapses into the live "prod-default-aaa"
+	// which wins as the earlier source), and the DOKS-only node prod-default-bbb.
+	if len(listed.Machines) != 3 {
+		t.Fatalf("live+DOKS union want 3 deduped machines, got %d: %+v", len(listed.Machines), listed.Machines)
+	}
+	if _, ok := byName["standalone-1"]; !ok {
+		t.Errorf("standalone droplet missing from merged list: %+v", listed.Machines)
+	}
+	if _, ok := byName["node-alias"]; ok {
+		t.Errorf("node-alias must NOT appear — its droplet drop-node-1 is already live; dedup must be BY ID: %+v", listed.Machines)
+	}
+	shared, ok := byName["prod-default-aaa"]
+	if !ok {
+		t.Errorf("shared droplet prod-default-aaa missing (live row must win the id collision): %+v", listed.Machines)
+	} else if shared.Provider != "DigitalOcean" || shared.Region != "sfo3" {
+		t.Errorf("shared node view mismatch: got %+v", shared)
+	}
+	nodeOnly, ok := byName["prod-default-bbb"]
+	if !ok {
+		t.Fatalf("DOKS-only node prod-default-bbb missing — the cluster node must surface on the fleet: %+v", listed.Machines)
+	}
+	if nodeOnly.Provider != "DigitalOcean" || nodeOnly.Status != "running" || nodeOnly.Type != "s-4vcpu-8gb" {
+		t.Errorf("DOKS-only node view mismatch: got %+v want provider=DigitalOcean status=running type=s-4vcpu-8gb", nodeOnly)
 	}
 }
 
