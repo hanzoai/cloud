@@ -30,7 +30,7 @@ func init() {
 		Category:     "Productivity",
 		Scopes:       googleScopes,
 		RedirectPath: callbackPath("google"),
-		Secrets:      []string{googleAccessTokenSecret, googleRefreshTokenSecret},
+		Secrets:      []string{accessSecret, refreshSecret},
 		Configured:   googleConfigured,
 		Creds:        googleCreds,
 		Authorize:    googleAuthorize,
@@ -40,10 +40,8 @@ func init() {
 }
 
 const (
-	googleClientIDEnv        = "GOOGLE_CLIENT_ID"
-	googleClientSecretEnv    = "GOOGLE_CLIENT_SECRET"
-	googleAccessTokenSecret  = "access_token"
-	googleRefreshTokenSecret = "refresh_token"
+	googleClientIDEnv     = "GOOGLE_CLIENT_ID"
+	googleClientSecretEnv = "GOOGLE_CLIENT_SECRET"
 )
 
 // Endpoint URLs are package vars (not consts) so a test can point the exchange /
@@ -130,10 +128,10 @@ func googleExchange(ctx context.Context, creds OAuthConfig, redirectURI, code st
 	if r.AccessToken == "" {
 		return nil, fmt.Errorf("google token exchange returned no access_token")
 	}
-	tokens := map[string]string{googleAccessTokenSecret: r.AccessToken}
+	tokens := map[string]string{accessSecret: r.AccessToken}
 	// A refresh token is returned only on the first offline consent; seal it when present.
 	if r.RefreshToken != "" {
-		tokens[googleRefreshTokenSecret] = r.RefreshToken
+		tokens[refreshSecret] = r.RefreshToken
 	}
 	externalID, label := googleAccount(ctx, r.AccessToken)
 	return &ExchangeResult{
