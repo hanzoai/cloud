@@ -22,7 +22,6 @@
 # --build-arg <NAME>_IMAGE=…  — release.yml resolves CONSOLE_IMAGE to a fresh
 # console-embed digest, exactly as CONSOLE_CACHEBUST re-fetched console before.
 ARG CONSOLE_IMAGE=ghcr.io/hanzoai/console-embed:latest
-ARG DEPLOY_UI_IMAGE=ghcr.io/hanzoai/deploy-ui-embed:latest
 ARG SKILLS_IMAGE=ghcr.io/hanzoai/agent-skills:latest
 ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:latest
 
@@ -39,9 +38,6 @@ ARG FLAGS_IMAGE=ghcr.io/hanzoai/cloud-flags:latest
 
 # ── console SPA static export (prebuilt → /dist) ─────────────────────────────
 FROM ${CONSOLE_IMAGE} AS console
-
-# ── deploy monochrome ArgoCD UI bundle (prebuilt → /dist) → clients/deploy/webui/dist
-FROM ${DEPLOY_UI_IMAGE} AS deployui
 
 # ── agent-skills catalog (prebuilt → /catalog) ──────────────────────────────
 FROM ${SKILLS_IMAGE} AS skills
@@ -105,8 +101,6 @@ COPY . .
 # Drop the console static bundle into the embed path BEFORE `go build`, so
 # //go:embed all:webui/dist bakes it into the binary (same-origin console).
 COPY --from=console /dist/ /src/webui/dist/
-# The monochrome ArgoCD dashboard bundle for /v1/deploy/ui (go:embed).
-COPY --from=deployui /dist/ /src/clients/deploy/webui/dist/
 # Overlay the FULL agent-skills catalog before `go build` so //go:embed all:catalog
 # bakes the complete set (all services × brands), not the committed `ai` fallback.
 COPY --from=skills /catalog/ /src/clients/agentskills/catalog/
