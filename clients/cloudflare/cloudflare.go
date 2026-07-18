@@ -63,6 +63,11 @@ const (
 // caller's org; production never reassigns it.
 var tokenFor = integrations.TokenFor
 
+// connectionFor reads an org's NON-secret connection metadata (the account id captured
+// at connect time, ExternalID) from the integrations plane. Also a package var ONLY
+// for test injection; production never reassigns it.
+var connectionFor = integrations.ConnectionFor
+
 // cfAPIBase is Cloudflare's API v4 origin. Overridable via CLOUDFLARE_API_BASE for
 // tests (an httptest server) and CF-compatible endpoints; read at call time. The
 // default is the real Cloudflare API. (Same knob hanzodns uses, so a test harness
@@ -274,11 +279,19 @@ func writeResult(c *zip.Ctx, out json.RawMessage) error {
 
 // ── request gate + token custody ────────────────────────────────────────────────
 
-// authClient is the ONE front door: it resolves the caller's validated org (403 if
+// actingOrgHeader is stamped on every SERVED /v1/cloudflare response with the org
+// whose Cloudflare token was actually used. A per-org caller (the platform BFF) MUST
+// assert it equals the org it requested: if a misdeployed, non-org-switch-capable
+// service credential made the identity boundary PIN X-Org-Id to the token's OWN
+// owner, this header exposes the mismatch so the caller fails LOUD instead of
+// silently reading/writing another tenant's Cloudflare account.
+const actingOrgHeader = "X-Hanzo-Org"
+
+// authClient is the READ front door: it resolves the caller's validated org (403 if
 // unvalidated — a forged X-Org-Id with no bearer never gets past this) and builds a
 // Cloudflare client bound to THAT org's KMS-sealed token (503 if the org has not
-// connected Cloudflare or KMS is down). The token detail is logged token-free and
-// never surfaced to the client.
+// connected Cloudflare or KMS is down). On success it stamps actingOrgHeader with the
+// served org. The token detail is logged token-free and never surfaced to the client.
 func authClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
 	org, ok := principal.Org(c)
 	if !ok {
@@ -291,21 +304,43 @@ func authClient(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
 		s.Log.Warn("cloudflare token unavailable", "org", org, "err", err)
 		return nil, org, zip.Errorf(http.StatusServiceUnavailable, "cloudflare is not connected for this org")
 	}
+	// Stamp the org actually served so a per-org caller can prove no tenant comingling.
+	c.SetHeader(actingOrgHeader, org)
 	return &client{token: string(bytes.TrimSpace(tok)), base: cfAPIBase()}, org, nil
 }
 
+// authWrite is the MUTATION front door (POST/PUT/DELETE): it additionally requires the
+// caller be an admin of its OWN org (principal.IsOrgAdmin — NOT SuperAdmin), parity
+// with the AdminOnly connector that seals the token. Wielding the token's dangerous
+// verbs (a Worker script PUT is arbitrary code on the org's Cloudflare account/domains;
+// a Pages project DELETE is production destruction) must match connecting it. The admin
+// check is FIRST, so a non-admin is refused before any KMS token read. Reads stay
+// validated-org-only via authClient — org members may look, only org admins may change.
+func authWrite(s *cloud.Service[state], c *zip.Ctx) (*client, string, error) {
+	if !principal.IsOrgAdmin(c) {
+		return nil, "", zip.ErrForbidden("this action requires org admin")
+	}
+	return authClient(s, c)
+}
+
 // resolveAccount resolves the Cloudflare account id for account-scoped endpoints
-// (Pages / Workers). Order: an explicit, validated ?account= override wins (for an
-// org whose token spans multiple accounts); otherwise the account is discovered live
-// from the token's own /accounts (authoritative — always the token's real account).
-// The result is validated 32-hex so it can never inject path structure. Fails closed
-// (400) when neither yields a usable account.
-func (cl *client) resolveAccount(ctx context.Context, c *zip.Ctx) (string, error) {
+// (Pages / Workers). Order: (1) an explicit, validated ?account= override wins (for an
+// org whose token spans multiple accounts); (2) the account captured at connect time
+// (the connection's ExternalID) — no per-call round-trip and deterministic for a
+// multi-account token; (3) only if none is stored, discover it live from the token's
+// own /accounts. Every candidate is validated 32-hex so it can never inject path
+// structure. Fails closed (400) when nothing yields a usable account.
+func (cl *client) resolveAccount(ctx context.Context, org string, c *zip.Ctx) (string, error) {
 	if a := strings.TrimSpace(c.Query("account")); a != "" {
 		if !idRE.MatchString(a) {
 			return "", zip.ErrBadRequest("account must be a 32-character hex id")
 		}
 		return url.PathEscape(a), nil
+	}
+	if conn, ok := connectionFor(org, providerCloudflare); ok {
+		if id := strings.TrimSpace(conn.ExternalID); idRE.MatchString(id) {
+			return url.PathEscape(id), nil
+		}
 	}
 	var accts []struct {
 		ID string `json:"id"`
