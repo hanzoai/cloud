@@ -610,6 +610,7 @@ var defaultJWTAudiences = []string{
 	"hanzo-chat",
 	"hanzo-id",
 	"hanzo-admin-guard",
+	"admin-console",
 	"hanzo-cloud",
 	"hanzo-world",
 	"cowork",
