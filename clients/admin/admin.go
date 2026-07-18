@@ -121,6 +121,9 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/waitlist", core.Guard(s, waitlist))
 	app.Post("/v1/admin/waitlist/boost", core.Guard(s, waitlistBoost))
 
+	// Usage-cap + promo control plane (promos platform-only; spend-caps org-scoped).
+	limitRoutes(app, s)
+
 	// ── Carved-out domains own their routes (audit/customer/revenue/finance +
 	// the billing fleet views metrics/invoices/subscriptions). ──
 	audit.Routes(app, s)
