@@ -1,4 +1,4 @@
-package featuregate
+package admission
 
 // The launch-registry — the host→service map + service display metadata. It is
 // deliberately MODE-FREE: a service's waitlist mode is NOT a column here, it is the
@@ -21,7 +21,7 @@ import (
 )
 
 // ErrServiceNotFound is returned when a service slug is not in the registry.
-var ErrServiceNotFound = errors.New("featuregate: waitlist service not found")
+var ErrServiceNotFound = errors.New("admission: waitlist service not found")
 
 // ServiceRow is one hosted service in the registry (host→service + metadata). The
 // waitlist MODE is intentionally absent — it is the platform switch waitlist.<svc>,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS wl_hosts (
 CREATE INDEX IF NOT EXISTS ix_wl_hosts_service ON wl_hosts(service);
 `
 	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("featuregate: waitlist migrate: %w", err)
+		return nil, fmt.Errorf("admission: waitlist migrate: %w", err)
 	}
 	return &waitlistStore{db: db}, nil
 }
@@ -210,7 +210,7 @@ func (s *waitlistStore) Get(ctx context.Context, service string) (ServiceRow, er
 func (s *waitlistStore) Upsert(ctx context.Context, in ServiceRow, by string, now int64) (ServiceRow, error) {
 	svc := strings.ToLower(strings.TrimSpace(in.Service))
 	if svc == "" {
-		return ServiceRow{}, fmt.Errorf("featuregate: waitlist service slug required")
+		return ServiceRow{}, fmt.Errorf("admission: waitlist service slug required")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
