@@ -152,6 +152,7 @@ func telegramWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		Channel: chatID, ThreadID: strconv.FormatInt(m.MessageID, 10), Text: prompt,
 		DedupeKey: strconv.FormatInt(m.UpdateID, 10),
 	}
+	emitIngress(org, in, "")
 	reply := telegramReplier(in)
 	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	return c.NoContent(http.StatusOK)
