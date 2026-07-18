@@ -8,12 +8,12 @@ package cloud
 //	EdgeRateLimit — per-client-IP flood cap BEFORE identity (the gateway
 //	                qos/ratelimit/router role).
 //
-// Both read their policy LIVE from the gatewaypolicy.Store (the /v1/gateway
+// Both read their policy LIVE from the edge.Store (the /v1/gateway
 // runtime config plane) on every request, so an operator can retune CORS origins
 // or the per-IP cap via PUT /v1/gateway/config with no redeploy. The store layers
 // the admin-org "platform" policy over the static boot defaults, so an
 // un-provisioned deployment behaves exactly as the env/flag config until a policy
-// is written. See clients/gatewaypolicy + clients/gateway.
+// is written. See clients/gateway/edge + clients/gateway.
 //
 // These are DELIBERATELY not the things cloud already does. The gateway's other
 // jobs are already owned in-binary and are NOT re-implemented here:
@@ -39,7 +39,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/gatewaypolicy"
+	"github.com/hanzoai/cloud/clients/gateway/edge"
 	"github.com/zap-proto/zip"
 )
 
@@ -76,7 +76,7 @@ const (
 //
 // When enabled it handles the OPTIONS preflight itself (204, short-circuit) and
 // reflects the allowlisted Origin on the actual response, then continues the chain.
-func EdgeCORS(pol *gatewaypolicy.Store) zip.Handler {
+func EdgeCORS(pol *edge.Store) zip.Handler {
 	var (
 		mu      sync.Mutex
 		lastKey string
@@ -204,7 +204,7 @@ func (m *originMatcher) allowed(origin string) bool {
 // traffic). Only proxied edge traffic, which carries the real client IP in XFF,
 // is throttled. A per_ip_rpm of 0 (env CLOUD_EDGE_RATELIMIT=false at boot) is a
 // live no-op.
-func EdgeRateLimit(pol *gatewaypolicy.Store) zip.Handler {
+func EdgeRateLimit(pol *edge.Store) zip.Handler {
 	rl := &edgeIPLimiter{policy: pol, buckets: map[string]*edgeBucket{}}
 	return rl.handler
 }
@@ -215,7 +215,7 @@ type edgeBucket struct {
 }
 
 type edgeIPLimiter struct {
-	policy *gatewaypolicy.Store
+	policy *edge.Store
 
 	mu        sync.Mutex
 	buckets   map[string]*edgeBucket
