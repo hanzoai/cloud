@@ -63,7 +63,7 @@ import (
 	"strings"
 	"time"
 
-	minio "github.com/minio/minio-go/v7"
+	minio "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
