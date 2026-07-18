@@ -1,7 +1,7 @@
 // Copyright 2023-2026 Hanzo AI Inc. All Rights Reserved.
 // Licensed under the Apache License, Version 2.0.
 
-package featuregate
+package admission
 
 import (
 	"context"
@@ -186,7 +186,7 @@ func TestRule_UngovernedHost_PassesThrough(t *testing.T) {
 
 func TestRule_ExemptPaths_NeverGated(t *testing.T) {
 	app := gateApp(t, "pending")
-	for _, p := range []string{"/health", "/v1/iam/get-account", "/v1/waitlist/join", "/v1/flags/waitlist", "/v1/featuregate/mode"} {
+	for _, p := range []string{"/health", "/v1/iam/get-account", "/v1/waitlist/join", "/v1/flags/waitlist"} {
 		code, _ := drive(t, app, greq{host: "hanzo.chat", path: p, user: "u", org: "acme", accept: html})
 		if code != 200 {
 			t.Fatalf("exempt path %q = %d, want 200 (never gated)", p, code)
