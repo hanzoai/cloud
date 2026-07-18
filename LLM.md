@@ -234,3 +234,27 @@ image to a prior semver and `/{name}/sync` requests a reconcile. SUPERADMIN-only
 `c.IsAdmin()`, fail-closed; Secret nodes are never surfaced. `engine.go` embeds the argo
 `gitops-engine` (`hanzoai/deploy/gitops-engine` v0.7.2, no replace) in-process for the
 reconcile half behind `DEPLOY_ENGINE_ENABLED` (default off), with a prune-safety fuse.
+
+## The `hanzo` CLI targets THIS binary — one contract, one IAM login
+
+The `hanzo` CLI (`cli/`) is the same unified binary; its control-plane verbs speak the
+routes THIS process serves, authorized off a plain `hanzo login` (the IAM access token is
+the final bearer fallback — no `--platform-token`). The ONE contract, no TS-Dokploy drift:
+
+- `hanzo apps list|get`  → `GET /v1/paas/apps[/{app}]`  (`clients/paas` fleet drift board)
+- `hanzo deploy <app>`   → `POST /v1/paas/apps/{app}/deploy` — a zero-downtime ROLLING
+  RESTART (stamps the Deployment pod-template `hanzo.ai/restartedAt` annotation; never
+  changes the declared TAG — that stays a git commit CD reconciles). `--env` picks the ns.
+- `hanzo clusters list|get` → `GET /v1/clusters`  (`clients/visor`, tenant-scoped)
+- `hanzo build`          → `POST /v1/runner`  (native buildkit fabric)
+
+`/v1/paas/*` auth mirrors `/v1/runner` (`clients/platform/runner.go`): the `guard` admits a
+validated principal who is SuperAdmin OR OrgAdmin, then each handler CONFINES a non-super
+caller to the platform namespaces its own validated org owns (`scopedNamespaces`, keyed on
+`principal.Org` — a tenant admin can never observe/restart another org's, or a platform,
+app; `?org=` cannot widen it). The rolling restart needs `patch` on `apps/deployments`
+(ClusterRole/cloud, universe `infra/k8s/cloud/rbac.yaml`). There is NO `/v1/apps`,
+`/v1/org/{org}/cluster`, or `/v1/platform/projects` CLI path — the first two never existed
+here (TS-Dokploy contract, 404), and `/v1/platform/*` needs a co-resident IAM store this
+deployment does not fold in (IAM runs as a separate svc) so it 500s; the live apps backend
+is `/v1/paas`, whose board reads k8s directly with no IAM-store dependency.
