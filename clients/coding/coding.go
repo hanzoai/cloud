@@ -44,6 +44,10 @@ const (
 // Sessions is the live agent-session registry seam (clients/agents in-process).
 type Sessions interface {
 	Open(ctx context.Context, org, actor, agent, title string) (string, error)
+	// OpenOn opens a session tagged with the run's dispatch TARGET, so a routed
+	// run shows in mission-control on the machine it was sent to. An empty target
+	// behaves exactly like Open.
+	OpenOn(ctx context.Context, org, actor, agent, title, target string) (string, error)
 	Log(ctx context.Context, org, sessionID, kind, actor string, payload []byte) error
 	Close(ctx context.Context, org, sessionID, status string) error
 }
@@ -109,6 +113,11 @@ type RunResult struct {
 // Req is one coding request the trigger surface dispatches. Credential is the
 // per-org agent git secret the caller resolved from KMS fail-closed; it is
 // relayed to the sandbox and NEVER logged or placed in a session event.
+//
+// TargetID, when set, ROUTES the run to a registered machine (#48): the run is
+// enqueued as a durable task addressed to that target instead of executing in the
+// cloud-side sandbox, and the credential is NOT used (the machine authenticates
+// with its own). When empty, the local sandbox path runs unchanged.
 type Req struct {
 	Org            string
 	UserID         string // linked Hanzo subject — session attribution + X-User-Id
@@ -119,6 +128,25 @@ type Req struct {
 	Prompt         string
 	CredUser       string
 	CredToken      string
+	TimeoutSeconds int
+	TargetID       string // when set, route to this registered machine instead of the sandbox
+}
+
+// RoutedRun is the NON-SECRET spec coding hands the Route seam to enqueue on the
+// durable engine. It mirrors agents.RoutedRun so coding.go stays pure (no agents
+// import); the adapter bridges the two, exactly as PRInput/RunRequest mirror
+// their downstream types. It carries no credential by design — the executing
+// machine authenticates git + model routing with its own already-held creds.
+type RoutedRun struct {
+	Org            string
+	TargetID       string
+	SessionID      string
+	Repo           string
+	Project        string
+	Base           string
+	Branch         string
+	Prompt         string
+	CloneURL       string
 	TimeoutSeconds int
 }
 
@@ -135,6 +163,12 @@ type Result struct {
 	PR        PRRef
 	LogTail   string
 	Error     string
+	// Routed reports that the run was ENQUEUED to a target machine rather than run
+	// in the cloud sandbox. When true, OK means "accepted + queued" (not
+	// "completed"): the terminal outcome flows through the session stream as the
+	// machine executes. TargetID is the machine it was routed to.
+	Routed   bool
+	TargetID string
 }
 
 // Runner-facing behavioral defaults.
@@ -155,6 +189,14 @@ type Dispatcher struct {
 	// Log is an optional structured log seam for best-effort mirror failures; nil
 	// is fine (mirror failures are non-fatal and simply dropped).
 	Log func(msg string, kv ...any)
+	// Route enqueues a routed run on the durable engine (the tasks-engine binding
+	// in routed.go). Nil disables routing — a run with a TargetID then fails
+	// closed rather than silently running in the sandbox.
+	Route func(ctx context.Context, run RoutedRun) error
+	// TargetGate is the fail-closed liveness+existence check for a routed run's
+	// target (agents.TargetDispatchable): the target exists in this org, is
+	// online, and has a live runner. Nil disables routing.
+	TargetGate func(ctx context.Context, org, targetID string) error
 }
 
 // Run executes one coding job end to end and returns its Result. It never
@@ -179,6 +221,15 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	if len(prompt) > maxPromptLen {
 		prompt = prompt[:maxPromptLen]
 	}
+
+	// ROUTED PATH (#48): a run with a chosen target is ENQUEUED as a durable task
+	// addressed to that machine and executed THERE, never in the cloud sandbox. It
+	// carries no credential (the machine uses its own), so it branches BEFORE the
+	// credential gate; everything below — the local sandbox path — is unchanged.
+	if strings.TrimSpace(req.TargetID) != "" {
+		return d.routed(ctx, req, org, repo, prompt, res)
+	}
+
 	if strings.TrimSpace(req.CredToken) == "" {
 		res.Error = "no agent credential for this org"
 		return res
@@ -293,6 +344,78 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 	})
 	_ = d.Sessions.Close(term, org, sessionID, statusDone)
 	res.OK = true
+	return res
+}
+
+// routed dispatches one run to a chosen target machine (#48). It opens the live
+// session tagged with the target (so mission-control shows it on that machine),
+// enqueues a DURABLE task addressed to the target on the tasks engine, and
+// returns immediately — the machine claims and executes it, streaming the
+// terminal outcome into the SAME session. It never runs locally: an unavailable
+// target, a disabled router, or a failed enqueue FAILS CLOSED with an honest
+// error.
+func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt string, res Result) Result {
+	target := strings.TrimSpace(req.TargetID)
+	res.Routed = true
+	res.TargetID = target
+
+	// Routing must be wired (composition root binds both). A half-wired dispatcher
+	// must not fall through to the sandbox with a target set.
+	if d.Route == nil || d.TargetGate == nil {
+		res.Error = "routing is not available"
+		return res
+	}
+
+	// The machine clones the org's repo with its OWN credential; we still need the
+	// clone URL (non-secret) to hand it.
+	cloneURL := ""
+	if d.CloneURL != nil {
+		cloneURL = d.CloneURL(org, repo)
+	}
+	if cloneURL == "" {
+		res.Error = "git is not available"
+		return res
+	}
+
+	// Liveness + existence gate: only dispatch to a target that exists in this
+	// org, is online, and has a live runner. Fail closed — never elsewhere.
+	if err := d.TargetGate(ctx, org, target); err != nil {
+		res.Error = "target " + target + " is not available: " + err.Error()
+		return res
+	}
+
+	agentRef := strings.TrimSpace(req.AgentRef)
+	if agentRef == "" {
+		agentRef = "hanzo"
+	}
+	actor := strings.TrimSpace(req.UserID)
+
+	sessionID, err := d.Sessions.OpenOn(ctx, org, actor, agentRef, codingTitle(repo, prompt), target)
+	if err != nil {
+		res.Error = "could not start a session: " + err.Error()
+		return res
+	}
+	res.SessionID = sessionID
+	branch := "agent/" + shortID(sessionID)
+	res.Branch = branch
+
+	d.mirror(ctx, org, sessionID, actor, kindStatus, map[string]any{
+		"status": "routed", "repo": repo, "branch": branch, "base": baseOr(req.Base), "target": target,
+	})
+
+	run := RoutedRun{
+		Org: org, TargetID: target, SessionID: sessionID,
+		Repo: repo, Project: strings.TrimSpace(req.Project), Base: strings.TrimSpace(req.Base),
+		Branch: branch, Prompt: prompt, CloneURL: cloneURL, TimeoutSeconds: timeoutOr(req.TimeoutSeconds),
+	}
+	// Enqueue on the durable engine. A failure fails the run closed (session
+	// error) rather than leaving a zombie "running" session or running locally.
+	if err := d.Route(ctx, run); err != nil {
+		term := context.WithoutCancel(ctx)
+		return d.fail(term, org, sessionID, actor, res, "could not queue the routed run: "+err.Error(), "")
+	}
+
+	res.OK = true // accepted + queued; the machine drives it to terminal from here
 	return res
 }
 
