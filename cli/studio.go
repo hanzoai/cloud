@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -112,6 +113,12 @@ func stopStudio(cmd *exec.Cmd) {
 // handler signals it after each completed render (see gpu.go).
 var studioRecycle = make(chan struct{}, 1)
 
+// staging guards the claim-to-submit window: a claimed job is real work the
+// engine queue cannot see yet, so the supervisor must never recycle over it
+// (observed: jobs claimed during a recycle failed staging on a dead engine
+// and were consumed).
+var staging atomic.Int32
+
 func requestStudioRecycle() {
 	select {
 	case studioRecycle <- struct{}{}:
@@ -192,7 +199,7 @@ func superviseStudio(ctx context.Context, dir string, out io.Writer) {
 			recyclePending = true
 		case <-tick.C:
 			busy, ok := studioBusy(ctx)
-			if recyclePending && ok && !busy {
+			if recyclePending && ok && !busy && staging.Load() == 0 {
 				recyclePending = false
 				unhealthy = 0
 				restart("recycle")
