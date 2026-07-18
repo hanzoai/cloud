@@ -1,4 +1,4 @@
-package featuregate
+package admission
 
 // The launch-control gate — the COMPLETE waitlist feature, COMPOSING the ONE flag
 // engine (clients/flags) one-way. Decomplected into the two orthogonal axes it always
@@ -42,7 +42,7 @@ const (
 	platformProject = "platform"
 )
 
-// registryState is featuregate's process-wide launch state: the platform-tenant
+// registryState is admission's process-wide launch state: the platform-tenant
 // host→service registry store + the deployment brand it was seeded for. Installed by
 // Mount, torn down by Shutdown.
 type registryState struct {
@@ -83,7 +83,7 @@ func waitlistKey(svc string) string { return "waitlist." + strings.ToLower(strin
 
 // waitlistDef is the platform switch for one service's mode. Default "true" = the
 // launch posture (gated until an admin opens it), so a deployment with no stored flag
-// behaves exactly as the old featuregate seed (waitlistMode ON).
+// behaves exactly as the old admission seed (waitlistMode ON).
 func waitlistDef(svc, display string) flags.Def {
 	if strings.TrimSpace(display) == "" {
 		display = svc
@@ -122,7 +122,7 @@ func boolDef(on bool) json.RawMessage {
 // gate is not mounted (writes need it; the decide fail-opens instead).
 func requireRegistry() (*waitlistStore, error) {
 	if mounted == nil || mounted.store == nil {
-		return nil, fmt.Errorf("featuregate: waitlist registry not mounted")
+		return nil, fmt.Errorf("admission: waitlist registry not mounted")
 	}
 	return mounted.store.For(platformOrg, platformProject)
 }
@@ -172,7 +172,7 @@ func ListWaitlistServices(ctx context.Context) ([]ServiceView, error) {
 func SetWaitlistMode(ctx context.Context, service string, mode bool, actor string) (ServiceView, error) {
 	service = strings.ToLower(strings.TrimSpace(service))
 	if service == "" {
-		return ServiceView{}, fmt.Errorf("featuregate: service is required")
+		return ServiceView{}, fmt.Errorf("admission: service is required")
 	}
 	st, err := requireRegistry()
 	if err != nil {
@@ -195,7 +195,7 @@ func SetWaitlistMode(ctx context.Context, service string, mode bool, actor strin
 func UpsertWaitlistService(ctx context.Context, in ServiceInput, actor string) (ServiceView, error) {
 	svc := strings.ToLower(strings.TrimSpace(in.Service))
 	if svc == "" {
-		return ServiceView{}, fmt.Errorf("featuregate: service slug is required")
+		return ServiceView{}, fmt.Errorf("admission: service slug is required")
 	}
 	st, err := requireRegistry()
 	if err != nil {
@@ -273,18 +273,17 @@ func waitlistModeRoute(c *zip.Ctx) error {
 // Mount installs the launch-control gate: it opens the platform-tenant host→service
 // registry, seeds it for the deployment brand, registers a waitlist.<svc> switch per
 // service in the flag engine (flags.Register), and serves the guard's public mode read
-// at the CURRENT frozen path (/v1/flags/waitlist) plus the /v1/featuregate/mode compat
-// alias. Fail-safe: a registry error (e.g. cek master key not yet injected) degrades to
-// the in-memory seed switches — WaitlistModeForHost then fail-opens. Mounts AFTER flags
-// so the engine's platform-switch plane is installed first.
+// at /v1/flags/waitlist. Fail-safe: a registry error (e.g. cek master key not yet
+// injected) degrades to the in-memory seed switches — WaitlistModeForHost then
+// fail-opens. Mounts AFTER flags so the engine's platform-switch plane is installed first.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if deps.Logger == nil {
-		return fmt.Errorf("featuregate.Mount: nil deps.Logger")
+		return fmt.Errorf("admission.Mount: nil deps.Logger")
 	}
 	if deps.DataDir == "" {
-		return fmt.Errorf("featuregate.Mount: empty deps.DataDir")
+		return fmt.Errorf("admission.Mount: empty deps.DataDir")
 	}
-	log := deps.Logger.New("subsystem", "featuregate")
+	log := deps.Logger.New("subsystem", "admission")
 	mounted = &registryState{
 		store: cloud.NewOrgStore[*waitlistStore](deps.DataDir, "waitlist", openWaitlistStore),
 		brand: deps.Brand,
@@ -294,12 +293,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// under /v1/flags. Exempt from the Enforce gate (see defaultExemptPrefixes) so a
 	// gated user can still resolve mode.
 	app.Get("/v1/flags/waitlist", waitlistModeRoute)
-	// Compat alias (TEMPORARY): the former /v1/featuregate/mode path, same handler — kept
-	// only so an unverified external caller can't 404 while the namespace collapse rolls
-	// out. Delete this (and its exempt entry in middleware.go) once every caller is
-	// confirmed on /v1/flags/waitlist.
-	app.Get("/v1/featuregate/mode", waitlistModeRoute)
-	log.Info("featuregate launch gate ready", "services", n)
+	log.Info("admission gate ready", "services", n)
 	return nil
 }
 
