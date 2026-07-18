@@ -21,15 +21,19 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/commerceclient"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
+	financeclient "github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	commercestore "github.com/hanzoai/commerce/api/store"
+	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
 	"github.com/hanzoai/commerce/middleware/iammiddleware"
+	commercensctx "github.com/hanzoai/commerce/util/nscontext"
 	log "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -164,6 +168,19 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	commerceinproc.SetApp(app)
 	commerceclient.PublishEmbedded(embedded)
 
+	// Usage-cap enforcement on the FINANCE path. The unified binary records usage in
+	// the finance ledger (fin.RecordUsage), NOT commerce's transaction store — which
+	// it leaves empty — so the cap must read spend from, and fire alerts on, the
+	// finance ledger. Two seams, both org-wide (the finance Entry carries no scope;
+	// per-scope caps are a follow-up):
+	//   - SetPeriodSpendReader: AuthorizeSpendCap's scopeSpentCents reads the org's
+	//     finance period spend instead of the empty commerce transaction ledger, so
+	//     a real LLM request increments the cap's `spent` and trips the 402.
+	//   - SetUsageHook: after each finance debit, fire the org's spend-alerts on the
+	//     SAME crossing (the alert half), reading the same finance spend + debouncing.
+	commercebilling.SetPeriodSpendReader(financePeriodSpend)
+	financeclient.SetUsageHook(fireCapAlert)
+
 	lg.Info("commerce embedded natively (hanzoai/commerce module on the shared zip app)",
 		"data_dir", dataDir,
 		"brand", deps.Brand,
@@ -214,4 +231,42 @@ func mountCommerceFailClosed(app *zip.App) {
 	for _, p := range commercePrefixes {
 		app.All(p+"/*", failed)
 	}
+}
+
+// financePeriodSpend is the usage-cap's period-spend source (injected into commerce
+// via SetPeriodSpendReader). It returns the org's finance-ledger usage in cents since
+// the start of the CURRENT UTC month — the window the cap resets on (mirrors
+// commerce periodStartUTC). Org-wide: the finance Entry carries no project/service,
+// so scope args are ignored and the org total is returned (what the covering
+// org-wide spend-alert row binds on). A finance impl without the sum capability, or a
+// split deploy (no co-resident finance), reports 0 — the cap can never over-count.
+func financePeriodSpend(ctx context.Context, org string, test bool, _, _ string) (int64, error) {
+	fin := financeclient.Current()
+	if fin == nil {
+		return 0, nil
+	}
+	summer, ok := fin.(interface {
+		SumUsageSince(context.Context, string, bool, int64) (int64, error)
+	})
+	if !ok {
+		return 0, nil
+	}
+	n := time.Now().UTC()
+	since := time.Date(n.Year(), n.Month(), 1, 0, 0, 0, 0, time.UTC).Unix()
+	return summer.SumUsageSince(ctx, org, test, since)
+}
+
+// fireCapAlert fires the org's spend-alerts after a finance usage debit — the alert
+// half of the cap on the finance path (wired via finance.SetUsageHook). It resolves
+// the org's commerce datastore (where the spend-alert rows live) and calls the
+// exported commerce trigger, which reads the org's period spend via financePeriodSpend
+// and stamps/debounces. Detached + best-effort; never blocks the money path. Runs in
+// its own goroutine (the hook is invoked with `go`), so a background context is right.
+func fireCapAlert(org string, test bool, project, service string) {
+	if strings.TrimSpace(org) == "" {
+		return
+	}
+	ctx := commercensctx.WithNamespace(context.Background(), org)
+	db := commercedatastore.New(ctx)
+	commercebilling.FireSpendAlerts(ctx, db, org, test, project, service, nil)
 }
