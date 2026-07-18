@@ -888,15 +888,9 @@ exclude github.com/ugorji/go v0.0.0-20171122102828-84cb69a8af83
 
 // --- /v1/deploy engine embed (argo gitops-engine, in-process) ---
 require (
-	github.com/argoproj/argo-cd/gitops-engine v0.7.1-0.20250908182407-97ad5b59a627
+	github.com/hanzoai/deploy/gitops-engine v0.7.2
 	k8s.io/kubernetes v1.35.3 // indirect
 )
-
-// Consumer-side filesystem replace onto the fork's independently-importable
-// submodule (deploy/LLM.md embedding contract). Interim form; end-state is a
-// pinned pseudo-version once the submodule is tagged — same import path, no code
-// change. Canonical layout: ~/work/hanzo/{cloud,deploy}.
-replace github.com/argoproj/argo-cd/gitops-engine => ../deploy/gitops-engine
 
 // gitops-engine drags the k8s.io/kubernetes staging tree via pkg/utils/kube.
 // Pin EVERY staging module to cloud's k8s line (0.35.3) so embedding the engine
