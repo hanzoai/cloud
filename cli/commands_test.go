@@ -10,14 +10,14 @@ import (
 
 func TestNormalizeRepoURL(t *testing.T) {
 	cases := map[string]string{
-		"luxfi/wallet":                        "https://github.com/luxfi/wallet",
-		"hanzoai/cloud":                       "https://github.com/hanzoai/cloud",
-		"https://github.com/luxfi/wallet":     "https://github.com/luxfi/wallet",   // full URL untouched
-		"git@github.com:luxfi/wallet.git":     "git@github.com:luxfi/wallet.git",   // scp-style untouched
-		"https://gitlab.com/org/repo":         "https://gitlab.com/org/repo",       // non-github URL untouched
-		"owner/name/extra":                    "owner/name/extra",                  // not a bare owner/name
-		"single":                              "single",                            // not two segments
-		"":                                    "",                                  // empty
+		"luxfi/wallet":                    "https://github.com/luxfi/wallet",
+		"hanzoai/cloud":                   "https://github.com/hanzoai/cloud",
+		"https://github.com/luxfi/wallet": "https://github.com/luxfi/wallet", // full URL untouched
+		"git@github.com:luxfi/wallet.git": "git@github.com:luxfi/wallet.git", // scp-style untouched
+		"https://gitlab.com/org/repo":     "https://gitlab.com/org/repo",     // non-github URL untouched
+		"owner/name/extra":                "owner/name/extra",                // not a bare owner/name
+		"single":                          "single",                          // not two segments
+		"":                                "",                                // empty
 	}
 	for in, want := range cases {
 		if got := normalizeRepoURL(in); got != want {
@@ -38,11 +38,15 @@ func withPlatform(t *testing.T, h http.HandlerFunc) string {
 	return srv.URL
 }
 
+// apps list hits the LIVE board path /v1/paas/apps and renders the fleet table.
 func TestAppsListCommandTable(t *testing.T) {
-	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) {
+	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/paas/apps" {
+			t.Errorf("apps path = %s, want /v1/paas/apps", r.URL.Path)
+		}
 		_ = json.NewEncoder(w).Encode(AppsList{
 			Apps: []AppView{
-				{Org: "hanzoai", App: "iam", Env: "main", DeclaredTag: strptr("v1.2.3"), RunningTag: strptr("v1.2.3"), Health: strptr("green"), Drift: json.RawMessage(`{"severity":"ok"}`)},
+				{Org: "hanzoai", App: "iam", Env: "main", DeclaredTag: "v1.2.3", RunningTag: "v1.2.3", Health: "green", Drift: json.RawMessage(`{"severity":"ok"}`)},
 			},
 			Summary: struct {
 				Total   int            `json:"total"`
@@ -58,6 +62,20 @@ func TestAppsListCommandTable(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("apps list table missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+// apps list honors --env/--health/--drift as server query params (the board filters).
+func TestAppsListCommandFilters(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("env") != "main" || q.Get("health") != "red" || q.Get("drift") != "1" {
+			t.Errorf("filters not forwarded: %s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(AppsList{})
+	})
+	if _, err := runRoot(t, "", "apps", "list", "--env", "main", "--health", "red", "--drift"); err != nil {
+		t.Fatalf("apps list filters: %v", err)
 	}
 }
 
@@ -78,69 +96,101 @@ func TestAppsListCommandJSON(t *testing.T) {
 	}
 }
 
+// apps get hits /v1/paas/apps/{app}.
+func TestAppsGetCommand(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/paas/apps/iam" {
+			t.Errorf("path = %s, want /v1/paas/apps/iam", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(AppView{ID: "hanzoai/iam/main", Org: "hanzoai", App: "iam", Env: "main", DeclaredTag: "v1.2.3", Health: "green", Phase: "Running"})
+	})
+	out, err := runRoot(t, "", "apps", "get", "iam")
+	if err != nil {
+		t.Fatalf("apps get: %v", err)
+	}
+	for _, want := range []string{"hanzoai/iam/main", "Running", "v1.2.3"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("apps get missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// deploy hits /v1/paas/apps/{app}/deploy — a rolling restart, org from identity.
 func TestDeployCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/org/acme/project/p1/env/e1/container/app-x/redeploy" {
+		if r.URL.Path != "/v1/paas/apps/app-x/deploy" {
 			t.Errorf("redeploy path = %s", r.URL.Path)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		w.WriteHeader(202)
+		_ = json.NewEncoder(w).Encode(DeployResult{OK: true, App: "app-x", Namespace: "hanzo", Env: "main", RestartedAt: "2026-07-18T12:00:00Z"})
 	})
-	out, err := runRoot(t, "", "deploy", "app-x", "--org", "acme", "--project", "p1", "--env", "e1")
+	out, err := runRoot(t, "", "deploy", "app-x")
 	if err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
-	if !strings.Contains(out, "redeployed app-x") {
+	if !strings.Contains(out, "restarted app-x") || !strings.Contains(out, "namespace=hanzo") {
 		t.Fatalf("deploy output: %q", out)
 	}
 }
 
-func TestDeployRequiresProjectEnv(t *testing.T) {
-	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
-	if _, err := runRoot(t, "", "deploy", "app-x", "--org", "acme"); err == nil {
-		t.Fatalf("deploy must require --project/--env")
+// deploy --env selects the lifecycle namespace via the ?env query param.
+func TestDeployCommandEnv(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/paas/apps/chat/deploy" || r.URL.Query().Get("env") != "test" {
+			t.Errorf("deploy env request = %s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+		w.WriteHeader(202)
+		_ = json.NewEncoder(w).Encode(DeployResult{OK: true, App: "chat", Namespace: "hanzo-testnet", Env: "test", RestartedAt: "2026-07-18T12:00:00Z"})
+	})
+	if _, err := runRoot(t, "", "deploy", "chat", "--env", "test"); err != nil {
+		t.Fatalf("deploy --env: %v", err)
 	}
 }
 
-func TestDeployRequiresOrg(t *testing.T) {
-	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
-	if _, err := runRoot(t, "", "deploy", "app-x", "--project", "p1", "--env", "e1"); err == nil {
-		t.Fatalf("deploy must require an org")
+// A non-ok deploy response is surfaced as an error.
+func TestDeployNotOK(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(DeployResult{OK: false})
+	})
+	if _, err := runRoot(t, "", "deploy", "app-x"); err == nil {
+		t.Fatalf("deploy must error when the server does not report ok")
 	}
 }
 
+// clusters list hits the LIVE /v1/clusters (org from identity, not the path).
 func TestClustersListCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/org/acme/cluster" {
-			t.Errorf("path = %s", r.URL.Path)
+		if r.URL.Path != "/v1/clusters" {
+			t.Errorf("path = %s, want /v1/clusters", r.URL.Path)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{
-			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Phase: "ready", Active: true, OperatorInstalled: true, BaselineInstalled: true},
+			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Kind: "managed", NodeCount: 3, NodeSize: "s-2vcpu-4gb", NvidiaGPU: 2},
 		}})
 	})
-	out, err := runRoot(t, "", "clusters", "list", "--org", "acme")
+	out, err := runRoot(t, "", "clusters", "list")
 	if err != nil {
 		t.Fatalf("clusters list: %v", err)
 	}
-	for _, want := range []string{"NAME", "hanzo-acme", "c1", "ready", "yes"} {
+	for _, want := range []string{"NAME", "hanzo-acme", "c1", "managed", "2 nvidia"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("clusters list missing %q in:\n%s", want, out)
 		}
 	}
 }
 
-func TestK8sTargetCommand(t *testing.T) {
-	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/org/acme/cluster/select" {
-			t.Errorf("path = %s", r.URL.Path)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"target": Target{Cluster: "hanzo-k8s", Dedicated: false, Namespaces: map[string]string{"hanzo": "main"}}})
+// clusters get filters the live list client-side by id or name.
+func TestClustersGetCommand(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"clusters": []Cluster{
+			{DoksClusterID: "c1", Name: "hanzo-acme", Region: "sfo3", Status: "running", Kind: "byo", NodeCount: 1},
+		}})
 	})
-	out, err := runRoot(t, "", "k8s", "target", "--org", "acme")
+	out, err := runRoot(t, "", "clusters", "get", "c1")
 	if err != nil {
-		t.Fatalf("k8s target: %v", err)
+		t.Fatalf("clusters get: %v", err)
 	}
-	if !strings.Contains(out, "hanzo-k8s") || !strings.Contains(out, "shared") {
-		t.Fatalf("k8s target output: %q", out)
+	if !strings.Contains(out, "hanzo-acme") || !strings.Contains(out, "byo") {
+		t.Fatalf("clusters get output: %q", out)
 	}
 }
 
@@ -185,5 +235,3 @@ func TestConfigSetGetCommand(t *testing.T) {
 		t.Fatalf("config get = %q", out)
 	}
 }
-
-func strptr(s string) *string { return &s }

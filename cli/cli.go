@@ -596,7 +596,6 @@ func newRootCmd() *cobra.Command {
 		newDeployCmd(envOf, &f),
 		newClustersCmd(envOf, &f),
 		newBuildCmd(envOf, &f),
-		newK8sCmd(envOf, &f),
 		newConfigCmd(),
 		newSecurityCmd(envOf),
 		newGPUCmd(envOf, &f),
