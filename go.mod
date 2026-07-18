@@ -80,6 +80,9 @@ require (
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
+	github.com/luxfi/go-bip32 v1.1.0 // indirect
+	github.com/luxfi/go-bip39 v1.2.0 // indirect
+	github.com/luxfi/protocol v0.0.2 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
@@ -89,7 +92,6 @@ require (
 require (
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/hanzoai/captable v1.0.0
-	github.com/luxfi/keys v1.4.1 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )
 
@@ -593,7 +595,7 @@ require (
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/geth v1.20.1
 	github.com/luxfi/ids v1.3.2 // indirect
-	github.com/luxfi/kms v1.11.8
+	github.com/luxfi/kms v1.12.4
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.2.1 // indirect
 	github.com/luxfi/magnetar v1.2.3 // indirect
