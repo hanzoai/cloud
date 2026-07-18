@@ -52,6 +52,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -498,18 +499,71 @@ func publicCaptureEnabled() bool {
 	}
 }
 
-// captureTenant resolves the tenant a batch is attributed to. A VALIDATED
-// principal always wins (authenticated product traffic → its own org). Otherwise,
-// for anonymous marketing traffic, the tenant is the PUBLIC brand org derived
-// SERVER-SIDE from the request Host via the white-label registry — never a
-// client-claimed org, so the isolation invariant holds: a caller with no bearer
-// can only ever write into the brand-public partition of the Host it actually
-// reached, and a forged X-Org-Id is ignored exactly as on the read path. An
-// unrecognized Host is refused (we never dump anonymous events into a default
-// org). Returns ("", false) when the caller must be answered 403.
+// resolveKeyOrg maps a presented project/API key to its org through the ONE IAM
+// key seam (cloud.OrgForKey). It is a package var ONLY so a test can substitute a
+// resolver without standing up IAM; production is always cloud.OrgForKey.
+var resolveKeyOrg = cloud.OrgForKey
+
+// projectKey returns the project/API key a keyed SDK presents OUT-OF-BAND of the
+// Authorization header — the transports SanitizeIdentity does NOT mint identity
+// from, so they never reach tenant() as a principal. In priority order: the
+// ?api_key= query, the x-api-key / api-key headers, and the PostHog-wire body
+// field `api_key` (posthog-js and the insights-go batch envelope put it there).
+// "" when none is present.
+//
+// The body is PEEKED via c.Body() — fasthttp buffers the full body, so the later
+// c.Bind in the handler re-reads the same bytes; peeking does not consume it. Only
+// the api_key field is decoded (a bad/unrelated JSON body simply yields "").
+func projectKey(c *zip.Ctx) string {
+	if k := trim(c.Query("api_key")); k != "" {
+		return k
+	}
+	if k := trim(c.Header("x-api-key")); k != "" {
+		return k
+	}
+	if k := trim(c.Header("api-key")); k != "" {
+		return k
+	}
+	if body := c.Body(); len(body) > 0 {
+		var probe struct {
+			APIKey string `json:"api_key"`
+		}
+		if json.Unmarshal(body, &probe) == nil {
+			if k := trim(probe.APIKey); k != "" {
+				return k
+			}
+		}
+	}
+	return ""
+}
+
+// captureTenant resolves the tenant a batch is attributed to, in strict trust
+// order:
+//
+//  1. A VALIDATED principal always wins (authenticated product traffic → its own
+//     org; this also covers a Hanzo key sent as a bearer, which SanitizeIdentity
+//     has already resolved to a principal upstream).
+//  2. Otherwise, if the caller PRESENTS a project key out-of-band (posthog-js /
+//     insights-go: api_key in the body/query/x-api-key), resolve it to its org
+//     through the ONE IAM key seam. This FAILS CLOSED: a presented-but-unresolvable
+//     key is refused (→ 403), NEVER falling through to the brand-host fallback —
+//     attributing a keyed request to the wrong (brand-public) partition would be a
+//     cross-tenant write.
+//  3. Only for TRULY anonymous traffic (no principal, no key) is the tenant the
+//     PUBLIC brand org derived SERVER-SIDE from the request Host via the
+//     white-label registry — never a client-claimed org. An unrecognized Host is
+//     refused (we never dump anonymous events into a default org).
+//
+// Returns ("", false) when the caller must be answered 403.
 func captureTenant(c *zip.Ctx) (string, bool) {
 	if org, ok := tenant(c); ok {
 		return org, true
+	}
+	if key := projectKey(c); key != "" {
+		if org, ok := resolveKeyOrg(c.Context(), key); ok {
+			return org, true
+		}
+		return "", false // presented key that does not resolve → fail CLOSED
 	}
 	if !publicCaptureEnabled() {
 		return "", false
@@ -520,36 +574,75 @@ func captureTenant(c *zip.Ctx) (string, bool) {
 	return "", false
 }
 
-// capture ingests one batch into hanzo.events, tenant-scoped. Shared by
-// /v1/analytics, /v1/analytics/batch, and /v1/tracker.
-func capture(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := captureTenant(c)
-	if !ok {
-		return zip.ErrForbidden("valid bearer or a recognized brand host required")
+// ── ONE write core ───────────────────────────────────────────────────────────
+
+// event source tags — the ingest adapter each row arrived through. Stamped into
+// properties.$source by ingestEvents so the ONE hanzo.events table stays honest
+// about origin (canonical vs. deprecated wire) WITHOUT a second table or a schema
+// migration: the read lenses are unchanged and $source is queryable in the
+// properties JSON, which is exactly the migration signal for the alias sunset.
+const (
+	sourceEvent   = "event"   // canonical POST /v1/event (native Event wire)
+	sourcePostHog = "posthog" // POST /v1/insights/e (PostHog wire adapter, deprecated)
+	sourceCapture = "capture" // POST /v1/analytics{,/batch}, /v1/tracker (Segment/beacon, deprecated)
+)
+
+// withSource returns a copy of p carrying $source=source (the ingest adapter), so
+// normalizeEvent's scrub+store path records origin as a property. nil-safe; never
+// mutates the caller's map (the adapters share their event structs).
+func withSource(p map[string]any, source string) map[string]any {
+	if source == "" {
+		return p
 	}
-	var batch CaptureBatch
-	if err := c.Bind(&batch); err != nil {
-		return zip.ErrBadRequest("malformed capture batch")
+	out := make(map[string]any, len(p)+1)
+	for k, v := range p {
+		out[k] = v
 	}
-	evs := batch.events()
+	out["$source"] = source
+	return out
+}
+
+// deprecatedOnce records one deprecation log per alias path per process, so a
+// high-volume ingest alias signals its sunset exactly once instead of flooding.
+var deprecatedOnce sync.Map
+
+// deprecated logs (once per path) that a superseded ingest alias was hit, pointing
+// callers at the canonical front door. It NEVER changes behavior — the alias keeps
+// working — it only records the migration signal (also visible as $source in the
+// warehouse).
+func deprecated(s *cloud.Service[state], c *zip.Ctx, canonical string) {
+	p := c.Path()
+	if _, seen := deprecatedOnce.LoadOrStore(p, struct{}{}); seen {
+		return
+	}
+	s.Log.Warn("deprecated analytics ingest endpoint; migrate to the canonical event front door",
+		"path", p, "canonical", canonical)
+}
+
+// ingestEvents is the ONE write core: normalize → scrub → batch INSERT into the
+// ONE hanzo.events table. org is the SERVER-resolved tenant (never client input);
+// source tags the ingest adapter. Every front door — the canonical /v1/event and
+// the deprecated PostHog / Segment / beacon adapters — funnels here, so there is
+// exactly one write path. Returns the honest accepted/dropped receipt; the errors
+// it returns are already HTTP-shaped (zip) for the handler to pass straight up.
+func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (CaptureResult, error) {
 	if len(evs) == 0 {
-		return c.JSON(http.StatusOK, CaptureResult{})
+		return CaptureResult{}, nil
 	}
 	if len(evs) > maxBatch {
-		return zip.ErrBadRequest("batch too large")
+		return CaptureResult{}, zip.ErrBadRequest("batch too large")
 	}
 	if err := requireDatastore(); err != nil {
-		return err
+		return CaptureResult{}, err
 	}
-	ctx := c.Context()
 	if err := EnsureEventsTable(ctx); err != nil {
-		return zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
+		return CaptureResult{}, zip.Errorf(http.StatusServiceUnavailable, "analytics warehouse unavailable: %v", err)
 	}
-
 	now := time.Now().UTC()
 	rows := make([]eventRow, 0, len(evs))
 	dropped := 0
 	for _, e := range evs {
+		e.Properties = withSource(e.Properties, source)
 		row, ok := normalizeEvent(org, now, e)
 		if !ok {
 			dropped++
@@ -558,12 +651,33 @@ func capture(s *cloud.Service[state], c *zip.Ctx) error {
 		rows = append(rows, row)
 	}
 	if len(rows) == 0 {
-		return c.JSON(http.StatusOK, CaptureResult{Dropped: dropped})
+		return CaptureResult{Dropped: dropped}, nil
 	}
-
 	stmt, args := buildEventsInsert(rows)
 	if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
-		return warehouseErr("capture", err)
+		return CaptureResult{}, warehouseErr("capture", err)
 	}
-	return c.JSON(http.StatusOK, CaptureResult{Accepted: len(rows), Dropped: dropped})
+	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
+}
+
+// capture ingests a Segment/beacon batch into hanzo.events, tenant-scoped. It is
+// the DEPRECATED wire adapter behind /v1/analytics, /v1/analytics/batch, and
+// /v1/tracker: a thin CaptureBatch decoder over the ONE write core (ingestEvents).
+// New callers post the canonical Event to /v1/event; this alias keeps working and
+// keeps captureTenant's brand-host path for anonymous marketing traffic.
+func capture(s *cloud.Service[state], c *zip.Ctx) error {
+	deprecated(s, c, "/v1/event")
+	org, ok := captureTenant(c)
+	if !ok {
+		return zip.ErrForbidden("valid bearer or a recognized brand host required")
+	}
+	var batch CaptureBatch
+	if err := c.Bind(&batch); err != nil {
+		return zip.ErrBadRequest("malformed capture batch")
+	}
+	res, err := ingestEvents(c.Context(), org, sourceCapture, batch.events())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, res)
 }
