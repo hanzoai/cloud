@@ -103,23 +103,102 @@ func TestRunnerBuild_NoTokenConfigured(t *testing.T) {
 	}
 }
 
-// A validated IAM org-admin builds off the ONE identity — no shared token needed
-// (here the server has none configured) ⇒ 202. This is the `hanzo build` path.
+// A validated IAM org-admin builds off the ONE identity into ITS OWN org's
+// registry — no shared token needed (here the server has none configured) ⇒ 202.
+// This is the `hanzo build` path. The image namespace (hanzoai) matches the
+// caller's org (hanzo), so H1's registry-org binding admits it.
 func TestRunnerBuild_IAMAdminLaunches(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, body := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
-		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
+		"repo": "https://github.com/hanzoai/app", "sha": "00971263b",
+		"image": "ghcr.io/hanzoai/app-web:00971263b"})
 	if code != http.StatusAccepted {
-		t.Fatalf("IAM org-admin build: want 202, got %d (%s)", code, body)
+		t.Fatalf("IAM org-admin same-org build: want 202, got %d (%s)", code, body)
 	}
 	var resp runnerBuildResp
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("decode resp: %v", err)
 	}
-	if resp.BuildJobID == "" || resp.Image != "ghcr.io/luxfi/wallet-web:00971263b" {
+	if resp.BuildJobID == "" || resp.Image != "ghcr.io/hanzoai/app-web:00971263b" {
 		t.Fatalf("unexpected resp: %+v", resp)
+	}
+}
+
+// H1 — the exact cross-org supply-chain hole RED flagged, now CLOSED: a hanzo
+// org-admin trying to build into ghcr.io/luxfi/* (another brand's registry) ⇒ 403,
+// even though the image is an owned registry and the caller is a valid org-admin.
+// Identity does not widen the registry boundary beyond the caller's own org.
+func TestRunnerBuild_IAMCrossOrgImageRejected(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	app := runnerApp(t)
+	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
+	if code != http.StatusForbidden {
+		t.Fatalf("IAM cross-org image (hanzo admin → ghcr.io/luxfi): want 403, got %d", code)
+	}
+}
+
+// A lux org-admin building into ITS OWN org's registry (ghcr.io/luxfi/*) ⇒ 202.
+// Proves the binding is per-org, not a hanzo-only allow: every registry brand's
+// admin can push its own namespace, and only its own.
+func TestRunnerBuild_IAMSameOrgLuxLaunches(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	app := runnerApp(t)
+	code, body := postRunnerAs(t, app, "lx-uuid", "lux", true, false, map[string]any{
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
+	if code != http.StatusAccepted {
+		t.Fatalf("IAM lux admin same-org build: want 202, got %d (%s)", code, body)
+	}
+}
+
+// A platform SuperAdmin (X-User-IsAdmin, the reserved admin org) MAY cross org
+// registries ⇒ 202 building ghcr.io/luxfi/* — the one identity permitted to. (In
+// production SuperAdmin is disabled via unset CLOUD_ADMIN_ORG; this proves the
+// intended cross-org exception is wired for when it is enabled.)
+func TestRunnerBuild_SuperAdminCrossOrgLaunches(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	app := runnerApp(t)
+	code, body := postRunnerAs(t, app, "root-uuid", "hanzo", true, true, map[string]any{
+		"repo": "https://github.com/luxfi/wallet", "sha": "00971263b",
+		"image": "ghcr.io/luxfi/wallet-web:00971263b"})
+	if code != http.StatusAccepted {
+		t.Fatalf("SuperAdmin cross-org build: want 202, got %d (%s)", code, body)
+	}
+}
+
+// An org whose brand owns NO registry namespace (e.g. adnexus) is refused on the
+// IAM path for ANY owned registry ⇒ 403 — nobody pushes to a brand they do not own.
+func TestRunnerBuild_IAMOrglessRegistryRejected(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
+	app := runnerApp(t)
+	code, _ := postRunnerAs(t, app, "ad-uuid", "adnexus", true, false, map[string]any{
+		"repo": "https://github.com/hanzoai/app", "image": "ghcr.io/hanzoai/app-web:v1"})
+	if code != http.StatusForbidden {
+		t.Fatalf("IAM adnexus admin → ghcr.io/hanzoai: want 403 (owns no namespace), got %d", code)
+	}
+}
+
+// M1 — an `image` carrying a comma injects a BuildKit `--output` exporter attribute
+// (name=…,registry.insecure=true). It must be rejected as a malformed ref ⇒ 400,
+// BEFORE any registry decision reads it. Uses the machine token so the check is not
+// masked by an earlier identity/registry 403.
+func TestRunnerBuild_ImageInjectionRejected(t *testing.T) {
+	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", testBuildTok)
+	app := runnerApp(t)
+	for _, bad := range []string{
+		"ghcr.io/hanzoai/x,registry.insecure=true",
+		"ghcr.io/hanzoai/x name=y",
+		"ghcr.io/hanzoai/x\",push=true",
+		"ghcr.io/hanzoai/x:tag\nname=evil",
+	} {
+		code, _ := postRunner(t, app, testBuildTok, map[string]any{
+			"repo": "https://github.com/hanzoai/cloud", "image": bad})
+		if code != http.StatusBadRequest {
+			t.Fatalf("injected image %q: want 400, got %d", bad, code)
+		}
 	}
 }
 
@@ -162,11 +241,13 @@ func TestRunnerBuild_IAMAdminDisallowedImage(t *testing.T) {
 
 // A non-SuperAdmin org-admin naming a FOREIGN organizationId ⇒ 403 (a build may be
 // attributed only to the caller's own org unless they are a platform SuperAdmin).
+// The image is the caller's OWN org registry (ghcr.io/hanzoai) so H1's registry
+// binding passes and the 403 isolates the organizationId attribution check.
 func TestRunnerBuild_IAMForeignOrgRejected(t *testing.T) {
 	t.Setenv("PLATFORM_BUILD_CALLBACK_TOKEN", "")
 	app := runnerApp(t)
 	code, _ := postRunnerAs(t, app, "e7d7-uuid", "hanzo", true, false, map[string]any{
-		"repo": "https://github.com/luxfi/wallet", "image": "ghcr.io/luxfi/wallet-web:v1",
+		"repo": "https://github.com/hanzoai/app", "image": "ghcr.io/hanzoai/app-web:v1",
 		"organizationId": "lux"})
 	if code != http.StatusForbidden {
 		t.Fatalf("IAM foreign org: want 403, got %d", code)
