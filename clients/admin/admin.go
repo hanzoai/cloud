@@ -111,7 +111,7 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/flags", core.Guard(s, flagsBoard))
 	app.Put("/v1/admin/flags/:key", core.Guard(s, setFlag))
 	// Launch-control services board — the waitlist-mode lens on the flag engine (twin
-	// of /v1/admin/flags), folded in from the former featuregate control plane.
+	// of /v1/admin/flags), reading the registry + decide the admission gate owns.
 	app.Get("/v1/admin/services", core.Guard(s, services))
 	app.Post("/v1/admin/services", core.Guard(s, upsertService))
 	app.Post("/v1/admin/services/:service/mode", core.Guard(s, setServiceMode))
