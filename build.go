@@ -157,9 +157,15 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 		httpClient = commerceinproc.Client(0) // in-process dispatch; no network timeout
 	}
 	m, err := metering.New(metering.Config{
-		BaseURL:    base,
-		Token:      cfg.CommerceServiceToken,
-		Org:        cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
+		BaseURL: base,
+		Token:   cfg.CommerceServiceToken,
+		Org:     cfg.Brand, // X-Org-Id default for S2S; per-request org overrides.
+		// Honor the documented METERING_TEST env: when "true", route every debit to
+		// commerce's TEST/sandbox books (fin.RecordUsage in.Test=true) so a staging /
+		// canary deployment records NO real money — and the usage-cap read (org.TestMode
+		// via SQUARE_ENVIRONMENT=sandbox) sees the SAME test books. Unset in prod → live,
+		// unchanged. Without this the flag was silently ignored (always live).
+		Test:       strings.EqualFold(strings.TrimSpace(os.Getenv(metering.EnvTest)), "true"),
 		FailOpen:   cfg.BillingFailOpen,
 		HTTPClient: httpClient, // nil off the co-resident path → metering builds its own
 	})
