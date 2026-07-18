@@ -6,6 +6,44 @@ artifact serves `api.hanzo.ai`, `api.lux.cloud`, `api.zoo.cloud`, `api.osage.clo
 and every white-label reseller. Brand, enabled subsystems, and org scope are
 deployment configuration.
 
+## Open Cloud planes
+
+Spec home: HIP-0129 `hip-0129-open-cloud-planes` (hips repo). This section is a
+map, not the spec. One noun, one owner, one route family. No plane reads another
+plane's store; imports flow custody-ward only (channels -> integrations, never
+reverse).
+
+| Route | Noun | Owner | Tier |
+| --- | --- | --- | --- |
+| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (extends; user scope new) | In flight (branch `feat/connectors`) |
+| `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` (new) | Planned (branch `feat/channels` reserved; no transport code yet) |
+| `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped |
+| `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped |
+| `/v1/compute/bots` | Hosting: `@hanzo/bot` Node containers | `clients/bots` | Shipped |
+| `/v1/tasks` | Durable engine | `clients/tasks` | Shipped |
+| `/v1/gpus` + fleet | BYO GPU presence | `clients/fleet` + `clients/visor` | Shipped |
+| IAM | Identity: users, orgs, roles | IAM | Shipped |
+| KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
+
+Custody invariants: secrets sealed in KMS at
+`/orgs/{org}/users/{user}/connectors/{provider}/{label}`, never in SQLite rows;
+verify before store. Refresh is single-flight with rotation resealing; the CLI
+does local browser PKCE and posts the bundle to
+`POST /v1/connectors/:provider/credential`; cloud owns device-code flows.
+
+Transport invariants: typed actions (`command|url|select|approval`), no raw
+string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
+owner bootstrap on first approval.
+
+Container boundary is permanent for native-module, host-filesystem, loop-state,
+and vendor-Node work (agent loop, exec/PTY, harnesses, browser, voice, codecs,
+Node-bound channels, plugin SDK/loader). The Node plugin SDK is never ported to
+Go; cloud extensibility is connectors/automations/tools.
+
+Port roadmap (P1-P15) lives in HIP-0129; do not restate it here. Every claim
+carries its tier: Shipped (on main, named package/route), In flight (named
+pre-main branch), Planned (backlog id or named reservation).
+
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
