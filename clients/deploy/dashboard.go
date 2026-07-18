@@ -1,37 +1,27 @@
-// dashboard.go — serves the full ArgoCD React UI (Hanzo monochrome) at
-// /v1/deploy/ui/, fed the App-CR projection (projection.go) through a
-// reimplementation of the SUBSET of the ArgoCD api-server REST surface the UI
-// needs. NO argocd api-server, NO repo-server, NO redis, NO stored
-// Application/AppProject CRD — every response is synthesized from our operator
-// App CRs + the embedded engine's readers.
+// dashboard.go — the ArgoCD-UI-compatible projection API at /v1/deploy/api/*,
+// fed the App-CR projection (projection.go). NO argocd api-server, NO
+// repo-server, NO redis, NO stored Application/AppProject CRD — every response
+// is synthesized from our operator App CRs. The FRONTEND is NOT here: the
+// monochrome dashboard ships as the `hanzoai/spa`-based `cd-ui` App CR served at
+// cd.hanzo.ai/ (base-href /); this plane is only the same-origin API it calls:
 //
-// Layout (base href = /v1/deploy/ui/, so the UI's /api/v1 calls land under it):
+//	GET  /v1/deploy/api/v1/settings          → AuthSettings (auth disabled; IAM gates at the edge)
+//	GET  /v1/deploy/api/v1/session/userinfo  → {loggedIn:true,...}
+//	GET  /v1/deploy/api/version              → VersionMessage
+//	GET  /v1/deploy/api/v1/account/can-i/*   → {"value":"yes"}
+//	GET  /v1/deploy/api/v1/applications                          → ApplicationList (projected)
+//	GET  /v1/deploy/api/v1/applications/{name}                   → Application (projected)
+//	GET  /v1/deploy/api/v1/applications/{name}/resource-tree     → ApplicationTree
+//	POST /v1/deploy/api/v1/applications/{name}/{sync,rollback}   → request App-CR reconcile
 //
-//	GET  /v1/deploy/ui/                         → the SPA (index.html, base-href rewritten)
-//	GET  /v1/deploy/ui/*                        → static assets, else SPA fallback
-//	GET  /v1/deploy/ui/api/v1/settings          → AuthSettings (auth disabled; IAM gates at the edge)
-//	GET  /v1/deploy/ui/api/v1/session/userinfo  → {loggedIn:true,...}
-//	GET  /v1/deploy/ui/api/version              → VersionMessage
-//	GET  /v1/deploy/ui/api/v1/account/can-i/*   → {"value":"yes"}
-//	GET  /v1/deploy/ui/api/v1/applications          → ApplicationList (projected)
-//	GET  /v1/deploy/ui/api/v1/applications/{name}    → Application (projected)
-//	GET  /v1/deploy/ui/api/v1/applications/{name}/resource-tree → ApplicationTree
-//	POST /v1/deploy/ui/api/v1/applications/{name}/sync     → request App-CR reconcile
-//	POST /v1/deploy/ui/api/v1/applications/{name}/rollback → request App-CR reconcile
-//
-// Every route is SuperAdmin-gated (c.IsAdmin) — the same fail-closed predicate
-// as the rest of /v1/deploy; the argocd UI's own auth is disabled because IAM
-// owns identity at the edge. AppProject → IAM/Org (no argocd RBAC).
+// Every route is SuperAdmin-gated (c.IsAdmin), fail-closed; the argocd UI's own
+// auth is disabled because IAM owns identity at the edge (the SPA is public
+// static assets, the data is gated). AppProject → IAM/Org (no argocd RBAC).
 package deploy
 
 import (
-	"bytes"
-	"embed"
 	"encoding/json"
-	"io/fs"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -41,23 +31,14 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-// dashFS holds the built monochrome ArgoCD bundle. `all:` embeds the whole tree.
-// At a plain `go build` this is the committed fallback shell (webui/dist/
-// index.html); the image build runs the hanzoai/deploy rebrand/hanzo-monochrome
-// `yarn build` and OVERWRITES webui/dist with the real bundle BEFORE `go build`
-// (the Dockerfile deploy-ui stage / `make deploy-ui`), exactly as webui.go does
-// for the console. One artifact, one binary.
-//
-//go:embed all:webui/dist
-var dashFS embed.FS
+// dashPrefix is the API base the monochrome dashboard SPA calls. The FE itself
+// is NOT served here — it ships as the `hanzoai/spa`-based `cd-ui` App CR served
+// at cd.hanzo.ai/ (base-href /); this cloud plane is ONLY the IAM-gated
+// projection API at cd.hanzo.ai/v1/deploy/*, same-origin with the SPA (no CORS).
+const dashPrefix = "/v1/deploy"
 
-const dashPrefix = "/v1/deploy/ui"
-
-var baseHRefRe = regexp.MustCompile(`<base href="[^"]*">`)
-
-// registerDashboardRoutes wires the ArgoCD-UI-compatible surface. Specific API
-// routes are registered BEFORE the static wildcard so they win; the wildcard is
-// the SPA fallback. Called from routes() (deploy.go) after the native routes.
+// registerDashboardRoutes wires the ArgoCD-UI-compatible API surface (no FE —
+// the SPA is a separate hanzoai/spa App). Called from routes() (deploy.go).
 func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	// Bootstrap (the SPA awaits settings + userinfo before first render).
 	app.Get(dashPrefix+"/api/v1/settings", guard(s, cloud.Handle(s, dashSettings)))
@@ -73,10 +54,6 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	// Actions → App-CR reconcile ops.
 	app.Post(dashPrefix+"/api/v1/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
 	app.Post(dashPrefix+"/api/v1/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
-
-	// Static SPA — terminal wildcard, registered LAST.
-	app.All(dashPrefix, guard(s, cloud.Handle(s, dashStatic)))
-	app.All(dashPrefix+"/*", guard(s, cloud.Handle(s, dashStatic)))
 }
 
 // ── bootstrap ────────────────────────────────────────────────────────────────
@@ -225,70 +202,4 @@ func dashSync(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	s.Log.Info("dashboard sync requested", "app", name, "namespace", ns, "actor", c.User())
 	return c.JSON(http.StatusOK, projectApp(cr, ns, runningVersions(s, c.Context(), ns)[name]))
-}
-
-// ── static SPA ───────────────────────────────────────────────────────────────
-
-// dashStatic serves the embedded UI: an existing asset by path, else the SPA
-// index.html (base-href rewritten to /v1/deploy/ui/) for client-side routes.
-func dashStatic(s *cloud.Service[state], c *zip.Ctx) error {
-	sub, err := fs.Sub(dashFS, "webui/dist")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dashboard assets: %v", err)
-	}
-	rel := strings.TrimPrefix(strings.TrimPrefix(c.Path(), dashPrefix), "/")
-	if rel == "" {
-		return serveDashIndex(c, sub)
-	}
-	f, err := sub.Open(rel)
-	if err != nil {
-		// Unknown path under the SPA root → client-side route → index.html.
-		return serveDashIndex(c, sub)
-	}
-	defer f.Close()
-	data, err := fs.ReadFile(sub, rel)
-	if err != nil {
-		return serveDashIndex(c, sub)
-	}
-	if ct := contentTypeFor(rel); ct != "" {
-		c.SetHeader("Content-Type", ct)
-	}
-	return c.Bytes(http.StatusOK, data)
-}
-
-func serveDashIndex(c *zip.Ctx, sub fs.FS) error {
-	data, err := fs.ReadFile(sub, "index.html")
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "dashboard index: %v", err)
-	}
-	// Rewrite <base href> so the SPA's /api/v1 + router basename resolve under
-	// /v1/deploy/ui/ (the upstream server does the same via replaceBaseHRef).
-	data = baseHRefRe.ReplaceAll(data, []byte(`<base href="`+dashPrefix+`/">`))
-	if !bytes.Contains(data, []byte("<base href=")) {
-		data = bytes.Replace(data, []byte("<head>"), []byte(`<head><base href="`+dashPrefix+`/">`), 1)
-	}
-	c.SetHeader("Content-Type", "text/html; charset=utf-8")
-	return c.Bytes(http.StatusOK, data)
-}
-
-func contentTypeFor(name string) string {
-	switch {
-	case strings.HasSuffix(name, ".js"):
-		return "application/javascript"
-	case strings.HasSuffix(name, ".css"):
-		return "text/css"
-	case strings.HasSuffix(name, ".html"):
-		return "text/html; charset=utf-8"
-	case strings.HasSuffix(name, ".svg"):
-		return "image/svg+xml"
-	case strings.HasSuffix(name, ".json"):
-		return "application/json"
-	case strings.HasSuffix(name, ".woff2"):
-		return "font/woff2"
-	case strings.HasSuffix(name, ".png"):
-		return "image/png"
-	case strings.HasSuffix(name, ".ico"):
-		return "image/x-icon"
-	}
-	return ""
 }
