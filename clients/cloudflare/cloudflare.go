@@ -1,5 +1,5 @@
 // Package cloudflare is the per-org Cloudflare asset plane for the unified Hanzo
-// Cloud binary — the /v1/cloudflare/* surface that manages an org's Cloudflare
+// Cloud binary — the /v1/integrations/cloudflare/* surface that manages an org's Cloudflare
 // Pages, Workers, and (Phase 2) R2/KV/D1 through the SAME per-org, KMS-sealed API
 // token the org connected via clients/integrations. It is a sibling of hanzodns
 // (which owns /v1/dns as a separate CoreDNS process): both drive Cloudflare with an
@@ -97,7 +97,7 @@ var (
 // the account id is resolved per request. So the value is the shared Base only.
 type state struct{}
 
-// Mount wires /v1/cloudflare/* onto app. The subsystem is stateless (no store, no
+// Mount wires /v1/integrations/cloudflare/* onto app. The subsystem is stateless (no store, no
 // goroutine): it reads the per-org token in-process per request and proxies to
 // Cloudflare, so there is nothing to build or tear down.
 func Mount(app *zip.App, deps cloud.Deps) error {
@@ -106,42 +106,42 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		routes)
 }
 
-// routes registers the /v1/cloudflare surface. Every route runs through authClient
+// routes registers the /v1/integrations/cloudflare surface. Every route runs through authClient
 // (validated-org gate + fail-closed per-org token) FIRST, so no route is a softer
 // target than another. Pages + Workers are WIRED; R2/KV/D1 are typed Phase-2 stubs
 // that answer an honest 501 (never a fake success).
 func routes(app *zip.App, s *cloud.Service[state]) {
 	// Pages (wired) — account-scoped.
-	app.Get("/v1/cloudflare/pages/projects", cloud.Handle(s, pagesList))
-	app.Post("/v1/cloudflare/pages/projects", cloud.Handle(s, pagesCreate))
-	app.Get("/v1/cloudflare/pages/projects/:project", cloud.Handle(s, pagesGet))
-	app.Delete("/v1/cloudflare/pages/projects/:project", cloud.Handle(s, pagesDelete))
-	app.Post("/v1/cloudflare/pages/projects/:project/deployments", cloud.Handle(s, pagesDeploy))
-	app.Post("/v1/cloudflare/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
-	app.Delete("/v1/cloudflare/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
+	app.Get("/v1/integrations/cloudflare/pages/projects", cloud.Handle(s, pagesList))
+	app.Post("/v1/integrations/cloudflare/pages/projects", cloud.Handle(s, pagesCreate))
+	app.Get("/v1/integrations/cloudflare/pages/projects/:project", cloud.Handle(s, pagesGet))
+	app.Delete("/v1/integrations/cloudflare/pages/projects/:project", cloud.Handle(s, pagesDelete))
+	app.Post("/v1/integrations/cloudflare/pages/projects/:project/deployments", cloud.Handle(s, pagesDeploy))
+	app.Post("/v1/integrations/cloudflare/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
+	app.Delete("/v1/integrations/cloudflare/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
 
 	// Workers (wired) — scripts + workers.dev subdomain are account-scoped; routes
 	// are zone-scoped.
-	app.Get("/v1/cloudflare/workers/scripts", cloud.Handle(s, workersScriptList))
-	app.Put("/v1/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
-	app.Delete("/v1/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
-	app.Post("/v1/cloudflare/workers/scripts/:script/subdomain", cloud.Handle(s, workersScriptSubdomainSet))
-	app.Get("/v1/cloudflare/workers/subdomain", cloud.Handle(s, workersSubdomainGet))
-	app.Get("/v1/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteList))
-	app.Post("/v1/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
-	app.Delete("/v1/cloudflare/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
+	app.Get("/v1/integrations/cloudflare/workers/scripts", cloud.Handle(s, workersScriptList))
+	app.Put("/v1/integrations/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
+	app.Delete("/v1/integrations/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
+	app.Post("/v1/integrations/cloudflare/workers/scripts/:script/subdomain", cloud.Handle(s, workersScriptSubdomainSet))
+	app.Get("/v1/integrations/cloudflare/workers/subdomain", cloud.Handle(s, workersSubdomainGet))
+	app.Get("/v1/integrations/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteList))
+	app.Post("/v1/integrations/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
+	app.Delete("/v1/integrations/cloudflare/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
 
 	// R2 / KV / D1 (Phase-2 stubs) — routes + typed provider methods exist; bodies
 	// ship in Phase 2. Each answers an honest 501, never a misleading 200.
-	app.Get("/v1/cloudflare/r2/buckets", cloud.Handle(s, r2BucketList))
-	app.Post("/v1/cloudflare/r2/buckets", cloud.Handle(s, r2BucketCreate))
-	app.Delete("/v1/cloudflare/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
-	app.Get("/v1/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceList))
-	app.Post("/v1/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
-	app.Delete("/v1/cloudflare/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
-	app.Get("/v1/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseList))
-	app.Post("/v1/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseCreate))
-	app.Delete("/v1/cloudflare/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
+	app.Get("/v1/integrations/cloudflare/r2/buckets", cloud.Handle(s, r2BucketList))
+	app.Post("/v1/integrations/cloudflare/r2/buckets", cloud.Handle(s, r2BucketCreate))
+	app.Delete("/v1/integrations/cloudflare/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
+	app.Get("/v1/integrations/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceList))
+	app.Post("/v1/integrations/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
+	app.Delete("/v1/integrations/cloudflare/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
+	app.Get("/v1/integrations/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseList))
+	app.Post("/v1/integrations/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseCreate))
+	app.Delete("/v1/integrations/cloudflare/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
 }
 
 // ── client (the cfDo shape, reused verbatim from hanzodns) ──────────────────────
@@ -279,7 +279,7 @@ func writeResult(c *zip.Ctx, out json.RawMessage) error {
 
 // ── request gate + token custody ────────────────────────────────────────────────
 
-// actingOrgHeader is stamped on every SERVED /v1/cloudflare response with the org
+// actingOrgHeader is stamped on every SERVED /v1/integrations/cloudflare response with the org
 // whose Cloudflare token was actually used. A per-org caller (the platform BFF) MUST
 // assert it equals the org it requested: if a misdeployed, non-org-switch-capable
 // service credential made the identity boundary PIN X-Org-Id to the token's OWN
