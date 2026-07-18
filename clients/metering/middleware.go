@@ -2,6 +2,7 @@ package metering
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -171,7 +172,17 @@ func IdentityFromGatewayHeaders(r *http.Request) AuthInput {
 
 func defaultOnDenied(w http.ResponseWriter, _ *http.Request, err error) {
 	w.Header().Set("Content-Type", "application/json")
-	if err == ErrInsufficientBalance {
+	// A configured per-scope spend cap is a DISTINCT 402 from out-of-funds: the
+	// balance is fine, the tenant's own policy ceiling is not. It must map to the
+	// same spend_cap_exceeded 402 the zip-native edge gate (denyVerdict) emits, not
+	// fall through to 503 — a standalone product on this net/http middleware surfaces
+	// the identical, honest verdict.
+	if errors.Is(err, ErrSpendCapExceeded) {
+		w.WriteHeader(http.StatusPaymentRequired) // 402
+		_, _ = w.Write([]byte(`{"error":{"message":"Spend cap reached for this scope. Raise it at console.hanzo.ai/limits","type":"billing_error","code":"spend_cap_exceeded"}}`))
+		return
+	}
+	if errors.Is(err, ErrInsufficientBalance) {
 		w.WriteHeader(http.StatusPaymentRequired) // 402
 		_, _ = w.Write([]byte(`{"error":{"message":"Insufficient balance. Please add credits at console.hanzo.ai","type":"billing_error","code":"insufficient_balance"}}`))
 		return
