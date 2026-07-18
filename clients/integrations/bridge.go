@@ -285,7 +285,7 @@ func putUserLink(s *cloud.Service[state], org, provider, extUser string, link us
 	if err != nil {
 		return err
 	}
-	return kmsPut(s, org, provider, userSecretName(extUser), blob)
+	return kmsPut(s, kmsPath(org, provider), userSecretName(extUser), blob)
 }
 
 // getUserLink returns the linked (org, provider, extUser) binding. found=false (nil
@@ -298,7 +298,7 @@ func getUserLink(s *cloud.Service[state], org, provider, extUser string) (userLi
 	if !kmsReady(s) {
 		return userLink{}, false, kms.ErrMasterKeyMissing
 	}
-	raw, err := kmsGet(s, org, provider, userSecretName(extUser))
+	raw, err := kmsGet(s, kmsPath(org, provider), userSecretName(extUser))
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return userLink{}, false, nil
 	}
