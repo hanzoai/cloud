@@ -89,6 +89,52 @@ var hexSHARE = regexp.MustCompile(`^[A-Fa-f0-9]{7,64}$`)
 // escape the build context or be misread as a flag/shell token.
 var dockerfilePathRE = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
 
+// ociRefRE is the strict grammar of a single OCI image reference:
+//
+//	<host>[:port]/<path-component>[/<path-component>...][:<tag>][@<digest>]
+//
+// It is an ALLOWLIST of exactly the characters legal in a reference and NOTHING
+// else — so an `image` value can never smuggle a second BuildKit exporter
+// attribute. The output is emitted as `--output type=image,name=<image>,push=true`,
+// a CSV of key=value attrs; a comma or space in <image> would inject an attr
+// (`name=…,registry.insecure=true`) or split the argv element. The domain is a
+// dot-separated set of components with an optional port; each path component is
+// lowercase alphanumerics with `.`/`_`/`-` separators (the distribution-spec
+// `remote-name` grammar); the optional tag is `[\w][\w.-]{0,127}`; the optional
+// digest is `<alg>:<hex>`. No comma, space, quote, newline, '=', or shell/CSV
+// metacharacter can match (M1).
+var ociRefRE = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(?::[0-9]+)?(?:/[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*)+(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?:@[A-Za-z0-9]+:[A-Fa-f0-9]{32,})?$`)
+
+// validateImageRef enforces that the build OUTPUT image is a single, well-formed
+// OCI reference with no exporter-CSV / argv-injection surface. `image` is the 4th
+// attacker-controlled input to the privileged build (alongside repo.url /
+// dockerfile / git-ref) and the ONLY one that reaches buildFrontendCmd's
+// `--output type=image,name=<image>,push=true`. A prefix (owned-registry) check is
+// NOT structural validation — imageAllowed("ghcr.io/hanzoai/x,registry.insecure=true")
+// is a prefix match yet injects an exporter attribute — so the value is validated
+// here to a strict single ref. Returns the cleaned (trimmed) ref or an error.
+func validateImageRef(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", fmt.Errorf("image is required")
+	}
+	if len(s) > 512 {
+		return "", fmt.Errorf("image ref is too long")
+	}
+	// Belt (explicit) before the suspenders (grammar): no control char, no
+	// whitespace, and none of the CSV/shell metacharacters — most importantly ','
+	// and '=' (the exporter-attribute separators) and quotes/newlines. This is the
+	// exact injection class the ociRefRE allowlist also rejects; naming it makes the
+	// intent legible and the failure loud.
+	if strings.ContainsAny(s, " \t\r\n,=;&|$`(){}<>*?[]\\'\"^~#!") {
+		return "", fmt.Errorf("image ref contains disallowed characters")
+	}
+	if !ociRefRE.MatchString(s) {
+		return "", fmt.Errorf("image must be a single valid OCI reference")
+	}
+	return s, nil
+}
+
 // validateRepoURL enforces that a git repo URL is a real https URL to an
 // allowlisted host with no shell/flag metacharacters. The build context is
 // derived from this string, so this is the injection guard for CRIT-1. Returns
@@ -177,28 +223,34 @@ func validateGitRef(raw string) (string, error) {
 	return s, nil
 }
 
-// validateBuildInputs validates the three free-form strings that reach the
-// privileged BuildKit Job. url is required; dockerfile and ref are optional
-// (empty ⇒ caller substitutes a safe default) but validated when present.
-// Returns cleaned values. This is the ONE choke point every build call funnels
-// through (createApp validates url+dockerfile early for a 400; launchBuildJob
-// validates all three so a hostile persisted row or deploy-body ref still fails
-// closed).
-func validateBuildInputs(rawURL, dockerfile, ref string) (cleanURL, cleanDockerfile, cleanRef string, err error) {
+// validateBuildInputs validates the FOUR free-form strings that reach the
+// privileged BuildKit Job. url + image are required; dockerfile and ref are
+// optional (empty ⇒ caller substitutes a safe default) but validated when
+// present. Returns cleaned values. This is the ONE choke point every build call
+// funnels through (createApp validates url+dockerfile early for a 400;
+// launchBuildJob/launchDirectBuild validate all four so a hostile persisted row,
+// a deploy-body ref, OR a caller-supplied output image still fails closed). The
+// image is validated here — not merely prefix-checked at the handler — so the
+// `--output` exporter attribute-injection class is closed on the privileged path
+// itself (M1), matching the url/dockerfile/ref treatment.
+func validateBuildInputs(rawURL, dockerfile, ref, image string) (cleanURL, cleanDockerfile, cleanRef, cleanImage string, err error) {
 	if cleanURL, err = validateRepoURL(rawURL); err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if strings.TrimSpace(dockerfile) != "" {
 		if cleanDockerfile, err = validateDockerfile(dockerfile); err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 	}
 	if strings.TrimSpace(ref) != "" {
 		if cleanRef, err = validateGitRef(ref); err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 	}
-	return cleanURL, cleanDockerfile, cleanRef, nil
+	if cleanImage, err = validateImageRef(image); err != nil {
+		return "", "", "", "", err
+	}
+	return cleanURL, cleanDockerfile, cleanRef, cleanImage, nil
 }
 
 // ── resource bounds (MED-3) ───────────────────────────────────────────────────
