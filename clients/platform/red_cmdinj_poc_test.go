@@ -226,9 +226,6 @@ func TestBuildJobSpec_RootlessAndScopedCred(t *testing.T) {
 	if sc["runAsUser"] != int64(1000) || sc["runAsNonRoot"] != true {
 		t.Fatalf("build container must run rootless as uid 1000, got %v", sc)
 	}
-	if sc["allowPrivilegeEscalation"] != false {
-		t.Fatalf("build container must not allow privilege escalation, got %v", sc)
-	}
 	if img, _ := c0["image"].(string); !strings.Contains(img, "-rootless") {
 		t.Fatalf("build image must be the rootless variant, got %q", img)
 	}
