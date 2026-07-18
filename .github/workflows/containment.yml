@@ -111,6 +111,28 @@ jobs:
             echo "GOPROXY=https://proxy.golang.org,direct"
           } >> "$GITHUB_ENV"
 
+      - name: zen streaming-fix floor — go.mod must pin github.com/hanzoai/zen >= v1.4.1
+        # The SSE body-close fix (zen commit 50328b8, first released in zen v1.4.1)
+        # is what makes streaming completions return a body instead of an empty
+        # stream. A stale-branch merge that reverts go.mod's zen pin below the floor
+        # silently re-breaks streaming, and `next build`'s ignoreBuildErrors hides
+        # the runtime break — so no image may be cut on a regressed pin. This is the
+        # durable root-cause guard: it reads the EFFECTIVE module version (post-MVS,
+        # exactly what the build links) and fails the PR/push below the floor.
+        run: |
+          set -euo pipefail
+          FLOOR="v1.4.1"
+          V="$(go list -m -f '{{.Version}}' github.com/hanzoai/zen)"
+          echo "effective github.com/hanzoai/zen = ${V} (floor ${FLOOR})"
+          # semver-correct compare: the lowest of {V, FLOOR} under `sort -V` must be
+          # the FLOOR, i.e. V >= FLOOR. (sort -V orders v1.4.2 above v1.4.10 too.)
+          low="$(printf '%s\n%s\n' "$V" "$FLOOR" | sort -V | head -1)"
+          if [ "$low" != "$FLOOR" ]; then
+            echo "::error::github.com/hanzoai/zen is pinned at ${V}, below the streaming-fix floor ${FLOOR} — this re-breaks SSE streaming (empty completions). Re-pin zen to >= ${FLOOR} in go.mod before merging."
+            exit 1
+          fi
+          echo "OK: zen ${V} is at or above the streaming-fix floor ${FLOOR}"
+
       - name: positive proof — clients/controlplane is unreachable from the default build
         run: |
           set -euo pipefail
