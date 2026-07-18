@@ -66,6 +66,7 @@ import (
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
+	"github.com/hanzoai/cloud/clients/cloudflare"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/content"
@@ -316,6 +317,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "graph", Mount: graph.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
+		// Per-org Cloudflare asset plane /v1/cloudflare/{pages,workers,r2,kv,d1}/*.
+		// Mounts AFTER integrations because it reads the org's Cloudflare token through
+		// the integrations custody seam (integrations.TokenFor) — one token, one
+		// custody boundary. Stateless: no store, no shutdown.
+		{Name: "cloudflare", Mount: cloudflare.Mount},
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
