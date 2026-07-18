@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -83,16 +84,60 @@ func stripBearer(h string) string {
 	return h
 }
 
-// runnerBuild serves POST /v1/runner — enqueue a native, privileged build.
-func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
-	// Auth: shared build-callback token, constant-time. Fail closed if unset —
-	// no token configured means no privileged builds, never an open endpoint.
+// runnerTokenOK reports whether the request carries the shared build-callback
+// token, compared in constant time. An UNSET server secret can never match (a
+// zero-length secret would otherwise ConstantTimeCompare-equal a zero-length
+// header) — the token path simply does not authorize, and the endpoint stays
+// available via the IAM path rather than ever accepting an empty credential.
+func runnerTokenOK(c *zip.Ctx) bool {
 	want := strings.TrimSpace(getenv("PLATFORM_BUILD_CALLBACK_TOKEN", ""))
 	if want == "" {
-		return zip.Errorf(http.StatusServiceUnavailable, "runner build unavailable: no build-callback token configured")
+		return false
 	}
 	got := stripBearer(c.Header("Authorization"))
-	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+	if got == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+// runnerIAMAdmin reports whether the request carries a validated IAM principal
+// that is an admin (of its own org via the IAM `isAdmin` bit, or a platform
+// SuperAdmin) within a resolvable org. It reads ONLY the principal.* accessors —
+// the output of the ONE identity verifier — which read authority headers that
+// SanitizeIdentity strips on ingress and re-mints solely from a signature-verified
+// JWT, so the signal is unforgeable off-gateway. A validated but non-admin member
+// is refused here; the owned-registry allowlist still bounds the image either way.
+func runnerIAMAdmin(c *zip.Ctx) bool {
+	if !principal.Validated(c) {
+		return false
+	}
+	if _, ok := principal.Org(c); !ok {
+		return false
+	}
+	return principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c)
+}
+
+// runnerBuild serves POST /v1/runner — enqueue a native, privileged build.
+func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
+	// Auth — ONE of two credentials, never a third:
+	//   (1) the shared build-callback token (constant-time): the MACHINE path
+	//       (git-push-to-deploy, cloud self-release, the operator). A user never
+	//       holds it. Or
+	//   (2) a validated IAM principal who is an admin (the IAM `isAdmin` bit, or a
+	//       platform SuperAdmin): the `hanzo build` USER path, so ONE IAM login
+	//       authorizes a build with no separate build token. principal.Validated is
+	//       true ONLY when the identity boundary (the gateway / cloud's own
+	//       SanitizeIdentity) minted X-User-Id from a signature-verified JWT and
+	//       re-minted X-User-IsOrgAdmin from its `isAdmin` claim — every authority
+	//       header is STRIPPED on ingress and re-injected only from validated
+	//       claims, so an off-gateway forge cannot fake it, and a plain member
+	//       (no admin bit) is refused.
+	// Both paths are bounded by the SAME owned-registry allowlist below, so neither
+	// can push outside the registries we own.
+	viaToken := runnerTokenOK(c)
+	viaIAM := !viaToken && runnerIAMAdmin(c)
+	if !viaToken && !viaIAM {
 		return zip.ErrForbidden("invalid build token")
 	}
 
@@ -103,10 +148,13 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	req.Repo = strings.TrimSpace(req.Repo)
 	req.Image = strings.TrimSpace(req.Image)
 
-	// Release path: cloud self-publishes ghcr.io/hanzoai/cloud with native release
-	// semantics (compute version → build → smoke → tag → notify). It computes its
-	// own owned image, so it runs before the caller-supplied-image checks below.
+	// Release self-publishes ghcr.io/hanzoai/cloud (compute version → build → smoke
+	// → tag → notify) — a fabric operation reserved to the MACHINE token. An
+	// interactive login, even an admin, never cuts a cloud release.
 	if req.Release {
+		if !viaToken {
+			return zip.ErrForbidden("release builds require the platform build token")
+		}
 		return startRelease(s, c, req)
 	}
 
@@ -116,6 +164,21 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if !imageAllowed(req.Image) {
 		return zip.ErrForbidden("image must push to an owned registry (ghcr.io/{hanzoai,luxfi,zooai}/*)")
+	}
+
+	// Attribute the build to an org. On the IAM path the org is the caller's
+	// VALIDATED org, never a client-named one: default organizationId to it, and
+	// refuse a foreign org unless the caller is a platform SuperAdmin (who may act
+	// cross-org). The machine-token path keeps its explicit organizationId.
+	buildOrg := strings.TrimSpace(req.OrgID)
+	if viaIAM {
+		callerOrg, _ := principal.Org(c)
+		switch {
+		case buildOrg == "":
+			buildOrg = callerOrg
+		case buildOrg != callerOrg && !principal.IsSuperAdmin(c):
+			return zip.ErrForbidden("organizationId must be your own org")
+		}
 	}
 
 	bldID, err := genID("bld")
@@ -131,7 +194,7 @@ func runnerBuild(s *cloud.Service[state], c *zip.Ctx) error {
 	// Record the build (org "platform" — a fabric-owned direct build, not
 	// tenant-scoped). Best-effort: a record miss must not fail a launched build.
 	now := time.Now().Unix()
-	b := Build{ID: bldID, Org: firstNonEmpty(req.OrgID, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
+	b := Build{ID: bldID, Org: firstNonEmpty(buildOrg, platformBuildOrg), Status: "queued", Image: req.Image, JobName: jobName, CreatedAt: now, UpdatedAt: now}
 	if err := s.State.store.InsertBuild(c.Context(), b); err != nil {
 		s.Log.Warn("runner build record insert failed (build already launched)", "job", jobName, "err", err)
 	}
