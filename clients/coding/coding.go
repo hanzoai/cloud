@@ -148,6 +148,12 @@ type RoutedRun struct {
 	Prompt         string
 	CloneURL       string
 	TimeoutSeconds int
+	// Actor + AgentRef are the dispatching user + agent label, carried so the durable
+	// completion path can attribute the session close and file the PR with the same
+	// assignee the local path uses. Neither is a secret and neither crosses to the
+	// machine (the durable view the machine claims omits them).
+	Actor    string
+	AgentRef string
 }
 
 // Result is the terminal outcome the trigger surface renders.
@@ -309,42 +315,119 @@ func (d Dispatcher) Run(ctx context.Context, req Req) Result {
 		return res
 	}
 
-	// 4. Independently confirm the branch LANDED in native git (integrity: trust
-	// the branch tips we can read, not the runner's self-report). When the verify
-	// seam is wired and the ref is absent, fail closed.
+	// 4+5. Verify the branch landed and file the PR — the SAME completion a routed
+	// run's terminal report runs (completeChanged), so cloud-side integrity + the PR
+	// row are identical whether the run executed in the sandbox or on a machine.
+	return d.completeChanged(term, completion{
+		org: org, repo: repo, project: strings.TrimSpace(req.Project), base: req.Base,
+		prompt: prompt, sessionID: sessionID, branch: branch, actor: actor, agentRef: agentRef,
+		diffstat: runRes.Diffstat, logTail: runRes.LogTail,
+	}, res)
+}
+
+// completion bundles the run context the shared changed-run completion needs, so the
+// local sandbox path and the routed path hand it the same values.
+type completion struct {
+	org, repo, project, base  string
+	prompt, sessionID, branch string
+	actor, agentRef           string
+	diffstat, logTail         string
+}
+
+// completeChanged is the shared terminal for a run that reported CHANGES: confirm the
+// pushed branch LANDED in native git (integrity — trust the tips we can read, not a
+// self-report), open the native PR work item, mirror the done status, and close the
+// session done. Fail-closed: when the verify seam is wired and the ref is absent, the
+// session closes ERROR and NO PR is filed. A tracker failure is recorded but does not
+// fail the run (the branch is pushed + verified). ctx is the cancel-immune terminal
+// context. Used by the local path (Run) and the routed completion (finalizeRouted).
+func (d Dispatcher) completeChanged(ctx context.Context, c completion, res Result) Result {
 	if d.VerifyRef != nil {
-		sha, ok := d.VerifyRef(ctx, org, repo, branch)
+		sha, ok := d.VerifyRef(ctx, c.org, c.repo, c.branch)
 		if !ok {
-			return d.fail(term, org, sessionID, actor, res,
-				"pushed branch "+branch+" was not found in native git", runRes.LogTail)
+			return d.fail(ctx, c.org, c.sessionID, c.actor, res,
+				"pushed branch "+c.branch+" was not found in native git", c.logTail)
 		}
 		res.Verified = true
 		if sha != "" {
 			res.CommitSha = sha // authoritative tip from our own storage
 		}
 	}
-
-	// 5. Open the native PR work item (Kind:pr, Source:agent). A tracker failure
-	// does NOT fail the run — the branch is pushed and verified; the PR row is a
-	// side-effect — but it is recorded.
-	pr, perr := d.Tracker.CreatePR(term, PRInput{
-		Org: org, Project: strings.TrimSpace(req.Project), Repo: repo,
-		Base: baseOr(req.Base), Head: branch, Title: codingTitle(repo, prompt),
-		Body: prBody(prompt, req.Base, branch, res.CommitSha, runRes.Diffstat, sessionID), Assignee: agentRef,
+	pr, perr := d.Tracker.CreatePR(ctx, PRInput{
+		Org: c.org, Project: strings.TrimSpace(c.project), Repo: c.repo,
+		Base: baseOr(c.base), Head: c.branch, Title: codingTitle(c.repo, c.prompt),
+		Body: prBody(c.prompt, c.base, c.branch, res.CommitSha, c.diffstat, c.sessionID), Assignee: c.agentRef,
 	})
 	if perr != nil {
-		d.logf("coding: tracker PR create failed", "org", org, "repo", repo, "err", perr)
-		d.mirror(term, org, sessionID, actor, kindLog, map[string]any{"message": "tracker PR not created: " + perr.Error()})
+		d.logf("coding: tracker PR create failed", "org", c.org, "repo", c.repo, "err", perr)
+		d.mirror(ctx, c.org, c.sessionID, c.actor, kindLog, map[string]any{"message": "tracker PR not created: " + perr.Error()})
 	} else {
 		res.PR = pr
 	}
-
-	d.mirror(term, org, sessionID, actor, kindStatus, map[string]any{
-		"status": "done", "changed": true, "branch": branch, "commit": res.CommitSha, "pr": pr.Identifier,
+	d.mirror(ctx, c.org, c.sessionID, c.actor, kindStatus, map[string]any{
+		"status": "done", "changed": true, "branch": c.branch, "commit": res.CommitSha, "pr": pr.Identifier,
 	})
-	_ = d.Sessions.Close(term, org, sessionID, statusDone)
+	_ = d.Sessions.Close(ctx, c.org, c.sessionID, statusDone)
 	res.OK = true
 	return res
+}
+
+// finalizeRouted is the CLOUD-SIDE completion for a routed run whose machine reported
+// a terminal result. The machine pushed with its OWN credential and streamed into the
+// session; cloud still owns the integrity gate + the PR row + the session's terminal
+// state (the machine never closes the session), exactly as the local keystone path
+// does after a sandbox push. No secret crosses — cloud only reads the ref it can see.
+//
+//   - reported failure        -> session closed ERROR (no PR).
+//   - reported no changes      -> session closed DONE  (no PR).
+//   - reported a changed push  -> completeChanged: VerifyRef the branch LANDED (fail
+//     closed to a session ERROR + no PR if absent), file
+//     the native PR, close DONE — the shared path.
+//
+// Best-effort + cancel-immune: it runs on its own terminal context so a run near its
+// deadline still transitions out of "running". It is invoked from the durable delivery
+// activity once, after the report is in hand, so it never re-executes the run.
+func (d Dispatcher) finalizeRouted(ctx context.Context, in RoutedRun, res RoutedResult) {
+	if d.Sessions == nil {
+		return
+	}
+	out := Result{SessionID: in.SessionID, Repo: in.Repo, Routed: true, TargetID: in.TargetID}
+	if !res.OK {
+		d.fail(ctx, in.Org, in.SessionID, in.Actor, out, nonEmpty(res.Error, "the routed run reported failure"), "")
+		return
+	}
+	if !res.Changed {
+		d.mirror(ctx, in.Org, in.SessionID, in.Actor, kindStatus, map[string]any{"status": "done", "changed": false})
+		_ = d.Sessions.Close(ctx, in.Org, in.SessionID, statusDone)
+		return
+	}
+	branch := strings.TrimSpace(res.Branch)
+	if branch == "" {
+		branch = in.Branch
+	}
+	out.Branch = branch
+	out.CommitSha = res.CommitSha
+	out.Changed = true
+	agentRef := strings.TrimSpace(in.AgentRef)
+	if agentRef == "" {
+		agentRef = "hanzo"
+	}
+	_ = d.completeChanged(ctx, completion{
+		org: in.Org, repo: in.Repo, project: in.Project, base: in.Base,
+		prompt: in.Prompt, sessionID: in.SessionID, branch: branch, actor: in.Actor, agentRef: agentRef,
+		diffstat: res.Diffstat, logTail: "",
+	}, out)
+}
+
+// RoutedResult mirrors agents.RoutedResult so coding.go stays free of an agents import
+// on the completion path (the adapter bridges). It is the terminal a machine reports.
+type RoutedResult struct {
+	OK        bool
+	Changed   bool
+	Branch    string
+	CommitSha string
+	Diffstat  string
+	Error     string
 }
 
 // routed dispatches one run to a chosen target machine (#48). It opens the live
@@ -407,6 +490,7 @@ func (d Dispatcher) routed(ctx context.Context, req Req, org, repo, prompt strin
 		Org: org, TargetID: target, SessionID: sessionID,
 		Repo: repo, Project: strings.TrimSpace(req.Project), Base: strings.TrimSpace(req.Base),
 		Branch: branch, Prompt: prompt, CloneURL: cloneURL, TimeoutSeconds: timeoutOr(req.TimeoutSeconds),
+		Actor: actor, AgentRef: agentRef,
 	}
 	// Enqueue on the durable engine. A failure fails the run closed (session
 	// error) rather than leaving a zombie "running" session or running locally.
