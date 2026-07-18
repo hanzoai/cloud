@@ -10,14 +10,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/kms"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
+
+// The cek data plane fail-closes without a master key on encryption-capable
+// builds; supply one process-wide so integrations.db opens in local runs
+// exactly as it does in CI (mirrors clients/git, clients/flags).
+func TestMain(m *testing.M) {
+	k := make([]byte, 32)
+	if _, err := rand.Read(k); err != nil {
+		panic(err)
+	}
+	cek.SetMasterKey(k)
+	os.Exit(m.Run())
+}
 
 // newKMS builds a REAL clients/kms.Client with a fresh 32-byte master key — no
 // mock: token custody is exercised through the exact seal/open path production
