@@ -141,6 +141,29 @@ func TestPlatformTokenPrecedence(t *testing.T) {
 	}
 }
 
+// TestPlatformTokenFallsBackToIAM is the UNIFY-INFRA contract for the control
+// plane: after a plain `hanzo login`, the IAM access token is the FINAL fallback
+// so `hanzo apps`/`hanzo deploy` authorize off the one identity. An explicit
+// platform service token (creds/env/flag) still wins.
+func TestPlatformTokenFallsBackToIAM(t *testing.T) {
+	sandbox(t)
+	// Only an IAM login: no platform token anywhere ⇒ the IAM access token is sent.
+	e := resolve(&Config{}, &Credentials{AccessToken: "iam-jwt"}, globalFlags{})
+	if got := e.platformToken(""); got != "iam-jwt" {
+		t.Fatalf("IAM access token should be the final platform-token fallback: %q", got)
+	}
+	// A dedicated platform service token still beats the IAM token.
+	e = resolve(&Config{}, &Credentials{AccessToken: "iam-jwt", PlatformToken: "svc"}, globalFlags{})
+	if got := e.platformToken(""); got != "svc" {
+		t.Fatalf("dedicated platform token must beat the IAM fallback: %q", got)
+	}
+	// No login at all ⇒ empty (caller surfaces "run `hanzo login`").
+	e = resolve(&Config{}, &Credentials{}, globalFlags{})
+	if got := e.platformToken(""); got != "" {
+		t.Fatalf("no token and no login should resolve empty: %q", got)
+	}
+}
+
 func TestBuildTokenPrecedence(t *testing.T) {
 	sandbox(t)
 	e := resolve(&Config{}, &Credentials{BuildToken: "creds"}, globalFlags{})
@@ -153,6 +176,37 @@ func TestBuildTokenPrecedence(t *testing.T) {
 	}
 	if got := e.buildToken("flag"); got != "flag" {
 		t.Fatalf("flag wins: %q", got)
+	}
+}
+
+// TestBuildTokenFallsBackToIAM is the UNIFY-INFRA contract: after a plain
+// `hanzo login` (no --build-token), the IAM access token is the FINAL fallback,
+// so `hanzo build` authorizes off the one identity. An explicit build token
+// (creds/env/flag) still wins — the IAM token is the LAST resort, never an
+// override of a purpose-minted machine token.
+func TestBuildTokenFallsBackToIAM(t *testing.T) {
+	sandbox(t)
+	// Only an IAM login: no build token anywhere ⇒ the IAM access token is sent.
+	e := resolve(&Config{}, &Credentials{AccessToken: "iam-jwt"}, globalFlags{})
+	if got := e.buildToken(""); got != "iam-jwt" {
+		t.Fatalf("IAM access token should be the final build-token fallback: %q", got)
+	}
+	// A dedicated build token still beats the IAM token (precedence preserved).
+	e = resolve(&Config{}, &Credentials{AccessToken: "iam-jwt", BuildToken: "creds"}, globalFlags{})
+	if got := e.buildToken(""); got != "creds" {
+		t.Fatalf("dedicated build token must beat the IAM fallback: %q", got)
+	}
+	// HANZO_TOKEN (the env form of the IAM token) is also honored via accessToken().
+	e = resolve(&Config{}, &Credentials{}, globalFlags{})
+	t.Setenv("HANZO_TOKEN", "iam-env")
+	if got := e.buildToken(""); got != "iam-env" {
+		t.Fatalf("HANZO_TOKEN should back the build-token fallback: %q", got)
+	}
+	// No login at all ⇒ empty, so the caller can surface "run `hanzo login`".
+	t.Setenv("HANZO_TOKEN", "")
+	e = resolve(&Config{}, &Credentials{}, globalFlags{})
+	if got := e.buildToken(""); got != "" {
+		t.Fatalf("no token and no login should resolve empty: %q", got)
 	}
 }
 
