@@ -164,3 +164,102 @@ func capturedJobCommand(t *testing.T, k *k8sClient, ns, appSlug string) []string
 	t.Fatalf("job for app %s not found", appSlug)
 	return nil
 }
+
+// TestValidateImageRef proves the M1 fix: the build OUTPUT image is validated as a
+// single, well-formed OCI reference so it can never inject a BuildKit `--output`
+// exporter attribute (name=…,registry.insecure=true) or split the argv element.
+func TestValidateImageRef(t *testing.T) {
+	good := []string{
+		"ghcr.io/hanzoai/cloud:v1.801.89",
+		"ghcr.io/luxfi/wallet-web:00971263b",
+		"ghcr.io/hanzoai/tenant-myorg/my-app:latest",
+		"registry.hanzo.ai/zooai/api:v2.3.4",
+		"ghcr.io/hanzoai/app-web:main",
+		"ghcr.io/hanzoai/x@sha256:" + strings.Repeat("a", 64),
+	}
+	for _, img := range good {
+		if got, err := validateImageRef(img); err != nil || got != img {
+			t.Errorf("validateImageRef(%q) should PASS, got (%q,%v)", img, got, err)
+		}
+	}
+	bad := map[string]string{
+		"ghcr.io/hanzoai/x,registry.insecure=true": "comma injects a CSV exporter attr",
+		"ghcr.io/hanzoai/x name=evil":              "space splits the argv element",
+		"ghcr.io/hanzoai/x\",push=true":            "quote breaks the ref",
+		"ghcr.io/hanzoai/x:tag\nname=evil":         "newline",
+		"ghcr.io/hanzoai/x=y":                      "'=' is an attr separator",
+		"-ghcr.io/hanzoai/x:tag":                   "leading '-' reads as a flag",
+		"ghcr.io/hanzoai/x;rm -rf /":               "shell metacharacters",
+		"":                                         "empty",
+		" ":                                        "whitespace-only",
+	}
+	for img, why := range bad {
+		if _, err := validateImageRef(img); err == nil {
+			t.Errorf("validateImageRef(%q) MUST reject (%s)", img, why)
+		}
+	}
+}
+
+// TestBuildJobSpec_RootlessAndScopedCred proves the H2 hardening of the shared
+// build Job: it is ROOTLESS (no privileged, uid 1000) and mounts ONLY the target
+// org's push credential — never the shared 3-org kaniko-ghcr secret.
+func TestBuildJobSpec_RootlessAndScopedCred(t *testing.T) {
+	k := fakeK8s()
+	push, err := buildPushSecret("ghcr.io/luxfi/wallet-web:00971263b")
+	if err != nil {
+		t.Fatalf("buildPushSecret: %v", err)
+	}
+	if push != "push-luxfi" {
+		t.Fatalf("push secret must be per-org (push-luxfi), got %q", push)
+	}
+	job := k.buildJobSpec("pf-runner-x", "platform", "runner", push, []any{"buildctl-daemonless.sh"})
+	podSpec, _, _ := unstructured.NestedMap(job.Object, "spec", "template", "spec")
+
+	containers, _, _ := unstructured.NestedSlice(podSpec, "containers")
+	c0 := containers[0].(map[string]any)
+
+	// (1) NOT privileged, non-root uid 1000.
+	sc := c0["securityContext"].(map[string]any)
+	if sc["privileged"] != false {
+		t.Fatalf("build container must NOT be privileged, got %v", sc["privileged"])
+	}
+	if sc["runAsUser"] != int64(1000) || sc["runAsNonRoot"] != true {
+		t.Fatalf("build container must run rootless as uid 1000, got %v", sc)
+	}
+	if sc["allowPrivilegeEscalation"] != false {
+		t.Fatalf("build container must not allow privilege escalation, got %v", sc)
+	}
+	if img, _ := c0["image"].(string); !strings.Contains(img, "-rootless") {
+		t.Fatalf("build image must be the rootless variant, got %q", img)
+	}
+
+	// (2) The ONLY mounted registry credential is the per-org push secret.
+	vols, _, _ := unstructured.NestedSlice(podSpec, "volumes")
+	for _, v := range vols {
+		vm := v.(map[string]any)
+		if sec, ok := vm["secret"].(map[string]any); ok {
+			name, _ := sec["secretName"].(string)
+			if name == "kaniko-ghcr" {
+				t.Fatalf("build must NOT mount the shared 3-org kaniko-ghcr secret")
+			}
+			if vm["name"] == "ghcr" && name != push {
+				t.Fatalf("registry cred must be the per-org push secret %q, got %q", push, name)
+			}
+		}
+	}
+	// (3) No imagePullSecrets referencing the shared cred, SA token off.
+	if podSpec["automountServiceAccountToken"] != false {
+		t.Fatalf("build pod must not automount the SA token")
+	}
+	if _, ok := podSpec["imagePullSecrets"]; ok {
+		t.Fatalf("rootless build must not carry imagePullSecrets (public image), got %v", podSpec["imagePullSecrets"])
+	}
+}
+
+// TestBuildPushSecret_FailClosed proves buildPushSecret refuses a non-owned image
+// rather than falling back to a broad credential.
+func TestBuildPushSecret_FailClosed(t *testing.T) {
+	if _, err := buildPushSecret("docker.io/evil/x:latest"); err == nil {
+		t.Fatal("buildPushSecret must fail closed for a non-owned registry")
+	}
+}

@@ -1,9 +1,44 @@
 package cloud
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"os"
 	"testing"
+	"time"
 )
+
+// TestValidate_FailSecureOnEmptyTrustSet proves I2: a validator whose resolved
+// issuer OR audience allowlist is empty REJECTS an otherwise-valid, correctly
+// signed token — the axis is never silently disabled. Production always resolves
+// non-empty sets; this guards the misconfiguration path (CLOUD_JWT_AUDIENCES=""
+// or an empty issuer set), which must fail closed, not open.
+func TestValidate_FailSecureOnEmptyTrustSet(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("genkey: %v", err)
+	}
+	jwks := jwksServer(t, &key.PublicKey)
+	future := time.Now().Add(time.Hour)
+	tok := signWith(t, key, tokenClaims("hanzo-console", "acme", "", false, future))
+
+	// Sanity: a properly configured validator accepts the token.
+	if _, err := newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-console"}, 0).validate(tok); err != nil {
+		t.Fatalf("baseline valid token must be accepted, got %v", err)
+	}
+
+	// Empty audience set → deny.
+	if _, err := newIdentityValidator(testIssuer, jwks.URL, nil, 0).validate(tok); err == nil {
+		t.Error("empty audience allowlist must REJECT (fail-secure), not accept")
+	}
+
+	// Empty issuer set → deny (construct directly; trustedIssuers never yields empty
+	// with a primary, so bypass it to exercise the guard).
+	vEmptyIss := &identityValidator{issuers: nil, audiences: []string{"hanzo-console"}, cache: newJWKSCache(jwks.URL, 0), keys: newIAMKeys()}
+	if _, err := vEmptyIss.validate(tok); err == nil {
+		t.Error("empty issuer allowlist must REJECT (fail-secure), not accept")
+	}
+}
 
 // TestTrustedIssuers_WhiteLabel proves the in-binary validator's trusted-issuer
 // set is the primary issuer UNIONED with every white-label brand issuer plus the
@@ -40,7 +75,8 @@ func TestTrustedIssuers_WhiteLabel(t *testing.T) {
 }
 
 // TestIssuerAllowed proves the set membership check: brand issuers pass, an
-// outsider is rejected, and an empty set (never in prod) skips the check.
+// outsider is rejected, and an empty set is fail-secure — it matches NOTHING (I2),
+// so a misconfiguration that empties the allowlist denies every token.
 func TestIssuerAllowed(t *testing.T) {
 	set := []string{"https://hanzo.id", "https://lux.id"}
 	if !issuerAllowed("https://lux.id", set) {
@@ -49,8 +85,8 @@ func TestIssuerAllowed(t *testing.T) {
 	if issuerAllowed("https://attacker.id", set) {
 		t.Error("attacker.id must be rejected")
 	}
-	if !issuerAllowed("anything", nil) {
-		t.Error("empty set must skip the check (matches prior empty-issuer behavior)")
+	if issuerAllowed("anything", nil) {
+		t.Error("empty set must DENY (fail-secure), never skip the check")
 	}
 }
 
