@@ -161,23 +161,30 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 // ---- machines ----
 
 // managedMachines is the org's Visor-provisioned machines: the deduped UNION of
-// Visor's TWO machine sources, so every real machine appears exactly once.
+// Visor's THREE machine sources, so every real machine appears exactly once.
 //
 //   - REGISTRY (GET /v1/get-machines → GetMachines): Visor's DB-backed, masked
 //     machine records — they carry whatever Visor has synced/enriched.
 //   - LIVE DigitalOcean reseller list (GET /v1/machines → ListComputeMachines →
 //     service.ListOrgMachines): every droplet currently tagged to the org in
 //     Hanzo's house DO account, straight from the live DO API.
+//   - DOKS worker NODES (GET /v1/kubernetes-nodes → ListComputeKubernetesNodes):
+//     each managed-Kubernetes node as a Machine (Id=droplet id), unioned across the
+//     house account (hanzo-org cluster tag) and BYOC providers (Provider.ClusterID)
+//     so the fleet shows cluster NODES, not just standalone droplets.
 //
 // A droplet that was provisioned but is NOT (yet) in the registry lives ONLY in
 // the live list; sourcing the registry alone made it invisible on the world admin
-// fleet (the bug this fixes). Dedup is by provider id OR name; the REGISTRY entry
-// WINS a collision so any enrichment/masking it carries is preserved. Each source
-// is independently resilient — an outage of either is logged and skipped, never
-// hiding the other (or the caller's BYO fold). Nothing is fabricated: only
+// fleet (the bug this fixes). A DOKS node's droplet carries a k8s tag (not a
+// hanzo-org droplet tag), so it is absent from BOTH registry and live and would be
+// invisible without the third source. Dedup is by provider id OR name; the REGISTRY
+// entry WINS a collision so any enrichment/masking it carries is preserved, and a
+// DOKS node whose droplet also appears live is deduped by droplet id (never twice).
+// Each source is independently resilient — an outage of any is logged and skipped,
+// never hiding the others (or the caller's BYO fold). Nothing is fabricated: only
 // machines Visor actually returns are surfaced.
 func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMachine {
-	var registry, live []visorMachine
+	var registry, live, nodes []visorMachine
 	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &registry); err != nil {
 		// A Visor blip must not hide the org's OTHER machine source (or its BYO fold).
 		s.Log.Warn("visor get-machines failed; registry machines omitted", "org", org, "err", err)
@@ -187,9 +194,19 @@ func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMac
 		s.Log.Warn("visor list-compute-machines failed; live DO machines omitted", "org", org, "err", err)
 		live = nil
 	}
+	// THIRD source: DOKS worker NODES (GET /v1/kubernetes-nodes → visor unions the
+	// house-account hanzo-org-tagged clusters + BYOC Provider.ClusterID clusters).
+	// A cluster's node is a real droplet, so the world fleet should show the NODES,
+	// not just standalone droplets. A DOKS node whose droplet is ALSO in the live
+	// list dedupes by droplet id below (Machine.Id == DropletID), so it never lists
+	// twice. Independently resilient like the other two.
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/kubernetes-nodes", q("owner", org), nil, &nodes); err != nil {
+		s.Log.Warn("visor kubernetes-nodes failed; DOKS nodes omitted", "org", org, "err", err)
+		nodes = nil
+	}
 
-	out := make([]visorMachine, 0, len(registry)+len(live))
-	seen := make(map[string]struct{}, 2*(len(registry)+len(live)))
+	out := make([]visorMachine, 0, len(registry)+len(live)+len(nodes))
+	seen := make(map[string]struct{}, 2*(len(registry)+len(live)+len(nodes)))
 	claim := func(m visorMachine) {
 		if m.Id != "" {
 			seen["id:"+m.Id] = struct{}{}
@@ -219,6 +236,15 @@ func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMac
 		claim(m)
 	}
 	for _, m := range live {
+		if claimed(m) {
+			continue
+		}
+		out = append(out, m)
+		claim(m)
+	}
+	// DOKS nodes last: a node whose droplet already surfaced (registry or live)
+	// dedupes by droplet id/name; only cluster nodes not otherwise listed are added.
+	for _, m := range nodes {
 		if claimed(m) {
 			continue
 		}
