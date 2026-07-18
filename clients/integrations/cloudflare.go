@@ -44,7 +44,20 @@ const (
 // is expected to carry. Cloudflare's verify response does NOT disclose a token's
 // scopes (a least-privilege token cannot read its own token object), so this is
 // recorded as the REQUESTED/expected set — connection metadata, not a read-back.
-var cloudflareScopes = []string{"Zone:DNS:Edit", "Zone:Read", "Account:Cloudflare Pages:Edit"}
+//
+// The set grows with the /v1/cloudflare asset plane, one capability at a time — a
+// scope is added ONLY when its endpoint is actually callable, never speculatively.
+// DNS+Pages back /v1/dns and /v1/cloudflare/pages; Workers Scripts/Routes back the
+// wired /v1/cloudflare/workers. R2/KV/D1 are Phase-2 stubs (their handlers answer
+// 501), so their scopes are NOT requested yet — add them alongside their wiring:
+//
+//	R2  → "Account:Workers R2 Storage:Edit"
+//	KV  → "Account:Workers KV Storage:Edit"
+//	D1  → "Account:D1:Edit"
+var cloudflareScopes = []string{
+	"Zone:DNS:Edit", "Zone:Read", "Account:Cloudflare Pages:Edit",
+	"Account:Workers Scripts:Edit", "Zone:Workers Routes:Edit",
+}
 
 // cfHTTPClient is the shared client for Cloudflare verify/discovery calls. A tight
 // timeout so a slow/hung Cloudflare never wedges a connect request.
