@@ -81,11 +81,24 @@ func RoutedRunWorkflow(ctx workflow.Context, in agents.RoutedRun) (agents.Routed
 	return res, err
 }
 
+// routedFinalizeTimeout bounds the cloud-side completion (verify ref + file PR +
+// close session) that runs once the machine reports. Generous for a couple of local
+// reads + writes, but finite so a wedged seam can never hold the activity open.
+const routedFinalizeTimeout = 60 * time.Second
+
 // DeliverRoutedRunActivity offers the run to the live mailbox and blocks until the
 // machine reports a terminal result or the budget elapses. It derives an internal
 // deadline from the same budget so the goroutine can never outlive the activity
 // even if the engine does not cancel the passed ctx exactly at StartToClose.
 // Exported for worker registration; not called directly.
+//
+// COMPLETION PARITY (#48): once the report is in hand, it runs the cloud-side
+// completion (routedFinalizer) — VerifyRef the pushed branch landed, file the native
+// PR, and CLOSE THE SESSION (the machine never closes it) — the SAME steps the local
+// keystone path runs after a sandbox push. It runs on a cancel-immune, bounded
+// context so a run near its deadline still transitions to terminal, and only AFTER a
+// real report (never on the re-offer/timeout path), so a completed run is never
+// re-executed by a retry.
 func DeliverRoutedRunActivity(ctx context.Context, in agents.RoutedRun) (agents.RoutedResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, routedStartToClose(in.TimeoutSeconds))
 	defer cancel()
@@ -95,7 +108,38 @@ func DeliverRoutedRunActivity(ctx context.Context, in agents.RoutedRun) (agents.
 	if !ok {
 		return agents.RoutedResult{}, fmt.Errorf("routed run %s was not completed before its deadline", in.SessionID)
 	}
+	if routedFinalizer != nil {
+		fctx, fcancel := context.WithTimeout(context.WithoutCancel(ctx), routedFinalizeTimeout)
+		routedFinalizer(fctx, in, res)
+		fcancel()
+	}
 	return res, nil
+}
+
+// routedFinalizer is the completion seam the delivery activity runs when a routed run
+// reports terminal: verify the pushed ref, file the PR, and close the session. It is
+// injected once at the composition root (NewDispatcher binds it to THIS dispatcher's
+// git/tracker/session seams), so the free-function activity reaches those seams
+// without coding holding global Dispatcher state — the same injected-seam shape
+// index_on_push uses. Nil (unwired, e.g. a direct-Dispatcher unit test that fakes the
+// Route seam) simply skips the cloud-side completion.
+var routedFinalizer func(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult)
+
+func setRoutedFinalizer(fn func(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult)) {
+	routedFinalizer = fn
+}
+
+// finalizeRoutedDurable adapts the durable agents types to coding's and runs the
+// cloud-side completion. It is what NewDispatcher binds as the routedFinalizer seam.
+func (d Dispatcher) finalizeRoutedDurable(ctx context.Context, in agents.RoutedRun, res agents.RoutedResult) {
+	d.finalizeRouted(ctx, RoutedRun{
+		Org: in.Org, TargetID: in.TargetID, SessionID: in.SessionID, Repo: in.Repo,
+		Project: in.Project, Base: in.Base, Branch: in.Branch, Prompt: in.Prompt,
+		Actor: in.Actor, AgentRef: in.AgentRef,
+	}, RoutedResult{
+		OK: res.OK, Changed: res.Changed, Branch: res.Branch,
+		CommitSha: res.CommitSha, Diffstat: res.Diffstat, Error: res.Error,
+	})
 }
 
 var (
@@ -152,6 +196,7 @@ func enqueueRoutedRun(ctx context.Context, run RoutedRun) error {
 		Org: run.Org, TargetID: run.TargetID, SessionID: run.SessionID,
 		Repo: run.Repo, Project: run.Project, Base: run.Base, Branch: run.Branch,
 		Prompt: run.Prompt, CloneURL: run.CloneURL, TimeoutSeconds: run.TimeoutSeconds,
+		Actor: run.Actor, AgentRef: run.AgentRef,
 	}
 	_, err = cli.ExecuteWorkflow(ctx, tasksclient.StartWorkflowOptions{
 		ID:        run.SessionID,
