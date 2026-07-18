@@ -20,9 +20,13 @@ import (
 // saw for assertions.
 type fakeVisor struct {
 	lastOwner string
-	// machinesByOwner is the per-tenant machine inventory the fake serves.
+	// machinesByOwner is the per-tenant REGISTRY inventory (/v1/get-machines).
 	machinesByOwner map[string][]map[string]any
-	poolsByOwner    map[string][]map[string]any
+	// liveByOwner is the per-tenant LIVE DigitalOcean reseller list
+	// (/v1/machines → ListComputeMachines) — the live droplet inventory that
+	// listMachines now unions with the registry.
+	liveByOwner  map[string][]map[string]any
+	poolsByOwner map[string][]map[string]any
 }
 
 func envelope200(w http.ResponseWriter, data any) {
@@ -37,6 +41,13 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
 		envelope200(w, f.machinesByOwner[owner])
+	})
+	// Live DO reseller list (ListComputeMachines). Exact-match path — it does NOT
+	// shadow /v1/machines/launch below (that is a distinct exact pattern).
+	mux.HandleFunc("/v1/machines", func(w http.ResponseWriter, r *http.Request) {
+		owner := r.URL.Query().Get("owner")
+		f.lastOwner = owner
+		envelope200(w, f.liveByOwner[owner])
 	})
 	mux.HandleFunc("/v1/get-machine", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id") // owner/name
@@ -166,6 +177,77 @@ func TestMachinesListTenantScopedAndShape(t *testing.T) {
 	}
 	if f.lastOwner != "other" {
 		t.Fatalf("cloud must forward owner=other, got %q", f.lastOwner)
+	}
+}
+
+// TestMachinesMergeLiveDOAndRegistry proves listMachines unions Visor's registry
+// (/v1/get-machines) with the LIVE DigitalOcean reseller list (/v1/machines): a
+// droplet present ONLY in the live list surfaces (the bug this fixes), a machine
+// in BOTH is deduped (by id AND by name — even when the registry row has no
+// provider id yet), and the REGISTRY entry wins the collision so its enrichment
+// (displayName) is preserved.
+func TestMachinesMergeLiveDOAndRegistry(t *testing.T) {
+	f := &fakeVisor{
+		// Registry (DB-backed, enriched/masked): web-1 has a provider id; api-1 is a
+		// fresh record with no provider id yet (id assigned only after sync).
+		machinesByOwner: map[string][]map[string]any{
+			"acme": {
+				{"owner": "acme", "name": "web-1", "id": "drop-1", "displayName": "Web 1",
+					"provider": "DigitalOcean", "size": "s-2vcpu-4gb", "region": "sfo3", "state": "running"},
+				{"owner": "acme", "name": "api-1", "displayName": "API 1",
+					"provider": "DigitalOcean", "size": "s-1vcpu-1gb", "region": "sfo3", "state": "running"},
+			},
+		},
+		// Live DO reseller list: web-1 again (same droplet id, raw — no displayName),
+		// api-1 again (same name, now WITH a droplet id), and do-only which was
+		// provisioned but never landed in the registry.
+		liveByOwner: map[string][]map[string]any{
+			"acme": {
+				{"owner": "acme", "name": "web-1", "id": "drop-1",
+					"provider": "DigitalOcean", "size": "s-2vcpu-4gb", "region": "sfo3", "state": "running"},
+				{"owner": "acme", "name": "api-1", "id": "drop-3",
+					"provider": "DigitalOcean", "size": "s-1vcpu-1gb", "region": "sfo3", "state": "running"},
+				{"owner": "acme", "name": "do-only", "id": "drop-2",
+					"provider": "DigitalOcean", "size": "s-4vcpu-8gb", "region": "nyc3", "state": "running"},
+			},
+		},
+	}
+	app := mountApp(t, f)
+
+	code, body := do(t, app, http.MethodGet, "/v1/machines", "acme", nil)
+	if code != http.StatusOK {
+		t.Fatalf("list want 200, got %d (%s)", code, body)
+	}
+	var listed struct {
+		Machines []machineView `json:"machines"`
+	}
+	if err := json.Unmarshal(body, &listed); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+
+	byID := map[string]machineView{}
+	for _, m := range listed.Machines {
+		byID[m.ID] = m
+	}
+	// Expected deduped union: 3 machines, not 5. web-1 (deduped by id), api-1
+	// (deduped by name — the registry row had no id), and the live-only do-only.
+	// The two "won" rows keep the REGISTRY displayName; do-only keeps its live name.
+	want := []struct{ id, name, region, typ string }{
+		{"web-1", "Web 1", "sfo3", "s-2vcpu-4gb"},
+		{"api-1", "API 1", "sfo3", "s-1vcpu-1gb"},
+		{"do-only", "do-only", "nyc3", "s-4vcpu-8gb"},
+	}
+	if len(listed.Machines) != len(want) {
+		t.Fatalf("registry+live union want %d deduped machines, got %d: %+v", len(want), len(listed.Machines), listed.Machines)
+	}
+	for _, w := range want {
+		m, ok := byID[w.id]
+		if !ok {
+			t.Fatalf("machine %q missing from merged list: %+v", w.id, listed.Machines)
+		}
+		if m.Name != w.name || m.Region != w.region || m.Type != w.typ || m.Provider != "DigitalOcean" || m.Status != "running" {
+			t.Fatalf("machine %q view mismatch: got %+v want name=%q region=%q type=%q", w.id, m, w.name, w.region, w.typ)
+		}
 	}
 }
 
