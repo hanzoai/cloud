@@ -44,7 +44,7 @@ func r2BucketList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func r2BucketCreate(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func r2BucketCreate(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func r2BucketDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, _, err := authClient(s, c)
+	cl, _, err := authWrite(s, c)
 	if err != nil {
 		return err
 	}
