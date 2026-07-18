@@ -149,6 +149,7 @@ func slackEvents(s *cloud.Service[state], c *zip.Ctx) error {
 			Provider: "slack", ExternalID: route.TeamID, User: route.User,
 			Channel: route.Channel, ThreadID: route.ThreadTS, Text: route.Text, DedupeKey: key,
 		}
+		emitIngress(org, in, "")
 		reply := slackReplier(s, org, route.Channel, route.ThreadTS, route.User)
 		bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 		return c.NoContent(http.StatusOK)
