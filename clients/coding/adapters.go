@@ -24,7 +24,7 @@ func NewDispatcher(
 	verifyRef func(ctx context.Context, org, repo, branch string) (string, bool),
 	log func(msg string, kv ...any),
 ) Dispatcher {
-	return Dispatcher{
+	d := Dispatcher{
 		Sessions:  sessionAdapter{},
 		Tracker:   trackerAdapter{},
 		Runner:    runner{},
@@ -37,6 +37,13 @@ func NewDispatcher(
 		Route:      enqueueRoutedRun,
 		TargetGate: agents.TargetDispatchable,
 	}
+	// #48 completion parity: bind the routed completion seam to THIS dispatcher's
+	// git/tracker/session seams, so the durable delivery activity verifies the
+	// pushed ref, files the PR, and closes the session exactly as the local path
+	// does. The two git functions resolve their state at call time, so binding here
+	// (init, before any run) is safe.
+	setRoutedFinalizer(d.finalizeRoutedDurable)
+	return d
 }
 
 // sessionAdapter forwards to the agents in-process session API (inproc.go).
