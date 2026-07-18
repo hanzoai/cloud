@@ -217,6 +217,34 @@ func TestOnlyExplicitHeadersReachUpstream(t *testing.T) {
 	}
 }
 
+// PATH-SCOPE GUARD: a dot-segment or encoded-dot traversal that Fiber's raw
+// wildcard still matches but whose NORMALIZED path walks OUTSIDE /v1/dns is refused
+// (400) and NEVER reaches the DNS host -- the caller can never seize control of the
+// whole upstream path. Fail-closed: 0 bytes forwarded.
+func TestEscapedPathIsRefusedAndNeverReachesUpstream(t *testing.T) {
+	for _, target := range []string{
+		"/v1/dns/../../admin/secrets",
+		"/v1/dns/../../admin",
+		"/v1/dns/..%2f..%2fadmin",
+		"/v1/dns/../../../metrics",
+	} {
+		t.Run(target, func(t *testing.T) {
+			up := newStubDNS()
+			defer up.Close()
+			up.zonesByOrg = map[string]string{"orgA": "a.com"}
+			app := dnsApp(t, up.URL)
+
+			res, _ := do(t, app, as(httptest.NewRequest(http.MethodGet, target, nil), "orgA", "orgA/dave", "tokenA"))
+			if res.StatusCode != http.StatusBadRequest && res.StatusCode != http.StatusNotFound {
+				t.Fatalf("status = %d for %q, want 400/404 (an escaped path must be refused)", res.StatusCode, target)
+			}
+			if up.hits != 0 {
+				t.Fatalf("upstream reached %d time(s) for %q, want 0 -- traversal must be refused before forwarding", up.hits, target)
+			}
+		})
+	}
+}
+
 // A degenerate HANZO_DNS_URL that trims to an empty base fails closed (503), never
 // forwarding to an unintended host.
 func TestDegenerateURLFailsClosed(t *testing.T) {
