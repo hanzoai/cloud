@@ -71,6 +71,44 @@ func OpenSession(ctx context.Context, org, actor, agent, title string) (string, 
 	return id, nil
 }
 
+// OpenSessionOn is OpenSession with the run's dispatch TARGET recorded, so
+// mission-control shows a routed run on the machine it was sent to (session.target
+// == the target id) exactly as a locally-linked run shows its host. The target is
+// re-resolved org-scoped and MUST belong to this org — a session can never claim
+// to run on another tenant's machine (the same fail-closed rule sessionContext
+// enforces on the HTTP register path). An empty target falls back to OpenSession.
+func OpenSessionOn(ctx context.Context, org, actor, agent, title, target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return OpenSession(ctx, org, actor, agent, title)
+	}
+	if mounted == nil {
+		return "", fmt.Errorf("agents: not mounted")
+	}
+	org = strings.TrimSpace(org)
+	if org == "" {
+		return "", fmt.Errorf("agents: org required")
+	}
+	if _, err := mounted.State.store.GetTarget(ctx, org, target); err != nil {
+		if err == errTargetNotFound {
+			return "", fmt.Errorf("agents: target not found in this org")
+		}
+		return "", fmt.Errorf("agents: resolve target: %w", err)
+	}
+	id, err := OpenSession(ctx, org, actor, agent, title)
+	if err != nil {
+		return "", err
+	}
+	// Stamp the target onto the freshly-opened row (org-scoped update); a failure
+	// here is non-fatal — the session is live, it simply lacks its machine tag.
+	if x, gerr := mounted.State.store.GetSession(ctx, org, id); gerr == nil {
+		x.Target = target
+		x.UpdatedAt = time.Now().Unix()
+		_ = mounted.State.store.UpdateSession(ctx, x)
+	}
+	return id, nil
+}
+
 // LogSessionEvent appends one ordered event (message|tool-call|spawn|log|status|
 // control) to an org's session and fans it out live. The (org, id) pair is
 // re-resolved so a caller can only write to a session THIS org owns; kind is
