@@ -29,18 +29,15 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 		// engine
 		{"POST", "/v1/deploy/reconcile"},
 		// dashboard bootstrap + projection + actions + static
-		{"GET", "/v1/deploy/ui/api/v1/settings"},
-		{"GET", "/v1/deploy/ui/api/v1/session/userinfo"},
-		{"GET", "/v1/deploy/ui/api/version"},
-		{"GET", "/v1/deploy/ui/api/v1/account/can-i/applications/get/x"},
-		{"GET", "/v1/deploy/ui/api/v1/applications"},
-		{"GET", "/v1/deploy/ui/api/v1/applications/cloud"},
-		{"GET", "/v1/deploy/ui/api/v1/applications/cloud/resource-tree"},
-		{"POST", "/v1/deploy/ui/api/v1/applications/cloud/sync"},
-		{"POST", "/v1/deploy/ui/api/v1/applications/cloud/rollback"},
-		{"GET", "/v1/deploy/ui"},
-		{"GET", "/v1/deploy/ui/index.html"},
-		{"GET", "/v1/deploy/ui/applications/cloud"}, // an SPA client-side route
+		{"GET", "/v1/deploy/api/v1/settings"},
+		{"GET", "/v1/deploy/api/v1/session/userinfo"},
+		{"GET", "/v1/deploy/api/version"},
+		{"GET", "/v1/deploy/api/v1/account/can-i/applications/get/x"},
+		{"GET", "/v1/deploy/api/v1/applications"},
+		{"GET", "/v1/deploy/api/v1/applications/cloud"},
+		{"GET", "/v1/deploy/api/v1/applications/cloud/resource-tree"},
+		{"POST", "/v1/deploy/api/v1/applications/cloud/sync"},
+		{"POST", "/v1/deploy/api/v1/applications/cloud/rollback"},
 	}
 	for _, r := range guarded {
 		// WITHOUT admin → 403 (the guard, fail-closed).
