@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -37,10 +38,13 @@ type cfMock struct {
 	status     string // verify result.status; "" => "active"
 	verifyCode int    // HTTP status for /verify; 0 => 200
 	noAccounts bool   // /accounts returns 403 (least-priv token can't list)
+	oauthToken string // /token access_token; "" => cfOAuthAccessToken
+	oauthErr   bool   // /token returns an error envelope (invalid_grant)
 
-	mu       sync.Mutex
-	gotAuth  string // Authorization header seen on /verify
-	gotQuery string // raw query seen on /verify (must never carry the token)
+	mu        sync.Mutex
+	gotAuth   string // Authorization header seen on /verify
+	gotQuery  string // raw query seen on /verify (must never carry the token)
+	gotTokURL string // raw query seen on /token (the code must ride the POST FORM, not the URL)
 }
 
 func newCFMock(t *testing.T, m *cfMock) {
@@ -70,12 +74,41 @@ func newCFMock(t *testing.T, m *cfMock) {
 				return
 			}
 			_, _ = w.Write([]byte(`{"success":true,"result":[{"id":"acc-abc","name":"Acme Cloudflare"}]}`))
+		case strings.HasPrefix(r.URL.Path, "/token"):
+			// OAuth code→token exchange. The code MUST ride the POST form, never the URL.
+			m.mu.Lock()
+			m.gotTokURL = r.URL.RawQuery
+			m.mu.Unlock()
+			if m.oauthErr {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"bad code"}`))
+				return
+			}
+			tok := m.oauthToken
+			if tok == "" {
+				tok = cfOAuthAccessToken
+			}
+			_, _ = w.Write([]byte(`{"access_token":"` + tok + `","token_type":"bearer","scope":"dns_records:edit zone:read pages:edit"}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("CLOUDFLARE_API_BASE", srv.URL)
+	// Point the OAuth authorize/token origin at the same mock; the OAuth app creds
+	// are set per-test by cfOAuthCreds so apikey-only tests stay OAuth-unconfigured.
+	t.Setenv("CLOUDFLARE_OAUTH_BASE", srv.URL)
+}
+
+// cfOAuthAccessToken is the access token the mock /token endpoint mints.
+const cfOAuthAccessToken = "cf-oauth-access-SECRET-cafebabe98765432"
+
+// cfOAuthCreds sets Hanzo's registered Cloudflare OAuth app creds so the OAuth leg
+// of /connect is active. Without this the OAuth path answers an honest 503.
+func cfOAuthCreds(t *testing.T) {
+	t.Helper()
+	t.Setenv(cloudflareOAuthClientIDEnv, "cf-hanzo-oauth-client")
+	t.Setenv(cloudflareOAuthClientSecretEnv, "cf-hanzo-oauth-secret")
 }
 
 // cfReq issues a request with the gateway identity headers. admin=true adds
@@ -359,5 +392,180 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 
 	if strings.Contains(logs.String(), cfTestToken) {
 		t.Fatalf("the credential token appeared in a log line:\n%s", logs.String())
+	}
+}
+
+// ---- OAuth path — the browser Authorization Code flow on the SAME provider ----
+
+// cfConnectNoToken posts a tokenless /connect as an org admin — the console
+// "Connect Cloudflare" button / `hanzo connector add --provider cloudflare` with no
+// --token. A body with no "token" key routes to the OAuth flow.
+func cfConnectNoToken(t *testing.T, app *zip.App, org string) httpResult {
+	t.Helper()
+	return cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", org, true, map[string]any{})
+}
+
+func TestCloudflareOAuthConnectReturnsAuthorizeURLWhenConfigured(t *testing.T) {
+	newCFMock(t, &cfMock{status: "active"})
+	cfOAuthCreds(t)
+	app := newApp(t, newKMS(t))
+
+	res := cfConnectNoToken(t, app, "acme")
+	if res.Code != http.StatusOK {
+		t.Fatalf("tokenless connect want 200, got %d (%s)", res.Code, res.Body)
+	}
+	var out struct {
+		AuthorizeURL string `json:"authorizeUrl"`
+	}
+	if err := json.Unmarshal(res.Body, &out); err != nil || out.AuthorizeURL == "" {
+		t.Fatalf("want an authorizeUrl, got %s", res.Body)
+	}
+	u, err := url.Parse(out.AuthorizeURL)
+	if err != nil {
+		t.Fatalf("authorizeUrl parse: %v", err)
+	}
+	q := u.Query()
+	if q.Get("client_id") != "cf-hanzo-oauth-client" {
+		t.Fatalf("client_id want cf-hanzo-oauth-client, got %q", q.Get("client_id"))
+	}
+	if q.Get("response_type") != "code" {
+		t.Fatalf("response_type want code, got %q", q.Get("response_type"))
+	}
+	if got := q.Get("scope"); got != "dns_records:edit zone:read pages:edit" {
+		t.Fatalf("scope want the DNS/zone/pages set, got %q", got)
+	}
+	if q.Get("state") == "" {
+		t.Fatal("authorizeUrl must carry a signed state")
+	}
+	if !strings.HasSuffix(q.Get("redirect_uri"), "/v1/integrations/cloudflare/callback") {
+		t.Fatalf("redirect_uri want the cloudflare callback, got %q", q.Get("redirect_uri"))
+	}
+	if strings.Contains(out.AuthorizeURL, "cf-hanzo-oauth-secret") {
+		t.Fatal("the OAuth client secret leaked into the authorize URL")
+	}
+}
+
+func TestCloudflareOAuthUnconfiguredIs503ButApikeyStillWorks(t *testing.T) {
+	newCFMock(t, &cfMock{status: "active"}) // sets OAUTH_BASE but NOT the app creds
+	kc := newKMS(t)
+	app := newApp(t, kc)
+
+	// No OAuth app creds → a tokenless connect is an honest 503, nothing stored.
+	res := cfConnectNoToken(t, app, "acme")
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("tokenless connect w/o OAuth creds want 503, got %d (%s)", res.Code, res.Body)
+	}
+	if _, ok := kmsHas(t, kc, "acme"); ok {
+		t.Fatal("a 503 OAuth-unconfigured connect must store nothing")
+	}
+	// The apikey path is unaffected: a token in the body still seals.
+	if r := cfConnect(t, app, "acme"); r.Code != http.StatusOK {
+		t.Fatalf("apikey connect want 200 even when OAuth is unconfigured, got %d (%s)", r.Code, r.Body)
+	}
+	if _, ok := kmsHas(t, kc, "acme"); !ok {
+		t.Fatal("apikey connect must still seal the token")
+	}
+}
+
+func TestCloudflareApikeyTokenSealsEvenWhenOAuthConfigured(t *testing.T) {
+	newCFMock(t, &cfMock{status: "active"})
+	cfOAuthCreds(t) // OAuth available — a token in the body MUST still pick apikey
+	kc := newKMS(t)
+	app := newApp(t, kc)
+
+	res := cfConnect(t, app, "acme") // posts {token: cfTestToken}
+	if res.Code != http.StatusOK {
+		t.Fatalf("apikey connect want 200, got %d (%s)", res.Code, res.Body)
+	}
+	got, ok := kmsHas(t, kc, "acme")
+	if !ok || string(got) != cfTestToken {
+		t.Fatalf("apikey token must be sealed verbatim, got ok=%v %q", ok, got)
+	}
+	if string(got) == cfOAuthAccessToken {
+		t.Fatal("dispatch wrongly routed a token-bearing connect to OAuth")
+	}
+}
+
+func TestCloudflareOAuthCallbackSealsSameKMSCoordinate(t *testing.T) {
+	m := &cfMock{status: "active"}
+	newCFMock(t, m)
+	cfOAuthCreds(t)
+	kc := newKMS(t)
+	app := newApp(t, kc)
+
+	// 1) tokenless connect → authorizeUrl carrying the signed state.
+	res := cfConnectNoToken(t, app, "acme")
+	if res.Code != http.StatusOK {
+		t.Fatalf("connect want 200, got %d (%s)", res.Code, res.Body)
+	}
+	var out struct {
+		AuthorizeURL string `json:"authorizeUrl"`
+	}
+	_ = json.Unmarshal(res.Body, &out)
+	u, err := url.Parse(out.AuthorizeURL)
+	if err != nil {
+		t.Fatalf("authorizeUrl parse: %v", err)
+	}
+	state := u.Query().Get("state")
+	if state == "" {
+		t.Fatal("no state in authorizeUrl")
+	}
+
+	// 2) Cloudflare redirects the browser back to the callback with code+state.
+	cb := "/v1/integrations/cloudflare/callback?code=cf-oauth-code-xyz&state=" + url.QueryEscape(state)
+	r := cfReq(t, app, http.MethodGet, cb, "", false, nil) // PUBLIC — org from the signed state
+	if r.Code != http.StatusFound {
+		t.Fatalf("callback want 302 redirect, got %d (%s)", r.Code, r.Body)
+	}
+
+	// 3) The exchanged access token is sealed to the SAME coordinate as apikey.
+	got, ok := kmsHas(t, kc, "acme")
+	if !ok {
+		t.Fatal("OAuth callback must seal at /orgs/acme/integrations/cloudflare/api_token")
+	}
+	if string(got) != cfOAuthAccessToken {
+		t.Fatalf("sealed token mismatch: got %q, want the OAuth access token", got)
+	}
+	conn, ok := ConnectionFor("acme", "cloudflare")
+	if !ok {
+		t.Fatal("expected a connection row after the OAuth callback")
+	}
+	if strings.Contains(conn.AccountLabel+conn.ExternalID+strings.Join(conn.Scopes, ","), cfOAuthAccessToken) {
+		t.Fatal("OAuth access token leaked into the connection row")
+	}
+	// The authorization code rode the POST form, never the /token URL.
+	m.mu.Lock()
+	tokURL := m.gotTokURL
+	m.mu.Unlock()
+	if strings.Contains(tokURL, "cf-oauth-code") {
+		t.Fatalf("the authorization code leaked into the /token URL query: %q", tokURL)
+	}
+}
+
+func TestCloudflareOAuthCallbackFailClosedOnExchangeError(t *testing.T) {
+	newCFMock(t, &cfMock{status: "active", oauthErr: true}) // /token returns invalid_grant
+	cfOAuthCreds(t)
+	kc := newKMS(t)
+	app := newApp(t, kc)
+
+	res := cfConnectNoToken(t, app, "acme")
+	if res.Code != http.StatusOK {
+		t.Fatalf("connect want 200, got %d", res.Code)
+	}
+	var out struct {
+		AuthorizeURL string `json:"authorizeUrl"`
+	}
+	_ = json.Unmarshal(res.Body, &out)
+	u, _ := url.Parse(out.AuthorizeURL)
+	cb := "/v1/integrations/cloudflare/callback?code=bad&state=" + url.QueryEscape(u.Query().Get("state"))
+	r := cfReq(t, app, http.MethodGet, cb, "", false, nil)
+	if r.Code != http.StatusFound { // framework 302s to a LABELED failure page
+		t.Fatalf("failed exchange want 302 (labeled failure), got %d (%s)", r.Code, r.Body)
+	}
+	if _, ok := kmsHas(t, kc, "acme"); ok {
+		t.Fatal("a failed OAuth exchange must seal nothing")
+	}
+	if _, ok := ConnectionFor("acme", "cloudflare"); ok {
+		t.Fatal("a failed OAuth exchange must create no connection row")
 	}
 }
