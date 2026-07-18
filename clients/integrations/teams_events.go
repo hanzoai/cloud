@@ -98,6 +98,7 @@ func teamsEvents(s *cloud.Service[state], c *zip.Ctx) error {
 		Provider: "teams", ExternalID: tenant, User: user,
 		Channel: act.ConversationID, Text: stripTeamsMentions(act.Text), DedupeKey: act.ID,
 	}
+	emitIngress(org, in, act.ServiceURL)
 	reply := teamsReplier(act.ServiceURL, act.ConversationID)
 	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	return c.NoContent(http.StatusOK)

@@ -65,6 +65,7 @@ import (
 	"github.com/hanzoai/cloud/clients/bots"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
+	"github.com/hanzoai/cloud/clients/channels"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
 	"github.com/hanzoai/cloud/clients/content"
@@ -320,6 +321,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
 		{Name: "settings", Mount: settings.Mount, Shutdown: settings.Shutdown},
 		{Name: "notify", Mount: notify.Mount, OwnsHealth: true},
+		{Name: "channels", Mount: channels.Mount, Shutdown: channels.Shutdown},
 		{Name: "gateway", Mount: gateway.Mount},
 		{Name: "entitlements", Mount: entitlements.Mount, Shutdown: entitlements.Shutdown},
 		{Name: "exec", Mount: exec.Mount},
