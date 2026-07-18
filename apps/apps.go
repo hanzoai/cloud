@@ -321,7 +321,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "graph", Mount: graph.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
-		// Per-org Cloudflare asset plane /v1/cloudflare/{pages,workers,r2,kv,d1}/*.
+		// Per-org Cloudflare asset plane /v1/integrations/cloudflare/{pages,workers,r2,kv,d1}/*.
 		// Mounts AFTER integrations because it reads the org's Cloudflare token through
 		// the integrations custody seam (integrations.TokenFor) — one token, one
 		// custody boundary. Stateless: no store, no shutdown.
