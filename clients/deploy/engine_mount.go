@@ -12,6 +12,7 @@ package deploy
 import (
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -25,8 +26,37 @@ import (
 
 // Engine config — all optional; defaults target the live universe manifest repo
 // (the exact source universe-crs syncs). Configure only what must vary.
-func engineEnabled() bool     { return os.Getenv("DEPLOY_ENGINE_ENABLED") == "true" }
-func enginePrune() bool       { return os.Getenv("DEPLOY_ENGINE_PRUNE") == "true" }
+func engineEnabled() bool { return os.Getenv("DEPLOY_ENGINE_ENABLED") == "true" }
+func enginePrune() bool   { return os.Getenv("DEPLOY_ENGINE_PRUNE") == "true" }
+
+// pruneFuse bounds a single reconcile's deletions (RED HIGH-1). Conservative
+// defaults: at most 10 objects OR 20% of the managed set, whichever is smaller,
+// unless explicitly raised. A silent empty/partial render trips the fuse instead
+// of sweeping the fleet.
+func pruneFuse() PruneFuse {
+	return PruneFuse{
+		MaxDeletions: envInt("DEPLOY_ENGINE_PRUNE_MAX", 10),
+		MaxRatio:     envFloat("DEPLOY_ENGINE_PRUNE_MAX_RATIO", 0.20),
+	}
+}
+
+func envInt(k string, d int) int {
+	if v := os.Getenv(k); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return d
+}
+
+func envFloat(k string, d float64) float64 {
+	if v := os.Getenv(k); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return d
+}
 func engineRepo() string      { return envOr("DEPLOY_ENGINE_REPO", "https://github.com/hanzoai/universe") }
 func engineRef() string       { return envOr("DEPLOY_ENGINE_REF", "main") }
 func enginePath() string      { return envOr("DEPLOY_ENGINE_PATH", "infra/k8s/operator/crs") }
@@ -74,7 +104,7 @@ func engineReconcile(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusBadGateway, "engine: render git source: %v", err)
 	}
 
-	results, err := rec.reconcile(ctx, objs, revision, engineDefaultNS(), enginePrune())
+	results, err := rec.reconcile(ctx, objs, revision, engineDefaultNS(), enginePrune(), pruneFuse())
 	if err != nil {
 		return zip.Errorf(http.StatusBadGateway, "engine: sync: %v", err)
 	}
