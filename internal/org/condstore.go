@@ -15,7 +15,7 @@ package org
 // backend exposes NO conditional-write primitive — "overwriting is allowed" is its
 // contract — so the fence, which is a CONDITIONAL write, cannot ride that path. It
 // addresses a dedicated object per shard directly against the gateway, exactly as
-// clients/s3 does. No new dependency: github.com/minio/minio-go/v7 is already
+// clients/s3 does. No new dependency: github.com/hanzoai/s3-go is already
 // vendored. Build one from s3admin's admin client:
 //
 //	a := s3admin.New()
@@ -32,7 +32,7 @@ import (
 	"io"
 
 	"github.com/hanzoai/vfs/replica"
-	minio "github.com/minio/minio-go/v7"
+	minio "github.com/hanzoai/s3-go"
 )
 
 // MinioConditionalStore is a replica.ConditionalStore over minio-go's native
