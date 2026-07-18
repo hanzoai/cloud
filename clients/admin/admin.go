@@ -38,7 +38,10 @@ import (
 	"github.com/hanzoai/cloud/clients/admin/finance"
 	"github.com/hanzoai/cloud/clients/admin/health"
 	"github.com/hanzoai/cloud/clients/admin/iam"
+	"github.com/hanzoai/cloud/clients/admin/invoices"
+	"github.com/hanzoai/cloud/clients/admin/metrics"
 	"github.com/hanzoai/cloud/clients/admin/revenue"
+	"github.com/hanzoai/cloud/clients/admin/subscriptions"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -118,11 +121,15 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/waitlist", core.Guard(s, waitlist))
 	app.Post("/v1/admin/waitlist/boost", core.Guard(s, waitlistBoost))
 
-	// ── Carved-out domains own their routes (audit/customer/revenue/finance). ──
+	// ── Carved-out domains own their routes (audit/customer/revenue/finance +
+	// the billing fleet views metrics/invoices/subscriptions). ──
 	audit.Routes(app, s)
 	customer.Routes(app, s)
 	revenue.Routes(app, s)
 	finance.Routes(app, s)
+	metrics.Routes(app, s)
+	invoices.Routes(app, s)
+	subscriptions.Routes(app, s)
 }
 
 // ── /v1/admin/me — operator identity (AdminMe) ───────────────────────────────
