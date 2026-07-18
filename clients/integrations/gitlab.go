@@ -38,7 +38,7 @@ func init() {
 		Category:     "Developer",
 		Scopes:       gitlabScopes,
 		RedirectPath: callbackPath("gitlab"),
-		Secrets:      []string{gitlabAccessTokenSecret, gitlabRefreshTokenSecret},
+		Secrets:      []string{accessSecret, refreshSecret},
 		Configured:   gitlabConfigured,
 		Creds:        gitlabCreds,
 		Authorize:    gitlabAuthorize,
@@ -48,11 +48,9 @@ func init() {
 }
 
 const (
-	gitlabClientIDEnv        = "GITLAB_CLIENT_ID"
-	gitlabClientSecretEnv    = "GITLAB_CLIENT_SECRET"
-	gitlabURLEnv             = "GITLAB_URL"
-	gitlabAccessTokenSecret  = "access_token"
-	gitlabRefreshTokenSecret = "refresh_token"
+	gitlabClientIDEnv     = "GITLAB_CLIENT_ID"
+	gitlabClientSecretEnv = "GITLAB_CLIENT_SECRET"
+	gitlabURLEnv          = "GITLAB_URL"
 )
 
 // gitlabBase is the GitLab instance base (gitlab.com or a self-hosted instance),
@@ -141,9 +139,9 @@ func gitlabExchange(ctx context.Context, creds OAuthConfig, redirectURI, code st
 	if r.AccessToken == "" {
 		return nil, fmt.Errorf("gitlab token exchange returned no access_token")
 	}
-	tokens := map[string]string{gitlabAccessTokenSecret: r.AccessToken}
+	tokens := map[string]string{accessSecret: r.AccessToken}
 	if r.RefreshToken != "" {
-		tokens[gitlabRefreshTokenSecret] = r.RefreshToken
+		tokens[refreshSecret] = r.RefreshToken
 	}
 	externalID, label := gitlabAccount(ctx, r.AccessToken)
 	return &ExchangeResult{
