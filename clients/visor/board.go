@@ -209,16 +209,15 @@ func clusterUnits(s *cloud.Service[state], org, proj string) []fleetUnit {
 	return out
 }
 
-// machineUnits folds in the Visor-provisioned machines. BYO workers are NOT folded
-// in here (unlike /v1/machines, which merges them for the console's Machines page):
-// on the board they are their own source, so each row says where it really came
-// from. Fail-soft: a wedged Visor costs its rows, not the board.
+// machineUnits folds in the Visor-provisioned machines — the SAME managed-machine
+// union listMachines serves (registry + live DO droplets, deduped), so the board
+// and the Machines page can never disagree about which machines exist, not just how
+// they normalize. BYO workers are NOT folded in here (unlike /v1/machines, which
+// merges them for the console's Machines page): on the board they are their own
+// source, so each row says where it really came from. Fail-soft: a wedged Visor
+// costs its rows, not the board (managedMachines logs and returns what it can).
 func machineUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
-	var machines []visorMachine
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/get-machines", q("owner", org), nil, &machines); err != nil {
-		s.Log.Warn("fleet board: visor machines unavailable", "org", org, "err", err)
-		return nil
-	}
+	machines := managedMachines(s, c, org)
 	out := make([]fleetUnit, 0, len(machines))
 	for _, m := range machines {
 		// Reuse the ONE visorMachine normalizer (size → GPU model, cpuSize → vcpu)
