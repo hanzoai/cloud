@@ -8,12 +8,17 @@ package integrations
 // row holds only non-secret metadata (account id/label, the requested scopes);
 // the token is never in the row, the response, or a log line.
 //
-// Cloudflare has no server-side OAuth-app requirement for this path (the customer
-// already holds the token), so the connector is always "configured". Cloudflare
-// DID ship self-managed OAuth clients on 2026-06-03; a `kind:oauth` Cloudflare
-// provider can be added later as a sibling file (a registered Hanzo OAuth client +
-// domain verification) without touching this apikey path — one framework, N
-// providers. See the connector HIP / hanzo dns wiring.
+// The same provider ALSO offers a browser OAuth path (Authorization Code, a
+// confidential client with client_secret — the framework's OAuth pattern, no PKCE;
+// see slack_link.go). A tokenless /connect starts the consent flow at Cloudflare
+// and the exchanged access token is sealed to the SAME KMS coordinate as the
+// apikey path (api_token), so the DNS provider layer never learns which method
+// minted the token. The request picks the path: a token in the /connect body seals
+// via apikey; its absence starts OAuth. The apikey path is always available; the
+// OAuth leg activates only once Hanzo's registered Cloudflare OAuth app creds are
+// present in ENV (CLOUDFLARE_OAUTH_CLIENT_ID/SECRET), else it answers an honest
+// 503 pointing the caller at the token path. One framework, one provider, two
+// credential-acquisition methods. See the connector HIP / hanzo dns wiring.
 
 import (
 	"context"
@@ -21,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -54,11 +60,19 @@ func init() {
 		AdminOnly:   true,
 		Scopes:      cloudflareScopes,
 		Secrets:     []string{cloudflareTokenSecret},
-		// apikey: no OAuth callback, no server-side app creds. Always available;
-		// the only secret is the customer's token, custodied in KMS.
-		Configured: func() bool { return true },
-		Creds:      func() OAuthConfig { return OAuthConfig{} },
-		Verify:     cloudflareVerify,
+		// Dual-path connector. apikey: the customer submits a scoped API token to
+		// /connect (verify-before-seal). oauth: a tokenless /connect starts the
+		// browser Authorization Code flow and the exchanged access token is sealed to
+		// the SAME KMS coordinate (api_token), so the DNS layer is auth-agnostic.
+		// Configured stays true — the apikey path is ALWAYS available; the OAuth leg
+		// gates on its own app creds (Creds().ClientID) inside connect, so a missing
+		// Cloudflare OAuth app degrades to an honest 503 without breaking apikey.
+		Configured:   func() bool { return true },
+		RedirectPath: callbackPath(cloudflareProvider),
+		Creds:        cloudflareCreds,
+		Authorize:    cloudflareAuthorize,
+		Exchange:     cloudflareExchange,
+		Verify:       cloudflareVerify,
 	})
 }
 
@@ -185,4 +199,116 @@ func cfDiscoverAccount(ctx context.Context, token string) (id, name string) {
 		return "", ""
 	}
 	return strings.TrimSpace(ar.Result[0].ID), strings.TrimSpace(ar.Result[0].Name)
+}
+
+const (
+	// cloudflareOAuthClientIDEnv / cloudflareOAuthClientSecretEnv name the ENV that
+	// carries Hanzo's registered Cloudflare OAuth app creds (KMS-synced, never in
+	// code). Until BOTH are present the OAuth leg of /connect answers an honest 503
+	// and the apikey path still works.
+	cloudflareOAuthClientIDEnv     = "CLOUDFLARE_OAUTH_CLIENT_ID"
+	cloudflareOAuthClientSecretEnv = "CLOUDFLARE_OAUTH_CLIENT_SECRET"
+)
+
+// cloudflareOAuthScopes is the consent scope set — the OAuth-flow spelling of the
+// same DNS/zone/pages access the apikey token path requests.
+var cloudflareOAuthScopes = []string{"dns_records:edit", "zone:read", "pages:edit"}
+
+// cfOAuthBase is Cloudflare's OAuth2 origin (…/auth authorize + …/token exchange).
+// Overridable via CLOUDFLARE_OAUTH_BASE for tests and CF-compatible endpoints; read
+// at call time. The default is Cloudflare's dashboard OAuth2 endpoint.
+func cfOAuthBase() string {
+	if v := strings.TrimSpace(os.Getenv("CLOUDFLARE_OAUTH_BASE")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	return "https://dash.cloudflare.com/oauth2"
+}
+
+// cloudflareCreds reads Hanzo's registered Cloudflare OAuth app creds from ENV.
+// Empty ClientID => the OAuth leg is not configured (connect answers 503).
+func cloudflareCreds() OAuthConfig {
+	return OAuthConfig{
+		ClientID:     strings.TrimSpace(os.Getenv(cloudflareOAuthClientIDEnv)),
+		ClientSecret: strings.TrimSpace(os.Getenv(cloudflareOAuthClientSecretEnv)),
+	}
+}
+
+// cloudflareAuthorize builds Cloudflare's consent URL (Authorization Code flow,
+// confidential client — client_secret, no PKCE, matching the framework's OAuth
+// providers; see slack_link.go). state is the framework's signed single-use CSRF
+// token; redirectURI is /v1/integrations/cloudflare/callback.
+func cloudflareAuthorize(creds OAuthConfig, redirectURI, state string) (string, error) {
+	q := url.Values{
+		"client_id":     {creds.ClientID},
+		"response_type": {"code"},
+		"redirect_uri":  {redirectURI},
+		"scope":         {strings.Join(cloudflareOAuthScopes, " ")},
+		"state":         {state},
+	}
+	return cfOAuthBase() + "/auth?" + q.Encode(), nil
+}
+
+// cfOAuthTokenResponse is Cloudflare's oauth2/token response.
+type cfOAuthTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	Scope       string `json:"scope"`
+	Error       string `json:"error"`
+	ErrorDesc   string `json:"error_description"`
+}
+
+// cloudflareExchange trades the OAuth code for an access token and seals it to the
+// SAME KMS coordinate as the apikey path (api_token), so the DNS provider layer is
+// auth-method-agnostic. It FAILS CLOSED (transport error, non-2xx, error envelope,
+// or empty token → error, nothing stored) and its error NEVER contains the token
+// or the authorization code value.
+func cloudflareExchange(ctx context.Context, creds OAuthConfig, redirectURI, code string) (*ExchangeResult, error) {
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {creds.ClientID},
+		"client_secret": {creds.ClientSecret},
+		"redirect_uri":  {redirectURI},
+		"code":          {code},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfOAuthBase()+"/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("cloudflare oauth: build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := cfHTTPClient.Do(req)
+	if err != nil {
+		// token-free: never echo the code or the exchange target's userinfo.
+		return nil, fmt.Errorf("cloudflare oauth token request failed")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("cloudflare oauth token http %d", resp.StatusCode)
+	}
+	var r cfOAuthTokenResponse
+	if err := json.Unmarshal(body, &r); err != nil {
+		return nil, fmt.Errorf("cloudflare oauth token: malformed response")
+	}
+	if r.Error != "" {
+		// r.Error is Cloudflare's short error code (e.g. invalid_grant), never the token.
+		return nil, fmt.Errorf("cloudflare oauth token: %s", r.Error)
+	}
+	token := strings.TrimSpace(r.AccessToken)
+	if token == "" {
+		return nil, fmt.Errorf("cloudflare oauth token: no access_token")
+	}
+	// Best-effort account discovery with the freshly minted token (a least-priv
+	// grant may be unable to list accounts — not fatal).
+	accountID, accountLabel := cfDiscoverAccount(ctx, token)
+	scopes := cloudflareOAuthScopes
+	if granted := strings.Fields(strings.TrimSpace(r.Scope)); len(granted) > 0 {
+		scopes = granted
+	}
+	return &ExchangeResult{
+		Tokens:       map[string]string{cloudflareTokenSecret: token},
+		ExternalID:   accountID,
+		AccountLabel: accountLabel,
+		Scopes:       scopes,
+	}, nil
 }
