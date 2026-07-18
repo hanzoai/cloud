@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -48,6 +49,72 @@ func TestCodeAgentsBypassPermissionsByDefault(t *testing.T) {
 	}
 }
 
+func TestCodeArgsSeparatorPreservesAgentSubcommand(t *testing.T) {
+	model, safe, continueLast, rest := splitCodeArgs([]string{"--safe", "--", "exec", "--ephemeral", "do it"})
+	if model != "" || !safe || continueLast {
+		t.Fatalf("model=%q safe=%v continue=%v, want default model and safe mode", model, safe, continueLast)
+	}
+	if want := []string{"exec", "--ephemeral", "do it"}; !reflect.DeepEqual(rest, want) {
+		t.Fatalf("agent args = %q, want %q", rest, want)
+	}
+}
+
+func TestCodeArgsExplicitModelBeforeSeparator(t *testing.T) {
+	model, safe, continueLast, rest := splitCodeArgs([]string{"zen5-max", "--", "exec"})
+	if model != "zen5-max" || safe || continueLast || !reflect.DeepEqual(rest, []string{"exec"}) {
+		t.Fatalf("model=%q safe=%v continue=%v rest=%q", model, safe, continueLast, rest)
+	}
+}
+
+func TestCodeContinueIsNormalizedForBothHarnesses(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		want []string
+	}{
+		{name: "claude", want: []string{"--continue"}},
+		{name: "codex", want: []string{"resume", "--last"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			model, safe, continueLast, rest := splitCodeArgs([]string{"-c"})
+			if model != "" || safe || !continueLast || len(rest) != 0 {
+				t.Fatalf("model=%q safe=%v continue=%v rest=%q", model, safe, continueLast, rest)
+			}
+			if got := codeAgentRest(codeAgents[tt.name], continueLast, rest); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("normalized continue args = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCodeUnknownOptionsAndPostSeparatorArgsPassThrough(t *testing.T) {
+	unknown := []string{"--mystery", "value", "--other=1"}
+	model, safe, continueLast, rest := splitCodeArgs(unknown)
+	if model != "" || safe || continueLast || !reflect.DeepEqual(rest, unknown) {
+		t.Fatalf("unknown options changed: model=%q safe=%v continue=%v rest=%q", model, safe, continueLast, rest)
+	}
+
+	_, _, continueLast, rest = splitCodeArgs([]string{"--", "-c", "model=x"})
+	if continueLast || !reflect.DeepEqual(rest, []string{"-c", "model=x"}) {
+		t.Fatalf("post-separator Codex config must pass verbatim: continue=%v rest=%q", continueLast, rest)
+	}
+}
+
+func TestCodexProviderUsesNativeResponsesMetadata(t *testing.T) {
+	argv := codeArgv(codeAgents["codex"], "https://api.hanzo.ai", defaultCodeModel, false, nil)
+	for _, want := range []string{
+		`model_provider=hanzo`,
+		`model_providers.hanzo.base_url="https://api.hanzo.ai/v1"`,
+		`model_providers.hanzo.wire_api="responses"`,
+		`features.remote_models=false`,
+		`model_context_window=262144`,
+		`model_auto_compact_token_limit=235929`,
+	} {
+		if !slices.Contains(argv, want) {
+			t.Errorf("Codex argv %q does not contain %q", argv, want)
+		}
+	}
+}
+
 // TestCodeTokenPrecedence locks in the 402 unblock: a fresh `hanzo login` JWT
 // (which carries owner/project/sub on EVERY deployment) beats the hk- API key
 // (which only mints a billing principal where the server has IAM_MINT_CLIENT_*).
@@ -60,10 +127,10 @@ func TestCodeTokenPrecedence(t *testing.T) {
 	freshExpiry := time.Now().Add(1 * time.Hour).Unix()
 
 	cases := []struct {
-		name    string
-		envKey  string // HANZO_API_KEY override
-		creds   Credentials
-		want    string
+		name   string
+		envKey string // HANZO_API_KEY override
+		creds  Credentials
+		want   string
 	}{
 		{
 			name:  "fresh JWT beats hk- key",
@@ -81,16 +148,16 @@ func TestCodeTokenPrecedence(t *testing.T) {
 			want:  "hk-stored",
 		},
 		{
-			name:  "HANZO_API_KEY overrides everything (deliberate operator override)",
+			name:   "HANZO_API_KEY overrides everything (deliberate operator override)",
 			envKey: "hk-explicit",
-			creds: Credentials{AccessToken: "jwt-live", Expiry: freshExpiry},
-			want:  "hk-explicit",
+			creds:  Credentials{AccessToken: "jwt-live", Expiry: freshExpiry},
+			want:   "hk-explicit",
 		},
 		{
-			name:  "HANZO_API_KEY overrides even an expired JWT",
+			name:   "HANZO_API_KEY overrides even an expired JWT",
 			envKey: "hk-explicit",
-			creds: Credentials{AccessToken: "jwt-dead", Expiry: time.Now().Add(-1 * time.Hour).Unix()},
-			want:  "hk-explicit",
+			creds:  Credentials{AccessToken: "jwt-dead", Expiry: time.Now().Add(-1 * time.Hour).Unix()},
+			want:   "hk-explicit",
 		},
 	}
 
