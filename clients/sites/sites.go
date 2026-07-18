@@ -147,7 +147,8 @@ func New(cfg Config, log luxlog.Logger) *Server {
 
 // Middleware is the host-router. Three outcomes, in order:
 //
-//  1. `<slug>.<apex>` (e.g. maxpower.hanzo.app) → serve the slug's site (terminal).
+//  1. `<slug>.<org>.<apex>` (e.g. myapp.maxpower.hanzo.app) → serve that org's
+//     site (terminal). The org is IN the hostname, so slug uniqueness is per-org.
 //  2. a bound CUSTOM domain (e.g. yadota.tech, a customer's own apex pointed at
 //     this edge) → serve that project's site from its S3 prefix (terminal). Only
 //     an external host (not one of OUR self domains) with a LIVE binding qualifies.
@@ -237,11 +238,15 @@ func (s *Server) serveCustom(c *zip.Ctx, site Site) error {
 	return s.streamSite(c, cli, site)
 }
 
-// siteSlug extracts the site slug from a Host, or reports that this is not a site
-// host. A host is a site iff it is exactly `<label>.<apex>` where <label> is a
-// single non-reserved DNS label matching slugRE. Multi-label hosts (a.b.apex),
-// the apex itself, reserved labels, and malformed labels are NOT sites — they
-// fall through to the normal pipeline.
+// siteSlug extracts the org-scoped host KEY from a Host, or reports that this is
+// not a site host. A site host is exactly `<slug>.<org>.<apex>`: two DNS labels
+// under the apex, where <slug> is a non-reserved label matching slugRE and <org>
+// is a label matching slugRE. Org-scoping is STRUCTURAL — the org lives in the
+// hostname, so two orgs can each publish the SAME slug without collision. The
+// returned key is `<slug>.<org>` (apex stripped): the exact string projects binds
+// into site_hosts at publish (projects.onPublish), so the resolver's exact-host
+// match finds it. The bare apex, a single-label host, a >2-label host, reserved
+// or malformed labels are NOT sites — they fall through to the normal pipeline.
 func (s *Server) siteSlug(host string) (string, bool) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if i := strings.IndexByte(host, ':'); i >= 0 {
@@ -251,14 +256,20 @@ func (s *Server) siteSlug(host string) (string, bool) {
 	if !strings.HasSuffix(host, suffix) {
 		return "", false
 	}
-	label := strings.TrimSuffix(host, suffix)
-	if label == "" || strings.Contains(label, ".") {
-		return "", false // apex or multi-label host
+	key := strings.TrimSuffix(host, suffix)
+	slug, org, ok := strings.Cut(key, ".")
+	if !ok {
+		return "", false // single-label host (bare <label>.<apex>) is not org-scoped
 	}
-	if IsReserved(label) || !slugRE.MatchString(label) {
+	if strings.Contains(org, ".") {
+		return "", false // more than two labels under the apex
+	}
+	// Both labels must be valid slug-grammar DNS labels; the slug label must also
+	// be non-reserved so a published site can never shadow a real app/api host.
+	if IsReserved(slug) || !slugRE.MatchString(slug) || !slugRE.MatchString(org) {
 		return "", false
 	}
-	return label, true
+	return key, true
 }
 
 // serve resolves the slug to its Site and streams the requested object from the
