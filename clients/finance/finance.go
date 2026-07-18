@@ -34,6 +34,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hanzoai/cloud/clients/money"
@@ -186,6 +187,39 @@ func (f *ledgerFinance) Deposit(ctx context.Context, in types.DepositInput) (str
 	return entryID, nil
 }
 
+// usageHook, when set, is called (async, best-effort) after a successful usage debit.
+// It is the dependency-inverted seam the usage-cap ALERT fires through WITHOUT finance
+// importing commerce: the host (apps/commerce.go) registers a hook that reads the org's
+// finance period spend and fires/debounces the spend-alerts. Set once at boot.
+var usageHook atomic.Pointer[func(org string, test bool, project, service string)]
+
+// SetUsageHook installs the post-debit hook (the cap alert-fire). Pass nil to clear.
+func SetUsageHook(h func(org string, test bool, project, service string)) {
+	if h == nil {
+		usageHook.Store(nil)
+		return
+	}
+	usageHook.Store(&h)
+}
+
+// SumUsageSince returns the org's total metered usage (cents) recorded at/after
+// `since` (unix seconds) — the finance-ledger source the ORG-WIDE usage cap enforces
+// on. The finance Entry carries no project/service, so this is the org total (which
+// the covering org-wide spend-alert row binds on); per-scope caps are a follow-up.
+// Zero when the org has no store yet (never spent). Reads the sandbox books for a
+// test org (test=true), so a test-mode cap counts only test spend.
+func (f *ledgerFinance) SumUsageSince(ctx context.Context, org string, test bool, since int64) (int64, error) {
+	store, err := f.storeFor(org, test)
+	if err != nil {
+		return 0, err
+	}
+	sum, err := store.SumByKindSince(ctx, kindUsage, since)
+	if err != nil {
+		return 0, err
+	}
+	return sum.Cents(), nil
+}
+
 // RecordUsage posts a balanced usage debit (wallet → revenue:platform) from subject's
 // wallet. Idempotent on in.RequestID: a replay of the same request is a no-op inside the
 // same transaction as the insert, so a retry debits AT MOST ONCE. A non-positive amount is
@@ -198,7 +232,7 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 	if err != nil {
 		return err
 	}
-	return store.Tx(ctx, func(tx ledger.Tx) error {
+	if err := store.Tx(ctx, func(tx ledger.Tx) error {
 		if in.RequestID != "" {
 			_, ok, ferr := tx.EntryByRef(kindUsage, "", in.RequestID)
 			if ferr != nil {
@@ -229,7 +263,18 @@ func (f *ledgerFinance) RecordUsage(ctx context.Context, in types.UsageInput) er
 			{Account: acctRevenue, Amount: in.Amount},
 		}
 		return tx.Insert(e, postings)
-	})
+	}); err != nil {
+		return err
+	}
+
+	// The debit is committed — fire the usage-cap alert on this crossing (async,
+	// off the money path). Debounced inside FireSpendAlerts, so firing on an
+	// idempotent replay too is harmless. finance never blocks or imports commerce.
+	if p := usageHook.Load(); p != nil {
+		h := *p
+		go h(in.Org, in.Test, in.Project, in.Service)
+	}
+	return nil
 }
 
 // Close closes every cached org store (best-effort), returning the first error.
