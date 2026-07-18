@@ -31,8 +31,8 @@
 // rides on it: no host→service map, no waitlist, no service registry. Those COMPOSE
 // this engine from the OUTSIDE, one-way (they import flags; flags imports none of them):
 //
-//   - the launch waitlist gate (clients/featuregate) — a service's mode IS the switch
-//     waitlist.<svc>; featuregate owns the host→service registry + Enforce and reads the
+//   - the launch waitlist gate (clients/admission) — a service's mode IS the switch
+//     waitlist.<svc>; admission owns the host→service registry + Enforce and reads the
 //     mode through flags.Bool. It USED to live in this package; extracting it is the
 //     PROOF the engine composes its tenants rather than absorbing them.
 //   - authz        (access policy)          — (Principal, resource+action) -> allow/deny

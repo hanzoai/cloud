@@ -51,6 +51,7 @@ import (
 	// owns process-lifetime resources, a Shutdown); Wire references them directly.
 	"github.com/hanzoai/cloud/clients/account"
 	"github.com/hanzoai/cloud/clients/admin"
+	"github.com/hanzoai/cloud/clients/admission"
 	"github.com/hanzoai/cloud/clients/ads"
 	"github.com/hanzoai/cloud/clients/affiliates"
 	"github.com/hanzoai/cloud/clients/agent"
@@ -75,7 +76,6 @@ import (
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
-	"github.com/hanzoai/cloud/clients/featuregate"
 	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
@@ -340,12 +340,12 @@ func Wire() []cloud.MountSpec {
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
 		// registry + brand seed + the waitlist.<svc> switch registration + the
-		// /v1/flags/waitlist (and /v1/featuregate/mode compat) mode read + the Enforce
+		// /v1/flags/waitlist (and /v1/admission/mode compat) mode read + the Enforce
 		// middleware — COMPOSING the flags engine one-way (flags.Bool/Register/
-		// SetPlatformSwitch; flags never imports featuregate). Mounts AFTER flags so the
+		// SetPlatformSwitch; flags never imports admission). Mounts AFTER flags so the
 		// engine's platform-switch plane is installed first; the admin board is the
 		// /v1/admin/services lens over it. Owns the registry store handle → Shutdown.
-		{Name: "featuregate", Mount: featuregate.Mount, Shutdown: ctxShutdown(featuregate.Shutdown)},
+		{Name: "admission", Mount: admission.Mount, Shutdown: ctxShutdown(admission.Shutdown)},
 		// Tasks: the durable workflow/UI surface AND platform cron (durable schedules
 		// on the same shared engine, replacing every k8s CronJob). cron was a separate
 		// Wire entry; it mounts no routes and only registers schedules, so it is folded

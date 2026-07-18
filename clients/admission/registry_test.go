@@ -1,4 +1,4 @@
-package featuregate
+package admission
 
 // Registry coverage for the host→service store. It drives the store over a raw sqlite
 // handle (the same driver OrgDB uses), so it exercises the registry WITHOUT the cek

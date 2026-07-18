@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package featuregate is the launch-control GATE for Hanzo's hosted services — the
+// Package admission is the launch-control GATE for Hanzo's hosted services — the
 // COMPLETE waitlist feature, COMPOSING the ONE flag engine (clients/flags) one-way. It
 // owns:
 //
@@ -20,11 +20,11 @@
 //   - the per-service MODE decide WaitlistModeForHost — a service's mode IS the switch
 //     waitlist.<svc>, evaluated through the flag engine (flags.Bool),
 //   - the admin control funcs (List/Set/Upsert) the /v1/admin/services board calls,
-//   - the guard's public mode read /v1/flags/waitlist (+ /v1/featuregate/mode compat), Mount,
+//   - the guard's public mode read /v1/flags/waitlist, Mount,
 //   - the native enforcement middleware (Enforce, this file),
 //   - the per-user approval predicate (Approvals, reused from IAM — approval.go).
 //
-// flags NEVER imports featuregate; featuregate imports flags. The engine is the pure
+// flags NEVER imports admission; admission imports flags. The engine is the pure
 // (Principal, context) -> verdict primitive; this package is its first composed tenant.
 // Enforcement is decomplected into two orthogonal axes:
 //
@@ -37,7 +37,7 @@
 //	if waitlistMode[host] AND NOT user.approved → bounce to the waitlist
 //	if approved OR mode=off                     → allow
 //	unauthenticated                             → login first
-package featuregate
+package admission
 
 import (
 	"context"
@@ -66,7 +66,7 @@ import (
 // INTEGRATION POINT — wire in serve.go RIGHT AFTER SanitizeIdentity:
 //
 //	app.Use(IdentityMiddleware(cfg))          // establishes the validated principal
-//	app.Use(featuregate.Enforce(featuregate.EnforceConfig{ WaitlistURL: … }))  // ← here
+//	app.Use(admission.Enforce(admission.EnforceConfig{ WaitlistURL: … }))  // ← here
 //
 // It reads the sanitized X-User-Id / X-User-IsAdmin / X-User-Approved that
 // IdentityMiddleware minted, so it MUST run after it and (like BillingGate) before
@@ -119,10 +119,9 @@ type EnforceConfig struct {
 // health, the auth/OIDC handshake, and the waitlist join API itself (so a gated
 // user can still submit the waitlist form).
 var defaultExemptPrefixes = []string{
-	"/v1/flags/waitlist",   // the guard's public mode read (flags engine)
-	"/v1/featuregate/mode", // TEMPORARY compat alias for the above (remove with the route in flags/routes.go)
-	"/v1/iam/",             // auth / OIDC / approval-status / get-account handshake
-	"/v1/waitlist",         // the waitlist join API (a gated user must reach it)
+	"/v1/flags/waitlist", // the guard's public mode read (flags engine)
+	"/v1/iam/",           // auth / OIDC / approval-status / get-account handshake
+	"/v1/waitlist",       // the waitlist join API (a gated user must reach it)
 	"/health",
 	"/healthz",
 	"/__guard/", // the @file guard's own callback surface (defense in depth)
@@ -207,7 +206,7 @@ func bounce(c *zip.Ctx, waitlistURL string) error {
 }
 
 // apiKeyPrefixes are the Hanzo API-key prefixes. This MIRRORS cloud
-// auth_identity.go isAPIKey (the ONE authority) — kept local so featuregate stays
+// auth_identity.go isAPIKey (the ONE authority) — kept local so admission stays
 // self-contained (no cloud-internal import) while agreeing on the exact contract:
 // a token with one of these prefixes is a possession-gated API key, not a session
 // principal. If cloud adds a prefix there, add it here.
