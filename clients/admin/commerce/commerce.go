@@ -295,6 +295,237 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 	return out, nil
 }
 
+// ── SaaS-metrics god-view (fleet-wide, org-independent) ──────────────────────
+
+// SaaSMetrics mirrors commerce's GET /v1/metrics/saas snapshot — the whole-business
+// SaaS-operations aggregate (MRR/ARR, new/churn, plan mix, top customers, recent
+// movements) computed IN commerce across every org namespace. It is org-INDEPENDENT
+// (like Costs) so the reader sends NO subject. Only the fields the admin god-view
+// renders are modeled; commerce fields we don't consume (upgrades/downgrades,
+// untagged-request counts) are simply ignored by the decoder.
+type SaaSMetrics struct {
+	AsOf      string         `json:"asOf"`
+	Currency  string         `json:"currency"`
+	Window    string         `json:"window"`
+	Revenue   SaaSRevenue    `json:"revenue"`
+	Subs      SaaSSubs       `json:"subscriptions"`
+	Usage     SaaSUsage      `json:"usage"`
+	Customers []SaaSCustomer `json:"customers"`
+	Orgs      int            `json:"orgs"`
+	Gaps      []string       `json:"gaps"`
+}
+
+// SaaSRevenue is the recurring-revenue headline (run-rate MRR/ARR + windowed movement).
+type SaaSRevenue struct {
+	MRRCents            money.Cents    `json:"mrrCents"`
+	ARRCents            money.Cents    `json:"arrCents"`
+	ActiveSubscriptions int            `json:"activeSubscriptions"`
+	PayingCustomers     int            `json:"payingCustomers"`
+	Trials              int            `json:"trials"`
+	NewMRRCents         money.Cents    `json:"newMrrCents"`
+	ChurnedMRRCents     money.Cents    `json:"churnedMrrCents"`
+	NetNewMRRCents      money.Cents    `json:"netNewMrrCents"`
+	ByCategory          []SaaSCategory `json:"byCategory"`
+}
+
+// SaaSCategory is one plan-category bucket of run-rate MRR (the plan mix).
+type SaaSCategory struct {
+	Category      string      `json:"category"`
+	MRRCents      money.Cents `json:"mrrCents"`
+	Subscriptions int         `json:"subscriptions"`
+}
+
+// SaaSSubs is the subscription-operations panel (per-plan mix, trials, new/canceled,
+// recent movements).
+type SaaSSubs struct {
+	ByPlan       []SaaSPlan  `json:"byPlan"`
+	TrialsActive int         `json:"trialsActive"`
+	New          int         `json:"new"`
+	Canceled     int         `json:"canceled"`
+	Recent       []SaaSEvent `json:"recent"`
+}
+
+// SaaSPlan is one plan's active/trialing counts, seats, and MRR contribution.
+type SaaSPlan struct {
+	Plan     string      `json:"plan"`
+	Name     string      `json:"name"`
+	Category string      `json:"category"`
+	Active   int         `json:"active"`
+	Trialing int         `json:"trialing"`
+	Seats    int         `json:"seats"`
+	MRRCents money.Cents `json:"mrrCents"`
+}
+
+// SaaSEvent is one recent subscription movement ("created" or "canceled").
+type SaaSEvent struct {
+	At            string      `json:"at"`
+	Org           string      `json:"org"`
+	Type          string      `json:"type"`
+	Plan          string      `json:"plan"`
+	Category      string      `json:"category"`
+	MRRDeltaCents money.Cents `json:"mrrDeltaCents"`
+}
+
+// SaaSUsage is the metered / pay-as-you-go revenue headline for the window.
+type SaaSUsage struct {
+	Instrumented     bool        `json:"instrumented"`
+	WindowUsageCents money.Cents `json:"windowUsageCents"`
+	Requests         int64       `json:"requests"`
+}
+
+// SaaSCustomer is one top customer by MRR + windowed usage.
+type SaaSCustomer struct {
+	Org        string      `json:"org"`
+	Plan       string      `json:"plan"`
+	Category   string      `json:"category"`
+	Status     string      `json:"status"`
+	MRRCents   money.Cents `json:"mrrCents"`
+	UsageCents money.Cents `json:"usageCents"`
+	Seats      int         `json:"seats"`
+	Since      string      `json:"since,omitempty"`
+}
+
+// Metrics reads the fleet SaaS-operations god-view (GET /v1/metrics/saas). Like Costs it
+// is org-INDEPENDENT — the engine walks every org namespace itself — so it authenticates
+// with the admin S2S service token and sends NO subject. Empty (not an error) when
+// commerce is unwired, so a partial deploy degrades to an honest empty snapshot.
+func (c *Client) Metrics(ctx context.Context, window string, limit int) (SaaSMetrics, error) {
+	var out SaaSMetrics
+	if !c.Ready() {
+		return out, nil
+	}
+	q := url.Values{}
+	if window != "" {
+		q.Set("window", window)
+	}
+	if limit > 0 {
+		q.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	body, err := c.get(ctx, "/v1/metrics/saas", q, "")
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return out, fmt.Errorf("commerce metrics decode: %w", err)
+	}
+	return out, nil
+}
+
+// ── billing invoices + subscriptions (per-subject fleet rows) ────────────────
+
+// Invoice is one issued invoice as the fleet god-view renders it: the id (for a future
+// /v1/billing/invoices/:id detail fetch), the human number, status, amount due,
+// currency, and the issue/due dates. Sourced from GET /v1/billing/invoices
+// (invoiceResponse); all timestamps are RFC3339 strings.
+type Invoice struct {
+	ID        string      `json:"id"`
+	Number    string      `json:"numberStr"`
+	Status    string      `json:"status"`
+	AmountDue money.Cents `json:"amountDue"`
+	Currency  string      `json:"currency"`
+	Issued    string      `json:"createdAt"`
+	Due       string      `json:"dueDate"`
+}
+
+// Invoices lists a subject's invoices (GET /v1/billing/invoices), optionally filtered by
+// status. The subject selects the org's billing namespace via X-Org-Id (trusted only
+// after the service-token bearer verifies). Empty (not an error) when commerce is unwired.
+func (c *Client) Invoices(ctx context.Context, subject, status string) ([]Invoice, error) {
+	if !c.Ready() {
+		return nil, nil
+	}
+	q := url.Values{}
+	if status != "" {
+		q.Set("status", status)
+	}
+	body, err := c.get(ctx, "/v1/billing/invoices", q, subject)
+	if err != nil {
+		return nil, err
+	}
+	var wrap struct {
+		Invoices []Invoice `json:"invoices"`
+	}
+	if err := json.Unmarshal(body, &wrap); err != nil {
+		return nil, fmt.Errorf("commerce invoices decode: %w", err)
+	}
+	return wrap.Invoices, nil
+}
+
+// Subscription is one subscription row the fleet god-view renders: the id, the buyer
+// (userId), plan tier, status, monthly-normalized MRR, and the current-period
+// start/end (started/renews). MRR reuses monthlyNormalized so a yearly plan is
+// comparable to a monthly one in the fleet total.
+type Subscription struct {
+	ID      string      `json:"id"`
+	User    string      `json:"user"`
+	Plan    string      `json:"plan"`
+	Status  string      `json:"status"`
+	MRR     money.Cents `json:"mrrCents"`
+	Started string      `json:"started"`
+	Renews  string      `json:"renews"`
+}
+
+// subscriptionRowWire is the /v1/billing/subscriptions row shape the fleet view folds —
+// richer than subscriptionsWire (which Plan() uses for the MRR sum alone).
+type subscriptionRowWire struct {
+	ID          string `json:"id"`
+	UserID      string `json:"userId"`
+	PlanID      string `json:"planId"`
+	Status      string `json:"status"`
+	Created     string `json:"createdAt"`
+	PeriodStart string `json:"currentPeriodStart"`
+	PeriodEnd   string `json:"currentPeriodEnd"`
+	Plan        struct {
+		Name     string      `json:"name"`
+		Price    money.Cents `json:"price"`
+		Interval string      `json:"interval"`
+	} `json:"plan"`
+}
+
+// Subscriptions lists a subject's subscriptions (GET /v1/billing/subscriptions),
+// optionally filtered by status, as fleet rows with a monthly-normalized MRR. Empty (not
+// an error) when commerce is unwired.
+func (c *Client) Subscriptions(ctx context.Context, subject, status string) ([]Subscription, error) {
+	if !c.Ready() {
+		return nil, nil
+	}
+	q := url.Values{}
+	if status != "" {
+		q.Set("status", status)
+	}
+	body, err := c.get(ctx, "/v1/billing/subscriptions", q, subject)
+	if err != nil {
+		return nil, err
+	}
+	var wrap struct {
+		Subscriptions []subscriptionRowWire `json:"subscriptions"`
+	}
+	if err := json.Unmarshal(body, &wrap); err != nil {
+		return nil, fmt.Errorf("commerce subscriptions decode: %w", err)
+	}
+	out := make([]Subscription, 0, len(wrap.Subscriptions))
+	for _, s := range wrap.Subscriptions {
+		name := strings.TrimSpace(s.Plan.Name)
+		if name == "" {
+			name = strings.TrimSpace(s.PlanID)
+		}
+		started := strings.TrimSpace(s.Created)
+		if started == "" {
+			started = s.PeriodStart
+		}
+		out = append(out, Subscription{
+			ID:      s.ID,
+			User:    s.UserID,
+			Plan:    name,
+			Status:  s.Status,
+			MRR:     monthlyNormalized(s.Plan.Price, s.Plan.Interval),
+			Started: started,
+			Renews:  s.PeriodEnd,
+		})
+	}
+	return out, nil
+}
+
 // post performs one admin-authenticated commerce POST (JSON body) and returns the
 // raw response. The admin S2S service token is the bearer and X-Org-Id=<subject>
 // the per-org namespace selector commerce's EdgeAuth trusts only after verifying
