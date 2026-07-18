@@ -143,17 +143,14 @@ func build(b cloud.Base) (state, error) {
 // routes registers the /v1/deploy/* surface. Every observing/mutating route is
 // SuperAdmin-gated; the health probe is public (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/deploy/applications", guard(s, cloud.Handle(s, listApplications)))
+	// Liveness — public (probe-able without a JWT).
 	app.Get("/v1/deploy/health", cloud.Handle(s, health))
-	app.Get("/v1/deploy/:name/tree", guard(s, cloud.Handle(s, appTree)))
-	app.Get("/v1/deploy/:name/resource/:ref", guard(s, cloud.Handle(s, appResource)))
-	app.Get("/v1/deploy/:name/logs", guard(s, cloud.Handle(s, appLogs)))
-	app.Post("/v1/deploy/:name/rollback", guard(s, cloud.Handle(s, rollback)))
-	app.Post("/v1/deploy/:name/sync", guard(s, cloud.Handle(s, sync)))
-	// Engine (write) routes — the embedded gitops-engine reconcile that replaces
+	// Engine (write) reconcile — the embedded gitops-engine that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)
-	// ArgoCD monochrome dashboard (App-CR projection) at /v1/deploy/ui/*.
+	// The deploy API at /v1/deploy/<resource> (no /api/ prefix, no inner /v1) —
+	// the App-CR projection the monochrome dashboard SPA (cd-ui) consumes. This
+	// IS the deploy API; the FE is the separate hanzoai/spa cd-ui App.
 	registerDashboardRoutes(app, s)
 }
 
