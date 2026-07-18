@@ -153,6 +153,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// Engine (write) routes — the embedded gitops-engine reconcile that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)
+	// ArgoCD monochrome dashboard (App-CR projection) at /v1/deploy/ui/*.
+	registerDashboardRoutes(app, s)
 }
 
 // guard wraps a handler with the SuperAdmin gate (fail-closed: a non-SuperAdmin is
