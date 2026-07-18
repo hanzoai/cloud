@@ -1,0 +1,5 @@
+# The real monochrome ArgoCD bundle is built by CI (make deploy-ui) and overlaid
+# here before go build. Only the fallback shell + this file are tracked.
+*
+!.gitignore
+!index.html

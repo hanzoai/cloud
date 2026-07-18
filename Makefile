@@ -24,7 +24,7 @@ OPENAPI_DIR    ?= ../openapi
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
 CGO_ENABLED     ?= 0
 
-.PHONY: help native webui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help native webui deploy-ui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -39,6 +39,17 @@ webui: ## Build the real console static bundle into webui/dist (go:embed source)
 	find webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name assets -exec rm -rf {} +
 	cp -r "$(CONSOLE_DIR)/out/." webui/dist/
 	@echo ">> embedded real console bundle into webui/dist (index.html $$(wc -c < webui/dist/index.html) bytes)"
+
+deploy-ui: ## Build the monochrome ArgoCD dashboard bundle into clients/deploy/webui/dist (go:embed source). DEPLOY_DIR=<path to hanzoai/deploy>.
+	@command -v yarn >/dev/null 2>&1 || { echo "yarn is required to build the deploy dashboard bundle"; exit 1; }
+	@test -f "$(DEPLOY_DIR)/ui/package.json" || { echo "deploy checkout not found at $(DEPLOY_DIR) — set DEPLOY_DIR=<path to hanzoai/deploy on rebrand/hanzo-monochrome>"; exit 1; }
+	@test -d "$(DEPLOY_DIR)/ui/node_modules" || (cd "$(DEPLOY_DIR)/ui" && yarn install --frozen-lockfile)
+	cd "$(DEPLOY_DIR)/ui" && NODE_OPTIONS=--max-old-space-size=8192 yarn build
+	# Overlay the fresh bundle, keeping only the tracked fallback (.gitignore +
+	# index.html shell); the real 43MB bundle is build-time-only (gitignored).
+	find clients/deploy/webui/dist -mindepth 1 -maxdepth 1 ! -name .gitignore -exec rm -rf {} +
+	cp -r "$(DEPLOY_DIR)/ui/dist/app/." clients/deploy/webui/dist/
+	@echo ">> embedded monochrome ArgoCD bundle into clients/deploy/webui/dist (index.html $$(wc -c < clients/deploy/webui/dist/index.html) bytes)"
 
 agentskills: ## Regenerate the FULL agent-skills catalog into clients/agentskills/catalog (go:embed source) from the openapi SOT. OPENAPI_DIR=<path to openapi>.
 	@test -f "$(OPENAPI_DIR)/skills.py" || { echo "openapi checkout not found at $(OPENAPI_DIR) — set OPENAPI_DIR=<path> or clone hanzoai/openapi"; exit 1; }
