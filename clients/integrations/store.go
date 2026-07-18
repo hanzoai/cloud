@@ -30,6 +30,28 @@ type Connection struct {
 	UpdatedAt    int64
 }
 
+// Connector is a user's non-secret link to a provider account — the per-user
+// sibling of Connection (the /v1/connectors plane). The credential itself lives
+// ONLY in KMS at userPath(org,user,provider,label); this row holds metadata.
+type Connector struct {
+	Org, User, Provider, Label string
+	ExternalID, AccountLabel   string
+	Scopes                     []string
+	ExpiresAt                  int64 // access-token expiry, unix seconds; 0 = non-expiring
+	ConnectedAt, UpdatedAt     int64
+}
+
+// Grant is one in-flight device authorization. Code/UserCode come from the
+// provider; Interval (seconds) is raised by slow_down; LastPollAt gates the
+// server-side poll throttle; ExpiresAt is enforced at read time, not only GC.
+type Grant struct {
+	ID, Org, User, Provider, Label string
+	Code, UserCode                 string
+	Interval                       int64 // seconds between polls
+	LastPollAt                     int64 // unix seconds of the last upstream poll; 0 = never
+	CreatedAt, ExpiresAt           int64 // unix seconds
+}
+
 // Store is the integrations database. ONE SQLite file
 // ({DataDir}/integrations.db) holds every org's connections + in-flight OAuth
 // nonces; tenancy is the org column (PK includes it).
@@ -97,6 +119,55 @@ CREATE TABLE IF NOT EXISTS bridge_events (
   PRIMARY KEY (provider, event_key)
 );
 CREATE INDEX IF NOT EXISTS ix_bridge_events_created ON bridge_events(created_at);
+
+-- connectors are per-USER links to a provider account (the /v1/connectors
+-- plane; sibling of the org-scoped connections table). The credential lives
+-- ONLY in KMS at /orgs/{org}/users/{user}/connectors/{provider}/{label}; this
+-- row is non-secret metadata. label allows multiple accounts per provider;
+-- expires_at (unix seconds, 0 = non-expiring) lets the refresh engine decide
+-- without touching KMS.
+CREATE TABLE IF NOT EXISTS connectors (
+  org           TEXT NOT NULL,
+  user          TEXT NOT NULL,
+  provider      TEXT NOT NULL,
+  label         TEXT NOT NULL,
+  external_id   TEXT NOT NULL DEFAULT '',
+  account_label TEXT NOT NULL DEFAULT '',
+  scopes_csv    TEXT NOT NULL DEFAULT '',
+  expires_at    INTEGER NOT NULL DEFAULT 0,
+  connected_at  INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (org, user, provider, label)
+);
+
+-- grants are in-flight device authorizations (poll-until-done, TTL <= 15 min).
+-- code is the provider device handle (secret-adjacent): it lives HERE, not in
+-- KMS, because this store is cek-encrypted at rest (SQLCipher DEK wrapped
+-- under the same master key as KMS; cek.Open fail-secure) and the row needs
+-- non-destructive polling reads, read-time TTL, poll cadence, and GC — a
+-- lifecycle KMS does not model. Pure-Go dev builds share the existing at-rest
+-- posture of oauth_nonces (same class of short-lived material; production is
+-- SQLCipher). NOTE: github-copilot's code is exchange-complete on its own
+-- (openai's is not — the server-side code_verifier is never stored), so the
+-- SQLCipher posture is load-bearing for copilot specifically; the tight TTL
+-- bounds the exposure. last_poll_at drives the server-side poll throttle
+-- (RFC-8628: never hit the provider faster than interval — the client_ids are
+-- shared across all tenants). Terminal outcomes DELETE the row; pending is
+-- existence.
+CREATE TABLE IF NOT EXISTS grants (
+  id           TEXT PRIMARY KEY,
+  org          TEXT NOT NULL,
+  user         TEXT NOT NULL,
+  provider     TEXT NOT NULL,
+  label        TEXT NOT NULL,
+  code         TEXT NOT NULL,
+  user_code    TEXT NOT NULL,
+  interval     INTEGER NOT NULL,
+  last_poll_at INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  expires_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -268,6 +339,176 @@ func (s *Store) GCNonces(ctx context.Context, before int64) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `DELETE FROM oauth_nonces WHERE created_at < ?`, before)
 	if err != nil {
 		return 0, fmt.Errorf("gc nonces: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// ── connectors (per-user plane) ────────────────────────────────────────────────
+
+const connectorCols = `org,user,provider,label,external_id,account_label,scopes_csv,expires_at,connected_at,updated_at`
+
+func scanConnector(sc interface{ Scan(...any) error }) (Connector, error) {
+	var c Connector
+	var scopes string
+	err := sc.Scan(&c.Org, &c.User, &c.Provider, &c.Label, &c.ExternalID, &c.AccountLabel,
+		&scopes, &c.ExpiresAt, &c.ConnectedAt, &c.UpdatedAt)
+	c.Scopes = decodeScopes(scopes)
+	return c, err
+}
+
+// UpsertConnector stores (or refreshes) a connector. On a re-connect or token
+// refresh the original connected_at is PRESERVED ("connected since"), only the
+// metadata and updated_at advance — Upsert (connections) parity.
+func (s *Store) UpsertConnector(ctx context.Context, c Connector) error {
+	now := time.Now().Unix()
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO connectors (`+connectorCols+`) VALUES (?,?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(org,user,provider,label) DO UPDATE SET
+		   external_id=excluded.external_id,
+		   account_label=excluded.account_label,
+		   scopes_csv=excluded.scopes_csv,
+		   expires_at=excluded.expires_at,
+		   updated_at=excluded.updated_at`,
+		c.Org, c.User, c.Provider, c.Label, c.ExternalID, c.AccountLabel,
+		encodeScopes(c.Scopes), c.ExpiresAt, now, now)
+	if err != nil {
+		return fmt.Errorf("upsert connector: %w", err)
+	}
+	return nil
+}
+
+// GetConnector returns the connector for (org,user,provider,label). found=false
+// (nil error) when there is no row.
+func (s *Store) GetConnector(ctx context.Context, org, user, provider, label string) (Connector, bool, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+connectorCols+` FROM connectors WHERE org=? AND user=? AND provider=? AND label=?`,
+		org, user, provider, label)
+	c, err := scanConnector(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Connector{}, false, nil
+	}
+	if err != nil {
+		return Connector{}, false, fmt.Errorf("get connector: %w", err)
+	}
+	return c, true, nil
+}
+
+// ListConnectors returns every connector for (org,user), newest-connected first,
+// with a deterministic (provider,label) tiebreak.
+func (s *Store) ListConnectors(ctx context.Context, org, user string) ([]Connector, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+connectorCols+` FROM connectors WHERE org=? AND user=?
+		 ORDER BY connected_at DESC, provider ASC, label ASC`, org, user)
+	if err != nil {
+		return nil, fmt.Errorf("list connectors: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Connector
+	for rows.Next() {
+		c, err := scanConnector(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan connector: %w", err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// CountConnectors counts (org,user,provider) rows — the maxConnectors intake cap.
+func (s *Store) CountConnectors(ctx context.Context, org, user, provider string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM connectors WHERE org=? AND user=? AND provider=?`,
+		org, user, provider).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count connectors: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteConnector removes a connector. Reports whether a row went (idempotent caller).
+func (s *Store) DeleteConnector(ctx context.Context, org, user, provider, label string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM connectors WHERE org=? AND user=? AND provider=? AND label=?`,
+		org, user, provider, label)
+	if err != nil {
+		return false, fmt.Errorf("delete connector: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// ── grants (in-flight device authorizations) ───────────────────────────────────
+
+const grantCols = `id,org,user,provider,label,code,user_code,interval,last_poll_at,created_at,expires_at`
+
+// PutGrant records a started device authorization. A duplicate 128-bit id
+// (astronomically unlikely) is a conflict, surfaced so the flow fails rather
+// than silently overwriting an in-flight one (PutNonce parity).
+func (s *Store) PutGrant(ctx context.Context, g Grant) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO grants (`+grantCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		g.ID, g.Org, g.User, g.Provider, g.Label, g.Code, g.UserCode,
+		g.Interval, g.LastPollAt, g.CreatedAt, g.ExpiresAt)
+	if err != nil {
+		return fmt.Errorf("put grant: %w", err)
+	}
+	return nil
+}
+
+// GetGrant is (id,org,user)-scoped — another tenant's poll of a known id is
+// found=false — and enforces the TTL in SQL (expires_at > now), so an expired
+// grant is indistinguishable from an unknown one at read time.
+func (s *Store) GetGrant(ctx context.Context, id, org, user string) (Grant, bool, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+grantCols+` FROM grants WHERE id=? AND org=? AND user=? AND expires_at > ?`,
+		id, org, user, time.Now().Unix())
+	var g Grant
+	err := row.Scan(&g.ID, &g.Org, &g.User, &g.Provider, &g.Label, &g.Code, &g.UserCode,
+		&g.Interval, &g.LastPollAt, &g.CreatedAt, &g.ExpiresAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Grant{}, false, nil
+	}
+	if err != nil {
+		return Grant{}, false, fmt.Errorf("get grant: %w", err)
+	}
+	return g, true, nil
+}
+
+// SetGrantInterval records a provider slow_down bump so every later poll honors
+// the raised cadence.
+func (s *Store) SetGrantInterval(ctx context.Context, id string, sec int64) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE grants SET interval=? WHERE id=?`, sec, id); err != nil {
+		return fmt.Errorf("set grant interval: %w", err)
+	}
+	return nil
+}
+
+// TouchGrant sets last_poll_at — the server-side poll-throttle clock. Tests
+// pass 0 to rewind the throttle.
+func (s *Store) TouchGrant(ctx context.Context, id string, now int64) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE grants SET last_poll_at=? WHERE id=?`, now, id); err != nil {
+		return fmt.Errorf("touch grant: %w", err)
+	}
+	return nil
+}
+
+// DeleteGrant forgets a grant (terminal poll outcomes; idempotent).
+func (s *Store) DeleteGrant(ctx context.Context, id string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM grants WHERE id=?`, id); err != nil {
+		return fmt.Errorf("delete grant: %w", err)
+	}
+	return nil
+}
+
+// GCGrants deletes expired grants. Returns how many were reaped. Called
+// opportunistically on device start so abandoned flows don't accrete
+// (GCNonces parity).
+func (s *Store) GCGrants(ctx context.Context, now int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM grants WHERE expires_at <= ?`, now)
+	if err != nil {
+		return 0, fmt.Errorf("gc grants: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
