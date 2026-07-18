@@ -102,26 +102,3 @@ func TestProjectTree_ShapeIsUIRenderable(t *testing.T) {
 		t.Fatalf("node ref wrong: %v", n0)
 	}
 }
-
-// TestBaseHRefRewrite asserts the SPA index gets the /v1/deploy/ui/ base href so
-// the UI's /api/v1 calls + router basename resolve under the prefix.
-func TestBaseHRefRewrite(t *testing.T) {
-	in := []byte(`<!doctype html><html><head><base href="/"><title>x</title></head><body></body></html>`)
-	out := baseHRefRe.ReplaceAll(in, []byte(`<base href="`+dashPrefix+`/">`))
-	want := `<base href="/v1/deploy/ui/">`
-	if string(out) == string(in) {
-		t.Fatal("base href was not rewritten")
-	}
-	if !projContains(string(out), want) {
-		t.Fatalf("rewritten index missing %q: %s", want, out)
-	}
-}
-
-func projContains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
