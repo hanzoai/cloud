@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	minio "github.com/minio/minio-go/v7"
+	minio "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/types"
