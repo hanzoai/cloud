@@ -340,6 +340,34 @@ func (s *Store) Entries(ctx context.Context, limit int) ([]ledger.Entry, error) 
 	return out, nil
 }
 
+// SumByKindSince sums the entry amounts of ONE kind created at/after `since` (unix
+// seconds) — a read-only aggregate over the indexed created_at, no schema change.
+// Amounts are 18-decimal TEXT (SQLite INTEGER overflows past ~$9.20), so the fold is
+// in Go. This is the usage-cap's period-spend source: sum kind "finance.usage" for
+// the org store since the start of the UTC month, so a cap enforces on real ledger
+// spend rather than a bounded, truncatable journal scan.
+func (s *Store) SumByKindSince(ctx context.Context, kind string, since int64) (money.Amount, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT amount FROM treasury_entries WHERE kind = ? AND created_at >= ?`, kind, since)
+	if err != nil {
+		return money.Zero(), fmt.Errorf("sum by kind: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	sum := money.Zero()
+	for rows.Next() {
+		var amt string
+		if err := rows.Scan(&amt); err != nil {
+			return money.Zero(), fmt.Errorf("scan amount: %w", err)
+		}
+		a, perr := money.ParseInt(amt)
+		if perr != nil {
+			return money.Zero(), fmt.Errorf("parse amount: %w", perr)
+		}
+		sum = sum.Add(a)
+	}
+	return sum, rows.Err()
+}
+
 func (s *Store) postingsOf(ctx context.Context, entryID string) ([]ledger.Posting, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT account, amount FROM treasury_postings WHERE entry_id=? ORDER BY id`, entryID)
