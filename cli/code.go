@@ -147,6 +147,7 @@ type codeAgent struct {
 	bin          string                     // executable to exec
 	wire         wire                       // how it finds the cloud
 	fullAuto     []string                   // flags that bypass approval prompts
+	continueArgs []string                   // harness-native form of Hanzo -c/--continue
 	modelArg     []string                   // how the model is passed on argv (empty: via env)
 	carrier      func(model string) string  // maps the resolved model to a client-recognized id (claude: zen→carrier); nil = pass through
 	provider     func(base string) []string // agents that need the endpoint declared, not just env'd
@@ -163,10 +164,11 @@ type codeAgent struct {
 // declared, so declare Hanzo as the provider and select it.
 func codexLike(bin, install string) codeAgent {
 	return codeAgent{
-		bin:      bin,
-		wire:     openaiWire,
-		fullAuto: []string{"--dangerously-bypass-approvals-and-sandbox"},
-		modelArg: []string{"-m"},
+		bin:          bin,
+		wire:         openaiWire,
+		fullAuto:     []string{"--dangerously-bypass-approvals-and-sandbox"},
+		continueArgs: []string{"resume", "--last"},
+		modelArg:     []string{"-m"},
 		provider: func(base string) []string {
 			return []string{
 				"-c", "model_provider=hanzo",
@@ -174,6 +176,12 @@ func codexLike(bin, install string) codeAgent {
 				"-c", fmt.Sprintf(`model_providers.hanzo.base_url="%s/v1"`, strings.TrimSuffix(base, "/")),
 				"-c", `model_providers.hanzo.env_key="OPENAI_API_KEY"`,
 				"-c", `model_providers.hanzo.wire_api="responses"`,
+				// api.hanzo.ai exposes the standard OpenAI /v1/models shape,
+				// not Codex's private remote model-catalog schema. Skip that
+				// optional refresh and supply the coding model's metadata here.
+				"-c", `features.remote_models=false`,
+				"-c", `model_context_window=262144`,
+				"-c", `model_auto_compact_token_limit=235929`,
 			}
 		},
 		install: install,
@@ -190,9 +198,10 @@ const zenIdentityPrompt = "You are running through the Hanzo AI cloud as a Hanzo
 
 var codeAgents = map[string]codeAgent{
 	"claude": {
-		bin:      "claude",
-		wire:     anthropicWire,
-		fullAuto: []string{"--dangerously-skip-permissions"},
+		bin:          "claude",
+		wire:         anthropicWire,
+		fullAuto:     []string{"--dangerously-skip-permissions"},
+		continueArgs: []string{"--continue"},
 		// --model forces the session model on argv. Claude Code persists the
 		// user's last /model selection (e.g. the reserved word "best"), and that
 		// persisted choice OVERRIDES ANTHROPIC_MODEL — so the env var alone cannot
@@ -246,9 +255,12 @@ func newCodeCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Long: "Run @hanzo/dev, Claude Code, or Codex against api.hanzo.ai with the endpoint,\n" +
 			"credential and model injected — no env vars to remember. `hanzo code` alone runs\n" +
 			"dev (the Hanzo agent); name an agent to pick another. Model ids resolve fuzzily\n" +
-			"(glm5.2 -> glm-5.2) and agents run full-auto unless you pass --safe.",
+			"(glm5.2 -> glm-5.2), -c resumes either harness, and agents run full-auto unless\n" +
+			"you pass --safe. Unknown options pass through; -- forces verbatim passthrough.",
 		Example: "  hanzo code                 # dev, the default agent\n" +
 			"  hanzo code claude\n" +
+			"  hanzo code claude -c\n" +
+			"  hanzo code codex -c\n" +
 			"  hanzo code codex deepseek-v4-pro\n" +
 			"  hanzo code dev glm5.2 -- --resume\n" +
 			"  hanzo code ls",
@@ -320,19 +332,10 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 	}
 	base := strings.TrimSuffix(firstNonEmpty(env.CloudURL, "https://api.hanzo.ai"), "/")
 
-	// First non-flag arg is the model; --safe is ours; the rest is the agent's.
-	model, safe, rest := "", false, make([]string, 0, len(args))
-	for _, a := range args {
-		switch {
-		case a == "--": // the separator is ours; the agent must not see it
-		case a == "--safe" || a == "--ask":
-			safe = true
-		case model == "" && !strings.HasPrefix(a, "-") && len(rest) == 0:
-			model = a
-		default:
-			rest = append(rest, a)
-		}
-	}
+	// First non-flag arg before -- is the model; --safe and --continue are ours.
+	// Unknown options pass through unchanged. Everything after -- belongs to the
+	// agent, including positional subcommands and raw Codex -c config overrides.
+	model, safe, continueLast, rest := splitCodeArgs(args)
 	if model == "" {
 		model = defaultCodeModel
 	}
@@ -382,7 +385,7 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 		}
 	}
 
-	argv := codeArgv(agent, base, model, safe, rest)
+	argv := codeArgv(agent, base, model, safe, codeAgentRest(agent, continueLast, rest))
 
 	for k, v := range agent.wire(base, token, model) {
 		if err := os.Setenv(k, v); err != nil {
@@ -395,6 +398,45 @@ func runCode(env *Env, agent codeAgent, args []string) error {
 		fmt.Fprintf(env.out, "%s → %s on %s\n", agent.bin, model, base)
 	}
 	return execEngine(bin, argv) // exec: signals + exit code flow straight through
+}
+
+// splitCodeArgs pulls the launcher-owned tokens (the model, --safe, -c/--continue)
+// out of the raw args; everything else is the agent's. The `--` separator is ours
+// and switches on verbatim passthrough — every token after it goes to the agent
+// untouched, including positional subcommands (`codex exec`) and raw Codex -c
+// config overrides that would otherwise look like our --continue.
+func splitCodeArgs(args []string) (model string, safe, continueLast bool, rest []string) {
+	rest = make([]string, 0, len(args))
+	passthrough := false
+	for _, a := range args {
+		switch {
+		case passthrough:
+			rest = append(rest, a)
+		case a == "--": // the separator is ours; the agent must not see it
+			passthrough = true
+		case a == "--safe" || a == "--ask":
+			safe = true
+		case a == "-c" || a == "--continue":
+			continueLast = true
+		case model == "" && !strings.HasPrefix(a, "-") && len(rest) == 0:
+			model = a
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return model, safe, continueLast, rest
+}
+
+// codeAgentRest prepends the agent's harness-native resume tokens when -c/--continue
+// was given, so one Hanzo flag resumes the last session on either harness (`--continue`
+// for Claude Code, `resume --last` for Codex/dev).
+func codeAgentRest(agent codeAgent, continueLast bool, rest []string) []string {
+	if !continueLast {
+		return rest
+	}
+	args := make([]string, 0, len(agent.continueArgs)+len(rest))
+	args = append(args, agent.continueArgs...)
+	return append(args, rest...)
 }
 
 // codeArgv builds the final agent command line. Permission bypass is the
