@@ -824,6 +824,14 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		return nil, fmt.Errorf("studio.render: input needs a `prompt` graph")
 	}
 	cl := &http.Client{Timeout: 60 * time.Second}
+	// The claim-to-submit window: hold off the supervisor's recycle, and wait out
+	// one if it is already mid-flight — a claimed job must never die on staging
+	// because the engine happened to be restarting.
+	staging.Add(1)
+	defer staging.Add(-1)
+	if err := waitEngine(ctx, cl); err != nil {
+		return nil, fmt.Errorf("studio.render: %w", err)
+	}
 	// Materialize any uploaded inputs (they live in orgs/{org}/input on the cloud
 	// pod, which this worker cannot read) into the LOCAL studio input dir via its
 	// own /upload/image, so LoadImage resolves them before we render.
@@ -1161,6 +1169,34 @@ func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs 
 		}
 	}
 	return nil
+}
+
+// waitEngine blocks until the local engine answers its /queue — up to 90s, which
+// outlasts any supervisor recycle (engine restart is seconds, model reload longer).
+func waitEngine(ctx context.Context, cl *http.Client) error {
+	deadline := time.Now().Add(90 * time.Second)
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, localComfyUI+"/queue", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := cl.Do(req)
+		if err == nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
+			resp.Body.Close()
+			if resp.StatusCode/100 == 2 {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("engine not up: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
 }
 
 // collectOutputs pulls the output image/file names out of a ComfyUI history entry.
