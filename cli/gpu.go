@@ -1199,14 +1199,19 @@ func waitEngine(ctx context.Context, cl *http.Client) error {
 	}
 }
 
-// collectOutputs pulls the output image/file names out of a ComfyUI history entry.
+// collectOutputs pulls the output file names out of a ComfyUI history entry. Savers
+// publish under different keys — SaveImage/SaveVideo under "images", SaveGLB under
+// "3d" — so every saver's outputs are gathered, not just images (a 3D mesh would
+// otherwise never travel back to the library).
 func collectOutputs(entry json.RawMessage) []string {
+	type namedFile struct {
+		Filename  string `json:"filename"`
+		Subfolder string `json:"subfolder"`
+	}
 	var e struct {
 		Outputs map[string]struct {
-			Images []struct {
-				Filename  string `json:"filename"`
-				Subfolder string `json:"subfolder"`
-			} `json:"images"`
+			Images []namedFile `json:"images"`
+			ThreeD []namedFile `json:"3d"`
 		} `json:"outputs"`
 	}
 	if err := json.Unmarshal(entry, &e); err != nil {
@@ -1214,8 +1219,8 @@ func collectOutputs(entry json.RawMessage) []string {
 	}
 	var files []string
 	for _, node := range e.Outputs {
-		for _, img := range node.Images {
-			files = append(files, filepath.Join(img.Subfolder, img.Filename))
+		for _, f := range append(append([]namedFile{}, node.Images...), node.ThreeD...) {
+			files = append(files, filepath.Join(f.Subfolder, f.Filename))
 		}
 	}
 	return files
