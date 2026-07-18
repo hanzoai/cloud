@@ -563,6 +563,48 @@ func (c *Client) post(ctx context.Context, path, subject string, body []byte, id
 	return respBody, nil
 }
 
+// Forward proxies an admin-authenticated request to commerce VERBATIM and returns
+// the raw body + status. It is the ONE seam a SuperAdmin surface drives commerce's
+// own endpoints through — the platform plan-promo config (/v1/platform/promo) and a
+// per-org spend-alert override (/v1/billing/spend-alerts) — without a typed method
+// per shape. subject is the X-Org-Id namespace selector (the target org for a cap
+// override, or the admin org for platform config); body is nil for GET/DELETE. The
+// status is returned so the caller surfaces commerce's OWN verdict (400 validation,
+// 403, 404) instead of flattening every non-2xx into one code.
+func (c *Client) Forward(ctx context.Context, method, path, subject string, body []byte) ([]byte, int, error) {
+	if !c.Ready() {
+		return nil, 0, errUnconfigured
+	}
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rdr)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	if subject != "" {
+		req.Header.Set("X-Org-Id", subject)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("commerce unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return raw, resp.StatusCode, nil
+}
+
 // get performs one admin-authenticated commerce GET and returns the raw body.
 func (c *Client) get(ctx context.Context, path string, q url.Values, subject string) ([]byte, error) {
 	u := c.base + path
