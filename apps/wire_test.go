@@ -84,6 +84,7 @@ var frozen = []struct {
 	{"team", false, true},            // was order 138
 	{"settings", false, true},        // was order 138
 	{"notify", true, false},          // was order 139
+	{"channels", false, true},        // new: /v1/channels transport plane (after notify; must mount after integrations so RegisterIngress installs before webhooks emit)
 	{"gateway", false, false},        // was order 139
 	{"entitlements", false, true},    // was order 139
 	{"exec", false, false},           // was order 140
