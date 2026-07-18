@@ -150,6 +150,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/deploy/:name/logs", guard(s, cloud.Handle(s, appLogs)))
 	app.Post("/v1/deploy/:name/rollback", guard(s, cloud.Handle(s, rollback)))
 	app.Post("/v1/deploy/:name/sync", guard(s, cloud.Handle(s, sync)))
+	// Engine (write) routes — the embedded gitops-engine reconcile that replaces
+	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
+	registerEngineRoutes(app, s)
 }
 
 // guard wraps a handler with the SuperAdmin gate (fail-closed: a non-SuperAdmin is
