@@ -2,18 +2,34 @@ package team
 
 // chat.go is the Chunter agent-responder: it makes the org's agents (already
 // projected as workspace members by the roster reconcile) TALKABLE. When a human
-// posts a Chunter ChatMessage that is addressed to a bot member — a direct message
-// whose participants include the bot, or a channel message that @-mentions it —
-// the transactor runs that agent through the canonical in-process run path
+// posts a Chunter ChatMessage addressed to a bot member — a direct message whose
+// participants include the bot, or a channel message that @-mentions it — the
+// transactor runs that agent through the canonical in-process run path
 // (agents.RunOnBehalf, one balance gate + one debit + one recorded run) and posts
 // the model's answer back into the SAME conversation as that bot.
+//
+// SAFETY POSTURE (why every path here is bounded and lazy). The responder is the
+// ONE place in the team subsystem that can, per inbound message, initiate an
+// OUTBOUND model call — and that call self-routes through the cloud gateway
+// (api.hanzo.ai/v1). An unbounded version is a foot-gun: a replayed message
+// backlog, a channel firehose, or a persistently-failing model (e.g. the
+// publishable-key 403) could each fan out into thousands of concurrent HTTP calls
+// and exhaust the writer. So the responder is:
+//   - OFF by default — Mount only wires runAgent when TEAM_AGENTS_ENABLED=1, so an
+//     un-configured or misconfigured binary NEVER answers (nil runAgent ⇒ inert).
+//   - Fresh-only — a message created before this process booted (a replay/backfill)
+//     is NEVER answered; only genuinely-live posts trigger a turn.
+//   - Single-flight per conversation+bot — at most one in-flight answer per
+//     (workspace, space, bot); duplicates are dropped, not queued.
+//   - Hard-capped — a global semaphore bounds concurrent turns; over the cap, drop.
+//   - Circuit-broken — after repeated failures an agent is skipped for a cooldown
+//     (the backoff that turns a 403 storm into a quiet trickle). No retries, ever.
 //
 // It is the chat twin of bots.go: bots.go is the READ/projection surface (agents
 // AS members); this is the WRITE/response surface (agents that ANSWER). The seam to
 // the LLM is a single injected func (AgentRunner) so the transactor stays decoupled
 // from clients/agents' concrete run machinery and the loop is unit-testable with a
-// fake runner. There is ONE reply path (applyTx + broadcast) — the same write the
-// live SPA and the roster projection use.
+// fake runner.
 
 import (
 	"context"
@@ -23,6 +39,7 @@ import (
 	"html"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,20 +50,34 @@ const (
 	clDirectMessage = "chunter:class:DirectMessage"
 )
 
-// agentReplyTimeout bounds one agent turn (model call + reply write). A hung model
-// must never leak a goroutine or hold a workspace handle.
-const agentReplyTimeout = 90 * time.Second
+// Responder bounds. Conservative defaults; the concurrency cap is overridable in
+// Mount via TEAM_AGENTS_MAX_CONCURRENCY.
+const (
+	agentReplyTimeout    = 90 * time.Second // one agent turn (model call + reply write)
+	defaultMaxConcurrent = 4                // global in-flight turn cap default
+	backfillGraceMs      = 60_000           // a message created >60s before boot is backfill → never answered
+	breakerThreshold     = 3                // consecutive failures before an agent's circuit opens
+	breakerCooldown      = 60 * time.Second // how long a tripped agent is skipped
+)
 
 // AgentRunner runs agent `agentID` for `org` on behalf of `userSub` with `input`
-// and returns the model's text output. It is injected in Mount as an adapter over
-// agents.RunOnBehalf — the ONE in-process run path (billed, metered, recorded) — so
-// clients/team never speaks clients/agents' concrete run types and the responder is
-// testable with a fake.
+// and returns the model's text output. It is injected in Mount (only when the
+// feature is enabled) as an adapter over agents.RunOnBehalf — the ONE in-process
+// run path (billed, metered, recorded) — so clients/team never speaks
+// clients/agents' concrete run types and the responder is testable with a fake.
 type AgentRunner func(ctx context.Context, org, userSub, agentID, input string) (string, error)
+
+// agentBreaker is one agent's failure circuit. Guarded by its own mutex; stored in
+// transServer.breaker keyed by agent id.
+type agentBreaker struct {
+	mu        sync.Mutex
+	fails     int
+	openUntil int64 // unix millis; while now < openUntil the agent is skipped
+}
 
 // chatMsg is the parsed shape of one inbound Chunter ChatMessage create the
 // responder needs: where it lives (space + the attach coordinates a reply mirrors),
-// its author, and its text.
+// its author, its text, and WHEN it was created (the freshness gate).
 type chatMsg struct {
 	objectID        string
 	space           string
@@ -55,6 +86,7 @@ type chatMsg struct {
 	collection      string
 	message         string // stored markup (HTML)
 	authorUID       string // account uuid (social id stripped of the "hanzo:" prefix)
+	createdOn       int64  // unix millis; a value below the boot floor is backfill
 }
 
 // parseChatMessage returns the chatMsg for an applied tx iff it is a create of a
@@ -78,6 +110,7 @@ func parseChatMessage(raw json.RawMessage) (chatMsg, bool) {
 		attachedToClass: str(t["attachedToClass"]),
 		collection:      str(t["collection"]),
 		authorUID:       stripHanzo(str(firstNonNil(t["createdBy"], t["modifiedBy"]))),
+		createdOn:       asInt64(firstNonNil(t["createdOn"], t["modifiedOn"])),
 	}
 	if a, ok := t["attributes"].(map[string]any); ok {
 		m.message = str(a["message"])
@@ -92,20 +125,29 @@ func parseChatMessage(raw json.RawMessage) (chatMsg, bool) {
 
 // maybeAgentReply is the transactor hook (called from session.tx, the client WS
 // write path — NEVER from the roster/sync applyTx path, so a projection can never
-// trigger a reply). For every inbound human ChatMessage addressed to an active bot
-// member it fires one async agent turn per bot. It returns immediately; the model
-// call and the reply write happen in a recovered goroutine so the WS read loop is
-// never blocked and a model/DB error can never crash the session.
+// trigger a reply). For every inbound, FRESH, human ChatMessage addressed to an
+// active bot member it fires one async, bounded agent turn per bot. It returns
+// immediately; the model call and the reply write happen in a recovered, capped
+// goroutine so the WS read loop is never blocked and a model/DB error can never
+// crash the session.
 func (srv *transServer) maybeAgentReply(org, workspace string, applied []json.RawMessage) {
 	if srv.runAgent == nil || srv.bots == nil {
-		return // responder disabled (no runner wired)
+		return // responder disabled (TEAM_AGENTS_ENABLED unset ⇒ no runner wired)
 	}
-	// Cheap gate first: only touch the agents registry if a chat message was written.
+	// Cheap gate first: only touch the agents registry if a FRESH chat message was
+	// written. A message created before this process booted is a replay/backfill and
+	// is never answered (the anti-storm invariant the boot-backlog test locks).
+	floor := srv.startedAt - backfillGraceMs
 	var msgs []chatMsg
 	for _, raw := range applied {
-		if m, ok := parseChatMessage(raw); ok {
-			msgs = append(msgs, m)
+		m, ok := parseChatMessage(raw)
+		if !ok {
+			continue
 		}
+		if srv.startedAt > 0 && m.createdOn > 0 && m.createdOn < floor {
+			continue // backfill — never answer
+		}
+		msgs = append(msgs, m)
 	}
 	if len(msgs) == 0 {
 		return
@@ -162,10 +204,11 @@ func (srv *transServer) replyTargets(org, workspace string, m chatMsg, byUID map
 	return out
 }
 
-// replyAsBot runs one agent turn and posts its answer as the bot, in the SAME
-// conversation (space + attach coordinates mirrored from the inbound message) and
-// through the SAME write path (applyTx + broadcast) the SPA uses — so connected
-// clients see the reply live. Recovered + timeout-bounded: a panicking model
+// replyAsBot runs one bounded agent turn and posts its answer as the bot, in the
+// SAME conversation (space + attach coordinates mirrored from the inbound message)
+// and through the SAME write path (applyTx + broadcast) the SPA uses. It is
+// single-flight per (workspace, space, bot), globally concurrency-capped, and
+// circuit-broken per agent; recovered + timeout-bounded so a panicking model
 // adapter or a hung call can neither crash the transactor nor leak.
 func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 	defer func() {
@@ -173,6 +216,32 @@ func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 			srv.log.Error("team: agent reply panicked", "agent", bot.ID, "err", r)
 		}
 	}()
+
+	// Single-flight: at most one in-flight answer per conversation+bot. A burst of
+	// messages to the same DM while a turn is running collapses to one.
+	flightKey := workspace + "|" + m.space + "|" + bot.ID
+	if _, busy := srv.inflight.LoadOrStore(flightKey, struct{}{}); busy {
+		return
+	}
+	defer srv.inflight.Delete(flightKey)
+
+	// Circuit breaker: skip a persistently-failing agent for a cooldown (the backoff
+	// that turns a 403/5xx storm into a quiet trickle).
+	if srv.breakerOpen(bot.ID) {
+		return
+	}
+
+	// Hard concurrency cap: never more than N turns in flight process-wide. Over the
+	// cap we DROP (bounded, no queue) rather than pile up goroutines/HTTP calls.
+	if srv.sem != nil {
+		select {
+		case srv.sem <- struct{}{}:
+			defer func() { <-srv.sem }()
+		default:
+			return
+		}
+	}
+
 	prompt := plainText(m.message)
 	if prompt == "" {
 		return
@@ -181,11 +250,13 @@ func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 	defer cancel()
 	out, err := srv.runAgent(ctx, org, m.authorUID, bot.ID, prompt)
 	if err != nil {
+		srv.breakerRecord(bot.ID, false)
 		if srv.log != nil {
 			srv.log.Warn("team: agent reply failed", "agent", bot.ID, "err", err)
 		}
 		return
 	}
+	srv.breakerRecord(bot.ID, true)
 	if strings.TrimSpace(out) == "" {
 		return
 	}
@@ -201,6 +272,37 @@ func (srv *transServer) replyAsBot(org, workspace string, m chatMsg, bot Bot) {
 	sess := &session{server: srv, store: srv.store, hier: srv.hier, org: org, workspace: workspace, account: botUID}
 	if _, ap := sess.applyTx(raw); len(ap) > 0 {
 		srv.hub.broadcast(workspace, ap)
+	}
+}
+
+// breakerOpen reports whether agent `id`'s circuit is currently tripped.
+func (srv *transServer) breakerOpen(id string) bool {
+	v, ok := srv.breaker.Load(id)
+	if !ok {
+		return false
+	}
+	b := v.(*agentBreaker)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return time.Now().UnixMilli() < b.openUntil
+}
+
+// breakerRecord folds one turn's outcome into agent `id`'s circuit: a success
+// resets it; breakerThreshold consecutive failures trip it for breakerCooldown.
+func (srv *transServer) breakerRecord(id string, ok bool) {
+	v, _ := srv.breaker.LoadOrStore(id, &agentBreaker{})
+	b := v.(*agentBreaker)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if ok {
+		b.fails = 0
+		b.openUntil = 0
+		return
+	}
+	b.fails++
+	if b.fails >= breakerThreshold {
+		b.openUntil = time.Now().UnixMilli() + breakerCooldown.Milliseconds()
+		b.fails = 0 // count fresh after the cooldown
 	}
 }
 
@@ -267,6 +369,22 @@ func toStringSlice(v any) []string {
 		}
 	}
 	return out
+}
+
+// asInt64 coerces a JSON number (float64) or int to int64. Non-numeric ⇒ 0.
+func asInt64(v any) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return i
+	}
+	return 0
 }
 
 // newMsgID mints a fresh opaque doc id for a reply message. Chunter treats _id as an
