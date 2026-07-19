@@ -127,7 +127,17 @@ func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 			continue
 		}
 		started++
-		go forwardWatch(ctx, ns, watcher, events)
+		// The read plane installs no panic recovery around detached goroutines, and a
+		// watch event is a system boundary — recover here so a malformed event can never
+		// crash the whole process; the watcher is still stopped by forwardWatch's defer.
+		go func(ns string, watcher watch.Interface) {
+			defer func() {
+				if r := recover(); r != nil {
+					s.Log.Error("deploy stream: watch goroutine panic recovered", "namespace", ns, "panic", r)
+				}
+			}()
+			forwardWatch(ctx, ns, watcher, events)
+		}(ns, watcher)
 	}
 	if started > 0 {
 		s.Log.Info("deploy stream: watching App CRs", "namespaces", started)
@@ -177,8 +187,8 @@ func forwardWatch(ctx context.Context, ns string, watcher watch.Interface, event
 				continue // skip BOOKMARK / ERROR — not an application change
 			}
 			obj, ok := e.Object.(*unstructured.Unstructured)
-			if !ok || obj.GetName() == "" {
-				continue
+			if !ok || obj == nil || obj.GetName() == "" {
+				continue // guard the typed-nil object: GetName() would nil-deref
 			}
 			if _, platform := nsEnv[obj.GetNamespace()]; !platform {
 				continue // only the platform namespaces this plane reads
