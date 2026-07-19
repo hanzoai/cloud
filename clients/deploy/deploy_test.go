@@ -28,6 +28,7 @@ func fakeSvc(objs ...runtime.Object) *cloud.Service[state] {
 		hpaGVR:         "HorizontalPodAutoscalerList",
 		pdbGVR:         "PodDisruptionBudgetList",
 		configMapsGVR:  "ConfigMapList",
+		appProjectGVR:  "AppProjectList",
 	}, objs...)
 	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{dyn: dyn}}
 }
@@ -69,6 +70,25 @@ func pod(ns, name, image string, labels map[string]any) *unstructured.Unstructur
 		"metadata": map[string]any{"name": name, "namespace": ns, "uid": "pod-" + name, "labels": labels},
 		"spec":     map[string]any{"containers": []any{map[string]any{"name": "app", "image": image}}},
 		"status":   map[string]any{"phase": "Running", "containerStatuses": []any{map[string]any{"name": "app", "ready": true}}},
+	}}
+}
+
+// appProjectCR builds a real argoproj.io/v1alpha1 AppProject CR (the "prefer real
+// projects" path). sourceRepos are surfaced; anything else on the CR is not.
+func appProjectCR(name string, sourceRepos ...string) *unstructured.Unstructured {
+	repos := make([]any, 0, len(sourceRepos))
+	for _, r := range sourceRepos {
+		repos = append(repos, r)
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1", "kind": "AppProject",
+		"metadata": map[string]any{"name": name, "namespace": "argocd"},
+		"spec": map[string]any{
+			"sourceRepos":  repos,
+			"destinations": []any{map[string]any{"server": inClusterServer, "namespace": "hanzo"}},
+			// A field the projection must NOT surface (roles carry token metadata).
+			"roles": []any{map[string]any{"name": "secret-role", "policies": []any{"p, proj:x:secret-role, *, *, *, allow"}}},
+		},
 	}}
 }
 
