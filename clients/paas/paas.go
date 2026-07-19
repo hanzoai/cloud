@@ -130,7 +130,14 @@ func build(b cloud.Base) (state, error) {
 func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/paas/apps", guard(s, cloud.Handle(s, listApps)))
 	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
-	app.Post("/v1/paas/apps/:app/deploy", guard(s, cloud.Handle(s, deploy)))
+	// MUTATION is superadmin-only (operatorGuard), NOT the broader read guard: the
+	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
+	// -devnet}), so a rolling restart here recreates a SHARED platform service
+	// (iam/kms/gateway/…). Per the 2026-07-08 admin-org P0 a brand-org ("hanzo")
+	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
+	// a platform-operator action. Gating the read board (below) any wider is bounded
+	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
+	app.Post("/v1/paas/apps/:app/deploy", operatorGuard(s, cloud.Handle(s, deploy)))
 	app.Get("/v1/paas/health", cloud.Handle(s, health))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
@@ -163,6 +170,26 @@ func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 			return h(c)
 		}
 		return zip.ErrForbidden("admin required")
+	}
+}
+
+// operatorGuard restricts a route to a platform SUPERADMIN (a member of the
+// reserved admin org — principal.IsSuperAdmin). It is stricter than guard on
+// purpose: the mutating deploy/restart acts on the platform's OWN service tier, so
+// it is a platform-operator action, NOT one a customer-org admin — even an admin of
+// the brand org — may take (the 2026-07-08 admin-org P0: "a plain hanzo admin is a
+// customer-org admin only"). A validated OrgAdmin who is not a SuperAdmin is refused
+// 403 here, closing the fleet-restart DoS lever (RED H1) while the read board stays
+// on the broader guard.
+func operatorGuard(s *cloud.Service[state], h zip.Handler) zip.Handler {
+	return func(c *zip.Ctx) error {
+		if !principal.Validated(c) {
+			return zip.ErrForbidden("authentication required (run `hanzo login`)")
+		}
+		if !principal.IsSuperAdmin(c) {
+			return zip.ErrForbidden("deploy is a platform-operator action — requires a superadmin identity (a member of the admin org)")
+		}
+		return h(c)
 	}
 }
 
@@ -218,6 +245,18 @@ func targetNamespaces(c *zip.Ctx) []string {
 // scopedNamespaces confines a non-super OrgAdmin to. Kept in lockstep with nsEnv.
 func nsOrg(ns string) string {
 	return strings.TrimSuffix(strings.TrimSuffix(ns, "-devnet"), "-testnet")
+}
+
+// nsForEnv maps a lifecycle env to its scanned namespace ("main"→hanzo,
+// "test"→hanzo-testnet, "dev"→hanzo-devnet), "" for an unknown env. The inverse of
+// nsEnv, used to reject an invalid ?env with a clean 400 rather than a confusing 404.
+func nsForEnv(env string) string {
+	for ns, e := range nsEnv {
+		if e == env {
+			return ns
+		}
+	}
+	return ""
 }
 
 // ── observe: the drift board (inventory.ts) ──────────────────────────────────
@@ -368,9 +407,14 @@ const restartedAtAnnotation = "hanzo.ai/restartedAt"
 // deploy performs a zero-downtime ROLLING RESTART of the app's Deployment: it
 // stamps the pod-template restartedAt annotation (the `kubectl rollout restart`
 // mechanism), which the default RollingUpdate strategy turns into a graceful
-// pod-by-pod recreate that re-pulls the declared image. It targets ONLY the
-// namespaces the caller is authorized for (targetNamespaces: the caller's own org,
-// optionally narrowed by ?env=), so an OrgAdmin can restart only its own apps.
+// pod-by-pod recreate that re-pulls the declared image.
+//
+// SUPERADMIN-only (operatorGuard on the route): the board scans only the platform's
+// OWN tier, so a restart here recreates a shared platform service — a platform-
+// operator action, not a customer-org-admin one (RED H1). The env MUST be named
+// explicitly (?env=main|test|dev) — a bare deploy never silently targets production
+// (RED L1). Within that env it targets only the namespaces the caller is authorized
+// for (targetNamespaces).
 //
 // It deliberately does NOT change the declared image TAG: that is the one property
 // Hanzo CD's selfHeal reconciles from universe git, so a tag change is still a git
@@ -383,6 +427,16 @@ func deploy(s *cloud.Service[state], c *zip.Ctx) error {
 	name := reqApp(c)
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("app must be a DNS-1123 label")
+	}
+	// L1: never SILENTLY target production. A restart must name its lifecycle env
+	// explicitly (?env=main|test|dev) — a bare deploy no longer defaults to the
+	// prod (main) namespace, closing the fat-finger / confused-deputy prod hazard.
+	env := strings.TrimSpace(c.Query("env"))
+	if env == "" {
+		return zip.ErrBadRequest("specify ?env=main|test|dev — deploy does not default to production")
+	}
+	if nsForEnv(env) == "" {
+		return zip.ErrBadRequest("env must be one of main|test|dev")
 	}
 	ns, err := resolveTargetIn(s, c.Context(), name, targetNamespaces(c))
 	if err != nil {
