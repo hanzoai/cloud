@@ -118,18 +118,29 @@ func TestAppsGetCommand(t *testing.T) {
 // deploy hits /v1/paas/apps/{app}/deploy — a rolling restart, org from identity.
 func TestDeployCommand(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/paas/apps/app-x/deploy" {
-			t.Errorf("redeploy path = %s", r.URL.Path)
+		if r.URL.Path != "/v1/paas/apps/app-x/deploy" || r.URL.Query().Get("env") != "main" {
+			t.Errorf("redeploy request = %s?%s", r.URL.Path, r.URL.RawQuery)
 		}
 		w.WriteHeader(202)
 		_ = json.NewEncoder(w).Encode(DeployResult{OK: true, App: "app-x", Namespace: "hanzo", Env: "main", RestartedAt: "2026-07-18T12:00:00Z"})
 	})
-	out, err := runRoot(t, "", "deploy", "app-x")
+	out, err := runRoot(t, "", "deploy", "app-x", "--env", "main")
 	if err != nil {
 		t.Fatalf("deploy: %v", err)
 	}
 	if !strings.Contains(out, "restarted app-x") || !strings.Contains(out, "namespace=hanzo") {
 		t.Fatalf("deploy output: %q", out)
+	}
+}
+
+// deploy REQUIRES --env — a bare deploy errors CLI-side, never silently prod.
+func TestDeployRequiresEnv(t *testing.T) {
+	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("deploy without --env must not reach the server")
+		w.WriteHeader(202)
+	})
+	if _, err := runRoot(t, "", "deploy", "app-x"); err == nil {
+		t.Fatalf("deploy must require --env")
 	}
 }
 
@@ -152,7 +163,7 @@ func TestDeployNotOK(t *testing.T) {
 	withPlatform(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(DeployResult{OK: false})
 	})
-	if _, err := runRoot(t, "", "deploy", "app-x"); err == nil {
+	if _, err := runRoot(t, "", "deploy", "app-x", "--env", "main"); err == nil {
 		t.Fatalf("deploy must error when the server does not report ok")
 	}
 }
