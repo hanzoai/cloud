@@ -8,6 +8,7 @@ package team
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -121,6 +122,23 @@ func agentsBotLister(ctx context.Context, org string) ([]Bot, error) {
 // are live; anything else (archived/retired) is inactive.
 func botActive(status string) bool {
 	return status == "" || status == "active" || status == "ready"
+}
+
+// agentReplyRunner is the ONE in-process seam the Chunter responder (chat.go) uses
+// to make a bot answer: it runs the agent through agents.RunOnBehalf — the SAME
+// billed/metered/recorded run path the HTTP POST /v1/agents/:id/run handler uses —
+// on behalf of the human who addressed it, and returns the model's text. A run that
+// executed but whose model errored (nil error, error-status Run) surfaces as an
+// error so the responder posts nothing rather than an empty bubble.
+func agentReplyRunner(ctx context.Context, org, userSub, agentID, input string) (string, error) {
+	run, err := agents.RunOnBehalf(ctx, org, userSub, agentID, input)
+	if err != nil {
+		return "", err
+	}
+	if run.Error != "" {
+		return "", errors.New(run.Error)
+	}
+	return run.Output, nil
 }
 
 // botUserID derives a STABLE member account uuid from an agent id — a UUIDv5 over
