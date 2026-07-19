@@ -33,7 +33,11 @@ import (
 )
 
 // insightsEvent is the PostHog wire shape (subset that matters for ingest).
+// UUID is the top-level per-event id PostHog SDKs mint for idempotency; the rest
+// of the identity/attribution the SDKs carry rides inside Properties (mapped in
+// toCapture).
 type insightsEvent struct {
+	UUID       string         `json:"uuid"`
 	Event      string         `json:"event"`
 	DistinctID string         `json:"distinct_id"`
 	Timestamp  string         `json:"timestamp"`
@@ -65,6 +69,11 @@ func (e insightsEvent) toCapture() CaptureEvent {
 		typ = "pageview"
 	}
 	return CaptureEvent{
+		// Idempotency id: PostHog SDKs carry a top-level event `uuid`; some send it
+		// as an `$insert_id` property instead. Preserve it as the client MessageID so
+		// a retried batch (insights-go retries with backoff) keeps a STABLE row id
+		// rather than the server minting a fresh one per attempt.
+		MessageID:  firstNonEmptyStr(strings.TrimSpace(e.UUID), strings.TrimSpace(str("$insert_id"))),
 		Type:       typ,
 		Event:      e.Event,
 		Timestamp:  e.Timestamp,
@@ -73,6 +82,19 @@ func (e insightsEvent) toCapture() CaptureEvent {
 		URL:        str("$current_url"),
 		Path:       str("$pathname"),
 		Referrer:   str("$referrer"),
+		// UTM attribution: PostHog SDKs put campaign params in BARE `utm_*`
+		// properties (not $-prefixed — confirmed against the SDK/ingest source).
+		// hanzo.events has first-class utm_* columns and the native capture path
+		// maps CaptureEvent.UTM into them (capture.go), so surfacing them here is
+		// what lets the web/commerce lens attribute traffic to a campaign. They were
+		// previously dropped on the PostHog-wire front door.
+		UTM: UTM{
+			Source:   str("utm_source"),
+			Medium:   str("utm_medium"),
+			Campaign: str("utm_campaign"),
+			Term:     str("utm_term"),
+			Content:  str("utm_content"),
+		},
 		Product:    str("product"),
 		Library:    str("$lib"),
 		LibraryVer: str("$lib_version"),
