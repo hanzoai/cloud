@@ -3,6 +3,8 @@ package deploy
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +14,7 @@ import (
 
 	luxlog "github.com/luxfi/log"
 
+	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
 )
 
@@ -288,12 +291,169 @@ func TestCallbackRequiresMatchingState(t *testing.T) {
 func TestCallbackRefusesNonAdminOrg(t *testing.T) {
 	app, iam := signinApp(t, "")
 	iam.token = fakeJWT("hanzo", "someone", time.Hour) // a real user, wrong org
+	iam.verified = cloud.VerifiedIdentity{Owner: "hanzo", User: "someone", Expiry: time.Now().Add(time.Hour)}
 
 	resp := completeSignin(t, app)
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("callback for a non-admin-org principal = %d, want 403", resp.StatusCode)
 	}
 	assertNoSession(t, resp)
+}
+
+// TestCallbackRefusesUnverifiableToken is the MED-1 loop-breaker: a token this
+// deployment's identity boundary will NOT accept (audience allowlist that omits the
+// console's client_id, wrong issuer, expired) must fail HERE, once, with the real
+// reason — never become a cookie that is refused on the next request, bounced back
+// to sign-in, and re-minted forever.
+func TestCallbackRefusesUnverifiableToken(t *testing.T) {
+	app, iam := signinApp(t, "")
+	// The exact shape of the misconfiguration: aud=admin-console, allowlist without it.
+	iam.verifyErr = errors.New(`claims: square/go-jose/jwt: validation failed, invalid audience claim (aud)`)
+
+	resp := completeSignin(t, app)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("callback with an unverifiable token = %d, want 401", resp.StatusCode)
+	}
+	assertNoSession(t, resp)
+
+	// The error must NAME the knob, or an operator has nothing to act on.
+	body, _ := io.ReadAll(resp.Body)
+	for _, want := range []string{"audience", defaultClientID} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("error body does not mention %q: %s", want, body)
+		}
+	}
+}
+
+// TestCallbackRefusesAlreadyExpiredToken: an expired credential must not become an
+// 8-hour cookie. There is no fallback lifetime — a cookie that cannot work is the
+// loop, not a mitigation.
+func TestCallbackRefusesAlreadyExpiredToken(t *testing.T) {
+	app, iam := signinApp(t, "")
+	iam.verified = cloud.VerifiedIdentity{Owner: "admin", User: "cto", Expiry: time.Now().Add(-time.Minute)}
+
+	resp := completeSignin(t, app)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("callback with an expired token = %d, want 401", resp.StatusCode)
+	}
+	assertNoSession(t, resp)
+}
+
+// TestSessionMaxAge pins the clamp at both ends (RED LOW-2).
+func TestSessionMaxAge(t *testing.T) {
+	cases := []struct {
+		name   string
+		expiry time.Time
+		want   func(int) bool
+		desc   string
+	}{
+		{"no expiry proven", time.Time{}, func(n int) bool { return n == 0 }, "0"},
+		{"already expired", time.Now().Add(-time.Hour), func(n int) bool { return n == 0 }, "0"},
+		{"expired by a second", time.Now().Add(-time.Second), func(n int) bool { return n == 0 }, "0"},
+		{"normal hour", time.Now().Add(time.Hour), func(n int) bool { return n > 3500 && n <= 3600 }, "~3600"},
+		{"absurd future", time.Now().Add(292 * 365 * 24 * time.Hour), func(n int) bool { return n == int(sessionMaxTTL.Seconds()) }, "clamped to sessionMaxTTL"},
+		{"just over the cap", time.Now().Add(sessionMaxTTL + time.Hour), func(n int) bool { return n == int(sessionMaxTTL.Seconds()) }, "clamped to sessionMaxTTL"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sessionMaxAge(c.expiry); !c.want(got) {
+				t.Errorf("sessionMaxAge = %d, want %s", got, c.desc)
+			}
+		})
+	}
+}
+
+// TestSignInFailsClosedWithoutPublicOrigin (RED MED-3): with no configured public
+// origin the OAuth hop refuses rather than deriving a redirect_uri from the
+// caller-controlled Host / X-Forwarded-Proto headers.
+func TestSignInFailsClosedWithoutPublicOrigin(t *testing.T) {
+	svc := fakeSvc()
+	svc.State.oauth = oauth{
+		issuer: "https://iam.test", clientID: defaultClientID, adminOrg: "admin",
+		http:   &http.Client{Timeout: time.Second},
+		verify: func(string) (cloud.VerifiedIdentity, error) { return cloud.VerifiedIdentity{}, nil },
+	} // publicURL deliberately empty
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	routes(app, svc)
+
+	// A forged Host must NOT be adopted as the origin.
+	req := httptest.NewRequest("GET", "/v1/deploy/login", nil)
+	req.Host = "evil.example"
+	req.Header.Set("X-Forwarded-Proto", "http")
+	resp := do(t, app, req)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("login with no configured origin = %d, want 503", resp.StatusCode)
+	}
+	if loc := resp.Header.Get("Location"); strings.Contains(loc, "evil.example") {
+		t.Errorf("redirect adopted the forged Host: %q", loc)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "DEPLOY_PUBLIC_URL") {
+		t.Errorf("error must name the knob to set, got: %s", body)
+	}
+
+	// The callback refuses for the same reason, and mints nothing.
+	cb := httptest.NewRequest("GET", "/v1/deploy/callback?code=c&state=s", nil)
+	cb.Host = "evil.example"
+	resp = do(t, app, cb)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("callback with no configured origin = %d, want 503", resp.StatusCode)
+	}
+	assertNoSession(t, resp)
+}
+
+// TestLogoutClearsSession: POST clears the cookie; the route is not a GET.
+func TestLogoutClearsSession(t *testing.T) {
+	app, _ := signinApp(t, "https://iam.test")
+
+	resp := do(t, app, httptest.NewRequest("POST", "/v1/deploy/logout", nil))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("logout = %d, want 200", resp.StatusCode)
+	}
+	var cleared bool
+	for _, ck := range resp.Cookies() {
+		if ck.Name == sessionCookie && ck.Value == "" && ck.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("logout did not clear the session cookie")
+	}
+
+	// A cross-site top-level navigation must not be able to sign anyone out.
+	if resp := do(t, app, httptest.NewRequest("GET", "/v1/deploy/logout", nil)); resp.StatusCode == http.StatusOK {
+		t.Error("GET /v1/deploy/logout succeeded; logout must be POST-only")
+	}
+}
+
+// TestCookiesCarryHostPrefix (RED LOW-3): both cookies use the __Host- prefix, which
+// the browser will only honour for Secure, Path=/, Domain-less cookies — so a
+// sibling *.hanzo.ai host cannot shadow them with a Domain=.hanzo.ai cookie.
+func TestCookiesCarryHostPrefix(t *testing.T) {
+	if !strings.HasPrefix(sessionCookie, "__Host-") {
+		t.Errorf("session cookie %q lacks the __Host- prefix", sessionCookie)
+	}
+	if !strings.HasPrefix(flowCookie, "__Host-") {
+		t.Errorf("flow cookie %q lacks the __Host- prefix", flowCookie)
+	}
+	// The session name must be one cloud's identity boundary actually reads.
+	if sessionCookie != "__Host-hanzo_iam_token" {
+		t.Errorf("session cookie %q is not in cloud's cookieTokenNames", sessionCookie)
+	}
+
+	app, _ := signinApp(t, "")
+	resp := completeSignin(t, app)
+	for _, ck := range resp.Cookies() {
+		if !strings.HasPrefix(ck.Name, "__Host-") {
+			continue
+		}
+		// The __Host- contract, enforced here so a future edit cannot silently
+		// break it (a browser would then reject the cookie outright).
+		if !ck.Secure || ck.Path != "/" || ck.Domain != "" {
+			t.Errorf("%s violates the __Host- contract: Secure=%v Path=%q Domain=%q",
+				ck.Name, ck.Secure, ck.Path, ck.Domain)
+		}
+	}
 }
 
 // TestCallbackMintsSessionForSuperAdmin is the happy path: the session cookie is
@@ -390,35 +550,51 @@ func TestDecodeFlow(t *testing.T) {
 	}
 }
 
-func TestTokenIdentity(t *testing.T) {
-	owner, user := tokenIdentity(fakeJWT("admin", "cto", time.Hour))
-	if owner != "admin" || user != "cto" {
-		t.Errorf("tokenIdentity = (%q,%q), want (admin,cto)", owner, user)
+// TestVerifiedClaimsDecide: the admin-org decision is made on what the VALIDATOR
+// proved, never on what the token says about itself. A token whose unverified body
+// claims owner=admin is refused when validation reports a different owner — the
+// unverified decode is gone, and this pins that it stays gone.
+func TestVerifiedClaimsDecide(t *testing.T) {
+	app, iam := signinApp(t, "")
+	iam.token = fakeJWT("admin", "cto", time.Hour) // body SAYS admin
+	iam.verified = cloud.VerifiedIdentity{Owner: "hanzo", User: "someone", Expiry: time.Now().Add(time.Hour)}
+
+	resp := completeSignin(t, app)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("callback = %d, want 403: the verified owner must win over the token body", resp.StatusCode)
 	}
-	// Anything that is not a JWT yields no identity — and callback then refuses,
-	// because "" is never the admin org.
-	for _, bad := range []string{"", "not.a.jwt", "a.b", "..", "x"} {
-		if o, _ := tokenIdentity(bad); o != "" {
-			t.Errorf("tokenIdentity(%q) owner = %q, want empty", bad, o)
-		}
-	}
+	assertNoSession(t, resp)
 }
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
 // fakeIAM is a stand-in for IAM's token endpoint, recording what the exchange sent.
+// verified is what cloud's validator will PROVE about the token it hands back;
+// verifyErr makes validation fail, which is how a real deployment behaves when its
+// audience allowlist or issuer does not admit the token.
 type fakeIAM struct {
-	token  string
-	status int
-	calls  int
-	form   url.Values
+	token     string
+	status    int
+	calls     int
+	form      url.Values
+	verified  cloud.VerifiedIdentity
+	verifyErr error
 }
 
 // signinApp builds the real router over a state whose IAM is a local fake (or the
 // literal issuer when one is given, for the no-network authorize assertions).
+//
+// The token verifier is the ONE seam a test replaces: cloud's real validator needs
+// a live JWKS and an RS256-signed token, which would test go-jose rather than this
+// flow. The contract it stands in for — verified claims decide, a validation
+// failure refuses — is exercised in both directions below.
 func signinApp(t *testing.T, issuer string) (*zip.App, *fakeIAM) {
 	t.Helper()
-	iam := &fakeIAM{token: fakeJWT("admin", "cto", time.Hour), status: http.StatusOK}
+	iam := &fakeIAM{
+		token:    fakeJWT("admin", "cto", time.Hour),
+		status:   http.StatusOK,
+		verified: cloud.VerifiedIdentity{Owner: "admin", User: "cto", Expiry: time.Now().Add(time.Hour)},
+	}
 	if issuer == "" {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/v1/iam/oauth/token" {
@@ -439,6 +615,12 @@ func signinApp(t *testing.T, issuer string) (*zip.App, *fakeIAM) {
 	svc.State.oauth = oauth{
 		issuer: issuer, clientID: defaultClientID, adminOrg: "admin",
 		publicURL: "https://cd.hanzo.ai", http: &http.Client{Timeout: 5 * time.Second},
+		verify: func(raw string) (cloud.VerifiedIdentity, error) {
+			if iam.verifyErr != nil {
+				return cloud.VerifiedIdentity{}, iam.verifyErr
+			}
+			return iam.verified, nil
+		},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	routes(app, svc)
