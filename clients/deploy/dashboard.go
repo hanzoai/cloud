@@ -20,6 +20,7 @@
 package deploy
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
@@ -57,10 +59,89 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get(dashPrefix+"/applications", guard(s, cloud.Handle(s, dashAppList)))
 	app.Get(dashPrefix+"/applications/:name", guard(s, cloud.Handle(s, dashApp)))
 	app.Get(dashPrefix+"/applications/:name/resource-tree", guard(s, cloud.Handle(s, dashResourceTree)))
+	// Applications watch (Server-Sent Events) — the live stream the applications
+	// view opens; see stream.go.
+	app.Get(dashPrefix+"/stream/applications", guard(s, cloud.Handle(s, dashStreamApps)))
+
+	// Destination clusters + AppProjects — the two lists the applications view
+	// resolves alongside the fleet (Destination column + project filter).
+	app.Get(dashPrefix+"/clusters", guard(s, cloud.Handle(s, dashClusters)))
+	app.Get(dashPrefix+"/projects", guard(s, cloud.Handle(s, dashProjects)))
 
 	// Actions → App-CR reconcile ops.
 	app.Post(dashPrefix+"/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
 	app.Post(dashPrefix+"/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
+}
+
+// ── clusters + projects projection ───────────────────────────────────────────
+
+// dashClusters is GET /v1/deploy/clusters — the ArgoCD ClusterList of the
+// destinations the fleet reconciles into (always ≥ the in-cluster destination),
+// read from the SAME App-CR source dashAppList uses. It NEVER surfaces a cluster
+// credential (argoCluster has no config field — see projection.go).
+func dashClusters(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
+		return err
+	}
+	crs, err := allAppCRs(s, c.Context())
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, projectClusters(crs))
+}
+
+// dashProjects is GET /v1/deploy/projects — the ArgoCD AppProjectList. It PREFERS
+// real argoproj.io/v1alpha1 AppProject CRs when that CRD is served; otherwise it
+// synthesizes one permissive project per distinct App-CR project name (default
+// always present). Read-only, from the same App-CR source.
+func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
+	if err := ready(s); err != nil {
+		return err
+	}
+	if items, ok := listAppProjects(s, c.Context()); ok {
+		return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: items})
+	}
+	crs, err := allAppCRs(s, c.Context())
+	if err != nil {
+		return err
+	}
+	names := projectedProjectNames(crs)
+	items := make([]argoProject, 0, len(names))
+	for _, name := range names {
+		items = append(items, synthProject(name))
+	}
+	return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: items})
+}
+
+// allAppCRs collects every App CR across the platform namespaces — the exact
+// listAppCRs source dashAppList reads, flattened (order does not matter for the
+// cluster/project sets, which dedupe).
+func allAppCRs(s *cloud.Service[state], ctx context.Context) ([]unstructured.Unstructured, error) {
+	var out []unstructured.Unstructured
+	for _, ns := range scanOrder() {
+		crs, err := listAppCRs(s, ctx, ns)
+		if err != nil {
+			return nil, k8sErr(s, "list", err)
+		}
+		out = append(out, crs...)
+	}
+	return out, nil
+}
+
+// listAppProjects lists real argoproj.io/v1alpha1 AppProject CRs cluster-wide. It
+// returns (projected, true) ONLY when the CRD is served AND at least one project
+// exists; any error (CRD absent — the norm here, or RBAC) or an empty set yields
+// (nil, false) so the caller synthesizes. It never fails the request.
+func listAppProjects(s *cloud.Service[state], ctx context.Context) ([]argoProject, bool) {
+	list, err := s.State.dyn.Resource(appProjectGVR).List(ctx, metav1.ListOptions{})
+	if err != nil || list == nil || len(list.Items) == 0 {
+		return nil, false
+	}
+	out := make([]argoProject, 0, len(list.Items))
+	for i := range list.Items {
+		out = append(out, projectAppProject(&list.Items[i]))
+	}
+	return out, true
 }
 
 // ── bootstrap ────────────────────────────────────────────────────────────────
