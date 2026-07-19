@@ -13,13 +13,25 @@
 //	GET /v1/deploy/logout   — clear the session cookie
 //
 // WHAT IT MINTS — NOT A SECOND SESSION MECHANISM. The callback stores the IAM
-// access-token JWT in the `hanzo_iam_token` cookie: the FIRST name in cloud's
-// cookieTokenNames, which SanitizeIdentity already reads, independently verifies
-// (signature/issuer/audience/expiry against the IAM JWKS) and turns into the same
-// principal a Bearer would. So this adds exactly one thing — a way to PUT the
-// token in the browser for this host. The gate, the validation, and the SuperAdmin
-// predicate are untouched; a forged cookie is still just an invalid JWT, and a
-// forged X-User-IsAdmin header is still stripped on ingress.
+// access-token JWT in the `__Host-hanzo_iam_token` cookie: the FIRST name in
+// cloud's cookieTokenNames, which SanitizeIdentity already reads, independently
+// verifies (signature/issuer/audience/expiry against the IAM JWKS) and turns into
+// the same principal a Bearer would. So this adds exactly one thing — a way to PUT
+// the token in the browser for this host. The gate, the validation, and the
+// SuperAdmin predicate are untouched; a forged cookie is still just an invalid JWT,
+// and a forged X-User-IsAdmin header is still stripped on ingress.
+//
+// MINT ONLY WHAT THIS DEPLOYMENT WILL ACCEPT. The callback runs the exchanged token
+// through cloud's OWN validator (cloud.NewTokenValidator — the same JWKS, issuer set
+// and audience allowlist the boundary uses) BEFORE writing the cookie, and makes the
+// admin-org decision on those VERIFIED claims. This is not defence in depth against
+// IAM; it is the thing that makes a misconfiguration fail FAST and LOUD. The audience
+// allowlist is env-overridable (jwtAudiencesFromEnv REPLACES the baked default), so a
+// deployment whose CLOUD_JWT_AUDIENCES / GATEWAY_ALLOWED_AUDIENCES omits this
+// console's client_id would otherwise mint a cookie the boundary refuses on the very
+// next request — 403 → document-bounce to sign-in → IAM session still live → instant
+// code → mint → 403, looping until the browser gives up. Validating here turns that
+// infinite loop into one clear error naming the real reason.
 //
 // PUBLIC CLIENT, PKCE. The deploy plane holds no client secret: it drives IAM's
 // authorization-code flow with PKCE S256 (RFC 7636), which IAM accepts with an
@@ -64,19 +76,27 @@ const (
 	// sessionCookie is cloud's EXISTING session cookie name — cookieTokenNames[0]
 	// in middleware_identity.go. Writing it here is what makes SanitizeIdentity
 	// resolve a principal on the next request. Do not invent a second name.
-	sessionCookie = "hanzo_iam_token"
+	//
+	// The __Host- prefix is a browser-enforced invariant, not decoration: a cookie
+	// so named may only be set Secure, Path=/ and with NO Domain, so a sibling
+	// *.hanzo.ai host cannot set a Domain=.hanzo.ai cookie of the same name to
+	// shadow this console's session.
+	sessionCookie = "__Host-hanzo_iam_token"
 
 	// flowCookie carries the one in-flight OAuth round trip (state nonce, PKCE
-	// verifier, return path). It is deleted the moment the callback reads it.
-	flowCookie = "hanzo_deploy_oauth"
+	// verifier, return path). It is deleted the moment the callback reads it, and
+	// carries the same __Host- guarantee — a shadowed flow cookie would be a way
+	// to feed this console someone else's state nonce.
+	flowCookie = "__Host-hanzo_deploy_oauth"
 
 	// flowTTL bounds how long an unfinished sign-in stays resumable.
 	flowTTL = 10 * time.Minute
 
-	// sessionFallbackTTL is the session cookie's lifetime when the token carries
-	// no readable exp. The cookie outliving the token is harmless (the token is
-	// re-validated on every request) but pointless, so keep it short.
-	sessionFallbackTTL = 8 * time.Hour
+	// sessionMaxTTL caps the session cookie regardless of what the token claims.
+	// An `exp` far in the future must not become a decade-long cookie; the token is
+	// re-validated on every request either way, so a shorter cookie costs only a
+	// re-sign-in.
+	sessionMaxTTL = 24 * time.Hour
 
 	// defaultClientID is the IAM application whose ORGANIZATION is the admin org,
 	// so a sign-in through it resolves users in `admin` — the only org whose
@@ -93,21 +113,29 @@ type oauth struct {
 	clientID     string // IAM application client_id (organization == adminOrg)
 	clientSecret string // optional; empty ⟹ public client on PKCE alone
 	adminOrg     string // the reserved org whose members are SuperAdmins
-	publicURL    string // this plane's PUBLIC origin, when the request Host is internal
+	publicURL    string // REQUIRED public origin of this console; "" disables sign-in
 	http         *http.Client
+
+	// verify is cloud's own token validator (NewTokenValidator(issuer).Validate).
+	// It is a seam so a test can drive the round trip without a live JWKS; in the
+	// binary there is exactly one implementation, and a nil verify fails closed.
+	verify func(raw string) (cloud.VerifiedIdentity, error)
 }
 
 // newOAuth resolves the sign-in configuration from deps + env. The issuer comes
 // from the SAME value the identity boundary validates tokens against
-// (deps.IAMIssuer), so a token this flow mints is a token cloud accepts.
+// (deps.IAMIssuer), and the verifier is built from that issuer, so a token this
+// flow accepts is by construction a token cloud accepts.
 func newOAuth(deps cloud.Deps) oauth {
+	issuer := strings.TrimRight(firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"), "/")
 	return oauth{
-		issuer:       strings.TrimRight(firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"), "/"),
+		issuer:       issuer,
 		clientID:     firstNonEmpty(os.Getenv("DEPLOY_IAM_CLIENT_ID"), defaultClientID),
 		clientSecret: os.Getenv("DEPLOY_IAM_CLIENT_SECRET"),
 		adminOrg:     firstNonEmpty(os.Getenv("IAM_ADMIN_ORG"), "admin"),
 		publicURL:    strings.TrimRight(firstNonEmpty(os.Getenv("DEPLOY_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 		http:         &http.Client{Timeout: 15 * time.Second},
+		verify:       cloud.NewTokenValidator(issuer).Validate,
 	}
 }
 
@@ -115,28 +143,24 @@ func newOAuth(deps cloud.Deps) oauth {
 // authorize/token/userinfo under /v1/iam — never at the root, never under /api/.
 func (o oauth) oauthBase() string { return o.issuer + "/v1/iam" }
 
-// callbackOrigin is the origin the redirect_uri is built from. It MUST produce the
-// byte-identical string in login (authorize) and callback (token exchange) — IAM
-// compares them. Behind the gateway the request Host is the internal cluster host,
-// which IAM's redirect allowlist rejects, so a configured public origin wins.
-func (o oauth) callbackOrigin(c *zip.Ctx) string {
-	if o.publicURL != "" {
-		return o.publicURL
+// redirectURI is the OAuth redirect_uri, built from CONFIGURATION ONLY. It must be
+// the byte-identical string in login (authorize) and callback (token exchange) —
+// IAM compares them — and it must match a URI registered on the application.
+//
+// It is deliberately NOT derived from the request. Host and X-Forwarded-Proto are
+// caller-controlled: behind the gateway Host is the internal cluster host (which
+// IAM's allowlist rejects outright), and off-gateway a caller can set either freely.
+// Deriving an OAuth redirect from attacker-controlled input is only ever saved by
+// the registry's exact-match check — a second lock covering for a broken first one.
+// So the public origin is required, and with none configured sign-in fails CLOSED
+// with an error naming the knob, rather than guessing an origin from a header.
+func (o oauth) redirectURI() (string, error) {
+	if o.publicURL == "" {
+		return "", fmt.Errorf("sign-in is not configured: set DEPLOY_PUBLIC_URL (or PUBLIC_ORIGIN) " +
+			"to this console's public origin, e.g. https://cd.hanzo.ai")
 	}
-	host := strings.TrimSpace(c.Fiber().Host())
-	if host == "" {
-		host = "localhost"
-	}
-	scheme := "https"
-	if proto := c.Header("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	} else if strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "127.0.0.1") {
-		scheme = "http"
-	}
-	return scheme + "://" + host
+	return o.publicURL + callbackPath, nil
 }
-
-func (o oauth) redirectURI(c *zip.Ctx) string { return o.callbackOrigin(c) + callbackPath }
 
 // ── the round trip ───────────────────────────────────────────────────────────
 
@@ -153,6 +177,11 @@ type flow struct {
 // login starts the round trip: mint a nonce + PKCE verifier, remember them in the
 // flow cookie, and send the browser to IAM's authorize endpoint.
 func login(s *cloud.Service[state], c *zip.Ctx) error {
+	redirect, err := s.State.oauth.redirectURI()
+	if err != nil {
+		s.Log.Error("deploy sign-in unavailable", "err", err)
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", err)
+	}
 	nonce, err := randomToken()
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "login: %v", err)
@@ -171,7 +200,7 @@ func login(s *cloud.Service[state], c *zip.Ctx) error {
 	o := s.State.oauth
 	q := url.Values{
 		"client_id":             {o.clientID},
-		"redirect_uri":          {o.redirectURI(c)},
+		"redirect_uri":          {redirect},
 		"response_type":         {"code"},
 		"scope":                 {"openid profile email"},
 		"state":                 {nonce},
@@ -191,8 +220,13 @@ func login(s *cloud.Service[state], c *zip.Ctx) error {
 // they lack the role instead of being handed a session that silently 403s
 // everything, and so no cookie is ever minted for a principal the plane will refuse.
 func callback(s *cloud.Service[state], c *zip.Ctx) error {
+	redirect, cfgErr := s.State.oauth.redirectURI()
 	raw := c.Fiber().Cookies(flowCookie)
 	clearCookie(c, flowCookie) // single use: consumed whether or not it validates
+	if cfgErr != nil {
+		s.Log.Error("deploy sign-in unavailable", "err", cfgErr)
+		return zip.Errorf(http.StatusServiceUnavailable, "%v", cfgErr)
+	}
 	f, err := decodeFlow(raw)
 	if err != nil {
 		return zip.ErrBadRequest("no sign-in is in progress; start at " + loginPath)
@@ -210,28 +244,58 @@ func callback(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("missing authorization code")
 	}
 
-	access, err := s.State.oauth.exchange(c.Context(), code, s.State.oauth.redirectURI(c), f.Verifier)
+	access, err := s.State.oauth.exchange(c.Context(), code, redirect, f.Verifier)
 	if err != nil {
 		s.Log.Error("deploy sign-in code exchange failed", "err", err)
 		return zip.ErrUnauthorized("sign-in could not be completed")
 	}
-	owner, user := tokenIdentity(access)
-	if owner != s.State.oauth.adminOrg {
-		s.Log.Warn("deploy sign-in refused: not a SuperAdmin", "user", user, "org", owner)
+
+	// Verify the token the way THIS deployment's identity boundary will, before
+	// handing it to a browser. A token that fails here would be refused on the very
+	// next request, so minting a cookie for it would produce a sign-in loop rather
+	// than a session — fail now, with the real reason.
+	if s.State.oauth.verify == nil {
+		s.Log.Error("deploy sign-in has no token validator configured")
+		return zip.Errorf(http.StatusServiceUnavailable, "sign-in is not configured: no identity validator")
+	}
+	id, err := s.State.oauth.verify(access)
+	if err != nil {
+		s.Log.Error("deploy sign-in token failed validation", "err", err,
+			"issuer", s.State.oauth.issuer, "client", s.State.oauth.clientID)
+		return zip.ErrUnauthorized("the sign-in token was refused by this deployment's identity boundary (" +
+			err.Error() + "); check that " + s.State.oauth.clientID +
+			" is in the JWT audience allowlist (CLOUD_JWT_AUDIENCES / GATEWAY_ALLOWED_AUDIENCES) " +
+			"and that the issuer matches")
+	}
+	// SuperAdmin ⟺ the VERIFIED owner claim IS the reserved admin org. Not the
+	// `isAdmin` bit, which only says "admin of my own org" — conflating the two
+	// would be a privilege escalation.
+	if id.Owner != s.State.oauth.adminOrg {
+		s.Log.Warn("deploy sign-in refused: not a SuperAdmin", "user", id.User, "org", id.Owner)
 		return zip.ErrForbidden("SuperAdmin required: this console is limited to members of the " +
 			s.State.oauth.adminOrg + " organization")
 	}
 
-	setCookie(c, sessionCookie, access, sessionMaxAge(access))
-	s.Log.Info("deploy sign-in", "user", user, "org", owner)
+	maxAge := sessionMaxAge(id.Expiry)
+	if maxAge <= 0 {
+		return zip.ErrUnauthorized("the sign-in token has already expired")
+	}
+	setCookie(c, sessionCookie, access, maxAge)
+	s.Log.Info("deploy sign-in", "user", id.User, "org", id.Owner, "ttl", maxAge)
 	return c.Redirect(http.StatusFound, f.Return)
 }
 
 // logout clears the session cookie for this host. IAM's own session is untouched —
-// this ends the cd.hanzo.ai session only.
+// this ends the console session only.
+//
+// It is a POST because it CHANGES STATE. As a GET it was reachable by a cross-site
+// top-level navigation (an <img> or a link on any page), which a SameSite=Lax cookie
+// still rides, so any site could sign a SuperAdmin out at will. A nuisance rather
+// than a compromise, but a state-changing GET is a bug regardless; POST is not
+// carried cross-site by a Lax cookie, so the class is closed.
 func logout(s *cloud.Service[state], c *zip.Ctx) error {
 	clearCookie(c, sessionCookie)
-	return c.Redirect(http.StatusFound, "/")
+	return c.JSON(http.StatusOK, map[string]any{"loggedIn": false, "loginUrl": loginPath})
 }
 
 // exchange redeems the authorization code at IAM's token endpoint with the PKCE
@@ -373,54 +437,28 @@ func decodeFlow(raw string) (flow, error) {
 	return f, nil
 }
 
-// tokenIdentity reads the `owner` (org) and `name` (username) claims from a JWT
-// WITHOUT verifying it. That is sound here and nowhere else: the token came back
-// over TLS from IAM's own token endpoint in a server-to-server call, so its
-// authenticity is established by transport, and nothing is authorized on the basis
-// of what this returns — SanitizeIdentity independently verifies signature, issuer,
-// audience and expiry on every later request, and guard() gates on THAT. These
-// claims only decide whether it is worth minting a cookie at all, and what to log.
-func tokenIdentity(access string) (owner, user string) {
-	parts := strings.Split(access, ".")
-	if len(parts) != 3 {
-		return "", ""
+// sessionMaxAge is the session cookie's lifetime, derived from the token's VERIFIED
+// expiry so the cookie dies with the credential it carries. It is bounded at both
+// ends and never guesses:
+//
+//   - already expired (or no expiry proven) → 0, and the caller refuses the sign-in.
+//     There is no "fall back to 8 hours" — a fallback for an expired token mints a
+//     cookie that cannot work, which is precisely the mint-then-refuse loop this
+//     whole path exists to prevent.
+//   - absurdly far future → clamped to sessionMaxTTL, so a mis-issued exp cannot
+//     become a decade-long cookie.
+func sessionMaxAge(expiry time.Time) int {
+	if expiry.IsZero() {
+		return 0
 	}
-	blob, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", ""
+	remaining := time.Until(expiry)
+	if remaining <= 0 {
+		return 0
 	}
-	var claims struct {
-		Owner string `json:"owner"`
-		Name  string `json:"name"`
-		Sub   string `json:"sub"`
+	if remaining > sessionMaxTTL {
+		remaining = sessionMaxTTL
 	}
-	if err := json.Unmarshal(blob, &claims); err != nil {
-		return "", ""
-	}
-	return claims.Owner, firstNonEmpty(claims.Name, claims.Sub)
-}
-
-// sessionMaxAge is the session cookie's lifetime: the token's own remaining life,
-// so the cookie dies with the credential it carries.
-func sessionMaxAge(access string) int {
-	parts := strings.Split(access, ".")
-	if len(parts) != 3 {
-		return int(sessionFallbackTTL.Seconds())
-	}
-	blob, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return int(sessionFallbackTTL.Seconds())
-	}
-	var claims struct {
-		Exp int64 `json:"exp"`
-	}
-	if err := json.Unmarshal(blob, &claims); err != nil || claims.Exp == 0 {
-		return int(sessionFallbackTTL.Seconds())
-	}
-	if secs := int(time.Until(time.Unix(claims.Exp, 0)).Seconds()); secs > 0 {
-		return secs
-	}
-	return int(sessionFallbackTTL.Seconds())
+	return int(remaining.Seconds())
 }
 
 // ── cookies ──────────────────────────────────────────────────────────────────
