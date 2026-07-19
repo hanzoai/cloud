@@ -46,32 +46,39 @@ func newTestClient(t *testing.T) *Client {
 }
 
 func TestEnvFallbackAndDefault(t *testing.T) {
-	// No engine/store configured -> env fallback, then literal default.
+	// No engine/store configured. Runtime flags carry no Env, so they resolve to
+	// their literal default and an env var must NOT move them — that is what makes
+	// /v1/flags the single source of truth, flippable live without a redeploy.
+	// Boot-time ReadOnly rows keep Env, because env IS their boot mechanism.
 	prev := mounted
 	mounted = &Client{} // not configured
 	t.Cleanup(func() { mounted = prev })
 
-	// waitlist_open default is "true" (no env set).
+	// waitlist_open default is "true".
 	t.Setenv("WAITLIST_OPEN", "")
 	if !Bool("waitlist_open") {
 		t.Fatalf("waitlist_open default should be true")
 	}
-	// env override beats the literal default.
+	// A runtime flag ignores env: the default still wins.
 	t.Setenv("WAITLIST_OPEN", "false")
-	if Bool("waitlist_open") {
-		t.Fatalf("waitlist_open env=false should win")
+	if !Bool("waitlist_open") {
+		t.Fatalf("waitlist_open is a runtime flag: env must not override its default")
 	}
 	// int default.
 	if Int("waitlist_access_capacity") != 0 {
 		t.Fatalf("capacity default should be 0")
 	}
 	t.Setenv("WAITLIST_ACCESS_CAPACITY", "250")
-	if Int("waitlist_access_capacity") != 250 {
-		t.Fatalf("capacity env should be 250, got %d", Int("waitlist_access_capacity"))
+	if Int("waitlist_access_capacity") != 0 {
+		t.Fatalf("waitlist_access_capacity is a runtime flag: env must not override its default")
 	}
-	// network id read-only default.
+	// A boot-time ReadOnly row still reads env, and falls back to its default.
 	if Int("network_id_localnet") != 1337 {
 		t.Fatalf("localnet id default should be 1337")
+	}
+	t.Setenv("LUX_NETWORK_ID_LOCALNET", "1338")
+	if Int("network_id_localnet") != 1338 {
+		t.Fatalf("network_id_localnet is boot-time: env must win, got %d", Int("network_id_localnet"))
 	}
 	// unknown key is safe.
 	if Bool("nope") || Int("nope") != 0 || String("nope") != "" {
