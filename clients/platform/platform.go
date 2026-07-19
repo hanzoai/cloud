@@ -386,10 +386,20 @@ func listProjects(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	rows, err := s.State.projects.List(c.Context(), org)
 	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
+		// This list is the console dashboard's first authenticated read. A
+		// co-resident IAM store that is not yet initialized (the iamStore guard's
+		// typed 503) — or any transient store failure — must degrade to an empty
+		// project set, never a 500 that breaks dashboard init: a new org genuinely
+		// has zero projects. The real cause is surfaced to operators, not swallowed;
+		// written in-band (nil returned) so no outer error filter can reflatten it.
+		s.Log.Warn("platform: project store unavailable; serving empty project list", "org", org, "err", err)
+		return c.JSON(http.StatusOK, []projectView{})
 	}
 	out := make([]projectView, 0, len(rows))
 	for _, p := range rows {
+		if p == nil {
+			continue // never nil-deref a stray nil row into a 500
+		}
 		apps, _ := s.State.store.ListApplications(c.Context(), org, p.Name)
 		out = append(out, toProjectView(p, len(apps)))
 	}
