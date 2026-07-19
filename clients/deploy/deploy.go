@@ -156,7 +156,10 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// See login.go.
 	app.Get(loginPath, cloud.Handle(s, login))
 	app.Get(callbackPath, cloud.Handle(s, callback))
-	app.Get(logoutPath, cloud.Handle(s, logout))
+	// POST, not GET: signing out changes state, and a state-changing GET is
+	// reachable by a cross-site top-level navigation that a SameSite=Lax cookie
+	// still rides. See logout in login.go.
+	app.Post(logoutPath, cloud.Handle(s, logout))
 	// Engine (write) reconcile — the embedded gitops-engine that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)
