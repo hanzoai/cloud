@@ -42,7 +42,14 @@ const dashPrefix = "/v1/deploy"
 func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	// Bootstrap (the SPA awaits settings + userinfo before first render).
 	app.Get(dashPrefix+"/settings", guard(s, cloud.Handle(s, dashSettings)))
-	app.Get(dashPrefix+"/session/userinfo", guard(s, cloud.Handle(s, dashUserInfo)))
+	// userinfo is the ONE deliberately PUBLIC bootstrap route: it is how the SPA
+	// asks "am I signed in?", and a 403 to that question is unanswerable — the SPA
+	// is an XHR client, so the document bounce in guard() never fires for it and it
+	// dead-ends with no way to reach sign-in. Anonymous callers get
+	// {loggedIn:false} and the sign-in URL; nothing else. It discloses no identity,
+	// no cluster state, and no configuration, and it is NOT a gate: every route
+	// that returns fleet data or mutates a CR stays guard()ed.
+	app.Get(dashPrefix+"/session/userinfo", cloud.Handle(s, dashUserInfo))
 	app.Get(dashPrefix+"/version", guard(s, cloud.Handle(s, dashVersion)))
 	app.Get(dashPrefix+"/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
 
@@ -79,17 +86,36 @@ func dashSettings(s *cloud.Service[state], c *zip.Ctx) error {
 	})
 }
 
+// dashUserInfo answers "is this browser signed in, and if not where does it sign
+// in?" — the SPA's bootstrap question, and the only route on this plane that
+// answers for an anonymous caller.
+//
+// The anonymous branch carries loggedIn:false and a URL, and NOTHING else: no
+// username, no org, no groups, no issuer, no hint about who the caller might be or
+// what exists in the cluster. Answering it costs nothing (the caller already knows
+// whether it holds a cookie) and withholding it costs the whole sign-in journey.
+//
+// The predicate is c.IsAdmin() — the SAME SuperAdmin fact guard() gates on, minted
+// by SanitizeIdentity from a validated principal whose org is the reserved admin
+// org. So a validated-but-not-SuperAdmin caller is reported as NOT logged in here,
+// which is the truth as this console defines it: they cannot use it.
 func dashUserInfo(s *cloud.Service[state], c *zip.Ctx) error {
-	// IAM authenticated the request at the edge; report the principal.
+	if !c.IsAdmin() {
+		return c.JSON(http.StatusOK, map[string]any{
+			"loggedIn": false,
+			"loginUrl": loginPath,
+		})
+	}
 	user := c.User()
 	if user == "" {
 		user = "admin"
 	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"loggedIn": true,
-		"username": user,
-		"iss":      "argocd", // keep == argocd so the UI never triggers an SSO redirect
-		"groups":   []string{},
+		"loggedIn":  true,
+		"username":  user,
+		"iss":       "argocd", // keep == argocd so the UI never triggers an SSO redirect
+		"groups":    []string{},
+		"logoutUrl": logoutPath,
 	})
 }
 
