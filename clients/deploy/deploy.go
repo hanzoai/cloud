@@ -18,12 +18,15 @@
 //	                                      (the operator reconciles the rollout).
 //	POST /v1/deploy/{name}/sync         — request an operator reconcile now.
 //
-// SECURITY — every route is SUPERADMIN ONLY, fail-closed, on the SAME predicate
-// the rest of cloud uses (c.IsAdmin()): the plane reads and mutates SYSTEM Service
-// CRs across the whole fleet, so a tenant must never reach it. Secret objects are
-// never surfaced (no node, no manifest) so the tree can never leak materialized
-// env. The user-facing per-org PaaS is /v1/platform; this is the platform-operator
-// console the admin dashboard consumes.
+// SECURITY — the projection READS are TENANT-SCOPED and the WRITES stay SuperAdmin-
+// only, all fail-closed on the SAME identity boundary the rest of cloud trusts
+// (resolveScope, scope.go — validated principal + injective provisioning.SanitizeOrg
+// + the c.IsAdmin() SuperAdmin predicate): a SuperAdmin sees/mutates the whole fleet,
+// a validated org member sees ONLY its own org's apps (hanzo.ai/org label), and the
+// reconcile writes (sync/rollback) remain SuperAdmin-only. Secret objects are never
+// surfaced (no node, no manifest) so the tree can never leak materialized env. The
+// user-facing per-org PaaS is /v1/platform; this is the platform-operator console the
+// admin dashboard consumes, now also serving a read-only per-org reflection.
 //
 // GitOps note (the follow-on seam): today the CR is the desired-state source and a
 // rollback/rollout PATCHES it directly (P1's RegisterServiceReleaser), so deploys
@@ -39,7 +42,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 
 	"github.com/hanzoai/cloud"
@@ -181,11 +183,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
-			if wantsDocument(c.Method(), c.Header("Sec-Fetch-Dest"), c.Header("Sec-Fetch-Mode"),
-				c.Header("Accept"), c.Header("X-Requested-With")) {
-				return c.Redirect(http.StatusFound, loginPath+"?returnTo="+url.QueryEscape(currentPath(c)))
-			}
-			return zip.ErrForbidden("SuperAdmin required")
+			return refuse(c) // the ONE fail-closed refusal (redirect a navigation, 403 an API call)
 		}
 		return h(c)
 	}
