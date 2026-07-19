@@ -129,14 +129,18 @@ func newDeployCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 	var environment string
 	cmd := &cobra.Command{
 		Use:   "deploy <app>",
-		Short: "Redeploy an app (rolling restart, zero-downtime)",
+		Short: "Redeploy an app (rolling restart, zero-downtime) — requires --env",
 		Long: "Drive a platform redeploy: a rolling restart of the app's k8s Deployment\n" +
 			"(re-pulls the declared image, recreates pods, zero downtime). The app is the\n" +
-			"operator App CR name; the org comes from your IAM identity (org-scoped). Use\n" +
-			"--env to target test/dev (default: production). This is the canonical\n" +
-			"PaaS-driven deploy — a TAG change is still a git commit.",
+			"operator App CR name; the org comes from your IAM identity. --env is REQUIRED\n" +
+			"(main|test|dev) — deploy never silently targets production. Restarting a shared\n" +
+			"platform service is a platform-operator action, so this needs a superadmin\n" +
+			"identity. A TAG change is still a git commit — this restarts what is declared.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(environment) == "" {
+				return fmt.Errorf("--env is required (main|test|dev) — deploy will not default to production")
+			}
 			e := envOf()
 			res, err := e.platform(gf).Redeploy(cmd.Context(), args[0], environment)
 			if err != nil {
@@ -148,7 +152,7 @@ func newDeployCmd(envOf func() *Env, gf *globalFlags) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&environment, "env", "", "lifecycle env: main|test|dev (default production)")
+	cmd.Flags().StringVar(&environment, "env", "", "lifecycle env: main|test|dev (REQUIRED)")
 	return cmd
 }
 
