@@ -25,6 +25,7 @@ package cloud
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,6 +82,23 @@ type scopeRateLimiter struct {
 }
 
 func (rl *scopeRateLimiter) handler(c *zip.Ctx) error {
+	// Never gate the co-resident commerce surface — it is this limiter's OWN
+	// config source, not metered user traffic. rulesFor reads the scope rules via
+	// GET /v1/billing/spend-alerts, dispatched in-process over the co-resident
+	// commerce handler (commerceinproc), which re-runs the WHOLE app. If this
+	// handler gated that path, the rules fetch would re-enter here, re-fetch (the
+	// cache is only filled AFTER the fetch returns, so it is still cold), and
+	// re-enter again — an unbounded in-process self-dispatch that overflowed the
+	// writer's goroutine stack and piled up setRequestCancel goroutines. The
+	// billing/commerce surfaces are internal S2S plumbing; the per-IP pre-auth
+	// limiters and commerce's own gates still apply, so exempting them here removes
+	// the self-reference without loosening any user-facing ceiling.
+	if p := c.Path(); strings.HasPrefix(p, "/v1/billing/") ||
+		strings.HasPrefix(p, "/v1/commerce/") ||
+		strings.HasPrefix(p, "/_/commerce/") {
+		return c.Next()
+	}
+
 	// Only an authenticated org is scope-rate-limited. Without a validated
 	// principal there is no org to key on; anonymous abuse is handled by the
 	// per-IP pre-auth limiters, and priced paths are refused by each subsystem's
