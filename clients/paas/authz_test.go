@@ -202,7 +202,7 @@ func TestGetApp_OrgAdmin_200(t *testing.T) {
 	}
 }
 
-// ── deploy: rolling restart, org-confined ────────────────────────────────────
+// ── deploy: rolling restart — SUPERADMIN-only, explicit env ──────────────────
 
 // restartedAt reads the pod-template restart annotation off the live Deployment in
 // the fake, "" when absent.
@@ -216,16 +216,40 @@ func restartedAt(t *testing.T, s *cloud.Service[state], ns, name string) string 
 	return v
 }
 
-// An OrgAdmin rolling-restarts its own app: 202 + the Deployment carries a fresh
-// restartedAt annotation (the kubectl rollout restart mechanism).
-func TestDeploy_OrgAdmin_RollingRestart(t *testing.T) {
+// RED H1 regression: a brand-org ("hanzo") OrgAdmin — who READS the platform board
+// (guard) — is REFUSED the mutating restart (operatorGuard) with 403, and the
+// Deployment is UNTOUCHED. Restarting a shared platform service is a superadmin
+// (platform-operator) action, not a customer-org-admin one. This is the DoS-lever
+// closed: no hanzo-org-admin JWT can loop-restart prod iam/kms/gateway.
+func TestDeploy_OrgAdmin_403_Platform(t *testing.T) {
+	app, s := paasApp(t, fleet()...)
+	code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "z-uuid", "hanzo", true, false)
+	if code != http.StatusForbidden {
+		t.Fatalf("hanzo ORG-admin (not superadmin) deploy iam: want 403, got %d", code)
+	}
+	if got := restartedAt(t, s, "hanzo", "iam"); got != "" {
+		t.Fatalf("a refused deploy must not mutate the Deployment; got restart stamp %q", got)
+	}
+}
+
+// A plain member is refused the mutate too (necessary-but-not-sufficient login).
+func TestDeploy_NonAdmin_403(t *testing.T) {
+	app, _ := paasApp(t, fleet()...)
+	if code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "u", "hanzo", false, false); code != http.StatusForbidden {
+		t.Fatalf("plain member deploy: want 403, got %d", code)
+	}
+}
+
+// A SUPERADMIN rolling-restarts a platform service: 202 + the Deployment carries a
+// fresh restartedAt annotation (the kubectl rollout restart mechanism).
+func TestDeploy_SuperAdmin_RollingRestart(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
 	if got := restartedAt(t, s, "hanzo", "iam"); got != "" {
 		t.Fatalf("precondition: iam should have no restart stamp, got %q", got)
 	}
-	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy", "z-uuid", "hanzo", true, false)
+	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy?env=main", "root", "admin", false, true)
 	if code != http.StatusAccepted {
-		t.Fatalf("hanzo admin deploy iam: want 202, got %d (%s)", code, body)
+		t.Fatalf("superadmin deploy iam: want 202, got %d (%s)", code, body)
 	}
 	var resp struct {
 		OK          bool   `json:"ok"`
@@ -244,24 +268,22 @@ func TestDeploy_OrgAdmin_RollingRestart(t *testing.T) {
 	}
 }
 
-// A foreign OrgAdmin cannot restart the platform's app — 404, and the Deployment is
-// UNTOUCHED (no restart stamp). This is the mutating-path confinement.
-func TestDeploy_ForeignOrgAdmin_404_NoMutation(t *testing.T) {
+// RED L1: a deploy with NO ?env is refused 400 — it never silently targets prod.
+func TestDeploy_RequiresExplicitEnv(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
-	code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy", "acme-admin", "acme", true, false)
-	if code != http.StatusNotFound {
-		t.Fatalf("acme admin restarting hanzo/iam: want 404, got %d", code)
+	code, _ := doAs(t, app, http.MethodPost, "/v1/paas/apps/iam/deploy", "root", "admin", false, true)
+	if code != http.StatusBadRequest {
+		t.Fatalf("deploy with no env: want 400, got %d", code)
 	}
 	if got := restartedAt(t, s, "hanzo", "iam"); got != "" {
-		t.Fatalf("a refused deploy must not mutate the Deployment; got restart stamp %q", got)
+		t.Fatalf("a rejected (no-env) deploy must not mutate; got %q", got)
 	}
 }
 
-// ?env selects the namespace within the caller's authorized set: an OrgAdmin can
-// restart the test-env app by naming it, and prod is untouched.
-func TestDeploy_OrgAdmin_EnvSelectsNamespace(t *testing.T) {
+// ?env selects the namespace: a superadmin restarts the test-env app by naming it.
+func TestDeploy_SuperAdmin_EnvSelectsNamespace(t *testing.T) {
 	app, s := paasApp(t, fleet()...)
-	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/chat/deploy?env=test", "z-uuid", "hanzo", true, false)
+	code, body := doAs(t, app, http.MethodPost, "/v1/paas/apps/chat/deploy?env=test", "root", "admin", false, true)
 	if code != http.StatusAccepted {
 		t.Fatalf("deploy chat @test: want 202, got %d (%s)", code, body)
 	}
