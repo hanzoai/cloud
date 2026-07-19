@@ -21,7 +21,7 @@ images:
 
 test:
   - name: native-flags
-    # The flags evaluator staticlib clients/featureflags links under CGO=1.
+    # The flags evaluator staticlib clients/flags links under CGO=1.
     run: |
       set -e
       if ! command -v cargo >/dev/null 2>&1; then
@@ -56,7 +56,7 @@ test:
         ./clients/catalogsync/ \
         ./clients/bots/ \
         ./clients/admin/finance/ \
-        ./clients/featureflags/ \
+        ./clients/flags/ \
         ./clients/ml/
 
 kms:
