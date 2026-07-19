@@ -287,9 +287,177 @@ func TestMaybeAgentReplyDisabledWhenNoRunner(t *testing.T) {
 	}
 }
 
+// ── hardening / anti-storm regression ──────────────────────────────────────────
+
+// countingRunner records how many times it was invoked (thread-safe) and returns a
+// fixed outcome. It is the "outbound call" probe the boot-backlog test asserts on.
+type countingRunner struct {
+	mu   sync.Mutex
+	n    int
+	out  string
+	err  error
+	gate chan struct{} // if non-nil, each call blocks on it (for concurrency tests)
+}
+
+func (c *countingRunner) run(_ context.Context, _, _, _, _ string) (string, error) {
+	c.mu.Lock()
+	c.n++
+	c.mu.Unlock()
+	if c.gate != nil {
+		<-c.gate
+	}
+	return c.out, c.err
+}
+
+func (c *countingRunner) calls() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.n
+}
+
+// TestNoReplyToBacklogAtBoot is the anti-storm invariant the writer post-mortem
+// demands: a workspace with a BACKLOG of old messages, replayed through the
+// responder right after boot, must produce ZERO outbound model calls. Only a
+// genuinely fresh (post-boot) message is ever answered. This is what prevents "a
+// replayed message backlog fans out into thousands of HTTP calls".
+func TestNoReplyToBacklogAtBoot(t *testing.T) {
+	const org, human = "maxpower", "113d4dd4-2486-40de-be2b-88d6e3e0b718"
+	bot := Bot{ID: "agent_enso", Name: "enso", Active: true}
+	srv, _, ws := rosterServer(t, org, human, "Dave", []Bot{bot})
+	botUID := botUserID(bot.ID)
+
+	cr := &countingRunner{out: "hi"}
+	srv.runAgent = cr.run
+	srv.startedAt = time.Now().UnixMilli() // boot NOW
+
+	dmID := "dm-enso"
+	putDoc(t, srv, org, ws, map[string]any{
+		"_id": dmID, "_class": clDirectMessage, "space": dmID, "members": []any{human, botUID},
+	})
+
+	// A backlog of 500 messages, each created an hour before boot (a replay/backfill).
+	old := srv.startedAt - int64(60*60*1000)
+	backlog := make([]json.RawMessage, 0, 500)
+	for i := 0; i < 500; i++ {
+		backlog = append(backlog, chatCreateRawAt(t, dmID, clDirectMessage, "hanzo:"+human, "<p>old</p>", old))
+	}
+	srv.maybeAgentReply(org, ws, backlog)
+
+	time.Sleep(150 * time.Millisecond) // give any (erroneous) goroutine a chance
+	if n := cr.calls(); n != 0 {
+		t.Fatalf("backlog replay fired %d outbound model calls, want 0 (storm risk)", n)
+	}
+
+	// A single FRESH message IS answered — the filter is precise, not a blanket off.
+	fresh := chatCreateRawAt(t, dmID, clDirectMessage, "hanzo:"+human, "<p>hello now</p>", time.Now().UnixMilli())
+	srv.maybeAgentReply(org, ws, []json.RawMessage{fresh})
+	waitFor(t, 2*time.Second, func() bool { return cr.calls() == 1 }, "a fresh post was not answered")
+}
+
+// TestConcurrencyCapBounded proves the hard concurrency cap: with the semaphore set
+// to 2, firing 8 messages to DISTINCT conversations must never run more than 2
+// turns at once — the surplus is DROPPED, not queued (no unbounded goroutine/HTTP
+// fan-out).
+func TestConcurrencyCapBounded(t *testing.T) {
+	const org, human = "acme", "11111111-1111-4111-8111-111111111111"
+	bot := Bot{ID: "agent_enso", Name: "enso", Active: true}
+	srv, _, ws := rosterServer(t, org, human, "Ada", []Bot{bot})
+	botUID := botUserID(bot.ID)
+
+	gate := make(chan struct{})
+	cr := &countingRunner{out: "ok", gate: gate}
+	srv.runAgent = cr.run
+	srv.sem = make(chan struct{}, 2) // cap = 2
+
+	// 8 distinct DMs (distinct single-flight keys) all with the bot.
+	for i := 0; i < 8; i++ {
+		dm := "dm-" + string(rune('a'+i))
+		putDoc(t, srv, org, ws, map[string]any{
+			"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},
+		})
+		srv.maybeAgentReply(org, ws, []json.RawMessage{chatCreateRaw(t, dm, clDirectMessage, "hanzo:"+human, "<p>hi</p>")})
+	}
+
+	// Exactly cap(=2) turns acquire the semaphore and block on the gate; the other 6
+	// hit the default branch and drop. Wait for the 2 to be in-flight, then confirm
+	// no third starts.
+	waitFor(t, 2*time.Second, func() bool { return cr.calls() == 2 }, "cap turns never started")
+	time.Sleep(150 * time.Millisecond)
+	if n := cr.calls(); n != 2 {
+		t.Fatalf("in-flight turns = %d, want exactly 2 (cap); surplus must drop, not queue", n)
+	}
+	close(gate) // release the 2
+}
+
+// TestSingleFlightPerConversation proves at most one in-flight answer per
+// (workspace, space, bot): a burst of 5 messages to the SAME DM collapses to ONE
+// turn while it runs; the rest are dropped.
+func TestSingleFlightPerConversation(t *testing.T) {
+	const org, human = "acme", "22222222-2222-4222-8222-222222222222"
+	bot := Bot{ID: "agent_enso", Name: "enso", Active: true}
+	srv, _, ws := rosterServer(t, org, human, "Ada", []Bot{bot})
+	botUID := botUserID(bot.ID)
+
+	gate := make(chan struct{})
+	cr := &countingRunner{out: "ok", gate: gate}
+	srv.runAgent = cr.run
+
+	dm := "dm-solo"
+	putDoc(t, srv, org, ws, map[string]any{
+		"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},
+	})
+	for i := 0; i < 5; i++ {
+		srv.maybeAgentReply(org, ws, []json.RawMessage{chatCreateRaw(t, dm, clDirectMessage, "hanzo:"+human, "<p>spam</p>")})
+	}
+	waitFor(t, 2*time.Second, func() bool { return cr.calls() == 1 }, "no turn started")
+	time.Sleep(150 * time.Millisecond)
+	if n := cr.calls(); n != 1 {
+		t.Fatalf("single-flight broke: %d concurrent turns for one conversation, want 1", n)
+	}
+	close(gate)
+}
+
+// TestCircuitBreakerBacksOff proves a persistently-failing agent is skipped after
+// breakerThreshold failures — the backoff that turns a 403 storm into a quiet
+// trickle. Driven synchronously (replyAsBot direct) for determinism.
+func TestCircuitBreakerBacksOff(t *testing.T) {
+	const org, human = "acme", "33333333-3333-4333-8333-333333333333"
+	bot := Bot{ID: "agent_enso", Name: "enso", Active: true}
+	srv, _, ws := rosterServer(t, org, human, "Ada", []Bot{bot})
+	botUID := botUserID(bot.ID)
+
+	cr := &countingRunner{err: errForced}
+	srv.runAgent = cr.run
+
+	// Each call to a DISTINCT conversation (so single-flight never collapses them),
+	// same bot. After breakerThreshold failures the circuit opens and the runner is
+	// no longer called.
+	for i := 0; i < 10; i++ {
+		dm := "dm-" + string(rune('a'+i))
+		putDoc(t, srv, org, ws, map[string]any{
+			"_id": dm, "_class": clDirectMessage, "space": dm, "members": []any{human, botUID},
+		})
+		m := chatMsg{space: dm, attachedTo: dm, attachedToClass: clDirectMessage, collection: "messages",
+			authorUID: human, message: "<p>hi</p>", createdOn: time.Now().UnixMilli()}
+		srv.replyAsBot(org, ws, m, bot) // synchronous
+	}
+	if n := cr.calls(); n != breakerThreshold {
+		t.Fatalf("runner called %d times, want %d (circuit must open after threshold)", n, breakerThreshold)
+	}
+	if !srv.breakerOpen(bot.ID) {
+		t.Fatal("circuit did not open after repeated failures")
+	}
+}
+
 // ── test helpers ───────────────────────────────────────────────────────────────
 
 const clChannel = "chunter:class:Channel"
+
+var errForced = errForcedType("forced failure")
+
+type errForcedType string
+
+func (e errForcedType) Error() string { return string(e) }
 
 func mustMarshal(t *testing.T, v any) json.RawMessage {
 	t.Helper()
@@ -309,10 +477,18 @@ func putDoc(t *testing.T, srv *transServer, org, ws string, doc map[string]any) 
 
 func chatCreateRaw(t *testing.T, space, spaceClass, author, message string) json.RawMessage {
 	t.Helper()
+	return chatCreateRawAt(t, space, spaceClass, author, message, time.Now().UnixMilli())
+}
+
+// chatCreateRawAt is chatCreateRaw with an explicit createdOn (unix millis) so a
+// test can forge a backlog message that predates the server boot.
+func chatCreateRawAt(t *testing.T, space, spaceClass, author, message string, createdOn int64) json.RawMessage {
+	t.Helper()
 	return mustMarshal(t, map[string]any{
 		"_class": clTxCreate, "objectId": newMsgID(), "objectClass": clChatMessage,
 		"objectSpace": space, "attachedTo": space, "attachedToClass": spaceClass,
 		"collection": "messages", "createdBy": author, "modifiedBy": author,
+		"createdOn": createdOn, "modifiedOn": createdOn,
 		"attributes": map[string]any{"message": message},
 	})
 }
