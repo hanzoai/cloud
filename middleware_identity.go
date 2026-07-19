@@ -67,7 +67,14 @@ func OrgHasUnsafeRune(s string) bool {
 // that httpOnly cookie, no Authorization header) resolves to no principal and
 // every org-scoped /v1 endpoint (agents/gpus/machines/platform/orgs/…) 403s
 // "X-Org-Id required". The JWT is present in the browser; this reads the right name.
-var cookieTokenNames = []string{"hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
+//
+// __Host-hanzo_iam_token is FIRST and is the name a first-party sign-in should
+// mint (clients/deploy does). The __Host- prefix is enforced by the browser: such
+// a cookie may only be set Secure, Path=/, and WITHOUT a Domain attribute, so a
+// sibling *.hanzo.ai host cannot set a Domain=.hanzo.ai cookie of the same name to
+// shadow it. The unprefixed names stay for the clients that already mint them (ai's
+// account.go, clients/team), and are read only if no un-shadowable cookie is present.
+var cookieTokenNames = []string{"__Host-hanzo_iam_token", "hanzo_iam_token", "iam_access_token", "access_token", "hanzo_token"}
 
 // authorityHeaders are the identity/authority headers the gateway mints and the
 // ONLY ones a downstream may trust. The sanitizer deletes every one on ingress
