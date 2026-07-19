@@ -46,30 +46,33 @@ func newTestClient(t *testing.T) *Client {
 }
 
 func TestEnvFallbackAndDefault(t *testing.T) {
-	// No engine/store configured -> env fallback, then literal default.
+	// No engine/store configured -> literal Default. Runtime flags (waitlist_*,
+	// public_signup, gateway_*) had their Env: fallbacks stripped in #331, so they
+	// resolve store -> Default only; their env vars no longer move them (the
+	// /v1/flags DB is the single source, flipped live). Boot-time ReadOnly rows
+	// (network_id_*) keep Env — that IS their boot mechanism.
 	prev := mounted
 	mounted = &Client{} // not configured
 	t.Cleanup(func() { mounted = prev })
 
-	// waitlist_open default is "true" (no env set).
-	t.Setenv("WAITLIST_OPEN", "")
+	// waitlist_open Default is "true".
 	if !Bool("waitlist_open") {
 		t.Fatalf("waitlist_open default should be true")
 	}
-	// env override beats the literal default.
+	// #331: WAITLIST_OPEN is no longer a gate — it must NOT flip the flag.
 	t.Setenv("WAITLIST_OPEN", "false")
-	if Bool("waitlist_open") {
-		t.Fatalf("waitlist_open env=false should win")
+	if !Bool("waitlist_open") {
+		t.Fatalf("waitlist_open must stay at its Default; the env gate was dropped in #331")
 	}
-	// int default.
+	// int Default 0, likewise env-independent post-#331.
 	if Int("waitlist_access_capacity") != 0 {
 		t.Fatalf("capacity default should be 0")
 	}
 	t.Setenv("WAITLIST_ACCESS_CAPACITY", "250")
-	if Int("waitlist_access_capacity") != 250 {
-		t.Fatalf("capacity env should be 250, got %d", Int("waitlist_access_capacity"))
+	if Int("waitlist_access_capacity") != 0 {
+		t.Fatalf("capacity must stay at Default 0; the env gate was dropped in #331, got %d", Int("waitlist_access_capacity"))
 	}
-	// network id read-only default.
+	// A boot-time ReadOnly row KEEPS its env mechanism; its Default is 1337.
 	if Int("network_id_localnet") != 1337 {
 		t.Fatalf("localnet id default should be 1337")
 	}
