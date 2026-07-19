@@ -114,6 +114,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Post("/v1/clusters/:clusterId/pools/:poolId/scale", cloud.Handle(s, scalePool))
 	app.Delete("/v1/clusters/:clusterId/pools/:poolId", cloud.Handle(s, deletePool))
 
+	// Unified /v1/k8s — the ONE Kubernetes noun (k8s.go): DOKS cluster lifecycle
+	// (list / detail+nodes / create / delete) plus the fleet-wide worker NODES,
+	// proxied to Visor. Reads are org-scoped; create/delete are admin-gated (real
+	// house-account infra spend). Static /clusters registers before its :id sibling
+	// so a cluster id never captures the literal.
+	app.Get("/v1/k8s/clusters", cloud.Handle(s, listK8sClusters))
+	app.Post("/v1/k8s/clusters", cloud.Handle(s, createK8sCluster))
+	app.Get("/v1/k8s/clusters/:id", cloud.Handle(s, getK8sCluster))
+	app.Delete("/v1/k8s/clusters/:id", cloud.Handle(s, deleteK8sCluster))
+	app.Get("/v1/k8s/nodes", cloud.Handle(s, listK8sNodes))
+
 	// Compute catalog: the global region + size lists that back the Machines/GPUs
 	// launch drawer. Namespaced under /v1/compute (visor's domain) — "sizes"/"regions"
 	// are catalog dimensions shared by machines AND gpus, not owned nouns, so they
@@ -168,7 +179,7 @@ func project(c *zip.Ctx) string { return principal.Project(c) }
 //   - LIVE DigitalOcean reseller list (GET /v1/machines → ListComputeMachines →
 //     service.ListOrgMachines): every droplet currently tagged to the org in
 //     Hanzo's house DO account, straight from the live DO API.
-//   - DOKS worker NODES (GET /v1/kubernetes-nodes → ListComputeKubernetesNodes):
+//   - DOKS worker NODES (GET /v1/k8s/nodes → ListComputeKubernetesNodes):
 //     each managed-Kubernetes node as a Machine (Id=droplet id), unioned across the
 //     house account (hanzo-org cluster tag) and BYOC providers (Provider.ClusterID)
 //     so the fleet shows cluster NODES, not just standalone droplets.
@@ -194,14 +205,14 @@ func managedMachines(s *cloud.Service[state], c *zip.Ctx, org string) []visorMac
 		s.Log.Warn("visor list-compute-machines failed; live DO machines omitted", "org", org, "err", err)
 		live = nil
 	}
-	// THIRD source: DOKS worker NODES (GET /v1/kubernetes-nodes → visor unions the
+	// THIRD source: DOKS worker NODES (GET /v1/k8s/nodes → visor unions the
 	// house-account hanzo-org-tagged clusters + BYOC Provider.ClusterID clusters).
 	// A cluster's node is a real droplet, so the world fleet should show the NODES,
 	// not just standalone droplets. A DOKS node whose droplet is ALSO in the live
 	// list dedupes by droplet id below (Machine.Id == DropletID), so it never lists
 	// twice. Independently resilient like the other two.
-	if err := s.State.cl.call(c, http.MethodGet, "/v1/kubernetes-nodes", q("owner", org), nil, &nodes); err != nil {
-		s.Log.Warn("visor kubernetes-nodes failed; DOKS nodes omitted", "org", org, "err", err)
+	if err := s.State.cl.call(c, http.MethodGet, "/v1/k8s/nodes", q("owner", org), nil, &nodes); err != nil {
+		s.Log.Warn("visor k8s nodes failed; DOKS nodes omitted", "org", org, "err", err)
 		nodes = nil
 	}
 
