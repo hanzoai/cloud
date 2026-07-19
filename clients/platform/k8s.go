@@ -97,10 +97,15 @@ var selfSubjectAccessReviewsGVR = schema.GroupVersionResource{Group: "authorizat
 // carries so the pod can pull the PRIVATE per-tenant build image
 // (ghcr.io/hanzoai/tenant-<org>/*). serviceCR REFERENCES it by name only; the
 // Secret itself is provisioned by the OPERATOR's tenant-RBAC controller (from a
-// KMS-synced source), NEVER by cloud-api. The cloud-api ServiceAccount holds no
-// `secrets` grant and issues no Secrets API call — secret provisioning is the
-// operator's job, exclusively. Until the operator has projected it the reference
-// degrades to the namespace default rather than hard-failing the deploy.
+// KMS-synced source), NEVER by cloud-api — cloud references it by name only and
+// never provisions it. (cloud's ONLY Secrets API write is the per-tenant KMS-auth
+// creds Secret in a TENANT namespace, via its per-tenant get/create/delete grant;
+// see secretsGVR.) The ISOLATED build namespace (hanzo-build) is deliberately kept
+// OFF the operator's tenant-RBAC selector (it must NOT carry hanzo.ai/managed-by=
+// platform) so that secrets grant is NEVER projected there — a build ns needs only
+// the cloud-build-launcher jobs/pods grant, no secrets (R6). Until the operator has
+// projected a tenant pull secret the reference degrades to the namespace default
+// rather than hard-failing the deploy.
 const tenantPullSecretName = "ghcr-pull"
 
 // errTooManyBuilds is returned by launchBuildJob when the caller's org already
@@ -835,13 +840,18 @@ func buildPushSecret(image string) (string, error) {
 // and defense-in-depth hardened (H2):
 //
 //   - moby/buildkit:*-rootless as uid/gid 1000, runAsNonRoot, privileged=false,
-//     allowPrivilegeEscalation=false, all capabilities dropped. The unprivileged
-//     rootless worker needs seccomp/AppArmor unconfined + --oci-worker-no-process-
-//     sandbox (it user-namespaces the build instead of relying on host privilege),
-//     which is the documented way to run buildkit with NO host-root escape surface.
+//     seccomp/AppArmor Unconfined + --oci-worker-no-process-sandbox — it
+//     user-namespaces the build instead of relying on host privilege, the
+//     documented moby/buildkit k8s rootless posture with NO host-root escape.
+//     allowPrivilegeEscalation and the default capability set are LEFT at k8s
+//     defaults on purpose: rootlesskit's setuid newuidmap/newgidmap need them
+//     (dropping ALL caps or no-new-privs breaks the sub-uid mapping — proven by
+//     an on-cluster canary). See the container securityContext below.
 //   - pushSecret is the caller-resolved PER-ORG push credential (push-<namespace>),
-//     mounted read-only as the only registry credential in the pod — never the
-//     shared 3-org credential.
+//     mounted read-only as the only registry credential in the pod. NOTE the mount
+//     is per-org but the token VALUE must be a per-org minimal-scope token for this
+//     to bound blast radius (else a hostile build reads a still-multi-org token) —
+//     an egress allowlist on the build ns shrinks the exfil surface meanwhile.
 //   - runs in the ISOLATED build namespace (k.buildNS, defaulted off the main
 //     platform namespace) with automountServiceAccountToken=false and pinned to the
 //     dedicated CI runner pool (taint + nodeSelector) — retained from before.
