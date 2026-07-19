@@ -39,6 +39,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 
 	"github.com/hanzoai/cloud"
@@ -118,17 +119,19 @@ type state struct {
 	dyn       dynamic.Interface // nil when no kubeconfig resolved (fail-closed)
 	clientset kubernetes.Interface
 	initErr   string
+	oauth     oauth // sign-in configuration (login.go)
 }
 
 // Mount wires /v1/deploy/* onto app. Every handler gates on c.IsAdmin() first.
 func Mount(app *zip.App, deps cloud.Deps) error {
-	return cloud.Mount(app, deps, "deploy", build, routes)
+	return cloud.Mount(app, deps, "deploy",
+		func(b cloud.Base) (state, error) { return build(b, newOAuth(deps)) }, routes)
 }
 
 // build resolves the in-process k8s clients (fail-closed: when no kubeconfig
 // resolves the subsystem still mounts and every endpoint 503s honestly).
-func build(b cloud.Base) (state, error) {
-	var st state
+func build(b cloud.Base, o oauth) (state, error) {
+	st := state{oauth: o}
 	dyn, cs, err := newClients()
 	if err != nil {
 		st.initErr = err.Error()
@@ -136,7 +139,8 @@ func build(b cloud.Base) (state, error) {
 	} else {
 		st.dyn, st.clientset = dyn, cs
 	}
-	b.Log.Info("deploy control plane mounted", "prefix", "/v1/deploy", "k8s", st.dyn != nil, "brand", b.Brand, "env", b.Env)
+	b.Log.Info("deploy control plane mounted", "prefix", "/v1/deploy", "k8s", st.dyn != nil,
+		"brand", b.Brand, "env", b.Env, "iam", o.issuer, "client", o.clientID, "adminOrg", o.adminOrg)
 	return st, nil
 }
 
@@ -145,6 +149,17 @@ func build(b cloud.Base) (state, error) {
 func routes(app *zip.App, s *cloud.Service[state]) {
 	// Liveness — public (probe-able without a JWT).
 	app.Get("/v1/deploy/health", cloud.Handle(s, health))
+	// Sign-in — necessarily public: these three routes ARE how a browser gets an
+	// authenticated principal for this host. They grant nothing themselves; the
+	// session they mint is an IAM JWT the identity boundary re-verifies on every
+	// later request, and a principal outside the admin org is refused a cookie.
+	// See login.go.
+	app.Get(loginPath, cloud.Handle(s, login))
+	app.Get(callbackPath, cloud.Handle(s, callback))
+	// POST, not GET: signing out changes state, and a state-changing GET is
+	// reachable by a cross-site top-level navigation that a SameSite=Lax cookie
+	// still rides. See logout in login.go.
+	app.Post(logoutPath, cloud.Handle(s, logout))
 	// Engine (write) reconcile — the embedded gitops-engine that replaces
 	// universe-crs. Gated by DEPLOY_ENGINE_ENABLED; see engine_mount.go.
 	registerEngineRoutes(app, s)
@@ -156,13 +171,35 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 // guard wraps a handler with the SuperAdmin gate (fail-closed: a non-SuperAdmin is
 // refused 403 before any cluster object is read or mutated), matching clients/paas.
+//
+// The gate itself is unchanged — c.IsAdmin() and nothing else, on the SanitizeIdentity
+// -minted header no client can forge. Only the SHAPE of the refusal is negotiated: a
+// browser NAVIGATION to a deploy URL is sent to the sign-in page (a 403 page with no
+// way to sign in is a dead end), while every API call keeps its 403. wantsDocument
+// decides, and it decides "no" unless the request positively identifies as a document
+// GET — so the API contract, and every client that depends on the 403, is untouched.
 func guard(s *cloud.Service[state], h zip.Handler) zip.Handler {
 	return func(c *zip.Ctx) error {
 		if !c.IsAdmin() {
+			if wantsDocument(c.Method(), c.Header("Sec-Fetch-Dest"), c.Header("Sec-Fetch-Mode"),
+				c.Header("Accept"), c.Header("X-Requested-With")) {
+				return c.Redirect(http.StatusFound, loginPath+"?returnTo="+url.QueryEscape(currentPath(c)))
+			}
 			return zip.ErrForbidden("SuperAdmin required")
 		}
 		return h(c)
 	}
+}
+
+// currentPath is the path+query to return to after signing in. It is run through
+// the same open-redirect guard as a caller-supplied returnTo — the value is
+// server-derived, but there is exactly ONE rule for what a return path may be.
+func currentPath(c *zip.Ctx) string {
+	p := c.Path()
+	if q := string(c.Fiber().Request().URI().QueryString()); q != "" {
+		p += "?" + q
+	}
+	return safeReturn(p)
 }
 
 // health is a REAL probe: the API server is reachable AND the App CRD is served.
