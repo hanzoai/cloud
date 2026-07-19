@@ -76,6 +76,18 @@ const (
 // would silently debit the wrong tenant.
 const headerOrg = "X-Org-Id"
 
+// capAuthorizeTimeout HARD-bounds the per-scope spend-cap check. The cap is a POLICY
+// overlay, NEVER a gate on availability: a slow, broken, or hot-looping commerce
+// authorize must fail-open (allow) FAST, never hang the completion path (the SEV1 that
+// a legacy-org GetById hot-loop caused). Short enough that a healthy in-proc call
+// (sub-50ms) is unaffected, while a stuck one is abandoned and the request proceeds.
+const capAuthorizeTimeout = 1500 * time.Millisecond
+
+// OnCapError, when set, is called (best-effort) whenever the cap check FAILS OPEN — a
+// timeout or any error on the authorize call. It lets the host log/alert on a degraded
+// cap without this leaf package taking a logger dependency. nil = no-op.
+var OnCapError func(error)
+
 // headerTest opts a service-token call into commerce's TEST ledger
 // (org.Live=false): balances and debits hit the sandbox books, not real money.
 // See commerce/middleware/accesstoken.go (c.GetHeader("X-Hanzo-Test")). Sent
@@ -327,7 +339,10 @@ func (c *Client) AuthorizeVerdict(ctx context.Context, in AuthInput) (Verdict, e
 	// Funded — layer the per-scope spend cap. Fail-open on any cap error.
 	sv, serr := c.scopeAuthorize(ctx, in)
 	if serr != nil {
-		return Verdict{Allow: true}, nil
+		if OnCapError != nil {
+			OnCapError(serr) // observe the fail-open (timeout / broken commerce); never block.
+		}
+		return Verdict{Allow: true}, nil // fail-open: a cap-check failure NEVER blocks a completion.
 	}
 	if !sv.Allow && sv.Reason == "spend_cap" {
 		return Verdict{Allow: false, Reason: "spend_cap", CapCents: sv.CapCents, SpentCents: sv.SpentCents}, nil
@@ -393,9 +408,34 @@ func (c *Client) scopeAuthorize(ctx context.Context, in AuthInput) (scopeVerdict
 	}
 	q.Set("currency", currencyOr(in.Currency))
 
-	body, err := c.get(ctx, pathLimitsAuthorize, q, c.orgFor(in.Org))
-	if err != nil {
-		return scopeVerdict{}, err
+	// HARD BOUND (SEV1 safety): the cap check must NEVER hang the completion path. Run
+	// the authorize with a strict deadline AND a select-based hard timeout that returns
+	// to the caller even if the in-proc handler goroutine is STUCK (an unresponsive
+	// handler — e.g. a hot-loop — cannot be interrupted, so ctx cancellation alone would
+	// not unblock c.get). On timeout OR any error the caller (AuthorizeVerdict) fails
+	// open and ALLOWS the request; a stuck goroutine is abandoned (a leak bounded by the
+	// upstream hot-loop fix), never a wait.
+	tctx, cancel := context.WithTimeout(ctx, capAuthorizeTimeout)
+	defer cancel()
+	type getResult struct {
+		body []byte
+		err  error
+	}
+	done := make(chan getResult, 1)
+	go func() {
+		b, e := c.get(tctx, pathLimitsAuthorize, q, c.orgFor(in.Org))
+		done <- getResult{b, e}
+	}()
+
+	var body []byte
+	select {
+	case r := <-done:
+		if r.err != nil {
+			return scopeVerdict{}, r.err
+		}
+		body = r.body
+	case <-tctx.Done():
+		return scopeVerdict{}, fmt.Errorf("metering: cap authorize exceeded %s — failing open: %w", capAuthorizeTimeout, tctx.Err())
 	}
 	var v scopeVerdict
 	if err := json.Unmarshal(body, &v); err != nil {

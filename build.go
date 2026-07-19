@@ -176,6 +176,11 @@ func buildMeteringClient(cfg *Config, log luxlog.Logger) *metering.Client {
 		log.Error("billing: invalid commerce URL, gate disabled", "err", err)
 		m, _ = metering.New(metering.Config{})
 	}
+	// Observe every cap-check fail-open (timeout / slow / broken commerce) — a cap that
+	// silently allows must never be silent. The completion still proceeds (fail-open).
+	metering.OnCapError = func(err error) {
+		log.Warn("spend-cap check failed open (allowing completion) — commerce authorize slow/unavailable", "err", err)
+	}
 	if m.Enabled() {
 		log.Info("billing gate enabled", "commerce", boolStr(inProcess, "in-process", "http:"+base), "fail_open", cfg.BillingFailOpen)
 	} else {
