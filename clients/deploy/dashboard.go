@@ -14,9 +14,15 @@
 //	GET  /v1/deploy/applications/{name}/resource-tree     → ApplicationTree
 //	POST /v1/deploy/applications/{name}/{sync,rollback}   → request App-CR reconcile
 //
-// Every route is SuperAdmin-gated (c.IsAdmin), fail-closed; the argocd UI's own
-// auth is disabled because IAM owns identity at the edge (the SPA is public
-// static assets, the data is gated). AppProject → IAM/Org (no argocd RBAC).
+// SECURITY — TENANT-SCOPED reads, SuperAdmin-only writes, fail-closed (scope.go):
+// the READ projections (applications list/detail/resource-tree, clusters, projects,
+// stream) resolve the request's scope (resolveScope) — a SuperAdmin sees the whole
+// fleet, a validated org member sees ONLY its own org's apps (hanzo.ai/org label,
+// tenant-<org> namespace), anyone else 403s. The WRITE actions (sync/rollback) and
+// the argocd bootstrap (settings/version/can-i) stay SuperAdmin-only (guard). The
+// argocd UI's own auth is disabled because IAM owns identity at the edge (the SPA is
+// public static assets, the data is scoped). AppProject → IAM/Org (no argocd RBAC):
+// projects are REFLECTED read-only from the IAM-owned (org,name) Project resource.
 package deploy
 
 import (
@@ -29,7 +35,6 @@ import (
 	"github.com/zap-proto/zip"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
@@ -55,20 +60,24 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get(dashPrefix+"/version", guard(s, cloud.Handle(s, dashVersion)))
 	app.Get(dashPrefix+"/account/can-i/*", guard(s, cloud.Handle(s, dashCanI)))
 
-	// Applications projection (read).
-	app.Get(dashPrefix+"/applications", guard(s, cloud.Handle(s, dashAppList)))
-	app.Get(dashPrefix+"/applications/:name", guard(s, cloud.Handle(s, dashApp)))
-	app.Get(dashPrefix+"/applications/:name/resource-tree", guard(s, cloud.Handle(s, dashResourceTree)))
+	// Applications projection (read). TENANT-SCOPED, not blanket-guard()ed: each handler
+	// resolves the request's scope (resolveScope) and fails closed — a SuperAdmin sees the
+	// whole fleet, a validated org member sees ONLY its own org's apps, anyone else 403s.
+	app.Get(dashPrefix+"/applications", cloud.Handle(s, dashAppList))
+	app.Get(dashPrefix+"/applications/:name", cloud.Handle(s, dashApp))
+	app.Get(dashPrefix+"/applications/:name/resource-tree", cloud.Handle(s, dashResourceTree))
 	// Applications watch (Server-Sent Events) — the live stream the applications
-	// view opens; see stream.go.
-	app.Get(dashPrefix+"/stream/applications", guard(s, cloud.Handle(s, dashStreamApps)))
+	// view opens; see stream.go. Same tenant scope as the list.
+	app.Get(dashPrefix+"/stream/applications", cloud.Handle(s, dashStreamApps))
 
 	// Destination clusters + AppProjects — the two lists the applications view
-	// resolves alongside the fleet (Destination column + project filter).
-	app.Get(dashPrefix+"/clusters", guard(s, cloud.Handle(s, dashClusters)))
-	app.Get(dashPrefix+"/projects", guard(s, cloud.Handle(s, dashProjects)))
+	// resolves alongside the fleet (Destination column + project filter). Tenant-scoped:
+	// clusters count only the caller's apps; projects reflect the caller's IAM projects.
+	app.Get(dashPrefix+"/clusters", cloud.Handle(s, dashClusters))
+	app.Get(dashPrefix+"/projects", cloud.Handle(s, dashProjects))
 
-	// Actions → App-CR reconcile ops.
+	// Actions → App-CR reconcile ops. STILL SuperAdmin-only (guard): write-back to the
+	// fleet is a follow-on; this plane's tenant surface is read-only reflection for now.
 	app.Post(dashPrefix+"/applications/:name/sync", guard(s, cloud.Handle(s, dashSync)))
 	app.Post(dashPrefix+"/applications/:name/rollback", guard(s, cloud.Handle(s, dashSync)))
 }
@@ -80,10 +89,17 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 // read from the SAME App-CR source dashAppList uses. It NEVER surfaces a cluster
 // credential (argoCluster has no config field — see projection.go).
 func dashClusters(s *cloud.Service[state], c *zip.Ctx) error {
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
-	crs, err := allAppCRs(s, c.Context())
+	// Only the caller's own apps are counted (SuperAdmin: the whole fleet). The in-cluster
+	// destination is always present (projectClusters), and no cluster credential can leak
+	// (argoCluster has no config field) — so a tenant view is still credential-free.
+	crs, err := sc.appCRs(s, c.Context())
 	if err != nil {
 		return err
 	}
@@ -95,37 +111,36 @@ func dashClusters(s *cloud.Service[state], c *zip.Ctx) error {
 // synthesizes one permissive project per distinct App-CR project name (default
 // always present). Read-only, from the same App-CR source.
 func dashProjects(s *cloud.Service[state], c *zip.Ctx) error {
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
-	if items, ok := listAppProjects(s, c.Context()); ok {
-		return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: items})
-	}
-	crs, err := allAppCRs(s, c.Context())
-	if err != nil {
-		return err
-	}
-	names := projectedProjectNames(crs)
-	items := make([]argoProject, 0, len(names))
-	for _, name := range names {
-		items = append(items, synthProject(name))
-	}
-	return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: items})
-}
-
-// allAppCRs collects every App CR across the platform namespaces — the exact
-// listAppCRs source dashAppList reads, flattened (order does not matter for the
-// cluster/project sets, which dedupe).
-func allAppCRs(s *cloud.Service[state], ctx context.Context) ([]unstructured.Unstructured, error) {
-	var out []unstructured.Unstructured
-	for _, ns := range scanOrder() {
-		crs, err := listAppCRs(s, ctx, ns)
-		if err != nil {
-			return nil, k8sErr(s, "list", err)
+	// IAM is the ONE source of truth for the (org,name) Project resource. Reflect it: a
+	// normal org sees ONLY its own organization's projects, a SuperAdmin sees every org's.
+	items := sc.iamProjects()
+	if sc.superAdmin && len(items) == 0 {
+		// Whole-fleet fallback when the embedded IAM store is unavailable/empty: preserve the
+		// pre-tenant projection — real argocd AppProject CRs if that CRD is served (that list is
+		// cluster-wide/unscoped, so it is a SuperAdmin-only path, NEVER a tenant's), else
+		// synthesize from the fleet's distinct App-CR project names. Keeps the SuperAdmin view
+		// populated even before IAM is reachable (e.g. in a unit test with no embedded store).
+		if real, served := listAppProjects(s, c.Context()); served {
+			return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: real})
 		}
-		out = append(out, crs...)
+		crs, err := sc.appCRs(s, c.Context())
+		if err != nil {
+			return err
+		}
+		for _, name := range projectedProjectNames(crs) {
+			items = append(items, synthProject(name))
+		}
 	}
-	return out, nil
+	// "default" always resolves (every projected app's spec.project falls back to it), which
+	// also holds the e2e invariant that the projects list contains 'default'.
+	return c.JSON(http.StatusOK, argoProjectList{Metadata: argoListMeta{}, Items: ensureDefault(items)})
 }
 
 // listAppProjects lists real argoproj.io/v1alpha1 AppProject CRs cluster-wide. It
@@ -217,17 +232,24 @@ func dashCanI(s *cloud.Service[state], c *zip.Ctx) error {
 // ── applications projection ──────────────────────────────────────────────────
 
 func dashAppList(s *cloud.Service[state], c *zip.Ctx) error {
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
 	list := argoAppList{APIVersion: "argoproj.io/v1alpha1", Kind: "ApplicationList", Metadata: argoListMeta{}, Items: []argoApp{}}
-	for _, ns := range scanOrder() {
+	for _, ns := range sc.namespaces() {
 		crs, err := listAppCRs(s, c.Context(), ns)
 		if err != nil {
 			return k8sErr(s, "list", err)
 		}
 		running := runningVersions(s, c.Context(), ns)
 		for i := range crs {
+			if !sc.allows(&crs[i]) {
+				continue // cross-tenant CR — never projected to this scope
+			}
 			list.Items = append(list.Items, projectApp(&crs[i], ns, running[crs[i].GetName()]))
 		}
 	}
@@ -235,6 +257,10 @@ func dashAppList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func dashApp(s *cloud.Service[state], c *zip.Ctx) error {
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
@@ -242,7 +268,8 @@ func dashApp(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must be a DNS-1123 label")
 	}
-	ns, err := resolveNamespace(s, c, name)
+	// findNamespace 404s a cross-tenant name (org A's app requested by org B) — no oracle.
+	ns, err := sc.findNamespace(s, c, name)
 	if err != nil {
 		return err
 	}
@@ -264,6 +291,10 @@ func dashApp(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func dashResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
@@ -271,7 +302,7 @@ func dashResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must be a DNS-1123 label")
 	}
-	ns, err := resolveNamespace(s, c, name)
+	ns, err := sc.findNamespace(s, c, name)
 	if err != nil {
 		return err
 	}
@@ -287,6 +318,12 @@ func dashResourceTree(s *cloud.Service[state], c *zip.Ctx) error {
 // truth; rollback-by-revision is the image-pin follow-on). Returns the projected
 // Application (the UI only checks for a non-error response).
 func dashSync(s *cloud.Service[state], c *zip.Ctx) error {
+	// Reached only through guard() (SuperAdmin-only), so the scope is always whole-fleet;
+	// resolving it keeps ONE namespace-resolution path (findNamespace) across the plane.
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
+	}
 	if err := ready(s); err != nil {
 		return err
 	}
@@ -294,7 +331,7 @@ func dashSync(s *cloud.Service[state], c *zip.Ctx) error {
 	if !appNameRE.MatchString(name) {
 		return zip.ErrBadRequest("name must be a DNS-1123 label")
 	}
-	ns, err := resolveNamespace(s, c, name)
+	ns, err := sc.findNamespace(s, c, name)
 	if err != nil {
 		return err
 	}

@@ -178,6 +178,13 @@ func projectApp(cr *unstructured.Unstructured, ns, runningTag string) argoApp {
 	if tag != "" {
 		image = repository + ":" + tag
 	}
+	// Surface the tenant label the App CR already carries so the projection can be
+	// grouped/scoped by org; env stays as before. The tenant BOUNDARY is enforced upstream
+	// in the handlers (scope.allows) — this only reflects what the CR declares.
+	labels := map[string]string{"argocd.argoproj.io/instance": native.Name, "hanzo.ai/env": native.Env}
+	if org := orgOf(cr); org != "" {
+		labels[orgLabel] = org
+	}
 	return argoApp{
 		APIVersion: "argoproj.io/v1alpha1",
 		Kind:       "Application",
@@ -186,12 +193,14 @@ func projectApp(cr *unstructured.Unstructured, ns, runningTag string) argoApp {
 			Namespace:         ns,
 			UID:               string(cr.GetUID()),
 			CreationTimestamp: cr.GetCreationTimestamp().Format("2006-01-02T15:04:05Z07:00"),
-			Labels:            map[string]string{"argocd.argoproj.io/instance": native.Name, "hanzo.ai/env": native.Env},
+			Labels:            labels,
 		},
 		Spec: argoSpec{
 			Source:      argoSource{RepoURL: deployManifestRepo, Path: "infra/k8s/operator/crs", TargetRevision: "main"},
 			Destination: argoDestination{Server: inClusterServer, Namespace: ns},
-			Project:     "default",
+			// spec.project reflects the IAM Project the CR belongs to (app.kubernetes.io/part-of),
+			// falling back to "default" when the CR carries no project label. No longer hard-coded.
+			Project: projectName(cr),
 		},
 		Status: argoStatus{
 			Sync:      argoSyncStatus{Status: argoSyncFrom(native.Sync), Revision: native.Version},

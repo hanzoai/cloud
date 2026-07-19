@@ -208,7 +208,7 @@ func TestStreamBurstEmitsAddedPerApp(t *testing.T) {
 	)
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if ok := streamAppBurst(s, context.Background(), w); !ok {
+	if ok := streamAppBurst(s, superScope(), context.Background(), w); !ok {
 		t.Fatal("streamAppBurst returned false (write failed) on a live buffer")
 	}
 	_ = w.Flush()
@@ -246,7 +246,7 @@ func TestStreamBurstEmitsAddedPerApp(t *testing.T) {
 func TestStreamBurstZeroAppsNoPanic(t *testing.T) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if ok := streamAppBurst(fakeSvc(), context.Background(), w); !ok {
+	if ok := streamAppBurst(fakeSvc(), superScope(), context.Background(), w); !ok {
 		t.Fatal("streamAppBurst on zero apps returned false, want true")
 	}
 	_ = w.Flush()
@@ -264,7 +264,7 @@ func TestStreamHonorsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		streamApps(s, ctx, bufio.NewWriter(io.Discard))
+		streamApps(s, superScope(), ctx, bufio.NewWriter(io.Discard))
 		close(done)
 	}()
 	// Let the burst + watch establish, then cancel.
@@ -287,7 +287,7 @@ func TestForwardWatchSkipsTypedNilObjectNotFatal(t *testing.T) {
 	defer cancel()
 	fw := watch.NewFake()
 	events := make(chan streamEvent, 4)
-	go forwardWatch(ctx, "hanzo", fw, events)
+	go forwardWatch(ctx, superScope(), "hanzo", fw, events)
 
 	go func() {
 		// a typed-nil object as ADDED: e.Object.(*unstructured.Unstructured) is

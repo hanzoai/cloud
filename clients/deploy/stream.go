@@ -7,9 +7,10 @@
 // projection) — then watches the App CRs and forwards ADDED/MODIFIED/DELETED as
 // they occur, holding the connection open with periodic keep-alives. Every watch +
 // goroutine it starts is bound to the request and torn down on return, so a client
-// disconnect leaks nothing. Read-only and SuperAdmin-gated by guard(); it fails
-// closed (503) when no cluster client is configured, and degrades to keep-alive
-// only (the initial state still renders) if the watch verb is not granted.
+// disconnect leaks nothing. Read-only and TENANT-SCOPED (resolveScope: SuperAdmin
+// streams the whole fleet, a validated org member only its own org's apps); it fails
+// closed (403 unauthorized, 503 when no cluster client is configured) and degrades to
+// keep-alive only (the initial state still renders) if the watch verb is not granted.
 package deploy
 
 import (
@@ -45,10 +46,18 @@ type streamResult struct {
 }
 
 // dashStreamApps is GET /v1/deploy/stream/applications — the applications watch as
-// SSE. SuperAdmin-gated by guard(); 503 when no cluster client is configured.
+// SSE. Tenant-scoped (resolveScope): a SuperAdmin streams the whole fleet, a validated
+// org member streams ONLY its own org's apps; anyone else 403s. 503 when no cluster
+// client is configured.
 func dashStreamApps(s *cloud.Service[state], c *zip.Ctx) error {
+	// readiness BEFORE the scope gate: the readiness of the cluster client is already
+	// public via /v1/deploy/health, and the direct-call fail-closed test asserts the 503.
 	if err := ready(s); err != nil {
 		return err
+	}
+	sc, ok := resolveScope(c)
+	if !ok {
+		return refuse(c)
 	}
 	// Capture the context BEFORE SendStreamWriter: its callback runs AFTER this
 	// handler returns (fasthttp body writer) and must not touch c. c.Context() is
@@ -57,7 +66,7 @@ func dashStreamApps(s *cloud.Service[state], c *zip.Ctx) error {
 	ctx := c.Context()
 	setStreamHeaders(c)
 	return c.SendStreamWriter(func(w *bufio.Writer) {
-		streamApps(s, ctx, w)
+		streamApps(s, sc, ctx, w)
 	})
 }
 
@@ -74,19 +83,20 @@ func setStreamHeaders(c *zip.Ctx) {
 // streamApps is the SSE core, separated from the handler so it is unit-testable
 // over a bytes.Buffer + a cancelable context: emit the initial ADDED burst, then
 // watch for live changes until the client disconnects or the context is canceled.
-func streamApps(s *cloud.Service[state], ctx context.Context, w *bufio.Writer) {
+func streamApps(s *cloud.Service[state], sc scope, ctx context.Context, w *bufio.Writer) {
 	wctx, cancel := context.WithCancel(ctx)
 	defer cancel() // stops every watch + forwarder started below
-	if !streamAppBurst(s, wctx, w) {
+	if !streamAppBurst(s, sc, wctx, w) {
 		return // client gone during the burst
 	}
-	streamAppWatch(s, wctx, w)
+	streamAppWatch(s, sc, wctx, w)
 }
 
-// streamAppBurst emits one ADDED event per current App CR, projected identically
-// to dashAppList. Returns false if a write failed (client disconnected).
-func streamAppBurst(s *cloud.Service[state], ctx context.Context, w *bufio.Writer) bool {
-	for _, ns := range scanOrder() {
+// streamAppBurst emits one ADDED event per current App CR VISIBLE to the scope,
+// projected identically to dashAppList. Returns false if a write failed (client
+// disconnected).
+func streamAppBurst(s *cloud.Service[state], sc scope, ctx context.Context, w *bufio.Writer) bool {
+	for _, ns := range sc.namespaces() {
 		crs, err := listAppCRs(s, ctx, ns)
 		if err != nil {
 			s.Log.Warn("deploy stream: initial list failed", "namespace", ns, "err", err)
@@ -94,6 +104,9 @@ func streamAppBurst(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 		}
 		running := runningVersions(s, ctx, ns)
 		for i := range crs {
+			if !sc.allows(&crs[i]) {
+				continue // cross-tenant CR — never streamed to this scope
+			}
 			if !writeAppEvent(w, string(watch.Added), projectApp(&crs[i], ns, running[crs[i].GetName()])) {
 				return false
 			}
@@ -114,10 +127,10 @@ type streamEvent struct {
 // watch events and writes a keep-alive on an idle interval. It returns when the
 // context is canceled OR a write fails (client disconnected). Every watch +
 // goroutine is bound to ctx and stopped on return — no leak.
-func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Writer) {
+func streamAppWatch(s *cloud.Service[state], sc scope, ctx context.Context, w *bufio.Writer) {
 	events := make(chan streamEvent, 16)
 	started := 0
-	for _, ns := range scanOrder() {
+	for _, ns := range sc.namespaces() {
 		watcher, err := s.State.dyn.Resource(appsCRGVR).Namespace(ns).Watch(ctx, metav1.ListOptions{})
 		if err != nil {
 			// Degrade, don't fail: the initial state stands and the keep-alive holds
@@ -136,7 +149,7 @@ func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 					s.Log.Error("deploy stream: watch goroutine panic recovered", "namespace", ns, "panic", r)
 				}
 			}()
-			forwardWatch(ctx, ns, watcher, events)
+			forwardWatch(ctx, sc, ns, watcher, events)
 		}(ns, watcher)
 	}
 	if started > 0 {
@@ -146,7 +159,7 @@ func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 	// Running-image tags refresh on the keep-alive tick, bounding LIST calls to once
 	// per interval regardless of event rate; a live event projects with the last
 	// known tag (nil-map reads are the empty string — safe).
-	running := allRunningVersions(s, ctx)
+	running := sc.runningByNamespace(s, ctx)
 	ticker := time.NewTicker(streamKeepalive)
 	defer ticker.Stop()
 	for {
@@ -158,7 +171,7 @@ func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 				return
 			}
 		case <-ticker.C:
-			running = allRunningVersions(s, ctx)
+			running = sc.runningByNamespace(s, ctx)
 			if _, err := w.WriteString(": keep-alive\n\n"); err != nil {
 				return
 			}
@@ -172,7 +185,7 @@ func streamAppWatch(s *cloud.Service[state], ctx context.Context, w *bufio.Write
 // forwardWatch relays one namespace's App-CR watch onto events until ctx is
 // canceled or the watch closes (server timeout / Stop). It stops its watcher on
 // return and never blocks past ctx — the send to events selects on ctx.Done.
-func forwardWatch(ctx context.Context, ns string, watcher watch.Interface, events chan<- streamEvent) {
+func forwardWatch(ctx context.Context, sc scope, ns string, watcher watch.Interface, events chan<- streamEvent) {
 	defer watcher.Stop()
 	for {
 		select {
@@ -190,8 +203,8 @@ func forwardWatch(ctx context.Context, ns string, watcher watch.Interface, event
 			if !ok || obj == nil || obj.GetName() == "" {
 				continue // guard the typed-nil object: GetName() would nil-deref
 			}
-			if _, platform := nsEnv[obj.GetNamespace()]; !platform {
-				continue // only the platform namespaces this plane reads
+			if !sc.watches(obj) {
+				continue // only namespaces this scope watches, and (for an org) only its own CRs
 			}
 			select {
 			case events <- streamEvent{typ: typ, ns: ns, obj: obj}:
@@ -211,16 +224,6 @@ func watchType(t watch.EventType) string {
 	default:
 		return ""
 	}
-}
-
-// allRunningVersions collects running image tags per platform namespace
-// (best-effort — a list error yields an empty inner map).
-func allRunningVersions(s *cloud.Service[state], ctx context.Context) map[string]map[string]string {
-	out := make(map[string]map[string]string, len(nsEnv))
-	for _, ns := range scanOrder() {
-		out[ns] = runningVersions(s, ctx, ns)
-	}
-	return out
 }
 
 // writeAppEvent writes one SSE frame — `data: {"result":{"type":…,"application":…}}`
