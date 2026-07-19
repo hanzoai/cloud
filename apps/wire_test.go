@@ -46,6 +46,7 @@ var frozen = []struct {
 	{"do", false, false},             // was order 123
 	{"platform", true, false},        // was order 124
 	{"projects", false, false},       // was order 125
+	{"dns", false, false},            // new: /v1/dns zone plane (after projects)
 	{"prompts", false, false},        // was order 126
 	{"agents", false, true},          // was order 127
 	{"link", false, true},            // new: unified AI login manager (/v1/links), after agents
@@ -77,6 +78,7 @@ var frozen = []struct {
 	{"graph", false, false},          // was order 135
 	{"security", true, true},         // was order 136
 	{"integrations", false, true},    // was order 137
+	{"cloudflare", false, false},     // new: /v1/cloudflare edge plane (after integrations)
 	{"sbom", true, false},            // was order 137
 	{"team", false, true},            // was order 138
 	{"settings", false, true},        // was order 138
