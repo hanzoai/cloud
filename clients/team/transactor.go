@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 
+	luxlog "github.com/luxfi/log"
+
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/zap-proto/zip"
 	"github.com/zap-proto/zip/wsx"
@@ -56,6 +58,8 @@ type transServer struct {
 	secret   string
 	accounts *accountStore // human members (this deployment's workspaces)
 	bots     BotLister     // bot members (the org's in-process agents)
+	runAgent AgentRunner   // the Chunter responder's LLM seam (agents.RunOnBehalf); nil = responder off
+	log      luxlog.Logger // best-effort responder logging; nil-safe (tests leave it unset)
 }
 
 // live is the process-singleton transactor server, published in Mount so the
@@ -269,6 +273,10 @@ func (s *session) tx(id int64, params []json.RawMessage) []byte {
 	res, applied := s.applyTx(params[0])
 	if len(applied) > 0 {
 		s.server.hub.broadcast(s.workspace, applied)
+		// Fire agent replies for any bot-addressed Chunter message. Async + guarded
+		// inside; only the client WS write path reaches here (the roster/sync path
+		// calls applyTx directly), so a projection can never trigger a reply.
+		s.server.maybeAgentReply(s.org, s.workspace, applied)
 	}
 	return s.result(id, res)
 }
