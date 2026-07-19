@@ -58,8 +58,15 @@ type transServer struct {
 	secret   string
 	accounts *accountStore // human members (this deployment's workspaces)
 	bots     BotLister     // bot members (the org's in-process agents)
-	runAgent AgentRunner   // the Chunter responder's LLM seam (agents.RunOnBehalf); nil = responder off
+	runAgent AgentRunner   // the Chunter responder's LLM seam (agents.RunOnBehalf); nil = responder OFF
 	log      luxlog.Logger // best-effort responder logging; nil-safe (tests leave it unset)
+
+	// Chunter responder bounds (chat.go). ALL zero-value-safe so a bare
+	// transServer literal (tests, the sync path) is inert-but-correct.
+	startedAt int64         // process boot (unix millis); messages older than this are backfill → never answered (0 = no filter, tests)
+	sem       chan struct{} // hard concurrency cap on in-flight agent turns (nil = uncapped, tests)
+	inflight  sync.Map      // single-flight: (workspace|space|bot) currently answering → drop duplicates
+	breaker   sync.Map      // per-agent circuit breaker: agentID → *agentBreaker (backoff on repeated failure)
 }
 
 // live is the process-singleton transactor server, published in Mount so the

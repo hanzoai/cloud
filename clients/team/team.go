@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
@@ -84,14 +86,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	trans := &transServer{
-		store:    newStore(filepath.Join(root, "workspaces")),
-		hier:     buildHierarchy(modelJSON),
-		hub:      newHub(),
-		secret:   cfg.serverSecret,
-		accounts: accounts,
-		bots:     agentsBotLister,  // the ONE in-process seam to the agents registry
-		runAgent: agentReplyRunner, // the Chunter responder's LLM seam (agents.RunOnBehalf)
-		log:      log,
+		store:     newStore(filepath.Join(root, "workspaces")),
+		hier:      buildHierarchy(modelJSON),
+		hub:       newHub(),
+		secret:    cfg.serverSecret,
+		accounts:  accounts,
+		bots:      agentsBotLister, // the ONE in-process seam to the agents registry
+		log:       log,
+		startedAt: time.Now().UnixMilli(), // freshness floor: messages older than boot are never answered
+	}
+	// Chunter agent responder: OFF by default (one-way safe default). Only when
+	// TEAM_AGENTS_ENABLED=1 do we wire the LLM seam + the concurrency cap, so an
+	// un-configured OR misconfigured binary is provably inert — nil runAgent makes
+	// maybeAgentReply return at the top and NO outbound model call can ever fire.
+	// (This is the containment the writer-crash post-mortem demands: a new binary
+	// must be safe by default and only answer when an operator opts in.)
+	if os.Getenv("TEAM_AGENTS_ENABLED") == "1" {
+		trans.runAgent = agentReplyRunner
+		trans.sem = make(chan struct{}, teamAgentsMaxConcurrency())
+		log.Info("team: Chunter agent responder ENABLED", "maxConcurrency", cap(trans.sem))
+	} else {
+		log.Info("team: Chunter agent responder OFF (set TEAM_AGENTS_ENABLED=1 to enable)")
 	}
 	// Publish the singleton so the in-process projection path (Apply / ingest) and
 	// the /v1/team/bots/sync handler can write into the per-workspace store.
@@ -170,6 +185,27 @@ func loadConfig(deps cloud.Deps) config {
 		// shared fallback name. Unset → derive from the request Host (no regression).
 		publicURL: strings.TrimRight(firstNonEmpty(os.Getenv("TEAM_PUBLIC_URL"), os.Getenv("PUBLIC_ORIGIN")), "/"),
 	}
+}
+
+// teamAgentsMaxConcurrency resolves the responder's global in-flight turn cap from
+// TEAM_AGENTS_MAX_CONCURRENCY (default defaultMaxConcurrent). It is clamped to
+// [1,64] so a typo can never uncap the fan-out (0/negative → default) or make it
+// absurd. The cap is the hard ceiling on concurrent outbound model calls the
+// responder can have in flight process-wide.
+func teamAgentsMaxConcurrency() int {
+	n := defaultMaxConcurrent
+	if v := os.Getenv("TEAM_AGENTS_MAX_CONCURRENCY"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+			n = parsed
+		}
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > 64 {
+		n = 64
+	}
+	return n
 }
 
 // env returns the value of key, or fallback when unset. The ONE env helper for the
