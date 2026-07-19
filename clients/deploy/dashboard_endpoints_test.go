@@ -18,6 +18,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
 )
 
@@ -273,6 +274,36 @@ func TestStreamHonorsContextCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("streamApps did not return within 2s of context cancel (goroutine/watch leak)")
+	}
+}
+
+// TestForwardWatchSkipsTypedNilObjectNotFatal proves a malformed watch event
+// carrying a typed-nil *unstructured.Unstructured is skipped, not fatal: the
+// forwardWatch goroutine must not nil-deref on GetName() and a following valid
+// event must still forward. A watch event is a system boundary and the read
+// plane installs no panic recovery — a crash here would take down the process.
+func TestForwardWatchSkipsTypedNilObjectNotFatal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fw := watch.NewFake()
+	events := make(chan streamEvent, 4)
+	go forwardWatch(ctx, "hanzo", fw, events)
+
+	go func() {
+		// a typed-nil object as ADDED: e.Object.(*unstructured.Unstructured) is
+		// (nil, true), so the pre-guard code nil-derefs on GetName().
+		fw.Action(watch.Added, (*unstructured.Unstructured)(nil))
+		// then a valid App CR in a platform namespace — must still come through.
+		fw.Action(watch.Added, appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1))
+	}()
+
+	select {
+	case ev := <-events:
+		if ev.obj == nil || ev.obj.GetName() != "cloud" {
+			t.Fatalf("expected the valid App CR to forward; got %+v", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("valid event never arrived — forwardWatch died on the typed-nil object")
 	}
 }
 
