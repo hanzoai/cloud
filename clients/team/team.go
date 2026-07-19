@@ -89,7 +89,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		hub:      newHub(),
 		secret:   cfg.serverSecret,
 		accounts: accounts,
-		bots:     agentsBotLister, // the ONE in-process seam to the agents registry
+		bots:     agentsBotLister,  // the ONE in-process seam to the agents registry
+		runAgent: agentReplyRunner, // the Chunter responder's LLM seam (agents.RunOnBehalf)
+		log:      log,
 	}
 	// Publish the singleton so the in-process projection path (Apply / ingest) and
 	// the /v1/team/bots/sync handler can write into the per-workspace store.
