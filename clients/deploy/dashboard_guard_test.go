@@ -31,6 +31,9 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 		{"GET", "/v1/deploy/applications/cloud/resource-tree"},
 		{"POST", "/v1/deploy/applications/cloud/sync"},
 		{"POST", "/v1/deploy/applications/cloud/rollback"},
+		// destination clusters + AppProjects (the applications view's side lists)
+		{"GET", "/v1/deploy/clusters"},
+		{"GET", "/v1/deploy/projects"},
 	}
 	for _, r := range guarded {
 		// WITHOUT admin → 403 (the guard, fail-closed).
