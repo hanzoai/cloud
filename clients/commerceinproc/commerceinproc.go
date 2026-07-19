@@ -24,9 +24,13 @@
 package commerceinproc
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -88,6 +92,47 @@ func BaseURL(env string) string {
 	return ""
 }
 
+// maxDepth caps how many co-resident dispatches may be NESTED on one goroutine.
+// The in-process handler is the WHOLE shared app (SetApp publishes
+// adaptor.FiberApp), so a dispatch re-runs every edge middleware — and any of
+// those middlewares (e.g. the per-org scope rate-limiter reading its rules from
+// commerce, or the ai per-tier gate) itself issues a commerce read, which
+// dispatches the whole app AGAIN. On a cold config/tier cache that read never
+// resolves before it re-enters, so it recurses without bound: synchronously it
+// overflows the goroutine stack (a fatal ~1e9-byte "stack overflow"); each level
+// also leaks the completion's net/http cancel watchdog, so under load the writer
+// accumulates tens of thousands of goroutines parked in setRequestCancel and OOMs.
+// A legitimate flow nests at most a couple of reads (a debit that first checks a
+// balance), so a small cap admits every real path while turning the runaway into a
+// bounded, fail-safe refusal at the seam. Callers of the co-resident reads treat
+// the refusal as any transport error and fall safe (the tier gate ALLOWS, the
+// scope-rule fetch fails OPEN); the prepaid balance read is a direct in-process
+// ledger call, never this transport, so fail-closed billing is unaffected.
+const maxDepth = 8
+
+// depthByGoroutine tracks the current nested-dispatch depth per goroutine. The
+// dispatch is synchronous (ServeHTTP runs on the caller's goroutine), so a
+// goroutine-keyed counter measures exactly the nesting of the recursion; distinct
+// concurrent requests run on distinct goroutines and never share a count.
+var depthByGoroutine sync.Map // goid -> int
+
+// goroutineID returns the current goroutine's numeric id. It is used ONLY for
+// re-entrancy accounting (never identity or security); the runtime prints it at
+// the head of the per-goroutine stack, which is the one portable way to read it.
+func goroutineID() int64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	// "goroutine <id> [<state>]:"
+	s := string(buf[:n])
+	s = strings.TrimPrefix(s, "goroutine ")
+	if i := strings.IndexByte(s, ' '); i > 0 {
+		if id, err := strconv.ParseInt(s[:i], 10, 64); err == nil {
+			return id
+		}
+	}
+	return 0
+}
+
 // roundTripper dispatches to the in-process commerce handler when one is published,
 // else to fallback (plain HTTP). The gin engine routes on req.URL.Path, so the host
 // in the (placeholder or real) base is irrelevant when co-resident.
@@ -95,6 +140,26 @@ type roundTripper struct{ fallback http.RoundTripper }
 
 func (rt roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if p := handler.Load(); p != nil {
+		// Re-entrancy guard: bound how deep co-resident dispatches may nest on
+		// this goroutine (see maxDepth). Without it a middleware that reads
+		// commerce while serving a commerce read re-runs the whole app forever.
+		id := goroutineID()
+		depth := 0
+		if v, ok := depthByGoroutine.Load(id); ok {
+			depth = v.(int)
+		}
+		if depth >= maxDepth {
+			return nil, fmt.Errorf("commerceinproc: in-process dispatch depth %d exceeded (re-entrant commerce read refused: %s %s)", maxDepth, req.Method, req.URL.Path)
+		}
+		depthByGoroutine.Store(id, depth+1)
+		defer func() {
+			if depth == 0 {
+				depthByGoroutine.Delete(id)
+			} else {
+				depthByGoroutine.Store(id, depth)
+			}
+		}()
+
 		// Callers build CLIENT-style requests (http.NewRequest → empty
 		// RequestURI); the in-process dispatch is SERVER-side, and the fiber
 		// pipeline routes on RequestURI. Normalize here — the one seam.
