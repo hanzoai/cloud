@@ -16,15 +16,15 @@ import (
 	"github.com/hanzoai/commerce/datastore"
 	"github.com/hanzoai/commerce/db"
 	commercemid "github.com/hanzoai/commerce/middleware"
-	"github.com/hanzoai/commerce/middleware/svcorg"
+	"github.com/hanzoai/commerce/pkg/org"
 	"github.com/hanzoai/commerce/util/bit"
 	"github.com/hanzoai/commerce/util/permission"
 )
 
 // seedInMemDatastore installs a fresh in-memory default datastore so the
-// service-token branch's svcorg.Resolve (GetOrCreate on the org table) succeeds
+// service-token branch's org.Resolve (GetOrCreate on the org table) succeeds
 // and the request reaches the handler — the funded path — rather than 503ing on a
-// resolve failure. Mirrors svcorg/resolver_test.go's setup.
+// resolve failure. Mirrors pkg/org's lookup_test.go setup.
 func seedInMemDatastore(t *testing.T) {
 	t.Helper()
 	mgr, err := db.NewManager(&db.Config{DataDir: t.TempDir(), EnableVectorSearch: false, IsDev: true})
@@ -65,8 +65,8 @@ func TestInProcMeteringDispatch_ServiceTokenAuthPath(t *testing.T) {
 	const svc = "svc-token-metering-xyz789"
 	t.Setenv("COMMERCE_SERVICE_TOKEN", svc)
 	seedInMemDatastore(t)
-	svcorg.Invalidate("funded")
-	svcorg.Invalidate("broke")
+	org.Invalidate("funded")
+	org.Invalidate("broke")
 
 	// finance NOT co-resident → the metering balance read goes over commerceinproc,
 	// through the real commerce middleware chain, exactly like the topology that 500'd.
