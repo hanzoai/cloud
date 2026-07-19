@@ -175,19 +175,29 @@ func workerUnits(org string) []fleetUnit {
 	workers := byoWorkers(org)
 	out := make([]fleetUnit, 0, len(workers))
 	for _, w := range workers {
-		u := fleetUnit{
-			Source: samples.SourceBYO, Unit: w.ID, Kind: samples.KindWorker,
-			Label: w.Hostname, Host: w.Hostname, Status: w.Status,
-		}
-		if w.Os != "" || len(w.GPUs) > 0 {
-			u.Spec = &fleetSpec{OS: w.Os, GPUs: len(w.GPUs)}
-			if len(w.GPUs) > 0 {
-				u.Spec.GPUModel = w.GPUs[0].Name
-			}
-		}
-		out = append(out, u)
+		out = append(out, byoUnit(w))
 	}
 	return out
+}
+
+// byoUnit projects one dialed-in BYO worker onto the board, carrying the host's full
+// static spec — OS, CPU arch, logical cores, total RAM and the GPU summary — in the
+// SAME fleetSpec a code-linked run-target reports (agentUnits). This is what surfaces
+// a gpu-connect node's real arch (amd64/arm64) + memory on GET /v1/fleet, not just
+// its GPU. A field the worker did not report stays zero (omitempty), never invented.
+func byoUnit(w byoWorker) fleetUnit {
+	u := fleetUnit{
+		Source: samples.SourceBYO, Unit: w.ID, Kind: samples.KindWorker,
+		Label: w.Hostname, Host: w.Hostname, Status: w.Status,
+	}
+	sp := fleetSpec{OS: w.Os, Arch: w.Arch, CPUs: w.CPUs, Memory: w.Memory, GPUs: len(w.GPUs)}
+	if len(w.GPUs) > 0 {
+		sp.GPUModel = w.GPUs[0].Name
+	}
+	if sp != (fleetSpec{}) {
+		u.Spec = &sp
+	}
+	return u
 }
 
 // clusterUnits folds in the org's attached BYO clusters. A cluster's accelerators
