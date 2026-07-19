@@ -181,7 +181,7 @@ func projectApp(cr *unstructured.Unstructured, ns, runningTag string) argoApp {
 	// Surface the tenant label the App CR already carries so the projection can be
 	// grouped/scoped by org; env stays as before. The tenant BOUNDARY is enforced upstream
 	// in the handlers (scope.allows) — this only reflects what the CR declares.
-	labels := map[string]string{"argocd.argoproj.io/instance": native.Name, "hanzo.ai/env": native.Env}
+	labels := map[string]string{"hanzo.ai/instance": native.Name, "hanzo.ai/env": native.Env}
 	if org := orgOf(cr); org != "" {
 		labels[orgLabel] = org
 	}
