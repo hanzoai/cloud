@@ -26,7 +26,7 @@ type fakeVisor struct {
 	// (/v1/machines → ListComputeMachines) — the live droplet inventory that
 	// listMachines now unions with the registry.
 	liveByOwner map[string][]map[string]any
-	// nodesByOwner is the per-tenant DOKS worker NODES list (/v1/kubernetes-nodes →
+	// nodesByOwner is the per-tenant DOKS worker NODES list (/v1/k8s/nodes →
 	// ListComputeKubernetesNodes) — the THIRD machine source managedMachines unions.
 	nodesByOwner map[string][]map[string]any
 	poolsByOwner map[string][]map[string]any
@@ -53,7 +53,7 @@ func (f *fakeVisor) server(t *testing.T) *httptest.Server {
 		envelope200(w, f.liveByOwner[owner])
 	})
 	// DOKS worker nodes (ListComputeKubernetesNodes) — the third machine source.
-	mux.HandleFunc("/v1/kubernetes-nodes", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/k8s/nodes", func(w http.ResponseWriter, r *http.Request) {
 		owner := r.URL.Query().Get("owner")
 		f.lastOwner = owner
 		envelope200(w, f.nodesByOwner[owner])
@@ -261,7 +261,7 @@ func TestMachinesMergeLiveDOAndRegistry(t *testing.T) {
 }
 
 // TestMachinesMergeDOKSNodes proves the THIRD source: listMachines unions DOKS
-// worker NODES (/v1/kubernetes-nodes) with the live droplet list so a cluster's
+// worker NODES (/v1/k8s/nodes) with the live droplet list so a cluster's
 // nodes appear on the fleet — while a DOKS node whose droplet is ALSO in the live
 // list is deduped by droplet id (never listed twice). This is the visor backport's
 // payoff: cluster NODES show, not just standalone droplets.
@@ -269,7 +269,7 @@ func TestMachinesMergeDOKSNodes(t *testing.T) {
 	f := &fakeVisor{
 		// Live DO reseller list: one standalone droplet, plus a DOKS worker droplet
 		// (drop-node-1) that DO also surfaced under the org tag — so its droplet id
-		// appears in BOTH the live list and the kubernetes-nodes list.
+		// appears in BOTH the live list and the k8s-nodes list.
 		liveByOwner: map[string][]map[string]any{
 			"acme": {
 				{"owner": "acme", "name": "standalone-1", "id": "drop-1",
