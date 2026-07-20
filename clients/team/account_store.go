@@ -273,6 +273,25 @@ func (s *accountStore) MembersForWorkspaceUUID(ctx context.Context, org, wsUUID 
 	return out, rows.Err()
 }
 
+// GuestRank returns the 1-based join-order rank of account among the
+// workspace's guest-role members, 0 when the account is not a guest there. The
+// entitle gate compares it to the plan's team.guests cap so the FIRST cap
+// guests keep access deterministically (joined_at, user_id tie-break) and later
+// invites are refused — never all-or-nothing.
+func (s *accountStore) GuestRank(ctx context.Context, workspaceID, account string) int {
+	var rank int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM members g, members me
+		  WHERE me.workspace_id = ? AND me.user_id = ? AND me.role = ?
+		    AND g.workspace_id = me.workspace_id AND g.role = me.role
+		    AND (g.joined_at < me.joined_at OR (g.joined_at = me.joined_at AND g.user_id <= me.user_id))`,
+		workspaceID, account, roleGuest).Scan(&rank)
+	if err != nil {
+		return 0
+	}
+	return rank
+}
+
 // EnsureMemberName fills display_name on the account's member rows when empty, so
 // the projected Person shows a human name rather than the account uuid. Idempotent
 // (only fills empty). Scoped to the account's own rows.
