@@ -15,8 +15,8 @@ package cloud
 // THE FIX. This middleware runs FIRST — before BillingGate and every subsystem —
 // and rewrites the request's identity headers so each downstream c.IsAdmin() /
 // c.Org() / c.User() reflects a VALIDATED principal, never a raw client header.
-// It is ONE place; every existing IsAdmin()/Org() reader (pricingsvc admin
-// catalog + /v1/pricing/sync, provisioningsvc, mlsvc, evalsvc, plansvc) becomes
+// It is ONE place; every existing IsAdmin()/Org() reader (pricing admin
+// catalog + /v1/pricing/sync, provisioning, ml, eval, plan) becomes
 // trustworthy without touching a single handler.
 //
 // ADMIN IS SUPERADMIN. The gateway mints X-User-IsAdmin from the JWT `isAdmin`
@@ -375,7 +375,7 @@ func validatedPrincipal(c *zip.Ctx, v *identityValidator) *idClaims {
 // session manager, no session cookie, no session, or no stored token. The token
 // is NOT trusted here — validatedPrincipal feeds it back through v.validate — so
 // this only maps an opaque, httpOnly session id to the server-minted JWT bound to
-// it. The session cookie name and store are the SAME ones clients/iamsvc wired
+// it. The session cookie name and store are the SAME ones clients/iam wired
 // into Beego's global session manager (web.BConfig.WebConfig.Session).
 func sessionAccessToken(c *zip.Ctx) string {
 	mgr := web.GlobalSessions

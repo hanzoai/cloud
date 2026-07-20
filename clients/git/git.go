@@ -183,7 +183,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	cloud.RegisterGitImporter(githubImporter{})
 	// Install the outbound-mirror controller so the universal sync engine's git
 	// provider can ensure/remove a repo's mirror target through the SAME store the
-	// mirror_out reactor pushes from — no syncsvc⇆git cycle (mirror_control.go).
+	// mirror_out reactor pushes from — no sync⇆git cycle (mirror_control.go).
 	cloud.RegisterGitMirrorController(gitMirrorController{})
 
 	// SSH transport: `git clone git@<sshHost>:<org>/<repo>.git`. The listener is

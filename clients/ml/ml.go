@@ -35,7 +35,7 @@
 // hung off the shared cloud.Deps: a raw Kubernetes client has none of the
 // in-process/ZAP-RPC duality the Deps inter-subsystem clients model, and it is
 // used by exactly this one subsystem — so it stays self-contained here, the
-// same way provisioningsvc builds its own backend clients. When no kubeconfig
+// same way provisioning builds its own backend clients. When no kubeconfig
 // is resolvable the subsystem mounts anyway and every endpoint fails closed:
 // mutating routes return 503 and the health routes report status "degraded"
 // with the real init error (never a fake success).
