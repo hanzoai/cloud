@@ -232,8 +232,8 @@ func TestBuildSite_MetersOnce(t *testing.T) {
 		Files                                 []string
 	}
 	mustJSON(t, body, &resp)
-	if resp.URL != "https://shop.acme.hanzo.app" {
-		t.Fatalf("url=%q want https://shop.acme.hanzo.app", resp.URL)
+	if resp.URL != "https://shop.hanzo.app" {
+		t.Fatalf("url=%q want https://shop.hanzo.app", resp.URL)
 	}
 	if resp.Slug != "shop" || resp.Status != "live" || resp.DeploymentID == "" {
 		t.Fatalf("bad response: %+v", resp)
@@ -299,10 +299,11 @@ func TestFailedDeploy_NotBilled(t *testing.T) {
 }
 
 // TestIdempotentRedeploy: deploying the same slug twice returns the SAME
-// org-scoped <slug>.<org>.hanzo.app URL and bills each deploy (distinct billable
-// events). Org-scoping makes the slug namespace PER-ORG: a second org deploying
-// the same slug gets its OWN host and both live independently — there is no shared
-// global slug to hijack.
+// bare <slug>.hanzo.app URL and bills each deploy (distinct billable events).
+// The bare slug is a GLOBAL first-come namespace: the first org to publish a slug
+// owns the subdomain; a second org publishing the same slug is REFUSED the host
+// binding (it still deploys + bills + serves at its S3 URL, just not at the shared
+// subdomain). This is the anti-hijack guarantee at the host boundary.
 func TestIdempotentRedeploy(t *testing.T) {
 	startFakeS3(t)
 	bs := &billServer{available: 1000000}
@@ -311,29 +312,26 @@ func TestIdempotentRedeploy(t *testing.T) {
 
 	first := deployVia(t, app, "acme", "myapp")
 	second := deployVia(t, app, "acme", "myapp") // redeploy, same owner+slug
-	if first != "https://myapp.acme.hanzo.app" || second != first {
+	if first != "https://myapp.hanzo.app" || second != first {
 		t.Fatalf("redeploy URL not stable: first=%q second=%q", first, second)
 	}
 	// Two deploys = two billable events.
 	if !waitForDebit(func() bool { return bs.debits() == 2 }) {
 		t.Fatalf("two deploys must bill twice, got %d", bs.debits())
 	}
-	// The org-scoped host binding resolves to acme.
-	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp.acme"); err != nil || p.Org != "acme" {
-		t.Fatalf("host myapp.acme must resolve to acme, got org=%q err=%v", p.Org, err)
+	// The bare host binding resolves to acme (first-come owner).
+	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp"); err != nil || p.Org != "acme" {
+		t.Fatalf("host myapp must resolve to acme, got org=%q err=%v", p.Org, err)
 	}
 
-	// A different org deploying the SAME slug gets its OWN org-scoped host — no
-	// collision, both sites live. Structural isolation: the org is IN the hostname.
+	// A different org deploying the SAME slug still deploys + bills (its build is
+	// real), but the bare host stays bound to acme — evil never hijacks it.
 	evil := deployVia(t, app, "evil", "myapp")
-	if evil != "https://myapp.evil.hanzo.app" {
-		t.Fatalf("evil deploy url=%q, want https://myapp.evil.hanzo.app", evil)
+	if evil != "https://myapp.hanzo.app" {
+		t.Fatalf("evil deploy url=%q, want https://myapp.hanzo.app", evil)
 	}
-	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp.evil"); err != nil || p.Org != "evil" {
-		t.Fatalf("myapp.evil must resolve to evil, got %q err=%v", p.Org, err)
-	}
-	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp.acme"); err != nil || p.Org != "acme" {
-		t.Fatalf("myapp.acme must still resolve to acme, got %q", p.Org)
+	if p, err := mounted.State.store.ResolveHost(context.Background(), "myapp"); err != nil || p.Org != "acme" {
+		t.Fatalf("bare host myapp must STILL resolve to acme (first-come), got %q err=%v", p.Org, err)
 	}
 }
 
@@ -357,7 +355,7 @@ func TestDeploySiteFiles_JSONPath(t *testing.T) {
 	}
 	var resp struct{ URL, Slug, Status string }
 	mustJSON(t, body, &resp)
-	if resp.URL != "https://raw.acme.hanzo.app" || resp.Slug != "raw" || resp.Status != "live" {
+	if resp.URL != "https://raw.hanzo.app" || resp.Slug != "raw" || resp.Status != "live" {
 		t.Fatalf("bad deploy_site response: %+v", resp)
 	}
 	f.mu.Lock()
@@ -391,7 +389,7 @@ func TestListSites(t *testing.T) {
 	if len(sites) != 1 {
 		t.Fatalf("acme must see exactly its 1 live site, got %d: %+v", len(sites), sites)
 	}
-	if sites[0].Slug != "one" || sites[0].URL != "https://one.acme.hanzo.app" || sites[0].Status != "live" {
+	if sites[0].Slug != "one" || sites[0].URL != "https://one.hanzo.app" || sites[0].Status != "live" {
 		t.Fatalf("bad site view: %+v", sites[0])
 	}
 
