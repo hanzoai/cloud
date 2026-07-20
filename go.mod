@@ -28,7 +28,7 @@ require (
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.3.0
+	github.com/hanzoai/sqlite v0.3.2
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
@@ -84,6 +84,7 @@ require (
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
+	github.com/hanzoai/sqlcipher v0.1.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
@@ -841,7 +842,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.827.1
+	github.com/hanzoai/ai v1.828.1
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
