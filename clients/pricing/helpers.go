@@ -10,7 +10,7 @@ import (
 // loadPlansCatalog returns the @hanzo/plans catalog the pricing bundle reads
 // for its subscription/blockchain/policy/tools/gpu endpoints. Sourced from the
 // plans embed module so cloud has ONE copy of the plan catalog feeding both
-// /v1/plans/* (plansvc) and /v1/pricing/{subscriptions,blockchain,…} (here).
+// /v1/plans/* (plan) and /v1/pricing/{subscriptions,blockchain,…} (here).
 func loadPlansCatalog() (map[string]any, error) {
 	return hplans.Data()
 }
