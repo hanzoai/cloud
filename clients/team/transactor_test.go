@@ -157,3 +157,32 @@ func TestEnvelopeWrapsRPC(t *testing.T) {
 		t.Fatalf("reply payload = %s", back.Payload)
 	}
 }
+
+// TestOriginAllowed is the WS-upgrade Origin allow-list table: absent Origin
+// (non-browser) and the team/hanzo surfaces are admitted; everything else —
+// including lookalike registered domains — is refused before the upgrade.
+func TestOriginAllowed(t *testing.T) {
+	cases := []struct {
+		origin, host string
+		want         bool
+	}{
+		{"", "hanzo.team", true},                          // non-browser client
+		{"https://hanzo.team", "hanzo.team", true},        // same host
+		{"https://hanzo.team", "api.hanzo.ai", true},      // team surface
+		{"https://team.hanzo.ai", "hanzo.team", true},     // team surface
+		{"https://api.hanzo.team", "hanzo.team", true},    // team surface
+		{"https://console.hanzo.ai", "hanzo.team", true},  // *.hanzo.ai
+		{"https://hanzo.ai", "hanzo.team", true},          // apex
+		{"http://localhost:8087", "localhost:8000", true}, // local dev
+		{"https://evil.example", "hanzo.team", false},     // foreign origin
+		{"https://evilhanzo.ai", "hanzo.team", false},     // suffix lookalike
+		{"https://hanzo.ai.evil.example", "hanzo.team", false},
+		{"null", "hanzo.team", false},   // opaque origin
+		{"://bad", "hanzo.team", false}, // unparseable
+	}
+	for _, c := range cases {
+		if got := originAllowed(c.origin, c.host); got != c.want {
+			t.Errorf("originAllowed(%q, %q) = %v, want %v", c.origin, c.host, got, c.want)
+		}
+	}
+}
