@@ -442,6 +442,37 @@ func (s *Store) ResolveHost(ctx context.Context, host string) (Project, error) {
 	return p, nil
 }
 
+// ResolveUniqueLiveSlug resolves a BARE subdomain slug (`<slug>.hanzo.app`) to
+// the single LIVE project owning that slug across all orgs. Slugs are only
+// org-unique, so the bare host is servable ONLY when unambiguous: zero or 2+
+// live owners ⇒ errNotFound (each project still serves at its org-scoped host
+// and its S3 URL). LIMIT 2 — a second row is the whole ambiguity signal; we
+// never enumerate. This is what keeps pre-binding publishes servable with no
+// backfill migration.
+func (s *Store) ResolveUniqueLiveSlug(ctx context.Context, slug string) (Project, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE slug=? AND status='live' LIMIT 2`, slug)
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve slug: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Project
+	for rows.Next() {
+		p, err := scanProject(rows)
+		if err != nil {
+			return Project{}, fmt.Errorf("resolve slug: %w", err)
+		}
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return Project{}, fmt.Errorf("resolve slug: %w", err)
+	}
+	if len(out) != 1 {
+		return Project{}, errNotFound
+	}
+	return out[0], nil
+}
+
 // ListHostsForProject returns every public host bound to (org, slug), oldest
 // first. It powers GET .../domains so a console/user can see which hostnames the
 // site serves — its `<slug>.hanzo.app` subdomain plus any bound custom domains.
