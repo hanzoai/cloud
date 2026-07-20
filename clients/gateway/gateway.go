@@ -66,8 +66,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the gateway config plane.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/gateway/config", cloud.Handle(s, get))
-	app.Put("/v1/gateway/config", cloud.Handle(s, put))
+	g := app.Group("/v1/gateway")
+	g.Get("/config", cloud.Handle(s, get))
+	g.Put("/config", cloud.Handle(s, put))
 }
 
 // get returns the EFFECTIVE edge policy the caller is subject to: the platform

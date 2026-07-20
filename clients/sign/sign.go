@@ -122,21 +122,22 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes wires the /v1/sign/* owner + recipient-token surface. The native
 // /v1/sign/health route stays inline in Mount (registered before the host build).
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/sign")
 	// Owner routes — tenant = validated principal org. GET reads carry no body.
-	app.Post("/v1/sign/documents", owner(s, "documents.create", nil, true))
-	app.Get("/v1/sign/documents", owner(s, "documents.list", nil, false))
-	app.Get("/v1/sign/documents/:id", ownerID(s, "documents.get", false))
-	app.Post("/v1/sign/documents/:id/recipients", ownerID(s, "recipients.add", true))
-	app.Post("/v1/sign/documents/:id/fields", ownerID(s, "fields.add", true))
-	app.Post("/v1/sign/documents/:id/send", ownerID(s, "documents.send", true))
-	app.Get("/v1/sign/documents/:id/download", ownerID(s, "documents.download", false))
-	app.Get("/v1/sign/documents/:id/audit", ownerID(s, "documents.audit", false))
+	g.Post("/documents", owner(s, "documents.create", nil, true))
+	g.Get("/documents", owner(s, "documents.list", nil, false))
+	g.Get("/documents/:id", ownerID(s, "documents.get", false))
+	g.Post("/documents/:id/recipients", ownerID(s, "recipients.add", true))
+	g.Post("/documents/:id/fields", ownerID(s, "fields.add", true))
+	g.Post("/documents/:id/send", ownerID(s, "documents.send", true))
+	g.Get("/documents/:id/download", ownerID(s, "documents.download", false))
+	g.Get("/documents/:id/audit", ownerID(s, "documents.audit", false))
 
 	// Recipient token routes — tenant = :org path segment; capability = :token.
-	app.Get("/v1/sign/o/:org/sign/:token", token(s, "sign.view", false))
-	app.Post("/v1/sign/o/:org/sign/:token/fields/:fieldId", token(s, "sign.field", true))
-	app.Post("/v1/sign/o/:org/sign/:token/complete", token(s, "sign.complete", true))
-	app.Post("/v1/sign/o/:org/sign/:token/reject", token(s, "sign.reject", true))
+	g.Get("/o/:org/sign/:token", token(s, "sign.view", false))
+	g.Post("/o/:org/sign/:token/fields/:fieldId", token(s, "sign.field", true))
+	g.Post("/o/:org/sign/:token/complete", token(s, "sign.complete", true))
+	g.Post("/o/:org/sign/:token/reject", token(s, "sign.reject", true))
 }
 
 // owner builds a handler for a principal-gated route with fixed params.

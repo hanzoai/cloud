@@ -93,12 +93,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // channels/generate/publish) never collide with the parameterised transition route
 // (which is three segments deep), so registration order is not load-bearing here.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/content/lifecycle", cloud.Handle(s, getLifecycle))
-	app.Get("/v1/content/board", cloud.Handle(s, getBoard))
-	app.Get("/v1/content/channels", cloud.Handle(s, getChannels))
-	app.Post("/v1/content/generate", cloud.Handle(s, postGenerate))
-	app.Post("/v1/content/publish", cloud.Handle(s, postPublish))
-	app.Post("/v1/content/:doctype/:name/transition", cloud.Handle(s, postTransition))
+	g := app.Group("/v1/content")
+	g.Get("/lifecycle", cloud.Handle(s, getLifecycle))
+	g.Get("/board", cloud.Handle(s, getBoard))
+	g.Get("/channels", cloud.Handle(s, getChannels))
+	g.Post("/generate", cloud.Handle(s, postGenerate))
+	g.Post("/publish", cloud.Handle(s, postPublish))
+	g.Post("/:doctype/:name/transition", cloud.Handle(s, postTransition))
 }
 
 // Shutdown releases the mounted singleton. Idempotent; content owns no store, so this

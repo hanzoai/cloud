@@ -84,13 +84,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Collection root (/v1/tools) stays flat — Group(p).Get("") yields "p/".
 	app.Get("/v1/tools", cloud.Handle(s, listTools))
-	app.Post("/v1/tools/mcp", cloud.Handle(s, mcp))
-	app.Get("/v1/tools/activation", cloud.Handle(s, getActivation))
-	app.Put("/v1/tools/activation", cloud.Handle(s, putActivation))
-	app.Get("/v1/tools/servers", cloud.Handle(s, listServers))
-	app.Post("/v1/tools/servers", cloud.Handle(s, createServer))
-	app.Delete("/v1/tools/servers/:id", cloud.Handle(s, deleteServer))
+	g := app.Group("/v1/tools")
+	g.Post("/mcp", cloud.Handle(s, mcp))
+	g.Get("/activation", cloud.Handle(s, getActivation))
+	g.Put("/activation", cloud.Handle(s, putActivation))
+	g.Get("/servers", cloud.Handle(s, listServers))
+	g.Post("/servers", cloud.Handle(s, createServer))
+	g.Delete("/servers/:id", cloud.Handle(s, deleteServer))
 }
 
 // Shutdown closes the stores. Idempotent.

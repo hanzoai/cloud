@@ -98,48 +98,49 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes wires the /v1/captable/* route table → bundle route names. GET reads
 // carry no body; mutations do.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/captable")
 	// company
-	app.Get("/v1/captable/company", route(s, "company.get", nil, false))
-	app.Put("/v1/captable/company", route(s, "company.update", nil, true))
+	g.Get("/company", route(s, "company.get", nil, false))
+	g.Put("/company", route(s, "company.update", nil, true))
 	// stakeholders
-	app.Get("/v1/captable/stakeholders", route(s, "stakeholders.list", nil, false))
-	app.Post("/v1/captable/stakeholders", route(s, "stakeholders.add", nil, true))
-	app.Patch("/v1/captable/stakeholders/:id", routeID(s, "stakeholders.update", true))
-	app.Delete("/v1/captable/stakeholders/:id", routeID(s, "stakeholders.delete", false))
+	g.Get("/stakeholders", route(s, "stakeholders.list", nil, false))
+	g.Post("/stakeholders", route(s, "stakeholders.add", nil, true))
+	g.Patch("/stakeholders/:id", routeID(s, "stakeholders.update", true))
+	g.Delete("/stakeholders/:id", routeID(s, "stakeholders.delete", false))
 	// share classes
-	app.Get("/v1/captable/share-classes", route(s, "shareClasses.list", nil, false))
-	app.Post("/v1/captable/share-classes", route(s, "shareClasses.create", nil, true))
-	app.Patch("/v1/captable/share-classes/:id", routeID(s, "shareClasses.update", true))
+	g.Get("/share-classes", route(s, "shareClasses.list", nil, false))
+	g.Post("/share-classes", route(s, "shareClasses.create", nil, true))
+	g.Patch("/share-classes/:id", routeID(s, "shareClasses.update", true))
 	// equity plans
-	app.Get("/v1/captable/equity-plans", route(s, "equityPlans.list", nil, false))
-	app.Post("/v1/captable/equity-plans", route(s, "equityPlans.create", nil, true))
+	g.Get("/equity-plans", route(s, "equityPlans.list", nil, false))
+	g.Post("/equity-plans", route(s, "equityPlans.create", nil, true))
 	// shares (issuance + transfer). /shares/transfer registers before /shares/:id
 	// (different methods anyway) so it can never be shadowed.
-	app.Get("/v1/captable/shares", route(s, "shares.list", nil, false))
-	app.Post("/v1/captable/shares", route(s, "shares.add", nil, true))
-	app.Post("/v1/captable/shares/transfer", route(s, "shares.transfer", nil, true))
-	app.Delete("/v1/captable/shares/:id", routeID(s, "shares.delete", false))
+	g.Get("/shares", route(s, "shares.list", nil, false))
+	g.Post("/shares", route(s, "shares.add", nil, true))
+	g.Post("/shares/transfer", route(s, "shares.transfer", nil, true))
+	g.Delete("/shares/:id", routeID(s, "shares.delete", false))
 	// options
-	app.Get("/v1/captable/options", route(s, "options.list", nil, false))
-	app.Post("/v1/captable/options", route(s, "options.add", nil, true))
-	app.Delete("/v1/captable/options/:id", routeID(s, "options.delete", false))
+	g.Get("/options", route(s, "options.list", nil, false))
+	g.Post("/options", route(s, "options.add", nil, true))
+	g.Delete("/options/:id", routeID(s, "options.delete", false))
 	// SAFEs
-	app.Get("/v1/captable/safes", route(s, "safes.list", nil, false))
-	app.Post("/v1/captable/safes", route(s, "safes.create", nil, true))
-	app.Delete("/v1/captable/safes/:id", routeID(s, "safes.delete", false))
+	g.Get("/safes", route(s, "safes.list", nil, false))
+	g.Post("/safes", route(s, "safes.create", nil, true))
+	g.Delete("/safes/:id", routeID(s, "safes.delete", false))
 	// convertible notes
-	app.Get("/v1/captable/convertibles", route(s, "convertibles.list", nil, false))
-	app.Post("/v1/captable/convertibles", route(s, "convertibles.create", nil, true))
-	app.Delete("/v1/captable/convertibles/:id", routeID(s, "convertibles.delete", false))
+	g.Get("/convertibles", route(s, "convertibles.list", nil, false))
+	g.Post("/convertibles", route(s, "convertibles.create", nil, true))
+	g.Delete("/convertibles/:id", routeID(s, "convertibles.delete", false))
 	// rounds + investments
-	app.Get("/v1/captable/rounds", route(s, "rounds.list", nil, false))
-	app.Post("/v1/captable/rounds", route(s, "rounds.create", nil, true))
-	app.Get("/v1/captable/rounds/:id", routeID(s, "rounds.get", false))
-	app.Post("/v1/captable/rounds/:id/close", routeID(s, "rounds.close", true))
-	app.Post("/v1/captable/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
-	app.Get("/v1/captable/investments", route(s, "rounds.investments.list", nil, false))
+	g.Get("/rounds", route(s, "rounds.list", nil, false))
+	g.Post("/rounds", route(s, "rounds.create", nil, true))
+	g.Get("/rounds/:id", routeID(s, "rounds.get", false))
+	g.Post("/rounds/:id/close", routeID(s, "rounds.close", true))
+	g.Post("/rounds/:id/investments", routeID(s, "rounds.investments.add", true))
+	g.Get("/investments", route(s, "rounds.investments.list", nil, false))
 	// computed cap table
-	app.Get("/v1/captable/summary", route(s, "captable", nil, false))
+	g.Get("/summary", route(s, "captable", nil, false))
 }
 
 // route builds a zip handler that dispatches a fixed bundle route. readBody

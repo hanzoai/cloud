@@ -73,12 +73,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// reach per-call dispatch enforcement without tools importing marketplace.
 	tools.SetPricer(&pricer{store: store})
 
+	// Surface root stays flat: Group("/v1/marketplace").Get("") would register
+	// "/v1/marketplace/", not the bare surface path.
 	app.Get("/v1/marketplace", cloud.Handle(s, discover))
-	app.Get("/v1/marketplace/listings", cloud.Handle(s, listListings))
-	app.Post("/v1/marketplace/listings", cloud.Handle(s, publish))
-	app.Delete("/v1/marketplace/listings/:id", cloud.Handle(s, unpublish))
-	app.Post("/v1/marketplace/install", cloud.Handle(s, install))
-	app.Post("/v1/marketplace/uninstall", cloud.Handle(s, uninstall))
+
+	g := app.Group("/v1/marketplace")
+	g.Get("/listings", cloud.Handle(s, listListings))
+	g.Post("/listings", cloud.Handle(s, publish))
+	g.Delete("/listings/:id", cloud.Handle(s, unpublish))
+	g.Post("/install", cloud.Handle(s, install))
+	g.Post("/uninstall", cloud.Handle(s, uninstall))
 
 	s.Log.Info("marketplace mounted", "prefix", "/v1/marketplace", "brand", deps.Brand)
 	return nil

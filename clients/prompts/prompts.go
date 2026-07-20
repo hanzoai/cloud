@@ -164,12 +164,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // the :name param route so a real prompt can never shadow /metrics (and
 // "metrics"/"new" are reserved names).
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/prompts")
+	// Root routes stay flat: Group("/v1/prompts").<M>("") would register "/v1/prompts/".
 	app.Get("/v1/prompts", cloud.Handle(s, list))
 	app.Post("/v1/prompts", cloud.Handle(s, create))
-	app.Get("/v1/prompts/metrics", cloud.Handle(s, metrics))
-	app.Get("/v1/prompts/catalog", cloud.Handle(s, catalog))
-	app.Get("/v1/prompts/:name", cloud.Handle(s, get))
-	app.Delete("/v1/prompts/:name", cloud.Handle(s, del))
+	g.Get("/metrics", cloud.Handle(s, metrics))
+	g.Get("/catalog", cloud.Handle(s, catalog))
+	g.Get("/:name", cloud.Handle(s, get))
+	g.Delete("/:name", cloud.Handle(s, del))
 }
 
 // ---- handlers ----
