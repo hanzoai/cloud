@@ -86,12 +86,15 @@ func Shutdown() error {
 // 500. Terminal writes the reject status (401 no-principal, 400 bad body, 404
 // not-found) in-band, so the filter has nothing to flatten and the real 4xx stands.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Collection endpoints sit AT the group root (/v1/sync). Group(p).Method("")
+	// yields "p/", so these stay flat on app to preserve the exact path.
 	app.Post("/v1/sync", cloud.Terminal(cloud.Handle(s, createSync)))
 	app.Get("/v1/sync", cloud.Terminal(cloud.Handle(s, listSyncs)))
-	app.Get("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, getSync)))
-	app.Patch("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, patchSync)))
-	app.Delete("/v1/sync/:id", cloud.Terminal(cloud.Handle(s, deleteSync)))
+	g := app.Group("/v1/sync")
+	g.Get("/:id", cloud.Terminal(cloud.Handle(s, getSync)))
+	g.Patch("/:id", cloud.Terminal(cloud.Handle(s, patchSync)))
+	g.Delete("/:id", cloud.Terminal(cloud.Handle(s, deleteSync)))
 	// Manual run: reconcile one sync now (initial import, or a re-sync after an
 	// upstream you couldn't webhook). A distinct trailing segment, never shadows :id.
-	app.Post("/v1/sync/:id/run", cloud.Terminal(cloud.Handle(s, runSync)))
+	g.Post("/:id/run", cloud.Terminal(cloud.Handle(s, runSync)))
 }

@@ -193,17 +193,21 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // param route so a real function can never shadow
 // /metrics|/triggers|/deployments|/secrets.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Collection root stays flat: Group("/v1/functions").Get("") would register
+	// "/v1/functions/", not the bare collection path.
 	app.Get("/v1/functions", cloud.Handle(s, list))
 	app.Post("/v1/functions", cloud.Handle(s, create))
-	app.Get("/v1/functions/metrics", cloud.Handle(s, metrics))
-	app.Get("/v1/functions/triggers", cloud.Handle(s, triggers))
-	app.Get("/v1/functions/deployments", cloud.Handle(s, deployments))
-	app.Get("/v1/functions/secrets", cloud.Handle(s, secrets))
-	app.Get("/v1/functions/:name", cloud.Handle(s, get))
-	app.Delete("/v1/functions/:name", cloud.Handle(s, del))
-	app.Get("/v1/functions/:name/invocations", cloud.Handle(s, invocations))
-	app.Get("/v1/functions/:name/logs", cloud.Handle(s, logs))
-	app.Post("/v1/functions/:name/invoke", cloud.Handle(s, invoke))
+
+	g := app.Group("/v1/functions")
+	g.Get("/metrics", cloud.Handle(s, metrics))
+	g.Get("/triggers", cloud.Handle(s, triggers))
+	g.Get("/deployments", cloud.Handle(s, deployments))
+	g.Get("/secrets", cloud.Handle(s, secrets))
+	g.Get("/:name", cloud.Handle(s, get))
+	g.Delete("/:name", cloud.Handle(s, del))
+	g.Get("/:name/invocations", cloud.Handle(s, invocations))
+	g.Get("/:name/logs", cloud.Handle(s, logs))
+	g.Post("/:name/invoke", cloud.Handle(s, invoke))
 }
 
 // ---- handlers ----

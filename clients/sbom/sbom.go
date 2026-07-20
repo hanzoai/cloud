@@ -110,9 +110,11 @@ func build(b cloud.Base) (state, error) {
 // greedy resolve wildcard so it is never captured by it. Health is not JWT-gated
 // (liveness must be probe-able).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/sbom/health", cloud.Handle(s, health))
+	g := app.Group("/v1/sbom")
+	g.Get("/health", cloud.Handle(s, health))
+	// Root route stays flat: Group("/v1/sbom").Post("") would register "/v1/sbom/".
 	app.Post("/v1/sbom", cloud.Handle(s, ingest))
-	app.Get("/v1/sbom/*", cloud.Handle(s, resolve))
+	g.Get("/*", cloud.Handle(s, resolve))
 }
 
 // requireDatastore returns the honest 503 when the datastore store is not

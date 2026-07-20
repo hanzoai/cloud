@@ -133,14 +133,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// /v1/s3/objects to provisioning's GET /v1/s3/:name (a 404 "resource not
 	// found") instead of the honest 503 — the file-manager surface must fail closed
 	// under its own name, never fall through to a different subsystem's handler.
-	app.Get("/v1/s3/health", cloud.Handle(s, health))
-	app.Get("/v1/s3/buckets", guard(s, cloud.Handle(s, listBuckets)))
-	app.Post("/v1/s3/buckets", guard(s, cloud.Handle(s, createBucket)))
-	app.Delete("/v1/s3/buckets/:bucket", guard(s, cloud.Handle(s, deleteBucket)))
-	app.Get("/v1/s3/buckets/:bucket/objects", guard(s, cloud.Handle(s, listObjects)))
-	app.Post("/v1/s3/buckets/:bucket/objects", guard(s, cloud.Handle(s, presignUpload)))
-	app.Get("/v1/s3/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
-	app.Delete("/v1/s3/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
+	g := app.Group("/v1/s3")
+	g.Get("/health", cloud.Handle(s, health))
+	g.Get("/buckets", guard(s, cloud.Handle(s, listBuckets)))
+	g.Post("/buckets", guard(s, cloud.Handle(s, createBucket)))
+	g.Delete("/buckets/:bucket", guard(s, cloud.Handle(s, deleteBucket)))
+	g.Get("/buckets/:bucket/objects", guard(s, cloud.Handle(s, listObjects)))
+	g.Post("/buckets/:bucket/objects", guard(s, cloud.Handle(s, presignUpload)))
+	g.Get("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, presignDownload)))
+	g.Delete("/buckets/:bucket/objects/*", guard(s, cloud.Handle(s, deleteObject)))
 
 	if !s.State.admin.Configured() {
 		s.Log.Warn("s3 subsystem mounted fail-closed: S3_ADMIN_ACCESS_KEY/SECRET_KEY not set (all ops 503 until provisioned)")

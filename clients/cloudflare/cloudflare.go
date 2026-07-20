@@ -111,37 +111,38 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // target than another. Pages + Workers are WIRED; R2/KV/D1 are typed Phase-2 stubs
 // that answer an honest 501 (never a fake success).
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/integrations/cloudflare")
 	// Pages (wired) — account-scoped.
-	app.Get("/v1/integrations/cloudflare/pages/projects", cloud.Handle(s, pagesList))
-	app.Post("/v1/integrations/cloudflare/pages/projects", cloud.Handle(s, pagesCreate))
-	app.Get("/v1/integrations/cloudflare/pages/projects/:project", cloud.Handle(s, pagesGet))
-	app.Delete("/v1/integrations/cloudflare/pages/projects/:project", cloud.Handle(s, pagesDelete))
-	app.Post("/v1/integrations/cloudflare/pages/projects/:project/deployments", cloud.Handle(s, pagesDeploy))
-	app.Post("/v1/integrations/cloudflare/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
-	app.Delete("/v1/integrations/cloudflare/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
+	g.Get("/pages/projects", cloud.Handle(s, pagesList))
+	g.Post("/pages/projects", cloud.Handle(s, pagesCreate))
+	g.Get("/pages/projects/:project", cloud.Handle(s, pagesGet))
+	g.Delete("/pages/projects/:project", cloud.Handle(s, pagesDelete))
+	g.Post("/pages/projects/:project/deployments", cloud.Handle(s, pagesDeploy))
+	g.Post("/pages/projects/:project/domains", cloud.Handle(s, pagesDomainAdd))
+	g.Delete("/pages/projects/:project/domains/:domain", cloud.Handle(s, pagesDomainDelete))
 
 	// Workers (wired) — scripts + workers.dev subdomain are account-scoped; routes
 	// are zone-scoped.
-	app.Get("/v1/integrations/cloudflare/workers/scripts", cloud.Handle(s, workersScriptList))
-	app.Put("/v1/integrations/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
-	app.Delete("/v1/integrations/cloudflare/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
-	app.Post("/v1/integrations/cloudflare/workers/scripts/:script/subdomain", cloud.Handle(s, workersScriptSubdomainSet))
-	app.Get("/v1/integrations/cloudflare/workers/subdomain", cloud.Handle(s, workersSubdomainGet))
-	app.Get("/v1/integrations/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteList))
-	app.Post("/v1/integrations/cloudflare/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
-	app.Delete("/v1/integrations/cloudflare/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
+	g.Get("/workers/scripts", cloud.Handle(s, workersScriptList))
+	g.Put("/workers/scripts/:script", cloud.Handle(s, workersScriptPut))
+	g.Delete("/workers/scripts/:script", cloud.Handle(s, workersScriptDelete))
+	g.Post("/workers/scripts/:script/subdomain", cloud.Handle(s, workersScriptSubdomainSet))
+	g.Get("/workers/subdomain", cloud.Handle(s, workersSubdomainGet))
+	g.Get("/workers/zones/:zone/routes", cloud.Handle(s, workersRouteList))
+	g.Post("/workers/zones/:zone/routes", cloud.Handle(s, workersRouteCreate))
+	g.Delete("/workers/zones/:zone/routes/:route", cloud.Handle(s, workersRouteDelete))
 
 	// R2 / KV / D1 (Phase-2 stubs) — routes + typed provider methods exist; bodies
 	// ship in Phase 2. Each answers an honest 501, never a misleading 200.
-	app.Get("/v1/integrations/cloudflare/r2/buckets", cloud.Handle(s, r2BucketList))
-	app.Post("/v1/integrations/cloudflare/r2/buckets", cloud.Handle(s, r2BucketCreate))
-	app.Delete("/v1/integrations/cloudflare/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
-	app.Get("/v1/integrations/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceList))
-	app.Post("/v1/integrations/cloudflare/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
-	app.Delete("/v1/integrations/cloudflare/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
-	app.Get("/v1/integrations/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseList))
-	app.Post("/v1/integrations/cloudflare/d1/databases", cloud.Handle(s, d1DatabaseCreate))
-	app.Delete("/v1/integrations/cloudflare/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
+	g.Get("/r2/buckets", cloud.Handle(s, r2BucketList))
+	g.Post("/r2/buckets", cloud.Handle(s, r2BucketCreate))
+	g.Delete("/r2/buckets/:bucket", cloud.Handle(s, r2BucketDelete))
+	g.Get("/kv/namespaces", cloud.Handle(s, kvNamespaceList))
+	g.Post("/kv/namespaces", cloud.Handle(s, kvNamespaceCreate))
+	g.Delete("/kv/namespaces/:namespace", cloud.Handle(s, kvNamespaceDelete))
+	g.Get("/d1/databases", cloud.Handle(s, d1DatabaseList))
+	g.Post("/d1/databases", cloud.Handle(s, d1DatabaseCreate))
+	g.Delete("/d1/databases/:database", cloud.Handle(s, d1DatabaseDelete))
 }
 
 // ── client (the cfDo shape, reused verbatim from hanzodns) ──────────────────────

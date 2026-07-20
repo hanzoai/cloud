@@ -29,13 +29,14 @@ const sendMaxBody = 1 << 20 // 1 MiB
 // routes registers the /v1/channels surface. The :channel send route is LAST:
 // zip matches in registration order, so the static paths above must win.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/channels")
 	app.Get("/v1/channels", cloud.Terminal(cloud.Handle(s, list)))
-	app.Get("/v1/channels/inbox", cloud.Terminal(cloud.Handle(s, inbox)))
-	app.Get("/v1/channels/pairing", cloud.Terminal(cloud.Handle(s, pairingList)))
-	app.Post("/v1/channels/pairing/approve", cloud.Terminal(cloud.Handle(s, pairingApprove)))
-	app.Get("/v1/channels/allowlist", cloud.Terminal(cloud.Handle(s, allowlistGet)))
-	app.Put("/v1/channels/allowlist", cloud.Terminal(cloud.Handle(s, allowlistPut)))
-	app.Post("/v1/channels/:channel/send", cloud.Terminal(cloud.Handle(s, send)))
+	g.Get("/inbox", cloud.Terminal(cloud.Handle(s, inbox)))
+	g.Get("/pairing", cloud.Terminal(cloud.Handle(s, pairingList)))
+	g.Post("/pairing/approve", cloud.Terminal(cloud.Handle(s, pairingApprove)))
+	g.Get("/allowlist", cloud.Terminal(cloud.Handle(s, allowlistGet)))
+	g.Put("/allowlist", cloud.Terminal(cloud.Handle(s, allowlistPut)))
+	g.Post("/:channel/send", cloud.Terminal(cloud.Handle(s, send)))
 }
 
 // ── JSON projections (camelCase, closed shapes) ──────────────────────────────
