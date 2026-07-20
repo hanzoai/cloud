@@ -39,6 +39,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -159,6 +160,8 @@ type worker struct {
 	hostname string
 	jobsNS   string
 	gpus     []gpuInfo
+	arch     string // CPU arch (`uname -m`), detected once at newWorker
+	memory   int64  // total system RAM in bytes, detected once at newWorker
 	handlers map[string]jobHandler
 
 	// studioUploadURL is the org studio base that receives finished render outputs
@@ -198,8 +201,16 @@ type gpuInfo struct {
 // additive (omitempty): an older cloud that does not read them still renders the
 // GPU; a newer one advertises the engine endpoint on GET /v1/fleet/workers.
 type registration struct {
-	Hostname     string               `json:"hostname"`
-	Os           string               `json:"os"`
+	Hostname string `json:"hostname"`
+	Os       string `json:"os"`
+	// Arch/CPUs/Memory are THIS host's static CPU spec, in the SAME convention the
+	// fleet already uses for code-linked run-targets: Arch is `uname -m`
+	// (aarch64 | x86_64 | arm64), Memory is total system RAM in BYTES. Matching the
+	// existing convention matters — evo-2 and spark appear on the board as BOTH a
+	// run-target and a gpu-connect worker, so both rows must show the SAME arch.
+	Arch         string               `json:"arch,omitempty"`
+	CPUs         int                  `json:"cpus,omitempty"`
+	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
 	GPUs         []gpuInfo            `json:"gpus"`
@@ -292,6 +303,8 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 		hostname:        host,
 		jobsNS:          firstNonEmpty(jobsNS, defaultJobsNS),
 		gpus:            detectGPUs(),
+		arch:            detectArch(),
+		memory:          detectMemTotal(),
 		studioUploadURL: firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL),
 	}
 	policy, err := loadSharePolicy()
@@ -363,6 +376,66 @@ func detectAppleGPU() []gpuInfo {
 		}
 	}
 	return []gpuInfo{info}
+}
+
+// detectArch reports this machine's CPU architecture in the SAME convention the
+// fleet already uses for code-linked nodes — `uname -m` (aarch64 | x86_64 on Linux,
+// arm64 | x86_64 on Darwin) — so a machine that shows up as both a run-target and a
+// gpu-connect worker carries ONE arch string on the board. Falls back to the
+// compiled runtime.GOARCH only if uname is unavailable; "" is never forced.
+func detectArch() string {
+	if out, err := exec.Command("uname", "-m").Output(); err == nil {
+		if a := strings.TrimSpace(string(out)); a != "" {
+			return a
+		}
+	}
+	return runtime.GOARCH
+}
+
+// detectMemTotal returns this machine's total physical RAM in bytes, or 0 when it
+// cannot be read (reported as "unknown" via omitempty — never faked). Linux reads
+// /proc/meminfo's MemTotal (covers evo-2's Strix Halo and spark's GB10, both Linux);
+// Darwin reads sysctl hw.memsize. This is the SAME total a code-linked box reports
+// as Spec.Memory, so the fleet board describes both kinds of node identically.
+func detectMemTotal() int64 {
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+		if err != nil {
+			return 0
+		}
+		var b int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(out)), &b); err == nil && b > 0 {
+			return b
+		}
+		return 0
+	}
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	return parseMemTotalKB(b)
+}
+
+// parseMemTotalKB extracts MemTotal from /proc/meminfo content (reported in kB) and
+// returns it in bytes, or 0 when the line is absent or malformed.
+func parseMemTotalKB(meminfo []byte) int64 {
+	sc := bufio.NewScanner(bytes.NewReader(meminfo))
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, "MemTotal:") {
+			continue
+		}
+		f := strings.Fields(line) // "MemTotal:" <kb> "kB"
+		if len(f) < 2 {
+			return 0
+		}
+		kb, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil || kb <= 0 {
+			return 0
+		}
+		return kb * 1024
+	}
+	return 0
 }
 
 // ---------------------------------------------------------------------------
@@ -510,6 +583,9 @@ func (w *worker) buildRegistration() registration {
 	return registration{
 		Hostname:     w.hostname,
 		Os:           runtime.GOOS,
+		Arch:         w.arch,
+		CPUs:         runtime.NumCPU(),
+		Memory:       w.memory,
 		Version:      Version,
 		JobQueue:     w.jobsNS,
 		GPUs:         w.gpus,
