@@ -157,14 +157,39 @@ func New(cfg Config, log luxlog.Logger) *Server {
 //
 // A published site (either shape) is a PUBLIC artifact: it returns HERE, never
 // entering the authenticated/billed API pipeline.
+// baseHostHandler serves the org's Base data plane (/v1/base, /v1/realtime, /_/)
+// on a published site host — host-as-project-ref (HIP-0014). Nil (the default)
+// leaves a site host serving only its static files; base.Mount installs it,
+// gated by CLOUD_BASE_PUBLIC_HOST. The org comes ONLY from the resolved Site
+// (the subdomain), never the caller — the same server-supplied tenant key the
+// file plane trusts. Authz is Base's own collection rules.
+var baseHostHandler func(org string, c *zip.Ctx) error
+
+// SetBaseHostHandler installs the per-org Base handler (see baseHostHandler).
+func SetBaseHostHandler(h func(org string, c *zip.Ctx) error) { baseHostHandler = h }
+
+// isBasePath reports whether a path targets the Base data plane or admin.
+func isBasePath(p string) bool {
+	return strings.HasPrefix(p, "/v1/base") || strings.HasPrefix(p, "/v1/realtime") ||
+		p == "/_" || strings.HasPrefix(p, "/_/")
+}
+
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
 		raw := c.Fiber().Hostname()
 		if slug, ok := s.siteSlug(raw); ok {
+			if baseHostHandler != nil && isBasePath(c.Path()) {
+				if site, ok := s.resolveLive(c.Context(), slug); ok {
+					return baseHostHandler(site.Org, c)
+				}
+			}
 			return s.serve(c, slug)
 		}
 		if host := hostOnly(raw); s.customCandidate(host) {
 			if site, ok := s.resolveLive(c.Context(), host); ok {
+				if baseHostHandler != nil && isBasePath(c.Path()) {
+					return baseHostHandler(site.Org, c)
+				}
 				return s.serveCustom(c, site)
 			}
 		}
