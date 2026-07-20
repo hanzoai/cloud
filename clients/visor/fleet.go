@@ -65,6 +65,13 @@ type byoWorker struct {
 	LastHeartbeat string   `json:"lastHeartbeat,omitempty"`
 	FirstSeen     string   `json:"firstSeen,omitempty"`
 	Os            string   `json:"os,omitempty"`
+	// Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
+	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
+	// BYTES — the same fields a code-linked run-target carries, so the /v1/fleet
+	// board renders a gpu-connect node's arch + cores + RAM like any other unit.
+	Arch          string   `json:"arch,omitempty"`
+	CPUs          int      `json:"cpus,omitempty"`
+	Memory        int64    `json:"memory,omitempty"`
 	Version       string   `json:"version,omitempty"`
 	JobQueue      string   `json:"jobQueue,omitempty"`
 	// Capabilities the worker advertises ("studio.render", "engine.serve"); Engine
@@ -78,6 +85,9 @@ type byoWorker struct {
 type fleetRegistration struct {
 	Hostname     string               `json:"hostname"`
 	Os           string               `json:"os"`
+	Arch         string               `json:"arch,omitempty"`
+	CPUs         int                  `json:"cpus,omitempty"`
+	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
 	GPUs         []byoGPU             `json:"gpus"`
@@ -121,6 +131,9 @@ func byoWorkers(org string) []byoWorker {
 			LastHeartbeat: a.LastHeartbeatTime,
 			FirstSeen:     a.StartTime,
 			Os:            reg.Os,
+			Arch:          reg.Arch,
+			CPUs:          reg.CPUs,
+			Memory:        reg.Memory,
 			Version:       reg.Version,
 			JobQueue:      reg.JobQueue,
 			Capabilities:  reg.Capabilities,
