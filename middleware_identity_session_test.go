@@ -11,7 +11,7 @@ import (
 
 // The EMBED session→principal bridge (validatedPrincipal → sessionAccessToken) must
 // be a SAFE NO-OP whenever there is no in-process IAM session manager — i.e. on any
-// binary that does not mount clients/iamsvc (and in these tests, where GlobalSessions
+// binary that does not mount clients/iam (and in these tests, where GlobalSessions
 // is never initialised). A first-party-session cookie present WITHOUT a bearer and
 // WITHOUT a session manager must resolve ANONYMOUS (never a principal, never a panic),
 // so the bridge can never widen auth on a non-embed deployment.
