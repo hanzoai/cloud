@@ -91,8 +91,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "kms"), State: state{kms: kc, iamTokenURL: tokenURL}}
 
-	app.Get("/v1/kms/health", cloud.Handle(s, health))
-	app.Get("/v1/kms/config", configHandler(deps))
+	// Plain /v1/kms surface. The /v1/kms/auth login broker below keeps its OWN
+	// group because it carries a per-source-IP rate-limit middleware this group
+	// must not apply.
+	g := app.Group("/v1/kms")
+	g.Get("/health", cloud.Handle(s, health))
+	g.Get("/config", configHandler(deps))
 	// The login broker is PUBLIC (it IS the credential exchange) and independent of
 	// the local store: the kms-operator POSTs its per-tenant clientId/clientSecret
 	// here to mint the owner-scoped IAM bearer it then carries on the org-scoped
@@ -127,10 +131,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// from getSecret (400 "secret name is required"), leaving listSecrets
 	// unreachable. `+` requires a non-empty name, so the bare path falls through
 	// to the exact list route.
-	app.Get("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, listSecrets)))
-	app.Get("/v1/kms/orgs/:org/secrets/+", guard(s, cloud.Handle(s, getSecret)))
-	app.Post("/v1/kms/orgs/:org/secrets", guard(s, cloud.Handle(s, putSecret)))
-	app.Delete("/v1/kms/orgs/:org/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
+	g.Get("/orgs/:org/secrets", guard(s, cloud.Handle(s, listSecrets)))
+	g.Get("/orgs/:org/secrets/+", guard(s, cloud.Handle(s, getSecret)))
+	g.Post("/orgs/:org/secrets", guard(s, cloud.Handle(s, putSecret)))
+	g.Delete("/orgs/:org/secrets/+", guard(s, cloud.Handle(s, deleteSecret)))
 
 	s.Log.Info(
 		"kms subsystem mounted",

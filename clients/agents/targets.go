@@ -509,11 +509,12 @@ func toTargetView(t Target, load TargetLoad) targetView {
 // /v1/agents/:ref wildcard (Fiber matches in registration order) so "targets" is not
 // captured as a ref. The static /v1/agents/targets precedes /v1/agents/targets/:id.
 func mountTargets(s *cloud.Service[state], app *zip.App) {
-	app.Post("/v1/agents/targets", cloud.Handle(s, registerTarget))
-	app.Get("/v1/agents/targets", cloud.Handle(s, listTargets))
-	app.Get("/v1/agents/targets/:id", cloud.Handle(s, getTarget))
-	app.Patch("/v1/agents/targets/:id", cloud.Handle(s, patchTarget))
-	app.Delete("/v1/agents/targets/:id", cloud.Handle(s, deleteTarget))
+	g := app.Group("/v1/agents")
+	g.Post("/targets", cloud.Handle(s, registerTarget))
+	g.Get("/targets", cloud.Handle(s, listTargets))
+	g.Get("/targets/:id", cloud.Handle(s, getTarget))
+	g.Patch("/targets/:id", cloud.Handle(s, patchTarget))
+	g.Delete("/targets/:id", cloud.Handle(s, deleteTarget))
 	// The #48 route-work machine surface (claim-key, claim long-poll, report)
 	// lives on the same target routes; register after the CRUD so the
 	// extra-segment paths are unambiguous.

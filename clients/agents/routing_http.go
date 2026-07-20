@@ -40,9 +40,10 @@ const (
 // AFTER the target CRUD routes so the extra-segment paths are unambiguous.
 func mountRouting(s *cloud.Service[state], app *zip.App) {
 	assertSingleReplica(s.Log)
-	app.Post("/v1/agents/targets/:id/claim-key", cloud.Handle(s, mintClaimKey))
-	app.Post("/v1/agents/targets/:id/claim", cloud.Handle(s, claimRoutedRun))
-	app.Post("/v1/agents/targets/:id/runs/:runId/report", cloud.Handle(s, reportRoutedRun))
+	g := app.Group("/v1/agents")
+	g.Post("/targets/:id/claim-key", cloud.Handle(s, mintClaimKey))
+	g.Post("/targets/:id/claim", cloud.Handle(s, claimRoutedRun))
+	g.Post("/targets/:id/runs/:runId/report", cloud.Handle(s, reportRoutedRun))
 }
 
 // caller is the VALIDATED principal id (X-User-Id) — the machine-owner identity for
