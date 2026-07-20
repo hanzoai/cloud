@@ -24,10 +24,10 @@ func seedGitApp(t *testing.T, s *cloud.Service[state], org, slug, repoURL, branc
 	return a
 }
 
-// pushSvc mounts a Service over a ready fake cluster (no HTTP routes needed —
+// pushService mounts a Service over a ready fake cluster (no HTTP routes needed —
 // buildFromPush is called directly) and trusts the embedded-git apex as a build
 // source, exactly as platform.Mount does from deps.Domain.
-func pushSvc(t *testing.T) *cloud.Service[state] {
+func pushService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	_, s := mountSvcK8s(t, fakeK8s())
 	prev := selfGitHost
@@ -40,7 +40,7 @@ func pushSvc(t *testing.T) *cloud.Service[state] {
 // "building" and a "building" deployment for the pushed commit is recorded.
 func TestBuildFromPush_LaunchesMatchingApp(t *testing.T) {
 	ctx := context.Background()
-	s := pushSvc(t)
+	s := pushService(t)
 	const clone = "https://git.hanzo.ai/v1/git/acme/site.git"
 	a := seedGitApp(t, s, "acme", "site", "https://git.hanzo.ai/v1/git/acme/site", "main")
 
@@ -69,7 +69,7 @@ func TestBuildFromPush_LaunchesMatchingApp(t *testing.T) {
 // A push to a branch no app tracks is a no-op: no deployment, no error.
 func TestBuildFromPush_NoMatchIsNoop(t *testing.T) {
 	ctx := context.Background()
-	s := pushSvc(t)
+	s := pushService(t)
 	a := seedGitApp(t, s, "acme", "site", "https://git.hanzo.ai/v1/git/acme/site", "main")
 
 	// Right repo, wrong branch.
@@ -92,7 +92,7 @@ func TestBuildFromPush_NoMatchIsNoop(t *testing.T) {
 // An image-source app matching the repo URL is never built by a push (git only).
 func TestBuildFromPush_IgnoresImageApp(t *testing.T) {
 	ctx := context.Background()
-	s := pushSvc(t)
+	s := pushService(t)
 	img := Application{
 		ID: "app_acme_api", Org: "acme", ProjectID: "default", Slug: "api", Name: "api",
 		Source: "image", RepoURL: "https://git.hanzo.ai/v1/git/acme/api", ImageRepo: "ghcr.io/hanzoai/api", ImageTag: "1",

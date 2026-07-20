@@ -98,7 +98,7 @@ func TestWantsDocument(t *testing.T) {
 // navigation gets bounced to sign-in. Neither is ever served the data.
 func TestGuardRefusesNonAdmin(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	routes(app, fakeSvc())
+	routes(app, fakeService())
 
 	// API call (no Accept, the shape every API client and the existing e2e sends).
 	resp := do(t, app, httptest.NewRequest("GET", "/v1/deploy/applications", nil))
@@ -367,7 +367,7 @@ func TestSessionMaxAge(t *testing.T) {
 // origin the OAuth hop refuses rather than deriving a redirect_uri from the
 // caller-controlled Host / X-Forwarded-Proto headers.
 func TestSignInFailsClosedWithoutPublicOrigin(t *testing.T) {
-	svc := fakeSvc()
+	svc := fakeService()
 	svc.State.oauth = oauth{
 		issuer: "https://iam.test", clientID: defaultClientID, adminOrg: "admin",
 		http:   &http.Client{Timeout: time.Second},
@@ -611,7 +611,7 @@ func signinApp(t *testing.T, issuer string) (*zip.App, *fakeIAM) {
 		t.Cleanup(srv.Close)
 		issuer = srv.URL
 	}
-	svc := fakeSvc()
+	svc := fakeService()
 	svc.State.oauth = oauth{
 		issuer: issuer, clientID: defaultClientID, adminOrg: "admin",
 		publicURL: "https://cd.hanzo.ai", http: &http.Client{Timeout: 5 * time.Second},

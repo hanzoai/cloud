@@ -1,4 +1,4 @@
-// Package pluginsvc is the runtime plugin loader for the unified cloud binary.
+// Package plugin is the runtime plugin loader for the unified cloud binary.
 //
 // cloud is a thin host: its native Go subsystems are compiled in, but
 // everything else mounts at RUNTIME from a manifest — no cloud rebuild to add
@@ -13,7 +13,7 @@
 //     client when available; until then proxying uses plain HTTP. Either
 //     way cloud never recompiles to point at a service.
 //
-// The manifest path comes from CLOUD_PLUGINS (a JSON file); if unset, pluginsvc
+// The manifest path comes from CLOUD_PLUGINS (a JSON file); if unset, plugin
 // mounts nothing. Adding a service = edit the manifest + drop a .wasm or
 // redeploy the standalone — cloud is unchanged unless its own core changes.
 package plugin
@@ -62,7 +62,7 @@ type Manifest struct {
 //
 // The proxy kind dials its target through an http.RoundTripper chosen by
 // Plugin.Via. "http" is built in; "zap" (and any future transport) is
-// registered here by its client package, so pluginsvc has no hard dependency
+// registered here by its client package, so plugin has no hard dependency
 // on the ZAP wire code and works today over HTTP.
 
 var (

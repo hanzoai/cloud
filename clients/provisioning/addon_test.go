@@ -98,7 +98,7 @@ func TestStore_InstanceColumnRoundTrips(t *testing.T) {
 // and returns a postgres:// DSN authenticated as the "admin" superuser.
 func TestDedicated_SQLEngineAssemblesDSN(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreate(t, s, "sql", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
@@ -147,7 +147,7 @@ func TestDedicated_SQLEngineAssemblesDSN(t *testing.T) {
 // redis://default:… DSN — never an "admin" user that would fail AUTH.
 func TestDedicated_KVEngineAssemblesDSN(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreate(t, s, "kv", "acme", "sessions")
 	if resp.StatusCode != http.StatusCreated {
@@ -202,7 +202,7 @@ func TestDedicated_KVEngineAssemblesDSN(t *testing.T) {
 // the same instance MERGES (never clobbers the first).
 func TestDedicated_InstanceBindingInjectsURL(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	r1 := postCreateInstance(t, s, "datastore", "acme", "warehouse", "commerce")
 	if r1.StatusCode != http.StatusCreated {
@@ -239,7 +239,7 @@ func TestDedicated_InstanceBindingInjectsURL(t *testing.T) {
 // instance touches no addons Secret — the pre-binding behavior is unchanged.
 func TestDedicated_NotInstanceBoundSkipsInjection(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	if resp := postCreate(t, s, "datastore", "acme", "warehouse"); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create = %d", resp.StatusCode)
@@ -254,7 +254,7 @@ func TestDedicated_NotInstanceBoundSkipsInjection(t *testing.T) {
 // key is gone afterward.
 func TestDedicated_DropRemovesURLBeforeTeardown(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	if resp := postCreateInstance(t, s, "datastore", "acme", "warehouse", "commerce"); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create = %d", resp.StatusCode)
@@ -296,7 +296,7 @@ func TestDedicated_DropRemovesURLBeforeTeardown(t *testing.T) {
 func TestDedicated_InjectFailureRollsBack(t *testing.T) {
 	orch := newFakeOrch()
 	orch.patchErr = context.DeadlineExceeded // make PatchAddonSecret fail
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreateInstance(t, s, "datastore", "acme", "warehouse", "commerce")
 	if resp.StatusCode != http.StatusBadGateway {
@@ -326,7 +326,7 @@ func TestDedicated_InjectPartialWriteRollsBackOrphanKey(t *testing.T) {
 	orch := newFakeOrch()
 	orch.patchErr = context.DeadlineExceeded
 	orch.patchErrAfterWrite = true // the key lands, THEN the call reports failure
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreateInstance(t, s, "datastore", "acme", "warehouse", "commerce")
 	if resp.StatusCode != http.StatusBadGateway {
