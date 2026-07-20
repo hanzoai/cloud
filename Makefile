@@ -4,6 +4,18 @@
 GO              ?= go
 BIN             ?= cloud
 PKG             ?= ./cmd/cloud
+
+# cloud is a STANDALONE Go module — a self-contained deploy unit (its own go.mod,
+# Dockerfile, binary). It is intentionally NOT a member of the parent
+# ~/work/hanzo/go.work workspace (that workspace deliberately excludes the heavy
+# modules; adding cloud would merge its k8s/otel graph with o11y's and reintroduce
+# koanf/ugorji import ambiguities). But `go` auto-discovers that parent go.work
+# whenever a dev builds from inside this tree, which shadows cloud's own
+# replace/exclude directives (oxy pin, ugorji monolith exclude, k8s staging pins)
+# and breaks `go build ./...`. Force module mode so make targets build EXACTLY
+# what CI/Docker build (fresh checkout, no parent go.work). Overridable via
+# `make GOWORK=... <target>` for the rare cross-module case.
+export GOWORK := off
 DOCKER_IMAGE    ?= ghcr.io/hanzoai/cloud
 DOCKER_TAG      ?= dev
 LDFLAGS         ?= -s -w
