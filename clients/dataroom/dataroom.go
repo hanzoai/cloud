@@ -137,25 +137,26 @@ func Mount(app *zip.App, deps hcloud.Deps) error {
 
 // routes wires the /v1/dataroom/* surface onto app.
 func routes(app *zip.App, s *hcloud.Service[state]) {
+	g := app.Group("/v1/dataroom")
 	// --- admin surface (validated principal → org) ---------------------------
-	app.Get("/v1/dataroom/documents", admin(s, "documents.list", nil, false))
-	app.Post("/v1/dataroom/documents", hcloud.Handle(s, uploadDocument))
-	app.Get("/v1/dataroom/documents/:id", adminID(s, "documents.get", false))
-	app.Get("/v1/dataroom/documents/:id/file", hcloud.Handle(s, adminDownload))
-	app.Get("/v1/dataroom/datarooms", admin(s, "datarooms.list", nil, false))
-	app.Post("/v1/dataroom/datarooms", admin(s, "datarooms.create", nil, true))
-	app.Get("/v1/dataroom/datarooms/:id", adminID(s, "datarooms.get", false))
-	app.Post("/v1/dataroom/datarooms/:id/documents", adminID(s, "datarooms.addDocument", true))
-	app.Get("/v1/dataroom/links", admin(s, "links.list", nil, false))
-	app.Post("/v1/dataroom/links", hcloud.Handle(s, createLink))
-	app.Get("/v1/dataroom/analytics/link/:linkId", adminParam(s, "analytics.link", "linkId", false))
-	app.Get("/v1/dataroom/analytics/dataroom/:dataroomId", adminParam(s, "analytics.dataroom", "dataroomId", false))
+	g.Get("/documents", admin(s, "documents.list", nil, false))
+	g.Post("/documents", hcloud.Handle(s, uploadDocument))
+	g.Get("/documents/:id", adminID(s, "documents.get", false))
+	g.Get("/documents/:id/file", hcloud.Handle(s, adminDownload))
+	g.Get("/datarooms", admin(s, "datarooms.list", nil, false))
+	g.Post("/datarooms", admin(s, "datarooms.create", nil, true))
+	g.Get("/datarooms/:id", adminID(s, "datarooms.get", false))
+	g.Post("/datarooms/:id/documents", adminID(s, "datarooms.addDocument", true))
+	g.Get("/links", admin(s, "links.list", nil, false))
+	g.Post("/links", hcloud.Handle(s, createLink))
+	g.Get("/analytics/link/:linkId", adminParam(s, "analytics.link", "linkId", false))
+	g.Get("/analytics/dataroom/:dataroomId", adminParam(s, "analytics.dataroom", "dataroomId", false))
 
 	// --- viewer surface (public; org resolved from the link index) -----------
-	app.Get("/v1/dataroom/view/:linkId", viewer(s, "view.link", false))
-	app.Post("/v1/dataroom/view/:linkId/authenticate", viewer(s, "view.authenticate", true))
-	app.Post("/v1/dataroom/view/:linkId/pageview", viewer(s, "view.recordPage", true))
-	app.Get("/v1/dataroom/view/:linkId/document/:documentId/file", hcloud.Handle(s, viewerDownload))
+	g.Get("/view/:linkId", viewer(s, "view.link", false))
+	g.Post("/view/:linkId/authenticate", viewer(s, "view.authenticate", true))
+	g.Post("/view/:linkId/pageview", viewer(s, "view.recordPage", true))
+	g.Get("/view/:linkId/document/:documentId/file", hcloud.Handle(s, viewerDownload))
 }
 
 // === admin dispatch (validated principal) ====================================
