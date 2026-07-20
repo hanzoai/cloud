@@ -71,7 +71,7 @@ func TestValidNarrowingRejectsInjection(t *testing.T) {
 
 func TestScopedWalletSealsAtScopedRef(t *testing.T) {
 	k, _ := testKMS(t)
-	_, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
+	_, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 
 	acct := mkAccount(t, app, "acme")
 
@@ -120,7 +120,7 @@ func TestScopedWalletSealsAtScopedRef(t *testing.T) {
 
 func TestScopeLookupPath(t *testing.T) {
 	k, _ := testKMS(t)
-	s, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
+	s, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 	ctx := context.Background()
 
 	// Provision four wallets in org "acme" spanning distinct scopes, plus one in a

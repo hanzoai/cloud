@@ -109,7 +109,7 @@ func (f *fakeOrch) DeletePVC(_ context.Context, ns, name string) error {
 	return nil
 }
 
-func newDedicatedSvc(t *testing.T, orch orchestrator) *cloud.Service[state] {
+func newDedicatedService(t *testing.T, orch orchestrator) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -152,7 +152,7 @@ func doReq(t *testing.T, h zip.Handler, method, route, path, org, bodyStr string
 // dimension, and returns a DSN pointing at the instance's OWN in-cluster Service.
 func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreate(t, s, "datastore", "acme", "analytics")
 	if resp.StatusCode != http.StatusCreated {
@@ -231,7 +231,7 @@ func TestDedicated_CreateLaunchesInstance(t *testing.T) {
 // namespaces — no shared backend, no cross-tenant reachability.
 func TestDedicated_TwoOrgsSeparateInstances(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	if resp := postCreate(t, s, "docdb", "acme", "events"); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("acme create = %d", resp.StatusCode)
@@ -261,7 +261,7 @@ func TestDedicated_TwoOrgsSeparateInstances(t *testing.T) {
 // operator reports the instance StatefulSet Running — never before.
 func TestDedicated_ReadyReconcile(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	if resp := postCreate(t, s, "datastore", "acme", "warehouse"); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create = %d", resp.StatusCode)
@@ -292,7 +292,7 @@ func TestDedicated_ReadyReconcile(t *testing.T) {
 // TestDedicated_DropTearsDownInstance: delete removes the CR + admin Secret + row.
 func TestDedicated_DropTearsDownInstance(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	if resp := postCreate(t, s, "docdb", "acme", "sessions"); resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create = %d", resp.StatusCode)

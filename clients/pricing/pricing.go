@@ -1,4 +1,4 @@
-// Package pricingsvc mounts the @hanzo/pricing service into the unified cloud
+// Package pricing mounts the @hanzo/pricing service into the unified cloud
 // binary under /v1/pricing/* (+ the /v1/models, /v1/gpu, /v1/tools aliases),
 // per HIP-0106.
 //
@@ -99,7 +99,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// must stay hidden across restarts. A non-persistent (in-memory) overlay would
 	// silently re-expose hidden models on the next pod start — a fail-OPEN
 	// degradation of a security control. So an empty DataDir is a hard boot error
-	// (prod sets CLOUD_DATA_DIR), never a silent downgrade. provisioningsvc already
+	// (prod sets CLOUD_DATA_DIR), never a silent downgrade. provisioning already
 	// requires DataDir, so the unified binary always provides one.
 	if deps.DataDir == "" {
 		return fmt.Errorf("pricing.Mount: empty DataDir — the catalog enablement overlay requires a persistent data dir (set CLOUD_DATA_DIR); refusing to boot with a non-persistent overlay that would re-expose admin-hidden models on restart")

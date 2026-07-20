@@ -146,7 +146,7 @@ func TestSafeCustody(t *testing.T) {
 	if !safeCl.configured() {
 		t.Fatal("safe client should be configured with base + secret")
 	}
-	s, app := newSvc(t, map[Kind]Custody{KindSafe: safeCustody{mpc: mpcCl, safe: safeCl}}, KindSafe)
+	s, app := newService(t, map[Kind]Custody{KindSafe: safeCustody{mpc: mpcCl, safe: safeCl}}, KindSafe)
 
 	acct := mkAccount(t, app, "acme")
 	w := mkWallet(t, app, "acme", acct, "safe", "warm", "eip155:36963")
