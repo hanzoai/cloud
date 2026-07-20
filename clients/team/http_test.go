@@ -464,7 +464,7 @@ func TestCallbackVerifiesOwner(t *testing.T) {
 			verify:   verify,
 		}
 		app := zip.New(zip.Config{Logger: luxlog.New("test")})
-		g.register(app, func(h zip.Handler) zip.Handler { return h })
+		g.register(app.Group("/v1/team"), func(h zip.Handler) zip.Handler { return h })
 		cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=ok&state=aaaa", nil)
 		cb.AddCookie(&http.Cookie{Name: stateCookie, Value: "aaaa|"})
 		resp, err := app.Fiber().Test(cb)
