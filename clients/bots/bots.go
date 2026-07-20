@@ -134,9 +134,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the bots surface. The static /run literal and the :runId param
 // are resolved by specificity, so /v1/bots/run can never bind as a run id.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/bots/run", cloud.Handle(s, run))
+	g := app.Group("/v1/bots")
+	g.Post("/run", cloud.Handle(s, run))
 	app.Get("/v1/bots", cloud.Handle(s, list))
-	app.Post("/v1/bots/:runId/stop", cloud.Handle(s, stop))
+	g.Post("/:runId/stop", cloud.Handle(s, stop))
 }
 
 // run reports that launching is not implemented.

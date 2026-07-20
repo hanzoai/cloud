@@ -128,8 +128,9 @@ func build(b cloud.Base) (state, error) {
 // the IAM guard (SuperAdmin or org-confined OrgAdmin); the health probe is public
 // (real k8s reachability).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/paas/apps", guard(s, cloud.Handle(s, listApps)))
-	app.Get("/v1/paas/apps/:app", guard(s, cloud.Handle(s, getApp)))
+	g := app.Group("/v1/paas")
+	g.Get("/apps", guard(s, cloud.Handle(s, listApps)))
+	g.Get("/apps/:app", guard(s, cloud.Handle(s, getApp)))
 	// MUTATION is superadmin-only (operatorGuard), NOT the broader read guard: the
 	// only namespaces this board scans are the platform's OWN tier (hanzo{,-testnet,
 	// -devnet}), so a rolling restart here recreates a SHARED platform service
@@ -137,8 +138,8 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// admin is a CUSTOMER-org admin, not a platform operator — restarting prod iam is
 	// a platform-operator action. Gating the read board (below) any wider is bounded
 	// (observe, audit-logged); gating a restart wider is a live DoS lever (RED H1).
-	app.Post("/v1/paas/apps/:app/deploy", operatorGuard(s, cloud.Handle(s, deploy)))
-	app.Get("/v1/paas/health", cloud.Handle(s, health))
+	g.Post("/apps/:app/deploy", operatorGuard(s, cloud.Handle(s, deploy)))
+	g.Get("/health", cloud.Handle(s, health))
 
 	// Native release seam: install the first-party CR-rollout hook (build.go's
 	// RegisterServiceReleaser inversion) so a proven, clean-semver image rolls onto
