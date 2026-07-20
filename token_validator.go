@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/hanzoai/iam"
 )
 
 // VerifiedIdentity is what a token PROVED, after signature, issuer, audience and
@@ -39,6 +41,14 @@ type VerifiedIdentity struct {
 	// conflating the two is a privilege escalation. Reported so a caller can tell
 	// an org admin from a plain member, never as the platform gate.
 	IsAdmin bool
+	// Orgs is the validated `orgs` membership-set claim — every org the subject
+	// may act in (the HOME org first, then explicit team memberships), each with
+	// its coarse role (owner | admin | member). It is the Slack-model tenancy set
+	// a caller enumerates cross-org surfaces against (hanzo.team unions a user's
+	// workspaces across it) with NO IAM round-trip. Empty on a token minted before
+	// the claim shipped (iam < 1.31.34); a reader then falls back to the single
+	// Owner org. Verified off the SAME signed token as Owner — never trusted raw.
+	Orgs []iam.OrgRef
 	// Expiry is the token's own `exp`. A session built on this token must not
 	// outlive it.
 	Expiry time.Time
@@ -78,6 +88,7 @@ func (t *TokenValidator) Validate(raw string) (VerifiedIdentity, error) {
 		Username: claims.username(),
 		Email:    claims.Email,
 		IsAdmin:  claims.IsAdmin,
+		Orgs:     claims.Orgs,
 	}
 	if claims.Expiry != nil {
 		id.Expiry = claims.Expiry.Time()
