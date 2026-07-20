@@ -105,6 +105,11 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/o11y", core.Guard(s, o11y))
 	app.Post("/v1/admin/sync", core.Guard(s, syncNow))
 
+	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited
+	// relay to commerce's mint-gated POST /v1/billing/credit-grants; commerce is the
+	// sole ledger. See creditgrant.go.
+	app.Post("/v1/admin/credit-grants", core.Guard(s, createCreditGrant))
+
 	// Product analytics — org-scoped (SuperAdmin: all-orgs; org admin: their own org).
 	app.Get("/v1/admin/analytics", core.GuardScoped(s, analytics))
 	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
