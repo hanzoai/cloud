@@ -96,6 +96,9 @@ func (f *fakeFinance) Deposit(_ context.Context, in types.DepositInput) (string,
 	return id, nil
 }
 func (f *fakeFinance) RecordUsage(_ context.Context, _ types.UsageInput) error { return nil }
+func (f *fakeFinance) SumUsageSince(_ context.Context, _ string, _ bool, _ int64) (int64, error) {
+	return 0, nil
+}
 
 // insertPromo seeds a custom promo for a test (small cap, so exhaustion is cheap
 // to prove).

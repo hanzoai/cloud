@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hanzoai/account"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/hanzoai/account"
 
 	"github.com/hanzoai/cloud/clients/finance"
 	"github.com/hanzoai/cloud/clients/money"
@@ -45,6 +46,9 @@ func (f *fakeFinance) Balance(_ context.Context, org, subject, _ string, _ bool)
 
 func (f *fakeFinance) Deposit(context.Context, types.DepositInput) (string, error) { return "", nil }
 func (f *fakeFinance) RecordUsage(context.Context, types.UsageInput) error         { return nil }
+func (f *fakeFinance) SumUsageSince(context.Context, string, bool, int64) (int64, error) {
+	return 0, nil
+}
 
 func publishFinance(t *testing.T, f *fakeFinance) {
 	t.Helper()
