@@ -69,25 +69,23 @@ func selectWS(t *testing.T, app *zip.App, org, acct, slug string) (int, []byte) 
 const gateOrg = "acme"
 const gateAcct = "550e8400-e29b-41d4-a716-446655440000"
 
-func TestEntitleDeniedIs402WithUpgradeURL(t *testing.T) {
+// TestEntitleUnentitledAdmitsObserve: a definitive "no entitlement" ADMITS in
+// observe mode — the blocking 402 form of this gate broke every login live on
+// 2026-07-20 (no org had a subscription row and no self-serve checkout exists
+// to escape the 402). Enforcement returns with the card-on-file subscribe path;
+// when it does, this test flips back to asserting the 402 + upgradeUrl body.
+func TestEntitleUnentitledAdmitsObserve(t *testing.T) {
 	app, store := gateApp(t, &fakeCommerce{ent: &types.LicenseEntitlement{ProductID: productTeam, Active: false}}, nil)
 	ws, _ := store.EnsureWorkspace(context.Background(), gateOrg, gateAcct, "Ada")
 	code, body := selectWS(t, app, gateOrg, gateAcct, ws.Slug)
-	if code != http.StatusPaymentRequired {
-		t.Fatalf("status = %d, want 402 (%s)", code, body)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — unentitled must admit in observe mode (%s)", code, body)
 	}
 	var out struct {
-		Error      Status `json:"error"`
-		UpgradeURL string `json:"upgradeUrl"`
+		Result *WorkspaceLoginInfo `json:"result"`
 	}
-	if err := json.Unmarshal(body, &out); err != nil {
-		t.Fatalf("decode: %v (%s)", err, body)
-	}
-	if out.UpgradeURL != upgradeURL || out.Error.Params["upgradeUrl"] != upgradeURL {
-		t.Fatalf("upgradeUrl missing: %s", body)
-	}
-	if out.Error.Code != "account:status:PaymentRequired" {
-		t.Fatalf("code = %q", out.Error.Code)
+	if json.Unmarshal(body, &out) != nil || out.Result == nil || out.Result.Workspace != ws.UUID {
+		t.Fatalf("observe mode must return a workspace login: %s", body)
 	}
 }
 
@@ -139,16 +137,10 @@ func TestEntitleGuestCap(t *testing.T) {
 			t.Fatalf("guest %d status = %d, want 200 (%s)", i, code, body)
 		}
 	}
-	code, body := selectWS(t, app, gateOrg, guest(4), ws.Slug)
-	if code != http.StatusPaymentRequired {
-		t.Fatalf("guest 4 status = %d, want 402 (%s)", code, body)
-	}
-	var out struct {
-		Error Status `json:"error"`
-	}
-	_ = json.Unmarshal(body, &out)
-	if out.Error.Params["limit"] != float64(3) {
-		t.Fatalf("limit param = %v, want 3 (%s)", out.Error.Params["limit"], body)
+	// Guest 4 exceeds the cap but ADMITS in observe mode (denial logged, not
+	// enforced) — flips back to a 402 assertion when enforcement returns.
+	if code, body := selectWS(t, app, gateOrg, guest(4), ws.Slug); code != http.StatusOK {
+		t.Fatalf("guest 4 status = %d, want 200 in observe mode (%s)", code, body)
 	}
 
 	// Plans service down → guest admitted (infra error, never a lockout).
