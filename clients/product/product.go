@@ -1,4 +1,4 @@
-// Package productsvc exposes the read-only Search and Vector product surfaces
+// Package product exposes the read-only Search and Vector product surfaces
 // the Hanzo console panels call at api.cloud.hanzo.ai, per HIP-0106.
 //
 // The console's Search/Indexes and Vector panels call

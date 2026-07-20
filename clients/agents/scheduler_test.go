@@ -48,9 +48,9 @@ func (c *countingAI) Embed(_ context.Context, _ *types.EmbedRequest) ([][]float3
 	return nil, nil
 }
 
-// schedSvc builds a Service + scheduler with NO billing (gate allows) and the given
+// schedService builds a Service + scheduler with NO billing (gate allows) and the given
 // AI, seeded with the supplied agents. Returns the scheduler for direct tick().
-func schedSvc(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {
+func schedService(t *testing.T, ai types.AIClient, seed ...Agent) *scheduler {
 	t.Helper()
 	s := &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}, State: state{store: testStore(t), ai: ai}}
 	for _, a := range seed {
@@ -83,7 +83,7 @@ func waitFor(cond func() bool) bool {
 // run; a tick at a non-matching minute launches none.
 func TestSchedulerFiresDueAgent(t *testing.T) {
 	ai := &countingAI{}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "*/5 * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "*/5 * * * *"))
 	ctx := context.Background()
 
 	sc.tick(ctx, at(t, "2026-07-01 12:36")) // 36 not multiple of 5 -> no fire
@@ -102,7 +102,7 @@ func TestSchedulerFiresDueAgent(t *testing.T) {
 // like an HTTP run — the scheduler shares runAgent.
 func TestSchedulerRecordsRun(t *testing.T) {
 	ai := &countingAI{}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "* * * * *"))
 	ctx := context.Background()
 	sc.tick(ctx, at(t, "2026-07-01 12:00"))
 	if !waitFor(func() bool {
@@ -119,7 +119,7 @@ func TestSchedulerRecordsRun(t *testing.T) {
 // tick fires; the immediately-following matching tick is skipped (backoff=1).
 func TestSchedulerBackoffOnFailure(t *testing.T) {
 	ai := &countingAI{fail: true}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "* * * * *"))
 	ctx := context.Background()
 
 	sc.tick(ctx, at(t, "2026-07-01 12:00"))
@@ -152,7 +152,7 @@ func TestSchedulerBackoffOnFailure(t *testing.T) {
 // second matching tick while it is in flight does NOT start a second run.
 func TestSchedulerConcurrencyCap(t *testing.T) {
 	ai := &countingAI{block: make(chan struct{})}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "* * * * *"))
 	ctx := context.Background()
 
 	sc.tick(ctx, at(t, "2026-07-01 12:00")) // starts run #1, which blocks
@@ -257,7 +257,7 @@ func TestSchedulerGatesUnfundedRun(t *testing.T) {
 // path that lets Shutdown close the store safely.
 func TestSchedulerStopDrainsCleanly(t *testing.T) {
 	ai := &countingAI{}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "* * * * *"))
 	sc.start()
 	// Fire one run via a direct tick, then stop — stop must return after drain.
 	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
@@ -286,7 +286,7 @@ func TestSchedulerStopDrainsCleanly(t *testing.T) {
 // rather than waiting the full runTimeout.
 func TestSchedulerStopHonorsDeadline(t *testing.T) {
 	ai := &countingAI{block: make(chan struct{})}
-	sc := schedSvc(t, ai, longRunning("acme", "cron", "* * * * *"))
+	sc := schedService(t, ai, longRunning("acme", "cron", "* * * * *"))
 	sc.start()
 	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
 	if !waitFor(func() bool { return ai.count() == 1 }) {
@@ -310,7 +310,7 @@ func TestSchedulerStopHonorsDeadline(t *testing.T) {
 func TestSchedulerOnlyLongRunning(t *testing.T) {
 	ai := &countingAI{}
 	one := mk("acme", "one") // one-shot default, no schedule
-	sc := schedSvc(t, ai, one)
+	sc := schedService(t, ai, one)
 	sc.tick(context.Background(), at(t, "2026-07-01 12:00"))
 	time.Sleep(20 * time.Millisecond)
 	if ai.count() != 0 {
