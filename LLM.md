@@ -44,6 +44,48 @@ Port roadmap (P1-P15) lives in HIP-0129; do not restate it here. Every claim
 carries its tier: Shipped (on main, named package/route), In flight (named
 pre-main branch), Planned (backlog id or named reservation).
 
+## Build & module graph — standalone module, NOT a go.work member
+
+`cloud` is a self-contained deploy unit: its own `go.mod`, `Dockerfile`, binary.
+It is intentionally NOT listed in the parent `~/work/hanzo/go.work` workspace —
+that workspace deliberately excludes the heavy modules, and merging cloud's
+k8s/otel dependency tree with `o11y`'s reintroduces `koanf`/`ugorji`
+monolith-vs-split import ambiguities (the parent workspace is itself red on the
+koanf split; that is not cloud's bug to fix).
+
+The catch: `go` auto-discovers that parent `go.work` whenever you run a bare
+`go build ./...` / `go test ./...` from inside this tree, which puts the build in
+workspace mode and SILENTLY DROPS cloud's own `go.mod` directives. Those
+directives are load-bearing and each fixes exactly one graph hazard:
+
+- `replace github.com/vulcand/oxy/v2 => github.com/traefik/oxy/v2 <pseudo>` — the
+  bare require is a placeholder (`v2.0.0-00010101000000-000000000000`); without
+  the replace it resolves to an invalid version.
+- `exclude github.com/ugorji/go <old-monolith>` — drops the pre-split monolith so
+  `github.com/ugorji/go/codec` (pulled by gin) is unambiguous.
+- the `k8s.io/*` staging replace block pins every staging module to the `v0.35.3`
+  line. `k8s.io/kubernetes` is a GRAPH-ONLY transitive require of
+  `hanzoai/deploy/gitops-engine` (clients/deploy uses its `pkg/utils/kube`); NO
+  cloud package imports `k8s.io/kubernetes`, so its staging tree never compiles —
+  do not "drop k8s.io/kubernetes", the pins keep the graph consistent and it is
+  never built. koanf resolves to the split modules; the `koanf v1.5.0` monolith
+  require is a harmless graph leaf, never imported.
+
+So: build cloud in module mode, never workspace mode. `make build`/`test`/`vet`/
+`tidy` force `GOWORK=off` (matches CI and the Dockerfile, which check out cloud
+alone with no parent go.work). For a bare `go` command from this tree, prefix
+`GOWORK=off`. `GOWORK=off go build ./...` and `go vet ./...` are green; `go mod
+tidy` is stable. Do NOT commit a `go.work` here — it would flip the Dockerfile
+(`COPY go.mod go.sum` → `go mod download` → `COPY . .`) into workspace mode after
+its `-mod=readonly` download step.
+
+Test modes: `make test` is pure-Go (`CGO_ENABLED=0`). Encrypted-at-rest OrgDB
+tests (`cek`, `CLOUD_KMS_MASTER_KEY_REF` set) REQUIRE `CGO_ENABLED=1` +
+libsqlcipher (`cek/cek.go` refuses to encrypt in pure-Go); those run only in the
+Dockerfile's dedicated `-tags libsqlite3` CGO stage, and fail under `make test`
+by design (clients/git, kms, flags, x402, cmd/kmsreseal, finance). Bundle-embed
+tests (clients/tasks/ui) need `make deploy-ui` first (real bundle is gitignored).
+
 ## Framework doctrine
 
 One way to do everything. Composable, orthogonal, DRY. A new subsystem is a
