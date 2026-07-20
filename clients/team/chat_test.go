@@ -451,7 +451,6 @@ func TestCircuitBreakerBacksOff(t *testing.T) {
 
 // ── test helpers ───────────────────────────────────────────────────────────────
 
-const clChannel = "chunter:class:Channel"
 
 var errForced = errForcedType("forced failure")
 
