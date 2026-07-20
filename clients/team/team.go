@@ -144,6 +144,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
 	files.register(tg, guard)
 
+	// Billing plane: the go:embed'd usage/wallet page (/billing/ui/*) + the
+	// plan/seats read (/billing/plan) — session-gated, org-scoped through the
+	// SAME commerce/plan seams the login gate (entitle.go) uses.
+	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret}
+	billing.register(tg, guard)
+
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil
