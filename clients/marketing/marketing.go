@@ -124,54 +124,55 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // registration order is publish order; zip is first-match, and each path here has
 // a distinct shape (segment count), so none shadows another.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/marketing/summary", cloud.Handle(s, summary))
+	g := app.Group("/v1/marketing")
+	g.Get("/summary", cloud.Handle(s, summary))
 
 	// Campaigns (create / schedule / status).
-	app.Get("/v1/marketing/campaigns", cloud.Handle(s, listCampaigns))
-	app.Post("/v1/marketing/campaigns", cloud.Handle(s, createCampaign))
-	app.Get("/v1/marketing/campaigns/:id", cloud.Handle(s, getCampaign))
-	app.Put("/v1/marketing/campaigns/:id", cloud.Handle(s, updateCampaign))
-	app.Post("/v1/marketing/campaigns/:id/schedule", cloud.Handle(s, scheduleCampaign))
-	app.Delete("/v1/marketing/campaigns/:id", cloud.Handle(s, deleteCampaign))
+	g.Get("/campaigns", cloud.Handle(s, listCampaigns))
+	g.Post("/campaigns", cloud.Handle(s, createCampaign))
+	g.Get("/campaigns/:id", cloud.Handle(s, getCampaign))
+	g.Put("/campaigns/:id", cloud.Handle(s, updateCampaign))
+	g.Post("/campaigns/:id/schedule", cloud.Handle(s, scheduleCampaign))
+	g.Delete("/campaigns/:id", cloud.Handle(s, deleteCampaign))
 
 	// Email drip sequences (durable steps on the tasks engine).
-	app.Get("/v1/marketing/sequences", cloud.Handle(s, listSequences))
-	app.Post("/v1/marketing/sequences", cloud.Handle(s, createSequence))
-	app.Get("/v1/marketing/sequences/:id", cloud.Handle(s, getSequence))
-	app.Post("/v1/marketing/sequences/:id/status", cloud.Handle(s, setSequenceStatus))
-	app.Get("/v1/marketing/sequences/:id/steps", cloud.Handle(s, listStepsHandler))
-	app.Post("/v1/marketing/sequences/:id/steps", cloud.Handle(s, addStep))
-	app.Post("/v1/marketing/sequences/:id/enroll", cloud.Handle(s, enroll))
-	app.Get("/v1/marketing/sequences/:id/enrollments", cloud.Handle(s, listEnrollments))
-	app.Post("/v1/marketing/sequences/:id/enrollments/:eid/cancel", cloud.Handle(s, cancelEnrollment))
+	g.Get("/sequences", cloud.Handle(s, listSequences))
+	g.Post("/sequences", cloud.Handle(s, createSequence))
+	g.Get("/sequences/:id", cloud.Handle(s, getSequence))
+	g.Post("/sequences/:id/status", cloud.Handle(s, setSequenceStatus))
+	g.Get("/sequences/:id/steps", cloud.Handle(s, listStepsHandler))
+	g.Post("/sequences/:id/steps", cloud.Handle(s, addStep))
+	g.Post("/sequences/:id/enroll", cloud.Handle(s, enroll))
+	g.Get("/sequences/:id/enrollments", cloud.Handle(s, listEnrollments))
+	g.Post("/sequences/:id/enrollments/:eid/cancel", cloud.Handle(s, cancelEnrollment))
 
 	// Audiences (cohort filters over the org's analytics events).
-	app.Get("/v1/marketing/audiences", cloud.Handle(s, listAudiences))
-	app.Post("/v1/marketing/audiences", cloud.Handle(s, createAudience))
-	app.Get("/v1/marketing/audiences/:id", cloud.Handle(s, getAudience))
-	app.Get("/v1/marketing/audiences/:id/preview", cloud.Handle(s, previewAudience))
-	app.Delete("/v1/marketing/audiences/:id", cloud.Handle(s, deleteAudience))
+	g.Get("/audiences", cloud.Handle(s, listAudiences))
+	g.Post("/audiences", cloud.Handle(s, createAudience))
+	g.Get("/audiences/:id", cloud.Handle(s, getAudience))
+	g.Get("/audiences/:id/preview", cloud.Handle(s, previewAudience))
+	g.Delete("/audiences/:id", cloud.Handle(s, deleteAudience))
 
 	// Promo codes (launch discount → non-cash wallet credit).
-	app.Get("/v1/marketing/promos", cloud.Handle(s, listPromos))
-	app.Get("/v1/marketing/promos/:code/eligibility", cloud.Handle(s, quotePromo))
-	app.Post("/v1/marketing/promos/:code/redeem", cloud.Handle(s, redeemPromo))
-	app.Get("/v1/marketing/promos/:code/redemption", cloud.Handle(s, getRedemption))
+	g.Get("/promos", cloud.Handle(s, listPromos))
+	g.Get("/promos/:code/eligibility", cloud.Handle(s, quotePromo))
+	g.Post("/promos/:code/redeem", cloud.Handle(s, redeemPromo))
+	g.Get("/promos/:code/redemption", cloud.Handle(s, getRedemption))
 
 	// Content calendar (scheduled posts + task-executed publish hooks).
-	app.Get("/v1/marketing/calendar", cloud.Handle(s, listCalendarPosts))
-	app.Post("/v1/marketing/calendar", cloud.Handle(s, createCalendarPost))
-	app.Get("/v1/marketing/calendar/:id", cloud.Handle(s, getCalendarPost))
-	app.Put("/v1/marketing/calendar/:id", cloud.Handle(s, updateCalendarPost))
-	app.Post("/v1/marketing/calendar/:id/publish", cloud.Handle(s, publishCalendarPost))
-	app.Delete("/v1/marketing/calendar/:id", cloud.Handle(s, deleteCalendarPost))
+	g.Get("/calendar", cloud.Handle(s, listCalendarPosts))
+	g.Post("/calendar", cloud.Handle(s, createCalendarPost))
+	g.Get("/calendar/:id", cloud.Handle(s, getCalendarPost))
+	g.Put("/calendar/:id", cloud.Handle(s, updateCalendarPost))
+	g.Post("/calendar/:id/publish", cloud.Handle(s, publishCalendarPost))
+	g.Delete("/calendar/:id", cloud.Handle(s, deleteCalendarPost))
 
 	// Suppression / unsubscribe. Management is org-scoped; the one-click
 	// unsubscribe is PUBLIC (signed token, no principal).
-	app.Get("/v1/marketing/suppressions", cloud.Handle(s, listSuppressions))
-	app.Post("/v1/marketing/suppressions", cloud.Handle(s, addSuppression))
-	app.Delete("/v1/marketing/suppressions", cloud.Handle(s, removeSuppression))
-	app.Get("/v1/marketing/unsubscribe", cloud.Handle(s, unsubscribe))
+	g.Get("/suppressions", cloud.Handle(s, listSuppressions))
+	g.Post("/suppressions", cloud.Handle(s, addSuppression))
+	g.Delete("/suppressions", cloud.Handle(s, removeSuppression))
+	g.Get("/unsubscribe", cloud.Handle(s, unsubscribe))
 }
 
 // ---- shared helpers (mirror clients/crm) ----

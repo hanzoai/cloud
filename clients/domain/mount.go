@@ -76,13 +76,14 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	h := func(fn func(*cloud.Service[state], *zip.Ctx) error) func(*zip.Ctx) error {
 		return cloud.Terminal(cloud.Handle(s, fn))
 	}
-	app.Get("/v1/domain/health", cloud.Handle(s, health))
-	app.Get("/v1/domain/search", h(searchHandler))
-	app.Get("/v1/domain/availability", h(availabilityHandler))
-	app.Get("/v1/domain/domains", h(listHandler))
-	app.Post("/v1/domain/register", h(registerHandler))
-	app.Post("/v1/domain/renew", h(renewHandler))
-	app.Post("/v1/domain/transfer", h(transferHandler))
+	g := app.Group("/v1/domain")
+	g.Get("/health", cloud.Handle(s, health))
+	g.Get("/search", h(searchHandler))
+	g.Get("/availability", h(availabilityHandler))
+	g.Get("/domains", h(listHandler))
+	g.Post("/register", h(registerHandler))
+	g.Post("/renew", h(renewHandler))
+	g.Post("/transfer", h(transferHandler))
 }
 
 // ── config ───────────────────────────────────────────────────────────────────────

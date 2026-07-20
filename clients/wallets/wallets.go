@@ -104,14 +104,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the wallets surface. Static /v1/wallets/accounts routes
 // register BEFORE the /v1/wallets/:id param route so the static segment wins.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/wallets/accounts", cloud.Handle(s, createAccount))
-	app.Get("/v1/wallets/accounts", cloud.Handle(s, listAccounts))
+	g := app.Group("/v1/wallets")
+	g.Post("/accounts", cloud.Handle(s, createAccount))
+	g.Get("/accounts", cloud.Handle(s, listAccounts))
+	// Collection root (/v1/wallets) stays flat — Group(p).Post("") yields "p/".
 	app.Post("/v1/wallets", cloud.Handle(s, createWallet))
 	app.Get("/v1/wallets", cloud.Handle(s, listWallets))
-	app.Get("/v1/wallets/:id", cloud.Handle(s, getWallet))
-	app.Post("/v1/wallets/:id/keys", cloud.Handle(s, rotateKeys))
-	app.Post("/v1/wallets/:id/sign", cloud.Handle(s, sign))
-	app.Post("/v1/wallets/:id/safe-tx", cloud.Handle(s, proposeSafeTx))
+	g.Get("/:id", cloud.Handle(s, getWallet))
+	g.Post("/:id/keys", cloud.Handle(s, rotateKeys))
+	g.Post("/:id/sign", cloud.Handle(s, sign))
+	g.Post("/:id/safe-tx", cloud.Handle(s, proposeSafeTx))
 }
 
 // buildCustody assembles the available custody backends. KMS is always present

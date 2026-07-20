@@ -94,15 +94,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	mounted = s
 
-	app.Get("/v1/code/search", s.handleSearch)
-	app.Post("/v1/code/context", s.handleContext)
-	app.Get("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/ask", s.handleAsk)
-	app.Post("/v1/code/index", s.handleIndex)
+	g := app.Group("/v1/code")
+	g.Get("/search", s.handleSearch)
+	g.Post("/context", s.handleContext)
+	g.Get("/ask", s.handleAsk)
+	g.Post("/ask", s.handleAsk)
+	g.Post("/index", s.handleIndex)
 	// Repo-inspection primitives (the zread contract over the org's own index):
 	// tree = get_repo_structure, file = read_file.
-	app.Get("/v1/code/tree", s.handleTree)
-	app.Get("/v1/code/file", s.handleFile)
+	g.Get("/tree", s.handleTree)
+	g.Get("/file", s.handleFile)
 
 	s.log.Info("code surface mounted (native)",
 		"brand", deps.Brand, "semantic", s.embed.Enabled(), "synth", s.synth.Enabled())

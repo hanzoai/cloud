@@ -8,5 +8,6 @@ import (
 
 // Routes registers the fleet invoice view (SuperAdmin only, cross-tenant).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
-	app.Get("/v1/admin/invoices", core.Guard(s, Invoices))
+	g := app.Group("/v1/admin")
+	g.Get("/invoices", core.Guard(s, Invoices))
 }

@@ -165,27 +165,28 @@ func Shutdown(ctx context.Context) error {
 // middlewares share uniform CRUD (list/get/delete keyed by kind); create+update
 // share one handler per kind (POST and PUT both land there).
 func mountRoutes(s *cloud.Service[state], app *zip.App) {
-	app.Get("/v1/ingress/status", cloud.Handle(s, status))
-	app.Get("/v1/ingress/tls", cloud.Handle(s, getTLS))
-	app.Put("/v1/ingress/tls", cloud.Handle(s, putTLS))
+	g := app.Group("/v1/ingress")
+	g.Get("/status", cloud.Handle(s, status))
+	g.Get("/tls", cloud.Handle(s, getTLS))
+	g.Put("/tls", cloud.Handle(s, putTLS))
 
-	app.Get("/v1/ingress/routes", list(s, KindRoute))
-	app.Get("/v1/ingress/routes/:id", getObj(s, KindRoute))
-	app.Post("/v1/ingress/routes", cloud.Handle(s, putRoute))
-	app.Put("/v1/ingress/routes/:id", cloud.Handle(s, putRoute))
-	app.Delete("/v1/ingress/routes/:id", del(s, KindRoute))
+	g.Get("/routes", list(s, KindRoute))
+	g.Get("/routes/:id", getObj(s, KindRoute))
+	g.Post("/routes", cloud.Handle(s, putRoute))
+	g.Put("/routes/:id", cloud.Handle(s, putRoute))
+	g.Delete("/routes/:id", del(s, KindRoute))
 
-	app.Get("/v1/ingress/services", list(s, KindService))
-	app.Get("/v1/ingress/services/:id", getObj(s, KindService))
-	app.Post("/v1/ingress/services", cloud.Handle(s, putService))
-	app.Put("/v1/ingress/services/:id", cloud.Handle(s, putService))
-	app.Delete("/v1/ingress/services/:id", del(s, KindService))
+	g.Get("/services", list(s, KindService))
+	g.Get("/services/:id", getObj(s, KindService))
+	g.Post("/services", cloud.Handle(s, putService))
+	g.Put("/services/:id", cloud.Handle(s, putService))
+	g.Delete("/services/:id", del(s, KindService))
 
-	app.Get("/v1/ingress/middlewares", list(s, KindMiddleware))
-	app.Get("/v1/ingress/middlewares/:id", getObj(s, KindMiddleware))
-	app.Post("/v1/ingress/middlewares", cloud.Handle(s, putMiddleware))
-	app.Put("/v1/ingress/middlewares/:id", cloud.Handle(s, putMiddleware))
-	app.Delete("/v1/ingress/middlewares/:id", del(s, KindMiddleware))
+	g.Get("/middlewares", list(s, KindMiddleware))
+	g.Get("/middlewares/:id", getObj(s, KindMiddleware))
+	g.Post("/middlewares", cloud.Handle(s, putMiddleware))
+	g.Put("/middlewares/:id", cloud.Handle(s, putMiddleware))
+	g.Delete("/middlewares/:id", del(s, KindMiddleware))
 }
 
 // admin resolves the SuperAdmin tenant for an edge-config request. The edge is
