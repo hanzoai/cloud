@@ -208,63 +208,65 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the git control plane + smart-HTTP + SSH-key + ZAP surface.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	g := app.Group("/v1/git")
+
 	// Control plane (JSON). Static /repos + /usage register before the
 	// smart-HTTP :org/:repo params so a real org can never shadow them.
-	app.Post("/v1/git/repos", cloud.Handle(s, create))
-	app.Get("/v1/git/repos", cloud.Handle(s, list))
-	app.Get("/v1/git/usage", cloud.Handle(s, usage))
-	app.Get("/v1/git/repos/:name", cloud.Handle(s, get))
-	app.Patch("/v1/git/repos/:name", cloud.Handle(s, patchRepo))
-	app.Delete("/v1/git/repos/:name", cloud.Handle(s, del))
+	g.Post("/repos", cloud.Handle(s, create))
+	g.Get("/repos", cloud.Handle(s, list))
+	g.Get("/usage", cloud.Handle(s, usage))
+	g.Get("/repos/:name", cloud.Handle(s, get))
+	g.Patch("/repos/:name", cloud.Handle(s, patchRepo))
+	g.Delete("/repos/:name", cloud.Handle(s, del))
 	// Push generated files without a local git client (hanzo.app builder).
 	// A distinct trailing segment, so it never shadows the :org/:repo routes.
-	app.Post("/v1/git/repos/:name/push", cloud.Handle(s, pushFiles))
+	g.Post("/repos/:name/push", cloud.Handle(s, pushFiles))
 	// Gitea push-webhook ingest (git.hanzo.ai). A static segment that never
 	// shadows the :org/:repo smart-HTTP routes; HMAC-authed, drives the same
 	// fireBranchBuild core a native push does (webhook.go). cloud.Terminal writes
 	// the handler's bad-signature 401 / malformed-body 400 in-band so the commerce
 	// /v1 ErrorHandlerJSON (co-mounted ahead) cannot flatten it to 500 — the same
 	// reject-parity /v1/sync + /v1/connector/github/webhook carry.
-	app.Post("/v1/git/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
+	g.Post("/webhook", cloud.Terminal(cloud.Handle(s, webhook)))
 	// SSH public-key registry (per-user keys for `git clone git@…`).
-	app.Post("/v1/git/keys", cloud.Handle(s, registerKey))
-	app.Get("/v1/git/keys", cloud.Handle(s, listKeys))
-	app.Delete("/v1/git/keys/:id", cloud.Handle(s, deleteKey))
+	g.Post("/keys", cloud.Handle(s, registerKey))
+	g.Get("/keys", cloud.Handle(s, listKeys))
+	g.Delete("/keys/:id", cloud.Handle(s, deleteKey))
 	// Mirror an external repo into <org>/:name (creates the repo on first use).
 	// A distinct trailing segment, so it never shadows the :org/:repo smart-HTTP
 	// routes below.
-	app.Post("/v1/git/repos/:name/mirror", cloud.Handle(s, mirror))
+	g.Post("/repos/:name/mirror", cloud.Handle(s, mirror))
 	// Repack a repo with a reachability bitmap + commit-graph so its next clone
 	// serves fast (bitmap reuse, no full object-graph walk). Distinct trailing
 	// segment, like /mirror — never shadows the :org/:repo smart-HTTP routes.
-	app.Post("/v1/git/repos/:name/gc", cloud.Handle(s, maintain))
+	g.Post("/repos/:name/gc", cloud.Handle(s, maintain))
 
 	// Repo-lifecycle config: Slack-channel subscriptions (notify.go) + downstream
 	// mirror targets (mirror_out.go). Distinct trailing segments, so they never
 	// shadow the :org/:repo smart-HTTP routes below. Org-scoped like every repo op.
-	app.Post("/v1/git/repos/:name/subscriptions", cloud.Handle(s, subscribe))
-	app.Get("/v1/git/repos/:name/subscriptions", cloud.Handle(s, listSubscriptions))
-	app.Delete("/v1/git/repos/:name/subscriptions/:id", cloud.Handle(s, unsubscribe))
-	app.Post("/v1/git/repos/:name/mirrors", cloud.Handle(s, addMirror))
-	app.Get("/v1/git/repos/:name/mirrors", cloud.Handle(s, listMirrors))
-	app.Delete("/v1/git/repos/:name/mirrors/:id", cloud.Handle(s, deleteMirror))
+	g.Post("/repos/:name/subscriptions", cloud.Handle(s, subscribe))
+	g.Get("/repos/:name/subscriptions", cloud.Handle(s, listSubscriptions))
+	g.Delete("/repos/:name/subscriptions/:id", cloud.Handle(s, unsubscribe))
+	g.Post("/repos/:name/mirrors", cloud.Handle(s, addMirror))
+	g.Get("/repos/:name/mirrors", cloud.Handle(s, listMirrors))
+	g.Delete("/repos/:name/mirrors/:id", cloud.Handle(s, deleteMirror))
 
 	// Read/browse surface (JSON) for the console repo-browser: refs, tree, blob,
 	// commits, readme. ref + path ride as ?ref=&path= query params (the UI's own
 	// convention), so a slashed branch is unambiguous. Distinct trailing segments —
 	// they never shadow the :org/:repo smart-HTTP routes below. Org-scoped like every
 	// repo op; the JSON twin of the HTML browser in ui.go (one set of read helpers).
-	app.Get("/v1/git/repos/:name/refs", cloud.Handle(s, browseRefs))
-	app.Get("/v1/git/repos/:name/tree", cloud.Handle(s, browseTree))
-	app.Get("/v1/git/repos/:name/blob", cloud.Handle(s, browseBlob))
-	app.Get("/v1/git/repos/:name/commits", cloud.Handle(s, browseCommits))
-	app.Get("/v1/git/repos/:name/readme", cloud.Handle(s, browseReadme))
+	g.Get("/repos/:name/refs", cloud.Handle(s, browseRefs))
+	g.Get("/repos/:name/tree", cloud.Handle(s, browseTree))
+	g.Get("/repos/:name/blob", cloud.Handle(s, browseBlob))
+	g.Get("/repos/:name/commits", cloud.Handle(s, browseCommits))
+	g.Get("/repos/:name/readme", cloud.Handle(s, browseReadme))
 
 	// Smart-HTTP git protocol. These live under /v1/git/:org/:repo/* so
 	// `git clone https://<host>/v1/git/<org>/<repo>.git` works natively.
-	app.Get("/v1/git/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
-	app.Post("/v1/git/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
-	app.Post("/v1/git/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
+	g.Get("/:org/:repo/info/refs", cloud.Handle(s, infoRefs))
+	g.Post("/:org/:repo/git-upload-pack", cloud.Handle(s, uploadPack))
+	g.Post("/:org/:repo/git-receive-pack", cloud.Handle(s, receivePack))
 
 	// Root-level smart-HTTP on the git host so `git clone
 	// https://git.hanzo.ai/<org>/<repo>.git` works with the canonical git URL

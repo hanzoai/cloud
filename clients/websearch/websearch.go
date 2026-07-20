@@ -307,7 +307,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	native := http.HandlerFunc(searchNative)
 	searchDirect := zip.AdaptNetHTTP(native)
 	searchKeyed := zip.AdaptNetHTTP(searchGuard(native))
-	app.All("/v1/websearch/search", func(c *zip.Ctx) error {
+	g := app.Group("/v1/websearch")
+	g.All("/search", func(c *zip.Ctx) error {
 		if principal.Validated(c) {
 			return searchDirect(c)
 		}
@@ -317,8 +318,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	scrape := zip.AdaptNetHTTPFunc(scrapeHandler)
 	// Firecrawl builds {apiUrl}/{version}/scrape; pin firecrawlVersion:v1 so the
 	// client POSTs /v1/websearch/v1/scrape. Also accept the bare /scrape.
-	app.Post("/v1/websearch/v1/scrape", scrape)
-	app.Post("/v1/websearch/scrape", scrape)
+	g.Post("/v1/scrape", scrape)
+	g.Post("/scrape", scrape)
 
 	logger.Info("web search surface mounted (native searxng-compat meta-search + firecrawl-compat over Hanzo Crawl)",
 		"crawl", crawlEndpoint())
