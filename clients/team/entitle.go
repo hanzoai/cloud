@@ -38,7 +38,7 @@ const upgradeURL = "https://billing.hanzo.ai"
 // statusPaymentRequired is the 402 body: a platform Status whose params carry
 // the product and the upgrade destination.
 func statusPaymentRequired(msg string) Status {
-	return Status{Severity: 1, Code: "account:status:PaymentRequired", Params: map[string]any{
+	return Status{Severity: "ERROR", Code: "account:status:PaymentRequired", Params: map[string]any{
 		"message": msg, "product": productTeam, "upgradeUrl": upgradeURL,
 	}}
 }
