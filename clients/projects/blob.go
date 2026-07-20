@@ -386,7 +386,7 @@ func (p *peekReader) Read(b []byte) (int, error) {
 
 func isGzip(head []byte) bool { return len(head) >= 2 && head[0] == 0x1f && head[1] == 0x8b }
 
-// ---- env helper (local to projects; mirror provisioningsvc conventions) ----
+// ---- env helper (local to projects; mirror provisioning conventions) ----
 
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
