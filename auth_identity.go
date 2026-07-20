@@ -33,6 +33,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/iam"
 )
 
 // idClaims is the subset of Hanzo IAM JWT claims the identity sanitizer needs.
@@ -40,13 +41,14 @@ import (
 type idClaims struct {
 	jwt.Claims
 
-	Owner             string `json:"owner"`              // org slug (the org)
-	Project           string `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
-	BillingAccount    string `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
-	Name              string `json:"name"`               // display name (id fallback)
-	PreferredUsername string `json:"preferred_username"` // id fallback
-	Email             string `json:"email"`
-	IsAdmin           bool   `json:"isAdmin"`
+	Owner             string       `json:"owner"`              // org slug (the org)
+	Project           string       `json:"project"`            // org SUB-SCOPE within owner (empty ⟹ default project)
+	BillingAccount    string       `json:"billing_account"`    // WHO PAYS, stated by IAM (empty ⟹ pre-claim token)
+	Name              string       `json:"name"`               // display name (id fallback)
+	PreferredUsername string       `json:"preferred_username"` // id fallback
+	Email             string       `json:"email"`
+	IsAdmin           bool         `json:"isAdmin"`
+	Orgs              []iam.OrgRef `json:"orgs"` // membership SET (home first); empty on legacy tokens
 }
 
 // mintedProject returns the project id to stamp into X-Project-Id, or "" when the
