@@ -106,13 +106,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the ads surface: the campaign CRUD + the summary roll-up.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/ads/summary", cloud.Handle(s, summary))
+	g := app.Group("/v1/ads")
+	g.Get("/summary", cloud.Handle(s, summary))
 
-	app.Get("/v1/ads/campaigns", cloud.Handle(s, listCampaigns))
-	app.Post("/v1/ads/campaigns", cloud.Handle(s, createCampaign))
-	app.Get("/v1/ads/campaigns/:id", cloud.Handle(s, getCampaign))
-	app.Put("/v1/ads/campaigns/:id", cloud.Handle(s, updateCampaign))
-	app.Delete("/v1/ads/campaigns/:id", cloud.Handle(s, deleteCampaign))
+	g.Get("/campaigns", cloud.Handle(s, listCampaigns))
+	g.Post("/campaigns", cloud.Handle(s, createCampaign))
+	g.Get("/campaigns/:id", cloud.Handle(s, getCampaign))
+	g.Put("/campaigns/:id", cloud.Handle(s, updateCampaign))
+	g.Delete("/campaigns/:id", cloud.Handle(s, deleteCampaign))
 }
 
 // ---- shared helpers (mirror clients/crm) ----

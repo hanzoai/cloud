@@ -164,7 +164,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/x402/settlements/:id", cloud.Handle(s, getSettlement))
+	g := app.Group("/v1/x402")
+	g.Get("/settlements/:id", cloud.Handle(s, getSettlement))
 }
 
 // Enforce is the pay-per-use middleware a priced route group applies. It is a
