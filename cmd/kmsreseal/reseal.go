@@ -63,10 +63,13 @@ func (r *resealReport) add(res resealResult) {
 type tokenFunc func(ctx context.Context, t Target) (string, error)
 
 // reseal migrates every explicit target and resolves every folder target, reading
-// from src and writing (sealing) into dst. It never stops on a single target's
-// failure — every result is recorded so the report is complete and the run is
-// re-runnable. plan=true performs NO network I/O (just enumerates the work).
-func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, tokenFor tokenFunc, plan bool) *resealReport {
+// from src (with the src-face token) and writing+sealing into dst (with the
+// dst-face token). The two faces carry DIFFERENT identities: src uses the CR's
+// existing app-name credential (which the standalone accepts); dst uses the per-org
+// <org>-platform-kms credential (which cloud accepts dynamically, admin-denied, with
+// NO static audience widening). It never stops on a single target's failure — every
+// result is recorded so the run is re-runnable. plan=true performs NO network I/O.
+func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, srcAuth, dstAuth tokenFunc, plan bool) *resealReport {
 	rep := &resealReport{}
 
 	// Explicit targets.
@@ -75,7 +78,7 @@ func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, tokenFor to
 			rep.add(resealResult{Coord: t.Coord(), Outcome: outPlanned})
 			continue
 		}
-		rep.add(resealOne(ctx, t, src, dst, tokenFor))
+		rep.add(resealOne(ctx, t, src, dst, srcAuth, dstAuth))
 	}
 
 	// Folder targets: LIST the source folder to discover keys, then migrate each.
@@ -84,18 +87,25 @@ func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, tokenFor to
 			rep.add(resealResult{Coord: f.Coord(), Outcome: outPlanned, Detail: "folder (keys resolved at run)"})
 			continue
 		}
-		tok, err := tokenFor(ctx, f)
+		srcTok, err := srcAuth(ctx, f)
 		if err != nil {
-			rep.add(resealResult{Coord: f.Coord(), Outcome: outFailed, Detail: "auth: " + err.Error()})
+			rep.add(resealResult{Coord: f.Coord(), Outcome: outFailed, Detail: "src auth: " + err.Error()})
 			continue
 		}
-		keys, err := src.listFolder(ctx, tok, f.Org, f.Path, f.Env)
+		dstTok, err := dstAuth(ctx, f)
+		if err != nil {
+			rep.add(resealResult{Coord: f.Coord(), Outcome: outFailed, Detail: "dst auth: " + err.Error()})
+			continue
+		}
+		keys, err := src.listFolder(ctx, srcTok, f.Org, f.Path, f.Env)
 		if err != nil {
 			rep.add(resealResult{Coord: f.Coord(), Outcome: outFailed, Detail: "list folder: " + err.Error()})
 			continue
 		}
 		if len(keys) == 0 {
-			rep.add(resealResult{Coord: f.Coord(), Outcome: outAbsent, Detail: "folder empty at source"})
+			// Empty folder-sync: a crown-jewel path with no keys would produce an empty
+			// managed Secret and wedge its consumer. Flag it, never silently skip.
+			rep.add(resealResult{Coord: f.Coord(), Outcome: outAbsent, Detail: "folder EMPTY at source (seeding wedge risk — verify before cutover)"})
 			continue
 		}
 		sort.Strings(keys)
@@ -103,25 +113,29 @@ func reseal(ctx context.Context, inv Inventory, src, dst *kmsClient, tokenFor to
 			t := f
 			t.Folder = false
 			t.Key = k
-			rep.add(resealOneWithToken(ctx, t, src, dst, tok))
+			rep.add(resealOneWithTokens(ctx, t, src, dst, srcTok, dstTok))
 		}
 	}
 	return rep
 }
 
-// resealOne authenticates for the target then migrates it.
-func resealOne(ctx context.Context, t Target, src, dst *kmsClient, tokenFor tokenFunc) resealResult {
-	tok, err := tokenFor(ctx, t)
+// resealOne authenticates for the target on both faces then migrates it.
+func resealOne(ctx context.Context, t Target, src, dst *kmsClient, srcAuth, dstAuth tokenFunc) resealResult {
+	srcTok, err := srcAuth(ctx, t)
 	if err != nil {
-		return resealResult{Coord: t.Coord(), Outcome: outFailed, Detail: "auth: " + err.Error()}
+		return resealResult{Coord: t.Coord(), Outcome: outFailed, Detail: "src auth: " + err.Error()}
 	}
-	return resealOneWithToken(ctx, t, src, dst, tok)
+	dstTok, err := dstAuth(ctx, t)
+	if err != nil {
+		return resealResult{Coord: t.Coord(), Outcome: outFailed, Detail: "dst auth: " + err.Error()}
+	}
+	return resealOneWithTokens(ctx, t, src, dst, srcTok, dstTok)
 }
 
-// resealOneWithToken performs the GET(src)→POST(dst) for one target with an already
-// resolved token. The plaintext is wiped after the write.
-func resealOneWithToken(ctx context.Context, t Target, src, dst *kmsClient, tok string) resealResult {
-	val, err := src.getSecret(ctx, tok, t.Org, t.Path, t.Env, t.Key)
+// resealOneWithTokens performs GET(src, srcTok) → POST(dst, dstTok) for one target.
+// The plaintext is wiped after the write.
+func resealOneWithTokens(ctx context.Context, t Target, src, dst *kmsClient, srcTok, dstTok string) resealResult {
+	val, err := src.getSecret(ctx, srcTok, t.Org, t.Path, t.Env, t.Key)
 	if err == errSecretNotFound {
 		return resealResult{Coord: t.Coord(), Outcome: outAbsent, Detail: "not found at source"}
 	}
@@ -129,14 +143,16 @@ func resealOneWithToken(ctx context.Context, t Target, src, dst *kmsClient, tok 
 		return resealResult{Coord: t.Coord(), Outcome: outFailed, Detail: "read: " + err.Error()}
 	}
 	defer wipe(val)
-	if err := dst.putSecret(ctx, tok, t.Org, t.Path, t.Env, t.Key, val); err != nil {
+	if err := dst.putSecret(ctx, dstTok, t.Org, t.Path, t.Env, t.Key, val); err != nil {
 		return resealResult{Coord: t.Coord(), Outcome: outFailed, Detail: "write: " + err.Error()}
 	}
 	return resealResult{Coord: t.Coord(), Outcome: outMigrated}
 }
 
-// wipe zeroes a plaintext buffer once it is no longer needed (defense in depth;
-// the value already never leaves memory).
+// wipe zeroes the plaintext buffer read from the source once the write is done.
+// Best-effort defense in depth: the value already never leaves memory, and
+// putSecret copies it into a JSON body (string(value)) whose backing bytes Go does
+// not let us wipe — so this zeroes the READ buffer, not every transient copy.
 func wipe(b []byte) {
 	for i := range b {
 		b[i] = 0
@@ -152,6 +168,8 @@ func runReseal(args []string) error {
 	srcURL := fs.String("src", "", "standalone KMS base URL (read source), e.g. http://kms.hanzo.svc")
 	cloudURL := fs.String("cloud", "", "cloud embedded KMS base URL (seal destination), e.g. http://cloud.hanzo.svc")
 	onlyHost := fs.String("only-host", "", "migrate only CRs whose hostAPI matches this (excludes e.g. the devnet KMS)")
+	dstCredNS := fs.String("dst-cred-namespace", "hanzo", "namespace holding the per-org <org>-platform-kms credential Secrets")
+	dstCredSuffix := fs.String("dst-cred-suffix", "-platform-kms-creds", "Secret name suffix for the per-org cloud (dst) credential: <org>+suffix")
 	plan := fs.Bool("plan", false, "enumerate the work without any network I/O or writes")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -165,19 +183,37 @@ func runReseal(args []string) error {
 	if err != nil {
 		return err
 	}
-	inv := filterHost(BuildInventory(crs), *onlyHost)
+	full := BuildInventory(crs)
+	inv := filterHost(full, *onlyHost)
 
 	ctx := context.Background()
 	src := newKMSClient(*srcURL, nil)
 	dst := newKMSClient(*cloudURL, nil)
-	tokenFor := newK8sTokenFunc(src) // logs in at the source with each CR's credential
+	// src (standalone read): the CR's existing app-name credential.
+	// dst (cloud write): the per-org <org>-platform-kms credential cloud accepts
+	// dynamically (admin-denied, no static widening) — provisioning it is gated.
+	srcAuth := newTokenFunc(src, crCredResolver, "src")
+	dstAuth := newTokenFunc(dst, machineAudResolver(*dstCredNS, *dstCredSuffix), "dst")
 
-	rep := reseal(ctx, inv, src, dst, tokenFor, *plan)
+	rep := reseal(ctx, inv, src, dst, srcAuth, dstAuth, *plan)
 	printResealReport(inv, rep, *plan)
+	printHostScope("RESEAL", full, inv, *onlyHost, rep.Migrated)
 	if rep.Failed > 0 {
 		return fmt.Errorf("%d target(s) failed — see report; re-run is safe (idempotent)", rep.Failed)
 	}
 	return nil
+}
+
+// printHostScope (MED-2) prints the host-scoped work vs the UNFILTERED inventory
+// total, so the operator can assert Σ(per-host done) == the full inventory before
+// cutover — a single host-filter typo can silently omit a CR otherwise.
+func printHostScope(op string, full, scoped Inventory, onlyHost string, done int) {
+	scope := "ALL hosts"
+	if strings.TrimSpace(onlyHost) != "" {
+		scope = onlyHost
+	}
+	fmt.Printf("%s host-scope [%s]: %d done of %d explicit + %d folder in scope; UNFILTERED inventory total = %d explicit + %d folders across %d hosts. Assert Σ(per-host)==unfiltered before cutover.\n",
+		op, scope, done, len(scoped.Targets), len(scoped.Folders), len(full.Targets), len(full.Folders), len(full.Hosts))
 }
 
 // filterHost drops targets/folders whose CR hostAPI does not match onlyHost (when
