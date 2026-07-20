@@ -111,29 +111,74 @@ func TestRejectsNonUUID(t *testing.T) {
 	}
 }
 
-// TestExpEnforced proves Decode(verify=true) rejects an expired token and accepts
-// a still-valid one — the replay-window mitigation. A missing exp (0) is not
-// enforced, and verify=false never enforces temporal claims.
+// TestExpEnforced is the temporal-claim table: Decode(verify=true) rejects an
+// expired exp and a future nbf, tolerates clockSkew on both edges, and
+// verify=false never enforces temporal claims.
 func TestExpEnforced(t *testing.T) {
-	past := time.Now().Add(-time.Minute).Unix()
-	expired, _ := Generate(acc, ws, map[string]any{"org": "acme"}, past, secret)
-	if _, err := Decode(expired, secret, true); err != ErrExpired {
-		t.Fatalf("expired token: want ErrExpired, got %v", err)
+	mint := func(exp, nbf int64) string {
+		payload, err := marshalCompact(Token{Account: acc, Workspace: ws, Exp: exp, Nbf: nbf})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := base64.RawURLEncoding.EncodeToString(payload)
+		return header + "." + body + "." + sign(header+"."+body, secret)
+	}
+	n := time.Now()
+	cases := []struct {
+		name     string
+		exp, nbf int64
+		want     error
+	}{
+		{"valid future exp", n.Add(time.Hour).Unix(), 0, nil},
+		{"expired", n.Add(-2 * time.Minute).Unix(), 0, ErrExpired},
+		{"exp within skew", n.Add(-clockSkew / 2).Unix(), 0, nil},
+		{"future nbf", 0, n.Add(time.Hour).Unix(), ErrNotYetValid},
+		{"nbf within skew", 0, n.Add(clockSkew / 2).Unix(), nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := Decode(mint(c.exp, c.nbf), secret, true); err != c.want {
+				t.Fatalf("Decode = %v, want %v", err, c.want)
+			}
+		})
 	}
 	// verify=false must NOT enforce expiry (it is a pure decode).
-	if _, err := Decode(expired, secret, false); err != nil {
+	if _, err := Decode(mint(n.Add(-2*time.Minute).Unix(), 0), secret, false); err != nil {
 		t.Fatalf("verify=false must not enforce exp: %v", err)
 	}
+}
 
-	future, _ := Generate(acc, ws, map[string]any{"org": "acme"}, time.Now().Add(time.Hour).Unix(), secret)
-	if _, err := Decode(future, secret, true); err != nil {
-		t.Fatalf("valid future token rejected: %v", err)
+// TestLegacyNoExpGrace pins the pre-rollout grace: a token WITHOUT an exp claim
+// verifies until the fixed legacyExp cutoff and is ErrExpired after it — the
+// documented end of the immortal-token window.
+func TestLegacyNoExpGrace(t *testing.T) {
+	tok, err := Generate(acc, ws, nil, 0, secret)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer func() { now = time.Now }()
+	now = func() time.Time { return legacyExp.Add(-time.Hour) }
+	if _, err := Decode(tok, secret, true); err != nil {
+		t.Fatalf("no-exp token before cutoff: %v, want accepted", err)
+	}
+	now = func() time.Time { return legacyExp.Add(time.Hour) }
+	if _, err := Decode(tok, secret, true); err != ErrExpired {
+		t.Fatalf("no-exp token after cutoff: %v, want ErrExpired", err)
+	}
+}
 
-	// nbf in the future → not yet valid.
-	nbf, _ := Generate(acc, ws, nil, 0, secret)
-	// Re-mint with an nbf by hand is awkward; instead assert the no-exp token verifies.
-	if _, err := Decode(nbf, secret, true); err != nil {
-		t.Fatalf("no-exp token must verify: %v", err)
+// TestEmptySecretRefused proves the removed fallback stays removed: neither
+// minting nor verifying ever proceeds on an empty secret.
+func TestEmptySecretRefused(t *testing.T) {
+	if _, err := Generate(acc, ws, nil, 0, ""); err != ErrNoSecret {
+		t.Fatalf("Generate(empty secret) = %v, want ErrNoSecret", err)
+	}
+	tok, _ := Generate(acc, ws, nil, 0, secret)
+	if _, err := Decode(tok, "", true); err != ErrNoSecret {
+		t.Fatalf("Decode(empty secret, verify) = %v, want ErrNoSecret", err)
+	}
+	// verify=false is a pure decode — no secret needed.
+	if _, err := Decode(tok, "", false); err != nil {
+		t.Fatalf("Decode(empty secret, no verify) = %v, want ok", err)
 	}
 }

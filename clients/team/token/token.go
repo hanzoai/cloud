@@ -32,11 +32,22 @@ import (
 	"github.com/google/uuid"
 )
 
-// DefaultSecret mirrors the upstream `getSecret()` fallback. Production always
-// injects SERVER_SECRET (synced from KMS); the literal exists only so dev parity
-// with the upstream pods (which also default to "secret") holds. It is NEVER a
-// production secret — the Mount path fails onto the KMS-synced env value.
-const DefaultSecret = "secret"
+// clockSkew is the temporal-claim tolerance: exp/nbf are enforced with this much
+// slack so a small clock drift between minting and verifying hosts never rejects
+// a live session at the boundary.
+const clockSkew = 60 * time.Second
+
+// legacyExp is the acceptance deadline for tokens minted BEFORE the exp rollout,
+// which carry no `exp` claim (the payload has no iat either, so a per-token grace
+// cannot be computed — only a fixed cutoff can honor them). Until this instant a
+// missing exp verifies (existing live sessions keep working); after it a missing
+// exp is ErrExpired, closing the immortal-token window for good. Deliberately a
+// constant, never an env knob.
+var legacyExp = time.Date(2026, time.August, 19, 0, 0, 0, 0, time.UTC)
+
+// now is the clock Decode enforces temporal claims against; a variable only so
+// tests can pin it across the legacyExp cutoff.
+var now = time.Now
 
 // header is the constant jwt-simple HS256 header, pre-encoded. jwt-simple
 // emits exactly {"typ":"JWT","alg":"HS256"} (typ before alg); we hardcode the
@@ -69,6 +80,11 @@ var ErrExpired = errors.New("token: expired")
 // the future.
 var ErrNotYetValid = errors.New("token: not yet valid")
 
+// ErrNoSecret is returned when signing or verifying is attempted with an empty
+// secret. There is NO fallback literal: an unset SERVER_SECRET must surface as a
+// hard error, never as a token silently signed with a public value.
+var ErrNoSecret = errors.New("token: empty secret")
+
 // Generate mints an HS256 token for account (always) and workspace (optional —
 // pass "" for an account/login token that is not yet scoped to a workspace).
 // extra is folded in as the leading `extra` claim when non-empty (e.g.
@@ -85,7 +101,7 @@ func Generate(account, workspace string, extra map[string]any, exp int64, secret
 		}
 	}
 	if secret == "" {
-		secret = DefaultSecret
+		return "", ErrNoSecret
 	}
 	payload, err := marshalCompact(Token{Extra: extra, Account: account, Workspace: workspace, Exp: exp})
 	if err != nil {
@@ -97,9 +113,10 @@ func Generate(account, workspace string, extra map[string]any, exp int64, secret
 }
 
 // Decode verifies (when verify is true) and parses an HS256 token. When verify is
-// true it enforces the temporal claims: a token whose `exp` has passed is rejected
-// (ErrExpired) and a token whose `nbf` is in the future is rejected
-// (ErrNotYetValid). A missing claim (0) is not enforced. This closes the
+// true it enforces the temporal claims with clockSkew tolerance: a token whose
+// `exp` has passed is rejected (ErrExpired), a token whose `nbf` is in the future
+// is rejected (ErrNotYetValid), and a token with NO `exp` is honored only until
+// legacyExp (the pre-rollout grace) then rejected. This closes the
 // permanent-replay window on a captured token (the transactor token rides in the
 // URL path — log-prone — so a bounded lifetime is the mitigation until the front
 // moves it off the URL, #60).
@@ -108,10 +125,10 @@ func Decode(tok, secret string, verify bool) (*Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	if secret == "" {
-		secret = DefaultSecret
-	}
 	if verify {
+		if secret == "" {
+			return nil, ErrNoSecret
+		}
 		if !hmac.Equal([]byte(sig), []byte(sign(h+"."+body, secret))) {
 			return nil, ErrSignature
 		}
@@ -125,11 +142,15 @@ func Decode(tok, secret string, verify bool) (*Token, error) {
 		return nil, fmt.Errorf("token: decode payload: %w", err)
 	}
 	if verify {
-		now := time.Now().Unix()
-		if t.Exp != 0 && now >= t.Exp {
+		ts := now()
+		exp := t.Exp
+		if exp == 0 {
+			exp = legacyExp.Unix() // pre-rollout token: honored until the fixed cutoff
+		}
+		if ts.Add(-clockSkew).Unix() >= exp {
 			return nil, ErrExpired
 		}
-		if t.Nbf != 0 && now < t.Nbf {
+		if t.Nbf != 0 && ts.Add(clockSkew).Unix() < t.Nbf {
 			return nil, ErrNotYetValid
 		}
 	}
