@@ -292,6 +292,19 @@ func (s *accountStore) GuestRank(ctx context.Context, workspaceID, account strin
 	return rank
 }
 
+// Seats counts the org's distinct ACTIVE human members across all of its
+// workspaces (the billed seats), and how many of those are invited guests.
+// Bots never occupy a seat. Backs GET /v1/team/billing/plan.
+func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int) {
+	const q = `SELECT
+	  COUNT(DISTINCT m.user_id),
+	  COUNT(DISTINCT CASE WHEN m.role = ? THEN m.user_id END)
+	FROM members m JOIN workspaces w ON w.id = m.workspace_id
+	WHERE w.owner_org = ? AND m.active = 1 AND m.is_bot = 0`
+	_ = s.db.QueryRowContext(ctx, q, roleGuest, org).Scan(&seats, &guests)
+	return seats, guests
+}
+
 // EnsureMemberName fills display_name on the account's member rows when empty, so
 // the projected Person shows a human name rather than the account uuid. Idempotent
 // (only fills empty). Scoped to the account's own rows.
