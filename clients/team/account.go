@@ -189,13 +189,13 @@ func statusWorkspaceNotFound(url string) Status {
 
 // ── route registration ────────────────────────────────────────────────────────
 
-func (g *api) register(app *zip.App, guard guardFn) {
-	app.Post("/v1/team/account", guard(g.rpc))
-	app.Get("/v1/team/account/providers", guard(g.providers))
-	app.Get("/v1/team/account/auth/:provider", guard(g.authStart))
-	app.Get("/v1/team/account/auth/:provider/callback", guard(g.authCallback))
-	app.Put("/v1/team/account/cookie", guard(g.setCookie))
-	app.Delete("/v1/team/account/cookie", guard(g.clearCookie))
+func (g *api) register(r zip.Router, guard guardFn) {
+	r.Post("/account", guard(g.rpc))
+	r.Get("/account/providers", guard(g.providers))
+	r.Get("/account/auth/:provider", guard(g.authStart))
+	r.Get("/account/auth/:provider/callback", guard(g.authCallback))
+	r.Put("/account/cookie", guard(g.setCookie))
+	r.Delete("/account/cookie", guard(g.clearCookie))
 }
 
 // ── REST: providers ───────────────────────────────────────────────────────────
