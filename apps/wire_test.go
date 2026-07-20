@@ -47,6 +47,7 @@ var frozen = []struct {
 	{"platform", true, false},        // was order 124
 	{"projects", false, false},       // was order 125
 	{"dns", false, false},            // new: /v1/dns zone plane (after projects)
+	{"domain", false, false},         // new: Hanzo Domains registrar (/v1/domain), after dns
 	{"prompts", false, false},        // was order 126
 	{"agents", false, true},          // was order 127
 	{"link", false, true},            // new: unified AI login manager (/v1/links), after agents

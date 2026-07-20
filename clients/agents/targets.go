@@ -87,6 +87,7 @@ var errTargetNotFound = errors.New("agents: target not found")
 type Target struct {
 	ID        string
 	Org       string
+	Owner     string // the VALIDATED principal (c.User()) that registered this machine; "" for a pre-migration row
 	Label     string
 	Kind      string // laptop | cloud | gpu | cluster | machine
 	Status    string // online | offline | draining
@@ -112,6 +113,7 @@ func (s *Store) migrateTargets() error {
 CREATE TABLE IF NOT EXISTS agent_targets (
   id         TEXT PRIMARY KEY,
   org        TEXT NOT NULL,
+  owner      TEXT NOT NULL DEFAULT '',
   label      TEXT NOT NULL DEFAULT '',
   kind       TEXT NOT NULL DEFAULT 'machine',
   status     TEXT NOT NULL DEFAULT 'online',
@@ -129,9 +131,12 @@ CREATE INDEX IF NOT EXISTS ix_targets_org_created ON agent_targets(org, created_
 		return fmt.Errorf("migrate targets: %w", err)
 	}
 	// Forward, idempotent upgrade for target rows created before the capability +
-	// metrics columns existed. PRAGMA-guarded, so re-running on an upgraded DB is a
-	// no-op — the DDL above covers fresh installs, this covers pre-existing ones.
+	// metrics + owner columns existed. PRAGMA-guarded, so re-running on an upgraded
+	// DB is a no-op — the DDL above covers fresh installs, this covers pre-existing
+	// ones. A pre-owner row backfills owner='' (unowned) and is admin-only until its
+	// owner re-registers (register binds the owner) — see registerTarget.
 	if err := s.addColumns("agent_targets", map[string]string{
+		"owner":      "TEXT NOT NULL DEFAULT ''",
 		"spec":       "TEXT NOT NULL DEFAULT ''",
 		"metrics":    "TEXT NOT NULL DEFAULT ''",
 		"metrics_at": "INTEGER NOT NULL DEFAULT 0",
@@ -141,12 +146,12 @@ CREATE INDEX IF NOT EXISTS ix_targets_org_created ON agent_targets(org, created_
 	return nil
 }
 
-const targetCols = `id,org,label,kind,status,capacity,host,spec,metrics,metrics_at,created_at,updated_at`
+const targetCols = `id,org,owner,label,kind,status,capacity,host,spec,metrics,metrics_at,created_at,updated_at`
 
 func scanTarget(sc interface{ Scan(...any) error }) (Target, error) {
 	var t Target
 	var spec, metrics string
-	err := sc.Scan(&t.ID, &t.Org, &t.Label, &t.Kind, &t.Status, &t.Capacity, &t.Host,
+	err := sc.Scan(&t.ID, &t.Org, &t.Owner, &t.Label, &t.Kind, &t.Status, &t.Capacity, &t.Host,
 		&spec, &metrics, &t.MetricsAt, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return t, err
@@ -159,8 +164,8 @@ func scanTarget(sc interface{ Scan(...any) error }) (Target, error) {
 // CreateTarget inserts one target. The id is caller-generated (genID("tgt")).
 func (s *Store) CreateTarget(ctx context.Context, t Target) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.ID, t.Org, t.Label, t.Kind, t.Status, t.Capacity, t.Host,
+		`INSERT INTO agent_targets (`+targetCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.ID, t.Org, t.Owner, t.Label, t.Kind, t.Status, t.Capacity, t.Host,
 		encodeSpec(t.Spec), encodeMetrics(t.Metrics), t.MetricsAt, t.CreatedAt, t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert target: %w", err)
@@ -203,12 +208,14 @@ func (s *Store) ListTargets(ctx context.Context, org string) ([]Target, error) {
 }
 
 // UpdateTarget persists mutable fields for an existing (org,id) target. Scoped by org
-// so a cross-tenant id can never mutate another's target.
+// so a cross-tenant id can never mutate another's target. owner is persisted too so a
+// relink can BIND a previously-unowned row (registerTarget) and a patch preserves the
+// owner it read; no client-facing patch field sets owner, so it never moves by mutation.
 func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_targets SET label=?, kind=?, status=?, capacity=?, host=?, spec=?, metrics=?, metrics_at=?, updated_at=?
+		`UPDATE agent_targets SET owner=?, label=?, kind=?, status=?, capacity=?, host=?, spec=?, metrics=?, metrics_at=?, updated_at=?
 		 WHERE org=? AND id=?`,
-		t.Label, t.Kind, t.Status, t.Capacity, t.Host,
+		t.Owner, t.Label, t.Kind, t.Status, t.Capacity, t.Host,
 		encodeSpec(t.Spec), encodeMetrics(t.Metrics), t.MetricsAt, t.UpdatedAt, t.Org, t.ID)
 	if err != nil {
 		return fmt.Errorf("update target: %w", err)
@@ -218,6 +225,32 @@ func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
 		return errTargetNotFound
 	}
 	return nil
+}
+
+// GetLinkableTargetByHost returns the target for (org,host) that the caller `owner`
+// may re-link — its OWN row, else an UNOWNED (pre-migration) row it may adopt —
+// preferring the exact-owner match, newest first. A row owned by a DIFFERENT
+// principal is NEVER returned, so a re-link can never clobber another member's
+// machine: the caller gets its own row or (falling through in registerTarget) a fresh
+// one. errTargetNotFound when nothing linkable exists.
+func (s *Store) GetLinkableTargetByHost(ctx context.Context, org, host, owner string) (Target, error) {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return Target{}, errTargetNotFound
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+targetCols+` FROM agent_targets
+		 WHERE org=? AND host=? AND (owner=? OR owner='')
+		 ORDER BY CASE WHEN owner=? THEN 0 ELSE 1 END, created_at DESC, id ASC LIMIT 1`,
+		org, host, owner, owner)
+	t, err := scanTarget(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Target{}, errTargetNotFound
+	}
+	if err != nil {
+		return Target{}, fmt.Errorf("get linkable target by host: %w", err)
+	}
+	return t, nil
 }
 
 // GetTargetByHost returns an org's target reporting the given host, or
@@ -548,12 +581,21 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		metricsAt = now // the server owns the staleness clock; a client can't forge it
 	}
 
-	// Idempotent re-link: the SAME machine (org+host) refreshes its existing target
-	// rather than piling up duplicates, so mission-control shows one row per machine
-	// with live spec/metrics. Only an explicit host keys this — an anonymous target
-	// (no host) always creates.
+	// The registering principal OWNS this machine (least privilege): only it (or an
+	// org admin) may later mint the claim key, claim runs, report, patch, or delete
+	// it. tenant() already required a validated principal, so this is non-empty.
+	owner := caller(c)
+
+	// Idempotent re-link: the SAME machine (org+host+owner) refreshes its existing
+	// target rather than piling up duplicates, so mission-control shows one row per
+	// machine with live spec/metrics. It resolves ONLY the caller's own row (or an
+	// UNOWNED pre-migration row, which it ADOPTS by binding owner) — a row owned by a
+	// different member is never touched, so a re-link can never hijack another's
+	// machine; the caller falls through to create its own. Only an explicit host keys
+	// this — an anonymous target (no host) always creates.
 	if host != "" {
-		if existing, err := s.State.store.GetTargetByHost(c.Context(), org, host); err == nil {
+		if existing, err := s.State.store.GetLinkableTargetByHost(c.Context(), org, host, owner); err == nil {
+			existing.Owner = owner // bind an adopted unowned row; no-op if already ours
 			existing.Label, existing.Kind, existing.Status, existing.Capacity = label, kind, status, capacity
 			existing.Spec, existing.Metrics, existing.MetricsAt = spec, metrics, metricsAt
 			existing.UpdatedAt = now
@@ -571,7 +613,7 @@ func registerTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
 	t := Target{
-		ID: id, Org: org, Label: label, Kind: kind, Status: status,
+		ID: id, Org: org, Owner: owner, Label: label, Kind: kind, Status: status,
 		Capacity: capacity, Host: host, Spec: spec, Metrics: metrics, MetricsAt: metricsAt,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -647,6 +689,12 @@ func patchTarget(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	// Only the machine's owner (or an org admin) may mutate it — a member cannot
+	// reconfigure/drain another member's machine. Fail-closed to the SAME not-found
+	// an unknown id gives, so a probe learns nothing about what exists.
+	if !ownsTarget(c, t) {
+		return zip.ErrNotFound("target not found")
 	}
 	var body patchTargetReq
 	if err := c.Bind(&body); err != nil {
@@ -729,6 +777,19 @@ func deleteTarget(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	id := idParam(c)
+	// Resolve + ownership-gate before deleting: only the machine's owner (or an org
+	// admin) may deregister it. A cross-org id, an unknown id, and a non-owned id all
+	// collapse to the same not-found — no oracle.
+	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	if err == errTargetNotFound {
+		return zip.ErrNotFound("target not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	if !ownsTarget(c, t) {
+		return zip.ErrNotFound("target not found")
+	}
 	deleted, err := s.State.store.DeleteTarget(c.Context(), org, id)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "delete: %v", err)
