@@ -1,4 +1,4 @@
-// Package iamsvc folds Hanzo IAM into the unified hanzoai/cloud binary as an
+// Package iam folds Hanzo IAM into the unified hanzoai/cloud binary as an
 // in-process subsystem (HIP-0106) — the LAST binary-consolidation piece:
 // "one Go binary (hanzoai/cloud) embeds IAM + KMS + o11y".
 //

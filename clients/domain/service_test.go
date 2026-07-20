@@ -100,7 +100,7 @@ func (z *mockZones) EnsureZone(_ context.Context, _, _ string) ([]string, error)
 
 // --- helpers ---------------------------------------------------------------------
 
-func newSvc(reg *mockReg, bill *mockBill, zones *mockZones) *Service {
+func newService(reg *mockReg, bill *mockBill, zones *mockZones) *Service {
 	return NewService(reg, bill, zones, NewMemStore(), Config{
 		Markup:      Markup{Multiplier: 1.15, MinMarginCents: 300},
 		Nameservers: []string{"ns1.hanzo.ai", "ns2.hanzo.ai"},
@@ -133,7 +133,7 @@ func TestAvailabilityPricesWithMarkup(t *testing.T) {
 	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
 		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99, RenewalPrice: 55.99, TLD: "ai"},
 	}}
-	svc := newSvc(reg, &mockBill{balance: -1}, &mockZones{ns: []string{"ns1.hanzo.ai"}})
+	svc := newService(reg, &mockBill{balance: -1}, &mockZones{ns: []string{"ns1.hanzo.ai"}})
 	qs, err := svc.Availability(context.Background(), "acme.ai")
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestRegisterHappyPath_BillsAndPointsNameservers(t *testing.T) {
 	}}
 	bill := &mockBill{balance: 100000} // $1000
 	zones := &mockZones{ns: []string{"ns1.hanzo.ai", "ns2.hanzo.ai"}}
-	svc := newSvc(reg, bill, zones)
+	svc := newService(reg, bill, zones)
 
 	res, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestRegisterRefusedWhenInsufficientBalance_NoRegistrarCall(t *testing.T) {
 		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
 	}}
 	bill := &mockBill{balance: 100} // $1.00 — nowhere near $64.39
-	svc := newSvc(reg, bill, &mockZones{})
+	svc := newService(reg, bill, &mockZones{})
 
 	_, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil)
 	if !errors.Is(err, ErrInsufficientFunds) {
@@ -208,7 +208,7 @@ func TestRegisterRegistrarFailure_NoCharge(t *testing.T) {
 		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
-	svc := newSvc(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
+	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
 
 	_, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil)
 	if err == nil {
@@ -224,7 +224,7 @@ func TestRegisterUnavailable(t *testing.T) {
 	reg := &mockReg{configured: true, avail: map[string]namecom.SearchResult{
 		"taken.ai": {DomainName: "taken.ai", Purchasable: false},
 	}}
-	svc := newSvc(reg, &mockBill{balance: -1}, &mockZones{})
+	svc := newService(reg, &mockBill{balance: -1}, &mockZones{})
 	_, err := svc.Register(context.Background(), "acme", "taken.ai", 1, nil)
 	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("want ErrUnavailable, got %v", err)
@@ -236,7 +236,7 @@ func TestRegisterAlreadyOwned(t *testing.T) {
 		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
-	svc := newSvc(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
+	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
 	if _, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestRegisterFallsBackToConfigNameserversWhenZoneFails(t *testing.T) {
 	}}
 	bill := &mockBill{balance: 100000}
 	zones := &mockZones{err: errors.New("dns down")}
-	svc := newSvc(reg, bill, zones)
+	svc := newService(reg, bill, zones)
 
 	if _, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil); err != nil {
 		t.Fatal(err)
@@ -269,7 +269,7 @@ func TestRenewOwnedDomainBills(t *testing.T) {
 		"acme.ai": {DomainName: "acme.ai", Purchasable: true, PurchasePrice: 55.99, RenewalPrice: 55.99},
 	}}
 	bill := &mockBill{balance: 100000}
-	svc := newSvc(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
+	svc := newService(reg, bill, &mockZones{ns: []string{"ns1.hanzo.ai"}})
 	if _, err := svc.Register(context.Background(), "acme", "acme.ai", 1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestRenewOwnedDomainBills(t *testing.T) {
 
 func TestRenewNotOwned(t *testing.T) {
 	reg := &mockReg{configured: true}
-	svc := newSvc(reg, &mockBill{balance: -1}, &mockZones{})
+	svc := newService(reg, &mockBill{balance: -1}, &mockZones{})
 	_, err := svc.Renew(context.Background(), "acme", "nope.ai", 1)
 	if !errors.Is(err, ErrNotOwned) {
 		t.Fatalf("want ErrNotOwned, got %v", err)
@@ -300,7 +300,7 @@ func TestRenewNotOwned(t *testing.T) {
 
 func TestNotConfigured(t *testing.T) {
 	reg := &mockReg{configured: false}
-	svc := newSvc(reg, &mockBill{balance: -1}, &mockZones{})
+	svc := newService(reg, &mockBill{balance: -1}, &mockZones{})
 	if _, err := svc.Availability(context.Background(), "acme.ai"); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("want ErrNotConfigured, got %v", err)
 	}

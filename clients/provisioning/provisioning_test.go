@@ -53,9 +53,9 @@ func (m *mockProv) Create(_ context.Context, _, _, pw string) (string, string, i
 
 func (m *mockProv) Drop(_ context.Context, _, _ string) error { m.dropped++; return nil }
 
-// newTestSvc builds a provisioning Service with a temp store, KMS-degraded secrets (no env),
+// newTestService builds a provisioning Service with a temp store, KMS-degraded secrets (no env),
 // and a mock provisioner under each given kind.
-func newTestSvc(t *testing.T, kinds ...string) (*cloud.Service[state], *mockProv) {
+func newTestService(t *testing.T, kinds ...string) (*cloud.Service[state], *mockProv) {
 	t.Helper()
 	// Force KMS degrade so secret persistence is hermetic and never dials.
 	t.Setenv("CLOUD_KMS_NODES", "")
@@ -394,7 +394,7 @@ func TestGenToken(t *testing.T) {
 // TestCreateOrgGate: a non-admin POST with no X-Org-Id is refused 403 before
 // anything is provisioned.
 func TestCreateOrgGate(t *testing.T) {
-	s, mp := newTestSvc(t, "sql")
+	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Post("/v1/sql", create(s, "sql"))
 
@@ -421,7 +421,7 @@ func TestCreateOrgGate(t *testing.T) {
 // gate this forged request would allocate a DB in the victim's namespace and
 // return its connection string + generated password, or (on DELETE) destroy it.
 func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
-	s, mp := newTestSvc(t, "sql")
+	s, mp := newTestService(t, "sql")
 	app := zip.New(zip.Config{DisableStartupMessage: true})
 	app.Post("/v1/sql", create(s, "sql"))
 	app.Delete("/v1/sql/:name", drop(s, "sql"))
@@ -464,7 +464,7 @@ func TestForgedOrgWithoutPrincipalRefused(t *testing.T) {
 // the only kinds that mint a per-resource credential.
 func TestCreateKMSDegradePersistsNoPlaintext(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 	if s.State.sec.Enabled() {
 		t.Fatal("precondition: KMS must be degraded for this test")
 	}
