@@ -31,6 +31,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
+	"github.com/hanzoai/iam"
 )
 
 // authCookie is the cookie the SPA's PUT/DELETE /cookie manage; RPC itself rides
@@ -132,10 +133,14 @@ type WorkspaceLoginInfo struct {
 // WorkspaceInfo is one entry of getUserWorkspaces. The version triple is the Team
 // MODEL version (the SAME source the transactor reports as serverVersion).
 type WorkspaceInfo struct {
-	UUID         string `json:"uuid"`
-	Name         string `json:"name"`
-	URL          string `json:"url"`
-	DataID       string `json:"dataId,omitempty"`
+	UUID   string `json:"uuid"`
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	DataID string `json:"dataId,omitempty"`
+	// Org is the workspace's owning IAM tenant. getUserWorkspaces unions a user's
+	// workspaces across every org they belong to, so the client switcher groups by
+	// this field (a user in two orgs sees both orgs' workspaces, each tagged).
+	Org          string `json:"org,omitempty"`
 	Region       string `json:"region"`
 	Mode         string `json:"mode"`
 	VersionMajor int    `json:"versionMajor"`
@@ -188,6 +193,21 @@ func statusError(msg string) Status {
 }
 func statusWorkspaceNotFound(url string) Status {
 	return Status{Severity: "ERROR", Code: "account:status:WorkspaceNotFound", Params: map[string]any{"workspace": url}}
+}
+
+// statusBadRequest is the clean 400-shaped refusal for a missing required RPC
+// param (e.g. selectWorkspace with no workspaceUrl). Delivered in the RPC error
+// envelope (HTTP 200 body carrying {error: Status}, the established account-RPC
+// convention the SPA translates) — never a silent success or a default.
+func statusBadRequest(msg string) Status {
+	return Status{Severity: "ERROR", Code: "account:status:BadRequest", Params: map[string]any{"message": msg}}
+}
+
+// statusAmbiguous is the refusal when an explicit workspace slug resolves in more
+// than one of the caller's orgs: the caller must disambiguate, so the server
+// returns a clean error rather than picking one.
+func statusAmbiguous(url string) Status {
+	return Status{Severity: "ERROR", Code: "account:status:WorkspaceAmbiguous", Params: map[string]any{"workspace": url}}
 }
 
 // statusBadCredentials is the password-login refusal. The code is the platform
@@ -343,11 +363,74 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	// account uuid. Idempotent (only fills empty).
 	_ = g.accounts.EnsureMemberName(ctx, account, displayName)
 
-	tok, err = token.Generate(account, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), g.cfg.serverSecret)
+	// Carry the FULL membership set into the session token so getUserWorkspaces
+	// can union a user's workspaces across every org they belong to (the Slack
+	// model) with no IAM round-trip per poll. The set is the VERIFIED `orgs` claim;
+	// a legacy token (iam < 1.31.34, empty claim) falls back to the single home org
+	// as sole admin. `org` (home) is retained as the primary tenant every existing
+	// account-store surface (files/collab/billing) already scopes to.
+	extra := map[string]any{"org": org, "orgs": orgsClaim(id.Orgs, org)}
+	// extra.user is the IAM `<owner>/<name>` id — the key get-memberships takes for a
+	// mid-session membership refresh. Present only when IAM gave a username.
+	if id.Username != "" {
+		extra["user"] = org + "/" + id.Username
+	}
+	tok, err = token.Generate(account, "", extra, expUnix(sessionTokenTTL), g.cfg.serverSecret)
 	if err != nil {
 		return "", "", "token_failed", err
 	}
 	return account, tok, "", nil
+}
+
+// orgsClaim builds the session token's extra.orgs value from the VERIFIED IAM
+// `orgs` claim. It fails CLOSED to the single home org (sole admin) for a legacy
+// token whose claim is empty, so the session ALWAYS carries at least the home
+// tenant — never an empty set that would strand a user with zero workspaces. Each
+// entry is a plain map so token.Generate's JSON marshal is stable and the decode
+// side (orgsFromExtra) reads it back with no SDK dependency in the token layer.
+func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
+	out := make([]map[string]any, 0, len(orgs)+1)
+	seen := map[string]bool{}
+	for _, o := range orgs {
+		if o.Org == "" || seen[o.Org] {
+			continue
+		}
+		seen[o.Org] = true
+		out = append(out, map[string]any{"org": o.Org, "role": o.Role})
+	}
+	if len(out) == 0 && home != "" {
+		out = append(out, map[string]any{"org": home, "role": "admin"})
+	}
+	return out
+}
+
+// orgsFromExtra reads the session token's extra.orgs back into the membership set.
+// A legacy token (no orgs key) falls back to the single extra.org home tenant, so
+// every authenticated path still resolves at least the home org. Deduped, home-safe.
+func orgsFromExtra(extra map[string]any) []iam.OrgRef {
+	out := make([]iam.OrgRef, 0, 4)
+	seen := map[string]bool{}
+	if raw, ok := extra["orgs"].([]any); ok {
+		for _, e := range raw {
+			m, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			org, _ := m["org"].(string)
+			if org == "" || seen[org] {
+				continue
+			}
+			seen[org] = true
+			role, _ := m["role"].(string)
+			out = append(out, iam.OrgRef{Org: org, Role: role})
+		}
+	}
+	if len(out) == 0 {
+		if org, _ := extra["org"].(string); org != "" {
+			out = append(out, iam.OrgRef{Org: org, Role: "admin"})
+		}
+	}
+	return out
 }
 
 // stateFromCookie splits the flow cookie into its nonce and the escaped
@@ -410,6 +493,10 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.getUserWorkspaces(c)
 	case "selectWorkspace":
 		return g.selectWorkspace(c, req.Params)
+	case "sendInvite":
+		return g.sendInvite(c, req.Params)
+	case "getMemberships":
+		return g.getMemberships(c)
 	case "getWorkspaceInfo":
 		return g.getWorkspaceInfo(c)
 	case "getRegionInfo":
@@ -529,40 +616,65 @@ func (g *api) getLoginInfoByToken(c *zip.Ctx) error {
 	return g.ok(c, LoginInfo{Account: account, Token: tok})
 }
 
+// getUserWorkspaces returns the UNION of the caller's workspaces across EVERY org
+// in the session's membership set — the Slack model: a user who belongs to their
+// home org plus one or more team orgs sees all of their workspaces in one list,
+// each tagged with its owning org so the client switcher groups by org. Each
+// WorkspacesOf join is still owner_org-scoped, so a user only ever sees workspaces
+// they are a member of, and never a foreign tenant's.
 func (g *api) getUserWorkspaces(c *zip.Ctx) error {
-	account, org, _, err := g.account(c)
+	account, orgs, _, err := g.accountOrgs(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	wss, err := g.accounts.WorkspacesOf(c.Context(), org, account)
-	if err != nil {
-		return g.fail(c, statusError(err.Error()))
-	}
 	out := []WorkspaceInfo{}
-	for _, ws := range wss {
-		out = append(out, toWorkspaceInfo(ws))
+	seen := map[string]bool{} // dedupe by workspace uuid (a ws belongs to one org)
+	for _, o := range orgs {
+		wss, err := g.accounts.WorkspacesOf(c.Context(), o.Org, account)
+		if err != nil {
+			return g.fail(c, statusError(err.Error()))
+		}
+		for _, ws := range wss {
+			if seen[ws.UUID] {
+				continue
+			}
+			seen[ws.UUID] = true
+			out = append(out, toWorkspaceInfo(ws))
+		}
 	}
 	return g.ok(c, out)
 }
 
-// selectWorkspace resolves the workspace scoped to the caller's VERIFIED token org
-// (a foreign tenant's slug is unresolvable), checks membership from the members
-// row, then mints the workspace token carrying extra.org and returns the
-// transactor wss endpoint under /v1/team/transactor.
+// selectWorkspace resolves the workspace the caller EXPLICITLY named (workspaceUrl)
+// among EVERY org in the session's membership set, checks membership, then mints
+// the workspace token carrying extra.org and returns the transactor wss endpoint.
+//
+// It NEVER defaults to a "first" workspace: an absent workspaceUrl is a clean
+// BadRequest and a slug that resolves in two of the caller's orgs is a clean
+// Ambiguous — the client must pass the explicit choice the /login/selectWorkspace
+// selector already collects. The single-workspace fast path is the degenerate
+// explicit case: when getUserWorkspaces returns exactly one workspace the front
+// auto-selects it BY URL, so this path still receives an explicit workspaceUrl and
+// the UX is unchanged. Cross-tenant isolation is preserved because each candidate
+// lookup is owner_org-scoped to an org the session already proves membership in.
 func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
-	account, org, _, err := g.account(c)
+	account, orgs, _, err := g.accountOrgs(c)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
 	wsURL, _ := params["workspaceUrl"].(string)
-	ws, err := g.accounts.WorkspaceBySlug(c.Context(), org, wsURL)
+	wsURL = strings.TrimSpace(wsURL)
+	if wsURL == "" {
+		return g.fail(c, statusBadRequest("workspaceUrl is required"))
+	}
+	ws, role, err := g.resolveWorkspace(c.Context(), orgs, account, wsURL)
 	if err != nil {
+		if err == errAmbiguousWorkspace {
+			return g.fail(c, statusAmbiguous(wsURL))
+		}
 		return g.fail(c, statusWorkspaceNotFound(wsURL))
 	}
-	role, ok := g.accounts.Membership(c.Context(), ws.ID, account)
-	if !ok {
-		return g.fail(c, statusUnauthorized("not a member of "+wsURL))
-	}
+	org := ws.OwnerOrg
 	// The billing gate: the org's plan must license the team product. 402 carries
 	// the upgrade destination; infra errors NEVER block login (see entitle).
 	if st := g.entitle(c.Context(), org, role, ws.ID, account); st != nil {
@@ -585,16 +697,69 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	})
 }
 
+// errAmbiguousWorkspace is returned by resolveWorkspace when a slug the caller is
+// a member of exists in MORE THAN ONE of the session orgs — the caller must
+// disambiguate rather than have the server silently pick one.
+var errAmbiguousWorkspace = fmt.Errorf("team: workspace slug ambiguous across orgs")
+
+// resolveWorkspace maps an EXPLICIT (slug) to the single workspace the caller is a
+// member of across the session's org set. It is the one place the cross-org lookup
+// lives: iterate the caller's orgs, resolve the slug owner_org-scoped in each, keep
+// only those the caller is a member of, and require EXACTLY one — 0 ⇒ not found,
+// >1 ⇒ ambiguous. Never a silent default. Returns the workspace and the caller's
+// role in it.
+func (g *api) resolveWorkspace(ctx context.Context, orgs []iam.OrgRef, account, slug string) (workspace, Role, error) {
+	var found workspace
+	var role Role
+	n := 0
+	seen := map[string]bool{}
+	for _, o := range orgs {
+		if o.Org == "" || seen[o.Org] {
+			continue
+		}
+		seen[o.Org] = true
+		ws, err := g.accounts.WorkspaceBySlug(ctx, o.Org, slug)
+		if err != nil {
+			continue // absent in this org (or a real store error) — not a candidate
+		}
+		r, ok := g.accounts.Membership(ctx, ws.ID, account)
+		if !ok {
+			continue // resolvable but the caller is not a member — not a candidate
+		}
+		found, role = ws, r
+		n++
+	}
+	switch {
+	case n == 0:
+		return workspace{}, "", errNoWorkspace
+	case n > 1:
+		return workspace{}, "", errAmbiguousWorkspace
+	default:
+		return found, role, nil
+	}
+}
+
+// getWorkspaceInfo returns info for THE workspace the caller is scoped to — the
+// one selectWorkspace already minted into the session token's `workspace` claim,
+// resolved owner_org-scoped by (org, uuid). It NEVER falls back to the caller's
+// first workspace: a token with no workspace claim (an account/login token that
+// has not selected a workspace yet) is a clean WorkspaceNotFound, so the client is
+// forced through the explicit selectWorkspace step rather than being silently
+// handed an arbitrary one.
 func (g *api) getWorkspaceInfo(c *zip.Ctx) error {
-	account, org, _, err := g.account(c)
+	t, _, err := sessionToken(c, g.cfg.serverSecret)
 	if err != nil {
 		return g.fail(c, statusUnauthorized(err.Error()))
 	}
-	wss, err := g.accounts.WorkspacesOf(c.Context(), org, account)
-	if err != nil || len(wss) == 0 {
+	if t.Workspace == "" {
 		return g.fail(c, statusWorkspaceNotFound(""))
 	}
-	return g.ok(c, toWorkspaceInfo(wss[0]))
+	org, _ := t.Extra["org"].(string)
+	ws, err := g.accounts.WorkspaceByUUID(c.Context(), org, t.Workspace)
+	if err != nil {
+		return g.fail(c, statusWorkspaceNotFound(t.Workspace))
+	}
+	return g.ok(c, toWorkspaceInfo(ws))
 }
 
 func (g *api) getPerson(c *zip.Ctx) error {
@@ -657,6 +822,19 @@ func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
 	}
 	org, _ = t.Extra["org"].(string)
 	return t.Account, org, raw, nil
+}
+
+// accountOrgs resolves (AccountUuid, membership set, token) from the verified
+// session token. The set is the SIGNED extra.orgs claim (home + every team org),
+// read back home-safe by orgsFromExtra — the tenant SET the cross-org surfaces
+// (getUserWorkspaces union, selectWorkspace resolution) enumerate. Never a client
+// header. Empty account fails closed, exactly like account().
+func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []iam.OrgRef, tok string, err error) {
+	t, raw, err := sessionToken(c, g.cfg.serverSecret)
+	if err != nil {
+		return "", nil, "", err
+	}
+	return t.Account, orgsFromExtra(t.Extra), raw, nil
 }
 
 // callbackOrigin is the ORIGIN the OAuth redirect_uri is built from — the SAME
@@ -887,7 +1065,7 @@ func providerParam(c *zip.Ctx) string {
 // serverVersion) so the workspace-model version and the server version never drift.
 func toWorkspaceInfo(ws workspace) WorkspaceInfo {
 	return WorkspaceInfo{
-		UUID: ws.UUID, Name: ws.Name, URL: ws.Slug, DataID: ws.DataID, Region: ws.Region,
+		UUID: ws.UUID, Name: ws.Name, URL: ws.Slug, DataID: ws.DataID, Org: ws.OwnerOrg, Region: ws.Region,
 		Mode:         "active",
 		VersionMajor: modelMajor(), VersionMinor: modelMinor(), VersionPatch: modelPatch(),
 	}
