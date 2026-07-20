@@ -139,3 +139,48 @@ func TestCreateRejectsReservedSlug(t *testing.T) {
 		t.Fatalf("create normal slug status=%d body=%s, want 201", status, body)
 	}
 }
+
+// TestResolveUniqueLiveSlug proves the bare `<slug>.hanzo.app` fallback is
+// deterministic and collision-safe: it serves ONLY a slug owned by exactly one
+// LIVE project across all orgs — drafts don't count, and an ambiguous slug
+// (two live owners) serves neither (each keeps its org-scoped host + S3 URL).
+// This is what keeps publishes from before host binding servable, no backfill.
+func TestResolveUniqueLiveSlug(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	// One live owner, no site_hosts row (a pre-binding publish) → resolves.
+	solo := mkProject("maxpower", "dave-synapse-demo", "Synapse")
+	solo.Status, solo.Bucket = "live", "hanzo-sites"
+	if err := s.CreateProject(ctx, solo); err != nil {
+		t.Fatalf("create solo: %v", err)
+	}
+	if p, err := s.ResolveUniqueLiveSlug(ctx, "dave-synapse-demo"); err != nil || p.Org != "maxpower" {
+		t.Fatalf("unique live slug = (%+v,%v), want org=maxpower", p, err)
+	}
+
+	// A DRAFT with the same slug in another org does not make it ambiguous.
+	dr := mkProject("acme", "dave-synapse-demo", "Draft Synapse")
+	dr.Status = "draft"
+	if err := s.CreateProject(ctx, dr); err != nil {
+		t.Fatalf("create draft: %v", err)
+	}
+	if p, err := s.ResolveUniqueLiveSlug(ctx, "dave-synapse-demo"); err != nil || p.Org != "maxpower" {
+		t.Fatalf("draft polluted unique resolve: (%+v,%v)", p, err)
+	}
+
+	// A SECOND live owner makes the bare slug ambiguous → honest not-found.
+	ac := mkProject("acme2", "dave-synapse-demo", "Acme Synapse")
+	ac.Status, ac.Bucket = "live", "hanzo-sites"
+	if err := s.CreateProject(ctx, ac); err != nil {
+		t.Fatalf("create second live: %v", err)
+	}
+	if _, err := s.ResolveUniqueLiveSlug(ctx, "dave-synapse-demo"); !errors.Is(err, errNotFound) {
+		t.Fatalf("ambiguous slug = %v, want errNotFound", err)
+	}
+
+	// Unknown slug → not found.
+	if _, err := s.ResolveUniqueLiveSlug(ctx, "nope"); !errors.Is(err, errNotFound) {
+		t.Fatalf("unknown slug = %v, want errNotFound", err)
+	}
+}
