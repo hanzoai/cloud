@@ -304,7 +304,7 @@ func TestWalkTarGzRejects(t *testing.T) {
 }
 
 // TestSitePrefixAndSiteURL pins the storage layout (sitePrefix) and the ONE
-// canonical public URL of a deployed site: the pretty <slug>.<org>.<apex> host. The old
+// canonical public URL of a deployed site: the pretty bare <slug>.<apex> host. The old
 // raw-S3 liveURL form is gone (forward-perfection) — a published site is only ever
 // addressed by its pretty host, which is stable across redeploys of the same slug.
 func TestSitePrefixAndSiteURL(t *testing.T) {
@@ -312,16 +312,19 @@ func TestSitePrefixAndSiteURL(t *testing.T) {
 		t.Fatalf("sitePrefix=%q", got)
 	}
 	s := &cloud.Service[state]{State: state{apex: "hanzo.app"}}
-	// Org-scoped: the org lives in the hostname (<slug>.<org>.<apex>), so two orgs
-	// can each own slug "myapp" and their public URLs never collide.
-	if got := siteURL(s, "maxpower", "myapp"); got != "https://myapp.maxpower.hanzo.app" {
-		t.Fatalf("siteURL=%q want %q", got, "https://myapp.maxpower.hanzo.app")
+	// Bare host: the servable public URL is <slug>.<apex> (one DNS label — the
+	// only shape a wildcard Ingress + wildcard cert can route/secure). The slug is
+	// therefore a GLOBAL first-come namespace; the URL does NOT carry the org.
+	if got := siteURL(s, "maxpower", "myapp"); got != "https://myapp.hanzo.app" {
+		t.Fatalf("siteURL=%q want %q", got, "https://myapp.hanzo.app")
 	}
-	if siteURL(s, "acme", "myapp") == siteURL(s, "maxpower", "myapp") {
-		t.Fatal("same slug in different orgs must yield DIFFERENT URLs (org-scoped)")
+	// Same slug ⇒ same public URL regardless of org (who actually SERVES it is
+	// decided by first-come host binding, not the URL string).
+	if siteURL(s, "acme", "myapp") != siteURL(s, "maxpower", "myapp") {
+		t.Fatal("same slug must yield the SAME bare URL across orgs")
 	}
 	// Deterministic across calls — the redeploy URL-invariant at the URL layer.
 	if siteURL(s, "maxpower", "myapp") != siteURL(s, "maxpower", "myapp") {
-		t.Fatal("siteURL must be deterministic for a given (org,slug)")
+		t.Fatal("siteURL must be deterministic for a given slug")
 	}
 }
