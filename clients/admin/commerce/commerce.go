@@ -295,6 +295,18 @@ func (c *Client) Deposit(ctx context.Context, subject string, amount money.Cents
 	return out, nil
 }
 
+// CreateCreditGrant forwards a credit-grant request verbatim to commerce's
+// mint-gated POST /v1/billing/credit-grants (CreateCreditGrant), authenticated
+// by the admin service token, with subject as the target-org namespace selector.
+// Commerce is the sole credit-grant ledger; this relays its contract untouched
+// (the raw response is returned to the caller) so the admin surface stays thin.
+func (c *Client) CreateCreditGrant(ctx context.Context, subject string, body []byte, idempotencyKey string) ([]byte, error) {
+	if !c.Ready() {
+		return nil, errUnconfigured
+	}
+	return c.post(ctx, "/v1/billing/credit-grants", subject, body, idempotencyKey)
+}
+
 // ── SaaS-metrics god-view (fleet-wide, org-independent) ──────────────────────
 
 // SaaSMetrics mirrors commerce's GET /v1/metrics/saas snapshot — the whole-business
