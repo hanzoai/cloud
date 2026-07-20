@@ -66,9 +66,16 @@ func registerDashboardRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get(dashPrefix+"/applications", cloud.Handle(s, dashAppList))
 	app.Get(dashPrefix+"/applications/:name", cloud.Handle(s, dashApp))
 	app.Get(dashPrefix+"/applications/:name/resource-tree", cloud.Handle(s, dashResourceTree))
+	// Per-app detail projections the SPA's application view calls (detail.go). Same tenant
+	// scope as dashApp: resolveScope + findNamespace, a cross-tenant name 404s.
+	app.Get(dashPrefix+"/applications/:name/syncwindows", cloud.Handle(s, dashSyncWindows))
+	app.Get(dashPrefix+"/applications/:name/revisions/:revision/metadata", cloud.Handle(s, dashRevisionMetadata))
 	// Applications watch (Server-Sent Events) — the live stream the applications
 	// view opens; see stream.go. Same tenant scope as the list.
 	app.Get(dashPrefix+"/stream/applications", cloud.Handle(s, dashStreamApps))
+	// Per-app live resource-tree stream (detail.go) — the detail view's tree watch, same
+	// tenant scope: the scope gate runs before any SSE frame is emitted.
+	app.Get(dashPrefix+"/stream/applications/:name/resource-tree", cloud.Handle(s, dashStreamResourceTree))
 
 	// Destination clusters + AppProjects — the two lists the applications view
 	// resolves alongside the fleet (Destination column + project filter). Tenant-scoped:
