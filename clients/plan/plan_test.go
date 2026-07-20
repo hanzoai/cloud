@@ -3,6 +3,7 @@ package plan
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/hanzoai/cloud/clients/goja"
@@ -46,8 +47,8 @@ func TestPlans_Vocab(t *testing.T) {
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(body.Namespaces) != 9 {
-		t.Fatalf("namespaces = %d, want 9", len(body.Namespaces))
+	if len(body.Namespaces) != 10 {
+		t.Fatalf("namespaces = %d, want 10 (team added in plans v1.4.1)", len(body.Namespaces))
 	}
 	if len(body.Keys) < 40 {
 		t.Fatalf("entitlement keys = %d, want >=40", len(body.Keys))
@@ -131,6 +132,104 @@ func TestEntitlements_UnknownPlanErrors(t *testing.T) {
 	defer func() { host.Close(); host = prev }()
 	if _, err := Entitlements(context.Background(), "does-not-exist"); err == nil {
 		t.Fatal("expected error for unknown plan id")
+	}
+}
+
+// TestPlans_Ladder pins the hanzo.team commercial model (plans v1.4.1) on the
+// surface GET /v1/plans/subscriptions serves: the personal ladder pro $20 /
+// plus $100 / max $200, and team $25 per-seat with a 2-seat minimum. Stripe
+// lookup keys are part of the contract — pro moved to hanzo_pro_20 (the old
+// hanzo_pro stays on the immutable $49 price).
+func TestPlans_Ladder(t *testing.T) {
+	h := newHost(t)
+	defer h.Close()
+	resp, err := h.Dispatch(context.Background(), goja.Request{Route: "subscriptions", Tenant: "hanzo"})
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	var body struct {
+		Plans []struct {
+			ID           string  `json:"id"`
+			PriceMonthly float64 `json:"priceMonthly"`
+			Limits       struct {
+				MinSeats float64 `json:"minSeats"`
+			} `json:"limits"`
+			PriceRef struct {
+				Recurring struct {
+					PerSeat         bool   `json:"per_seat"`
+					StripeLookupKey string `json:"stripe_lookup_key"`
+				} `json:"recurring"`
+			} `json:"price_ref"`
+		} `json:"plans"`
+	}
+	if err := json.Unmarshal(resp.Body, &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	price := map[string]float64{"pro": 20, "plus": 100, "max": 200, "team": 25}
+	lookup := map[string]string{"pro": "hanzo_pro_20", "plus": "hanzo_plus", "max": "hanzo_max", "team": "hanzo_team_25"}
+	seen := map[string]bool{}
+	for _, p := range body.Plans {
+		want, ok := price[p.ID]
+		if !ok {
+			continue
+		}
+		seen[p.ID] = true
+		if p.PriceMonthly != want {
+			t.Errorf("%s priceMonthly = %v, want %v", p.ID, p.PriceMonthly, want)
+		}
+		if p.PriceRef.Recurring.StripeLookupKey != lookup[p.ID] {
+			t.Errorf("%s stripe lookup = %q, want %q", p.ID, p.PriceRef.Recurring.StripeLookupKey, lookup[p.ID])
+		}
+		if p.ID == "team" {
+			if !p.PriceRef.Recurring.PerSeat {
+				t.Error("team must price per seat")
+			}
+			if p.Limits.MinSeats != 2 {
+				t.Errorf("team limits.minSeats = %v, want 2", p.Limits.MinSeats)
+			}
+		}
+	}
+	for id := range price {
+		if !seen[id] {
+			t.Errorf("plan %q missing from subscriptions", id)
+		}
+	}
+}
+
+// TestLicenseEntitlement_TeamProduct is the entitlement gate contract for
+// hanzo.team: a signed license for pro, plus, max AND team must carry
+// licensing.product:team, and developer (free) must NOT — the gate fails
+// closed for a tier that never bought team access.
+func TestLicenseEntitlement_TeamProduct(t *testing.T) {
+	prev := host
+	host = newHost(t)
+	defer func() { host.Close(); host = prev }()
+	ctx := context.Background()
+
+	for _, id := range []string{"pro", "plus", "max", "team"} {
+		ents, feats, found, err := LicenseEntitlement(ctx, id)
+		if err != nil {
+			t.Fatalf("LicenseEntitlement(%s): %v", id, err)
+		}
+		if !found {
+			t.Fatalf("LicenseEntitlement(%s): plan not found", id)
+		}
+		if !slices.Contains(feats, "licensing.product:team") {
+			t.Errorf("%s license_features = %v, want licensing.product:team", id, feats)
+		}
+		if id != "team" && ents["team.guests"] != float64(3) {
+			t.Errorf("%s team.guests = %v, want 3", id, ents["team.guests"])
+		}
+	}
+	if _, feats, found, err := LicenseEntitlement(ctx, "max"); err != nil || !found {
+		t.Fatalf("LicenseEntitlement(max): found=%v err=%v", found, err)
+	} else if !slices.Contains(feats, "licensing.product:engine") {
+		t.Errorf("max license_features = %v, want licensing.product:engine", feats)
+	}
+	if _, feats, found, err := LicenseEntitlement(ctx, "developer"); err != nil || !found {
+		t.Fatalf("LicenseEntitlement(developer): found=%v err=%v", found, err)
+	} else if slices.Contains(feats, "licensing.product:team") {
+		t.Error("developer must not carry licensing.product:team")
 	}
 }
 
