@@ -96,6 +96,7 @@ func (s *session) txUpdate(t map[string]any) map[string]any {
 	doc["modifiedBy"] = t["modifiedBy"]
 	doc["modifiedOn"] = t["modifiedOn"]
 	_ = s.store.put(s.org, s.workspace, doc)
+	s.trigger(doc) // member joins/leaves reconcile the chat notify contexts
 	return doc
 }
 
