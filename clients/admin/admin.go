@@ -103,6 +103,7 @@ func routes(app *zip.App, s *cloud.Service[core.State]) {
 	app.Get("/v1/admin/products", core.Guard(s, products))
 	app.Get("/v1/admin/compute", core.Guard(s, compute))
 	app.Get("/v1/admin/o11y", core.Guard(s, o11y))
+	app.Get("/v1/admin/aimetrics", core.Guard(s, aimetrics))
 	app.Post("/v1/admin/sync", core.Guard(s, syncNow))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited
