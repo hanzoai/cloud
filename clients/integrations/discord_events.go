@@ -114,6 +114,7 @@ func discordInteractions(s *cloud.Service[state], c *zip.Ctx) error {
 		Provider: "discord", ExternalID: it.GuildID, User: it.User,
 		Channel: it.ChannelID, Text: it.Prompt, DedupeKey: it.ID,
 	}
+	emitIngress(org, in, "")
 	reply := discordReplier(it.AppID, it.Token)
 	bridgeSpawn(s, org, func() { runBridgeTurn(s, org, in, reply) })
 	// Ack SYNC with a deferred EPHEMERAL response (flags 64) — the async edit stays
