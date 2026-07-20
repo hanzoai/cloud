@@ -36,6 +36,27 @@ var (
 	errReservedHost = errors.New("projects: site host is a reserved label")
 )
 
+// Release is an IMMUTABLE, content-addressed snapshot of a site's bytes at one
+// S3 prefix. It is a VALUE, not an event: its ID is a digest of the object
+// manifest it was built from, so publishing identical content twice yields the
+// SAME release (idempotence for free) and different content can never reuse an
+// ID. Nothing mutates a release after PutRelease — a rollback is a pointer flip
+// to an older one, never a rewrite. (Distinct from Deployment, which is the
+// EVENT log of deploy attempts: attempts fail and are still recorded; releases
+// only exist once their bytes are fully copied.)
+type Release struct {
+	ID     string
+	Org    string
+	Slug   string
+	Prefix string
+	// Source is the org-relative build-output prefix this release was promoted
+	// from, kept for provenance. It is never re-read to serve.
+	Source    string
+	Objects   int
+	Bytes     int64
+	CreatedAt int64
+}
+
 // Project is the org-scoped, canonical record of a buildable/deployable site.
 // It is the SAME record whether read from hanzo.app (the builder) or
 // console.hanzo.ai (the Projects module): org isolation is the org column,
@@ -60,6 +81,12 @@ type Project struct {
 	LiveURL       string
 	Bucket        string
 	CurrentDeploy string
+	// CurrentRelease is the site's serving POINTER — the id of the immutable
+	// Release whose prefix the site edge reads. Empty means "serve the legacy
+	// mutable <org>/<slug>/ prefix" (every site published before releases, and
+	// every site whose last go-live was a full-artifact deploy). Flipping this one
+	// field is the whole of activation and rollback.
+	CurrentRelease string
 	// CacheControl is the per-project override for the HTML/document Cache-Control
 	// header applied to deployed objects (and honored by the site server). Empty =
 	// the honest default (public, max-age=60, s-maxage=86400). Content-hashed
@@ -181,6 +208,25 @@ CREATE TABLE IF NOT EXISTS site_hosts (
   updated_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_site_hosts_org_slug ON site_hosts(org, slug);
+
+-- releases holds the IMMUTABLE content-addressed snapshots a site can serve.
+-- The PK is (org, slug, id): the id alone is a content digest, so scoping it by
+-- tenant keeps two orgs that publish byte-identical content as two independent
+-- rows over two independent object copies — a release row is never shared across
+-- a tenant boundary, and a lookup that forgets the org scope cannot compile to a
+-- hit. Rows are INSERT-only; the serving pointer is projects.current_release.
+CREATE TABLE IF NOT EXISTS releases (
+  id          TEXT NOT NULL,
+  org         TEXT NOT NULL,
+  slug        TEXT NOT NULL,
+  prefix      TEXT NOT NULL,
+  source      TEXT NOT NULL DEFAULT '',
+  objects     INTEGER NOT NULL DEFAULT 0,
+  bytes       INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (org, slug, id)
+);
+CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, created_at DESC);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -191,6 +237,11 @@ CREATE INDEX IF NOT EXISTS ix_site_hosts_org_slug ON site_hosts(org, slug);
 	for _, alter := range []string{
 		`ALTER TABLE projects ADD COLUMN cache_control TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE projects ADD COLUMN last_purge_at INTEGER NOT NULL DEFAULT 0`,
+		// current_release is the site's serving POINTER: the id of the release whose
+		// immutable prefix the site edge reads. Empty (the default every existing row
+		// gets) means "serve the legacy mutable <org>/<slug>/ prefix" — so this
+		// migration is inert for every site published before releases existed.
+		`ALTER TABLE projects ADD COLUMN current_release TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate alter: %w", err)
@@ -202,13 +253,13 @@ CREATE INDEX IF NOT EXISTS ix_site_hosts_org_slug ON site_hosts(org, slug);
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,cache_control,last_purge_at,created_at,updated_at`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
 	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description,
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
-		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy,
+		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
 		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt)
 	return p, err
 }
@@ -217,10 +268,10 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy,
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
 		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -268,10 +319,10 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,cache_control=?,last_purge_at=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CacheControl, p.LastPurgeAt, p.UpdatedAt, p.Org, p.Slug)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
@@ -492,6 +543,127 @@ func (s *Store) ListHostsForProject(ctx context.Context, org, slug string) ([]st
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+
+const releaseCols = `id,org,slug,prefix,source,objects,bytes,created_at`
+
+func scanRelease(sc interface{ Scan(...any) error }) (Release, error) {
+	var r Release
+	err := sc.Scan(&r.ID, &r.Org, &r.Slug, &r.Prefix, &r.Source, &r.Objects, &r.Bytes, &r.CreatedAt)
+	return r, err
+}
+
+// PutRelease records a fully-copied release. It is INSERT-only and idempotent on
+// the content address: re-publishing identical bytes hits the (org,slug,id) PK
+// and is a no-op rather than a conflict, because the row already describes
+// exactly those bytes at exactly that prefix. Call it ONLY after every object has
+// landed — the existence of the row is the promise that the prefix is complete,
+// and ActivateRelease will not flip to a release that has no row.
+func (s *Store) PutRelease(ctx context.Context, r Release) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO releases (`+releaseCols+`) VALUES (?,?,?,?,?,?,?,?)
+		 ON CONFLICT(org, slug, id) DO NOTHING`,
+		r.ID, r.Org, r.Slug, r.Prefix, r.Source, r.Objects, r.Bytes, r.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("insert release: %w", err)
+	}
+	return nil
+}
+
+// GetRelease returns one release scoped to (org, slug, id), or errNotFound. The
+// org is part of the key, not a filter applied afterwards, so a foreign release
+// id is indistinguishable from a nonexistent one — no existence oracle.
+func (s *Store) GetRelease(ctx context.Context, org, slug, id string) (Release, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+releaseCols+` FROM releases WHERE org=? AND slug=? AND id=?`, org, slug, id)
+	r, err := scanRelease(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Release{}, errNotFound
+	}
+	if err != nil {
+		return Release{}, fmt.Errorf("get release: %w", err)
+	}
+	return r, nil
+}
+
+// ListReleases returns a site's releases, newest first — the rollback menu.
+func (s *Store) ListReleases(ctx context.Context, org, slug string, limit int) ([]Release, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+releaseCols+` FROM releases WHERE org=? AND slug=? ORDER BY created_at DESC, id ASC LIMIT ?`,
+		org, slug, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list releases: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Release
+	for rows.Next() {
+		r, err := scanRelease(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan release: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ActivateRelease flips a site's serving pointer to a release. This is the whole
+// of activation, and it is ATOMIC in the strongest available sense: ONE statement
+// whose WHERE clause both scopes the project to the tenant AND requires a
+// matching release row to exist in the same tenant. There is no read-then-write
+// window in which the pointer could name a release that was never fully copied,
+// and two concurrent activations serialize into one winner (never a blend) —
+// SQLite runs them one at a time on the single write connection.
+//
+// A release row exists only after every object was copied (PutRelease), so
+// "pointer set" implies "content complete" by construction. n==0 means the
+// project or the release does not exist FOR THIS TENANT; the caller renders the
+// same 404 for both, so a foreign id yields no signal. Re-activating the
+// already-active release matches a row and succeeds — activation is idempotent.
+func (s *Store) ActivateRelease(ctx context.Context, org, slug, id string, now int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET current_release=?, updated_at=?
+		 WHERE org=? AND slug=?
+		   AND EXISTS (SELECT 1 FROM releases WHERE org=? AND slug=? AND id=?)`,
+		id, now, org, slug, org, slug, id)
+	if err != nil {
+		return fmt.Errorf("activate release: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// MarkLive refreshes ONLY the denormalized go-live display fields of a site. It
+// deliberately does NOT touch current_release: ActivateRelease is the SOLE
+// writer of the serving pointer on the activate path, so a slow activation can
+// never lose a race to a newer one and leave the pointer disagreeing with the
+// last atomic flip. (The two full-artifact go-live paths clear the pointer
+// through UpdateProject — that is their intent, not a side effect.)
+func (s *Store) MarkLive(ctx context.Context, org, slug, liveURL, bucket string, lastPurgeAt, now int64) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE projects SET status='live', live_url=?, bucket=?, last_purge_at=?, updated_at=?
+		 WHERE org=? AND slug=?`,
+		liveURL, bucket, lastPurgeAt, now, org, slug)
+	if err != nil {
+		return fmt.Errorf("mark live: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// DeleteReleases drops every release row for a site. Called on project delete,
+// alongside the purge of the release object space.
+func (s *Store) DeleteReleases(ctx context.Context, org, slug string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM releases WHERE org=? AND slug=?`, org, slug)
+	if err != nil {
+		return fmt.Errorf("delete releases: %w", err)
+	}
+	return nil
 }
 
 // prefixCols qualifies each projectCols name with a table alias (for JOINs).
