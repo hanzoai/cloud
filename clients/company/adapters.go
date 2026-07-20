@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	captablesvc "github.com/hanzoai/cloud/clients/captable"
-	dataroomsvc "github.com/hanzoai/cloud/clients/dataroom"
+	"github.com/hanzoai/cloud/clients/captable"
+	"github.com/hanzoai/cloud/clients/dataroom"
 )
 
 // adapters.go wires the company provider interfaces to the REAL sibling subsystems
@@ -28,7 +28,7 @@ const (
 type dataroomSink struct{}
 
 func (dataroomSink) Ingest(ctx context.Context, org, name, contentType string, data []byte) (string, error) {
-	return dataroomsvc.Ingest(ctx, org, name, contentType, data)
+	return dataroom.Ingest(ctx, org, name, contentType, data)
 }
 
 // ---- CapTable → captable ----
@@ -37,7 +37,7 @@ type captableAdapter struct{}
 
 // SetIncorporation records the entity kind on the tenant's canonical company row.
 func (captableAdapter) SetIncorporation(ctx context.Context, org, companyName, incType, country, state string) error {
-	return captablesvc.SetIncorporation(ctx, org, companyName, incType, country, state)
+	return captable.SetIncorporation(ctx, org, companyName, incType, country, state)
 }
 
 // SeedFounders writes the founding allocation into the cap table: it sets the
@@ -46,24 +46,24 @@ func (captableAdapter) SetIncorporation(ctx context.Context, org, companyName, i
 // the 10M pool). Idempotent enough to re-run: stakeholders dedupe by email, the
 // share class is ensured-by-name, and certificate ids are per-founder.
 func (a captableAdapter) SeedFounders(ctx context.Context, org, companyName string, founders []Founder) error {
-	holders := make([]captablesvc.StakeholderInput, 0, len(founders))
+	holders := make([]captable.StakeholderInput, 0, len(founders))
 	for _, fo := range founders {
-		holders = append(holders, captablesvc.StakeholderInput{
+		holders = append(holders, captable.StakeholderInput{
 			Name: fo.Name, Email: fo.Email,
 			StakeholderType: "INDIVIDUAL", CurrentRelationship: "FOUNDER",
 		})
 	}
-	if _, err := captablesvc.AddStakeholders(ctx, org, holders); err != nil {
+	if _, err := captable.AddStakeholders(ctx, org, holders); err != nil {
 		return fmt.Errorf("seed founders: add stakeholders: %w", err)
 	}
-	classID, err := captablesvc.EnsureShareClass(ctx, org, captablesvc.ShareClassInput{
+	classID, err := captable.EnsureShareClass(ctx, org, captable.ShareClassInput{
 		Name: "Common", ClassType: "COMMON", InitialSharesAuthorized: foundingAuthorizedShares,
 		VotesPerShare: 1, ParValue: 0.0001, PricePerShare: 0.0001,
 	})
 	if err != nil || classID == "" {
 		return fmt.Errorf("seed founders: ensure common class: %w", err)
 	}
-	ids, err := captablesvc.StakeholderIDsByEmail(ctx, org)
+	ids, err := captable.StakeholderIDsByEmail(ctx, org)
 	if err != nil {
 		return fmt.Errorf("seed founders: resolve ids: %w", err)
 	}
@@ -76,7 +76,7 @@ func (a captableAdapter) SeedFounders(ctx context.Context, org, companyName stri
 		if err != nil {
 			return err
 		}
-		if err := captablesvc.IssueShares(ctx, org, captablesvc.ShareInput{
+		if err := captable.IssueShares(ctx, org, captable.ShareInput{
 			StakeholderID: sid, ShareClassID: classID, CertificateID: fmt.Sprintf("%s-%d", cert, i+1),
 			Quantity: int64(fo.EquityBps) * sharesPerBps, Status: "ACTIVE",
 		}); err != nil {
@@ -89,7 +89,7 @@ func (a captableAdapter) SeedFounders(ctx context.Context, org, companyName stri
 // AddStakeholders maps company stakeholders (used by the cap-table import path) to
 // the captable contract.
 func (captableAdapter) AddStakeholders(ctx context.Context, org string, holders []Stakeholder) (int, error) {
-	in := make([]captablesvc.StakeholderInput, 0, len(holders))
+	in := make([]captable.StakeholderInput, 0, len(holders))
 	for _, h := range holders {
 		st := h.StakeholderType
 		if st == "" {
@@ -99,17 +99,17 @@ func (captableAdapter) AddStakeholders(ctx context.Context, org string, holders 
 		if rel == "" {
 			rel = "INVESTOR"
 		}
-		in = append(in, captablesvc.StakeholderInput{
+		in = append(in, captable.StakeholderInput{
 			Name: h.Name, Email: h.Email, StakeholderType: st,
 			CurrentRelationship: rel, InstitutionName: h.InstitutionName,
 		})
 	}
-	return captablesvc.AddStakeholders(ctx, org, in)
+	return captable.AddStakeholders(ctx, org, in)
 }
 
 // RecordRound maps a company fundraising round to the captable contract.
 func (captableAdapter) RecordRound(ctx context.Context, org string, r RoundInput) (string, error) {
-	return captablesvc.RecordRound(ctx, org, captablesvc.RoundInput{
+	return captable.RecordRound(ctx, org, captable.RoundInput{
 		Name: r.Name, RoundType: r.RoundType, TargetAmount: r.TargetAmount,
 		PreMoneyValuation: r.PreMoneyValuation, PricePerShare: r.PricePerShare,
 		ShareClassID: r.ShareClassID,
@@ -130,6 +130,6 @@ func (captableUpgrader) MarkCompany(ctx context.Context, f *Formation) error {
 	if name == "" {
 		name = f.Org
 	}
-	return captablesvc.SetIncorporation(ctx, f.Org, name,
+	return captable.SetIncorporation(ctx, f.Org, name,
 		f.Structure.incorporationType(), "US", string(f.Jurisdiction))
 }

@@ -30,7 +30,7 @@ func testStore(t *testing.T) *Store {
 	return st
 }
 
-func testSvc(t *testing.T) *cloud.Service[state] {
+func testService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	return &cloud.Service[state]{
 		Base:  cloud.NewBase(cloud.Deps{Logger: luxlog.NewNoOpLogger()}, "ingress"),
@@ -216,7 +216,7 @@ func TestTLSHostPolicy(t *testing.T) {
 }
 
 func TestReloadBuildsTLSHostSet(t *testing.T) {
-	s := testSvc(t)
+	s := testService(t)
 	ctx := context.Background()
 
 	// A TLS route + an org-level extraHost.

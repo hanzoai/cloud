@@ -22,7 +22,7 @@ import (
 // magic — no WiredTiger mongod datadir, no Postgres PG_VERSION).
 func TestDedicated_DocdbIsFerretOnSQL(t *testing.T) {
 	orch := newFakeOrch()
-	s := newDedicatedSvc(t, orch)
+	s := newDedicatedService(t, orch)
 
 	resp := postCreate(t, s, "docdb", "acme", "events")
 	if resp.StatusCode != http.StatusCreated {

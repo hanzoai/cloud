@@ -16,7 +16,7 @@ import (
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
-func fakeSvc(objs ...runtime.Object) *cloud.Service[state] {
+func fakeService(objs ...runtime.Object) *cloud.Service[state] {
 	scheme := runtime.NewScheme()
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
 		appsCRGVR:      "AppList",
@@ -235,7 +235,7 @@ func TestObserveApplication(t *testing.T) {
 // ── CR resolution ────────────────────────────────────────────────────────────
 
 func TestGetAppCR(t *testing.T) {
-	s := fakeSvc(appCR("App", "hanzo", "iam", "u-app", "ghcr.io/hanzoai/iam", "v2.0.0", "Running", 1, 1))
+	s := fakeService(appCR("App", "hanzo", "iam", "u-app", "ghcr.io/hanzoai/iam", "v2.0.0", "Running", 1, 1))
 	obj, gvr, err := getAppCR(s, context.Background(), "hanzo", "iam")
 	if err != nil {
 		t.Fatalf("getAppCR: %v", err)
@@ -253,7 +253,7 @@ func TestGetAppCR(t *testing.T) {
 }
 
 func TestListAppCRs(t *testing.T) {
-	s := fakeSvc(
+	s := fakeService(
 		appCR("App", "hanzo", "iam", "u1", "r", "v2.0.0", "Running", 1, 1),
 		appCR("App", "hanzo", "cloud", "u3", "r", "v1.799.0", "Running", 1, 1),
 	)
@@ -284,7 +284,7 @@ func TestBuildTreeOwnership(t *testing.T) {
 	dep := deployment("hanzo", "iam", "d1", "u1", "ghcr.io/hanzoai/iam:v1.0.0", 1, 1) // owned by CR uid u1
 	svc := coreService("hanzo", "iam", "u1")                                          // owned by CR uid u1
 	p := pod("hanzo", "iam-abc", "ghcr.io/hanzoai/iam:v1.0.0", map[string]any{"app.kubernetes.io/instance": "iam"})
-	s := fakeSvc(cr, dep, svc, p)
+	s := fakeService(cr, dep, svc, p)
 
 	nodes := buildTree(s, context.Background(), "hanzo", "iam", cr)
 	kinds := map[string]bool{}

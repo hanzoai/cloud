@@ -1,4 +1,4 @@
-// Package tasksvc mounts the Hanzo Tasks HTTP + UI surface natively onto the
+// Package tasks mounts the Hanzo Tasks HTTP + UI surface natively onto the
 // unified cloud binary per HIP-0106 — the follow-up named in cloud's durable.go
 // ("consolidating that surface into cloud"). Tasks is the durable
 // workflow/activity engine (event-sourced, exactly-once, crash-recovering)
@@ -46,10 +46,10 @@ import (
 // creates NO engine — the ONE engine lives in cloud.EmbeddedTasks (durable.go).
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("tasksvc.Mount: nil zip.App")
+		return fmt.Errorf("tasks.Mount: nil zip.App")
 	}
 	if deps.Logger == nil {
-		return fmt.Errorf("tasksvc.Mount: nil deps.Logger")
+		return fmt.Errorf("tasks.Mount: nil deps.Logger")
 	}
 
 	h := zip.AdaptNetHTTP(&surface{})
