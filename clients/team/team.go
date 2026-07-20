@@ -150,6 +150,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret}
 	billing.register(tg, guard)
 
+	// Collaborator RPC plane: the HTTP half of the collaborative markup contract
+	// (createContent/updateContent/getContent snapshots on deps.VFS). App-level
+	// route — the front posts to /collaborator/rpc/:documentId (see collab.go);
+	// the live Y.js WS lane stays on the collab relay.
+	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
+	collab.register(app, guard)
+
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
 	return nil

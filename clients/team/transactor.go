@@ -173,6 +173,10 @@ type session struct {
 	org       string // IAM tenant (token extra.org); scopes the data path
 	workspace string
 	sessionID string
+	// derived accumulates synthetic txes the trigger projection mints (e.g. the
+	// DocNotifyContext docs a channel create fans out). tx() drains + broadcasts
+	// them with the applied txes so every live session's queries refresh.
+	derived []json.RawMessage
 }
 
 // loop is the frame pump: every WS frame is a ZAP envelope wrapping a JSON-RPC
@@ -334,6 +338,10 @@ func (s *session) tx(id int64, params []json.RawMessage) []byte {
 		return s.result(id, map[string]any{})
 	}
 	res, applied := s.applyTx(params[0])
+	if len(s.derived) > 0 {
+		applied = append(applied, s.derived...)
+		s.derived = nil
+	}
 	if len(applied) > 0 {
 		s.server.hub.broadcast(s.workspace, applied)
 		// Fire agent replies for any bot-addressed Chunter message. Async + guarded
