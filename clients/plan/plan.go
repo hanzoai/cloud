@@ -71,8 +71,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	host = h
 
+	g := app.Group("/v1/plans")
+
 	// Native health endpoint — always answers, no JS, no auth.
-	app.Get("/v1/plans/health", func(c *zip.Ctx) error {
+	g.Get("/health", func(c *zip.Ctx) error {
 		return c.JSON(http.StatusOK, map[string]any{"status": "ok", "service": "plans"})
 	})
 
@@ -101,10 +103,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 
 	// Parameterized: resolve + entitlements take a plan id.
-	app.Get("/v1/plans/resolve/:id", func(c *zip.Ctx) error {
+	g.Get("/resolve/:id", func(c *zip.Ctx) error {
 		return dispatch(c, "resolve", map[string]string{"id": c.Param("id")})
 	})
-	app.Get("/v1/plans/entitlements/:id", func(c *zip.Ctx) error {
+	g.Get("/entitlements/:id", func(c *zip.Ctx) error {
 		return dispatch(c, "entitlements", map[string]string{"id": c.Param("id")})
 	})
 

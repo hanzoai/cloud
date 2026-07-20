@@ -106,11 +106,13 @@ func build(b cloud.Base) (state, error) {
 // /v1/usage/health liveness route (OwnsHealth=false) is a distinct path and never
 // shadows these.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Collection root (/v1/usage) stays flat — Group(p).Post("") yields "p/".
 	app.Post("/v1/usage", cloud.Handle(s, record))
-	app.Get("/v1/usage/samples", cloud.Handle(s, samples))
-	app.Get("/v1/usage/summary", cloud.Handle(s, summary))
-	app.Get("/v1/usage/analytics/access", cloud.Handle(s, analyticsAccess))
-	app.Get("/v1/usage/analytics", cloud.Handle(s, analytics))
+	g := app.Group("/v1/usage")
+	g.Get("/samples", cloud.Handle(s, samples))
+	g.Get("/summary", cloud.Handle(s, summary))
+	g.Get("/analytics/access", cloud.Handle(s, analyticsAccess))
+	g.Get("/analytics", cloud.Handle(s, analytics))
 }
 
 // summary answers GET /v1/usage/summary. ?range=24h|7d|30d|custom (+ ?start/?end

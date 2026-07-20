@@ -189,32 +189,33 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	// Static sub-routes are registered before any :name param route so a real
 	// dataset name can never shadow a collection route.
-	app.Post("/v1/evals/datasets", s.createDataset)
-	app.Get("/v1/evals/datasets", s.listDatasets)
-	app.Get("/v1/evals/datasets/:name", s.getDataset)
-	app.Delete("/v1/evals/datasets/:name", s.deleteDataset)
+	g := app.Group("/v1/evals")
+	g.Post("/datasets", s.createDataset)
+	g.Get("/datasets", s.listDatasets)
+	g.Get("/datasets/:name", s.getDataset)
+	g.Delete("/datasets/:name", s.deleteDataset)
 
-	app.Post("/v1/evals/dataset-items", s.createItem)
-	app.Get("/v1/evals/dataset-items", s.listItems)
+	g.Post("/dataset-items", s.createItem)
+	g.Get("/dataset-items", s.listItems)
 
-	app.Post("/v1/evals/evaluators", s.createEvaluator)
-	app.Get("/v1/evals/evaluators", s.listEvaluators)
+	g.Post("/evaluators", s.createEvaluator)
+	g.Get("/evaluators", s.listEvaluators)
 
-	app.Post("/v1/evals/score-configs", s.createScoreConfig)
-	app.Get("/v1/evals/score-configs", s.listScoreConfigs)
+	g.Post("/score-configs", s.createScoreConfig)
+	g.Get("/score-configs", s.listScoreConfigs)
 
-	app.Post("/v1/evals/scores", s.createScore)
-	app.Get("/v1/evals/scores", s.listScores)
+	g.Post("/scores", s.createScore)
+	g.Get("/scores", s.listScores)
 
-	app.Get("/v1/evals/traces", s.listTraces)
+	g.Get("/traces", s.listTraces)
 
 	// AI observability dashboard (the native Langfuse home): per-org / per-project
 	// counts, cost, tokens, error & success rate, and latency percentiles over a
 	// window — aggregated from the SAME cloud_usage ledger + GenAI spans.
-	app.Get("/v1/evals/metrics", s.metricsBoard)
+	g.Get("/metrics", s.metricsBoard)
 
-	app.Post("/v1/evals/runs", s.runHandler)
-	app.Get("/v1/evals/runs", s.listRuns)
+	g.Post("/runs", s.runHandler)
+	g.Get("/runs", s.listRuns)
 
 	log.Info("evals surface mounted (native)", "brand", deps.Brand, "telemetry", tel != nil)
 	return nil
