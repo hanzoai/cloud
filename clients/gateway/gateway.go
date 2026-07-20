@@ -35,7 +35,7 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// state is gatewaysvc's own data; shared deps live in the embedded cloud.Base.
+// state is gateway's own data; shared deps live in the embedded cloud.Base.
 type state struct {
 	store *edge.Store
 }
