@@ -122,25 +122,27 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		commerce: deps.Commerce,
 		planEnt:  plan.Entitlements,
 	}
-	acct.register(app, guard)
+	// One /v1/team group; every route below is a child of it.
+	tg := app.Group("/v1/team")
+	acct.register(tg, guard)
 
 	// The front's workspace switcher polls this statistics endpoint on the
 	// transactor base (LoginEndpoint ws→http + /api/v1/statistics). Static route —
 	// never captured by the :token segment below.
-	app.Get("/v1/team/transactor/api/v1/statistics", guard(trans.statistics))
+	tg.Get("/transactor/api/v1/statistics", guard(trans.statistics))
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
 	// path segment — no slashes), decoded + VERIFIED before the upgrade.
-	app.Get("/v1/team/transactor/:token", guard(trans.serveWS))
+	tg.Get("/transactor/:token", guard(trans.serveWS))
 
 	bridge := &botsBridge{trans: trans, accounts: accounts}
-	bridge.register(app, guard)
+	bridge.register(tg, guard)
 
 	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
 	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
-	files.register(app, guard)
+	files.register(tg, guard)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
