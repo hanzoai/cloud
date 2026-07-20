@@ -1,4 +1,4 @@
-// Package syncsvc is the universal sync service (/v1/sync): cloud↔cloud data
+// Package sync is the universal sync service (/v1/sync): cloud↔cloud data
 // sync between connected platforms, expressed as Syncs the engine runs. Git
 // (GitHub/GitLab ⇆ native Hanzo Git) is the FIRST provider; storage, db, and other
 // kinds are new providers at their own kind with nothing in the engine to change.

@@ -85,10 +85,10 @@ func (s *sandbox) start(t *testing.T) string {
 }
 func (s *sandbox) ran() int32 { return atomic.LoadInt32(&s.calls) }
 
-// newBilledSvc builds a functions service with a store, an exec client pointed at
+// newBilledService builds a functions service with a store, an exec client pointed at
 // execUpstream (empty ⇒ unconfigured), and a metering client pointed at
 // commerceURL (default org "hanzo"; empty ⇒ !Enabled()).
-func newBilledSvc(t *testing.T, commerceURL, execUpstream string) *cloud.Service[state] {
+func newBilledService(t *testing.T, commerceURL, execUpstream string) *cloud.Service[state] {
 	t.Helper()
 	log := luxlog.New("module", "fnbilltest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
@@ -141,7 +141,7 @@ func fireInvoke(t *testing.T, s *cloud.Service[state], org, name string) *http.R
 func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
 	sb := &sandbox{}
 	bs := &billServer{available: 0}
-	s := newBilledSvc(t, bs.start(t), sb.start(t))
+	s := newBilledService(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
@@ -162,7 +162,7 @@ func TestInvoke_RefusesUnfundedOrg(t *testing.T) {
 func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
 	sb := &sandbox{}
 	bs := &billServer{available: 100000}
-	s := newBilledSvc(t, bs.start(t), sb.start(t))
+	s := newBilledService(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
@@ -207,7 +207,7 @@ func TestInvoke_AllowsAndDebitsCallerOrg(t *testing.T) {
 func TestInvoke_TransportFailureNotBilled(t *testing.T) {
 	bs := &billServer{available: 100000}
 	// execUpstream points at a dead address so run() returns a transport error.
-	s := newBilledSvc(t, bs.start(t), "http://127.0.0.1:1")
+	s := newBilledService(t, bs.start(t), "http://127.0.0.1:1")
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
@@ -227,7 +227,7 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 	t.Setenv("CLOUD_FUNCTION_FEE_CENTS", "0")
 	sb := &sandbox{}
 	bs := &billServer{available: 0}
-	s := newBilledSvc(t, bs.start(t), sb.start(t))
+	s := newBilledService(t, bs.start(t), sb.start(t))
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")
@@ -248,7 +248,7 @@ func TestInvoke_FreeFeeUngated(t *testing.T) {
 // nothing is billed.
 func TestInvoke_BillingUnconfiguredNoop(t *testing.T) {
 	sb := &sandbox{}
-	s := newBilledSvc(t, "", sb.start(t)) // empty commerce URL ⇒ !Enabled()
+	s := newBilledService(t, "", sb.start(t)) // empty commerce URL ⇒ !Enabled()
 	seedFn(t, s, "acme", "resize")
 
 	resp := fireInvoke(t, s, "acme", "resize")

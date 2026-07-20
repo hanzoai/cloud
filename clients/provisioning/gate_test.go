@@ -51,7 +51,7 @@ func TestUnavailableKinds_EmptyAfterDedicated(t *testing.T) {
 func TestCreate_DedicatedFailsClosedWithoutCluster(t *testing.T) {
 	for _, kind := range []string{"datastore", "docdb", "sql", "kv"} {
 		t.Run(kind, func(t *testing.T) {
-			s, _ := newTestSvc(t) // no orch, no bill
+			s, _ := newTestService(t) // no orch, no bill
 			resp := postCreate(t, s, kind, "acme", "warehouse")
 			if resp.StatusCode != http.StatusServiceUnavailable {
 				body, _ := io.ReadAll(resp.Body)
