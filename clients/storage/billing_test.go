@@ -69,10 +69,10 @@ func (b *billServer) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-// newBilledSvc builds an s3 Service with S3 admin credentials present (so guard does
+// newBilledService builds an s3 Service with S3 admin credentials present (so guard does
 // not 503 on Configured()) and a metering client pointed at commerceURL (default
 // org "hanzo"; empty ⇒ !Enabled()).
-func newBilledSvc(t *testing.T, commerceURL string) *cloud.Service[state] {
+func newBilledService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("S3_ADMIN_ACCESS_KEY", "AKIATEST")
 	t.Setenv("S3_ADMIN_SECRET_KEY", "secrettest")
@@ -119,7 +119,7 @@ func callGuard(t *testing.T, s *cloud.Service[state], org string, hErr error) (s
 // touched), nothing is debited.
 func TestGuard_RefusesUnfundedOrg(t *testing.T) {
 	bs := &billServer{available: 0}
-	s := newBilledSvc(t, bs.start(t))
+	s := newBilledService(t, bs.start(t))
 
 	status, ran := callGuard(t, s, "acme", nil)
 	if status != http.StatusPaymentRequired {
@@ -137,7 +137,7 @@ func TestGuard_RefusesUnfundedOrg(t *testing.T) {
 // debited once with product "s3" / unit "op".
 func TestGuard_AllowsAndDebitsCallerOrg(t *testing.T) {
 	bs := &billServer{available: 100000}
-	s := newBilledSvc(t, bs.start(t))
+	s := newBilledService(t, bs.start(t))
 
 	status, ran := callGuard(t, s, "acme", nil)
 	if status != http.StatusNoContent {
@@ -178,7 +178,7 @@ func TestGuard_AllowsAndDebitsCallerOrg(t *testing.T) {
 // mirrors the edge gate ("do not bill failed work").
 func TestGuard_HandlerFailureNotBilled(t *testing.T) {
 	bs := &billServer{available: 100000}
-	s := newBilledSvc(t, bs.start(t))
+	s := newBilledService(t, bs.start(t))
 
 	status, ran := callGuard(t, s, "acme", zip.Errorf(http.StatusBadGateway, "s3 down"))
 	if status != http.StatusBadGateway {
@@ -198,7 +198,7 @@ func TestGuard_HandlerFailureNotBilled(t *testing.T) {
 func TestGuard_FreeFeeUngated(t *testing.T) {
 	t.Setenv("CLOUD_S3_FEE_CENTS", "0")
 	bs := &billServer{available: 0}
-	s := newBilledSvc(t, bs.start(t))
+	s := newBilledService(t, bs.start(t))
 
 	status, ran := callGuard(t, s, "acme", nil)
 	if status != http.StatusNoContent {
@@ -216,7 +216,7 @@ func TestGuard_FreeFeeUngated(t *testing.T) {
 // Billing unconfigured (no commerce URL) → the gate is a no-op: the op runs and
 // nothing is billed.
 func TestGuard_BillingUnconfiguredNoop(t *testing.T) {
-	s := newBilledSvc(t, "") // empty commerce URL ⇒ !Enabled()
+	s := newBilledService(t, "") // empty commerce URL ⇒ !Enabled()
 
 	status, ran := callGuard(t, s, "acme", nil)
 	if status != http.StatusNoContent {
@@ -231,7 +231,7 @@ func TestGuard_BillingUnconfiguredNoop(t *testing.T) {
 // gate — the tenant boundary precedes billing.
 func TestGuard_NoPrincipalRefused(t *testing.T) {
 	bs := &billServer{available: 100000}
-	s := newBilledSvc(t, bs.start(t))
+	s := newBilledService(t, bs.start(t))
 
 	status, ran := callGuard(t, s, "", nil)
 	if status != http.StatusForbidden {

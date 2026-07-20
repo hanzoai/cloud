@@ -65,9 +65,9 @@ func (b *billServer) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-// newBilledSvc builds a provisioning Service with a mock provisioner and a real
+// newBilledService builds a provisioning Service with a mock provisioner and a real
 // metering client pointed at commerceURL (default org "hanzo").
-func newBilledSvc(t *testing.T, commerceURL string, kinds ...string) (*cloud.Service[state], *mockProv) {
+func newBilledService(t *testing.T, commerceURL string, kinds ...string) (*cloud.Service[state], *mockProv) {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -113,7 +113,7 @@ func postCreate(t *testing.T, s *cloud.Service[state], kind, org, name string) *
 // runs before the backend). No free provisioning.
 func TestCreate_RefusesUnfundedOrg(t *testing.T) {
 	bs := &billServer{available: 0}
-	s, mp := newBilledSvc(t, bs.start(t), "vector")
+	s, mp := newBilledService(t, bs.start(t), "vector")
 
 	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusPaymentRequired {
@@ -136,7 +136,7 @@ func TestCreate_RefusesUnfundedOrg(t *testing.T) {
 // client default hanzo) is debited the provision fee.
 func TestCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 	bs := &billServer{available: 100000}
-	s, mp := newBilledSvc(t, bs.start(t), "vector")
+	s, mp := newBilledService(t, bs.start(t), "vector")
 
 	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
@@ -171,7 +171,7 @@ func TestCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 func TestCreate_FreeKindUngated(t *testing.T) {
 	t.Setenv("CLOUD_PROVISION_FEE_CENTS_VECTOR", "0")
 	bs := &billServer{available: 0}
-	s, mp := newBilledSvc(t, bs.start(t), "vector")
+	s, mp := newBilledService(t, bs.start(t), "vector")
 
 	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
@@ -191,7 +191,7 @@ func TestCreate_FreeKindUngated(t *testing.T) {
 // Billing unconfigured (no commerce URL) → the gate is a no-op: provisioning
 // works and nothing is billed (an unconfigured deployment is never blocked).
 func TestCreate_BillingUnconfiguredNoop(t *testing.T) {
-	s, mp := newBilledSvc(t, "", "vector") // empty commerce URL => !Enabled()
+	s, mp := newBilledService(t, "", "vector") // empty commerce URL => !Enabled()
 	resp := postCreate(t, s, "vector", "acme", "orders")
 	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(resp.Body)
