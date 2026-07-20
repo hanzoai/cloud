@@ -50,7 +50,7 @@ func gateApp(t *testing.T, commerce types.CommerceClient, planEnt func(context.C
 		planEnt:  planEnt,
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	g.register(app, func(h zip.Handler) zip.Handler { return h })
+	g.register(app.Group("/v1/team"), func(h zip.Handler) zip.Handler { return h })
 	return app, store
 }
 
