@@ -40,7 +40,7 @@ const (
 	// treated as the sync bot (no push is suppressed), so a deployment without the
 	// relay keeps today's behavior; set it to the relay's Gitea login to arm the
 	// guard. Idempotent SHAs already make the echo a no-op downstream; this skips it
-	// early and explicitly (loop guard, engine-level twin in syncsvc).
+	// early and explicitly (loop guard, engine-level twin in sync).
 	syncActorEnv = "GIT_SYNC_ACTOR"
 	// zeroSHA is git's all-zero object id — the `after` of a branch delete and
 	// the `before` of a branch create.

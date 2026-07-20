@@ -16,7 +16,7 @@ import (
 //
 // It wires the two middlewares that could wrongly reject an anonymous auth
 // request — SanitizeIdentity (identity trust boundary) and BillingGate — in
-// front of a stub IAM handler mounted the way iamsvc mounts the real one, and
+// front of a stub IAM handler mounted the way iam mounts the real one, and
 // asserts:
 //
 //   - unauth login/authorize/token/jwks reach the handler (2xx), never 402/503 —
