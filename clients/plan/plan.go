@@ -1,4 +1,4 @@
-// Package plansvc mounts the @hanzo/plans catalog into the unified cloud
+// Package plan mounts the @hanzo/plans catalog into the unified cloud
 // binary under /v1/plans/*, per HIP-0106.
 //
 // STRATEGY: wrap, don't rewrite. @hanzo/plans is a Node data package (JSON
