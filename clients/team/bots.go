@@ -24,9 +24,9 @@ type botsBridge struct {
 	accounts *accountStore
 }
 
-func (b *botsBridge) register(app *zip.App, guard guardFn) {
-	app.Get("/v1/team/bots", guard(b.list))
-	app.Post("/v1/team/bots/sync", guard(b.sync))
+func (b *botsBridge) register(r zip.Router, guard guardFn) {
+	r.Get("/bots", guard(b.list))
+	r.Post("/bots/sync", guard(b.sync))
 }
 
 // botView is the published shape of one bot member.

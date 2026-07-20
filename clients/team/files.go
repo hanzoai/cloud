@@ -48,13 +48,13 @@ type filesService struct {
 	secret   string
 }
 
-func (s *filesService) register(app *zip.App, guard guardFn) {
+func (s *filesService) register(r zip.Router, guard guardFn) {
 	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
-	app.Post("/v1/team/files/:workspace", guard(s.upload))
-	app.Get("/v1/team/files/:workspace/:filename", guard(s.download))
+	r.Post("/files/:workspace", guard(s.upload))
+	r.Get("/files/:workspace/:filename", guard(s.download))
 	// deleteFile: DELETE getFileUrl(ws, file) = /{workspace}/{file}?file={file}
 	// (front.ts) — the download route shape, DELETE method.
-	app.Delete("/v1/team/files/:workspace/:filename", guard(s.deleteBlob))
+	r.Delete("/files/:workspace/:filename", guard(s.deleteBlob))
 }
 
 // principal resolves (account, org) from the request's VERIFIED session or
