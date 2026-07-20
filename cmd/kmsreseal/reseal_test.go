@@ -188,13 +188,13 @@ func TestReseal_RoundTripRealSeal(t *testing.T) {
 		{Org: "hanzo", Path: "datastore", Env: "prod", Key: "DATASTORE_PASSWORD"},
 	}}
 
-	rep := reseal(context.Background(), inv, src, dst, injectToken, false)
+	rep := reseal(context.Background(), inv, src, dst, injectToken, injectToken, false)
 	if rep.Migrated != 3 || rep.Failed != 0 {
 		t.Fatalf("reseal: migrated=%d failed=%d, want 3/0: %+v", rep.Migrated, rep.Failed, rep.Results)
 	}
 
 	// VERIFY: every target byte-identical on cloud (real open) vs source.
-	vrep := verify(context.Background(), inv, src, dst, injectToken)
+	vrep := verify(context.Background(), inv, src, dst, injectToken, injectToken)
 	if vrep.Match != 3 || vrep.Mismatch != 0 || vrep.AbsentD != 0 {
 		t.Fatalf("verify: match=%d mismatch=%d absent-dst=%d, want 3/0/0: %+v", vrep.Match, vrep.Mismatch, vrep.AbsentD, vrep.Results)
 	}
@@ -220,7 +220,7 @@ func TestReseal_WrongOrgTokenRefusedByCloud(t *testing.T) {
 	// A token scoped to the WRONG org: the fake source refuses the read (403), so the
 	// migration fails closed — the value is never even read, let alone written cross-org.
 	badToken := func(_ context.Context, _ Target) (string, error) { return "org:evil", nil }
-	rep := reseal(context.Background(), inv, src, dst, badToken, false)
+	rep := reseal(context.Background(), inv, src, dst, badToken, badToken, false)
 	if rep.Failed != 1 || rep.Migrated != 0 {
 		t.Fatalf("wrong-org reseal: migrated=%d failed=%d, want 0/1", rep.Migrated, rep.Failed)
 	}
@@ -237,7 +237,7 @@ func TestReseal_FolderSyncResolvedViaList(t *testing.T) {
 	fs.seed("hanzo", "commerce", "prod", "STRIPE_KEY", "stripe-2")
 	inv := Inventory{Folders: []Target{{Org: "hanzo", Path: "commerce", Env: "prod", Folder: true}}}
 
-	rep := reseal(context.Background(), inv, src, dst, injectToken, false)
+	rep := reseal(context.Background(), inv, src, dst, injectToken, injectToken, false)
 	if rep.Migrated != 2 || rep.Failed != 0 {
 		t.Fatalf("folder reseal: migrated=%d failed=%d, want 2/0: %+v", rep.Migrated, rep.Failed, rep.Results)
 	}
@@ -246,7 +246,7 @@ func TestReseal_FolderSyncResolvedViaList(t *testing.T) {
 		{Org: "hanzo", Path: "commerce", Env: "prod", Key: "HUSD_TREASURY_KEY"},
 		{Org: "hanzo", Path: "commerce", Env: "prod", Key: "STRIPE_KEY"},
 	}}
-	if v := verify(context.Background(), explicit, src, dst, injectToken); v.Match != 2 {
+	if v := verify(context.Background(), explicit, src, dst, injectToken, injectToken); v.Match != 2 {
 		t.Fatalf("folder verify match=%d, want 2", v.Match)
 	}
 }
@@ -256,7 +256,7 @@ func TestReseal_PlanDoesNoNetwork(t *testing.T) {
 	src := newKMSClient("http://kms.hanzo.svc", panicDoer{})
 	dst := newKMSClient("http://cloud.hanzo.svc", panicDoer{})
 	inv := Inventory{Targets: []Target{{Org: "hanzo", Path: "p", Env: "prod", Key: "K"}}, Folders: []Target{{Org: "hanzo", Path: "f", Env: "prod", Folder: true}}}
-	rep := reseal(context.Background(), inv, src, dst, injectToken, true)
+	rep := reseal(context.Background(), inv, src, dst, injectToken, injectToken, true)
 	if rep.Planned != 2 || rep.Migrated != 0 || rep.Failed != 0 {
 		t.Fatalf("plan: planned=%d migrated=%d failed=%d, want 2/0/0", rep.Planned, rep.Migrated, rep.Failed)
 	}
