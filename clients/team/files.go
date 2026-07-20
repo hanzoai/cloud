@@ -40,15 +40,15 @@ import (
 // backend or memory. 100 MiB matches the attachment ceiling.
 const maxBlobSize = 100 << 20
 
-// filesSvc serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
+// filesService serves the workspace blob plane. vfs is cloud's blob seam (deps.VFS);
 // accounts asserts workspace membership; secret verifies the session token.
-type filesSvc struct {
+type filesService struct {
 	vfs      types.VFSClient
 	accounts *accountStore
 	secret   string
 }
 
-func (s *filesSvc) register(app *zip.App, guard guardFn) {
+func (s *filesService) register(app *zip.App, guard guardFn) {
 	// Workspace is in the PATH (front.ts POSTs to {UPLOAD_URL}/{workspace}).
 	app.Post("/v1/team/files/:workspace", guard(s.upload))
 	app.Get("/v1/team/files/:workspace/:filename", guard(s.download))
@@ -59,7 +59,7 @@ func (s *filesSvc) register(app *zip.App, guard guardFn) {
 
 // principal resolves (account, org) from the request's VERIFIED session or
 // workspace token (bearer or the HttpOnly account cookie).
-func (s *filesSvc) principal(c *zip.Ctx) (account, org string, err error) {
+func (s *filesService) principal(c *zip.Ctx) (account, org string, err error) {
 	t, _, err := sessionToken(c, s.secret)
 	if err != nil {
 		return "", "", err
@@ -75,7 +75,7 @@ func (s *filesSvc) principal(c *zip.Ctx) (account, org string, err error) {
 // (Red F-C: bind files to workspace membership, not just same-org). Any failure is
 // a 404 — no oracle distinguishing "no such workspace", "not your org", or "not a
 // member".
-func (s *filesSvc) authorize(c *zip.Ctx, account, org, wsUUID string) error {
+func (s *filesService) authorize(c *zip.Ctx, account, org, wsUUID string) error {
 	wsUUID = strings.TrimSpace(wsUUID)
 	if wsUUID == "" {
 		return zip.ErrBadRequest("workspace required")
@@ -97,7 +97,7 @@ func (s *filesSvc) authorize(c *zip.Ctx, account, org, wsUUID string) error {
 // multipart file's filename). The server does NOT mint the id — the front owns it
 // (front.ts: formData.append('file', file, uuid)). Response body is irrelevant
 // (uploadFile discards it); we echo the id for curl/debug.
-func (s *filesSvc) upload(c *zip.Ctx) error {
+func (s *filesService) upload(c *zip.Ctx) error {
 	account, org, err := s.principal(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
@@ -148,7 +148,7 @@ func (s *filesSvc) upload(c *zip.Ctx) error {
 // client :filename (Red F-B: a crafted .svg name would otherwise force
 // image/svg+xml → active XSS). Anything not a recognized raster image is served
 // inert: application/octet-stream + attachment + nosniff.
-func (s *filesSvc) download(c *zip.Ctx) error {
+func (s *filesService) download(c *zip.Ctx) error {
 	account, org, err := s.principal(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
@@ -194,7 +194,7 @@ func (s *filesSvc) download(c *zip.Ctx) error {
 // never confirms a blob's existence, and a foreign blobId (a different physical
 // key the caller can never name into another tenant's box) is a harmless no-op.
 // front.ts only checks response.ok, so 204 satisfies the contract.
-func (s *filesSvc) deleteBlob(c *zip.Ctx) error {
+func (s *filesService) deleteBlob(c *zip.Ctx) error {
 	account, org, err := s.principal(c)
 	if err != nil {
 		return zip.ErrUnauthorized("invalid session token")
