@@ -13,7 +13,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/team/token"
+	"github.com/hanzoai/cloud/clients/plan"
 )
 
 // guardFn wraps a route handler so it fails closed (503) in degraded mode. It is
@@ -112,8 +112,22 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// the /v1/team/bots/sync handler can write into the per-workspace store.
 	live = trans
 
-	acct := &api{accounts: accounts, trans: trans, cfg: cfg, log: log}
+	acct := &api{
+		accounts: accounts, trans: trans, cfg: cfg, log: log,
+		// The IAM boundary: the SAME RS256/JWKS validator the identity middleware
+		// uses, so the OAuth callback's `owner` claim is VERIFIED, never trusted raw.
+		verify: cloud.NewTokenValidator(cfg.iamEndpoint).Validate,
+		// The entitlement seams: commerce answers "does the org's plan license
+		// 'team'"; plan answers the plan's entitlement block (team.guests cap).
+		commerce: deps.Commerce,
+		planEnt:  plan.Entitlements,
+	}
 	acct.register(app, guard)
+
+	// The front's workspace switcher polls this statistics endpoint on the
+	// transactor base (LoginEndpoint ws→http + /api/v1/statistics). Static route —
+	// never captured by the :token segment below.
+	app.Get("/v1/team/transactor/api/v1/statistics", guard(trans.statistics))
 
 	// The transactor data-plane WebSocket. The :token segment is a JWT (a single
 	// path segment — no slashes), decoded + VERIFIED before the upgrade.
@@ -125,8 +139,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// Files plane: the workspace blob store the Team front's UPLOAD_URL/FILES_URL
 	// hit, backed by cloud's canonical VFS seam (deps.VFS) and org-scoped by the
 	// verified session token — the SAME isolation invariant as the docs store.
-	fsvc := &filesSvc{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
-	fsvc.register(app, guard)
+	files := &filesService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
+	files.register(app, guard)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
 	log.Info("team mounted", "brand", deps.Brand, "iam", cfg.iamEndpoint, "client", cfg.iamClientID, "degraded", degraded)
@@ -174,7 +188,6 @@ func loadConfig(deps cloud.Deps) config {
 		iamEndpoint:     firstNonEmpty(deps.IAMIssuer, os.Getenv("IAM_ENDPOINT"), "https://hanzo.id"),
 		iamClientID:     firstNonEmpty(os.Getenv("TEAM_IAM_CLIENT_ID"), "hanzo-team"),
 		iamClientSecret: os.Getenv("TEAM_IAM_CLIENT_SECRET"),
-		iamOrg:          firstNonEmpty(os.Getenv("IAM_ORG"), "hanzo"),
 		serverSecret:    os.Getenv("SERVER_SECRET"),
 		frontURL:        strings.TrimRight(os.Getenv("FRONT_URL"), "/"),
 		transactor:      strings.TrimRight(os.Getenv("TRANSACTOR_URL"), "/"),
@@ -219,19 +232,13 @@ func env(key, fallback string) string {
 
 // resolveSecret decides the HS256 signing posture from the RAW SERVER_SECRET env.
 // It returns degraded=true (fail-closed, health-only) when the secret is unset or
-// the public DefaultSecret literal AND the TEAM_DEV_INSECURE=1 escape hatch is not
-// set — so no production path ever signs/verifies a team token with a known key
-// (which would let a forged {extra.org, workspace} token read+write ANY tenant's
-// docs). With the dev escape hatch it runs functional on the default secret,
-// loudly. It mutates cfg.serverSecret to the concrete signing key for the dev case.
+// the upstream public "secret" literal — so no path EVER signs/verifies a team
+// token with a known key (which would let a forged {extra.org, workspace} token
+// read+write ANY tenant's docs). There is no escape hatch: dev sets a real
+// SERVER_SECRET like every other deployment (one way).
 func resolveSecret(cfg *config, log luxlog.Logger) (degraded bool) {
-	if cfg.serverSecret != "" && cfg.serverSecret != token.DefaultSecret {
+	if cfg.serverSecret != "" && cfg.serverSecret != "secret" {
 		return false // a real, non-default secret — functional and secure
-	}
-	if os.Getenv("TEAM_DEV_INSECURE") == "1" {
-		cfg.serverSecret = token.DefaultSecret
-		log.Warn("team: running on the DEFAULT HS256 signing secret (TEAM_DEV_INSECURE=1) — NEVER in production")
-		return false
 	}
 	log.Error("team: SERVER_SECRET is unset or the public default — subsystem DEGRADED (health-only); every /v1/team route returns 503 until a KMS-synced SERVER_SECRET is provided")
 	return true

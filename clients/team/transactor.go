@@ -14,10 +14,13 @@ package team
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 
 	luxlog "github.com/luxfi/log"
+	"github.com/valyala/fasthttp"
 
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/zap-proto/zip"
@@ -103,7 +106,60 @@ func (srv *transServer) serveWS(c *zip.Ctx) error {
 		defer srv.hub.remove(sess)
 		sess.loop(conn)
 		return nil
-	})(c)
+	}, wsx.Config{CheckOrigin: wsOriginOK})(c)
+}
+
+// wsOriginOK is the browser-Origin gate on the transactor upgrade: without it
+// ANY page could open an authenticated socket with a token it holds (or lure a
+// logged-in browser into one). Absent Origin is allowed — non-browser clients
+// (CLI, server-side) send none.
+func wsOriginOK(ctx *fasthttp.RequestCtx) bool {
+	return originAllowed(string(ctx.Request.Header.Peek("Origin")), string(ctx.Host()))
+}
+
+// originAllowed admits: no Origin (non-browser), the request's own host, the
+// team surfaces (hanzo.team, team.hanzo.ai, api.hanzo.team), any *.hanzo.ai
+// (+ apex), and loopback for local dev. Everything else is refused.
+func originAllowed(origin, host string) bool {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	if strings.EqualFold(u.Host, host) {
+		return true
+	}
+	switch h := strings.ToLower(u.Hostname()); h {
+	case "hanzo.team", "team.hanzo.ai", "api.hanzo.team", "hanzo.ai", "localhost", "127.0.0.1":
+		return true
+	default:
+		return strings.HasSuffix(h, ".hanzo.ai")
+	}
+}
+
+// statistics answers GET /v1/team/transactor/api/v1/statistics — the endpoint
+// the front's workspace switcher (SelectWorkspaceMenu) and server panel poll on
+// the transactor base. Token-authed exactly like the upgrade; the shape is the
+// upstream front service's ({metrics, statistics:{activeSessions}, admin}), and
+// activeSessions carries ONLY the token's own workspace — never another
+// tenant's sessions.
+func (srv *transServer) statistics(c *zip.Ctx) error {
+	t, err := token.Decode(c.Query("token"), srv.secret, true)
+	if err != nil || t.Account == "" {
+		return zip.ErrUnauthorized("invalid token")
+	}
+	active := map[string]any{}
+	if t.Workspace != "" {
+		active[t.Workspace] = srv.hub.users(t.Workspace)
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"metrics":    map[string]any{},
+		"statistics": map[string]any{"activeSessions": active},
+		"admin":      false,
+	})
 }
 
 // session is one live transactor connection, scoped to a (workspace, account).
@@ -618,6 +674,17 @@ func (h *hub) remove(s *session) {
 			delete(h.ws, s.workspace)
 		}
 	}
+}
+
+// users lists a workspace's live sessions in the front's statistics shape.
+func (h *hub) users(workspace string) []map[string]any {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := []map[string]any{}
+	for s := range h.ws[workspace] {
+		out = append(out, map[string]any{"userId": s.account})
+	}
+	return out
 }
 
 func (h *hub) broadcast(workspace string, txes []json.RawMessage) {
