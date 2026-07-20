@@ -40,10 +40,28 @@ func (r siteResolver) Resolve(ctx context.Context, slug string) (sites.Site, boo
 		Org:                  p.Org,
 		Slug:                 p.Slug,
 		Bucket:               p.Bucket,
-		Prefix:               sitePrefix(p.Org, p.Slug),
+		Prefix:               servePrefix(p),
 		Status:               p.Status,
 		CrossOriginIsolation: crossOriginIsolated(p.Framework),
 	}, true, nil
+}
+
+// servePrefix is the ONE rule for which S3 prefix a site serves from, and the
+// read side of the release pointer: a project with an active release serves that
+// release's immutable prefix; a project without one serves the legacy mutable
+// `<org>/<slug>/` prefix it was deployed to.
+//
+// The pointer is re-validated HERE against releaseIDRE before it can widen a
+// prefix. It was already validated when it was written (activation only accepts
+// an id that matches a stored release row, and ids are minted as digests), so
+// this is defense in depth: even a poisoned or hand-edited row cannot produce a
+// prefix that escapes the org — an unrecognized id falls back to the legacy
+// prefix rather than being interpolated.
+func servePrefix(p Project) string {
+	if id := p.CurrentRelease; id != "" && releaseIDRE.MatchString(id) {
+		return releasePrefix(p.Org, p.Slug, id)
+	}
+	return sitePrefix(p.Org, p.Slug)
 }
 
 // crossOriginIsolated reports whether a project's declared framework is a
