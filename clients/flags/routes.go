@@ -17,14 +17,15 @@ import (
 )
 
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/flags/health", cloud.Handle(s, health))
+	g := app.Group("/v1/flags")
+	g.Get("/health", cloud.Handle(s, health))
 	app.Post("/v1/flags", cloud.Handle(s, evaluateFlags))
-	app.Post("/v1/flags/decide", cloud.Handle(s, evaluateFlags)) // PostHog /decide alias
-	app.Get("/v1/flags/defs", cloud.Handle(s, listDefs))
-	app.Get("/v1/flags/defs/:key", cloud.Handle(s, getDef))
-	app.Put("/v1/flags/defs/:key", cloud.Handle(s, putDef))
-	app.Delete("/v1/flags/defs/:key", cloud.Handle(s, deleteDef))
-	app.Get("/v1/flags/activity", cloud.Handle(s, listActivity))
+	g.Post("/decide", cloud.Handle(s, evaluateFlags)) // PostHog /decide alias
+	g.Get("/defs", cloud.Handle(s, listDefs))
+	g.Get("/defs/:key", cloud.Handle(s, getDef))
+	g.Put("/defs/:key", cloud.Handle(s, putDef))
+	g.Delete("/defs/:key", cloud.Handle(s, deleteDef))
+	g.Get("/activity", cloud.Handle(s, listActivity))
 }
 
 // tenant resolves the org — the tenant-isolation KEY — from the validated

@@ -154,29 +154,30 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the automations surface: the connector catalog, flow CRUD +
 // versioning + lifecycle, run history, and the MCP endpoint.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/automations/connectors", cloud.Handle(s, connectors))
+	g := app.Group("/v1/automations")
+	g.Get("/connectors", cloud.Handle(s, connectors))
 	// Back-compat alias: the pre-rename /pieces path stays valid (same handler, same
 	// body) so live clients pinned to it keep working. "pieces" is the retired
 	// ActivePieces term; "connectors" is the ONE Hanzo name (HIP-0126).
-	app.Get("/v1/automations/pieces", cloud.Handle(s, connectors))
+	g.Get("/pieces", cloud.Handle(s, connectors))
 
-	app.Get("/v1/automations/flows", cloud.Handle(s, listFlows))
-	app.Post("/v1/automations/flows", cloud.Handle(s, createFlow))
-	app.Get("/v1/automations/flows/:id", cloud.Handle(s, getFlow))
-	app.Patch("/v1/automations/flows/:id", cloud.Handle(s, updateFlow))
-	app.Delete("/v1/automations/flows/:id", cloud.Handle(s, deleteFlow))
-	app.Get("/v1/automations/flows/:id/versions", cloud.Handle(s, listVersions))
-	app.Post("/v1/automations/flows/:id/versions", cloud.Handle(s, createVersion))
-	app.Post("/v1/automations/flows/:id/operations", cloud.Handle(s, applyOperation))
-	app.Post("/v1/automations/flows/:id/run", cloud.Handle(s, runFlow))
-	app.Post("/v1/automations/flows/:id/enable", cloud.Handle(s, enableFlow))
-	app.Post("/v1/automations/flows/:id/disable", cloud.Handle(s, disableFlow))
+	g.Get("/flows", cloud.Handle(s, listFlows))
+	g.Post("/flows", cloud.Handle(s, createFlow))
+	g.Get("/flows/:id", cloud.Handle(s, getFlow))
+	g.Patch("/flows/:id", cloud.Handle(s, updateFlow))
+	g.Delete("/flows/:id", cloud.Handle(s, deleteFlow))
+	g.Get("/flows/:id/versions", cloud.Handle(s, listVersions))
+	g.Post("/flows/:id/versions", cloud.Handle(s, createVersion))
+	g.Post("/flows/:id/operations", cloud.Handle(s, applyOperation))
+	g.Post("/flows/:id/run", cloud.Handle(s, runFlow))
+	g.Post("/flows/:id/enable", cloud.Handle(s, enableFlow))
+	g.Post("/flows/:id/disable", cloud.Handle(s, disableFlow))
 
-	app.Get("/v1/automations/runs", cloud.Handle(s, listRuns))
-	app.Get("/v1/automations/runs/:id", cloud.Handle(s, getRun))
-	app.Post("/v1/automations/runs/:id/resume", cloud.Handle(s, resumeRun))
+	g.Get("/runs", cloud.Handle(s, listRuns))
+	g.Get("/runs/:id", cloud.Handle(s, getRun))
+	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
 
-	app.Post("/v1/automations/mcp", cloud.Handle(s, mcp))
+	g.Post("/mcp", cloud.Handle(s, mcp))
 }
 
 // Shutdown closes the store. Idempotent — safe when nothing is mounted.

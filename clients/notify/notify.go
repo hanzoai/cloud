@@ -100,10 +100,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &service{log: log, kms: deps.KMS}
 	s.send = s.sendReal
 
-	app.Get("/v1/notify/health", s.health)
-	app.Post("/v1/notify/send", s.handleSend(""))
-	app.Post("/v1/notify/send/sms", s.handleSend(string(ntypes.ChannelSMS)))
-	app.Post("/v1/notify/send/email", s.handleSend(string(ntypes.ChannelEmail)))
+	g := app.Group("/v1/notify")
+	g.Get("/health", s.health)
+	g.Post("/send", s.handleSend(""))
+	g.Post("/send/sms", s.handleSend(string(ntypes.ChannelSMS)))
+	g.Post("/send/email", s.handleSend(string(ntypes.ChannelEmail)))
 
 	if log != nil {
 		log.Info("notify send surface mounted", "prefix", "/v1/notify")

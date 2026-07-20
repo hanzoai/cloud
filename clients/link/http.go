@@ -88,15 +88,19 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	// Collection root stays flat: Group("/v1/links").Post("") would register
+	// "/v1/links/", not the bare collection path.
 	app.Post("/v1/links", cloud.Handle(s, upsertLink))
 	app.Get("/v1/links", cloud.Handle(s, listLinks))
+
+	g := app.Group("/v1/links")
 	// Static literals before the :id param — Fiber matches in registration order,
 	// so "route"/"devices" must win over :id.
-	app.Get("/v1/links/route", cloud.Handle(s, routePlan))
-	app.Get("/v1/links/devices/:machine", cloud.Handle(s, deviceDetail))
-	app.Post("/v1/links/devices/:machine/revoke", cloud.Handle(s, revokeDevice))
-	app.Get("/v1/links/:id", cloud.Handle(s, getLink))
-	app.Delete("/v1/links/:id", cloud.Handle(s, revokeLink))
+	g.Get("/route", cloud.Handle(s, routePlan))
+	g.Get("/devices/:machine", cloud.Handle(s, deviceDetail))
+	g.Post("/devices/:machine/revoke", cloud.Handle(s, revokeDevice))
+	g.Get("/:id", cloud.Handle(s, getLink))
+	g.Delete("/:id", cloud.Handle(s, revokeLink))
 
 	log.Info("link mounted", "brand", deps.Brand)
 	return nil

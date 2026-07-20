@@ -90,13 +90,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the security surface. Static routes register before the :id
 // params so a scan id can never shadow /rules or /health (Fiber first-match).
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/security/health", cloud.Handle(s, health))
-	app.Get("/v1/security/rules", cloud.Handle(s, listRules))
-	app.Post("/v1/security/scans", cloud.Handle(s, submitScan))
-	app.Get("/v1/security/scans", cloud.Handle(s, listScans))
-	app.Get("/v1/security/findings", cloud.Handle(s, listFindings))
-	app.Get("/v1/security/scans/:id", cloud.Handle(s, getScan))
-	app.Get("/v1/security/findings/:id", cloud.Handle(s, getFinding))
+	g := app.Group("/v1/security")
+	g.Get("/health", cloud.Handle(s, health))
+	g.Get("/rules", cloud.Handle(s, listRules))
+	g.Post("/scans", cloud.Handle(s, submitScan))
+	g.Get("/scans", cloud.Handle(s, listScans))
+	g.Get("/findings", cloud.Handle(s, listFindings))
+	g.Get("/scans/:id", cloud.Handle(s, getScan))
+	g.Get("/findings/:id", cloud.Handle(s, getFinding))
 }
 
 // Shutdown closes the findings store. Idempotent; safe if Mount never ran.
