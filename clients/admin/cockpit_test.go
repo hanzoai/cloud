@@ -203,7 +203,7 @@ func newCockpitFakes(t *testing.T) *cockpitFakes {
 		}
 	}))
 
-	_, s, fa := mountSvc(t, f.iam.URL, f.commerce.URL, "")
+	_, s, fa := mountService(t, f.iam.URL, f.commerce.URL, "")
 	f.service = s
 	f.do = func(method, path string, hdr map[string]string, body string) (*http.Response, []byte) {
 		t.Helper()
