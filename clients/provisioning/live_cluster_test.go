@@ -29,7 +29,7 @@ import (
 	luxlog "github.com/luxfi/log"
 )
 
-func liveSvc(t *testing.T) *cloud.Service[state] {
+func liveService(t *testing.T) *cloud.Service[state] {
 	t.Helper()
 	t.Setenv("CLOUD_KMS_NODES", "")
 	t.Setenv("CLOUD_KMS_PASSPHRASE", "")
@@ -83,7 +83,7 @@ func dropLive(t *testing.T, s *cloud.Service[state], kind, org, name string) {
 }
 
 func TestLive_DedicatedProvisioning(t *testing.T) {
-	s := liveSvc(t)
+	s := liveService(t)
 	ctx := context.Background()
 
 	// Two orgs, each gets its OWN datastore instance in its OWN namespace.

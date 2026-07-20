@@ -15,7 +15,7 @@ import (
 
 // The finance PURE-math derivation tests (ComputeFinance / AvgDailyBurnCents) live with
 // the handler in clients/admin/finance. These are the INTEGRATION tests that drive GET
-// /v1/admin/finance through the shared admin mount harness (mountSvc + fake IAM/commerce/DO).
+// /v1/admin/finance through the shared admin mount harness (mountService + fake IAM/commerce/DO).
 
 // newFakeDO serves the DO billing API with fixed decimal-dollar strings so the
 // finance aggregation is deterministic. account_balance is NEGATIVE (credit held).
@@ -49,7 +49,7 @@ func TestFinance_RealAggregation(t *testing.T) {
 	do := newFakeDO()
 	defer do.Close()
 
-	doReq, s, _ := mountSvc(t, iam.server.URL, commerce.URL, "")
+	doReq, s, _ := mountService(t, iam.server.URL, commerce.URL, "")
 	s.State.DO = digitalocean.NewWithBase(do.URL, "test-do-token") // configured DO client
 	admin := map[string]string{
 		"X-User-IsAdmin": "true", "X-Org-Id": "admin",
@@ -151,7 +151,7 @@ func TestFinance_HonestUnconfiguredDO(t *testing.T) {
 	commerce := newFakeCommerceFinance()
 	defer commerce.Close()
 
-	doReq, _, _ := mountSvc(t, iam.server.URL, commerce.URL, "") // s.do already has empty token → unconfigured
+	doReq, _, _ := mountService(t, iam.server.URL, commerce.URL, "") // s.do already has empty token → unconfigured
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := doReq("GET", "/v1/admin/finance", admin)
@@ -212,7 +212,7 @@ func TestFinance_RevenueSourceDown_NoFabrication(t *testing.T) {
 	defer commerce.Close()
 
 	// IAM points nowhere reachable → listOrgs errors; commerce /v1/costs still 200s.
-	doReq, _, _ := mountSvc(t, "http://127.0.0.1:0", commerce.URL, "")
+	doReq, _, _ := mountService(t, "http://127.0.0.1:0", commerce.URL, "")
 	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin"}
 
 	resp, body := doReq("GET", "/v1/admin/finance", admin)

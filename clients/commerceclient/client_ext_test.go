@@ -10,7 +10,7 @@ import (
 
 	"github.com/hanzoai/cloud"
 	inproc "github.com/hanzoai/cloud/clients/commerceclient"
-	plansvc "github.com/hanzoai/cloud/clients/plan"
+	"github.com/hanzoai/cloud/clients/plan"
 	commercemod "github.com/hanzoai/commerce"
 	"github.com/hanzoai/commerce/billing/grant"
 	"github.com/hanzoai/commerce/datastore"
@@ -27,8 +27,8 @@ func mountPlansVocab(t *testing.T) {
 	t.Helper()
 	plansOnce.Do(func() {
 		app := zip.New(zip.Config{Logger: luxlog.New("test-plans")})
-		if err := plansvc.Mount(app, cloud.Deps{Logger: luxlog.New("test-plans"), Brand: "hanzo"}); err != nil {
-			t.Fatalf("plansvc.Mount: %v", err)
+		if err := plan.Mount(app, cloud.Deps{Logger: luxlog.New("test-plans"), Brand: "hanzo"}); err != nil {
+			t.Fatalf("plan.Mount: %v", err)
 		}
 	})
 }

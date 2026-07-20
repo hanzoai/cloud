@@ -17,7 +17,7 @@ import (
 // /v1/deploy/ui route without wrapping it in guard() breaks this test.
 func TestDeployRoutesRequireAdmin(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	routes(app, fakeSvc()) // the COMPLETE surface: native + engine + dashboard
+	routes(app, fakeService()) // the COMPLETE surface: native + engine + dashboard
 
 	guarded := []struct{ method, path string }{
 		// engine
@@ -109,7 +109,7 @@ func TestDeployRoutesRequireAdmin(t *testing.T) {
 // anonymous answer carries the sign-in URL and NOTHING that identifies anyone.
 func TestUserInfoIsPublicBootstrap(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	routes(app, fakeSvc())
+	routes(app, fakeService())
 
 	resp, err := app.Fiber().Test(httptest.NewRequest("GET", "/v1/deploy/session/userinfo", nil))
 	if err != nil {

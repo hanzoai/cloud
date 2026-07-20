@@ -24,16 +24,16 @@ import (
 // mount builds a zip app with admin mounted against the given upstream bases,
 // and returns a `do` helper that issues test requests through the whole app.
 func mount(t *testing.T, iamURL, commerceURL, healthURL string) func(method, path string, hdr map[string]string) (*http.Response, []byte) {
-	do, _, _ := mountSvc(t, iamURL, commerceURL, healthURL)
+	do, _, _ := mountService(t, iamURL, commerceURL, healthURL)
 	return do
 }
 
-// mountSvc is mount but also returns the underlying cloud.Service[state] (so finance tests can swap
+// mountService is mount but also returns the underlying cloud.Service[state] (so finance tests can swap
 // in a fake DigitalOcean client, and the cockpit tests can attach an audit store)
 // AND the raw fiber app (so tests that need a request BODY can drive it directly —
 // the returned `do` sends a nil body). The handlers read s.* live at request time,
 // so an override before issuing a request takes effect.
-func mountSvc(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[core.State], *fiber.App) {
+func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(method, path string, hdr map[string]string) (*http.Response, []byte), *cloud.Service[core.State], *fiber.App) {
 	t.Helper()
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	s := &cloud.Service[core.State]{State: core.State{
