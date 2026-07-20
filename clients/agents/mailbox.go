@@ -2,7 +2,12 @@ package agents
 
 import (
 	"context"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
+
+	luxlog "github.com/luxfi/log"
 )
 
 // mailbox.go is the LIVE hand-off between a routed run's durable owner (the
@@ -35,6 +40,11 @@ type RoutedRun struct {
 	Prompt         string `json:"prompt"`
 	CloneURL       string `json:"cloneUrl"`
 	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+	// Actor + AgentRef are CLOUD-SIDE attribution for the completion path (session
+	// close + PR assignee). They are NOT part of routedRunView, so they never cross
+	// to the executing machine — the machine needs neither.
+	Actor    string `json:"actor,omitempty"`
+	AgentRef string `json:"agentRef,omitempty"`
 }
 
 // RoutedResult is a routed run's terminal outcome, reported by the machine and
@@ -96,22 +106,92 @@ type mailbox struct {
 	queues map[string][]*offer
 	byRun  map[string]*offer
 	signal map[string]chan struct{}
+	// inflight is the per-org set of live routed sessions (offered, not yet finished),
+	// the gauge the per-org admission cap reads. A SET keyed by session id (not a bare
+	// counter) so a re-offer after a restart re-adds idempotently and a superseded
+	// offer never double-counts or wrongly decrements the still-live session.
+	inflight map[string]map[string]struct{}
 }
 
 func newMailbox() *mailbox {
 	return &mailbox{
-		queues: map[string][]*offer{},
-		byRun:  map[string]*offer{},
-		signal: map[string]chan struct{}{},
+		queues:   map[string][]*offer{},
+		byRun:    map[string]*offer{},
+		signal:   map[string]chan struct{}{},
+		inflight: map[string]map[string]struct{}{},
 	}
+}
+
+func (m *mailbox) inflightAddLocked(org, sess string) {
+	s := m.inflight[org]
+	if s == nil {
+		s = map[string]struct{}{}
+		m.inflight[org] = s
+	}
+	s[sess] = struct{}{}
+}
+
+func (m *mailbox) inflightRemoveLocked(org, sess string) {
+	if s := m.inflight[org]; s != nil {
+		delete(s, sess)
+		if len(s) == 0 {
+			delete(m.inflight, org)
+		}
+	}
+}
+
+// InFlight returns how many routed runs an org has live (offered, not yet finished).
+func (m *mailbox) InFlight(org string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.inflight[org])
 }
 
 // routedMailbox is the ONE process-wide rendezvous, shared by the coding
 // delivery activity (Offer/Await) and the machine-facing HTTP surface
 // (Claim/Report). One mailbox, one way.
+//
+// SINGLE-REPLICA DEPENDENCY (accepted, inherited). This rendezvous is IN-PROCESS: the
+// durable delivery activity (Offer/Await, on whichever replica's tasks worker polls
+// the agent-routed queue) and the external machine's POST /claim (ingress load-
+// balanced to any replica) must land on the SAME process, because the mailbox is a
+// package global, not a shared broker. cloud already runs HARD single-replica —
+// Recreate, replicas:1 — because the embedded Badger KMS holds an exclusive file lock
+// and the audit sequence is an in-memory counter (infra/k8s/operator/crs/cloud.yaml),
+// so route-work INHERITS that guarantee for free and needs no broker. assertSingleReplica
+// logs the assumption at mount and warns loudly if a multi-replica signal is present.
+//
+// IF cloud is ever made multi-replica (the KMS lock lifted): this rendezvous MUST
+// become replica-aware — either a sticky route that pins a target's /claim to the
+// replica whose worker owns its delivery, or a shared broker (the embedded NATS/
+// JetStream already in-process, keyed by (org,target)) so Offer and Claim meet
+// regardless of which replica each hits. Until then, single-replica is the contract.
 var routedMailbox = newMailbox()
 
-func mbKey(org, target string) string      { return org + "\x00" + target }
+// assertSingleReplica records the single-replica assumption the process-global
+// rendezvous depends on, and warns LOUDLY if a multi-replica signal is detectable
+// (CLOUD_REPLICAS > 1). It does not fail mount — cloud's replicas:1 is enforced by the
+// deployment (the KMS lock), so this is a defensive breadcrumb for the day that
+// changes, not a runtime gate. Called once from mountRouting.
+func assertSingleReplica(log luxlog.Logger) {
+	if log == nil {
+		return
+	}
+	replicas := 1
+	if v := strings.TrimSpace(os.Getenv("CLOUD_REPLICAS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			replicas = n
+		}
+	}
+	if replicas > 1 {
+		log.Warn("route-work: the routed-run rendezvous is process-global and REQUIRES cloud to run single-replica, but CLOUD_REPLICAS>1 — routed /claim will silently fail on a replica that does not own the delivery. Make the rendezvous replica-aware (sticky target route or shared broker) before scaling out.",
+			"replicas", replicas)
+		return
+	}
+	log.Info("route-work: routed-run rendezvous is in-process; assumes cloud single-replica (inherited from the KMS exclusive lock)")
+}
+
+func mbKey(org, target string) string        { return org + "\x00" + target }
 func runKey(org, target, sess string) string { return org + "\x00" + target + "\x00" + sess }
 
 // Offer files run for its (org,target) and returns the handle its durable owner
