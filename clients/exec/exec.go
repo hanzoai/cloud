@@ -1,4 +1,4 @@
-// Package execsvc exposes the Code Interpreter ("Run Code") surface on the
+// Package exec exposes the Code Interpreter ("Run Code") surface on the
 // unified cloud-api /v1 plane, per HIP-0106.
 //
 // hanzo.chat (LibreChat fork) drives its execute_code agent tool against a
@@ -76,7 +76,7 @@ func newProxy(rawURL string) (http.Handler, error) {
 		return nil, err
 	}
 	if target.Scheme == "" || target.Host == "" {
-		return nil, fmt.Errorf("execsvc: CODE_EXEC_UPSTREAM must be an absolute URL, got %q", rawURL)
+		return nil, fmt.Errorf("exec: CODE_EXEC_UPSTREAM must be an absolute URL, got %q", rawURL)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	base := proxy.Director
@@ -123,11 +123,11 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 // node process with the shared service key, so we enforce that key here.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	if app == nil {
-		return fmt.Errorf("execsvc.Mount: nil zip.App")
+		return fmt.Errorf("exec.Mount: nil zip.App")
 	}
 	logger := deps.Logger
 	if logger == nil {
-		return fmt.Errorf("execsvc.Mount: nil deps.Logger")
+		return fmt.Errorf("exec.Mount: nil deps.Logger")
 	}
 	logger = logger.New("subsystem", "exec")
 
