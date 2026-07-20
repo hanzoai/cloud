@@ -1260,8 +1260,8 @@ github.com/hanzoai/govaluate v0.1.0 h1:8Ajg4pNw2zFssXO2Ixj3fa73HawZUQiMwcP2NakUj
 github.com/hanzoai/govaluate v0.1.0/go.mod h1:0kZEEPJJmWLx67swZ7wAbE7xahX+CQzm9u/O4dNF5u4=
 github.com/hanzoai/ha v0.1.1 h1:FyiD6mRAdAKbPRlzSqOWujvDG/O9OgZ3CHvqO+XRfsY=
 github.com/hanzoai/ha v0.1.1/go.mod h1:7G+gwkCWNpVsioNpKpK+x6ECoUYY2N/m/rlgPbxCqrA=
-github.com/hanzoai/iam v1.31.28 h1:bEKm4x7Ghy0LQD+GeMjeMhzBwIYjJV+6UlGwCkHCi4U=
-github.com/hanzoai/iam v1.31.28/go.mod h1:7kl/z2j0QQ+DFmQsq8S//ypDLkyl6VDsY4owK3fKbJU=
+github.com/hanzoai/iam v1.31.34 h1:OCLkFUnO1gsED4V4/6j2cqw7KhxIlJZsHZHxXLkPlWw=
+github.com/hanzoai/iam v1.31.34/go.mod h1:Mk4FFv1diSDwZ489M9aTlsQpn+fQzs4zxSh8J5Zorvo=
 github.com/hanzoai/iam2 v0.16.0 h1:zjLXs4DlO/UlP3hIHtnH6P29bTZSIG8gUwAUrgw1F04=
 github.com/hanzoai/iam2 v0.16.0/go.mod h1:40YxnxnRgEH+ARZs+qL2An+B1HhOVkbtohr0KJtbtFg=
 github.com/hanzoai/iamsdk/v2 v2.1.2 h1:u86WwM76e46YUrDbvB5k5hD2g+t9oqT5PmssKC5+El8=

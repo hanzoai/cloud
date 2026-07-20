@@ -317,6 +317,33 @@ func (s *accountStore) EnsureMemberName(ctx context.Context, account, name strin
 	return err
 }
 
+// AddMember records (or re-activates) a human membership row for an invited
+// account in a workspace. Idempotent: a re-invite updates the role and clears any
+// prior deactivation rather than duplicating (the PK is (workspace_id, user_id)).
+// The role is written verbatim (owner | admin | member | guest) — the invite path
+// validates it before calling. joined_at is preserved on an existing row so guest
+// join-order (GuestRank) stays deterministic across re-invites.
+func (s *accountStore) AddMember(ctx context.Context, workspaceID, account, role, displayName string) error {
+	if workspaceID == "" || account == "" {
+		return fmt.Errorf("team: add member: empty workspace/account")
+	}
+	if role == "" {
+		role = "member"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
+		 VALUES (?,?,?,?,0,1,?)
+		 ON CONFLICT(workspace_id,user_id) DO UPDATE SET
+		   role=excluded.role,
+		   active=1,
+		   display_name=CASE WHEN members.display_name='' THEN excluded.display_name ELSE members.display_name END`,
+		workspaceID, account, role, displayName, time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("add member: %w", err)
+	}
+	return nil
+}
+
 // WorkspacesForOrg returns every workspace of an org — used by /v1/team/bots/sync
 // to re-project the org's agents into each of its workspaces. Org-scoped.
 func (s *accountStore) WorkspacesForOrg(ctx context.Context, org string) ([]workspace, error) {
