@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -283,8 +285,7 @@ func TestBotsReadRouteTenantGate(t *testing.T) {
 // is not registered by Mount, so this unit test asserts the route-degrade, which is
 // the security-load-bearing half.)
 func TestDegradedWithoutSecret(t *testing.T) {
-	t.Setenv("SERVER_SECRET", "")     // unset
-	t.Setenv("TEAM_DEV_INSECURE", "") // no escape hatch
+	t.Setenv("SERVER_SECRET", "") // unset
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount must SUCCEED in degraded mode (health-only), got: %v", err)
@@ -301,9 +302,10 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	if code, _ := call(t, app, http.MethodPost, "/v1/team/account", nil, rpcRequest{Method: "getUserWorkspaces"}); code != http.StatusServiceUnavailable {
 		t.Fatalf("degraded /v1/team/account = %d, want 503", code)
 	}
-	// The default-secret literal is ALSO degraded (a public key must never sign).
+	// The upstream public "secret" literal is ALSO degraded (a public key must
+	// never sign) — and there is NO env escape hatch back to it.
 	_ = Shutdown()
-	t.Setenv("SERVER_SECRET", "secret") // == token.DefaultSecret
+	t.Setenv("SERVER_SECRET", "secret")
 	app2 := zip.New(zip.Config{Logger: luxlog.New("test")})
 	if err := Mount(app2, cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), VFS: newMemVFS()}); err != nil {
 		t.Fatalf("Mount (default secret) must succeed degraded: %v", err)
@@ -313,10 +315,10 @@ func TestDegradedWithoutSecret(t *testing.T) {
 	}
 }
 
-// TestDevInsecureEnablesRoutes proves the explicit dev escape hatch
-// (TEAM_DEV_INSECURE=1) runs functional on the default secret — for local dev
-// only. The route is NOT degraded.
-func TestDevInsecureEnablesRoutes(t *testing.T) {
+// TestInsecureHatchRemoved proves the retired TEAM_DEV_INSECURE escape hatch is
+// DEAD: even with it set, an unset SERVER_SECRET stays degraded. Dev runs on a
+// real secret like every other deployment — one way.
+func TestInsecureHatchRemoved(t *testing.T) {
 	t.Setenv("SERVER_SECRET", "")
 	t.Setenv("TEAM_DEV_INSECURE", "1")
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -324,9 +326,8 @@ func TestDevInsecureEnablesRoutes(t *testing.T) {
 		t.Fatalf("Mount: %v", err)
 	}
 	t.Cleanup(func() { _ = Shutdown() })
-	// Functional: a validated principal gets 200 (empty list), not 503.
-	if code, body := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusOK {
-		t.Fatalf("dev-insecure /v1/team/bots = %d, want 200 (%s)", code, body)
+	if code, body := call(t, app, http.MethodGet, "/v1/team/bots", map[string]string{"X-Org-Id": "acme", "X-User-Id": "u_acme"}, nil); code != http.StatusServiceUnavailable {
+		t.Fatalf("/v1/team/bots with dead hatch = %d, want 503 (%s)", code, body)
 	}
 }
 
@@ -374,5 +375,163 @@ func TestBotsSyncAdminGate(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &sr); err != nil || !sr.Synced {
 		t.Fatalf("admin sync body = %s (err %v)", body, err)
+	}
+}
+
+// TestOAuthStateRoundTrip: authStart mints a RANDOM state nonce bound to the
+// flow cookie (the navigateUrl rides in the cookie, not in state), and the
+// callback refuses any state that does not match — no cookie, wrong nonce —
+// before ever touching the code exchange.
+func TestOAuthStateRoundTrip(t *testing.T) {
+	app := mountTeam(t)
+
+	req := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid?navigateUrl=/inbox", nil)
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("authStart: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("Location: %v", err)
+	}
+	state := loc.Query().Get("state")
+	if len(state) != 32 {
+		t.Fatalf("state = %q, want a 32-hex nonce (never the navigateUrl)", state)
+	}
+	var flow string
+	for _, ck := range resp.Cookies() {
+		if ck.Name == stateCookie {
+			flow = ck.Value
+		}
+	}
+	wantCookie := state + "|" + url.QueryEscape("/inbox")
+	if flow != wantCookie {
+		t.Fatalf("flow cookie = %q, want %q", flow, wantCookie)
+	}
+
+	// Callback with a MISMATCHED state (cookie present) → bounced, never exchanged.
+	cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=x&state=forged", nil)
+	cb.AddCookie(&http.Cookie{Name: stateCookie, Value: flow})
+	resp2, err := app.Fiber().Test(cb)
+	if err != nil {
+		t.Fatalf("callback: %v", err)
+	}
+	defer func() { _ = resp2.Body.Close() }()
+	if loc2 := resp2.Header.Get("Location"); !strings.Contains(loc2, "error=state_mismatch") {
+		t.Fatalf("mismatched state Location = %q, want error=state_mismatch", loc2)
+	}
+
+	// Callback with NO flow cookie → same refusal.
+	cb2 := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=x&state="+state, nil)
+	resp3, err := app.Fiber().Test(cb2)
+	if err != nil {
+		t.Fatalf("callback (no cookie): %v", err)
+	}
+	defer func() { _ = resp3.Body.Close() }()
+	if loc3 := resp3.Header.Get("Location"); !strings.Contains(loc3, "error=state_mismatch") {
+		t.Fatalf("cookieless callback Location = %q, want error=state_mismatch", loc3)
+	}
+}
+
+// TestCallbackVerifiesOwner drives the FULL callback against a stub IAM: the
+// tenant comes from the VERIFIED owner (the injected validator), and a token
+// that fails verification fails CLOSED (error bounce, no default org, no
+// session minted).
+func TestCallbackVerifiesOwner(t *testing.T) {
+	iam := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/iam/oauth/token":
+			_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "iam-access"})
+		case "/v1/iam/oauth/userinfo":
+			_ = json.NewEncoder(w).Encode(map[string]string{"sub": "550e8400-e29b-41d4-a716-446655440000", "name": "Ada"})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer iam.Close()
+
+	drive := func(verify func(string) (cloud.VerifiedIdentity, error)) *http.Response {
+		store, err := openAccountStore(t.TempDir() + "/account.db")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = store.Close() })
+		g := &api{
+			accounts: store,
+			cfg:      config{serverSecret: testSecret, iamEndpoint: iam.URL, iamClientID: "hanzo-team", provider: "openid"},
+			log:      luxlog.New("test"),
+			verify:   verify,
+		}
+		app := zip.New(zip.Config{Logger: luxlog.New("test")})
+		g.register(app, func(h zip.Handler) zip.Handler { return h })
+		cb := httptest.NewRequest(http.MethodGet, "https://hanzo.team/v1/team/account/auth/openid/callback?code=ok&state=aaaa", nil)
+		cb.AddCookie(&http.Cookie{Name: stateCookie, Value: "aaaa|"})
+		resp, err := app.Fiber().Test(cb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = resp.Body.Close() })
+		return resp
+	}
+
+	// Verified owner → session token minted, carrying the VERIFIED org.
+	resp := drive(func(access string) (cloud.VerifiedIdentity, error) {
+		if access != "iam-access" {
+			t.Fatalf("verify saw %q, want the exchanged access token", access)
+		}
+		return cloud.VerifiedIdentity{Owner: "acme"}, nil
+	})
+	loc, _ := url.Parse(resp.Header.Get("Location"))
+	sess := loc.Query().Get("token")
+	if sess == "" {
+		t.Fatalf("no session token in bounce: %q", resp.Header.Get("Location"))
+	}
+	dec, err := token.Decode(sess, testSecret, true)
+	if err != nil || dec.Extra["org"] != "acme" {
+		t.Fatalf("session token org = %v (err %v), want verified owner acme", dec, err)
+	}
+
+	// Verification failure → fail closed: error bounce, NO token.
+	resp2 := drive(func(string) (cloud.VerifiedIdentity, error) {
+		return cloud.VerifiedIdentity{}, fmt.Errorf("signature mismatch")
+	})
+	loc2 := resp2.Header.Get("Location")
+	if !strings.Contains(loc2, "error=org_failed") || strings.Contains(loc2, "token=") {
+		t.Fatalf("unverified owner Location = %q, want error=org_failed and no token", loc2)
+	}
+}
+
+// TestTransactorStatistics: the workspace switcher's poll target answers the
+// front-compatible shape under a valid token and 401s otherwise.
+func TestTransactorStatistics(t *testing.T) {
+	app := mountTeam(t)
+	const acct, wsUUID = "550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+	wsTok, err := token.Generate(acct, wsUUID, map[string]any{"org": "acme"}, expUnix(workspaceTokenTTL), testSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body := call(t, app, http.MethodGet, "/v1/team/transactor/api/v1/statistics?token="+wsTok, nil, nil)
+	if code != http.StatusOK {
+		t.Fatalf("statistics = %d, want 200 (%s)", code, body)
+	}
+	var out struct {
+		Metrics    map[string]any `json:"metrics"`
+		Statistics struct {
+			ActiveSessions map[string][]map[string]any `json:"activeSessions"`
+		} `json:"statistics"`
+		Admin *bool `json:"admin"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("shape: %v (%s)", err, body)
+	}
+	if out.Metrics == nil || out.Statistics.ActiveSessions == nil || out.Admin == nil {
+		t.Fatalf("missing keys: %s", body)
+	}
+	if _, ok := out.Statistics.ActiveSessions[wsUUID]; !ok {
+		t.Fatalf("activeSessions missing the token's workspace: %s", body)
+	}
+	if code, _ := call(t, app, http.MethodGet, "/v1/team/transactor/api/v1/statistics?token=not.a.token", nil, nil); code != http.StatusUnauthorized {
+		t.Fatalf("bad token statistics = %d, want 401", code)
 	}
 }
