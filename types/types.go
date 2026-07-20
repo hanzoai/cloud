@@ -278,6 +278,11 @@ type FinanceClient interface {
 	// RecordUsage posts a usage debit (wallet→revenue) from subject's ledger wallet.
 	// Idempotent on in.RequestID.
 	RecordUsage(ctx context.Context, in UsageInput) error
+	// SumUsageSince returns org's total metered usage in CENTS at/after the unix
+	// cutoff `since` (deposits excluded; test selects the sandbox books). The rolling
+	// AI-spend cap's trailing-window source — usage older than the cutoff drops out of
+	// the sum, so a moving window needs no reset job.
+	SumUsageSince(ctx context.Context, org string, test bool, since int64) (int64, error)
 }
 
 // AIClient is the inter-subsystem interface to AI.

@@ -111,6 +111,7 @@ import (
 	"github.com/hanzoai/cloud/clients/provisioning"
 	"github.com/hanzoai/cloud/clients/pubsub"
 	"github.com/hanzoai/cloud/clients/referrals"
+	"github.com/hanzoai/cloud/clients/rollingcap"
 	"github.com/hanzoai/cloud/clients/runtime"
 	"github.com/hanzoai/cloud/clients/sbom"
 	"github.com/hanzoai/cloud/clients/security"
@@ -250,6 +251,11 @@ func Wire() []cloud.MountSpec {
 		// Provisioning control plane: /v1/sql,/v1/vector,/v1/datastore,/v1/kv,/v1/search,/v1/s3,/v1/docdb.
 		{Name: "provisioning", Mount: provisioning.Mount},
 		{Name: "billing", Mount: billing.Mount},
+		// Rolling AI-spend cap: installs the ai gate's per-tier trailing-window cap
+		// reader (registers no routes; its admin-editable knobs are platform switches
+		// surfaced in the /v1/admin/flags cockpit). After commerce/plan so the tier +
+		// finance globals it composes are wired.
+		{Name: "rollingcap", Mount: rollingcap.Mount},
 		// CATCH-ALL /v1/billing/* + /v1/commerce/* data bridges — AFTER clients/billing
 		// (121) + the commerce embed (100). Same clients/account package as "account" (48).
 		{Name: "account-bridge", Mount: account.MountBridge},
