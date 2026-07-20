@@ -257,9 +257,18 @@ func (s *Server) siteSlug(host string) (string, bool) {
 		return "", false
 	}
 	key := strings.TrimSuffix(host, suffix)
-	slug, org, ok := strings.Cut(key, ".")
-	if !ok {
-		return "", false // single-label host (bare <label>.<apex>) is not org-scoped
+	slug, org, scoped := strings.Cut(key, ".")
+	if !scoped {
+		// Bare `<slug>.<apex>` — the product URL every surface advertises, and the
+		// ONLY shape the edge can physically serve today (a k8s Ingress host and a
+		// Let's Encrypt wildcard each match exactly one label, so
+		// `<slug>.<org>.<apex>` never routes nor gets TLS). The resolver serves it
+		// iff it maps to exactly one live project (explicit binding, else a unique
+		// live slug across orgs) — an ambiguous bare host is an honest 404.
+		if IsReserved(key) || !slugRE.MatchString(key) {
+			return "", false
+		}
+		return key, true
 	}
 	if strings.Contains(org, ".") {
 		return "", false // more than two labels under the apex
