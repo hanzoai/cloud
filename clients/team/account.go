@@ -10,6 +10,7 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -171,20 +172,30 @@ type SocialID struct {
 }
 
 // Status is the platform PlatformError payload sent as {"error": Status}.
+// Severity is the platform's STRING enum ("OK"/"INFO"/"WARNING"/"ERROR") — the
+// SPA compares it against those literals, so a numeric severity matches nothing.
 type Status struct {
-	Severity int            `json:"severity"`
+	Severity string         `json:"severity"`
 	Code     string         `json:"code"`
 	Params   map[string]any `json:"params"`
 }
 
 func statusUnauthorized(msg string) Status {
-	return Status{Severity: 1, Code: "account:status:Unauthorized", Params: map[string]any{"message": msg}}
+	return Status{Severity: "ERROR", Code: "account:status:Unauthorized", Params: map[string]any{"message": msg}}
 }
 func statusError(msg string) Status {
-	return Status{Severity: 1, Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
+	return Status{Severity: "ERROR", Code: "account:status:InternalServerError", Params: map[string]any{"message": msg}}
 }
 func statusWorkspaceNotFound(url string) Status {
-	return Status{Severity: 1, Code: "account:status:WorkspaceNotFound", Params: map[string]any{"workspace": url}}
+	return Status{Severity: "ERROR", Code: "account:status:WorkspaceNotFound", Params: map[string]any{"workspace": url}}
+}
+
+// statusBadCredentials is the password-login refusal. The code is the platform
+// status the SPA already translates ("Account not found or the provided
+// credentials are incorrect") so the form renders a native message, and it
+// deliberately does not distinguish no-such-account from wrong-password.
+func statusBadCredentials() Status {
+	return Status{Severity: "ERROR", Code: "platform:status:AccountNotFound", Params: map[string]any{}}
 }
 
 // ── route registration ────────────────────────────────────────────────────────
@@ -201,9 +212,15 @@ func (g *api) register(r zip.Router, guard guardFn) {
 // ── REST: providers ───────────────────────────────────────────────────────────
 
 func (g *api) providers(c *zip.Ctx) error {
-	// Only IAM. The full method set (email/SMS/Google/GitHub/Web3) is presented by
-	// IAM itself once the browser reaches /auth/openid.
-	return c.JSON(http.StatusOK, []ProviderInfo{{Name: g.cfg.provider, DisplayName: "Hanzo"}})
+	// Every entry federates through the SAME IAM authorize hop: google/github
+	// carry a provider_hint so hanzo.id lands STRAIGHT in the provider's OAuth
+	// flow (the console-proven pattern, id >= 0.2.6); openid is the plain Hanzo
+	// SSO page.
+	return c.JSON(http.StatusOK, []ProviderInfo{
+		{Name: "google", DisplayName: "Google"},
+		{Name: "github", DisplayName: "GitHub"},
+		{Name: g.cfg.provider, DisplayName: "Hanzo"},
+	})
 }
 
 // ── REST: IAM OAuth bridge (external hop, net/http) ────────────────────────────
@@ -214,9 +231,11 @@ func (g *api) providers(c *zip.Ctx) error {
 // cookie (never the bare navigateUrl): the callback only proceeds when the two
 // match, so a cross-site-initiated or replayed callback is refused.
 func (g *api) authStart(c *zip.Ctx) error {
-	provider := providerParam(c)
+	// The redirect_uri is ALWAYS the canonical openid callback (the one IAM has
+	// registered) — a /auth/google or /auth/github start differs only in the
+	// provider_hint it carries into the authorize URL.
 	origin := g.callbackOrigin(c)
-	redirect := origin + "/v1/team/account/auth/" + provider + "/callback"
+	redirect := origin + "/v1/team/account/auth/" + g.cfg.provider + "/callback"
 	nonce, err := randState()
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "state")
@@ -231,7 +250,26 @@ func (g *api) authStart(c *zip.Ctx) error {
 		"scope":         {"openid profile email"},
 		"state":         {nonce},
 	}
+	if hint := providerHint(providerParam(c), c.Query("provider_hint")); hint != "" {
+		q.Set("provider_hint", hint)
+	}
 	return c.Fiber().Redirect().Status(http.StatusFound).To(oauthBase(g.cfg.iamEndpoint) + "/oauth/authorize?" + q.Encode())
+}
+
+// providerHint is the ONE mapping from the SPA's provider path segment to the
+// IAM provider_hint that makes hanzo.id auto-federate straight into the social
+// provider (hint values are the IAM provider record names, e.g.
+// "provider-github"). An explicit provider_hint query passes through verbatim;
+// "openid" — the plain Hanzo SSO — carries none.
+func providerHint(provider, explicit string) string {
+	if explicit = strings.TrimSpace(explicit); explicit != "" {
+		return explicit
+	}
+	switch provider {
+	case "google", "github":
+		return "provider-" + provider
+	}
+	return ""
 }
 
 // authCallback verifies the state nonce against the flow cookie, exchanges the
@@ -263,23 +301,40 @@ func (g *api) authCallback(c *zip.Ctx) error {
 		g.log.Error("account: oauth code exchange", "err", err)
 		return g.bounce(c, "", navigate, "exchange_failed")
 	}
+	_, tok, failCode, err := g.establishSession(c.Context(), access)
+	if err != nil {
+		g.log.Error("account: establish session", "err", err)
+		return g.bounce(c, "", navigate, failCode)
+	}
+	// Retain the IAM access_token (RS256) in an HttpOnly cookie so the same-origin
+	// agents proxy can forward it to the cloud gateway. Page JS never reads it.
+	g.setIAMTokenCookie(c, access)
+	return g.bounce(c, tok, navigate, "")
+}
+
+// establishSession is the ONE post-authentication path: it turns a fresh IAM
+// access token into a team session, identically for the OAuth callback and the
+// password login. userinfo → canonical account id; tenant = the IAM org — the
+// access token's `owner` claim, accepted ONLY off a VERIFIED token (RS256
+// against the IAM JWKS, same trust anchor as the identity boundary). It scopes
+// every workspace + data file — full multitenancy — so a verification failure
+// fails CLOSED: no fallback org, no login. failCode is the OAuth bounce error
+// code for the failing step.
+func (g *api) establishSession(ctx context.Context, access string) (account, tok, failCode string, err error) {
 	sub, email, name, err := g.userinfo(access)
 	if err != nil {
-		return g.bounce(c, "", navigate, "userinfo_failed")
+		return "", "", "userinfo_failed", err
 	}
 	// AccountUuid = the IAM sub (derived to a stable UUID when the sub is not one).
-	account := accountID(sub)
-	// Tenant = the IAM org — the access token's `owner` claim, accepted ONLY off a
-	// VERIFIED token (RS256 against the IAM JWKS, same trust anchor as the identity
-	// boundary). It scopes every workspace + data file — full multitenancy — so a
-	// verification failure fails CLOSED: no fallback org, no login.
+	account = accountID(sub)
 	id, err := g.verify(access)
-	if err != nil || id.Owner == "" {
-		g.log.Error("account: iam token verify", "err", err)
-		return g.bounce(c, "", navigate, "org_failed")
+	if err != nil {
+		return "", "", "org_failed", err
+	}
+	if id.Owner == "" {
+		return "", "", "org_failed", fmt.Errorf("verified token has empty owner")
 	}
 	org := id.Owner
-	ctx := c.Context()
 	displayName := firstNonEmpty(name, localPart(email))
 	if _, err := g.accounts.EnsureWorkspace(ctx, org, account, displayName); err != nil {
 		g.log.Error("account: ensure workspace", "err", err)
@@ -288,14 +343,11 @@ func (g *api) authCallback(c *zip.Ctx) error {
 	// account uuid. Idempotent (only fills empty).
 	_ = g.accounts.EnsureMemberName(ctx, account, displayName)
 
-	tok, err := token.Generate(account, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), g.cfg.serverSecret)
+	tok, err = token.Generate(account, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), g.cfg.serverSecret)
 	if err != nil {
-		return g.bounce(c, "", navigate, "token_failed")
+		return "", "", "token_failed", err
 	}
-	// Retain the IAM access_token (RS256) in an HttpOnly cookie so the same-origin
-	// agents proxy can forward it to the cloud gateway. Page JS never reads it.
-	g.setIAMTokenCookie(c, access)
-	return g.bounce(c, tok, navigate, "")
+	return account, tok, "", nil
 }
 
 // stateFromCookie splits the flow cookie into its nonce and the escaped
@@ -350,6 +402,8 @@ func (g *api) rpc(c *zip.Ctx) error {
 		return g.fail(c, statusError("bad request"))
 	}
 	switch req.Method {
+	case "login":
+		return g.passwordLogin(c, req.Params)
 	case "getLoginInfoByToken", "getLoginWithWorkspaceInfo":
 		return g.getLoginInfoByToken(c)
 	case "getUserWorkspaces":
@@ -369,8 +423,102 @@ func (g *api) rpc(c *zip.Ctx) error {
 	case "loginAsGuest":
 		return g.fail(c, statusUnauthorized("guest login disabled"))
 	default:
-		return g.fail(c, Status{Severity: 1, Code: "account:status:UnknownMethod", Params: map[string]any{"method": req.Method}})
+		return g.fail(c, Status{Severity: "ERROR", Code: "account:status:UnknownMethod", Params: map[string]any{"method": req.Method}})
 	}
+}
+
+// passwordLogin is the account RPC "login" — the SPA's native email+password
+// form. It authenticates against IAM ONLY (there are no local accounts): the
+// SAME two-step the platform e2e auth helper documents — POST /v1/iam/login
+// (responseType=code) with the credentials, then the standard confidential code
+// exchange — then the EXACT session establishment the OAuth callback runs. The
+// password lives in one local string, rides only in the body of the ONE IAM
+// login call, and is never logged or persisted; bad credentials answer a clean
+// 401 with the platform status the form already translates.
+func (g *api) passwordLogin(c *zip.Ctx, params map[string]any) error {
+	email, _ := params["email"].(string)
+	password, _ := params["password"].(string)
+	email = strings.TrimSpace(email)
+	if email == "" || password == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
+	}
+	redirect := g.callbackOrigin(c) + "/v1/team/account/auth/" + g.cfg.provider + "/callback"
+	code, err := g.passwordCode(email, password, redirect)
+	if err != nil {
+		// err carries IAM's status message only — never the submitted secret.
+		g.log.Warn("account: password login refused", "err", err)
+		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
+	}
+	access, err := g.exchangeCode(code, redirect)
+	if err != nil {
+		g.log.Error("account: password login code exchange", "err", err)
+		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
+	}
+	account, tok, _, err := g.establishSession(c.Context(), access)
+	if err != nil {
+		g.log.Error("account: password login session", "err", err)
+		return c.JSON(http.StatusUnauthorized, map[string]any{"error": statusBadCredentials()})
+	}
+	// Same cookie posture as the OAuth callback: the IAM access_token rides an
+	// HttpOnly cookie for the same-origin agents proxy; the SPA then PUTs the
+	// session cookie through the SAME /cookie route every login path uses.
+	g.setIAMTokenCookie(c, access)
+	return g.ok(c, LoginInfo{Account: account, Token: tok})
+}
+
+// passwordCode performs the IAM password login and returns the authorization
+// code (the same two-step contract the platform e2e auth helper locks: the
+// OAuth params ride the query string, the credentials ride the JSON body — the
+// ONE place the password touches the wire). Error paths surface only IAM's
+// status message.
+func (g *api) passwordCode(username, password, redirectURI string) (string, error) {
+	nonce, err := randState()
+	if err != nil {
+		return "", err
+	}
+	q := url.Values{
+		"clientId":     {g.cfg.iamClientID},
+		"responseType": {"code"},
+		"redirectUri":  {redirectURI},
+		"scope":        {"openid profile email"},
+		"state":        {nonce},
+		"type":         {"code"},
+	}
+	body, err := json.Marshal(map[string]any{
+		"type":         "code",
+		"application":  g.cfg.iamClientID,
+		"username":     username,
+		"password":     password,
+		"signinMethod": "Password",
+		"autoSignin":   true,
+	})
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.Post(oauthBase(g.cfg.iamEndpoint)+"/login?"+q.Encode(), "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("iam login request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("iam login status %d", resp.StatusCode)
+	}
+	var out struct {
+		Status string          `json:"status"`
+		Msg    string          `json:"msg"`
+		Data   json.RawMessage `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("iam login decode: %w", err)
+	}
+	if out.Status != "ok" {
+		return "", fmt.Errorf("iam login: %s", out.Msg)
+	}
+	var code string
+	if err := json.Unmarshal(out.Data, &code); err != nil || code == "" {
+		return "", fmt.Errorf("iam login: no authorization code in response")
+	}
+	return code, nil
 }
 
 func (g *api) getLoginInfoByToken(c *zip.Ctx) error {
