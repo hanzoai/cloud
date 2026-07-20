@@ -615,6 +615,7 @@ var defaultJWTAudiences = []string{
 	"admin-console",
 	"hanzo-cloud",
 	"hanzo-world",
+	"hanzo-team",
 	"cowork",
 	"https://api.hanzo.ai",
 }
