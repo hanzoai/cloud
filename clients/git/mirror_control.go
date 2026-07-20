@@ -13,7 +13,7 @@ import (
 // target through it, reusing the SAME repo_mirrors store + validateMirrorTarget
 // gate the /mirror endpoint and mirror_out reactor use — one outbound target list,
 // no second path. Registered in Mount via cloud.RegisterGitMirrorController, so the
-// engine drives it with no syncsvc⇆git import cycle (the pushBuilder / GitImporter
+// engine drives it with no sync⇆git import cycle (the pushBuilder / GitImporter
 // idiom).
 
 type gitMirrorController struct{}
