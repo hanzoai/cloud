@@ -10,7 +10,11 @@ package team
 //     login gate that fails closed on an outage would brick every team session
 //     mid-rollout, so it degrades to open and logs.
 //   - DEFINITIVE "no entitlement" (resolution succeeded, no plan licenses
-//     'team') ⇒ 402 with the upgrade destination.
+//     'team') ⇒ OBSERVE: log the denial and admit. Self-serve checkout does
+//     not exist yet, so a 402 here locks users out of a dead end — proven live
+//     2026-07-20 when the blocking form of this gate 402'd every org without a
+//     subscription row and broke all logins. Enforcement (the 402 with the
+//     upgrade destination) returns when the card-on-file subscribe path ships.
 //
 // Personal AI plans license 'team' with an invited-guest cap (the plan
 // entitlement key `team.guests` in @hanzo/plans subscription.json); org team
@@ -51,8 +55,8 @@ func (g *api) entitle(ctx context.Context, org, role, workspaceID, account strin
 		return nil
 	}
 	if ent == nil || !ent.Active {
-		st := statusPaymentRequired("this org's plan does not include hanzo.team")
-		return &st
+		g.log.Warn("team: org lacks a team entitlement, admitting (observe)", "org", org)
+		return nil
 	}
 	if role != roleGuest || g.planEnt == nil {
 		return nil
@@ -67,9 +71,8 @@ func (g *api) entitle(ctx context.Context, org, role, workspaceID, account strin
 		return nil // no team.guests key — this plan's guests are uncapped
 	}
 	if rank := g.accounts.GuestRank(ctx, workspaceID, account); rank > limit {
-		st := statusPaymentRequired("guest limit reached for this plan")
-		st.Params["limit"] = limit
-		return &st
+		g.log.Warn("team: guest over plan cap, admitting (observe)", "org", org, "limit", limit, "rank", rank)
+		return nil
 	}
 	return nil
 }
