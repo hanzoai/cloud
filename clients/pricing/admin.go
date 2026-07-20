@@ -8,7 +8,7 @@
 // Gating mirrors the rest of cloud: c.IsAdmin() is the gateway-minted
 // X-User-IsAdmin claim, set only on the JWT-validated path (HIP-0026) for
 // members of the global `admin` org. Same trust model the pricing /sync trigger
-// and provisioningsvc already rely on. Non-admins get 403, never the catalog
+// and provisioning already rely on. Non-admins get 403, never the catalog
 // state.
 package pricing
 
