@@ -1,4 +1,4 @@
-// Package provisioningsvc is the Hanzo Cloud provisioning control plane. It
+// Package provisioning is the Hanzo Cloud provisioning control plane. It
 // turns "create a database" into a real logical resource inside an
 // already-live, shared product backend, per the unified /v1 binary (HIP-0106).
 //
@@ -647,7 +647,7 @@ func genID() (string, error) {
 var mounted *cloud.Service[state]
 
 // Shutdown closes the provisioning metadata store. Idempotent. Mirrors the
-// plansvc Shutdown contract so the serve layer can release subsystem resources
+// plan Shutdown contract so the serve layer can release subsystem resources
 // uniformly.
 func Shutdown(context.Context) error {
 	if mounted == nil || mounted.State.store == nil {
