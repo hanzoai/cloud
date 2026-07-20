@@ -256,29 +256,19 @@ func (s *Server) siteSlug(host string) (string, bool) {
 	if !strings.HasSuffix(host, suffix) {
 		return "", false
 	}
-	key := strings.TrimSuffix(host, suffix)
-	slug, org, scoped := strings.Cut(key, ".")
-	if !scoped {
-		// Bare `<slug>.<apex>` — the product URL every surface advertises, and the
-		// ONLY shape the edge can physically serve today (a k8s Ingress host and a
-		// Let's Encrypt wildcard each match exactly one label, so
-		// `<slug>.<org>.<apex>` never routes nor gets TLS). The resolver serves it
-		// iff it maps to exactly one live project (explicit binding, else a unique
-		// live slug across orgs) — an ambiguous bare host is an honest 404.
-		if IsReserved(key) || !slugRE.MatchString(key) {
-			return "", false
-		}
-		return key, true
-	}
-	if strings.Contains(org, ".") {
-		return "", false // more than two labels under the apex
-	}
-	// Both labels must be valid slug-grammar DNS labels; the slug label must also
-	// be non-reserved so a published site can never shadow a real app/api host.
-	if IsReserved(slug) || !slugRE.MatchString(slug) || !slugRE.MatchString(org) {
+	label := strings.TrimSuffix(host, suffix)
+	// EXACTLY ONE non-reserved slug label — the bare `<slug>.<apex>`. That is the
+	// ONE servable shape: a k8s wildcard Ingress host and a Let's Encrypt wildcard
+	// cert each match exactly one label, so a dotted key (`<slug>.<org>.<apex>` or
+	// deeper) neither routes nor gets TLS — it is never a site, it falls through to
+	// the normal pipeline. The slug must be non-reserved so a published site can
+	// never shadow a real app/api host. The resolver then serves it iff it maps to
+	// exactly one live project (explicit binding, else a unique live slug across
+	// orgs) — an ambiguous bare host is an honest 404.
+	if strings.Contains(label, ".") || IsReserved(label) || !slugRE.MatchString(label) {
 		return "", false
 	}
-	return key, true
+	return label, true
 }
 
 // serve resolves the slug to its Site and streams the requested object from the
