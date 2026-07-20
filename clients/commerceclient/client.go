@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	plansvc "github.com/hanzoai/cloud/clients/plan"
+	"github.com/hanzoai/cloud/clients/plan"
 	"github.com/hanzoai/cloud/types"
 	commercemod "github.com/hanzoai/commerce"
 	"github.com/hanzoai/commerce/datastore"
@@ -134,7 +134,7 @@ func (c *inProcessClient) CheckEntitlement(ctx context.Context, orgID, productID
 		if slug == "" {
 			continue // no resolvable plan tier on this sub — cannot grant from it
 		}
-		_, features, found, ferr := plansvc.LicenseEntitlement(ctx, slug)
+		_, features, found, ferr := plan.LicenseEntitlement(ctx, slug)
 		if ferr != nil {
 			// MACHINERY failure (plans vocabulary unavailable): cannot resolve features
 			// ⇒ cannot verify ⇒ fail closed. Never deny-by-guess on an outage.

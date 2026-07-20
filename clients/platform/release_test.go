@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func testSvc() *cloud.Service[state] {
+func testService() *cloud.Service[state] {
 	return &cloud.Service[state]{Base: cloud.Base{Log: luxlog.New("test")}}
 }
 
@@ -205,7 +205,7 @@ func TestComputeReleaseVersion(t *testing.T) {
 	defer srv.Close()
 	defer swapAPIBase(srv.URL)()
 
-	got, err := computeReleaseVersion(testSvc(), context.Background(), releaseRepoSlug)
+	got, err := computeReleaseVersion(testService(), context.Background(), releaseRepoSlug)
 	if err != nil {
 		t.Fatalf("computeReleaseVersion: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestTagRelease_RefPath(t *testing.T) {
 	defer swapAPIBase(srv.URL)()
 
 	sha := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-	if err := tagRelease(testSvc(), context.Background(), releaseRepoSlug, sha, "v1.786.44"); err != nil {
+	if err := tagRelease(testService(), context.Background(), releaseRepoSlug, sha, "v1.786.44"); err != nil {
 		t.Fatalf("tagRelease: %v", err)
 	}
 	if gotBody["ref"] != "refs/tags/v1.786.44" || gotBody["sha"] != sha {
@@ -260,7 +260,7 @@ func TestNotifyUniverse_Payload(t *testing.T) {
 	defer swapAPIBase(srv.URL)()
 
 	img := "ghcr.io/hanzoai/cloud:v1.786.44"
-	if err := notifyUniverse(testSvc(), context.Background(), img, "deadbeef"); err != nil {
+	if err := notifyUniverse(testService(), context.Background(), img, "deadbeef"); err != nil {
 		t.Fatalf("notifyUniverse: %v", err)
 	}
 	if got["event_type"] != "image-update" {
@@ -277,7 +277,7 @@ func TestNotifyUniverse_Payload(t *testing.T) {
 func TestReleaseSeams_FailClosedWithoutTokens(t *testing.T) {
 	t.Setenv("GH_PAT", "")
 	t.Setenv("UNIVERSE_DISPATCH_TOKEN", "")
-	s := testSvc()
+	s := testService()
 	if err := tagRelease(s, context.Background(), releaseRepoSlug, "sha", "v1.0.0"); err == nil {
 		t.Fatal("tagRelease with no GH_PAT: want fail-closed error")
 	}

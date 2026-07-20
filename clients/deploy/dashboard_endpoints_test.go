@@ -52,7 +52,7 @@ func getJSON(t *testing.T, s *cloud.Service[state], path string) map[string]any 
 // column reads (items[].server/name/connectionState), with the fleet's app count,
 // and NO cluster credential.
 func TestDashClustersEndpoint(t *testing.T) {
-	s := fakeSvc(
+	s := fakeService(
 		appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1),
 		appCR("App", "hanzo", "iam", "u2", "ghcr.io/hanzoai/iam", "v1", "Running", 1, 1),
 	)
@@ -86,7 +86,7 @@ func TestDashClustersEndpoint(t *testing.T) {
 // TestDashProjectsEndpoint_Synthesizes: with no AppProject CRD served, /projects
 // synthesizes the distinct App-CR project set (default always present).
 func TestDashProjectsEndpoint_Synthesizes(t *testing.T) {
-	s := fakeSvc(appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1))
+	s := fakeService(appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1))
 	body := getJSON(t, s, "/v1/deploy/projects")
 
 	items, ok := body["items"].([]any)
@@ -107,7 +107,7 @@ func TestDashProjectsEndpoint_Synthesizes(t *testing.T) {
 // TestDashProjectsEndpoint_PrefersRealCRs: when real AppProject CRs are served,
 // /projects lists THOSE (not synthesized ones) and surfaces only intended fields.
 func TestDashProjectsEndpoint_PrefersRealCRs(t *testing.T) {
-	s := fakeSvc(
+	s := fakeService(
 		appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1),
 		appProjectCR("team-a", "https://git.hanzo.ai/team-a/*"),
 	)
@@ -136,7 +136,7 @@ func TestDashProjectsEndpoint_PrefersRealCRs(t *testing.T) {
 // the SuperAdmin claim (fail-closed, no fleet/cluster data to an anonymous caller).
 func TestNewRoutesRequireAdmin(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	routes(app, fakeSvc())
+	routes(app, fakeService())
 	for _, path := range []string{"/v1/deploy/clusters", "/v1/deploy/projects", "/v1/deploy/stream/applications"} {
 		// EventSource sends Accept: text/event-stream + Sec-Fetch-Dest: empty, so a
 		// non-admin gets a 403 (not the browser-document redirect) — assert both.
@@ -202,7 +202,7 @@ func TestStreamFailsClosedWithoutCluster(t *testing.T) {
 // the argo Application shape (status.health/sync), projected identically to
 // dashAppList.
 func TestStreamBurstEmitsAddedPerApp(t *testing.T) {
-	s := fakeSvc(
+	s := fakeService(
 		appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1),
 		appCR("App", "hanzo", "iam", "u2", "ghcr.io/hanzoai/iam", "v1", "Running", 1, 1),
 	)
@@ -246,7 +246,7 @@ func TestStreamBurstEmitsAddedPerApp(t *testing.T) {
 func TestStreamBurstZeroAppsNoPanic(t *testing.T) {
 	var buf bytes.Buffer
 	w := bufio.NewWriter(&buf)
-	if ok := streamAppBurst(fakeSvc(), superScope(), context.Background(), w); !ok {
+	if ok := streamAppBurst(fakeService(), superScope(), context.Background(), w); !ok {
 		t.Fatal("streamAppBurst on zero apps returned false, want true")
 	}
 	_ = w.Flush()
@@ -260,7 +260,7 @@ func TestStreamBurstZeroAppsNoPanic(t *testing.T) {
 // return directly (the keep-alive interval is irrelevant), so this needs no global
 // tuning and cannot race a concurrent stream.
 func TestStreamHonorsContextCancel(t *testing.T) {
-	s := fakeSvc(appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1))
+	s := fakeService(appCR("App", "hanzo", "cloud", "u1", "ghcr.io/hanzoai/cloud", "v1", "Running", 1, 1))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

@@ -60,7 +60,7 @@ func (b *billDouble) lastDebit() (string, []byte) {
 	return b.usageOrg, b.usageBody
 }
 
-func newBilledMLSvc(t *testing.T, commerceURL string) *cloud.Service[state] {
+func newBilledMLService(t *testing.T, commerceURL string) *cloud.Service[state] {
 	t.Helper()
 	log := luxlog.New("module", "mlbilltest")
 	m, err := metering.New(metering.Config{BaseURL: commerceURL, Token: "svc-token", Org: "hanzo"})
@@ -101,7 +101,7 @@ func postTrainJob(t *testing.T, s *cloud.Service[state], org string) *http.Respo
 // billed. This closes the free-GPU hole.
 func TestComputeCreate_RefusesUnfundedOrg(t *testing.T) {
 	bd := &billDouble{available: 0}
-	s := newBilledMLSvc(t, bd.start(t))
+	s := newBilledMLService(t, bd.start(t))
 
 	resp := postTrainJob(t, s, "acme")
 	if resp.StatusCode != http.StatusPaymentRequired {
@@ -121,7 +121,7 @@ func TestComputeCreate_RefusesUnfundedOrg(t *testing.T) {
 // hanzo) is debited the compute fee under provider "compute".
 func TestComputeCreate_AllowsAndDebitsCallerOrg(t *testing.T) {
 	bd := &billDouble{available: 100000}
-	s := newBilledMLSvc(t, bd.start(t))
+	s := newBilledMLService(t, bd.start(t))
 
 	resp := postTrainJob(t, s, "acme")
 	if resp.StatusCode != http.StatusCreated {
