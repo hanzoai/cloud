@@ -3,6 +3,7 @@ package projects
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/hanzoai/cloud/clients/sites"
 )
@@ -18,8 +19,17 @@ type siteResolver struct{ store *Store }
 // prefix are read ONLY from the store binding (site_hosts → projects), never from
 // the request — the org-isolation boundary. A missing binding is a clean
 // not-found (honest 404), not an error.
+//
+// A BARE key (no dot — the `<slug>.hanzo.app` product URL) additionally falls
+// back to the unique-live-slug resolve: serve iff exactly one live project owns
+// that slug across all orgs. Deterministic, shadow-safe (reserved labels never
+// reach here), and migration-free for projects published before host binding
+// existed. An org-scoped `<slug>.<org>` key resolves ONLY via its binding.
 func (r siteResolver) Resolve(ctx context.Context, slug string) (sites.Site, bool, error) {
 	p, err := r.store.ResolveHost(ctx, slug)
+	if errors.Is(err, errNotFound) && !strings.Contains(slug, ".") {
+		p, err = r.store.ResolveUniqueLiveSlug(ctx, slug)
+	}
 	if errors.Is(err, errNotFound) {
 		return sites.Site{}, false, nil
 	}
