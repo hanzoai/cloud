@@ -28,16 +28,17 @@ var errUnconfigured = errors.New("not configured")
 
 // Routes registers the finance dashboard (SuperAdmin only).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
-	app.Get("/v1/admin/finance", core.Guard(s, Finance))
+	g := app.Group("/v1/admin")
+	g.Get("/finance", core.Guard(s, Finance))
 	// One-time commerce→finance balance cutover (SuperAdmin only). Idempotent per org.
-	app.Post("/v1/admin/finance/backfill", core.Guard(s, Backfill))
+	g.Post("/finance/backfill", core.Guard(s, Backfill))
 	// Fund an ARBITRARY subject's native wallet — an org pool or a human ("hanzo/z").
 	// SuperAdmin only; additive (grants stack).
-	app.Post("/v1/admin/finance/deposit", core.Guard(s, Deposit))
+	g.Post("/finance/deposit", core.Guard(s, Deposit))
 	// Per-provider upstream credit ledger + usage funding split (multi-provider
 	// credit-management). Same SuperAdmin guard, same cloud_usage warehouse.
-	app.Get("/v1/admin/providers/credit", core.Guard(s, ProvidersCredit))
-	app.Get("/v1/admin/usage/funding", core.Guard(s, UsageFunding))
+	g.Get("/providers/credit", core.Guard(s, ProvidersCredit))
+	g.Get("/usage/funding", core.Guard(s, UsageFunding))
 }
 
 // FinanceData is the full /v1/admin/finance aggregate.

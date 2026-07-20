@@ -98,8 +98,9 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &service{store: store, kms: deps.KMS, log: log}
 	mounted = s
 
-	app.Get("/v1/settings/:product", s.getSettings)
-	app.Put("/v1/settings/:product", s.putSettings)
+	g := app.Group("/v1/settings")
+	g.Get("/:product", s.getSettings)
+	g.Put("/:product", s.putSettings)
 
 	log.Info("settings surface mounted", "prefix", "/v1/settings", "brand", deps.Brand, "kms", deps.KMS != nil)
 	return nil

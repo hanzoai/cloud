@@ -26,8 +26,9 @@ import (
 
 // Routes registers the /v1/admin/audit* surface (SuperAdmin only).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
-	app.Get("/v1/admin/audit", core.Guard(s, Records))
-	app.Get("/v1/admin/audit/verify", core.Guard(s, Verify))
+	g := app.Group("/v1/admin")
+	g.Get("/audit", core.Guard(s, Records))
+	g.Get("/audit/verify", core.Guard(s, Verify))
 }
 
 // Records answers GET /v1/admin/audit from cloud's local tamper-evident store when

@@ -276,6 +276,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	}
 	mounted = s
 
+	g := app.Group("/v1/agents")
 	app.Get("/v1/agents", cloud.Handle(s, list))
 	app.Post("/v1/agents", cloud.Handle(s, create))
 	// The static org-wide surfaces are listed before the :ref wildcard for reading
@@ -284,18 +285,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// a ref). Registration order decides nothing here — it only decides which
 	// handler silently wins when two patterns are byte-identical, which is a
 	// collision, not a precedence.
-	app.Get("/v1/agents/metrics", cloud.Handle(s, metrics))
-	app.Get("/v1/agents/activity", cloud.Handle(s, activity))
+	g.Get("/metrics", cloud.Handle(s, metrics))
+	g.Get("/activity", cloud.Handle(s, activity))
 	// Live agent-session control plane: /v1/agents/sessions[/...].
 	mountSessions(s, app)
 	// Agent targets: /v1/agents/targets[/...] — the #48 dispatch destinations a
 	// session runs on.
 	mountTargets(s, app)
-	app.Get("/v1/agents/:ref", cloud.Handle(s, get))
-	app.Patch("/v1/agents/:ref", cloud.Handle(s, update))
-	app.Delete("/v1/agents/:ref", cloud.Handle(s, del))
-	app.Post("/v1/agents/:ref/run", cloud.Handle(s, run))
-	app.Get("/v1/agents/:ref/runs", cloud.Handle(s, runs))
+	g.Get("/:ref", cloud.Handle(s, get))
+	g.Patch("/:ref", cloud.Handle(s, update))
+	g.Delete("/:ref", cloud.Handle(s, del))
+	g.Post("/:ref/run", cloud.Handle(s, run))
+	g.Get("/:ref/runs", cloud.Handle(s, runs))
 
 	// Long-running scheduler: invokes each long-running agent's run on its cron
 	// cadence through the SAME runAgent path as the HTTP handler (one run path,

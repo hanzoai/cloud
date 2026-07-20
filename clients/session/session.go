@@ -97,13 +97,14 @@ func Shutdown() error {
 // routes registers the surface. Collection endpoints register before their
 // :id siblings so the first-match scan resolves them first.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/code/sessions", cloud.Handle(s, createSession))
-	app.Get("/v1/code/sessions", cloud.Handle(s, listSessions))
-	app.Get("/v1/code/sessions/:id", cloud.Handle(s, getSession))
-	app.Patch("/v1/code/sessions/:id", cloud.Handle(s, updateSession))
-	app.Delete("/v1/code/sessions/:id", cloud.Handle(s, deleteSession))
-	app.Post("/v1/code/sessions/:id/events", cloud.Handle(s, createEvent))
-	app.Get("/v1/code/sessions/:id/events", cloud.Handle(s, listEvents))
+	g := app.Group("/v1/code")
+	g.Post("/sessions", cloud.Handle(s, createSession))
+	g.Get("/sessions", cloud.Handle(s, listSessions))
+	g.Get("/sessions/:id", cloud.Handle(s, getSession))
+	g.Patch("/sessions/:id", cloud.Handle(s, updateSession))
+	g.Delete("/sessions/:id", cloud.Handle(s, deleteSession))
+	g.Post("/sessions/:id/events", cloud.Handle(s, createEvent))
+	g.Get("/sessions/:id/events", cloud.Handle(s, listEvents))
 }
 
 func org(c *zip.Ctx) (string, bool) { return principal.Org(c) }

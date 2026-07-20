@@ -85,8 +85,10 @@ func build(b cloud.Base) (state, error) {
 
 // routes registers the read-only templates surface.
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Collection root (/v1/templates) stays flat — Group(p).Get("") yields "p/".
 	app.Get("/v1/templates", cloud.Handle(s, list))
-	app.Get("/v1/templates/:slug", cloud.Handle(s, get))
+	g := app.Group("/v1/templates")
+	g.Get("/:slug", cloud.Handle(s, get))
 }
 
 // List returns the validated starter-kit catalog (the SAME slice the HTTP GET

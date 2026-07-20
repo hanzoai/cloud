@@ -50,11 +50,12 @@ import (
 // procedures are ordinary /v1 routes; the shared /zap plane turns them into ZAP
 // procedures for the browser/service ZAP client.
 func mountZAP(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/git/zap/createRepo", cloud.Handle(s, zapCreate))
-	app.Post("/v1/git/zap/listRepos", cloud.Handle(s, zapList))
-	app.Post("/v1/git/zap/getRepo", cloud.Handle(s, zapGet))
-	app.Post("/v1/git/zap/deleteRepo", cloud.Handle(s, zapDelete))
-	app.Post("/v1/git/zap/usage", cloud.Handle(s, zapUsage))
+	g := app.Group("/v1/git")
+	g.Post("/zap/createRepo", cloud.Handle(s, zapCreate))
+	g.Post("/zap/listRepos", cloud.Handle(s, zapList))
+	g.Post("/zap/getRepo", cloud.Handle(s, zapGet))
+	g.Post("/zap/deleteRepo", cloud.Handle(s, zapDelete))
+	g.Post("/zap/usage", cloud.Handle(s, zapUsage))
 }
 
 // ---- envelope ----
