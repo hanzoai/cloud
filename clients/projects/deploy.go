@@ -17,13 +17,18 @@ import (
 	"github.com/zap-proto/zip"
 )
 
-// siteHost is the org-scoped host key a published project binds and resolves on:
-// `<slug>.<org>`. Org-scoping is STRUCTURAL — the org lives in the hostname, so
-// two orgs can each own the same slug and their sites can never collide or shadow
-// one another (the slug alone was a single global first-come namespace). It is the
-// exact string bound into site_hosts (onPublish) AND the key the sites edge
-// resolves after stripping the apex (sites.siteSlug), so bind and resolve agree.
-func siteHost(org, slug string) string { return slug + "." + org }
+// siteHost is the public host key a published project binds and resolves on: the
+// BARE `<slug>`. The published edge is `<slug>.<apex>` (one DNS label), because a
+// k8s wildcard Ingress host and a Let's Encrypt wildcard cert each match exactly
+// ONE label — a two-label `<slug>.<org>.<apex>` neither routes nor gets TLS, so it
+// can never actually serve. The bare slug is therefore a GLOBAL, first-come
+// namespace (the PK on site_hosts enforces one owner per host); a second org
+// publishing the same slug is refused the subdomain and serves at its S3 URL
+// only. This is the exact string bound into site_hosts (onPublish) AND the key the
+// sites edge resolves after stripping the apex (sites.siteSlug), so bind and
+// resolve agree — and it matches TestSiteHostBindingIsFirstComeAndTenantSafe,
+// which has always asserted bare-host first-come.
+func siteHost(org, slug string) string { return slug }
 
 // onPublish runs the go-live side effects for a project whose new build just
 // landed at its S3 prefix: it claims the org-scoped public host (first-come per
@@ -51,12 +56,15 @@ func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Proj
 	p.LastPurgeAt = now
 }
 
-// siteURL is the canonical public URL of a deployed site: the pretty org-scoped
-// host https://<slug>.<org>.<apex> the sites edge (clients/sites) serves from S3.
-// It is the ONE live-URL form on both the Deployment and the Project — a redeploy
-// to the same slug returns the SAME URL because slug, org, and apex are stable.
-func siteURL(s *cloud.Service[state], org, slug string) string {
-	return "https://" + slug + "." + org + "." + s.State.apex
+// siteURL is the canonical public URL of a deployed site: the pretty bare host
+// https://<slug>.<apex> the sites edge (clients/sites) serves from S3 — the ONE
+// host that actually routes + gets a wildcard cert (see siteHost). It is the ONE
+// live-URL form on both the Deployment and the Project — a redeploy to the same
+// slug returns the SAME URL because slug and apex are stable. `org` is retained in
+// the signature (the caller has it; kept for symmetry with siteHost) but does not
+// appear in the servable host.
+func siteURL(s *cloud.Service[state], _org, slug string) string {
+	return "https://" + slug + "." + s.State.apex
 }
 
 // publishSite is the ONE shared deploy core: given a parsed site artifact and its
