@@ -138,17 +138,18 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // :param siblings so Fiber's first-match scan resolves the collection endpoints
 // before the detail ones.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Post("/v1/tracker/projects", cloud.Handle(s, createProject))
-	app.Get("/v1/tracker/projects", cloud.Handle(s, listProjects))
-	app.Get("/v1/tracker/projects/:key", cloud.Handle(s, getProject))
-	app.Patch("/v1/tracker/projects/:key", cloud.Handle(s, updateProject))
-	app.Delete("/v1/tracker/projects/:key", cloud.Handle(s, deleteProject))
+	g := app.Group("/v1/tracker")
+	g.Post("/projects", cloud.Handle(s, createProject))
+	g.Get("/projects", cloud.Handle(s, listProjects))
+	g.Get("/projects/:key", cloud.Handle(s, getProject))
+	g.Patch("/projects/:key", cloud.Handle(s, updateProject))
+	g.Delete("/projects/:key", cloud.Handle(s, deleteProject))
 
-	app.Post("/v1/tracker/projects/:key/issues", cloud.Handle(s, createIssue))
-	app.Get("/v1/tracker/projects/:key/issues", cloud.Handle(s, listIssues))
-	app.Get("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, getIssue))
-	app.Patch("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, updateIssue))
-	app.Delete("/v1/tracker/projects/:key/issues/:num", cloud.Handle(s, deleteIssue))
+	g.Post("/projects/:key/issues", cloud.Handle(s, createIssue))
+	g.Get("/projects/:key/issues", cloud.Handle(s, listIssues))
+	g.Get("/projects/:key/issues/:num", cloud.Handle(s, getIssue))
+	g.Patch("/projects/:key/issues/:num", cloud.Handle(s, updateIssue))
+	g.Delete("/projects/:key/issues/:num", cloud.Handle(s, deleteIssue))
 }
 
 // ---- HTTP response shapes (the published contract) ----

@@ -22,7 +22,8 @@ import (
 
 // Routes registers the fleet revenue board (SuperAdmin only, cross-tenant profitability).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
-	app.Get("/v1/admin/revenue", core.Guard(s, Revenue))
+	g := app.Group("/v1/admin")
+	g.Get("/revenue", core.Guard(s, Revenue))
 }
 
 // RevenueCustomer is one row of the per-customer revenue table.

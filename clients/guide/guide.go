@@ -68,16 +68,20 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// Overview stays flat: Group("/v1/guide").Get("") would register "/v1/guide/",
+	// not the bare surface path.
 	app.Get("/v1/guide", cloud.Handle(s, overview))
-	app.Get("/v1/guide/curriculum", cloud.Handle(s, getCurriculum))
-	app.Put("/v1/guide/curriculum", cloud.Handle(s, putCurriculum))
-	app.Delete("/v1/guide/curriculum", cloud.Handle(s, deleteCurriculum))
-	app.Get("/v1/guide/actions", cloud.Handle(s, listActions))
-	app.Post("/v1/guide/steps/:id/start", cloud.Handle(s, markStart))
-	app.Post("/v1/guide/steps/:id/done", cloud.Handle(s, markDone))
-	app.Post("/v1/guide/steps/:id/skip", cloud.Handle(s, markSkip))
-	app.Post("/v1/guide/steps/:id/reset", cloud.Handle(s, markReset))
-	app.Post("/v1/guide/steps/:id/do", cloud.Handle(s, doStep))
+
+	g := app.Group("/v1/guide")
+	g.Get("/curriculum", cloud.Handle(s, getCurriculum))
+	g.Put("/curriculum", cloud.Handle(s, putCurriculum))
+	g.Delete("/curriculum", cloud.Handle(s, deleteCurriculum))
+	g.Get("/actions", cloud.Handle(s, listActions))
+	g.Post("/steps/:id/start", cloud.Handle(s, markStart))
+	g.Post("/steps/:id/done", cloud.Handle(s, markDone))
+	g.Post("/steps/:id/skip", cloud.Handle(s, markSkip))
+	g.Post("/steps/:id/reset", cloud.Handle(s, markReset))
+	g.Post("/steps/:id/do", cloud.Handle(s, doStep))
 }
 
 // Shutdown closes every cached per-org store. Idempotent.
