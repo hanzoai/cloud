@@ -42,7 +42,7 @@
 //	GET    /v1/evals/runs             list run records (datasetName)     -> {data:[…]}
 //
 // Order 145: binds /v1/evals/* BEFORE the AI subsystem's /v1/* catch-all (150),
-// the same slot productsvc uses. serve.go auto-registers GET /v1/evals/health.
+// the same slot product uses. serve.go auto-registers GET /v1/evals/health.
 package eval
 
 import (
