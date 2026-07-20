@@ -25,7 +25,6 @@ package team
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -58,17 +57,10 @@ func (s *filesService) register(r zip.Router, guard guardFn) {
 }
 
 // principal resolves (account, org) from the request's VERIFIED session or
-// workspace token (bearer or the HttpOnly account cookie).
+// workspace token (bearer or the HttpOnly account cookie) — the shared
+// orgPrincipal resolution (billing.go).
 func (s *filesService) principal(c *zip.Ctx) (account, org string, err error) {
-	t, _, err := sessionToken(c, s.secret)
-	if err != nil {
-		return "", "", err
-	}
-	org, _ = t.Extra["org"].(string)
-	if strings.TrimSpace(org) == "" {
-		return "", "", fmt.Errorf("token carries no org")
-	}
-	return t.Account, org, nil
+	return orgPrincipal(c, s.secret)
 }
 
 // authorize asserts :workspace belongs to org AND the caller is a MEMBER of it
