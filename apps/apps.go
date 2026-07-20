@@ -75,6 +75,7 @@ import (
 	"github.com/hanzoai/cloud/clients/deploy"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
+	"github.com/hanzoai/cloud/clients/domain"
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
@@ -257,6 +258,8 @@ func Wire() []cloud.MountSpec {
 		// The /v1/dns forward head: relays the console DNS dashboard to the DNS
 		// control plane under the caller's own validated bearer (clients/dns).
 		{Name: "dns", Mount: dns.Mount},
+		// The registrar: search/price/register domains (name.com) per org.
+		{Name: "domain", Mount: domain.Mount},
 		{Name: "prompts", Mount: prompts.Mount},
 		{Name: "agents", Mount: agents.Mount, Shutdown: agents.Shutdown},
 		// The unified AI login manager registry (/v1/links). Mounts AFTER agents so
