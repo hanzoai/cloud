@@ -55,40 +55,112 @@ func loadCRsFromKubectl() ([]cr, error) {
 	return all, nil
 }
 
-// newK8sTokenFunc returns a tokenFunc that, for a target, reads its CR's
-// credentialsRef Secret and brokers an owner-scoped bearer at src. Tokens are
-// cached per credential (namespace/name) so a credential logs in once.
-func newK8sTokenFunc(src *kmsClient) tokenFunc {
+// credRef is the credential a token func resolves for a target on one face.
+type credRef struct {
+	ns, name         string
+	clientID, secret string
+}
+
+// credResolver maps a target to the credential that authenticates it on one face.
+// crCredResolver reads the CR's credentialsRef (the app-name identity the standalone
+// accepts); machineAudResolver reads the per-org <org>-platform-kms identity cloud
+// accepts dynamically and admin-denied (no static widening).
+type credResolver func(t Target) (credRef, error)
+
+// crCredResolver reads a target's CR credentialsRef Secret — the existing app-name
+// machine identity the STANDALONE accepts (aud ∈ KMS_EXPECTED_AUDIENCE).
+func crCredResolver(t Target) (credRef, error) {
+	if t.CredName == "" {
+		return credRef{}, fmt.Errorf("CR %s/%s has no credentialsRef — cannot authenticate", t.CRNamespace, t.CRName)
+	}
+	cid, sec, err := readCredential(t.CredNS, t.CredName)
+	if err != nil {
+		return credRef{}, err
+	}
+	return credRef{ns: t.CredNS, name: t.CredName, clientID: cid, secret: sec}, nil
+}
+
+// machineAudResolver reads the per-org <org>-platform-kms credential (Secret
+// name = "<org>"+suffix in ns) — the dedicated KMS-sync identity CLOUD accepts
+// dynamically via kmsMachineAudience (admin-denied, scoped to /v1/kms org==owner).
+// A missing Secret fails loud: provisioning it is a gated cutover prerequisite.
+func machineAudResolver(ns, suffix string) credResolver {
+	return func(t Target) (credRef, error) {
+		name := t.Org + suffix
+		cid, sec, err := readCredential(ns, name)
+		if err != nil {
+			return credRef{}, fmt.Errorf("per-org KMS-sync credential %s/%s not provisioned (mint the <org>-platform-kms IAM app + Secret first): %w", ns, name, err)
+		}
+		return credRef{ns: ns, name: name, clientID: cid, secret: sec}, nil
+	}
+}
+
+// newTokenFunc brokers an owner-scoped bearer at `client` for each target's
+// credential, caches per credential, and (LOW-1, defense-in-depth) decodes the
+// minted token's owner claim and asserts it EQUALS the target's org before the
+// token is handed to any read/write — so a misscoped credential fails the target
+// rather than acting on the wrong org. An admin-owner token is refused for a
+// tenant target (the fleet identities must be org-bound, never platform admin).
+func newTokenFunc(client *kmsClient, resolve credResolver, face string) tokenFunc {
 	var (
 		mu    sync.Mutex
 		cache = map[string]string{}
 	)
 	return func(ctx context.Context, t Target) (string, error) {
-		if t.CredName == "" {
-			return "", fmt.Errorf("CR %s/%s has no credentialsRef — cannot authenticate", t.CRNamespace, t.CRName)
-		}
-		key := t.CredNS + "/" + t.CredName
-		mu.Lock()
-		tok, ok := cache[key]
-		mu.Unlock()
-		if ok {
-			return tok, nil
-		}
-		clientID, clientSecret, err := readCredential(t.CredNS, t.CredName)
+		ref, err := resolve(t)
 		if err != nil {
 			return "", err
 		}
-		tok, err = src.login(ctx, clientID, clientSecret)
-		// Wipe the secret material from our copy immediately after the login POST.
-		wipeString(&clientSecret)
-		if err != nil {
-			return "", fmt.Errorf("broker token for %s: %w", key, err)
-		}
+		key := ref.ns + "/" + ref.name
 		mu.Lock()
-		cache[key] = tok
+		tok, ok := cache[key]
 		mu.Unlock()
+		if !ok {
+			tok, err = client.login(ctx, ref.clientID, ref.secret)
+			wipeString(&ref.secret) // wipe the secret material right after the login POST
+			if err != nil {
+				return "", fmt.Errorf("broker %s token for %s: %w", face, key, err)
+			}
+			mu.Lock()
+			cache[key] = tok
+			mu.Unlock()
+		}
+		// LOW-1: assert token owner == target org (fail-closed on mismatch/admin).
+		owner, isAdmin, derr := decodeJWTOwner(tok)
+		if derr == nil {
+			if isAdmin {
+				return "", fmt.Errorf("%s credential %s mints an ADMIN token — the fleet KMS identity must be org-bound, not platform admin", face, key)
+			}
+			if owner != t.Org {
+				return "", fmt.Errorf("%s credential %s token owner %q != target org %q (misscoped credential)", face, key, owner, t.Org)
+			}
+		}
 		return tok, nil
 	}
+}
+
+// decodeJWTOwner reads the `owner` + `isAdmin` claims from a JWT WITHOUT verifying
+// the signature — the SERVER validates the signature; this is a local sanity gate
+// so the tool never uses a token whose owner disagrees with the target org. A
+// non-JWT token (e.g. an opaque test stub) returns an error, which the caller
+// treats as "skip the local assertion" (the server still enforces owner==:org).
+func decodeJWTOwner(token string) (owner string, isAdmin bool, err error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", false, fmt.Errorf("not a JWT")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", false, fmt.Errorf("jwt payload: %w", err)
+	}
+	var claims struct {
+		Owner   string `json:"owner"`
+		IsAdmin bool   `json:"isAdmin"`
+	}
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		return "", false, fmt.Errorf("jwt claims: %w", err)
+	}
+	return claims.Owner, claims.IsAdmin, nil
 }
 
 // readCredential extracts (clientId, clientSecret) from a credentialsRef Secret.
