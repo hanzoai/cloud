@@ -61,6 +61,7 @@ import (
 	"github.com/hanzoai/base/plugins/waitlist"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
 
@@ -158,10 +159,41 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.All("/v1/base/*", func(c *zip.Ctx) error { return serveOrg(p, log, c) })
 
 	mounted = &subsystem{pool: p, platform: platformApp}
+
+	// Host-as-project-ref (HIP-0014, gated by CLOUD_BASE_PUBLIC_HOST, default OFF):
+	// let a published site host serve /v1/base, /v1/realtime and /_/ scoped to the
+	// org its SUBDOMAIN resolves to — so an anon page can reach its own Base, authz
+	// by Base's collection rules. The org comes from the resolved site, never the
+	// caller. Absent the flag, site hosts serve only static files (unchanged).
+	if publicHostEnabled() {
+		sites.SetBaseHostHandler(func(org string, c *zip.Ctx) error {
+			h, release, err := p.acquire(org)
+			if err != nil {
+				log.Error("base: open org app failed", "err", err)
+				return zip.Errorf(http.StatusInternalServerError, "base unavailable")
+			}
+			defer release()
+			return zip.AdaptNetHTTP(h)(c)
+		})
+		log.Info("base public-host routing enabled", "flag", publicHostEnv)
+	}
+
 	log.Info("base app embedded",
 		"waitlist", "/v1/waitlist/*", "hosting", "/v1/base/*",
 		"prefix", os.Getenv("BASE_API_PREFIX"), "brand", deps.Brand, "env", deps.Env)
 	return nil
+}
+
+// publicHostEnv gates host-as-project-ref Base routing (default OFF).
+const publicHostEnv = "CLOUD_BASE_PUBLIC_HOST"
+
+func publicHostEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(publicHostEnv))) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // serveOrg resolves the caller's org from the validated principal, acquires that
