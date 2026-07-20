@@ -106,14 +106,45 @@ type mailbox struct {
 	queues map[string][]*offer
 	byRun  map[string]*offer
 	signal map[string]chan struct{}
+	// inflight is the per-org set of live routed sessions (offered, not yet finished),
+	// the gauge the per-org admission cap reads. A SET keyed by session id (not a bare
+	// counter) so a re-offer after a restart re-adds idempotently and a superseded
+	// offer never double-counts or wrongly decrements the still-live session.
+	inflight map[string]map[string]struct{}
 }
 
 func newMailbox() *mailbox {
 	return &mailbox{
-		queues: map[string][]*offer{},
-		byRun:  map[string]*offer{},
-		signal: map[string]chan struct{}{},
+		queues:   map[string][]*offer{},
+		byRun:    map[string]*offer{},
+		signal:   map[string]chan struct{}{},
+		inflight: map[string]map[string]struct{}{},
 	}
+}
+
+func (m *mailbox) inflightAddLocked(org, sess string) {
+	s := m.inflight[org]
+	if s == nil {
+		s = map[string]struct{}{}
+		m.inflight[org] = s
+	}
+	s[sess] = struct{}{}
+}
+
+func (m *mailbox) inflightRemoveLocked(org, sess string) {
+	if s := m.inflight[org]; s != nil {
+		delete(s, sess)
+		if len(s) == 0 {
+			delete(m.inflight, org)
+		}
+	}
+}
+
+// InFlight returns how many routed runs an org has live (offered, not yet finished).
+func (m *mailbox) InFlight(org string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.inflight[org])
 }
 
 // routedMailbox is the ONE process-wide rendezvous, shared by the coding

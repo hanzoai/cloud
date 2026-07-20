@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
 
@@ -38,9 +39,46 @@ const (
 // mountRouting registers the route-work machine surface. Called from mountTargets
 // AFTER the target CRUD routes so the extra-segment paths are unambiguous.
 func mountRouting(s *cloud.Service[state], app *zip.App) {
+	assertSingleReplica(s.Log)
 	app.Post("/v1/agents/targets/:id/claim-key", cloud.Handle(s, mintClaimKey))
 	app.Post("/v1/agents/targets/:id/claim", cloud.Handle(s, claimRoutedRun))
 	app.Post("/v1/agents/targets/:id/runs/:runId/report", cloud.Handle(s, reportRoutedRun))
+}
+
+// caller is the VALIDATED principal id (X-User-Id) — the machine-owner identity for
+// route-work. tenant() already required a validated principal, so on any handler that
+// resolved an org this is non-empty.
+func caller(c *zip.Ctx) string { return strings.TrimSpace(c.User()) }
+
+// ownsTarget reports whether the caller may MANAGE this target's route-work plane —
+// mint/rotate the claim key, claim, report, patch, delete. A machine belongs to the
+// principal that registered it (least privilege, AC-6): its owner may manage it, and
+// an org admin (self-service org management, the admin-org model's isAdmin) may manage
+// any of the org's targets. An UNOWNED (pre-migration) row is admin-only until its
+// owner re-registers — register binds the owner. Fail-closed: an empty caller or an
+// empty owner never satisfies the ownership arm, so a non-validated request or a
+// pre-migration row is never owner-managed.
+func ownsTarget(c *zip.Ctx, t Target) bool {
+	if principal.IsOrgAdmin(c) || principal.IsSuperAdmin(c) {
+		return true
+	}
+	u := caller(c)
+	return t.Owner != "" && u != "" && u == t.Owner
+}
+
+// authorizeTargetManage resolves the (org,id) target and gates it on ownsTarget,
+// collapsing every failure — cross-org, unknown, or not-owned — to the SAME
+// errTargetNotFound so the machine surface never distinguishes them (no oracle). The
+// resolved target is returned for the caller to use (avoids a second read).
+func authorizeTargetManage(s *cloud.Service[state], c *zip.Ctx, org, id string) (Target, error) {
+	t, err := s.State.store.GetTarget(c.Context(), org, id)
+	if err != nil {
+		return Target{}, errTargetNotFound // unknown / cross-org -> no oracle
+	}
+	if !ownsTarget(c, t) {
+		return Target{}, errTargetNotFound
+	}
+	return t, nil
 }
 
 // mintClaimKey (re)mints the target's claim key and returns it ONCE. Only the
@@ -52,11 +90,12 @@ func mintClaimKey(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	id := idParam(c)
-	// The target must exist in this org before it can carry a capability.
-	if _, err := s.State.store.GetTarget(c.Context(), org, id); err == errTargetNotFound {
+	// The target must exist in this org AND the caller must OWN it (or be an org
+	// admin) before it can (re)mint a capability — minting rotates the key, so an
+	// un-scoped mint would let any org member strand a victim's daemon and steal its
+	// runs. Every failure collapses to the same not-found (no oracle).
+	if _, err := authorizeTargetManage(s, c, org, id); err != nil {
 		return zip.ErrNotFound("target not found")
-	} else if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "target: %v", err)
 	}
 	key, err := newClaimKey()
 	if err != nil {
@@ -77,6 +116,14 @@ func claimRoutedRun(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
 	id := idParam(c)
+	// TWO proofs, both required, both fail-closed to the SAME 403 (no oracle): the
+	// caller must OWN this machine (or be an org admin) AND hold its claim key. The
+	// ownership gate is defense in depth — with mint owner-scoped an attacker cannot
+	// obtain a valid key for a victim's machine, but a claim still refuses a
+	// non-owner outright rather than resting solely on the capability.
+	if _, err := authorizeTargetManage(s, c, org, id); err != nil {
+		return claimAuthError(errTargetNotFound)
+	}
 	if err := s.State.store.verifyClaimKey(c.Context(), org, id, c.Header(claimKeyHeader)); err != nil {
 		return claimAuthError(err)
 	}
@@ -115,6 +162,11 @@ func reportRoutedRun(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	id := idParam(c)
 	runID := strings.TrimSpace(c.Param("runId"))
+	// Same two proofs as claim: own the machine (or org admin) AND hold its key, so a
+	// non-owner can neither fabricate a report nor complete a victim's run. No oracle.
+	if _, err := authorizeTargetManage(s, c, org, id); err != nil {
+		return claimAuthError(errTargetNotFound)
+	}
 	if err := s.State.store.verifyClaimKey(c.Context(), org, id, c.Header(claimKeyHeader)); err != nil {
 		return claimAuthError(err)
 	}
