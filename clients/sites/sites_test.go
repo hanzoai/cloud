@@ -146,8 +146,17 @@ func TestSiteSlug(t *testing.T) {
 	site("my-cool-site.acme.hanzo.app", "my-cool-site.acme")
 	site("myapp.maxpower.hanzo.app:443", "myapp.maxpower") // port stripped
 
+	// Bare `<slug>.<apex>` — the product URL (and the only shape the one-label
+	// ingress wildcard + LE cert can serve). Key is the bare slug; the resolver
+	// serves it iff it maps to exactly one live project.
+	site("dave-synapse-demo.hanzo.app", "dave-synapse-demo")
+	site("Brew.Hanzo.App", "brew")            // case-insensitive
+	site("vibe-check.hanzo.app:443", "vibe-check") // port stripped
+
 	notSite("hanzo.app")                // apex, no label
-	notSite("maxpower.hanzo.app")       // single label — not org-scoped
+	notSite("www.hanzo.app")            // reserved bare label
+	notSite("api.hanzo.app")            // reserved bare label
+	notSite("-bad.hanzo.app")           // invalid bare slug
 	notSite("www.acme.hanzo.app")       // reserved slug label
 	notSite("app.acme.hanzo.app")       // reserved (real app host)
 	notSite("api.acme.hanzo.app")       // reserved
