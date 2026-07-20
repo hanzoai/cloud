@@ -169,7 +169,7 @@ func TestResolveScope_Boundary(t *testing.T) {
 // twoTenantFleet is a fleet with apps for two tenants (in their tenant-<org> namespaces)
 // plus a system app in the platform "hanzo" namespace.
 func twoTenantFleet() *cloud.Service[state] {
-	return fakeSvc(
+	return fakeService(
 		orgAppCR("tenant-acme", "acme-web", "acme", "storefront"),
 		orgAppCR("tenant-acme", "acme-api", "acme", "storefront"),
 		orgAppCR("tenant-bravo", "bravo-web", "bravo", "site"),
@@ -330,7 +330,7 @@ func TestProjectApp_UnlabeledFallsIntoDefault(t *testing.T) {
 // NEVER surfaces the unscoped cluster-wide AppProject list (that path is SuperAdmin-only) —
 // even when real AppProject CRs are served — and always contains 'default'.
 func TestDashProjects_OrgNeverSeesCrossOrgAppProjects(t *testing.T) {
-	s := fakeSvc(
+	s := fakeService(
 		orgAppCR("tenant-acme", "acme-web", "acme", "storefront"),
 		appProjectCR("team-secret", "https://git.hanzo.ai/team-secret/*"), // a cross-org real AppProject CR
 	)

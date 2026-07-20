@@ -24,9 +24,9 @@ import (
 
 // ── harness ──────────────────────────────────────────────────────────────────
 
-// newSvc builds a wallets service over a fresh temp store with the given custody set,
+// newService builds a wallets service over a fresh temp store with the given custody set,
 // installs it as the process singleton, and mounts the routes on a fresh app.
-func newSvc(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Service[state], *zip.App) {
+func newService(t *testing.T, custody map[Kind]Custody, def Kind) (*cloud.Service[state], *zip.App) {
 	t.Helper()
 	st, err := openStore(filepath.Join(t.TempDir(), "wallets.db"))
 	if err != nil {
@@ -154,7 +154,7 @@ func isHexAddr(s string) bool {
 
 func TestKMSSingleSigEndToEnd(t *testing.T) {
 	k, dir := testKMS(t)
-	_, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
+	_, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 
 	acct := mkAccount(t, app, "acme")
 	w := mkWallet(t, app, "acme", acct, "kms", "hot", "eip155:1")
@@ -242,7 +242,7 @@ func assertSealedAtRest(t *testing.T, dir, plaintextHex string) {
 
 func TestPerTenantIsolation(t *testing.T) {
 	k, _ := testKMS(t)
-	_, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
+	_, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 
 	// Org A owns a wallet.
 	acctA := mkAccount(t, app, "orga")
@@ -289,7 +289,7 @@ func TestPerTenantIsolation(t *testing.T) {
 func TestCustodySeamSelectsBackend(t *testing.T) {
 	k, _ := testKMS(t)
 	// Only KMS is configured — mpc/treasury must fail closed.
-	s, app := newSvc(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
+	s, app := newService(t, map[Kind]Custody{KindKMS: kmsCustody{kms: k}}, KindKMS)
 
 	// Resolver: kms resolves; mpc/treasury fail closed; unknown is a distinct error.
 	if _, err := custodyFor(s, KindKMS); err != nil {
@@ -371,7 +371,7 @@ func TestMPCPathWiredCompiles(t *testing.T) {
 	if !client.configured() {
 		t.Fatal("mpc client should be configured with a node + key")
 	}
-	s, app := newSvc(t, map[Kind]Custody{KindMPC: mpcCustody{http: client}}, KindMPC)
+	s, app := newService(t, map[Kind]Custody{KindMPC: mpcCustody{http: client}}, KindMPC)
 
 	acct := mkAccount(t, app, "acme")
 	w := mkWallet(t, app, "acme", acct, "mpc", "warm", "eip155:1")
