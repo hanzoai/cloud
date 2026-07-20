@@ -90,42 +90,43 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // control plane behind core.Guard. Each carved-out domain (audit/customer/revenue/finance)
 // owns its own route registration.
 func routes(app *zip.App, s *cloud.Service[core.State]) {
+	g := app.Group("/v1/admin")
 	// Org-scoped panels — GuardScoped. Cross-tenant reads are impossible for a non-super
 	// caller.
-	app.Get("/v1/admin/me", core.GuardScoped(s, me))
-	app.Get("/v1/admin/overview", core.GuardScoped(s, overview))
-	app.Get("/v1/admin/orgs", core.GuardScoped(s, orgs))
-	app.Get("/v1/admin/users", core.GuardScoped(s, users))
-	app.Get("/v1/admin/usage", core.GuardScoped(s, usage))
+	g.Get("/me", core.GuardScoped(s, me))
+	g.Get("/overview", core.GuardScoped(s, overview))
+	g.Get("/orgs", core.GuardScoped(s, orgs))
+	g.Get("/users", core.GuardScoped(s, users))
+	g.Get("/usage", core.GuardScoped(s, usage))
 	// Platform reads — SuperAdmin only (cross-tenant by nature).
-	app.Get("/v1/admin/roles", core.Guard(s, roles))
-	app.Get("/v1/admin/applications", core.Guard(s, applications))
-	app.Get("/v1/admin/products", core.Guard(s, products))
-	app.Get("/v1/admin/compute", core.Guard(s, compute))
-	app.Get("/v1/admin/o11y", core.Guard(s, o11y))
-	app.Get("/v1/admin/aimetrics", core.Guard(s, aimetrics))
-	app.Post("/v1/admin/sync", core.Guard(s, syncNow))
+	g.Get("/roles", core.Guard(s, roles))
+	g.Get("/applications", core.Guard(s, applications))
+	g.Get("/products", core.Guard(s, products))
+	g.Get("/compute", core.Guard(s, compute))
+	g.Get("/o11y", core.Guard(s, o11y))
+	g.Get("/aimetrics", core.Guard(s, aimetrics))
+	g.Post("/sync", core.Guard(s, syncNow))
 
 	// Credit grants — the ONE admin mint surface (SuperAdmin only). Thin, audited
 	// relay to commerce's mint-gated POST /v1/billing/credit-grants; commerce is the
 	// sole ledger. See creditgrant.go.
-	app.Post("/v1/admin/credit-grants", core.Guard(s, createCreditGrant))
+	g.Post("/credit-grants", core.Guard(s, createCreditGrant))
 
 	// Product analytics — org-scoped (SuperAdmin: all-orgs; org admin: their own org).
-	app.Get("/v1/admin/analytics", core.GuardScoped(s, analytics))
+	g.Get("/analytics", core.GuardScoped(s, analytics))
 	// Bases — the tenant Base-instance panel, org-scoped (bases.go).
-	app.Get("/v1/admin/bases", core.GuardScoped(s, bases))
+	g.Get("/bases", core.GuardScoped(s, bases))
 
 	// ── Platform control plane — SuperAdmin ONLY (launch/release/flags + access). ──
-	app.Get("/v1/admin/flags", core.Guard(s, flagsBoard))
-	app.Put("/v1/admin/flags/:key", core.Guard(s, setFlag))
+	g.Get("/flags", core.Guard(s, flagsBoard))
+	g.Put("/flags/:key", core.Guard(s, setFlag))
 	// Launch-control services board — the waitlist-mode lens on the flag engine (twin
 	// of /v1/admin/flags), reading the registry + decide the admission gate owns.
-	app.Get("/v1/admin/services", core.Guard(s, services))
-	app.Post("/v1/admin/services", core.Guard(s, upsertService))
-	app.Post("/v1/admin/services/:service/mode", core.Guard(s, setServiceMode))
-	app.Get("/v1/admin/waitlist", core.Guard(s, waitlist))
-	app.Post("/v1/admin/waitlist/boost", core.Guard(s, waitlistBoost))
+	g.Get("/services", core.Guard(s, services))
+	g.Post("/services", core.Guard(s, upsertService))
+	g.Post("/services/:service/mode", core.Guard(s, setServiceMode))
+	g.Get("/waitlist", core.Guard(s, waitlist))
+	g.Post("/waitlist/boost", core.Guard(s, waitlistBoost))
 
 	// Usage-cap + promo control plane (promos platform-only; spend-caps org-scoped).
 	limitRoutes(app, s)
