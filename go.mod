@@ -28,7 +28,7 @@ require (
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
 	github.com/hanzoai/sign v1.0.0
-	github.com/hanzoai/sqlite v0.3.0
+	github.com/hanzoai/sqlite v0.3.2
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
@@ -84,6 +84,7 @@ require (
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
+	github.com/hanzoai/sqlcipher v0.1.0 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
@@ -258,7 +259,6 @@ require (
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
-	modernc.org/sqlite v1.51.0 // indirect
 )
 
 require (
@@ -821,9 +821,6 @@ require (
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	layeh.com/radius v0.0.0-20231213012653-1006025d24f8 // indirect
 	maunium.net/go/mautrix v0.22.1 // indirect
-	modernc.org/libc v1.72.3 // indirect
-	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
 	rsc.io/binaryregexp v0.2.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
@@ -848,7 +845,7 @@ require (
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.28
 	github.com/hanzoai/thinking v0.1.1 // indirect
-	github.com/hanzoai/vfs v0.6.4
+	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.2
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
