@@ -536,7 +536,7 @@ func registrableDomain(host string) string {
 // the empty-Enable "mount everything" default and mount ONLY when named in
 // CLOUD_ENABLE. This is the HIP-0106 staged-rollout contract, enforced in code.
 //
-// "iam" is staged because iamsvc.Mount boots the WHOLE Beego identity runtime via
+// "iam" is staged because iam.Mount boots the WHOLE Beego identity runtime via
 // iamserver.InitEmbed(), which initialises process-global Beego config (web.BConfig
 // / the shared AppConfig). The `ai` subsystem is a sibling casibase/casdoor fork
 // linked against the SAME beego module, and reads that same process-global at its
