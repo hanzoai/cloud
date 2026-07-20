@@ -108,6 +108,12 @@ func publishSite(s *cloud.Service[state], ctx context.Context, org string, p Pro
 	emitProjectLifecycle(ctx, cloud.LifecycleDeployLive, org, p, d, p.Slug+" live ("+live+")")
 
 	p.Status, p.LiveURL, p.CurrentDeploy, p.Bucket, p.UpdatedAt = "live", live, d.ID, s.State.blob.bucket, time.Now().Unix()
+	// A full-artifact deploy REPLACES the site at its legacy mutable prefix, so it
+	// takes the serving pointer back from any active release (releaseSpace is a
+	// sibling of that prefix, so the release objects themselves survive and remain
+	// re-activatable). Leaving a stale pointer here would serve the old release
+	// instead of the artifact just uploaded.
+	p.CurrentRelease = ""
 	onPublish(s, ctx, org, &p)
 	if err := s.State.store.UpdateProject(ctx, p); err != nil {
 		return d, fmt.Errorf("finalize project: %w", err)
@@ -356,6 +362,9 @@ func completeDeployment(s *cloud.Service[state], c *zip.Ctx) error {
 	p.UpdatedAt = now
 	if status == "live" {
 		p.Status, p.LiveURL, p.CurrentDeploy = "live", d.LiveURL, d.ID
+		// CI synced the built site to the legacy mutable prefix, so — exactly as in
+		// publishSite — going live there takes the pointer back from any release.
+		p.CurrentRelease = ""
 		onPublish(s, c.Context(), org, &p)
 	} else {
 		p.Status = "error"
