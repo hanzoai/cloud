@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/hanzoai/cloud"
-	"github.com/zap-proto/zip"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
+	"github.com/zap-proto/zip"
 )
 
 // TestAdminCatalog_HTTP drives the real subsystem over HTTP: it Mounts
-// pricingsvc on a zip app and exercises the admin write surface + the gated
+// pricing on a zip app and exercises the admin write surface + the gated
 // read path end-to-end. This verifies the load-bearing pieces the pure-gate
 // unit tests can't: the greedy-wildcard route for slashed model ids, the
 // IsAdmin gate, and the enable→customer-sees flow.
