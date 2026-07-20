@@ -8,5 +8,6 @@ import (
 
 // Routes registers the fleet subscription view (SuperAdmin only, cross-tenant).
 func Routes(app *zip.App, s *cloud.Service[core.State]) {
-	app.Get("/v1/admin/subscriptions", core.Guard(s, Subscriptions))
+	g := app.Group("/v1/admin")
+	g.Get("/subscriptions", core.Guard(s, Subscriptions))
 }

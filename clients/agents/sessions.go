@@ -182,17 +182,18 @@ func toEventView(e Event) eventView {
 // :name would otherwise capture "sessions"). Within the block, the static
 // /stream route precedes the /:id param for the same reason.
 func mountSessions(s *cloud.Service[state], app *zip.App) {
-	app.Post("/v1/agents/sessions", cloud.Handle(s, registerSession))
-	app.Get("/v1/agents/sessions", cloud.Handle(s, listSessions))
-	app.Get("/v1/agents/sessions/stream", cloud.Handle(s, sessionsStream))
-	app.Get("/v1/agents/sessions/:id", cloud.Handle(s, getSession))
-	app.Patch("/v1/agents/sessions/:id", cloud.Handle(s, patchSession))
-	app.Get("/v1/agents/sessions/:id/tree", cloud.Handle(s, sessionTree))
-	app.Post("/v1/agents/sessions/:id/events", cloud.Handle(s, appendSessionEvent))
-	app.Post("/v1/agents/sessions/:id/pause", cloud.Handle(s, pauseSession))
-	app.Post("/v1/agents/sessions/:id/resume", cloud.Handle(s, resumeSession))
-	app.Post("/v1/agents/sessions/:id/stop", cloud.Handle(s, stopSession))
-	app.Post("/v1/agents/sessions/:id/message", cloud.Handle(s, messageSession))
+	g := app.Group("/v1/agents")
+	g.Post("/sessions", cloud.Handle(s, registerSession))
+	g.Get("/sessions", cloud.Handle(s, listSessions))
+	g.Get("/sessions/stream", cloud.Handle(s, sessionsStream))
+	g.Get("/sessions/:id", cloud.Handle(s, getSession))
+	g.Patch("/sessions/:id", cloud.Handle(s, patchSession))
+	g.Get("/sessions/:id/tree", cloud.Handle(s, sessionTree))
+	g.Post("/sessions/:id/events", cloud.Handle(s, appendSessionEvent))
+	g.Post("/sessions/:id/pause", cloud.Handle(s, pauseSession))
+	g.Post("/sessions/:id/resume", cloud.Handle(s, resumeSession))
+	g.Post("/sessions/:id/stop", cloud.Handle(s, stopSession))
+	g.Post("/sessions/:id/message", cloud.Handle(s, messageSession))
 }
 
 func idParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("id")) }

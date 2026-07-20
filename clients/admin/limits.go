@@ -25,17 +25,18 @@ import (
 
 // limitRoutes registers the promo + cap control plane. Called from routes().
 func limitRoutes(app *zip.App, s *cloud.Service[core.State]) {
+	g := app.Group("/v1/admin")
 	// Platform plan promo — SuperAdmin only.
-	app.Get("/v1/admin/promos", core.Guard(s, getPromo))
-	app.Put("/v1/admin/promos", core.Guard(s, putPromo))
+	g.Get("/promos", core.Guard(s, getPromo))
+	g.Put("/promos", core.Guard(s, putPromo))
 
 	// Per-org usage-cap oversight/override — SuperAdmin (any org via ?org=) or an org
 	// admin (own org only). Reuses the customer's OWN self-service spend-alert CRUD,
 	// so a platform override and a customer edit are the same rows.
-	app.Get("/v1/admin/spend-caps", core.GuardScoped(s, listSpendCaps))
-	app.Post("/v1/admin/spend-caps", core.GuardScoped(s, createSpendCap))
-	app.Patch("/v1/admin/spend-caps/:id", core.GuardScoped(s, updateSpendCap))
-	app.Delete("/v1/admin/spend-caps/:id", core.GuardScoped(s, deleteSpendCap))
+	g.Get("/spend-caps", core.GuardScoped(s, listSpendCaps))
+	g.Post("/spend-caps", core.GuardScoped(s, createSpendCap))
+	g.Patch("/spend-caps/:id", core.GuardScoped(s, updateSpendCap))
+	g.Delete("/spend-caps/:id", core.GuardScoped(s, deleteSpendCap))
 }
 
 // getPromo returns the current platform plan promo. X-Org-Id is the admin org —

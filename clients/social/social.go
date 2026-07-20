@@ -160,21 +160,22 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 // routes registers the social surface: the account + post CRUD + the summary roll-up.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/social/summary", cloud.Handle(s, summary))
-	app.Get("/v1/social/providers", cloud.Handle(s, listProviders))
+	g := app.Group("/v1/social")
+	g.Get("/summary", cloud.Handle(s, summary))
+	g.Get("/providers", cloud.Handle(s, listProviders))
 
-	app.Get("/v1/social/accounts", cloud.Handle(s, listAccounts))
-	app.Post("/v1/social/accounts", cloud.Handle(s, createAccount))
-	app.Get("/v1/social/accounts/:id", cloud.Handle(s, getAccount))
-	app.Put("/v1/social/accounts/:id", cloud.Handle(s, updateAccount))
-	app.Delete("/v1/social/accounts/:id", cloud.Handle(s, deleteAccount))
+	g.Get("/accounts", cloud.Handle(s, listAccounts))
+	g.Post("/accounts", cloud.Handle(s, createAccount))
+	g.Get("/accounts/:id", cloud.Handle(s, getAccount))
+	g.Put("/accounts/:id", cloud.Handle(s, updateAccount))
+	g.Delete("/accounts/:id", cloud.Handle(s, deleteAccount))
 
-	app.Get("/v1/social/posts", cloud.Handle(s, listPosts))
-	app.Post("/v1/social/posts", cloud.Handle(s, createPost))
-	app.Get("/v1/social/posts/:id", cloud.Handle(s, getPost))
-	app.Put("/v1/social/posts/:id", cloud.Handle(s, updatePost))
-	app.Delete("/v1/social/posts/:id", cloud.Handle(s, deletePost))
-	app.Post("/v1/social/posts/:id/publish", cloud.Handle(s, publishPostHandler))
+	g.Get("/posts", cloud.Handle(s, listPosts))
+	g.Post("/posts", cloud.Handle(s, createPost))
+	g.Get("/posts/:id", cloud.Handle(s, getPost))
+	g.Put("/posts/:id", cloud.Handle(s, updatePost))
+	g.Delete("/posts/:id", cloud.Handle(s, deletePost))
+	g.Post("/posts/:id/publish", cloud.Handle(s, publishPostHandler))
 }
 
 // ---- shared helpers (mirror clients/crm + clients/marketing) ----

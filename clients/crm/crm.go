@@ -120,25 +120,26 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // routes registers the CRM surface: companies, contacts, opportunities, the summary
 // roll-up, and the Startup Program application intake.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/crm/summary", cloud.Handle(s, summary))
+	g := app.Group("/v1/crm")
+	g.Get("/summary", cloud.Handle(s, summary))
 
-	app.Get("/v1/crm/companies", cloud.Handle(s, listCompanies))
-	app.Post("/v1/crm/companies", cloud.Handle(s, createCompany))
-	app.Get("/v1/crm/companies/:id", cloud.Handle(s, getCompany))
-	app.Put("/v1/crm/companies/:id", cloud.Handle(s, updateCompany))
-	app.Delete("/v1/crm/companies/:id", cloud.Handle(s, deleteCompany))
+	g.Get("/companies", cloud.Handle(s, listCompanies))
+	g.Post("/companies", cloud.Handle(s, createCompany))
+	g.Get("/companies/:id", cloud.Handle(s, getCompany))
+	g.Put("/companies/:id", cloud.Handle(s, updateCompany))
+	g.Delete("/companies/:id", cloud.Handle(s, deleteCompany))
 
-	app.Get("/v1/crm/contacts", cloud.Handle(s, listContacts))
-	app.Post("/v1/crm/contacts", cloud.Handle(s, createContact))
-	app.Get("/v1/crm/contacts/:id", cloud.Handle(s, getContact))
-	app.Put("/v1/crm/contacts/:id", cloud.Handle(s, updateContact))
-	app.Delete("/v1/crm/contacts/:id", cloud.Handle(s, deleteContact))
+	g.Get("/contacts", cloud.Handle(s, listContacts))
+	g.Post("/contacts", cloud.Handle(s, createContact))
+	g.Get("/contacts/:id", cloud.Handle(s, getContact))
+	g.Put("/contacts/:id", cloud.Handle(s, updateContact))
+	g.Delete("/contacts/:id", cloud.Handle(s, deleteContact))
 
-	app.Get("/v1/crm/opportunities", cloud.Handle(s, listOpps))
-	app.Post("/v1/crm/opportunities", cloud.Handle(s, createOpp))
-	app.Get("/v1/crm/opportunities/:id", cloud.Handle(s, getOpp))
-	app.Put("/v1/crm/opportunities/:id", cloud.Handle(s, updateOpp))
-	app.Delete("/v1/crm/opportunities/:id", cloud.Handle(s, deleteOpp))
+	g.Get("/opportunities", cloud.Handle(s, listOpps))
+	g.Post("/opportunities", cloud.Handle(s, createOpp))
+	g.Get("/opportunities/:id", cloud.Handle(s, getOpp))
+	g.Put("/opportunities/:id", cloud.Handle(s, updateOpp))
+	g.Delete("/opportunities/:id", cloud.Handle(s, deleteOpp))
 
 	// Startup Program applications. The intake POST is PUBLIC (unauthenticated
 	// marketing form) and IP-rate-limited; the reads/mutations are staff-only,
@@ -148,9 +149,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 		Window: intakeRateWindow,
 		KeyFn:  func(c *zip.Ctx) string { return c.Fiber().IP() },
 	})).Post("/applications", cloud.Handle(s, apply))
-	app.Get("/v1/crm/applications", cloud.Handle(s, listApplications))
-	app.Get("/v1/crm/applications/:id", cloud.Handle(s, getApplication))
-	app.Patch("/v1/crm/applications/:id", cloud.Handle(s, patchApplication))
+	g.Get("/applications", cloud.Handle(s, listApplications))
+	g.Get("/applications/:id", cloud.Handle(s, getApplication))
+	g.Patch("/applications/:id", cloud.Handle(s, patchApplication))
 }
 
 // ---- shared helpers ----
