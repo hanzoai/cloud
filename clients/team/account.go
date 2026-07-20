@@ -10,7 +10,10 @@ package team
 // net/http — it is an external hop to hanzo.id.
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,12 +22,14 @@ import (
 	"strings"
 	"time"
 
-	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/google/uuid"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
+	"github.com/hanzoai/cloud/types"
 )
 
 // authCookie is the cookie the SPA's PUT/DELETE /cookie manage; RPC itself rides
@@ -35,6 +40,15 @@ const authCookie = "account-token"
 // the same-origin /v1/agents proxy can forward it to the cloud gateway. HttpOnly —
 // never exposed to page JS.
 const iamTokenCookie = "hanzo_iam_token"
+
+// stateCookie binds the OAuth `state` nonce (plus the SPA's navigateUrl) to the
+// browser that STARTED the flow. Minted per authStart, verified and cleared by
+// authCallback — a callback whose state does not match the cookie is a forged or
+// replayed flow and is bounced, never exchanged.
+const stateCookie = "team-oauth-state"
+
+// stateTTL bounds one OAuth round trip browser→IAM→callback.
+const stateTTL = 10 * time.Minute
 
 // Token lifetimes. Every minted token now carries an `exp` (Decode enforces it),
 // bounding the replay window on a captured token. The session token matches the
@@ -52,7 +66,6 @@ type config struct {
 	iamEndpoint     string // OIDC issuer base (deps.IAMIssuer / IAM_ENDPOINT)
 	iamClientID     string // IAM_CLIENT_ID (KMS-synced env)
 	iamClientSecret string // IAM_CLIENT_SECRET (KMS-synced env)
-	iamOrg          string // login-org fallback when the token carries no owner
 	serverSecret    string // SERVER_SECRET (KMS-synced env) — HS256 signing key
 	frontURL        string // browser destination after IAM (default: request origin)
 	transactor      string // wss:// base returned by selectWorkspace (default: derived)
@@ -72,6 +85,16 @@ type api struct {
 	trans    *transServer
 	cfg      config
 	log      luxlog.Logger
+	// verify is cloud's RS256/JWKS IAM token validator (cloud.NewTokenValidator —
+	// the SAME trust anchor as the identity boundary). The OAuth callback derives
+	// the tenant from ITS verdict, never from unverified claims.
+	verify func(string) (cloud.VerifiedIdentity, error)
+	// commerce answers CheckEntitlement(org, "team") at workspace select — nil
+	// (not co-resident) is an infra absence and never blocks login.
+	commerce types.CommerceClient
+	// planEnt resolves a plan id to its entitlement block (plan.Entitlements) —
+	// the source of the team.guests cap.
+	planEnt func(context.Context, string) (map[string]any, error)
 }
 
 // ── types (ported from team-go/pkg/account/types.go) ──────────────────────────
@@ -187,32 +210,50 @@ func (g *api) providers(c *zip.Ctx) error {
 
 // authStart redirects the browser into IAM's authorize endpoint. team is a
 // confidential client (client_secret), so no PKCE — the code is exchanged
-// server-side in authCallback.
+// server-side in authCallback. state is a RANDOM nonce bound to a short-lived
+// cookie (never the bare navigateUrl): the callback only proceeds when the two
+// match, so a cross-site-initiated or replayed callback is refused.
 func (g *api) authStart(c *zip.Ctx) error {
 	provider := providerParam(c)
 	origin := g.callbackOrigin(c)
 	redirect := origin + "/v1/team/account/auth/" + provider + "/callback"
+	nonce, err := randState()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "state")
+	}
+	// The navigateUrl rides IN the cookie (escaped) next to the nonce, so the
+	// round trip needs no second channel and the value stays server-bound.
+	g.setSessionCookie(c, stateCookie, nonce+"|"+url.QueryEscape(c.Query("navigateUrl")), int(stateTTL.Seconds()))
 	q := url.Values{
 		"client_id":     {g.cfg.iamClientID},
 		"redirect_uri":  {redirect},
 		"response_type": {"code"},
 		"scope":         {"openid profile email"},
-		"state":         {c.Query("navigateUrl")},
+		"state":         {nonce},
 	}
 	return c.Fiber().Redirect().Status(http.StatusFound).To(oauthBase(g.cfg.iamEndpoint) + "/oauth/authorize?" + q.Encode())
 }
 
-// authCallback exchanges the IAM code for the user, ensures the account has a
-// workspace, mints the account token, and bounces the browser back to the SPA
-// with ?token= (which Auth reads via getLoginInfoFromQuery).
+// authCallback verifies the state nonce against the flow cookie, exchanges the
+// IAM code for the user, ensures the account has a workspace, mints the account
+// token, and bounces the browser back to the SPA with ?token= (which Auth reads
+// via getLoginInfoFromQuery).
 func (g *api) authCallback(c *zip.Ctx) error {
 	provider := providerParam(c)
+	// One-shot state: read + clear the flow cookie FIRST, then require the
+	// callback's state to match the nonce it holds — before any error/code
+	// handling, so a forged callback never reaches the exchange.
+	nonce, navigate := g.stateFromCookie(c)
+	g.setSessionCookie(c, stateCookie, "", -1)
+	if nonce == "" || c.Query("state") != nonce {
+		return g.bounce(c, "", "", "state_mismatch")
+	}
 	if e := c.Query("error"); e != "" {
-		return g.bounce(c, "", c.Query("state"), e)
+		return g.bounce(c, "", navigate, e)
 	}
 	code := c.Query("code")
 	if code == "" {
-		return g.bounce(c, "", c.Query("state"), "missing_code")
+		return g.bounce(c, "", navigate, "missing_code")
 	}
 	origin := g.callbackOrigin(c)
 	redirect := origin + "/v1/team/account/auth/" + provider + "/callback"
@@ -220,22 +261,24 @@ func (g *api) authCallback(c *zip.Ctx) error {
 	access, err := g.exchangeCode(code, redirect)
 	if err != nil {
 		g.log.Error("account: oauth code exchange", "err", err)
-		return g.bounce(c, "", c.Query("state"), "exchange_failed")
+		return g.bounce(c, "", navigate, "exchange_failed")
 	}
 	sub, email, name, err := g.userinfo(access)
 	if err != nil {
-		return g.bounce(c, "", c.Query("state"), "userinfo_failed")
+		return g.bounce(c, "", navigate, "userinfo_failed")
 	}
 	// AccountUuid = the IAM sub (derived to a stable UUID when the sub is not one).
 	account := accountID(sub)
-	// Tenant = the IAM org (the access token's `owner` claim). It scopes every
-	// workspace + data file — full multitenancy. The account token carries it as
-	// extra.org so getLoginInfoByToken/selectWorkspace and the transactor all route
-	// to the right tenant.
-	org := orgFromToken(access)
-	if org == "" {
-		org = g.cfg.iamOrg
+	// Tenant = the IAM org — the access token's `owner` claim, accepted ONLY off a
+	// VERIFIED token (RS256 against the IAM JWKS, same trust anchor as the identity
+	// boundary). It scopes every workspace + data file — full multitenancy — so a
+	// verification failure fails CLOSED: no fallback org, no login.
+	id, err := g.verify(access)
+	if err != nil || id.Owner == "" {
+		g.log.Error("account: iam token verify", "err", err)
+		return g.bounce(c, "", navigate, "org_failed")
 	}
+	org := id.Owner
 	ctx := c.Context()
 	displayName := firstNonEmpty(name, localPart(email))
 	if _, err := g.accounts.EnsureWorkspace(ctx, org, account, displayName); err != nil {
@@ -247,12 +290,30 @@ func (g *api) authCallback(c *zip.Ctx) error {
 
 	tok, err := token.Generate(account, "", map[string]any{"org": org}, expUnix(sessionTokenTTL), g.cfg.serverSecret)
 	if err != nil {
-		return g.bounce(c, "", c.Query("state"), "token_failed")
+		return g.bounce(c, "", navigate, "token_failed")
 	}
 	// Retain the IAM access_token (RS256) in an HttpOnly cookie so the same-origin
 	// agents proxy can forward it to the cloud gateway. Page JS never reads it.
 	g.setIAMTokenCookie(c, access)
-	return g.bounce(c, tok, c.Query("state"), "")
+	return g.bounce(c, tok, navigate, "")
+}
+
+// stateFromCookie splits the flow cookie into its nonce and the escaped
+// navigateUrl it carries. Empty nonce ⇒ no live flow.
+func (g *api) stateFromCookie(c *zip.Ctx) (nonce, navigate string) {
+	raw := c.Fiber().Req().Cookies(stateCookie)
+	nonce, esc, _ := strings.Cut(raw, "|")
+	navigate, _ = url.QueryUnescape(esc)
+	return nonce, navigate
+}
+
+// randState mints the OAuth state nonce: 128 bits of crypto/rand, hex.
+func randState() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 // ── REST: cookie ──────────────────────────────────────────────────────────────
@@ -353,6 +414,11 @@ func (g *api) selectWorkspace(c *zip.Ctx, params map[string]any) error {
 	role, ok := g.accounts.Membership(c.Context(), ws.ID, account)
 	if !ok {
 		return g.fail(c, statusUnauthorized("not a member of "+wsURL))
+	}
+	// The billing gate: the org's plan must license the team product. 402 carries
+	// the upgrade destination; infra errors NEVER block login (see entitle).
+	if st := g.entitle(c.Context(), org, role, ws.ID, account); st != nil {
+		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
 	}
 	// Carry the tenant into the workspace token so the transactor routes to
 	// orgs/<org>/ws/<workspace>.db. Short-lived (workspaceTokenTTL) — it rides in
@@ -609,19 +675,6 @@ func (g *api) userinfo(access string) (sub, email, name string, err error) {
 		return "", "", "", fmt.Errorf("userinfo: missing sub")
 	}
 	return u.Sub, u.Email, u.Name, nil
-}
-
-// orgFromToken reads the IAM access-token's `owner` claim (the Casdoor org = the
-// tenant) WITHOUT verifying — the token came from a trusted code exchange, so we
-// only decode the JSON payload to learn which org the user belongs to.
-func orgFromToken(jwtTok string) string {
-	var claims struct {
-		Owner string `json:"owner"`
-	}
-	if decodeJWTClaims(jwtTok, &claims) != nil {
-		return ""
-	}
-	return claims.Owner
 }
 
 // secondsUntilExp reads a JWT's `exp` and returns the remaining lifetime in
