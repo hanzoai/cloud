@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // VerifiedIdentity is what a token PROVED, after signature, issuer, audience and
