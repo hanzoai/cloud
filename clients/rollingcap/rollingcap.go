@@ -46,6 +46,13 @@ import (
 // capWindowKey is the trailing-window size (hours); 0 disables the cap globally.
 const capWindowKey = "ai_rolling_window_hours"
 
+// capDefaultKey is the FALLBACK cap (cents) applied to any caller whose plan tier has
+// no specific cap set — including pay-as-you-go, empty/unknown tiers, and unseeded
+// names. It closes the burst-spend hole for non-subscription users (a pay-as-you-go
+// caller would otherwise be uncapped). Default 0 = opt-in: no behavior change until an
+// admin sets it in the cockpit, at which point EVERY caller gets a rolling ceiling.
+const capDefaultKey = "ai_rolling_cap_cents_default"
+
 // capSeed maps a plan tier to its rolling-cap default in US cents, mirroring
 // @hanzo/plans subscription.json (developer $0.75 / pro $2.50 / plus $12 / max $25).
 // Both the commerce tier taxonomy (free/starter/pro/enterprise) and the plan ids
@@ -64,6 +71,11 @@ func init() {
 		Key: capWindowKey, Category: "Gateway", Type: flags.TypeInt, Default: "3",
 		Label: "AI rolling-cap window (hours)",
 		Desc:  "Trailing window the per-plan AI-spend cap sums over (Anthropic-style; resets continuously). 0 disables the cap globally.",
+	})
+	flags.Register(flags.Def{
+		Key: capDefaultKey, Category: "Gateway", Type: flags.TypeInt, Default: "0",
+		Label: "AI rolling cap ¢ — default (all other tiers)",
+		Desc:  "Fallback max AI spend (US cents) within the window for any caller whose tier has no specific cap — pay-as-you-go, empty, or unknown. 0 = uncapped (opt-in).",
 	})
 	for tier, cents := range capSeed {
 		flags.Register(flags.Def{
@@ -95,8 +107,13 @@ func Mount(_ *zip.App, _ cloud.Deps) error {
 			return false, err // fail open — a commerce blip must not 429 a paying caller
 		}
 		capCents := flags.Int(capKey(name))
-		if name == "" || capCents <= 0 {
-			return false, nil // unknown or uncapped tier
+		if capCents <= 0 {
+			// No tier-specific cap (pay-as-you-go / empty / unseeded name) → the
+			// default fallback closes the hole for non-subscription callers.
+			capCents = flags.Int(capDefaultKey)
+		}
+		if capCents <= 0 {
+			return false, nil // neither a tier cap nor a default → uncapped
 		}
 		since := time.Now().Add(-time.Duration(window) * time.Hour).Unix()
 		spent, err := fin.SumUsageSince(ctx, namespace, false, since)
