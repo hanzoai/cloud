@@ -125,10 +125,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
+	// The collection root (/v1/validators) stays FLAT: Group("/v1/validators").
+	// Get("")/Post("") would register "/v1/validators/" (trailing slash), which
+	// the portal's bare /v1/validators calls would miss. Same gotcha the
+	// clients/wallets, guide, link, … subsystems document.
+	app.Get("/v1/validators", cloud.Handle(s, listValidators))
+	app.Post("/v1/validators", cloud.Handle(s, provisionValidator))
+
 	g := app.Group("/v1/validators")
 	g.Get("/challenge", cloud.Handle(s, issueChallenge))
-	g.Get("", cloud.Handle(s, listValidators))
-	g.Post("", cloud.Handle(s, provisionValidator))
 	g.Get("/:tokenId", cloud.Handle(s, getValidator))
 }
 
