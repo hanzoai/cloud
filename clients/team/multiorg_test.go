@@ -12,7 +12,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients/team/token"
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // newTestApp registers a standalone api's account routes on a fresh app with no
