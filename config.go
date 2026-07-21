@@ -265,17 +265,24 @@ type Config struct {
 	CommerceServiceToken string
 	BillingFailOpen      bool
 
-	// AI inference gateway — the /v1/agents run path. Agent runs execute a real
-	// chat completion through an OpenAI-compatible endpoint (the Hanzo LLM
-	// gateway). This is the ONE real inference wiring: with AIAPIKey set,
-	// pickAIClient returns the HTTP gateway client; without it deps.AI is the
-	// fail-closed stub and a run never fabricates output.
+	// AI inference gateway. Two DISTINCT endpoints, two DISTINCT credentials by
+	// concern (see build.go pickCompletionsClient / pickEmbedClient):
+	//   - CHAT COMPLETIONS (deps.AI, a WRITE endpoint) — agents/guide/crm/content/
+	//     sitegen/code-ask. Authenticated by the IAM M2M identity below, NEVER by a
+	//     read-only publishable (pk-) key.
+	//   - EMBEDDINGS (deps.Embed, a READ-ONLY endpoint) — code-index + KB. This is
+	//     the ONLY consumer of AIAPIKey (the pk- key); read-only is exactly what a
+	//     publishable key may do.
 	//
 	// AIBaseURL is the gateway /v1 root (CLOUD_AI_BASE_URL, default
-	// https://api.hanzo.ai/v1); the client appends /chat/completions.
+	// https://api.hanzo.ai/v1); the client appends /chat/completions or /embeddings.
 	//
-	// AIAPIKey is a KMS-injected virtual key (CLOUD_AI_API_KEY). It is a SECRET —
-	// never logged, never printed, never read from disk here.
+	// AIAPIKey is the KMS-injected static gateway key (CLOUD_AI_API_KEY ←
+	// cloud-ai-embed-key). It is a SECRET — never logged, printed, or read from disk
+	// here. On the Hanzo deployment it is a read-only PUBLISHABLE (pk-) key: it feeds
+	// deps.Embed (read-only, valid) and is REFUSED for deps.AI completions, which the
+	// gateway would 403 ("Publishable keys can only access read-only endpoints"). A
+	// completions-capable secret key (sk-/hk-) set here would instead drive both.
 	//
 	// AIDefaultModel is the served model an agent with no explicit model falls
 	// back to (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). Model routing
@@ -285,14 +292,14 @@ type Config struct {
 	AIDefaultModel string
 
 	// AIAuthClientID / AIAuthClientSecret are the binary's OWN IAM service
-	// identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET). When no static AIAPIKey is
-	// set, the AI client authenticates to the gateway with a client-credentials
-	// (M2M) token minted from this identity and auto-refreshed — the durable
-	// no-static-key path. On the Hanzo deployment the identity resolves to
-	// admin/hanzo-cloud (gateway-balance-exempt), so cloud's per-org
-	// ResourceMeter remains the single debit. The token endpoint is derived from
-	// IAMIssuer ({issuer}/v1/iam/oauth/token). The secret is KMS-injected and
-	// never logged.
+	// identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET). The completions client (deps.AI)
+	// authenticates to the gateway with a client-credentials (M2M) token minted from
+	// this identity and auto-refreshed — the durable no-static-key path, and the ONLY
+	// completions credential when AIAPIKey is the read-only pk- embed key. On the
+	// Hanzo deployment the identity resolves to admin/hanzo-cloud (gateway-balance-
+	// exempt), so cloud's per-org ResourceMeter remains the single debit. The token
+	// endpoint is derived from IAMIssuer ({issuer}/v1/iam/oauth/token). The secret is
+	// KMS-injected and never logged.
 	AIAuthClientID     string
 	AIAuthClientSecret string
 
