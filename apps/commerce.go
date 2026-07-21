@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	accountclient "github.com/hanzoai/cloud/clients/account"
 	"github.com/hanzoai/cloud/clients/commerceclient"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	financeclient "github.com/hanzoai/cloud/clients/finance"
@@ -172,6 +173,43 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// wildcard and serves plans in-process — the same co-resident move billing.go makes
 	// for usage/balance. RequestContext supplies the namespaced context promo.Active reads.
 	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
+
+	// The rest of the console's billing READS, served co-resident for the SAME reason
+	// plans is: commerce's api.Route() billing bundle is never compiled here, so without
+	// these registrations every one of them falls through to the account bridge's
+	// /v1/billing/* wildcard, which forwards to COMMERCE_URL — the public api.hanzo.ai
+	// edge, which is THIS binary — and self-dispatches into a 502 loop. In prod there is
+	// no separate commerce backend to point COMMERCE_URL at (the in-cluster `commerce`
+	// Service selects the cloud pods), so co-residence is the only way to break the loop.
+	//
+	// Chain: RequestContext (gated context) → IAMTokenRequired (resolves the org from the
+	// gateway-validated X-Org-Id into Locals("organization"), the namespace commerce's
+	// GetOrganization reads) → PinBillingSubject (pins the caller's OWN billing subject
+	// into the query — the SAME isolation the bridge applies, so a read can never widen
+	// past the caller; fail-closed for an unvalidated caller) → the commerce handler. The
+	// specific paths shadow the bridge wildcard (order 100 < 122). payment-config is
+	// org-scoped, not subject-scoped, but PinBillingSubject is still the auth gate that
+	// keeps an unvalidated caller from reaching GetOrganization; its pinned (unused)
+	// subject params are ignored by that handler.
+	billingRead := []struct {
+		path string
+		h    zip.Handler
+	}{
+		{"/v1/billing/invoices", commercebilling.ListInvoices},
+		{"/v1/billing/invoices/:id/pdf", commercebilling.DownloadInvoicePDF},
+		{"/v1/billing/subscriptions", commercebilling.ListBillingSubscriptions},
+		{"/v1/billing/spend-alerts", commercebilling.ListSpendAlerts},
+		{"/v1/billing/payouts", commercebilling.ListPayouts},
+		{"/v1/billing/payment-config", commercebilling.GetPaymentConfig},
+	}
+	for _, r := range billingRead {
+		app.Get(r.path,
+			commercemid.RequestContext(),
+			iammiddleware.IAMTokenRequired(),
+			accountclient.PinBillingSubject(),
+			r.h,
+		)
+	}
 
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
