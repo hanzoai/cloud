@@ -239,6 +239,35 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		commercebilling.AuthorizeSpendCap,
 	)
 
+	// Self-service spend-cap CRUD WRITES — the customer half of the cap: a customer
+	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
+	// write siblings of the co-resident GET /v1/billing/spend-alerts list; without their
+	// own registration they too fell through the account bridge's /v1/billing/* wildcard
+	// (billingForwardable includes POST spend-alerts) into the SAME 502 self-dispatch loop
+	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
+	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
+	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
+	// the global RequestContext — an IAM JWT OR the COMMERCE_SERVICE_TOKEN, org resolved
+	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
+	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
+	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
+	// org-level, not billing-subject-level. Shadow the bridge wildcard (order 100 < 122).
+	app.Post("/v1/billing/spend-alerts",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.CreateSpendAlert,
+	)
+	app.Patch("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.UpdateSpendAlert,
+	)
+	app.Delete("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.DeleteSpendAlert,
+	)
+
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
