@@ -59,6 +59,10 @@ func listApplications(s *cloud.Service[state], c *zip.Ctx) error {
 			cr := &crs[i]
 			apps = append(apps, observeApplication(cr, ns, running[cr.GetName()]))
 		}
+		// Also project the static-plane sites (staticFiles Middleware + IngressRoute,
+		// no App CR) as role:"site" rows, so the board is the WHOLE delivery surface —
+		// every service AND every site (incl. cd.hanzo.ai itself). Best-effort.
+		apps = append(apps, listSiteApplications(s, c.Context(), ns)...)
 	}
 	sort.Slice(apps, func(i, j int) bool {
 		if apps[i].Namespace != apps[j].Namespace {

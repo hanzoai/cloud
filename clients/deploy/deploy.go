@@ -64,6 +64,17 @@ import (
 // CHILD it reconciles), which is why a resource ref always carries its group.
 var appsCRGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1", Resource: "apps"}
 
+// Static-plane sites are NOT App CRs — a site is a `staticFiles` Middleware (its
+// S3 origin) + an IngressRoute (its host), served straight from S3 with zero pods.
+// These two GVRs let the fleet list ALSO project each site as an Application row
+// (role:"site"), so cd.hanzo.ai shows every service AND every site — the whole
+// delivery surface, not just the pod-backed half. Group hanzo.ai/v1alpha1 is the
+// operator's ingress CRD group (distinct from the upstream traefik.io mirror).
+var (
+	middlewaresGVR   = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1alpha1", Resource: "middlewares"}
+	ingressRoutesGVR = schema.GroupVersionResource{Group: "hanzo.ai", Version: "v1alpha1", Resource: "ingressroutes"}
+)
+
 // childGVRs are the operator-owned workload objects the tree walks at depth 1
 // (owned by the Service CR) and their descendants (ReplicaSet → Pod). Secrets are
 // DELIBERATELY absent: the tree never surfaces materialized env. Order is the

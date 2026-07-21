@@ -50,6 +50,12 @@ import (
 const (
 	fleetNS       = "fleet"
 	defaultJobsNS = "gpu-jobs"
+	// gpuQueuePrefix names a per-GPU lane WITHIN the gpu-jobs namespace: a job whose
+	// taskQueue is "gpu:<identity>" is claimed ONLY by that node; the shared
+	// "gpu-jobs" value stays the any-GPU broadcast. ONE convention (shared with the
+	// studio dispatcher + clients/visor), so targeting is the taskQueue VALUE — not a
+	// second store, a new namespace, or a new endpoint.
+	gpuQueuePrefix = "gpu:"
 	// heartbeatEvery keeps the presence record fresh; well under cloud's 90s
 	// byoLiveWindow so one missed beat does not flap the machine offline.
 	heartbeatEvery = 30 * time.Second
@@ -61,6 +67,11 @@ const (
 	renderWindow = 4 * time.Hour
 	// localComfyUI is the studio render backend the studio.render handler drives.
 	localComfyUI = "http://127.0.0.1:8188"
+	// localWorkerExecute is the GATED submit seam on the local studio (worker-mode):
+	// the render graph is POSTed here with X-Worker-Token so ONLY the fleet worker —
+	// not anything else that can reach loopback — can start a render. It replaces the
+	// open /prompt POST (the hidden-run hole the studio's --worker-mode closes).
+	localWorkerExecute = localComfyUI + "/v1/worker/execute"
 	// defaultStudioUploadURL is where finished render outputs are POSTed so they
 	// land in the org's gallery (orgs/{org}/output → S3 mirror). The render runs on
 	// the LOCAL studio; the deliverable is uploaded to the org's cloud studio,
@@ -110,6 +121,15 @@ type worker struct {
 	// fleet record and enforced at claim.
 	policy *SharePolicy
 
+	// studio.render preflight — a node must be able to SERVE renders before it
+	// advertises studioCap or claims render lanes, else it claims jobs the gated
+	// /v1/worker/execute will only refuse (poison loop). studioReady = a worker token
+	// is present AND a studio is reachable (or we launch one via --studio-dir).
+	// Re-evaluated on each heartbeat so a studio dying/recovering flips claiming.
+	launchesStudio bool // --studio-dir set: we own the studio lifecycle
+	studioReady    bool // current preflight verdict
+	studioWarned   bool // loud "won't render" error emitted once per not-ready spell
+
 	// engine.serve — advertise a hanzo-engine model server running on this node.
 	serveEngine  bool
 	engineURL    string               // local URL probed for /v1/models
@@ -144,7 +164,7 @@ type registration struct {
 	// fleet already uses for code-linked run-targets: Arch is `uname -m`
 	// (aarch64 | x86_64 | arm64), Memory is total system RAM in BYTES. Matching the
 	// existing convention matters — evo-2 and spark appear on the board as BOTH a
-	// run-target and a gpu-connect worker, so both rows must show the SAME arch.
+	// run-target and a linked worker, so both rows must show the SAME arch.
 	Arch         string               `json:"arch,omitempty"`
 	CPUs         int                  `json:"cpus,omitempty"`
 	CPUModel     string               `json:"cpuModel,omitempty"`
@@ -320,7 +340,7 @@ func detectAppleGPU() []gpuInfo {
 // detectArch reports this machine's CPU architecture in the SAME convention the
 // fleet already uses for code-linked nodes — `uname -m` (aarch64 | x86_64 on Linux,
 // arm64 | x86_64 on Darwin) — so a machine that shows up as both a run-target and a
-// gpu-connect worker carries ONE arch string on the board. Falls back to the
+// linked worker carries ONE arch string on the board. Falls back to the
 // compiled runtime.GOARCH only if uname is unavailable; "" is never forced.
 func detectArch() string {
 	if out, err := exec.Command("uname", "-m").Output(); err == nil {
@@ -410,6 +430,97 @@ func parseMemTotalKB(meminfo []byte) int64 {
 	return 0
 }
 
+// sampleProbeTimeout hard-caps the nvidia-smi probe; sampleReportTimeout bounds the
+// whole detached report (probe + POST). A hung nvidia-smi (GPU/driver pressure) thus
+// self-cancels instead of wedging the worker's select loop.
+const (
+	sampleProbeTimeout  = 5 * time.Second
+	sampleReportTimeout = 20 * time.Second
+)
+
+// nvidiaSmi runs the utilization query bounded by ctx (CommandContext kills it when
+// ctx fires). A package var so a test can substitute a hung/slow probe and prove it
+// can never block the worker loop.
+var nvidiaSmi = func(ctx context.Context) ([]byte, error) {
+	return exec.CommandContext(ctx, "nvidia-smi",
+		"--query-gpu=utilization.gpu,memory.used,memory.free",
+		"--format=csv,noheader,nounits").Output()
+}
+
+// sampleReport is this machine's live GPU utilization for the fleet series.
+type sampleReport struct {
+	GPUUtil  float64 // mean across cards, 0..1
+	GPUs     int
+	GPUModel string
+	MemUsed  int64 // bytes, summed across cards
+	MemFree  int64 // bytes, summed across cards
+}
+
+// sampleGPUs reads live utilization from nvidia-smi (utilization.gpu %, memory
+// used/free MiB), averaging util to 0..1 and summing memory across cards. A box
+// without nvidia-smi (Apple / CPU-only) returns a zero-util report that still
+// carries its GPU count + model — a valid liveness point, never faked numbers.
+func (w *worker) sampleGPUs(ctx context.Context) sampleReport {
+	rep := sampleReport{GPUs: len(w.gpus)}
+	if len(w.gpus) > 0 {
+		rep.GPUModel = w.gpus[0].Name
+	}
+	pctx, cancel := context.WithTimeout(ctx, sampleProbeTimeout)
+	defer cancel()
+	out, err := nvidiaSmi(pctx)
+	if err != nil {
+		return rep // hung/absent nvidia-smi self-cancels → inventory-only report, never a stall
+	}
+	var utilSum float64
+	var n int
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		f := strings.Split(sc.Text(), ",")
+		if len(f) < 3 {
+			continue
+		}
+		if u, e := strconv.ParseFloat(strings.TrimSpace(f[0]), 64); e == nil {
+			utilSum += u
+			n++
+		}
+		if used, e := strconv.ParseInt(strings.TrimSpace(f[1]), 10, 64); e == nil {
+			rep.MemUsed += used << 20 // MiB → bytes
+		}
+		if free, e := strconv.ParseInt(strings.TrimSpace(f[2]), 10, 64); e == nil {
+			rep.MemFree += free << 20
+		}
+	}
+	if n > 0 {
+		rep.GPUUtil = utilSum / float64(n) / 100.0 // percent → 0..1
+	}
+	return rep
+}
+
+// reportSample posts this machine's live utilization to the org's fleet series
+// (POST /v1/fleet/samples) so the console board shows THIS GPU's load beside its
+// inventory. DETACHED + bounded: the probe and POST run on their OWN goroutine under
+// a hard timeout, so a hung nvidia-smi (GPU/driver pressure) or a slow POST can NEVER
+// block the worker's select loop — heartbeats and claims keep flowing. At most one
+// report is in flight per ticker site (interval ≫ budget), and it self-cancels on
+// worker shutdown (parent ctx). A dropped sample is the server's to log, never the
+// worker's to stall on.
+func (w *worker) reportSample(parent context.Context) {
+	go func() {
+		ctx, cancel := context.WithTimeout(parent, sampleReportTimeout)
+		defer cancel()
+		r := w.sampleGPUs(ctx)
+		_, _ = w.call(ctx, http.MethodPost, "/v1/fleet/samples", map[string]any{
+			"unit":     w.identity,
+			"host":     w.hostname,
+			"gpuUtil":  r.GPUUtil,
+			"gpus":     r.GPUs,
+			"gpuModel": r.GPUModel,
+			"memUsed":  r.MemUsed,
+			"memFree":  r.MemFree,
+		}, nil)
+	}()
+}
+
 // ---------------------------------------------------------------------------
 // connect.
 // ---------------------------------------------------------------------------
@@ -447,12 +558,20 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 		w.refreshEngine(ctx)
 	}
 
+	// studio.render preflight: decide whether this node can SERVE renders BEFORE it
+	// advertises studioCap or claims a render lane. A --studio-dir node launches its
+	// own studio (assumed reachable once up); a BYO node probes an already-running one.
+	// The worker token is required either way — the gated execute seam refuses without it.
+	w.launchesStudio = opts.studioDir != ""
+	w.refreshStudioReady(ctx)
+
 	if err := w.register(ctx); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
 	fmt.Fprintf(out, "linked %q into %s as a node (org %s)\n", w.hostname, w.baseURL, orgOf(env))
 	fmt.Fprintf(out, "  cpu: %s\n", describeCPU(w))
 	fmt.Fprintf(out, "  gpu: %s\n", describeGPUs(w.gpus))
+	w.warnIfCannotRender(cmd.ErrOrStderr())
 
 	// studio.render backend: the claim loop drives the LOCAL studio server, so
 	// when a checkout is named we own its lifecycle too — no separate watchdog.
@@ -497,8 +616,9 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	}
 
 	// Heartbeat once immediately so the machine reports online without waiting a
-	// full interval.
+	// full interval, and report an initial utilization sample.
 	_ = w.heartbeat(ctx)
+	w.reportSample(ctx)
 
 	for {
 		select {
@@ -516,9 +636,23 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 					fmt.Fprintf(out, "engine %s — %s\n", w.engine.URL, describeEngine(w.engine))
 				}
 			}
+			// Re-evaluate render readiness; if it flipped, re-advertise (studioCap on/off)
+			// so the fleet never shows a node accepting renders it can't serve.
+			if w.refreshStudioReady(ctx) {
+				if err := w.register(ctx); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "re-advertise capabilities: %v\n", err)
+				}
+				if w.studioReady {
+					w.studioWarned = false
+					fmt.Fprintf(out, "studio ready — now accepting render jobs\n")
+				} else {
+					w.warnIfCannotRender(cmd.ErrOrStderr())
+				}
+			}
 			if err := w.heartbeat(ctx); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "heartbeat: %v\n", err)
 			}
+			w.reportSample(ctx)
 		case <-poll.C:
 			if err := w.claimAndRun(ctx, out); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "claim: %v\n", err)
@@ -574,11 +708,72 @@ func (w *worker) buildRegistration() registration {
 // present (it claims gpu-jobs); engine.serve is added when --serve-engine advertises
 // a local hanzo-engine model server.
 func (w *worker) capabilities() []string {
-	caps := []string{studioCap}
+	caps := []string{}
+	if w.studioReady {
+		caps = append(caps, studioCap) // only advertised when this node can actually render
+	}
 	if w.serveEngine {
 		caps = append(caps, engineCap)
 	}
 	return caps
+}
+
+// studioReachable probes the local studio's /queue (bounded), authenticated. A node
+// that can answer it is up enough to accept a render.
+func (w *worker) studioReachable(ctx context.Context) bool {
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, localComfyUI+"/queue", nil)
+	if err != nil {
+		return false
+	}
+	authLocal(req)
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))
+	return resp.StatusCode/100 == 2
+}
+
+// refreshStudioReady recomputes whether this node can serve renders and returns
+// whether the verdict changed. Ready ⇔ a worker token is present AND (we launch the
+// studio ourselves via --studio-dir, or a studio is reachable now). The token is the
+// decisive gate: without it the gated execute seam 403s every job. A missing studio
+// on a node that does NOT launch one also blocks — it would only refuse renders.
+func (w *worker) refreshStudioReady(ctx context.Context) bool {
+	ready := workerToken() != "" && (w.launchesStudio || w.studioReachable(ctx))
+	changed := ready != w.studioReady
+	w.studioReady = ready
+	return changed
+}
+
+// warnIfCannotRender emits the loud "this node won't render" message once per
+// not-ready spell (latched), and clears the latch when the node recovers so a later
+// regression warns again.
+func (w *worker) warnIfCannotRender(errw io.Writer) {
+	if w.studioReady {
+		w.studioWarned = false
+		return
+	}
+	if w.studioWarned {
+		return
+	}
+	w.studioWarned = true
+	fmt.Fprintf(errw, "WARNING: this node will NOT accept renders — %s. It heartbeats as present but claims no render jobs.\n", w.studioBlockReason())
+}
+
+// studioBlockReason explains why a node won't serve renders, for the loud operator
+// warning. Empty when the node IS ready.
+func (w *worker) studioBlockReason() string {
+	if w.studioReady {
+		return ""
+	}
+	if workerToken() == "" {
+		return "STUDIO_WORKER_TOKEN not set (the gated studio seam would refuse every render) — set it from KMS"
+	}
+	return fmt.Sprintf("no studio reachable on %s (start one, or pass --studio-dir so the worker launches it)", localComfyUI)
 }
 
 func (w *worker) heartbeat(ctx context.Context) error {
@@ -589,20 +784,51 @@ func (w *worker) heartbeat(ctx context.Context) error {
 	return err
 }
 
-// claimAndRun claims the next job (if any), runs its handler, and reports the
-// terminal result. A 204 (empty queue) is a no-op.
-func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
+// gpuQueue is this worker's OWN task-queue lane — the value a job names to target
+// THIS machine ("gpu:spark"). Targeted jobs land here; the shared w.jobsNS
+// ("gpu-jobs") lane stays the any-GPU broadcast. ONE namespace (w.jobsNS), two
+// queue VALUES — targeting is the string, not a second store or endpoint.
+func (w *worker) gpuQueue() string { return gpuQueuePrefix + w.identity }
+
+// claimFrom claims the next job on ONE task-queue value within w.jobsNS. Returns
+// (act, true, nil) when a job was claimed, (_, false, nil) on an empty queue (204).
+func (w *worker) claimFrom(ctx context.Context, taskQueue string) (claimedActivity, bool, error) {
 	var act claimedActivity
 	code, err := w.call(ctx, http.MethodPost, "/v1/tasks/namespaces/"+w.jobsNS+"/activities/claim", map[string]any{
-		"taskQueue":    w.jobsNS,
+		"taskQueue":    taskQueue,
 		"identity":     w.identity,
 		"leaseSeconds": claimLeaseSecs,
 	}, &act)
 	if err != nil {
+		return claimedActivity{}, false, err
+	}
+	return act, code != http.StatusNoContent, nil
+}
+
+// claimAndRun claims the next job — this machine's OWN lane first (gpu:<identity>),
+// then the shared any-GPU lane — runs its handler, and reports the terminal result.
+// Both lanes empty is a no-op. Targeted-lane-first guarantees a job pinned to THIS
+// GPU is never starved by shared work; a job is only ever claimed under an explicit
+// queue name, so one worker never steals another GPU's targeted job (an empty
+// taskQueue on claim would match any lane and do exactly that).
+func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
+	// Poison-loop guard: a node that can't serve renders must not claim render lanes —
+	// it would only fail every claimed job on the gated execute seam. It still
+	// heartbeats presence (shows in the fleet), just idle, until it becomes ready.
+	if !w.studioReady {
+		return nil
+	}
+	act, claimed, err := w.claimFrom(ctx, w.gpuQueue())
+	if err != nil {
 		return err
 	}
-	if code == http.StatusNoContent {
-		return nil // nothing to do
+	if !claimed {
+		if act, claimed, err = w.claimFrom(ctx, w.jobsNS); err != nil {
+			return err
+		}
+		if !claimed {
+			return nil // both lanes empty — nothing to do
+		}
 	}
 	wf, run := act.Execution.WorkflowId, act.Execution.RunId
 	fmt.Fprintf(out, "claimed job %s (type %s)\n", wf, act.Type.Name)
@@ -640,6 +866,7 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 				_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "heartbeat"),
 					map[string]any{"identity": w.identity}, nil)
 				_ = w.heartbeat(ctx) // fleet presence — stays online through the render
+				w.reportSample(ctx)  // live util during the render (the board's hottest point)
 			}
 		}
 	}()
@@ -932,6 +1159,21 @@ func echoHandler(_ context.Context, input json.RawMessage) (any, error) {
 	return map[string]any{"echo": v}, nil
 }
 
+// workerToken is the KMS-sourced STUDIO_WORKER_TOKEN this box holds — the credential
+// the local studio's --worker-mode gate checks. Empty on an unconfigured box (the
+// render preflight refuses such a node before it ever claims a render lane).
+func workerToken() string { return os.Getenv("STUDIO_WORKER_TOKEN") }
+
+// authLocal stamps the worker token on a loopback studio request. The studio's
+// --worker-mode gate guards the submit seam today, but sending it on ALL loopback
+// calls (execute/history/view/upload/queue) makes the CLI robust if that scope widens
+// — one way to talk to the local studio, always authenticated.
+func authLocal(req *http.Request) {
+	if t := workerToken(); t != "" {
+		req.Header.Set("X-Worker-Token", t)
+	}
+}
+
 // studioRenderHandler POSTs the job payload to the local ComfyUI /prompt endpoint
 // and polls /history/{id} until the prompt completes. The GPU work happens entirely
 // on the LOCAL studio server (127.0.0.1:8188); this handler drives it, then uploads
@@ -966,25 +1208,26 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		return nil, fmt.Errorf("studio.render: staging inputs: %w", err)
 	}
 	body, _ := json.Marshal(map[string]any{"prompt": req.Prompt})
-	post, err := http.NewRequestWithContext(ctx, http.MethodPost, localComfyUI+"/prompt", bytes.NewReader(body))
+	post, err := http.NewRequestWithContext(ctx, http.MethodPost, localWorkerExecute, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	post.Header.Set("Content-Type", "application/json")
+	authLocal(post) // gated worker-mode submit seam
 	resp, err := cl.Do(post)
 	if err != nil {
-		return nil, fmt.Errorf("studio.render: POST /prompt: %w (is the local studio server on %s?)", err, localComfyUI)
+		return nil, fmt.Errorf("studio.render: POST /v1/worker/execute: %w (is the local studio server on %s?)", err, localComfyUI)
 	}
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("studio.render: /prompt HTTP %d: %s", resp.StatusCode, serverMessage(raw))
+		return nil, fmt.Errorf("studio.render: /v1/worker/execute HTTP %d: %s", resp.StatusCode, serverMessage(raw))
 	}
 	var pr struct {
 		PromptID string `json:"prompt_id"`
 	}
 	if err := json.Unmarshal(raw, &pr); err != nil || pr.PromptID == "" {
-		return nil, fmt.Errorf("studio.render: no prompt_id in /prompt response")
+		return nil, fmt.Errorf("studio.render: no prompt_id in /v1/worker/execute response")
 	}
 	// Poll history until the prompt shows up (completed).
 	deadline := time.Now().Add(renderWindow)
@@ -995,6 +1238,7 @@ func (w *worker) studioRenderHandler(ctx context.Context, input json.RawMessage)
 		case <-time.After(2 * time.Second):
 		}
 		hreq, _ := http.NewRequestWithContext(ctx, http.MethodGet, localComfyUI+"/history/"+pr.PromptID, nil)
+		authLocal(hreq)
 		hresp, err := cl.Do(hreq)
 		if err != nil {
 			continue
@@ -1068,6 +1312,7 @@ func (w *worker) fetchLocalOutput(ctx context.Context, name, subfolder string) (
 	if err != nil {
 		return nil, err
 	}
+	authLocal(req)
 	resp, err := w.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -1285,6 +1530,7 @@ func (w *worker) materializeInputs(ctx context.Context, cl *http.Client, inputs 
 			return err
 		}
 		req.Header.Set("Content-Type", mw.FormDataContentType())
+		authLocal(req)
 		resp, err := cl.Do(req)
 		if err != nil {
 			return fmt.Errorf("stage input %q: %w", in.Name, err)
@@ -1307,6 +1553,7 @@ func waitEngine(ctx context.Context, cl *http.Client) error {
 		if err != nil {
 			return err
 		}
+		authLocal(req)
 		resp, err := cl.Do(req)
 		if err == nil {
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<10))

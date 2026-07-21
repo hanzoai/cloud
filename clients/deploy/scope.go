@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"net/url"
 
-	iamobj "github.com/hanzoai/iam/object"
+	iamobj "github.com/hanzoai/iam-v1/object"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
