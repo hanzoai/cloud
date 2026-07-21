@@ -61,7 +61,7 @@ import (
 
 	"github.com/hanzoai/beego/v2/server/web"
 	"github.com/hanzoai/beego/v2/server/web/session"
-	"github.com/hanzoai/iam/iamserver"
+	"github.com/hanzoai/iam-v1/iamserver"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
