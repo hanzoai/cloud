@@ -68,6 +68,7 @@ var frozen = []struct {
 	{"crm", false, false},            // was order 131
 	{"marketing", false, true},       // new: marketing domain fold (after crm)
 	{"ads", false, true},             // new: ads domain fold (after crm)
+	{"validators", false, true},      // new: NFT-gated node provisioning (after ads); golden refrozen
 	{"social", false, true},          // new: /v1/social fold (after crm)
 	{"analytics", true, false},       // was order 132
 	{"git", false, false},            // was order 132
