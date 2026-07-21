@@ -32,7 +32,7 @@ import (
 	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/iam-v1"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // authCookie is the cookie the SPA's PUT/DELETE /cookie manage; RPC itself rides
@@ -413,7 +413,7 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 // tenant — never an empty set that would strand a user with zero workspaces. Each
 // entry is a plain map so token.Generate's JSON marshal is stable and the decode
 // side (orgsFromExtra) reads it back with no SDK dependency in the token layer.
-func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
+func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
 	out := make([]map[string]any, 0, len(orgs)+1)
 	seen := map[string]bool{}
 	for _, o := range orgs {
@@ -432,8 +432,8 @@ func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
 // orgsFromExtra reads the session token's extra.orgs back into the membership set.
 // A legacy token (no orgs key) falls back to the single extra.org home tenant, so
 // every authenticated path still resolves at least the home org. Deduped, home-safe.
-func orgsFromExtra(extra map[string]any) []iam.OrgRef {
-	out := make([]iam.OrgRef, 0, 4)
+func orgsFromExtra(extra map[string]any) []model.OrgRef {
+	out := make([]model.OrgRef, 0, 4)
 	seen := map[string]bool{}
 	if raw, ok := extra["orgs"].([]any); ok {
 		for _, e := range raw {
@@ -447,12 +447,12 @@ func orgsFromExtra(extra map[string]any) []iam.OrgRef {
 			}
 			seen[org] = true
 			role, _ := m["role"].(string)
-			out = append(out, iam.OrgRef{Org: org, Role: role})
+			out = append(out, model.OrgRef{Org: org, Role: role})
 		}
 	}
 	if len(out) == 0 {
 		if org, _ := extra["org"].(string); org != "" {
-			out = append(out, iam.OrgRef{Org: org, Role: "admin"})
+			out = append(out, model.OrgRef{Org: org, Role: "admin"})
 		}
 	}
 	return out
@@ -733,7 +733,7 @@ var errAmbiguousWorkspace = fmt.Errorf("team: workspace slug ambiguous across or
 // only those the caller is a member of, and require EXACTLY one — 0 ⇒ not found,
 // >1 ⇒ ambiguous. Never a silent default. Returns the workspace and the caller's
 // role in it.
-func (g *api) resolveWorkspace(ctx context.Context, orgs []iam.OrgRef, account, slug string) (workspace, Role, error) {
+func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account, slug string) (workspace, Role, error) {
 	var found workspace
 	var role Role
 	n := 0
@@ -854,7 +854,7 @@ func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
 // read back home-safe by orgsFromExtra — the tenant SET the cross-org surfaces
 // (getUserWorkspaces union, selectWorkspace resolution) enumerate. Never a client
 // header. Empty account fails closed, exactly like account().
-func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []iam.OrgRef, tok string, err error) {
+func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []model.OrgRef, tok string, err error) {
 	t, raw, err := sessionToken(c, g.cfg.serverSecret)
 	if err != nil {
 		return "", nil, "", err
