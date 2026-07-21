@@ -99,6 +99,14 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
 	// pages show them alongside Visor-provisioned compute.
 	app.Get("/v1/fleet/workers", cloud.Handle(s, listFleetWorkers))
+	// The org's gpu-jobs render queue: per-GPU depth + running workflow (GET), and a
+	// manage verb — cancel a queued/running render (POST). Deeper literals register
+	// before bare /v1/fleet so neither shadows the other.
+	app.Get("/v1/fleet/jobs", cloud.Handle(s, listFleetJobs))
+	app.Post("/v1/fleet/jobs/:id/cancel", cloud.Handle(s, cancelFleetJob))
+	// BYO workers self-report GPU utilization here (POST); the GET on the same path
+	// (listFleetSamples, below) reads the org's series back.
+	app.Post("/v1/fleet/samples", cloud.Handle(s, ingestSample))
 	// The unified board: every compute source the org has, each with its latest
 	// utilization, plus the series behind it (board.go). The deeper literals
 	// register before the bare /v1/fleet so neither can shadow the other.

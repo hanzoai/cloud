@@ -29,9 +29,10 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/iam"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // authCookie is the cookie the SPA's PUT/DELETE /cookie manage; RPC itself rides
@@ -356,8 +357,32 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	}
 	org := id.Owner
 	displayName := firstNonEmpty(name, localPart(email))
-	if _, err := g.accounts.EnsureWorkspace(ctx, org, account, displayName); err != nil {
-		g.log.Error("account: ensure workspace", "err", err)
+	// The VERIFIED membership set (home ∪ every org the token proves) is the ONE
+	// source that drives BOTH the workspace union (getUserWorkspaces) AND the seat
+	// projection (Seats). Ensuring a workspace — hence a counted member row — in
+	// EVERY org the user belongs to, not just the home org, is what makes a
+	// non-home org's wallet report the caller as a seat instead of "0 members".
+	// A legacy token (iam < 1.31.34, empty claim) folds to the single home org.
+	orgs := orgsClaim(id.Orgs, org)
+	for _, o := range orgs {
+		oorg, _ := o["org"].(string)
+		if oorg == "" {
+			continue
+		}
+		if _, err := g.accounts.EnsureWorkspace(ctx, oorg, account, displayName); err != nil {
+			g.log.Error("account: ensure workspace", "org", oorg, "err", err)
+		}
+		// A new org gets its default office AND its default crew together: the
+		// built-in @dev/@des/@vi personas, seeded once into the ONE agents registry
+		// (idempotent, no-op without a model). Best-effort — a seed hiccup NEVER
+		// blocks login; the crew simply appears on the next touch. They project into
+		// the workspace roster as bot members (bots.go) and answer @-mentions through
+		// the Chunter responder (chat.go), same as any org agent.
+		if n, err := agents.SeedPersonalities(ctx, oorg); err != nil {
+			g.log.Warn("account: seed personalities", "org", oorg, "err", err)
+		} else if n > 0 {
+			g.log.Info("account: seeded default crew", "org", oorg, "created", n)
+		}
 	}
 	// Fill the human display name so the roster reconcile renders a name, not the
 	// account uuid. Idempotent (only fills empty).
@@ -365,11 +390,11 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 
 	// Carry the FULL membership set into the session token so getUserWorkspaces
 	// can union a user's workspaces across every org they belong to (the Slack
-	// model) with no IAM round-trip per poll. The set is the VERIFIED `orgs` claim;
-	// a legacy token (iam < 1.31.34, empty claim) falls back to the single home org
-	// as sole admin. `org` (home) is retained as the primary tenant every existing
-	// account-store surface (files/collab/billing) already scopes to.
-	extra := map[string]any{"org": org, "orgs": orgsClaim(id.Orgs, org)}
+	// model) with no IAM round-trip per poll — the SAME set just ensured above, so
+	// the token, the workspace union, and the seat count never disagree. `org`
+	// (home) is retained as the primary tenant every existing account-store
+	// surface (files/collab/billing) already scopes to.
+	extra := map[string]any{"org": org, "orgs": orgs}
 	// extra.user is the IAM `<owner>/<name>` id — the key get-memberships takes for a
 	// mid-session membership refresh. Present only when IAM gave a username.
 	if id.Username != "" {
@@ -383,12 +408,16 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 }
 
 // orgsClaim builds the session token's extra.orgs value from the VERIFIED IAM
-// `orgs` claim. It fails CLOSED to the single home org (sole admin) for a legacy
-// token whose claim is empty, so the session ALWAYS carries at least the home
-// tenant — never an empty set that would strand a user with zero workspaces. Each
-// entry is a plain map so token.Generate's JSON marshal is stable and the decode
-// side (orgsFromExtra) reads it back with no SDK dependency in the token layer.
-func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
+// `orgs` claim. The home tenant is ALWAYS present: it is extra.org — the org the
+// wallet, Seats, and every account-store surface scope to — so its workspace has
+// to be ensured (and count a seat) at login. The IAM orgs claim does not reliably
+// list a user's OWN home org (it may carry only explicit team memberships), so
+// home is appended when absent rather than only when the claim is empty; without
+// this a user whose claim names other orgs but not home lands on a home org with
+// no ensured workspace and a wallet that reports 0 seats. Each entry is a plain
+// map so token.Generate's JSON marshal is stable and the decode side
+// (orgsFromExtra) reads it back with no SDK dependency in the token layer.
+func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
 	out := make([]map[string]any, 0, len(orgs)+1)
 	seen := map[string]bool{}
 	for _, o := range orgs {
@@ -398,7 +427,7 @@ func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
 		seen[o.Org] = true
 		out = append(out, map[string]any{"org": o.Org, "role": o.Role})
 	}
-	if len(out) == 0 && home != "" {
+	if home != "" && !seen[home] {
 		out = append(out, map[string]any{"org": home, "role": "admin"})
 	}
 	return out
@@ -407,8 +436,8 @@ func orgsClaim(orgs []iam.OrgRef, home string) []map[string]any {
 // orgsFromExtra reads the session token's extra.orgs back into the membership set.
 // A legacy token (no orgs key) falls back to the single extra.org home tenant, so
 // every authenticated path still resolves at least the home org. Deduped, home-safe.
-func orgsFromExtra(extra map[string]any) []iam.OrgRef {
-	out := make([]iam.OrgRef, 0, 4)
+func orgsFromExtra(extra map[string]any) []model.OrgRef {
+	out := make([]model.OrgRef, 0, 4)
 	seen := map[string]bool{}
 	if raw, ok := extra["orgs"].([]any); ok {
 		for _, e := range raw {
@@ -422,12 +451,12 @@ func orgsFromExtra(extra map[string]any) []iam.OrgRef {
 			}
 			seen[org] = true
 			role, _ := m["role"].(string)
-			out = append(out, iam.OrgRef{Org: org, Role: role})
+			out = append(out, model.OrgRef{Org: org, Role: role})
 		}
 	}
 	if len(out) == 0 {
 		if org, _ := extra["org"].(string); org != "" {
-			out = append(out, iam.OrgRef{Org: org, Role: "admin"})
+			out = append(out, model.OrgRef{Org: org, Role: "admin"})
 		}
 	}
 	return out
@@ -708,7 +737,7 @@ var errAmbiguousWorkspace = fmt.Errorf("team: workspace slug ambiguous across or
 // only those the caller is a member of, and require EXACTLY one — 0 ⇒ not found,
 // >1 ⇒ ambiguous. Never a silent default. Returns the workspace and the caller's
 // role in it.
-func (g *api) resolveWorkspace(ctx context.Context, orgs []iam.OrgRef, account, slug string) (workspace, Role, error) {
+func (g *api) resolveWorkspace(ctx context.Context, orgs []model.OrgRef, account, slug string) (workspace, Role, error) {
 	var found workspace
 	var role Role
 	n := 0
@@ -829,7 +858,7 @@ func (g *api) account(c *zip.Ctx) (account, org, tok string, err error) {
 // read back home-safe by orgsFromExtra — the tenant SET the cross-org surfaces
 // (getUserWorkspaces union, selectWorkspace resolution) enumerate. Never a client
 // header. Empty account fails closed, exactly like account().
-func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []iam.OrgRef, tok string, err error) {
+func (g *api) accountOrgs(c *zip.Ctx) (account string, orgs []model.OrgRef, tok string, err error) {
 	t, raw, err := sessionToken(c, g.cfg.serverSecret)
 	if err != nil {
 		return "", nil, "", err
