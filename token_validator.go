@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hanzoai/iam-v1"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // VerifiedIdentity is what a token PROVED, after signature, issuer, audience and
@@ -48,7 +48,7 @@ type VerifiedIdentity struct {
 	// workspaces across it) with NO IAM round-trip. Empty on a token minted before
 	// the claim shipped (iam < 1.31.34); a reader then falls back to the single
 	// Owner org. Verified off the SAME signed token as Owner — never trusted raw.
-	Orgs []iam.OrgRef
+	Orgs []model.OrgRef
 	// Expiry is the token's own `exp`. A session built on this token must not
 	// outlive it.
 	Expiry time.Time
