@@ -14,16 +14,16 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.7
+	github.com/hanzoai/commerce v1.49.8
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
-	github.com/hanzoai/iam v1.31.34
-	github.com/hanzoai/iam2 v0.16.0
+	github.com/hanzoai/iam v1.32.1
+	github.com/hanzoai/iam-v1 v1.31.36
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
-	github.com/hanzoai/plans v1.4.3
+	github.com/hanzoai/plans v1.4.4
 	github.com/hanzoai/pricing v1.3.0
 	github.com/hanzoai/pubsub v1.0.0
 	github.com/hanzoai/s3-go v1.0.0
@@ -32,7 +32,8 @@ require (
 	github.com/hanzoai/stream v1.2.0
 	github.com/lib/pq v1.12.3
 	github.com/luxfi/log v1.5.0
-	github.com/luxfi/zapdb v1.10.0
+	github.com/luxfi/node v1.36.15
+	github.com/luxfi/zapdb v1.10.1
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/nats-io/nats.go v1.50.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/resourceprocessor v0.144.0
@@ -68,6 +69,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/beego/beego v1.12.14 // indirect
+	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
@@ -75,7 +77,9 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/exponent-io/jsonpath v0.0.0-20210407135951-1de76d718b3f // indirect
 	github.com/fatih/camelcase v1.0.0 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
+	github.com/google/renameio/v2 v2.0.2 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
@@ -85,7 +89,9 @@ require (
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.0 // indirect
+	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
+	github.com/luxfi/filesystem v0.0.1 // indirect
 	github.com/mattetti/filebuffer v1.0.1 // indirect
 	github.com/minio/minio-go/v7 v7.0.100 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
@@ -93,6 +99,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
+	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	k8s.io/apiserver v0.35.3 // indirect
 	k8s.io/cli-runtime v0.35.3 // indirect
 	k8s.io/component-base v0.35.3 // indirect
@@ -106,7 +113,6 @@ require (
 require (
 	github.com/google/go-github/v84 v84.0.0 // indirect
 	github.com/hanzoai/captable v1.0.0
-	github.com/luxfi/keys v1.4.1 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 )
 
@@ -156,7 +162,7 @@ require (
 	github.com/luxfi/validators v1.3.1 // indirect
 	github.com/luxfi/version v1.0.1 // indirect
 	github.com/luxfi/warp v1.24.1 // indirect
-	github.com/luxwallet/connect/go v0.1.3 // indirect
+	github.com/luxwallet/connect/go v0.1.4 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
@@ -355,7 +361,7 @@ require (
 	github.com/blinkbean/dingtalk v1.1.3 // indirect
 	github.com/boombuler/barcode v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.25.0 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.6 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.6 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
@@ -390,7 +396,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dchest/captcha v0.0.0-20200903113550-03f5f0333e1f // indirect
-	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
+	github.com/deckarep/golang-set/v2 v2.9.0 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/dghubble/oauth1 v0.7.3 // indirect
@@ -531,7 +537,7 @@ require (
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
 	github.com/hanzoai/sendgrid-go v3.4.2-0.20180724185151-733a05184a8d+incompatible // indirect
-	github.com/hanzoai/tasks v1.51.1
+	github.com/hanzoai/tasks v1.51.3
 	github.com/hanzoai/xorm v1.4.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
@@ -607,7 +613,7 @@ require (
 	github.com/luxfi/database v1.21.1 // indirect
 	github.com/luxfi/fhe v1.8.2 // indirect
 	github.com/luxfi/geth v1.20.1
-	github.com/luxfi/ids v1.3.2 // indirect
+	github.com/luxfi/ids v1.3.2
 	github.com/luxfi/kms v1.11.8
 	github.com/luxfi/lattice/v7 v7.1.4 // indirect
 	github.com/luxfi/lens v0.2.1 // indirect
@@ -697,7 +703,7 @@ require (
 	github.com/russellhaering/gosaml2 v0.11.0 // indirect
 	github.com/russellhaering/goxmldsig v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/sagikazarmark/locafero v0.9.0 // indirect
+	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/scim2/filter-parser/v2 v2.2.0 // indirect
@@ -718,12 +724,11 @@ require (
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/slack-go/slack v0.23.1 // indirect
-	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/speps/go-hashids v2.0.0+incompatible // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.20.1 // indirect
+	github.com/spf13/viper v1.21.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/square/square-go-sdk/v3 v3.0.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
@@ -749,8 +754,8 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
-	github.com/tklauser/go-sysconf v0.3.16 // indirect
-	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/tklauser/go-sysconf v0.4.0 // indirect
+	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ua-parser/uap-go v0.0.0-20251207011819-db9adb27a0b8 // indirect
@@ -807,7 +812,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260615183401-62b3387ff324 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
 	google.golang.org/grpc v1.81.1 // indirect
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
@@ -842,7 +847,7 @@ require (
 	github.com/hanzo-ds/go v1.0.1
 	github.com/hanzo-ds/native v0.72.0 // indirect
 	github.com/hanzoai/agent v0.1.3
-	github.com/hanzoai/ai v1.828.1
+	github.com/hanzoai/ai v1.829.3
 	github.com/hanzoai/authz v1.10.7
 	github.com/hanzoai/base v1.5.7
 	github.com/hanzoai/licensing v0.1.5
