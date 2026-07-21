@@ -1,6 +1,6 @@
 package cli
 
-// gpu_spec_test.go — the host static-spec a `hanzo gpu connect` node reports so
+// gpu_spec_test.go — the host static-spec a `hanzo link` node reports so
 // GET /v1/fleet can show its CPU arch, core count and total RAM (the fields a
 // code-linked box already carries). Real telemetry only: arch is `uname -m`, cores
 // are runtime.NumCPU, RAM is parsed from the OS — never a hardcoded machine.
@@ -49,7 +49,7 @@ func TestDetectMemTotalIsReal(t *testing.T) {
 
 // detectArch must match the fleet's `uname -m` convention (aarch64 | x86_64 | arm64),
 // NOT runtime.GOARCH (arm64 | amd64) — so a machine that appears as both a run-target
-// and a gpu-connect worker shows ONE arch string on the board. On Linux uname -m is
+// and a linked worker shows ONE arch string on the board. On Linux uname -m is
 // aarch64/x86_64; assert the real host agrees and is never GOARCH's amd64.
 func TestDetectArchMatchesUnameConvention(t *testing.T) {
 	got := detectArch()
