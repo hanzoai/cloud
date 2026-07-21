@@ -127,6 +127,7 @@ import (
 	"github.com/hanzoai/cloud/clients/tracker"
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/hanzoai/cloud/clients/usage"
+	"github.com/hanzoai/cloud/clients/validators"
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
@@ -310,6 +311,11 @@ func Wire() []cloud.MountSpec {
 		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
 		// on SIGTERM (ctxShutdown adapts func() error).
 		{Name: "ads", Mount: ads.Mount, Shutdown: ctxShutdown(ads.Shutdown)},
+		// GDA/SDM validator onboarding /v1/validators/* — wallet-sig + ETH-mainnet
+		// GenesisNFT ownerOf → seal luxd staking identity into KMS → write a NEW-node
+		// LuxNetwork CR (node.lux.cloud, never the live luxd) → enqueue an owner-gated
+		// registration (never auto-submitted to any P-Chain). Owns a DB handle.
+		{Name: "validators", Mount: validators.Mount, Shutdown: ctxShutdown(validators.Shutdown)},
 		// Native /v1/social/* — the in-process fold of the live social stack
 		// (github.com/hanzoai/social: social-backend/frontend/orchestrator, a Postiz-style
 		// scheduler), a per-org accounts+posts store on Base/SQLite, twin of crm. Owns a DB
