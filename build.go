@@ -91,7 +91,13 @@ func BuildDeps(cfg *Config) Deps {
 	// pass-through and a dev deployment is never blocked.
 	deps.Metering = buildMeteringClient(cfg, logger)
 	wireTierReader(deps.Metering, logger)
-	deps.AI = meteredAIClient(pickAIClient(cfg, logger), deps)
+	// AI (completions, WRITE) and Embed (embeddings, READ-ONLY) are DISTINCT
+	// credentials by concern: completions never ride the read-only publishable
+	// (pk-) key — the gateway 403s a pk- key on any write endpoint — so deps.AI
+	// resolves to the M2M identity, while deps.Embed keeps the pk- key (correct
+	// least-privilege for a read-only call). Both meter through the ONE commerce path.
+	deps.AI = meteredAIClient(pickCompletionsClient(cfg, logger), deps)
+	deps.Embed = meteredAIClient(pickEmbedClient(cfg, logger), deps)
 	wireFinance(cfg, logger)
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
@@ -579,42 +585,74 @@ func RegisterCommerceClientFactory(f func(cfg *Config, log luxlog.Logger) Commer
 	commerceClientFactory = f
 }
 
-// pickAIClient resolves deps.AI — the client the agents subsystem runs chat
-// completions through. Unlike the co-resident subsystems, there is NO in-process
-// "ai" mount that fills a nil deps.AI: inference is an external gateway, so this
-// must return a concrete client, never nil. (A nil deps.AI was the live bug —
-// the default all-enabled config returned nil here and nothing ever filled it,
-// so every /v1/agents/:name/run 503'd "inference is not configured".)
+// publishableKey reports whether apiKey is a read-only PUBLISHABLE key (pk-). The
+// Hanzo gateway 403s a publishable key on any WRITE endpoint — "Publishable keys
+// can only access read-only endpoints … use a secret key (sk-)". So the COMPLETIONS
+// resolver must refuse it (it would only 403 chat), while the EMBED resolver accepts
+// it (embeddings ARE read-only). pk- is the IAM key family's read-only member
+// (hk-/sk-/pk-/fw_/hz_; clients/admission). This ONE predicate is the split's crux:
+// it kept the intermittent-403 bug — a pk- embed key riding the shared completions
+// client — from ever recurring, wherever the key comes from.
+func publishableKey(apiKey string) bool {
+	return strings.HasPrefix(strings.TrimSpace(apiKey), "pk-")
+}
+
+// pickCompletionsClient resolves deps.AI — the client the agents run path (and
+// guide/crm/content/sitegen/code /ask) execute CHAT COMPLETIONS through. There is
+// NO in-process "ai" mount that fills a nil deps.AI: inference is an external
+// gateway, so this returns a concrete client, never nil.
 //
+// Completions are a WRITE endpoint: a read-only publishable (pk-) key 403s them. So
+// this resolver NEVER rides a pk- key — that is the embed credential (pickEmbedClient).
 // Preference order:
-//  1. Static-key HTTP gateway when a base URL AND a static key are configured —
-//     an operator override / pre-provisioned key. The key is a KMS-injected
-//     secret; only the base URL and default model are ever logged.
+//  1. Static SECRET-key HTTP gateway when a base URL AND a completions-capable
+//     (non-pk-) static key are configured — an explicit operator override (sk-/hk-).
+//     A pk- key here is REFUSED (it would only 403 chat) and the resolver falls
+//     through to M2M — THE fix for the intermittent publishable-key 403 on bot replies.
 //  2. M2M HTTP gateway when a base URL AND the binary's IAM identity are present
-//     (the durable Hanzo default): the client mints+refreshes a client-
-//     credentials token from IAM_CLIENT_ID/SECRET — no static key to rotate. The
-//     secret is never logged.
+//     (the durable Hanzo default): the client mints+refreshes a client-credentials
+//     token from IAM_CLIENT_ID/SECRET — no static key to rotate. Secret never logged.
 //  3. ZAP RPC when an addr is configured (split-deploy of a future ai subsystem).
 //  4. Fail-closed stub otherwise — a run records an honest error, never fakes one.
-func pickAIClient(cfg *Config, log luxlog.Logger) AIClient {
-	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
-		log.Info("deps.AI → HTTP gateway (static key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
+func pickCompletionsClient(cfg *Config, log luxlog.Logger) AIClient {
+	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" && !publishableKey(cfg.AIAPIKey) {
+		log.Info("deps.AI (completions) → HTTP gateway (static secret key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
 		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
+	}
+	if cfg.AIAPIKey != "" && publishableKey(cfg.AIAPIKey) {
+		log.Info("deps.AI (completions) → refusing read-only publishable (pk-) key for chat; using M2M", "base_url", cfg.AIBaseURL)
 	}
 	if cfg.AIBaseURL != "" && cfg.AIAuthClientID != "" && cfg.AIAuthClientSecret != "" {
 		tokenURL := aiM2MTokenURL(cfg)
 		if tokenURL != "" {
-			log.Info("deps.AI → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
+			log.Info("deps.AI (completions) → HTTP gateway (IAM M2M)", "base_url", cfg.AIBaseURL,
 				"token_url", tokenURL, "client_id", cfg.AIAuthClientID, "default_model", cfg.AIDefaultModel)
 			return clients.AIHTTPM2M(cfg.AIBaseURL, tokenURL, cfg.AIAuthClientID, cfg.AIAuthClientSecret, cfg.AIDefaultModel)
 		}
 	}
 	if cfg.AIZAPAddr != "" {
-		log.Info("deps.AI → ZAP RPC", "addr", cfg.AIZAPAddr)
+		log.Info("deps.AI (completions) → ZAP RPC", "addr", cfg.AIZAPAddr)
 		return clients.AIRPCAt(cfg.AIZAPAddr)
 	}
-	log.Info("deps.AI → disabled (no CLOUD_AI_API_KEY, no IAM M2M identity, no gateway configured)")
+	log.Info("deps.AI (completions) → disabled (no secret key, no IAM M2M identity, no gateway configured)")
 	return clients.DisabledAI()
+}
+
+// pickEmbedClient resolves deps.Embed — the client code-index + KB knowledge run
+// EMBEDDINGS through. Embeddings are a READ-ONLY endpoint, so the read-only
+// publishable (pk-) key (CLOUD_AI_API_KEY ← cloud-ai-embed-key) is the CORRECT
+// least-privilege credential here, and is used UNCHANGED — this path is deliberately
+// not rewired. Preference order:
+//  1. Static-key HTTP gateway when a base URL AND a static key are configured. The
+//     key (pk- or sk-) is a KMS-injected secret; only base URL + model are logged.
+//  2. Otherwise share the completions resolution (M2M / ZAP / fail-closed) so a
+//     deploy with no dedicated embed key still indexes — no regression.
+func pickEmbedClient(cfg *Config, log luxlog.Logger) AIClient {
+	if cfg.AIBaseURL != "" && cfg.AIAPIKey != "" {
+		log.Info("deps.Embed → HTTP gateway (static embed key)", "base_url", cfg.AIBaseURL, "default_model", cfg.AIDefaultModel)
+		return clients.AIHTTPAt(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIDefaultModel)
+	}
+	return pickCompletionsClient(cfg, log)
 }
 
 // aiM2MTokenURL resolves IAM's client_credentials endpoint the agent runner mints
