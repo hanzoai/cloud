@@ -23,35 +23,12 @@
 // contract → MountAll → graceful Listen) — that body lives once in cloud.Serve
 // and is shared with cmd/cloud. No subcommand duplicates boot logic.
 //
-// The single exception is `hanzo iam`. The registry's iam Mount (pkg/iam,
-// order 50) wraps the Beego handler under /v1/iam/* for the fused surface;
-// the FULL standalone IAM — login UI at /, all ~150 routes at root, LDAP +
-// RADIUS listeners — is iamserver.Run(), the body of the legacy iamd
-// main(). `hanzo iam` runs that, so the standalone identity provider is
-// byte-for-byte what iamd shipped. See the iam case in dispatch().
-//
-// THE BEEGO CRUX (and why this binary does not init-panic). iam imports
-// github.com/hanzoai/beego/v2; that fork carries process-global state
-// (web.BeeApp singleton, ORM model registry, logger registration). The
-// fear is that importing iam alongside the other subsystems collides at
-// package load regardless of subcommand. It does not, for two reasons
-// this codebase already established:
-//
-//  1. iam's ~150 route registrations and ORM table creation are NOT at
-//     package init() — they live inside iamserver.Init() / routers.InitAPI()
-//     / object.CreateTables(), which run only when iam actually serves.
-//     Blank-importing the package is inert: no router, no ORM, no listener.
-//  2. There is exactly ONE Beego v2 import path in the graph
-//     (hanzoai/beego/v2), so there is exactly one Beego global to
-//     initialize, and it is initialized lazily by whichever path serves
-//     iam. (visor, the other Beego service, pins the *v1* fork
-//     github.com/beego/beego and is intentionally NOT linked here — two
-//     Beego majors in one binary is the collision to avoid, so we don't.)
-//
-// The proof is mechanical: the existing cmd/cloud binary already links
-// this same graph (iam Beego v2 + kms + commerce + gateway + …) and builds
-// + boots. cmd/hanzo links the same set plus iamserver for the standalone
-// path; nothing new collides.
+// Identity is served two ways, both on the CLEAN github.com/hanzoai/iam (the
+// Casdoor/Beego fork github.com/hanzoai/iam-v1 is RETIRED): the in-process fold
+// clients/iam (order 50) embeds the clean iam under /v1/iam/* for the fused
+// surface via server.Handler(db); the FULL standalone identity provider is the
+// clean iam's own binary. The legacy `hanzo iam` subcommand (which launched the
+// Casdoor daemon via iamserver.Run) is gone — nothing here links the dead module.
 package main
 
 import (
@@ -69,13 +46,9 @@ import (
 
 	"github.com/hanzoai/cloud"
 
-	// iamserver is the body of the standalone iamd main() — full Beego
-	// server (login UI, all routes, LDAP/RADIUS). `hanzo iam` calls Run().
-	"github.com/hanzoai/iam-v1/iamserver"
-
 	// The subsystem set is defined ONCE in the subsystems bundle (shared with
 	// cmd/cloud). apps.Wire() returns it in mount order; main threads that
-	// slice through dispatch/usage/Serve. Inert at load — see THE BEEGO CRUX.
+	// slice through dispatch/usage/Serve. Inert at load.
 	"github.com/hanzoai/cloud/apps"
 )
 
@@ -89,7 +62,6 @@ var version = "dev"
 // registry-backed subcommands.
 var nonRegistrySubcommands = map[string]string{
 	"cloud":     "serve the full unified surface (all enabled subsystems, one listener)",
-	"iam":       "serve standalone Hanzo IAM (full Beego server: login UI, OAuth2/OIDC, LDAP/RADIUS)",
 	"datastore": "datastore-fork analytics DB — not a Go serve target (see help text)",
 }
 
@@ -159,15 +131,11 @@ func dispatch(sub string, specs []cloud.MountSpec) error {
 		// Full fused surface: --enable governs the set (empty = all).
 		return cloud.Serve(specs, nil)
 
-	case "iam":
-		// Standalone IAM = the body of iamd's main(). Full Beego server:
-		// login UI at /, ~150 routes at root, LDAP + RADIUS listeners,
-		// background sync loops. iamserver.Run() blocks until the process
-		// is signalled. This is intentionally NOT the /v1/iam/*-wrapped
-		// registry Mount — `hanzo iam` IS the identity provider, not a
-		// route-prefixed subsystem inside the cloud surface.
-		iamserver.Run()
-		return nil
+	// NOTE: the legacy `hanzo iam` subcommand (the standalone Casdoor/Beego
+	// identity daemon, github.com/hanzoai/iam-v1) is RETIRED. iam-v1 is dead; the
+	// standalone identity provider is now the clean github.com/hanzoai/iam binary
+	// (native zip + hanzoai/orm), and the in-process fold is clients/iam (which
+	// embeds the clean iam). Nothing here links the dead Casdoor module anymore.
 
 	case "datastore":
 		// Hanzo Datastore is a datastore C++ fork. It has no Go
