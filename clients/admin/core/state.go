@@ -8,6 +8,8 @@
 package core
 
 import (
+	"strings"
+
 	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/admin/commerce"
 	"github.com/hanzoai/cloud/clients/admin/digitalocean"
@@ -29,4 +31,28 @@ type State struct {
 	DO         *digitalocean.Client
 	AdminOrg   string
 	AuditStore *audit.Recorder
+
+	// WLTenants is the fail-closed allowlist of enabled WHITE-LABEL TENANT orgs — the
+	// resellers/brands whose OWN-org admins may reach the org-scoped cockpit panels
+	// (GuardScoped) at admin.<brand>. It is the second admission tier next to the admin
+	// org: a SuperAdmin (owner == AdminOrg) is cross-tenant and never consults this set;
+	// EVERY other caller must be an admin of an org that is IN this set, and is then
+	// hard-scoped to that org's subtree. Seeded ONCE from ADMIN_WL_TENANT_ORGS at Mount
+	// and otherwise immutable, so the decision is a deliberate, git-/KMS-auditable
+	// onboarding — never self-service. EMPTY by default: with no entry, NO customer
+	// org-admin is admitted (only SuperAdmins reach the cockpit), so a mis-set/absent
+	// env fails CLOSED, never open.
+	WLTenants map[string]bool
+}
+
+// IsWhiteLabelTenant reports whether org is an enabled white-label tenant — the ONE
+// place the WL admission decision is read. Nil/empty set ⇒ always false (fail-closed):
+// no org is a WL tenant until explicitly enabled. The org is matched VERBATIM (only
+// trimmed), the same owner key principal.Org yields, so folding can never collapse a
+// distinct owner into an enabled one.
+func (st State) IsWhiteLabelTenant(org string) bool {
+	if len(st.WLTenants) == 0 {
+		return false
+	}
+	return st.WLTenants[strings.TrimSpace(org)]
 }

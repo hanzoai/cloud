@@ -42,6 +42,14 @@ func mountService(t *testing.T, iamURL, commerceURL, healthURL string) (func(met
 		Health:   health.New(healthURL),
 		DO:       digitalocean.New(""), // no token → honest not-configured unless a test overrides s.State.DO
 		AdminOrg: "admin",
+		// The harness enables ONE white-label tenant — "maxpower" (the org orgAdminHdr
+		// belongs to) — so the scoped-panel tests exercise the ADMITTED WL tier. The
+		// gate now requires WL enablement for any non-super caller, so the deny tests use
+		// a DIFFERENT org (not in this set) to prove a non-enabled org-admin is refused,
+		// and the fail-closed default (empty set ⇒ deny) is covered by a dedicated unit
+		// test on State.IsWhiteLabelTenant. A test that needs the fleet-only default
+		// clears s.State.WLTenants after mount.
+		WLTenants: map[string]bool{"maxpower": true},
 	}}
 	// Mirror the REAL Mount EXACTLY by registering the same routes() the subsystem uses
 	// (org-scoped panels behind GuardScoped, the platform control plane behind Guard,
