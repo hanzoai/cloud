@@ -67,8 +67,13 @@ func launchStudio(dir string) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
+	// --listen 127.0.0.1 (loopback only) + --worker-mode: the render backend serves
+	// the fleet worker on this box and nothing else. The worker dials loopback
+	// (localComfyUI) so binding wider bought nothing but an open, unauthenticated
+	// /prompt — the hidden-run hole. --worker-mode makes the studio gate its submit
+	// seam (/v1/worker/execute + X-Worker-Token) so only the worker can start a render.
 	cmd := exec.Command(studioPython(dir), "main.py",
-		"--listen", "0.0.0.0", "--port", "8188",
+		"--listen", "127.0.0.1", "--port", "8188", "--worker-mode",
 		"--normalvram", "--disable-auto-launch",
 		"--output-directory", filepath.Join(dir, "output"))
 	cmd.Dir = dir
