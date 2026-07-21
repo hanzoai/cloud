@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	iamobj "github.com/hanzoai/iam/object"
+	iamobj "github.com/hanzoai/iam-v1/object"
 	"github.com/zap-proto/zip"
 )
 
