@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/iam-v1"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // TestVerifiedIdentityCarriesOrgs proves a signed `orgs` claim is verified and
@@ -25,7 +25,7 @@ func TestVerifiedIdentityCarriesOrgs(t *testing.T) {
 	v := &TokenValidator{v: newIdentityValidator(testIssuer, jwks.URL, []string{"hanzo-team"}, 0)}
 
 	claims := tokenClaims("hanzo-team", "maxpower", "dave@example.com", false, time.Now().Add(time.Hour))
-	claims.Orgs = []iam.OrgRef{
+	claims.Orgs = []model.OrgRef{
 		{Org: "maxpower", Role: "admin"},
 		{Org: "acme", Role: "member"},
 	}
@@ -37,8 +37,8 @@ func TestVerifiedIdentityCarriesOrgs(t *testing.T) {
 		t.Fatalf("owner = %q, want maxpower", id.Owner)
 	}
 	if len(id.Orgs) != 2 ||
-		id.Orgs[0] != (iam.OrgRef{Org: "maxpower", Role: "admin"}) ||
-		id.Orgs[1] != (iam.OrgRef{Org: "acme", Role: "member"}) {
+		id.Orgs[0] != (model.OrgRef{Org: "maxpower", Role: "admin"}) ||
+		id.Orgs[1] != (model.OrgRef{Org: "acme", Role: "member"}) {
 		t.Fatalf("orgs = %+v, want [maxpower/admin acme/member]", id.Orgs)
 	}
 }
