@@ -28,6 +28,7 @@ import (
 	"github.com/hanzoai/cloud/clients/commerceclient"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	financeclient "github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	commercestore "github.com/hanzoai/commerce/api/store"
@@ -252,19 +253,27 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
 	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
 	// org-level, not billing-subject-level. Shadow the bridge wildcard (order 100 < 122).
+	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
+	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
+	// Forward) — never any authenticated member. commerce's own `user` group admits any
+	// member, which would let a compromised member key DELETE the org's cap (→ unbounded
+	// spend) or POST a 1¢ enforce cap (→ org-wide 402 DoS). requireSpendCapAdmin closes that.
 	app.Post("/v1/billing/spend-alerts",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
 		commercebilling.CreateSpendAlert,
 	)
 	app.Patch("/v1/billing/spend-alerts/:id",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
 		commercebilling.UpdateSpendAlert,
 	)
 	app.Delete("/v1/billing/spend-alerts/:id",
 		commercemid.RequestContext(),
 		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
 		commercebilling.DeleteSpendAlert,
 	)
 
@@ -377,4 +386,20 @@ func fireCapAlert(org string, test bool, project, service string) {
 	ctx := commercensctx.WithNamespace(context.Background(), org)
 	db := commercedatastore.New(ctx)
 	commercebilling.FireSpendAlerts(ctx, db, org, test, project, service, nil)
+}
+
+// requireSpendCapAdmin gates a spend-alert WRITE to a validated ORG ADMIN or platform
+// SuperAdmin (the unforgeable SanitizeIdentity-minted X-User-IsOrgAdmin / isAdmin bits),
+// OR the trusted in-proc S2S service token (the SuperAdmin cap-oversight Forward + internal
+// automation). A validated non-admin MEMBER is REFUSED (403): a spend cap is a financial
+// safety boundary — a member must not be able to delete the org's cap (→ unbounded spend)
+// or set a punitive 1¢ cap (→ org-wide 402 DoS). The read paths (list/authorize) stay
+// member/S2S-open; only the mutations require admin.
+func requireSpendCapAdmin() zip.Handler {
+	return func(c *zip.Ctx) error {
+		if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || accountclient.IsServiceToken(c) {
+			return c.Next()
+		}
+		return zip.ErrForbidden("org admin required to change spend caps")
+	}
 }
