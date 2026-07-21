@@ -96,6 +96,49 @@ func TestSeatsCountsActiveMember(t *testing.T) {
 	}
 }
 
+// TestEnsureWorkspaceHealsMigratedMember reproduces the live "Seats: 0 for
+// maxpower" shape: the caller (Dave) OWNS a workspace in the org, but a team-go
+// migration left his member row as is_bot=1 / active=0, so Seats excludes him even
+// though getUserWorkspaces still lists the workspace. Re-authenticating (which runs
+// EnsureWorkspace) must heal the caller's own row back to an active human seat.
+func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org = "maxpower"
+	const acct = "113d4dd4-2486-40de-be2b-88d6e3e0b718" // Dave's real account uuid shape
+
+	w, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A freshly created workspace already counts one seat.
+	if seats, _ := s.Seats(ctx, org); seats != 1 {
+		t.Fatalf("seats after create = %d, want 1", seats)
+	}
+
+	// Corrupt the owner's row exactly as the migration did: bot + inactive.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE members SET is_bot = 1, active = 0 WHERE workspace_id = ? AND user_id = ?`,
+		w.ID, acct); err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats != 0 {
+		t.Fatalf("seats with migrated bot/inactive owner = %d, want 0 (the live defect)", seats)
+	}
+	// The workspace still lists for the user (getUserWorkspaces does not filter flags).
+	if ws, err := s.WorkspacesOf(ctx, org, acct); err != nil || len(ws) != 1 {
+		t.Fatalf("WorkspacesOf = %d (%v), want 1 (still listed)", len(ws), err)
+	}
+
+	// Re-login → EnsureWorkspace heals the caller's own row → the seat returns.
+	if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini"); err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats != 1 {
+		t.Fatalf("seats after re-login heal = %d, want 1 (owner is an active human seat)", seats)
+	}
+}
+
 // TestMembershipReadFromRow proves Membership is read from the members row (never
 // self-asserted): a non-member gets ("", false).
 func TestMembershipReadFromRow(t *testing.T) {
