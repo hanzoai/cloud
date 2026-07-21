@@ -12,7 +12,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients/team/token"
-	"github.com/hanzoai/iam-v1"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // newTestApp registers a standalone api's account routes on a fresh app with no
@@ -27,7 +27,7 @@ func newTestApp(g *api) *zip.App {
 // orgsExtra builds the session-token extra a real login mints: home org + the
 // full membership set (as the decode side reads it back). One place so the tests
 // mirror orgsClaim's shape exactly.
-func orgsExtra(home string, refs ...iam.OrgRef) map[string]any {
+func orgsExtra(home string, refs ...model.OrgRef) map[string]any {
 	return map[string]any{"org": home, "orgs": orgsClaim(refs, home)}
 }
 
@@ -58,7 +58,7 @@ func seedMember(t *testing.T, s *accountStore, org, account, slug, role string) 
 // with only extra.org falls back to that single home org as admin, and an empty
 // claim still yields the home org (never an empty set).
 func TestOrgsClaimRoundTrip(t *testing.T) {
-	refs := []iam.OrgRef{{Org: "maxpower", Role: "admin"}, {Org: "acme", Role: "member"}}
+	refs := []model.OrgRef{{Org: "maxpower", Role: "admin"}, {Org: "acme", Role: "member"}}
 	tok, err := token.Generate("550e8400-e29b-41d4-a716-446655440000", "",
 		orgsExtra("maxpower", refs...), 0, "s3cret")
 	if err != nil {
@@ -69,13 +69,13 @@ func TestOrgsClaimRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := orgsFromExtra(dec.Extra)
-	if len(got) != 2 || got[0] != (iam.OrgRef{Org: "maxpower", Role: "admin"}) || got[1] != (iam.OrgRef{Org: "acme", Role: "member"}) {
+	if len(got) != 2 || got[0] != (model.OrgRef{Org: "maxpower", Role: "admin"}) || got[1] != (model.OrgRef{Org: "acme", Role: "member"}) {
 		t.Fatalf("round-trip orgs = %+v, want [maxpower/admin acme/member]", got)
 	}
 
 	// Legacy token: only extra.org → single home org, admin.
 	legacy := orgsFromExtra(map[string]any{"org": "acme"})
-	if len(legacy) != 1 || legacy[0] != (iam.OrgRef{Org: "acme", Role: "admin"}) {
+	if len(legacy) != 1 || legacy[0] != (model.OrgRef{Org: "acme", Role: "admin"}) {
 		t.Fatalf("legacy fallback = %+v, want [acme/admin]", legacy)
 	}
 
@@ -102,7 +102,7 @@ func TestGetUserWorkspacesUnionsOrgs(t *testing.T) {
 	}
 
 	sess, err := token.Generate(acct, "", orgsExtra("davelorenzini",
-		iam.OrgRef{Org: "davelorenzini", Role: "admin"}, iam.OrgRef{Org: "maxpower", Role: "member"}),
+		model.OrgRef{Org: "davelorenzini", Role: "admin"}, model.OrgRef{Org: "maxpower", Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +181,7 @@ func TestSelectWorkspaceCrossOrg(t *testing.T) {
 		t.Fatal(err)
 	}
 	sess, _ := token.Generate(acct, "", orgsExtra("davelorenzini",
-		iam.OrgRef{Org: "davelorenzini", Role: "admin"}, iam.OrgRef{Org: "maxpower", Role: "member"}),
+		model.OrgRef{Org: "davelorenzini", Role: "admin"}, model.OrgRef{Org: "maxpower", Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
@@ -220,7 +220,7 @@ func TestSelectWorkspaceNoDefault(t *testing.T) {
 	if _, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada"); err != nil {
 		t.Fatal(err)
 	}
-	sess, _ := token.Generate(acct, "", orgsExtra(org, iam.OrgRef{Org: org, Role: "admin"}),
+	sess, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 
 	// No workspaceUrl → BadRequest, and NO workspace token leaked.
@@ -254,7 +254,7 @@ func TestSelectWorkspaceAmbiguous(t *testing.T) {
 	seedMember(t, s, "org-b", acct, "shared", "member")
 
 	sess, _ := token.Generate(acct, "", orgsExtra("org-a",
-		iam.OrgRef{Org: "org-a", Role: "admin"}, iam.OrgRef{Org: "org-b", Role: "member"}),
+		model.OrgRef{Org: "org-a", Role: "admin"}, model.OrgRef{Org: "org-b", Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
@@ -286,7 +286,7 @@ func TestGuestSelectUnaffected(t *testing.T) {
 	s := mounted.State.accounts
 	ws := seedMember(t, s, org, acct, "guest-space", roleGuest)
 
-	sess, _ := token.Generate(acct, "", orgsExtra(org, iam.OrgRef{Org: org, Role: "member"}),
+	sess, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + sess},
@@ -320,7 +320,7 @@ func TestGetWorkspaceInfoNoDefault(t *testing.T) {
 	}
 
 	// Account-scoped token (NO workspace claim) → no default, WorkspaceNotFound.
-	acctTok, _ := token.Generate(acct, "", orgsExtra(org, iam.OrgRef{Org: org, Role: "admin"}),
+	acctTok, _ := token.Generate(acct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + acctTok}, rpcRequest{Method: "getWorkspaceInfo"})
@@ -395,7 +395,7 @@ func TestSendInviteWritesMembershipAndRow(t *testing.T) {
 	}
 	app := newTestApp(g)
 
-	sess, _ := token.Generate(inviterAcct, "", orgsExtra(org, iam.OrgRef{Org: org, Role: "admin"}),
+	sess, _ := token.Generate(inviterAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "admin"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + sess},
@@ -466,7 +466,7 @@ func TestSendInviteRequiresAdmin(t *testing.T) {
 	app := newTestApp(g)
 
 	// The plain member tries to invite → Unauthorized, and IAM is never touched.
-	sess, _ := token.Generate(memberAcct, "", orgsExtra(org, iam.OrgRef{Org: org, Role: "member"}),
+	sess, _ := token.Generate(memberAcct, "", orgsExtra(org, model.OrgRef{Org: org, Role: "member"}),
 		expUnix(sessionTokenTTL), testSecret)
 	code, body := call(t, app, http.MethodPost, "/v1/team/account",
 		map[string]string{"Authorization": "Bearer " + sess},
@@ -497,7 +497,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 		}
 		if r.URL.Path == "/v1/iam/get-memberships" && r.URL.Query().Get("user") == "maxpower/dave" {
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": []iam.OrgRef{
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "data": []model.OrgRef{
 				{Org: "maxpower", Role: "admin"}, {Org: "acme", Role: "member"},
 			}})
 			return
@@ -519,7 +519,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	app := newTestApp(g)
 
 	// Session token carries extra.user (the IAM id) and a stale one-org set.
-	extra := orgsExtra(org, iam.OrgRef{Org: org, Role: "admin"})
+	extra := orgsExtra(org, model.OrgRef{Org: org, Role: "admin"})
 	extra["user"] = "maxpower/dave"
 	sess, _ := token.Generate(acct, "", extra, expUnix(sessionTokenTTL), testSecret)
 	auth := map[string]string{"Authorization": "Bearer " + sess}
@@ -527,7 +527,7 @@ func TestGetMembershipsRefresh(t *testing.T) {
 	// Live refresh returns the fuller set from IAM.
 	code, body := call(t, app, http.MethodPost, "/v1/team/account", auth, rpcRequest{Method: "getMemberships"})
 	var r struct {
-		Result []iam.OrgRef `json:"result"`
+		Result []model.OrgRef `json:"result"`
 	}
 	if code != http.StatusOK {
 		t.Fatalf("status %d: %s", code, body)
