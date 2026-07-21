@@ -37,12 +37,51 @@ import (
 )
 
 // uiRoutes registers the browser UI. Called from routes() in git.go.
+//
+// TWO mount points, ONE handler set. The /git/* prefix serves the UI on EVERY
+// host (base "/git") — this is how the console embeds the git browser. The root
+// mount serves the SAME handlers GitHub-style at "/" on the DEDICATED git host
+// only (base ""), so a browse URL matches the clone URL (git.hanzo.ai/<org>/<repo>
+// ↔ git.hanzo.ai/<org>/<repo>.git). onGitHost gates the root routes to the git
+// host; on api/console they fall through (c.Next()) to the console SPA catch-all,
+// so a bare /:org/:repo can never shadow it there. They register AFTER the root
+// smart-HTTP routes (git.go), whose paths carry a distinct /info/refs |
+// /git-*-pack tail, so a 2-segment UI route and a clone route never collide.
 func uiRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/git", cloud.Handle(s, uiHome))
 	app.Get("/git/:org/:repo", cloud.Handle(s, uiRepo))
 	app.Get("/git/:org/:repo/tree/*", cloud.Handle(s, uiTree))
 	app.Get("/git/:org/:repo/blob/*", cloud.Handle(s, uiBlob))
 	app.Get("/git/:org/:repo/commits", cloud.Handle(s, uiCommits))
+
+	onGit := onGitHost(s.State.gitHost)
+	app.Get("/", onGit(cloud.Handle(s, uiHome)))
+	app.Get("/:org/:repo", onGit(cloud.Handle(s, uiRepo)))
+	app.Get("/:org/:repo/tree/*", onGit(cloud.Handle(s, uiTree)))
+	app.Get("/:org/:repo/blob/*", onGit(cloud.Handle(s, uiBlob)))
+	app.Get("/:org/:repo/commits", onGit(cloud.Handle(s, uiCommits)))
+}
+
+// uiBase is the URL base the UI links against for this request: "" on the
+// dedicated git host (git.hanzo.ai serves the UI at the ROOT, GitHub-style, so a
+// browse URL matches the clone URL) and "/git" everywhere else (the console
+// embeds the git browser under /git). One canonical URL per host — never both.
+func uiBase(s *cloud.Service[state], c *zip.Ctx) string {
+	if h := s.State.gitHost; h != "" && strings.EqualFold(c.Fiber().Hostname(), h) {
+		return ""
+	}
+	return "/git"
+}
+
+// uiCloneURL is the canonical clone URL the UI shows: the clean git-host form
+// (https://git.hanzo.ai/<org>/<repo>.git) the root smart-HTTP routes serve, not
+// the /v1/git-prefixed API form. Falls back to the API cloneURL when no git host
+// is configured.
+func uiCloneURL(s *cloud.Service[state], org, name string) string {
+	if h := s.State.gitHost; h != "" {
+		return fmt.Sprintf("https://%s/%s/%s.git", h, org, name)
+	}
+	return cloneURL(s, org, name)
 }
 
 // uiOrg resolves the caller's validated org and enforces the :org path segment
@@ -149,7 +188,8 @@ func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
 			DefaultBranch: firstNonEmptyStr(r.DefaultBranch, defaultBranchName),
 			Size:          humanBytes(r.SizeBytes), Updated: rfc3339(r.UpdatedAt)})
 	}
-	return render(c, http.StatusOK, "Repositories", homeTmpl, homeData{Org: o, Repos: rows})
+	base := uiBase(s, c)
+	return render(c, base, http.StatusOK, "Repositories", homeTmpl, homeData{Base: base, Org: o, Repos: rows})
 }
 
 func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
@@ -163,8 +203,9 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "no such repository")
 	}
 	ref := strings.TrimSpace(c.Query("ref"))
-	d := repoData{Org: o, Repo: r.Name, Description: r.Description,
-		CloneHTTP: cloneURL(s, o, r.Name), CloneSSH: sshURL(s, o, r.Name)}
+	base := uiBase(s, c)
+	d := repoData{Base: base, Org: o, Repo: r.Name, Description: r.Description,
+		CloneHTTP: uiCloneURL(s, o, r.Name), CloneSSH: sshURL(s, o, r.Name)}
 
 	repo, err := openGit(s, r)
 	if err == nil {
@@ -173,7 +214,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		if commit, label, e := resolveRef(repo, r, ref); e == nil {
 			d.Ref = label
-			d.Entries = treeEntries(commit, "", o, r.Name, label)
+			d.Entries = treeEntries(commit, "", o, r.Name, label, base)
 			d.Commits = recentCommits(repo, commit, 10)
 			if _, readme, ok := readmeAt(commit); ok {
 				d.Readme = readme
@@ -187,7 +228,7 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 	if d.Ref == "" {
 		d.Ref = firstNonEmptyStr(r.DefaultBranch, defaultBranchName)
 	}
-	return render(c, http.StatusOK, r.Name, repoTmpl, d)
+	return render(c, base, http.StatusOK, r.Name, repoTmpl, d)
 }
 
 func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
@@ -210,10 +251,11 @@ func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.Errorf(http.StatusNotFound, "unknown ref")
 	}
 	sub := cleanTreePath(c.Fiber().Params("*"))
-	return render(c, http.StatusOK, r.Name+"/"+sub, treeTmpl, treeData{
-		Org: o, Repo: r.Name, Ref: label, Path: sub,
-		Crumbs:  crumbs(o, r.Name, label, sub),
-		Entries: treeEntries(commit, sub, o, r.Name, label),
+	base := uiBase(s, c)
+	return render(c, base, http.StatusOK, r.Name+"/"+sub, treeTmpl, treeData{
+		Base: base, Org: o, Repo: r.Name, Ref: label, Path: sub,
+		Crumbs:  crumbs(o, r.Name, label, sub, base),
+		Entries: treeEntries(commit, sub, o, r.Name, label, base),
 	})
 }
 
@@ -241,15 +283,16 @@ func uiBlob(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusNotFound, "no such file")
 	}
-	d := blobData{Org: o, Repo: r.Name, Ref: label, Path: fp,
-		Crumbs: crumbs(o, r.Name, label, fp), Size: humanBytes(file.Size)}
+	base := uiBase(s, c)
+	d := blobData{Base: base, Org: o, Repo: r.Name, Ref: label, Path: fp,
+		Crumbs: crumbs(o, r.Name, label, fp, base), Size: humanBytes(file.Size)}
 	if bin, _ := file.IsBinary(); bin {
 		d.Binary = true
 	} else if txt, e := file.Contents(); e == nil {
 		d.Content = txt
 		d.Lines = strings.Count(txt, "\n") + 1
 	}
-	return render(c, http.StatusOK, r.Name+"/"+fp, blobTmpl, d)
+	return render(c, base, http.StatusOK, r.Name+"/"+fp, blobTmpl, d)
 }
 
 func uiCommits(s *cloud.Service[state], c *zip.Ctx) error {
@@ -271,8 +314,9 @@ func uiCommits(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusNotFound, "unknown ref")
 	}
-	return render(c, http.StatusOK, r.Name+" commits", commitsTmpl, commitsData{
-		Org: o, Repo: r.Name, Ref: label, Commits: recentCommits(repo, commit, 100),
+	base := uiBase(s, c)
+	return render(c, base, http.StatusOK, r.Name+" commits", commitsTmpl, commitsData{
+		Base: base, Org: o, Repo: r.Name, Ref: label, Commits: recentCommits(repo, commit, 100),
 	})
 }
 
@@ -294,8 +338,8 @@ func branchList(repo *gogit.Repository) []string {
 }
 
 // treeEntries lists the immediate children of a subtree, dirs first then files,
-// each with a UI link that carries the ref.
-func treeEntries(commit *object.Commit, sub, org, repo, ref string) []entry {
+// each with a UI link (base-prefixed) that carries the ref.
+func treeEntries(commit *object.Commit, sub, org, repo, ref, base string) []entry {
 	tree, err := commit.Tree()
 	if err != nil {
 		return nil
@@ -316,10 +360,10 @@ func treeEntries(commit *object.Commit, sub, org, repo, ref string) []entry {
 		q := "?ref=" + template.URLQueryEscaper(ref)
 		if e.Mode == 0o40000 { // directory
 			dirs = append(dirs, entry{Name: child, IsDir: true,
-				Href: "/git/" + org + "/" + repo + "/tree/" + full + q})
+				Href: base + "/" + org + "/" + repo + "/tree/" + full + q})
 		} else {
 			files = append(files, entry{Name: child,
-				Href: "/git/" + org + "/" + repo + "/blob/" + full + q})
+				Href: base + "/" + org + "/" + repo + "/blob/" + full + q})
 		}
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name < dirs[j].Name })
@@ -351,9 +395,9 @@ func recentCommits(repo *gogit.Repository, from *object.Commit, n int) []commitR
 	return out
 }
 
-// crumbs builds path breadcrumbs, each linking to its tree.
-func crumbs(org, repo, ref, p string) []crumb {
-	out := []crumb{{Name: repo, Href: "/git/" + org + "/" + repo + "?ref=" + template.URLQueryEscaper(ref)}}
+// crumbs builds path breadcrumbs, each linking (base-prefixed) to its tree.
+func crumbs(org, repo, ref, p, base string) []crumb {
+	out := []crumb{{Name: repo, Href: base + "/" + org + "/" + repo + "?ref=" + template.URLQueryEscaper(ref)}}
 	if p == "" {
 		return out
 	}
@@ -365,7 +409,7 @@ func crumbs(org, repo, ref, p string) []crumb {
 			acc = acc + "/" + seg
 		}
 		out = append(out, crumb{Name: seg,
-			Href: "/git/" + org + "/" + repo + "/tree/" + acc + "?ref=" + template.URLQueryEscaper(ref)})
+			Href: base + "/" + org + "/" + repo + "/tree/" + acc + "?ref=" + template.URLQueryEscaper(ref)})
 	}
 	return out
 }
