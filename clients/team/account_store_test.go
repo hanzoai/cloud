@@ -49,6 +49,96 @@ func TestEnsureWorkspaceIdempotent(t *testing.T) {
 	}
 }
 
+// TestSeatsCountsActiveMember proves Seats counts the org's distinct active,
+// non-bot members — so a just-seeded owner yields at least one seat. (The wallet's
+// "0 members" symptom is a MISSING member row for the viewed org, never the count
+// logic; establishSession now seeds one per verified org.) A bot and a deactivated
+// row are excluded; a guest counts as both a seat and a guest; the count is
+// tenant-scoped.
+func TestSeatsCountsActiveMember(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org = "acme"
+	owner := "aaaaaaaa-0000-4000-8000-000000000001"
+
+	// A freshly ensured workspace seeds the owner member row → at least one seat.
+	w, err := s.EnsureWorkspace(ctx, org, owner, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats < 1 {
+		t.Fatalf("seats after seeding one member = %d, want >= 1", seats)
+	}
+
+	seed := func(user, role string, bot, active int) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
+			 VALUES (?,?,?,?,?,?,1)`, w.ID, user, role, "m", bot, active); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("bbbbbbbb-0000-4000-8000-000000000002", "member", 1, 1)  // bot — never a seat
+	seed("cccccccc-0000-4000-8000-000000000003", "member", 0, 0)  // deactivated — excluded
+	seed("dddddddd-0000-4000-8000-000000000004", roleGuest, 0, 1) // guest — a seat AND a guest
+
+	seats, guests := s.Seats(ctx, org)
+	if seats != 2 {
+		t.Fatalf("seats = %d, want 2 (owner + guest; bot and inactive excluded)", seats)
+	}
+	if guests != 1 {
+		t.Fatalf("guests = %d, want 1 (the guest)", guests)
+	}
+
+	// Tenant-scoped: another org sees none of acme's seats.
+	if seats, _ := s.Seats(ctx, "other"); seats != 0 {
+		t.Fatalf("other-org seats = %d, want 0", seats)
+	}
+}
+
+// TestEnsureWorkspaceHealsMigratedMember reproduces the live "Seats: 0 for
+// maxpower" shape: the caller (Dave) OWNS a workspace in the org, but a team-go
+// migration left his member row as is_bot=1 / active=0, so Seats excludes him even
+// though getUserWorkspaces still lists the workspace. Re-authenticating (which runs
+// EnsureWorkspace) must heal the caller's own row back to an active human seat.
+func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org = "maxpower"
+	const acct = "113d4dd4-2486-40de-be2b-88d6e3e0b718" // Dave's real account uuid shape
+
+	w, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A freshly created workspace already counts one seat.
+	if seats, _ := s.Seats(ctx, org); seats != 1 {
+		t.Fatalf("seats after create = %d, want 1", seats)
+	}
+
+	// Corrupt the owner's row exactly as the migration did: bot + inactive.
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE members SET is_bot = 1, active = 0 WHERE workspace_id = ? AND user_id = ?`,
+		w.ID, acct); err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats != 0 {
+		t.Fatalf("seats with migrated bot/inactive owner = %d, want 0 (the live defect)", seats)
+	}
+	// The workspace still lists for the user (getUserWorkspaces does not filter flags).
+	if ws, err := s.WorkspacesOf(ctx, org, acct); err != nil || len(ws) != 1 {
+		t.Fatalf("WorkspacesOf = %d (%v), want 1 (still listed)", len(ws), err)
+	}
+
+	// Re-login → EnsureWorkspace heals the caller's own row → the seat returns.
+	if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini"); err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats != 1 {
+		t.Fatalf("seats after re-login heal = %d, want 1 (owner is an active human seat)", seats)
+	}
+}
+
 // TestMembershipReadFromRow proves Membership is read from the members row (never
 // self-asserted): a non-member gets ("", false).
 func TestMembershipReadFromRow(t *testing.T) {

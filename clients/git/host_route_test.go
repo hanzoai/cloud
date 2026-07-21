@@ -40,3 +40,50 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 		t.Fatalf("api host: want 404 (fell through), got %d", resp.StatusCode)
 	}
 }
+
+// TestRootUI_HostGuard verifies the root-level UI routes ("/" and the GitHub-style
+// "/:org/:repo" browse paths) serve native git's ui.go ONLY on the git host and
+// fall through on every other host — so git.hanzo.ai/<org>/<repo> renders the
+// native browser while a bare /:org/:repo never shadows the console SPA elsewhere.
+func TestRootUI_HostGuard(t *testing.T) {
+	app := mountApp(t) // Domain api.hanzo.test → gitHost git.hanzo.test
+
+	// On the git host, GET / reaches uiHome; with no validated principal the handler
+	// answers 403 ("sign in") — proving the route matched native git (a routing
+	// miss would be 404, and the pre-change behavior fell through to the console).
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "git.hanzo.test"
+	resp, err := app.Fiber().Test(req, testCfg)
+	if err != nil {
+		t.Fatalf("git-host / request: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("git host /: want 403 (uiHome ran, principal required), got %d", resp.StatusCode)
+	}
+
+	// The GitHub-style browse path reaches uiRepo on the git host (same 403 gate).
+	req = httptest.NewRequest(http.MethodGet, "/acme/widget", nil)
+	req.Host = "git.hanzo.test"
+	resp, err = app.Fiber().Test(req, testCfg)
+	if err != nil {
+		t.Fatalf("git-host /:org/:repo request: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("git host /:org/:repo: want 403 (uiRepo ran), got %d", resp.StatusCode)
+	}
+
+	// On the api host the root UI routes fall through (c.Next()); nothing else is
+	// mounted in this git-only test app, so both 404 — proving they never serve off
+	// the git host (where the console SPA catch-all owns the root instead).
+	for _, path := range []string{"/", "/acme/widget"} {
+		req = httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "api.hanzo.test"
+		resp, err = app.Fiber().Test(req, testCfg)
+		if err != nil {
+			t.Fatalf("api-host %s request: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("api host %s: want 404 (fell through), got %d", path, resp.StatusCode)
+		}
+	}
+}

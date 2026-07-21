@@ -7,9 +7,14 @@ package team
 //	POST {COLLABORATOR_URL http(s)}/rpc/{documentId}   body {method, payload}
 //
 //	documentId = "<workspaceUuid>|<objectClass>|<objectId>|<objectAttr>"
-//	  - createContent {content:{field:markup}} → {content:{field:blobRef}}
+//	  - createContent {content:{field:markup}, updates?:{field:b64yUpdate}}
+//	                                           → {content:{field:blobRef}}
 //	  - updateContent {content:{field:markup}} → {}
 //	  - getContent    {source?:blobRef}        → {content:{field:markup}}
+//
+// createContent ALSO seeds the live-editing update log (collabws.go) from the
+// front-supplied Y.js update, so a dialog-authored description is visible in the
+// collaborative editor — which replays that log — not only in snapshot reads.
 //
 // The LIVE editing lane (Y.js sync) is the /collaborator WebSocket served by
 // collabws.go in this same service; this RPC lane is markup-snapshot blob I/O,
@@ -31,6 +36,9 @@ package team
 // the physical key embeds org+workspace so a foreign ref cannot resolve.
 
 import (
+	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -92,11 +100,42 @@ func collabJSONID(objectID, field string, now time.Time) string {
 	return fmt.Sprintf("%s-%s-%d", objectID, field, now.UnixMilli())
 }
 
+// seedYLog writes the live-editing update log for a NEWLY created doc field from
+// the front-supplied base64 Y.js update, so the collaborative editor (collabws.go,
+// which replays this log) shows dialog-authored content — not just the snapshot
+// reads. No-op when no update is supplied, when it is malformed (the snapshot still
+// stands — no worse than before), or when a log already exists (a live-edited doc
+// must never be clobbered). One log entry: a full-state update the joining editor
+// applies against its empty ydoc. The blob id matches collabws.go's yLogBlobID for
+// the SAME (objectID, field), so the WS room loads exactly what this seeded.
+func (s *collabService) seedYLog(ctx context.Context, org, workspace, objectID, field, b64 string) error {
+	if b64 == "" {
+		return nil
+	}
+	update, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil || len(update) == 0 || len(update) > maxMarkupSize {
+		return nil
+	}
+	key := blobKey(org, workspace, yLogBlobID(collabDoc{objectID: objectID, objectAttr: field}))
+	if data, gerr := s.vfs.Get(ctx, key); gerr == nil && len(data) > 0 {
+		return nil // a log already exists — never clobber live edits
+	} else if gerr != nil && !errors.Is(gerr, types.ErrBlobNotFound) {
+		return gerr
+	}
+	return s.vfs.Put(ctx, key, marshalYLog([][]byte{update}))
+}
+
 type collabRequest struct {
 	Method  string `json:"method"`
 	Payload struct {
 		Content map[string]string `json:"content"`
 		Source  string            `json:"source"`
+		// Updates carries, per field, a base64 Y.js state update encoding the SAME
+		// markup — the front computes it (markupToYDoc → encodeStateAsUpdate) so a
+		// createContent seeds the live-editing lane's update log, not just the
+		// snapshot blob. Without it a dialog-created description is invisible in the
+		// collaborative editor, which replays the ydoc log, never the snapshot.
+		Updates map[string]string `json:"updates"`
 	} `json:"payload"`
 }
 
@@ -148,6 +187,17 @@ func (s *collabService) rpc(c *zip.Ctx) error {
 				return zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
 			}
 			refs[field] = blobID
+			// createContent births a NEW object: seed the live-editing lane's update
+			// log from the front-supplied Y.js update so the collaborative editor
+			// (collabws.go, which replays this log) shows the content, not just the
+			// snapshot reads. Scoped to createContent — updateContent must never
+			// clobber a doc that peers may be live-editing — and only when no log
+			// exists yet (belt-and-suspenders against a double create).
+			if req.Method == "createContent" {
+				if err := s.seedYLog(c.Context(), org, doc.workspace, doc.objectID, field, req.Payload.Updates[field]); err != nil {
+					return zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
+				}
+			}
 		}
 		if req.Method == "updateContent" {
 			return c.JSON(http.StatusOK, map[string]any{})
