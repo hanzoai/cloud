@@ -798,14 +798,22 @@ func runDisconnect(cmd *cobra.Command, env *Env) error {
 		return err
 	}
 	w, _ := newWorker(env, "")
+	out := cmd.OutOrStdout()
 	path := fmt.Sprintf("/v1/tasks/namespaces/%s/activities/%s/%s/complete", fleetNS, w.identity, w.identity)
-	if _, err := w.call(ctx, http.MethodPost, path, map[string]any{
+	code, err := w.call(ctx, http.MethodPost, path, map[string]any{
 		"result":   map[string]any{"disconnected": true},
 		"identity": w.identity,
-	}, nil); err != nil {
-		return fmt.Errorf("disconnect: %w", err)
+	}, nil)
+	if err != nil {
+		// Idempotent: an already-terminal (409) or absent (404) fleet row is the
+		// desired end state, so a repeat `hanzo unlink` no-ops instead of erroring.
+		if code == http.StatusConflict || code == http.StatusNotFound {
+			fmt.Fprintf(out, "%q already unlinked (no active fleet row)\n", w.hostname)
+			return nil
+		}
+		return fmt.Errorf("deregister: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "unlinked %q from the fleet\n", w.hostname)
+	fmt.Fprintf(out, "unlinked %q from the fleet\n", w.hostname)
 	return nil
 }
 
