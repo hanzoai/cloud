@@ -129,3 +129,45 @@ GitHub export is an optional, separate step — going live never requires it.
   deploy endpoint directly (git mode) for repo-linked projects.
 - Do not cache across orgs; the org is implicit in the token. Switching org in
   the console re-fetches with the new token (new `X-Org-Id`).
+
+## Convergence — one site plane (retires the static crs/ plane)
+
+Two mechanisms serve S3-backed static sites today; they collapse into ONE:
+
+1. **Projects PaaS (canonical).** A site is a `Project` in THIS store; its bundle
+   lives at `<bucket>/<org>/<slug>/`; `clients/sites` is the host-router that turns
+   `<slug>.hanzo.app` (and bound custom domains) into that site. DB-backed,
+   tenant-isolated, versioned, metered. The `/v1/deploy` dashboard already projects
+   these (see `clients/deploy/sites.go`).
+2. **Static crs/ plane (LEGACY — retires).** A hand-declared `staticFiles`
+   Middleware + IngressRoute per site (`universe infra/k8s/operator/crs/
+   static-sites.yaml`) serving `s3://cdn/<slug>` on `<slug>.hanzo.ai`, straight from
+   the ingress with no store, no build, no versioning. It was *easy* (one route to
+   hand-write) but not *simple* — a second serving path + a second S3 layout + a
+   second state home for exactly the job Projects already does.
+
+**Decision:** every first-party site (`cd`, `flow`, `gallery`, `yadota`, …) becomes
+a `Project`, served by `clients/sites`. No external-prefix special case in the
+resolver: the bundle MOVES to the one canonical layout `<bucket>/<org>/<slug>/`
+(the resolver keeps computing `sitePrefix(org, slug)` — one way, no branch). The
+`<slug>.hanzo.ai` host is a bound host routed through cloud, exactly like
+`<slug>.hanzo.app`.
+
+**Per-site migration (idempotent, gated, lowest-risk first; `cd.hanzo.ai` LAST):**
+1. Copy the bundle to the canonical layout:
+   `s3 cp --recursive s3://cdn/<slug>/  s3://<blob.bucket>/hanzo/<slug>/`.
+2. `POST /v1/projects` (org `hanzo`) → `{slug, framework:"static", status:"live"}`,
+   then record its live Deployment (prefix `hanzo/<slug>`) so the resolver serves it.
+3. `BindHost` the first-party host `<slug>.hanzo.ai` to the project (the reserved-
+   label guard in `clients/sites/reserved.go` still applies).
+4. Route `*.hanzo.ai` first-party site hosts through cloud, mirroring the
+   `*.hanzo.app` wildcard edge (`universe .../crs/hanzo-app-sites.yaml`: wildcard
+   Ingress → `cloud:8000`, cloud's `clients/sites` runs FIRST, before identity).
+5. Delete that site's `staticFiles` Middleware + IngressRoute from `static-sites.yaml`.
+   Verify the host still serves (now via cloud) BEFORE removing the crs/ route.
+
+Steps 1–2 are additive (no live-routing change — the crs/ route keeps serving until
+step 4/5). The cutover (4/5) is a reviewed per-host flip; `cd.hanzo.ai` is the CD
+dashboard's own host, so it migrates last, after every other site is proven on the
+new path. End state: `static-sites.yaml` holds ZERO first-party sites, one host-
+router, one S3 layout, one store — sites are Projects, sourced from `hanzo-apps`.
