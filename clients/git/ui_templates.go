@@ -33,11 +33,13 @@ type crumb struct {
 }
 
 type homeData struct {
+	Base  string
 	Org   string
 	Repos []repoRow
 }
 
 type repoData struct {
+	Base                        string
 	Org, Repo, Description, Ref string
 	CloneHTTP, CloneSSH         string
 	Branches                    []string
@@ -48,12 +50,14 @@ type repoData struct {
 }
 
 type treeData struct {
+	Base                 string
 	Org, Repo, Ref, Path string
 	Crumbs               []crumb
 	Entries              []entry
 }
 
 type blobData struct {
+	Base                       string
 	Org, Repo, Ref, Path, Size string
 	Crumbs                     []crumb
 	Content                    string
@@ -62,18 +66,26 @@ type blobData struct {
 }
 
 type commitsData struct {
+	Base           string
 	Org, Repo, Ref string
 	Commits        []commitRow
 }
 
 // render writes a page: the named body template wrapped in the shared chrome.
-func render(c *zip.Ctx, status int, title string, body *template.Template, data any) error {
+// base is the request's UI base path ("" on the git host, "/git" elsewhere); the
+// chrome's home link resolves to base or "/" so it points at the right root on
+// either host.
+func render(c *zip.Ctx, base string, status int, title string, body *template.Template, data any) error {
 	var inner bytes.Buffer
 	if err := body.Execute(&inner, data); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "render: %v", err)
 	}
+	home := base
+	if home == "" {
+		home = "/"
+	}
 	var page bytes.Buffer
-	if err := chromeTmpl.Execute(&page, chromeData{Title: title, Body: template.HTML(inner.String())}); err != nil {
+	if err := chromeTmpl.Execute(&page, chromeData{Title: title, Home: home, Body: template.HTML(inner.String())}); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "render: %v", err)
 	}
 	c.SetHeader("Content-Type", "text/html; charset=utf-8")
@@ -83,6 +95,7 @@ func render(c *zip.Ctx, status int, title string, body *template.Template, data 
 
 type chromeData struct {
 	Title string
+	Home  string
 	Body  template.HTML
 }
 
@@ -132,7 +145,7 @@ footer{max-width:1080px;margin:40px auto;padding:0 20px;color:var(--dim);font-si
 .empty{padding:40px 16px;text-align:center;color:var(--dim)}
 </style></head><body>
 <header><div class="wrap"><div class="bar">
-<a class="brand" href="/git"><b>Hanzo</b> Git</a>
+<a class="brand" href="{{.Home}}"><b>Hanzo</b> Git</a>
 </div></div></header>
 <main>{{.Body}}</main>
 <footer>Hanzo Git — native git hosting on Hanzo IAM. <span class="mono">git.hanzo.ai</span></footer>
@@ -142,7 +155,7 @@ const homeHTML = `<h1>{{.Org}}</h1>
 <p class="muted">{{len .Repos}} repositor{{if eq (len .Repos) 1}}y{{else}}ies{{end}}</p>
 {{if .Repos}}<div class="panel">
 {{range .Repos}}<div class="row">
-<div style="flex:1"><a href="/git/{{$.Org}}/{{.Name}}">{{.Name}}</a>
+<div style="flex:1"><a href="{{$.Base}}/{{$.Org}}/{{.Name}}">{{.Name}}</a>
 {{if .Description}}<div class="muted">{{.Description}}</div>{{end}}</div>
 <span class="pill">{{.DefaultBranch}}</span>
 <span class="muted">{{.Size}}</span>
@@ -155,7 +168,7 @@ const repoHTML = `<h1>{{.Repo}}</h1>
 <div class="clone"><input readonly value="{{.CloneSSH}}"></div>
 {{if .Empty}}<div class="panel"><div class="empty">This repository is empty. Push a commit to <span class="mono">{{.Ref}}</span>.</div></div>
 {{else}}
-<h2>{{.Ref}} · <a href="/git/{{.Org}}/{{.Repo}}/commits?ref={{.Ref}}">commits</a>{{range .Branches}} · <a href="/git/{{$.Org}}/{{$.Repo}}?ref={{.}}">{{.}}</a>{{end}}</h2>
+<h2>{{.Ref}} · <a href="{{.Base}}/{{.Org}}/{{.Repo}}/commits?ref={{.Ref}}">commits</a>{{range .Branches}} · <a href="{{$.Base}}/{{$.Org}}/{{$.Repo}}?ref={{.}}">{{.}}</a>{{end}}</h2>
 <div class="panel">
 {{range .Entries}}<div class="row">
 <span class="ico">{{if .IsDir}}▸{{else}}·{{end}}</span>
