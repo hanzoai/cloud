@@ -6,20 +6,24 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/integrations"
 )
 
-// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (Gitea). It
-// carries no git logic of its own — Reconcile composes Gitea's own primitives (gitea.go),
-// so Gitea is the ONE git store and no byte transits the retired cloud embedded server:
+// git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (the NATIVE
+// /v1/git plane in this same binary). It carries no git logic of its own — Reconcile
+// composes the native git object-plane seams (cloud.ImportGitRepo / cloud.InboundGitSync
+// / cloud.EnsureGitMirror, which clients/git registers at Mount), so the native git
+// store is the ONE git store and no byte transits an external git host:
 //
-//   - INBOUND (a source push): gitea.mirrorIn advances the matching branch fast-forward
-//     only — a diverged Gitea ref is a conflict, never overwritten (the split-brain
-//     guard, now on Gitea).
-//   - RECONCILE (a manual run / initial sync): for a pulling direction, gitea.mirrorIn
-//     mirrors every branch of the upstream INTO Gitea; for a pushing direction,
-//     gitea.ensurePushMirror declares a Gitea push-mirror (sync_on_commit) so Gitea
-//     itself propagates every later commit to the upstream — no cloud-side reactor.
+//   - INBOUND (a source push): cloud.InboundGitSync advances the matching branch
+//     fast-forward only — a diverged native ref is a Conflict, never overwritten (the
+//     split-brain guard, enforced by git itself, native preserved).
+//   - RECONCILE (a manual run / initial sync): for a pulling direction, cloud.ImportGitRepo
+//     fast-forward mirrors every branch of the upstream INTO native (and, when the sync
+//     also pushes, registers the outbound native→upstream mirror so the native push
+//     lifecycle propagates every later commit back); for a push-only direction,
+//     cloud.EnsureGitMirror declares that outbound target without importing.
 //
 // The short-lived GitHub App installation token rides IN the event when a webhook
 // already minted it; for a manual run the provider mints a fresh one per org. It is
@@ -65,16 +69,12 @@ func resolve(sy Sync, ev Event) act {
 	return act{do: true, inbound: true}
 }
 
-// Reconcile drives sy's endpoints toward agreement for ev on Gitea (the one git store),
-// returning whether Gitea (the target) changed.
+// Reconcile drives sy's endpoints toward agreement for ev on the native git store,
+// returning whether native (the target) changed.
 func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, error) {
 	a := resolve(sy, ev)
 	if !a.do {
 		return false, nil
-	}
-	gt, err := giteaFromEnv()
-	if err != nil {
-		return false, err // fail closed when the Gitea store is unconfigured
 	}
 	owner := sy.Org
 	native := normalizeGitName(sy.Target.Locator)
@@ -84,24 +84,36 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 		return false, err
 	}
 	if a.inbound {
-		// Advance the pushed branch fast-forward only; a diverged Gitea ref is a
-		// conflict (preserved) and an up-to-date ref is a no-op — both "no change".
-		return gt.mirrorIn(ctx, owner, native, source, tok, ev.Branch)
+		// Advance the pushed branch fast-forward only; a diverged native ref is a
+		// Conflict (preserved) and an up-to-date ref is a no-op — both "no change".
+		res, err := cloud.InboundGitSync(ctx, cloud.GitInboundReq{
+			Org: owner, Repo: native, Branch: ev.Branch,
+			CloneURL: source, Token: tok, Origin: hostOf(source),
+		})
+		if err != nil {
+			return false, err
+		}
+		return res.Applied, nil
 	}
-	// Manual reconcile toward the direction. Pull/both mirror EVERY branch in; push/both
-	// declare the outbound Gitea push-mirror so Gitea propagates later commits. Off would
-	// not reach here.
+	// Manual reconcile toward the direction. Pull/both fast-forward mirror EVERY branch
+	// IN (and, when it also pushes, register the outbound native→source mirror so the
+	// native push lifecycle propagates later commits back); push-only declares that
+	// outbound target without importing. Off would not reach here.
 	changed := false
 	if dirPulls(sy.Direction) {
-		c, err := gt.mirrorIn(ctx, owner, native, source, tok, "")
-		if err != nil {
-			return false, fmt.Errorf("mirror-in: %w", err)
+		mirrorURL := ""
+		if dirPushes(sy.Direction) {
+			mirrorURL = source
 		}
-		changed = c
-	}
-	if dirPushes(sy.Direction) {
-		if err := gt.ensurePushMirror(ctx, owner, native, source, tok); err != nil {
-			return false, fmt.Errorf("ensure push-mirror: %w", err)
+		if err := cloud.ImportGitRepo(ctx, cloud.GitImportReq{
+			Org: owner, Repo: native, CloneURL: source, Token: tok, MirrorURL: mirrorURL,
+		}); err != nil {
+			return false, fmt.Errorf("import: %w", err)
+		}
+		changed = true
+	} else if dirPushes(sy.Direction) {
+		if err := cloud.EnsureGitMirror(ctx, owner, "", native, source, true); err != nil {
+			return false, fmt.Errorf("ensure mirror: %w", err)
 		}
 		changed = true
 	}
