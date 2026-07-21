@@ -356,8 +356,21 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 	}
 	org := id.Owner
 	displayName := firstNonEmpty(name, localPart(email))
-	if _, err := g.accounts.EnsureWorkspace(ctx, org, account, displayName); err != nil {
-		g.log.Error("account: ensure workspace", "err", err)
+	// The VERIFIED membership set (home ∪ every org the token proves) is the ONE
+	// source that drives BOTH the workspace union (getUserWorkspaces) AND the seat
+	// projection (Seats). Ensuring a workspace — hence a counted member row — in
+	// EVERY org the user belongs to, not just the home org, is what makes a
+	// non-home org's wallet report the caller as a seat instead of "0 members".
+	// A legacy token (iam < 1.31.34, empty claim) folds to the single home org.
+	orgs := orgsClaim(id.Orgs, org)
+	for _, o := range orgs {
+		oorg, _ := o["org"].(string)
+		if oorg == "" {
+			continue
+		}
+		if _, err := g.accounts.EnsureWorkspace(ctx, oorg, account, displayName); err != nil {
+			g.log.Error("account: ensure workspace", "org", oorg, "err", err)
+		}
 	}
 	// Fill the human display name so the roster reconcile renders a name, not the
 	// account uuid. Idempotent (only fills empty).
@@ -365,11 +378,11 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 
 	// Carry the FULL membership set into the session token so getUserWorkspaces
 	// can union a user's workspaces across every org they belong to (the Slack
-	// model) with no IAM round-trip per poll. The set is the VERIFIED `orgs` claim;
-	// a legacy token (iam < 1.31.34, empty claim) falls back to the single home org
-	// as sole admin. `org` (home) is retained as the primary tenant every existing
-	// account-store surface (files/collab/billing) already scopes to.
-	extra := map[string]any{"org": org, "orgs": orgsClaim(id.Orgs, org)}
+	// model) with no IAM round-trip per poll — the SAME set just ensured above, so
+	// the token, the workspace union, and the seat count never disagree. `org`
+	// (home) is retained as the primary tenant every existing account-store
+	// surface (files/collab/billing) already scopes to.
+	extra := map[string]any{"org": org, "orgs": orgs}
 	// extra.user is the IAM `<owner>/<name>` id — the key get-memberships takes for a
 	// mid-session membership refresh. Present only when IAM gave a username.
 	if id.Username != "" {
