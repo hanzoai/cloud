@@ -42,6 +42,7 @@ var frozen = []struct {
 	{"storage", true, false},         // was order 118
 	{"provisioning", false, false},   // was order 120
 	{"billing", false, false},        // was order 121
+	{"rollingcap", false, false},     // rolling spend-cap gate (after billing); golden drifted — refrozen
 	{"account-bridge", false, false}, // was order 122
 	{"do", false, false},             // was order 123
 	{"platform", true, false},        // was order 124
