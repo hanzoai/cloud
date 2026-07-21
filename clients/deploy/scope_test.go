@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	iamobj "github.com/hanzoai/iam/object"
+	iamobj "github.com/hanzoai/iam-v1/object"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
