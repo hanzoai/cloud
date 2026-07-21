@@ -29,6 +29,7 @@ import (
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/agents"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/iam-v1"
@@ -370,6 +371,17 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 		}
 		if _, err := g.accounts.EnsureWorkspace(ctx, oorg, account, displayName); err != nil {
 			g.log.Error("account: ensure workspace", "org", oorg, "err", err)
+		}
+		// A new org gets its default office AND its default crew together: the
+		// built-in @dev/@des/@vi personas, seeded once into the ONE agents registry
+		// (idempotent, no-op without a model). Best-effort — a seed hiccup NEVER
+		// blocks login; the crew simply appears on the next touch. They project into
+		// the workspace roster as bot members (bots.go) and answer @-mentions through
+		// the Chunter responder (chat.go), same as any org agent.
+		if n, err := agents.SeedPersonalities(ctx, oorg); err != nil {
+			g.log.Warn("account: seed personalities", "org", oorg, "err", err)
+		} else if n > 0 {
+			g.log.Info("account: seeded default crew", "org", oorg, "created", n)
 		}
 	}
 	// Fill the human display name so the roster reconcile renders a name, not the
