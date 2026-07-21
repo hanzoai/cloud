@@ -85,6 +85,45 @@ func TestOrgsClaimRoundTrip(t *testing.T) {
 	}
 }
 
+// TestOrgsClaimAlwaysIncludesHome reproduces the wallet "Seats: 0" defect at its
+// root. The IAM orgs claim does not always list a user's OWN home org — it can
+// carry only explicit team memberships. When it names other orgs but NOT home,
+// establishSession's ensure-a-workspace-per-claimed-org loop skips the home org,
+// so the wallet — which counts the HOME org (extra.org) — finds no member row and
+// reports 0 seats. orgsClaim must therefore keep home in the set unconditionally.
+func TestOrgsClaimAlwaysIncludesHome(t *testing.T) {
+	const home = "maxpower"
+	// The failing shape: the claim lists a DIFFERENT org, never home.
+	claim := []model.OrgRef{{Org: "hanzo", Role: "member"}}
+
+	out := orgsClaim(claim, home)
+	hasHome := false
+	for _, o := range out {
+		if o["org"] == home {
+			hasHome = true
+		}
+	}
+	if !hasHome {
+		t.Fatalf("orgsClaim(%v, %q) = %v, must include the home org", claim, home, out)
+	}
+
+	// End-to-end: drive establishSession's ensure-every-claimed-org loop, then the
+	// wallet's seat count for the HOME org must be >= 1 (the caller's own ensured
+	// member row), never 0.
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const acct = "aaaaaaaa-0000-4000-8000-00000000dave"
+	for _, o := range out {
+		org, _ := o["org"].(string)
+		if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave"); err != nil {
+			t.Fatalf("ensure workspace %s: %v", org, err)
+		}
+	}
+	if seats, _ := s.Seats(ctx, home); seats < 1 {
+		t.Fatalf("home-org seats = %d, want >= 1 (the wallet counts the home org)", seats)
+	}
+}
+
 // TestGetUserWorkspacesUnionsOrgs is the Slack-model bar: a multi-org session
 // token lists the caller's workspaces from EVERY org they belong to, each tagged
 // with its owning org, in one union.
