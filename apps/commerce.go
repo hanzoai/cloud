@@ -160,6 +160,19 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		commercebilling.RunAutoRechargeAllOrgs,
 	)
 
+	// GET /v1/billing/plans — the public tier catalog the console renders. commerce's
+	// legacy api.Route() billing bundle (ListPlans, invoices, subscriptions, …) is NOT
+	// registered by the co-resident embed: setupRoutes wires only /v1/commerce/*, so
+	// /v1/billing/plans has NO handler in this binary. The account bridge's
+	// /v1/billing/* wildcard (order 122) then forwards the read BACK to commerce at
+	// COMMERCE_URL — which defaults to the public api.hanzo.ai edge — re-entering the
+	// same bridge in an unbounded self-dispatch loop that surfaces as a 502
+	// ("commerce unreachable: Get https://api.hanzo.ai/v1/billing/plans"). Registering
+	// the static ListPlans handler HERE (order 100, ahead of the bridge) shadows that
+	// wildcard and serves plans in-process — the same co-resident move billing.go makes
+	// for usage/balance. RequestContext supplies the namespaced context promo.Active reads.
+	app.Get("/v1/billing/plans", commercemid.RequestContext(), commercebilling.ListPlans)
+
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
