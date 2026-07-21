@@ -28,6 +28,7 @@ import (
 	"github.com/hanzoai/cloud/clients/commerceclient"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	financeclient "github.com/hanzoai/cloud/clients/finance"
+	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	commercestore "github.com/hanzoai/commerce/api/store"
@@ -211,6 +212,71 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		)
 	}
 
+	// GET /v1/billing/spend-alerts/authorize — the per-request per-scope spend-CAP
+	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
+	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +
+	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
+	// the console billingRead block above: without a co-resident handler this authorize
+	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
+	// service-token-forwardable (billing.go billingForwardable) — re-forwarded it to
+	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over commerceinproc's
+	// self-routing transport, re-entering the same wildcard until the depth-8 guard refused
+	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
+	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
+	// plain GET /v1/billing/spend-alerts (registered above) already broke this loop for the
+	// CRUD read; this closes the /authorize sibling the metering gate hits on every call.
+	//
+	// Chain mirrors commerce's OWN gate on this route (api/billing/handlers.go: the `billing`
+	// group's userRequired = TokenRequired) plus the RequestContext the standalone supplies
+	// globally — NOT the IAM/PinBillingSubject console chain: a raw service token is not an
+	// IAM JWT, so IAMTokenRequired would leave GetOrganization unset and AuthorizeSpendCap
+	// would 500. TokenRequired authenticates the service token AND resolves the tenant from
+	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
+	// The specific route shadows the bridge wildcard (order 100 < 122). No PlatformOnly:
+	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
+	app.Get("/v1/billing/spend-alerts/authorize",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.AuthorizeSpendCap,
+	)
+
+	// Self-service spend-cap CRUD WRITES — the customer half of the cap: a customer
+	// (or the admin S2S) CREATES / EDITS / REMOVES their own usage caps. These are the
+	// write siblings of the co-resident GET /v1/billing/spend-alerts list; without their
+	// own registration they too fell through the account bridge's /v1/billing/* wildcard
+	// (billingForwardable includes POST spend-alerts) into the SAME 502 self-dispatch loop
+	// authorize hit — so a customer could not set a cap AT ALL in the unified binary
+	// (POST/PATCH/DELETE all 502'd). Same chain commerce's own route table gates them with
+	// (api/billing/handlers.go:322-325, the `user` group's userRequired = TokenRequired) +
+	// the global RequestContext — an IAM JWT OR the COMMERCE_SERVICE_TOKEN, org resolved
+	// from the gateway-pinned X-Org-Id into Locals("organization"). Org-scoped by that
+	// namespace (a caller only ever writes their OWN org's caps; a foreign :id is a
+	// not-found miss in the caller's namespace), so no PinBillingSubject — spend-alerts are
+	// org-level, not billing-subject-level. Shadow the bridge wildcard (order 100 < 122).
+	// A spend cap is a FINANCIAL SAFETY control, so its writes are gated to an ORG ADMIN
+	// (or SuperAdmin, or the trusted S2S service token for the SuperAdmin cap-oversight
+	// Forward) — never any authenticated member. commerce's own `user` group admits any
+	// member, which would let a compromised member key DELETE the org's cap (→ unbounded
+	// spend) or POST a 1¢ enforce cap (→ org-wide 402 DoS). requireSpendCapAdmin closes that.
+	app.Post("/v1/billing/spend-alerts",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.CreateSpendAlert,
+	)
+	app.Patch("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.UpdateSpendAlert,
+	)
+	app.Delete("/v1/billing/spend-alerts/:id",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		requireSpendCapAdmin(),
+		commercebilling.DeleteSpendAlert,
+	)
+
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
@@ -320,4 +386,20 @@ func fireCapAlert(org string, test bool, project, service string) {
 	ctx := commercensctx.WithNamespace(context.Background(), org)
 	db := commercedatastore.New(ctx)
 	commercebilling.FireSpendAlerts(ctx, db, org, test, project, service, nil)
+}
+
+// requireSpendCapAdmin gates a spend-alert WRITE to a validated ORG ADMIN or platform
+// SuperAdmin (the unforgeable SanitizeIdentity-minted X-User-IsOrgAdmin / isAdmin bits),
+// OR the trusted in-proc S2S service token (the SuperAdmin cap-oversight Forward + internal
+// automation). A validated non-admin MEMBER is REFUSED (403): a spend cap is a financial
+// safety boundary — a member must not be able to delete the org's cap (→ unbounded spend)
+// or set a punitive 1¢ cap (→ org-wide 402 DoS). The read paths (list/authorize) stay
+// member/S2S-open; only the mutations require admin.
+func requireSpendCapAdmin() zip.Handler {
+	return func(c *zip.Ctx) error {
+		if principal.IsSuperAdmin(c) || principal.IsOrgAdmin(c) || accountclient.IsServiceToken(c) {
+			return c.Next()
+		}
+		return zip.ErrForbidden("org admin required to change spend caps")
+	}
 }

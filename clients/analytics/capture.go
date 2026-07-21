@@ -173,6 +173,7 @@ type CaptureEvent struct {
 	Quantity    uint32         `json:"quantity"`
 	Revenue     float64        `json:"revenue"`
 	Currency    string         `json:"currency"`
+	Error       *Exception     `json:"error"` // set on type:'error' events (folded into properties.$exception)
 	Properties  map[string]any `json:"properties"`
 	Library     string         `json:"library"`
 	LibraryVer  string         `json:"libraryVersion"`
@@ -297,12 +298,20 @@ func resolveEventName(e CaptureEvent) string {
 		return "$identify"
 	case "group":
 		return "$group"
+	case "error":
+		if name == "" {
+			return "$error"
+		}
+		return name
 	default: // "event"
 		return name
 	}
 }
 
-// canonicalType folds the type to the closed set {pageview,identify,group,event}.
+// canonicalType folds the type to the closed set
+// {pageview,identify,group,error,event}. `error` is first-class so the ingest can
+// store type:'error' events under event_type='error' — the key the /v1/errors
+// read lens filters on. An unknown type still folds to "event".
 func canonicalType(t string) string {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "pageview", "page":
@@ -311,6 +320,8 @@ func canonicalType(t string) string {
 		return "identify"
 	case "group":
 		return "group"
+	case "error":
+		return "error"
 	default:
 		return "event"
 	}

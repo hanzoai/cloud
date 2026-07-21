@@ -350,3 +350,9 @@ func s2sBillingCall(c *zip.Ctx) bool {
 	bearer := strings.TrimSpace(strings.TrimPrefix(c.Header("Authorization"), "Bearer "))
 	return bearer != "" && subtle.ConstantTimeCompare([]byte(bearer), []byte(token)) == 1
 }
+
+// IsServiceToken is the exported view of s2sBillingCall — whether the request is a trusted
+// in-proc S2S caller bearing the verified COMMERCE_SERVICE_TOKEN. Used by co-resident route
+// gates (e.g. the spend-alert admin gate) that must admit the metering cap-gate and the
+// SuperAdmin cap-oversight Forward alongside org admins, while refusing a plain member.
+func IsServiceToken(c *zip.Ctx) bool { return s2sBillingCall(c) }

@@ -109,6 +109,7 @@ func TestBuildRegistrationCarriesEngine(t *testing.T) {
 		jobsNS:       "gpu-jobs",
 		gpus:         []gpuInfo{{Name: "NVIDIA GB10", MemoryTotal: "122880 MiB"}},
 		serveEngine:  true,
+		studioReady:  true,
 		engineURL:    srv.URL,
 		engineAdvURL: "http://node.example:1234",
 	}
@@ -136,7 +137,7 @@ func TestBuildRegistrationCarriesEngine(t *testing.T) {
 }
 
 func TestCapabilitiesWithoutEngine(t *testing.T) {
-	w := &worker{serveEngine: false}
+	w := &worker{serveEngine: false, studioReady: true}
 	caps := w.capabilities()
 	if len(caps) != 1 || caps[0] != studioCap {
 		t.Fatalf("capabilities = %v, want just [%q] when not serving an engine", caps, studioCap)
