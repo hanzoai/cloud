@@ -70,6 +70,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			DO:         digitalocean.New(doTokenFromEnv()),
 			AdminOrg:   adminOrgOf(deps),
 			AuditStore: deps.Audit,
+			WLTenants:  wlTenantsFromEnv(),
 		},
 	}
 
@@ -161,6 +162,11 @@ func me(s *cloud.Service[core.State], c *zip.Ctx) error {
 		Email:        strings.TrimSpace(c.UserEmail()),
 		DisplayName:  name,
 		IsSuperAdmin: sc.Super,
+		// The gate (GuardScoped) already proved this caller is either a SuperAdmin or an
+		// admin of an ENABLED WL tenant, so an admitted non-super IS the WL tier — no
+		// separate lookup needed. ScopeOrgs is the resolved subtree (empty ⇒ all, for super).
+		IsWhiteLabel: !sc.Super,
+		ScopeOrgs:    sc.Orgs,
 	})
 }
 
@@ -461,6 +467,30 @@ func adminOrgOf(_ cloud.Deps) string {
 		return v
 	}
 	return "admin"
+}
+
+// wlTenantsFromEnv resolves the enabled white-label tenant allowlist from
+// ADMIN_WL_TENANT_ORGS (comma-separated org slugs). It is the ONE seed of
+// State.WLTenants — the fail-closed second admission tier: EMPTY/unset ⇒ no customer
+// org-admin is admitted (SuperAdmins only), so an absent/mis-set env fails CLOSED.
+// Each entry is trimmed and matched verbatim against principal.Org (the validated
+// owner), never folded; blank entries are dropped. Onboarding a reseller is a
+// deliberate, KMS-/git-auditable edit to this env, not a runtime self-service flip.
+func wlTenantsFromEnv() map[string]bool {
+	raw := strings.TrimSpace(os.Getenv("ADMIN_WL_TENANT_ORGS"))
+	if raw == "" {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		if org := strings.TrimSpace(part); org != "" {
+			set[org] = true
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return set
 }
 
 // doTokenFromEnv reads the DigitalOcean token from the environment. Sourced from a
