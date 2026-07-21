@@ -408,11 +408,15 @@ func (g *api) establishSession(ctx context.Context, access string) (account, tok
 }
 
 // orgsClaim builds the session token's extra.orgs value from the VERIFIED IAM
-// `orgs` claim. It fails CLOSED to the single home org (sole admin) for a legacy
-// token whose claim is empty, so the session ALWAYS carries at least the home
-// tenant — never an empty set that would strand a user with zero workspaces. Each
-// entry is a plain map so token.Generate's JSON marshal is stable and the decode
-// side (orgsFromExtra) reads it back with no SDK dependency in the token layer.
+// `orgs` claim. The home tenant is ALWAYS present: it is extra.org — the org the
+// wallet, Seats, and every account-store surface scope to — so its workspace has
+// to be ensured (and count a seat) at login. The IAM orgs claim does not reliably
+// list a user's OWN home org (it may carry only explicit team memberships), so
+// home is appended when absent rather than only when the claim is empty; without
+// this a user whose claim names other orgs but not home lands on a home org with
+// no ensured workspace and a wallet that reports 0 seats. Each entry is a plain
+// map so token.Generate's JSON marshal is stable and the decode side
+// (orgsFromExtra) reads it back with no SDK dependency in the token layer.
 func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
 	out := make([]map[string]any, 0, len(orgs)+1)
 	seen := map[string]bool{}
@@ -423,7 +427,7 @@ func orgsClaim(orgs []model.OrgRef, home string) []map[string]any {
 		seen[o.Org] = true
 		out = append(out, map[string]any{"org": o.Org, "role": o.Role})
 	}
-	if len(out) == 0 && home != "" {
+	if home != "" && !seen[home] {
 		out = append(out, map[string]any{"org": home, "role": "admin"})
 	}
 	return out
