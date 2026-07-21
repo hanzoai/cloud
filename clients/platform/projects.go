@@ -7,7 +7,7 @@
 //
 // IAM is embedded in the SAME cloud binary (clients/iam mounts the whole Beego
 // handler; iamserver.InitEmbed wires the shared object store), so the reference
-// is an IN-PROCESS call into github.com/hanzoai/iam/object — no HTTP hop to
+// is an IN-PROCESS call into github.com/hanzoai/iam-v1/object — no HTTP hop to
 // /v1/iam, and IAM's canonical *object.Project is used verbatim, never cloned
 // into a platform-local struct. This couples platform to the embedded IAM
 // runtime: a cloud deployment that enables "platform" MUST also enable "iam"
@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"time"
 
-	iamobj "github.com/hanzoai/iam/object"
+	iamobj "github.com/hanzoai/iam-v1/object"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud/clients/principal"
