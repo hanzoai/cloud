@@ -11,11 +11,11 @@ package team
 //	  - updateContent {content:{field:markup}} → {}
 //	  - getContent    {source?:blobRef}        → {content:{field:markup}}
 //
-// The LIVE editing lane (Y.js sync) stays on the /collaborator WebSocket to the
-// collab relay; this RPC lane is markup-snapshot blob I/O, and blobs are cloud's
-// domain (deps.VFS — the SAME seam and tenant-scoped key layout as files.go).
-// The ingress path-splits /collaborator/rpc → cloud while /collaborator (WS)
-// keeps routing to the relay.
+// The LIVE editing lane (Y.js sync) is the /collaborator WebSocket served by
+// collabws.go in this same service; this RPC lane is markup-snapshot blob I/O,
+// and blobs are cloud's domain (deps.VFS — the SAME seam and tenant-scoped key
+// layout as files.go). The ingress routes both /collaborator/rpc and
+// /collaborator (WS) to cloud.
 //
 // Snapshot semantics mirror the reference server (server/collaborator rpc):
 // createContent/updateContent persist the markup JSON at a timestamped blob id
@@ -46,17 +46,22 @@ import (
 // blob backend. 10 MiB of ProseMirror JSON is far beyond any real document.
 const maxMarkupSize = 10 << 20
 
-// collabService serves the collaborator RPC lane.
+// collabService serves the collaborator planes: the markup-snapshot RPC lane
+// (this file) and the live hocuspocus WS lane (collabws.go), sharing one
+// tenancy gate and one VFS seam.
 type collabService struct {
 	vfs      types.VFSClient
 	accounts *accountStore
 	secret   string
+	hub      *collabHub
 }
 
 func (s *collabService) register(app *zip.App, guard guardFn) {
-	// App-level (NOT under /v1/team): the front derives this path from
-	// COLLABORATOR_URL (wss://<host>/collaborator → POST /collaborator/rpc/:id).
+	// App-level (NOT under /v1/team): the front derives both paths from
+	// COLLABORATOR_URL (wss://<host>/collaborator → the live Y.js WebSocket;
+	// http(s)://<host>/collaborator/rpc/:id → the snapshot RPC).
 	app.Post("/collaborator/rpc/:documentId", guard(s.rpc))
+	app.Get("/collaborator", guard(s.ws))
 }
 
 // collabDoc is the decoded documentId (collaborator-client encodeDocumentId).
