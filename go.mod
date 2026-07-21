@@ -18,8 +18,8 @@ require (
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
-	github.com/hanzoai/iam v1.31.34
-	github.com/hanzoai/iam2 v0.16.0
+	github.com/hanzoai/iam v1.32.0
+	github.com/hanzoai/iam-v1 v1.31.37
 	github.com/hanzoai/money v0.2.1
 	github.com/hanzoai/notify v1.6.18
 	github.com/hanzoai/otel-collector v1.2.0
@@ -156,7 +156,7 @@ require (
 	github.com/luxfi/validators v1.3.1 // indirect
 	github.com/luxfi/version v1.0.1 // indirect
 	github.com/luxfi/warp v1.24.1 // indirect
-	github.com/luxwallet/connect/go v0.1.3 // indirect
+	github.com/luxwallet/connect/go v0.1.4 // indirect
 	github.com/minio/highwayhash v1.0.4 // indirect
 	github.com/mostynb/go-grpc-compression v1.2.3 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
