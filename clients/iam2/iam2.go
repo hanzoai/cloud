@@ -27,7 +27,7 @@ import (
 	"os"
 	"path/filepath"
 
-	iam2server "github.com/hanzoai/iam2/server"
+	iam2server "github.com/hanzoai/iam/server"
 	"github.com/hanzoai/orm"
 	"github.com/zap-proto/zip"
 

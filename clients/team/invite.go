@@ -38,7 +38,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // iamMaxInviteBody bounds an IAM response read — get-user / add-membership /
