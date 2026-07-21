@@ -71,7 +71,7 @@ import (
 
 	// iamserver is the body of the standalone iamd main() — full Beego
 	// server (login UI, all routes, LDAP/RADIUS). `hanzo iam` calls Run().
-	"github.com/hanzoai/iam/iamserver"
+	"github.com/hanzoai/iam-v1/iamserver"
 
 	// The subsystem set is defined ONCE in the subsystems bundle (shared with
 	// cmd/cloud). apps.Wire() returns it in mount order; main threads that

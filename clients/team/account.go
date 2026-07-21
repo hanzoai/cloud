@@ -31,7 +31,7 @@ import (
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/team/token"
 	"github.com/hanzoai/cloud/types"
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // authCookie is the cookie the SPA's PUT/DELETE /cookie manage; RPC itself rides
