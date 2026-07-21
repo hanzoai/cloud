@@ -1,5 +1,5 @@
-// studio.go — local Hanzo Studio render-backend supervision for `hanzo gpu
-// connect --studio-dir <checkout>`. The gpu-jobs claim loop renders on the
+// studio.go — local Hanzo Studio render-backend supervision for `hanzo link
+// --studio-dir <checkout>`. The gpu-jobs claim loop renders on the
 // LOCAL studio server (127.0.0.1:8188); this keeps that server alive so the
 // box needs no separate watchdog script or hand-rolled systemd unit — the
 // hanzo CLI is the one way a BYO box joins the fleet, render backend included.
