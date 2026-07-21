@@ -31,6 +31,15 @@ import (
 var baseReserved = func() map[string]bool {
 	labels := []string{
 		"", "www",
+		// SECURITY INVARIANT — reserved ⊇ every `<label>.<apex>` the SHARED brand
+		// `<brand>-app` IAM client registers as an OAuth redirect. If such a label were
+		// publishable, an attacker could first-come-claim `<label>.<apex>`, serve their
+		// own page, then run authorize with client_id=<brand>-app + a redirect that IS
+		// on the shared client's exact-match list → the victim's code lands on the
+		// attacker's page → token with aud=<brand>-app that the API trusts (account
+		// takeover). `www` (above) + `stg` are the current hanzo-app redirect labels;
+		// keep this in lock-step with init_data.json (TestReservedCoversSharedAppRedirects).
+		"stg",
 		// infrastructure / app hosts
 		"api", "app", "apps", "admin", "administrator", "root", "console", "dashboard",
 		"portal", "sites", "site", "host", "hosting", "internal", "gateway", "proxy",

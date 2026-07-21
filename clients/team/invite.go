@@ -38,7 +38,7 @@ import (
 
 	"github.com/zap-proto/zip"
 
-	"github.com/hanzoai/iam"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // iamMaxInviteBody bounds an IAM response read — get-user / add-membership /
@@ -165,12 +165,12 @@ func (g *api) iamAddMembership(ctx context.Context, user, org, role string) erro
 // iamGetMemberships reads the LIVE org-membership set for a user (`<owner>/<name>`)
 // straight from IAM — the mid-session refresh a client uses to pick up an org it
 // was invited into without re-logging-in. Same shape as the `orgs` claim.
-func (g *api) iamGetMemberships(ctx context.Context, user string) ([]iam.OrgRef, error) {
+func (g *api) iamGetMemberships(ctx context.Context, user string) ([]model.OrgRef, error) {
 	data, err := g.iamDo(ctx, http.MethodGet, "/get-memberships", url.Values{"user": {user}}, nil)
 	if err != nil {
 		return nil, err
 	}
-	var refs []iam.OrgRef
+	var refs []model.OrgRef
 	if err := json.Unmarshal(data, &refs); err != nil {
 		return nil, fmt.Errorf("iam get-memberships decode: %w", err)
 	}

@@ -77,7 +77,12 @@ type fleetUnit struct {
 	Spec     *fleetSpec    `json:"spec,omitempty"`
 	Metrics  *fleetMetrics `json:"metrics,omitempty"`
 	Sessions int           `json:"sessions"`
-	Running  int           `json:"running"`
+	// Running is what the unit is actively executing: agent sessions for a run-target,
+	// in-flight renders for a BYO GPU. Queued is the gpu-jobs backlog on this GPU's
+	// lane (BYO units only; an agent unit does not queue). Both come from the org's
+	// gpu-jobs queue for BYO units, overlaid in listFleet.
+	Running int `json:"running"`
+	Queued  int `json:"queued,omitempty"`
 }
 
 // sampleView is one row of the time series on the wire.
@@ -285,6 +290,21 @@ func listFleet(s *cloud.Service[state], c *zip.Ctx) error {
 		// another's row.
 		if smp, ok := latest[units[i].Unit]; ok && smp.Source == units[i].Source {
 			units[i].Metrics = metricsOf(smp)
+		}
+	}
+
+	// Overlay the org's gpu-jobs queue depth onto its BYO GPU units: Queued (waiting
+	// on this GPU's lane) + Running (renders it is executing now). Only BYO units
+	// carry a render queue; an agent unit's Running stays its session load. Fail-soft:
+	// gpuJobs is nil on an unavailable engine, so counts is empty and nothing is
+	// touched — the board never breaks because the queue read did.
+	counts := gpuJobCounts(gpuJobs(org))
+	for i := range units {
+		if units[i].Source != samples.SourceBYO {
+			continue
+		}
+		if cnt, ok := counts[units[i].Unit]; ok {
+			units[i].Queued, units[i].Running = cnt.queued, cnt.running
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"units": units})
