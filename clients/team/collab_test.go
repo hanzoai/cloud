@@ -1,7 +1,9 @@
 package team
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -72,6 +74,61 @@ func TestCollabRPCRoundTrip(t *testing.T) {
 	})
 	if code != http.StatusOK || string(body) != "{}" {
 		t.Fatalf("updateContent = %d (%s)", code, body)
+	}
+}
+
+// TestCollabCreateContentSeedsYLog is the tracker "description dropped on create"
+// bar: the New-Issue dialog's createContent must seed the live-editing update log
+// (the one collabws.go replays), not only the snapshot blob — else the freshly
+// created issue's collaborative editor shows empty. updateContent must NEVER touch
+// the log (a live-edited doc must not be clobbered).
+func TestCollabCreateContentSeedsYLog(t *testing.T) {
+	vfs := newMemVFS()
+	app := mountTeamVFS(t, vfs)
+	ctx := context.Background()
+	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
+	ws, err := mounted.State.accounts.EnsureWorkspace(ctx, org, acct, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := bearerFor(t, acct, org)
+	docID := collabDocID(ws.UUID, "tracker:class:Issue", "issue-seed", "description")
+	markup := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}`
+	update := []byte{0x01, 0x02, 0x03, 0x04} // opaque Y.js update — the lane never parses it
+	logKey := blobKey(org, ws.UUID, yLogBlobID(collabDoc{objectID: "issue-seed", objectAttr: "description"}))
+
+	code, body := call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+		"method": "createContent",
+		"payload": map[string]any{
+			"content": map[string]string{"description": markup},
+			"updates": map[string]string{"description": base64.StdEncoding.EncodeToString(update)},
+		},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("createContent = %d (%s)", code, body)
+	}
+	data, err := vfs.Get(ctx, logKey)
+	if err != nil {
+		t.Fatalf("createContent did not seed the ydoc log: %v", err)
+	}
+	if log := unmarshalYLog(data); len(log) != 1 || !bytes.Equal(log[0], update) {
+		t.Fatalf("seeded log = %v, want one entry %v", log, update)
+	}
+
+	// updateContent must not clobber the log the live editors own.
+	code, body = call(t, app, http.MethodPost, "/collaborator/rpc/"+docID, auth, map[string]any{
+		"method": "updateContent",
+		"payload": map[string]any{
+			"content": map[string]string{"description": markup},
+			"updates": map[string]string{"description": base64.StdEncoding.EncodeToString([]byte{0x09})},
+		},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("updateContent = %d (%s)", code, body)
+	}
+	data, _ = vfs.Get(ctx, logKey)
+	if log := unmarshalYLog(data); len(log) != 1 || !bytes.Equal(log[0], update) {
+		t.Fatalf("updateContent clobbered the seeded log: %v", log)
 	}
 }
 
