@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	iamobj "github.com/hanzoai/iam/object"
+	iamobj "github.com/hanzoai/iam-v1/object"
 )
 
 // fakeProjects is an in-memory, org-scoped ProjectStore standing in for the
