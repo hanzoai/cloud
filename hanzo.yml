@@ -57,7 +57,9 @@ test:
         ./clients/bots/ \
         ./clients/admin/finance/ \
         ./clients/flags/ \
-        ./clients/ml/
+        ./clients/ml/ \
+        ./clients/visor/ \
+        ./cli/
 
 kms:
   path: /deploy
