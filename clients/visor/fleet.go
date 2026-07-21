@@ -71,6 +71,7 @@ type byoWorker struct {
 	// board renders a gpu-connect node's arch + cores + RAM like any other unit.
 	Arch          string   `json:"arch,omitempty"`
 	CPUs          int      `json:"cpus,omitempty"`
+	CPUModel      string   `json:"cpuModel,omitempty"`
 	Memory        int64    `json:"memory,omitempty"`
 	Version       string   `json:"version,omitempty"`
 	JobQueue      string   `json:"jobQueue,omitempty"`
@@ -88,6 +89,7 @@ type fleetRegistration struct {
 	Arch         string               `json:"arch,omitempty"`
 	CPUs         int                  `json:"cpus,omitempty"`
 	Memory       int64                `json:"memory,omitempty"`
+	CPUModel     string               `json:"cpuModel,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
 	GPUs         []byoGPU             `json:"gpus"`
@@ -133,6 +135,7 @@ func byoWorkers(org string) []byoWorker {
 			Os:            reg.Os,
 			Arch:          reg.Arch,
 			CPUs:          reg.CPUs,
+			CPUModel:      reg.CPUModel,
 			Memory:        reg.Memory,
 			Version:       reg.Version,
 			JobQueue:      reg.JobQueue,
