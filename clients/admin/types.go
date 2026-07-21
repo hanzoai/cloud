@@ -19,6 +19,17 @@ type adminMe struct {
 	Email        string `json:"email"`
 	DisplayName  string `json:"displayName"`
 	IsSuperAdmin bool   `json:"isSuperAdmin"`
+	// IsWhiteLabel marks the admitted NON-super tier: an admin of an enabled
+	// white-label tenant org. Mutually exclusive with IsSuperAdmin (the gate lets
+	// exactly one tier through). The operator SPA reads it to render the SUBTREE
+	// cockpit — the fleet god-view nav (finance/revenue/metrics/o11y/providers) is
+	// hidden — while a super sees the whole fleet.
+	IsWhiteLabel bool `json:"isWhiteLabel"`
+	// ScopeOrgs is the caller's visible tenant window: empty for a SuperAdmin (means
+	// ALL orgs), or the WL tenant's own subtree (today the singleton {org}). The SPA
+	// threads it through the faceting/drill-down layer so a WL tenant can never widen
+	// a filter past their subtree.
+	ScopeOrgs []string `json:"scopeOrgs,omitempty"`
 }
 
 // overviewData is the fleet overview tiles (OverviewData / GET /v1/admin/overview).
