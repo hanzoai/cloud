@@ -150,11 +150,11 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	billing := &billingService{accounts: accounts, commerce: deps.Commerce, planEnt: plan.Entitlements, secret: cfg.serverSecret}
 	billing.register(tg, guard)
 
-	// Collaborator RPC plane: the HTTP half of the collaborative markup contract
-	// (createContent/updateContent/getContent snapshots on deps.VFS). App-level
-	// route — the front posts to /collaborator/rpc/:documentId (see collab.go);
-	// the live Y.js WS lane stays on the collab relay.
-	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret}
+	// Collaborator planes, both app-level under /collaborator: the markup
+	// snapshot RPC (collab.go, POST /collaborator/rpc/:documentId) and the live
+	// hocuspocus Y.js WebSocket (collabws.go, GET /collaborator) — one service,
+	// one tenancy gate, one VFS seam.
+	collab := &collabService{vfs: deps.VFS, accounts: accounts, secret: cfg.serverSecret, hub: newCollabHub(deps.VFS)}
 	collab.register(app, guard)
 
 	mounted = &cloud.Service[state]{Base: cloud.NewBase(deps, "team"), State: state{accounts: accounts, trans: trans}}
