@@ -124,6 +124,30 @@ func TestBindHostRejectsReserved(t *testing.T) {
 	}
 }
 
+// TestBindHostRejectsStg is the storage-layer regression guard for the account-
+// takeover HIGH (RED): `stg` is a shared `hanzo-app` OAuth redirect label
+// (https://stg.hanzo.app/callback), so `stg.hanzo.app` MUST be un-claimable. slugRE
+// would otherwise admit it — reserved is the SOLE gate — so BindHost must refuse it
+// like any reserved label, and it must never resolve. Mirrors TestBindHostRejectsReserved.
+func TestBindHostRejectsStg(t *testing.T) {
+	if !slugRE.MatchString("stg") {
+		t.Fatal("precondition: stg must match slugRE, so reserving it is the ONLY thing stopping a claim")
+	}
+	ctx := context.Background()
+	s := newTestStore(t)
+	p := mkProject("attacker", "stg", "stg")
+	p.Status = "live"
+	if err := s.CreateProject(ctx, p); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.BindHost(ctx, "stg", "attacker", "stg", 100); !errors.Is(err, errReservedHost) {
+		t.Fatalf("BindHost(stg) = %v, want errReservedHost", err)
+	}
+	if _, err := s.ResolveHost(ctx, "stg"); !errors.Is(err, errNotFound) {
+		t.Fatalf("reserved host stg must not resolve, got %v", err)
+	}
+}
+
 // TestCreateRejectsReservedSlug proves the create-time guard through the real HTTP
 // handler: a reserved slug is a 400; a normal slug still creates. ONE reserved-list
 // source (sites.IsReserved) is enforced here and at BindHost.
