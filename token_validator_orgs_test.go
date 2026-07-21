@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // TestVerifiedIdentityCarriesOrgs proves a signed `orgs` claim is verified and
