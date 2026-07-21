@@ -276,6 +276,7 @@ type collabPeer struct {
 // replicas=1) — every session for a doc lands in this process.
 type collabRoom struct {
 	blobKey string
+	stop    chan struct{} // closes when the room is GC'd; ends the flusher
 
 	mu        sync.Mutex
 	peers     map[*collabPeer]struct{}
@@ -283,6 +284,22 @@ type collabRoom struct {
 	loaded    bool
 	dirty     bool
 	lastFlush time.Time
+}
+
+// flusher persists a dirty room on the debounce clock even when no further
+// appends arrive (burst-then-idle must not sit in memory until the last peer
+// leaves). Ends when the room is GC'd.
+func (rm *collabRoom) flusher(vfs types.VFSClient) {
+	t := time.NewTicker(collabFlushEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-rm.stop:
+			return
+		case <-t.C:
+			rm.flush(context.Background(), vfs, false)
+		}
+	}
 }
 
 type collabHub struct {
@@ -305,9 +322,11 @@ func (h *collabHub) join(ctx context.Context, org, workspace, docName string, d 
 	if !ok {
 		rm = &collabRoom{
 			blobKey: blobKey(org, workspace, yLogBlobID(d)),
+			stop:    make(chan struct{}),
 			peers:   map[*collabPeer]struct{}{},
 		}
 		h.rooms[key] = rm
+		go rm.flusher(h.vfs)
 	}
 	h.mu.Unlock()
 
@@ -337,6 +356,7 @@ func (h *collabHub) leave(ctx context.Context, org, workspace, docName string, r
 	empty := len(rm.peers) == 0
 	if empty {
 		delete(h.rooms, key)
+		close(rm.stop)
 	}
 	rm.mu.Unlock()
 	h.mu.Unlock()
