@@ -1216,6 +1216,8 @@ github.com/hanzoai/ai v1.829.0 h1:m/Hm8mK0V+cU3wX0ShGcO5QrDMtDHV+zZTuuyVQ63dU=
 github.com/hanzoai/ai v1.829.0/go.mod h1:vVlaV0pZh8H2Le96O7pRy95i6EbQXpqq5GNfxMRc+HU=
 github.com/hanzoai/ai v1.829.2 h1:Zyq6lIGz6SjsCsEWINoqhfA3Si+7afzgWnOQI1RLAAk=
 github.com/hanzoai/ai v1.829.2/go.mod h1:vVlaV0pZh8H2Le96O7pRy95i6EbQXpqq5GNfxMRc+HU=
+github.com/hanzoai/ai v1.829.3 h1:U0z3ZyubEYxP3AIrbP7A1cjxMvzzaK5Tm4iCWvyXHLs=
+github.com/hanzoai/ai v1.829.3/go.mod h1:vVlaV0pZh8H2Le96O7pRy95i6EbQXpqq5GNfxMRc+HU=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
 github.com/hanzoai/authz v1.10.7/go.mod h1:9wf6n6BvrvxRULUtL3yc+vmprwwvAGZLGJoMHhiQSK4=
 github.com/hanzoai/authzstore v0.1.1 h1:4GsvB+bKs+gFtfKDMoYq/C7KxJAHrXLwtwdSutTakbo=
@@ -1230,6 +1232,8 @@ github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
 github.com/hanzoai/commerce v1.49.7 h1:/6Cr3LQC6OqIE0pRwbKg1MYGNiOPpPNrjb/9F8owYu8=
 github.com/hanzoai/commerce v1.49.7/go.mod h1:+Bp6hVxJQmv71D/ZPzs5qiEVHyDNUchNsqakd+778ps=
+github.com/hanzoai/commerce v1.49.8 h1:3Z6FA2N9lv0s/bv2BR825J4Bq3CYA0zRPbpOACNsp/Y=
+github.com/hanzoai/commerce v1.49.8/go.mod h1:+Bp6hVxJQmv71D/ZPzs5qiEVHyDNUchNsqakd+778ps=
 github.com/hanzoai/csqlite v0.1.0 h1:suwC3dh0INlfP/U0Es6cDf6JNQ+2+GVLLATPWCUux6k=
 github.com/hanzoai/csqlite v0.1.0/go.mod h1:H31a/O6VXuklR9UBkgY++bmAK5uzVfXPqU0F6P9Wsos=
 github.com/hanzoai/dashscope-go-sdk v0.0.2 h1:L/FlStjXeehrNSBqU8y/ecSG/MnaAJqfyfjmLYmY344=
