@@ -70,6 +70,13 @@ var superHdr = map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", 
 var orgAdminHdr = map[string]string{"X-Org-Id": "maxpower", "X-User-Id": "maxpower/dave", "X-User-Email": "dave@maxpower.test", "X-User-IsOrgAdmin": "true"}
 var memberHdr = map[string]string{"X-Org-Id": "maxpower", "X-User-Id": "maxpower/eve", "X-User-Email": "eve@maxpower.test"}
 
+// nonWLOrgAdminHdr is a VALIDATED org admin (the unforgeable X-User-IsOrgAdmin bit +
+// a pinned own-org) of an org that is NOT an enabled white-label tenant — "acme" is
+// absent from the harness WLTenants set. It is the caller the OLD gate wrongly admitted
+// (any org-admin) and the new gate must REFUSE: same 403 as an anonymous forge. It is
+// the whole point of the WL admission tier.
+var nonWLOrgAdminHdr = map[string]string{"X-Org-Id": "acme", "X-User-Id": "acme/carol", "X-User-Email": "carol@acme.test", "X-User-IsOrgAdmin": "true"}
+
 func TestScope_SuperSeesAllOrgs(t *testing.T) {
 	iam := newScopeIAM()
 	defer iam.server.Close()
@@ -177,6 +184,84 @@ func TestScope_PlatformRouteDeniesOrgAdminButScopedAdmits(t *testing.T) {
 	}
 	if env.Data.Owner != "maxpower" {
 		t.Fatalf("org admin me.Owner = %q, want maxpower", env.Data.Owner)
+	}
+	if !env.Data.IsWhiteLabel {
+		t.Fatalf("admitted WL-tenant org admin me.IsWhiteLabel must be true")
+	}
+	if len(env.Data.ScopeOrgs) != 1 || env.Data.ScopeOrgs[0] != "maxpower" {
+		t.Fatalf("WL-tenant me.ScopeOrgs = %v, want [maxpower] (own subtree only)", env.Data.ScopeOrgs)
+	}
+}
+
+// TestScope_NonWhiteLabelOrgAdminDenied is the CORE new invariant: a validated org
+// admin whose org is NOT an enabled white-label tenant is REFUSED on EVERY org-scoped
+// panel — not scoped-down, REFUSED (403). The old GuardScoped admitted any org-admin;
+// the tightened gate requires WL enablement, so an ordinary customer's own-org admin can
+// never open the cockpit. Same 403 a non-admin member gets.
+func TestScope_NonWhiteLabelOrgAdminDenied(t *testing.T) {
+	do := mount(t, "http://127.0.0.1:0", "http://127.0.0.1:0", "")
+	for _, r := range scopedAdminRoutes {
+		if resp, body := do(r.method, r.path, nonWLOrgAdminHdr); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s [org admin of NON-WL org]: got %d, want 403 — WL admission tier bypassed (body=%s)",
+				r.method, r.path, resp.StatusCode, body)
+		}
+	}
+}
+
+// TestScope_WhiteLabelTenantDeniedGodViews proves the SUBTREE ceiling: an ADMITTED WL
+// tenant (maxpower is enabled) still gets 403 on EVERY platform god-view (core.Guard) —
+// finance/revenue/metrics/o11y/providers-credit/audit/customers/flags/…. A WL tenant can
+// read its own subtree panels but NEVER a fleet number. This is the no-fleet-leak line.
+func TestScope_WhiteLabelTenantDeniedGodViews(t *testing.T) {
+	do := mount(t, "http://127.0.0.1:0", "http://127.0.0.1:0", "")
+	for _, r := range platformAdminRoutes {
+		if resp, body := do(r.method, r.path, orgAdminHdr); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s [enabled WL tenant]: got %d, want 403 — a WL tenant must never reach a fleet god-view (body=%s)",
+				r.method, r.path, resp.StatusCode, body)
+		}
+	}
+}
+
+// TestScope_WhiteLabelDefaultFailClosed proves the platform default is fleet-only: with
+// NO org enabled (WLTenants cleared), even a validated org admin is 403 on the scoped
+// panels — the cockpit is SuperAdmin-only until an org is explicitly onboarded.
+func TestScope_WhiteLabelDefaultFailClosed(t *testing.T) {
+	iam := newScopeIAM()
+	defer iam.server.Close()
+	commerce := newFakeCommerce()
+	defer commerce.server.Close()
+	do, s, _ := mountService(t, iam.server.URL, commerce.server.URL, "")
+	s.State.WLTenants = nil // fleet-only default: no white-label tenant enabled
+	for _, r := range scopedAdminRoutes {
+		if resp, body := do(r.method, r.path, orgAdminHdr); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s [org admin, NO WL enabled]: got %d, want 403 — default must be fleet-only (body=%s)",
+				r.method, r.path, resp.StatusCode, body)
+		}
+	}
+	// A SuperAdmin is unaffected by the allowlist — still cross-tenant.
+	if resp, _ := do("GET", "/v1/admin/me", superHdr); resp.StatusCode != http.StatusOK {
+		t.Fatalf("SuperAdmin must be admitted regardless of WLTenants, got %d", resp.StatusCode)
+	}
+}
+
+// TestState_IsWhiteLabelTenant unit-pins the ONE admission read: fail-closed on a
+// nil/empty set, verbatim (trimmed) match otherwise — no fold that could collapse a
+// distinct owner into an enabled one.
+func TestState_IsWhiteLabelTenant(t *testing.T) {
+	var zero core.State // nil WLTenants
+	if zero.IsWhiteLabelTenant("maxpower") {
+		t.Fatal("nil WLTenants must be fail-closed (deny)")
+	}
+	empty := core.State{WLTenants: map[string]bool{}}
+	if empty.IsWhiteLabelTenant("maxpower") {
+		t.Fatal("empty WLTenants must be fail-closed (deny)")
+	}
+	on := core.State{WLTenants: map[string]bool{"maxpower": true}}
+	if !on.IsWhiteLabelTenant("maxpower") || !on.IsWhiteLabelTenant("  maxpower  ") {
+		t.Fatal("enabled org must be admitted (trimmed)")
+	}
+	if on.IsWhiteLabelTenant("acme") || on.IsWhiteLabelTenant("") || on.IsWhiteLabelTenant("MAXPOWER") {
+		t.Fatal("absent/empty/case-different org must be denied (verbatim match, no fold)")
 	}
 }
 
