@@ -8,7 +8,7 @@
 //   GET /v1/team/billing/plan  → { plan, active, seats, guests, guestLimit }
 import { useEffect, useState } from 'react'
 import { YStack, XStack, Text } from '@hanzo/gui'
-import { MetricCard, Panel, PageHeader, PrimaryButton, StatusTag } from '@hanzo/ui'
+import { MetricCard, Panel, PrimaryButton, StatusTag } from '@hanzo/ui'
 import { Activity, CreditCard, Users, Wallet } from '@hanzogui/lucide-icons-2'
 
 const TOPUP = 'https://billing.hanzo.ai'
@@ -29,6 +29,7 @@ interface Plan {
   seats?: number
   guests?: number
   guestLimit?: number
+  upgradeUrl?: string
 }
 
 type State =
@@ -80,15 +81,22 @@ export function App() {
 
   return (
     <YStack maxW={760} width="100%" self="center" p="$4" gap="$4">
-      <PageHeader
-        title="Usage & billing"
-        subtitle="Your org's wallet, current-period usage, and plan."
-        actions={
-          <PrimaryButton size="$3" onPress={() => window.open(TOPUP, '_blank', 'noopener')}>
-            Top up
-          </PrimaryButton>
-        }
-      />
+      {/* Header reflows at narrow widths: the title block flexes to fill the row and
+          the Top up button holds its intrinsic size (flexShrink 0), so it stays whole
+          — never clipped to "Top" — and wraps below on a phone instead of compressing. */}
+      <XStack justify="space-between" items="flex-start" gap="$4" flexWrap="wrap">
+        <YStack gap="$1" flex={1} minW={200}>
+          <Text fontSize="$7" fontWeight="800">
+            Usage &amp; billing
+          </Text>
+          <Text fontSize="$3" color="$color11">
+            Your org's wallet, current-period usage, and plan.
+          </Text>
+        </YStack>
+        <PrimaryButton size="$3" flexShrink={0} onPress={() => window.open(TOPUP, '_blank', 'noopener')}>
+          Top up
+        </PrimaryButton>
+      </XStack>
       {state.kind === 'loading' && <Text color="$color10">Loading…</Text>}
       {state.kind === 'signin' && (
         <Panel title="Sign in required" grow={false}>
@@ -120,11 +128,20 @@ export function App() {
             right={
               state.plan?.plan ? (
                 <StatusTag status={state.plan.active ? 'active' : 'inactive'} />
-              ) : undefined
+              ) : (
+                // No paid team subscription → the org runs on the effective Free tier
+                // (the login gate admits it). Offer the upgrade, never a bare dash.
+                <PrimaryButton
+                  size="$2"
+                  onPress={() => window.open(state.plan?.upgradeUrl || TOPUP, '_blank', 'noopener')}
+                >
+                  Upgrade
+                </PrimaryButton>
+              )
             }
           >
             <XStack gap="$3" flexWrap="wrap">
-              <MetricCard icon={<CreditCard size={16} />} label="Plan" value={state.plan?.plan || '—'} caption="hanzo.team" />
+              <MetricCard icon={<CreditCard size={16} />} label="Plan" value={state.plan?.plan || 'Free'} caption="hanzo.team" />
               <MetricCard icon={<Users size={16} />} label="Seats" value={count(state.plan?.seats)} caption="Members in your org" />
               <MetricCard
                 icon={<Users size={16} />}
@@ -134,7 +151,9 @@ export function App() {
               />
             </XStack>
             <Text color="$color10" fontSize="$2">
-              Manage payment methods and top-ups at billing.hanzo.ai.
+              {state.plan?.plan
+                ? 'Manage payment methods and top-ups at billing.hanzo.ai.'
+                : "You're on the Free plan — upgrade for more seats and guests at billing.hanzo.ai."}
             </Text>
           </Panel>
         </>

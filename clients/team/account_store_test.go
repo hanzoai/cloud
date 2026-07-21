@@ -49,6 +49,53 @@ func TestEnsureWorkspaceIdempotent(t *testing.T) {
 	}
 }
 
+// TestSeatsCountsActiveMember proves Seats counts the org's distinct active,
+// non-bot members — so a just-seeded owner yields at least one seat. (The wallet's
+// "0 members" symptom is a MISSING member row for the viewed org, never the count
+// logic; establishSession now seeds one per verified org.) A bot and a deactivated
+// row are excluded; a guest counts as both a seat and a guest; the count is
+// tenant-scoped.
+func TestSeatsCountsActiveMember(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org = "acme"
+	owner := "aaaaaaaa-0000-4000-8000-000000000001"
+
+	// A freshly ensured workspace seeds the owner member row → at least one seat.
+	w, err := s.EnsureWorkspace(ctx, org, owner, "Ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seats, _ := s.Seats(ctx, org); seats < 1 {
+		t.Fatalf("seats after seeding one member = %d, want >= 1", seats)
+	}
+
+	seed := func(user, role string, bot, active int) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
+			 VALUES (?,?,?,?,?,?,1)`, w.ID, user, role, "m", bot, active); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("bbbbbbbb-0000-4000-8000-000000000002", "member", 1, 1)  // bot — never a seat
+	seed("cccccccc-0000-4000-8000-000000000003", "member", 0, 0)  // deactivated — excluded
+	seed("dddddddd-0000-4000-8000-000000000004", roleGuest, 0, 1) // guest — a seat AND a guest
+
+	seats, guests := s.Seats(ctx, org)
+	if seats != 2 {
+		t.Fatalf("seats = %d, want 2 (owner + guest; bot and inactive excluded)", seats)
+	}
+	if guests != 1 {
+		t.Fatalf("guests = %d, want 1 (the guest)", guests)
+	}
+
+	// Tenant-scoped: another org sees none of acme's seats.
+	if seats, _ := s.Seats(ctx, "other"); seats != 0 {
+		t.Fatalf("other-org seats = %d, want 0", seats)
+	}
+}
+
 // TestMembershipReadFromRow proves Membership is read from the members row (never
 // self-asserted): a non-member gets ("", false).
 func TestMembershipReadFromRow(t *testing.T) {
