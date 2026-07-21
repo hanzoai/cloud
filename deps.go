@@ -71,7 +71,17 @@ type Deps struct {
 	KMS      KMSClient
 	Base     BaseClient
 	Commerce CommerceClient
-	AI       AIClient
+	// AI runs CHAT COMPLETIONS (a WRITE endpoint): agents, guide, crm, content,
+	// sitegen, code /ask. It authenticates with the binary's IAM M2M identity — a
+	// completions-capable credential — NEVER the read-only publishable (pk-) embed
+	// key, which the gateway 403s on any write endpoint.
+	AI AIClient
+	// Embed runs EMBEDDINGS (a READ-ONLY endpoint): code-index + KB knowledge. This
+	// is the ONLY consumer of the read-only publishable (pk-) key (CLOUD_AI_API_KEY),
+	// the correct least-privilege credential for a read-only call. Split from AI so a
+	// pk- embed key can never leak onto the completions path (the intermittent-403
+	// bug). Falls back to the AI (M2M) resolution when no static embed key is set.
+	Embed    AIClient
 	O11y     O11yClient
 	VFS      VFSClient
 	MQ       MQClient
