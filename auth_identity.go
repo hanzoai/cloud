@@ -33,7 +33,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/iam"
+	"github.com/hanzoai/iam-v1"
 )
 
 // idClaims is the subset of Hanzo IAM JWT claims the identity sanitizer needs.
