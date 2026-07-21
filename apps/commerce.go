@@ -211,6 +211,34 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 		)
 	}
 
+	// GET /v1/billing/spend-alerts/authorize — the per-request per-scope spend-CAP
+	// VERDICT the request-edge metering gate consumes (clients/metering scopeAuthorize,
+	// pathLimitsAuthorize). It is a SERVICE-token S2S read (COMMERCE_SERVICE_TOKEN +
+	// X-Org-Id), NOT a browser/IAM read — so it needs its OWN registration, distinct from
+	// the console billingRead block above: without a co-resident handler this authorize
+	// fell through to the account bridge's /v1/billing/* wildcard (order 122), which — being
+	// service-token-forwardable (billing.go billingForwardable) — re-forwarded it to
+	// COMMERCE_URL (the public api.hanzo.ai edge = THIS binary) over commerceinproc's
+	// self-routing transport, re-entering the same wildcard until the depth-8 guard refused
+	// → 502 → the gate fails OPEN (the cap is a policy overlay, so no traffic was blocked,
+	// but ~135 502s/30m spammed the money path and each burned 8 full-app dispatches). The
+	// plain GET /v1/billing/spend-alerts (registered above) already broke this loop for the
+	// CRUD read; this closes the /authorize sibling the metering gate hits on every call.
+	//
+	// Chain mirrors commerce's OWN gate on this route (api/billing/handlers.go: the `billing`
+	// group's userRequired = TokenRequired) plus the RequestContext the standalone supplies
+	// globally — NOT the IAM/PinBillingSubject console chain: a raw service token is not an
+	// IAM JWT, so IAMTokenRequired would leave GetOrganization unset and AuthorizeSpendCap
+	// would 500. TokenRequired authenticates the service token AND resolves the tenant from
+	// the gateway-pinned X-Org-Id into Locals("organization"), which AuthorizeSpendCap reads.
+	// The specific route shadows the bridge wildcard (order 100 < 122). No PlatformOnly:
+	// authorize is a per-org cap read, not a cross-org mint (unlike auto-recharge/run-all).
+	app.Get("/v1/billing/spend-alerts/authorize",
+		commercemid.RequestContext(),
+		commercemid.TokenRequired(),
+		commercebilling.AuthorizeSpendCap,
+	)
+
 	// In-process seams:
 	//   - commerceinproc routes the S2S billing byte-stream into the co-resident
 	//     app (the metering debit path) instead of a socket to a standalone pod.
