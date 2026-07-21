@@ -79,9 +79,16 @@ const (
 	// collabReadLimit caps one WS frame; a single Y.js update for a huge paste
 	// is well under this, and the RPC lane's markup cap is 10 MiB.
 	collabReadLimit = 16 << 20
-	// collabIdleTimeout closes sockets with no inbound traffic. The provider
-	// renews awareness every ~15s, so a healthy client never comes close.
+	// collabIdleTimeout closes sockets with no inbound traffic — data frames
+	// (the provider renews awareness every ~15s) or pong replies to our pings.
 	collabIdleTimeout = 60 * time.Second
+	// collabPingEvery keeps healthy-but-quiet sockets alive: backgrounded tabs
+	// throttle JS timers (no awareness renewals) but the browser's network
+	// stack still auto-pongs WS pings, which extend the read deadline. Without
+	// this, a backgrounded tab dies at the idle deadline with an abrupt close
+	// the provider reports as 1006 — the exact "cannot connect" error banner
+	// this lane exists to kill.
+	collabPingEvery = 20 * time.Second
 	// collabWriteTimeout bounds one frame write so a dead peer cannot wedge a
 	// broadcaster.
 	collabWriteTimeout = 10 * time.Second
@@ -574,6 +581,25 @@ func (cc *collabConn) sync(ctx context.Context, ds *collabDocSession, r *lreader
 func (s *collabService) ws(c *zip.Ctx) error {
 	return wsx.Upgrade(func(conn *wsx.Conn) error {
 		conn.SetReadLimit(collabReadLimit)
+		conn.SetPongHandler(func(string) error {
+			return conn.SetReadDeadline(time.Now().Add(collabIdleTimeout))
+		})
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() { // keepalive: WriteControl is safe alongside WriteMessage
+			t := time.NewTicker(collabPingEvery)
+			defer t.Stop()
+			for {
+				select {
+				case <-stop:
+					return
+				case <-t.C:
+					if conn.WriteControl(wsx.PingMessage, nil, time.Now().Add(collabWriteTimeout)) != nil {
+						return
+					}
+				}
+			}
+		}()
 		ctx := context.Background()
 		cc := newCollabConn(s, &collabWriter{conn: conn})
 		defer cc.close(ctx)
