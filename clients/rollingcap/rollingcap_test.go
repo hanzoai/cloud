@@ -27,7 +27,7 @@ import (
 // so we can assert the decision table without a live commerce/finance stack. It mirrors
 // exactly the closure Mount installs.
 func reader(tier func(context.Context, string, string) (string, error),
-	capCents func(string) int, windowHours int,
+	capCents func(string) int, defaultCents, windowHours int,
 	sumSince func(context.Context, string, bool, int64) (int64, error),
 ) func(context.Context, string, string) (bool, error) {
 	return func(ctx context.Context, subject, namespace string) (bool, error) {
@@ -39,7 +39,10 @@ func reader(tier func(context.Context, string, string) (string, error),
 			return false, err
 		}
 		cc := capCents(name)
-		if name == "" || cc <= 0 {
+		if cc <= 0 {
+			cc = defaultCents // fallback for pay-as-you-go / empty / unseeded tiers
+		}
+		if cc <= 0 {
 			return false, nil
 		}
 		spent, err := sumSince(ctx, namespace, false, 0)
@@ -54,37 +57,59 @@ func TestRollingCapDecision(t *testing.T) {
 	tier := func(name string, err error) func(context.Context, string, string) (string, error) {
 		return func(context.Context, string, string) (string, error) { return name, err }
 	}
-	caps := func(string) int { return 250 } // pro cap = $2.50
+	// Models flags.Int(capKey(name)): a seeded tier returns its cap, an unseeded/empty
+	// name returns 0 (the switch isn't registered) → the reader falls to the default.
+	caps := func(name string) int {
+		if name == "pro" {
+			return 250 // $2.50
+		}
+		return 0
+	}
 	sum := func(cents int64, err error) func(context.Context, string, bool, int64) (int64, error) {
 		return func(context.Context, string, bool, int64) (int64, error) { return cents, err }
 	}
 	ctx := context.Background()
 
+	const noDefault = 0
+
 	// Over the cap ⇒ deny (over=true). $3.00 spent >= $2.50 cap.
-	if over, err := reader(tier("pro", nil), caps, 3, sum(300, nil))(ctx, "s", "o"); err != nil || !over {
+	if over, err := reader(tier("pro", nil), caps, noDefault, 3, sum(300, nil))(ctx, "s", "o"); err != nil || !over {
 		t.Errorf("over-cap: got over=%v err=%v, want true,nil", over, err)
 	}
 	// Under the cap ⇒ admit. $1.00 spent < $2.50.
-	if over, err := reader(tier("pro", nil), caps, 3, sum(100, nil))(ctx, "s", "o"); err != nil || over {
+	if over, err := reader(tier("pro", nil), caps, noDefault, 3, sum(100, nil))(ctx, "s", "o"); err != nil || over {
 		t.Errorf("under-cap: got over=%v err=%v, want false,nil", over, err)
 	}
 	// Window disabled globally ⇒ admit regardless of spend.
-	if over, _ := reader(tier("pro", nil), caps, 0, sum(999999, nil))(ctx, "s", "o"); over {
+	if over, _ := reader(tier("pro", nil), caps, noDefault, 0, sum(999999, nil))(ctx, "s", "o"); over {
 		t.Errorf("window=0 must disable the cap (admit)")
 	}
-	// Unknown/uncapped tier ⇒ admit (fail open).
-	if over, _ := reader(tier("", nil), caps, 3, sum(999999, nil))(ctx, "s", "o"); over {
-		t.Errorf("empty tier must admit (uncapped)")
+	// Unknown tier + NO default ⇒ admit (uncapped, opt-in).
+	if over, _ := reader(tier("", nil), caps, noDefault, 3, sum(999999, nil))(ctx, "s", "o"); over {
+		t.Errorf("empty tier with no default must admit (uncapped)")
 	}
-	if over, _ := reader(tier("enterprise", nil), func(string) int { return 0 }, 3, sum(999999, nil))(ctx, "s", "o"); over {
-		t.Errorf("cap=0 (uncapped tier) must admit")
+	if over, _ := reader(tier("enterprise", nil), func(string) int { return 0 }, noDefault, 3, sum(999999, nil))(ctx, "s", "o"); over {
+		t.Errorf("cap=0 tier with no default must admit")
+	}
+	// DEFAULT FALLBACK: pay-as-you-go / empty / unseeded tier + a default cap set ⇒
+	// the default applies. $6 spent >= $5 default → deny. This closes the hole for
+	// non-subscription callers.
+	if over, err := reader(tier("pay-as-you-go", nil), func(string) int { return 0 }, 500, 3, sum(600, nil))(ctx, "s", "o"); err != nil || !over {
+		t.Errorf("pay-as-you-go over default cap: got over=%v err=%v, want true,nil", over, err)
+	}
+	if over, _ := reader(tier("", nil), caps, 500, 3, sum(400, nil))(ctx, "s", "o"); over {
+		t.Errorf("empty tier under default cap ($4<$5) must admit")
+	}
+	// A tier WITH a specific cap ignores the default (tier-specific wins).
+	if over, _ := reader(tier("pro", nil), caps, 100000, 3, sum(300, nil))(ctx, "s", "o"); !over {
+		t.Errorf("tier-specific cap ($2.50) must apply over a large default; $3>$2.50 → deny")
 	}
 	// Tier read error ⇒ FAIL OPEN (admit): a commerce blip must not 429 a paying caller.
-	if over, err := reader(tier("", errTest), caps, 3, sum(999999, nil))(ctx, "s", "o"); over || err == nil {
+	if over, err := reader(tier("", errTest), caps, 500, 3, sum(999999, nil))(ctx, "s", "o"); over || err == nil {
 		t.Errorf("tier error must fail open (over=false) and propagate err; got over=%v err=%v", over, err)
 	}
 	// Usage-sum error ⇒ FAIL OPEN.
-	if over, err := reader(tier("pro", nil), caps, 3, sum(0, errTest))(ctx, "s", "o"); over || err == nil {
+	if over, err := reader(tier("pro", nil), caps, noDefault, 3, sum(0, errTest))(ctx, "s", "o"); over || err == nil {
 		t.Errorf("sum error must fail open (over=false) and propagate err; got over=%v err=%v", over, err)
 	}
 }
