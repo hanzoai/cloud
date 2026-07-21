@@ -83,12 +83,12 @@ func newUnlinkCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 		Short: "Take this machine out of the fleet (deregister + stop hanzod)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Reverse of link: drop the compute-fleet row, then stop the fabric.
-			if err := runDisconnect(cmd, envOf()); err != nil {
-				return err
-			}
+			// Reverse of link, both best-effort: drop the compute-fleet row, then
+			// ALWAYS stop the fabric so a deregister error never leaves hanzod
+			// running. The deregister error is reported, not short-circuited.
+			derr := runDisconnect(cmd, envOf())
 			stopFabric(cmd)
-			return nil
+			return derr
 		},
 	}
 }
