@@ -19,6 +19,14 @@ type adminMe struct {
 	Email        string `json:"email"`
 	DisplayName  string `json:"displayName"`
 	IsSuperAdmin bool   `json:"isSuperAdmin"`
+	// IsWhiteLabel: admitted but not fleet-super — a subtree-scoped (white-label)
+	// tenant operator. Mutually exclusive with IsSuperAdmin; drives the subtree
+	// cockpit vs the fleet god-view in the operator console.
+	IsWhiteLabel bool `json:"isWhiteLabel"`
+	// ScopeOrgs: the operator's visible tenant window — empty/nil for a SuperAdmin
+	// (all orgs), else the scoped subtree (sc.Orgs). The faceting layer threads
+	// this as its scope ceiling so a tenant can never facet outside its subtree.
+	ScopeOrgs []string `json:"scopeOrgs,omitempty"`
 }
 
 // overviewData is the fleet overview tiles (OverviewData / GET /v1/admin/overview).
