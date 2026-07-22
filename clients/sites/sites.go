@@ -107,6 +107,18 @@ type Config struct {
 	// subjected to a per-request binding lookup, and a customer binding can never
 	// shadow a real Hanzo host. The apex is always treated as self.
 	SelfDomains []string
+	// FirstPartyApex is a SelfDomain (e.g. hanzo.ai) on which we serve a small set
+	// of OUR OWN first-party sites (cd/flow/gallery.hanzo.ai) — the brand's own
+	// pages, not customer sites. It uses the OPPOSITE security model to Apex: Apex
+	// is multi-tenant, so sites are the DEFAULT and a denylist (Reserved) carves out
+	// app hosts; the brand apex carries api/console/iam/kms/… and CANNOT afford a
+	// denylist gap (one missing label = a project shadowing a real host → the OAuth
+	// account-takeover in reserved.go), so here sites are OPT-IN: ONLY a label in
+	// FirstPartySites serves, everything else falls through to the normal pipeline,
+	// protected by default. Empty = no first-party sites (the multi-tenant-only
+	// default). The apex itself is unaffected (hanzo.app stays the site default).
+	FirstPartyApex  string
+	FirstPartySites []string
 }
 
 // Server is the host-routed public site edge. It holds the S3 access path
@@ -114,10 +126,12 @@ type Config struct {
 // reserved-label policy is the package-level shared source (reserved.go), so
 // serve/create/bind never disagree. It reads the resolver at request time.
 type Server struct {
-	apex        string
-	selfDomains []string // OUR own registrable domains — never custom-domain candidates
-	admin       s3admin.Admin
-	log         luxlog.Logger
+	apex            string
+	selfDomains     []string        // OUR own registrable domains — never custom-domain candidates
+	firstPartyApex  string          // internal apex serving OUR opt-in first-party sites (hanzo.ai); "" = none
+	firstPartySites map[string]bool // the explicit allowlist of first-party site labels on that apex
+	admin           s3admin.Admin
+	log             luxlog.Logger
 }
 
 // New builds the Server from Config. An empty apex defaults to hanzo.app.
@@ -142,7 +156,24 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		seen[d] = true
 		self = append(self, d)
 	}
-	return &Server{apex: apex, selfDomains: self, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	// First-party apex (internal, opt-in sites) — normalize, force it to be a self
+	// domain (a first-party site host is never a customer custom-domain candidate),
+	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
+	fpApex := strings.ToLower(strings.TrimSpace(cfg.FirstPartyApex))
+	fpSites := map[string]bool{}
+	if fpApex != "" {
+		if !seen[fpApex] {
+			seen[fpApex] = true
+			self = append(self, fpApex)
+		}
+		for _, l := range cfg.FirstPartySites {
+			l = strings.ToLower(strings.TrimSpace(l))
+			if l != "" {
+				fpSites[l] = true
+			}
+		}
+	}
+	return &Server{apex: apex, selfDomains: self, firstPartyApex: fpApex, firstPartySites: fpSites, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
 // Middleware is the host-router. Three outcomes, in order:
@@ -276,6 +307,25 @@ func (s *Server) siteSlug(host string) (string, bool) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if i := strings.IndexByte(host, ':'); i >= 0 {
 		host = host[:i] // strip any :port
+	}
+	// First-party apex (internal, e.g. hanzo.ai) — OPT-IN sites. ONLY an explicitly
+	// allow-listed label serves as a site; EVERY other `<label>.<firstPartyApex>`
+	// (api, console, iam, kms, world, chat, …) returns false and falls through to the
+	// normal /v1 + console pipeline, protected BY DEFAULT. There is no denylist to
+	// keep complete — the allowlist IS the boundary — so a NEW internal host can never
+	// be shadowed by a first-come project (the account-takeover in reserved.go).
+	// Terminal for this apex: a non-allow-listed host never reaches the multi-tenant
+	// branch below, and the label must still be a bare valid slug so a dotted key
+	// (`x.y.hanzo.ai`) can't match a map entry.
+	if s.firstPartyApex != "" {
+		fpSuffix := "." + s.firstPartyApex
+		if strings.HasSuffix(host, fpSuffix) {
+			label := strings.TrimSuffix(host, fpSuffix)
+			if s.firstPartySites[label] && !strings.Contains(label, ".") && slugRE.MatchString(label) {
+				return label, true
+			}
+			return "", false
+		}
 	}
 	suffix := "." + s.apex
 	if !strings.HasSuffix(host, suffix) {
