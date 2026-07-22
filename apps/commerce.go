@@ -32,7 +32,6 @@ import (
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
 	catalogapi "github.com/hanzoai/commerce/api/catalog"
-	planapi "github.com/hanzoai/commerce/api/plan"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
@@ -76,13 +75,6 @@ var commercePrefixes = []string{
 	// same /v1 gate chain. Own the prefix here so it reaches commerce (each handler
 	// is requireSuperAdmin-gated) instead of the AI /v1/* balance catch-all.
 	"/v1/catalog",
-	// Platform-admin subscription/DNS plan authority CMS: GET/POST/PUT/DELETE
-	// /v1/plans/entries + POST /v1/plans/seed (increment 3a) — the SuperAdmin CRUD
-	// the console plan editor drives. The PUBLIC read stays GET /v1/billing/plans;
-	// this CRUD rides the /v1 bundle (api.Route → planApi.AdminRoute), which the
-	// embed skips, so mountCommerce mounts it below. Own the prefix so it reaches
-	// commerce (each handler requireSuperAdmin-gated), not the AI /v1/* 402 gate.
-	"/v1/plans",
 	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
 	// Square et al). The provider's HMAC over the registered notification URL +
 	// body IS the auth; a bearer gate is impossible for provider callbacks.
@@ -171,17 +163,6 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// populates the claims each handler's requireSuperAdmin reads (anon → 403, a
 	// platform admin edits); it is cross-tenant data, never org-scoped.
 	catalogapi.AdminRoute(storeV1)
-
-	// Platform-admin subscription/DNS plan authority CRUD on the SAME /v1 bundle:
-	// GET/POST/PUT/DELETE /v1/plans/entries + POST /v1/plans/seed (increment 3a).
-	// Mirrors the catalog mount: the standalone wires it on the /v1 bundle
-	// (api.Route → planApi.AdminRoute), which the co-resident embed skips. The
-	// embed seed SOURCE is injected here (the composition root) — commercebilling.
-	// SeedRows, the SAME @hanzo/plans embed the boot seed + resolveSubscriptionPlan
-	// read — so api/plan never imports api/billing. Each handler is
-	// requireSuperAdmin-gated (anon → 403); prices are admin-editable but the mint
-	// gates score the IMMUTABLE embed, so an edit never moves a charge gate.
-	planapi.AdminRoute(storeV1, commercebilling.SeedRows)
 
 	// Provider webhook intake at the LIVE registered path. Chain mirrors the
 	// commerce-standalone posture: gated request context, then the sessionless
