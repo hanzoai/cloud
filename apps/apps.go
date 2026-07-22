@@ -77,6 +77,7 @@ import (
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/domain"
 	"github.com/hanzoai/cloud/clients/entitlements"
+	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
 	"github.com/hanzoai/cloud/clients/flags"
@@ -348,6 +349,7 @@ func Wire() []cloud.MountSpec {
 		{Name: "sign", Mount: sign.Mount, Shutdown: sign.Shutdown, OwnsHealth: true},
 		{Name: "product", Mount: product.Mount},
 		{Name: "evals", Mount: eval.Mount},
+		{Name: "benchmark", Mount: benchmark.Mount},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
