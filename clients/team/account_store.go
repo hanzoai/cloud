@@ -307,14 +307,22 @@ func (s *accountStore) GuestRank(ctx context.Context, workspaceID, account strin
 // Seats counts the org's distinct ACTIVE human members across all of its
 // workspaces (the billed seats), and how many of those are invited guests.
 // Bots never occupy a seat. Backs GET /v1/team/billing/plan.
-func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int) {
+//
+// The Scan error is PROPAGATED, never swallowed: this is an aggregate COUNT
+// query that always returns exactly one row (zeros for an org with no members),
+// so a Scan error is a real DB failure — surfacing it lets the wallet's seat
+// read fail honestly and retry, instead of a broken read masquerading as a
+// truthful "0 members" and under-reporting the billed seat count.
+func (s *accountStore) Seats(ctx context.Context, org string) (seats, guests int, err error) {
 	const q = `SELECT
 	  COUNT(DISTINCT m.user_id),
 	  COUNT(DISTINCT CASE WHEN m.role = ? THEN m.user_id END)
 	FROM members m JOIN workspaces w ON w.id = m.workspace_id
 	WHERE w.owner_org = ? AND m.active = 1 AND m.is_bot = 0`
-	_ = s.db.QueryRowContext(ctx, q, roleGuest, org).Scan(&seats, &guests)
-	return seats, guests
+	if err := s.db.QueryRowContext(ctx, q, roleGuest, org).Scan(&seats, &guests); err != nil {
+		return 0, 0, fmt.Errorf("seats: %w", err)
+	}
+	return seats, guests, nil
 }
 
 // EnsureMemberName fills display_name on the account's member rows when empty, so

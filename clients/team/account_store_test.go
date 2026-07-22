@@ -66,7 +66,7 @@ func TestSeatsCountsActiveMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seats, _ := s.Seats(ctx, org); seats < 1 {
+	if seats, _, _ := s.Seats(ctx, org); seats < 1 {
 		t.Fatalf("seats after seeding one member = %d, want >= 1", seats)
 	}
 
@@ -82,7 +82,10 @@ func TestSeatsCountsActiveMember(t *testing.T) {
 	seed("cccccccc-0000-4000-8000-000000000003", "member", 0, 0)  // deactivated — excluded
 	seed("dddddddd-0000-4000-8000-000000000004", roleGuest, 0, 1) // guest — a seat AND a guest
 
-	seats, guests := s.Seats(ctx, org)
+	seats, guests, err := s.Seats(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if seats != 2 {
 		t.Fatalf("seats = %d, want 2 (owner + guest; bot and inactive excluded)", seats)
 	}
@@ -91,7 +94,7 @@ func TestSeatsCountsActiveMember(t *testing.T) {
 	}
 
 	// Tenant-scoped: another org sees none of acme's seats.
-	if seats, _ := s.Seats(ctx, "other"); seats != 0 {
+	if seats, _, _ := s.Seats(ctx, "other"); seats != 0 {
 		t.Fatalf("other-org seats = %d, want 0", seats)
 	}
 }
@@ -112,7 +115,7 @@ func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A freshly created workspace already counts one seat.
-	if seats, _ := s.Seats(ctx, org); seats != 1 {
+	if seats, _, _ := s.Seats(ctx, org); seats != 1 {
 		t.Fatalf("seats after create = %d, want 1", seats)
 	}
 
@@ -122,7 +125,7 @@ func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
 		w.ID, acct); err != nil {
 		t.Fatal(err)
 	}
-	if seats, _ := s.Seats(ctx, org); seats != 0 {
+	if seats, _, _ := s.Seats(ctx, org); seats != 0 {
 		t.Fatalf("seats with migrated bot/inactive owner = %d, want 0 (the live defect)", seats)
 	}
 	// The workspace still lists for the user (getUserWorkspaces does not filter flags).
@@ -134,8 +137,25 @@ func TestEnsureWorkspaceHealsMigratedMember(t *testing.T) {
 	if _, err := s.EnsureWorkspace(ctx, org, acct, "Dave Lorenzini"); err != nil {
 		t.Fatal(err)
 	}
-	if seats, _ := s.Seats(ctx, org); seats != 1 {
+	if seats, _, _ := s.Seats(ctx, org); seats != 1 {
 		t.Fatalf("seats after re-login heal = %d, want 1 (owner is an active human seat)", seats)
+	}
+}
+
+// TestSeatsSurfacesReadError proves a real seat-read failure is PROPAGATED, not
+// swallowed into a false "0 members": a broken store (closed handle) errors rather
+// than silently reporting 0 seats (which would masquerade as "no members" and
+// under-bill). An org with no members legitimately returns (0, 0, nil) — that path
+// is exercised by the tenant-scoped "other" org above; here the read itself fails.
+func TestSeatsSurfacesReadError(t *testing.T) {
+	s := newAccountStore(t)
+	_ = s.db.Close() // simulate an unreadable store — the query must error, not report 0
+	seats, guests, err := s.Seats(context.Background(), "acme")
+	if err == nil {
+		t.Fatal("Seats must surface a read error, not a silent 0-seat count")
+	}
+	if seats != 0 || guests != 0 {
+		t.Fatalf("on error Seats must return 0,0 alongside the error, got %d,%d", seats, guests)
 	}
 }
 
