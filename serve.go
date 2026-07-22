@@ -228,7 +228,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// injected at its Mount via sites.SetResolver; until then a site host 404s
 	// honestly. Org isolation (org+prefix come only from the store keyed by the
 	// validated slug; object keys are rooted-clean) lives in clients/sites.
-	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains, FirstPartyApex: cfg.SitesFirstPartyApex, FirstPartySites: cfg.SitesFirstPartySites}, deps.Logger).Middleware())
+	app.Use(sites.New(sites.Config{Apex: cfg.SitesApex, Reserved: cfg.SitesReserved, SelfDomains: cfg.SitesSelfDomains, FirstPartyApex: cfg.SitesFirstPartyApex, FirstPartySites: cfg.SitesFirstPartySites, FirstPartyOrg: cfg.SitesFirstPartyOrg}, deps.Logger).Middleware())
 
 	// Edge policy — the "gateway role" cloud absorbs to serve the public
 	// api.hanzo.ai edge directly (no KrakenD gateway hop). Runs BEFORE identity by

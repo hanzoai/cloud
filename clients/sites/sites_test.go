@@ -15,16 +15,24 @@ import (
 // fakeResolver records the slugs it is asked to resolve so a test can assert that
 // the tenant is ALWAYS keyed by the validated host slug and never by the path.
 type fakeResolver struct {
-	mu    sync.Mutex
-	calls []string
-	site  Site
-	found bool
-	err   error
+	mu       sync.Mutex
+	calls    []string
+	orgCalls []string
+	site     Site
+	found    bool
+	err      error
 }
 
 func (f *fakeResolver) Resolve(_ context.Context, slug string) (Site, bool, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, slug)
+	f.mu.Unlock()
+	return f.site, f.found, f.err
+}
+
+func (f *fakeResolver) ResolveOrg(_ context.Context, org, slug string) (Site, bool, error) {
+	f.mu.Lock()
+	f.orgCalls = append(f.orgCalls, org+"/"+slug)
 	f.mu.Unlock()
 	return f.site, f.found, f.err
 }
@@ -130,13 +138,13 @@ func TestCandidates(t *testing.T) {
 func TestSiteSlug(t *testing.T) {
 	s := testServer()
 	site := func(host, wantSlug string) {
-		slug, ok := s.siteSlug(host)
+		slug, _, ok := s.siteSlug(host)
 		if !ok || slug != wantSlug {
 			t.Errorf("siteSlug(%q) = (%q,%v), want (%q,true)", host, slug, ok, wantSlug)
 		}
 	}
 	notSite := func(host string) {
-		if slug, ok := s.siteSlug(host); ok {
+		if slug, _, ok := s.siteSlug(host); ok {
 			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site", host, slug)
 		}
 	}
@@ -180,14 +188,15 @@ func TestSiteSlugFirstParty(t *testing.T) {
 		SelfDomains:     []string{"hanzo.ai"},
 		FirstPartyApex:  "hanzo.ai",
 		FirstPartySites: []string{"cd", "flow", "gallery"},
+		FirstPartyOrg:   "hanzo",
 	}, luxlog.New("test"))
 	site := func(host, want string) {
-		if slug, ok := s.siteSlug(host); !ok || slug != want {
+		if slug, _, ok := s.siteSlug(host); !ok || slug != want {
 			t.Errorf("siteSlug(%q) = (%q,%v), want (%q,true)", host, slug, ok, want)
 		}
 	}
 	notSite := func(host string) {
-		if slug, ok := s.siteSlug(host); ok {
+		if slug, _, ok := s.siteSlug(host); ok {
 			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site (protected)", host, slug)
 		}
 	}
@@ -485,4 +494,48 @@ func headerMap(pairs [][2]string) map[string]string {
 		m[p[0]] = p[1]
 	}
 	return m
+}
+
+// TestFirstPartyOrgPinned is the ship-blocker proof (RED #4): a first-party host
+// resolves through ResolveOrg PINNED to the owning org, NEVER the unique-across-orgs
+// Resolve — so a customer who names a project "cd" can never be served on cd.hanzo.ai.
+func TestFirstPartyOrgPinned(t *testing.T) {
+	s := New(Config{
+		Apex: "hanzo.app", SelfDomains: []string{"hanzo.ai"},
+		FirstPartyApex: "hanzo.ai", FirstPartySites: []string{"cd"}, FirstPartyOrg: "hanzo",
+	}, luxlog.New("test"))
+	fr := &fakeResolver{site: Site{Org: "hanzo", Slug: "cd", Status: "live", Bucket: "b", Prefix: "hanzo/cd"}, found: true}
+	SetResolver(fr)
+	defer SetResolver(nil)
+
+	// First-party host → org-pinned resolve, and NOT the unique-slug path.
+	slug, fp, ok := s.siteSlug("cd.hanzo.ai")
+	if !ok || !fp || slug != "cd" {
+		t.Fatalf("siteSlug(cd.hanzo.ai) = (%q,%v,%v), want (cd,true,true)", slug, fp, ok)
+	}
+	if _, ok := s.resolveLivePinned(context.Background(), slug, fp); !ok {
+		t.Fatal("first-party resolve failed")
+	}
+	if len(fr.orgCalls) != 1 || fr.orgCalls[0] != "hanzo/cd" {
+		t.Errorf("first-party did NOT org-pin: orgCalls=%v", fr.orgCalls)
+	}
+	if len(fr.calls) != 0 {
+		t.Errorf("first-party must NEVER use unique-slug Resolve: calls=%v", fr.calls)
+	}
+
+	// Multi-tenant host → unique-slug Resolve, never org-pinned.
+	fr.calls, fr.orgCalls = nil, nil
+	slug2, fp2, ok2 := s.siteSlug("my-site.hanzo.app")
+	if !ok2 || fp2 || slug2 != "my-site" {
+		t.Fatalf("siteSlug(my-site.hanzo.app) = (%q,%v,%v), want (my-site,false,true)", slug2, fp2, ok2)
+	}
+	if _, ok := s.resolveLivePinned(context.Background(), slug2, fp2); !ok {
+		t.Fatal("multi-tenant resolve failed")
+	}
+	if len(fr.calls) != 1 || fr.calls[0] != "my-site" {
+		t.Errorf("multi-tenant should use Resolve: calls=%v", fr.calls)
+	}
+	if len(fr.orgCalls) != 0 {
+		t.Errorf("multi-tenant must NEVER org-pin: orgCalls=%v", fr.orgCalls)
+	}
 }
