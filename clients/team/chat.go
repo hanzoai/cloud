@@ -326,10 +326,27 @@ func plainText(markup string) string {
 	return strings.TrimSpace(regexp.MustCompile(`\s+`).ReplaceAllString(s, " "))
 }
 
-// htmlMarkup wraps an agent's plain-text answer as the minimal ProseMirror-
-// compatible markup Chunter stores: each non-empty line an escaped <p>. Empty input
-// yields an empty paragraph (never invalid markup).
+// flattenMarkup normalizes an agent answer to PLAIN text, so htmlMarkup can wrap
+// it cleanly. Models often reply in HTML/markdown-ish markup (`<p>yes.</p>`); left
+// as-is, htmlMarkup would ESCAPE those tags and Chunter would render the literal
+// string `<p>yes.</p>`. Block boundaries become newlines (paragraph structure is
+// preserved), remaining tags are stripped, entities unescaped. Idempotent on genuine
+// plain text (no tags → unchanged but for a safe entity unescape).
+func flattenMarkup(text string) string {
+	s := regexp.MustCompile(`(?i)</(p|div|li|h[1-6])>|<br\s*/?>`).ReplaceAllString(text, "\n")
+	s = tagRe.ReplaceAllString(s, "")
+	s = html.UnescapeString(s)
+	// Collapse 3+ newlines to a single blank-line boundary; trim each line's tail.
+	s = regexp.MustCompile(`\n{2,}`).ReplaceAllString(s, "\n")
+	return strings.TrimSpace(s)
+}
+
+// htmlMarkup wraps an agent's answer as the minimal ProseMirror-compatible markup
+// Chunter stores: each non-empty line an escaped <p>. The input is first flattened
+// to plain text (models may reply in HTML), so tags are never double-escaped into
+// visible text. Empty input yields an empty paragraph (never invalid markup).
 func htmlMarkup(text string) string {
+	text = flattenMarkup(text)
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	var b strings.Builder
 	for _, ln := range lines {

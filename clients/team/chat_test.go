@@ -69,15 +69,40 @@ func TestPlainText(t *testing.T) {
 }
 
 func TestHTMLMarkupEscapesAndWraps(t *testing.T) {
+	// A dangerous tag is STRIPPED (never reaches Chunter as executable OR visible
+	// markup) and the surrounding text stays; entities are safe.
 	got := htmlMarkup("a <script>x</script>\n\nb & c")
 	if strings.Contains(got, "<script>") {
-		t.Fatalf("htmlMarkup did not escape html: %q", got)
+		t.Fatalf("htmlMarkup leaked a raw tag: %q", got)
 	}
-	if got != "<p>a &lt;script&gt;x&lt;/script&gt;</p><p>b &amp; c</p>" {
+	if got != "<p>a x</p><p>b &amp; c</p>" {
 		t.Fatalf("htmlMarkup wrong: %q", got)
 	}
 	if htmlMarkup("") != "<p></p>" {
 		t.Fatalf("htmlMarkup(empty) = %q, want <p></p>", htmlMarkup(""))
+	}
+}
+
+// TestHTMLMarkupFlattensModelHTML pins the LIVE bug: a model that answers in HTML
+// (`<p>yes.</p>`) must render as the text "yes.", not the literal string
+// "<p>yes.</p>" (which is what double-escaping produced on hanzo.team).
+func TestHTMLMarkupFlattensModelHTML(t *testing.T) {
+	cases := map[string]string{
+		"<p>yes.</p>":                "<p>yes.</p>",
+		"<p>line 1</p><p>line 2</p>": "<p>line 1</p><p>line 2</p>",
+		"plain answer":               "<p>plain answer</p>",
+		"<div>a</div><div>b</div>":   "<p>a</p><p>b</p>",
+		"one<br>two":                 "<p>one</p><p>two</p>",
+		"<p>done &amp; dusted</p>":   "<p>done &amp; dusted</p>",
+	}
+	for in, want := range cases {
+		if got := htmlMarkup(in); got != want {
+			t.Errorf("htmlMarkup(%q) = %q, want %q", in, got, want)
+		}
+		// No literal angle-bracketed paragraph tag ever survives as visible text.
+		if strings.Contains(htmlMarkup(in), "&lt;p&gt;") {
+			t.Errorf("htmlMarkup(%q) left an escaped <p> visible: %q", in, htmlMarkup(in))
+		}
 	}
 }
 
@@ -450,7 +475,6 @@ func TestCircuitBreakerBacksOff(t *testing.T) {
 }
 
 // ── test helpers ───────────────────────────────────────────────────────────────
-
 
 var errForced = errForcedType("forced failure")
 
