@@ -328,9 +328,13 @@ func TestConnectorPlanesDisjoint(t *testing.T) {
 			t.Fatalf("provider %s methods want %v, got %v", id, methods, got[id])
 		}
 	}
+	// No org-scoped provider may surface on the user plane. Checked against the
+	// registry's Scope directly (the real disjointness invariant), so adding a
+	// user connector needs no edit here while an org provider leaking still fails.
 	for id := range got {
-		if _, ok := want[id]; !ok {
-			t.Fatalf("org provider %q leaked onto /v1/connectors/providers", id)
+		p, ok := registry[id]
+		if !ok || p.Scope != userScope {
+			t.Fatalf("non-user-scoped provider %q surfaced on /v1/connectors/providers", id)
 		}
 	}
 }
