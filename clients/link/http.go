@@ -95,8 +95,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 
 	g := app.Group("/v1/links")
 	// Static literals before the :id param — Fiber matches in registration order,
-	// so "route"/"devices" must win over :id.
+	// so "route"/"devices"/"usage" must win over :id.
 	g.Get("/route", cloud.Handle(s, routePlan))
+	// The account-usage plane (usage.go): report samples, one account's own dash,
+	// and the global view across every account + Hanzo-routed usage.
+	g.Post("/usage", cloud.Handle(s, reportUsage))
+	g.Get("/usage/summary", cloud.Handle(s, usageSummary))
+	// The per-account SERVER-ROUTED breakdown (usage_accounts.go). Static, so it must
+	// register before the "/usage" catch and the ":id" param.
+	g.Get("/usage/accounts", cloud.Handle(s, usageAccounts))
+	g.Get("/usage", cloud.Handle(s, usageDash))
 	g.Get("/devices/:machine", cloud.Handle(s, deviceDetail))
 	g.Post("/devices/:machine/revoke", cloud.Handle(s, revokeDevice))
 	g.Get("/:id", cloud.Handle(s, getLink))
