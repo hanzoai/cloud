@@ -29,6 +29,14 @@
 //	POST   /v1/sites/deploy                  deploy a raw file manifest (the deploy_site tool)
 //	GET    /v1/sites                         list the org's live sites
 //
+// Releases (the server-side promote — see release.go; mirrored under
+// /v1/platform/sites/:slug/…):
+//
+//	POST   /v1/sites/:slug/publish                      promote a build output + go live
+//	POST   /v1/sites/:slug/releases                     promote only (no flip)
+//	GET    /v1/sites/:slug/releases                     rollback menu, newest first
+//	POST   /v1/sites/:slug/releases/:release/activate   flip the pointer (go live / roll back)
+//
 // Deploy pipeline: a deploy uploads the built static site to OUR S3
 // (CLOUD_PROJECTS_BUCKET on s3.hanzo.ai) under "<org>/<slug>/", marks the
 // bucket public-read, and records a live URL. The hanzoai/static container
@@ -244,6 +252,14 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Post("/v1/sites/deploy", cloud.Handle(s, deploySiteFiles))
 	app.Get("/v1/sites", cloud.Handle(s, listSites))
 
+	// Releases — how content GETS to a site's serving prefix (release.go). The
+	// builder's build output already lives in OUR object store, so publishing is a
+	// server-side promote into an immutable content-addressed release plus an
+	// atomic pointer flip: no bytes traverse the API and no client holds an S3
+	// credential. /publish is create+activate (the 99% path); the two halves stay
+	// separable for a staged rollout, and activate doubles as the free rollback.
+	siteReleases(app, s, "/v1/sites")
+
 	// /v1/platform/sites — the PaaS static-site surface. Static sites are the
 	// S3-backed part of the platform (container apps live at /v1/platform/projects,
 	// clients/platform); this is the SAME engine as /v1/projects, exposed under the
@@ -261,6 +277,18 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
 	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
 	app.Post("/v1/platform/sites/:slug/domains", cloud.Handle(s, setDomains))
+	siteReleases(app, s, "/v1/platform/sites")
+}
+
+// siteReleases registers the release routes under a site-surface base path. Both
+// site surfaces (/v1/sites and /v1/platform/sites) are the same engine, so they
+// get the same four routes from this one registration — a release published on
+// one is visible and activatable on the other because there is only one store.
+func siteReleases(app *zip.App, s *cloud.Service[state], base string) {
+	app.Post(base+"/:slug/publish", cloud.Handle(s, publishSiteRelease))
+	app.Post(base+"/:slug/releases", cloud.Handle(s, createRelease))
+	app.Get(base+"/:slug/releases", cloud.Handle(s, listReleases))
+	app.Post(base+"/:slug/releases/:release/activate", cloud.Handle(s, activateRelease))
 }
 
 // ---- handlers ----
@@ -462,12 +490,21 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 	if uErr := s.State.store.UnbindHost(c.Context(), p.Slug, org, p.Slug); uErr != nil {
 		s.Log.Warn("unbind host failed (continuing)", "org", org, "slug", p.Slug, "err", uErr)
 	}
+	// Drop the release rows so a reclaimed slug never inherits the previous
+	// owner's rollback menu.
+	if rErr := s.State.store.DeleteReleases(c.Context(), org, p.Slug); rErr != nil {
+		s.Log.Warn("delete releases failed (continuing)", "org", org, "slug", p.Slug, "err", rErr)
+	}
 	// Best-effort purge of the live site; metadata is already gone, so a purge
-	// failure must not resurrect the project — log and continue.
+	// failure must not resurrect the project — log and continue. BOTH spaces go:
+	// the legacy mutable prefix AND the site's release space, which is a sibling
+	// of it (releaseSpace) and so is not covered by the first purge.
 	if s.State.blob.configured() {
 		if cli, cErr := s.State.blob.client(); cErr == nil {
-			if pErr := purgePrefix(c.Context(), cli, s.State.blob.bucket, sitePrefix(org, p.Slug)); pErr != nil {
-				s.Log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "err", pErr)
+			for _, prefix := range []string{sitePrefix(org, p.Slug), releaseSpace(org) + "/" + p.Slug} {
+				if pErr := purgePrefix(c.Context(), cli, s.State.blob.bucket, prefix); pErr != nil {
+					s.Log.Warn("purge site failed (continuing)", "org", org, "slug", p.Slug, "prefix", prefix, "err", pErr)
+				}
 			}
 		}
 	}
