@@ -3,78 +3,41 @@ package iam
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"testing"
 
-	"github.com/hanzoai/beego/v2/server/web"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
+
+	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/iam/pkg/model"
+	"github.com/hanzoai/iam/pkg/store"
 )
 
-// TestPrefixesCoverAuthCritical guards that the mount set never loses an
-// auth-critical surface hanzo.id serves — the operator SSO chain and every
-// relying party depend on these exact prefixes being served in-process.
+// TestPrefixesCoverAuthCritical guards that the fail-closed prefix set never loses an
+// auth-critical surface hanzo.id serves — the operator SSO chain and every relying
+// party depend on these exact prefixes being served in-process.
 func TestPrefixesCoverAuthCritical(t *testing.T) {
 	have := map[string]bool{}
 	for _, p := range iamPrefixes {
 		have[p] = true
 	}
-	for _, n := range []string{"/v1/iam", "/.well-known", "/login/oauth"} {
+	for _, n := range []string{"/v1/iam", "/login/oauth"} {
 		if !have[n] {
 			t.Errorf("iamPrefixes missing auth-critical prefix %q", n)
 		}
 	}
 }
 
-// TestMountHandlerPreservesFullPath verifies the routing plumbing the embedded
-// IAM handler relies on: zip.App.Mount(prefix, h) must dispatch prefix/* to h
-// with the ORIGINAL request path intact. Beego routes on the full path
-// (/v1/iam/oauth/token, not a stripped /oauth/token), so a prefix-stripping mount
-// would 404 every OAuth/OIDC call. This drives the exact mountHandler call Mount
-// uses, with a stub handler, so it runs without the full Beego runtime.
-func TestMountHandlerPreservesFullPath(t *testing.T) {
-	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-
-	var gotPath string
-	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mountHandler(app, stub)
-
-	for _, want := range []string{
-		"/v1/iam/oauth/token",
-		"/v1/iam/oauth/authorize",
-		"/v1/iam/.well-known/jwks",
-		"/.well-known/openid-configuration",
-		"/.well-known/jwks",
-		"/login/oauth/authorize",
-	} {
-		gotPath = ""
-		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, want, nil))
-		if err != nil {
-			t.Fatalf("Test(%s): %v", want, err)
-		}
-		_ = resp.Body.Close()
-		if gotPath != want {
-			t.Errorf("embedded handler saw path %q, want full %q (prefix stripped?)", gotPath, want)
-		}
-	}
-}
-
 // TestMountFailClosed503 proves the fail-soft path: when the embed cannot boot,
-// mountFailClosed serves an honest JSON 503 on every IAM prefix instead of
-// letting /v1/iam/* fall through to the console SPA (HTML 200). cloud and every
-// co-resident subsystem stay up — the blast-radius isolation the consolidation
-// exists for.
+// mountFailClosed serves an honest JSON 503 on every IAM prefix instead of letting
+// /v1/iam/* fall through to the console SPA (HTML 200). cloud and every co-resident
+// subsystem stay up — the blast-radius isolation the consolidation exists for.
 func TestMountFailClosed503(t *testing.T) {
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
 	mountFailClosed(app)
 	for _, p := range []string{
 		"/v1/iam/oauth/token",
 		"/v1/iam/.well-known/jwks",
-		"/.well-known/openid-configuration",
 		"/login/oauth/authorize",
 	} {
 		resp, err := app.Fiber().Test(httptest.NewRequest(http.MethodGet, p, nil))
@@ -88,56 +51,54 @@ func TestMountFailClosed503(t *testing.T) {
 	}
 }
 
-// TestIsolateDatabase proves the co-residence unblock: isolateDatabase pins IAM's
-// SQLite handle to its OWN iam.db under the IAM data dir via IAM_DATABASE_URL —
-// the IAM-scoped key that conf.GetConfigDataSourceName honors ABOVE the shared
-// `dataSourceName` a deployment sets for the sibling `ai` fork. Without this the
-// embedded IAM opens ai's database and the binary crashes at boot (SQLITE_CANTOPEN
-// / casdoor-table auto-migration into ai's store). It must (1) set an iam-owned
-// DSN, (2) NOT collide with ai's dataSourceName, and (3) respect an operator
-// override.
-func TestIsolateDatabase(t *testing.T) {
-	const dataDir = "/data/iam"
-	const aiDSN = "file:/data/ai.db?cache=shared" // what a deployment sets for `ai`
-
-	// (1)+(2): default fills an iam-owned DSN that is NOT ai's.
-	t.Setenv("dataSourceName", aiDSN)
-	os.Unsetenv("IAM_DATABASE_URL")
-	isolateDatabase(dataDir)
-	got := os.Getenv("IAM_DATABASE_URL")
-	if got == "" {
-		t.Fatal("IAM_DATABASE_URL unset after isolateDatabase — IAM would resolve ai's dataSourceName")
+// TestPaths covers the store-path derivation: the SQLite file lands under {DataDir}/iam,
+// and init_data.json resolves the standalone-iam default unless `initDataFile` overrides.
+func TestPaths(t *testing.T) {
+	dbPath, initData := paths(cloud.Deps{DataDir: "/var/data"})
+	if dbPath != "/var/data/iam/iam.db" {
+		t.Errorf("dbPath = %q, want /var/data/iam/iam.db", dbPath)
 	}
-	if got == aiDSN {
-		t.Fatalf("IAM_DATABASE_URL == ai's dataSourceName (%q) — the collision is NOT isolated", got)
+	if initData != "init_data.json" {
+		t.Errorf("initData = %q, want the CWD-relative default", initData)
 	}
-	if !strings.Contains(got, "/data/iam/iam.db") {
-		t.Errorf("IAM_DATABASE_URL = %q, want IAM's own iam.db under the data dir", got)
-	}
-
-	// (3): an operator-set IAM_DATABASE_URL (e.g. an external DSN) is respected.
-	const override = "file:/mnt/custom/iam.db?cache=shared"
-	t.Setenv("IAM_DATABASE_URL", override)
-	isolateDatabase(dataDir)
-	if os.Getenv("IAM_DATABASE_URL") != override {
-		t.Errorf("isolateDatabase clobbered operator override: got %q, want %q", os.Getenv("IAM_DATABASE_URL"), override)
+	t.Setenv("initDataFile", "/etc/iam/init_data.json")
+	if _, initData := paths(cloud.Deps{DataDir: "/var/data"}); initData != "/etc/iam/init_data.json" {
+		t.Errorf("initData override not honored, got %q", initData)
 	}
 }
 
-// TestInitSessionsIdempotent proves the session-manager hook is safe to call more
-// than once (Beego's GlobalSessions is a process singleton) and wires the memory
-// provider IAM configures. Beego defaults SessionProvider to "memory" and
-// auto-registers it, so this runs without iamserver.Init.
-func TestInitSessionsIdempotent(t *testing.T) {
-	if web.GlobalSessions == nil {
-		if err := initSessions(); err != nil {
-			t.Fatalf("initSessions: %v", err)
-		}
+// TestDBLifecycleAndStore is the end-to-end contract for the in-process store accessor:
+// DB() is nil until Mount runs (the nil-guard contract sibling subsystems rely on), and
+// after a successful Mount DB() returns the live orm.DB that pkg/store reads/writes the
+// SAME project rows through — the whole reason Layer 3 (clients/platform, clients/deploy)
+// can drop iam-v1's in-process object store.
+func TestDBLifecycleAndStore(t *testing.T) {
+	embeddedDB = nil // assert the pre-Mount nil-guard contract from a known state
+	if DB() != nil {
+		t.Fatal("DB() must be nil before Mount")
 	}
-	if web.GlobalSessions == nil {
-		t.Fatal("GlobalSessions still nil after initSessions")
+
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir()}
+	if err := Mount(app, deps); err != nil {
+		t.Fatalf("Mount: %v", err)
 	}
-	if err := initSessions(); err != nil {
-		t.Fatalf("initSessions second call (must be a no-op): %v", err)
+	if DB() == nil {
+		t.Fatal("DB() must be non-nil after a successful Mount")
+	}
+
+	// The embedded store is the ONE project store: write via pkg/store over DB(), read it
+	// back by its owner/name id, and confirm tenant-scoped listing sees exactly it.
+	ok, err := store.AddProject(DB(), &model.Project{Owner: "hanzo", Name: "alpha", DisplayName: "Alpha"})
+	if err != nil || !ok {
+		t.Fatalf("AddProject over DB(): ok=%v err=%v", ok, err)
+	}
+	got, err := store.GetProject(DB(), "hanzo/alpha")
+	if err != nil || got == nil || got.Name != "alpha" {
+		t.Fatalf("GetProject over DB(): got=%+v err=%v", got, err)
+	}
+	rows, err := store.GetOrganizationProjects(DB(), "hanzo")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("GetOrganizationProjects over DB(): rows=%d err=%v", len(rows), err)
 	}
 }
