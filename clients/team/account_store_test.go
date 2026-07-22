@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/hanzoai/cloud/clients/team/token"
@@ -46,6 +47,53 @@ func TestEnsureWorkspaceIdempotent(t *testing.T) {
 	role, ok := s.Membership(ctx, w1.ID, acct)
 	if !ok || role != "owner" {
 		t.Fatalf("owner membership = %q,%v, want owner", role, ok)
+	}
+}
+
+// TestEnsureWorkspaceConcurrentSingleRow proves two (or more) concurrent logins for
+// the same (org, account) converge to exactly ONE personal workspace. The prior
+// check-then-insert (WorkspacesOf → INSERT) had no uniqueness on the personal-
+// workspace identity, so racing logins could each see "none" and mint a duplicate;
+// the (owner_org, owner) unique index + idempotent upsert closes it.
+func TestEnsureWorkspaceConcurrentSingleRow(t *testing.T) {
+	s := newAccountStore(t)
+	ctx := context.Background()
+	const org, acct = "acme", "550e8400-e29b-41d4-a716-446655440000"
+
+	const n = 32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	got := make([]workspace, n)
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start // release all at once to maximize the check-then-insert interleave
+			got[i], errs[i] = s.EnsureWorkspace(ctx, org, acct, "Ada")
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("EnsureWorkspace #%d: %v", i, err)
+		}
+	}
+	// Every concurrent caller must resolve the SAME workspace row.
+	for i := 1; i < n; i++ {
+		if got[i].ID != got[0].ID {
+			t.Fatalf("concurrent logins minted different workspaces: %s vs %s", got[0].ID, got[i].ID)
+		}
+	}
+	// And the store holds exactly one personal workspace for the account.
+	wss, err := s.WorkspacesOf(ctx, org, acct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wss) != 1 {
+		t.Fatalf("want exactly 1 personal workspace after %d concurrent logins, got %d", n, len(wss))
 	}
 }
 
