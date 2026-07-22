@@ -1,6 +1,6 @@
 package visor
 
-// fleet_spec_test.go — a gpu-connect node's CPU arch + core count + total RAM must
+// fleet_spec_test.go — a linked node's CPU arch + core count + total RAM must
 // survive the CLI→server decode (fleetRegistration) and land on the /v1/fleet board
 // (byoUnit → fleetSpec), the SAME fields a code-linked run-target carries. This is
 // what makes evo-2 (x86_64 / Strix Halo) and spark (aarch64 / GB10) show real arch +
@@ -14,7 +14,7 @@ import (
 	"github.com/hanzoai/cloud/clients/samples"
 )
 
-// cliHostSpecJSON is exactly what `hanzo gpu connect` writes as the fleet presence
+// cliHostSpecJSON is exactly what `hanzo link` writes as the fleet presence
 // activity's Input for spark (GB10, aarch64, 128 GiB).
 const cliHostSpecJSON = `{
   "hostname": "spark",
