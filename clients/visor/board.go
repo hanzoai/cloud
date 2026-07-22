@@ -174,7 +174,7 @@ func agentUnits(s *cloud.Service[state], c *zip.Ctx, org string) []fleetUnit {
 	return out
 }
 
-// workerUnits folds in the BYO machines that dialed in via `hanzo gpu connect`.
+// workerUnits folds in the BYO machines that dialed in via `hanzo link`.
 // byoWorkers is already fail-soft (nil on any error).
 func workerUnits(org string) []fleetUnit {
 	workers := byoWorkers(org)
@@ -188,7 +188,7 @@ func workerUnits(org string) []fleetUnit {
 // byoUnit projects one dialed-in BYO worker onto the board, carrying the host's full
 // static spec — OS, CPU arch, logical cores, total RAM and the GPU summary — in the
 // SAME fleetSpec a code-linked run-target reports (agentUnits). This is what surfaces
-// a gpu-connect node's real arch (amd64/arm64) + memory on GET /v1/fleet, not just
+// a linked node's real arch (amd64/arm64) + memory on GET /v1/fleet, not just
 // its GPU. A field the worker did not report stays zero (omitempty), never invented.
 func byoUnit(w byoWorker) fleetUnit {
 	u := fleetUnit{
