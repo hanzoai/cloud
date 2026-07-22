@@ -39,6 +39,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -292,13 +293,26 @@ func sanitizeID(s string) string {
 	return s
 }
 
-// detectGPUs queries nvidia-smi for the machine's accelerators; on Apple
-// Silicon it reports the chip's integrated GPU with its unified memory.
-// Degrades gracefully to an empty list (CPU-only) when neither is present.
+// detectGPUs reports the machine's accelerators as first-class resources — NVIDIA
+// (nvidia-smi), AMD (rocm-smi / kfd topology / vulkaninfo), or the Apple Silicon
+// integrated GPU with its unified memory. Each vendor path is tried in turn; the
+// first that reports a card wins. Degrades gracefully to an empty list (CPU-only)
+// when none is present.
 func detectGPUs() []gpuInfo {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		return detectAppleGPU()
 	}
+	if g := detectNvidiaGPUs(); len(g) > 0 {
+		return g
+	}
+	if g := detectAmdGPUs(); len(g) > 0 {
+		return g
+	}
+	return nil
+}
+
+// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi (name + total VRAM).
+func detectNvidiaGPUs() []gpuInfo {
 	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").Output()
 	if err != nil {
 		return nil
@@ -314,6 +328,203 @@ func detectGPUs() []gpuInfo {
 		gpus = append(gpus, gpuInfo{Name: strings.TrimSpace(name), MemoryTotal: strings.TrimSpace(mem)})
 	}
 	return gpus
+}
+
+// detectAmdGPUs reports AMD accelerators — discrete Radeon cards and gfx APUs alike
+// (e.g. evo's gfx1151 Radeon 8060S on the RYZEN AI MAX+ 395). Resolution order:
+// rocm-smi (marketing name + gfx target), then the kfd topology under /sys (gfx
+// target from gfx_target_version, GPU nodes only), then a vulkaninfo summary. VRAM
+// is filled best-effort from the amdgpu sysfs mem_info_vram_total, positionally.
+func detectAmdGPUs() []gpuInfo {
+	if out, err := exec.Command("rocm-smi", "--showproductname", "--csv").Output(); err == nil {
+		if gpus := parseRocmSmiCSV(out); len(gpus) > 0 {
+			return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+		}
+	}
+	if gpus := parseKfdTopology(sysfsKfdNodes); len(gpus) > 0 {
+		return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+	}
+	if out, err := exec.Command("vulkaninfo", "--summary").Output(); err == nil {
+		if gpus := parseVulkaninfoSummary(out); len(gpus) > 0 {
+			return gpus
+		}
+	}
+	return nil
+}
+
+// sysfs roots, indirected so tests can point them at fixtures.
+var (
+	sysfsKfdNodes = "/sys/class/kfd/kfd/topology/nodes"
+	sysfsDRM      = "/sys/class/drm"
+)
+
+// parseRocmSmiCSV parses `rocm-smi --showproductname --csv` into one gpuInfo per
+// card, naming it "<Card Series> (<GFX Version>)" (e.g. "Radeon 8060S Graphics
+// (gfx1151)"). Column order is read from the header so it survives field additions.
+func parseRocmSmiCSV(out []byte) []gpuInfo {
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	var series, gfx = -1, -1
+	var gpus []gpuInfo
+	for sc.Scan() {
+		fields := strings.Split(strings.TrimSpace(sc.Text()), ",")
+		if len(fields) < 2 {
+			continue
+		}
+		if series < 0 { // header row
+			for i, f := range fields {
+				switch strings.TrimSpace(f) {
+				case "Card Series":
+					series = i
+				case "GFX Version":
+					gfx = i
+				}
+			}
+			continue
+		}
+		if series >= len(fields) {
+			continue
+		}
+		name := strings.TrimSpace(fields[series])
+		if name == "" {
+			continue
+		}
+		if gfx >= 0 && gfx < len(fields) {
+			if v := strings.TrimSpace(fields[gfx]); v != "" {
+				name += " (" + v + ")"
+			}
+		}
+		gpus = append(gpus, gpuInfo{Name: name})
+	}
+	return gpus
+}
+
+// parseKfdTopology reads the amdgpu kfd topology under nodesDir and reports one
+// gpuInfo per GPU node — a node with simd_count > 0 (node 0 is the CPU) — naming it
+// from the decoded gfx_target_version (110501 → "gfx1151"). Nodes are visited in
+// numeric order so the list matches the DRM card order VRAM is read in.
+func parseKfdTopology(nodesDir string) []gpuInfo {
+	entries, err := os.ReadDir(nodesDir)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Slice(names, func(i, j int) bool { return atoiSafe(names[i]) < atoiSafe(names[j]) })
+	var gpus []gpuInfo
+	for _, n := range names {
+		b, err := os.ReadFile(filepath.Join(nodesDir, n, "properties"))
+		if err != nil {
+			continue
+		}
+		simd, gfxVer := kfdNodeProps(b)
+		if simd <= 0 || gfxVer <= 0 {
+			continue // CPU node or non-GPU
+		}
+		gpus = append(gpus, gpuInfo{Name: "AMD GPU (" + gfxName(gfxVer) + ")"})
+	}
+	return gpus
+}
+
+// kfdNodeProps extracts simd_count and gfx_target_version from a kfd node's
+// properties file (space-separated "key value" lines).
+func kfdNodeProps(properties []byte) (simd, gfxVer int) {
+	sc := bufio.NewScanner(bytes.NewReader(properties))
+	for sc.Scan() {
+		k, v, ok := strings.Cut(strings.TrimSpace(sc.Text()), " ")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "simd_count":
+			simd = atoiSafe(strings.TrimSpace(v))
+		case "gfx_target_version":
+			gfxVer = atoiSafe(strings.TrimSpace(v))
+		}
+	}
+	return simd, gfxVer
+}
+
+// gfxName decodes a kfd gfx_target_version into the LLVM gfx target string:
+// 110501 → "gfx1151" (major=v/10000, minor=(v/100)%100, step=v%100).
+func gfxName(v int) string {
+	return fmt.Sprintf("gfx%d%d%d", v/10000, (v/100)%100, v%100)
+}
+
+// amdVRAMTotals returns each amdgpu card's total VRAM in MiB, in DRM card order,
+// read from /sys/class/drm/card*/device/mem_info_vram_total (vendor 0x1002).
+func amdVRAMTotals(drmDir string) []int64 {
+	entries, err := os.ReadDir(drmDir)
+	if err != nil {
+		return nil
+	}
+	cards := make([]string, 0, len(entries))
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, "card") && !strings.Contains(n, "-") {
+			cards = append(cards, n)
+		}
+	}
+	sort.Slice(cards, func(i, j int) bool {
+		return atoiSafe(strings.TrimPrefix(cards[i], "card")) < atoiSafe(strings.TrimPrefix(cards[j], "card"))
+	})
+	var mems []int64
+	for _, c := range cards {
+		dev := filepath.Join(drmDir, c, "device")
+		if vendor, _ := os.ReadFile(filepath.Join(dev, "vendor")); strings.TrimSpace(string(vendor)) != "0x1002" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dev, "mem_info_vram_total"))
+		if err != nil {
+			continue
+		}
+		var bytesTotal int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &bytesTotal); err == nil && bytesTotal > 0 {
+			mems = append(mems, bytesTotal/(1024*1024))
+		}
+	}
+	return mems
+}
+
+// fillAmdVRAM attaches VRAM totals to the GPU list positionally when the counts
+// match (the common single-GPU case always does); otherwise the names stand alone.
+func fillAmdVRAM(gpus []gpuInfo, memsMiB []int64) []gpuInfo {
+	if len(memsMiB) != len(gpus) {
+		return gpus
+	}
+	for i := range gpus {
+		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", memsMiB[i])
+	}
+	return gpus
+}
+
+// parseVulkaninfoSummary is the last-resort AMD path: it scrapes GPU device names
+// from `vulkaninfo --summary` (the "deviceName = ..." lines), keeping AMD/Radeon
+// devices only so it never double-counts an NVIDIA card already handled upstream.
+func parseVulkaninfoSummary(out []byte) []gpuInfo {
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	var gpus []gpuInfo
+	for sc.Scan() {
+		_, v, ok := strings.Cut(sc.Text(), "deviceName")
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(strings.TrimLeft(v, " =\t"))
+		if name == "" {
+			continue
+		}
+		if l := strings.ToLower(name); strings.Contains(l, "amd") || strings.Contains(l, "radeon") || strings.Contains(l, "gfx") {
+			gpus = append(gpus, gpuInfo{Name: name})
+		}
+	}
+	return gpus
+}
+
+// atoiSafe parses an int, returning 0 on any error (0 never denotes a GPU node).
+func atoiSafe(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
 }
 
 // detectAppleGPU reports the Apple Silicon chip as one GPU with the machine's
