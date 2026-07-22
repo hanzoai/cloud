@@ -69,6 +69,10 @@ func (f *financeFake) server(t *testing.T) *httptest.Server {
 				_, _ = io.WriteString(w, `{"balance":100000,"holds":2500,"available":100000}`)
 			case "globex":
 				_, _ = io.WriteString(w, `{"balance":500000,"holds":0,"available":500000}`)
+			case "held":
+				// Fully held: a real balance, every cent authorized away, commerce reports
+				// available 0. The projection must NOT resurrect balance as spendable.
+				_, _ = io.WriteString(w, `{"balance":100000,"holds":100000,"available":0}`)
 			default:
 				_, _ = io.WriteString(w, `{"balance":0,"holds":0,"available":0}`)
 			}
@@ -127,6 +131,53 @@ func TestFinanceBalance_ShapeCentsAndIsolation(t *testing.T) {
 	_ = json.Unmarshal(body, &b)
 	if b.AvailableCents != 500000 {
 		t.Fatalf("globex must see its own balance 500000, got %d (cross-tenant leak?)", b.AvailableCents)
+	}
+}
+
+// TestSpendableCents_NeverOverReportsHeld pins the available projection: reported
+// available is trusted when present; otherwise available is balance NET OF holds,
+// so a fully-held wallet reports 0 and holds beyond balance clamp to 0 (never a
+// negative, never phantom spendable money).
+func TestSpendableCents_NeverOverReportsHeld(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		balance, holds, available int64
+		want                      int64
+	}{
+		{"available reported wins", 100000, 2500, 100000, 100000},
+		{"fully held reports zero", 100000, 100000, 0, 0},
+		{"holds exceed balance clamp to zero", 100000, 150000, 0, 0},
+		{"balance only nets holds", 100000, 30000, 0, 70000},
+		{"balance only no holds", 100000, 0, 0, 100000},
+		{"empty wallet", 0, 0, 0, 0},
+	} {
+		got := spendableCents(commerceBalance{Balance: tc.balance, Holds: tc.holds, Available: tc.available})
+		if got != tc.want {
+			t.Fatalf("%s: spendableCents(bal=%d holds=%d avail=%d) = %d, want %d",
+				tc.name, tc.balance, tc.holds, tc.available, got, tc.want)
+		}
+	}
+}
+
+// TestFinanceBalance_FullyHeldReportsZeroAvailable proves the handler (not just the
+// helper) never shows held funds as spendable: a fully-held org's /v1/finance/balance
+// reports availableCents 0 with the held amount in pendingCents.
+func TestFinanceBalance_FullyHeldReportsZeroAvailable(t *testing.T) {
+	f := &financeFake{}
+	app := mountApp(t, f.server(t).URL, "svc-token")
+	code, body := call(t, app, http.MethodGet, "/v1/finance/balance", "held/dave", "held")
+	if code != http.StatusOK {
+		t.Fatalf("balance held = %d (%s)", code, body)
+	}
+	var b financeBalanceView
+	if err := json.Unmarshal(body, &b); err != nil {
+		t.Fatalf("decode balance: %v (%s)", err, body)
+	}
+	if b.AvailableCents != 0 {
+		t.Fatalf("fully-held wallet must report 0 available, got %d (over-reported held funds)", b.AvailableCents)
+	}
+	if b.PendingCents != 100000 {
+		t.Fatalf("fully-held wallet must report 100000 pending (held), got %d", b.PendingCents)
 	}
 }
 

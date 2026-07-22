@@ -221,17 +221,31 @@ func financeBalance(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := financeGet(s, c, "/v1/billing/balance", org, url.Values{"currency": {"usd"}}, &b); err != nil {
 		return err
 	}
-	available := b.Available
-	if available == 0 && b.Balance != 0 {
-		available = b.Balance
-	}
 	return financeJSON(s, c, financeBalanceView{
 		Currency:       "usd",
-		AvailableCents: available,
+		AvailableCents: spendableCents(b),
 		PendingCents:   b.Holds,
 		DueCents:       0,
 		AsOf:           time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// spendableCents is what the finance UI shows as spendable from a commerce balance:
+// commerce's reported `available` when it populates that field, else balance NET OF
+// holds when commerce reports only a balance. Held funds are never spendable and the
+// result never goes negative — a fully-held wallet (balance == holds) reports 0, and
+// holds beyond the balance clamp to 0 rather than rendering phantom money the gate
+// would refuse. (The prior fallback used balance alone, over-reporting a fully-held
+// balance as entirely available.)
+func spendableCents(b commerceBalance) int64 {
+	avail := b.Available
+	if avail == 0 && b.Balance != 0 {
+		avail = b.Balance - b.Holds
+	}
+	if avail < 0 {
+		return 0
+	}
+	return avail
 }
 
 // financeCredits projects the DEPOSIT rows of the commerce ledger — each staff/promo
