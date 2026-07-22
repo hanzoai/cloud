@@ -202,6 +202,73 @@ func TestTenantStoreCachesAndIsolates(t *testing.T) {
 	}
 }
 
+// TestOrgStoreEach proves the cross-org sweep primitive: it enumerates exactly the
+// orgs that have THIS subsystem's file (skipping the reserved _* partitions and orgs
+// with only other subsystems' files) and hands back the SAME cached handle For
+// returns — never a second open of the file (the property a reconciler relies on,
+// since the at-rest layer does not support a concurrent second open).
+func TestOrgStoreEach(t *testing.T) {
+	dir := t.TempDir()
+	opened := 0
+	cache := NewOrgStore(dir, "widget", func(db *sql.DB) (*sql.DB, error) { opened++; return db, nil })
+	t.Cleanup(func() { _ = cache.CloseAll() })
+
+	// Two real orgs (For creates + caches their widget.db) ...
+	a, err := cache.For("orga", "")
+	if err != nil {
+		t.Fatalf("For orga: %v", err)
+	}
+	b, err := cache.For("orgb", "")
+	if err != nil {
+		t.Fatalf("For orgb: %v", err)
+	}
+	if opened != 2 {
+		t.Fatalf("want 2 opens after two For, got %d", opened)
+	}
+	// ... a reserved platform partition (must be skipped) ...
+	p, err := PlatformDB(dir, "widget")
+	if err != nil {
+		t.Fatalf("PlatformDB: %v", err)
+	}
+	defer func() { _ = p.Close() }()
+	// ... and an org dir carrying only a DIFFERENT subsystem's file (no widget.db → skipped).
+	other := filepath.Join(dir, "orgs", "orgc")
+	if err := os.MkdirAll(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "gadget.db"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	seen := map[string]*sql.DB{}
+	if err := cache.Each(func(slug string, st *sql.DB, e error) {
+		if e != nil {
+			t.Fatalf("Each open %s: %v", slug, e)
+		}
+		seen[slug] = st
+	}); err != nil {
+		t.Fatalf("Each: %v", err)
+	}
+
+	// Exactly the two real orgs — _platform skipped, orgc (no widget.db) skipped.
+	if len(seen) != 2 || seen["orga"] == nil || seen["orgb"] == nil {
+		t.Fatalf("Each enumerated %d slugs %v, want exactly {orga,orgb}", len(seen), seen)
+	}
+	// The handles are the SAME cached ones For returned — no second open.
+	if seen["orga"] != a || seen["orgb"] != b {
+		t.Fatal("Each must return the cached handle, not a fresh open")
+	}
+	if opened != 2 {
+		t.Fatalf("Each must not re-open already-cached orgs: opens=%d want 2", opened)
+	}
+
+	// A missing orgs root is an empty enumeration, not an error.
+	empty := NewOrgStore(filepath.Join(dir, "nope"), "widget", func(db *sql.DB) (*sql.DB, error) { return db, nil })
+	if err := empty.Each(func(string, *sql.DB, error) { t.Fatal("no orgs → fn must not be called") }); err != nil {
+		t.Fatalf("missing root want nil error, got %v", err)
+	}
+}
+
 // TestSanitizeOrgInjectiveAndSafe locks the properties OrgDB relies on: a
 // clean DNS label is the identity, case-only siblings do NOT fold onto one slug
 // (a case-insensitive-filesystem cross-org break), and unsafe-rune orgs are
