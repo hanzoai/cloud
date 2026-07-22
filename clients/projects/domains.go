@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
 
@@ -102,10 +101,9 @@ func setDomains(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		bound = append(bound, host)
 	}
-	// Purge the edge so the newly-bound host serves the current content immediately.
-	if err := s.State.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); err != nil {
-		s.Log.Warn("cloudflare purge failed after domain bind (continuing)", "org", org, "slug", p.Slug, "err", err)
-	}
+	// Purge the edge cache-tag so the newly-bound host serves the current build
+	// from the edge immediately.
+	purgeTag(s, c.Context(), org, p.Slug)
 	hosts, _ := s.State.store.ListHostsForProject(c.Context(), org, p.Slug)
 	return c.JSON(http.StatusOK, map[string]any{"slug": p.Slug, "org": org, "bound": bound, "domains": hosts})
 }
