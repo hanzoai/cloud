@@ -150,13 +150,26 @@ type codeAgent struct {
 	continueArgs []string                   // harness-native form of Hanzo -c/--continue
 	modelArg     []string                   // how the model is passed on argv (empty: via env)
 	carrier      func(model string) string  // maps the resolved model to a client-recognized id (claude: zen→carrier); nil = pass through
-	provider     func(base string) []string // agents that need the endpoint declared, not just env'd
+	provider     func(base, model string) []string // agents that need the endpoint declared, not just env'd
 	clear        []string                   // env that would shadow the wire (a stale key in the shell)
 	configHome   string                     // env var that relocates the agent's config dir to ~/.hanzo ("" = share the user's own install)
 	seed         func(dir string) error     // one-time defaults for the isolated config dir
 	appendSystem []string                   // --append-system-prompt + text; ALWAYS applied (identity, not a permission bypass — present in --safe too)
 	mcp          bool                       // auto-wire the Hanzo MCP server (code/vector/web/vision tools) as an stdio server scoped to the cwd
 	install      string                     // hint when the binary is missing
+}
+
+// codeContextWindow is the input context (tokens) the served coding model
+// budgets from. The enso and zen5 flagship tiers serve 1M; the flash tiers
+// serve 131072. Codex is told this so it sizes context to the real window
+// instead of a flat 256K cap — the cause of "maximum context exceeded" at
+// 262144 even on a 1M-capable model. This wrapper only launches Hanzo coding
+// models (default zen5), so non-flash defaults to the 1M flagship window.
+func codeContextWindow(model string) int {
+	if strings.Contains(strings.ToLower(model), "flash") {
+		return 131072
+	}
+	return 1000000
 }
 
 // codex and @hanzo/dev share a lineage (dev is a Codex fork), hence a wire.
@@ -169,19 +182,23 @@ func codexLike(bin, install string) codeAgent {
 		fullAuto:     []string{"--dangerously-bypass-approvals-and-sandbox"},
 		continueArgs: []string{"resume", "--last"},
 		modelArg:     []string{"-m"},
-		provider: func(base string) []string {
+		provider: func(base, model string) []string {
+			// api.hanzo.ai exposes the standard OpenAI /v1/models shape, not
+			// Codex's private remote model-catalog schema, so skip that refresh
+			// and supply the model's window here — sized to the SERVED model
+			// (enso / zen5 flagship = 1M, flash tiers = 131072) so Codex budgets
+			// the real context instead of a flat 256K cap (the "maximum context
+			// exceeded at 262144" bug). Auto-compact at 90% leaves headroom.
+			win := codeContextWindow(model)
 			return []string{
 				"-c", "model_provider=hanzo",
 				"-c", `model_providers.hanzo.name="Hanzo"`,
 				"-c", fmt.Sprintf(`model_providers.hanzo.base_url="%s/v1"`, strings.TrimSuffix(base, "/")),
 				"-c", `model_providers.hanzo.env_key="OPENAI_API_KEY"`,
 				"-c", `model_providers.hanzo.wire_api="responses"`,
-				// api.hanzo.ai exposes the standard OpenAI /v1/models shape,
-				// not Codex's private remote model-catalog schema. Skip that
-				// optional refresh and supply the coding model's metadata here.
 				"-c", `features.remote_models=false`,
-				"-c", `model_context_window=262144`,
-				"-c", `model_auto_compact_token_limit=235929`,
+				"-c", fmt.Sprintf("model_context_window=%d", win),
+				"-c", fmt.Sprintf("model_auto_compact_token_limit=%d", win*9/10),
 			}
 		},
 		install: install,
@@ -447,7 +464,7 @@ func codeArgv(agent codeAgent, base, model string, safe bool, rest []string) []s
 		argv = append(argv, agent.fullAuto...)
 	}
 	if agent.provider != nil {
-		argv = append(argv, agent.provider(base)...)
+		argv = append(argv, agent.provider(base, model)...)
 	}
 	if len(agent.modelArg) > 0 { // claude takes the model via env, codex/dev on argv
 		argv = append(argv, agent.modelArg...)
