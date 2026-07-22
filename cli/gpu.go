@@ -745,6 +745,7 @@ type connectOpts struct {
 	registerProvider bool   // auto POST /v1/add-provider for the engine
 	studioDir        string // local Studio checkout to launch + supervise on :8188
 	studioURL        string // studio base the render mirror uploads finished images to
+	mirror           bool   // sweep local renders into the org studio library (default on)
 }
 
 func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
@@ -819,7 +820,7 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	mirrorDir := ""
 	seen := map[string]int64{}
 	var mirC <-chan time.Time
-	if opts.studioDir != "" {
+	if opts.studioDir != "" && opts.mirror {
 		mirrorDir = filepath.Join(opts.studioDir, "output")
 		mir := time.NewTicker(heartbeatEvery)
 		defer mir.Stop()
@@ -1989,6 +1990,9 @@ func installDaemon(cmd *cobra.Command, opts connectOpts) error {
 	}
 	if opts.studioDir != "" {
 		args += " --studio-dir " + opts.studioDir
+	}
+	if !opts.mirror {
+		args += " --mirror=false"
 	}
 	unit := fmt.Sprintf(`[Unit]
 Description=Hanzo node (compute worker)
