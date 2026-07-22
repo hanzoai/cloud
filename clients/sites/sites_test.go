@@ -149,21 +149,70 @@ func TestSiteSlug(t *testing.T) {
 	site("vibe-check.hanzo.app:443", "vibe-check") // port stripped
 	site("my-cool-site.hanzo.app", "my-cool-site")
 
-	notSite("hanzo.app")                // apex, no label
-	notSite("www.hanzo.app")            // reserved bare label
-	notSite("api.hanzo.app")            // reserved bare label
-	notSite("app.hanzo.app")            // reserved (real app host)
-	notSite("-bad.hanzo.app")           // invalid bare slug
-	notSite("UPPER_bad.hanzo.app")      // underscore invalid
+	notSite("hanzo.app")           // apex, no label
+	notSite("www.hanzo.app")       // reserved bare label
+	notSite("api.hanzo.app")       // reserved bare label
+	notSite("app.hanzo.app")       // reserved (real app host)
+	notSite("-bad.hanzo.app")      // invalid bare slug
+	notSite("UPPER_bad.hanzo.app") // underscore invalid
 	// A dotted key is NOT a servable host (wildcard cert/ingress match one label),
 	// so `<slug>.<org>.<apex>` and deeper fall through to the normal pipeline.
 	notSite("myapp.maxpower.hanzo.app")
 	notSite("my-cool-site.acme.hanzo.app")
-	notSite("a.b.c.hanzo.app")          // >2 labels
-	notSite("api.hanzo.ai")             // different zone → normal pipeline
-	notSite("console.hanzo.ai")         // different zone
-	notSite("../orgb.hanzo.app")        // traversal-shaped label rejected
+	notSite("a.b.c.hanzo.app")   // >2 labels
+	notSite("api.hanzo.ai")      // different zone → normal pipeline
+	notSite("console.hanzo.ai")  // different zone
+	notSite("../orgb.hanzo.app") // traversal-shaped label rejected
 	notSite("myapp.evil.hanzo.app.evil.com")
+}
+
+// ---- siteSlug: first-party apex (hanzo.ai) — OPT-IN allowlist boundary ----
+
+// The brand apex (hanzo.ai) serves ONLY our explicit internal sites; every other
+// host — including internal hosts reserved.go never listed — falls through
+// PROTECTED. This opt-in allowlist is the security boundary that replaces the
+// denylist-completeness burden: on the brand's own domain a missing reserved label
+// must NOT become a publishable site (the OAuth account-takeover in reserved.go).
+func TestSiteSlugFirstParty(t *testing.T) {
+	s := New(Config{
+		Apex:            "hanzo.app",
+		Reserved:        []string{"app", "api", "admin"},
+		SelfDomains:     []string{"hanzo.ai"},
+		FirstPartyApex:  "hanzo.ai",
+		FirstPartySites: []string{"cd", "flow", "gallery"},
+	}, luxlog.New("test"))
+	site := func(host, want string) {
+		if slug, ok := s.siteSlug(host); !ok || slug != want {
+			t.Errorf("siteSlug(%q) = (%q,%v), want (%q,true)", host, slug, ok, want)
+		}
+	}
+	notSite := func(host string) {
+		if slug, ok := s.siteSlug(host); ok {
+			t.Errorf("siteSlug(%q) = (%q,true), want not-a-site (protected)", host, slug)
+		}
+	}
+	// Allow-listed internal sites serve on the brand apex.
+	site("cd.hanzo.ai", "cd")
+	site("flow.hanzo.ai", "flow")
+	site("Gallery.Hanzo.AI", "gallery") // case-insensitive
+	site("cd.hanzo.ai:443", "cd")       // port stripped
+	// THE BOUNDARY: every non-allow-listed brand-apex host is protected — it falls
+	// through to the normal /v1 + console pipeline, NEVER served as a site. This holds
+	// for real internal hosts reserved.go may never have listed (iam/kms/world/chat),
+	// so a first-come project can never shadow one.
+	notSite("api.hanzo.ai")
+	notSite("console.hanzo.ai")
+	notSite("iam.hanzo.ai") // not in baseReserved — protected anyway (opt-in default)
+	notSite("kms.hanzo.ai")
+	notSite("world.hanzo.ai")
+	notSite("chat.hanzo.ai")
+	notSite("models.hanzo.ai")
+	notSite("anything-unlisted.hanzo.ai")
+	notSite("cd.acme.hanzo.ai") // a dotted key can never match a bare allowlist entry
+	notSite("hanzo.ai")         // bare apex, no label
+	// The multi-tenant apex is unaffected: users' sites still resolve on hanzo.app.
+	site("my-cool-site.hanzo.app", "my-cool-site")
+	notSite("api.hanzo.app") // still reserved on the multi-tenant apex
 }
 
 // ---- middleware: passthrough vs terminal + resolver keying --------------
