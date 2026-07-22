@@ -140,6 +140,38 @@ func TestMigrateOrgIdempotent(t *testing.T) {
 	mustBalance(t, f, "empty", "empty", 0)
 }
 
+// TestBalanceReadErrorSurfaces pins the money invariant that a REAL balance-read
+// failure is surfaced as an error, NEVER rendered as a genuine $0 ("unknown is not
+// broke"). Regression guard for the swallowed store.Balance error, which showed a
+// funded customer $0 and made the prepaid AI gate refuse a funded org.
+func TestBalanceReadErrorSurfaces(t *testing.T) {
+	ctx := context.Background()
+	f := New(t.TempDir())
+	defer func() { _ = f.Close() }()
+
+	// Fund acme so the store + a real balance row exist; confirm the happy read.
+	if _, err := f.Deposit(ctx, types.DepositInput{Org: "acme", Subject: "acme", Amount: money.FromCents(5000)}); err != nil {
+		t.Fatalf("deposit: %v", err)
+	}
+	mustBalance(t, f, "acme", "acme", 5000)
+
+	// Force a REAL read failure: close the underlying ledger DB out from under the
+	// cached store, so the next Balance read errors (closed DB) rather than a genuine
+	// zero. This is exactly the DB-error / corrupt-row class balanceOf returns.
+	store, err := f.storeFor("acme", false)
+	if err != nil {
+		t.Fatalf("storeFor: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+
+	bal, err := f.Balance(ctx, "acme", "acme", "usd", false)
+	if err == nil {
+		t.Fatalf("a real balance-read failure must surface an error, got (%s, nil) — unknown must never render as $0", bal)
+	}
+}
+
 func mustBalance(t *testing.T, f *ledgerFinance, org, subject string, want int64) {
 	t.Helper()
 	got, err := f.Balance(context.Background(), org, subject, "usd", false)
