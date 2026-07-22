@@ -30,30 +30,76 @@ import (
 // which has always asserted bare-host first-come.
 func siteHost(org, slug string) string { return slug }
 
-// onPublish runs the go-live side effects for a project whose new build just
-// landed at its S3 prefix: it claims the org-scoped public host (first-come per
-// (org,slug), idempotent for the owner) and purges the Cloudflare edge by
-// cache-tag so the new publish is instantly live at the edge. Both are
-// best-effort — an unconfigured/failing CF token must NOT fail the deploy (the
-// site is already live at its S3 URL). It stamps LastPurgeAt on the project (the
-// caller persists it in the same UpdateProject that flips status to live).
+// onPublish runs the go-live side effects after a deployment's build lands at the
+// project's S3 origin prefix: it claims the org-scoped public host (first-come per
+// (org,slug), idempotent for the owner) and purges the edge cache-tag so the new
+// build serves at the edge immediately. Both are best-effort — a taken/reserved
+// host or an unconfigured/failing edge purge must NOT fail the deploy; the project
+// still serves from its S3 origin. purgeEdge stamps LastPurgeAt; the caller
+// persists it in the same UpdateProject that flips status to live.
 func onPublish(s *cloud.Service[state], ctx context.Context, org string, p *Project) {
-	now := time.Now().Unix()
 	host := siteHost(org, p.Slug)
-	if err := s.State.store.BindHost(ctx, host, org, p.Slug, now); err != nil {
+	if err := s.State.store.BindHost(ctx, host, org, p.Slug, time.Now().Unix()); err != nil {
 		switch {
 		case errors.Is(err, errHostTaken):
-			s.Log.Warn("subdomain already claimed by another project (serving at S3 URL only)", "org", org, "slug", p.Slug, "host", host)
+			s.Log.Warn("subdomain already claimed by another project (serving from S3 origin only)", "org", org, "slug", p.Slug, "host", host)
 		case errors.Is(err, errReservedHost):
-			s.Log.Warn("subdomain is a reserved label; not bound (serving at S3 URL only)", "org", org, "slug", p.Slug, "host", host)
+			s.Log.Warn("subdomain is a reserved label; not bound (serving from S3 origin only)", "org", org, "slug", p.Slug, "host", host)
 		default:
 			s.Log.Warn("bind host failed (continuing)", "org", org, "slug", p.Slug, "host", host, "err", err)
 		}
 	}
-	if err := s.State.cf.PurgeTags(ctx, sites.CacheTag(org, p.Slug)); err != nil {
-		s.Log.Warn("cloudflare purge failed (continuing)", "org", org, "slug", p.Slug, "err", err)
+	purgeEdge(s, ctx, org, p)
+}
+
+// purgeTag flushes the edge cache-tag site-<org>-<slug> for a project's site. It is
+// the ONE place that derives the cache-tag and issues the purge, so every purge
+// site — deploy (onPublish), domain-bind (setDomains), delete (del), and the
+// dedicated POST /v1/projects/:slug/purge — shares one tag and one failure policy.
+// Best-effort by construction: PurgeTags is a warn-only no-op when the edge (CF) is
+// unconfigured, and a purge miss is logged, never fatal — the S3 origin keeps
+// serving and the edge self-heals when the short HTML TTL lapses.
+func purgeTag(s *cloud.Service[state], ctx context.Context, org, slug string) {
+	if err := s.State.cf.PurgeTags(ctx, sites.CacheTag(org, slug)); err != nil {
+		s.Log.Warn("edge cache-tag purge failed (continuing)", "org", org, "slug", slug, "err", err)
 	}
-	p.LastPurgeAt = now
+}
+
+// purgeEdge purges the project's edge cache-tag and stamps LastPurgeAt = now. It is
+// the shared core of the two content-freshness paths — the go-live side effects
+// (onPublish) and the dedicated purge handler — so purge + stamp happen ONE way. It
+// does NOT persist: the caller writes p in its own UpdateProject.
+func purgeEdge(s *cloud.Service[state], ctx context.Context, org string, p *Project) {
+	purgeTag(s, ctx, org, p.Slug)
+	p.LastPurgeAt = time.Now().Unix()
+}
+
+// purge is POST /v1/projects/:slug/purge: a first-class edge cache purge with NO
+// redeploy. It flushes the project's edge cache-tag site-<org>-<slug> and stamps
+// LastPurgeAt, but NEVER writes or deletes the S3 origin — the live build keeps
+// serving from S3; only stale edge copies drop. Org-scoped exactly like deploy: the
+// tenant is the gateway-minted X-Org-Id (403 without one); an unknown (org,slug) is
+// 404. An edge purge miss (unconfigured/failing CF token) is non-fatal — LastPurgeAt
+// is still stamped and the response is 200. Returns the updated Project view so the
+// caller sees the new lastPurgeAt.
+func purge(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := org(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	p, err := s.State.store.GetProject(c.Context(), org, slugParam(c))
+	if errors.Is(err, errNotFound) {
+		return zip.ErrNotFound("project not found")
+	}
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
+	}
+	purgeEdge(s, c.Context(), org, &p)
+	p.UpdatedAt = time.Now().Unix()
+	if err := s.State.store.UpdateProject(c.Context(), p); err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "update: %v", err)
+	}
+	return c.JSON(http.StatusOK, toProjectView(p))
 }
 
 // siteURL is the canonical public URL of a deployed site: the pretty bare host
