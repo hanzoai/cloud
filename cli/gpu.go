@@ -1,11 +1,11 @@
 package cli
 
-// gpu.go — `hanzo gpu connect|status|disconnect`: bring THIS machine's GPU to the
-// Hanzo cloud fleet. connect authenticates against IAM (reusing the `hanzo login`
-// credential store), registers the machine + its GPU inventory as a heartbeating
+// gpu.go — the compute-worker machinery behind `hanzo link` (command wiring lives
+// in link.go). It authenticates against IAM (reusing the `hanzo login` credential
+// store), registers the machine + its CPU/memory/GPU inventory as a heartbeating
 // presence record in the org's `fleet` tasks namespace, and runs an OUTBOUND-only
 // worker loop that CLAIMS jobs from the org's `gpu-jobs` namespace — the NAT-safe
-// primitive (the worker dials out; nothing dials in). The registered GPU then shows
+// primitive (the worker dials out; nothing dials in). The registered node then shows
 // up on console.hanzo.ai's Machines + GPUs pages (provider="byo") via cloud's
 // /v1/fleet union.
 //
@@ -39,6 +39,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -91,73 +92,9 @@ const (
 	engineCap = "engine.serve"
 )
 
-// ---------------------------------------------------------------------------
-// Command wiring.
-// ---------------------------------------------------------------------------
-
-func newGPUCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "gpu",
-		Short: "Bring this machine's GPU to the Hanzo cloud fleet",
-		Long: "Connect this machine's GPU to the Hanzo cloud so it appears in the console\n" +
-			"(Machines + GPUs, provider=byo) and claims jobs from your org's gpu-jobs queue.\n" +
-			"Authentication reuses the `hanzo login` token; the org is taken from its claims.",
-	}
-
-	var jobsNS string
-	var daemon bool
-	var serveEngine bool
-	var engineURL string
-	var engineEndpoint string
-	var registerProvider bool
-	var studioDir string
-	var studioURL string
-	connect := &cobra.Command{
-		Use:   "connect",
-		Short: "Register this GPU and run the outbound worker loop",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts := connectOpts{
-				jobsNS:           jobsNS,
-				serveEngine:      serveEngine,
-				engineURL:        engineURL,
-				engineEndpoint:   engineEndpoint,
-				registerProvider: registerProvider,
-				studioDir:        studioDir,
-				studioURL:        studioURL,
-			}
-			if daemon {
-				return installDaemon(cmd, opts)
-			}
-			return runConnect(cmd, envOf(), opts)
-		},
-	}
-	connect.Flags().StringVar(&jobsNS, "jobs-namespace", defaultJobsNS, "tasks namespace to claim jobs from")
-	connect.Flags().BoolVar(&daemon, "daemon", false, "install a systemd --user unit (Restart=always) instead of running in the foreground")
-	connect.Flags().BoolVar(&serveEngine, "serve-engine", false, "also advertise a hanzo-engine model server (OpenAI + Anthropic) running on this node")
-	connect.Flags().StringVar(&engineURL, "engine-url", defaultEngineURL, "local URL where hanzo-engine is probed (GET /v1/models)")
-	connect.Flags().StringVar(&engineEndpoint, "engine-endpoint", "", "public URL to advertise for gateway routing (defaults to --engine-url; a BYO node needs a reachable URL/tunnel)")
-	connect.Flags().BoolVar(&registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
-	connect.Flags().StringVar(&studioDir, "studio-dir", os.Getenv("HANZO_STUDIO_DIR"), "local Hanzo Studio checkout; when set, connect launches and supervises the render backend on 127.0.0.1:8188")
-	connect.Flags().StringVar(&studioURL, "studio-url", firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL), "studio base URL the render mirror uploads finished images to (POST /v1/library/upload)")
-
-	status := &cobra.Command{
-		Use:   "status",
-		Short: "Show the org's connected GPUs (this machine highlighted)",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return runGPUStatus(cmd, envOf()) },
-	}
-
-	disconnect := &cobra.Command{
-		Use:   "disconnect",
-		Short: "Remove this machine from the fleet",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, _ []string) error { return runDisconnect(cmd, envOf()) },
-	}
-
-	cmd.AddCommand(connect, status, disconnect)
-	return cmd
-}
+// The node-level command surface — `hanzo link | unlink | status` — is wired in
+// link.go. It composes the worker machinery below (runConnect / runDisconnect /
+// runFleetStatus) with the fabric verbs (`hanzo node up|stop`).
 
 // ---------------------------------------------------------------------------
 // worker — the connect loop's state.
@@ -172,6 +109,7 @@ type worker struct {
 	jobsNS   string
 	gpus     []gpuInfo
 	arch     string // CPU arch (`uname -m`), detected once at newWorker
+	cpuModel string // CPU model name (/proc/cpuinfo | sysctl), detected once at newWorker
 	memory   int64  // total system RAM in bytes, detected once at newWorker
 	handlers map[string]jobHandler
 
@@ -227,9 +165,10 @@ type registration struct {
 	// fleet already uses for code-linked run-targets: Arch is `uname -m`
 	// (aarch64 | x86_64 | arm64), Memory is total system RAM in BYTES. Matching the
 	// existing convention matters — evo-2 and spark appear on the board as BOTH a
-	// run-target and a gpu-connect worker, so both rows must show the SAME arch.
+	// run-target and a linked worker, so both rows must show the SAME arch.
 	Arch         string               `json:"arch,omitempty"`
 	CPUs         int                  `json:"cpus,omitempty"`
+	CPUModel     string               `json:"cpuModel,omitempty"`
 	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
@@ -324,6 +263,7 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 		jobsNS:          firstNonEmpty(jobsNS, defaultJobsNS),
 		gpus:            detectGPUs(),
 		arch:            detectArch(),
+		cpuModel:        detectCPUModel(),
 		memory:          detectMemTotal(),
 		studioUploadURL: firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL),
 	}
@@ -353,13 +293,26 @@ func sanitizeID(s string) string {
 	return s
 }
 
-// detectGPUs queries nvidia-smi for the machine's accelerators; on Apple
-// Silicon it reports the chip's integrated GPU with its unified memory.
-// Degrades gracefully to an empty list (CPU-only) when neither is present.
+// detectGPUs reports the machine's accelerators as first-class resources — NVIDIA
+// (nvidia-smi), AMD (rocm-smi / kfd topology / vulkaninfo), or the Apple Silicon
+// integrated GPU with its unified memory. Each vendor path is tried in turn; the
+// first that reports a card wins. Degrades gracefully to an empty list (CPU-only)
+// when none is present.
 func detectGPUs() []gpuInfo {
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		return detectAppleGPU()
 	}
+	if g := detectNvidiaGPUs(); len(g) > 0 {
+		return g
+	}
+	if g := detectAmdGPUs(); len(g) > 0 {
+		return g
+	}
+	return nil
+}
+
+// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi (name + total VRAM).
+func detectNvidiaGPUs() []gpuInfo {
 	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").Output()
 	if err != nil {
 		return nil
@@ -375,6 +328,203 @@ func detectGPUs() []gpuInfo {
 		gpus = append(gpus, gpuInfo{Name: strings.TrimSpace(name), MemoryTotal: strings.TrimSpace(mem)})
 	}
 	return gpus
+}
+
+// detectAmdGPUs reports AMD accelerators — discrete Radeon cards and gfx APUs alike
+// (e.g. evo's gfx1151 Radeon 8060S on the RYZEN AI MAX+ 395). Resolution order:
+// rocm-smi (marketing name + gfx target), then the kfd topology under /sys (gfx
+// target from gfx_target_version, GPU nodes only), then a vulkaninfo summary. VRAM
+// is filled best-effort from the amdgpu sysfs mem_info_vram_total, positionally.
+func detectAmdGPUs() []gpuInfo {
+	if out, err := exec.Command("rocm-smi", "--showproductname", "--csv").Output(); err == nil {
+		if gpus := parseRocmSmiCSV(out); len(gpus) > 0 {
+			return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+		}
+	}
+	if gpus := parseKfdTopology(sysfsKfdNodes); len(gpus) > 0 {
+		return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+	}
+	if out, err := exec.Command("vulkaninfo", "--summary").Output(); err == nil {
+		if gpus := parseVulkaninfoSummary(out); len(gpus) > 0 {
+			return gpus
+		}
+	}
+	return nil
+}
+
+// sysfs roots, indirected so tests can point them at fixtures.
+var (
+	sysfsKfdNodes = "/sys/class/kfd/kfd/topology/nodes"
+	sysfsDRM      = "/sys/class/drm"
+)
+
+// parseRocmSmiCSV parses `rocm-smi --showproductname --csv` into one gpuInfo per
+// card, naming it "<Card Series> (<GFX Version>)" (e.g. "Radeon 8060S Graphics
+// (gfx1151)"). Column order is read from the header so it survives field additions.
+func parseRocmSmiCSV(out []byte) []gpuInfo {
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	var series, gfx = -1, -1
+	var gpus []gpuInfo
+	for sc.Scan() {
+		fields := strings.Split(strings.TrimSpace(sc.Text()), ",")
+		if len(fields) < 2 {
+			continue
+		}
+		if series < 0 { // header row
+			for i, f := range fields {
+				switch strings.TrimSpace(f) {
+				case "Card Series":
+					series = i
+				case "GFX Version":
+					gfx = i
+				}
+			}
+			continue
+		}
+		if series >= len(fields) {
+			continue
+		}
+		name := strings.TrimSpace(fields[series])
+		if name == "" {
+			continue
+		}
+		if gfx >= 0 && gfx < len(fields) {
+			if v := strings.TrimSpace(fields[gfx]); v != "" {
+				name += " (" + v + ")"
+			}
+		}
+		gpus = append(gpus, gpuInfo{Name: name})
+	}
+	return gpus
+}
+
+// parseKfdTopology reads the amdgpu kfd topology under nodesDir and reports one
+// gpuInfo per GPU node — a node with simd_count > 0 (node 0 is the CPU) — naming it
+// from the decoded gfx_target_version (110501 → "gfx1151"). Nodes are visited in
+// numeric order so the list matches the DRM card order VRAM is read in.
+func parseKfdTopology(nodesDir string) []gpuInfo {
+	entries, err := os.ReadDir(nodesDir)
+	if err != nil {
+		return nil
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	sort.Slice(names, func(i, j int) bool { return atoiSafe(names[i]) < atoiSafe(names[j]) })
+	var gpus []gpuInfo
+	for _, n := range names {
+		b, err := os.ReadFile(filepath.Join(nodesDir, n, "properties"))
+		if err != nil {
+			continue
+		}
+		simd, gfxVer := kfdNodeProps(b)
+		if simd <= 0 || gfxVer <= 0 {
+			continue // CPU node or non-GPU
+		}
+		gpus = append(gpus, gpuInfo{Name: "AMD GPU (" + gfxName(gfxVer) + ")"})
+	}
+	return gpus
+}
+
+// kfdNodeProps extracts simd_count and gfx_target_version from a kfd node's
+// properties file (space-separated "key value" lines).
+func kfdNodeProps(properties []byte) (simd, gfxVer int) {
+	sc := bufio.NewScanner(bytes.NewReader(properties))
+	for sc.Scan() {
+		k, v, ok := strings.Cut(strings.TrimSpace(sc.Text()), " ")
+		if !ok {
+			continue
+		}
+		switch k {
+		case "simd_count":
+			simd = atoiSafe(strings.TrimSpace(v))
+		case "gfx_target_version":
+			gfxVer = atoiSafe(strings.TrimSpace(v))
+		}
+	}
+	return simd, gfxVer
+}
+
+// gfxName decodes a kfd gfx_target_version into the LLVM gfx target string:
+// 110501 → "gfx1151" (major=v/10000, minor=(v/100)%100, step=v%100).
+func gfxName(v int) string {
+	return fmt.Sprintf("gfx%d%d%d", v/10000, (v/100)%100, v%100)
+}
+
+// amdVRAMTotals returns each amdgpu card's total VRAM in MiB, in DRM card order,
+// read from /sys/class/drm/card*/device/mem_info_vram_total (vendor 0x1002).
+func amdVRAMTotals(drmDir string) []int64 {
+	entries, err := os.ReadDir(drmDir)
+	if err != nil {
+		return nil
+	}
+	cards := make([]string, 0, len(entries))
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, "card") && !strings.Contains(n, "-") {
+			cards = append(cards, n)
+		}
+	}
+	sort.Slice(cards, func(i, j int) bool {
+		return atoiSafe(strings.TrimPrefix(cards[i], "card")) < atoiSafe(strings.TrimPrefix(cards[j], "card"))
+	})
+	var mems []int64
+	for _, c := range cards {
+		dev := filepath.Join(drmDir, c, "device")
+		if vendor, _ := os.ReadFile(filepath.Join(dev, "vendor")); strings.TrimSpace(string(vendor)) != "0x1002" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dev, "mem_info_vram_total"))
+		if err != nil {
+			continue
+		}
+		var bytesTotal int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &bytesTotal); err == nil && bytesTotal > 0 {
+			mems = append(mems, bytesTotal/(1024*1024))
+		}
+	}
+	return mems
+}
+
+// fillAmdVRAM attaches VRAM totals to the GPU list positionally when the counts
+// match (the common single-GPU case always does); otherwise the names stand alone.
+func fillAmdVRAM(gpus []gpuInfo, memsMiB []int64) []gpuInfo {
+	if len(memsMiB) != len(gpus) {
+		return gpus
+	}
+	for i := range gpus {
+		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", memsMiB[i])
+	}
+	return gpus
+}
+
+// parseVulkaninfoSummary is the last-resort AMD path: it scrapes GPU device names
+// from `vulkaninfo --summary` (the "deviceName = ..." lines), keeping AMD/Radeon
+// devices only so it never double-counts an NVIDIA card already handled upstream.
+func parseVulkaninfoSummary(out []byte) []gpuInfo {
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	var gpus []gpuInfo
+	for sc.Scan() {
+		_, v, ok := strings.Cut(sc.Text(), "deviceName")
+		if !ok {
+			continue
+		}
+		name := strings.TrimSpace(strings.TrimLeft(v, " =\t"))
+		if name == "" {
+			continue
+		}
+		if l := strings.ToLower(name); strings.Contains(l, "amd") || strings.Contains(l, "radeon") || strings.Contains(l, "gfx") {
+			gpus = append(gpus, gpuInfo{Name: name})
+		}
+	}
+	return gpus
+}
+
+// atoiSafe parses an int, returning 0 on any error (0 never denotes a GPU node).
+func atoiSafe(s string) int {
+	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	return n
 }
 
 // detectAppleGPU reports the Apple Silicon chip as one GPU with the machine's
@@ -401,7 +551,7 @@ func detectAppleGPU() []gpuInfo {
 // detectArch reports this machine's CPU architecture in the SAME convention the
 // fleet already uses for code-linked nodes — `uname -m` (aarch64 | x86_64 on Linux,
 // arm64 | x86_64 on Darwin) — so a machine that shows up as both a run-target and a
-// gpu-connect worker carries ONE arch string on the board. Falls back to the
+// linked worker carries ONE arch string on the board. Falls back to the
 // compiled runtime.GOARCH only if uname is unavailable; "" is never forced.
 func detectArch() string {
 	if out, err := exec.Command("uname", "-m").Output(); err == nil {
@@ -410,6 +560,39 @@ func detectArch() string {
 		}
 	}
 	return runtime.GOARCH
+}
+
+// detectCPUModel reports this machine's CPU model name so the node advertises its
+// processor, not just its core count — Linux reads /proc/cpuinfo's "model name"
+// (x86) or "Model" (arm64 boards like spark's GB10), Darwin reads sysctl
+// machdep.cpu.brand_string. Empty when unreadable (reported via omitempty, never
+// faked); a bare `uname -m` arch still travels on the record.
+func detectCPUModel() string {
+	if runtime.GOOS == "darwin" {
+		if out, err := exec.Command("sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		return ""
+	}
+	b, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return ""
+	}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		line := sc.Text()
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(key) {
+		case "model name", "Model", "cpu model":
+			if v := strings.TrimSpace(val); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
 }
 
 // detectMemTotal returns this machine's total physical RAM in bytes, or 0 when it
@@ -553,7 +736,7 @@ func (w *worker) reportSample(parent context.Context) {
 // connect.
 // ---------------------------------------------------------------------------
 
-// connectOpts is the resolved `hanzo gpu connect` configuration.
+// connectOpts is the resolved `hanzo link` compute-worker configuration.
 type connectOpts struct {
 	jobsNS           string
 	serveEngine      bool
@@ -596,7 +779,9 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	if err := w.register(ctx); err != nil {
 		return fmt.Errorf("register: %w", err)
 	}
-	fmt.Fprintf(out, "connected %q to %s (org %s) — %s\n", w.hostname, w.baseURL, orgOf(env), describeGPUs(w.gpus))
+	fmt.Fprintf(out, "linked %q into %s as a node (org %s)\n", w.hostname, w.baseURL, orgOf(env))
+	fmt.Fprintf(out, "  cpu: %s\n", describeCPU(w))
+	fmt.Fprintf(out, "  gpu: %s\n", describeGPUs(w.gpus))
 	w.warnIfCannotRender(cmd.ErrOrStderr())
 
 	// studio.render backend: the claim loop drives the LOCAL studio server, so
@@ -604,7 +789,7 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	if opts.studioDir != "" {
 		go superviseStudio(ctx, opts.studioDir, out)
 	}
-	fmt.Fprintf(out, "claiming %s jobs; heartbeating every %s. Ctrl-C to stop (the machine goes offline after ~90s; `hanzo gpu disconnect` removes it).\n", w.jobsNS, heartbeatEvery)
+	fmt.Fprintf(out, "claiming %s jobs; heartbeating every %s. Ctrl-C to stop (the node goes offline after ~90s; `hanzo unlink` removes it).\n", w.jobsNS, heartbeatEvery)
 
 	if w.serveEngine {
 		w.printEngineHint(out)
@@ -649,7 +834,7 @@ func runConnect(cmd *cobra.Command, env *Env, opts connectOpts) error {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(out, "\nstopping (machine will go offline; run `hanzo gpu disconnect` to remove it)")
+			fmt.Fprintln(out, "\nstopping (node will go offline; run `hanzo unlink` to remove it)")
 			return nil
 		case <-hb.C:
 			// Re-probe the engine; if its reachability or model set changed, rewrite
@@ -719,6 +904,7 @@ func (w *worker) buildRegistration() registration {
 		Os:           runtime.GOOS,
 		Arch:         w.arch,
 		CPUs:         runtime.NumCPU(),
+		CPUModel:     w.cpuModel,
 		Memory:       w.memory,
 		Version:      Version,
 		JobQueue:     w.jobsNS,
@@ -936,13 +1122,20 @@ type fleetWorker struct {
 	Provider      string               `json:"provider"`
 	Location      string               `json:"location"`
 	Status        string               `json:"status"`
+	Arch          string               `json:"arch,omitempty"`
+	CPUs          int                  `json:"cpus,omitempty"`
+	CPUModel      string               `json:"cpuModel,omitempty"`
+	Memory        int64                `json:"memory,omitempty"`
 	GPUs          []gpuInfo            `json:"gpus"`
 	LastHeartbeat string               `json:"lastHeartbeat"`
 	Capabilities  []string             `json:"capabilities,omitempty"`
 	Engine        *engineAdvertisement `json:"engine,omitempty"`
 }
 
-func runGPUStatus(cmd *cobra.Command, env *Env) error {
+// runFleetStatus renders the org's fleet: every node with its CPU inventory and
+// each GPU shown distinctly, this box highlighted with `*`. This is the `hanzo
+// status` view; --output=json emits the raw worker list.
+func runFleetStatus(cmd *cobra.Command, env *Env) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Second)
 	defer cancel()
 	if _, err := env.ensureToken(ctx); err != nil {
@@ -957,22 +1150,83 @@ func runGPUStatus(cmd *cobra.Command, env *Env) error {
 	}
 	return env.emit(resp.Workers, func(out io.Writer) {
 		if len(resp.Workers) == 0 {
-			fmt.Fprintln(out, "no GPUs connected. Run `hanzo gpu connect` on a machine with a GPU.")
+			fmt.Fprintln(out, "no nodes linked. Run `hanzo link` on a machine to bring it into the fleet.")
 			return
 		}
-		fmt.Fprintf(out, "%-20s %-8s %-10s %-28s %s\n", "MACHINE", "STATUS", "PROVIDER", "GPU", "LAST HEARTBEAT")
+		online := 0
+		for _, fw := range resp.Workers {
+			if fw.Status == "online" {
+				online++
+			}
+		}
+		fmt.Fprintf(out, "fleet — org %s · %d node(s), %d online\n\n", orgOf(env), len(resp.Workers), online)
 		for _, fw := range resp.Workers {
 			marker := ""
 			if fw.ID == w.identity {
 				marker = " *"
 			}
-			fmt.Fprintf(out, "%-20s %-8s %-10s %-28s %s%s\n",
-				fw.Hostname, fw.Status, fw.Provider, describeGPUs(fw.GPUs), fw.LastHeartbeat, marker)
+			fmt.Fprintf(out, "%s %s%s\n", statusDot(fw.Status), fw.Hostname, marker)
+			fmt.Fprintf(out, "    status    %s (%s)\n", fw.Status, dashIfEmpty(fw.Provider))
+			fmt.Fprintf(out, "    cpu       %s\n", cpuSummary(fw.Arch, fw.CPUs, fw.CPUModel))
+			fmt.Fprintf(out, "    memory    %s\n", humanBytes(fw.Memory))
+			if len(fw.GPUs) == 0 {
+				fmt.Fprintf(out, "    gpu       (none — CPU-only node)\n")
+			}
+			for i, g := range fw.GPUs {
+				fmt.Fprintf(out, "    gpu[%d]    %s\n", i, describeGPUs([]gpuInfo{g}))
+			}
 			if fw.Engine != nil {
-				fmt.Fprintf(out, "%-20s   ↳ engine %s — %s\n", "", fw.Engine.URL, describeEngine(fw.Engine))
+				fmt.Fprintf(out, "    engine    %s — %s\n", fw.Engine.URL, describeEngine(fw.Engine))
+			}
+			if fw.LastHeartbeat != "" {
+				fmt.Fprintf(out, "    heartbeat %s\n", fw.LastHeartbeat)
 			}
 		}
 	})
+}
+
+// statusDot renders a filled/hollow dot for a node's liveness.
+func statusDot(status string) string {
+	if status == "online" {
+		return "●"
+	}
+	return "○"
+}
+
+// cpuSummary renders a node's CPU as "<cores> cores · <arch> · <model>", omitting
+// any field the node did not report. "unknown" only when it reported nothing.
+func cpuSummary(arch string, cpus int, model string) string {
+	var parts []string
+	if cpus > 0 {
+		parts = append(parts, fmt.Sprintf("%d cores", cpus))
+	}
+	if arch != "" {
+		parts = append(parts, arch)
+	}
+	if model != "" {
+		parts = append(parts, model)
+	}
+	if len(parts) == 0 {
+		return "unknown"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// describeCPU renders THIS node's CPU line for the link confirmation.
+func describeCPU(w *worker) string {
+	return cpuSummary(w.arch, runtime.NumCPU(), w.cpuModel) + " · " + humanBytes(w.memory)
+}
+
+// humanBytes renders a byte count as GiB/MiB, "unknown" for 0 (never faked).
+func humanBytes(n int64) string {
+	switch {
+	case n <= 0:
+		return "unknown"
+	case n >= 1<<30:
+		return fmt.Sprintf("%.0f GiB", float64(n)/float64(1<<30))
+	default:
+		return fmt.Sprintf("%.0f MiB", float64(n)/float64(1<<20))
+	}
 }
 
 func runDisconnect(cmd *cobra.Command, env *Env) error {
@@ -982,14 +1236,22 @@ func runDisconnect(cmd *cobra.Command, env *Env) error {
 		return err
 	}
 	w, _ := newWorker(env, "")
+	out := cmd.OutOrStdout()
 	path := fmt.Sprintf("/v1/tasks/namespaces/%s/activities/%s/%s/complete", fleetNS, w.identity, w.identity)
-	if _, err := w.call(ctx, http.MethodPost, path, map[string]any{
+	code, err := w.call(ctx, http.MethodPost, path, map[string]any{
 		"result":   map[string]any{"disconnected": true},
 		"identity": w.identity,
-	}, nil); err != nil {
-		return fmt.Errorf("disconnect: %w", err)
+	}, nil)
+	if err != nil {
+		// Idempotent: an already-terminal (409) or absent (404) fleet row is the
+		// desired end state, so a repeat `hanzo unlink` no-ops instead of erroring.
+		if code == http.StatusConflict || code == http.StatusNotFound {
+			fmt.Fprintf(out, "%q already unlinked (no active fleet row)\n", w.hostname)
+			return nil
+		}
+		return fmt.Errorf("deregister: %w", err)
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "disconnected %q from the fleet\n", w.hostname)
+	fmt.Fprintf(out, "unlinked %q from the fleet\n", w.hostname)
 	return nil
 }
 
@@ -1707,7 +1969,9 @@ func installDaemon(cmd *cobra.Command, opts connectOpts) error {
 	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		return err
 	}
-	args := "gpu connect"
+	// The unit is persistent COMPUTE membership; hanzod has its own supervision, so
+	// the worker unit does not also babysit the fabric (--no-fabric).
+	args := "link --no-fabric"
 	if opts.jobsNS != "" && opts.jobsNS != defaultJobsNS {
 		args += " --jobs-namespace " + opts.jobsNS
 	}
@@ -1727,7 +1991,7 @@ func installDaemon(cmd *cobra.Command, opts connectOpts) error {
 		args += " --studio-dir " + opts.studioDir
 	}
 	unit := fmt.Sprintf(`[Unit]
-Description=Hanzo GPU worker (bring-your-own compute)
+Description=Hanzo node (compute worker)
 After=network-online.target
 Wants=network-online.target
 
@@ -1740,7 +2004,7 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 `, exe, args)
-	unitPath := filepath.Join(unitDir, "hanzo-gpu.service")
+	unitPath := filepath.Join(unitDir, "hanzo-node.service")
 	if err := os.WriteFile(unitPath, []byte(unit), 0o644); err != nil {
 		return err
 	}
@@ -1751,11 +2015,11 @@ WantedBy=default.target
 		return nil
 	}
 	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
-	if err := exec.Command("systemctl", "--user", "enable", "--now", "hanzo-gpu.service").Run(); err != nil {
-		fmt.Fprintf(out, "unit written; enable it with: systemctl --user enable --now hanzo-gpu.service\n")
+	if err := exec.Command("systemctl", "--user", "enable", "--now", "hanzo-node.service").Run(); err != nil {
+		fmt.Fprintf(out, "unit written; enable it with: systemctl --user enable --now hanzo-node.service\n")
 		return nil
 	}
-	fmt.Fprintln(out, "enabled and started hanzo-gpu.service (Restart=always). Check: systemctl --user status hanzo-gpu")
+	fmt.Fprintln(out, "enabled and started hanzo-node.service (Restart=always). Check: systemctl --user status hanzo-node")
 	fmt.Fprintln(out, "note: the daemon reuses ~/.hanzo/credentials.json — keep `hanzo login` current, or set HANZO_TOKEN in the unit.")
 	return nil
 }
