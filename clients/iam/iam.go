@@ -2,160 +2,178 @@
 // in-process subsystem (HIP-0106) — the LAST binary-consolidation piece:
 // "one Go binary (hanzoai/cloud) embeds IAM + KMS + o11y".
 //
-// WRAP, DON'T REWRITE. IAM is a Beego app (~150 routes registered in
-// hanzoai/iam/routers.InitAPI over controllers.ApiController/RootController).
-// iamserver.InitEmbed() runs the ENTIRE IAM identity runtime — config, SQLite
-// store, KMS signing keys, controllers, authz filters, background sync/monitor
-// loops — as an in-process embed: it is standalone iamd's bootstrap MINUS the
-// standalone-daemon side effects that would crash or endanger this shared
-// process (no StopOldInstance `lsof`/SIGKILL, no LDAP/RADIUS listeners, no
-// export/os.Exit), binds NO HTTP listener, and RETURNS AN ERROR instead of
-// panicking. (The standalone `hanzo iam` / iamd path still uses iamserver.Init +
-// web.Run, byte-for-byte unchanged.) After a successful InitEmbed the full IAM
-// http.Handler is web.BeeApp.Handlers; this subsystem mounts THAT verbatim on
-// cloud's shared zip.App at every path prefix IAM owns. No auth logic is
-// reimplemented — the same controllers answer, so hanzo.id's OAuth/OIDC semantics
-// (authorize clientId org-resolution, JWT audiences, SuperAdmin owner=="admin",
-// argon2id password hashing) are preserved byte-for-byte.
+// CLEAN IAM (v2), NOT CASDOOR. This subsystem embeds github.com/hanzoai/iam —
+// the clean-room identity rewrite on the native Hanzo stack (zip + hanzoai/orm +
+// hanzoai/sqlite). The retired Casdoor/Beego fork (github.com/hanzoai/iam-v1) is
+// GONE from cloud's graph: there is no beego process-global to corrupt, no
+// InitEmbed, no session-manager hook, no shared-AppConfig co-residence hazard with
+// the sibling `ai` casdoor fork. iamserver.Mount registers the whole IAM v2 surface
+// (OIDC discovery/JWKS, oauth authorize/token/userinfo/introspect/revoke,
+// get-app-login, signin, the v2 entity CRUD, and the Casdoor verb-alias compat
+// layer) ZIP-NATIVELY onto cloud's shared app — no net/http adaptor round-trip. The
+// specific self-service routes layered in front (account, agentskills) still win by
+// Fiber's in-order match, so the fold is collision-free.
 //
-// The one hook web.Run() performs that the embed bootstrap omits is Beego
-// session-manager registration; this subsystem fires it explicitly (initSessions),
-// mirroring the sanctioned iam.Embed path, else every session-touching request
-// (login, authorize) nil-derefs in the router.
+// The store is embedded SQLite under {DataDir}/iam (server.OpenSQLite, WAL) — this
+// embed owns its OWN orm.DB outright, so the old Casdoor-fork "ai bootstrap unable to
+// open database file (14)" crash is gone. Config (orgs/apps/providers/signing certs) is
+// seeded from the same init_data.json the deployment already provides (server.Seed,
+// new-only + idempotent), so hanzo.id's OAuth/OIDC semantics are preserved.
+//
+// IN-PROCESS STORE ACCESS. DB() exposes the opened orm.DB to sibling subsystems that
+// REFLECT the IAM-owned Project resource in-process (clients/platform, clients/deploy)
+// via github.com/hanzoai/iam/pkg/store — no HTTP hop to /v1/iam. It is nil until
+// Mount runs (the same lifecycle the retired iam-v1 object-store global ormer had),
+// so those callers guard a nil DB and degrade to a clean 503 until IAM is mounted.
 //
 // FAIL-CLOSED, NOT FAIL-LOUD. A broken/misconfigured IAM does NOT crash the
-// consolidated binary: InitEmbed's error (or a session/handler failure) degrades
-// THIS subsystem to a 503 fail-closed on every IAM prefix (mountFailClosed) while
-// every co-resident subsystem (KMS, o11y, …) stays up — the blast-radius
-// isolation the whole consolidation exists for, mirroring the KMS
-// "no master key → health-only" pattern.
+// consolidated binary: an open/seed/mount failure degrades THIS subsystem to a 503
+// fail-closed on every IAM prefix (mountFailClosed) while every co-resident
+// subsystem (KMS, o11y, …) stays up — the blast-radius isolation the whole
+// consolidation exists for, mirroring the KMS "no master key → health-only" pattern.
 //
-// Mounted in-process (whole Beego handler, full request path preserved):
+// Mounted in-process (the whole IAM v2 surface, registered at its canonical paths):
 //
-//	/v1/iam/*      API + OAuth (/v1/iam/oauth/{authorize,token,userinfo,introspect,
-//	               revoke,...}) + OIDC (/v1/iam/.well-known/{openid-configuration,
-//	               jwks,...}) + login/logout/signup + userinfo + me/* + cap/* +
-//	               cert/saml/tokens + the full admin surface
-//	/.well-known/* legacy root OIDC discovery + JWKS (relying-party compatibility)
+//	/v1/iam/*      OIDC/OAuth2 (/v1/iam/oauth/{authorize,token,userinfo,introspect,
+//	               revoke,...}) + OIDC discovery (/v1/iam/.well-known/*) + signin +
+//	               get-app-login + the v2 entity CRUD + the Casdoor verb-alias compat
 //	/login/oauth/* browser authorize surface (the /v1/iam/oauth/authorize 302 target)
-//	/_/iam/*       login UI SPA assets
-//	/cas/*         CAS 1.0/2.0/3.0 ticket validation
-//	/scim/*        SCIM 2.0 user/group provisioning
 //
 // STAGING (security-critical): activation is the standard enable-list gate — the
-// operator adds "iam" to the cloud deployment's --enable only AFTER IAM's config
-// (Beego app.conf + env + KMS signing keys) is present in the cloud runtime and
-// the fold is verified (login/authorize/token/jwks + the operator SSO chain). Until
-// then hanzo.id is served by the standalone iam pod via ingress. A cloud pod that
-// enables "iam" MUST run at replicas=1 (Config.Validate enforces this): IAM's
-// session store is Beego's process-local "memory" provider, so a horizontally
-// scaled app tier would mint a login/authorize session on one replica and lose it
-// on the next. If a broken config slips through, the subsystem serves 503
-// fail-closed (above) rather than crashing cloud.
+// operator adds "iam" to the cloud deployment's --enable only AFTER the v2 config
+// (init_data + KMS signing keys) is present and the fold is verified
+// (login/authorize/token/jwks + the operator SSO chain). Until then hanzo.id is
+// served by the standalone iam pod via ingress. If a broken config slips through,
+// the subsystem serves 503 fail-closed rather than crashing cloud.
 package iam
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/hanzoai/beego/v2/server/web"
-	"github.com/hanzoai/beego/v2/server/web/session"
-	"github.com/hanzoai/iam-v1/iamserver"
+	iamserver "github.com/hanzoai/iam/server"
+	"github.com/hanzoai/orm"
 	"github.com/zap-proto/zip"
 
 	"github.com/hanzoai/cloud"
 )
 
-// iamPrefixes is every root path prefix the IAM Beego handler owns. The whole
-// handler is mounted at each via app.All(prefix+"/*", zip.AdaptNetHTTP(h)), which
-// preserves the full request path. The handler answers only paths IAM
-// registered; an unknown path under a prefix 404s from Beego exactly as
-// standalone IAM does, so a broad mount cannot leak another subsystem's surface.
+// iamPrefixes are the canonical absolute prefixes the IAM identity surface owns,
+// used ONLY for the fail-closed 503 — on success iamserver.Mount registers the real
+// routes itself. The bare /healthz is deliberately excluded — it is a shared-liveness
+// path, not an auth surface, so 503-ing it would mask the binary's own health rather
+// than an identity outage.
 var iamPrefixes = []string{
-	"/v1/iam",      // API + oauth + .well-known + me + cap + saml + tokens + admin
-	"/.well-known", // legacy root OIDC discovery + JWKS (RP compatibility)
+	"/v1/iam",      // OIDC/OAuth2 + entity CRUD + the Casdoor verb-alias compat layer
 	"/login/oauth", // browser authorize surface (the /v1/iam/oauth/authorize 302 target)
-	"/_/iam",       // login UI SPA assets
-	"/cas",         // CAS ticket validation
-	"/scim",        // SCIM 2.0
 }
 
-// Mount boots the in-process IAM Beego server and attaches its http.Handler to
-// cloud's shared zip.App. Called once by cloud.MountAll when "iam" is enabled.
-//
-// Beego keeps process-global singletons (web.BeeApp, GlobalSessions, logger/flag
-// registration), so the bootstrap is inherently once-per-process; MountAll calls
-// each subsystem's Mount exactly once, which satisfies that.
+// embeddedDB is the orm.DB Mount opens for the embedded IAM store, published to
+// sibling subsystems via DB(). nil until a successful Mount — the same lifecycle the
+// retired iam-v1 object store's package-global ormer had, so in-process readers guard
+// a nil DB the way they used to guard a nil ormer.
+var embeddedDB orm.DB
+
+// DB returns the embedded IAM store's orm.DB for in-process readers (clients/platform,
+// clients/deploy) that reflect the IAM-owned Project resource via
+// github.com/hanzoai/iam/pkg/store. It is nil until Mount has run (IAM not enabled, or
+// a boot failure that fail-closed the subsystem); callers MUST nil-guard and degrade to
+// 503 rather than dereference it.
+func DB() orm.DB { return embeddedDB }
+
+// Mount opens IAM's embedded store, seeds config from the same init_data.json the
+// deployment provides (non-fatal), and registers the whole IAM v2 surface onto cloud's
+// shared zip.App. Called once by cloud.MountAll when "iam" is enabled.
 func Mount(app *zip.App, deps cloud.Deps) error {
 	log := deps.Logger.New("subsystem", "iam")
 
-	// IAM persists its SQLite store under <DataDir>/iam, matching the sanctioned
-	// iam.Embed default. Set before InitEmbed reads config — Beego's conf resolves
-	// env ahead of app.conf, so this wins. Setenv only fails on a malformed key,
-	// which is impossible here, so the error is ignored (mirrors iam.Embed).
-	dataDir := filepath.Join(deps.DataDir, "iam")
-	if deps.DataDir != "" {
-		_ = os.Setenv("IAM_DATA_DIR", dataDir)
+	dbPath, initDataPath := paths(deps)
 
-		// SHARED-GLOBAL ISOLATION (the reason "iam" was staged): both this Beego
-		// identity fork AND the sibling `ai` casibase/casdoor fork resolve their
-		// SQLite handle from the SAME process-global keys — env `dataSourceName`
-		// (checked first by both forks' conf.GetConfigString) and, failing that, the
-		// one beego web.AppConfig. A deployment sets `dataSourceName` for `ai`; with
-		// IAM enabled, IAM's bootstrap would resolve that SAME value and xorm-open —
-		// then auto-migrate its casdoor tables INTO — ai's database file. That is the
-		// documented co-residence crash ("ai: bootstrap: unable to open database file
-		// (14)") that pinned every post-embed release. IAM's conf already honors an
-		// IAM-scoped override (conf.GetConfigDataSourceName → IAM_DATABASE_URL wins
-		// over the shared `dataSourceName`), so pinning it here to IAM's OWN sqlite
-		// file under DataDir gives the two forks independent stores, order-independent
-		// and with NO fork edit. driverName ("sqlite") is shared harmlessly — both
-		// forks want the one Hanzo sqlite driver. An operator-set IAM_DATABASE_URL
-		// (explicit external DSN) is respected — only the default is filled in.
-		isolateDatabase(dataDir)
-	}
-
-	// cloud owns process shutdown, not Beego's graceful runner.
-	web.BConfig.Listen.Graceful = false
-
-	// EMBED-MODE bootstrap (see package doc): the full IAM runtime minus the
-	// standalone-daemon side effects, returning an error instead of panicking. A
-	// broken IAM therefore degrades THIS subsystem to fail-closed health-only while
-	// every co-resident subsystem stays up — the fold's blast-radius isolation.
-	if err := iamserver.InitEmbed(); err != nil {
-		log.Error("iam bootstrap failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err)
+	// SQLite does not create parent dirs; ensure it exists (0700 — identity data).
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		log.Error("iam data dir create failed — serving fail-closed 503 (cloud stays up)", "err", err, "dir", filepath.Dir(dbPath))
 		mountFailClosed(app)
 		return nil
 	}
 
-	// web.Run() normally registers the Beego session manager; the embed path skips
-	// web.Run, so fire that one hook here. Without it every session-touching
-	// request (login, authorize) nil-derefs in the router.
-	if err := initSessions(); err != nil {
-		log.Error("iam session init failed — serving fail-closed 503", "err", err)
+	db, err := iamserver.OpenSQLite(dbPath)
+	if err != nil {
+		log.Error("iam store open failed — serving fail-closed 503 (cloud stays up; standalone iam pod unaffected)", "err", err, "path", dbPath)
+		mountFailClosed(app)
+		return nil
+	}
+	// Publish the opened store for in-process readers (DB()) — set only after a clean
+	// open so DB() is nil whenever the subsystem is fail-closed.
+	embeddedDB = db
+
+	// Seed is NON-FATAL: new-only + idempotent config bootstrap (orgs/apps/providers/
+	// certs) from the SAME init_data.json the standalone iam seeds from. A missing or
+	// partial file leaves iam mounted-but-unseeded (honest degrade) rather than blocking
+	// the identity plane; an already-seeded store simply skips everything.
+	if sum, serr := iamserver.Seed(context.Background(), db, initDataPath); serr != nil {
+		log.Warn("iam seed skipped (non-fatal)", "err", serr, "init_data", initDataPath)
+	} else if sum != nil {
+		log.Info("iam seed applied", "created", sum.Created, "skipped", sum.Skipped, "init_data", initDataPath)
+	}
+
+	// iamserver.Mount registers the whole surface at the canonical absolute paths. It
+	// PANICS only if a registered enterprise feature fails to mount (none today);
+	// recover so a future boot-misconfig degrades to fail-closed 503 instead of crashing
+	// the shared binary — the same blast-radius isolation the whole fold gives.
+	if err := safeMount(app, db); err != nil {
+		log.Error("iam mount failed — serving fail-closed 503 (cloud stays up)", "err", err)
+		embeddedDB = nil // fail-closed: no half-mounted store leaks to in-process readers
 		mountFailClosed(app)
 		return nil
 	}
 
-	handler := web.BeeApp.Handlers // *web.ControllerRegister implements http.Handler
-	if handler == nil {
-		log.Error("iam produced a nil Beego handler — serving fail-closed 503")
-		mountFailClosed(app)
-		return nil
-	}
-	mountHandler(app, handler)
-
-	log.Info("iam embedded in-process (Beego handler mounted)", "data_dir", dataDir, "prefixes", iamPrefixes)
+	log.Info("iam embedded in-process (clean iam-v2, zip-native + hanzoai/orm — Casdoor iam-v1 retired)", "db", dbPath, "prefixes", iamPrefixes)
 	return nil
 }
 
-// mountFailClosed serves an honest JSON 503 on every IAM prefix when the embed
-// cannot boot, so /v1/iam/* answers "iam unavailable" instead of falling through
-// to the console SPA catch-all (which would return HTML 200 for an auth path).
-// cloud and every other subsystem stay up — the fold's blast-radius isolation.
-// During staged rollout hanzo.id is still served by the standalone iam pod via
-// ingress, so clients never see this path until cutover.
+// paths derives IAM's SQLite file and init_data.json path from cloud.Deps. The store
+// lives under {DataDir}/iam — its OWN dir. DataDir empty falls back to CWD, exactly as
+// the standalone iam default does. init_data.json is CWD-relative "init_data.json" (the
+// standalone iam conf default), honoring the same `initDataFile` env override so a
+// deployment points BOTH the embedded and standalone iam at one file (DRY, one source
+// of seed truth).
+func paths(deps cloud.Deps) (dbPath, initDataPath string) {
+	root := deps.DataDir
+	if root == "" {
+		root = "."
+	}
+	dbPath = filepath.Join(root, "iam", "iam.db")
+
+	initDataPath = os.Getenv("initDataFile")
+	if initDataPath == "" {
+		initDataPath = "init_data.json"
+	}
+	return dbPath, initDataPath
+}
+
+// safeMount runs iamserver.Mount under a recover so its only panic path — a registered
+// enterprise feature failing to mount — becomes an error the caller fail-closes on,
+// never a crash of the shared cloud binary. With zero features registered today it
+// always returns nil.
+func safeMount(app *zip.App, db orm.DB) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("iam mount panicked: %v", r)
+		}
+	}()
+	iamserver.Mount(app, db)
+	return nil
+}
+
+// mountFailClosed serves an honest JSON 503 on every identity prefix when IAM cannot
+// boot, so /v1/iam/* answers "iam unavailable" instead of falling through to the
+// console SPA catch-all (which would 200 an auth path). cloud and every other subsystem
+// stay up — the fold's blast-radius isolation. During staged rollout hanzo.id is still
+// served by the standalone iam pod via ingress, so clients never see this path until
+// cutover.
 func mountFailClosed(app *zip.App) {
 	failed := zip.AdaptNetHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -165,75 +183,4 @@ func mountFailClosed(app *zip.App) {
 	for _, p := range iamPrefixes {
 		app.All(p+"/*", failed)
 	}
-}
-
-// mountHandler attaches the IAM http.Handler at every prefix IAM owns. Split from
-// Mount so the routing plumbing — app.All(prefix+"/*", zip.AdaptNetHTTP(h))
-// dispatching to the handler with the ORIGINAL request path preserved (Beego
-// routes on the full path) — is unit-testable without booting the full Beego runtime.
-func mountHandler(app *zip.App, handler http.Handler) {
-	for _, p := range iamPrefixes {
-		app.All(p+"/*", zip.AdaptNetHTTP(handler))
-	}
-}
-
-// initSessions mirrors the Beego session-manager registration that web.Run()
-// performs via its unexported initBeforeHTTPRun hook (which the embed path
-// bypasses). Config is read straight from web.BConfig.WebConfig.Session, which
-// iamserver.Init() has already populated (memory provider, cookie
-// "iam_session_id", lax SameSite), so there is no second source of session truth
-// — this only wires the manager IAM already configured. Idempotent.
-func initSessions() error {
-	if web.GlobalSessions != nil {
-		return nil
-	}
-	s := web.BConfig.WebConfig.Session
-	mgr, err := session.NewManager(s.SessionProvider, &session.ManagerConfig{
-		CookieName:      s.SessionName,
-		EnableSetCookie: s.SessionAutoSetCookie,
-		Gclifetime:      s.SessionGCMaxLifetime,
-		// Secure is PINNED true, not derived from Listen.EnableHTTPS. The binary
-		// listens plain :8000 behind the TLS-terminating ingress, so EnableHTTPS is
-		// false and the derived value would ship a non-Secure session cookie — and
-		// the embed console's identity bridge (middleware_identity.sessionAccessToken)
-		// turns that opaque sid into a money bearer (hk- mint, balance/top-up). A
-		// non-Secure cookie is capturable off any plaintext leg and replayable, so it
-		// MUST be Secure. The deployed edge is always HTTPS; a plain-HTTP local embed
-		// is not a supported prod topology. (RED H2.)
-		Secure:                  true,
-		CookieLifeTime:          s.SessionCookieLifeTime,
-		ProviderConfig:          filepath.ToSlash(s.SessionProviderConfig),
-		DisableHTTPOnly:         s.SessionDisableHTTPOnly,
-		Domain:                  s.SessionDomain,
-		EnableSidInHTTPHeader:   s.SessionEnableSidInHTTPHeader,
-		SessionNameInHTTPHeader: s.SessionNameInHTTPHeader,
-		EnableSidInURLQuery:     s.SessionEnableSidInURLQuery,
-		CookieSameSite:          s.SessionCookieSameSite,
-		SessionIDPrefix:         s.SessionIDPrefix,
-	})
-	if err != nil {
-		return err
-	}
-	web.GlobalSessions = mgr
-	go mgr.GC()
-	return nil
-}
-// isolateDatabase pins IAM's SQLite handle to its OWN file under dataDir via the
-// IAM-scoped IAM_DATABASE_URL override, so the embedded IAM never resolves the
-// shared `dataSourceName` (which a deployment sets for the sibling `ai` fork) and
-// the two casdoor-derived forks get independent stores. See the call site for the
-// full rationale (this is the co-residence unblock). An operator-set
-// IAM_DATABASE_URL is respected; only the default is filled in. Idempotent.
-func isolateDatabase(dataDir string) {
-	if _, ok := os.LookupEnv("IAM_DATABASE_URL"); ok {
-		return
-	}
-	_ = os.Setenv("IAM_DATABASE_URL", defaultIAMDatabaseURL(dataDir))
-}
-
-// defaultIAMDatabaseURL is IAM's default embedded SQLite DSN: its own iam.db under
-// the IAM data dir, WAL + a busy-timeout so a co-resident reader never trips
-// SQLITE_BUSY. Pure (no env/IO) so the isolation contract is unit-testable.
-func defaultIAMDatabaseURL(dataDir string) string {
-	return "file:" + filepath.ToSlash(filepath.Join(dataDir, "iam.db")) + "?cache=shared&_busy_timeout=5000&_journal_mode=WAL"
 }
