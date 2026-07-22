@@ -29,11 +29,21 @@ import (
 type fakeS3 struct {
 	mu      sync.Mutex
 	objects map[string][]byte // key: "<bucket>/<key>"
+	sizes   map[string]int64  // declared size override for sparse objects
 	puts    int
+	copies  int
 	// failPut makes every object PUT return a fast, non-retryable 403 so the
 	// deploy upload path fails deterministically (no network hang) for the
 	// "failed deploy is not billed" test.
 	failPut atomic.Bool
+	// failCopyAfter, when > 0, lets that many server-side COPYs succeed and then
+	// fails every later one with a fast 403 — the PARTIAL-COPY simulation the
+	// release tests need to prove a half-copied release can never be activated.
+	failCopyAfter atomic.Int32
+	// mutateOnCopy, when set, rewrites this source key's bytes just before the
+	// first COPY reads it, simulating a concurrent writer racing a publish so the
+	// conditional (if-match) copy guard can be exercised.
+	mutateOnCopy atomic.Value // string
 }
 
 // startFakeS3 boots the double and returns its bare host:port (for S3_ADMIN_ENDPOINT).
@@ -49,6 +59,44 @@ func startFakeS3(t *testing.T) *fakeS3 {
 	t.Setenv("S3_SECURE", "false")
 	t.Setenv("S3_REGION", "us-east-1")
 	return f
+}
+
+// seed writes an object directly into the double, standing in for the build
+// output an agent's code execution already produced inside our object store.
+func (f *fakeS3) seed(bucket, key, body string) {
+	f.mu.Lock()
+	f.objects[bucket+"/"+key] = []byte(body)
+	f.mu.Unlock()
+}
+
+// seedSparse declares an object of a given SIZE without allocating its bytes.
+// The release plane never reads object bodies — it caps on the size the listing
+// reports and then hands the bytes to the store to copy — so a sparse object is
+// a faithful (and honest) model of a large build output, and lets the byte-cap
+// test assert on half a gigabyte without allocating it.
+func (f *fakeS3) seedSparse(bucket, key string, size int64) {
+	f.mu.Lock()
+	f.objects[bucket+"/"+key] = nil
+	if f.sizes == nil {
+		f.sizes = make(map[string]int64)
+	}
+	f.sizes[bucket+"/"+key] = size
+	f.mu.Unlock()
+}
+
+// body returns a stored object's bytes (ok=false when absent).
+func (f *fakeS3) body(bucket, key string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.objects[bucket+"/"+key]
+	return string(b), ok
+}
+
+// copyCount reports how many server-side COPYs the double has served.
+func (f *fakeS3) copyCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.copies
 }
 
 func (f *fakeS3) count(prefix string) int {
@@ -114,6 +162,8 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.list(w, bucket, q.Get("prefix"))
 	case r.Method == http.MethodPost && q.Has("delete"):
 		f.delete(w, bucket, r)
+	case r.Method == http.MethodPut && hasKey && r.Header.Get("x-amz-copy-source") != "":
+		f.copy(w, bucket, key, r)
 	case r.Method == http.MethodPut && hasKey:
 		f.put(w, bucket, key, r)
 	case r.Method == http.MethodGet && hasKey:
@@ -122,6 +172,11 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}
 }
+
+// etagOf is the store's content identity for a body — real MD5, exactly as S3
+// reports for a single-part PUT. The release plane digests these, so the double
+// MUST report honest per-object etags or content-addressing would be untested.
+func etagOf(body []byte) string { return fmt.Sprintf("%x", md5.Sum(body)) }
 
 func (f *fakeS3) list(w http.ResponseWriter, bucket, prefix string) {
 	f.mu.Lock()
@@ -132,18 +187,85 @@ func (f *fakeS3) list(w http.ResponseWriter, bucket, prefix string) {
 			keys = append(keys, strings.TrimPrefix(k, bucket+"/"))
 		}
 	}
+	bodies := make(map[string][]byte, len(keys))
+	sizes := make(map[string]int64, len(keys))
+	for _, k := range keys {
+		bodies[k] = f.objects[bucket+"/"+k]
+		if n, ok := f.sizes[bucket+"/"+k]; ok {
+			sizes[k] = n
+		} else {
+			sizes[k] = int64(len(bodies[k]))
+		}
+	}
 	f.mu.Unlock()
 	sort.Strings(keys)
 	res := listBucketResult{Name: bucket, Prefix: prefix, KeyCount: len(keys), MaxKeys: 1000, IsTruncated: false}
 	for _, k := range keys {
 		res.Contents = append(res.Contents, lbContent{
 			Key: k, LastModified: time.Now().UTC().Format(time.RFC3339),
-			ETag: `"x"`, Size: 1,
+			ETag: fmt.Sprintf("%q", etagOf(bodies[k])), Size: sizes[k],
 		})
 	}
 	w.Header().Set("Content-Type", "application/xml")
 	_, _ = io.WriteString(w, xml.Header)
 	_ = xml.NewEncoder(w).Encode(res)
+}
+
+type copyResult struct {
+	XMLName      xml.Name `xml:"CopyObjectResult"`
+	ETag         string   `xml:"ETag"`
+	LastModified string   `xml:"LastModified"`
+}
+
+// copy implements S3 server-side COPY (PUT with x-amz-copy-source), including
+// the conditional x-amz-copy-source-if-match precondition the release plane
+// relies on to pin each object to the etag its manifest was digested from.
+func (f *fakeS3) copy(w http.ResponseWriter, bucket, key string, r *http.Request) {
+	src := strings.TrimPrefix(r.Header.Get("x-amz-copy-source"), "/")
+	if n := f.failCopyAfter.Load(); n > 0 {
+		f.mu.Lock()
+		done := f.copies
+		f.mu.Unlock()
+		if int32(done) >= n {
+			s3Error(w, http.StatusForbidden, "AccessDenied", "denied")
+			return
+		}
+	}
+	f.mu.Lock()
+	// Simulate a concurrent writer mutating the build output mid-publish.
+	if victim, _ := f.mutateOnCopy.Load().(string); victim != "" {
+		if _, ok := f.objects[bucket+"/"+victim]; ok {
+			f.objects[bucket+"/"+victim] = []byte("MUTATED BY A CONCURRENT WRITER")
+			f.mutateOnCopy.Store("")
+		}
+	}
+	body, ok := f.objects[src]
+	f.mu.Unlock()
+	if !ok {
+		s3Error(w, http.StatusNotFound, "NoSuchKey", "no such key")
+		return
+	}
+	if want := strings.Trim(r.Header.Get("x-amz-copy-source-if-match"), `"`); want != "" && want != etagOf(body) {
+		s3Error(w, http.StatusPreconditionFailed, "PreconditionFailed", "etag mismatch")
+		return
+	}
+	f.mu.Lock()
+	f.objects[bucket+"/"+key] = body
+	f.copies++
+	f.mu.Unlock()
+	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, xml.Header)
+	_ = xml.NewEncoder(w).Encode(copyResult{
+		ETag:         fmt.Sprintf("%q", etagOf(body)),
+		LastModified: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+	})
+}
+
+func s3Error(w http.ResponseWriter, status int, code, msg string) {
+	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(status) // 4xx → minio-go does not retry
+	_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>`+code+`</Code><Message>`+msg+`</Message></Error>`)
 }
 
 func (f *fakeS3) delete(w http.ResponseWriter, bucket string, r *http.Request) {
