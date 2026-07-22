@@ -33,12 +33,11 @@ type Config struct {
 
 	// Replicas is the app-tier replica count the operator injects (CLOUD_REPLICAS,
 	// mirroring the Deployment's spec.replicas). 0 = unset/unmanaged. It exists to
-	// enforce ONE contract: embedded IAM (clients/iam) uses Beego's
-	// process-local "memory" session store, so an iam-enabled cloud MUST run at a
-	// single replica or login/authorize sessions are lost across replicas.
-	// Validate refuses to boot iam-enabled above 1; the helm chart pins replicas=1
-	// whenever "iam" is in --enable. Migrating IAM sessions to a shared store lifts
-	// this.
+	// enforce ONE contract: embedded IAM (clients/iam) keeps its identity store as a
+	// per-pod embedded SQLite file, so an iam-enabled cloud MUST run at a single
+	// replica or each replica gets its OWN divergent identity store. Validate refuses
+	// to boot iam-enabled above 1; the helm chart pins replicas=1 whenever "iam" is in
+	// --enable. Pointing IAM at a shared external store lifts this.
 	Replicas int
 
 	// Brand is the white-label brand identifier.
@@ -543,21 +542,17 @@ func registrableDomain(host string) string {
 // the empty-Enable "mount everything" default and mount ONLY when named in
 // CLOUD_ENABLE. This is the HIP-0106 staged-rollout contract, enforced in code.
 //
-// "iam" is staged because iam.Mount boots the WHOLE Beego identity runtime via
-// iamserver.InitEmbed(), which initialises process-global Beego config (web.BConfig
-// / the shared AppConfig). The `ai` subsystem is a sibling casibase/casdoor fork
-// linked against the SAME beego module, and reads that same process-global at its
-// own bootstrap. Booting the IAM embed under the mount-all default corrupts the
-// shared global so `ai` can no longer open its SQLite store — the binary crashes at
-// boot with "ai: bootstrap: unable to open database file (14)" (SQLITE_CANTOPEN),
-// which is exactly why every cloud release since the IAM embed (#142) failed its
-// boot smoke and the fleet stayed pinned to a pre-embed image. Until that
-// shared-global isolation is solved AND the fold is verified (login/authorize/
-// token/jwks + the operator SSO chain), the operator activates IAM by ADDING "iam"
-// to CLOUD_ENABLE explicitly; until then hanzo.id is served by the standalone iam
-// pod and cloud runs iam-less exactly as it does in production today (pickIAMClient
-// falls back to the remote/disabled IAM client — see build.go). ONE activation
-// mechanism (the enable-list), ONE place.
+// "iam" is staged as a cutover gate. iam.Mount now embeds the CLEAN iam-v2
+// (clients/iam — zip-native + hanzoai/orm, the retired Casdoor iam-v1/beego fork is
+// GONE, so the old shared-Beego-global corruption of the `ai` subsystem is gone too),
+// but flipping hanzo.id from the standalone iam pod to the in-process embed is a
+// production identity cutover. Until the fold is verified (login/authorize/token/jwks
+// + the operator SSO chain) AND the v2 config (init_data + KMS signing keys) is present
+// in the cloud runtime, the operator activates IAM by ADDING "iam" to CLOUD_ENABLE
+// explicitly; until then hanzo.id is served by the standalone iam pod and cloud runs
+// iam-less exactly as it does in production today (pickIAMClient falls back to the
+// remote/disabled IAM client — see build.go). ONE activation mechanism (the
+// enable-list), ONE place.
 //
 // PHASE 2 (tasks #96, #105): commerce, captable, sign, dataroom are folded
 // in-process (clients/commerce, clients/captable, clients/sign, clients/dataroom)
@@ -572,9 +567,9 @@ func registrableDomain(host string) string {
 // S3_*/SQUARE_*/HUSD_*/IAM_*/COMMERCE_EDGE_AUTH) exactly as the standalone CR did;
 // a missing SQL_URL still fails loud (commerce.go) rather than reading $0 balances.
 // All four are dropped from staging so the mount-all default serves them from the
-// one binary — retiring their standalone pods. iam and ingress STAY staged (the
-// IAM embed corrupts its own bootstrap under mount-all; iam is served by the
-// standalone pod).
+// one binary — retiring their standalone pods. iam and ingress STAY staged: iam is a
+// production identity cutover gated on the fold being verified (see above), served by
+// the standalone pod until the operator flips it on.
 var stagedSubsystems = map[string]bool{"iam": true, "ingress": true}
 
 // Enabled reports whether subsystem `name` is enabled in this config.
@@ -750,22 +745,22 @@ func (c *Config) Validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("data-dir is required")
 	}
-	// Embedded IAM (clients/iam) uses Beego's process-local "memory" session
-	// store, so a horizontally scaled app tier would mint a login/authorize
-	// session on one replica and fail to find it on the next. Refuse to boot an
-	// iam-enabled cloud above a single replica. CLOUD_REPLICAS=0 (unset) is the
-	// unmanaged/dev case and is allowed — the helm chart pins replicas=1 whenever
-	// "iam" is in --enable, so a managed deployment always sets it. Migrate IAM
-	// sessions to a shared store to lift this.
+	// Embedded IAM (clients/iam) keeps its identity store as a per-pod embedded
+	// SQLite file ({DataDir}/iam/iam.db), so a horizontally scaled app tier would give
+	// each replica its OWN divergent identity store — a user/session written on one
+	// replica is absent on the next. Refuse to boot an iam-enabled cloud above a single
+	// replica. CLOUD_REPLICAS=0 (unset) is the unmanaged/dev case and is allowed — the
+	// helm chart pins replicas=1 whenever "iam" is in --enable, so a managed deployment
+	// always sets it. Point IAM at a shared external store to lift this.
 	if c.Enabled("iam") && c.Replicas > 1 {
-		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a process-local session store and requires replicas=1 (pin the Deployment to 1 replica or migrate IAM sessions to a shared store)", c.Replicas)
+		return fmt.Errorf("iam is enabled but CLOUD_REPLICAS=%d > 1: embedded IAM uses a per-pod SQLite store and requires replicas=1 (pin the Deployment to 1 replica or point IAM at a shared store)", c.Replicas)
 	}
 	// Horizontal shard routing (CLOUD_PEERS names >1 pod). Two fail-closed guards:
 	//   1. THIS pod must be one of the peers, else it owns no shard and would forward
 	//      every request away (a silent black-hole) — refuse to boot.
-	//   2. Embedded IAM cannot be sharded: its process-local login/authorize session,
-	//      minted on the pod that received the OAuth step, is unreachable on the owner
-	//      pod a later request routes to. Disable iam (use external iam.hanzo.svc).
+	//   2. Embedded IAM cannot be sharded: its per-pod SQLite identity store is local to
+	//      each pod, so a login/authorize step served on one pod is unreachable on the
+	//      owner pod a later request routes to. Disable iam (use external iam.hanzo.svc).
 	// Both are boot errors, never guesses — a wrong shard topology must fail loud.
 	if peers := parsePeers(c.ShardPeers); len(peers) >= 2 {
 		if c.ShardSelf == "" {
@@ -775,7 +770,7 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("shard self %q is not in CLOUD_PEERS %q: this pod is not a member of its own ring (it would forward every request away and own no shard)", c.ShardSelf, c.ShardPeers)
 		}
 		if c.Enabled("iam") {
-			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing: embedded IAM uses a process-local session store and cannot be sharded; disable iam (use external iam.hanzo.svc) or run a single pod")
+			return fmt.Errorf("iam is enabled with CLOUD_PEERS shard routing: embedded IAM uses a per-pod SQLite store and cannot be sharded; disable iam (use external iam.hanzo.svc) or run a single pod")
 		}
 	}
 	return nil

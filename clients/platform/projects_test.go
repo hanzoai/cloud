@@ -7,32 +7,32 @@ import (
 	"sync"
 	"testing"
 
-	iamobj "github.com/hanzoai/iam-v1/object"
+	model "github.com/hanzoai/iam/pkg/model"
 )
 
 // fakeProjects is an in-memory, org-scoped ProjectStore standing in for the
-// embedded IAM object store in tests. It proves the project lifecycle is
-// DELEGATED (platform owns no project rows) and records create/delete calls so a
-// test can assert the delegation actually happened. It returns IAM's canonical
-// *object.Project — the SAME type the production adapter returns — so no
+// embedded IAM store in tests. It proves the project lifecycle is DELEGATED
+// (platform owns no project rows) and records create/delete calls so a test can
+// assert the delegation actually happened. It returns IAM's canonical
+// *model.Project — the SAME type the production adapter returns — so no
 // platform-local project model is introduced anywhere.
 type fakeProjects struct {
 	mu      sync.Mutex
-	byKey   map[string]*iamobj.Project // "<org>/<name>"
+	byKey   map[string]*model.Project // "<org>/<name>"
 	creates []string
 	deletes []string
 }
 
 func newFakeProjects() *fakeProjects {
-	return &fakeProjects{byKey: map[string]*iamobj.Project{}}
+	return &fakeProjects{byKey: map[string]*model.Project{}}
 }
 
 func (f *fakeProjects) key(org, name string) string { return org + "/" + name }
 
-func (f *fakeProjects) List(_ context.Context, org string) ([]*iamobj.Project, error) {
+func (f *fakeProjects) List(_ context.Context, org string) ([]*model.Project, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := []*iamobj.Project{}
+	out := []*model.Project{}
 	for _, p := range f.byKey {
 		if p.Owner == org {
 			out = append(out, p)
@@ -41,19 +41,19 @@ func (f *fakeProjects) List(_ context.Context, org string) ([]*iamobj.Project, e
 	return out, nil
 }
 
-func (f *fakeProjects) Get(_ context.Context, org, name string) (*iamobj.Project, error) {
+func (f *fakeProjects) Get(_ context.Context, org, name string) (*model.Project, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.byKey[f.key(org, name)], nil
 }
 
-func (f *fakeProjects) Create(_ context.Context, org, name, display, description string) (*iamobj.Project, error) {
+func (f *fakeProjects) Create(_ context.Context, org, name, display, description string) (*model.Project, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.byKey[f.key(org, name)]; ok {
 		return nil, errConflict
 	}
-	p := &iamobj.Project{
+	p := &model.Project{
 		Owner: org, Name: name, Organization: org, DisplayName: display,
 		Description: description, CreatedTime: "2026-01-01T00:00:00Z",
 	}
