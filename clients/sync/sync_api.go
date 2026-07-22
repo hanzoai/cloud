@@ -369,7 +369,7 @@ func spawnReconcile(store *store, sy Sync) {
 			return
 		}
 		defer func() { <-reconcileSem }()
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), reconcileTimeout)
 		defer cancel()
 		runOne(ctx, store, sy, Event{Provider: sy.Source.Provider, Org: sy.Org, Manual: true})
 	}()
