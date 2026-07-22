@@ -364,6 +364,42 @@ func (h *collabHub) join(ctx context.Context, org, workspace, docName string, d 
 	return rm, snap, nil
 }
 
+// nopSink is a frameSink that discards. The hub's seed path attaches as a peer to
+// reuse a room's lifecycle and lock (so the seed serializes against live flushes) but
+// never sends frames of its own.
+type nopSink struct{}
+
+func (nopSink) write([]byte) error { return nil }
+
+// seedIfAbsent seeds a brand-new doc field's update log from a dialog-authored Y.js
+// update, but ONLY when the room's log is still empty. It runs THROUGH the SAME room
+// the live WS lane uses (identical docName ⇒ one room, one flushMu/mu), so the check
+// (empty?) and the set happen atomically under the room lock: a concurrent first edit
+// is never clobbered and the seed never overwrites a live log. This replaces the old
+// get-then-put in collab.go, whose gap between the Get(miss) and the Put let a racing
+// live edit be overwritten. Joins with a discard sink, seeds when empty, persists via
+// the room's own flush, then leaves (last-leaver GC unchanged).
+func (h *collabHub) seedIfAbsent(ctx context.Context, org, workspace, docName string, d collabDoc, update []byte) error {
+	peer := &collabPeer{sink: nopSink{}}
+	rm, _, err := h.join(ctx, org, workspace, docName, d, peer)
+	if err != nil {
+		return err
+	}
+	defer h.leave(ctx, org, workspace, docName, rm, peer)
+	rm.mu.Lock()
+	if len(rm.log) != 0 {
+		rm.mu.Unlock()
+		return nil // a live (or already-seeded) log exists — never clobber it
+	}
+	cp := make([]byte, len(update))
+	copy(cp, update)
+	rm.log = [][]byte{cp}
+	rm.dirty = true
+	rm.mu.Unlock()
+	rm.flush(ctx, h.vfs, true)
+	return nil
+}
+
 // leave detaches peer; the last leaver flushes and GCs the room.
 func (h *collabHub) leave(ctx context.Context, org, workspace, docName string, rm *collabRoom, peer *collabPeer) {
 	key := org + "\x00" + workspace + "\x00" + docName
