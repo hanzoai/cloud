@@ -34,14 +34,14 @@ plane (`clients/kms`) and the ONE in-process **tasks durable engine**
 37 native `clients/*` subsystems already carry their product surface in-process:
 admin, agents, analytics, bot, cms, console, crm, do, erp, eval, exec, framework,
 functions, git, graph, help, kms, ml, o11y, paassvc, plan, platform,
-plugin, pricing, product, projectsvc, prompt(s), provisioning, s3, security,
-tasksvc, templates, visor, websearch, zt.
+plugin, pricing, product, projects, prompt(s), provisioning, s3, security,
+tasks, templates, visor, websearch, zt.
 
 ## Wave 1 — THIS build (tasks + visor)
 
 | Service | Disposition | Notes |
 |---|---|---|
-| **tasks** (`hanzoai/tasks`, tasksd) | **merged** | Engine already embedded in-process by `durable.go` (ONE engine, loopback ZAP :19999, shared with ai ingest). This wave adds the **HTTP + UI surface** (`clients/tasksvc`, order 147) mounting that SAME engine's handlers at `/v1/tasks/*` + `/_/tasks/*` — the "consolidate the UI surface into cloud" follow-up named in `durable.go`. No second Embed. Needed a small `hanzoai/tasks` v1.46.0 (`auth.WithIdentity` in-proc identity seam + single `hanzoai/sqlite` driver). ~180 LOC + `cloud.EmbeddedTasks()` accessor. |
+| **tasks** (`hanzoai/tasks`, tasksd) | **merged** | Engine already embedded in-process by `durable.go` (ONE engine, loopback ZAP :19999, shared with ai ingest). This wave adds the **HTTP + UI surface** (`clients/tasks`, order 147) mounting that SAME engine's handlers at `/v1/tasks/*` + `/_/tasks/*` — the "consolidate the UI surface into cloud" follow-up named in `durable.go`. No second Embed. Needed a small `hanzoai/tasks` v1.46.0 (`auth.WithIdentity` in-proc identity seam + single `hanzoai/sqlite` driver). ~180 LOC + `cloud.EmbeddedTasks()` accessor. |
 | **visor** (`hanzoai/visor`) | **surface merged; logic port = own wave** | The compute REST surface (`/v1/machines`, `/v1/gpus`, `/v1/clusters`) is ALREADY native in `clients/visor` (order 133), org-scoped via `principal`. It PROXIES the standalone visor for data. Visor itself is a **5.4k-LOC multi-cloud Beego + xorm + Casdoor monolith** with its own DB and auth — mounting that in-process drags Beego/xorm/Casdoor + a second DB + bare `/v1/*` route collisions into this binary (architecturally wrong, not golf). The genuine native port = replace visor's `object/*` xorm persistence with a Base store and reuse its pure-`godo` `service/{digitalocean,doks}.go` on top of cloud's existing `clients/do` — a bounded **~600–900 LOC wave of its own**, sequenced after wave 2. Visor stays standalone until then. |
 
 ## Wave 2+ — mount queue (sequential; do one, tidy, prove, next)
