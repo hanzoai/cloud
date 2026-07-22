@@ -483,11 +483,16 @@ func ensureProject(s *cloud.Service[state], ctx context.Context, org, slug, name
 		ID: id, Org: org, Slug: slug, Name: name, Framework: "static",
 		Status: "draft", Bucket: s.State.blob.bucket, CreatedAt: now, UpdatedAt: now,
 	}
+	// Same wired-by-default settings as POST /v1/projects — analytics ON and the
+	// Base data-space namespace — so the /v1/sites create path is not a second
+	// place defaults are decided. A generated site has no opt-out knob (nil ⇒ ON).
+	setProjectDefaults(&np, nil)
 	if err := s.State.store.CreateProject(ctx, np); err != nil {
 		if errors.Is(err, errConflict) {
 			return s.State.store.GetProject(ctx, org, slug)
 		}
 		return Project{}, zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
+	provisionSpace(s, ctx, &np)
 	return np, nil
 }
