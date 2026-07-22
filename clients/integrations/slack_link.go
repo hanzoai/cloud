@@ -59,7 +59,9 @@ func setSlackCookie(s *cloud.Service[state], c *zip.Ctx, name, val string) {
 	})
 }
 
-func readSlackCookie(s *cloud.Service[state], c *zip.Ctx, name string) string { return c.Fiber().Cookies(name) }
+func readSlackCookie(s *cloud.Service[state], c *zip.Ctx, name string) string {
+	return c.Fiber().Cookies(name)
+}
 
 func clearSlackCookie(s *cloud.Service[state], c *zip.Ctx, name string) {
 	c.Fiber().Cookie(&fiber.Cookie{
@@ -300,7 +302,7 @@ func putSlackUserLink(s *cloud.Service[state], org, slackUser string, link slack
 	if err != nil {
 		return err
 	}
-	return kmsPut(s, org, "slack", slackUserSecretName(slackUser), blob)
+	return kmsPut(s, kmsPath(org, "slack"), slackUserSecretName(slackUser), blob)
 }
 
 // getSlackUserLink returns the linked (org, slackUser) binding. found=false (nil
@@ -313,7 +315,7 @@ func getSlackUserLink(s *cloud.Service[state], org, slackUser string) (slackUser
 	if !kmsReady(s) {
 		return slackUserLink{}, false, kms.ErrMasterKeyMissing
 	}
-	raw, err := kmsGet(s, org, "slack", slackUserSecretName(slackUser))
+	raw, err := kmsGet(s, kmsPath(org, "slack"), slackUserSecretName(slackUser))
 	if errors.Is(err, kms.ErrSecretNotFound) {
 		return slackUserLink{}, false, nil
 	}
