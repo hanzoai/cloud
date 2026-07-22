@@ -160,6 +160,11 @@ func me(s *cloud.Service[core.State], c *zip.Ctx) error {
 		Email:        strings.TrimSpace(c.UserEmail()),
 		DisplayName:  name,
 		IsSuperAdmin: sc.Super,
+		// Admitted (the gate already 200'd) but not fleet-super ⇒ a subtree-scoped
+		// white-label tenant operator; ScopeOrgs is its visible subtree (empty for
+		// a SuperAdmin, who sees the whole fleet).
+		IsWhiteLabel: !sc.Super,
+		ScopeOrgs:    sc.Orgs,
 	})
 }
 
