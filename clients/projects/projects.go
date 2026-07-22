@@ -19,6 +19,7 @@
 //	PATCH  /v1/projects/:slug                update
 //	DELETE /v1/projects/:slug                delete (+ purge S3 site)
 //	POST   /v1/projects/:slug/deploy         deploy (tar body | git json)
+//	POST   /v1/projects/:slug/purge          purge the edge cache-tag (no redeploy)
 //	GET    /v1/projects/:slug/deployments    deploy history
 //	GET    /v1/projects/:slug/deployments/:id one deployment
 //	POST   /v1/projects/:slug/deployments/:id/complete  CI completion hook
@@ -228,6 +229,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Delete("/v1/projects/:slug", cloud.Handle(s, del))
 
 	app.Post("/v1/projects/:slug/deploy", cloud.Handle(s, deploy))
+	app.Post("/v1/projects/:slug/purge", cloud.Handle(s, purge))
 	app.Get("/v1/projects/:slug/deployments", cloud.Handle(s, listDeployments))
 	app.Get("/v1/projects/:slug/deployments/:id", cloud.Handle(s, getDeployment))
 	app.Post("/v1/projects/:slug/deployments/:id/complete", cloud.Handle(s, completeDeployment))
@@ -257,6 +259,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Patch("/v1/platform/sites/:slug", cloud.Handle(s, update))
 	app.Delete("/v1/platform/sites/:slug", cloud.Handle(s, del))
 	app.Post("/v1/platform/sites/:slug/deploy", cloud.Handle(s, deploy))
+	app.Post("/v1/platform/sites/:slug/purge", cloud.Handle(s, purge))
 	app.Get("/v1/platform/sites/:slug/deployments", cloud.Handle(s, listDeployments))
 	app.Get("/v1/platform/sites/:slug/deployments/:id", cloud.Handle(s, getDeployment))
 	app.Get("/v1/platform/sites/:slug/domains", cloud.Handle(s, listDomains))
@@ -471,10 +474,9 @@ func del(s *cloud.Service[state], c *zip.Ctx) error {
 			}
 		}
 	}
-	// Purge the Cloudflare edge so the deleted site stops serving from cache.
-	if pErr := s.State.cf.PurgeTags(c.Context(), sites.CacheTag(org, p.Slug)); pErr != nil {
-		s.Log.Warn("cloudflare purge failed on delete (continuing)", "org", org, "slug", p.Slug, "err", pErr)
-	}
+	// Purge the edge cache-tag so the deleted project stops serving stale copies
+	// from the edge; its metadata and S3 origin are already gone.
+	purgeTag(s, c.Context(), org, p.Slug)
 	return c.NoContent(http.StatusNoContent)
 }
 

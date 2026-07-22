@@ -81,7 +81,9 @@ func (p *Purger) PurgeTags(ctx context.Context, tags ...string) error {
 	return nil
 }
 
-// CacheTag is the ONE canonical cache-tag for a site's objects. The site server
-// stamps it as the Cache-Tag response header; the Purger purges it on redeploy /
-// delete. Both derive it from server-owned Org+Slug so they always agree.
+// CacheTag is the ONE canonical edge cache-tag for a project's site objects. The
+// site server (streamSite) emits it as the Cache-Tag response header on every
+// served object; the Purger targets it on deploy, domain-bind, delete, and the
+// dedicated POST .../purge. Both derive it from server-owned Org+Slug so the
+// emitted tag and the purged tag never diverge.
 func CacheTag(org, slug string) string { return "site-" + org + "-" + slug }
