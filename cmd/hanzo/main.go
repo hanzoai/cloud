@@ -141,6 +141,20 @@ func main() {
 		return
 	}
 
+	// PASSTHROUGH. A verb that is neither a Go control verb nor a served subsystem
+	// belongs to the Rust fabric/dev CLI (node, dev, wallet, network, …). Delegate
+	// to it — installed as `hanzo-node` — so the single `hanzo` name is a SUPERSET:
+	// Go verbs served natively here, everything else handed through. `hanzo node up`
+	// (the fabric `link` composes) works for users too. Passthrough execs + exits;
+	// it returns only when no fabric CLI is resolvable, so fall through to the
+	// unknown-subcommand report below.
+	if !isServeTarget(sub, specs) {
+		cli.Passthrough(os.Args[1:])
+		usage(os.Stderr, specs)
+		fmt.Fprintf(os.Stderr, "\nunknown subcommand %q (no `hanzo-node` fabric CLI to delegate to)\n", sub)
+		os.Exit(1)
+	}
+
 	// SERVER MODE. Reset os.Args so the delegated service / cloud.LoadConfig
 	// sees its own flags at argv[1:], not the subcommand token. e.g.
 	// `hanzo kms --listen=:9000` → the kms serve path parses `--listen=:9000`.
@@ -150,6 +164,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "hanzo %s: %v\n", sub, err)
 		os.Exit(1)
 	}
+}
+
+// isServeTarget reports whether sub names something this binary serves in-process —
+// the full fused surface (cloud), standalone IAM, the datastore doc target, or any
+// registered subsystem. Everything else is delegated to the Rust CLI (passthrough).
+func isServeTarget(sub string, specs []cloud.MountSpec) bool {
+	if _, ok := nonRegistrySubcommands[sub]; ok {
+		return true
+	}
+	return registryHas(specs, sub)
 }
 
 // dispatch routes a subcommand to its serve entrypoint.
