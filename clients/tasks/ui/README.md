@@ -23,7 +23,7 @@ bun install
 bun run build            # → apps/admin-tasks/dist  (base=/tasks/, api=/v1/tasks)
 
 # sync into cloud
-rsync -a --delete apps/admin-tasks/dist/ <cloud>/clients/tasksvc/ui/dist/
+rsync -a --delete apps/admin-tasks/dist/ <cloud>/clients/tasks/ui/dist/
 ```
 
 Then `go build ./cmd/cloud` re-embeds it. Do NOT hand-edit files under `dist/` —

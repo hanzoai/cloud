@@ -182,7 +182,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	defer c.CloseNow()
 
 	// 1) createRepo over ZAP.
-	rep := zapCall(t, c, ctx, "git/zap/createRepo", map[string]any{"name": "zapsvc"}, 1)
+	rep := zapCall(t, c, ctx, "git/zap/createRepo", map[string]any{"name": "zap"}, 1)
 	if !rep.ok || rep.status != http.StatusOK {
 		t.Fatalf("createRepo: ok=%v status=%d err=%s", rep.ok, rep.status, rep.errorJSON)
 	}
@@ -190,13 +190,13 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(unwrapResult(rep.result), &created); err != nil {
 		t.Fatalf("decode createRepo result: %v (%s)", err, rep.result)
 	}
-	if created.Org != "acme" || created.Name != "zapsvc" {
+	if created.Org != "acme" || created.Name != "zap" {
 		t.Fatalf("unexpected repo: %+v", created)
 	}
-	if created.CloneURL != "https://api.hanzo.test/v1/git/acme/zapsvc.git" {
+	if created.CloneURL != "https://api.hanzo.test/v1/git/acme/zap.git" {
 		t.Fatalf("unexpected cloneUrl: %q", created.CloneURL)
 	}
-	if !strings.HasPrefix(created.SSHURL, "git@git.hanzo.test:acme/zapsvc.git") {
+	if !strings.HasPrefix(created.SSHURL, "git@git.hanzo.test:acme/zap.git") {
 		t.Fatalf("unexpected sshUrl: %q", created.SSHURL)
 	}
 
@@ -209,7 +209,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(unwrapResult(rep.result), &listed); err != nil {
 		t.Fatalf("decode listRepos: %v (%s)", err, rep.result)
 	}
-	if len(listed) != 1 || listed[0].Name != "zapsvc" {
+	if len(listed) != 1 || listed[0].Name != "zap" {
 		t.Fatalf("listRepos over ZAP = %+v", listed)
 	}
 
@@ -220,7 +220,7 @@ func TestZAPControlPlaneRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("core list: %v", err)
 	}
-	if len(out) != 1 || out[0].Name != "zapsvc" {
+	if len(out) != 1 || out[0].Name != "zap" {
 		t.Fatalf("REST/core view of ZAP-created repo = %+v", out)
 	}
 
