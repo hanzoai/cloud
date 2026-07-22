@@ -241,6 +241,16 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 		g.log.Error("team: invite — local member row write failed", "err", err)
 		return g.fail(c, statusInvite("could not add workspace member: "+err.Error()))
 	}
+	// The entitlement gate AT THE ADD POINT — the SAME seam selectWorkspace gates login
+	// with (entitle). A guest added beyond the plan's team.guests cap is caught here too,
+	// not only at the guest's later login. OBSERVE-MODE, consistent with the login gate:
+	// entitle logs the denial and admits today; the 402 below arms itself the day
+	// enforcement returns (entitle starts returning the Status). Any commerce/plans error
+	// admits inside entitle, so a licensing outage never bricks an invite. The invitee is
+	// now a guest member, so entitle's team.guests rank check sees this add.
+	if st := g.entitle(c.Context(), org, role, ws.ID, inviteeAccount); st != nil {
+		return c.JSON(http.StatusPaymentRequired, map[string]any{"error": *st, "upgradeUrl": upgradeURL})
+	}
 	return g.ok(c, map[string]any{
 		"invited":   email,
 		"workspace": ws.UUID,
