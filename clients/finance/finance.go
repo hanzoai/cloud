@@ -128,7 +128,15 @@ func (f *ledgerFinance) Balance(ctx context.Context, org, subject, currency stri
 	if err != nil {
 		return money.Zero(), err
 	}
-	bal, _ := store.Balance(ctx, walletAcct(subject))
+	bal, err := store.Balance(ctx, walletAcct(subject))
+	if err != nil {
+		// A REAL read failure (DB error / corrupt stored balance) is UNKNOWN, and
+		// unknown is NOT "broke": surfacing it lets the caller's guard render a 503
+		// instead of a genuine $0. Swallowing it here showed funded customers $0 and
+		// made the prepaid gate refuse a funded org — the exact invariant the balance
+		// callers document ("a balance that cannot be read is unknown, never zero").
+		return money.Zero(), err
+	}
 	if bal.IsNeg() {
 		return money.Zero(), nil
 	}
