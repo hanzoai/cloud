@@ -584,7 +584,8 @@ func k8sErr(s *cloud.Service[state], c *zip.Ctx, k resourceKind, op string, err 
 // dedicated cloud-ml identity — decomplected from the pod's own cloud-api SA — so
 // ML's KServe/Kubeflow cluster reach is never inherited by the product-API path
 // (least privilege; blast-radius separation). See universe
-// infra/k8s/cloud/ml-rbac.yaml (ClusterRoleBinding cloud-mlsvc -> cloud-ml).
+// infra/k8s/cloud/ml-rbac.yaml (the cloud-ml ClusterRoleBinding grants the
+// cloud-ml ServiceAccount its ML cluster role).
 const mlTokenFileEnv = "HANZO_ML_TOKEN_FILE"
 
 // dynForOrg returns the client ML operations should target for an org+project: its
