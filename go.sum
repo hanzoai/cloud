@@ -1059,8 +1059,8 @@ github.com/hanzoai/account v0.2.0 h1:WxIut3YMz8JNdHerlRIqP1a+k3P79BIKM1mjfRFDG0Y
 github.com/hanzoai/account v0.2.0/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v0.1.3 h1:zzV4t8kN/m/wTLrqzEy0fxxONSZbx3XSVH7TIR9gZNU=
 github.com/hanzoai/agent v0.1.3/go.mod h1:Z3hCBdSeN/nGV4o+3F4psQ2bbFk17+tMP5l+G2ssNNA=
-github.com/hanzoai/ai v1.829.7 h1:DQhdFGivpUdvaQCI7GU3670GrpsVyUog6y5K314kVVM=
-github.com/hanzoai/ai v1.829.7/go.mod h1:BeIlJNoqJ38l77meu6pgYfZqnxdebqcDJlZNgvwDJ8w=
+github.com/hanzoai/ai v1.830.0 h1:l7bZwuEPuql+z3aE+nmn/Ei24+MqXoJXL32Z3W+vueQ=
+github.com/hanzoai/ai v1.830.0/go.mod h1:BeIlJNoqJ38l77meu6pgYfZqnxdebqcDJlZNgvwDJ8w=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
 github.com/hanzoai/authz v1.10.7/go.mod h1:9wf6n6BvrvxRULUtL3yc+vmprwwvAGZLGJoMHhiQSK4=
 github.com/hanzoai/base v1.5.7 h1:490temFA2Bz4/QD5lWRKWFWJp+k7FfIJCOi3FXMA80w=
@@ -1069,8 +1069,6 @@ github.com/hanzoai/beego/v2 v2.4.2 h1:Piq3DwRfB6JM0XeF6GdvwAncOiTYSTvRuCQxvj28qi
 github.com/hanzoai/beego/v2 v2.4.2/go.mod h1:R/5uyJtklFoKrwBMyfcnfiFgHB6K5PceNIonnlp8Mh4=
 github.com/hanzoai/captable v1.0.0 h1:utXPsOaPL+QV0rJaoNDFHvWFv7etf2kfm1bsFh6JRD0=
 github.com/hanzoai/captable v1.0.0/go.mod h1:czdMnzEvb8FWNKCzmh+z8PmwYeQp4MGyTPgo+Q5O+mk=
-github.com/hanzoai/commerce v1.49.9 h1:ZnZweRHqKxhwatLCP0lr6lrNws0W2Wu7mqfV33VTTdE=
-github.com/hanzoai/commerce v1.49.9/go.mod h1:+Bp6hVxJQmv71D/ZPzs5qiEVHyDNUchNsqakd+778ps=
 github.com/hanzoai/commerce v1.49.10 h1:0ikev6+8TvUZmLPKAoAghp1MDE0cs2/LpNHRc79qTN0=
 github.com/hanzoai/commerce v1.49.10/go.mod h1:+Bp6hVxJQmv71D/ZPzs5qiEVHyDNUchNsqakd+778ps=
 github.com/hanzoai/commerce v1.49.11 h1:vq5J0rFT4eCs1k612TuWZcl1hfAuX8VsXLU/xm29XtQ=
