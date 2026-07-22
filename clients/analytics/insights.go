@@ -113,6 +113,15 @@ func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("valid bearer or a recognized brand host required")
 	}
+	return insightsWithOrg(org, c)
+}
+
+// insightsWithOrg is the PostHog-wire decode+ingest core with the tenant supplied
+// EXPLICITLY by the caller — the twin of captureWithOrg for the PostHog beacon
+// shape. The /v1/insights/e alias resolves org via captureTenant; the site-host
+// carve FORCES org from the resolved Site (host-derived, never the caller/body).
+// Both funnel through the ONE write core (ingestEvents, source=posthog).
+func insightsWithOrg(org string, c *zip.Ctx) error {
 	var body insightsBody
 	if err := c.Bind(&body); err != nil {
 		return zip.ErrBadRequest("malformed insights payload")
