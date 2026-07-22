@@ -34,7 +34,6 @@ package apps
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/hanzoai/cloud"
 	"github.com/zap-proto/zip"
@@ -88,7 +87,6 @@ import (
 	"github.com/hanzoai/cloud/clients/graph"
 	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/iam"
-	"github.com/hanzoai/cloud/clients/iam2"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/integrations"
 	"github.com/hanzoai/cloud/clients/kafka"
@@ -168,22 +166,6 @@ func init() {
 	})
 }
 
-// identitySpec selects the ONE identity backend that owns /v1/iam/* (+ /login/oauth/*)
-// for this boot. CLOUD_IAM_IMPL=iam2 picks the clean-room iam2 (zip+orm, beego-free);
-// anything else — including unset, the production default — keeps the legacy beego
-// Casdoor embed, byte-for-byte today's behavior. The two impls register the SAME
-// absolute prefixes and therefore cannot co-mount, so selection (this func) stays
-// separate from activation (cfg.Enabled): exactly one spec occupies the identity slot
-// in Wire, preserving mount order either way. os.Getenv (not the unexported
-// cloud.getenv, which is unreachable from package apps) is the read — CLOUD_IAM_IMPL is
-// the deliberate, off-by-default opt-in that keeps iam2 inert until a canary flips it.
-func identitySpec() cloud.MountSpec {
-	if os.Getenv("CLOUD_IAM_IMPL") == "iam2" {
-		return cloud.MountSpec{Name: "iam2", Mount: iam2.Mount}
-	}
-	return cloud.MountSpec{Name: "iam", Mount: iam.Mount}
-}
-
 // Wire returns every linked subsystem as a cloud.MountSpec, in mount order. The
 // slice position IS the order: cloud.MountAll iterates it as-given, registering each
 // subsystem's teardown as a zip shutdown hook so teardown runs in reverse (LIFO).
@@ -215,15 +197,12 @@ func Wire() []cloud.MountSpec {
 		// /v1/commerce/topup/wallet). MUST mount before the IAM /v1/iam/* wildcard (50) so
 		// they win Fiber's first-match scan (framework-guaranteed since zip v1.3.0).
 		{Name: "account", Mount: account.MountAccount},
-		// Embedded IAM identity plane (/v1/iam/*, /.well-known/*, /login/oauth/*, /_/iam/*,
-		// /cas/*, /scim/*) — the identity authority, mounts before its dependents. STAGED:
-		// the operator adds "iam" to --enable only after IAM config + the fold are verified.
-		// Which IMPLEMENTATION owns these prefixes is selected by CLOUD_IAM_IMPL
-		// (identitySpec): the clean-room iam2 (zip+orm, beego-free) when =="iam2", else the
-		// legacy beego Casdoor embed — the default (unset = today's behavior, byte-for-byte).
-		// Both register the SAME absolute paths and cannot co-mount, so this is an either/or
-		// switch at this ONE slot, never a shadow prefix.
-		identitySpec(),
+		// Embedded IAM identity plane (/v1/iam/*, /login/oauth/*) — the identity authority,
+		// mounts before its dependents. The ONE implementation: the clean-room iam-v2
+		// (zip-native + hanzoai/orm, beego-free); the retired Casdoor iam-v1 embed is GONE.
+		// STAGED: the operator adds "iam" to --enable only after IAM config + the fold are
+		// verified (login/authorize/token/jwks + the operator SSO chain).
+		{Name: "iam", Mount: iam.Mount},
 		// Embedded Base app engine + viral waitlist (/v1/waitlist/*). STAGED behind
 		// CLOUD_BASE_EMBED. OwnsHealth: native /v1/base/health.
 		{Name: "base", Mount: base.Mount, Shutdown: base.Shutdown, OwnsHealth: true},
