@@ -278,6 +278,13 @@ type collabRoom struct {
 	blobKey string
 	stop    chan struct{} // closes when the room is GC'd; ends the flusher
 
+	// flushMu serializes the persist step so two concurrent flushes cannot reorder
+	// their Puts (an earlier, staler snapshot landing after a newer one). Held ACROSS
+	// the Put but never with rm.mu (rm.mu is released before the Put), so appends and
+	// broadcasts are not blocked by a slow write. Order is flushMu → mu, never mu →
+	// flushMu.
+	flushMu sync.Mutex
+
 	mu        sync.Mutex
 	peers     map[*collabPeer]struct{}
 	log       [][]byte
@@ -328,22 +335,32 @@ func (h *collabHub) join(ctx context.Context, org, workspace, docName string, d 
 		h.rooms[key] = rm
 		go rm.flusher(h.vfs)
 	}
+	// Register the peer while STILL holding h.mu, BEFORE the (slow) VFS load, so a
+	// concurrent leave of the last old peer cannot observe this room as empty in the
+	// gap and GC it out from under this join — which would close(rm.stop) on an
+	// already-closed channel (panic) and evict a live room (split-brain). Lock order
+	// stays h→rm, matching leave, so no inversion.
+	rm.mu.Lock()
+	rm.peers[peer] = struct{}{}
 	h.mu.Unlock()
 
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
 	if !rm.loaded {
 		data, err := h.vfs.Get(ctx, rm.blobKey)
 		if err != nil && !errors.Is(err, types.ErrBlobNotFound) {
+			// Undo this join so a failed first-open leaks NEITHER the peer NOR the
+			// room+flusher: drop rm.mu, then leave() removes the peer and GCs the room
+			// if it is now empty (flush is a no-op here — nothing was appended).
+			rm.mu.Unlock()
+			h.leave(ctx, org, workspace, docName, rm, peer)
 			return nil, nil, fmt.Errorf("collab: load %s: %w", rm.blobKey, err)
 		}
 		rm.log = unmarshalYLog(data)
 		rm.loaded = true
 		rm.lastFlush = time.Now()
 	}
-	rm.peers[peer] = struct{}{}
 	snap := make([][]byte, len(rm.log))
 	copy(snap, rm.log)
+	rm.mu.Unlock()
 	return rm, snap, nil
 }
 
@@ -384,8 +401,15 @@ func (rm *collabRoom) append(ctx context.Context, vfs types.VFSClient, update []
 	}
 }
 
-// flush persists the log when dirty. force skips the debounce (last-leave).
+// flush persists the log when dirty. force skips the debounce (last-leave). The
+// persist is serialized (flushMu) so overlapping flushes cannot reorder their Puts,
+// and dirty is cleared only on a SUCCESSFUL Put — a failed write keeps the room
+// dirty so the next tick / last-leave retries, instead of silently dropping the
+// buffered window (the old code cleared dirty before the Put and discarded its
+// error, losing updates on any transient VFS failure).
 func (rm *collabRoom) flush(ctx context.Context, vfs types.VFSClient, force bool) {
+	rm.flushMu.Lock()
+	defer rm.flushMu.Unlock()
 	rm.mu.Lock()
 	if !rm.dirty || (!force && time.Since(rm.lastFlush) < collabFlushEvery) {
 		rm.mu.Unlock()
@@ -395,7 +419,14 @@ func (rm *collabRoom) flush(ctx context.Context, vfs types.VFSClient, force bool
 	rm.dirty = false
 	rm.lastFlush = time.Now()
 	rm.mu.Unlock()
-	_ = vfs.Put(ctx, rm.blobKey, data)
+	if err := vfs.Put(ctx, rm.blobKey, data); err != nil {
+		// Persist failed — re-arm dirty so the window is retried, never lost. An
+		// append that raced in during the Put has already set dirty=true; this is a
+		// no-op in that case (still dirty), which is correct.
+		rm.mu.Lock()
+		rm.dirty = true
+		rm.mu.Unlock()
+	}
 }
 
 // broadcast relays frame to the room's peers; skip omits one (the sender).
