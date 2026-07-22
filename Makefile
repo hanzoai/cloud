@@ -36,7 +36,7 @@ OPENAPI_DIR    ?= ../openapi
 # forces the fork to modernc too so the whole binary registers "sqlite" once.
 CGO_ENABLED     ?= 0
 
-.PHONY: help native webui deploy-ui agentskills build build-standalone hanzo run smoke test test-cgo vet tidy docker docker-push clean
+.PHONY: help native webui deploy-ui agentskills build build-standalone run smoke test test-cgo vet tidy docker docker-push clean
 
 help: ## Show this help.
 	@awk 'BEGIN{FS=":.*##";printf "\nUsage: make <target>\n\nTargets:\n"} /^[a-zA-Z_-]+:.*##/{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -76,9 +76,13 @@ build: ## Build the unified cloud binary into ./bin/cloud (embeds whatever webui
 
 build-standalone: webui build ## Build the REAL 1-binary console: console build:embed → webui/dist → go build.
 
-hanzo: ## Build the hanzo control-plane CLI into ./bin/hanzo (pure Go, same mode as cmd/cloud — registers the ONE "sqlite" driver exactly once; a plain CGO_ENABLED=1 `go build ./cmd/hanzo` links the fork's mattn backend alongside the embedded modernc importers and panics, see header).
-	@mkdir -p bin
-	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="$(LDFLAGS)" -o bin/hanzo ./cmd/hanzo
+# NOTE: cloud builds ONLY the `cloud` binary — the stateless unified API. The Go
+# `hanzo` CLI (cmd/hanzo + cli/) is RETIRED: the shipped `hanzo` is the Rust CLI
+# (~/work/hanzo/cli, `curl hanzo.sh`), which talks to this API over HTTP via its
+# OpenAPI-generated command surface. The `code` wrapper (incl. the zen-tier 1M
+# mechanism) now lives in the Rust CLI. cmd/hanzo + cli/ remain only as the
+# reference for the still-to-port client-side tools (GPU fleet worker `link`,
+# `runner`, `engine`, `security`) and are no longer built here.
 
 run: build ## Run with iam,base,kms,gateway,o11y enabled (matches README quickstart).
 	./bin/$(BIN) --enable=iam,base,kms,gateway,o11y --brand=hanzo --domain=api.hanzo.ai
