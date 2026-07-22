@@ -91,7 +91,7 @@ type attempt struct {
 }
 
 type state struct {
-	attempts []attempt // measured plane, loaded from the append-only store
+	store AttemptStore // the durability seam — fileStore (local dev) or cloud backend
 }
 
 // Mount is the subsystem entrypoint (registered in apps.go).
@@ -100,10 +100,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func build(b cloud.Base) (state, error) {
-	dir := filepath.Join(b.DataDir, "benchmark", "attempts")
-	att := loadAttempts(dir)
-	b.Log.Info("benchmark arena", "prefix", "/v1/benchmark", "benchmarks", len(catalog), "attempts", len(att))
-	return state{attempts: att}, nil
+	// Local-dev backend today; the cloud backend (relational + object store) swaps in
+	// behind AttemptStore with no handler change (the architecture: prod is stateless,
+	// never pod-local). Attempts import idempotently by stable id.
+	store := newFileStore(b.DataDir)
+	b.Log.Info("benchmark arena", "prefix", "/v1/benchmark", "benchmarks", len(catalog), "attempts", len(store.Attempts("")))
+	return state{store: store}, nil
 }
 
 // loadAttempts reads the append-only measured plane (one JSONL per model). Best-effort:
@@ -138,6 +140,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/leaderboard", cloud.Handle(s, getLeaderboard)) // per-model measured ∥ published
 	g.Get("/compare", cloud.Handle(s, getCompare))         // paired common-set (rescue/damage/McNemar)
 	g.Post("/runs", cloud.Handle(s, postRun))              // run a benchmark against a model/endpoint
+	presetRoutes(g, s)                                     // design-your-own router blend (enso-<name>)
 }
 
 func getCatalog(s *cloud.Service[state], c *zip.Ctx) error {
@@ -159,11 +162,17 @@ func getLeaderboard(s *cloud.Service[state], c *zip.Ctx) error {
 	if bench == "" {
 		bench = "gpqa_diamond"
 	}
-	// measured plane: per-model correct/total on this benchmark
+	return c.JSON(http.StatusOK, map[string]any{"benchmark": bench, "rows": computeLeaderboard(s.State.store.Attempts(bench), bench)})
+}
+
+// computeLeaderboard is the pure aggregation (testable): per-model measured accuracy
+// (coverage-aware) layered with the published claim, gap = published − measured. Never
+// blended; a model with only a claim shows measured=nil, and vice versa.
+func computeLeaderboard(attempts []attempt, bench string) []LeaderRow {
 	type acc struct{ ok, n int }
 	m := map[string]*acc{}
-	for _, a := range s.State.attempts {
-		if a.Benchmark != bench {
+	for _, a := range attempts {
+		if a.Benchmark != bench || a.Answer == "" {
 			continue
 		}
 		if m[a.Model] == nil {
@@ -214,7 +223,7 @@ func getLeaderboard(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return mi > mj
 	})
-	return c.JSON(http.StatusOK, map[string]any{"benchmark": bench, "rows": rows})
+	return rows
 }
 
 // getCompare: the ONLY valid arm-vs-arm test — paired on items BOTH completed, with
@@ -229,9 +238,15 @@ func getCompare(s *cloud.Service[state], c *zip.Ctx) error {
 	if a == "" || b == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "compare needs ?a= and ?b= model ids"})
 	}
+	return c.JSON(http.StatusOK, computeCompare(s.State.store.Attempts(bench), bench, a, b))
+}
+
+// computeCompare is the pure paired common-set test (testable): rescue/damage on items
+// BOTH arms completed + exact McNemar. The only valid arm-vs-arm comparison.
+func computeCompare(attempts []attempt, bench, a, b string) map[string]any {
 	ao, bo := map[string]bool{}, map[string]bool{}
-	for _, at := range s.State.attempts {
-		if at.Benchmark != bench {
+	for _, at := range attempts {
+		if at.Benchmark != bench || at.Answer == "" {
 			continue
 		}
 		switch at.Model {
@@ -261,12 +276,12 @@ func getCompare(s *cloud.Service[state], c *zip.Ctx) error {
 			bOnly++
 		}
 	}
-	return c.JSON(http.StatusOK, map[string]any{
+	return map[string]any{
 		"benchmark": bench, "a": a, "b": b, "n_common": nCommon,
 		"a_correct": aOK, "b_correct": bOK,
 		"rescue_a_over_b": aOnly, "rescue_b_over_a": bOnly, "net_a_minus_b": aOnly - bOnly,
 		"mcnemar_p": mcnemarExact(aOnly, bOnly),
-	})
+	}
 }
 
 // mcnemarExact: two-sided exact binomial p on the discordant pairs (b,c).
