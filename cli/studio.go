@@ -72,9 +72,17 @@ func launchStudio(dir string) (*exec.Cmd, error) {
 	// (localComfyUI) so binding wider bought nothing but an open, unauthenticated
 	// /prompt — the hidden-run hole. --worker-mode makes the studio gate its submit
 	// seam (/v1/worker/execute + X-Worker-Token) so only the worker can start a render.
+	// VRAM mode: default --normalvram (safe for smaller BYO GPUs); override with
+	// HANZO_STUDIO_VRAM (e.g. "--highvram") on big-memory boxes (GB10 128G unified) so
+	// the Qwen text-encoder stays resident on-GPU instead of non-deterministically
+	// offloading to CPU — offload makes renders CPU-bound and ~8x slower.
+	vramMode := os.Getenv("HANZO_STUDIO_VRAM")
+	if vramMode == "" {
+		vramMode = "--normalvram"
+	}
 	cmd := exec.Command(studioPython(dir), "main.py",
 		"--listen", "127.0.0.1", "--port", "8188", "--worker-mode",
-		"--normalvram", "--disable-auto-launch",
+		vramMode, "--disable-auto-launch",
 		"--output-directory", filepath.Join(dir, "output"))
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
