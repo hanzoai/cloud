@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/cloud/clients/sites"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers
 	// the "sqlite" database/sql name under both build tags (cgo →
@@ -97,6 +97,18 @@ type Project struct {
 	LastPurgeAt int64
 	CreatedAt   int64
 	UpdatedAt   int64
+	// Analytics is the per-project web-analytics flag, wired ON by default: a
+	// freshly created project collects analytics unless the caller opts out
+	// (analytics:false at create). It is the source of truth the app's
+	// static-builder reads as deployment.analytics, so the beacon is injected with
+	// no opt-in. Mutable via update (read-modify-write); immutable columns are
+	// org/slug/id/created_at.
+	Analytics bool
+	// SpaceId is the project's Base data space — the "<org>/<slug>" namespace under
+	// which its deployed site's form/forum/data submissions live in Hanzo Base
+	// (/v1/base). Set once at create (the app's namespace/repoId convention);
+	// immutable thereafter. A Base space is provisioned best-effort at create.
+	SpaceId string
 }
 
 // Deployment is one deploy attempt for a project, versioned monotonically per
@@ -169,7 +181,9 @@ CREATE TABLE IF NOT EXISTS projects (
   bucket          TEXT NOT NULL DEFAULT '',
   current_deploy  TEXT NOT NULL DEFAULT '',
   created_at      INTEGER NOT NULL,
-  updated_at      INTEGER NOT NULL
+  updated_at      INTEGER NOT NULL,
+  analytics       INTEGER NOT NULL DEFAULT 1,
+  space_id        TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_projects_org_slug ON projects(org, slug);
 CREATE INDEX IF NOT EXISTS ix_projects_org_updated ON projects(org, updated_at);
@@ -239,9 +253,12 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 		`ALTER TABLE projects ADD COLUMN last_purge_at INTEGER NOT NULL DEFAULT 0`,
 		// current_release is the site's serving POINTER: the id of the release whose
 		// immutable prefix the site edge reads. Empty (the default every existing row
-		// gets) means "serve the legacy mutable <org>/<slug>/ prefix" — so this
-		// migration is inert for every site published before releases existed.
+		// gets) means "serve the legacy mutable <org>/<slug>/ prefix".
 		`ALTER TABLE projects ADD COLUMN current_release TEXT NOT NULL DEFAULT ''`,
+		// analytics is wired ON by default (DEFAULT 1) so existing projects collect
+		// too; space_id backfills empty and the deploy/serve paths re-derive it.
+		`ALTER TABLE projects ADD COLUMN analytics INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE projects ADD COLUMN space_id TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := s.db.Exec(alter); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 			return fmt.Errorf("migrate alter: %w", err)
@@ -253,14 +270,15 @@ CREATE INDEX IF NOT EXISTS ix_releases_org_slug_created ON releases(org, slug, c
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at`
+const projectCols = `id,org,slug,name,description,repo_url,repo_branch,repo_provider,framework,status,live_url,bucket,current_deploy,current_release,cache_control,last_purge_at,created_at,updated_at,analytics,space_id`
 
 func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 	var p Project
 	err := sc.Scan(&p.ID, &p.Org, &p.Slug, &p.Name, &p.Description,
 		&p.RepoURL, &p.RepoBranch, &p.RepoProvider, &p.Framework,
 		&p.Status, &p.LiveURL, &p.Bucket, &p.CurrentDeploy, &p.CurrentRelease,
-		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt)
+		&p.CacheControl, &p.LastPurgeAt, &p.CreatedAt, &p.UpdatedAt,
+		&p.Analytics, &p.SpaceId)
 	return p, err
 }
 
@@ -268,11 +286,12 @@ func scanProject(sc interface{ Scan(...any) error }) (Project, error) {
 // errConflict.
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO projects (`+projectCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		p.ID, p.Org, p.Slug, p.Name, p.Description,
 		p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
 		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease,
-		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt)
+		p.CacheControl, p.LastPurgeAt, p.CreatedAt, p.UpdatedAt,
+		p.Analytics, p.SpaceId)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return errConflict
@@ -319,10 +338,10 @@ func (s *Store) ListProjects(ctx context.Context, org string) ([]Project, error)
 // reads-modifies-writes the whole Project; org+slug+id+created_at are immutable.
 func (s *Store) UpdateProject(ctx context.Context, p Project) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,updated_at=?
+		`UPDATE projects SET name=?,description=?,repo_url=?,repo_branch=?,repo_provider=?,framework=?,status=?,live_url=?,bucket=?,current_deploy=?,current_release=?,cache_control=?,last_purge_at=?,analytics=?,updated_at=?
 		 WHERE org=? AND slug=?`,
 		p.Name, p.Description, p.RepoURL, p.RepoBranch, p.RepoProvider, p.Framework,
-		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.UpdatedAt, p.Org, p.Slug)
+		p.Status, p.LiveURL, p.Bucket, p.CurrentDeploy, p.CurrentRelease, p.CacheControl, p.LastPurgeAt, p.Analytics, p.UpdatedAt, p.Org, p.Slug)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
 	}
