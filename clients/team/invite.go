@@ -222,7 +222,13 @@ func (g *api) sendInvite(c *zip.Ctx, params map[string]any) error {
 		g.log.Warn("team: invite — invitee not resolvable in IAM", "org", org, "err", err)
 		return g.fail(c, statusInvite("no Hanzo account for "+email+" in this org"))
 	}
-	if err := g.iamAddMembership(c.Context(), u.idKey(), org, role); err != nil {
+	// Least privilege: a WORKSPACE invite grants at most a coarse `member` at the
+	// ORG level. The rich role (owner/admin) is workspace-scoped only (the local
+	// roster row below); it must never escalate to an org-level IAM admin/owner
+	// grant that other surfaces trust via IsAdmin. Org admin/owner is granted
+	// through a deliberate org-admin path, not a per-workspace invite. Guest stays
+	// guest (lesser privilege, and load-bearing for the team.guests cap).
+	if err := g.iamAddMembership(c.Context(), u.idKey(), org, orgGrantRole(role)); err != nil {
 		g.log.Error("team: invite — add-membership failed", "org", org, "err", err)
 		return g.fail(c, statusInvite("could not record membership: "+err.Error()))
 	}
@@ -277,6 +283,20 @@ func validInviteRole(role string) bool {
 		return true
 	}
 	return false
+}
+
+// orgGrantRole caps the ORG-level IAM membership a workspace invite may confer:
+// owner/admin (workspace-scoped roles) collapse to a coarse `member` at the org
+// level so a per-workspace invite can never mint an org IAM admin/owner. member
+// and guest pass through unchanged (guest is lesser privilege and drives the
+// team.guests cap). The rich role still lands on the local workspace roster row.
+func orgGrantRole(role string) string {
+	switch role {
+	case "owner", "admin":
+		return "member"
+	default:
+		return role
+	}
 }
 
 // statusInvite is the platform Status for an invite that could not be recorded
