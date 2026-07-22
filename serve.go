@@ -256,6 +256,14 @@ func Serve(specs []MountSpec, enable []string) error {
 	// middleware_identity.go / auth_identity.go.
 	app.Use(IdentityMiddleware(cfg))
 
+	// Console identity = the ONE validated principal, not the embedded casibase account
+	// model. When a principal is present, /v1/get-account reflects it so the operator
+	// UI's SuperAdmin gate sees the same owner+isAdmin every /v1/admin/* route already
+	// authorizes on (a PKCE session is not a casibase session — without this the UI
+	// bounced to login despite valid admin API access). No principal → casibase path
+	// unchanged. Runs AFTER IdentityMiddleware, BEFORE MountAll's casibase mount.
+	app.Use(AccountFromPrincipal())
+
 	// Shard router (horizontal writer scale). Runs IMMEDIATELY after SanitizeIdentity
 	// — so it keys on the VALIDATED, server-minted X-Org-Id (never a raw client
 	// header) — and BEFORE audit/rate-limit/billing/subsystems, so a request whose
