@@ -63,6 +63,7 @@ import (
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
+	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
 )
 
@@ -85,10 +86,40 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 // build carries no per-subsystem state — analytics reads the shared warehouse. It
-// only records the informative mount line.
+// records the informative mount line and installs the site-host ingest carve.
 func build(b cloud.Base) (state, error) {
 	b.Log.Info("analytics surface", "warehouse", "hanzo", "brand", b.Brand)
+	installHostCarve(b)
 	return state{}, nil
+}
+
+// installHostCarve wires the published-site-host beacon ingest (the twin of base's
+// sites.SetBaseHostHandler): a page served on a site host can POST its OWN
+// analytics beacon to /v1/analytics{,/batch} or /v1/insights/e and have it ingested
+// into hanzo.events with the tenant FORCED to the site's resolved Org — the
+// server-supplied, host-derived tenant, never a body/header claim. It decodes the
+// same wires the deprecated aliases do and funnels through the SAME write core
+// (captureWithOrg / insightsWithOrg → ingestEvents); captureTenant is deliberately
+// NOT consulted because the host already authorizes the tenant.
+//
+// Gated by the SAME already-existing flag the anonymous ingest path uses —
+// CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
+// host accepts its own beacons out of the box, and turning public capture off also
+// removes this carve (a site host then 405s a beacon POST, unchanged). The org is
+// the resolver's Site.Org; sites.Middleware gates this carve on method POST so the
+// authenticated GET read lenses are never hijacked.
+func installHostCarve(b cloud.Base) {
+	if !publicCaptureEnabled() {
+		b.Log.Info("analytics public-host ingest carve disabled", "flag", publicCaptureEnv)
+		return
+	}
+	sites.SetAnalyticsHostHandler(func(org string, c *zip.Ctx) error {
+		if c.Path() == "/v1/insights/e" {
+			return insightsWithOrg(org, c)
+		}
+		return captureWithOrg(org, c)
+	})
+	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv)
 }
 
 // routes registers the analytics surface. Health owns /v1/analytics/health
