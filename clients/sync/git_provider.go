@@ -4,11 +4,18 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/integrations"
 )
+
+// gitMirrorTokenEnv is the git plane's shared mirror credential (git.mirrorEnvToken):
+// the KMS-injected token mirror.go fetches a private source with, sent ONLY to the
+// allowlisted source host. The sync provider falls back to it when the per-org GitHub
+// App is not connected, so native mirroring uses ONE credential path, not two.
+const gitMirrorTokenEnv = "GIT_MIRROR_TOKEN"
 
 // git_provider.go is the FIRST sync provider: GitHub/GitLab ⇆ Hanzo Git (the NATIVE
 // /v1/git plane in this same binary). It carries no git logic of its own — Reconcile
@@ -120,20 +127,32 @@ func (gitProvider) Reconcile(ctx context.Context, sy Sync, ev Event) (bool, erro
 	return changed, nil
 }
 
-// gitToken resolves the credential for a source fetch: the webhook-supplied token
-// wins; else a GitHub App installation token is minted per org. GitLab (and any
-// other) has no minted token here, so it fetches with whatever the event carried
-// (anonymous for a public repo) — fail-closed for a private repo, never a leak.
+// gitToken resolves the credential for a source fetch, in preference order:
+//
+//   - the webhook-supplied token (already minted for this event), else
+//   - for GitHub, the per-org GitHub App installation token (short-lived, scoped to
+//     the org's OWN installation) when the App is connected AND its creds are present,
+//     else
+//   - the git plane's shared mirror credential (GIT_MIRROR_TOKEN), the SAME token
+//     mirror.go fetches a private source with — so native mirroring has ONE credential
+//     path — else
+//   - anonymous ("").
+//
+// It NEVER hard-fails: a PUBLIC repo needs no credential, so failing the whole
+// reconcile because the App is not connected would wrongly freeze the public mirrors
+// too. A PRIVATE repo with no available credential simply fails at the git layer
+// (logged by the engine) — the honest signal to connect the App or set the mirror
+// token, never a leak. GitLab (and any other) has no minted token here, so it fetches
+// with whatever the event carried.
 func gitToken(ctx context.Context, provider, org, eventToken string) (string, error) {
 	if strings.TrimSpace(eventToken) != "" {
 		return eventToken, nil
 	}
 	if strings.EqualFold(provider, provGitHub) {
-		tok, err := integrations.InstallationToken(ctx, org)
-		if err != nil {
-			return "", fmt.Errorf("mint github token: %w", err)
+		if tok, err := integrations.InstallationToken(ctx, org); err == nil && strings.TrimSpace(tok) != "" {
+			return tok, nil
 		}
-		return tok, nil
+		return strings.TrimSpace(os.Getenv(gitMirrorTokenEnv)), nil
 	}
 	return "", nil
 }
