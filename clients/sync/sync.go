@@ -33,6 +33,11 @@ type state struct {
 // Shutdown — an atomic.Pointer so a detached run reads it race-free (nil ⇒ unmounted).
 var mounted atomic.Pointer[cloud.Service[state]]
 
+// schedStop stops the periodic reconcile scheduler (scheduler.go). Set once at Mount,
+// called once at Shutdown — both lifecycle-serialized, never concurrent. Idempotent
+// (startScheduler's closure self-guards), nil-safe.
+var schedStop func()
+
 // storeFor resolves the caller's org-scoped syncs store (one SQLite file at
 // {DataDir}/orgs/{org}/sync.db). Sync is org-scoped, not project-scoped — a link
 // binds two endpoints within one org.
@@ -61,13 +66,20 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	routes(app, s)
 	registerProvider(gitProvider{})
 	cloud.RegisterSync(reconcileEvent)
+	schedStop = startScheduler(s) // freshness: periodic reconcile of every poll sync (env-gated)
 
 	b.Log.Info("sync mounted", "brand", deps.Brand, "providers", "git")
 	return nil
 }
 
-// Shutdown closes every open per-org store. Idempotent.
+// Shutdown stops the reconcile scheduler (waiting for an in-flight sweep to drain) and
+// then closes every open per-org store — in THAT order, so a store is never closed out
+// from under a running reconcile. Idempotent.
 func Shutdown() error {
+	if schedStop != nil {
+		schedStop()
+		schedStop = nil
+	}
 	s := mounted.Load()
 	if s == nil {
 		return nil
