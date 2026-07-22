@@ -46,6 +46,7 @@
 package projects
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -56,6 +57,7 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/clients/base"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/sites"
 	"github.com/zap-proto/zip"
@@ -105,6 +107,12 @@ type state struct {
 	// canonical live URL of every deployed site is https://<slug>.<apex>, the pretty
 	// host the sites edge (clients/sites) serves — never a raw S3 URL.
 	apex string
+	// ensureSpace provisions a NEW project's Base data space (its form/forum/data
+	// submissions collection) so it accepts submissions at /v1/base out of the box.
+	// Wired at Mount to clients/base.EnsureSpace; overridable in tests. Best-effort:
+	// see provisionSpace — a failure NEVER fails project creation. nil disables the
+	// side effect entirely (space is provisioned lazily on first real use).
+	ensureSpace func(ctx context.Context, org string) error
 }
 
 // mounted is the active service so Shutdown can release the store. The unified
@@ -135,8 +143,14 @@ type projectView struct {
 	// in effect (TTL) and the last edge-purge time, so a console can show freshness.
 	CacheControl string `json:"cacheControl,omitempty"`
 	LastPurgeAt  int64  `json:"lastPurgeAt,omitempty"`
-	CreatedAt    int64  `json:"createdAt"`
-	UpdatedAt    int64  `json:"updatedAt"`
+	// Analytics is the wired-by-default web-analytics flag (default true). It is the
+	// value the app's static-builder reads as deployment.analytics to inject the
+	// beacon. Space is the project's Base data space ("<org>/<slug>") a deployed
+	// site posts form/forum/data submissions to under /v1/base.
+	Analytics bool   `json:"analytics"`
+	Space     string `json:"space,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 func toProjectView(p Project) projectView {
@@ -145,6 +159,7 @@ func toProjectView(p Project) projectView {
 		Repo:      repoView{URL: p.RepoURL, Branch: p.RepoBranch, Provider: p.RepoProvider},
 		Framework: p.Framework, Status: p.Status, LiveURL: p.LiveURL, Bucket: p.Bucket,
 		CurrentDeploymentID: p.CurrentDeploy, CacheControl: p.CacheControl, LastPurgeAt: p.LastPurgeAt,
+		Analytics: p.Analytics, Space: p.SpaceId,
 		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
@@ -204,6 +219,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		ai:           deps.AI, // may be nil (no gateway) — buildSite degrades to 503.
 		bill:         cloud.NewResourceMeter(deps, hostingProvider),
 		apex:         env("CLOUD_SITES_APEX", "hanzo.app"), // the pretty <slug>.<apex> the sites edge serves.
+		ensureSpace:  base.EnsureSpace,                     // wired-by-default Base data space (fail-soft).
 	}}
 	mounted = s
 
@@ -305,6 +321,10 @@ type createReq struct {
 		URL    string `json:"url"`
 		Branch string `json:"branch"`
 	} `json:"repo"`
+	// Analytics is the opt-OUT for the wired-by-default analytics beacon: absent
+	// (nil) ⇒ ON (the default); explicit false ⇒ off. A pointer so "unset" is
+	// distinguishable from "false" — the only way to turn the default off.
+	Analytics *bool `json:"analytics"`
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
@@ -364,13 +384,53 @@ func createProject(s *cloud.Service[state], c *zip.Ctx, org string, body createR
 	if p.RepoBranch == "" && p.RepoURL != "" {
 		p.RepoBranch = "main"
 	}
+	// The ONE place every create path (POST /v1/projects, /v1/projects/fork,
+	// /v1/sites) applies the wired-by-default subsystems: analytics ON unless the
+	// caller opted out, and the project's Base data-space namespace. Pure, so the
+	// defaults are set deterministically before persist.
+	setProjectDefaults(&p, body.Analytics)
 	if err := s.State.store.CreateProject(c.Context(), p); err != nil {
 		if errors.Is(err, errConflict) {
 			return zip.ErrConflict("project slug already exists in this org")
 		}
 		return zip.Errorf(http.StatusInternalServerError, "persist: %v", err)
 	}
+	// Best-effort provision the Base data space (form/forum/data submissions). Runs
+	// only after a successful persist so a conflicting create provisions nothing;
+	// a Base hiccup is logged and swallowed — it never fails the create.
+	provisionSpace(s, c.Context(), &p)
 	return c.JSON(http.StatusCreated, toProjectView(p))
+}
+
+// setProjectDefaults applies the wired-by-default project settings to a NEW
+// project: analytics ON unless the caller opted out (analytics:false), and the
+// Base data-space namespace ("<org>/<slug>" — the app's namespace/repoId
+// convention, same layout as the S3 sitePrefix). Pure (no I/O), so it is the ONE
+// deterministic place defaults are decided; every create path funnels through it
+// via createProject. Default-ON but overridable: a nil analytics ⇒ ON, an
+// explicit false ⇒ off.
+func setProjectDefaults(p *Project, analytics *bool) {
+	p.Analytics = analytics == nil || *analytics
+	p.SpaceId = sitePrefix(p.Org, p.Slug)
+}
+
+// provisionSpace best-effort-provisions a new project's Base data space (the
+// submissions collection its deployed site POSTs form/forum/data to). It is
+// FAIL-SOFT by construction: a disabled embed (ErrNotEmbedded) or any transient
+// Base error is logged and swallowed, so it can NEVER fail project creation — the
+// same graceful-degradation policy as the edge cache purge (onPublish). The space
+// is idempotent and org-level, so a later deploy or first submission re-ensures it.
+func provisionSpace(s *cloud.Service[state], ctx context.Context, p *Project) {
+	if s.State.ensureSpace == nil {
+		return
+	}
+	if err := s.State.ensureSpace(ctx, p.Org); err != nil {
+		if errors.Is(err, base.ErrNotEmbedded) {
+			s.Log.Info("base embed disabled; project data space deferred (set CLOUD_BASE_EMBED=1)", "org", p.Org, "space", p.SpaceId)
+			return
+		}
+		s.Log.Warn("provision base space failed (continuing)", "org", p.Org, "space", p.SpaceId, "err", err)
+	}
 }
 
 func list(s *cloud.Service[state], c *zip.Ctx) error {
