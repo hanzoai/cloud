@@ -130,6 +130,16 @@ type ChatResponse struct {
 	TotalTokens      int
 }
 
+// ErrUpstreamBusy marks a TRANSIENT upstream inference failure that a caller may
+// safely retry — an overloaded gateway (HTTP 429/5xx) or an empty-choices /
+// "Platform overloaded" response. A completion has NO side effect until it
+// succeeds, so retrying it never double-charges. The AI client tags such
+// failures with this sentinel (errors.Is-detectable); the agent runner tests for
+// it to decide whether to retry the same model and, if still throttled, fail over
+// to a reliable one. A NON-transient failure (400, auth, an unserved model) is
+// never tagged, so it fails fast rather than burning retries that will repeat it.
+var ErrUpstreamBusy = errors.New("upstream busy")
+
 // EmbedRequest is the embeddings call. Inputs are embedded in order; the result is
 // one vector per input, aligned by index. Org and Project are the billing SCOPE,
 // identical in meaning to ChatRequest's, so embeddings meter and observe through
