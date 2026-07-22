@@ -153,6 +153,19 @@ func (s *store) List(ctx context.Context, org string) ([]Sync, error) {
 	return collect(rows)
 }
 
+// ListAll returns EVERY sync in this store regardless of org — safe because a sync
+// file is physically ONE org's (OrgDB isolation), so this IS that org's full set. The
+// scheduler's discovery read uses it: it opens a store by its on-disk slug path (no org
+// in hand) and reads the org off each returned row.
+func (s *store) ListAll(ctx context.Context) ([]Sync, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+syncCols+` FROM sync ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list all sync: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return collect(rows)
+}
+
 // ResolveBySource returns the org's syncs of kind whose SOURCE provider matches —
 // the webhook resolution set (the caller further filters by locator/repo). One
 // query, index-backed.
