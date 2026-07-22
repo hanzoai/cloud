@@ -46,6 +46,27 @@ func (r siteResolver) Resolve(ctx context.Context, slug string) (sites.Site, boo
 	}, true, nil
 }
 
+// ResolveOrg resolves a slug PINNED to a specific org — the site path for a
+// first-party host (cd.hanzo.ai). It NEVER falls back to unique-across-orgs, so an
+// internal host is served ONLY by OUR own project, never a customer's same-named one.
+func (r siteResolver) ResolveOrg(ctx context.Context, org, slug string) (sites.Site, bool, error) {
+	p, err := r.store.ResolveOrgLiveSlug(ctx, org, slug)
+	if errors.Is(err, errNotFound) {
+		return sites.Site{}, false, nil
+	}
+	if err != nil {
+		return sites.Site{}, false, err
+	}
+	return sites.Site{
+		Org:                  p.Org,
+		Slug:                 p.Slug,
+		Bucket:               p.Bucket,
+		Prefix:               servePrefix(p),
+		Status:               p.Status,
+		CrossOriginIsolation: crossOriginIsolated(p.Framework),
+	}, true, nil
+}
+
 // servePrefix is the ONE rule for which S3 prefix a site serves from, and the
 // read side of the release pointer: a project with an active release serves that
 // release's immutable prefix; a project without one serves the legacy mutable
