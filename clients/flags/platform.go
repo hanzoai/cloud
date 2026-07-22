@@ -23,8 +23,7 @@ func init() {
 		{Key: "public_signup", Category: "Signup", Label: "Public open signup", Desc: "Allow anyone to create an account (off = invite / waitlist only).", Type: TypeBool, Default: "false"},
 
 		// ── Subsystem activation (boot-time; applying a flip needs an operator reconcile) ──
-		{Key: "subsystem_iam_active", Category: "Subsystems", Label: "IAM (canary auth cutover)", Desc: "Serve identity from the embedded IAM. CANARY-GATED staged auth cutover; applied at boot via CLOUD_ENABLE.", Type: TypeBool, Default: "false", ReadOnly: true},
-		{Key: "subsystem_iam2_active", Category: "Subsystems", Label: "IAM v2 (clean-room, beego-free)", Desc: "Serve identity from the clean-room iam2 instead of the beego/Casdoor embed. Selected at boot via CLOUD_IAM_IMPL=iam2 (one selector, applied on the next reconcile). Gate before flipping: the IAM cutover parity suite (universe e2e/50-iam-cutover-parity) must be green against the iam2 shadow.", Type: TypeBool, Default: "false", ReadOnly: true},
+		{Key: "subsystem_iam_active", Category: "Subsystems", Label: "IAM (canary auth cutover)", Desc: "Serve identity from the embedded clean-room iam-v2 (zip-native, beego-free; the Casdoor iam-v1 embed is retired). CANARY-GATED staged auth cutover; applied at boot via CLOUD_ENABLE. Gate before flipping: the IAM cutover parity suite (universe e2e/50-iam-cutover-parity) must be green.", Type: TypeBool, Default: "false", ReadOnly: true},
 		{Key: "subsystem_ingress_active", Category: "Subsystems", Label: "Ingress edge", Desc: "Serve the embedded ingress edge (routes/TLS/ACME). Applied at boot via CLOUD_ENABLE.", Type: TypeBool, Default: "false", ReadOnly: true},
 		{Key: "subsystem_pubsub_active", Category: "Subsystems", Label: "PubSub (NATS+JetStream)", Desc: "Serve the embedded messaging plane. Applied at boot via CLOUD_PUBSUB_ENABLED.", Type: TypeBool, Env: "CLOUD_PUBSUB_ENABLED", Default: "false", ReadOnly: true},
 
