@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver (registers the
 	// "sqlite" name under both build tags: cgo→mattn+SQLCipher, !cgo→modernc).
@@ -16,11 +17,19 @@ var errNotFound = errors.New("link: not found")
 
 // Store is the login-manager database. ONE SQLite file ({DataDir}/link.db) holds
 // every org's Links; tenancy is the (org, subject) pair. It holds NO metering
-// client — it is structurally incapable of charging commerce, and no usage series:
-// account-usage lives in its own subsystem (clients/usage), so link owns links and
-// nothing usage.
+// client — it is structurally incapable of charging commerce.
+//
+// It also owns the account-usage SERIES in the datastore (datastore.go): the Link
+// row is an account's latest state, the series is its history. Both are the same
+// (org, subject) tenancy, so they live behind one store rather than two seams that
+// could drift apart on isolation. dsReady latches the idempotent warehouse DDL —
+// on success only, so a datastore still connecting at boot is retried, not
+// permanently written off.
 type Store struct {
 	db *sql.DB
+
+	dsMu    sync.Mutex
+	dsReady bool
 }
 
 func openStore(path string) (*Store, error) {
