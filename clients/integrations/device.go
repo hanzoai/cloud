@@ -10,9 +10,20 @@ import (
 )
 
 // authClient is the shared HTTP client for provider auth-protocol calls
-// (openai.go / anthropic.go / copilot.go). 30 s is the per-request budget both
-// the OpenAI and GitHub device protocols specify.
-var authClient = &http.Client{Timeout: 30 * time.Second}
+// (openai.go / anthropic.go / copilot.go / keyverify.go). 30 s is the per-request
+// budget both the OpenAI and GitHub device protocols specify.
+//
+// Redirects are NEVER followed: a 3xx is surfaced as the final response, so it
+// lands in the non-2xx (fail-closed) branch of every verify. This closes two
+// holes on a server-side auth call, which never has a legitimate redirect: a
+// provider answering bad auth with 302→200 would otherwise verify (fail-open
+// amplifier), and Go forwards CUSTOM credential headers (X-Shopify-Access-Token,
+// Api-Key, X-Postmark-Server-Token) across a cross-host redirect (it strips only
+// Authorization/Cookie/WWW-Authenticate).
+var authClient = &http.Client{
+	Timeout:       30 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 // deviceInterval is the default poll cadence (seconds) when a provider start
 // carries none. begin() is the SOLE interval normalizer — providers pass wire
