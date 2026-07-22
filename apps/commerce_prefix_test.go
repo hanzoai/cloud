@@ -33,6 +33,7 @@ func TestCommercePrefixesPinned(t *testing.T) {
 		"/v1/billing/webhooks":      false,
 		"/v1/store":                 false,
 		"/v1/catalog":               false,
+		"/v1/plans":                 false,
 	}
 	for _, p := range commercePrefixes {
 		if _, ok := want[p]; ok {
@@ -94,6 +95,15 @@ func TestStoreSurfaceRoutedToCommerceNotAIGate(t *testing.T) {
 	}
 	if code, _ := doReq(t, app, http.MethodPut, "/v1/catalog/entries/cloud-starter"); code == http.StatusPaymentRequired {
 		t.Fatalf("PUT /v1/catalog/entries/:slug fell through to the AI balance gate (402) — the whole catalog CMS must be commerce-owned")
+	}
+
+	// The platform-admin plan authority CMS (increment 3a) must also reach commerce —
+	// requireSuperAdmin-gated (anon → 401/403) — never the AI /v1/* 402 gate.
+	if code, _ := doReq(t, app, http.MethodGet, "/v1/plans/entries"); code == http.StatusPaymentRequired {
+		t.Fatalf("GET /v1/plans/entries fell through to the AI balance gate (402) — /v1/plans must be a commercePrefix so the plan authority CMS reaches commerce")
+	}
+	if code, _ := doReq(t, app, http.MethodPut, "/v1/plans/entries/pro"); code == http.StatusPaymentRequired {
+		t.Fatalf("PUT /v1/plans/entries/:slug fell through to the AI balance gate (402) — the whole plan authority CMS must be commerce-owned")
 	}
 }
 
