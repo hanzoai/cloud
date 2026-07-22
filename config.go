@@ -242,6 +242,18 @@ type Config struct {
 	// → hanzo.ai). Env CLOUD_SITES_SELF_DOMAINS (comma-separated) overrides.
 	SitesSelfDomains []string
 
+	// SitesFirstPartyApex is an internal SelfDomain (hanzo.ai) on which we serve a
+	// small OPT-IN set of OUR OWN first-party sites (SitesFirstPartySites). Unlike
+	// SitesApex — multi-tenant, sites-by-default with a reserved denylist — the brand
+	// apex carries api/console/iam/kms/…, so it serves a site ONLY for an explicitly
+	// allow-listed label; every other host falls through protected by default (no
+	// denylist to keep complete). Env CLOUD_SITES_FIRSTPARTY_APEX (default hanzo.ai).
+	SitesFirstPartyApex string
+	// SitesFirstPartySites is the explicit allowlist of first-party site labels on
+	// SitesFirstPartyApex (our internal pages: cd, flow, gallery). A user site never
+	// lands here — users get <slug>.hanzo.app. Env CLOUD_SITES_FIRSTPARTY (comma-sep).
+	SitesFirstPartySites []string
+
 	// Endpoints for out-of-process subsystems (payments, vault). Empty
 	// means the subsystem is disabled OR the deployment expects a default
 	// service-discovery resolution.
@@ -368,15 +380,17 @@ var flagsOnce sync.Once
 // LoadConfig reads flags + env into a Config. Flags override env.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ListenAddr:       getenv("CLOUD_LISTEN", ":8080"),
-		ZAPListenAddr:    getenv("CLOUD_ZAP_LISTEN", ":9653"),
-		HealthListenAddr: getenv("CLOUD_HEALTH_LISTEN", ":9090"),
-		AdminListenAddr:  getenv("CLOUD_ADMIN_LISTEN", ":8081"),
-		ReadBufferSize:   getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
-		BodyLimit:        getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
-		SitesApex:        getenv("CLOUD_SITES_APEX", "hanzo.app"),
-		SitesReserved:    splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
-		SitesSelfDomains: splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
+		ListenAddr:           getenv("CLOUD_LISTEN", ":8080"),
+		ZAPListenAddr:        getenv("CLOUD_ZAP_LISTEN", ":9653"),
+		HealthListenAddr:     getenv("CLOUD_HEALTH_LISTEN", ":9090"),
+		AdminListenAddr:      getenv("CLOUD_ADMIN_LISTEN", ":8081"),
+		ReadBufferSize:       getenvInt("GATEWAY_READ_BUFFER_SIZE", 32768),
+		BodyLimit:            getenvInt("GATEWAY_BODY_LIMIT", 16<<20),
+		SitesApex:            getenv("CLOUD_SITES_APEX", "hanzo.app"),
+		SitesReserved:        splitTrim(getenv("CLOUD_SITES_RESERVED", "www,api,app,admin,mail,ftp,cdn,static,assets")),
+		SitesSelfDomains:     splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
+		SitesFirstPartyApex:  getenv("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
+		SitesFirstPartySites: splitTrim(getenv("CLOUD_SITES_FIRSTPARTY", "cd,flow,gallery")),
 
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
