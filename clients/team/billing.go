@@ -68,7 +68,11 @@ func (b *billingService) plan(c *zip.Ctx) error {
 	if err != nil {
 		return zip.ErrUnauthorized("sign in to view billing")
 	}
-	seats, guests := b.accounts.Seats(c.Context(), org)
+	seats, guests, err := b.accounts.Seats(c.Context(), org)
+	if err != nil {
+		// A real seat-read failure must surface, not render as a false "0 members".
+		return zip.Errorf(http.StatusBadGateway, "seat count unavailable")
+	}
 	out := planInfo{Seats: seats, Guests: guests, UpgradeURL: upgradeURL}
 	// Best-effort licensing read — the SAME seams entitle() gates login with.
 	// An infra absence (nil commerce, resolution error) leaves plan empty.
