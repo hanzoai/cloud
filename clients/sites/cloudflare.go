@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	luxlog "github.com/luxfi/log"
@@ -202,6 +204,27 @@ func (p *Purger) flush(key string, tags []string) {
 	if err := p.call(ctx, tags); err != nil {
 		p.log.Warn("coalesced cloudflare purge failed (serving stale until TTL)", "tags", tags, "err", err)
 	}
+}
+
+// takeToken admits a real API call only while the current minute is under the
+// process-wide ceiling, protecting the shared Cloudflare account quota from any
+// single tenant spreading purges across many sites. It rolls the counter at each
+// minute boundary (a fixed window); exceeding the ceiling returns false and the
+// caller degrades to stale-until-TTL — the same documented failure mode as an
+// unconfigured token.
+func (p *Purger) takeToken() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := time.Now()
+	if now.Sub(p.minute) >= time.Minute {
+		p.minute = now
+		p.inMinute = 0
+	}
+	if p.inMinute >= p.ceiling {
+		return false
+	}
+	p.inMinute++
+	return true
 }
 
 // call performs the purge API request, subject to the process-wide ceiling that
