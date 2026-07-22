@@ -185,9 +185,18 @@ func New(cfg Config, log luxlog.Logger) *Server {
 		}
 		for _, l := range cfg.FirstPartySites {
 			l = strings.ToLower(strings.TrimSpace(l))
-			if l != "" {
-				fpSites[l] = true
+			if l == "" {
+				continue
 			}
+			// Belt-and-suspenders on the brand apex (RED F-2): NEVER let a reserved
+			// label (api/login/wallet/console/…) be published as a first-party site,
+			// even if an operator lists it — those hosts must stay real app/auth
+			// surfaces. Drop it loudly; it can never resolve as a site.
+			if IsReserved(l) {
+				log.Warn("first-party site label is reserved — dropped", "label", l)
+				continue
+			}
+			fpSites[l] = true
 		}
 	} else {
 		fpApex = "" // no owning org ⇒ never serve a first-party site (fail-closed)
