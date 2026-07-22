@@ -70,6 +70,11 @@ type Site struct {
 // published subdomain (honest 404); err ⇒ a real store failure (honest 500).
 type Resolver interface {
 	Resolve(ctx context.Context, slug string) (Site, bool, error)
+	// ResolveOrg resolves a slug PINNED to org — the first-party-host path
+	// (cd.hanzo.ai → org "hanzo"). It must NEVER fall back to unique-across-orgs, so
+	// an internal host can only ever be served by OUR own project, never shadowed by
+	// a customer who happens to name a project the same.
+	ResolveOrg(ctx context.Context, org, slug string) (Site, bool, error)
 }
 
 var (
@@ -119,6 +124,12 @@ type Config struct {
 	// default). The apex itself is unaffected (hanzo.app stays the site default).
 	FirstPartyApex  string
 	FirstPartySites []string
+	// FirstPartyOrg is the org that OWNS the first-party sites (hanzo). A first-party
+	// host resolves PINNED to this org — never unique-across-orgs — so a customer's
+	// same-named project can never be served on our internal apex. Empty ⇒ the
+	// first-party sites cannot resolve (fail-closed), so it must be set when
+	// FirstPartyApex is.
+	FirstPartyOrg string
 }
 
 // Server is the host-routed public site edge. It holds the S3 access path
@@ -130,6 +141,7 @@ type Server struct {
 	selfDomains     []string        // OUR own registrable domains — never custom-domain candidates
 	firstPartyApex  string          // internal apex serving OUR opt-in first-party sites (hanzo.ai); "" = none
 	firstPartySites map[string]bool // the explicit allowlist of first-party site labels on that apex
+	firstPartyOrg   string          // the org that owns the first-party sites — resolution is PINNED to it
 	admin           s3admin.Admin
 	log             luxlog.Logger
 }
@@ -160,8 +172,13 @@ func New(cfg Config, log luxlog.Logger) *Server {
 	// domain (a first-party site host is never a customer custom-domain candidate),
 	// and build the explicit allowlist. Empty apex or empty allowlist ⇒ disabled.
 	fpApex := strings.ToLower(strings.TrimSpace(cfg.FirstPartyApex))
+	fpOrg := strings.ToLower(strings.TrimSpace(cfg.FirstPartyOrg))
 	fpSites := map[string]bool{}
-	if fpApex != "" {
+	// First-party sites require BOTH an apex AND an owning org: the org PINS
+	// resolution so a customer's same-named project can never shadow an internal
+	// host. Missing either ⇒ disabled (fail-closed) — no <label>.<fpApex> ever
+	// resolves as a site; every such host falls through to the normal pipeline.
+	if fpApex != "" && fpOrg != "" {
 		if !seen[fpApex] {
 			seen[fpApex] = true
 			self = append(self, fpApex)
@@ -172,8 +189,10 @@ func New(cfg Config, log luxlog.Logger) *Server {
 				fpSites[l] = true
 			}
 		}
+	} else {
+		fpApex = "" // no owning org ⇒ never serve a first-party site (fail-closed)
 	}
-	return &Server{apex: apex, selfDomains: self, firstPartyApex: fpApex, firstPartySites: fpSites, admin: s3admin.New(), log: log.New("subsystem", "sites")}
+	return &Server{apex: apex, selfDomains: self, firstPartyApex: fpApex, firstPartySites: fpSites, firstPartyOrg: fpOrg, admin: s3admin.New(), log: log.New("subsystem", "sites")}
 }
 
 // Middleware is the host-router. Three outcomes, in order:
@@ -208,13 +227,13 @@ func isBasePath(p string) bool {
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
 		raw := c.Fiber().Hostname()
-		if slug, ok := s.siteSlug(raw); ok {
+		if slug, firstParty, ok := s.siteSlug(raw); ok {
 			if baseHostHandler != nil && isBasePath(c.Path()) {
-				if site, ok := s.resolveLive(c.Context(), slug); ok {
+				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {
 					return baseHostHandler(site.Org, c)
 				}
 			}
-			return s.serve(c, slug)
+			return s.serve(c, slug, firstParty)
 		}
 		if host := hostOnly(raw); s.customCandidate(host) {
 			if site, ok := s.resolveLive(c.Context(), host); ok {
@@ -275,6 +294,29 @@ func (s *Server) resolveLive(ctx context.Context, key string) (Site, bool) {
 	return site, true
 }
 
+// resolveLivePinned resolves a slug to a LIVE Site, org-PINNED for a first-party
+// host (ResolveOrg over s.firstPartyOrg — never the unique-across-orgs fallback, so
+// a customer's same-named project can never be served on our internal apex) and via
+// the normal resolver otherwise. Same ok=false failure modes as resolveLive.
+func (s *Server) resolveLivePinned(ctx context.Context, slug string, firstParty bool) (Site, bool) {
+	if !firstParty {
+		return s.resolveLive(ctx, slug)
+	}
+	r := currentResolver()
+	if r == nil {
+		return Site{}, false
+	}
+	site, found, err := r.ResolveOrg(ctx, s.firstPartyOrg, slug)
+	if err != nil {
+		s.log.Error("resolve failed", "slug", slug, "org", s.firstPartyOrg, "err", err)
+		return Site{}, false
+	}
+	if !found || site.Status != "live" {
+		return Site{}, false
+	}
+	return site, true
+}
+
 // serveCustom serves a resolved custom-domain Site. It shares the object-serving
 // core (streamSite) with the slug path; only the method + storage guards are
 // re-applied here (the slug path applies them in serve).
@@ -303,7 +345,10 @@ func (s *Server) serveCustom(c *zip.Ctx, site Site) error {
 // into site_hosts at publish (projects.onPublish), so the resolver's exact-host
 // match finds it. The bare apex, a single-label host, a >2-label host, reserved
 // or malformed labels are NOT sites — they fall through to the normal pipeline.
-func (s *Server) siteSlug(host string) (string, bool) {
+// siteSlug resolves a Host to a site slug. `firstParty` is true when the host is
+// under the internal first-party apex — its resolution MUST be org-pinned (serve
+// routes it through ResolveOrg, never the unique-across-orgs fallback).
+func (s *Server) siteSlug(host string) (slug string, firstParty bool, ok bool) {
 	host = strings.ToLower(strings.TrimSpace(host))
 	if i := strings.IndexByte(host, ':'); i >= 0 {
 		host = host[:i] // strip any :port
@@ -322,14 +367,14 @@ func (s *Server) siteSlug(host string) (string, bool) {
 		if strings.HasSuffix(host, fpSuffix) {
 			label := strings.TrimSuffix(host, fpSuffix)
 			if s.firstPartySites[label] && !strings.Contains(label, ".") && slugRE.MatchString(label) {
-				return label, true
+				return label, true, true
 			}
-			return "", false
+			return "", false, false
 		}
 	}
 	suffix := "." + s.apex
 	if !strings.HasSuffix(host, suffix) {
-		return "", false
+		return "", false, false
 	}
 	label := strings.TrimSuffix(host, suffix)
 	// EXACTLY ONE non-reserved slug label — the bare `<slug>.<apex>`. That is the
@@ -341,15 +386,15 @@ func (s *Server) siteSlug(host string) (string, bool) {
 	// exactly one live project (explicit binding, else a unique live slug across
 	// orgs) — an ambiguous bare host is an honest 404.
 	if strings.Contains(label, ".") || IsReserved(label) || !slugRE.MatchString(label) {
-		return "", false
+		return "", false, false
 	}
-	return label, true
+	return label, false, true
 }
 
 // serve resolves the slug to its Site and streams the requested object from the
 // project's S3 prefix. Every failure renders an honest page; nothing is ever read
 // outside `<Bucket>/<Prefix>/`.
-func (s *Server) serve(c *zip.Ctx, slug string) error {
+func (s *Server) serve(c *zip.Ctx, slug string, firstParty bool) error {
 	c.SetHeader("X-Hanzo-Site", slug)
 
 	// A published site is a static read surface: only GET/HEAD. Anything else is
@@ -363,7 +408,18 @@ func (s *Server) serve(c *zip.Ctx, slug string) error {
 	if r == nil {
 		return s.errorPage(c, http.StatusNotFound, "site not found")
 	}
-	site, found, err := r.Resolve(c.Context(), slug)
+	var (
+		site  Site
+		found bool
+		err   error
+	)
+	if firstParty {
+		// Internal first-party host — resolve PINNED to the owning org, never the
+		// unique-across-orgs fallback, so a customer's same-named project can't shadow it.
+		site, found, err = r.ResolveOrg(c.Context(), s.firstPartyOrg, slug)
+	} else {
+		site, found, err = r.Resolve(c.Context(), slug)
+	}
 	if err != nil {
 		s.log.Error("resolve failed", "slug", slug, "err", err)
 		return s.errorPage(c, http.StatusInternalServerError, "temporarily unavailable")
