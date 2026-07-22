@@ -615,7 +615,14 @@ func withSource(p map[string]any, source string) map[string]any {
 
 // deprecatedOnce records one deprecation log per alias path per process, so a
 // high-volume ingest alias signals its sunset exactly once instead of flooding.
-var deprecatedOnce sync.Map
+// A plain mutex-guarded map (the alias set is tiny — /v1/analytics, /batch,
+// /tracker) rather than sync.Map: the latter (Go's HashTrieMap) was panicking
+// "ran out of hash bits" under the hot ingest path, 500-ing EVERY capture. A
+// bounded map+mutex has no trie state to corrupt and cannot panic here.
+var (
+	deprecatedMu   sync.Mutex
+	deprecatedSeen = make(map[string]struct{}, 8)
+)
 
 // deprecated logs (once per path) that a superseded ingest alias was hit, pointing
 // callers at the canonical front door. It NEVER changes behavior — the alias keeps
@@ -623,7 +630,13 @@ var deprecatedOnce sync.Map
 // warehouse).
 func deprecated(s *cloud.Service[state], c *zip.Ctx, canonical string) {
 	p := c.Path()
-	if _, seen := deprecatedOnce.LoadOrStore(p, struct{}{}); seen {
+	deprecatedMu.Lock()
+	_, seen := deprecatedSeen[p]
+	if !seen {
+		deprecatedSeen[p] = struct{}{}
+	}
+	deprecatedMu.Unlock()
+	if seen {
 		return
 	}
 	s.Log.Warn("deprecated analytics ingest endpoint; migrate to the canonical event front door",
