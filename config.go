@@ -253,6 +253,11 @@ type Config struct {
 	// SitesFirstPartyApex (our internal pages: cd, flow, gallery). A user site never
 	// lands here — users get <slug>.hanzo.app. Env CLOUD_SITES_FIRSTPARTY (comma-sep).
 	SitesFirstPartySites []string
+	// SitesFirstPartyOrg owns the first-party sites (hanzo). First-party host
+	// resolution is PINNED to this org so a customer project can never shadow an
+	// internal host (cd.hanzo.ai serves ONLY org hanzo's "cd"). Empty ⇒ first-party
+	// sites are disabled (fail-closed). Env CLOUD_SITES_FIRSTPARTY_ORG (default hanzo).
+	SitesFirstPartyOrg string
 
 	// Endpoints for out-of-process subsystems (payments, vault). Empty
 	// means the subsystem is disabled OR the deployment expects a default
@@ -391,6 +396,7 @@ func LoadConfig() *Config {
 		SitesSelfDomains:     splitTrim(getenv("CLOUD_SITES_SELF_DOMAINS", "")),
 		SitesFirstPartyApex:  getenv("CLOUD_SITES_FIRSTPARTY_APEX", "hanzo.ai"),
 		SitesFirstPartySites: splitTrim(getenv("CLOUD_SITES_FIRSTPARTY", "cd,flow,gallery")),
+		SitesFirstPartyOrg:   getenv("CLOUD_SITES_FIRSTPARTY_ORG", "hanzo"),
 
 		MarkdownDefaultPrefixes: splitTrim(getenv("CLOUD_MARKDOWN_DEFAULT_PREFIXES", "")),
 		Brand:                   getenv("CLOUD_BRAND", DefaultBrand),
