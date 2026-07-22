@@ -8,7 +8,7 @@ package cli
 // cosign-signed binary from the latest github.com/hanzoai/engine release), so the
 // CLI never re-implements platform detection or verification. `serve` launches the
 // installed binary (`hanzoai --port P run -m MODEL`); `status` probes it, reusing
-// the same /v1/models probe `hanzo gpu connect --serve-engine` advertises with.
+// the same /v1/models probe `hanzo link --serve-engine` advertises with.
 
 import (
 	"context"
