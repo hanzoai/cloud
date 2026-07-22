@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/types"
 	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/types"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
@@ -88,7 +88,10 @@ func mountBilled(t *testing.T, commerceURL string, ai types.AIClient) *zip.App {
 		t.Fatalf("metering.New: %v", err)
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
-	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, Metering: m}
+	// AIFallbackModel="best" arms the agent runner's failover so the retry/failover
+	// tests exercise the real escalation path; it never fires for a run whose model
+	// answers (or fails non-transiently), so the other billed tests are unaffected.
+	deps := cloud.Deps{Logger: luxlog.New("test"), DataDir: t.TempDir(), AI: ai, Metering: m, AIFallbackModel: "best"}
 	if err := Mount(app, deps); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}

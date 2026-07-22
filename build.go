@@ -63,14 +63,15 @@ func BuildDeps(cfg *Config) Deps {
 	)
 
 	deps := Deps{
-		Logger:         logger,
-		Brand:          cfg.Brand,
-		Version:        cfg.Version,
-		Env:            cfg.Env,
-		Domain:         cfg.Domain,
-		IAMIssuer:      cfg.IAMIssuer,
-		DataDir:        cfg.DataDir,
-		AIDefaultModel: cfg.AIDefaultModel,
+		Logger:          logger,
+		Brand:           cfg.Brand,
+		Version:         cfg.Version,
+		Env:             cfg.Env,
+		Domain:          cfg.Domain,
+		IAMIssuer:       cfg.IAMIssuer,
+		DataDir:         cfg.DataDir,
+		AIDefaultModel:  cfg.AIDefaultModel,
+		AIFallbackModel: cfg.AIFallbackModel,
 	}
 
 	// For each subsystem: enabled → leave nil (Mount fills it); not
