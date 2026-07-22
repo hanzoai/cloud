@@ -119,7 +119,7 @@ func TestOrgsClaimAlwaysIncludesHome(t *testing.T) {
 			t.Fatalf("ensure workspace %s: %v", org, err)
 		}
 	}
-	if seats, _ := s.Seats(ctx, home); seats < 1 {
+	if seats, _, _ := s.Seats(ctx, home); seats < 1 {
 		t.Fatalf("home-org seats = %d, want >= 1 (the wallet counts the home org)", seats)
 	}
 }
