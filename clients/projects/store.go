@@ -543,6 +543,25 @@ func (s *Store) ResolveUniqueLiveSlug(ctx context.Context, slug string) (Project
 	return out[0], nil
 }
 
+// ResolveOrgLiveSlug resolves a bare slug PINNED to a specific org — the LIVE
+// project that org owns with that slug. Unlike ResolveUniqueLiveSlug (unique
+// across ALL orgs), this can never return another org's project, so a first-party
+// site host (cd.hanzo.ai → org "hanzo", slug "cd") is served ONLY by OUR project,
+// never shadowed by a customer who named their project "cd". (org,slug) is unique
+// in the store, so LIMIT 1.
+func (s *Store) ResolveOrgLiveSlug(ctx context.Context, org, slug string) (Project, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+projectCols+` FROM projects WHERE org=? AND slug=? AND status='live' LIMIT 1`, org, slug)
+	p, err := scanProject(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Project{}, errNotFound
+	}
+	if err != nil {
+		return Project{}, fmt.Errorf("resolve org slug: %w", err)
+	}
+	return p, nil
+}
+
 // ListHostsForProject returns every public host bound to (org, slug), oldest
 // first. It powers GET .../domains so a console/user can see which hostnames the
 // site serves — its `<slug>.hanzo.app` subdomain plus any bound custom domains.
