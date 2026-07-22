@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -156,6 +157,12 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "chat completion failed")
+		// Tag a transient overload (429/5xx/"overloaded") with types.ErrUpstreamBusy
+		// so the agent runner can retry/fail over; a permanent error is left untagged
+		// and fails fast. The message is preserved either way.
+		if transientChat(err) {
+			err = fmt.Errorf("%w: %w", err, types.ErrUpstreamBusy)
+		}
 		return nil, fmt.Errorf("cloud: chat completion (model %q): %w", model, err)
 	}
 	span.SetAttributes(
@@ -164,8 +171,10 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		attribute.Int("gen_ai.usage.output_tokens", resp.Usage.CompletionTokens),
 	)
 	if len(resp.Choices) == 0 {
+		// A 200 with no choices is the gateway's "overloaded, no capacity" shape —
+		// transient, so tag it busy for retry/failover rather than dropping the reply.
 		span.SetStatus(codes.Error, "no choices")
-		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices", model)
+		return nil, fmt.Errorf("cloud: chat completion (model %q): upstream returned no choices: %w", model, types.ErrUpstreamBusy)
 	}
 	return &types.ChatResponse{
 		Content:          resp.Choices[0].Message.Content,
@@ -173,6 +182,41 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 		CompletionTokens: resp.Usage.CompletionTokens,
 		TotalTokens:      resp.Usage.TotalTokens,
 	}, nil
+}
+
+// transientChat reports whether an upstream chat-completion error is a transient
+// overload the agent runner may safely retry or fail over on: HTTP
+// 429/500/502/503/504, or a gateway that surfaces "overloaded" without a typed
+// status. A permanent failure — a 4xx that is not 429 (bad request, auth, an
+// unserved model) — returns false so it fails fast instead of burning retries.
+func transientChat(err error) bool {
+	if code, ok := httpStatus(err); ok {
+		switch code {
+		case http.StatusTooManyRequests, http.StatusInternalServerError,
+			http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+			return true
+		default:
+			return false
+		}
+	}
+	// No typed status (a bare transport/overload message) — treat an explicit
+	// "overloaded" as transient; anything else is not classifiable, so not retried.
+	return strings.Contains(strings.ToLower(err.Error()), "overloaded")
+}
+
+// httpStatus extracts the upstream HTTP status from a go-openai error
+// (*openai.APIError for a decoded error body, *openai.RequestError for a raw
+// non-2xx), returning ok=false when the error carries no status.
+func httpStatus(err error) (int, bool) {
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) && apiErr.HTTPStatusCode > 0 {
+		return apiErr.HTTPStatusCode, true
+	}
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) && reqErr.HTTPStatusCode > 0 {
+		return reqErr.HTTPStatusCode, true
+	}
+	return 0, false
 }
 
 // Embed returns one vector per input from the gateway's OpenAI-compatible

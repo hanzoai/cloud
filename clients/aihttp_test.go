@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -97,6 +98,49 @@ func TestAIHTTP_UpstreamErrorMapped(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "chat completion") {
 		t.Errorf("error not wrapped by client: %v", err)
+	}
+}
+
+// TestAIHTTP_TransientTagged proves the classification the agent runner relies on:
+// a transient overload (429 / 5xx / empty-choices) is tagged types.ErrUpstreamBusy
+// so the runner retries/fails over, while a permanent 4xx (400) is NOT tagged so it
+// fails fast. Without this split the runner would either drop replies on a passing
+// 429 or spin retries on an unrecoverable bad request.
+func TestAIHTTP_TransientTagged(t *testing.T) {
+	serve := func(status int, body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if status != 0 {
+				w.WriteHeader(status)
+			}
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		transit bool
+	}{
+		{"429 overloaded", http.StatusTooManyRequests, `{"error":{"message":"Platform overloaded"}}`, true},
+		{"503 unavailable", http.StatusServiceUnavailable, `{"error":{"message":"unavailable"}}`, true},
+		{"500 server", http.StatusInternalServerError, `{"error":{"message":"boom"}}`, true},
+		{"200 empty choices", 0, `{"id":"x","object":"chat.completion","choices":[]}`, true},
+		{"400 bad request", http.StatusBadRequest, `{"error":{"message":"bad input"}}`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := serve(tc.status, tc.body)
+			defer srv.Close()
+			_, err := AIHTTPAt(srv.URL, "sk-test", "deepseek-v4-flash").
+				ChatCompletion(context.Background(), &types.ChatRequest{Prompt: "x"})
+			if err == nil {
+				t.Fatalf("%s: expected an error", tc.name)
+			}
+			if got := errors.Is(err, types.ErrUpstreamBusy); got != tc.transit {
+				t.Fatalf("%s: errors.Is(ErrUpstreamBusy)=%v, want %v (err=%v)", tc.name, got, tc.transit, err)
+			}
+		})
 	}
 }
 
