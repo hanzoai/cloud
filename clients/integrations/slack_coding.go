@@ -295,7 +295,7 @@ func agentGitCredential(s *cloud.Service[state], ctx context.Context, org string
 	if !kmsReady(s) {
 		return "", "", fmt.Errorf("integrations: kms not ready")
 	}
-	tok, err := kmsGet(s, org, agentCredProvider, agentCredToken)
+	tok, err := kmsGet(s, kmsPath(org, agentCredProvider), agentCredToken)
 	if err != nil {
 		return "", "", err
 	}
@@ -304,7 +304,7 @@ func agentGitCredential(s *cloud.Service[state], ctx context.Context, org string
 		return "", "", fmt.Errorf("integrations: empty agent credential")
 	}
 	user = defaultAgentUser
-	if u, uerr := kmsGet(s, org, agentCredProvider, agentCredUser); uerr == nil {
+	if u, uerr := kmsGet(s, kmsPath(org, agentCredProvider), agentCredUser); uerr == nil {
 		if v := strings.TrimSpace(string(u)); v != "" {
 			user = v
 		}
