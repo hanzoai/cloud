@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	iamobj "github.com/hanzoai/iam-v1/object"
+	model "github.com/hanzoai/iam/pkg/model"
 	luxlog "github.com/luxfi/log"
 
 	"github.com/hanzoai/cloud"
@@ -354,7 +354,7 @@ func TestDashProjects_OrgNeverSeesCrossOrgAppProjects(t *testing.T) {
 // argo AppProject — name = Project.Name, description from DisplayName, an org label — and
 // surfaces NONE of Tags/Metadata.
 func TestProjectFromIAM_Reflects(t *testing.T) {
-	p := &iamobj.Project{
+	p := &model.Project{
 		Owner: "acme", Name: "storefront", Organization: "acme",
 		DisplayName: "Storefront", Description: "the shop", IsDefault: false,
 		Tags: []string{"secret-tag"}, Metadata: `{"secret":"x"}`,
