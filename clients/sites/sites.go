@@ -233,6 +233,31 @@ func isBasePath(p string) bool {
 		p == "/_" || strings.HasPrefix(p, "/_/")
 }
 
+// analyticsHostHandler ingests a published site's OWN analytics beacon (the
+// anonymous POST a page emits on unload) on the site host — host-as-project-ref
+// (HIP-0014), the exact twin of baseHostHandler. Nil (the default) leaves a site
+// host 405-ing a beacon POST; analytics.Mount installs it. The org comes ONLY from
+// the resolved Site (the subdomain / bound custom host), never the caller — the
+// SAME server-supplied tenant key the file plane and the base carve trust, so a
+// page for yadota.hanzo.app always ingests as that site's Org regardless of any
+// body/header claim. The authenticated GET read lenses on api.hanzo.ai
+// (/v1/analytics/overview|timeseries|top) are untouched: this carve is POST-only
+// and never runs on an API host.
+var analyticsHostHandler func(org string, c *zip.Ctx) error
+
+// SetAnalyticsHostHandler installs the per-org analytics ingest handler (see
+// analyticsHostHandler).
+func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
+
+// isAnalyticsPath reports whether a path targets the anonymous analytics-beacon
+// ingest: the Segment/beacon wire at /v1/analytics{,/batch} and the PostHog wire
+// at /v1/insights/e. The Middleware carve additionally gates on POST, so the
+// authenticated GET read lenses (/v1/analytics/overview|timeseries|top) — which
+// live on api.hanzo.ai, never a site host — are never hijacked.
+func isAnalyticsPath(p string) bool {
+	return strings.HasPrefix(p, "/v1/analytics") || p == "/v1/insights/e"
+}
+
 func (s *Server) Middleware() zip.Handler {
 	return func(c *zip.Ctx) error {
 		raw := c.Fiber().Hostname()
@@ -242,12 +267,20 @@ func (s *Server) Middleware() zip.Handler {
 					return baseHostHandler(site.Org, c)
 				}
 			}
+			if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
+				if site, ok := s.resolveLivePinned(c.Context(), slug, firstParty); ok {
+					return analyticsHostHandler(site.Org, c)
+				}
+			}
 			return s.serve(c, slug, firstParty)
 		}
 		if host := hostOnly(raw); s.customCandidate(host) {
 			if site, ok := s.resolveLive(c.Context(), host); ok {
 				if baseHostHandler != nil && isBasePath(c.Path()) {
 					return baseHostHandler(site.Org, c)
+				}
+				if analyticsHostHandler != nil && c.Method() == http.MethodPost && isAnalyticsPath(c.Path()) {
+					return analyticsHostHandler(site.Org, c)
 				}
 				return s.serveCustom(c, site)
 			}
