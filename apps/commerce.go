@@ -31,6 +31,7 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/commerce"
 	commercebilling "github.com/hanzoai/commerce/api/billing"
+	catalogapi "github.com/hanzoai/commerce/api/catalog"
 	commercestore "github.com/hanzoai/commerce/api/store"
 	commercedatastore "github.com/hanzoai/commerce/datastore"
 	commercemid "github.com/hanzoai/commerce/middleware"
@@ -66,6 +67,14 @@ var commercePrefixes = []string{
 	// whose prepaid BALANCE gate 402'd every store read (a store-metadata read
 	// must never require an LLM balance).
 	"/v1/store",
+	// Platform-admin catalog CMS: GET/POST/PUT/DELETE /v1/catalog/entries +
+	// POST /v1/catalog/seed — the SuperAdmin CRUD admin.hanzo.ai's editor drives.
+	// commerce's setupRoutes wires only the PUBLIC read (/v1/commerce/catalog);
+	// the CRUD lives on the standalone /v1 bundle (api.Route → catalogApi.AdminRoute),
+	// which the co-resident embed skips, so mountCommerce mounts it below on the
+	// same /v1 gate chain. Own the prefix here so it reaches commerce (each handler
+	// is requireSuperAdmin-gated) instead of the AI /v1/* balance catch-all.
+	"/v1/catalog",
 	// Payment-provider webhook receiver (POST /v1/billing/webhooks/:provider —
 	// Square et al). The provider's HMAC over the registered notification URL +
 	// body IS the auth; a bearer gate is impossible for provider callbacks.
@@ -145,6 +154,15 @@ func mountCommerce(app *zip.App, deps cloud.Deps) error {
 	// no-ops gracefully when IAM is not initialized.
 	storeV1.Use(iammiddleware.IAMTokenRequired())
 	commercestore.Route(storeV1, commercemid.TokenRequired())
+
+	// Platform-admin catalog CMS on the SAME /v1 bundle: GET/POST/PUT/DELETE
+	// /v1/catalog/entries + POST /v1/catalog/seed. setupRoutes wires only the
+	// public read (/v1/commerce/catalog); the CRUD rides the standalone /v1 bundle
+	// (api.Route → catalogApi.AdminRoute), which the co-resident embed skips — so
+	// register it here, exactly as the standalone does. storeV1's IAMTokenRequired
+	// populates the claims each handler's requireSuperAdmin reads (anon → 403, a
+	// platform admin edits); it is cross-tenant data, never org-scoped.
+	catalogapi.AdminRoute(storeV1)
 
 	// Provider webhook intake at the LIVE registered path. Chain mirrors the
 	// commerce-standalone posture: gated request context, then the sessionless
