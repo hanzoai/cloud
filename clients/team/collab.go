@@ -38,7 +38,6 @@ package team
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -105,10 +104,17 @@ func collabJSONID(objectID, field string, now time.Time) string {
 // which replays this log) shows dialog-authored content — not just the snapshot
 // reads. No-op when no update is supplied, when it is malformed (the snapshot still
 // stands — no worse than before), or when a log already exists (a live-edited doc
-// must never be clobbered). One log entry: a full-state update the joining editor
-// applies against its empty ydoc. The blob id matches collabws.go's yLogBlobID for
-// the SAME (objectID, field), so the WS room loads exactly what this seeded.
-func (s *collabService) seedYLog(ctx context.Context, org, workspace, objectID, field, b64 string) error {
+// must never be clobbered).
+//
+// It seeds THROUGH the collab hub (seedIfAbsent), not with a bare Get-then-Put. The
+// old get-then-put had a TOCTOU: between the Get(miss) and the Put, a concurrent first
+// edit on the live WS lane could land and then be overwritten by the seed. Routing
+// through the hub reuses the room's flushMu/mu, so the seed and any live edit for this
+// field serialize on ONE room and the seed applies only when the log is still empty.
+// docName is the canonical documentId the hocuspocus provider uses for THIS field, so
+// the seed and the field's editor share exactly one room; the blob id (yLogBlobID for
+// the SAME objectID+field) is what the WS room loads.
+func (s *collabService) seedYLog(ctx context.Context, org string, doc collabDoc, field, b64 string) error {
 	if b64 == "" {
 		return nil
 	}
@@ -116,13 +122,9 @@ func (s *collabService) seedYLog(ctx context.Context, org, workspace, objectID, 
 	if err != nil || len(update) == 0 || len(update) > maxMarkupSize {
 		return nil
 	}
-	key := blobKey(org, workspace, yLogBlobID(collabDoc{objectID: objectID, objectAttr: field}))
-	if data, gerr := s.vfs.Get(ctx, key); gerr == nil && len(data) > 0 {
-		return nil // a log already exists — never clobber live edits
-	} else if gerr != nil && !errors.Is(gerr, types.ErrBlobNotFound) {
-		return gerr
-	}
-	return s.vfs.Put(ctx, key, marshalYLog([][]byte{update}))
+	fieldDoc := collabDoc{workspace: doc.workspace, objectClass: doc.objectClass, objectID: doc.objectID, objectAttr: field}
+	docName := fieldDoc.workspace + "|" + fieldDoc.objectClass + "|" + fieldDoc.objectID + "|" + fieldDoc.objectAttr
+	return s.hub.seedIfAbsent(ctx, org, doc.workspace, docName, fieldDoc, update)
 }
 
 type collabRequest struct {
@@ -194,7 +196,7 @@ func (s *collabService) rpc(c *zip.Ctx) error {
 			// clobber a doc that peers may be live-editing — and only when no log
 			// exists yet (belt-and-suspenders against a double create).
 			if req.Method == "createContent" {
-				if err := s.seedYLog(c.Context(), org, doc.workspace, doc.objectID, field, req.Payload.Updates[field]); err != nil {
+				if err := s.seedYLog(c.Context(), org, doc, field, req.Payload.Updates[field]); err != nil {
 					return zip.Errorf(http.StatusBadGateway, "blob storage unavailable")
 				}
 			}
