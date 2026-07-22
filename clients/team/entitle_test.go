@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 
 	luxlog "github.com/luxfi/log"
@@ -22,6 +23,9 @@ import (
 type fakeCommerce struct {
 	ent *types.LicenseEntitlement
 	err error
+
+	mu     sync.Mutex
+	checks int // CheckEntitlement call count — lets a test prove the gate actually ran
 }
 
 func (f *fakeCommerce) GetOrgConfig(_ context.Context, orgID string) (*types.OrgConfig, error) {
@@ -29,7 +33,16 @@ func (f *fakeCommerce) GetOrgConfig(_ context.Context, orgID string) (*types.Org
 }
 
 func (f *fakeCommerce) CheckEntitlement(context.Context, string, string) (*types.LicenseEntitlement, error) {
+	f.mu.Lock()
+	f.checks++
+	f.mu.Unlock()
 	return f.ent, f.err
+}
+
+func (f *fakeCommerce) checkCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.checks
 }
 
 // gateApp registers the account API directly (no Mount) with a fake commerce +
