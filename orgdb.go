@@ -160,11 +160,21 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 // distinct (org[, project]) resolves to a distinct file, so a query in one can
 // never reach another's rows.
 func (c *OrgStore[T]) For(org, project string) (T, error) {
-	var zero T
 	path, err := orgDBPath(c.dataDir, org, project, c.subsystem)
 	if err != nil {
+		var zero T
 		return zero, err
 	}
+	return c.forPath(path)
+}
+
+// forPath opens (and migrates on first use) the store at an already-resolved DB
+// path, caching by path. It is the shared core of For and Each: the cache key is
+// the path, so an org reached via For(org) and the SAME file reached via Each's
+// enumeration resolve to the ONE handle — never a second open of the same file
+// (which the at-rest cek layer does not support concurrently).
+func (c *OrgStore[T]) forPath(path string) (T, error) {
+	var zero T
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if st, ok := c.byPath[path]; ok {
@@ -181,6 +191,40 @@ func (c *OrgStore[T]) For(org, project string) (T, error) {
 	}
 	c.byPath[path] = st
 	return st, nil
+}
+
+// Each folds fn over every org that has a {subsystem}.db on disk under
+// {dataDir}/orgs, handing it the org's SLUG (the on-disk directory name) and the
+// SAME cached store handle For returns (opened through forPath, keyed by path — no
+// second open). It is the cross-org sweep primitive a reconciler folds over: the
+// filesystem is the source of truth for "which orgs have this store", so no derived
+// registry can drift. The reserved platform partitions ({dataDir}/orgs/_*) are
+// skipped (their '_' is a rune SanitizeOrg never emits, so no real org is dropped).
+// A per-org OPEN failure is passed to fn as its err (fn decides skip vs. record); a
+// missing orgs root (a writer with no stores yet) is not an error. Under horizontal
+// sharding each writer's PVC holds only the orgs routed to it, so Each on a given
+// writer enumerates exactly that writer's orgs.
+func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
+	root := filepath.Join(c.dataDir, "orgs")
+	ents, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range ents {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), "_") {
+			continue
+		}
+		path := filepath.Join(root, e.Name(), c.subsystem+".db")
+		if _, statErr := os.Stat(path); statErr != nil {
+			continue // this org has no store for this subsystem
+		}
+		st, openErr := c.forPath(path)
+		fn(e.Name(), st, openErr)
+	}
+	return nil
 }
 
 // CloseAll closes every open per-org store. Idempotent; returns the first
