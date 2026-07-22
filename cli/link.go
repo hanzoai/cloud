@@ -75,6 +75,7 @@ func newLinkCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 	f.BoolVar(&opts.registerProvider, "register-provider", false, "auto-register the engine endpoint as an org model provider (POST /v1/add-provider)")
 	f.StringVar(&opts.studioDir, "studio-dir", os.Getenv("HANZO_STUDIO_DIR"), "local Hanzo Studio checkout; when set, link launches and supervises the render backend on 127.0.0.1:8188")
 	f.StringVar(&opts.studioURL, "studio-url", firstNonEmpty(os.Getenv("HANZO_STUDIO_UPLOAD_URL"), defaultStudioUploadURL), "studio base URL the render mirror uploads finished images to (POST /v1/library/upload)")
+	f.BoolVar(&opts.mirror, "mirror", true, "sweep local renders into the org studio library; --mirror=false serves jobs only")
 	return cmd
 }
 
