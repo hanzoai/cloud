@@ -5,7 +5,7 @@ read/written by **hanzo.app** (the builder) and **console.hanzo.ai** (the
 Projects module). Both call this surface through the gateway; there is no second
 copy of project state.
 
-Owner: `hanzoai/cloud` → `clients/projectsvc`. Mounted into the unified cloud
+Owner: `hanzoai/cloud` → `clients/projects`. Mounted into the unified cloud
 binary (HIP-0106), reachable at `https://api.hanzo.ai/v1/projects`.
 
 ## Auth & tenancy (HIP-0111)
@@ -71,6 +71,7 @@ type Deployment = {
 | `PATCH` | `/v1/projects/:slug` | `UpdateProject` | `200 Project` |
 | `DELETE` | `/v1/projects/:slug` | — | `204` (also purges the live S3 site) |
 | `POST` | `/v1/projects/:slug/deploy` | artifact **or** `GitDeploy` | `200 Deployment` (upload) / `202 Deployment` (git) |
+| `POST` | `/v1/projects/:slug/purge` | — | `200 Project` (flush the edge cache-tag; no redeploy) |
 | `GET` | `/v1/projects/:slug/deployments` | — | `200 Deployment[]` (newest version first) |
 | `GET` | `/v1/projects/:slug/deployments/:id` | — | `200 Deployment` / `404` |
 | `POST` | `/v1/projects/:slug/deployments/:id/complete` | `Complete` | `200 Deployment` (CI hook, git path) |
@@ -118,6 +119,15 @@ status (`400` validation, `403` no org, `404` not found, `409` slug taken,
 or `https://<sites-host>/<org>/<slug>/` when the `hanzoai/static` container
 (the static-app image) is configured to serve the bucket behind the gateway.
 GitHub export is an optional, separate step — going live never requires it.
+
+## Edge cache purge (no redeploy)
+
+`POST /v1/projects/:slug/purge` flushes the project's edge cache-tag
+(`site-<org>-<slug>` — the SAME tag deploy purges) so already-published content is
+re-fetched from the S3 origin at the edge. It **never** writes or deletes the S3
+origin: the live build keeps serving; only stale edge copies drop. It stamps
+`lastPurgeAt` and returns the updated `Project`. An unconfigured/failing edge (CF)
+is non-fatal — the purge is a no-op and still returns `200`.
 
 ## Console module notes
 
