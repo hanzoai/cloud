@@ -100,17 +100,40 @@ func TestCodeUnknownOptionsAndPostSeparatorArgsPassThrough(t *testing.T) {
 }
 
 func TestCodexProviderUsesNativeResponsesMetadata(t *testing.T) {
+	// defaultCodeModel is zen5 — a 1M flagship tier — so the window must be 1M,
+	// NOT the old flat 262144 cap that surfaced as "maximum context exceeded"
+	// even on a 1M-capable model. Auto-compact is 90% of the window.
 	argv := codeArgv(codeAgents["codex"], "https://api.hanzo.ai", defaultCodeModel, false, nil)
 	for _, want := range []string{
 		`model_provider=hanzo`,
 		`model_providers.hanzo.base_url="https://api.hanzo.ai/v1"`,
 		`model_providers.hanzo.wire_api="responses"`,
 		`features.remote_models=false`,
-		`model_context_window=262144`,
-		`model_auto_compact_token_limit=235929`,
+		`model_context_window=1000000`,
+		`model_auto_compact_token_limit=900000`,
 	} {
 		if !slices.Contains(argv, want) {
 			t.Errorf("Codex argv %q does not contain %q", argv, want)
+		}
+	}
+	// A flash tier budgets its smaller real window, not 1M.
+	flash := codeArgv(codeAgents["codex"], "https://api.hanzo.ai", "zen5-flash", false, nil)
+	if !slices.Contains(flash, `model_context_window=131072`) {
+		t.Errorf("zen5-flash argv %q must budget 131072, not the flagship 1M", flash)
+	}
+}
+
+// TestCodeContextWindowSizing pins the model→window map: every non-flash tier
+// gets the 1M flagship window; only flash tiers drop to 131072.
+func TestCodeContextWindowSizing(t *testing.T) {
+	for _, m := range []string{"zen5", "zen5-pro", "zen5-coder", "enso", "enso-ultra"} {
+		if w := codeContextWindow(m); w != 1000000 {
+			t.Errorf("codeContextWindow(%q) = %d, want 1000000", m, w)
+		}
+	}
+	for _, m := range []string{"zen5-flash", "enso-flash"} {
+		if w := codeContextWindow(m); w != 131072 {
+			t.Errorf("codeContextWindow(%q) = %d, want 131072", m, w)
 		}
 	}
 }
