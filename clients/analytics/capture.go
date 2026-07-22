@@ -695,6 +695,20 @@ func capture(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("valid bearer or a recognized brand host required")
 	}
+	return captureWithOrg(org, c)
+}
+
+// captureWithOrg is the Segment/beacon decode+ingest core with the tenant supplied
+// EXPLICITLY by the caller — the ONE write path shared by two org sources:
+//   - the /v1/analytics{,/batch}, /v1/tracker aliases resolve org via captureTenant
+//     (validated principal | project key | brand host) and call this;
+//   - the site-host carve (sites.SetAnalyticsHostHandler) FORCES org from the
+//     resolved Site (server-supplied, host-derived — never the caller/body) and
+//     calls this.
+//
+// It decodes the CaptureBatch wire and funnels every event through the ONE write
+// core (ingestEvents); org is never read from the body here or downstream.
+func captureWithOrg(org string, c *zip.Ctx) error {
 	var batch CaptureBatch
 	if err := c.Bind(&batch); err != nil {
 		return zip.ErrBadRequest("malformed capture batch")
