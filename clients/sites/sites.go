@@ -339,8 +339,10 @@ func (s *Server) serve(c *zip.Ctx, slug string) error {
 // only chooses the candidate keys, streams the first hit, and falls back to the
 // site's own 404.
 func (s *Server) streamSite(c *zip.Ctx, cli *minio.Client, site Site) error {
-	// The cache tag lets Cloudflare purge exactly this site's assets on redeploy.
-	// It is derived from server-owned values (Org+Slug), never the request.
+	// Emit the edge cache-tag on every served object so a tag-purge
+	// (projects.purgeTag → Purger.PurgeTags) invalidates exactly this project's site
+	// at the edge. Derived from server-owned Org+Slug — the SAME tag the purger
+	// targets — never from the request, so emit and purge never diverge.
 	c.SetHeader("Cache-Tag", CacheTag(site.Org, site.Slug))
 
 	rel := resolveKey(c.Path())
