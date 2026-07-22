@@ -95,7 +95,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	app.Get("/v1/gpus", cloud.Handle(s, listGPUs))
 
 	// BYO fleet: the org's bring-your-own machines that dialed in via
-	// `hanzo gpu connect`. Raw list here; the same workers are folded into
+	// `hanzo link`. Raw list here; the same workers are folded into
 	// /v1/machines and /v1/gpus above (provider="byo") so the console's existing
 	// pages show them alongside Visor-provisioned compute.
 	app.Get("/v1/fleet/workers", cloud.Handle(s, listFleetWorkers))
