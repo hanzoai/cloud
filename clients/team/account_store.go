@@ -141,6 +141,18 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 		return workspace{}, err
 	}
 	if len(existing) > 0 {
+		// Heal the caller's OWN membership. A user who just authenticated through IAM
+		// is, by definition, an ACTIVE, non-bot member of their workspace — but a row
+		// migrated from team-go (or otherwise) can carry is_bot=1 / active=0, which
+		// excludes the owner from the billed seat count (Seats filters active=1 AND
+		// is_bot=0) even though getUserWorkspaces still lists the workspace (it does
+		// not filter those flags). Force the caller's own row — never anyone else's —
+		// to an active human seat. Idempotent: a correct row is left unchanged.
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE members SET active = 1, is_bot = 0 WHERE workspace_id = ? AND user_id = ?`,
+			existing[0].ID, account); err != nil {
+			return workspace{}, fmt.Errorf("heal member: %w", err)
+		}
 		return existing[0], nil
 	}
 	if name == "" {
