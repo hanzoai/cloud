@@ -6,7 +6,7 @@ package cli
 // org for queued workflow jobs and spawns ephemeral, auto-exiting actions-runner
 // subprocesses tagged with this box's labels (GPU / vulkan aware). Outbound only —
 // nothing listens for inbound. Completes the trifecta: `engine` serves models,
-// `gpu connect` shares compute, `runner` claims CI — one binary, one org login.
+// `link` shares compute, `runner` claims CI — one binary, one org login.
 
 import (
 	"os/signal"

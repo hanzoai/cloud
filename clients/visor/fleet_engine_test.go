@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// cliRegistrationJSON is exactly what `hanzo gpu connect --serve-engine` writes as
+// cliRegistrationJSON is exactly what `hanzo link --serve-engine` writes as
 // the fleet presence activity's Input.
 const cliRegistrationJSON = `{
   "hostname": "gb10",
