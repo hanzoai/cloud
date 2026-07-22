@@ -1,5 +1,5 @@
 // fleet.go — BYO ("bring your own") compute: the operator's OWN machines that
-// dialed IN via `hanzo gpu connect`, as opposed to the DOKS/DigitalOcean machines
+// dialed IN via `hanzo link`, as opposed to the DOKS/DigitalOcean machines
 // Visor provisions. A BYO worker is an outbound agent behind NAT: it can't be
 // listed by Visor (Visor never provisioned it), so its presence lives as a
 // heartbeating standalone activity in the org's `fleet` namespace of the ONE
@@ -47,7 +47,7 @@ type byoGPU struct {
 }
 
 // engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
-// (advertised by `hanzo gpu connect --serve-engine`). hanzo-engine serves the OpenAI
+// (advertised by `hanzo link --serve-engine`). hanzo-engine serves the OpenAI
 // AND Anthropic HTTP APIs from one port, so the gateway can route model calls to this
 // GPU as an OpenAI-compatible provider. Surfaced verbatim on GET /v1/fleet/workers.
 type engineAdvertisement struct {
@@ -73,9 +73,10 @@ type byoWorker struct {
 	// Arch/CPUs/Memory are the connecting host's static CPU spec, mirrored from the
 	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
 	// BYTES — the same fields a code-linked run-target carries, so the /v1/fleet
-	// board renders a gpu-connect node's arch + cores + RAM like any other unit.
+	// board renders a linked node's arch + cores + RAM like any other unit.
 	Arch          string   `json:"arch,omitempty"`
 	CPUs          int      `json:"cpus,omitempty"`
+	CPUModel      string   `json:"cpuModel,omitempty"`
 	Memory        int64    `json:"memory,omitempty"`
 	Version       string   `json:"version,omitempty"`
 	JobQueue      string   `json:"jobQueue,omitempty"`
@@ -93,6 +94,7 @@ type fleetRegistration struct {
 	Arch         string               `json:"arch,omitempty"`
 	CPUs         int                  `json:"cpus,omitempty"`
 	Memory       int64                `json:"memory,omitempty"`
+	CPUModel     string               `json:"cpuModel,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
 	GPUs         []byoGPU             `json:"gpus"`
@@ -104,7 +106,7 @@ type fleetRegistration struct {
 // normalizes each presence activity. Fail-soft: a nil engine (not yet wired) or a
 // read error yields an empty list, never an error — a BYO read must never break the
 // Visor-backed machine/gpu listing it augments. Terminal (disconnected) presence
-// records are excluded so a `hanzo gpu disconnect` removes the row.
+// records are excluded so a `hanzo unlink` removes the row.
 func byoWorkers(org string) []byoWorker {
 	// ALL pages, not the first 100: an online worker must never be truncated away
 	// (dropping it from Machines/GPUs/status) because terminal presence rows crowd
@@ -134,6 +136,7 @@ func byoWorkers(org string) []byoWorker {
 			Os:            reg.Os,
 			Arch:          reg.Arch,
 			CPUs:          reg.CPUs,
+			CPUModel:      reg.CPUModel,
 			Memory:        reg.Memory,
 			Version:       reg.Version,
 			JobQueue:      reg.JobQueue,
