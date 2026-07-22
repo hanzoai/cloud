@@ -109,6 +109,31 @@ CREATE TABLE IF NOT EXISTS members (
   PRIMARY KEY (workspace_id, user_id)
 );
 CREATE INDEX IF NOT EXISTS ix_members_user ON members(user_id);
+
+-- Personal-workspace uniqueness. EnsureWorkspace is the SOLE creator of workspaces
+-- and always writes owner=account, so (owner_org, owner) identifies an account's ONE
+-- personal workspace. A pre-fix login race could mint duplicates (two concurrent
+-- logins both saw "none"); converge any such duplicates to the EARLIEST row (drop the
+-- extras' member rows, then the extras) before enforcing the invariant going forward.
+-- The index is PARTIAL (owner <> '') so any owner-less row — none created here — stays
+-- unconstrained rather than colliding. Idempotent: no-op once converged.
+DELETE FROM members WHERE workspace_id IN (
+  SELECT w.id FROM workspaces w
+  WHERE w.owner <> '' AND EXISTS (
+    SELECT 1 FROM workspaces e
+    WHERE e.owner_org = w.owner_org AND e.owner = w.owner AND e.id <> w.id
+      AND (e.created_at < w.created_at OR (e.created_at = w.created_at AND e.id < w.id))
+  )
+);
+DELETE FROM workspaces WHERE owner <> '' AND id IN (
+  SELECT w.id FROM workspaces w
+  WHERE EXISTS (
+    SELECT 1 FROM workspaces e
+    WHERE e.owner_org = w.owner_org AND e.owner = w.owner AND e.id <> w.id
+      AND (e.created_at < w.created_at OR (e.created_at = w.created_at AND e.id < w.id))
+  )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_workspaces_org_owner ON workspaces(owner_org, owner) WHERE owner <> '';
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("account migrate: %w", err)
@@ -136,24 +161,11 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 	if org == "" || account == "" {
 		return workspace{}, fmt.Errorf("team: ensure workspace: empty org/account")
 	}
-	existing, err := s.WorkspacesOf(ctx, org, account)
-	if err != nil {
+	// Fast path: the account already has a workspace → heal own membership, return it.
+	if w, ok, err := s.adoptExisting(ctx, org, account); err != nil {
 		return workspace{}, err
-	}
-	if len(existing) > 0 {
-		// Heal the caller's OWN membership. A user who just authenticated through IAM
-		// is, by definition, an ACTIVE, non-bot member of their workspace — but a row
-		// migrated from team-go (or otherwise) can carry is_bot=1 / active=0, which
-		// excludes the owner from the billed seat count (Seats filters active=1 AND
-		// is_bot=0) even though getUserWorkspaces still lists the workspace (it does
-		// not filter those flags). Force the caller's own row — never anyone else's —
-		// to an active human seat. Idempotent: a correct row is left unchanged.
-		if _, err := s.db.ExecContext(ctx,
-			`UPDATE members SET active = 1, is_bot = 0 WHERE workspace_id = ? AND user_id = ?`,
-			existing[0].ID, account); err != nil {
-			return workspace{}, fmt.Errorf("heal member: %w", err)
-		}
-		return existing[0], nil
+	} else if ok {
+		return w, nil
 	}
 	if name == "" {
 		name = "Workspace"
@@ -172,10 +184,25 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 		return workspace{}, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO workspaces (`+wsCols+`) VALUES (?,?,?,?,?,?,?,?,?)`,
-		w.ID, w.Slug, w.Name, w.UUID, w.Owner, w.OwnerOrg, w.DataID, w.Region, w.CreatedAt); err != nil {
+	// Idempotent create: the (owner_org, owner) partial-unique index makes a racing
+	// second login's INSERT a no-op (RowsAffected 0). The winner also writes the owner
+	// member row and commits; a loser rolls back its unused ids and ADOPTS the winner,
+	// so concurrent logins converge to exactly ONE personal workspace.
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO workspaces (`+wsCols+`) VALUES (?,?,?,?,?,?,?,?,?)
+		 ON CONFLICT(owner_org, owner) WHERE owner <> '' DO NOTHING`,
+		w.ID, w.Slug, w.Name, w.UUID, w.Owner, w.OwnerOrg, w.DataID, w.Region, w.CreatedAt)
+	if err != nil {
 		return workspace{}, fmt.Errorf("insert workspace: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_ = tx.Rollback()
+		if w, ok, err := s.adoptExisting(ctx, org, account); err != nil {
+			return workspace{}, err
+		} else if ok {
+			return w, nil
+		}
+		return workspace{}, fmt.Errorf("team: ensure workspace: create conflicted but no personal workspace resolved")
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO members (workspace_id,user_id,role,display_name,is_bot,active,joined_at)
@@ -187,6 +214,34 @@ func (s *accountStore) EnsureWorkspace(ctx context.Context, org, account, name s
 		return workspace{}, fmt.Errorf("commit: %w", err)
 	}
 	return w, nil
+}
+
+// adoptExisting returns the account's first workspace in the org (newest membership
+// first), having HEALED the caller's own member row to an active human seat. ok is
+// false when the account has no workspace yet. Used both on the fast path and after
+// losing the personal-workspace create race (adopt the concurrent winner).
+//
+// Heal rationale: a user who just authenticated through IAM is, by definition, an
+// ACTIVE, non-bot member of their workspace — but a row migrated from team-go (or
+// otherwise) can carry is_bot=1 / active=0, which excludes the owner from the billed
+// seat count (Seats filters active=1 AND is_bot=0) even though WorkspacesOf still
+// lists the workspace (it does not filter those flags). Force the caller's OWN row —
+// never anyone else's — to an active human seat. Idempotent: a correct row is left
+// unchanged.
+func (s *accountStore) adoptExisting(ctx context.Context, org, account string) (workspace, bool, error) {
+	existing, err := s.WorkspacesOf(ctx, org, account)
+	if err != nil {
+		return workspace{}, false, err
+	}
+	if len(existing) == 0 {
+		return workspace{}, false, nil
+	}
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE members SET active = 1, is_bot = 0 WHERE workspace_id = ? AND user_id = ?`,
+		existing[0].ID, account); err != nil {
+		return workspace{}, false, fmt.Errorf("heal member: %w", err)
+	}
+	return existing[0], true, nil
 }
 
 // WorkspacesOf returns the org's workspaces the account is a member of, newest
