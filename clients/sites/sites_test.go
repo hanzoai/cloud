@@ -539,3 +539,25 @@ func TestFirstPartyOrgPinned(t *testing.T) {
 		t.Errorf("multi-tenant must NEVER org-pin: orgCalls=%v", fr.orgCalls)
 	}
 }
+
+// TestFirstPartyDropsReserved (RED F-2): a reserved label an operator mistakenly
+// lists in the first-party allowlist must NOT become a site on the brand apex —
+// api/login stay real auth surfaces; only clean labels (cd) serve.
+func TestFirstPartyDropsReserved(t *testing.T) {
+	s := New(Config{
+		Apex: "hanzo.app", Reserved: []string{"app", "api", "admin"},
+		SelfDomains:    []string{"hanzo.ai"},
+		FirstPartyApex: "hanzo.ai", FirstPartySites: []string{"cd", "flow", "gallery", "api", "login", "wallet"},
+		FirstPartyOrg: "hanzo",
+	}, luxlog.New("test"))
+	for _, l := range []string{"cd", "flow", "gallery"} {
+		if _, _, ok := s.siteSlug(l + ".hanzo.ai"); !ok {
+			t.Errorf("%s.hanzo.ai (clean label) should serve as a first-party site", l)
+		}
+	}
+	for _, l := range []string{"api", "login", "wallet"} {
+		if _, _, ok := s.siteSlug(l + ".hanzo.ai"); ok {
+			t.Errorf("%s.hanzo.ai (reserved) must be DROPPED from the first-party allowlist", l)
+		}
+	}
+}
