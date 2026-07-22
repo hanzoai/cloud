@@ -44,6 +44,13 @@ func openStore(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	// The routed-usage counter (routed.go) lives on the SAME connection + tenancy as
+	// the links, so a router's per-account usage and the accounts it aggregates can
+	// never drift apart on isolation.
+	if err := s.migrateRouted(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
