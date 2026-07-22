@@ -11,13 +11,13 @@ import (
 // STAGED subsystem (iam, ingress) is NOT enabled — it mounts only when named in
 // CLOUD_ENABLE explicitly, while every non-staged subsystem still mounts.
 //
-// This is the guard that keeps the IAM embed (iamserver.InitEmbed, which boots
-// process-global Beego config the `ai` subsystem shares) from booting under the
-// mount-all default and crashing the binary at `ai` bootstrap — the boot-smoke
-// failure that pinned the fleet to a pre-embed image since #142. commerce was
-// un-staged in Phase 2 (task #105): it now mounts under the mount-all default
-// like every other in-process subsystem (the money-path cutover keeps the
-// authoritative stores in place — see stagedSubsystems in config.go).
+// This is the gate that keeps the IAM embed (clients/iam — now the clean zip-native
+// iam-v2, the Casdoor iam-v1/beego fork retired) from taking over hanzo.id under the
+// mount-all default: flipping identity from the standalone pod to the in-process embed
+// is a production cutover the operator makes explicitly, not a side effect of the
+// mount-all default. commerce was un-staged in Phase 2 (task #105): it now mounts under
+// the mount-all default like every other in-process subsystem (the money-path cutover
+// keeps the authoritative stores in place — see stagedSubsystems in config.go).
 func TestEnabled_StagedSubsystemsExcludedFromMountAll(t *testing.T) {
 	// Empty Enable = mount-all default.
 	c := &cloud.Config{}
