@@ -135,7 +135,34 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.serveAsset(w, r, name) {
 		return
 	}
+	// Static-export ROUTE shells: the console export emits one HTML per route
+	// (/signin → signin.html, /auth/callback → auth/callback.html). A deep load
+	// must get the ROUTE'S OWN shell so it hydrates the right page — serving
+	// index.html for /auth/callback hydrates '/' instead, AuthGate discards the
+	// ?code and bounces to /signin: the OAuth login loop. Only extensionless
+	// paths are route candidates.
+	if !strings.Contains(path.Base(name), ".") && h.serveRouteHTML(w, r, name+".html") {
+		return
+	}
 	h.serveIndex(w, r)
+}
+
+// serveRouteHTML writes a route's own exported shell with the SAME treatment as
+// the index shell: no-cache (clients must pick up a new build immediately) and
+// the white-label <title> rewrite. Returns false when the export has no HTML
+// for the route, so the caller falls back to the SPA shell.
+func (h *consoleHandler) serveRouteHTML(w http.ResponseWriter, r *http.Request, name string) bool {
+	b, err := fs.ReadFile(h.fsys, name)
+	if err != nil {
+		return false
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(brandTitle(b, r.Host))
+	}
+	return true
 }
 
 // serveAsset writes the embedded file at name if it exists, negotiating a
@@ -206,15 +233,22 @@ func (h *consoleHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 // (the Hanzo/default host) or there is no <title> to rewrite, the embedded bytes
 // are returned unchanged.
 func (h *consoleHandler) indexFor(host string) []byte {
+	return brandTitle(h.index, host)
+}
+
+// brandTitle rewrites a shell's <title> to the request host's white-label brand
+// — ONE rewrite shared by the index shell and every per-route shell (a Lux/Zoo
+// deep load must not leak the baked default brand either).
+func brandTitle(shell []byte, host string) []byte {
 	repl := []byte("<title>" + consoleTitle(host) + "</title>")
-	loc := consoleTitleRe.FindIndex(h.index)
-	if loc == nil || bytes.Equal(h.index[loc[0]:loc[1]], repl) {
-		return h.index
+	loc := consoleTitleRe.FindIndex(shell)
+	if loc == nil || bytes.Equal(shell[loc[0]:loc[1]], repl) {
+		return shell
 	}
-	out := make([]byte, 0, len(h.index)-(loc[1]-loc[0])+len(repl))
-	out = append(out, h.index[:loc[0]]...)
+	out := make([]byte, 0, len(shell)-(loc[1]-loc[0])+len(repl))
+	out = append(out, shell[:loc[0]]...)
 	out = append(out, repl...)
-	out = append(out, h.index[loc[1]:]...)
+	out = append(out, shell[loc[1]:]...)
 	return out
 }
 
@@ -226,6 +260,12 @@ func (h *consoleHandler) indexFor(host string) []byte {
 func (h *consoleHandler) setCacheHeaders(w http.ResponseWriter, name string) {
 	if strings.HasPrefix(name, "assets/") || strings.HasPrefix(name, "_next/") {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		return
+	}
+	// Any HTML shell (a directly-requested route .html) mirrors the index
+	// policy: never cached, so a redeploy is picked up immediately.
+	if strings.HasSuffix(name, ".html") {
+		w.Header().Set("Cache-Control", "no-cache")
 		return
 	}
 	w.Header().Set("Cache-Control", "public, max-age=3600")
