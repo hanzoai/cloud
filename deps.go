@@ -65,6 +65,12 @@ type Deps struct {
 	// catalog model. Model routing itself stays the gateway's job.
 	AIDefaultModel string
 
+	// AIFallbackModel is the reliable model the agent runner fails over to when an
+	// agent's own model stays throttled after retries (CLOUD_AI_FALLBACK_MODEL,
+	// default "best"). Only the autonomous agent/bot run path uses it; interactive
+	// chat is untouched. Empty disables failover.
+	AIFallbackModel string
+
 	// Subsystem clients — populated by BuildDeps based on enabled subsystems.
 	// Each is an interface with both in-process and ZAP-RPC implementations.
 	IAM      IAMClient
@@ -81,10 +87,10 @@ type Deps struct {
 	// the correct least-privilege credential for a read-only call. Split from AI so a
 	// pk- embed key can never leak onto the completions path (the intermittent-403
 	// bug). Falls back to the AI (M2M) resolution when no static embed key is set.
-	Embed    AIClient
-	O11y     O11yClient
-	VFS      VFSClient
-	MQ       MQClient
+	Embed AIClient
+	O11y  O11yClient
+	VFS   VFSClient
+	MQ    MQClient
 
 	// Payments + Vault stay out-of-process (PCI scope isolation per
 	// HIP-0106). These clients always resolve to ZAP-RPC implementations,
