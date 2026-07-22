@@ -92,6 +92,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kafka"
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
+	"github.com/hanzoai/cloud/clients/leaderboard"
 	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/marketplace"
@@ -281,6 +282,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "catalogsync", Mount: catalogsync.Mount, Shutdown: catalogsync.Shutdown},
 		{Name: "ml", Mount: ml.Mount, OwnsHealth: true},
 		{Name: "usage", Mount: usage.Mount},
+		// Gamified usage analytics: /v1/usage/leaderboard + /v1/usage/activity + the
+		// per-day contribution graph, over the datastore rollup (#43). Co-owns /v1/usage/*
+		// with usage (a distinct concern — who leads + your activity graph) at its own
+		// exact paths; owns the opt-in SQLite store. Before the ai /v1/* catch-all.
+		{Name: "leaderboard", Mount: leaderboard.Mount, Shutdown: leaderboard.Shutdown},
 		{Name: "crm", Mount: crm.Mount},
 		// Native /v1/marketing/* — the in-process fold of github.com/hanzoai/marketing
 		// (per-org campaign store on Base/SQLite), twin of crm. Owns a DB handle, so
