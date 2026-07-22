@@ -16,8 +16,10 @@
 //
 // Projects are owned by Hanzo IAM (hanzo.id), the ONE source of truth for the
 // org-scoped (Owner,Name) Project resource. This plane REFLECTS them read-only via
-// the in-process object store (embedded IAM, no HTTP hop) — mirroring
-// clients/platform/projects.go — and never persists a CD-side project row.
+// the clean iam's in-process project store (github.com/hanzoai/iam/pkg/store over
+// the embedded IAM's orm.DB, no HTTP hop) — mirroring clients/platform/projects.go —
+// and never persists a CD-side project row. The retired Casdoor iam-v1 object store
+// is GONE.
 package deploy
 
 import (
@@ -25,15 +27,18 @@ import (
 	"net/http"
 	"net/url"
 
-	iamobj "github.com/hanzoai/iam-v1/object"
+	"github.com/hanzoai/orm"
 	"github.com/zap-proto/zip"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/hanzoai/cloud"
+	iamclient "github.com/hanzoai/cloud/clients/iam"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/hanzoai/cloud/clients/provisioning"
+	model "github.com/hanzoai/iam/pkg/model"
+	iamstore "github.com/hanzoai/iam/pkg/store"
 )
 
 // Operator App CRs carry two labels this plane READS (never writes): clients/platform
@@ -204,20 +209,25 @@ func (sc scope) runningByNamespace(s *cloud.Service[state], ctx context.Context)
 
 // ── IAM-owned project reflection ─────────────────────────────────────────────
 
-// iamStore runs an embedded-IAM object-store call, converting a nil-store panic into a
-// clean 503 rather than a nil-deref crash. The store's engine (iamobj.ormer) is a package
-// global that is nil until the co-resident IAM subsystem initializes it; a project call
-// against a nil engine would otherwise nil-deref. Mirrors clients/platform.iamStore — a
-// deployment enabling "deploy" is meant to co-mount "iam" (single-binary co-residents).
-// Never masks a real error.
-func iamStore[T any](fn func() (T, error)) (out T, err error) {
+// iamStore runs an in-process clean-iam project-store call against db (the embedded
+// IAM's orm.DB, sourced from clients/iam.DB()): it short-circuits an absent store (IAM
+// not mounted → db nil) into a clean 503, and recovers any unexpected nil-deref as the
+// same 503 rather than a crash. The embedded IAM's DB is nil until the co-resident IAM
+// subsystem mounts it. Mirrors clients/platform.iamStore — a deployment enabling
+// "deploy" is meant to co-mount "iam" (single-binary co-residents). Never masks a real
+// error.
+func iamStore[T any](db orm.DB, fn func(db orm.DB) (T, error)) (out T, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = zip.Errorf(http.StatusServiceUnavailable,
 				"deploy requires the co-resident IAM store, which is not initialized")
 		}
 	}()
-	return fn()
+	if db == nil {
+		return out, zip.Errorf(http.StatusServiceUnavailable,
+			"deploy requires the co-resident IAM store, which is not initialized")
+	}
+	return fn(db)
 }
 
 // iamProjects reflects the IAM-owned projects VISIBLE to this scope into projected argo
@@ -227,11 +237,11 @@ func iamStore[T any](fn func() (T, error)) (out T, err error) {
 // the ONE source; this NEVER persists a CD-side project. A nil/absent embedded IAM store
 // yields nil (the caller's synthesized-default fallback keeps the projection populated).
 func (sc scope) iamProjects() []argoProject {
-	list, err := iamStore(func() ([]*iamobj.Project, error) {
+	list, err := iamStore(iamclient.DB(), func(db orm.DB) ([]*model.Project, error) {
 		if sc.superAdmin {
-			return iamobj.GetProjects("") // empty owner → every org's projects
+			return iamstore.GetProjects(db, "") // empty owner → every org's projects
 		}
-		return iamobj.GetOrganizationProjects(sc.org)
+		return iamstore.GetOrganizationProjects(db, sc.org)
 	})
 	if err != nil || len(list) == 0 {
 		return nil
@@ -248,7 +258,7 @@ func (sc scope) iamProjects() []argoProject {
 // Description, and an hanzo.ai/org label carrying the tenant. Project scoping on this
 // platform is IAM/Org, not argocd RBAC, so the projected spec is permissive — and ONLY
 // these fields are surfaced (never Tags/Metadata), so nothing unintended leaks.
-func projectFromIAM(p *iamobj.Project) argoProject {
+func projectFromIAM(p *model.Project) argoProject {
 	proj := synthProject(p.Name)
 	proj.Spec.Description = firstNonEmpty(p.DisplayName, p.Description)
 	if org := provisioning.SanitizeOrg(firstNonEmpty(p.Organization, p.Owner)); org != "" {
