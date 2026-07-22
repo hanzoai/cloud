@@ -28,7 +28,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	mrand "math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,6 +109,13 @@ type state struct {
 	// per subsystem. Empty only on a deployment that configured no default, in
 	// which case create still requires an explicit model.
 	defaultModel string
+	// failoverModel is the reliable model a run falls over to when the agent's own
+	// model stays throttled (429/overloaded) after bounded retries
+	// (deps.AIFallbackModel, default "best"). It makes an autonomous bot reply
+	// still land when the throttled default flash model is overloaded. Empty
+	// disables failover (retry-only). Only the run path reads it — interactive
+	// chat is untouched.
+	failoverModel string
 	// bill is the shared per-org gate+meter (reuses deps.Metering, the ONE
 	// commerce client — the same object ml/provisioning use). Nil/!Enabled()
 	// makes Gate allow and Meter a no-op, so an unconfigured deployment runs
@@ -262,11 +271,12 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "agents"),
 		State: state{
-			store:        store,
-			ai:           deps.AI,
-			defaultModel: strings.TrimSpace(deps.AIDefaultModel),
-			bill:         cloud.NewResourceMeter(deps, meterKind),
-			bus:          newBus(),
+			store:         store,
+			ai:            deps.AI,
+			defaultModel:  strings.TrimSpace(deps.AIDefaultModel),
+			failoverModel: strings.TrimSpace(deps.AIFallbackModel),
+			bill:          cloud.NewResourceMeter(deps, meterKind),
+			bus:           newBus(),
 			// TASKS PLUG-IN POINT: durable execution rides hanzoai/tasks, not a
 			// bespoke engine. Default is record-only; wiring client.Dial(TASKS_URL)
 			// from github.com/hanzoai/tasks/pkg/sdk/client here makes control forward
@@ -666,11 +676,12 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 		return Run{}, err
 	}
 
-	r := executeRun(ctx, s.State.ai, a.Org, a, input)
+	r := executeRun(ctx, s.State.ai, a.Org, a, input, s.State.failoverModel)
 	span.SetAttributes(
 		attribute.String("hanzo.agent.run_id", r.ID),
 		attribute.String("hanzo.agent.run_status", r.Status),
 		attribute.Int64("hanzo.agent.duration_ms", r.DurationMs),
+		attribute.String("gen_ai.response.model", r.Model),
 	)
 	if r.Status == "error" {
 		span.SetStatus(codes.Error, r.Error)
@@ -686,12 +697,14 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 	openRunSession(s, ctx, a, r, actor)
 
 	// Bill only a successful run (mirrors the edge gate: failed work is not
-	// charged). Rich attribution: product=agent (Provider), the agent's model,
-	// and the actor for the audit trail. Fire-and-forget on a background context.
+	// charged). Rich attribution: product=agent (Provider), the model ACTUALLY
+	// used (r.Model — a failover run bills the reliable model it fell over to, not
+	// the throttled one it started on), and the actor for the audit trail.
+	// Fire-and-forget on a background context.
 	if r.Status == "ok" {
 		s.State.bill.MeterUsage(a.Org, meterKind, metering.Usage{
 			AmountCents: fee,
-			Model:       a.Model,
+			Model:       r.Model,
 			Actor:       actor,
 			RequestID:   requestID,
 			ClientIP:    clientIP,
@@ -700,11 +713,31 @@ func runAgent(s *cloud.Service[state], ctx context.Context, a Agent, input, acto
 	return r, nil
 }
 
-// executeRun composes the agent's instructions with the caller input, runs one
-// real chat completion through the AI client, and returns the resulting Run —
-// status "ok" with output, or "error" with the upstream failure. Pure of HTTP
-// and persistence so it is directly testable; the caller records + responds.
-func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, input string) Run {
+// maxAttempts bounds retries of a SINGLE model's completion on a transient
+// upstream failure (429 / 5xx / empty-choices / "Platform overloaded"). Retrying
+// a completion is side-effect-free — nothing bills until it succeeds — so a
+// bounded retry with jittered backoff turns an intermittent gateway 429 into a
+// delivered reply instead of a dropped one.
+const maxAttempts = 3
+
+// retryBaseDelay / retryMaxDelay bound the exponential, equal-jittered backoff
+// between attempts. Small by design: a gateway overload clears in well under a
+// second, and a run must not stall a bot conversation.
+const (
+	retryBaseDelay = 150 * time.Millisecond
+	retryMaxDelay  = 2 * time.Second
+)
+
+// executeRun composes the agent's instructions with the caller input and runs
+// one chat completion through the AI client — with a bounded retry on transient
+// upstream overload and, if the agent's own model stays throttled, ONE failover
+// to the deployment's reliable model (fallback) so an autonomous bot reply still
+// lands. It returns the resulting Run — status "ok" with output and Model set to
+// the model that ACTUALLY answered (so metering bills that model), or "error"
+// with the final upstream failure. Pure of HTTP and persistence so it is directly
+// testable; the caller records + responds. This reliability policy is the agent
+// runner's ALONE — the interactive user-facing chat path is untouched.
+func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, input, fallback string) Run {
 	// Child step span; the AI client opens its own GenAI span nested under this.
 	ctx, span := agentTracer.Start(ctx, "agent.step", trace.WithSpanKind(trace.SpanKindInternal))
 	defer span.End()
@@ -718,11 +751,11 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 		prompt += in
 	}
 	start := time.Now()
-	resp, aiErr := ai.ChatCompletion(ctx, &types.ChatRequest{Model: a.Model, Prompt: prompt, Org: org})
+	resp, used, aiErr := completeWithFailover(ctx, ai, org, prompt, a.Model, fallback)
 	dur := time.Since(start).Milliseconds()
 	id, _ := genID("run")
 	r := Run{
-		ID: id, Org: org, AgentName: a.Name, Model: a.Model, Input: input,
+		ID: id, Org: org, AgentName: a.Name, Model: used, Input: input,
 		DurationMs: dur, CreatedAt: time.Now().Unix(),
 	}
 	if aiErr != nil {
@@ -737,6 +770,77 @@ func executeRun(ctx context.Context, ai types.AIClient, org string, a Agent, inp
 		}
 	}
 	return r
+}
+
+// completeWithFailover runs the completion on the agent's model with a bounded
+// retry (completeWithRetry), then — only if that model is STILL throttled after
+// its retries — fails over ONCE to fallback, a reliable model. It returns the
+// response, the model that actually produced it (for honest metering), and the
+// final error. A non-transient failure on either model returns immediately (the
+// next model would fail identically). ONE ordered mechanism, no config sprawl.
+func completeWithFailover(ctx context.Context, ai types.AIClient, org, prompt, model, fallback string) (*types.ChatResponse, string, error) {
+	models := []string{model}
+	if f := strings.TrimSpace(fallback); f != "" && f != model {
+		models = append(models, f)
+	}
+	var lastErr error
+	for _, m := range models {
+		resp, err := completeWithRetry(ctx, ai, org, prompt, m)
+		if err == nil {
+			return resp, m, nil
+		}
+		lastErr = err
+		// Escalate to the next model ONLY on a transient overload; a hard error
+		// (bad request, auth, unserved model) fails fast — failover cannot help.
+		if !errors.Is(err, types.ErrUpstreamBusy) {
+			return nil, m, err
+		}
+	}
+	return nil, models[len(models)-1], lastErr
+}
+
+// completeWithRetry calls the completion up to maxAttempts times, retrying ONLY a
+// transient upstream overload (types.ErrUpstreamBusy) with jittered backoff and
+// respecting context cancellation. A non-transient error returns immediately.
+func completeWithRetry(ctx context.Context, ai types.AIClient, org, prompt, model string) (*types.ChatResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		resp, err := ai.ChatCompletion(ctx, &types.ChatRequest{Model: model, Prompt: prompt, Org: org})
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !errors.Is(err, types.ErrUpstreamBusy) {
+			return nil, err // permanent — do not burn retries repeating it
+		}
+		if attempt == maxAttempts-1 {
+			break
+		}
+		if err := sleepBackoff(ctx, attempt); err != nil {
+			return nil, err // context cancelled/expired mid-backoff
+		}
+	}
+	return nil, lastErr
+}
+
+// sleepBackoff waits an exponential, equal-jittered delay before the next
+// attempt, or returns the context error if the caller's deadline fires first.
+func sleepBackoff(ctx context.Context, attempt int) error {
+	d := retryBaseDelay << attempt
+	if d > retryMaxDelay {
+		d = retryMaxDelay
+	}
+	// Equal jitter: half fixed, half random in [0, d/2) — spreads retries without
+	// ever collapsing the delay to ~0 (guarantees forward progress under load).
+	wait := d/2 + time.Duration(mrand.Int64N(int64(d/2)+1))
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func runs(s *cloud.Service[state], c *zip.Ctx) error {
