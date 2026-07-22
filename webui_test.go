@@ -10,8 +10,10 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
@@ -290,5 +292,62 @@ func TestHEAD_Root(t *testing.T) {
 	}
 	if ct := hdr.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("HEAD / Content-Type = %q, want text/html*", ct)
+	}
+}
+
+// TestRouteShell_ServedForExportedRoutes: a deep load of a route the static
+// export ships its OWN shell for (/signin → signin.html, /auth/callback →
+// auth/callback.html) gets THAT shell — not index.html. Serving index for
+// /auth/callback hydrates '/' instead, AuthGate discards the OAuth ?code and
+// bounces to /signin: the login loop this pins against. Uses a synthetic FS —
+// the committed fallback dist has no route shells; the real bundle does.
+func TestRouteShell_ServedForExportedRoutes(t *testing.T) {
+	fsys := fstest.MapFS{
+		"index.html":         {Data: []byte("<html><head><title>Hanzo Cloud Console</title></head><body>ROOT</body></html>")},
+		"signin.html":        {Data: []byte("<html><head><title>Hanzo Cloud Console</title></head><body>SIGNIN</body></html>")},
+		"auth/callback.html": {Data: []byte("<html><head><title>Hanzo Cloud Console</title></head><body>CALLBACK</body></html>")},
+	}
+	h, err := newConsoleHandler(fsys)
+	if err != nil {
+		t.Fatalf("newConsoleHandler: %v", err)
+	}
+
+	get := func(target, host string) (*httptest.ResponseRecorder, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		if host != "" {
+			req.Host = host
+		}
+		h.ServeHTTP(rec, req)
+		return rec, rec.Body.String()
+	}
+
+	// The route's OWN shell, never cached.
+	for target, marker := range map[string]string{
+		"/auth/callback?code=abc&state=xyz": "CALLBACK",
+		"/signin":                           "SIGNIN",
+	} {
+		rec, body := get(target, "")
+		if rec.Code != http.StatusOK || !strings.Contains(body, marker) {
+			t.Errorf("GET %s = %d %q, want 200 with the %s shell", target, rec.Code, body, marker)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("GET %s Cache-Control = %q, want no-cache", target, cc)
+		}
+	}
+
+	// A route with no exported shell still falls back to index (deep links work).
+	if _, body := get("/orgs", ""); !strings.Contains(body, "ROOT") {
+		t.Errorf("GET /orgs did not fall back to the SPA shell")
+	}
+
+	// White-label: a brand host's route shell gets ITS title, not the baked one.
+	if _, body := get("/signin", "console.lux.cloud"); strings.Contains(body, "Hanzo Cloud Console") {
+		t.Errorf("route shell leaked the baked Hanzo title on a lux host: %q", body)
+	}
+
+	// A DIRECT .html request is also never cached (stale-deploy guard).
+	if rec, _ := get("/signin.html", ""); rec.Header().Get("Cache-Control") != "no-cache" {
+		t.Errorf("GET /signin.html Cache-Control = %q, want no-cache", rec.Header().Get("Cache-Control"))
 	}
 }
