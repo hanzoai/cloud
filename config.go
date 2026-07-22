@@ -286,9 +286,17 @@ type Config struct {
 	// AIDefaultModel is the served model an agent with no explicit model falls
 	// back to (CLOUD_AI_DEFAULT_MODEL, default deepseek-v4-flash). Model routing
 	// is the gateway's job; this is the ONLY cloud-side model default.
-	AIBaseURL      string
-	AIAPIKey       string
-	AIDefaultModel string
+	//
+	// AIFallbackModel is the reliable model the agent runner fails over to when
+	// the agent's own model stays throttled (429/overloaded) after bounded retries
+	// (CLOUD_AI_FALLBACK_MODEL, default "best" — the gateway's route-to-best
+	// meta-model). It keeps an autonomous bot reply landing when the default flash
+	// model is overloaded; the interactive chat path never uses it. Empty disables
+	// failover (retry-only).
+	AIBaseURL       string
+	AIAPIKey        string
+	AIDefaultModel  string
+	AIFallbackModel string
 
 	// AIAuthClientID / AIAuthClientSecret are the binary's OWN IAM service
 	// identity (IAM_CLIENT_ID / IAM_CLIENT_SECRET). The completions client (deps.AI)
@@ -404,6 +412,7 @@ func LoadConfig() *Config {
 		AIBaseURL:          getenv("CLOUD_AI_BASE_URL", "https://api.hanzo.ai/v1"),
 		AIAPIKey:           getenv("CLOUD_AI_API_KEY", ""),
 		AIDefaultModel:     getenv("CLOUD_AI_DEFAULT_MODEL", "deepseek-v4-flash"),
+		AIFallbackModel:    getenv("CLOUD_AI_FALLBACK_MODEL", "best"),
 		AIAuthClientID:     getenv("IAM_CLIENT_ID", ""),
 		AIAuthClientSecret: getenv("IAM_CLIENT_SECRET", ""),
 		IAMZAPAddr:         getenv("CLOUD_IAM_ZAP_ADDR", ""),
