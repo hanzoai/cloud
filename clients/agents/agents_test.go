@@ -157,7 +157,7 @@ func TestExecuteRunOK(t *testing.T) {
 	ai := &fakeAI{content: "hi there"}
 	a := mk("maxpower", "greeter")
 	a.Instructions = "You are a greeter."
-	r := executeRun(context.Background(), ai, "maxpower", a, "say hi")
+	r := executeRun(context.Background(), ai, "maxpower", a, "say hi", "")
 
 	if r.Status != "ok" {
 		t.Fatalf("want ok, got %q err=%q", r.Status, r.Error)
@@ -178,7 +178,7 @@ func TestExecuteRunOK(t *testing.T) {
 
 func TestExecuteRunRecordsError(t *testing.T) {
 	ai := &fakeAI{err: errors.New("model unavailable")}
-	r := executeRun(context.Background(), ai, "maxpower", mk("maxpower", "x"), "in")
+	r := executeRun(context.Background(), ai, "maxpower", mk("maxpower", "x"), "in", "")
 	if r.Status != "error" {
 		t.Fatalf("want error status, got %q", r.Status)
 	}
