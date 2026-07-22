@@ -32,6 +32,7 @@ func TestCommercePrefixesPinned(t *testing.T) {
 		"/v1/billing/auto-recharge": false,
 		"/v1/billing/webhooks":      false,
 		"/v1/store":                 false,
+		"/v1/catalog":               false,
 	}
 	for _, p := range commercePrefixes {
 		if _, ok := want[p]; ok {
@@ -83,6 +84,16 @@ func TestStoreSurfaceRoutedToCommerceNotAIGate(t *testing.T) {
 	// And a sibling store path (the listing upsert the publish edge writes) is owned too.
 	if code, _ := doReq(t, app, http.MethodPut, "/v1/store/karma-store/listing/valentina"); code == http.StatusPaymentRequired {
 		t.Fatalf("PUT /v1/store/:id/listing/:slug fell through to the AI balance gate (402) — the whole store surface must be commerce-owned")
+	}
+
+	// The platform-admin catalog CMS (admin.hanzo.ai's editor) must reach commerce —
+	// where each handler is requireSuperAdmin-gated (anon → 401/403) — never the AI
+	// /v1/* balance gate, which would 402 the editor's list/edit instead.
+	if code, _ := doReq(t, app, http.MethodGet, "/v1/catalog/entries"); code == http.StatusPaymentRequired {
+		t.Fatalf("GET /v1/catalog/entries fell through to the AI balance gate (402) — /v1/catalog must be a commercePrefix so the SuperAdmin CMS reaches commerce")
+	}
+	if code, _ := doReq(t, app, http.MethodPut, "/v1/catalog/entries/cloud-starter"); code == http.StatusPaymentRequired {
+		t.Fatalf("PUT /v1/catalog/entries/:slug fell through to the AI balance gate (402) — the whole catalog CMS must be commerce-owned")
 	}
 }
 
