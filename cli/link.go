@@ -26,6 +26,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,12 +107,18 @@ func newStatusCmd(envOf func() *Env, _ *globalFlags) *cobra.Command {
 // Fabric — compose the canonical `hanzo node up` / `node stop`.
 // ---------------------------------------------------------------------------
 
-// fabricCLI resolves the Hanzo node CLI that owns hanzod supervision. It is the
-// installed `hanzo` (the Rust fabric CLI with `node up/stop`), overridable via
-// HANZO_FABRIC_CLI. Returns "" when none is resolvable, or when the only match is
-// THIS binary (which has no `node` verb — never shell into ourselves).
+// fabricCLI resolves the Hanzo node CLI that owns hanzod supervision — the Rust
+// fabric/dev CLI with `node up/stop`. In the canonical layout the Go unified binary
+// takes the `hanzo` name and the Rust CLI is installed alongside it as `hanzo-node`,
+// so `link` composes `node up` without shelling into itself (this binary has no
+// `node`). Resolution order: HANZO_FABRIC_CLI, then `hanzo-node`, then a
+// self-guarded `hanzo` (for boxes where the Rust CLI still holds the `hanzo` name).
+// Returns "" when none is resolvable.
 func fabricCLI() string {
 	if p := os.Getenv("HANZO_FABRIC_CLI"); p != "" {
+		return p
+	}
+	if p, err := exec.LookPath("hanzo-node"); err == nil {
 		return p
 	}
 	p, err := exec.LookPath("hanzo")
@@ -124,6 +131,32 @@ func fabricCLI() string {
 		}
 	}
 	return p
+}
+
+// Passthrough delegates a verb this binary does not own — node, dev, wallet,
+// network, … — to the Rust fabric/dev CLI (resolved by fabricCLI, installed as
+// `hanzo-node`), so the single `hanzo` name is a SUPERSET: Go verbs served natively,
+// everything else handed through unchanged. `hanzo node up` (the fabric `link`
+// itself composes) works for users too. It runs the delegate to completion with
+// inherited stdio and exits with its code; it returns false only when no fabric CLI
+// is resolvable, so the caller can report unknown-subcommand.
+func Passthrough(args []string) bool {
+	bin := fabricCLI()
+	if bin == "" {
+		return false
+	}
+	c := exec.Command(bin, args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			os.Exit(ee.ExitCode())
+		}
+		fmt.Fprintf(os.Stderr, "hanzo: delegating %v to %s: %v\n", args, bin, err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+	return true
 }
 
 // startFabric starts hanzod by invoking `hanzo node up` — the one canonical way to
