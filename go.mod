@@ -763,7 +763,7 @@ require (
 	github.com/hanzoai/metrics v1.110.2
 	github.com/hanzoai/o11y v1.5.28
 	github.com/hanzoai/thinking v0.1.1 // indirect
-	github.com/hanzoai/vfs v0.6.4
+	github.com/hanzoai/vfs v0.6.6
 	github.com/hanzoai/zen v1.4.2
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
