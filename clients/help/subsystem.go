@@ -5,8 +5,8 @@
 //
 //   - GET  /v1/help/articles            the public knowledge base (Published + public only)
 //   - GET  /v1/help/articles/:slug      one public article (re-checked, fail-closed)
-//   - GET  /v1/help/categories          KB sections for navigation
-//   - POST /v1/help/tickets             a customer files a ticket (rate-limited intake)
+//   - GET  /v1/help/categories          KB sections that front a public article
+//   - POST /v1/help/tickets             a customer files a ticket (bounded intake)
 //
 // SECURITY — the anonymous org is NEVER client-chosen. Every public endpoint serves
 // exactly ONE org, resolved SERVER-SIDE at mount (publicOrg): an explicit operator
@@ -16,20 +16,25 @@
 // status=Published AND is_public=1 (re-checked on a direct fetch) so a Draft or an
 // internal article never leaks. Unset (no brand, no override) leaves the plane
 // fail-closed: every endpoint 404s until the operator names the org.
+//
+// Per-client edge RATE LIMITING is the ingress's job (see routes): behind hanzoai/
+// ingress the app sees only the ingress as the socket peer, so an app-level per-IP
+// limiter would throttle every customer against ONE shared bucket. This plane bounds
+// each request instead and leaves the edge limit to the layer that knows the client.
 package help
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/zap-proto/zip"
-	"github.com/zap-proto/zip/middleware"
 )
 
 // Public-plane safety limits — an unauthenticated surface, so bound everything.
@@ -37,15 +42,9 @@ const (
 	maxSubject          = 300
 	maxMessage          = 16 * 1024 // a customer message / ticket description
 	maxSender           = 320       // RFC 5321 max email length
+	maxIntakeBytes      = 64 * 1024 // whole intake body cap (content is a subject + message + email, far under this)
 	defaultArticleLimit = 50
 	maxArticleLimit     = 200
-	// intake* strictly bound customer ticket creation per client IP (spam/DoS on an
-	// unauthenticated write). read* modestly bound public reads; ingress carries the
-	// primary edge limit.
-	intakeRateLimit  = 10
-	intakeRateWindow = time.Minute
-	readRateLimit    = 120
-	readRateWindow   = time.Minute
 )
 
 // state carries the resolved public-center org — the ONE tenant the anonymous
@@ -83,21 +82,21 @@ func publicOrg(brand string) string {
 	return strings.TrimSpace(brand)
 }
 
+// routes mounts the four public endpoints under /v1/help. Per-client edge rate
+// limiting is the INGRESS's job: hanzoai/ingress terminates the client connection, so
+// it is the only layer that sees the real, unspoofable client IP. Behind it the app's
+// socket peer IS the ingress, so an app-level per-IP limiter (c.Fiber().IP()) keys
+// every customer to ONE shared bucket — a global throttle plus a trivial DoS — and
+// X-Forwarded-For is client-settable (a fresh value per request evades the limit AND
+// grows the bucket map without bound). So this plane does NOT rate-limit per IP; it
+// bounds each request (body size, content clips, fail-closed validation) and delegates
+// the edge limit to the ingress — the house pattern ("ingress carries the edge limit").
 func routes(app *zip.App, s *cloud.Service[state]) {
-	ipKey := func(c *zip.Ctx) string { return c.Fiber().IP() }
-
-	// Public KB reads — a modest per-IP limit over the shared store.
-	read := app.Group("/v1/help", middleware.RateLimit(middleware.RateLimitConfig{
-		Limit: readRateLimit, Window: readRateWindow, KeyFn: ipKey,
-	}))
-	read.Get("/articles", cloud.Handle(s, listArticles))
-	read.Get("/articles/:slug", cloud.Handle(s, getArticle))
-	read.Get("/categories", cloud.Handle(s, listCategories))
-
-	// Public customer intake — a strict per-IP limit on an unauthenticated write.
-	app.Group("/v1/help", middleware.RateLimit(middleware.RateLimitConfig{
-		Limit: intakeRateLimit, Window: intakeRateWindow, KeyFn: ipKey,
-	})).Post("/tickets", cloud.Handle(s, fileTicket))
+	g := app.Group("/v1/help")
+	g.Get("/articles", cloud.Handle(s, listArticles))
+	g.Get("/articles/:slug", cloud.Handle(s, getArticle))
+	g.Get("/categories", cloud.Handle(s, listCategories))
+	g.Post("/tickets", cloud.Handle(s, fileTicket))
 }
 
 // ---- public knowledge base ----
@@ -152,12 +151,35 @@ func getArticle(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, articleDetail(doc))
 }
 
-// listCategories returns the KB sections for the public center's navigation. Missing
-// module → empty (not an error): an org with no help center has no sections.
+// listCategories returns the KB sections for the public center's navigation — but
+// ONLY the sections that front at least one Published + public article, so an internal
+// (agent-only) category name or description never leaks. A section with no public
+// article is invisible; an org with no public articles has no sections (empty, not an
+// error).
 func listCategories(s *cloud.Service[state], c *zip.Ctx) error {
 	org := s.State.publicOrg
 	if org == "" {
 		return zip.ErrNotFound("help center not available")
+	}
+	// The categories reachable from public articles. Same Published+public predicate
+	// the KB serves, re-checked in Go (defense in depth), so this never widens beyond
+	// what the article list already exposes.
+	arts, err := framework.Search(c.Context(), org, DTArticle,
+		map[string]string{"status": "Published", "is_public": "1"}, maxArticleLimit)
+	if err != nil {
+		s.Log.Warn("help: list categories (articles)", "org", org, "err", err)
+		return zip.Errorf(http.StatusInternalServerError, "list categories")
+	}
+	public := make(map[string]bool, len(arts))
+	for _, a := range arts {
+		if isPublished(a) {
+			if cat := strField(a, "category"); cat != "" {
+				public[cat] = true
+			}
+		}
+	}
+	if len(public) == 0 {
+		return c.JSON(http.StatusOK, map[string]any{"data": []map[string]any{}})
 	}
 	docs, err := framework.Search(c.Context(), org, DTCategory, nil, maxArticleLimit)
 	if err != nil {
@@ -166,6 +188,9 @@ func listCategories(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	out := make([]map[string]any, 0, len(docs))
 	for _, d := range docs {
+		if !public[d.Name] { // a category name IS its document name; the article Links it by that name
+			continue
+		}
 		out = append(out, map[string]any{
 			"name":        d.Name,
 			"description": strField(d, "description"),
@@ -198,6 +223,11 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 	if !framework.Installed(c.Context(), org, DTTicket) {
 		return zip.Errorf(http.StatusServiceUnavailable, "help center not configured")
 	}
+	// Bound the whole body BEFORE parsing: the meaningful content is a subject + a
+	// bounded message + an email, far under this cap, so a larger body is abuse.
+	if len(c.Body()) > maxIntakeBytes {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "request too large")
+	}
 	var in ticketIntake
 	if err := c.Bind(&in); err != nil {
 		return err
@@ -212,6 +242,14 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	message := clip(in.Description, maxMessage)
 
+	// The customer-facing reference is opaque + random, so returning it to an anonymous
+	// submitter reveals nothing about ticket volume; the monotonic name stays internal.
+	ref, err := newPublicRef()
+	if err != nil {
+		s.Log.Warn("help: mint ticket ref", "org", org, "err", err)
+		return zip.Errorf(http.StatusInternalServerError, "file ticket")
+	}
+
 	created, err := framework.Ingest(c.Context(), org, DTTicket, map[string]any{
 		"subject":     subject,
 		"description": message,
@@ -219,6 +257,7 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 		"priority":    normalizePriority(in.Priority),
 		"status":      "Open",
 		"source":      "portal",
+		"public_ref":  ref,
 	}, "")
 	if err != nil {
 		if framework.IsValidationError(err) {
@@ -240,7 +279,19 @@ func fileTicket(s *cloud.Service[state], c *zip.Ctx) error {
 			s.Log.Warn("help: opening message not recorded", "ticket", created.Name, "err", cerr)
 		}
 	}
-	return c.JSON(http.StatusCreated, map[string]any{"ticket": created.Name, "status": "Open"})
+	return c.JSON(http.StatusCreated, map[string]any{"ticket": ref, "status": "Open"})
+}
+
+// newPublicRef mints the opaque, random customer-facing ticket reference — 96 bits of
+// entropy, so it is collision-free across any realistic volume (the field is Unique, so
+// a collision would 422 rather than alias, but it cannot happen in practice) and, being
+// random, discloses nothing about ticket count or rate.
+func newPublicRef() (string, error) {
+	var b [12]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return "tkt_" + hex.EncodeToString(b[:]), nil
 }
 
 // ---- projections & helpers ----
