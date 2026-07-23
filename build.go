@@ -11,6 +11,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
+	sqlitedrv "github.com/hanzoai/sqlite"
 	"github.com/hanzoai/ha"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/metering"
@@ -841,19 +842,35 @@ func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.M
 	return org.NewDurability(cond, members, cipher, org.WithCheckpoint(durableCheckpoint)), members.Members
 }
 
-// durableCheckpoint folds the WAL into the real on-disk file before a durable ship reads
-// it — the checkpoint the codec runs before snapshotting (WithCheckpoint). It is a TRUNCATE
-// checkpoint with the busy fail-closed guard: busy!=0 means a reader held the WAL so the
-// main file is missing committed frames, and shipping it would silently lose an acked write.
+// durableCheckpoint makes the real on-disk file reflect every committed write before a
+// durable ship reads it — the checkpoint the codec runs before snapshotting (WithCheckpoint).
+// Two steps, correct on every backend:
 //
-// Correct as-is for the WRITE-time-encrypting backends — cgo libsqlcipher (page-level) and
-// the pure-Go codec VFS — where the real path already holds fresh ciphertext after the
-// checkpoint. THE ENVELOPE INTEGRATION POINT (P5): when the pure-Go encryption ENVELOPE
-// backend lands (encryption deferred to Checkpoint/Close, the real path stale until
-// re-encrypted), this MUST route through the driver's re-encrypting Checkpoint so the ship
-// reads FRESH ciphertext — return sqlitedrv.Checkpoint(db) here — else it ships stale bytes
-// and loses acked writes on takeover.
+//  1. A TRUNCATE checkpoint with the busy fail-closed guard: busy!=0 means a reader held the
+//     WAL so the main file is missing committed frames, and shipping it would silently lose an
+//     acked write. This folds the WAL and — on the WRITE-time-encrypting backends (cgo
+//     libsqlcipher page-level, and plaintext) — leaves the real path already fresh.
+//  2. sqlitedrv.Checkpoint re-encrypts the pure-Go ENVELOPE backend's real path. The envelope
+//     defers encryption to Checkpoint/Close, so after step 1 the real path is STALE ciphertext
+//     until re-encrypted; without this the ship reads stale bytes and loses acked writes on
+//     takeover (the envelope backend landed in hanzoai/sqlite v0.4.0 — every pure-Go and
+//     mislinked-cgo keyed open routes through it). It is a successful no-op on the write-time
+//     backends, so it runs unconditionally.
+//
+// Step 1's connection is released before step 2 so the envelope re-encrypt sees a clean handle.
 func durableCheckpoint(ctx context.Context, db *sql.DB) error {
+	if err := walCheckpointTruncate(ctx, db); err != nil {
+		return err
+	}
+	if err := sqlitedrv.Checkpoint(db); err != nil {
+		return fmt.Errorf("durable checkpoint re-encrypt: %w", err)
+	}
+	return nil
+}
+
+// walCheckpointTruncate folds the WAL into the main file with the busy fail-closed guard,
+// on its own connection (released on return, before the envelope re-encrypt).
+func walCheckpointTruncate(ctx context.Context, db *sql.DB) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("durable checkpoint conn: %w", err)
