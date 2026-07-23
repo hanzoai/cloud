@@ -90,6 +90,11 @@ type state struct {
 	store   *Store
 	audit   *audit.Recorder
 	catalog Catalog
+	// o11y is the unified observability plane. Every run emits ONE event here (a run
+	// counter), beside the meter + audit, under the same exactly-once guard — so a run
+	// is observed on the SAME plane as inference, never a private side-channel. Nil when
+	// the o11y subsystem is disabled (emit is a no-op).
+	o11y cloud.O11yClient
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -129,6 +134,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		store:   store,
 		audit:   deps.Audit,
 		catalog: catalog,
+		o11y:    deps.O11y,
 	}}
 	mounted = s
 
@@ -176,6 +182,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/runs", cloud.Handle(s, listRuns))
 	g.Get("/runs/:id", cloud.Handle(s, getRun))
 	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
+
+	// Inbound event sink (IFTTT): an authenticated producer POSTs an event and every
+	// enabled flow whose WEBHOOK trigger matches (source,event) fires. Distinct
+	// /hooks/* prefix — no wildcard, no shadow of the flow/run routes above. External
+	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
+	// the wire seam (SetTrigger), so this is one dispatch door, three entrances.
+	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
 
 	g.Post("/mcp", cloud.Handle(s, mcp))
 }
@@ -568,6 +581,41 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"resumed": true})
 }
 
+// ── inbound events (IFTTT trigger sink) ─────────────────────────────────────────
+
+// inboundHook is the authenticated inbound event sink:
+// POST /v1/automations/hooks/:source/:event. The org is the VALIDATED principal (never
+// the body); the path names the (source,event) trigger key; the JSON body is the event
+// payload threaded to matching flows as {{trigger.*}}. An optional X-Idempotency-Key
+// makes a re-delivery a no-op. Returns how many flows the event matched+started.
+func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	source, event := clip(c.Param("source")), clip(c.Param("event"))
+	if source == "" || event == "" {
+		return zip.ErrBadRequest("source and event are required")
+	}
+	if len(c.Body()) > maxTriggerBytes {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "event payload exceeds the %d-byte limit", maxTriggerBytes)
+	}
+	var payload map[string]any
+	if len(c.Body()) > 0 {
+		if err := json.Unmarshal(c.Body(), &payload); err != nil {
+			return zip.ErrBadRequest("event payload must be a JSON object")
+		}
+	}
+	n, err := Deliver(c.Context(), org, TriggerEvent{
+		Source: source, Name: event, DedupeKey: clip(c.Header("X-Idempotency-Key")), Payload: payload,
+	})
+	if err != nil {
+		return engineErr(err)
+	}
+	auditEvent(s, c, org, "automations.trigger.deliver", source+"/"+event, "ok", http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]any{"matched": n})
+}
+
 // ── enable / disable ──────────────────────────────────────────────────────────
 
 func enableFlow(s *cloud.Service[state], c *zip.Ctx) error {
@@ -623,6 +671,21 @@ func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable 
 			}
 		}
 	}
+
+	// WEBHOOK/APP_WEBHOOK triggers subscribe into the routing index — the inbound analog
+	// of the POLLING schedule above. On enable, upsert the subscription; on disable,
+	// ALWAYS drop it (idempotent), so a disabled flow never stays a live trigger target
+	// even if its version is now unreadable.
+	if enable {
+		if provider, event, ok := webhookKey(v, verr); ok {
+			if serr := s.State.store.UpsertTrigger(c.Context(), org, provider, event, f.ID, v.ID); serr != nil {
+				return zip.Errorf(http.StatusInternalServerError, "subscribe trigger: %v", serr)
+			}
+		}
+	} else if serr := s.State.store.DeleteFlowTriggers(c.Context(), org, flowID); serr != nil {
+		s.Log.Warn("trigger unsubscribe failed (continuing)", "flow", flowID, "err", serr)
+	}
+
 	action := "automations.flow.disable"
 	if enable {
 		action = "automations.flow.enable"
@@ -647,6 +710,24 @@ func pollingCron(v FlowVersion, verr error) (string, bool) {
 	return cron, true
 }
 
+// webhookKey reports whether a flow's trigger is an inbound WEBHOOK/APP_WEBHOOK event
+// and returns its (provider, event) subscription key — provider == the trigger's
+// pieceName, event == its triggerName. A load error, a non-webhook strategy, or an
+// empty piece/trigger name yields ("","",false).
+func webhookKey(v FlowVersion, verr error) (provider, event string, ok bool) {
+	if verr != nil || v.Trigger == nil {
+		return "", "", false
+	}
+	if v.Trigger.Strategy != StrategyWebhook && v.Trigger.Strategy != StrategyAppWebhook {
+		return "", "", false
+	}
+	provider, event = v.Trigger.Settings.PieceName, v.Trigger.Settings.TriggerName
+	if provider == "" || event == "" {
+		return "", "", false
+	}
+	return provider, event, true
+}
+
 // ── run bookkeeping (MED-1: the SINGLE owner, exactly-once) ─────────────────────
 
 // recordRunStart is the exactly-once run bookkeeping the durable run-start activity
@@ -669,9 +750,11 @@ func recordRunStart(s *cloud.Service[state], ctx context.Context, in RunStartInp
 	if !won {
 		return nil // another path already metered this run — exactly once
 	}
-	// meter + audit fire together, behind the SAME won-guard, so the audit trail's
-	// count of automations.flow.run records is an exact proxy for the meter count.
+	// meter + o11y event + audit fire together, behind the SAME won-guard, so the run's
+	// three unified records — ONE usage unit (cloud_usage), ONE o11y event, ONE audit
+	// record — are the same count, per run, exactly once, for EVERY entrypoint.
 	meterRun(s, in.Owner)
+	emitRunEvent(s, in.Owner)
 	auditRun(s, ctx, in.Owner, in.FlowID, in.RunID)
 	return nil
 }
@@ -694,6 +777,19 @@ func meterUnit(s *cloud.Service[state], org string, c *zip.Ctx) {
 // context). Nil/disabled meter → no-op.
 func meterRun(s *cloud.Service[state], org string) {
 	s.Bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+}
+
+// emitRunEvent emits the ONE o11y event per run onto the unified observability plane
+// (a run counter tagged by org + brand), beside the meter + audit under the SAME
+// exactly-once won-guard — so the o11y run count, the metered-unit count, and the
+// audit-record count are one and the same number. Nil o11y (subsystem disabled) → no-op.
+func emitRunEvent(s *cloud.Service[state], org string) {
+	if s.State.o11y == nil {
+		return
+	}
+	if ctr := s.State.o11y.Counter(meterKind, "org", org, "brand", s.Brand); ctr != nil {
+		ctr.Inc(1)
+	}
 }
 
 // auditEvent appends one tamper-evident audit record for an HTTP action. result is
