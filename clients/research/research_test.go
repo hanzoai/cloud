@@ -243,6 +243,27 @@ func TestProjectSummariesAndTotals(t *testing.T) {
 	}
 }
 
+// TestEmptyStoreTotals guards the empty-table aggregate (SUM over zero rows is NULL —
+// must COALESCE to 0, not fail to scan).
+func TestEmptyStoreTotals(t *testing.T) {
+	st, ctx := newStore(t)
+	tot, err := st.totals(ctx, "")
+	if err != nil {
+		t.Fatalf("empty totals: %v", err)
+	}
+	if tot.Experiments != 0 || tot.Attempts != 0 || tot.Projects != 0 {
+		t.Fatalf("empty totals = %+v, want zeros", tot)
+	}
+	c, err := st.counts(ctx)
+	if err != nil || (c != Counts{}) {
+		t.Fatalf("empty counts=%+v err=%v", c, err)
+	}
+	ps, err := st.projectSummaries(ctx)
+	if err != nil || len(ps) != 0 {
+		t.Fatalf("empty projects=%v err=%v", ps, err)
+	}
+}
+
 // ── SSRF gate (HIP-0512 §5) ───────────────────────────────────────────────────
 
 func TestSSRFGate(t *testing.T) {
