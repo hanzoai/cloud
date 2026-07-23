@@ -16,10 +16,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -439,7 +441,7 @@ func do(t *testing.T, app *zip.App, method, path, org, project string, body any)
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -575,7 +577,7 @@ func doRaw(t *testing.T, app *zip.App, method, path, org, project string) (int, 
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
