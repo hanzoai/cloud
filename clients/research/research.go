@@ -200,9 +200,13 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 }
 
 func build(b cloud.Base) (state, error) {
+	// WithDurable routes each org's research.db through the HA path (ha-elected single
+	// writer + hydrate-on-open + fenced ship). b.Durable is nil on a local/dev
+	// deployment, where the store is exactly the pre-durability local cache.
 	return state{
-		stores: cloud.NewOrgStore(b.DataDir, "research", openStore),
-		wh:     &warehouse{},
+		stores: cloud.NewOrgStore(b.DataDir, "research", openStore,
+			cloud.WithDurable(b.Durable), cloud.WithStoreLogger(b.Log)),
+		wh: &warehouse{},
 	}, nil
 }
 
@@ -240,6 +244,26 @@ func orgStore(s *cloud.Service[state], c *zip.Ctx) (*store, string, error) {
 		return nil, "", errJSON(c, http.StatusInternalServerError, "research store unavailable")
 	}
 	return st, org, nil
+}
+
+// shipDurable is the ship-before-ack step every research WRITE runs after its SQLite
+// commit: it snapshots the org's DB and ships it to the durable object fenced at the
+// lease round. A ship that is not acknowledged — this replica was deposed mid-request
+// or is running read-only — is NOT reported as success: the handler returns 503 so
+// the client retries and the shard router routes it to the org's current owner, so no
+// acknowledged write is ever lost. On a local-only deployment (no Durability) it acks
+// trivially, so the call is a harmless no-op there. Returns nil to proceed, or a
+// written error response to return.
+func shipDurable(s *cloud.Service[state], c *zip.Ctx, org string) error {
+	acked, err := s.State.stores.Sync(org, "")
+	if err != nil {
+		s.Log.Warn("research durable ship failed", "org", org, "err", err)
+		return errJSON(c, http.StatusServiceUnavailable, "research store failover in progress; retry")
+	}
+	if !acked {
+		return errJSON(c, http.StatusServiceUnavailable, "research store failover in progress; retry")
+	}
+	return nil
 }
 
 // postExperiments appends one batch of versions idempotently into the org's durable
@@ -286,6 +310,11 @@ func postExperiments(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		s.Log.Error("research ingest failed", "org", org, "project", project, "err", err)
 		return errJSON(c, http.StatusInternalServerError, "research ingest failed")
+	}
+	// Ship the committed ingest durably BEFORE acknowledging (and before the external
+	// roll-up), so a failover never loses an acked write.
+	if e := shipDurable(s, c, org); e != nil {
+		return e
 	}
 
 	// Roll up best-effort — the SQLite write above is the source of truth, so a datastore
@@ -403,6 +432,9 @@ func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	if n == 0 {
 		return errJSON(c, http.StatusNotFound, "no records for that target")
 	}
+	if e := shipDurable(s, c, org); e != nil {
+		return e
+	}
 	return c.JSON(http.StatusOK, map[string]any{"updated": n})
 }
 
@@ -449,6 +481,9 @@ func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		s.Log.Error("research artifact failed", "org", org, "err", err)
 		return errJSON(c, http.StatusInternalServerError, "research artifact failed")
+	}
+	if e := shipDurable(s, c, org); e != nil {
+		return e
 	}
 	rolledUp := true
 	if err := s.State.wh.rollUpArtifact(ctx, org, project, a, time.Now()); err != nil {
