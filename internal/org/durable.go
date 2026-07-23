@@ -75,14 +75,36 @@ type Durability struct {
 // buildDurability construction site, with no change here — the fence reads and CASes
 // through whatever store it is handed. The ship mechanism is likewise swappable: the
 // default wholeFile codec can be replaced by a WAL-frame delta codec behind snapshotCodec
-// without touching the fence or round.
-func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher) *Durability {
+// without touching the fence or round. WithCheckpoint injects the envelope's re-encrypting
+// Checkpoint (crypto-integration seam).
+func NewDurability(cond replica.ConditionalStore, view ownerView, cipher *Cipher, opts ...DurabilityOption) *Durability {
+	var o durabilityOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
 	return &Durability{
 		fencer: NewCASFencer(cond, view),
 		fenced: replica.NewFencedStore(cond),
 		cipher: cipher,
-		codec:  wholeFile{},
+		codec:  wholeFile{checkpoint: o.checkpoint},
 	}
+}
+
+// DurabilityOption configures a Durability.
+type DurabilityOption func(*durabilityOpts)
+
+type durabilityOpts struct {
+	checkpoint func(context.Context, *sql.DB) error
+}
+
+// WithCheckpoint injects the operation that folds the WAL into the real on-disk file and,
+// on the pure-Go encryption ENVELOPE, re-encrypts that real path — so a fenced ship reads
+// FRESH bytes, never stale ciphertext (which would be a lost acked write on takeover). The
+// composition root wires cek's Checkpoint here on the envelope backend; the default (no
+// option) is a raw TRUNCATE checkpoint, correct for the SQLCipher page-level and plaintext
+// backends that encrypt on write. This composes ship-before-ack with encrypt-on-checkpoint.
+func WithCheckpoint(fn func(context.Context, *sql.DB) error) DurabilityOption {
+	return func(o *durabilityOpts) { o.checkpoint = fn }
 }
 
 // For mints the Durable binding for one org DB: orgID is the org SLUG (the HRW
@@ -118,14 +140,12 @@ type Durable struct {
 // unopenable, so a store is always available for reads; writes fail closed until a
 // later open re-acquires.
 //
-// RECOVERY from a degraded open (Red M3): a pod that could not acquire at open stays
-// read-only for that store's cached lifetime — it does NOT re-acquire in place, because
-// a takeover CarryForward restores the durable snapshot OVER the local file, which is
-// unsafe under the live handle the store already handed out (stale reads). Recovery is
-// therefore a FRESH open: a pod restart (a readiness/liveness probe can gate on the
-// degraded log) or the shard router routing the org to a healthy owner. An in-process
-// quiesce-close-reopen on the cached entry is the future enhancement; until then the
-// safe, simple recovery is re-open.
+// RECOVERY from a degraded open (M3): a pod that could not acquire at open stays
+// read-only until this replica becomes the org's elected owner (a membership change),
+// at which point the OrgStore promotes the store IN PLACE — PendingPromotion gates it,
+// TryClaim proves the lease is claimable, then a quiesce-close-reopen swaps in a writer
+// handle and CarryForward-restores the latest snapshot under the FRESH handle (never
+// under the live one — the swap is why the reopen is required). No process restart.
 func (d *Durable) Hydrate(ctx context.Context) error {
 	lease, err := d.dy.fencer.Acquire(ctx, d.orgID)
 	if err != nil {
@@ -164,6 +184,42 @@ func (d *Durable) Owned() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.owned
+}
+
+// PendingPromotion reports whether this store opened degraded (does not hold the lease)
+// yet this replica is NOW the org's elected owner — a membership change made it the
+// writer, so the store must be promoted (re-acquire + hydrate + reopen) to serve writes.
+// Cheap and I/O-free: a lock plus one HRW over the live member snapshot, evaluated only
+// when the store is not already owned. It is the per-request gate the OrgStore checks on
+// a cache hit; the actual promotion runs (rarely) only when this returns true.
+func (d *Durable) PendingPromotion() bool {
+	d.mu.Lock()
+	owned := d.owned
+	d.mu.Unlock()
+	if owned {
+		return false
+	}
+	return d.dy.fencer.ElectsSelf(d.orgID)
+}
+
+// TryClaim probes whether this replica can hold the org's writer lease right now and, if
+// so, claims it — the promotion gate. It performs ONLY the lease CAS (via the fencer), no
+// local-file I/O, so a failed probe (not the elected owner, or the store unreachable)
+// costs nothing and leaves any live handle untouched. On success the lease object names
+// this replica at a fresh round (fencing any prior owner); the caller then quiesces and
+// reopens, whose Hydrate renews THIS same lease and CarryForward-restores the latest
+// snapshot under the fresh handle. Returns (false, nil) when not the elected owner,
+// (false, err) on a store error, (true, nil) when claimed.
+func (d *Durable) TryClaim(ctx context.Context) (bool, error) {
+	_, err := d.dy.fencer.Acquire(ctx, d.orgID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrNotOwner), errors.Is(err, ErrNoMembership):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // Sync snapshots the local file and ships it to the durable object fenced at the
