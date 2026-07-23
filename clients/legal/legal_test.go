@@ -292,6 +292,19 @@ func TestValidateOverrideFieldRefs(t *testing.T) {
 	if err := ValidateOverride(Template{ID: "x", Body: "{{if .flag}}{{.hidden}}{{end}}", Fields: []Field{{Key: "flag"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
 		t.Fatalf("undeclared field inside a control node must be rejected, got %v", err)
 	}
+	// The two indirect shapes that reach a field WITHOUT a FieldNode — an undeclared key
+	// here renders BLANK with no error (the index builtin ignores missingkey=error), so
+	// ValidateOverride must see and reject them.
+	if err := ValidateOverride(Template{ID: "x", Body: `{{index . "secret_term"}}`, Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "secret_term") {
+		t.Fatalf(`undeclared {{index . "k"}} must be rejected naming it, got %v`, err)
+	}
+	if err := ValidateOverride(Template{ID: "x", Body: "{{$.hidden}}", Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
+		t.Fatalf("undeclared {{$.k}} must be rejected naming it, got %v", err)
+	}
+	// ...and the SAME shapes with a declared key must still validate (no false reject).
+	if err := ValidateOverride(Template{ID: "x", Body: `{{index . "a"}} {{$.a}}`, Fields: []Field{{Key: "a"}}}); err != nil {
+		t.Fatalf("declared index/variable refs should validate: %v", err)
+	}
 	if err := ValidateOverride(Template{ID: "x", Body: "{{.a", Fields: nil}); err == nil {
 		t.Fatalf("an unparseable body must error")
 	}
