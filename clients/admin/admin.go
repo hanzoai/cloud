@@ -215,11 +215,20 @@ func users(s *cloud.Service[core.State], c *zip.Ctx) error {
 	} else if owner := strings.TrimSpace(c.Query("org")); owner != "" {
 		q.Set("owner", owner)
 	}
+	// Default pagination when the client omits it. IAM's user list returns ZERO
+	// rows AND total 0 when p/pageSize are unset — which surfaced as the admin
+	// directory showing "0 of 222". Default to the first page at the shared admin
+	// page size so the directory populates and the REAL total is reported; an
+	// explicit client p/pageSize still wins (the UI paginates from there).
 	if p := strings.TrimSpace(c.Query("p")); p != "" {
 		q.Set("p", p)
+	} else {
+		q.Set("p", "1")
 	}
 	if ps := strings.TrimSpace(c.Query("pageSize")); ps != "" {
 		q.Set("pageSize", ps)
+	} else {
+		q.Set("pageSize", "200")
 	}
 	if term := strings.TrimSpace(c.Query("q")); term != "" {
 		// IAM's list uses field/value contains-matching for the free-text filter.

@@ -180,6 +180,52 @@ func TestGate_AllowsSuperAdmin(t *testing.T) {
 	}
 }
 
+// TestUsers_DefaultsPagination locks the "0 of 222" fix: IAM's user list returns
+// ZERO rows AND total 0 when p/pageSize are unset, so the /v1/admin/users handler
+// MUST supply a default first page + page size when the client (the operator
+// directory) omits them. Proves the handler forwards p=1 & pageSize=200 and that
+// the real total reaches the client.
+func TestUsers_DefaultsPagination(t *testing.T) {
+	var gotP, gotPageSize string
+	iamSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/get-users") {
+			gotP = r.URL.Query().Get("p")
+			gotPageSize = r.URL.Query().Get("pageSize")
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"status":"ok","msg":"","data":[
+				{"owner":"hanzo","name":"alice","email":"alice@hanzo.ai","displayName":"Alice"}
+			],"data2":222}`)
+			return
+		}
+		w.WriteHeader(404)
+		io.WriteString(w, `{"status":"error","msg":"not found"}`)
+	}))
+	defer iamSrv.Close()
+
+	do := mount(t, iamSrv.URL, "http://127.0.0.1:0", "http://127.0.0.1:0")
+	admin := map[string]string{"X-User-IsAdmin": "true", "X-Org-Id": "admin", "X-User-Id": "admin/z", "X-User-Email": "z@hanzo.ai"}
+	resp, body := do("GET", "/v1/admin/users", admin) // NOTE: no ?pageSize — the bug path.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /v1/admin/users: got %d (body=%s)", resp.StatusCode, body)
+	}
+	if gotPageSize != "200" {
+		t.Fatalf("users list must default pageSize=200 when the client omits it, got %q", gotPageSize)
+	}
+	if gotP != "1" {
+		t.Fatalf("users list must default p=1 when the client omits it, got %q", gotP)
+	}
+	var env struct {
+		Data  []operatorUser `json:"data"`
+		Data2 int            `json:"data2"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		t.Fatalf("decode users envelope: %v (body=%s)", err, body)
+	}
+	if env.Data2 != 222 || len(env.Data) == 0 {
+		t.Fatalf("users must surface the REAL directory (got %d rows, total %d), not 0-of-222", len(env.Data), env.Data2)
+	}
+}
+
 // fakeIAM stands in for the IAM management surface. It records whether the
 // caller's credential was replayed and returns /v1 envelopes.
 type fakeIAM struct {
