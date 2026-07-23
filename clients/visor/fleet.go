@@ -43,7 +43,9 @@ const byoLiveWindow = 90 * time.Second
 // byoGPU is one accelerator reported by nvidia-smi on the connecting machine.
 type byoGPU struct {
 	Name        string `json:"name"`
-	MemoryTotal string `json:"memoryTotal,omitempty"` // VRAM, e.g. "122880 MiB"
+	MemoryTotal string `json:"memoryTotal,omitempty"` // VRAM (or unified pool), e.g. "122880 MiB"
+	Arch        string `json:"arch,omitempty"`        // native target, e.g. "gfx1151"
+	Unified     bool   `json:"unified,omitempty"`     // unified CPU/GPU memory pool (APU / SoC)
 }
 
 // engineAdvertisement is a hanzo-engine model server a BYO worker runs on its node
@@ -66,6 +68,8 @@ type byoWorker struct {
 	Provider      string   `json:"provider"` // always "byo"
 	Location      string   `json:"location"` // "on-prem" (BYO has no cloud region)
 	Status        string   `json:"status"`   // online | offline
+	Rocm          string   `json:"rocm,omitempty"`
+	Hip           string   `json:"hip,omitempty"`
 	GPUs          []byoGPU `json:"gpus"`
 	LastHeartbeat string   `json:"lastHeartbeat,omitempty"`
 	FirstSeen     string   `json:"firstSeen,omitempty"`
@@ -74,12 +78,12 @@ type byoWorker struct {
 	// registration: Arch is runtime.GOARCH (amd64 | arm64), Memory is total RAM in
 	// BYTES — the same fields a code-linked run-target carries, so the /v1/fleet
 	// board renders a linked node's arch + cores + RAM like any other unit.
-	Arch          string   `json:"arch,omitempty"`
-	CPUs          int      `json:"cpus,omitempty"`
-	CPUModel      string   `json:"cpuModel,omitempty"`
-	Memory        int64    `json:"memory,omitempty"`
-	Version       string   `json:"version,omitempty"`
-	JobQueue      string   `json:"jobQueue,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	CPUs     int    `json:"cpus,omitempty"`
+	CPUModel string `json:"cpuModel,omitempty"`
+	Memory   int64  `json:"memory,omitempty"`
+	Version  string `json:"version,omitempty"`
+	JobQueue string `json:"jobQueue,omitempty"`
 	// Capabilities the worker advertises ("studio.render", "engine.serve"); Engine
 	// is present when it runs a hanzo-engine model server. Both additive + omitempty.
 	Capabilities []string             `json:"capabilities,omitempty"`
@@ -97,6 +101,8 @@ type fleetRegistration struct {
 	CPUModel     string               `json:"cpuModel,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
+	Rocm         string               `json:"rocm,omitempty"`
+	Hip          string               `json:"hip,omitempty"`
 	GPUs         []byoGPU             `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
@@ -130,6 +136,8 @@ func byoWorkers(org string) []byoWorker {
 			Provider:      "byo",
 			Location:      "on-prem",
 			Status:        byoStatus(a.LastHeartbeatTime, now),
+			Rocm:          reg.Rocm,
+			Hip:           reg.Hip,
 			GPUs:          reg.GPUs,
 			LastHeartbeat: a.LastHeartbeatTime,
 			FirstSeen:     a.StartTime,
