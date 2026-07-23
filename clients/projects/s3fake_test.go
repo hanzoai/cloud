@@ -1,8 +1,8 @@
 package projects
 
-// fakeS3 is a minimal, in-memory S3 backend faithful enough for minio-go to drive
+// fakeS3 is a minimal, in-memory S3 backend faithful enough for hanzoai/s3-go to drive
 // the projects deploy write-path (ensureBucket → purgePrefix → PutObject) end to
-// end WITHOUT a live SeaweedFS/MinIO. It implements exactly the operations
+// end WITHOUT a live SeaweedFS/SeaweedFS. It implements exactly the operations
 // blob.uploadSite performs — HEAD bucket, PUT ?policy, GET ?list-type=2,
 // POST ?delete, and PUT object — and stores objects in a map so a REDEPLOY really
 // purges the old prefix and writes the new one. It ignores request signatures
@@ -264,7 +264,7 @@ func (f *fakeS3) copy(w http.ResponseWriter, bucket, key string, r *http.Request
 
 func s3Error(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/xml")
-	w.WriteHeader(status) // 4xx → minio-go does not retry
+	w.WriteHeader(status) // 4xx → hanzoai/s3-go does not retry
 	_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>`+code+`</Code><Message>`+msg+`</Message></Error>`)
 }
 
@@ -289,7 +289,7 @@ func (f *fakeS3) delete(w http.ResponseWriter, bucket string, r *http.Request) {
 func (f *fakeS3) put(w http.ResponseWriter, bucket, key string, r *http.Request) {
 	if f.failPut.Load() {
 		w.Header().Set("Content-Type", "application/xml")
-		w.WriteHeader(http.StatusForbidden) // 4xx → minio-go does not retry
+		w.WriteHeader(http.StatusForbidden) // 4xx → hanzoai/s3-go does not retry
 		_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>denied</Message></Error>`)
 		return
 	}

@@ -31,7 +31,7 @@ import (
 	"strings"
 	"sync"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 	"github.com/zap-proto/zip"
 
 	luxlog "github.com/luxfi/log"
@@ -488,7 +488,7 @@ func (s *Server) serve(c *zip.Ctx, slug string, firstParty bool) error {
 // rooted-clean under site.Prefix — lives in objectKey/resolveKey; this function
 // only chooses the candidate keys, streams the first hit, and falls back to the
 // site's own 404.
-func (s *Server) streamSite(c *zip.Ctx, cli *minio.Client, site Site) error {
+func (s *Server) streamSite(c *zip.Ctx, cli *s3.Client, site Site) error {
 	// Emit the edge cache-tag on every served object so a tag-purge
 	// (projects.purgeTag → Purger.PurgeTags) invalidates exactly this project's site
 	// at the edge. Derived from server-owned Org+Slug — the SAME tag the purger
@@ -547,15 +547,15 @@ func (s *Server) candidates(rel string) []string {
 // open fetches an object and returns it plus its info, or ok=false when the key
 // is absent (or any read error — a site request never surfaces an S3 error to the
 // client, it just misses). The caller must Close the returned object.
-func (s *Server) open(ctx context.Context, cli *minio.Client, bucket, key string) (*minio.Object, minio.ObjectInfo, bool) {
-	obj, err := cli.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
+func (s *Server) open(ctx context.Context, cli *s3.Client, bucket, key string) (*s3.Object, s3.ObjectInfo, bool) {
+	obj, err := cli.GetObject(ctx, bucket, key, s3.GetObjectOptions{})
 	if err != nil {
-		return nil, minio.ObjectInfo{}, false
+		return nil, s3.ObjectInfo{}, false
 	}
 	info, err := obj.Stat()
 	if err != nil {
 		_ = obj.Close()
-		return nil, minio.ObjectInfo{}, false
+		return nil, s3.ObjectInfo{}, false
 	}
 	return obj, info, true
 }
@@ -568,7 +568,7 @@ func (s *Server) open(ctx context.Context, cli *minio.Client, bucket, key string
 // Content-Length is set from info.Size (SendStream's size arg). fasthttp CLOSES the
 // object after the body is written (it implements io.Closer) — so we must NOT Close
 // it here (that would truncate the stream); the response writer owns the close.
-func (s *Server) streamObject(c *zip.Ctx, site Site, obj *minio.Object, size int64, contentType, cacheControl string, status int) error {
+func (s *Server) streamObject(c *zip.Ctx, site Site, obj *s3.Object, size int64, contentType, cacheControl string, status int) error {
 	c.SetHeader("Content-Type", contentType)
 	if cacheControl != "" {
 		c.SetHeader("Cache-Control", cacheControl)
@@ -585,7 +585,7 @@ func (s *Server) streamObject(c *zip.Ctx, site Site, obj *minio.Object, size int
 // notFound serves the site's own 404.html when it published one, else a plain
 // default 404. The 404.html is fetched from the SAME prefix (tenant-bounded) and
 // streamed, not buffered.
-func (s *Server) notFound(c *zip.Ctx, cli *minio.Client, site Site) error {
+func (s *Server) notFound(c *zip.Ctx, cli *s3.Client, site Site) error {
 	obj, info, ok := s.open(c.Context(), cli, site.Bucket, objectKey(site.Prefix, "404.html"))
 	if ok {
 		return s.streamObject(c, site, obj, info.Size, "text/html; charset=utf-8", "no-cache", http.StatusNotFound)
