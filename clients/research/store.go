@@ -122,11 +122,27 @@ CREATE TABLE IF NOT EXISTS attempt (
   ts           INTEGER NOT NULL DEFAULT 0,
   UNIQUE (project, benchmark, item, model, content_hash)
 );
+CREATE TABLE IF NOT EXISTS artifact (
+  sha256          TEXT PRIMARY KEY,
+  kind            TEXT NOT NULL,
+  ref             TEXT NOT NULL,
+  run_id          TEXT NOT NULL DEFAULT '',
+  project         TEXT NOT NULL DEFAULT 'default',
+  visibility      TEXT NOT NULL DEFAULT 'private',
+  retention_class TEXT NOT NULL DEFAULT 'raw-artifact',
+  git_sha         TEXT NOT NULL DEFAULT '',
+  git_branch      TEXT NOT NULL DEFAULT '',
+  git_dirty       INTEGER NOT NULL DEFAULT 0,
+  lib_versions    TEXT NOT NULL DEFAULT '{}',
+  ts              INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS ix_exp_key ON experiment(project, id);
 CREATE INDEX IF NOT EXISTS ix_att_key ON attempt(project, benchmark, item, model);
 CREATE INDEX IF NOT EXISTS ix_exp_proj_kind ON experiment(project, kind);
 CREATE INDEX IF NOT EXISTS ix_exp_git ON experiment(git_sha);
 CREATE INDEX IF NOT EXISTS ix_exp_branch ON experiment(git_branch);
+CREATE INDEX IF NOT EXISTS ix_art_run ON artifact(project, run_id);
+CREATE INDEX IF NOT EXISTS ix_art_ts ON artifact(project, ts);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("research migrate: %w", err)
@@ -354,6 +370,77 @@ func (s *store) setGrant(ctx context.Context, project, id string, visibility *st
 	res, err := s.db.ExecContext(ctx, `UPDATE experiment SET `+strings.Join(sets, ", ")+` WHERE project=? AND id=?`, args...)
 	if err != nil {
 		return 0, fmt.Errorf("research grant: %w", err)
+	}
+	return affected(res), nil
+}
+
+// ── artifacts (the research diary — raw-artifact retention class) ─────────────
+
+// putArtifact records one artifact manifest idempotently by its sha256 content hash —
+// hash-addressed, so a re-POST of the same bytes is a no-op (the "hash-addressed" half
+// of the earned durability label). project is the SERVER's value; visibility is FORCED
+// private (a grant is separate). The bytes live at ref (blob store); this stores the
+// verifiable manifest. Returns 1 when a new artifact was recorded, 0 on a dup.
+func (s *store) putArtifact(ctx context.Context, project string, a Artifact) (int, error) {
+	res, err := s.db.ExecContext(ctx, `
+INSERT OR IGNORE INTO artifact
+  (sha256, kind, ref, run_id, project, visibility, retention_class, git_sha, git_branch, git_dirty, lib_versions, ts)
+VALUES (?,?,?,?,?, 'private', 'raw-artifact', ?,?,?,?,?)`,
+		a.SHA256, a.Kind, a.Ref, a.RunID, project,
+		a.GitSHA, a.GitBranch, boolInt(a.GitDirty), jsonObj(a.LibVersions), a.TS)
+	if err != nil {
+		return 0, fmt.Errorf("research artifact insert: %w", err)
+	}
+	return affected(res), nil
+}
+
+// listArtifacts returns the chronological diary feed newest-first, filtered by project,
+// optional run_id, and an optional `since` unix-seconds lower bound. Bounded by limit.
+func (s *store) listArtifacts(ctx context.Context, project, runID string, since int64, limit int) ([]Artifact, error) {
+	q := `SELECT sha256, kind, ref, run_id, project, visibility, retention_class,
+  git_sha, git_branch, git_dirty, lib_versions, ts FROM artifact WHERE 1=1`
+	var args []any
+	if project != "" {
+		q += ` AND project=?`
+		args = append(args, project)
+	}
+	if runID != "" {
+		q += ` AND run_id=?`
+		args = append(args, runID)
+	}
+	if since > 0 {
+		q += ` AND ts >= ?`
+		args = append(args, since)
+	}
+	q += ` ORDER BY ts DESC, sha256 LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("research artifacts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Artifact
+	for rows.Next() {
+		var a Artifact
+		var libs string
+		var gitDirty int
+		if err := rows.Scan(&a.SHA256, &a.Kind, &a.Ref, &a.RunID, &a.Project, &a.Visibility, &a.RetentionClass,
+			&a.GitSHA, &a.GitBranch, &gitDirty, &libs, &a.TS); err != nil {
+			return nil, fmt.Errorf("research artifact scan: %w", err)
+		}
+		a.LibVersions = json.RawMessage(libs)
+		a.GitDirty = gitDirty != 0
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// setArtifactVisibility records the SEPARATE visibility grant for one artifact by sha256
+// — the same private-by-default rule as runs. Returns rows touched.
+func (s *store) setArtifactVisibility(ctx context.Context, project, sha256, visibility string) (int, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE artifact SET visibility=? WHERE project=? AND sha256=?`, visibility, project, sha256)
+	if err != nil {
+		return 0, fmt.Errorf("research artifact grant: %w", err)
 	}
 	return affected(res), nil
 }
