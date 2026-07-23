@@ -24,7 +24,7 @@ import (
 	"io"
 	"sync/atomic"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud/clients/s3admin"
 	"github.com/hanzoai/cloud/types"
@@ -35,10 +35,10 @@ import (
 // exactly like clients/s3's per-org physical naming — not a bucket-per-tenant.
 const TeamBlobBucket = "team-blobs"
 
-// s3vfs implements types.VFSClient over a minio client bound to the SeaweedFS S3
+// s3vfs implements types.VFSClient over a S3 client bound to the SeaweedFS S3
 // admin endpoint.
 type s3vfs struct {
-	client  *minio.Client
+	client  *s3.Client
 	bucket  string
 	region  string
 	ensured int32 // atomic: 1 once the bucket is confirmed present (create-if-absent)
@@ -47,7 +47,7 @@ type s3vfs struct {
 // Compile-time proof s3vfs satisfies the seam.
 var _ types.VFSClient = (*s3vfs)(nil)
 
-// NewS3VFS builds the S3-backed VFSClient from the shared admin config. The minio
+// NewS3VFS builds the S3-backed VFSClient from the shared admin config. The S3
 // client is offline-constructed (no network here); the bucket is created if absent
 // best-effort now AND lazily on the first op (so a boot-time S3 blip self-heals
 // rather than permanently disabling files). Returns an error only if the client
@@ -75,7 +75,7 @@ func (v *s3vfs) ensure(ctx context.Context) error {
 		return err
 	}
 	if !exists {
-		if err := v.client.MakeBucket(ctx, v.bucket, minio.MakeBucketOptions{Region: v.region}); err != nil {
+		if err := v.client.MakeBucket(ctx, v.bucket, s3.MakeBucketOptions{Region: v.region}); err != nil {
 			// Another replica may have created it between the check and the make.
 			if ex2, e2 := v.client.BucketExists(ctx, v.bucket); e2 != nil || !ex2 {
 				return err
@@ -94,19 +94,19 @@ func (v *s3vfs) Put(ctx context.Context, key string, payload []byte) error {
 		return err
 	}
 	_, err := v.client.PutObject(ctx, v.bucket, key, bytes.NewReader(payload), int64(len(payload)),
-		minio.PutObjectOptions{ContentType: "application/octet-stream"})
+		s3.PutObjectOptions{ContentType: "application/octet-stream"})
 	return err
 }
 
 // Get returns the object bytes at key. A MISSING key maps to types.ErrBlobNotFound
 // (so the consumer answers 404 / idempotent-204); any OTHER S3 error is returned
-// verbatim (so the consumer fails closed 502). minio's GetObject is lazy — the
+// verbatim (so the consumer fails closed 502). the S3 client's GetObject is lazy — the
 // NoSuchKey surfaces on read — so mapS3Err runs over the read error too.
 func (v *s3vfs) Get(ctx context.Context, key string) ([]byte, error) {
 	if err := v.ensure(ctx); err != nil {
 		return nil, err
 	}
-	obj, err := v.client.GetObject(ctx, v.bucket, key, minio.GetObjectOptions{})
+	obj, err := v.client.GetObject(ctx, v.bucket, key, s3.GetObjectOptions{})
 	if err != nil {
 		return nil, mapS3Err(err)
 	}
@@ -126,7 +126,7 @@ func (v *s3vfs) Delete(ctx context.Context, key string) error {
 	if err := v.ensure(ctx); err != nil {
 		return err
 	}
-	return mapS3Err(v.client.RemoveObject(ctx, v.bucket, key, minio.RemoveObjectOptions{}))
+	return mapS3Err(v.client.RemoveObject(ctx, v.bucket, key, s3.RemoveObjectOptions{}))
 }
 
 // mapS3Err is the load-bearing translation: a NoSuchKey S3 error becomes the
@@ -140,9 +140,9 @@ func mapS3Err(err error) error {
 	if err == nil {
 		return nil
 	}
-	// errors.As finds a minio.ErrorResponse whether it is returned directly (the
+	// errors.As finds a s3.ErrorResponse whether it is returned directly (the
 	// common case) or wrapped (%w) — more robust than a bare type assertion.
-	var er minio.ErrorResponse
+	var er s3.ErrorResponse
 	if errors.As(err, &er) && er.Code == "NoSuchKey" {
 		return types.ErrBlobNotFound
 	}
