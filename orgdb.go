@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -14,6 +15,12 @@ import (
 	// cek opens every org file encrypted at rest (the SOLE org-open seam).
 	"github.com/hanzoai/cloud/cek"
 
+	// internal/org is the HA-durable substrate: ha election (WHO writes) + vfs
+	// FencedStore ship/hydrate (HOW it ships) + envelope Cipher (at rest). An
+	// OrgStore configured WithDurable routes every per-org file through it.
+	"github.com/hanzoai/cloud/internal/org"
+	luxlog "github.com/luxfi/log"
+
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
 	// encrypted at rest + FTS5; !cgo → pure-Go modernc, FTS5 incl. the trigram
@@ -22,6 +29,36 @@ import (
 	// file; the blank import keeps the driver registered for cek's no-key fallback.
 	_ "github.com/hanzoai/sqlite"
 )
+
+// Durability wires an OrgStore's per-org files through the HA-durable path
+// (github.com/hanzoai/cloud/internal/org): each store is owned by the ha-elected
+// single writer for its org, hydrated from the object store on open, and its writes
+// shipped back fenced by the lease round. It is the per-deployment factory (one
+// election+fence over one object store); a possibly-nil value means local-only
+// (dev/single-node), the open path unchanged.
+type Durability = org.Durability
+
+// OrgStoreOption configures optional OrgStore behavior. With no options an OrgStore
+// is exactly the local-only cache it has always been (cek open, no ship).
+type OrgStoreOption func(*orgStoreOpts)
+
+type orgStoreOpts struct {
+	dur *Durability
+	log luxlog.Logger
+}
+
+// WithDurable routes every per-org file through the HA-durable path. A nil dur is a
+// no-op (local-only), so a caller passes its deployment's possibly-nil Durability
+// directly and the store degrades to local on a deployment without an object store.
+func WithDurable(dur *Durability) OrgStoreOption {
+	return func(o *orgStoreOpts) { o.dur = dur }
+}
+
+// WithStoreLogger sets the logger used to report a degraded hydrate (the store still
+// opens; the message is the operator's signal that a durable open ran read-only).
+func WithStoreLogger(log luxlog.Logger) OrgStoreOption {
+	return func(o *orgStoreOpts) { o.log = log }
+}
 
 // OrgDB is the ONE way any cloud subsystem opens a per-org SQLite file
 // (HIP-0302 physical org isolation). It resolves the path, creates the
@@ -137,20 +174,35 @@ type OrgStore[T io.Closer] struct {
 	subsystem string
 	open      func(*sql.DB) (T, error)
 
-	mu     sync.Mutex
-	byPath map[string]T
+	// dur (when non-nil) makes every per-org file HA-durable: forPath hydrates it
+	// from the object store before opening and binds a Durable that Sync ships
+	// fenced. nil ⇒ local-only, byte-identical to the pre-durability cache.
+	dur *Durability
+	log luxlog.Logger
+
+	mu       sync.Mutex
+	byPath   map[string]T
+	durables map[string]*org.Durable // parallel to byPath, populated only when dur != nil
 }
 
 // NewOrgStore builds a per-org store cache for subsystem under dataDir.
 // open wraps a freshly-opened *sql.DB (already pragma'd by OrgDB) into the
 // subsystem's store handle, running its migration; it is called once per org
-// file.
-func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, error)) *OrgStore[T] {
+// file. Pass WithDurable to route every file through the HA-durable path; with no
+// options the cache is exactly the local-only one it has always been.
+func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, error), opts ...OrgStoreOption) *OrgStore[T] {
+	var o orgStoreOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
 	return &OrgStore[T]{
 		dataDir:   dataDir,
 		subsystem: subsystem,
 		open:      open,
+		dur:       o.dur,
+		log:       o.log,
 		byPath:    map[string]T{},
+		durables:  map[string]*org.Durable{},
 	}
 }
 
@@ -159,13 +211,27 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 // pass principal.Project(c) for a project-scoped one. Isolation is PHYSICAL: a
 // distinct (org[, project]) resolves to a distinct file, so a query in one can
 // never reach another's rows.
-func (c *OrgStore[T]) For(org, project string) (T, error) {
-	path, err := orgDBPath(c.dataDir, org, project, c.subsystem)
+func (c *OrgStore[T]) For(orgID, project string) (T, error) {
+	path, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
-	return c.forPath(path)
+	slug, dbKey := c.durKey(orgID, project)
+	return c.forPath(slug, dbKey, path)
+}
+
+// durKey returns the org SLUG (the HRW election key + cipher AAD — the SAME slug the
+// on-disk path and the shard router hash use) and the durable object key for this
+// (org, project). The object layout mirrors the on-disk one (HIP-0302), so a store's
+// durable slot is the canonical orgs/<slug>[/projects/<proj>]/<subsystem>.db.
+func (c *OrgStore[T]) durKey(orgID, project string) (slug, dbKey string) {
+	slug = SanitizeOrg(orgID)
+	scope := ""
+	if project != "" {
+		scope = "projects/" + SanitizeOrg(project)
+	}
+	return slug, org.DBPath(slug, scope, c.subsystem)
 }
 
 // forPath opens (and migrates on first use) the store at an already-resolved DB
@@ -173,12 +239,15 @@ func (c *OrgStore[T]) For(org, project string) (T, error) {
 // the path, so an org reached via For(org) and the SAME file reached via Each's
 // enumeration resolve to the ONE handle — never a second open of the same file
 // (which the at-rest cek layer does not support concurrently).
-func (c *OrgStore[T]) forPath(path string) (T, error) {
+func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 	var zero T
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if st, ok := c.byPath[path]; ok {
 		return st, nil
+	}
+	if c.dur != nil {
+		return c.openDurable(slug, dbKey, path)
 	}
 	db, err := openOrgDB(path)
 	if err != nil {
@@ -191,6 +260,57 @@ func (c *OrgStore[T]) forPath(path string) (T, error) {
 	}
 	c.byPath[path] = st
 	return st, nil
+}
+
+// openDurable hydrates the org's durable snapshot into the local file (as the elected
+// owner, sealing the durable object to the lease round; as a non-owner, read-only)
+// BEFORE opening the local handle, then opens through the SAME cek path and binds the
+// handle so Sync can checkpoint on the store's sole connection. A degraded hydrate
+// (store unreachable / not owner) NEVER blocks the open — the store always opens
+// (reads serve local, writes fail closed via Sync) so a second replica can never
+// break the store. Caller holds c.mu.
+func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, error) {
+	var zero T
+	d := c.dur.For(slug, dbKey, path)
+	if err := d.Hydrate(context.Background()); err != nil && c.log != nil {
+		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "org", slug, "key", dbKey, "err", err)
+	}
+	db, err := openOrgDB(path)
+	if err != nil {
+		return zero, err
+	}
+	d.Bind(db)
+	st, err := c.open(db)
+	if err != nil {
+		_ = db.Close()
+		return zero, err
+	}
+	c.byPath[path] = st
+	c.durables[path] = d
+	return st, nil
+}
+
+// Sync ships the org's local file to its durable object, fenced at the lease round
+// (the ship-before-ack step a durable subsystem calls after a write commits). It
+// returns acked=false when this replica is not the owner or was deposed mid-request
+// (the caller retries on the new owner). On a local-only store (no Durability) it is
+// a successful no-op — the write is already as durable as configured. project is ""
+// for an org-scoped subsystem.
+func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
+	if c.dur == nil {
+		return true, nil
+	}
+	path, err := orgDBPath(c.dataDir, orgID, project, c.subsystem)
+	if err != nil {
+		return false, err
+	}
+	c.mu.Lock()
+	d := c.durables[path]
+	c.mu.Unlock()
+	if d == nil {
+		return false, fmt.Errorf("cloud: OrgStore.Sync for %s before its store was opened", path)
+	}
+	return d.Sync(context.Background())
 }
 
 // Each folds fn over every org that has a {subsystem}.db on disk under
@@ -221,7 +341,9 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 		if _, statErr := os.Stat(path); statErr != nil {
 			continue // this org has no store for this subsystem
 		}
-		st, openErr := c.forPath(path)
+		// e.Name() IS the on-disk org slug — the same value durKey folds to and the
+		// election hashes; Each is org-root scoped, so the durable key has no project.
+		st, openErr := c.forPath(e.Name(), org.DBPath(e.Name(), "", c.subsystem), path)
 		fn(e.Name(), st, openErr)
 	}
 	return nil
@@ -232,6 +354,13 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 func (c *OrgStore[T]) CloseAll() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Ship each durable's final state BEFORE closing the store handles it snapshots
+	// through (Durable.Close runs a best-effort final Sync on the still-open handle;
+	// ship-before-ack already covers every acknowledged write). Durable never owns
+	// the *sql.DB, so the store's Close below is the sole close.
+	for _, d := range c.durables {
+		_ = d.Close()
+	}
 	var first error
 	for _, st := range c.byPath {
 		if err := st.Close(); err != nil && first == nil {
@@ -239,6 +368,7 @@ func (c *OrgStore[T]) CloseAll() error {
 		}
 	}
 	c.byPath = map[string]T{}
+	c.durables = map[string]*org.Durable{}
 	return first
 }
 
