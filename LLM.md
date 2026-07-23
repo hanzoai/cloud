@@ -227,6 +227,23 @@ package under `clients/<name>` that obeys these seams — nothing more.
   curriculum is a machine-readable contract (embedded `default.yaml`; org-custom via
   PUT replaces it) so `hanzoai/marketing` can author the full `checklist.yaml`
   against the same `Step`/`Curriculum` shape.
+- **The EXPERIMENT is a composition, not a fourth engine (`clients/experiments`,
+  `/v1/experiments`).** A/B testing is ONE value whatever the variant KIND (feature
+  flag, ad creative, email subject, model id): the primitive owns only the
+  experiment registry (definition + decision); it COMPOSES three planes it never
+  duplicates. ASSIGNMENT = `flags.Assign(org,project,key,subject,props)` —
+  subject→variant is a deterministic `engineEvaluate` (sha1 rollout hash), no second
+  bucketing, no assignment store; create writes a multivariate flag def
+  (`flags.PutDef`) and decide rewrites its weights to 100% for the winner
+  (`flags.GetDef`+`PutDef`). MEASUREMENT = `analytics.Outcomes(...)` — one
+  org-scoped `hanzo.events` query (the `eventsWhere` isolation invariant), no second
+  event store; the analyze fold joins each subject's analytics outcome to its flags
+  variant by `distinct_id`. EVIDENCE = `research.Record`/`research.List` — per-variant
+  samples land as immutable `kind:"ab"` rows; significance (two-proportion z-test,
+  `math.Erfc`, no dep) is a PURE function over them. `clients/campaign` runs a
+  creative A/B by composing `experiments.Assign`/`experiments.Analyze` — it never
+  reinvents assignment or evidence. Add a new variant KIND by putting a payload on
+  the variant; the primitive does not care what it is.
 
 ## Identity vocabulary is IAM-native
 
