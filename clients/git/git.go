@@ -68,6 +68,7 @@ const defaultBranchName = "main"
 type state struct {
 	stores  *cloud.OrgStore[*Store] // per-org repo-metadata DBs, opened once each
 	storage *storage
+	dataDir string     // base data dir; {dataDir}/orgs/{slug} is enumerated for the public explore
 	sshHost string     // for sshUrl construction (e.g. "git.hanzo.ai")
 	gitHost string     // the HTTPS git host (e.g. "git.hanzo.ai"); root smart-HTTP is served only for this Host
 	ssh     *sshServer // Git SSH transport listener
@@ -170,6 +171,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	s := &cloud.Service[state]{Base: b, State: state{
 		stores:  cloud.NewOrgStore(deps.DataDir, "git", openStore),
 		storage: st,
+		dataDir: deps.DataDir,
 		sshHost: gitSSHHost(deps.Domain),
 		gitHost: defaultSSHHost(deps.Domain),
 		keys:    keys,
