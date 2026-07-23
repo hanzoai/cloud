@@ -56,8 +56,15 @@ var publishableDocTypes = []string{DocTypeCampaign, DocTypeSocialPost, DocTypeAs
 // init registers the marketing content model with the framework engine. The lifecycle
 // hooks are wired here too (hooks.go) so both the fixtures and their behavior are
 // declared once at build time, exactly as the cms/kb lanes do.
+//
+// marketing is ALWAYS-ON: MarkAlwaysOn defaults its DocTypes on for every org, so the
+// Business AI Guide's content steps (content_generate → Campaign/Asset) complete for a
+// fresh org with no per-org install — the fix for the live "content: marketing module
+// not installed for org" gap. It defaults only the SCHEMA on; every document stays
+// physically org-scoped (framework.MarkAlwaysOn).
 func init() {
 	framework.RegisterModule(Module, DocTypes())
+	framework.MarkAlwaysOn(Module)
 	registerHooks()
 }
 
