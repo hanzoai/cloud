@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -183,19 +182,27 @@ func overrideTemplate(s *cloud.Service[state], c *zip.Ctx) error {
 			t.Title = base.Title
 		}
 		if base.CounselReview {
-			t.CounselReview = true // never drop the counsel-review boundary on an override
+			t.CounselReview = true // never drop a builtin's counsel-review posture
 		}
 	}
 	if !validCategory(t.Category) {
 		return zip.ErrBadRequest("category must be formation, equity, ops, or sales")
 	}
+	// The counsel-review boundary is coupled to the CATEGORY, not just the builtin: a
+	// formation or equity (securities) template is ALWAYS counsel-review, so a NEW org
+	// template in one of those categories can never generate a securities-class
+	// document without the notice.
+	if counselRequired(t.Category) {
+		t.CounselReview = true
+	}
 	if t.Title == "" {
 		return zip.ErrBadRequest("title is required")
 	}
-	// Fail closed on an unparseable template rather than storing a body that will
-	// error at generation time.
-	if err := parseCheck(t); err != nil {
-		return zip.ErrBadRequest("template does not parse: " + err.Error())
+	// Fail closed on an unparseable body OR one that references an UNDECLARED field
+	// (which would render a silent blank), rather than storing a body that only fails
+	// at generation time.
+	if err := ValidateOverride(t); err != nil {
+		return zip.ErrBadRequest(err.Error())
 	}
 	saved, err := s.State.store.SaveTemplateOverride(c.Context(), org, t)
 	if err != nil {
@@ -481,14 +488,6 @@ func emitAudit(s *cloud.Service[state], c *zip.Ctx, action string, res audit.Res
 	if _, err := s.State.audit.Append(c.Context(), rec); err != nil {
 		s.Log.Warn("legal audit append failed", "err", err, "action", action)
 	}
-}
-
-// parseCheck reports whether a template BODY parses (independent of merge data) — the
-// override validation, so an org can never store a body that would only fail at
-// generation time.
-func parseCheck(t Template) error {
-	_, err := template.New(t.ID).Option("missingkey=error").Parse(t.Body)
-	return err
 }
 
 func mustJSON(v any) json.RawMessage {
