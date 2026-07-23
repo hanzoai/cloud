@@ -148,6 +148,14 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusBadGateway, "sync: %v", err)
 	}
+	// Fire any automation flows subscribed to github/push for THIS org (best-effort — a
+	// dispatch failure never fails the webhook ack). org is the signature-verified
+	// installation owner resolved above, never a client field; ev.After (the head SHA)
+	// is the idempotency key so a redelivered push fires each flow at most once.
+	fireTrigger(c.Context(), org, "github", "push", ev.After, map[string]any{
+		"repo": ev.Repository.Name, "ref": ev.Ref, "branch": branch,
+		"before": ev.Before, "after": ev.After, "pusher": actorOf(ev),
+	})
 	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
 }
 
