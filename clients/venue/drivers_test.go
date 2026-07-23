@@ -70,7 +70,7 @@ func awsEKS(w http.ResponseWriter, r *http.Request, caB64 string, clusters map[s
 // discover EKS clusters, fold each. The stub only assumes the role when the exact
 // external id is presented, so this passing proves venue forwards it.
 func TestAWS_KeylessRoleAssumptionDiscoversAndFolds(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAPLATFORM")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "platform-secret")
 	t.Setenv("AWS_REGION", "us-west-2")
@@ -121,7 +121,7 @@ func TestAWS_KeylessRoleAssumptionDiscoversAndFolds(t *testing.T) {
 // Confused-deputy: the WRONG external id fails the assumption — verify refuses and
 // nothing is stored.
 func TestAWS_WrongExternalIDRefused(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAPLATFORM")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "platform-secret")
 	t.Setenv("AWS_REGION", "us-west-2")
@@ -174,7 +174,7 @@ func gcpStub(t *testing.T, caB64 string, clusters map[string]string) *httptest.S
 // drives the container REST API; each GKE cluster folds with a kubeconfig bearing
 // the google access token.
 func TestGCP_KeylessDiscoversAndFolds(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	t.Setenv("GCP_STATIC_TOKEN", "ya29.test-access-token")
 	api := fakeAPIServer(t)
 	// GKE reports the endpoint host without a scheme; gcp.go prepends https://.
@@ -264,7 +264,7 @@ func azureStub(t *testing.T, tenant, wantSecret, wantAssertion string, clusters 
 
 // Service-principal Azure: tenant+client+secret → AAD token → list AKS → fold.
 func TestAzure_ServicePrincipalDiscoversAndFolds(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	az := azureStub(t, "tenant-1", "sp-secret", "", map[string]string{"prod-aks": api.URL})
 	t.Setenv("AZURE_AD_ENDPOINT", az.URL)
@@ -303,7 +303,7 @@ func TestAzure_ServicePrincipalDiscoversAndFolds(t *testing.T) {
 // Keyless Azure: no client secret → WIF client assertion (Hanzo's federated
 // token) → fold. Proves the keyless path forwards the assertion, not a secret.
 func TestAzure_KeylessWorkloadIdentityFederation(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	t.Setenv("AZURE_FEDERATED_TOKEN", "hanzo-federated-oidc-token")
 	api := fakeAPIServer(t)
 	az := azureStub(t, "tenant-1", "", "hanzo-federated-oidc-token", map[string]string{"prod-aks": api.URL})
@@ -333,6 +333,70 @@ func TestAzure_KeylessWorkloadIdentityFederation(t *testing.T) {
 	_ = json.Unmarshal(raw, &cr)
 	if cr.ClientSecret != "" {
 		t.Fatalf("keyless azure credential must carry no secret: %+v", cr)
+	}
+}
+
+// HIGH-1: a hostile external_account (WIF) credentialJson — whose credential_source
+// would make the pod fetch a token from the cloud metadata IP (SSRF) — is REJECTED
+// in verify(), before google.CredentialsFromJSON ever runs, so nothing is fetched,
+// read, or sealed.
+func TestGCP_HostileExternalAccountRejected(t *testing.T) {
+	// NO GCP_STATIC_TOKEN: the credentialJson validation path runs.
+	f := newRecFolder()
+	kc := newKMS(t)
+	app := newVenue(t, f, kc)
+
+	hostile := `{"type":"external_account","audience":"//iam.googleapis.com/x","subject_token_type":"urn:ietf:params:oauth:token-type:jwt","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token","headers":{"Metadata-Flavor":"Google"}}}`
+	res := call(t, app, http.MethodPost, "/v1/cloud/gcp/accounts", "acme", "", true, map[string]any{
+		"label": "prod", "credentialJson": hostile, "projectIds": []string{"p"},
+	})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("hostile external_account want 400, got %d (%s)", res.Code, res.Body)
+	}
+	if _, err := kc.Get("/orgs/acme/cloud/gcp/prod", credName, venueEnv); err == nil {
+		t.Fatal("a rejected hostile credential must not be sealed")
+	}
+	if f.count() != 0 {
+		t.Fatalf("nothing should fold on a rejected credential, got %d", f.count())
+	}
+}
+
+func TestValidateGoogleCredential(t *testing.T) {
+	reject := []string{
+		`{"type":"external_account","credential_source":{"url":"http://169.254.169.254/"}}`, // SSRF
+		`{"type":"external_account","credential_source":{"file":"/var/run/secrets/token"}}`, // LFI
+		`{"type":"impersonated_service_account"}`,                                           // recursion
+		`{"type":"service_account","token_uri":"http://attacker.example.com/token"}`,        // non-google token_uri
+		`{"type":"service_account","token_uri":"https://attacker.example.com/token"}`,       // wrong host
+		`not json`,
+		`{}`, // no type
+	}
+	for _, c := range reject {
+		if err := validateGoogleCredential([]byte(c)); err == nil {
+			t.Fatalf("must reject: %s", c)
+		}
+	}
+	accept := []string{
+		`{"type":"service_account","token_uri":"https://oauth2.googleapis.com/token","project_id":"p"}`,
+		`{"type":"service_account","project_id":"p"}`, // no token_uri (google default)
+	}
+	for _, c := range accept {
+		if err := validateGoogleCredential([]byte(c)); err != nil {
+			t.Fatalf("must accept %s: %v", c, err)
+		}
+	}
+}
+
+func TestValidRegion(t *testing.T) {
+	for _, ok := range []string{"us-west-2", "us-east-1", "eu-central-1", "ap-southeast-1"} {
+		if !validRegion(ok) {
+			t.Fatalf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"evil.com/", "us-west-2/", "../", "us_west_2", "US-WEST-2", "us-west", "sts.evil.com", "", ".", "us-west-2.evil.com"} {
+		if validRegion(bad) {
+			t.Fatalf("%q should be INVALID (region SSRF)", bad)
+		}
 	}
 }
 
