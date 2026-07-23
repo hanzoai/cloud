@@ -96,6 +96,7 @@ type functionView struct {
 	SuccessRate    *float64 `json:"successRate,omitempty"`
 	AvgDurationMs  *float64 `json:"avgDurationMs,omitempty"`
 	Errors7d       *int     `json:"errors7d,omitempty"`
+	Target         string   `json:"target,omitempty"`
 	CreatedAt      string   `json:"createdAt"`
 	LastDeployedAt string   `json:"lastDeployedAt"`
 }
@@ -141,7 +142,7 @@ func toView(s *cloud.Service[state], f Function, st InvStats) functionView {
 	v := functionView{
 		Name: f.Name, Namespace: f.Namespace, Environment: f.Runtime, Status: f.Status,
 		Image: f.Image, Endpoint: endpointFor(f.Name), EnvCount: len(f.EnvNames),
-		TimeoutSec: f.TimeoutSec, MemoryLimit: f.MemoryLimit,
+		TimeoutSec: f.TimeoutSec, MemoryLimit: f.MemoryLimit, Target: f.Target,
 		CreatedAt: rfc3339(f.CreatedAt), LastDeployedAt: rfc3339(f.LastDeployAt),
 	}
 	if st.Count > 0 {
@@ -223,6 +224,7 @@ type createReq struct {
 	TimeoutSec  int      `json:"timeoutSec"`
 	MemoryLimit string   `json:"memoryLimit"`
 	EnvNames    []string `json:"envNames"`
+	Target      string   `json:"target"` // ""|"sandbox" = sandbox, "fleet" = org GPU fleet
 }
 
 func create(s *cloud.Service[state], c *zip.Ctx) error {
@@ -269,6 +271,16 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 	if mem == "" {
 		mem = "256Mi"
 	}
+	target := strings.ToLower(strings.TrimSpace(body.Target))
+	if target == "sandbox" {
+		target = ""
+	}
+	if target != "" && target != "fleet" {
+		return zip.ErrBadRequest("target must be sandbox or fleet")
+	}
+	if target == "fleet" && runtime != "python" {
+		return zip.ErrBadRequest("target=fleet supports runtime=python only")
+	}
 	id, err := genID("fn")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
@@ -278,7 +290,7 @@ func create(s *cloud.Service[state], c *zip.Ctx) error {
 		ID: id, Org: org, Name: name, Namespace: sanitizeNs(body.Namespace), Runtime: runtime,
 		Image: strings.TrimSpace(body.Image), Code: body.Code, Handler: strings.TrimSpace(body.Handler),
 		TimeoutSec: timeout, MemoryLimit: mem, EnvNames: cleanList(body.EnvNames),
-		Status: "ready", LastDeployAt: now,
+		Target: target, Status: "ready", LastDeployAt: now,
 	}
 	saved, err := store.Upsert(c.Context(), f)
 	if err != nil {
