@@ -20,10 +20,17 @@ package integrations
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
 )
+
+// salesforceInstanceSuffixes are the domains a real Salesforce instance_url ends
+// in. The custody guard pins the host to one of these so a spoofed token endpoint
+// cannot inject an SSRF target (IMDS, RFC1918, an attacker host) the reader would
+// later call as its API base. Parity with shopHost/subdomainHost, which pin too.
+var salesforceInstanceSuffixes = []string{".salesforce.com", ".force.com", ".cloudforce.com", ".database.com"}
 
 const (
 	salesforceProvider        = "salesforce"
@@ -156,8 +163,29 @@ func salesforceInstance(raw string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
 		return "", fmt.Errorf("salesforce returned no usable instance_url")
 	}
-	if !validHostLabel(strings.ToLower(u.Hostname())) {
+	host := strings.ToLower(u.Hostname()) // port-stripped; the port is dropped below
+	if !validHostLabel(host) {
 		return "", fmt.Errorf("salesforce returned an unusable instance host")
+	}
+	// A test seam (SALESFORCE_LOGIN_BASE set) points the whole flow at httptest, whose
+	// instance_url is a loopback host:port — allow it there only. In prod, pin the host
+	// to a Salesforce suffix, reject a bare IP literal (IMDS/RFC1918/loopback), and drop
+	// any port, so a spoofed token endpoint cannot make the reader dial an attacker host.
+	if strings.TrimSpace(os.Getenv(salesforceLoginBaseEnv)) == "" {
+		if net.ParseIP(host) != nil {
+			return "", fmt.Errorf("salesforce instance host must not be an IP literal")
+		}
+		pinned := false
+		for _, s := range salesforceInstanceSuffixes {
+			if strings.HasSuffix(host, s) {
+				pinned = true
+				break
+			}
+		}
+		if !pinned {
+			return "", fmt.Errorf("salesforce instance host is not a Salesforce domain")
+		}
+		return "https://" + host, nil // port dropped
 	}
 	return "https://" + u.Host, nil
 }
