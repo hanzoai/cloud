@@ -183,3 +183,107 @@ func TestBuildTopProductsHonestEmpty(t *testing.T) {
 		t.Fatalf("must carry honest reason + source, got %+v", tp)
 	}
 }
+
+// ── behavior lenses (topPages / topReferrers / topSources) ────────────────────
+
+// TestBreakdownSQLBindsOrgPositionally: EVERY behavior lens inherits the tenancy
+// invariant — the org is the trailing bound parameter (never interpolated), the
+// predicate binds tenant_id, and the read is restricted to $pageview rows. The
+// group key is a server-chosen constant (safe to interpolate) and the limit is a
+// validated int. This is the SQL-boundary isolation proof for the new lenses.
+func TestBreakdownSQLBindsOrgPositionally(t *testing.T) {
+	start := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	const org = "o'; DROP TABLE hanzo.events; --" // hostile slug must NOT escape into SQL
+	for _, keyExpr := range []string{pageKeyExpr, referrerKeyExpr, sourceKeyExpr} {
+		sql, args := breakdownSQL(keyExpr, org, start, end, 10)
+		if strings.Contains(sql, org) {
+			t.Fatalf("org %q must NOT be interpolated into sql: %q", org, sql)
+		}
+		if !strings.Contains(sql, "tenant_id = ?") {
+			t.Fatalf("breakdown must bind tenant_id positionally: %q", sql)
+		}
+		if !strings.Contains(sql, "timestamp >= ? AND timestamp < ?") {
+			t.Fatalf("time bounds must be parameterized: %q", sql)
+		}
+		if len(args) != 3 {
+			t.Fatalf("want 3 bound args (start,end,org), got %d: %v", len(args), args)
+		}
+		if got, ok := args[2].(string); !ok || got != org {
+			t.Fatalf("org must be the trailing bound arg verbatim, want %q got %v", org, args[2])
+		}
+		if !strings.Contains(sql, "event = '$pageview'") {
+			t.Fatalf("behavior lenses count only $pageview rows: %q", sql)
+		}
+		if !strings.Contains(sql, keyExpr) {
+			t.Fatalf("breakdown must group by the key expr %q: %q", keyExpr, sql)
+		}
+		if !strings.Contains(sql, "LIMIT 10") {
+			t.Fatalf("breakdown must bound cardinality by the validated limit: %q", sql)
+		}
+		// pct denominator is the TRUE in-window total (window fn), not the top-N sum.
+		if !strings.Contains(sql, "sum(pageviews) OVER ()") {
+			t.Fatalf("breakdown pct denominator must be the in-window pageview total: %q", sql)
+		}
+	}
+}
+
+// TestBreakdownBucketsDirectAndNone: the referrer lens buckets a missing or
+// same-origin (self) referrer as "(direct)"; the source lens buckets an empty utm
+// as "(none)". This is the origin/referral/campaign split done IN SQL.
+func TestBreakdownBucketsDirectAndNone(t *testing.T) {
+	start := time.Date(2026, 6, 24, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	refSQL, _ := breakdownSQL(referrerKeyExpr, "acme", start, end, 5)
+	if !strings.Contains(refSQL, "'(direct)'") {
+		t.Fatalf("referrer lens must bucket no/own referrer as (direct): %q", refSQL)
+	}
+	if !strings.Contains(refSQL, "domain(url)") {
+		t.Fatalf("referrer lens must exclude same-origin (self) referrers via domain(url): %q", refSQL)
+	}
+	srcSQL, _ := breakdownSQL(sourceKeyExpr, "acme", start, end, 5)
+	if !strings.Contains(srcSQL, "'(none)'") {
+		t.Fatalf("source lens must bucket empty utm as (none): %q", srcSQL)
+	}
+}
+
+// TestBuildBreakdownPctShareOfTotal: pct is each bucket's share of the in-window
+// pageview TOTAL (the window-fn `total` column = 100), NOT of the returned-rows sum
+// (80). So a top-N list honestly reflects the long tail. Values come through
+// verbatim (key/pageviews/visitors).
+func TestBuildBreakdownPctShareOfTotal(t *testing.T) {
+	rows := []map[string]any{
+		{"k": "/pricing", "pageviews": uint64(60), "visitors": uint64(40), "total": uint64(100)},
+		{"k": "/docs", "pageviews": uint64(20), "visitors": uint64(15), "total": uint64(100)},
+	}
+	b := buildBreakdown(rows, true)
+	if !b.Available || len(b.Items) != 2 {
+		t.Fatalf("want 2 available items, got %+v", b)
+	}
+	if b.Items[0].Key != "/pricing" || b.Items[0].Pageviews != 60 || b.Items[0].Visitors != 40 {
+		t.Fatalf("row 0 must carry values verbatim: %+v", b.Items[0])
+	}
+	// 60/100 = 60%, 20/100 = 20% — share of the in-window TOTAL, not the shown sum.
+	if b.Items[0].Pct != 60 || b.Items[1].Pct != 20 {
+		t.Fatalf("pct must be share of the in-window total: %v / %v", b.Items[0].Pct, b.Items[1].Pct)
+	}
+	if b.Source != "hanzo.events" {
+		t.Fatalf("source want hanzo.events, got %q", b.Source)
+	}
+}
+
+// TestBuildBreakdownHonestEmpty: an events-query failure (ok=false) yields an
+// honestly-unavailable lens with an empty (non-nil) list — never fabricated rows,
+// never a 500. Mirrors buildTopProducts's honest-empty exactly.
+func TestBuildBreakdownHonestEmpty(t *testing.T) {
+	b := buildBreakdown(nil, false)
+	if b.Available {
+		t.Fatal("breakdown must be unavailable when the events query failed")
+	}
+	if b.Items == nil || len(b.Items) != 0 {
+		t.Fatalf("items must be an empty (non-nil) slice, got %#v", b.Items)
+	}
+	if b.Reason == "" || b.Source != "hanzo.events" {
+		t.Fatalf("must carry honest reason + source, got %+v", b)
+	}
+}
