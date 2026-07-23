@@ -121,6 +121,15 @@ type Durable struct {
 // on the local file and is returned for the caller to log — it NEVER makes the store
 // unopenable, so a store is always available for reads; writes fail closed until a
 // later open re-acquires.
+//
+// RECOVERY from a degraded open (Red M3): a pod that could not acquire at open stays
+// read-only for that store's cached lifetime — it does NOT re-acquire in place, because
+// a takeover CarryForward restores the durable snapshot OVER the local file, which is
+// unsafe under the live handle the store already handed out (stale reads). Recovery is
+// therefore a FRESH open: a pod restart (a readiness/liveness probe can gate on the
+// degraded log) or the shard router routing the org to a healthy owner. An in-process
+// quiesce-close-reopen on the cached entry is the future enhancement; until then the
+// safe, simple recovery is re-open.
 func (d *Durable) Hydrate(ctx context.Context) error {
 	lease, err := d.dy.fencer.Acquire(ctx, d.orgID)
 	if err != nil {
