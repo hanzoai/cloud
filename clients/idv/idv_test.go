@@ -2,6 +2,9 @@ package idv
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -210,5 +213,115 @@ func TestFromConfigSelection(t *testing.T) {
 	}
 	if rp, ok := p.(*REST); !ok || rp.Name() != "persona" {
 		t.Fatalf("configured provider = %T (%v), want *REST persona", p, p.Name())
+	}
+}
+
+// TestReviewerConfirmedIsNotProviderReported proves the boundary: the classify table —
+// the ONLY way a provider status becomes terminal — can NEVER emit reviewer_confirmed,
+// so that value is producible only by a consumer's attributed reviewer path. It is
+// nonetheless a valid, passing, terminal status.
+func TestReviewerConfirmedIsNotProviderReported(t *testing.T) {
+	for _, name := range []string{"persona", "onfido", "stripe", "generic"} {
+		for token, st := range classifierFor(name) {
+			if st == StatusReviewerConfirmed {
+				t.Fatalf("provider %q maps token %q to reviewer_confirmed — a provider must never produce it", name, token)
+			}
+		}
+	}
+	if !StatusReviewerConfirmed.Valid() || !StatusReviewerConfirmed.Terminal() || !StatusReviewerConfirmed.Pass() {
+		t.Fatalf("reviewer_confirmed must be valid, terminal, and passing")
+	}
+	if StatusRejected.Pass() || StatusReview.Pass() || StatusPending.Pass() {
+		t.Fatalf("only verified/reviewer_confirmed may pass")
+	}
+}
+
+// TestWebhookFromConfig covers the webhook receiver selection + fail-closed rules.
+func TestWebhookFromConfig(t *testing.T) {
+	okKey := func(context.Context, string) ([]byte, error) { return []byte("k"), nil }
+	badKey := func(context.Context, string) ([]byte, error) { return nil, errors.New("no such secret") }
+	env := func(m map[string]string) EnvFn { return func(k string) string { return m[k] } }
+
+	// Unset → disabled (nil, no error) — no external signature path by default.
+	w, err := WebhookFromConfig(okKey, env(map[string]string{}))
+	if err != nil || w != nil {
+		t.Fatalf("unset webhook = (%v,%v), want (nil,nil)", w, err)
+	}
+	// Named but unresolvable secret → error (fail-closed at mount).
+	if _, err := WebhookFromConfig(badKey, env(map[string]string{"CLOUD_IDV_WEBHOOK_KEY_REF": "kms://wh"})); err == nil {
+		t.Fatalf("expected error when the webhook secret does not resolve")
+	}
+	// Named with no KMS → error.
+	if _, err := WebhookFromConfig(nil, env(map[string]string{"CLOUD_IDV_WEBHOOK_KEY_REF": "kms://wh"})); err == nil {
+		t.Fatalf("expected error when a webhook is configured but KMS is unavailable")
+	}
+	// Named + resolvable → a receiver.
+	w, err = WebhookFromConfig(okKey, env(map[string]string{"CLOUD_IDV_WEBHOOK_KEY_REF": "kms://wh"}))
+	if err != nil || w == nil {
+		t.Fatalf("configured webhook = (%v,%v), want a receiver", w, err)
+	}
+}
+
+// TestWebhookVerify proves the HMAC gate is fail-closed and constant-time-correct.
+func TestWebhookVerify(t *testing.T) {
+	const secret = "shared-webhook-secret"
+	w := &Webhook{secret: func(context.Context) ([]byte, error) { return []byte(secret), nil }}
+	body := []byte(`{"reference":"idv_abc"}`)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	good := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	cases := []struct {
+		sig  string
+		want bool
+	}{
+		{good, true},
+		{"", false},
+		{"sha256=deadbeef", false},
+		{"nothex", false},
+		{good + "x", false}, // length/really-different
+	}
+	for _, c := range cases {
+		got, err := w.Verify(context.Background(), c.sig, body)
+		if err != nil {
+			t.Fatalf("Verify(%q) err: %v", c.sig, err)
+		}
+		if got != c.want {
+			t.Errorf("Verify(%q) = %v, want %v", c.sig, got, c.want)
+		}
+	}
+	// A different body under the same signature must NOT verify.
+	if ok, _ := w.Verify(context.Background(), good, []byte(`{"reference":"idv_OTHER"}`)); ok {
+		t.Fatalf("signature must not verify over a tampered body")
+	}
+	// Fail-closed when the secret can't be resolved.
+	wErr := &Webhook{secret: func(context.Context) ([]byte, error) { return nil, errors.New("kms down") }}
+	if _, err := wErr.Verify(context.Background(), good, body); err == nil {
+		t.Fatalf("expected error when the webhook secret is unavailable")
+	}
+}
+
+// TestWebhookReference proves the reference extraction reads the correlating id and
+// nothing else (the status is never trusted from the body).
+func TestWebhookReference(t *testing.T) {
+	w := &Webhook{}
+	cases := []struct {
+		body string
+		ref  string
+		ok   bool
+	}{
+		{`{"reference":"idv_1"}`, "idv_1", true},
+		{`{"ref":"idv_2"}`, "idv_2", true},
+		{`{"id":"idv_3"}`, "idv_3", true},
+		{`{"reference":"  idv_4 "}`, "idv_4", true},
+		{`{"status":"provider_verified"}`, "", false}, // no reference → not usable
+		{`not json`, "", false},
+		{`{"reference":""}`, "", false},
+	}
+	for _, c := range cases {
+		ref, ok := w.Reference([]byte(c.body))
+		if ok != c.ok || ref != c.ref {
+			t.Errorf("Reference(%q) = (%q,%v), want (%q,%v)", c.body, ref, ok, c.ref, c.ok)
+		}
 	}
 }
