@@ -10,6 +10,7 @@ import (
 
 	aiobject "github.com/hanzoai/ai/object"
 	"github.com/hanzoai/cloud/cek"
+	"github.com/hanzoai/ha"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/metering"
 	"github.com/hanzoai/cloud/internal/org"
@@ -108,7 +109,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
-	deps.Durable = buildDurability(cfg, logger)
+	deps.Durable, deps.LiveMembers = buildDurability(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -751,7 +752,10 @@ const durableProbePrefix = ".probe/cas-"
 // master. Any construction failure fails SAFE to nil (local-only) rather than crash
 // the boot; an encryption-capable build with no usable cipher is REFUSED — a build
 // that promises encryption never ships plaintext snapshots to the object store.
-func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
+// It returns the durable factory AND the live-members reader for the shard router (the
+// SAME election snapshot), non-nil together only when the plane is active; both nil when
+// local-only (the router then stays on the static ordinal set).
+func buildDurability(cfg *Config, log luxlog.Logger) (*Durability, func() []ha.Member) {
 	// A multi-replica deployment REQUIRES the durable plane: with >1 writer, a per-org
 	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
 	// disabledDurability logs at the severity the replica count warrants, so a
@@ -767,12 +771,12 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	admin := s3admin.New()
 	if !admin.Configured() {
 		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
-		return nil
+		return nil, nil
 	}
 	client, err := admin.Client()
 	if err != nil {
 		disabledDurability(log, multiReplica, fmt.Sprintf("S3 client construction failed: %v", err))
-		return nil
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if err := ensureDurableBucket(ctx, admin, client); err != nil {
@@ -800,7 +804,7 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	probeCancel()
 	if err != nil {
 		disabledDurability(log, multiReplica, fmt.Sprintf("object-store conditional-PUT atomicity NOT confirmed — %v", err))
-		return nil
+		return nil, nil
 	}
 
 	// Membership: LIVE when in-cluster + CLOUD_PEER_SELECTOR is set (a rolling upgrade's
@@ -824,11 +828,14 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
 		// drop durability — fail closed and log LOUDLY for the replica count.
 		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
-		return nil
+		return nil, nil
 	}
 
 	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "atomic_cas", true, "encrypted", cipher != nil)
-	return org.NewDurability(cond, members, cipher)
+	// members.Members is the live election snapshot; hand it to the shard router so it
+	// routes on the SAME set the fencer elects over — the store-layer owner and the routed
+	// owner never disagree.
+	return org.NewDurability(cond, members, cipher), members.Members
 }
 
 // disabledDurability records that the durable plane is OFF, at ERROR when the
