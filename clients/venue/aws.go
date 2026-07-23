@@ -29,11 +29,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
 
 const awsMaxPages = 20
+
+// regionRE pins an AWS region to its canonical shape so a hostile region can never
+// be interpolated into the STS/EKS host (e.g. region "evil.com/" → sts.evil.com,
+// shipping the assumed-role token off-account). MED-4.
+var regionRE = regexp.MustCompile(`^[a-z]{2}-[a-z]+-\d+$`)
+
+func validRegion(r string) bool { return regionRE.MatchString(strings.TrimSpace(r)) }
 
 var awsHTTP = &http.Client{Timeout: 20 * time.Second}
 
@@ -67,14 +75,15 @@ func awsBaseCreds() awsCreds {
 	}
 }
 
-// stsRegion picks the region STS assume-role signs under.
+// stsRegion picks the region STS assume-role signs under — always a validated
+// region so it is never smuggled into the endpoint host.
 func stsRegion(cr cred) string {
-	if r := strings.TrimSpace(os.Getenv("AWS_REGION")); r != "" {
+	if r := strings.TrimSpace(os.Getenv("AWS_REGION")); validRegion(r) {
 		return r
 	}
 	for _, r := range cr.Regions {
-		if s := strings.TrimSpace(r); s != "" {
-			return s
+		if validRegion(r) {
+			return strings.TrimSpace(r)
 		}
 	}
 	return "us-east-1"
@@ -185,7 +194,8 @@ func (awsDriver) discover(ctx context.Context, cr cred) ([]discovered, error) {
 	var out []discovered
 	for _, region := range cr.Regions {
 		region = strings.TrimSpace(region)
-		if region == "" {
+		if !validRegion(region) {
+			// A malformed region can never be interpolated into the endpoint host.
 			continue
 		}
 		names, lerr := eksListClusters(ctx, creds, region)
