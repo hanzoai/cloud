@@ -16,10 +16,17 @@ package research
 // the critical path; today the roll-up mirrors the ingest-time state.)
 //
 // VERSIONED, RETAINED: content_hash is part of the ORDER BY key, so every distinct
-// version is a distinct warehouse row (retained); ReplacingMergeTree(ts) collapses only
-// a re-roll-up of the SAME version (idempotent). Canonical is argMax(ts) per stable id at
-// read time. Provenance (git_sha/git_branch/git_dirty/lib_versions) rides as queryable
-// columns for the longitudinal board.
+// version is a distinct warehouse row (retained); ReplacingMergeTree(ts) collapses ONLY a
+// re-roll-up of the SAME version (same content_hash) — it is idempotent dedup of an
+// observation, NOT cross-version supersession. Provenance
+// (git_sha/git_branch/git_dirty/lib_versions) rides as queryable columns.
+//
+// CANONICAL OLAP READ IS DEFERRED — and when it lands it MUST be SEQ-authoritative, not
+// argMax(ts) (N2). A client ts is not a valid supersession clock (a backfill stamps a big
+// wall-clock ts, an SDK live record stamps none), exactly as in store.go's canonical
+// predicates. So the roll-up will carry the SQLite plane's monotonic append seq and the
+// canonical read will argMax by THAT, never by ts. Safe today: the OLAP plane serves no
+// authorization-relevant or canonical read yet, and the retained rows are complete.
 //
 // TENANCY: org and project are the SERVER's values, bound positionally — a payload
 // cannot forge them.
