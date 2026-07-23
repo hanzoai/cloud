@@ -32,6 +32,7 @@ package ads
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -114,6 +115,7 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/campaigns/:id", cloud.Handle(s, getCampaign))
 	g.Put("/campaigns/:id", cloud.Handle(s, updateCampaign))
 	g.Delete("/campaigns/:id", cloud.Handle(s, deleteCampaign))
+	g.Post("/campaigns/:id/launch", cloud.Handle(s, launchCampaignHandler))
 }
 
 // ---- shared helpers (mirror clients/crm) ----
@@ -224,7 +226,7 @@ func createCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	now := time.Now().Unix()
 	camp := Campaign{
-		ID: id, Org: org, Name: name, Platform: platform, Status: status,
+		ID: id, Org: org, Name: name, Platform: platform, Account: clip(body.Account), Status: status,
 		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -282,7 +284,7 @@ func updateCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrBadRequest("status must be one of draft, active, paused, completed")
 	}
 	camp := Campaign{
-		ID: idParam(c), Org: org, Name: name, Platform: platform, Status: status,
+		ID: idParam(c), Org: org, Name: name, Platform: platform, Account: clip(body.Account), Status: status,
 		Objective: clip(body.Objective), Budget: nonNeg(body.Budget), Spend: nonNeg(body.Spend),
 		UpdatedAt: time.Now().Unix(),
 	}
@@ -306,6 +308,63 @@ func deleteCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 		return zip.ErrNotFound("campaign not found")
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// ---- launch (consumes the connector plane) ----
+
+// launchCampaignHandler runs a stored ad campaign on its provider using the ORG'S
+// connected ad-account token. It is the standalone proof that /v1/ads consumes the
+// connector plane: no token is held here — LaunchPaid (provider.go) resolves it
+// from KMS through integrations.TokenFor and FAILS CLOSED when the org has not
+// connected the platform (424), so a launch can never spend on a connection the
+// org did not make. On success the provider campaign id is recorded (MarkLaunched)
+// and the campaign goes active. An optional body {account} sets/overrides the
+// target ad account when the stored campaign has none.
+func launchCampaignHandler(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	camp, err := s.State.store.GetCampaign(c.Context(), org, idParam(c))
+	if err != nil {
+		return mapErr(err, "campaign not found")
+	}
+	var body struct {
+		Account string `json:"account"`
+	}
+	_ = c.Bind(&body)
+	account := clip(body.Account)
+	if account == "" {
+		account = camp.Account
+	}
+	ref, lerr := LaunchPaid(c.Context(), org, PaidPlan{
+		Platform: camp.Platform, Account: account, Name: camp.Name,
+		Objective: camp.Objective, BudgetCents: camp.Budget,
+	})
+	if lerr != nil {
+		return mapProviderErr(lerr)
+	}
+	saved, err := s.State.store.MarkLaunched(c.Context(), org, camp.ID, ref.Account, ref.ExternalID, time.Now().Unix())
+	if err != nil {
+		return mapErr(err, "campaign not found")
+	}
+	return c.JSON(http.StatusOK, saved)
+}
+
+// mapProviderErr renders a provider-execution error as the honest HTTP status: a
+// missing/rejected connection is 424 (connect the account first), an unwired
+// platform is 501, a transient edge failure is 502.
+func mapProviderErr(err error) error {
+	switch {
+	case errors.Is(err, errNotConnected):
+		return zip.Errorf(http.StatusFailedDependency, "connect your ad account for this platform first")
+	case errors.Is(err, errUnsupportedPlatform):
+		return zip.Errorf(http.StatusNotImplemented, "%v", err)
+	case errors.Is(err, errUpstream):
+		return zip.Errorf(http.StatusBadGateway, "%v", err)
+	default:
+		return zip.Errorf(http.StatusBadRequest, "%v", err)
+	}
 }
 
 // ---- summary ----

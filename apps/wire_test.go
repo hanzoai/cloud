@@ -61,6 +61,7 @@ var frozen = []struct {
 	{"templates", false, false},      // was order 129
 	{"framework", false, true},       // was order 129
 	{"knowledge", false, false},      // was order 130
+	{"help", false, false},           // new: Hanzo Support public plane /v1/help (after knowledge; framework lane with a companion subsystem, no store → no Shutdown)
 	{"content", false, true},         // new: marketing content loop (after knowledge)
 	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
 	{"ml", true, false},              // was order 130
@@ -69,6 +70,7 @@ var frozen = []struct {
 	{"crm", false, false},            // was order 131
 	{"marketing", false, true},       // new: marketing domain fold (after crm)
 	{"ads", false, true},             // new: ads domain fold (after crm)
+	{"campaign", false, true},        // new: /v1/campaign GTM orchestration (after ads); fans out to channels
 	{"validators", false, true},      // new: NFT-gated node provisioning (after ads); golden refrozen
 	{"social", false, true},          // new: /v1/social fold (after crm)
 	{"analytics", true, false},       // was order 132
@@ -83,6 +85,7 @@ var frozen = []struct {
 	{"graph", false, false},          // was order 135
 	{"security", true, true},         // was order 136
 	{"integrations", false, true},    // was order 137
+	{"destinations", false, true},    // new: /v1/destinations CDP fan-out (after integrations, before cloudflare)
 	{"cloudflare", false, false},     // new: /v1/cloudflare edge plane (after integrations)
 	{"sbom", true, false},            // was order 137
 	{"team", false, true},            // was order 138
@@ -104,6 +107,7 @@ var frozen = []struct {
 	{"evals", false, false},          // was order 145
 	{"benchmark", false, false},      // benchmark plane (after evals, before treasury)
 	{"research", false, true},        // R&D evidence plane + /research board (HIP-0512), arena sibling after benchmark; Shutdown closes per-org stores
+	{"experiments", false, true},     // unified A/B EXPERIMENT primitive: composes flags(assign)+analytics(measure)+research(evidence); Shutdown closes the registry stores
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
@@ -114,6 +118,8 @@ var frozen = []struct {
 	{"referrals", false, false},      // was order 149
 	{"guide", false, true},           // new: Business AI Guide (after referrals, before ai)
 	{"company", false, true},         // new: Hanzo Company formation state machine (after guide)
+	{"compliance", true, true},       // new: Hanzo Compliance — KYC/KYB + accreditation + audit posture (after company)
+	{"legal", true, true},            // new: Hanzo Legal — template + generation engine + e-sign/filing (after compliance)
 	{"agent", false, false},          // new: /v1/agent tool-calling round (before zen/ai catch-all)
 	{"zen", false, false},            // zen* claim middleware before ai's catch-all (hip-00NN)
 	{"ai", false, false},             // was order 150
