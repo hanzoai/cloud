@@ -52,6 +52,54 @@ func TestDepositPostsGrant(t *testing.T) {
 	}
 }
 
+// TestGrantCreditPostsIdempotentCredit proves GrantCredit posts POST
+// /v1/billing/credit (the idempotent grant, NOT the additive deposit) with the
+// per-identity idempotencyKey, the bounded amount, the starter-credit tag, and the
+// org namespace — the on-signup funding path.
+func TestGrantCreditPostsIdempotentCredit(t *testing.T) {
+	var gotPath, gotOrg, gotAuth string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotOrg = r.Header.Get("X-Org-Id")
+		gotAuth = r.Header.Get("Authorization")
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "grant_1"})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "svc-tok")
+	id, err := c.GrantCredit(context.Background(), "dave", 500, "welcome", "starter-credit", "2027-01-01T00:00:00Z", "starter:dave@example.com")
+	if err != nil {
+		t.Fatalf("GrantCredit: %v", err)
+	}
+	if id != "grant_1" {
+		t.Fatalf("id = %q, want grant_1", id)
+	}
+	if gotPath != "/v1/billing/credit" {
+		t.Fatalf("path = %q, want /v1/billing/credit", gotPath)
+	}
+	if gotOrg != "dave" || gotAuth != "Bearer svc-tok" {
+		t.Fatalf("org=%q auth=%q, want dave / Bearer svc-tok", gotOrg, gotAuth)
+	}
+	if gotBody["amountCents"].(float64) != 500 || gotBody["tag"] != "starter-credit" {
+		t.Fatalf("body = %v, want amountCents=500 tag=starter-credit", gotBody)
+	}
+	if gotBody["idempotencyKey"] != "starter:dave@example.com" {
+		t.Fatalf("idempotencyKey = %v, want starter:dave@example.com (the per-identity anti-farm key)", gotBody["idempotencyKey"])
+	}
+}
+
+// TestGrantCreditUnconfigured proves an unwired commerce is an honest error, never a
+// phantom grant.
+func TestGrantCreditUnconfigured(t *testing.T) {
+	c := NewClient("", "")
+	if _, err := c.GrantCredit(context.Background(), "dave", 500, "welcome", "starter-credit", "", "starter:x"); err != ErrUnconfigured {
+		t.Fatalf("err = %v, want ErrUnconfigured", err)
+	}
+}
+
 // TestSpendCentsReadsRollup proves SpendCents reads GET /v1/billing/usage-rollup
 // (the accrual base) and returns consumedCents.
 func TestSpendCentsReadsRollup(t *testing.T) {
