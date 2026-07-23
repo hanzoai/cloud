@@ -270,10 +270,12 @@ func TestNewMutationsRequireOrgAdmin(t *testing.T) {
 
 // ── Workers AI meters through the ONE unified spine ─────────────────────────────
 
-// billStub is a minimal commerce double: a positive balance so the pre-call gate
-// passes, and a capture of the usage debit body so the test can prove Workers AI
-// debits the SAME "ai" spine (not a Cloudflare-specific one).
+// billStub is a minimal commerce double: a balance for the pre-call gate and a capture
+// of the usage debit body, so a test can prove Workers AI gates AND debits the SAME
+// "ai" spine. The balance is positive by default; set broke to model a frozen / broke
+// org the gate must refuse.
 type billStub struct {
+	broke  bool // when true the gate sees a 0 balance
 	mu     sync.Mutex
 	usages int32
 	body   []byte
@@ -281,9 +283,13 @@ type billStub struct {
 
 func (b *billStub) server(t *testing.T) *httptest.Server {
 	t.Helper()
+	avail := int64(100000)
+	if b.broke {
+		avail = 0
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/billing/balance", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"available":100000}`)
+		_, _ = io.WriteString(w, fmt.Sprintf(`{"available":%d}`, avail))
 	})
 	mux.HandleFunc("/v1/billing/usage", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&b.usages, 1)
@@ -333,6 +339,7 @@ func meteredHarness(t *testing.T, tokens map[string]string, rec *capture, result
 
 func TestWorkersAIMetersUnifiedSpine(t *testing.T) {
 	t.Setenv("CLOUD_AI_PRICE_UUSD_PER_1K", "2000") // deterministic rate; BYO fee = 100 bps of it
+	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "0")       // isolate the token-proportional debit (floor tested separately)
 
 	bill := &billStub{}
 	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
@@ -376,6 +383,64 @@ func TestWorkersAIMetersUnifiedSpine(t *testing.T) {
 		if !strings.Contains(ub, want) {
 			t.Fatalf("usage debit missing %s; body=%s", want, ub)
 		}
+	}
+}
+
+// F-1: a non-text Workers AI model (whisper audio) yields a 0 token estimate, but the
+// FLOORED fee forces the balance gate to run — so a broke/frozen org is REFUSED (402)
+// and its inference is never proxied to Cloudflare (no discovery, no run, no debit).
+func TestWorkersAIBrokeOrgRefusedOnNonText(t *testing.T) {
+	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "100") // floor on ⇒ gate always runs
+
+	bill := &billStub{broke: true} // 0 balance
+	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
+	if err != nil {
+		t.Fatalf("metering.New: %v", err)
+	}
+	rec := &capture{}
+	app := meteredHarness(t, map[string]string{"orga": "tok-A"}, rec, nil, m)
+
+	// A non-text body (audio bytes) — no prompt/messages/text ⇒ estTokens == 0.
+	status, body, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/ai/run/@cf/openai/whisper", "ua", "orga", false, `{"audio":[1,2,3,4]}`)
+	if status != http.StatusPaymentRequired {
+		t.Fatalf("broke org on a non-text model: status=%d, want 402; body=%s", status, body)
+	}
+	if len(rec.reqs) != 0 {
+		t.Fatalf("a refused inference was still proxied to Cloudflare (%d calls): %+v", len(rec.reqs), rec.reqs)
+	}
+	if n := atomic.LoadInt32(&bill.usages); n != 0 {
+		t.Fatalf("a refused inference recorded %d debit(s); want 0", n)
+	}
+}
+
+// F-1 (billing half): a funded org's text run whose model reports NO usage still leaves
+// a debit row ≥ the floor — never a silent, unbilled proxied call.
+func TestWorkersAINoUsageBillsFloor(t *testing.T) {
+	t.Setenv("CLOUD_AI_PRICE_UUSD_PER_1K", "2000")
+	t.Setenv("CLOUD_AI_BYO_FLOOR_UUSD", "100")
+
+	bill := &billStub{}
+	m, err := metering.New(metering.Config{BaseURL: bill.server(t).URL, Token: "svc", Org: "hanzo"})
+	if err != nil {
+		t.Fatalf("metering.New: %v", err)
+	}
+	rec := &capture{}
+	// The model returns a result with NO usage field (as classification/image models do).
+	resultFor := func(path string) (int, string) {
+		if strings.Contains(path, "/ai/run/") {
+			return 200, `{"success":true,"errors":[],"result":{"label":"cat"}}`
+		}
+		return 0, ""
+	}
+	app := meteredHarness(t, map[string]string{"orga": "tok-A"}, rec, resultFor, m)
+
+	status, resp, _ := doReq(t, app, http.MethodPost, "/v1/cloudflare/ai/run/@cf/microsoft/resnet-50", "ua", "orga", false, `{"image":[1,2,3]}`)
+	if status != 200 {
+		t.Fatalf("no-usage run status=%d resp=%s", status, resp)
+	}
+	waitFor(t, "floor debit", func() bool { return atomic.LoadInt32(&bill.usages) > 0 })
+	if ub := bill.usageBody(); !strings.Contains(ub, `"amountMicros":100`) {
+		t.Fatalf("a no-usage run must bill the floor (100); body=%s", ub)
 	}
 }
 

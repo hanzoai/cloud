@@ -83,13 +83,8 @@ func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return err
 	}
-	// Validate the model FIRST — before any account resolution — so a hostile model
-	// fails fast with zero Cloudflare contact (no discovery round-trip on bad input).
+	// Validate the model FIRST (pure, no I/O) so a hostile model fails fast.
 	model, err := aiModel(c.Param("*"))
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
 	if err != nil {
 		return err
 	}
@@ -107,14 +102,21 @@ func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
 	payer := principal.HomeOrg(c)
 	project, projectValidated := principal.ValidatedProject(c)
 
-	// Pre-call BALANCE gate on the BYO fee for the ESTIMATED input tokens (completion
-	// tokens are unknown until after). The gate reserves the fee, not the full inference
-	// cost — the org's own token pays CF for the compute. A zero fee short-circuits (no
-	// gate), mirroring the LLM meter's free-call pass-through.
+	// BALANCE/FREEZE gate BEFORE any Cloudflare contact. The BYO fee is FLOORED
+	// (BYOInferenceFeeMicros), so gateCents is ALWAYS ≥ 1 and the gate ALWAYS runs — even
+	// for a non-text modality (audio/image) whose token estimate is 0. A frozen / broke /
+	// over-cap org is refused HERE and never proxied to Cloudflare (no discovery, no run).
+	// The estimate prices the reservation; the exact debit lands after the call.
 	estTokens := cloud.EstTokens(aiPromptText(body))
 	gateCents := cloud.MicrosToGateCents(cloud.BYOInferenceFeeMicros(estTokens))
 	if err := s.State.aiBill.Gate(c.Context(), payer, project, projectValidated, cloud.AIMeterProvider, gateCents); err != nil {
 		return cloud.DenyResource(c, err)
+	}
+
+	// Only once the gate passes: resolve the account (may discover) and run.
+	acct, err := cl.resolveAccount(c.Context(), org, c)
+	if err != nil {
+		return err
 	}
 
 	// ONE gen_ai span, same plane as every model call. system = "cloudflare" (the
@@ -130,9 +132,11 @@ func aiRun(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// Debit the BYO fee on the EXACT tokens the model reported, falling back to the
-	// pre-call estimate when it reports none. MeterUsage forces User/Org to the payer
-	// and defaults Provider/Service to "ai", so Workers AI spend sums with LLM spend on
-	// the (project, "ai") axis; Model preserves per-model attribution.
+	// pre-call estimate when it reports none. A non-text modality reports 0 and estimates
+	// 0, but BYOInferenceFeeMicros is FLOORED, so the debit is still ≥ the floor — every
+	// /ai/run leaves a usage row, never a silent proxied call. MeterUsage forces User/Org
+	// to the payer and defaults Provider/Service to "ai", so Workers AI spend sums with
+	// LLM spend on the (project, "ai") axis; Model preserves per-model attribution.
 	billTokens := usage.TotalTokens
 	if billTokens <= 0 {
 		billTokens = usage.PromptTokens + usage.CompletionTokens
