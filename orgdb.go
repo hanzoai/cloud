@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	// cek opens every org file encrypted at rest (the SOLE org-open seam).
 	"github.com/hanzoai/cloud/cek"
@@ -182,7 +183,24 @@ type OrgStore[T io.Closer] struct {
 
 	mu       sync.Mutex
 	byPath   map[string]T
-	durables map[string]*org.Durable // parallel to byPath, populated only when dur != nil
+	durables map[string]*org.Durable  // parallel to byPath, populated only when dur != nil
+	inflight map[string]*openState[T] // durable opens in progress, deduped by path (M1)
+}
+
+// durableOpTimeout bounds every object-store round-trip a durable OrgStore makes
+// (hydrate on open, ship on Sync, final ship on close). It exists so a slow or hung
+// SeaweedFS degrades to a bounded latency (open read-only / ship not-acked) rather
+// than blocking a caller — or the store-wide lock — indefinitely.
+const durableOpTimeout = 30 * time.Second
+
+// openState records a durable open in flight for one path, so concurrent For() calls
+// for the SAME org wait on the ONE open (its done channel) instead of double-opening,
+// WITHOUT any of them holding the store-wide c.mu across the object-store I/O.
+type openState[T io.Closer] struct {
+	done chan struct{}
+	st   T
+	d    *org.Durable
+	err  error
 }
 
 // NewOrgStore builds a per-org store cache for subsystem under dataDir.
@@ -203,6 +221,7 @@ func NewOrgStore[T io.Closer](dataDir, subsystem string, open func(*sql.DB) (T, 
 		log:       o.log,
 		byPath:    map[string]T{},
 		durables:  map[string]*org.Durable{},
+		inflight:  map[string]*openState[T]{},
 	}
 }
 
@@ -242,52 +261,81 @@ func (c *OrgStore[T]) durKey(orgID, project string) (slug, dbKey string) {
 func (c *OrgStore[T]) forPath(slug, dbKey, path string) (T, error) {
 	var zero T
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if st, ok := c.byPath[path]; ok {
+		c.mu.Unlock()
 		return st, nil
 	}
-	if c.dur != nil {
-		return c.openDurable(slug, dbKey, path)
+	// Local-only (no Durability): open under c.mu — disk I/O only, unchanged from the
+	// pre-durability cache.
+	if c.dur == nil {
+		defer c.mu.Unlock()
+		db, err := openOrgDB(path)
+		if err != nil {
+			return zero, err
+		}
+		st, err := c.open(db)
+		if err != nil {
+			_ = db.Close()
+			return zero, err
+		}
+		c.byPath[path] = st
+		return st, nil
 	}
-	db, err := openOrgDB(path)
-	if err != nil {
-		return zero, err
+	// Durable: run the open (object-store hydrate + cek) with c.mu RELEASED so a
+	// slow/hung SeaweedFS never stalls another org's open or a cache hit (M1). A
+	// concurrent open of the SAME path waits on the in-flight record rather than
+	// double-opening.
+	if inf, ok := c.inflight[path]; ok {
+		c.mu.Unlock()
+		<-inf.done
+		return inf.st, inf.err
 	}
-	st, err := c.open(db)
-	if err != nil {
-		_ = db.Close()
-		return zero, err
+	inf := &openState[T]{done: make(chan struct{})}
+	c.inflight[path] = inf
+	c.mu.Unlock()
+
+	inf.st, inf.d, inf.err = c.openDurable(slug, dbKey, path)
+
+	c.mu.Lock()
+	delete(c.inflight, path)
+	if inf.err == nil {
+		c.byPath[path] = inf.st
+		c.durables[path] = inf.d
 	}
-	c.byPath[path] = st
-	return st, nil
+	c.mu.Unlock()
+	close(inf.done)
+	return inf.st, inf.err
 }
 
 // openDurable hydrates the org's durable snapshot into the local file (as the elected
 // owner, sealing the durable object to the lease round; as a non-owner, read-only)
 // BEFORE opening the local handle, then opens through the SAME cek path and binds the
-// handle so Sync can checkpoint on the store's sole connection. A degraded hydrate
-// (store unreachable / not owner) NEVER blocks the open — the store always opens
-// (reads serve local, writes fail closed via Sync) so a second replica can never
-// break the store. Caller holds c.mu.
-func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, error) {
+// handle so Sync can checkpoint on the store's sole connection. It runs WITHOUT the
+// store-wide c.mu held and time-bounds the object-store round-trip: a degraded hydrate
+// (store unreachable / timed out / not owner) NEVER blocks the open — the store always
+// opens (reads serve local, writes fail closed via Sync) so a second replica can never
+// break the store. It returns the store handle and its Durable for the caller to
+// publish; it touches no shared map.
+func (c *OrgStore[T]) openDurable(slug, dbKey, path string) (T, *org.Durable, error) {
 	var zero T
 	d := c.dur.For(slug, dbKey, path)
-	if err := d.Hydrate(context.Background()); err != nil && c.log != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
+	err := d.Hydrate(ctx)
+	cancel()
+	if err != nil && c.log != nil {
 		c.log.Warn("org store hydrate degraded — opening read-only", "subsystem", c.subsystem, "org", slug, "key", dbKey, "err", err)
 	}
 	db, err := openOrgDB(path)
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	d.Bind(db)
 	st, err := c.open(db)
 	if err != nil {
 		_ = db.Close()
-		return zero, err
+		return zero, nil, err
 	}
-	c.byPath[path] = st
-	c.durables[path] = d
-	return st, nil
+	return st, d, nil
 }
 
 // Sync ships the org's local file to its durable object, fenced at the lease round
@@ -310,7 +358,9 @@ func (c *OrgStore[T]) Sync(orgID, project string) (acked bool, err error) {
 	if d == nil {
 		return false, fmt.Errorf("cloud: OrgStore.Sync for %s before its store was opened", path)
 	}
-	return d.Sync(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
+	defer cancel()
+	return d.Sync(ctx)
 }
 
 // Each folds fn over every org that has a {subsystem}.db on disk under
@@ -352,15 +402,25 @@ func (c *OrgStore[T]) Each(fn func(slug string, st T, err error)) error {
 // CloseAll closes every open per-org store. Idempotent; returns the first
 // close error, if any.
 func (c *OrgStore[T]) CloseAll() error {
+	// Snapshot the durables, then ship each final state with c.mu RELEASED and
+	// time-bounded (L3): a hung object store must not stall shutdown, and the final
+	// ship never needs the store-wide lock (ship-before-ack already covers every
+	// acknowledged write, so this is belt-and-suspenders). Durable never owns the
+	// *sql.DB, so the store Close below is the sole handle close.
+	c.mu.Lock()
+	durs := make([]*org.Durable, 0, len(c.durables))
+	for _, d := range c.durables {
+		durs = append(durs, d)
+	}
+	c.mu.Unlock()
+	for _, d := range durs {
+		ctx, cancel := context.WithTimeout(context.Background(), durableOpTimeout)
+		_ = d.Close(ctx)
+		cancel()
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Ship each durable's final state BEFORE closing the store handles it snapshots
-	// through (Durable.Close runs a best-effort final Sync on the still-open handle;
-	// ship-before-ack already covers every acknowledged write). Durable never owns
-	// the *sql.DB, so the store's Close below is the sole close.
-	for _, d := range c.durables {
-		_ = d.Close()
-	}
 	var first error
 	for _, st := range c.byPath {
 		if err := st.Close(); err != nil && first == nil {
@@ -369,6 +429,7 @@ func (c *OrgStore[T]) CloseAll() error {
 	}
 	c.byPath = map[string]T{}
 	c.durables = map[string]*org.Durable{}
+	c.inflight = map[string]*openState[T]{}
 	return first
 }
 
