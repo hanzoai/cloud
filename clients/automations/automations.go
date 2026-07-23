@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -61,6 +62,13 @@ const (
 	// metered per flow-run start and per MCP tool call.
 	meterKind    = "automations.run"
 	feeEnvPrefix = "CLOUD_AUTOMATIONS_FEE_CENTS"
+
+	// runBudgetEnv / defaultRunBudgetPerMin bound an org's run-STARTS per rolling minute —
+	// the DURABLE amplification cap (counted from persisted rows, so it survives a restart),
+	// enforced before every run-start. A fan-out or an in-platform loop hits this ceiling and
+	// stops. Ops can retune per deployment; a very high value effectively disables it.
+	runBudgetEnv           = "CLOUD_AUTOMATIONS_RUNS_PER_MIN"
+	defaultRunBudgetPerMin = 300
 
 	// Noisy-neighbor bounds (MED-3 / LOW-2 / LOW-4). A flow tree is capped in step
 	// count AND total serialized size at every write; the resume payload is bounded;
@@ -90,6 +98,11 @@ type state struct {
 	store   *Store
 	audit   *audit.Recorder
 	catalog Catalog
+	// o11y is the unified observability plane. Every run emits ONE event here (a run
+	// counter), beside the meter + audit, under the same exactly-once guard — so a run
+	// is observed on the SAME plane as inference, never a private side-channel. Nil when
+	// the o11y subsystem is disabled (emit is a no-op).
+	o11y cloud.O11yClient
 }
 
 // mounted is the active service so Shutdown can release the store.
@@ -129,6 +142,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		store:   store,
 		audit:   deps.Audit,
 		catalog: catalog,
+		o11y:    deps.O11y,
 	}}
 	mounted = s
 
@@ -176,6 +190,13 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Get("/runs", cloud.Handle(s, listRuns))
 	g.Get("/runs/:id", cloud.Handle(s, getRun))
 	g.Post("/runs/:id/resume", cloud.Handle(s, resumeRun))
+
+	// Inbound event sink (IFTTT): an authenticated producer POSTs an event and every
+	// enabled flow whose WEBHOOK trigger matches (source,event) fires. Distinct
+	// /hooks/* prefix — no wildcard, no shadow of the flow/run routes above. External
+	// provider webhooks (GitHub/Stripe) + inbound channels reach the SAME Deliver via
+	// the wire seam (SetTrigger), so this is one dispatch door, three entrances.
+	g.Post("/hooks/:source/:event", cloud.Handle(s, inboundHook))
 
 	g.Post("/mcp", cloud.Handle(s, mcp))
 }
@@ -456,6 +477,96 @@ func runVersion(s *cloud.Service[state], ctx context.Context, org string, f Flow
 	return s.State.store.LatestVersion(ctx, org, f.ID)
 }
 
+// engineReady reports whether the shared durable engine is up. It is a package var so a
+// test can assert readiness without embedding the engine (mirrors runStarter/tokenSource);
+// production never reassigns it.
+var engineReady = func() bool { return cloud.EmbeddedTasks() != nil }
+
+// startRun is the ONE way a firing turns a (rule, run id, event) into a durable run,
+// shared by the manual /run and the event Deliver paths (a cron tick starts through the
+// engine's schedule instead). It applies the THREE per-org bounds — concurrency
+// (orgRunLimiter), durable rate budget (checkRunBudget), and engine readiness — BEFORE
+// the idempotency insert, so a bound trip or a not-ready engine never burns the run id
+// (which would drop the event permanently on redelivery). It then persists the run row as
+// the gate (CreateRunIfAbsent) and ONLY the caller that created the row dispatches it. It
+// does NOT meter or audit: the durable run-start activity is the SINGLE owner of run
+// bookkeeping (MED-1), billing a run exactly once no matter which path started it. trigger
+// is the firing event payload (nil for a manual run); depth is the causation depth threaded
+// onto the run. Returns the run row and whether THIS call started it.
+func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, runID string, depth int, trigger map[string]any) (FlowRun, bool, error) {
+	// Front-door concurrency bound, shared by EVERY run-start path so one org's burst never
+	// starves another. Full → refuse (429). Held only across the start (fast).
+	if !orgRunLimiter.acquire(org) {
+		return FlowRun{}, false, ErrBusy
+	}
+	defer orgRunLimiter.release(org)
+
+	// Readiness BEFORE the insert: a not-ready engine must not burn the run id.
+	if !engineReady() {
+		return FlowRun{}, false, ErrEngineNotReady
+	}
+	// Durable per-org rate budget BEFORE the insert: a fan-out or in-platform loop hits the
+	// ceiling and stops rather than storming the engine.
+	if err := checkRunBudget(s, ctx, org); err != nil {
+		return FlowRun{}, false, err
+	}
+
+	now := time.Now().UnixMilli()
+	run := FlowRun{
+		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
+		Status: RunRunning, StartTime: now, Created: now, Updated: now,
+	}
+	created, err := s.State.store.CreateRunIfAbsent(ctx, run)
+	if err != nil {
+		return FlowRun{}, false, err
+	}
+	if !created {
+		return run, false, nil
+	}
+	in := FlowRunInput{
+		Owner:         org, // VALIDATED org — the cred scope + isolation boundary; NEVER from the body/event
+		FlowID:        f.ID,
+		FlowVersionID: v.ID,
+		RunID:         runID,
+		Steps:         flattenSteps(&v),
+		Trigger:       trigger,
+		Depth:         depth,
+	}
+	if _, err := runStarter(ctx, in); err != nil {
+		// The durable start failed transiently (engine went not-ready / dial error between
+		// the readiness check and dispatch). DELETE the row — do NOT burn the id — so a
+		// redelivery retries. (A step failure INSIDE a started run is the engine's own retry
+		// domain, not this path.)
+		_ = s.State.store.DeleteRun(ctx, org, runID)
+		return FlowRun{}, false, err
+	}
+	return run, true, nil
+}
+
+// checkRunBudget enforces the org's durable per-rolling-minute run-start ceiling. It counts
+// persisted run rows, so the bound survives a restart. Over budget → ErrRateLimited.
+func checkRunBudget(s *cloud.Service[state], ctx context.Context, org string) error {
+	since := time.Now().Add(-time.Minute).UnixMilli()
+	n, err := s.State.store.CountRunsSince(ctx, org, since)
+	if err != nil {
+		return err
+	}
+	if n >= runBudgetPerMin() {
+		return ErrRateLimited
+	}
+	return nil
+}
+
+// runBudgetPerMin resolves the per-org run-start ceiling (env override, else the default).
+func runBudgetPerMin() int {
+	if v := os.Getenv(runBudgetEnv); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRunBudgetPerMin
+}
+
 func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -469,37 +580,15 @@ func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return mapStoreErr(err, "flow has no runnable version")
 	}
-	// Per-org front-door concurrency bound (LOW-2).
-	if !orgRunLimiter.acquire(org) {
-		return zip.Errorf(http.StatusTooManyRequests, "too many concurrent automation requests for this org")
-	}
-	defer orgRunLimiter.release(org)
-
 	runID, err := genID("run")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	in := FlowRunInput{
-		Owner:         org, // VALIDATED org — the cred scope; NEVER from the body
-		FlowID:        f.ID,
-		FlowVersionID: v.ID,
-		RunID:         runID,
-		Steps:         flattenSteps(&v),
-	}
-	if _, err := executeFlow(c.Context(), in); err != nil {
+	// startRun applies the per-org bounds (concurrency + durable budget) uniformly for every
+	// run-start path. Manual run: depth 0, no trigger payload.
+	run, _, err := startRun(s, c.Context(), org, f, v, runID, 0, nil)
+	if err != nil {
 		return engineErr(err)
-	}
-	now := time.Now().UnixMilli()
-	run := FlowRun{
-		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
-		Status: RunRunning, StartTime: now, Created: now, Updated: now,
-	}
-	// Persist the row for IMMEDIATE visibility (getRun/listRuns), but do NOT meter or
-	// audit here: the durable run-start activity is the SINGLE owner of run
-	// bookkeeping and bills the run exactly once (MED-1), so the manual path never
-	// double-records. CreateRunIfAbsent leaves metered=0 for the activity to claim.
-	if _, err := s.State.store.CreateRunIfAbsent(c.Context(), run); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist run: %v", err)
 	}
 	return c.JSON(http.StatusCreated, run)
 }
@@ -568,6 +657,57 @@ func resumeRun(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"resumed": true})
 }
 
+// ── inbound events (IFTTT trigger sink) ─────────────────────────────────────────
+
+// inboundHook is the authenticated inbound event sink:
+// POST /v1/automations/hooks/:source/:event. The org is the VALIDATED principal (never
+// the body); the path names the (source,event) trigger key; the JSON body is the event
+// payload threaded to matching flows as {{trigger.*}}. An optional X-Idempotency-Key
+// makes a re-delivery a no-op. Returns how many flows the event matched+started.
+func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(s, c)
+	if !ok {
+		return zip.ErrForbidden("a validated principal is required")
+	}
+	source, event := clip(c.Param("source")), clip(c.Param("event"))
+	if source == "" || event == "" {
+		return zip.ErrBadRequest("source and event are required")
+	}
+	body := c.Body()
+	if len(body) > maxTriggerBytes {
+		return zip.Errorf(http.StatusRequestEntityTooLarge, "event payload exceeds the %d-byte limit", maxTriggerBytes)
+	}
+	var payload map[string]any
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return zip.ErrBadRequest("event payload must be a JSON object")
+		}
+	}
+	// LOW-1: an absent idempotency key content-hashes the body, so a hammer of identical
+	// POSTs collapses to ONE run instead of minting a fresh run per POST.
+	dedupe := clip(c.Header("X-Idempotency-Key"))
+	if dedupe == "" {
+		dedupe = bodyDedupe(body)
+	}
+	n, err := Deliver(c.Context(), org, TriggerEvent{
+		Source: source, Name: event, DedupeKey: dedupe, Depth: causationDepth(c), Payload: payload,
+	})
+	if err != nil {
+		return engineErr(err)
+	}
+	auditEvent(s, c, org, "automations.trigger.deliver", source+"/"+event, "ok", http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]any{"matched": n})
+}
+
+// causationDepth reads the X-Causation-Depth header an in-platform producer sets to
+// propagate a firing's depth. Absent/invalid ⇒ 0 (an external origin).
+func causationDepth(c *zip.Ctx) int {
+	if n, err := strconv.Atoi(clip(c.Header("X-Causation-Depth"))); err == nil && n >= 0 {
+		return n
+	}
+	return 0
+}
+
 // ── enable / disable ──────────────────────────────────────────────────────────
 
 func enableFlow(s *cloud.Service[state], c *zip.Ctx) error {
@@ -586,17 +726,16 @@ func disableFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	return setEnabled(s, c, org, idParam(c), false)
 }
 
-// setEnabled flips a flow's status and wires its POLLING schedule to the engine
-// (CreateSchedule on enable, DeleteSchedule on disable). Non-POLLING flows are a
-// pure status flip — no engine needed. A POLLING enable requires the engine (503 if
-// not ready). Shared by /enable, /disable, and the CHANGE_STATUS operation.
+// setEnabled flips a rule's status and (dis)arms its trigger — the ONE reconfigure
+// path, shared by /enable, /disable, and the CHANGE_STATUS operation. Status and
+// trigger-arrival are decomplected: this owns the status flip; armTrigger owns the
+// arrival wiring.
 func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable bool) error {
 	f, err := s.State.store.GetFlow(c.Context(), org, flowID)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
 	v, verr := runVersion(s, c.Context(), org, f)
-	cron, polling := pollingCron(v, verr)
 
 	if enable {
 		f.Status = FlowEnabled
@@ -609,26 +748,53 @@ func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable 
 		return mapStoreErr(err, "flow not found")
 	}
 
-	scheduleID := "flow-" + flowID
-	if polling {
-		if enable {
-			in := FlowRunInput{Owner: org, FlowID: f.ID, FlowVersionID: v.ID, RunID: "sched-" + flowID, Steps: flattenSteps(&v)}
-			if serr := enableSchedule(c.Context(), org, scheduleID, cron, in); serr != nil {
-				return engineErr(serr)
-			}
-		} else {
-			// Best-effort: local status is authoritative; a schedule-delete failure is logged.
-			if serr := disableSchedule(c.Context(), org, scheduleID); serr != nil {
-				s.Log.Warn("schedule delete failed (continuing)", "flow", flowID, "err", serr)
-			}
-		}
+	if err := armTrigger(s, c.Context(), org, f, v, verr, enable); err != nil {
+		return err
 	}
+
 	action := "automations.flow.disable"
 	if enable {
 		action = "automations.flow.enable"
 	}
 	auditEvent(s, c, org, action, f.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, saved)
+}
+
+// armTrigger wires (enable) or removes (disable) a rule's trigger ARRIVAL — the ONE
+// place the trigger-source plane lives, orthogonal to the rule's actions and to its
+// status. Each source arms its own arrival: POLLING → a cron schedule on the shared
+// engine; WEBHOOK/APP_WEBHOOK → a subscription in the routing index; MANUAL → nothing.
+// The action chain is untouched here — any trigger source pairs with any actions.
+// Disable always drops the subscription (idempotent), so a disabled rule is never a
+// live target.
+func armTrigger(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, verr error, enable bool) error {
+	scheduleID := "flow-" + f.ID
+	cron, polling := pollingCron(v, verr)
+	provider, event, webhook := webhookKey(v, verr)
+
+	if !enable {
+		if polling {
+			if serr := disableSchedule(ctx, org, scheduleID); serr != nil {
+				s.Log.Warn("schedule disarm failed (continuing)", "flow", f.ID, "err", serr)
+			}
+		}
+		if serr := s.State.store.DeleteFlowTriggers(ctx, org, f.ID); serr != nil {
+			s.Log.Warn("subscription disarm failed (continuing)", "flow", f.ID, "err", serr)
+		}
+		return nil
+	}
+	if polling {
+		in := FlowRunInput{Owner: org, FlowID: f.ID, FlowVersionID: v.ID, RunID: "sched-" + f.ID, Steps: flattenSteps(&v)}
+		if serr := enableSchedule(ctx, org, scheduleID, cron, in); serr != nil {
+			return engineErr(serr)
+		}
+	}
+	if webhook {
+		if serr := s.State.store.UpsertTrigger(ctx, org, provider, event, f.ID, v.ID); serr != nil {
+			return zip.Errorf(http.StatusInternalServerError, "subscribe trigger: %v", serr)
+		}
+	}
+	return nil
 }
 
 // pollingCron reports whether a flow's trigger is a POLLING schedule and returns its
@@ -645,6 +811,24 @@ func pollingCron(v FlowVersion, verr error) (string, bool) {
 		return "", false
 	}
 	return cron, true
+}
+
+// webhookKey reports whether a flow's trigger is an inbound WEBHOOK/APP_WEBHOOK event
+// and returns its (provider, event) subscription key — provider == the trigger's
+// pieceName, event == its triggerName. A load error, a non-webhook strategy, or an
+// empty piece/trigger name yields ("","",false).
+func webhookKey(v FlowVersion, verr error) (provider, event string, ok bool) {
+	if verr != nil || v.Trigger == nil {
+		return "", "", false
+	}
+	if v.Trigger.Strategy != StrategyWebhook && v.Trigger.Strategy != StrategyAppWebhook {
+		return "", "", false
+	}
+	provider, event = v.Trigger.Settings.PieceName, v.Trigger.Settings.TriggerName
+	if provider == "" || event == "" {
+		return "", "", false
+	}
+	return provider, event, true
 }
 
 // ── run bookkeeping (MED-1: the SINGLE owner, exactly-once) ─────────────────────
@@ -669,9 +853,11 @@ func recordRunStart(s *cloud.Service[state], ctx context.Context, in RunStartInp
 	if !won {
 		return nil // another path already metered this run — exactly once
 	}
-	// meter + audit fire together, behind the SAME won-guard, so the audit trail's
-	// count of automations.flow.run records is an exact proxy for the meter count.
+	// meter + o11y event + audit fire together, behind the SAME won-guard, so the run's
+	// three unified records — ONE usage unit (cloud_usage), ONE o11y event, ONE audit
+	// record — are the same count, per run, exactly once, for EVERY entrypoint.
 	meterRun(s, in.Owner)
+	emitRunEvent(s, in.Owner)
 	auditRun(s, ctx, in.Owner, in.FlowID, in.RunID)
 	return nil
 }
@@ -694,6 +880,19 @@ func meterUnit(s *cloud.Service[state], org string, c *zip.Ctx) {
 // context). Nil/disabled meter → no-op.
 func meterRun(s *cloud.Service[state], org string) {
 	s.Bill.Meter(org, "", meterKind, cloud.ResourceFeeCents(feeEnvPrefix, meterKind), "", "")
+}
+
+// emitRunEvent emits the ONE o11y event per run onto the unified observability plane
+// (a run counter tagged by org + brand), beside the meter + audit under the SAME
+// exactly-once won-guard — so the o11y run count, the metered-unit count, and the
+// audit-record count are one and the same number. Nil o11y (subsystem disabled) → no-op.
+func emitRunEvent(s *cloud.Service[state], org string) {
+	if s.State.o11y == nil {
+		return
+	}
+	if ctr := s.State.o11y.Counter(meterKind, "org", org, "brand", s.Brand); ctr != nil {
+		ctr.Inc(1)
+	}
 }
 
 // auditEvent appends one tamper-evident audit record for an HTTP action. result is
@@ -813,10 +1012,15 @@ func mapOpErr(err error) error {
 	}
 }
 
-// engineErr maps an engine dial/exec error to HTTP: not-ready → 503 (honest), else 500.
+// engineErr maps an engine/run-start error to HTTP: not-ready → 503 (honest); a per-org
+// bound (rate budget / concurrency) → 429; else 500.
 func engineErr(err error) error {
-	if err == ErrEngineNotReady {
+	switch err {
+	case ErrEngineNotReady:
 		return zip.Errorf(http.StatusServiceUnavailable, "automation engine not ready")
+	case ErrRateLimited, ErrBusy:
+		return zip.Errorf(http.StatusTooManyRequests, "%v", err)
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 	}
-	return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 }
