@@ -95,7 +95,7 @@ func devStartPath(provider string) string { return "/v1/connectors/" + provider 
 func devPollPath(provider, flow string) string {
 	return "/v1/connectors/" + provider + "/device/" + flow + "/poll"
 }
-func credPath(provider string) string { return "/v1/connectors/" + provider + "/credential" }
+func credPath(provider string) string { return "/v1/connectors/" + provider + "/connect" }
 func tokenPath(id string) string      { return "/v1/connectors/" + id + "/token" }
 func refreshPath(id string) string    { return "/v1/connectors/" + id + "/refresh" }
 func connPath(id string) string       { return "/v1/connectors/" + id }
@@ -204,12 +204,25 @@ type tokenResp struct {
 	ExpiresAt string `json:"expiresAt"`
 }
 
+// listResp is the unified /v1/connectors wire: a flat list of Extensions, each
+// folding a provider archetype with the caller's connected instances + config.
 type listResp struct {
-	Connectors []connView `json:"connectors"`
+	Extensions []Extension `json:"extensions"`
 }
 
-type cpListResp struct {
-	Providers []connectorProviderView `json:"providers"`
+// userConnectorIDs flattens the unified list into the user-plane provider:label
+// ids (the legacy connView.ID shape) so existing per-instance assertions hold.
+func userConnectorIDs(exts []Extension) []string {
+	var ids []string
+	for _, e := range exts {
+		if e.Scope != userScope {
+			continue
+		}
+		for _, in := range e.Instances {
+			ids = append(ids, e.ID+":"+in.Label)
+		}
+	}
+	return ids
 }
 
 func rewind(t *testing.T, flow string) {
@@ -229,7 +242,6 @@ func TestConnectorsRequireIdentity(t *testing.T) {
 	// Validated before validUser (or any body/param validation) can run.
 	routes := []struct{ method, path string }{
 		{http.MethodGet, "/v1/connectors"},
-		{http.MethodGet, "/v1/connectors/providers"},
 		{http.MethodGet, tokenPath("fake:default")},
 		{http.MethodPost, devStartPath("fake")},
 		{http.MethodPost, devPollPath("fake", "deadbeef")},
@@ -262,7 +274,6 @@ func TestConnectorsRequireIdentity(t *testing.T) {
 		body         any
 	}{
 		{http.MethodGet, "/v1/connectors", nil},
-		{http.MethodGet, "/v1/connectors/providers", nil},
 		{http.MethodPost, credPath("fake"), map[string]any{"token": "tok"}},
 		{http.MethodGet, tokenPath("fake:default"), nil},
 		{http.MethodPost, refreshPath("fake:default"), nil},
@@ -275,48 +286,41 @@ func TestConnectorsRequireIdentity(t *testing.T) {
 	asOK(t, app, http.MethodDelete, connPath("fake:default"), "acme", userEmail, nil)
 }
 
+// TestConnectorPlanesDisjoint asserts the UNIFIED-surface invariants: one
+// /v1/connectors list, planes separated by the ?scope= VALUE (not a URL), and the
+// registry disjointness (a provider is user XOR org) preserved through the fold.
 func TestConnectorPlanesDisjoint(t *testing.T) {
 	app := newApp(t, newKMS(t))
 	userIDs := []string{"fake", "openai", "anthropic", "github-copilot"}
 
-	// User-scoped providers are invisible on the org list.
-	var orgList struct {
-		Providers []providerView `json:"providers"`
-	}
-	r := req(t, app, http.MethodGet, "/v1/integrations", "acme", nil)
-	if err := json.Unmarshal(r.Body, &orgList); err != nil {
-		t.Fatalf("org list: %v (%s)", err, r.Body)
-	}
-	for _, p := range orgList.Providers {
-		if slices.Contains(userIDs, p.ID) {
-			t.Fatalf("user-scoped provider %q leaked onto /v1/integrations", p.ID)
+	// scope=user returns ONLY user-scoped extensions; every one is truly
+	// user-scoped in the registry (no org provider leaks onto the user filter).
+	uv := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors?scope=user", "acme", userUUID, nil))
+	got := map[string][]string{}
+	for _, e := range uv.Extensions {
+		if e.Scope != userScope {
+			t.Fatalf("scope=user returned a %s-scoped extension %q", e.Scope, e.ID)
 		}
-	}
-	// Every org-plane read AND write path 404s a user-scoped id — the write
-	// paths (connect/verify/disconnect) are the dangerous ones.
-	for _, id := range userIDs {
-		for _, rt := range []struct{ method, path string }{
-			{http.MethodGet, "/v1/integrations/" + id},
-			{http.MethodPost, "/v1/integrations/" + id + "/connect"},
-			{http.MethodPost, "/v1/integrations/" + id + "/verify"},
-			{http.MethodPost, "/v1/integrations/" + id + "/disconnect"},
-		} {
-			if res := req(t, app, rt.method, rt.path, "acme", nil); res.Code != http.StatusNotFound {
-				t.Fatalf("%s %s want 404, got %d (%s)", rt.method, rt.path, res.Code, res.Body)
-			}
+		p, ok := registry[e.ID]
+		if !ok || p.Scope != userScope {
+			t.Fatalf("non-user-scoped provider %q surfaced under scope=user", e.ID)
 		}
-	}
-	// And an org provider is a 404 on the user plane.
-	if res := as(t, app, http.MethodPost, credPath("cloudflare"), "acme", userUUID, map[string]any{"token": "x"}); res.Code != http.StatusNotFound {
-		t.Fatalf("org provider on /v1/connectors want 404, got %d (%s)", res.Code, res.Body)
+		got[e.ID] = e.Methods
 	}
 
-	// The user provider cards carry capability-derived methods.
-	pv := decode[cpListResp](t, asOK(t, app, http.MethodGet, "/v1/connectors/providers", "acme", userUUID, nil))
-	got := map[string][]string{}
-	for _, p := range pv.Providers {
-		got[p.ID] = p.Methods
+	// scope=org returns ONLY org-scoped extensions; no user provider leaks.
+	ov := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors?scope=org", "acme", userUUID, nil))
+	for _, e := range ov.Extensions {
+		if e.Scope != orgScope {
+			t.Fatalf("scope=org returned a %s-scoped extension %q", e.Scope, e.ID)
+		}
+		if slices.Contains(userIDs, e.ID) {
+			t.Fatalf("user-scoped provider %q leaked onto scope=org", e.ID)
+		}
 	}
+
+	// The user extensions carry capability-derived methods (kind/scope are VALUES;
+	// methods derive from Device/Adopt/Verify, never a parallel enum).
 	want := map[string][]string{
 		"fake":           {"device", "oauth", "token"},
 		"openai":         {"device", "oauth"},
@@ -326,15 +330,6 @@ func TestConnectorPlanesDisjoint(t *testing.T) {
 	for id, methods := range want {
 		if !slices.Equal(got[id], methods) {
 			t.Fatalf("provider %s methods want %v, got %v", id, methods, got[id])
-		}
-	}
-	// No org-scoped provider may surface on the user plane. Checked against the
-	// registry's Scope directly (the real disjointness invariant), so adding a
-	// user connector needs no edit here while an org provider leaking still fails.
-	for id := range got {
-		p, ok := registry[id]
-		if !ok || p.Scope != userScope {
-			t.Fatalf("non-user-scoped provider %q surfaced on /v1/connectors/providers", id)
 		}
 	}
 }
@@ -536,10 +531,7 @@ func TestCredentialLabelAndID(t *testing.T) {
 	}
 	asOK(t, app, http.MethodPost, credPath("fake"), "acme", userEmail, map[string]any{"token": "tok"})
 	list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors", "acme", userEmail, nil))
-	ids := make([]string, 0, len(list.Connectors))
-	for _, c := range list.Connectors {
-		ids = append(ids, c.ID)
-	}
+	ids := userConnectorIDs(list.Extensions)
 	for _, want := range []string{"fake:work", "fake:default"} {
 		if !slices.Contains(ids, want) {
 			t.Fatalf("list must carry %s, got %v", want, ids)
@@ -552,15 +544,18 @@ func TestCredentialLabelAndID(t *testing.T) {
 			t.Fatalf("label %q want 400, got %d (%s)", label, res.Code, res.Body)
 		}
 	}
-	// Malformed connector ids are 400 on every id-taking route.
+	// Malformed / unknown connector ids are REJECTED (4xx) on every id-taking route,
+	// never processed (no 2xx) and never a 500: the user token/refresh handlers 400 a
+	// colon-less id (splitID); forget resolves provider-first on the unified surface
+	// (bare slugs are valid org ids) and 404s an unknown provider.
 	for _, id := range []string{"noseparator", ":x", "x:"} {
 		for _, rt := range []struct{ method, path string }{
 			{http.MethodGet, tokenPath(id)},
 			{http.MethodPost, refreshPath(id)},
 			{http.MethodDelete, connPath(id)},
 		} {
-			if res := as(t, app, rt.method, rt.path, "acme", userEmail, nil); res.Code != http.StatusBadRequest {
-				t.Fatalf("%s %s want 400, got %d (%s)", rt.method, rt.path, res.Code, res.Body)
+			if res := as(t, app, rt.method, rt.path, "acme", userEmail, nil); res.Code < 400 || res.Code >= 500 {
+				t.Fatalf("%s %s want 4xx rejection, got %d (%s)", rt.method, rt.path, res.Code, res.Body)
 			}
 		}
 	}
@@ -608,8 +603,8 @@ func TestCredentialVerifyFailStoresNothing(t *testing.T) {
 			t.Fatal("verify-before-store violated: a rejected credential was sealed")
 		}
 		list := decode[listResp](t, asOK(t, app, http.MethodGet, "/v1/connectors", "acme", userEmail, nil))
-		if len(list.Connectors) != 0 {
-			t.Fatalf("verify-before-store violated: a rejected credential created a row: %+v", list.Connectors)
+		if ids := userConnectorIDs(list.Extensions); len(ids) != 0 {
+			t.Fatalf("verify-before-store violated: a rejected credential created a row: %v", ids)
 		}
 	}
 

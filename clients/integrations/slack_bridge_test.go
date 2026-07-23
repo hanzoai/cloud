@@ -531,11 +531,11 @@ func TestSlackRoutePrecedence(t *testing.T) {
 		t.Fatalf("GET /slack/link must hit slackLink (302 to Slack), got %d loc=%q", resp.StatusCode, resp.Header.Get("Location"))
 	}
 
-	// The /:provider route still resolves for the bare provider id: GET
-	// /v1/integrations/slack (org-authed) returns the provider view — the literals
-	// did not shadow it.
-	if r := req(t, app, http.MethodGet, "/v1/integrations/slack", "acme", nil); r.Code != http.StatusOK {
-		t.Fatalf("GET /v1/integrations/slack (provider view) want 200, got %d (%s)", r.Code, r.Body)
+	// The bare provider view resolves on the unified plane: GET /v1/connectors/slack
+	// (org-authed) returns the slack Extension — the /v1/integrations/slack/* literal
+	// bridge routes (events/link) do not shadow the connect+config surface.
+	if r := req(t, app, http.MethodGet, "/v1/connectors/slack", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("GET /v1/connectors/slack (provider view) want 200, got %d (%s)", r.Code, r.Body)
 	}
 
 	// The events webhook is PUBLIC at the JWT layer: a valid-HMAC challenge with NO

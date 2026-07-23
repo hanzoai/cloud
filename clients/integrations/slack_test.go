@@ -125,7 +125,7 @@ func TestSlackProviderRegistered(t *testing.T) {
 	if !ok {
 		t.Fatal("slack provider not registered")
 	}
-	if p.RedirectPath != "/v1/integrations/slack/callback" {
+	if p.RedirectPath != "/v1/connectors/slack/callback" {
 		t.Fatalf("slack RedirectPath: %q", p.RedirectPath)
 	}
 	if p.Category != "Communication" {
