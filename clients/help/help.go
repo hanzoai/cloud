@@ -83,7 +83,10 @@ func DocTypes() []framework.DocType {
 // Link) so Help installs and runs WITHOUT the ERP lane; the assignee, team, and SLA
 // are in-lane Links. `source` records the intake channel (portal/email/zendesk/…) so
 // the inbound support connectors (Zendesk/Intercom/Re:amaze) can stamp provenance
-// when they file a ticket via framework.Ingest — the ONE inbound seam.
+// when they file a ticket via framework.Ingest — the ONE inbound seam. `public_ref`
+// is the opaque, random customer-facing reference the public intake returns in place
+// of the monotonic name, so an anonymous submitter never learns the ticket volume
+// (the sequential name stays internal to the agent plane).
 func ticket() framework.DocType {
 	return framework.DocType{
 		Name: DTTicket, Module: Module, Autoname: "hd-tkt-.#####", TitleField: "subject",
@@ -94,6 +97,7 @@ func ticket() framework.DocType {
 			{Fieldname: "priority", Fieldtype: framework.FieldSelect, Label: "Priority", Options: "Low\nMedium\nHigh\nUrgent", Default: "Medium", InListView: true},
 			{Fieldname: "customer", Fieldtype: framework.FieldData, Label: "Customer", InListView: true},
 			{Fieldname: "source", Fieldtype: framework.FieldData, Label: "Source", Default: "portal", InListView: true},
+			{Fieldname: "public_ref", Fieldtype: framework.FieldData, Label: "Public Ref", Unique: true, ReadOnly: true},
 			{Fieldname: "assigned_agent", Fieldtype: framework.FieldLink, Label: "Assigned Agent", Options: dtAgent, InListView: true},
 			{Fieldname: "team", Fieldtype: framework.FieldLink, Label: "Team", Options: dtTeam},
 			{Fieldname: "sla", Fieldtype: framework.FieldLink, Label: "SLA", Options: dtSLA},
