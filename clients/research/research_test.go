@@ -15,11 +15,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	sqlitedrv "github.com/hanzoai/sqlite"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
 
@@ -186,9 +189,15 @@ func TestSupersessionIsSeqNotClientTS(t *testing.T) {
 	if _, _, err := st.ingest(ctx, proj, nil, []Attempt{mkA("A", "corrected", 0)}); err != nil {
 		t.Fatal(err)
 	}
-	var ans string
-	if err := st.db.QueryRowContext(ctx, `SELECT a.answer FROM attempt a WHERE `+canonicalAttWhere+` AND a.benchmark='livecodebench'`).Scan(&ans); err != nil {
+	atts, err := st.allAtt(ctx)
+	if err != nil {
 		t.Fatal(err)
+	}
+	ans := ""
+	for _, r := range canonicalAtt(atts) {
+		if r.Benchmark == "livecodebench" {
+			ans = r.Answer
+		}
 	}
 	if ans != "A" {
 		t.Fatalf("ts=0 attempt correction of ts=big backfill: canonical answer=%q, want A", ans)
@@ -196,6 +205,57 @@ func TestSupersessionIsSeqNotClientTS(t *testing.T) {
 	c, _ := st.counts(ctx)
 	if c.ExperimentsRetained != 3 || c.AttemptsRetained != 2 {
 		t.Fatalf("retained counts=%+v, want exp=3 att=2 (every version retained)", c)
+	}
+}
+
+// TestConcurrentIngestSeqMonotone stresses the append clock: N concurrent ingests of
+// DISTINCT content must all land (no lost write, no dup) and the server-assigned seq
+// must be strictly unique and gapless in [1,N] — proving the single-writer
+// serialization (OrgDB MaxOpenConns(1) + orm writeMu + the ingest tx) keeps the
+// clock monotone with no torn read-modify-write. This is the seq counter's version
+// of the AUTOINCREMENT the raw-SQL store leaned on. Run under -race.
+func TestConcurrentIngestSeqMonotone(t *testing.T) {
+	st, ctx := newStore(t)
+	const N = 24
+	var wg sync.WaitGroup
+	errs := make([]error, N)
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			e := Experiment{ID: fmt.Sprintf("benchmark:m%d:hle", i), Kind: "benchmark", Subject: fmt.Sprintf("m%d", i), Task: "hle", Metric: "accuracy", Value: float64(i)}
+			_, _, errs[i] = st.ingest(ctx, proj, []Experiment{e}, nil)
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range errs {
+		if e != nil {
+			t.Fatalf("concurrent ingest %d: %v", i, e)
+		}
+	}
+	// Every distinct experiment landed exactly once — no lost write, no duplicate.
+	c, _ := st.counts(ctx)
+	if c.ExperimentsRetained != N || c.ExperimentsCanonical != N {
+		t.Fatalf("after %d concurrent ingests: counts=%+v, want retained=canonical=%d", N, c, N)
+	}
+	// Seqs are unique and gapless in [1,N]: the clock advanced exactly once per new
+	// version with no torn read-modify-write.
+	exps, err := st.allExp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int64]bool{}
+	for _, r := range exps {
+		if r.Seq < 1 || r.Seq > int64(N) {
+			t.Fatalf("seq %d out of [1,%d]", r.Seq, N)
+		}
+		if seen[r.Seq] {
+			t.Fatalf("duplicate seq %d — append clock not monotone under concurrency", r.Seq)
+		}
+		seen[r.Seq] = true
+	}
+	if len(seen) != N {
+		t.Fatalf("distinct seqs=%d, want %d (gapless)", len(seen), N)
 	}
 }
 
@@ -225,9 +285,18 @@ func TestProvenanceDistinctVersions(t *testing.T) {
 		t.Fatalf("canonical provenance wrong: sha=%q libs=%s", exps[0].GitSHA, exps[0].LibVersions)
 	}
 	// The superseded provenance is retained + queryable by git_sha (the board's query).
-	var n int
-	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM experiment WHERE git_sha=?`, "aaaa111").Scan(&n); err != nil || n != 1 {
-		t.Fatalf("retained provenance query n=%d err=%v, want 1", n, err)
+	all, err := st.allExp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, r := range all {
+		if r.GitSHA == "aaaa111" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("retained provenance n=%d, want 1 (superseded version retained + queryable by git_sha)", n)
 	}
 }
 
@@ -248,9 +317,13 @@ func TestFaultedRetained(t *testing.T) {
 	if c.AttemptsRetained != 2 || c.AttemptsCanonical != 1 {
 		t.Fatalf("counts=%+v, want retained=2 canonical=1 (fault retained, success canonical)", c)
 	}
-	var status, answer string
-	if err := st.db.QueryRowContext(ctx, `SELECT a.status, a.answer FROM attempt a WHERE `+canonicalAttWhere).Scan(&status, &answer); err != nil {
+	atts, err := st.allAtt(ctx)
+	if err != nil {
 		t.Fatal(err)
+	}
+	var status, answer string
+	for _, r := range canonicalAtt(atts) {
+		status, answer = r.Status, r.Answer
 	}
 	if status != "complete" || answer != "A" {
 		t.Fatalf("canonical attempt = (%s,%s), want (complete,A)", status, answer)
@@ -420,7 +493,7 @@ func do(t *testing.T, app *zip.App, method, path, org, project string, body any)
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -556,7 +629,7 @@ func doRaw(t *testing.T, app *zip.App, method, path, org, project string) (int, 
 	if project != "" {
 		req.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(req)
+	resp, err := app.Fiber().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
