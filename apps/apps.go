@@ -129,6 +129,7 @@ import (
 	"github.com/hanzoai/cloud/clients/treasury"
 	"github.com/hanzoai/cloud/clients/usage"
 	"github.com/hanzoai/cloud/clients/validators"
+	"github.com/hanzoai/cloud/clients/venue"
 	"github.com/hanzoai/cloud/clients/visor"
 	"github.com/hanzoai/cloud/clients/wallets"
 	"github.com/hanzoai/cloud/clients/websearch"
@@ -315,6 +316,12 @@ func Wire() []cloud.MountSpec {
 		// DB handles, so its Shutdown closes them on SIGTERM.
 		{Name: "sync", Mount: sync.Mount, Shutdown: ctxShutdown(sync.Shutdown)},
 		{Name: "visor", Mount: visor.Mount},
+		// Connect-a-cloud-account plane /v1/cloud/*: an org links its DigitalOcean /
+		// AWS / GCP / Azure accounts (labeled, KMS-sealed, keyless where possible),
+		// Hanzo DISCOVERS each account's native Kubernetes clusters and FOLDS them into
+		// the ONE fleet (clients/fleet.Register) — so they surface in visor's
+		// /v1/clusters and run work like any BYO/managed cluster. No second registry.
+		{Name: "venue", Mount: venue.Mount},
 		// Cap table on Base via goja. STAGED behind CLOUD_ENABLE.
 		{Name: "captable", Mount: captable.Mount, Shutdown: captable.Shutdown},
 		{Name: "code", Mount: code.Mount, Shutdown: code.Shutdown},
@@ -324,10 +331,11 @@ func Wire() []cloud.MountSpec {
 		{Name: "graph", Mount: graph.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
-		// Per-org Cloudflare asset plane /v1/integrations/cloudflare/{pages,workers,r2,kv,d1}/*.
-		// Mounts AFTER integrations because it reads the org's Cloudflare token through
-		// the integrations custody seam (integrations.TokenFor) — one token, one
-		// custody boundary. Stateless: no store, no shutdown.
+		// First-class per-org Cloudflare asset plane /v1/cloudflare/{zones,pages,workers,
+		// ai,r2,kv,d1}/* (sibling of /v1/dns, /v1/domain). Mounts AFTER integrations
+		// because it reads the org's Cloudflare token through the integrations custody
+		// seam (integrations.TokenFor) — one token, one custody boundary. Connecting the
+		// provider stays on the integrations plane; this plane only MANAGES resources.
 		{Name: "cloudflare", Mount: cloudflare.Mount},
 		{Name: "sbom", Mount: sbom.Mount, OwnsHealth: true},
 		{Name: "team", Mount: team.Mount, Shutdown: ctxShutdown(team.Shutdown)},
@@ -351,7 +359,10 @@ func Wire() []cloud.MountSpec {
 		{Name: "product", Mount: product.Mount},
 		{Name: "evals", Mount: eval.Mount},
 		{Name: "benchmark", Mount: benchmark.Mount},
-		{Name: "research", Mount: research.Mount, Shutdown: research.Shutdown},
+		// The R&D EVIDENCE plane (HIP-0512) + its R&D Ops Board UI at /research —
+		// the arena's sibling: benchmark measures, research is the versioned diary
+		// every product's runs accrue into. Non-staged: mounts under the default.
+		{Name: "research", Mount: research.Mount, Shutdown: ctxShutdown(research.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
