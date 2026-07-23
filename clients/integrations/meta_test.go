@@ -2,11 +2,13 @@ package integrations
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // metaMock stands in for Meta's oauth/access_token (two legs: code→short,
@@ -14,7 +16,8 @@ import (
 // the Authorization header on /me so a test can prove the long-lived leg ran and the
 // token rode the header (never the URL).
 type metaMock struct {
-	tokenErr bool
+	tokenErr bool // leg-1 (code→short) returns an error
+	longErr  bool // leg-2 (fb_exchange_token→long) returns an error
 	meAuth   string
 	sawLong  bool
 }
@@ -33,6 +36,11 @@ func newMetaMock(t *testing.T, m *metaMock) {
 			}
 			if r.Form.Get("grant_type") == "fb_exchange_token" {
 				m.sawLong = true
+				if m.longErr {
+					w.WriteHeader(http.StatusBadRequest)
+					_, _ = w.Write([]byte(`{"error":{"message":"cannot exchange","type":"OAuthException","code":100}}`))
+					return
+				}
 				_, _ = w.Write([]byte(`{"access_token":"META-LONG-LIVED-SECRET","token_type":"bearer","expires_in":5184000}`))
 				return
 			}
@@ -60,8 +68,17 @@ func TestMetaAuthorizeURL(t *testing.T) {
 	if q.Get("client_id") != "app-123" || q.Get("state") != "st8" || q.Get("response_type") != "code" {
 		t.Fatalf("authorize params wrong: %s", raw)
 	}
-	if !strings.Contains(q.Get("scope"), "ads_read") || strings.Contains(q.Get("scope"), "ads_management") {
-		t.Fatalf("scope must be read-only (ads_read, not ads_management): %q", q.Get("scope"))
+	scope := q.Get("scope")
+	if !strings.Contains(scope, "ads_read") {
+		t.Fatalf("scope must grant ads_read: %q", scope)
+	}
+	// Read-only means read-only: no WRITE-capable Meta scope may ever appear —
+	// ads_management (spend), business_management (BM asset write), or any
+	// *_management / rw_* variant. Meta comma-delimits the scope list.
+	for _, s := range strings.Split(scope, ",") {
+		if strings.Contains(s, "_management") || strings.HasPrefix(s, "rw_") {
+			t.Fatalf("scope %q includes a write-capable grant %q; the connector is documented read-only", scope, s)
+		}
 	}
 }
 
@@ -90,6 +107,36 @@ func TestMetaExchangeSealsLongLivedToken(t *testing.T) {
 	}
 	if m.meAuth != "Bearer META-LONG-LIVED-SECRET" {
 		t.Fatalf("account fetch must carry the token in the header, got %q", m.meAuth)
+	}
+}
+
+// TestMetaExchangeFallsBackToShortToken proves the long-lived leg is best-effort:
+// when fb_exchange_token fails, the connection still lands on the SHORT token with
+// its REAL expiry (now+3600), never a fabricated one and never the long-lived TTL,
+// and still no refresh token.
+func TestMetaExchangeFallsBackToShortToken(t *testing.T) {
+	m := &metaMock{longErr: true}
+	newMetaMock(t, m)
+	before := time.Now().Unix()
+	res, err := metaExchange(context.Background(), OAuthConfig{ClientID: "app", ClientSecret: "secret"},
+		"https://api.hanzo.ai/v1/integrations/meta_ads/callback", "authcode")
+	if err != nil {
+		t.Fatalf("exchange must still succeed on the short token: %v", err)
+	}
+	if !m.sawLong {
+		t.Fatal("the long-lived exchange must have been attempted")
+	}
+	if res.Tokens[accessSecret] != "META-SHORT-SECRET" {
+		t.Fatalf("must fall back to the short token, got %q", res.Tokens[accessSecret])
+	}
+	if _, hasRefresh := res.Tokens[refreshSecret]; hasRefresh {
+		t.Fatal("no refresh token must be sealed")
+	}
+	// Expiry is the SHORT token's real one (~now+3600), not the long-lived 5184000
+	// and not a fabricated value.
+	after := time.Now().Unix()
+	if res.ExpiresAt < before+3600 || res.ExpiresAt > after+3600 {
+		t.Fatalf("expiry must be the short token's real ~now+3600, got %d (window %d..%d)", res.ExpiresAt, before+3600, after+3600)
 	}
 }
 
@@ -146,6 +193,42 @@ func TestMetaE2EConnectSealsAndIsolates(t *testing.T) {
 	// The connecting org CAN read its token via the in-process seam.
 	if v, err := TokenFor(context.Background(), "acme", "meta_ads", accessSecret); err != nil || string(v) != "META-LONG-LIVED-SECRET" {
 		t.Fatalf("acme TokenFor want the sealed token, got %q err=%v", v, err)
+	}
+}
+
+// TestMetaStateCannotBeReplayedAtGoogleAds proves the signed state is bound to the
+// provider it was minted for: a state issued by meta_ads connect, replayed at the
+// google_ads callback, is rejected as invalid — one connector's consent can never be
+// redirected into another connector's custody.
+func TestMetaStateCannotBeReplayedAtGoogleAds(t *testing.T) {
+	t.Setenv(metaAppIDEnv, "app-id")
+	t.Setenv(metaAppSecretEnv, "app-secret")
+	app := newApp(t, newKMS(t))
+
+	// Mint a genuine signed state via meta_ads connect (org admin).
+	res := cfReq(t, app, http.MethodPost, "/v1/integrations/meta_ads/connect", "acme", true, nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("meta connect want 200, got %d (%s)", res.Code, res.Body)
+	}
+	var out struct {
+		AuthorizeURL string `json:"authorizeUrl"`
+	}
+	if err := json.Unmarshal(res.Body, &out); err != nil {
+		t.Fatalf("connect body: %v (%s)", err, res.Body)
+	}
+	u, _ := url.Parse(out.AuthorizeURL)
+	metaState := u.Query().Get("state")
+	if metaState == "" {
+		t.Fatal("no state minted")
+	}
+	// Replay it at a DIFFERENT provider's callback.
+	cb := req(t, app, http.MethodGet,
+		"/v1/integrations/google_ads/callback?state="+url.QueryEscape(metaState)+"&code=x", "", nil)
+	if cb.Code != http.StatusFound {
+		t.Fatalf("callback want a 302 redirect, got %d (%s)", cb.Code, cb.Body)
+	}
+	if !strings.Contains(cb.Location, "error=google_ads") || !strings.Contains(cb.Location, "invalid") {
+		t.Fatalf("cross-provider state replay must be rejected as invalid state, got loc=%q", cb.Location)
 	}
 }
 
