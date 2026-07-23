@@ -619,6 +619,9 @@ func decideAccreditation(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrForbidden("X-Org-Id required")
 	}
+	if !principal.IsSuperAdmin(c) && !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("an accreditation decision requires an org admin or platform reviewer")
+	}
 	var body struct {
 		Status AccreditationStatus `json:"status"`
 	}

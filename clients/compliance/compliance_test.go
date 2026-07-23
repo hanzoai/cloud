@@ -505,17 +505,22 @@ func TestAccreditationTracking(t *testing.T) {
 	}
 	accID, _ := acc["id"].(string)
 	// The reviewer decision attributes the confirmation.
-	_, dec := do(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
+	_, dec := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
 		map[string]any{"status": "reviewer_confirmed"})
-	if dec["status"] != string(AccReviewerConfirmed) || dec["reviewerSub"] != "u_"+org {
-		t.Fatalf("decision = %v, want reviewer_confirmed by u_%s", dec, org)
+	if dec["status"] != string(AccReviewerConfirmed) || dec["reviewerSub"] != "admin_"+org {
+		t.Fatalf("decision = %v, want reviewer_confirmed by admin_%s", dec, org)
 	}
 	// A reviewer may ALSO record a provider_verified accreditation (with the letter as
 	// evidence) — through the attributed decision endpoint, so it is never unattributed.
-	_, pv := do(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
+	_, pv := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
 		map[string]any{"status": "provider_verified"})
-	if pv["status"] != string(AccProviderVerified) || pv["reviewerSub"] != "u_"+org {
-		t.Fatalf("decision = %v, want provider_verified attributed to u_%s", pv, org)
+	if pv["status"] != string(AccProviderVerified) || pv["reviewerSub"] != "admin_"+org {
+		t.Fatalf("decision = %v, want provider_verified attributed to admin_%s", pv, org)
+	}
+	// The decision is role-gated: a validated NON-admin org member is refused.
+	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
+		map[string]any{"status": "reviewer_confirmed"}); code != http.StatusForbidden {
+		t.Fatalf("non-admin accreditation decision = %d, want 403", code)
 	}
 }
 
