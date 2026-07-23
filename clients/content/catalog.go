@@ -52,12 +52,9 @@ func EnsureCatalogAsset(ctx context.Context, org, slug string) (CatalogAssetResu
 	if mounted == nil {
 		return res, errNotMounted
 	}
-	// The org must have installed the marketing lane before an Asset can exist. A product
-	// event for an org that does not use content is a quiet skip, never an error loop.
-	if !framework.Installed(ctx, org, DocTypeAsset) {
-		res.Skipped = "not_installed"
-		return res, nil
-	}
+	// marketing is always-on, so the Asset lane resolves for every org (no per-org
+	// install gate). The reverse loop is still best-effort: an org with no configured
+	// studio quietly skips at the Generate step below (errNotConfigured), never erroring.
 
 	// Idempotency: a non-archived ecom Asset already keyed to this product ⇒ nothing to do.
 	name, exists, err := existingCatalogAsset(ctx, org, slug)
