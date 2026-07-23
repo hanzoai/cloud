@@ -229,8 +229,17 @@ func (d *Durable) snapshot(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("org: durable snapshot conn %s: %w", d.dbKey, err)
 	}
 	defer conn.Close()
-	if _, err := conn.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+	// TRUNCATE-checkpoint the WAL so the main file holds every committed page, and
+	// CHECK the result: busy!=0 means the checkpoint could not fold all frames (a
+	// reader held the WAL), so the file on disk is MISSING committed rows. Fail closed
+	// — a partial snapshot shipped as complete is a silent lost write. (busy, logFrames,
+	// checkpointed) is the PRAGMA's row.
+	var busy, logFrames, checkpointed int
+	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
 		return nil, fmt.Errorf("org: durable checkpoint %s: %w", d.dbKey, err)
+	}
+	if busy != 0 {
+		return nil, fmt.Errorf("org: durable checkpoint %s did not complete (busy=%d, log=%d, checkpointed=%d) — snapshot would miss committed WAL frames", d.dbKey, busy, logFrames, checkpointed)
 	}
 	main, err := os.ReadFile(d.dbPath)
 	if err != nil {
@@ -263,12 +272,20 @@ func (d *Durable) restore(sealed []byte) error {
 	if err != nil {
 		return err
 	}
+	// RestoreFile FIRST: it MkdirAll's the parent and atomically swaps the database
+	// bytes into place. The sidecar is written AFTER, into the now-existing directory,
+	// so both the encrypted file and its key are present before cek opens them. (Writing
+	// the sidecar first would fail on a fresh successor whose orgs/<slug>/ dir does not
+	// exist yet.)
+	if err := replica.RestoreFile(d.dbPath, main); err != nil {
+		return err
+	}
 	if len(sidecar) > 0 {
 		if err := os.WriteFile(d.dbPath+dekSuffix, sidecar, 0o600); err != nil {
 			return fmt.Errorf("org: durable write sidecar %s: %w", d.dbPath, err)
 		}
 	}
-	return replica.RestoreFile(d.dbPath, main)
+	return nil
 }
 
 // restoreLatestReadOnly refreshes the local file from the durable object without a
