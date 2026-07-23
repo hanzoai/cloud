@@ -78,7 +78,7 @@ func openStore(db *sql.DB) (*store, error) {
 // content idempotent while a correction (new content) appends a new version. Provenance
 // columns (git_sha, git_branch, git_dirty, lib_versions) are indexed/queryable.
 func (s *store) migrate() error {
-	const ddl = `
+	const tables = `
 CREATE TABLE IF NOT EXISTS experiment (
   seq          INTEGER PRIMARY KEY AUTOINCREMENT,
   project      TEXT NOT NULL DEFAULT 'default',
@@ -137,6 +137,57 @@ CREATE TABLE IF NOT EXISTS artifact (
   lib_versions    TEXT NOT NULL DEFAULT '{}',
   ts              INTEGER NOT NULL DEFAULT 0
 );
+`
+	if _, err := s.db.Exec(tables); err != nil {
+		return fmt.Errorf("research migrate tables: %w", err)
+	}
+	// Converge a table created by an OLDER schema to the current column set. CREATE TABLE
+	// IF NOT EXISTS never alters an existing table, so a column added after the table was
+	// first created must be added by ALTER — otherwise a later statement (an index or an
+	// insert) referencing it fails "no such column". A duplicate-column error means the
+	// column is already present (the desired state) and is ignored. Every current non-key
+	// column carries a DEFAULT, so ADD COLUMN is always valid. This makes migrate()
+	// idempotent across schema evolution: adding a column = adding it to the CREATE above
+	// AND this list.
+	ensure := []struct{ table, col string }{
+		{"experiment", "content_hash TEXT NOT NULL DEFAULT ''"},
+		{"experiment", "revision TEXT NOT NULL DEFAULT 'original'"},
+		{"experiment", "status TEXT NOT NULL DEFAULT 'complete'"},
+		{"experiment", "visibility TEXT NOT NULL DEFAULT 'private'"},
+		{"experiment", "trainable INTEGER NOT NULL DEFAULT 0"},
+		{"experiment", "publishable INTEGER NOT NULL DEFAULT 0"},
+		{"experiment", "metric TEXT"},
+		{"experiment", "value REAL"},
+		{"experiment", "n INTEGER"},
+		{"experiment", "n_total INTEGER NOT NULL DEFAULT 0"},
+		{"experiment", "cost_usd REAL"},
+		{"experiment", "meta TEXT"},
+		{"experiment", "git_sha TEXT NOT NULL DEFAULT ''"},
+		{"experiment", "git_branch TEXT NOT NULL DEFAULT ''"},
+		{"experiment", "git_dirty INTEGER NOT NULL DEFAULT 0"},
+		{"experiment", "lib_versions TEXT NOT NULL DEFAULT '{}'"},
+		{"experiment", "ts INTEGER NOT NULL DEFAULT 0"},
+		{"attempt", "content_hash TEXT NOT NULL DEFAULT ''"},
+		{"attempt", "revision TEXT NOT NULL DEFAULT 'original'"},
+		{"attempt", "status TEXT NOT NULL DEFAULT 'complete'"},
+		{"attempt", "source TEXT NOT NULL DEFAULT 'hanzo-measured'"},
+		{"attempt", "ts INTEGER NOT NULL DEFAULT 0"},
+		{"artifact", "run_id TEXT NOT NULL DEFAULT ''"},
+		{"artifact", "visibility TEXT NOT NULL DEFAULT 'private'"},
+		{"artifact", "retention_class TEXT NOT NULL DEFAULT 'raw-artifact'"},
+		{"artifact", "git_sha TEXT NOT NULL DEFAULT ''"},
+		{"artifact", "git_branch TEXT NOT NULL DEFAULT ''"},
+		{"artifact", "git_dirty INTEGER NOT NULL DEFAULT 0"},
+		{"artifact", "lib_versions TEXT NOT NULL DEFAULT '{}'"},
+		{"artifact", "ts INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, e := range ensure {
+		if _, err := s.db.Exec("ALTER TABLE " + e.table + " ADD COLUMN " + e.col); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("research migrate ensure %s.%s: %w", e.table, e.col, err)
+		}
+	}
+	const indexes = `
 CREATE INDEX IF NOT EXISTS ix_exp_key ON experiment(project, id);
 CREATE INDEX IF NOT EXISTS ix_att_key ON attempt(project, benchmark, item, model);
 CREATE INDEX IF NOT EXISTS ix_exp_proj_kind ON experiment(project, kind);
@@ -145,8 +196,8 @@ CREATE INDEX IF NOT EXISTS ix_exp_branch ON experiment(git_branch);
 CREATE INDEX IF NOT EXISTS ix_art_run ON artifact(project, run_id);
 CREATE INDEX IF NOT EXISTS ix_art_ts ON artifact(project, ts);
 `
-	if _, err := s.db.Exec(ddl); err != nil {
-		return fmt.Errorf("research migrate: %w", err)
+	if _, err := s.db.Exec(indexes); err != nil {
+		return fmt.Errorf("research migrate indexes: %w", err)
 	}
 	return nil
 }
