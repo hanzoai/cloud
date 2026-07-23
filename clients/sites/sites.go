@@ -190,13 +190,15 @@ var analyticsHostHandler func(org string, c *zip.Ctx) error
 // analyticsHostHandler).
 func SetAnalyticsHostHandler(h func(org string, c *zip.Ctx) error) { analyticsHostHandler = h }
 
-// isAnalyticsPath reports whether a path targets the anonymous analytics-beacon
-// ingest: the Segment/beacon wire at /v1/analytics{,/batch} and the PostHog wire
-// at /v1/insights/e. The Middleware carve additionally gates on POST, so the
-// authenticated GET read lenses (/v1/analytics/overview|timeseries|top) — which
-// live on api.hanzo.ai, never a site host — are never hijacked.
+// isAnalyticsPath reports whether a path targets the site-host analytics-beacon
+// ingest: the CANONICAL door at /v1/event, plus the deprecated Segment/beacon wire
+// at /v1/analytics{,/batch} and the deprecated PostHog wire at /v1/insights/e (kept
+// so beacons already deployed on published sites don't break mid-migration). The
+// Middleware carve additionally gates on POST, so the authenticated GET read lenses
+// (/v1/analytics/overview|timeseries|top) — which live on api.hanzo.ai, never a site
+// host — are never hijacked.
 func isAnalyticsPath(p string) bool {
-	return strings.HasPrefix(p, "/v1/analytics") || p == "/v1/insights/e"
+	return p == "/v1/event" || strings.HasPrefix(p, "/v1/analytics") || p == "/v1/insights/e"
 }
 
 func (s *Server) Middleware() zip.Handler {

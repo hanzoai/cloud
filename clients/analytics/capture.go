@@ -671,11 +671,12 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
 }
 
-// capture ingests a Segment/beacon batch into hanzo.events, tenant-scoped. It is
-// the DEPRECATED wire adapter behind /v1/analytics, /v1/analytics/batch, and
-// /v1/tracker: a thin CaptureBatch decoder over the ONE write core (ingestEvents).
-// New callers post the canonical Event to /v1/event; this alias keeps working and
-// keeps captureTenant's brand-host path for anonymous marketing traffic.
+// capture ingests a Segment/beacon batch into hanzo.events, tenant-scoped. It is a
+// DEPRECATED foreign-protocol shim behind /v1/analytics, /v1/analytics/batch, and
+// /v1/tracker — external-SDK compat ONLY; no Hanzo surface uses these (Hanzo
+// surfaces POST /v1/event). It funnels through the ONE ingest core (ingestBody via
+// captureWithOrg) and keeps captureTenant's brand-host path for anonymous external
+// marketing traffic, which the strict canonical door deliberately refuses.
 func capture(s *cloud.Service[state], c *zip.Ctx) error {
 	deprecated(s, c, "/v1/event")
 	org, ok := captureTenant(c)
@@ -685,24 +686,17 @@ func capture(s *cloud.Service[state], c *zip.Ctx) error {
 	return captureWithOrg(org, c)
 }
 
-// captureWithOrg is the Segment/beacon decode+ingest core with the tenant supplied
-// EXPLICITLY by the caller — the ONE write path shared by two org sources:
+// captureWithOrg is the Segment/beacon ingest with the tenant supplied EXPLICITLY by
+// the caller — the ONE write path shared by two org sources:
 //   - the /v1/analytics{,/batch}, /v1/tracker aliases resolve org via captureTenant
 //     (validated principal | project key | brand host) and call this;
 //   - the site-host carve (sites.SetAnalyticsHostHandler) FORCES org from the
 //     resolved Site (server-supplied, host-derived — never the caller/body) and
 //     calls this.
 //
-// It decodes the CaptureBatch wire and funnels every event through the ONE write
-// core (ingestEvents); org is never read from the body here or downstream.
+// It funnels through the ONE ingest core (ingestBody, source=capture), which is
+// wire-tolerant — so the Segment {batch} envelope this wire speaks decodes through
+// the SAME decoder as the canonical door; org is never read from the body.
 func captureWithOrg(org string, c *zip.Ctx) error {
-	var batch CaptureBatch
-	if err := c.Bind(&batch); err != nil {
-		return zip.ErrBadRequest("malformed capture batch")
-	}
-	res, err := ingestEvents(c.Context(), org, sourceCapture, batch.events())
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, res)
+	return ingestBody(c, org, sourceCapture)
 }
