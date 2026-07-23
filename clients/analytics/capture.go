@@ -681,6 +681,9 @@ func ingestEvents(ctx context.Context, org, source string, evs []CaptureEvent) (
 	if err := aiobject.DatastoreExec(ctx, stmt, args...); err != nil {
 		return CaptureResult{}, warehouseErr("capture", err)
 	}
+	// Fan the accepted batch out to the downstream sink (destinations), detached and
+	// fail-soft — never blocks or fails an ingest (forward.go). No-op when unset.
+	fanOut(org, evs)
 	return CaptureResult{Accepted: len(rows), Dropped: dropped}, nil
 }
 
