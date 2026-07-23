@@ -144,6 +144,16 @@ type Config struct {
 	// black-hole every request by forwarding it away with no shard of its own).
 	ShardSelf string
 
+	// PeerSelector is the Kubernetes label selector that names this deployment's writer
+	// pods (CLOUD_PEER_SELECTOR, e.g. "app.kubernetes.io/name=cloud,app.kubernetes.io/
+	// instance=<release>"). When set AND running in-cluster, membership is LIVE — the
+	// binary lists Ready, non-terminating pods matching it via the K8s API, so a rolling
+	// upgrade's changing pod set is tracked and a draining/dead pod is never elected an
+	// org's owner. Empty (dev / native-Go / not in a cluster) falls back to the STATIC
+	// ShardPeers/self set — capability-detected, no on/off flag. Deployment wiring the
+	// chart sets, not a feature toggle.
+	PeerSelector string
+
 	// ListenAddr is the public HTTP listener (default :8080).
 	ListenAddr string
 
@@ -419,6 +429,7 @@ func LoadConfig() *Config {
 		WriterLease:       getenvBool("CLOUD_WRITER_LEASE"),
 		ShardPeers:        getenv("CLOUD_PEERS", ""),
 		ShardSelf:         firstNonEmptyStr(getenv("CLOUD_POD_NAME", ""), getenv("POD_NAME", "")),
+		PeerSelector:      getenv("CLOUD_PEER_SELECTOR", ""),
 		PaymentsZAPAddr:   getenv("CLOUD_PAYMENTS_ZAP_ADDR", ""),
 		VaultZAPAddr:      getenv("CLOUD_VAULT_ZAP_ADDR", ""),
 		// Billing gate (KMS-backed COMMERCE_SERVICE_TOKEN; never plaintext).
