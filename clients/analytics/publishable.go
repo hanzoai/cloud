@@ -206,34 +206,16 @@ func foldException(e CaptureEvent) CaptureEvent {
 
 // ── handlers ─────────────────────────────────────────────────────────────────
 
-// ingest answers POST /v1/ingest — the publishable-key direct capture path. The
-// org is resolved from the SIGNED key (no IAM, no DB), the body is the
-// @hanzo/event WireEvent batch ({batch:[…]} | {events:[…]}), error events are
-// folded, and everything funnels through the ONE write core into hanzo.events.
-// FAILS CLOSED: a missing/unverifiable key is refused (403); the org is never
-// read from the body.
+// ingest answers POST /v1/ingest — a THIN DEPRECATED ALIAS of the canonical door.
+// Since /v1/event now natively accepts the publishable key (pk_…, via eventTenant)
+// AND the {batch:[…]} wire (via decodeIngest), /v1/ingest is redundant: it delegates
+// to the EXACT canonical handler logic (eventHandle) — the SAME pluggable auth,
+// tolerant decode, error-fold, and ONE write core — differing only in a one-shot
+// deprecation log and the $source=ingest origin tag for the migration signal.
+// Existing pk_ callers keep working unchanged; there is ONE implementation.
 func ingest(s *cloud.Service[state], c *zip.Ctx) error {
-	key := ingestKey(c)
-	if key == "" {
-		return zip.ErrForbidden("publishable ingest key required")
-	}
-	org, ok := verifyPublishableKey(ingestSecret(), key)
-	if !ok {
-		return zip.ErrForbidden("invalid publishable ingest key")
-	}
-	var batch CaptureBatch
-	if err := c.Bind(&batch); err != nil {
-		return zip.ErrBadRequest("malformed ingest batch")
-	}
-	evs := batch.events()
-	for i := range evs {
-		evs[i] = foldException(evs[i])
-	}
-	res, err := ingestEvents(c.Context(), org, sourceIngest, evs)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, res)
+	deprecated(s, c, "/v1/event")
+	return eventHandle(c, sourceIngest)
 }
 
 // mintKey answers POST /v1/ingest/keys — an org owner (VALIDATED principal) mints
