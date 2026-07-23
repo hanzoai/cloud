@@ -22,6 +22,10 @@ spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
+      serviceAccountName: {{ include "cloud.serviceAccountName" . }}
+      # Exceed the in-process drain + final ship so a rolling pod hands off cleanly before
+      # SIGKILL (see drain.go / serve.go shutdown).
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: cloud
@@ -33,11 +37,32 @@ spec:
             - "--data-dir={{ .Values.hanzo.dataDir }}"
             - "--iam-issuer={{ .Values.hanzo.iamIssuer }}"
             - "--enable={{ .Values.hanzo.enable }}"
+          # preStop belt-and-suspenders: give the endpoint controller a moment to remove
+          # this pod before SIGTERM so no request is dialed to a tearing-down pod. The
+          # in-process drain (drain.go) is the primary mechanism; this only sharpens it.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 3"]
           env:
             # Mirrors the resolved replica count so Config.Validate can enforce the
             # single-replica contract embedded IAM requires (memory session store).
             - name: CLOUD_REPLICAS
               value: {{ $replicas | quote }}
+            # Stable pod identity (HRW weight) + namespace for the live membership source.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Label selector that names this deployment's writer pods, so the live
+            # membership source (membership_k8s.go) tracks the pod set in-cluster. Empty /
+            # out-of-cluster falls back to the static self set — no flag, works everywhere.
+            - name: CLOUD_PEER_SELECTOR
+              value: "app.kubernetes.io/name={{ include "cloud.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
           ports:
             - name: http
               containerPort: 8080
