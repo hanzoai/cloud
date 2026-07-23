@@ -380,6 +380,12 @@ func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	if req.Visibility != nil && !visibilities[*req.Visibility] {
 		return errJSON(c, http.StatusUnprocessableEntity, "visibility must be private, org, or public")
 	}
+	// project locates WHICH run/artifact in the caller's org to grant — a run's stable
+	// id is (project, id), so the target project is an INPUT, defaulting to the
+	// caller's project scope. This is intentionally not server-forced (as ingest's is):
+	// the ORG (the physical file, orgStore→principal.Org) is the tenant boundary, and
+	// project is an org-internal label the org's own board reads across, so a caller
+	// granting for any project in ITS OWN org is within its authority — never cross-org.
 	project := req.Project
 	if project == "" {
 		project = principal.Project(c)
