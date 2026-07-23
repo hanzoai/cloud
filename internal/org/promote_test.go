@@ -14,6 +14,7 @@ package org
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -48,6 +49,12 @@ func (v *liveView) swap(ms []Member) {
 // connection, bound so Sync checkpoints on it) and ensures the kv table.
 func openBoundDB(t *testing.T, d *Durable) *sql.DB {
 	t.Helper()
+	// Create the parent dir before opening (what production's openOrgDB does): a fresh org
+	// whose durable object is empty has nothing to restore, so the orgs/<slug>/ dir does
+	// not exist yet.
+	if err := os.MkdirAll(filepath.Dir(d.dbPath), 0o700); err != nil {
+		t.Fatalf("mkdir %s: %v", d.dbPath, err)
+	}
 	db, err := sql.Open("sqlite", testDSN(d.dbPath))
 	if err != nil {
 		t.Fatalf("open %s: %v", d.dbPath, err)
