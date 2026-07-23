@@ -2,13 +2,17 @@ package apps
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"github.com/hanzoai/cloud/clients/ads"
 	"github.com/hanzoai/cloud/clients/automations"
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/coding"
+	"github.com/hanzoai/cloud/clients/experiments"
 	"github.com/hanzoai/cloud/clients/git"
 	"github.com/hanzoai/cloud/clients/integrations"
+	"github.com/hanzoai/cloud/clients/principal"
 )
 
 // wire_seams.go wires cross-subsystem in-process seams that cannot be a MountSpec
@@ -60,14 +64,38 @@ func init() {
 		},
 	))
 
-	// GTM ORGANIC + EMAIL channels and the creative-A/B experiment seam wire HERE
-	// the same way once their executors land (designed follow-ons):
+	// GTM creative A/B composes the merged EXPERIMENT primitive (clients/experiments)
+	// — campaign never reinvents bucketing or measurement. Assign resolves the
+	// subject's variant (creative) from the experiment's flag; Analyze is pull-model
+	// (it reads the metric from analytics itself), returned as opaque JSON so
+	// campaign stays decoupled from the analysis type. Campaign-linked experiments
+	// live in the org's default project. Both are nil-safe upstream: an org that
+	// never created a "campaign:<id>" experiment runs a single creative (Assign
+	// errors → "" → Content[0]).
+	campaign.SetExperiment(
+		func(ctx context.Context, org, experimentID, subject string) (string, error) {
+			a, err := experiments.Assign(ctx, org, principal.DefaultProject, experimentID, subject, nil)
+			if err != nil {
+				return "", err
+			}
+			return a.Variant, nil
+		},
+		func(ctx context.Context, org, experimentID string, start, end time.Time) (json.RawMessage, error) {
+			an, err := experiments.Analyze(ctx, org, principal.DefaultProject, experimentID, start, end, 0.05)
+			if err != nil {
+				return nil, err
+			}
+			return json.Marshal(an)
+		},
+	)
+
+	// GTM ORGANIC + EMAIL channels wire HERE the same way once their executors land
+	// (designed follow-ons — the publish rename + marketing email-connector wiring):
 	//
 	//   campaign.RegisterChannel(campaign.NewChannel(campaign.KindOrganic,
-	//       publish.Syndicate, publish.NoSpend, publish.Unpublish))     // social connectors
+	//       publish.Syndicate, publish.NoSpend, publish.Unpublish))   // social connectors
 	//   campaign.RegisterChannel(campaign.NewChannel(campaign.KindEmail,
-	//       marketing.Broadcast, marketing.NoSpend, marketing.Halt))    // email connectors
-	//   campaign.SetExperiment(experiment.Assign, experiment.RecordEvidence) // flags-assignment + analytics evidence
+	//       marketing.Broadcast, marketing.NoSpend, marketing.Halt))  // email connectors
 	//
 	// Until wired, those channels record "unavailable" on a fan-out (honest) and a
 	// campaign runs a single creative — never a fabricated launch or variant.
