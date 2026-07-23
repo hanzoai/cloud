@@ -67,14 +67,15 @@ var cfHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 func init() {
 	register(&Provider{
-		ID:          cloudflareProvider,
-		Name:        "Cloudflare",
-		Description: "DNS, zones, and Pages via a least-privilege scoped API token.",
-		Category:    "Infrastructure",
-		Kind:        apiKeyKind,
-		AdminOnly:   true,
-		Scopes:      cloudflareScopes,
-		Secrets:     []string{cloudflareTokenSecret},
+		ID:           cloudflareProvider,
+		Name:         "Cloudflare",
+		Description:  "DNS, zones, and Pages via a least-privilege scoped API token.",
+		Category:     "Infrastructure",
+		Kind:         kindKey,
+		Capabilities: []string{"cf-resource-management"},
+		AdminOnly:    true,
+		Scopes:       cloudflareScopes,
+		Secrets:      []string{cloudflareTokenSecret},
 		// Dual-path connector. apikey: the customer submits a scoped API token to
 		// /connect (verify-before-seal). oauth: a tokenless /connect starts the
 		// browser Authorization Code flow and the exchanged access token is sealed to

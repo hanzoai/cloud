@@ -168,6 +168,25 @@ CREATE TABLE IF NOT EXISTS grants (
   expires_at   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_grants_expires ON grants(expires_at);
+
+-- extension_config is the CONFIG half of the unified /v1/connectors plane: the
+-- enablement bit + an opaque per-extension config blob, keyed by the extension
+-- identity (scope,org,user,provider,label). Orthogonal to custody — KMS holds the
+-- credential, this holds "is it on" + "how is it tuned". A MISSING row means
+-- enabled-by-default (every already-connected connector keeps working with no
+-- row). org scope → user='' label=''; user scope → user=<id> label=<label>.
+-- Tenancy is the (org, and scope='org' OR user) predicate (see ListExtConfig).
+CREATE TABLE IF NOT EXISTS extension_config (
+  scope      TEXT NOT NULL,
+  org        TEXT NOT NULL,
+  user       TEXT NOT NULL DEFAULT '',
+  provider   TEXT NOT NULL,
+  label      TEXT NOT NULL DEFAULT '',
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  config     TEXT NOT NULL DEFAULT '{}',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (scope, org, user, provider, label)
+);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)

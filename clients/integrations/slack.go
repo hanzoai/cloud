@@ -24,6 +24,7 @@ func init() {
 		Name:         "Slack",
 		Description:  "Post messages and receive events in your Slack workspace.",
 		Category:     "Communication",
+		Capabilities: []string{"chat-bridge"},
 		Scopes:       slackScopes(),
 		RedirectPath: callbackPath("slack"),
 		Secrets:      []string{slackBotTokenSecret},
