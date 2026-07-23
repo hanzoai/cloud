@@ -59,7 +59,7 @@ func newMetaMock(t *testing.T, m *metaMock) {
 }
 
 func TestMetaAuthorizeURL(t *testing.T) {
-	raw, err := metaAuthorize(OAuthConfig{ClientID: "app-123"}, "https://api.hanzo.ai/v1/integrations/meta_ads/callback", "st8")
+	raw, err := metaAuthorize(OAuthConfig{ClientID: "app-123"}, "https://api.hanzo.ai/v1/connectors/meta_ads/callback", "st8")
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestMetaExchangeSealsLongLivedToken(t *testing.T) {
 	m := &metaMock{}
 	newMetaMock(t, m)
 	res, err := metaExchange(context.Background(), OAuthConfig{ClientID: "app", ClientSecret: "secret"},
-		"https://api.hanzo.ai/v1/integrations/meta_ads/callback", "authcode")
+		"https://api.hanzo.ai/v1/connectors/meta_ads/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestMetaExchangeFallsBackToShortToken(t *testing.T) {
 	newMetaMock(t, m)
 	before := time.Now().Unix()
 	res, err := metaExchange(context.Background(), OAuthConfig{ClientID: "app", ClientSecret: "secret"},
-		"https://api.hanzo.ai/v1/integrations/meta_ads/callback", "authcode")
+		"https://api.hanzo.ai/v1/connectors/meta_ads/callback", "authcode")
 	if err != nil {
 		t.Fatalf("exchange must still succeed on the short token: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestMetaStateCannotBeReplayedAtGoogleAds(t *testing.T) {
 	app := newApp(t, newKMS(t))
 
 	// Mint a genuine signed state via meta_ads connect (org admin).
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/meta_ads/connect", "acme", true, nil)
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/meta_ads/connect", "acme", true, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("meta connect want 200, got %d (%s)", res.Code, res.Body)
 	}
@@ -223,7 +223,7 @@ func TestMetaStateCannotBeReplayedAtGoogleAds(t *testing.T) {
 	}
 	// Replay it at a DIFFERENT provider's callback.
 	cb := req(t, app, http.MethodGet,
-		"/v1/integrations/google_ads/callback?state="+url.QueryEscape(metaState)+"&code=x", "", nil)
+		"/v1/connectors/google_ads/callback?state="+url.QueryEscape(metaState)+"&code=x", "", nil)
 	if cb.Code != http.StatusFound {
 		t.Fatalf("callback want a 302 redirect, got %d (%s)", cb.Code, cb.Body)
 	}
@@ -237,7 +237,7 @@ func TestMetaConnectRequiresOrgAdmin(t *testing.T) {
 	t.Setenv(metaAppIDEnv, "app-id")
 	t.Setenv(metaAppSecretEnv, "app-secret")
 	app := newApp(t, newKMS(t))
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/meta_ads/connect", "acme", false, nil)
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/meta_ads/connect", "acme", false, nil)
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("member connect want 403, got %d (%s)", res.Code, res.Body)
 	}
@@ -247,7 +247,7 @@ func TestMetaConnectRequiresOrgAdmin(t *testing.T) {
 // an honest 503, never a dead consent URL.
 func TestMetaConnectHonest503WhenUnconfigured(t *testing.T) {
 	app := newApp(t, newKMS(t))
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/meta_ads/connect", "acme", true, nil)
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/meta_ads/connect", "acme", true, nil)
 	if res.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unconfigured connect want 503, got %d (%s)", res.Code, res.Body)
 	}

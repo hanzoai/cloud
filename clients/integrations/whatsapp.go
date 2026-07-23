@@ -21,7 +21,7 @@ func init() {
 		Name:        "WhatsApp Business",
 		Description: "Send WhatsApp messages via the Cloud API. Connect with a System User token + phone number id.",
 		Category:    "Messaging",
-		Kind:        apiKeyKind,
+		Kind:        kindKey,
 		AdminOnly:   true,
 		Secrets:     []string{apiKeySecret},
 		Configured:  func() bool { return true },
