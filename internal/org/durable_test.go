@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -365,6 +366,13 @@ func TestFrameRoundTrip(t *testing.T) {
 	}
 	if _, _, err := unframe([]byte{0xff}); err == nil {
 		t.Fatal("unframe of a truncated frame must error, not restore arbitrary bytes")
+	}
+	// A max-uint64 sidecar length must fail closed, not overflow past the guard and
+	// panic the slice (L1).
+	var huge [binary.MaxVarintLen64 + 4]byte
+	n := binary.PutUvarint(huge[:], ^uint64(0))
+	if _, _, err := unframe(huge[:n+4]); err == nil {
+		t.Fatal("unframe of an oversized-length frame must fail closed (errCorruptFrame), not panic")
 	}
 }
 
