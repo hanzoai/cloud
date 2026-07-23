@@ -40,7 +40,8 @@
 //
 //	GET /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
 //	GET /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
-//	GET /v1/analytics/top          top models (real) + top products (honest-empty)
+//	GET /v1/analytics/top          top models (real) + products + behavior lenses
+//	                               (topPages/topReferrers/topSources over the events lens)
 //	GET /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
 // Registered as id "analytics" with cloud.HealthOwner + order 132: it serves its
@@ -402,13 +403,37 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		"GROUP BY product_id ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
 	prodRows, perr := aiobject.DatastoreQuery(ctx, prodSQL, eargs...)
 
+	// Behavior lenses over hanzo.events — WHERE people go / WHAT they look at
+	// (topPages) and where they come FROM (topReferrers organic/referral,
+	// topSources campaigns). Each is ONE pageview breakdown that degrades to
+	// honest-empty if the events table is absent or the query errors — never a 500
+	// (mirrors the overview web lens exactly).
+	pageSQL, pageArgs := breakdownSQL(pageKeyExpr, org, start, end, limit)
+	pageRows, pageErr := aiobject.DatastoreQuery(ctx, pageSQL, pageArgs...)
+	if pageErr != nil {
+		s.Log.Debug("topPages lens unavailable (honest-empty)", "err", pageErr)
+	}
+	refSQL, refArgs := breakdownSQL(referrerKeyExpr, org, start, end, limit)
+	refRows, refErr := aiobject.DatastoreQuery(ctx, refSQL, refArgs...)
+	if refErr != nil {
+		s.Log.Debug("topReferrers lens unavailable (honest-empty)", "err", refErr)
+	}
+	srcSQL, srcArgs := breakdownSQL(sourceKeyExpr, org, start, end, limit)
+	srcRows, srcErr := aiobject.DatastoreQuery(ctx, srcSQL, srcArgs...)
+	if srcErr != nil {
+		s.Log.Debug("topSources lens unavailable (honest-empty)", "err", srcErr)
+	}
+
 	return c.JSON(http.StatusOK, Top{
-		Range:    rangeLabel,
-		Start:    start.UTC().Format(time.RFC3339),
-		End:      end.UTC().Format(time.RFC3339),
-		Scope:    Scope{Org: org},
-		Models:   buildTopModels(modelRows),
-		Products: buildTopProducts(prodRows, perr == nil),
+		Range:     rangeLabel,
+		Start:     start.UTC().Format(time.RFC3339),
+		End:       end.UTC().Format(time.RFC3339),
+		Scope:     Scope{Org: org},
+		Models:    buildTopModels(modelRows),
+		Products:  buildTopProducts(prodRows, perr == nil),
+		Pages:     buildBreakdown(pageRows, pageErr == nil),
+		Referrers: buildBreakdown(refRows, refErr == nil),
+		Sources:   buildBreakdown(srcRows, srcErr == nil),
 	})
 }
 
