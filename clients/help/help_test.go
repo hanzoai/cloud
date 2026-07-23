@@ -54,18 +54,40 @@ func TestModelSpec(t *testing.T) {
 		}
 		byName[dt.Name] = dt
 	}
-	for _, want := range []string{dtTicket, dtAgent, dtTeam, dtCannedResponse, dtSLA} {
+	for _, want := range []string{DTTicket, dtAgent, dtTeam, dtCannedResponse, dtSLA, DTCategory, DTArticle, DTCommunication} {
 		if _, ok := byName[want]; !ok {
 			t.Fatalf("missing Help DocType %q", want)
 		}
 	}
-	ticket := byName[dtTicket]
+	ticket := byName[DTTicket]
 	status, ok := fieldOf(ticket, "status")
 	if !ok || status.Fieldtype != framework.FieldSelect || status.Default != "Open" || status.Options != "Open\nPending\nResolved\nClosed" {
 		t.Fatalf("hd-ticket.status must be a Select defaulting to Open with the four states, got %+v", status)
 	}
 	if a, ok := fieldOf(ticket, "assigned_agent"); !ok || a.Fieldtype != framework.FieldLink || a.Options != dtAgent {
 		t.Fatalf("hd-ticket.assigned_agent must Link hd-agent, got %+v", a)
+	}
+
+	// KB article: the public-visibility contract — a Draft/Published Select and an
+	// is_public Check that the /v1/help public plane gates on.
+	art := byName[DTArticle]
+	if st, ok := fieldOf(art, "status"); !ok || st.Fieldtype != framework.FieldSelect || st.Default != "Draft" || st.Options != "Draft\nPublished" {
+		t.Fatalf("hd-article.status must be a Draft/Published Select defaulting Draft, got %+v", st)
+	}
+	if pub, ok := fieldOf(art, "is_public"); !ok || pub.Fieldtype != framework.FieldCheck || pub.Default != "0" {
+		t.Fatalf("hd-article.is_public must be a Check defaulting 0 (private), got %+v", pub)
+	}
+	if art.Autoname != "field:slug" {
+		t.Fatalf("hd-article must be slug-named, got autoname %q", art.Autoname)
+	}
+
+	// Conversation message: the thread Link back to the ticket + the sender_type.
+	comm := byName[DTCommunication]
+	if tk, ok := fieldOf(comm, "ticket"); !ok || tk.Fieldtype != framework.FieldLink || tk.Options != DTTicket || !tk.Reqd {
+		t.Fatalf("hd-communication.ticket must be a required Link to hd-ticket, got %+v", tk)
+	}
+	if stype, ok := fieldOf(comm, "sender_type"); !ok || stype.Fieldtype != framework.FieldSelect || stype.Options != "customer\nagent" {
+		t.Fatalf("hd-communication.sender_type must be a customer/agent Select, got %+v", stype)
 	}
 }
 
@@ -88,7 +110,7 @@ func TestInstallAndTicketFlow(t *testing.T) {
 	}
 
 	// Open a ticket linking the agent; status defaults to Open.
-	tk := mustCreate(t, app, org, dtTicket, map[string]any{
+	tk := mustCreate(t, app, org, DTTicket, map[string]any{
 		"subject": "Cannot sign in", "priority": "High", "customer": "bob@acme.test", "assigned_agent": "jane",
 	})
 	if tk["status"] != "Open" {
@@ -97,22 +119,22 @@ func TestInstallAndTicketFlow(t *testing.T) {
 	name, _ := tk["name"].(string)
 
 	// No resolved tickets yet.
-	if n := len(listDocs(t, app, org, `/v1/framework/`+dtTicket+`?filters={"status":"Resolved"}`)); n != 0 {
+	if n := len(listDocs(t, app, org, `/v1/framework/`+DTTicket+`?filters={"status":"Resolved"}`)); n != 0 {
 		t.Fatalf("resolved tickets want 0, got %d", n)
 	}
 
 	// Advance the status → Resolved (a status write, the whole record on update).
-	if code, body := call(t, app, http.MethodPut, "/v1/framework/"+dtTicket+"/"+name, org, map[string]any{
+	if code, body := call(t, app, http.MethodPut, "/v1/framework/"+DTTicket+"/"+name, org, map[string]any{
 		"subject": "Cannot sign in", "priority": "High", "assigned_agent": "jane", "status": "Resolved", "resolution": "Reset password",
 	}); code != http.StatusOK {
 		t.Fatalf("resolve ticket want 200, got %d (%s)", code, body)
 	}
-	if n := len(listDocs(t, app, org, `/v1/framework/`+dtTicket+`?filters={"status":"Resolved"}`)); n != 1 {
+	if n := len(listDocs(t, app, org, `/v1/framework/`+DTTicket+`?filters={"status":"Resolved"}`)); n != 1 {
 		t.Fatalf("resolved tickets want 1, got %d", n)
 	}
 
 	// A dangling agent Link is refused (422) — Link integrity within the org.
-	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+dtTicket, org, map[string]any{
+	if code, _ := call(t, app, http.MethodPost, "/v1/framework/"+DTTicket, org, map[string]any{
 		"subject": "Ghost", "assigned_agent": "nobody",
 	}); code != http.StatusUnprocessableEntity {
 		t.Fatalf("dangling agent link want 422, got %d", code)
@@ -139,11 +161,11 @@ func TestInstallIdempotent(t *testing.T) {
 func TestTenantIsolation(t *testing.T) {
 	app := mount(t)
 	call(t, app, http.MethodPost, "/v1/framework/modules/help/install", "orgA", nil)
-	mustCreate(t, app, "orgA", dtTicket, map[string]any{"subject": "A ticket"})
+	mustCreate(t, app, "orgA", DTTicket, map[string]any{"subject": "A ticket"})
 	if n := len(listDocs(t, app, "orgB", "/v1/framework/doctypes")); n != 0 {
 		t.Fatalf("orgB must have zero doctypes, got %d", n)
 	}
-	if code, _ := call(t, app, http.MethodGet, "/v1/framework/"+dtTicket, "orgB", nil); code != http.StatusNotFound {
+	if code, _ := call(t, app, http.MethodGet, "/v1/framework/"+DTTicket, "orgB", nil); code != http.StatusNotFound {
 		t.Fatalf("orgB ticket read want 404 (not installed), got %d", code)
 	}
 }

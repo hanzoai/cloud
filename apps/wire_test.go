@@ -61,6 +61,7 @@ var frozen = []struct {
 	{"templates", false, false},      // was order 129
 	{"framework", false, true},       // was order 129
 	{"knowledge", false, false},      // was order 130
+	{"help", false, false},           // new: Hanzo Support public plane /v1/help (after knowledge; framework lane with a companion subsystem, no store → no Shutdown)
 	{"content", false, true},         // new: marketing content loop (after knowledge)
 	{"catalogsync", false, true},     // new: reverse loop (product.created → render) after content
 	{"ml", true, false},              // was order 130
