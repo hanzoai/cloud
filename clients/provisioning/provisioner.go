@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 	"github.com/hanzoai/s3-go/pkg/credentials"
 )
 
@@ -166,7 +166,7 @@ func (p *meiliProvisioner) Drop(ctx context.Context, physical, _ string) error {
 	return nil
 }
 
-// ----- S3 / MinIO (s3) ------------------------------------------------------
+// ----- S3 / SeaweedFS (s3) ------------------------------------------------------
 // env: S3_ADMIN_ENDPOINT (default s3.hanzo.svc:9000),
 //      S3_ADMIN_ACCESS_KEY, S3_ADMIN_SECRET_KEY,
 //      S3_SECURE (false), S3_REGION (us-east-1)
@@ -198,8 +198,8 @@ func newS3() *s3Provisioner {
 	}
 }
 
-func (p *s3Provisioner) client() (*minio.Client, error) {
-	return minio.New(p.endpoint, &minio.Options{
+func (p *s3Provisioner) client() (*s3.Client, error) {
+	return s3.New(p.endpoint, &s3.Options{
 		Creds:  credentials.NewStaticV4(p.ak, p.sk, ""),
 		Secure: p.secure,
 		Region: p.region,
@@ -212,7 +212,7 @@ func (p *s3Provisioner) Create(ctx context.Context, physical, _, _ string) (stri
 	if err != nil {
 		return "", "", 0, "", fmt.Errorf("connect: %w", err)
 	}
-	if err := cli.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: p.region}); err != nil {
+	if err := cli.MakeBucket(ctx, bucket, s3.MakeBucketOptions{Region: p.region}); err != nil {
 		if exists, _ := cli.BucketExists(ctx, bucket); exists {
 			return "", "", 0, "", errAlreadyExists
 		}
