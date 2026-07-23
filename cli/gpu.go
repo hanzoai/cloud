@@ -92,6 +92,7 @@ const (
 const (
 	studioCap = "studio.render"
 	engineCap = "engine.serve"
+	fnCap     = "fn.run" // ephemeral script execution (uv-run) on this node
 )
 
 // The node-level command surface — `hanzo link | unlink | status` — is wired in
@@ -281,6 +282,9 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 	w.handlers = map[string]jobHandler{
 		"echo":          echoHandler,
 		"studio.render": w.studioRenderHandler,
+	}
+	if _, err := exec.LookPath("uv"); err == nil {
+		w.handlers[fnCap] = fnRunHandler // functions-runner: needs uv, nothing else
 	}
 	return w, nil
 }
@@ -1046,7 +1050,21 @@ func (w *worker) capabilities() []string {
 	if w.serveEngine {
 		caps = append(caps, engineCap)
 	}
+	if _, ok := w.handlers[fnCap]; ok {
+		caps = append(caps, fnCap)
+	}
 	return caps
+}
+
+// hasNonRenderLane reports whether this worker serves any lane beyond the render
+// path (echo is a smoke type, not a lane).
+func (w *worker) hasNonRenderLane() bool {
+	for name := range w.handlers {
+		if name != "echo" && name != studioCap {
+			return true
+		}
+	}
+	return false
 }
 
 // studioReachable probes the local studio's /queue (bounded), authenticated. A node
@@ -1143,10 +1161,12 @@ func (w *worker) claimFrom(ctx context.Context, taskQueue string) (claimedActivi
 // queue name, so one worker never steals another GPU's targeted job (an empty
 // taskQueue on claim would match any lane and do exactly that).
 func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
-	// Poison-loop guard: a node that can't serve renders must not claim render lanes —
-	// it would only fail every claimed job on the gated execute seam. It still
-	// heartbeats presence (shows in the fleet), just idle, until it becomes ready.
-	if !w.studioReady {
+	// Poison-loop guard, per-LANE: a node that can't serve renders must not sit on
+	// render jobs — but a node with other lanes (fn.run) still claims. When renders
+	// are this worker's only real lane and the studio isn't ready, stay idle; a
+	// claimed render on a non-ready node is declined below so an eligible worker
+	// takes it.
+	if !w.studioReady && !w.hasNonRenderLane() {
 		return nil
 	}
 	act, claimed, err := w.claimFrom(ctx, w.gpuQueue())
@@ -1172,6 +1192,12 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 		return nil
 	}
 
+	if act.Type.Name == studioCap && !w.studioReady {
+		cause := "studio not ready on this node — declined so a render-capable worker takes it"
+		_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "fail"), map[string]any{"cause": cause, "identity": w.identity}, nil)
+		fmt.Fprintf(out, "  → declined (%s)\n", cause)
+		return nil
+	}
 	h, ok := w.handlers[act.Type.Name]
 	if !ok {
 		cause := fmt.Sprintf("no handler for job type %q", act.Type.Name)
@@ -1488,6 +1514,117 @@ func echoHandler(_ context.Context, input json.RawMessage) (any, error) {
 		_ = json.Unmarshal(input, &v)
 	}
 	return map[string]any{"echo": v}, nil
+}
+
+// fnRunInput is the fn.run job payload: an inline script executed on this node in
+// an ephemeral `uv run` environment. The queue is org-scoped, so the submitter is
+// running code on their OWN fleet — same trust domain as a CI runner.
+type fnRunInput struct {
+	Name           string            `json:"name,omitempty"`           // label for logs
+	Script         string            `json:"script"`                   // Python source (required)
+	Requirements   []string          `json:"requirements,omitempty"`   // uv --with deps, e.g. ["numpy", "torch==2.5.*"]
+	Env            map[string]string `json:"env,omitempty"`            // extra environment
+	TimeoutSeconds int               `json:"timeoutSeconds,omitempty"` // default 3600, cap 21600
+}
+
+const (
+	fnDefaultTimeout = time.Hour
+	fnMaxTimeout     = 6 * time.Hour
+	fnOutputTail     = 128 << 10 // keep the LAST 128 KiB of combined output
+)
+
+// fnValidate parses and bounds an fn.run payload. Requirements must look like
+// package specs — a leading dash would inject uv flags.
+func fnValidate(input json.RawMessage) (fnRunInput, error) {
+	var in fnRunInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return in, fmt.Errorf("fn.run: bad input: %w", err)
+	}
+	if strings.TrimSpace(in.Script) == "" {
+		return in, fmt.Errorf("fn.run: input needs a `script`")
+	}
+	for _, r := range in.Requirements {
+		if r == "" || strings.HasPrefix(r, "-") {
+			return in, fmt.Errorf("fn.run: bad requirement %q", r)
+		}
+	}
+	if in.TimeoutSeconds <= 0 {
+		in.TimeoutSeconds = int(fnDefaultTimeout / time.Second)
+	}
+	if in.TimeoutSeconds > int(fnMaxTimeout/time.Second) {
+		in.TimeoutSeconds = int(fnMaxTimeout / time.Second)
+	}
+	return in, nil
+}
+
+// tailBuffer keeps the last cap bytes written — a training loop can log gigabytes;
+// the activity result carries the end, where the outcome lives.
+type tailBuffer struct {
+	cap       int
+	buf       []byte
+	truncated bool
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > t.cap {
+		t.buf = t.buf[len(t.buf)-t.cap:]
+		t.truncated = true
+	}
+	return len(p), nil
+}
+
+// fnRunHandler executes an fn.run job: write the script to an ephemeral dir, run
+// it under `uv run` (which resolves requirements into a throwaway env — ROCm/CUDA
+// wheels included), and return the output tail + exit code. Nonzero exit fails
+// the activity with the tail as the cause, so the submitter sees the traceback.
+func fnRunHandler(ctx context.Context, input json.RawMessage) (any, error) {
+	in, err := fnValidate(input)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := os.MkdirTemp("", "fnrun-*")
+	if err != nil {
+		return nil, fmt.Errorf("fn.run: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	script := filepath.Join(dir, "main.py")
+	if err := os.WriteFile(script, []byte(in.Script), 0o600); err != nil {
+		return nil, fmt.Errorf("fn.run: %w", err)
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(in.TimeoutSeconds)*time.Second)
+	defer cancel()
+	args := []string{"run", "--no-project", "--quiet"}
+	for _, r := range in.Requirements {
+		args = append(args, "--with", r)
+	}
+	args = append(args, script)
+	cmd := exec.CommandContext(runCtx, "uv", args...)
+	cmd.Dir = dir
+	cmd.Env = os.Environ()
+	for k, v := range in.Env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	tail := &tailBuffer{cap: fnOutputTail}
+	cmd.Stdout = tail
+	cmd.Stderr = tail
+	start := time.Now()
+	runErr := cmd.Run()
+	dur := time.Since(start)
+	out := string(tail.buf)
+	if runCtx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("fn.run: timed out after %ds\n%s", in.TimeoutSeconds, out)
+	}
+	if runErr != nil {
+		return nil, fmt.Errorf("fn.run: %v\n%s", runErr, out)
+	}
+	return map[string]any{
+		"name":       in.Name,
+		"exitCode":   0,
+		"durationMs": dur.Milliseconds(),
+		"output":     out,
+		"truncated":  tail.truncated,
+	}, nil
 }
 
 // workerToken is the KMS-sourced STUDIO_WORKER_TOKEN this box holds — the credential
