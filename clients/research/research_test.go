@@ -415,3 +415,43 @@ func TestHTTPGrantSeparateFromUpload(t *testing.T) {
 		t.Fatalf("grant did not take: %v", m["data"])
 	}
 }
+
+// TestHTTPArtifactsDiary: the research-diary surface — idempotent by sha256, newest-first
+// feed, private-by-default, run filter, and the separate visibility grant by sha256.
+func TestHTTPArtifactsDiary(t *testing.T) {
+	app := mountResearch(t)
+	snap := Artifact{SHA256: "abc123", Kind: "snapshot", Ref: "s3://b/snap.png", RunID: "benchmark:m:gpqa_diamond", GitSHA: "deadbeef", TS: 100}
+	code, m := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", snap)
+	if code != http.StatusOK || m["created"] != true {
+		t.Fatalf("POST artifact status=%d body=%v", code, m)
+	}
+	// Re-POST identical sha256 → no-op (hash-addressed idempotency).
+	_, m2 := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", snap)
+	if m2["created"] != false {
+		t.Fatalf("re-POST created=%v, want false (idempotent by sha256)", m2["created"])
+	}
+	// A newer report.
+	do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
+		Artifact{SHA256: "def456", Kind: "report", Ref: "s3://b/report.html", RunID: "benchmark:m:gpqa_diamond", TS: 200})
+
+	// Diary feed newest-first, private by default.
+	code, g := do(t, app, http.MethodGet, "/v1/research/artifacts", "acme", "enso-bench", nil)
+	if code != http.StatusOK || g["total"].(float64) != 2 {
+		t.Fatalf("diary total=%v", g["total"])
+	}
+	first := g["data"].([]any)[0].(map[string]any)
+	if first["sha256"] != "def456" || first["visibility"] != "private" || first["retention_class"] != "raw-artifact" {
+		t.Fatalf("diary head wrong: %v", first)
+	}
+	// Kind validation.
+	bad, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{SHA256: "z", Kind: "malware", Ref: "r"})
+	if bad != http.StatusUnprocessableEntity {
+		t.Fatalf("bad kind status=%d, want 422", bad)
+	}
+	// Separate visibility grant by sha256.
+	vis := "public"
+	code, gr := do(t, app, http.MethodPost, "/v1/research/grants", "acme", "enso-bench", GrantRequest{Project: "enso-bench", SHA256: "abc123", Visibility: &vis})
+	if code != http.StatusOK || gr["updated"].(float64) != 1 {
+		t.Fatalf("artifact grant status=%d body=%v", code, gr)
+	}
+}
