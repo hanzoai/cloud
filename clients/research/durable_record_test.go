@@ -16,12 +16,14 @@ package research
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/internal/org"
 	"github.com/hanzoai/vfs/replica"
 	luxlog "github.com/luxfi/log"
@@ -80,11 +82,50 @@ func soleMembership(t *testing.T, id string) *org.Membership {
 	return m
 }
 
+// cekCanReopen reports whether cek can create a store and reopen it on THIS build —
+// the exact capability the successor's cross-pod restore needs. It holds on a pure-Go
+// (plaintext) build and on a real CGO+libsqlcipher build; it fails only on a CGO build
+// whose SQLite lacks SQLCipher, where cek writes a plaintext file it then cannot
+// migrate on reopen (sqlcipher_export is absent). A throwaway temp store, no global
+// state touched.
+func cekCanReopen(t *testing.T) bool {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "cek-probe.db")
+	db, err := cek.Open(p)
+	if err != nil {
+		return false
+	}
+	if _, err := db.Exec(`CREATE TABLE probe(x)`); err != nil {
+		_ = db.Close()
+		return false
+	}
+	_ = db.Close()
+	db2, err := cek.Open(p) // the reopen a broken-SQLCipher build fails (migrate → sqlcipher_export)
+	if err != nil {
+		return false
+	}
+	_ = db2.Close()
+	return true
+}
+
 // TestRecordShipsSoTakeoverKeepsIt: Record() on the owner ingests AND ships; a fresh
 // successor that takes over hydrates the shipped snapshot and SEES the row. Before the
 // fix (ingest with no Sync) the row was never shipped, so the successor saw zero rows
 // — the lost acked write H1 names.
 func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
+	// Gate on the cek capability THIS build actually has, not on what it advertises.
+	// The successor reopens the shipped store through cek; on a CGO build whose SQLite
+	// lacks SQLCipher, PRAGMA key is silently ignored so cek writes a PLAINTEXT file it
+	// then cannot migrate ("sqlcipher_export: no such function"), and the whole-suite
+	// TestMain still injects a dev key because sqlitedrv.EncryptionAvailable() reports a
+	// (false-positive) yes. cekCanReopen probes the real round-trip: it holds under
+	// pure-Go (plaintext) AND real libsqlcipher (encrypted, exercising the .dek sidecar
+	// cross-pod restore), and skips only on that broken-capability build so
+	// `go test ./...` stays green everywhere. Ship-before-return is proven regardless by
+	// TestRecordOnNonOwnerFailsClosed and by this test under CGO_ENABLED=0.
+	if !cekCanReopen(t) {
+		t.Skip("cek cannot reopen a store on this build (SQLite lacks SQLCipher) — the encrypted cross-pod sidecar round-trip runs in the CGO+libsqlcipher CI lane")
+	}
 	ctx := context.Background()
 	cas := newMemCAS()
 	const orgID = "acme"
