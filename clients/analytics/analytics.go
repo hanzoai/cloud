@@ -94,13 +94,14 @@ func build(b cloud.Base) (state, error) {
 }
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
-// sites.SetBaseHostHandler): a page served on a site host can POST its OWN
-// analytics beacon to /v1/analytics{,/batch} or /v1/insights/e and have it ingested
-// into hanzo.events with the tenant FORCED to the site's resolved Org — the
-// server-supplied, host-derived tenant, never a body/header claim. It decodes the
-// same wires the deprecated aliases do and funnels through the SAME write core
-// (captureWithOrg / insightsWithOrg → ingestEvents); captureTenant is deliberately
-// NOT consulted because the host already authorizes the tenant.
+// sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
+// beacon to the canonical /v1/event (or the deprecated /v1/analytics{,/batch} and
+// /v1/insights/e beacons kept working mid-migration) and have it ingested into
+// hanzo.events with the tenant FORCED to the site's resolved Org — the
+// server-supplied, host-derived tenant, never a body/header claim. It funnels
+// through the SAME write core (eventWithOrg / captureWithOrg / insightsWithOrg →
+// ingestBody → ingestEvents); the in-handler tenant resolvers are deliberately NOT
+// consulted because the host already authorizes the tenant.
 //
 // Gated by the SAME already-existing flag the anonymous ingest path uses —
 // CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
@@ -114,10 +115,14 @@ func installHostCarve(b cloud.Base) {
 		return
 	}
 	sites.SetAnalyticsHostHandler(func(org string, c *zip.Ctx) error {
-		if c.Path() == "/v1/insights/e" {
+		switch c.Path() {
+		case "/v1/event": // the canonical door — host-forced org, canonical wire
+			return eventWithOrg(org, c)
+		case "/v1/insights/e": // deprecated PostHog-wire beacon
 			return insightsWithOrg(org, c)
+		default: // deprecated Segment/beacon wire: /v1/analytics{,/batch}
+			return captureWithOrg(org, c)
 		}
-		return captureWithOrg(org, c)
 	})
 	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv)
 }
@@ -132,29 +137,34 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 
 	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
-	// (event.go) is the ONE canonical front door: body Event | [Event], org
-	// resolved IAM-only and fail-closed, into the ONE write core (ingestEvents).
+	// (event.go) is the ONE canonical front door serving EVERY auth context (IAM
+	// bearer | pk_ publishable key | site-host-forced) and EVERY wire shape
+	// (Event | [Event] | {batch}) into the ONE write core (ingestEvents). Every
+	// other route below is a thin alias/shim delegating to it.
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
-	// Publishable-key direct ingest (publishable.go) — the FASTEST path: a
-	// write-only pk_ key (HMAC-signed org, no IAM/DB hop) authenticates
-	// {batch:[WireEvent]} straight into the ONE write core. /v1/ingest/keys mints a
-	// pk_ for the caller's org; /v1/errors is the type:'error' read lens (validated
-	// principal — reads never accept the write-only key).
+	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
+	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
+	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);
+	// /v1/errors is the type:'error' read lens (validated principal — reads never
+	// accept the write-only key).
 	app.Post("/v1/ingest", cloud.Handle(s, ingest))
 	app.Post("/v1/ingest/keys", cloud.Handle(s, mintKey))
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
 
-	// DEPRECATED ingest aliases — thin wire adapters that normalize onto the SAME
-	// write core (log a one-shot deprecation, keep working). /v1/analytics{,/batch}
-	// and /v1/tracker speak the Segment/beacon CaptureBatch wire; /v1/tracker is a
-	// bare route (never collides with the /v1/tracker/projects* issue tracker).
+	// DEPRECATED foreign-protocol ingest shims — external-SDK compat ONLY; no Hanzo
+	// surface uses these (Hanzo surfaces POST /v1/event). They normalize their own
+	// wire onto CaptureEvent and funnel through the SAME write core (log a one-shot
+	// deprecation, keep working so external Segment/beacon callers are unbroken).
+	// /v1/analytics{,/batch} and /v1/tracker speak the Segment/beacon CaptureBatch
+	// wire; /v1/tracker is a bare route (never collides with /v1/tracker/projects*).
 	app.Post("/v1/analytics", cloud.Handle(s, capture))
 	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
 	app.Post("/v1/tracker", cloud.Handle(s, capture))
 
 	// /v1/insights — console reads over the SAME engine + the DEPRECATED PostHog-
-	// wire ingest adapter (/v1/insights/e → the ONE write core). Flags live at /v1/flags.
+	// wire ingest shim (/v1/insights/e → the ONE write core; external PostHog SDK
+	// compat only). Flags live at /v1/flags.
 	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
 	app.Post("/v1/insights/e", cloud.Handle(s, insightsIngest))
 	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
