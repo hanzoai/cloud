@@ -14,10 +14,12 @@ package org
 // cipher → the no-sidecar frame path).
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -250,6 +252,81 @@ func TestDurableTakeoverHydratesNoLostWriteFencesDeposed(t *testing.T) {
 	}
 	if v, ok := durableValue(t, ctx, cs, dbKey, "k-stale"); ok {
 		t.Fatalf("deposed writer's k-stale leaked into durable state as %q", v)
+	}
+}
+
+// TestDurableShipsAndRestoresSidecar covers the cek-encrypting build's path: the
+// database's <db>.dek key sidecar must travel WITH the database bytes so a successor
+// can open the encrypted file. A fake sidecar stands in for cek's real one (no cek /
+// no fsync needed) — what is under test is that Durable frames it on ship and writes
+// it back on hydrate.
+func TestDurableShipsAndRestoresSidecar(t *testing.T) {
+	ctx := context.Background()
+	cs := newFakeCondStore()
+	const orgID = "acme"
+	dbKey := replica.DBPath(orgID, "", "research")
+
+	old := newDurablePod(t, cs, "pod-old", []Member{{ID: "pod-old"}}, orgID, dbKey)
+	if err := old.d.Hydrate(ctx); err != nil {
+		t.Fatalf("old hydrate: %v", err)
+	}
+	old.open(t)
+	putKV(t, old.db, "k1", "v1")
+	sidecar := []byte("fake-dek: fileID(16) || wrapped-DEK")
+	if err := os.WriteFile(old.d.dbPath+dekSuffix, sidecar, 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	if acked, err := old.d.Sync(ctx); err != nil || !acked {
+		t.Fatalf("old sync: acked=%v err=%v", acked, err)
+	}
+
+	// A fresh successor hydrates: it must receive BOTH the database (k1) AND the
+	// sidecar written beside its own file.
+	next := newDurablePod(t, cs, "pod-new", []Member{{ID: "pod-new"}}, orgID, dbKey)
+	if err := next.d.Hydrate(ctx); err != nil {
+		t.Fatalf("successor hydrate: %v", err)
+	}
+	got, err := os.ReadFile(next.d.dbPath + dekSuffix)
+	if err != nil {
+		t.Fatalf("successor sidecar not restored: %v", err)
+	}
+	if !bytes.Equal(got, sidecar) {
+		t.Fatalf("successor sidecar = %q, want %q", got, sidecar)
+	}
+	next.open(t)
+	if !hasKV(t, next.db, "k1") {
+		t.Fatal("successor lost k1 across the sidecar ship")
+	}
+}
+
+// TestFrameRoundTrip pins the (sidecar,db) framing: empty and non-empty sidecars both
+// split back exactly, so the encrypting (sidecar) and plaintext (no-sidecar) builds
+// share one wire format.
+func TestFrameRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		sidecar []byte
+		db      []byte
+	}{
+		{"no-sidecar", nil, []byte("plaintext-db-bytes")},
+		{"with-sidecar", []byte("wrapped-dek"), []byte("encrypted-db-bytes")},
+		{"empty-both", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc, db, err := unframe(frame(tc.sidecar, tc.db))
+			if err != nil {
+				t.Fatalf("unframe: %v", err)
+			}
+			if len(sc) != len(tc.sidecar) || (len(sc) > 0 && !bytes.Equal(sc, tc.sidecar)) {
+				t.Fatalf("sidecar = %q, want %q", sc, tc.sidecar)
+			}
+			if len(db) != len(tc.db) || (len(db) > 0 && !bytes.Equal(db, tc.db)) {
+				t.Fatalf("db = %q, want %q", db, tc.db)
+			}
+		})
+	}
+	if _, _, err := unframe([]byte{0xff}); err == nil {
+		t.Fatal("unframe of a truncated frame must error, not restore arbitrary bytes")
 	}
 }
 
