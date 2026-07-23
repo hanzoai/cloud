@@ -202,6 +202,10 @@ func mountRuntime(deps cloud.Deps) error {
 		// Runtime (and its ONE datastore connection) is live; start native
 		// metrics ingest — opt-in, fail-soft (metrics.go).
 		startNativeMetricsIngest(embeddedRuntime.TelemetryStore, log)
+		// Project /v1/event errors onto the Sentry plane — opt-in, fail-soft
+		// (errorsink.go). Requires the in-process runtime's Modules.Sentry, so it is
+		// installed only on this embed-up branch.
+		installErrorSink(log)
 		log.Info("o11y runtime handler installed (in-process runtime)")
 		return nil
 	}
@@ -286,6 +290,9 @@ func MountO11y(a *zip.App, deps cloud.Deps) error {
 // first error is returned but every teardown still runs. Idempotent and nil-safe.
 func ShutdownO11y(ctx context.Context) error {
 	var firstErr error
+	// Detach the analytics error fan-out first so no in-flight ingest dispatches into a
+	// tearing-down runtime. Idempotent and nil-safe.
+	clearErrorSink()
 	if err := shutdownAnnotationQueues(); err != nil && firstErr == nil {
 		firstErr = err
 	}
