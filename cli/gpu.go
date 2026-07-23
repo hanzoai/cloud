@@ -177,8 +177,10 @@ type registration struct {
 	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
-	Rocm         string               `json:"rocm,omitempty"` // host ROCm version (AMD only)
-	Hip          string               `json:"hip,omitempty"`  // host HIP version (AMD only)
+	Rocm         string               `json:"rocm,omitempty"`   // host ROCm version (AMD only)
+	Hip          string               `json:"hip,omitempty"`    // host HIP version (AMD only)
+	Cuda         string               `json:"cuda,omitempty"`   // host CUDA toolkit version (NVIDIA only)
+	Driver       string               `json:"driver,omitempty"` // host NVIDIA driver version
 	GPUs         []gpuInfo            `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
@@ -321,24 +323,73 @@ func detectGPUs() []gpuInfo {
 	return nil
 }
 
-// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi (name + total VRAM).
+// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi: name, memory,
+// and the sm arch (compute capability). A unified SoC (GB10 Grace-Blackwell)
+// reports memory.total as "[N/A]" — there is no dedicated VRAM counter — so it
+// reports the MACHINE's RAM snapped to hardware capacity, unified=true, the
+// same convention the AMD APU and Apple paths use.
 func detectNvidiaGPUs() []gpuInfo {
-	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").Output()
+	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total,compute_cap", "--format=csv,noheader").Output()
 	if err != nil {
 		return nil
 	}
+	return parseNvidiaSmiCSV(out, detectMemTotal()/(1<<20))
+}
+
+// parseNvidiaSmiCSV parses `nvidia-smi --query-gpu=name,memory.total,compute_cap`
+// output ("NVIDIA GB10, [N/A], 12.1"). Pure — hostMiB is injected for the
+// unified-SoC memory figure.
+func parseNvidiaSmiCSV(out []byte, hostMiB int64) []gpuInfo {
 	var gpus []gpuInfo
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+		fields := strings.Split(sc.Text(), ",")
+		if len(fields) < 2 || strings.TrimSpace(fields[0]) == "" {
 			continue
 		}
-		name, mem, _ := strings.Cut(line, ",")
-		gpus = append(gpus, gpuInfo{Name: strings.TrimSpace(name), MemoryTotal: strings.TrimSpace(mem)})
+		g := gpuInfo{Name: strings.TrimSpace(fields[0]), MemoryTotal: strings.TrimSpace(fields[1])}
+		var memMiB int64
+		if _, err := fmt.Sscanf(g.MemoryTotal, "%d MiB", &memMiB); err != nil || memMiB <= 0 {
+			// No dedicated VRAM counter — a unified SoC. The machine's RAM is
+			// the GPU's RAM.
+			if hostMiB > 0 {
+				g.MemoryTotal = fmt.Sprintf("%d MiB", snapUnified(hostMiB))
+				g.Unified = true
+			} else {
+				g.MemoryTotal = ""
+			}
+		}
+		if len(fields) >= 3 {
+			if cap := strings.TrimSpace(fields[2]); cap != "" && cap != "[N/A]" {
+				g.Arch = "sm_" + strings.ReplaceAll(cap, ".", "")
+			}
+		}
+		gpus = append(gpus, g)
 	}
 	return gpus
 }
+
+// nvidiaSoft is the host CUDA/driver inventory, detected once — the NVIDIA
+// mirror of amdSoftware. Empty on non-NVIDIA hosts.
+type nvidiaSoft struct{ cuda, driver string }
+
+var nvidiaSoftware = sync.OnceValue(func() nvidiaSoft {
+	var v nvidiaSoft
+	if out, err := exec.Command("nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader").Output(); err == nil {
+		v.driver = strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+	}
+	if b, err := os.ReadFile("/usr/local/cuda/version.json"); err == nil {
+		var m struct {
+			Cuda struct {
+				Version string `json:"version"`
+			} `json:"cuda"`
+		}
+		if json.Unmarshal(b, &m) == nil {
+			v.cuda = m.Cuda.Version
+		}
+	}
+	return v
+})
 
 // detectAmdGPUs reports AMD accelerators — discrete Radeon cards and gfx APUs alike
 // (e.g. evo's gfx1151 Radeon 8060S on the RYZEN AI MAX+ 395). Resolution order:
@@ -572,7 +623,7 @@ func pickAmdMem(vramMiB, gttMiB, hostMiB int64) (miB int64, unified bool) {
 func snapUnified(miB int64) int64 {
 	const step = 16 << 10 // 16 GiB in MiB
 	next := ((miB + step - 1) / step) * step
-	if next-miB <= 6<<10 {
+	if next-miB <= 8<<10 {
 		return next
 	}
 	return miB
@@ -1053,6 +1104,8 @@ func (w *worker) buildRegistration() registration {
 		JobQueue:     w.jobsNS,
 		Rocm:         amdSoftware().rocm,
 		Hip:          amdSoftware().hip,
+		Cuda:         nvidiaSoftware().cuda,
+		Driver:       nvidiaSoftware().driver,
 		GPUs:         w.gpus,
 		Capabilities: w.capabilities(),
 		Engine:       w.engine,
