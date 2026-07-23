@@ -26,6 +26,7 @@ type Function struct {
 	Image        string
 	Code         string
 	Handler      string
+	Target       string // "" = sandbox (default) | "fleet" = org GPU fleet (fn.run)
 	TimeoutSec   int
 	MemoryLimit  string
 	EnvNames     []string
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS functions (
   image          TEXT NOT NULL DEFAULT '',
   code           TEXT NOT NULL DEFAULT '',
   handler        TEXT NOT NULL DEFAULT '',
+  target         TEXT NOT NULL DEFAULT '',
   timeout_sec    INTEGER NOT NULL DEFAULT 30,
   memory_limit   TEXT NOT NULL DEFAULT '256Mi',
   env_names      TEXT NOT NULL DEFAULT '[]',
@@ -108,6 +110,11 @@ CREATE INDEX IF NOT EXISTS ix_inv_org_fn_created ON invocations(org, function_na
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// Additive column for pre-existing stores; "duplicate column" means done.
+	if _, err := s.db.Exec(`ALTER TABLE functions ADD COLUMN target TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("migrate target: %w", err)
+	}
 	return nil
 }
 
@@ -135,13 +142,13 @@ func decodeList(s string) []string {
 	return xs
 }
 
-const fnCols = `id,org,name,namespace,runtime,image,code,handler,timeout_sec,memory_limit,env_names,status,deploy_version,created_at,last_deploy_at`
+const fnCols = `id,org,name,namespace,runtime,image,code,handler,target,timeout_sec,memory_limit,env_names,status,deploy_version,created_at,last_deploy_at`
 
 func scanFunction(sc interface{ Scan(...any) error }) (Function, error) {
 	var f Function
 	var env string
 	err := sc.Scan(&f.ID, &f.Org, &f.Name, &f.Namespace, &f.Runtime, &f.Image, &f.Code,
-		&f.Handler, &f.TimeoutSec, &f.MemoryLimit, &env, &f.Status, &f.DeployVer,
+		&f.Handler, &f.Target, &f.TimeoutSec, &f.MemoryLimit, &env, &f.Status, &f.DeployVer,
 		&f.CreatedAt, &f.LastDeployAt)
 	f.EnvNames = decodeList(env)
 	return f, err
@@ -165,8 +172,8 @@ func (s *Store) Upsert(ctx context.Context, f Function) (Function, error) {
 		f.DeployVer = 1
 		f.CreatedAt = f.LastDeployAt
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO functions (`+fnCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			f.ID, f.Org, f.Name, f.Namespace, f.Runtime, f.Image, f.Code, f.Handler,
+			`INSERT INTO functions (`+fnCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			f.ID, f.Org, f.Name, f.Namespace, f.Runtime, f.Image, f.Code, f.Handler, f.Target,
 			f.TimeoutSec, f.MemoryLimit, encodeList(f.EnvNames), f.Status, f.DeployVer,
 			f.CreatedAt, f.LastDeployAt); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -180,9 +187,9 @@ func (s *Store) Upsert(ctx context.Context, f Function) (Function, error) {
 		f.DeployVer = curVer + 1
 		f.CreatedAt = createdAt
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE functions SET namespace=?,runtime=?,image=?,code=?,handler=?,timeout_sec=?,memory_limit=?,env_names=?,status=?,deploy_version=?,last_deploy_at=?
+			`UPDATE functions SET namespace=?,runtime=?,image=?,code=?,handler=?,target=?,timeout_sec=?,memory_limit=?,env_names=?,status=?,deploy_version=?,last_deploy_at=?
 			 WHERE org=? AND name=?`,
-			f.Namespace, f.Runtime, f.Image, f.Code, f.Handler, f.TimeoutSec, f.MemoryLimit,
+			f.Namespace, f.Runtime, f.Image, f.Code, f.Handler, f.Target, f.TimeoutSec, f.MemoryLimit,
 			encodeList(f.EnvNames), f.Status, f.DeployVer, f.LastDeployAt, f.Org, f.Name); err != nil {
 			return Function{}, fmt.Errorf("update function: %w", err)
 		}
