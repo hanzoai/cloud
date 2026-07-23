@@ -49,6 +49,7 @@ import (
 // /git-*-pack tail, so a 2-segment UI route and a clone route never collide.
 func uiRoutes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/git", cloud.Handle(s, uiHome))
+	app.Get("/git/explore", cloud.Handle(s, uiExplore))
 	app.Get("/git/:org/:repo", cloud.Handle(s, uiRepo))
 	app.Get("/git/:org/:repo/tree/*", cloud.Handle(s, uiTree))
 	app.Get("/git/:org/:repo/blob/*", cloud.Handle(s, uiBlob))
@@ -56,6 +57,7 @@ func uiRoutes(app *zip.App, s *cloud.Service[state]) {
 
 	onGit := onGitHost(s.State.gitHost)
 	app.Get("/", onGit(cloud.Handle(s, uiHome)))
+	app.Get("/explore", onGit(cloud.Handle(s, uiExplore)))
 	app.Get("/:org/:repo", onGit(cloud.Handle(s, uiRepo)))
 	app.Get("/:org/:repo/tree/*", onGit(cloud.Handle(s, uiTree)))
 	app.Get("/:org/:repo/blob/*", onGit(cloud.Handle(s, uiBlob)))
@@ -169,10 +171,35 @@ func cleanTreePath(p string) string {
 
 // ---- handlers ----
 
+// uiRepoAccess resolves the :org/:repo path for a browser READ, allowing anonymous
+// access to PUBLIC repos while keeping private repos org-authed. Returns the repo's
+// org + metadata. A private-or-missing repo answers the SAME 404 so anonymous
+// probing can't distinguish existence (mirrors smart-HTTP's resolvePackRepo).
+func uiRepoAccess(s *cloud.Service[state], c *zip.Ctx) (string, Repo, error) {
+	pathOrg := c.Param("org")
+	if pathOrg == "" || !orgRE.MatchString(pathOrg) {
+		return "", Repo{}, zip.Errorf(http.StatusNotFound, "no such repository")
+	}
+	name := normalizeName(c.Param("repo"))
+	r, ok := findRepo(s, c.Context(), pathOrg, name)
+	if !ok {
+		return "", Repo{}, zip.Errorf(http.StatusNotFound, "no such repository")
+	}
+	if r.Public {
+		return pathOrg, r, nil // OSS: anyone reads
+	}
+	if authedOrg, authed := org(c); authed && authedOrg == pathOrg {
+		return pathOrg, r, nil // private: only the owning org
+	}
+	return "", Repo{}, zip.Errorf(http.StatusNotFound, "no such repository")
+}
+
 func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
-	o, err := uiOrg(c)
-	if err != nil {
-		return err
+	// Signed out ⇒ the public explore/landing (OSS-first). Signed in ⇒ your org's
+	// repos. Both public and private show for the authed org; the world sees public.
+	o, ok := org(c)
+	if !ok || o == "" {
+		return uiExplore(s, c)
 	}
 	st, err := storeFor(s, o)
 	if err != nil {
@@ -193,14 +220,9 @@ func uiHome(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
-	o, err := uiOrg(c)
+	o, r, err := uiRepoAccess(s, c)
 	if err != nil {
 		return err
-	}
-	name := normalizeName(c.Param("repo"))
-	r, ok := findRepo(s, c.Context(), o, name)
-	if !ok {
-		return zip.Errorf(http.StatusNotFound, "no such repository")
 	}
 	ref := strings.TrimSpace(c.Query("ref"))
 	base := uiBase(s, c)
@@ -232,14 +254,9 @@ func uiRepo(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
-	o, err := uiOrg(c)
+	o, r, err := uiRepoAccess(s, c)
 	if err != nil {
 		return err
-	}
-	name := normalizeName(c.Param("repo"))
-	r, ok := findRepo(s, c.Context(), o, name)
-	if !ok {
-		return zip.Errorf(http.StatusNotFound, "no such repository")
 	}
 	repo, err := openGit(s, r)
 	if err != nil {
@@ -260,14 +277,9 @@ func uiTree(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func uiBlob(s *cloud.Service[state], c *zip.Ctx) error {
-	o, err := uiOrg(c)
+	o, r, err := uiRepoAccess(s, c)
 	if err != nil {
 		return err
-	}
-	name := normalizeName(c.Param("repo"))
-	r, ok := findRepo(s, c.Context(), o, name)
-	if !ok {
-		return zip.Errorf(http.StatusNotFound, "no such repository")
 	}
 	repo, err := openGit(s, r)
 	if err != nil {
@@ -296,14 +308,9 @@ func uiBlob(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func uiCommits(s *cloud.Service[state], c *zip.Ctx) error {
-	o, err := uiOrg(c)
+	o, r, err := uiRepoAccess(s, c)
 	if err != nil {
 		return err
-	}
-	name := normalizeName(c.Param("repo"))
-	r, ok := findRepo(s, c.Context(), o, name)
-	if !ok {
-		return zip.Errorf(http.StatusNotFound, "no such repository")
 	}
 	repo, err := openGit(s, r)
 	if err != nil {
