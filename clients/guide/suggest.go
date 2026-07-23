@@ -40,7 +40,7 @@ const maxChatMessage = 4 * 1024
 type suggestion struct {
 	StepID      string `json:"stepId"`
 	Title       string `json:"title"`
-	Why         string `json:"why,omitempty"`
+	Detail      string `json:"detail,omitempty"`
 	Rationale   string `json:"rationale"`
 	Automatable bool   `json:"automatable"`
 	// Unlocks is how many downstream steps completing this one immediately makes
@@ -66,7 +66,7 @@ func rankSuggestions(cur Curriculum, states map[string]State) []suggestion {
 		sg := suggestion{
 			StepID:      s.ID,
 			Title:       s.Title,
-			Why:         s.Why,
+			Detail:      s.Detail,
 			Automatable: strings.TrimSpace(s.Tool) != "",
 			Unlocks:     cur.unlocks(states, s.ID),
 		}
