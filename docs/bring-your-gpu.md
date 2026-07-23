@@ -5,8 +5,8 @@ One fleet. Two ways to add a GPU. Two things a GPU does.
 ```
                  ┌─────────────────────── your org's GPU fleet ───────────────────────┐
    CONNECT (BYO) │                                                                     │
-  hanzo gpu      │   ┌── a GPU node ──────────────┐      ┌── a GPU node ────────────┐  │
-  connect  ─────▶│   │ studio.render  (diffusion) │      │ engine.serve             │  │
+  hanzo link     │   ┌── a GPU node ──────────────┐      ┌── a GPU node ────────────┐  │
+           ─────▶│   │ studio.render  (diffusion) │      │ engine.serve             │  │
                  │   │ engine.serve   (models)    │      │  hanzo-engine :1234      │  │
    DEPLOY (cloud)│   └────────────────────────────┘      │  OpenAI + Anthropic      │  │
   console →      │                                       └──────────┬───────────────┘  │
@@ -33,16 +33,16 @@ listens for inbound connections.
 
 ```sh
 hanzo login
-hanzo gpu connect
+hanzo link
 ```
 
 Or flip the toggle in **Hanzo Desktop → Settings → Cloud GPU → "Connect this device's
-GPU to Hanzo Cloud."** (The toggle spawns the same `hanzo gpu connect` CLI, bridging
-the desktop's IAM token via `HANZO_TOKEN`.)
+GPU to Hanzo Cloud."** (The toggle spawns the light open `hanzo-fleet-worker` sidecar \u2014 the same
+claim loop \u2014 bridging the desktop's IAM token via `HANZO_TOKEN`.)
 
 The machine registers a heartbeating presence record and shows up on
 `console.hanzo.ai` **GPUs** and **Machines** pages with a **BYO** badge
-(`provider=byo`). Stop with Ctrl-C (offline after ~90s) or `hanzo gpu disconnect`
+(`provider=byo`). Stop with Ctrl-C (offline after ~90s) or `hanzo unlink`
 (removes the row).
 
 ### Deploy (cloud)
@@ -59,14 +59,14 @@ Both actions live together on the GPUs page: bring your own **or** spin up cloud
 
 ### `studio.render` — Studio diffusion worker (default)
 
-`hanzo gpu connect` claims `studio.render` jobs from the org's `gpu-jobs` queue and
+`hanzo link` claims `studio.render` jobs from the org's `gpu-jobs` queue and
 drives a local ComfyUI/Studio server at `127.0.0.1:8188` (the same prompt graph
 `studio.hanzo.ai` submits). Always on — the worker claims jobs the moment it connects.
 
 ### `engine.serve` — hanzo-engine model server (`--serve-engine`)
 
 ```sh
-hanzo gpu connect --serve-engine
+hanzo link --serve-engine
 ```
 
 This advertises a **hanzo-engine** running on the node. hanzo-engine is the
@@ -117,7 +117,7 @@ curl -sS https://api.hanzo.ai/v1/add-provider \
   }'
 ```
 
-`hanzo gpu connect --serve-engine` prints this exact command ready to run, or
+`hanzo link --serve-engine` prints this exact command ready to run, or
 `--register-provider` POSTs it for you. Once registered, `api.hanzo.ai` routes model
 calls for that provider to your GPU — powering **chat**, the **API**, **Studio's
 LLM/copilot**, and **custom models**. (Want Anthropic wire format upstream instead?
