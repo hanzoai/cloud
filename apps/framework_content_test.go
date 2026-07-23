@@ -7,13 +7,15 @@ import (
 )
 
 // TestFrameworkContentModulesLinked guards the framework CONTENT modules
-// (cms/erp/help) against silent removal. They are not mount subsystems, so they
-// never appear in Wire(); they register their DocTypes and — for erp — the
-// ledger-posting lifecycle hooks into the framework engine from a package
-// init(), reached ONLY via the blank imports in apps.go. #248 dropped
-// those imports, which stripped the erp ledger hooks from the binary with no
-// mount change and no failing mount test. This asserts the engine's module
-// registry carries each lane, so that money-adjacent regression cannot recur.
+// (cms/erp/help) against silent removal. cms/erp are pure fixture lanes reached
+// ONLY via blank imports in apps.go; help is a real import + a Wire() spec (it also
+// mounts the /v1/help public plane) but still contributes its DocTypes the SAME way,
+// from a package init() (framework.RegisterModule). #248 dropped the blank imports,
+// which stripped the erp ledger hooks from the binary with no mount change and no
+// failing mount test. This asserts the engine's module registry carries each lane,
+// so that money-adjacent regression cannot recur — for help, dropping the import
+// would also drop its Wire() spec and fail TestWireOrderMatchesFrozen, but this keeps
+// the fixture-linkage guard uniform across all three lanes.
 func TestFrameworkContentModulesLinked(t *testing.T) {
 	got := make(map[string]bool)
 	for _, m := range framework.RegisteredModules() {

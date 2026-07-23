@@ -89,6 +89,7 @@ import (
 	"github.com/hanzoai/cloud/clients/git"
 	"github.com/hanzoai/cloud/clients/graph"
 	"github.com/hanzoai/cloud/clients/guide"
+	"github.com/hanzoai/cloud/clients/help"
 	"github.com/hanzoai/cloud/clients/iam"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/integrations"
@@ -139,19 +140,20 @@ import (
 	"github.com/hanzoai/cloud/clients/x402"
 	"github.com/hanzoai/cloud/clients/zt"
 
-	// Framework CONTENT modules — NOT mount subsystems (they carry no HTTP surface
-	// and are absent from Wire()). Each registers its DocType fixtures and, for erp,
-	// its ledger-posting lifecycle hooks into the clients/framework DocType engine
-	// from a package init() (framework.RegisterModule) — the idiomatic
-	// register-into-a-registry pattern (cf. database/sql drivers). The framework
-	// engine is mounted (always-on, /v1/framework/*) but its module registry is
-	// populated ONLY by these blank imports. Dropping one silently strips that
-	// lane's DocTypes and hooks — for erp, the immutable ledger postings — from the
-	// binary with NO mount change and NO failing mount test. #248 dropped them;
-	// TestFrameworkContentModulesLinked now guards against a recurrence. Keep.
+	// Framework CONTENT modules — pure fixture lanes that carry no HTTP surface and
+	// are absent from Wire(). Each registers its DocType fixtures and, for erp, its
+	// ledger-posting lifecycle hooks into the clients/framework DocType engine from a
+	// package init() (framework.RegisterModule) — the idiomatic register-into-a-
+	// registry pattern (cf. database/sql drivers). The framework engine is mounted
+	// (always-on, /v1/framework/*) but its module registry is populated ONLY by these
+	// blank imports. Dropping one silently strips that lane's DocTypes and hooks — for
+	// erp, the immutable ledger postings — from the binary with NO mount change and NO
+	// failing mount test. #248 dropped them; TestFrameworkContentModulesLinked now
+	// guards against a recurrence. Keep. (help is a framework lane too but ALSO mounts
+	// a thin /v1/help public plane, so it is a real import + a Wire() spec below,
+	// alongside knowledge — the other lane with a companion subsystem.)
 	_ "github.com/hanzoai/cloud/clients/cms"
 	_ "github.com/hanzoai/cloud/clients/erp"
-	_ "github.com/hanzoai/cloud/clients/help"
 )
 
 // init wires the cross-subsystem func seams — the composition root is the one place
@@ -274,6 +276,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "templates", Mount: templates.Mount},
 		{Name: "framework", Mount: framework.Mount, Shutdown: ctxShutdown(framework.Shutdown)},
 		{Name: "knowledge", Mount: knowledge.Mount},
+		// Hanzo Support PUBLIC plane /v1/help/* (help center KB read + customer ticket
+		// intake) — the anonymous face the secure-by-default framework surface can't
+		// serve. A framework lane like knowledge: its DocType fixtures register via
+		// init() (help.Module), and this mounts the thin public subsystem. Owns no store
+		// (delegates to the framework in-process API), so no Shutdown. After framework
+		// (whose in-process API it calls at request time); before the AI /v1/* catch-all.
+		{Name: "help", Mount: help.Mount},
 		// Marketing content loop /v1/content/* (generate → CMS → transition → publish).
 		// After framework (its DocType store the ops read/write) + knowledge (the sibling
 		// framework lane); before the AI /v1/* catch-all so /v1/content/* resolves here.
