@@ -2,6 +2,7 @@ package campaign
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net/http"
 	"strings"
@@ -61,6 +62,11 @@ type Metrics struct {
 	ROAS        float64         `json:"roas"` // revenue per spend $
 	Channels    []ChannelMetric `json:"channels"`
 	Source      string          `json:"source"`
+	// ABTest is the creative A/B analysis from the experiments primitive
+	// (experiments.Analyze, pull-model), present only when the campaign runs
+	// more than one creative and an experiment is wired. Opaque JSON — campaign
+	// stays decoupled from the experiments analysis type.
+	ABTest json.RawMessage `json:"abTest,omitempty"`
 }
 
 // metricsCampaign serves GET /v1/campaign/:id/metrics: the analytics funnel +
@@ -111,6 +117,9 @@ func metricsCampaign(s *cloud.Service[state], c *zip.Ctx) error {
 	m.CVR = ratio(ev.Conversions, ev.Clicks)
 	m.CAC = perConversion(spendCents, ev.Conversions)
 	m.ROAS = roas(ev.Revenue, spendCents)
+	// A/B lens: the experiments primitive's pull-model analysis (nil when the
+	// campaign runs a single creative or no experiment is wired).
+	m.ABTest = analyzeExperiment(c.Context(), org, camp, start, end)
 	return c.JSON(http.StatusOK, m)
 }
 
