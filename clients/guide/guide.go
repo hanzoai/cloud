@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/audit"
 	"github.com/hanzoai/cloud/clients/automations"
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
@@ -25,14 +28,17 @@ const listActionsLimit = 200
 // defaulted to automations and overridable in tests; detectors are the auto-detect
 // registry.
 type state struct {
-	stores    *cloud.OrgStore[*Store]
-	def       Curriculum
-	detectors map[string]Detector
-	signals   Signals // cross-subsystem growth-observe seam (bound at the composition root)
-	ai        cloud.AIClient
-	model     string
-	invoke    func(ctx context.Context, org, tool string, args map[string]any) (any, error)
-	toolOK    func(tool string) bool
+	stores       *cloud.OrgStore[*Store] // per-org checklist progress + org-override tier
+	blueprints   *BlueprintStore         // shared, versioned brand blueprint (seeded, SuperAdmin-authored)
+	brand        string                  // deployment brand — the resolution + admin authoring key
+	defBlueprint Blueprint               // embedded fail-safe blueprint for this brand (ultimate fallback)
+	detectors    map[string]Detector
+	signals      Signals // cross-subsystem growth-observe seam (bound at the composition root)
+	ai           cloud.AIClient
+	model        string
+	audit        *audit.Recorder // tamper-evident trail for SuperAdmin blueprint edits
+	invoke       func(ctx context.Context, org, tool string, args map[string]any) (any, error)
+	toolOK       func(tool string) bool
 }
 
 // mounted is the active service so Shutdown can close the per-org stores.
@@ -51,29 +57,76 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("guide.Mount: empty DataDir")
 	}
 	stores := cloud.NewOrgStore(deps.DataDir, "guide", openStore)
-	// The effective default is the WHITE-LABEL tier: a brand that ships
-	// brands/<brand>.yaml (zoo) serves ITS OWN journey; every other brand uses the base
-	// builtin default. Resolved once at Mount from deps.Brand (see brands.go).
-	def := defaultCurriculum
-	if bc, ok := brandCurriculum(deps.Brand); ok {
-		def = bc
+
+	// Open the SHARED brand-blueprint store (one file for the deployment) and SEED it
+	// idempotently: the embedded fixtures (base + each brand) are seeded-if-absent, so
+	// a redeploy never clobbers a SuperAdmin's live edits. After seeding the DB is
+	// authoritative; the embedded fixture is only the seed source + fail-safe fallback.
+	if err := os.MkdirAll(deps.DataDir, 0o755); err != nil {
+		return fmt.Errorf("guide.Mount: data dir: %w", err)
 	}
+	blueprints, err := openBlueprintStore(filepath.Join(deps.DataDir, "guide-blueprint.db"))
+	if err != nil {
+		return fmt.Errorf("guide.Mount: open blueprint store: %w", err)
+	}
+	seeded, err := seedBlueprints(context.Background(), blueprints)
+	if err != nil {
+		_ = blueprints.Close()
+		return fmt.Errorf("guide.Mount: seed blueprints: %w", err)
+	}
+
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "guide"), State: state{
-		stores:  stores,
-		def:     def,
-		signals: boundSignals, // installed by the composition root before Mount; zero value honest-degrades
-		ai:      deps.AI,
-		model:   strings.TrimSpace(deps.AIDefaultModel),
-		invoke:  automations.InvokeTool,
-		toolOK:  automations.ToolExists,
+		stores:       stores,
+		blueprints:   blueprints,
+		brand:        deps.Brand,
+		defBlueprint: fixtureBlueprint(deps.Brand),
+		signals:      boundSignals, // installed by the composition root before Mount; zero value honest-degrades
+		ai:           deps.AI,
+		model:        strings.TrimSpace(deps.AIDefaultModel),
+		audit:        deps.Audit,
+		invoke:       automations.InvokeTool,
+		toolOK:       automations.ToolExists,
 	}}
 	s.State.detectors = newDetectors(func(_ context.Context, org string) (*Store, error) {
 		return stores.For(org, "")
 	}, s.State.signals)
 	mounted = s
 	routes(app, s)
-	s.Log.Info("guide mounted", "steps", len(def.Steps), "brand", deps.Brand, "version", def.Version)
+	s.Log.Info("guide mounted", "brand", deps.Brand,
+		"steps", len(s.State.defBlueprint.Steps), "strategies", len(s.State.defBlueprint.Strategies),
+		"version", s.State.defBlueprint.Version, "seeded", seeded)
 	return nil
+}
+
+// seedBlueprints seeds the embedded fixtures into the shared store, seed-if-absent: the
+// base blueprint under brand "" plus each embedded brand blueprint under its key. The
+// canonical JSON of the PARSED blueprint is stored (so the persisted seed is exactly
+// what the engine runs, independent of input syntax). Idempotent by (brand): a brand
+// that already carries a row (a prior seed, or an admin edit) is left untouched.
+func seedBlueprints(ctx context.Context, store *BlueprintStore) (int, error) {
+	now := time.Now().Unix()
+	seed := func(brand string, bp Blueprint) (bool, error) {
+		doc, err := json.Marshal(bp)
+		if err != nil {
+			return false, fmt.Errorf("marshal %q seed: %w", brand, err)
+		}
+		return store.SeedIfAbsent(ctx, brand, doc, now)
+	}
+	count := 0
+	if ok, err := seed("", defaultBlueprint); err != nil {
+		return count, err
+	} else if ok {
+		count++
+	}
+	for _, brand := range BrandCurriculums() {
+		bp, _ := brandBlueprint(brand)
+		if ok, err := seed(brand, bp); err != nil {
+			return count, err
+		} else if ok {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func routes(app *zip.App, s *cloud.Service[state]) {
@@ -86,12 +139,18 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	// The OBSERVE surface: the org's real-time growth profile — observed signals, the
 	// classified growth stage, and the org's own key metrics. READ-ONLY (see profile).
 	g.Get("/profile", cloud.Handle(s, profile))
+	// The STRATEGIES corpus: the tactics library, org-scoped and filtered by
+	// category/workload + the caller's observed stage/signals. READ-ONLY — the corpus
+	// the recommendation-surface engine consumes. Content is SHARED (no org records).
+	g.Get("/strategies", cloud.Handle(s, strategies))
 	// The Business AI's dynamic "what to do next": the ranked next-best quests + a
 	// grounded narrative (suggest), and a grounded founder chat (chat). Both are
 	// READ-ONLY — they advise, never run an action (the only executing path is
 	// /steps/:id/do). See suggest.go.
 	g.Get("/suggest", cloud.Handle(s, suggest))
 	g.Post("/chat", cloud.Handle(s, chat))
+	// The per-org OVERRIDE tier (tier 1): a customer sets/clears its OWN curriculum.
+	// Org-scoped, per-customer — NOT the shared brand blueprint.
 	g.Get("/curriculum", cloud.Handle(s, getCurriculum))
 	g.Put("/curriculum", cloud.Handle(s, putCurriculum))
 	g.Delete("/curriculum", cloud.Handle(s, deleteCurriculum))
@@ -101,14 +160,30 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	g.Post("/steps/:id/skip", cloud.Handle(s, markSkip))
 	g.Post("/steps/:id/reset", cloud.Handle(s, markReset))
 	g.Post("/steps/:id/do", cloud.Handle(s, doStep))
+
+	// The SuperAdmin BLUEPRINT plane (tier 2 authoring): the platform/brand blueprint,
+	// authored LIVE on admin.hanzo.ai. Gated on IsSuperAdmin (owner=="admin") — a normal
+	// org member/admin gets 403; the brand blueprint is SHARED platform content, not a
+	// per-customer surface. See admin.go.
+	b := app.Group("/v1/guide/blueprint")
+	b.Get("", superAdmin(s, getBlueprint))
+	b.Put("", superAdmin(s, putBlueprint))
+	b.Get("/versions", superAdmin(s, listBlueprintVersions))
+	b.Patch("/:collection/:id", superAdmin(s, patchBlueprintItem))
 }
 
-// Shutdown closes every cached per-org store. Idempotent.
+// Shutdown closes every cached per-org store and the shared blueprint store.
+// Idempotent.
 func Shutdown() error {
 	if mounted == nil {
 		return nil
 	}
 	err := mounted.State.stores.CloseAll()
+	if mounted.State.blueprints != nil {
+		if berr := mounted.State.blueprints.Close(); err == nil {
+			err = berr
+		}
+	}
 	mounted = nil
 	return err
 }
@@ -129,20 +204,41 @@ func newID() string {
 	return "act_" + hex.EncodeToString(b[:])
 }
 
-// activeCurriculum returns the org's curriculum — its custom override if present,
-// else the built-in default — and whether an override is active. A stored override
-// was validated at PUT time; if it somehow fails to parse now (e.g. a schema the
-// binary predates) the default is used so the guide never breaks.
+// resolveBlueprint resolves the ACTIVE blueprint for the caller — three decomplected
+// tiers (the legal-template override-or-builtin pattern):
+//
+//  1. org override   — the customer's OWN curriculum (per-org guide_curriculum row).
+//  2. brand blueprint — the SuperAdmin-authored, seeded platform blueprint (shared DB),
+//     resolved for this deployment's brand (brand → base "").
+//  3. fixture         — the embedded fail-safe (this brand's blueprint or the base).
+//
+// tier is "org" | "brand" | "fixture". A tier whose stored doc fails to parse, or whose
+// root is disabled, is SKIPPED (fail-closed) so the guide never breaks or serves a
+// disabled blueprint. A stored doc was validated at write time; a re-parse failure
+// (e.g. a schema the binary predates) simply falls through to the next tier.
+func (st state) resolveBlueprint(ctx context.Context, store *Store) (Blueprint, string) {
+	if doc, ok, err := store.GetCurriculum(ctx); err == nil && ok {
+		if bp, err := Parse(doc); err == nil && on(bp.Enabled) {
+			return bp, "org"
+		}
+	}
+	if st.blueprints != nil {
+		if doc, _, _, ok, err := st.blueprints.LatestResolved(ctx, st.brand); err == nil && ok {
+			if bp, err := Parse(doc); err == nil && on(bp.Enabled) {
+				return bp, "brand"
+			}
+		}
+	}
+	return st.defBlueprint, "fixture"
+}
+
+// activeCurriculum returns the caller's effective (enabled-projected) engine curriculum
+// and whether an ORG OVERRIDE is active (the `custom` flag the views surface). The
+// brand blueprint and the fixture both read as custom=false — they are the platform
+// default, however it was authored.
 func (st state) activeCurriculum(ctx context.Context, store *Store) (Curriculum, bool) {
-	doc, ok, err := store.GetCurriculum(ctx)
-	if err != nil || !ok {
-		return st.def, false
-	}
-	cur, err := Parse(doc)
-	if err != nil {
-		return st.def, false
-	}
-	return cur, true
+	bp, tier := st.resolveBlueprint(ctx, store)
+	return bp.Curriculum(), tier == "org"
 }
 
 // stateMap projects the persisted rows onto a bare state map for the engine logic.
@@ -332,7 +428,7 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	if len(body) > maxCurriculum {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "curriculum exceeds the %d-byte limit", maxCurriculum)
 	}
-	cur, err := Parse(body)
+	bp, err := Parse(body)
 	if err != nil {
 		return zip.Errorf(http.StatusUnprocessableEntity, "%v", err)
 	}
@@ -342,14 +438,14 @@ func putCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	// Store the CANONICAL parsed form (JSON) so the persisted doc is exactly what the
 	// engine runs, independent of the input syntax (YAML or JSON).
-	canon, err := json.Marshal(cur)
+	canon, err := json.Marshal(bp)
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
 	if err := store.SetCurriculum(c.Context(), canon, time.Now().Unix()); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"custom": true, "curriculum": cur})
+	return c.JSON(http.StatusOK, map[string]any{"custom": true, "curriculum": bp.Curriculum()})
 }
 
 func deleteCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
@@ -364,7 +460,10 @@ func deleteCurriculum(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := store.ClearCurriculum(c.Context()); err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{"custom": false, "curriculum": s.State.def})
+	// Re-resolve: with the override cleared the caller falls through to the brand
+	// blueprint (or the fixture) — the effective default they now see.
+	cur, custom := s.State.activeCurriculum(c.Context(), store)
+	return c.JSON(http.StatusOK, map[string]any{"custom": custom, "curriculum": cur})
 }
 
 func listActions(s *cloud.Service[state], c *zip.Ctx) error {
