@@ -349,6 +349,11 @@ func refreshConn(s *cloud.Service[state], c *zip.Ctx) error {
 	if !found {
 		return zip.ErrNotFound("connector not connected")
 	}
+	// Freeze on disable (LOW-2): refresh USES the stored credential to rotate it, so
+	// a disabled connector is not refreshed — consistent with the /token gate.
+	if err := gateEnabled(c.Context(), s, userScope, org, user, p.ID, label); err != nil {
+		return err
+	}
 	if p.Refresh == nil {
 		return zip.ErrBadRequest("refresh not supported")
 	}
