@@ -1,6 +1,7 @@
 package venue
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -207,6 +208,134 @@ func TestGCP_KeylessDiscoversAndFolds(t *testing.T) {
 	}
 }
 
+// ── Azure (AKS) — service principal + keyless workload identity federation ───
+
+// azureStub emulates the AAD token endpoint + ARM. The token handler asserts the
+// expected auth shape (client_secret for SP, client_assertion for WIF), so a
+// successful discover proves venue sent the right credential. clusters is
+// name->apiserver endpoint; the kubeconfig is base64 like ARM returns it.
+func azureStub(t *testing.T, tenant, wantSecret, wantAssertion string, clusters map[string]string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/"+tenant+"/oauth2/v2.0/token", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if wantSecret != "" && r.Form.Get("client_secret") != wantSecret {
+			http.Error(w, `{"error":"invalid_client"}`, http.StatusUnauthorized)
+			return
+		}
+		if wantAssertion != "" && r.Form.Get("client_assertion") != wantAssertion {
+			http.Error(w, `{"error":"invalid_client"}`, http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"aad-token","token_type":"Bearer","expires_in":3600}`))
+	})
+	// managedClusters list + per-cluster listClusterUserCredential.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/listClusterUserCredential") {
+			name := strings.TrimSuffix(r.URL.Path, "/listClusterUserCredential")
+			name = name[strings.LastIndex(name, "/")+1:]
+			ep, ok := clusters[name]
+			if !ok {
+				http.Error(w, `{"error":{}}`, http.StatusNotFound)
+				return
+			}
+			kube := base64.StdEncoding.EncodeToString([]byte(doKubeconfig(ep)))
+			_, _ = w.Write([]byte(`{"kubeconfigs":[{"name":"clusterUser","value":"` + kube + `"}]}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/managedClusters") {
+			var items []string
+			for name, ep := range clusters {
+				id := "/subscriptions/sub-1/resourceGroups/rg1/providers/Microsoft.ContainerService/managedClusters/" + name
+				host := strings.TrimPrefix(ep, "https://")
+				items = append(items, fmt.Sprintf(`{"id":%q,"name":%q,"location":"eastus","properties":{"fqdn":%q}}`, id, name, host))
+			}
+			_, _ = w.Write([]byte(`{"value":[` + strings.Join(items, ",") + `]}`))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// Service-principal Azure: tenant+client+secret → AAD token → list AKS → fold.
+func TestAzure_ServicePrincipalDiscoversAndFolds(t *testing.T) {
+	t.Setenv(allowPrivateEndpointsEnv, "1")
+	api := fakeAPIServer(t)
+	az := azureStub(t, "tenant-1", "sp-secret", "", map[string]string{"prod-aks": api.URL})
+	t.Setenv("AZURE_AD_ENDPOINT", az.URL)
+	t.Setenv("AZURE_ARM_ENDPOINT", az.URL)
+
+	f := newRecFolder()
+	kc := newKMS(t)
+	app := newVenue(t, f, kc)
+
+	res := call(t, app, http.MethodPost, "/v1/cloud/azure/accounts", "acme", "", true, map[string]any{
+		"label": "prod", "tenantId": "tenant-1", "clientId": "client-1",
+		"clientSecret": "sp-secret", "subscriptionIds": []string{"sub-1"},
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("azure link want 201, got %d (%s)", res.Code, res.Body)
+	}
+	if strings.Contains(string(res.Body), "sp-secret") {
+		t.Fatalf("response leaked the client secret: %s", res.Body)
+	}
+	var out struct {
+		Account  accountView     `json:"account"`
+		Clusters []clusterResult `json:"clusters"`
+	}
+	_ = json.Unmarshal(res.Body, &out)
+	if out.Account.ExternalID != "tenant-1" {
+		t.Fatalf("azure tenant wrong: %+v", out.Account)
+	}
+	if len(out.Clusters) != 1 || !out.Clusters[0].Folded || out.Clusters[0].Nodes != 2 {
+		t.Fatalf("azure fold wrong: %+v", out.Clusters)
+	}
+	if f.count() != 1 {
+		t.Fatalf("azure should fold 1 cluster, got %d", f.count())
+	}
+}
+
+// Keyless Azure: no client secret → WIF client assertion (Hanzo's federated
+// token) → fold. Proves the keyless path forwards the assertion, not a secret.
+func TestAzure_KeylessWorkloadIdentityFederation(t *testing.T) {
+	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv("AZURE_FEDERATED_TOKEN", "hanzo-federated-oidc-token")
+	api := fakeAPIServer(t)
+	az := azureStub(t, "tenant-1", "", "hanzo-federated-oidc-token", map[string]string{"prod-aks": api.URL})
+	t.Setenv("AZURE_AD_ENDPOINT", az.URL)
+	t.Setenv("AZURE_ARM_ENDPOINT", az.URL)
+
+	f := newRecFolder()
+	kc := newKMS(t)
+	app := newVenue(t, f, kc)
+
+	res := call(t, app, http.MethodPost, "/v1/cloud/azure/accounts", "acme", "", true, map[string]any{
+		"label": "prod", "tenantId": "tenant-1", "clientId": "client-1",
+		"subscriptionIds": []string{"sub-1"}, // NO clientSecret → keyless WIF
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("azure WIF link want 201, got %d (%s)", res.Code, res.Body)
+	}
+	if f.count() != 1 {
+		t.Fatalf("azure WIF should fold 1 cluster, got %d", f.count())
+	}
+	// The sealed credential is keyless (no secret).
+	raw, err := kc.Get("/orgs/acme/cloud/azure/prod", credName, venueEnv)
+	if err != nil {
+		t.Fatalf("azure credential not sealed: %v", err)
+	}
+	var cr cred
+	_ = json.Unmarshal(raw, &cr)
+	if cr.ClientSecret != "" {
+		t.Fatalf("keyless azure credential must carry no secret: %+v", cr)
+	}
+}
+
 // Missing required inputs are refused before any provider call (bounds check).
 func TestProviderInputValidation(t *testing.T) {
 	app := newVenue(t, newRecFolder(), newKMS(t))
@@ -217,6 +346,7 @@ func TestProviderInputValidation(t *testing.T) {
 		{"aws", map[string]any{"label": "x", "regions": []string{"us-west-2"}}}, // no roleArn/externalId
 		{"gcp", map[string]any{"label": "x"}},                                   // no projectIds
 		{"digitalocean", map[string]any{"label": "x"}},                          // no token
+		{"azure", map[string]any{"label": "x", "tenantId": "t"}},                // no subscriptionIds
 	}
 	for _, tc := range cases {
 		r := call(t, app, http.MethodPost, "/v1/cloud/"+tc.provider+"/accounts", "acme", "", true, tc.body)
