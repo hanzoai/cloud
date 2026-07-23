@@ -108,7 +108,7 @@ func TestPresignDisabledWhenPublicEndpointBlank(t *testing.T) {
 }
 
 // TestHostOnlyStripsScheme: a configured public endpoint with a scheme is reduced
-// to a bare host[:port] (minio.New requires it), so operators can paste a URL.
+// to a bare host[:port] (s3.New requires it), so operators can paste a URL.
 func TestHostOnlyStripsScheme(t *testing.T) {
 	cases := map[string]string{
 		"https://s3.hanzo.ai":          "s3.hanzo.ai",
