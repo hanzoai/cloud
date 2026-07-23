@@ -45,6 +45,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -343,11 +344,11 @@ func detectNvidiaGPUs() []gpuInfo {
 func detectAmdGPUs() []gpuInfo {
 	if out, err := exec.Command("rocm-smi", "--showproductname", "--csv").Output(); err == nil {
 		if gpus := parseRocmSmiCSV(out); len(gpus) > 0 {
-			return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+			return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 		}
 	}
 	if gpus := parseKfdTopology(sysfsKfdNodes); len(gpus) > 0 {
-		return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+		return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 	}
 	if out, err := exec.Command("vulkaninfo", "--summary").Output(); err == nil {
 		if gpus := parseVulkaninfoSummary(out); len(gpus) > 0 {
@@ -480,6 +481,51 @@ func amdFamily(arch string) string {
 		return "AMD Phoenix"
 	}
 	return ""
+}
+
+// apuProcessorNames renders a unified-memory APU as the PROCESSOR it is — the
+// cpuinfo marketing name ("AMD Ryzen AI Max+ 395 w/ Radeon 8060S") beats the
+// iGPU series, because that is the product the owner bought. Discrete cards and
+// non-Ryzen hosts keep their existing names.
+func apuProcessorNames(gpus []gpuInfo, cpuModel string) []gpuInfo {
+	name := amdAPUName(cpuModel)
+	if name == "" {
+		return gpus
+	}
+	for i, g := range gpus {
+		if !g.Unified {
+			continue
+		}
+		if g.Arch != "" {
+			gpus[i].Name = name + " (" + g.Arch + ")"
+		} else {
+			gpus[i].Name = name
+		}
+	}
+	return gpus
+}
+
+// amdAPUName normalizes an AMD APU cpuinfo model into its marketing name:
+// "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S" -> "AMD Ryzen AI Max+ 395 w/ Radeon
+// 8060S". BIOS strings shout; the board should not. Non-Ryzen models return "".
+func amdAPUName(cpuModel string) string {
+	m := strings.Join(strings.Fields(cpuModel), " ")
+	if !strings.Contains(strings.ToLower(m), "ryzen") {
+		return ""
+	}
+	words := strings.Split(m, " ")
+	for i, w := range words {
+		if w == "AMD" || w == "AI" || w != strings.ToUpper(w) {
+			continue // brand/initialism stays; mixed-case is already right
+		}
+		if strings.ContainsFunc(w, unicode.IsDigit) {
+			continue // model numbers ("8060S", "395") keep their casing
+		}
+		if r := []rune(w); len(r) > 1 && strings.ContainsFunc(w, unicode.IsLetter) {
+			words[i] = string(r[0]) + strings.ToLower(string(r[1:]))
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // amdSoft is the host ROCm/HIP toolchain inventory, detected once: ROCm from
