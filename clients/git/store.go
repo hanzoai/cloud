@@ -213,6 +213,26 @@ func (s *Store) ListOrg(ctx context.Context, org string) ([]Repo, error) {
 	return out, rows.Err()
 }
 
+// ListPublic returns every PUBLIC repo across all projects for org, newest
+// first — the per-org half of the anonymous explore/discovery surface.
+func (s *Store) ListPublic(ctx context.Context, org string) ([]Repo, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+repoCols+` FROM repos WHERE org=? AND public=1 ORDER BY updated_at DESC, name ASC`, org)
+	if err != nil {
+		return nil, fmt.Errorf("list public repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Repo
+	for rows.Next() {
+		r, err := scanRepo(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan repo: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // SetSize records the last-measured storage size for a repo and bumps
 // updated_at. Called on create and after each push, so the metered number is
 // always the real on-disk size, never a fabricated rollup.

@@ -1,8 +1,10 @@
 package git
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -48,28 +50,37 @@ func TestRootSmartHTTP_HostGuard(t *testing.T) {
 func TestRootUI_HostGuard(t *testing.T) {
 	app := mountApp(t) // Domain api.hanzo.test → gitHost git.hanzo.test
 
-	// On the git host, GET / reaches uiHome; with no validated principal the handler
-	// answers 403 ("sign in") — proving the route matched native git (a routing
-	// miss would be 404, and the pre-change behavior fell through to the console).
+	// On the git host, GET / reaches uiHome; with no validated principal it now
+	// renders the PUBLIC explore/landing (200) instead of 403 — OSS-first, no sign-in
+	// to browse. The git-native body ("Hanzo Git") proves the route matched native
+	// git and did not fall through to the console SPA.
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "git.hanzo.test"
 	resp, err := app.Fiber().Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("git-host / request: %v", err)
 	}
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("git host /: want 403 (uiHome ran, principal required), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("git host /: want 200 (public explore), got %d", resp.StatusCode)
+	}
+	if body, _ := io.ReadAll(resp.Body); !strings.Contains(string(body), "Hanzo Git") {
+		t.Fatalf("git host /: want native git explore body (\"Hanzo Git\"), got %.120q", body)
 	}
 
-	// The GitHub-style browse path reaches uiRepo on the git host (same 403 gate).
+	// The GitHub-style browse path reaches uiRepo on the git host. A MISSING repo
+	// answers native git's 404 "no such repository" (uiRepoAccess ran) — distinct
+	// from a routing miss by the git-native error body.
 	req = httptest.NewRequest(http.MethodGet, "/acme/widget", nil)
 	req.Host = "git.hanzo.test"
 	resp, err = app.Fiber().Test(req, testCfg)
 	if err != nil {
 		t.Fatalf("git-host /:org/:repo request: %v", err)
 	}
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("git host /:org/:repo: want 403 (uiRepo ran), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("git host /:org/:repo (missing): want 404 (uiRepo ran), got %d", resp.StatusCode)
+	}
+	if body, _ := io.ReadAll(resp.Body); !strings.Contains(string(body), "no such repository") {
+		t.Fatalf("git host /:org/:repo: want native git 404 body, got %.120q", body)
 	}
 
 	// On the api host the root UI routes fall through (c.Next()); nothing else is
