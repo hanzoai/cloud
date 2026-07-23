@@ -199,15 +199,16 @@ func (d *Durable) Sync(ctx context.Context) (acked bool, err error) {
 	return true, nil
 }
 
-// Close best-effort ships any final state (ship-before-ack already covers every
-// acknowledged write) and releases. It does NOT close the live *sql.DB — that is the
+// Close best-effort ships any final state under the caller's (time-bounded) ctx —
+// ship-before-ack already covers every acknowledged write, so this is
+// belt-and-suspenders — and releases. It does NOT close the live *sql.DB; that is the
 // store handle the caller owns.
-func (d *Durable) Close() error {
+func (d *Durable) Close(ctx context.Context) error {
 	d.mu.Lock()
 	owned, bound := d.owned, d.db != nil
 	d.mu.Unlock()
 	if owned && bound {
-		_, _ = d.Sync(context.Background())
+		_, _ = d.Sync(ctx)
 	}
 	return nil
 }
@@ -310,10 +311,12 @@ func frame(sidecar, main []byte) []byte {
 	return append(buf, main...)
 }
 
-// unframe splits a framed payload back into (sidecar, database).
+// unframe splits a framed payload back into (sidecar, database). The bound is checked
+// as sl > len(b)-m (a SUBTRACTION, never m+sl) so a maliciously large uvarint length
+// cannot wrap uint64 addition past the guard and panic the slice — it fails closed.
 func unframe(b []byte) (sidecar, main []byte, err error) {
 	sl, m := binary.Uvarint(b)
-	if m <= 0 || uint64(m)+sl > uint64(len(b)) {
+	if m <= 0 || sl > uint64(len(b)-m) {
 		return nil, nil, errCorruptFrame
 	}
 	off := m + int(sl)
