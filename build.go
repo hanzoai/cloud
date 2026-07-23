@@ -753,6 +753,17 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
 	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
 
+	// Explicit opt-in: the object-store fence rests on the deployed SeaweedFS enforcing
+	// conditional-PUT (If-Match) atomically, which must be validated against the deployed
+	// version before it fences real tenant data (the takeover-fence staging gate). Until
+	// CLOUD_RESEARCH_DURABLE is set the store runs local-only — the shard router still
+	// pins each org to one writer, so this is not the rolling-deploy outage; only the
+	// cross-restart object-store snapshot waits for the opt-in.
+	if !cfg.ResearchDurable {
+		disabledDurability(log, multiReplica, "CLOUD_RESEARCH_DURABLE not set — HA object-store durability is opt-in pending the SeaweedFS conditional-PUT atomicity gate")
+		return nil
+	}
+
 	admin := s3admin.New()
 	if !admin.Configured() {
 		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
