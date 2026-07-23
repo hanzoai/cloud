@@ -100,6 +100,7 @@ func TestPickAmdMemUnified(t *testing.T) {
 func TestSnapUnified(t *testing.T) {
 	for _, c := range []struct{ in, want int64 }{
 		{127411, 131072}, // evo: 124.4 GiB visible of 128 GiB physical
+		{124610, 131072}, // spark GB10: 121.7 GiB visible of 128 GiB physical (~6.3 GiB firmware)
 		{131072, 131072}, // exact 128 GiB
 		{119194, 119194}, // ~116 GiB visible (16 GiB BIOS carve) — 11.6 GiB gap, keep honest
 		{63488, 65536},   // 62 GiB visible of 64 GiB
@@ -134,5 +135,23 @@ func TestApuProcessorNames(t *testing.T) {
 	}
 	if got, want := out[1].Name, "Radeon RX 7900 XTX (gfx1100)"; got != want {
 		t.Errorf("discrete name = %q, want %q", got, want)
+	}
+}
+
+// TestParseNvidiaSmiCSV — a GB10-class unified SoC ("[N/A]" VRAM) reports the
+// machine RAM snapped to capacity + its sm arch; a discrete card keeps its VRAM.
+func TestParseNvidiaSmiCSV(t *testing.T) {
+	out := []byte("NVIDIA GB10, [N/A], 12.1\n")
+	gpus := parseNvidiaSmiCSV(out, 124610)
+	if len(gpus) != 1 {
+		t.Fatalf("want 1 GPU, got %d", len(gpus))
+	}
+	g := gpus[0]
+	if g.Name != "NVIDIA GB10" || g.MemoryTotal != "131072 MiB" || !g.Unified || g.Arch != "sm_121" {
+		t.Errorf("GB10 = %+v", g)
+	}
+	disc := parseNvidiaSmiCSV([]byte("NVIDIA GeForce RTX 4090, 24564 MiB, 8.9\n"), 124610)
+	if d := disc[0]; d.MemoryTotal != "24564 MiB" || d.Unified || d.Arch != "sm_89" {
+		t.Errorf("discrete = %+v", d)
 	}
 }
