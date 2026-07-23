@@ -29,12 +29,12 @@ const apiKeySecret = "api_key"
 type placement int
 
 const (
-	bearer   placement = iota // Authorization: Bearer <key>
-	tokenAuth                 // Authorization: Token <key>
-	headerAt                  // <Name>: [<Scheme> ]<key>
-	queryAt                   // ?<Name>=<key>
-	basicAt                   // Authorization: Basic base64(<user>:<key>)
-	basicRaw                  // Authorization: Basic base64(<key>)  — key already "user:pass"
+	bearer    placement = iota // Authorization: Bearer <key>
+	tokenAuth                  // Authorization: Token <key>
+	headerAt                   // <Name>: [<Scheme> ]<key>
+	queryAt                    // ?<Name>=<key>
+	basicAt                    // Authorization: Basic base64(<user>:<key>)
+	basicRaw                   // Authorization: Basic base64(<key>)  — key already "user:pass"
 )
 
 // accountToken marks a keySpec field (basic username, or "{account}" in the URL)

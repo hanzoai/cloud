@@ -298,24 +298,9 @@ type state struct {
 
 var mounted *cloud.Service[state]
 
-// ── HTTP response shapes (the published contract) ──────────────────────────────
-
-type providerView struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Category    string          `json:"category"`
-	Available   bool            `json:"available"` // creds configured
-	Connected   bool            `json:"connected"` // this org has a connection
-	Connection  *connectionView `json:"connection,omitempty"`
-}
-
-type connectionView struct {
-	Account     string   `json:"account"`
-	ExternalID  string   `json:"externalId"`
-	Scopes      []string `json:"scopes"`
-	ConnectedAt string   `json:"connectedAt"`
-}
+// The org + user connection status is projected into the unified Extension wire
+// shape (extension.go); the org-only providerView/connectionView are retired with
+// the /v1/integrations list+get handlers they served.
 
 // ── Mount / lifecycle ──────────────────────────────────────────────────────────
 
@@ -508,53 +493,10 @@ func snapshotRegistry() map[string]*Provider {
 }
 
 // ── handlers ───────────────────────────────────────────────────────────────────
-
-// list returns every registered provider with this org's connection status.
-// Org-authed: a caller with no validated principal is 403 (the status is per-org,
-// so an org is required).
-func list(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	ids := sortedProviderIDs(s)
-	out := make([]providerView, 0, len(ids))
-	for _, id := range ids {
-		p := s.State.providers[id]
-		if p.Scope == userScope {
-			continue // user-plane providers are invisible on the org surface
-		}
-		v, err := providerViewFor(s, c.Context(), org, p)
-		if err != nil {
-			return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-		}
-		out = append(out, v)
-	}
-	return c.JSON(http.StatusOK, map[string]any{"providers": out})
-}
-
-// get returns one provider (404 for an unknown id) with this org's status.
-func get(s *cloud.Service[state], c *zip.Ctx) error {
-	org, ok := principal.Org(c)
-	if !ok {
-		return zip.ErrForbidden("a validated principal is required")
-	}
-	if !validOrg(org) {
-		return zip.ErrBadRequest("org must be a DNS-1123 label")
-	}
-	p, ok := orgProvider(s, providerParam(c))
-	if !ok {
-		return zip.ErrNotFound("unknown provider")
-	}
-	v, err := providerViewFor(s, c.Context(), org, p)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
-	}
-	return c.JSON(http.StatusOK, v)
-}
+//
+// The org list + get folded into the unified listExtensions / getExtension
+// (extension.go): an org connection is an Extension{scope:org} with ≤1 instance,
+// listed beside the user extensions on the ONE /v1/connectors surface.
 
 // connect begins an OAuth flow: it mints a single-use nonce + HMAC-signed state
 // binding this org to this provider, and returns the provider's authorize URL.
@@ -889,30 +831,6 @@ func disconnect(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // ── view + redirect builders ───────────────────────────────────────────────────
-
-// providerViewFor renders a provider's card for an org, folding in the org's live
-// connection status. (Named …For, not providerView, because Go forbids a func and
-// the providerView TYPE sharing an identifier — same deviation as ConnectionFor.)
-func providerViewFor(s *cloud.Service[state], ctx context.Context, org string, p *Provider) (providerView, error) {
-	v := providerView{
-		ID: p.ID, Name: p.Name, Description: p.Description, Category: p.Category,
-		Available: p.Configured(),
-	}
-	conn, found, err := s.State.store.Get(ctx, org, p.ID)
-	if err != nil {
-		return providerView{}, err
-	}
-	if found {
-		v.Connected = true
-		v.Connection = &connectionView{
-			Account:     conn.AccountLabel,
-			ExternalID:  conn.ExternalID,
-			Scopes:      nonNil(conn.Scopes),
-			ConnectedAt: rfc3339(conn.ConnectedAt),
-		}
-	}
-	return v, nil
-}
 
 func sortedProviderIDs(s *cloud.Service[state]) []string {
 	ids := make([]string, 0, len(s.State.providers))

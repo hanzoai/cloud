@@ -143,7 +143,7 @@ func cfReq(t *testing.T, app *zip.App, method, path, org string, admin bool, bod
 // cfConnect posts a connect with the standard test token as an org admin.
 func cfConnect(t *testing.T, app *zip.App, org string) httpResult {
 	t.Helper()
-	return cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", org, true,
+	return cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", org, true,
 		map[string]any{"token": cfTestToken})
 }
 
@@ -230,7 +230,7 @@ func TestCloudflareConnectRequiresOrgAdmin(t *testing.T) {
 	app := newApp(t, kc)
 
 	// A plain member (no X-User-IsOrgAdmin) is refused BEFORE any CF call / store.
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", "acme", false,
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", "acme", false,
 		map[string]any{"token": cfTestToken})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("member connect want 403, got %d (%s)", res.Code, res.Body)
@@ -244,7 +244,7 @@ func TestCloudflareConnectRequiresPrincipal(t *testing.T) {
 	newCFMock(t, &cfMock{status: "active"})
 	app := newApp(t, newKMS(t))
 	// No identity headers at all → 403 (a validated principal is required).
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", "", false,
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", "", false,
 		map[string]any{"token": cfTestToken})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("no-principal connect want 403, got %d", res.Code)
@@ -254,7 +254,7 @@ func TestCloudflareConnectRequiresPrincipal(t *testing.T) {
 func TestCloudflareConnectEmptyTokenRejected(t *testing.T) {
 	newCFMock(t, &cfMock{status: "active"})
 	app := newApp(t, newKMS(t))
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", "acme", true,
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", "acme", true,
 		map[string]any{"token": "   "})
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("empty token want 400, got %d (%s)", res.Code, res.Body)
@@ -278,8 +278,8 @@ func TestCloudflareTenantIsolation(t *testing.T) {
 		t.Fatal("orgb must not have a credential")
 	}
 	// B sees the provider as NOT connected.
-	rb := cfReq(t, app, http.MethodGet, "/v1/integrations/cloudflare", "orgb", false, nil)
-	var view providerView
+	rb := cfReq(t, app, http.MethodGet, "/v1/connectors/cloudflare", "orgb", false, nil)
+	var view Extension
 	if err := json.Unmarshal(rb.Body, &view); err != nil {
 		t.Fatalf("orgb get view: %v (%s)", err, rb.Body)
 	}
@@ -287,11 +287,11 @@ func TestCloudflareTenantIsolation(t *testing.T) {
 		t.Fatal("orgb must not see orga's connection")
 	}
 	// B's verify is 404 (nothing connected for B).
-	if r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/verify", "orgb", false, nil); r.Code != http.StatusNotFound {
+	if r := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/verify", "orgb", false, nil); r.Code != http.StatusNotFound {
 		t.Fatalf("orgb verify want 404, got %d (%s)", r.Code, r.Body)
 	}
 	// B's disconnect is idempotent-OK but MUST NOT remove A's secret or row.
-	if r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/disconnect", "orgb", true, nil); r.Code != http.StatusOK {
+	if r := cfReq(t, app, http.MethodDelete, "/v1/connectors/cloudflare", "orgb", true, nil); r.Code != http.StatusOK {
 		t.Fatalf("orgb disconnect want 200, got %d (%s)", r.Code, r.Body)
 	}
 	if _, ok := kmsHas(t, kc, "orga"); !ok {
@@ -312,7 +312,7 @@ func TestCloudflareVerifyEndpoint(t *testing.T) {
 	if r := cfConnect(t, app, "acme"); r.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d", r.Code)
 	}
-	r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/verify", "acme", false, nil)
+	r := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/verify", "acme", false, nil)
 	if r.Code != http.StatusOK {
 		t.Fatalf("verify want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -332,7 +332,7 @@ func TestCloudflareDisconnectRemovesTokenAndRow(t *testing.T) {
 	if r := cfConnect(t, app, "acme"); r.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d", r.Code)
 	}
-	if r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/disconnect", "acme", true, nil); r.Code != http.StatusOK {
+	if r := cfReq(t, app, http.MethodDelete, "/v1/connectors/cloudflare", "acme", true, nil); r.Code != http.StatusOK {
 		t.Fatalf("disconnect want 200, got %d (%s)", r.Code, r.Body)
 	}
 	if _, ok := kmsHas(t, kc, "acme"); ok {
@@ -342,7 +342,7 @@ func TestCloudflareDisconnectRemovesTokenAndRow(t *testing.T) {
 		t.Fatal("disconnect must delete the connection row")
 	}
 	// Idempotent: a second disconnect still 200s.
-	if r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/disconnect", "acme", true, nil); r.Code != http.StatusOK {
+	if r := cfReq(t, app, http.MethodDelete, "/v1/connectors/cloudflare", "acme", true, nil); r.Code != http.StatusOK {
 		t.Fatalf("second disconnect want 200, got %d", r.Code)
 	}
 }
@@ -379,7 +379,7 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 	t.Cleanup(func() { _ = Shutdown(context.Background()) })
 
 	// A successful connect (logs "connector connected") ...
-	if r := cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", "acme", true,
+	if r := cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", "acme", true,
 		map[string]any{"token": cfTestToken}); r.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -387,7 +387,7 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 	// Point at an unroutable address to force the transport-failure path WITHOUT a
 	// live call to the real Cloudflare API.
 	t.Setenv("CLOUDFLARE_API_BASE", "http://127.0.0.1:1")
-	_ = cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", "beta", true,
+	_ = cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", "beta", true,
 		map[string]any{"token": cfTestToken})
 
 	if strings.Contains(logs.String(), cfTestToken) {
@@ -402,7 +402,7 @@ func TestCloudflareTokenNeverLogged(t *testing.T) {
 // --token. A body with no "token" key routes to the OAuth flow.
 func cfConnectNoToken(t *testing.T, app *zip.App, org string) httpResult {
 	t.Helper()
-	return cfReq(t, app, http.MethodPost, "/v1/integrations/cloudflare/connect", org, true, map[string]any{})
+	return cfReq(t, app, http.MethodPost, "/v1/connectors/cloudflare/connect", org, true, map[string]any{})
 }
 
 func TestCloudflareOAuthConnectReturnsAuthorizeURLWhenConfigured(t *testing.T) {
@@ -437,7 +437,7 @@ func TestCloudflareOAuthConnectReturnsAuthorizeURLWhenConfigured(t *testing.T) {
 	if q.Get("state") == "" {
 		t.Fatal("authorizeUrl must carry a signed state")
 	}
-	if !strings.HasSuffix(q.Get("redirect_uri"), "/v1/integrations/cloudflare/callback") {
+	if !strings.HasSuffix(q.Get("redirect_uri"), "/v1/connectors/cloudflare/callback") {
 		t.Fatalf("redirect_uri want the cloudflare callback, got %q", q.Get("redirect_uri"))
 	}
 	if strings.Contains(out.AuthorizeURL, "cf-hanzo-oauth-secret") {
@@ -512,7 +512,7 @@ func TestCloudflareOAuthCallbackSealsSameKMSCoordinate(t *testing.T) {
 	}
 
 	// 2) Cloudflare redirects the browser back to the callback with code+state.
-	cb := "/v1/integrations/cloudflare/callback?code=cf-oauth-code-xyz&state=" + url.QueryEscape(state)
+	cb := "/v1/connectors/cloudflare/callback?code=cf-oauth-code-xyz&state=" + url.QueryEscape(state)
 	r := cfReq(t, app, http.MethodGet, cb, "", false, nil) // PUBLIC — org from the signed state
 	if r.Code != http.StatusFound {
 		t.Fatalf("callback want 302 redirect, got %d (%s)", r.Code, r.Body)
@@ -557,7 +557,7 @@ func TestCloudflareOAuthCallbackFailClosedOnExchangeError(t *testing.T) {
 	}
 	_ = json.Unmarshal(res.Body, &out)
 	u, _ := url.Parse(out.AuthorizeURL)
-	cb := "/v1/integrations/cloudflare/callback?code=bad&state=" + url.QueryEscape(u.Query().Get("state"))
+	cb := "/v1/connectors/cloudflare/callback?code=bad&state=" + url.QueryEscape(u.Query().Get("state"))
 	r := cfReq(t, app, http.MethodGet, cb, "", false, nil)
 	if r.Code != http.StatusFound { // framework 302s to a LABELED failure page
 		t.Fatalf("failed exchange want 302 (labeled failure), got %d (%s)", r.Code, r.Body)
