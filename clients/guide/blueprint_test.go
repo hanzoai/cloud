@@ -97,7 +97,7 @@ func TestResolutionTiers(t *testing.T) {
 	// A store seeded with a DISTINCT brand blueprint under the base key.
 	bpStore := testBlueprintStore(t)
 	brandDoc, _ := json.Marshal(Blueprint{Version: "brand-v", Steps: []Step{{ID: "b1", Title: "B1"}}})
-	if _, err := bpStore.SeedIfAbsent(ctx, "", brandDoc, 1); err != nil {
+	if _, err := bpStore.SeedOrUpgrade(ctx, "", brandDoc, seedVersion, 1); err != nil {
 		t.Fatalf("seed brand: %v", err)
 	}
 	st := state{blueprints: bpStore, brand: "", defBlueprint: fixture}
@@ -129,7 +129,7 @@ func TestResolutionTiers(t *testing.T) {
 	off := false
 	disabledDoc, _ := json.Marshal(Blueprint{Version: "disabled-v", Enabled: &off, Steps: []Step{{ID: "x", Title: "X"}}})
 	dstore := testBlueprintStore(t)
-	if _, err := dstore.SeedIfAbsent(ctx, "", disabledDoc, 1); err != nil {
+	if _, err := dstore.SeedOrUpgrade(ctx, "", disabledDoc, seedVersion, 1); err != nil {
 		t.Fatalf("seed disabled: %v", err)
 	}
 	st4 := state{blueprints: dstore, brand: "", defBlueprint: fixture}
@@ -175,5 +175,172 @@ func TestSeedIdempotentNoClobber(t *testing.T) {
 	}
 	if version != 2 || got.Version != "admin-edit" {
 		t.Fatalf("re-seed clobbered the admin edit: version=%d blueprint=%q", version, got.Version)
+	}
+}
+
+// TestSeedVersionAwareUpgrade proves the version-aware seed UPGRADES an UNEDITED seed row
+// in place when the embedded generation is newer — the mechanism that ships the 888 corpus
+// to a deployment already seeded with the old 114-journey — while never downgrading.
+func TestSeedVersionAwareUpgrade(t *testing.T) {
+	ctx := context.Background()
+	store := testBlueprintStore(t)
+	oldDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []Step{{ID: "a", Title: "A"}}})
+	newDoc, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
+
+	// Seed generation 1.
+	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 100); err != nil || act != SeedInserted {
+		t.Fatalf("first seed want SeedInserted, got %q err=%v", act, err)
+	}
+	// Re-seed at the SAME generation → no-op (idempotent redeploy).
+	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 101); err != nil || act != SeedNone {
+		t.Fatalf("re-seed same generation want SeedNone, got %q err=%v", act, err)
+	}
+	// A NEWER generation over the UNEDITED seed → UPGRADE in place (still version 1).
+	if act, err := store.SeedOrUpgrade(ctx, "", newDoc, 2, 102); err != nil || act != SeedUpgraded {
+		t.Fatalf("newer generation over unedited seed want SeedUpgraded, got %q err=%v", act, err)
+	}
+	doc, version, _, ok, err := store.LatestResolved(ctx, "")
+	if err != nil || !ok {
+		t.Fatalf("latest after upgrade: ok=%v err=%v", ok, err)
+	}
+	var got Blueprint
+	_ = json.Unmarshal(doc, &got)
+	if version != 1 || got.Version != "seed-v2" {
+		t.Fatalf("upgrade must replace the seed IN PLACE at version 1, got version=%d blueprint=%q", version, got.Version)
+	}
+	// Equal or older generation must NEVER regress the seed.
+	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 2, 103); err != nil || act != SeedNone {
+		t.Fatalf("equal generation want SeedNone, got %q err=%v", act, err)
+	}
+	if act, err := store.SeedOrUpgrade(ctx, "", oldDoc, 1, 104); err != nil || act != SeedNone {
+		t.Fatalf("older generation must never downgrade, got %q err=%v", act, err)
+	}
+	// The upgrade keeps a SINGLE seed version (no history churn).
+	if vs, _ := store.ListVersions(ctx, ""); len(vs) != 1 || vs[0].Version != 1 {
+		t.Fatalf("upgrade must keep a single seed version, got %+v", vs)
+	}
+}
+
+// TestSeedNeverClobbersAdminEdit is the LOAD-BEARING invariant: once a brand carries an
+// admin edit, NO seed generation — however new — ever touches it again. An admin edit at
+// any version survives forever.
+func TestSeedNeverClobbersAdminEdit(t *testing.T) {
+	ctx := context.Background()
+	store := testBlueprintStore(t)
+	seedDoc, _ := json.Marshal(Blueprint{Version: "seed-v1", Steps: []Step{{ID: "a", Title: "A"}}})
+	if act, err := store.SeedOrUpgrade(ctx, "", seedDoc, 1, 100); err != nil || act != SeedInserted {
+		t.Fatalf("seed want SeedInserted, got %q err=%v", act, err)
+	}
+	// An admin edits it → version 2, stamped source="admin".
+	adminDoc, _ := json.Marshal(Blueprint{Version: "admin-edit", Steps: []Step{{ID: "x", Title: "X"}}})
+	if v, err := store.SaveVersion(ctx, "", adminDoc, 101); err != nil || v != 2 {
+		t.Fatalf("admin edit want version 2, got v=%d err=%v", v, err)
+	}
+	// A newer seed generation MUST NOT clobber the admin edit — even a far-future one.
+	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v2", Steps: []Step{{ID: "a", Title: "A"}, {ID: "b", Title: "B"}}})
+	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 2, 102); err != nil || act != SeedNone {
+		t.Fatalf("v2 seed over an admin edit MUST be SeedNone (never clobber), got %q err=%v", act, err)
+	}
+	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 99, 103); err != nil || act != SeedNone {
+		t.Fatalf("any newer seed over an admin edit MUST be SeedNone, got %q err=%v", act, err)
+	}
+	// The admin edit is still authoritative + byte-intact.
+	doc, version, _, ok, err := store.LatestResolved(ctx, "")
+	if err != nil || !ok {
+		t.Fatalf("latest: ok=%v err=%v", ok, err)
+	}
+	var got Blueprint
+	_ = json.Unmarshal(doc, &got)
+	if version != 2 || got.Version != "admin-edit" {
+		t.Fatalf("admin edit clobbered by a seed: version=%d blueprint=%q", version, got.Version)
+	}
+}
+
+// TestMigrateBackfillsLegacyAdminEdit proves a LEGACY admin edit (a version >= 2 row that
+// predates the source column and defaulted to 'seed') is backfilled to source="admin" by
+// migrate(), so SeedOrUpgrade protects it exactly like a fresh admin edit.
+func TestMigrateBackfillsLegacyAdminEdit(t *testing.T) {
+	ctx := context.Background()
+	store := testBlueprintStore(t)
+	// Emulate the pre-migration shape: a seed at v1 + an admin edit at v2, both with source
+	// left at the column default 'seed' (as an old DB would have after the column was added
+	// but before any provenance was written).
+	seedDoc, _ := json.Marshal(Blueprint{Version: "legacy-seed", Steps: []Step{{ID: "a", Title: "A"}}})
+	adminDoc, _ := json.Marshal(Blueprint{Version: "legacy-admin", Steps: []Step{{ID: "x", Title: "X"}}})
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO guide_blueprint (brand,version,doc,updated_at,source,seed_version) VALUES ('',1,?,1,'seed',0)`, string(seedDoc)); err != nil {
+		t.Fatalf("insert legacy seed: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO guide_blueprint (brand,version,doc,updated_at,source,seed_version) VALUES ('',2,?,2,'seed',0)`, string(adminDoc)); err != nil {
+		t.Fatalf("insert legacy admin: %v", err)
+	}
+	// Re-run the migration → the version-2 row is stamped admin (self-healing backfill).
+	if err := store.migrate(); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	// A newer seed generation must now leave the legacy admin edit untouched.
+	newSeed, _ := json.Marshal(Blueprint{Version: "seed-v9", Steps: []Step{{ID: "a", Title: "A"}}})
+	if act, err := store.SeedOrUpgrade(ctx, "", newSeed, 9, 3); err != nil || act != SeedNone {
+		t.Fatalf("legacy admin edit must be protected after backfill, got %q err=%v", act, err)
+	}
+	doc, version, _, _, _ := store.LatestResolved(ctx, "")
+	var got Blueprint
+	_ = json.Unmarshal(doc, &got)
+	if version != 2 || got.Version != "legacy-admin" {
+		t.Fatalf("legacy admin edit not preserved: version=%d blueprint=%q", version, got.Version)
+	}
+}
+
+// TestAssembledSeedParsesAndValidates proves the embedded full-genome seed (base.yaml) is
+// well-formed: it parses + validates at init (mustBlueprint), carries the 64-principle
+// spine + the 1002-strategy corpus (888 modern + 114 heritage), and EVERY strategy files
+// under a real spine principle with NO duplicate id across the whole corpus.
+func TestAssembledSeedParsesAndValidates(t *testing.T) {
+	bp := defaultBlueprint // parsed + validated at package init
+	if got := len(bp.Principles); got != 64 {
+		t.Fatalf("assembled seed principles want 64, got %d", got)
+	}
+	if got := len(bp.Sections); got != 12 {
+		t.Fatalf("assembled seed sections want 12, got %d", got)
+	}
+	if got := len(bp.Steps); got != 67 {
+		t.Fatalf("assembled seed steps want 67, got %d", got)
+	}
+	if got := len(bp.Templates); got != 6 {
+		t.Fatalf("assembled seed templates want 6, got %d", got)
+	}
+	if got := len(bp.Strategies); got != 1002 {
+		t.Fatalf("assembled seed strategies want 1002, got %d", got)
+	}
+	slugs := make(map[string]bool, len(bp.Principles))
+	for _, p := range bp.Principles {
+		if p.Slug == "" {
+			t.Fatalf("principle %d has empty slug", p.N)
+		}
+		if slugs[p.Slug] {
+			t.Fatalf("duplicate principle slug %q", p.Slug)
+		}
+		slugs[p.Slug] = true
+	}
+	ids := make(map[string]bool, len(bp.Strategies))
+	modern, heritage := 0, 0
+	for _, s := range bp.Strategies {
+		if ids[s.ID] {
+			t.Fatalf("duplicate strategy id %q across the corpus", s.ID)
+		}
+		ids[s.ID] = true
+		if s.Principle == "" || !slugs[s.Principle] {
+			t.Fatalf("strategy %q files under unresolved principle %q", s.ID, s.Principle)
+		}
+		switch s.Era {
+		case "modern":
+			modern++
+		case "heritage":
+			heritage++
+		default:
+			t.Fatalf("strategy %q has unknown era %q", s.ID, s.Era)
+		}
+	}
+	if modern != 888 || heritage != 114 {
+		t.Fatalf("corpus era split want modern=888 heritage=114, got modern=%d heritage=%d", modern, heritage)
 	}
 }
