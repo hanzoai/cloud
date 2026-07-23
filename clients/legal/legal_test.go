@@ -235,6 +235,68 @@ func TestOverrideCannotDropCounselReview(t *testing.T) {
 	}
 }
 
+// TestNewEquityTemplateForcesCounselNotice is MEDIUM-1: a BRAND-NEW org template id
+// (not a builtin) in the equity/securities category cannot omit the counsel-review
+// boundary — the flag is coupled to the CATEGORY, and the notice rides on the document.
+func TestNewEquityTemplateForcesCounselNotice(t *testing.T) {
+	app, _ := mount(t)
+	const org = "acme"
+	code, m := do(t, app, http.MethodPut, "/v1/legal/templates/our-safe", org, map[string]any{
+		"category": "equity", "title": "Our SAFE", "counselReview": false,
+		"body":   "# Our SAFE for {{.company_name}}",
+		"fields": []map[string]string{{"key": "company_name", "label": "Company"}},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("override want 200, got %d (%v)", code, m)
+	}
+	tpl, _ := m["template"].(map[string]any)
+	if tpl["counselReview"] != true {
+		t.Fatalf("a NEW equity template must be forced counsel-review, got %v", tpl["counselReview"])
+	}
+	_, gen := do(t, app, http.MethodPost, "/v1/legal/documents", org, map[string]any{
+		"templateId": "our-safe", "data": map[string]string{"company_name": "Acme"},
+	})
+	if !strings.HasPrefix(mapStr(docFrom(gen), "body"), CounselNotice) {
+		t.Fatalf("new equity doc must lead with the counsel notice")
+	}
+}
+
+// TestOverrideRejectsUndeclaredFieldRef is LOW-3: an override body that references a
+// field it does NOT declare is refused, so an undeclared field passed empty can never
+// render a silent blank into a document.
+func TestOverrideRejectsUndeclaredFieldRef(t *testing.T) {
+	app, _ := mount(t)
+	const org = "acme"
+	code, m := do(t, app, http.MethodPut, "/v1/legal/templates/nda", org, map[string]any{
+		"body":   "# NDA for {{.company_name}} — {{.secret_clause}}",
+		"fields": []map[string]string{{"key": "company_name", "label": "Company"}},
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("undeclared field ref want 400, got %d (%v)", code, m)
+	}
+	blob, _ := json.Marshal(m)
+	if !strings.Contains(string(blob), "secret_clause") {
+		t.Fatalf("error should name the undeclared field, got %s", blob)
+	}
+}
+
+// TestValidateOverrideFieldRefs unit-tests the pure LOW-3 engine check across direct
+// fields, control nodes, and an unparseable body.
+func TestValidateOverrideFieldRefs(t *testing.T) {
+	if err := ValidateOverride(Template{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []Field{{Key: "a"}, {Key: "b"}}}); err != nil {
+		t.Fatalf("all-declared refs should validate: %v", err)
+	}
+	if err := ValidateOverride(Template{ID: "x", Body: "{{.a}} and {{.b}}", Fields: []Field{{Key: "a"}}}); err == nil || !strings.Contains(err.Error(), "b") {
+		t.Fatalf("undeclared field must be rejected naming it, got %v", err)
+	}
+	if err := ValidateOverride(Template{ID: "x", Body: "{{if .flag}}{{.hidden}}{{end}}", Fields: []Field{{Key: "flag"}}}); err == nil || !strings.Contains(err.Error(), "hidden") {
+		t.Fatalf("undeclared field inside a control node must be rejected, got %v", err)
+	}
+	if err := ValidateOverride(Template{ID: "x", Body: "{{.a", Fields: nil}); err == nil {
+		t.Fatalf("an unparseable body must error")
+	}
+}
+
 // TestTenantIsolation proves org B cannot read org A's document.
 func TestTenantIsolation(t *testing.T) {
 	app, _ := mount(t)

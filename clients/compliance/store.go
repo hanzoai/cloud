@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS compliance_check (
 );
 CREATE INDEX IF NOT EXISTS ix_compliance_check_org ON compliance_check(org, created_at);
 CREATE INDEX IF NOT EXISTS ix_compliance_check_ref ON compliance_check(org, provider_ref);
+CREATE INDEX IF NOT EXISTS ix_compliance_check_provider_ref ON compliance_check(provider_ref);
 
 CREATE TABLE IF NOT EXISTS compliance_accreditation (
   id              TEXT PRIMARY KEY,
@@ -208,6 +209,25 @@ func (s *Store) GetCheckByRef(ctx context.Context, org, providerRef string) (Che
 	}
 	if err != nil {
 		return Check{}, fmt.Errorf("get check by ref: %w", err)
+	}
+	return chk, nil
+}
+
+// GetCheckByProviderRef finds a check by its provider reference across ALL orgs — the
+// lookup a SIGNATURE-authenticated provider webhook needs, since an external provider
+// carries no validated org. The provider reference is a cryptographically-unique
+// token (128 random bits, minted per verification), so the owning org is resolved FROM
+// the matched record: the webhook can only ever touch the one tenant that holds that
+// reference, and a caller cannot probe another tenant by guessing (an unknown ref is a
+// plain not-found). The org on the returned Check is authoritative for the update.
+func (s *Store) GetCheckByProviderRef(ctx context.Context, providerRef string) (Check, error) {
+	chk, err := s.scanCheck(s.db.QueryRowContext(ctx,
+		`SELECT `+checkCols+` FROM compliance_check WHERE provider_ref=?`, providerRef))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Check{}, errNotFound
+	}
+	if err != nil {
+		return Check{}, fmt.Errorf("get check by provider ref: %w", err)
 	}
 	return chk, nil
 }

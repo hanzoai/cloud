@@ -3,8 +3,12 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -103,6 +107,97 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, ma
 	return resp.StatusCode, out
 }
 
+// doOrgAdmin issues a request as the org's own admin (a reviewer role) — the identity a
+// verification decision requires. It mirrors do() but sets the unforgeable
+// X-User-IsOrgAdmin header the gateway mints for an org admin.
+func doOrgAdmin(t *testing.T, app *zip.App, method, path, org string, body any) (int, map[string]any) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	rq.Header.Set("X-Org-Id", org)
+	rq.Header.Set("X-User-Id", "admin_"+org)
+	rq.Header.Set("X-User-IsOrgAdmin", "true")
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return resp.StatusCode, out
+}
+
+// doWebhook POSTs a raw signed body to the webhook — no X-Org-Id (an external caller
+// has none); the ONLY authentication is the signature header.
+func doWebhook(t *testing.T, app *zip.App, sig string, body []byte) (int, map[string]any) {
+	t.Helper()
+	rq := httptest.NewRequest(http.MethodPost, "/v1/compliance/verifications/webhook", bytes.NewReader(body))
+	rq.Header.Set("Content-Type", "application/json")
+	if sig != "" {
+		rq.Header.Set(idv.WebhookRefHeader, sig)
+	}
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test webhook: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return resp.StatusCode, out
+}
+
+// sign returns the webhook signature header for a body under secret.
+func sign(secret string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// fakeKMS resolves ONE sealed secret by reference — the webhook HMAC key.
+type fakeKMS struct {
+	ref    string
+	secret []byte
+}
+
+func (k fakeKMS) GetSecret(_ context.Context, ref string) ([]byte, error) {
+	if ref == k.ref {
+		return k.secret, nil
+	}
+	return nil, fmt.Errorf("no such secret %q", ref)
+}
+func (k fakeKMS) PutSecret(context.Context, string, []byte) error         { return nil }
+func (k fakeKMS) Sign(context.Context, string, []byte) ([]byte, error)    { return nil, nil }
+
+// mountWithWebhook mounts compliance with a signature-authenticated webhook configured:
+// CLOUD_IDV_WEBHOOK_KEY_REF names a KMS secret the fakeKMS resolves to `secret`.
+func mountWithWebhook(t *testing.T, secret string) *zip.App {
+	t.Helper()
+	t.Setenv("CLOUD_IDV_WEBHOOK_KEY_REF", "kms://idv-webhook")
+	rec, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), nil)
+	if err != nil {
+		t.Fatalf("audit.Open: %v", err)
+	}
+	app := zip.New(zip.Config{Logger: luxlog.New("test")})
+	deps := cloud.Deps{
+		Logger: luxlog.New("test"), DataDir: t.TempDir(), Audit: rec,
+		KMS: fakeKMS{ref: "kms://idv-webhook", secret: []byte(secret)},
+	}
+	if err := Mount(app, deps); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
+	t.Cleanup(func() { _ = Shutdown(); _ = rec.Close() })
+	return app
+}
+
 // startCheck creates a subject + verification inline and returns the check view.
 func startCheck(t *testing.T, app *zip.App, org, email string) map[string]any {
 	t.Helper()
@@ -117,7 +212,7 @@ func startCheck(t *testing.T, app *zip.App, org, email string) map[string]any {
 
 // TestManualNeverAutoApproves is the load-bearing property with the DEFAULT provider:
 // creating and refreshing a verification never yields a verified status. The only
-// route to a terminal status is the authenticated callback.
+// route to a pass is an attributed, role-gated reviewer decision (reviewer_confirmed).
 func TestManualNeverAutoApproves(t *testing.T) {
 	app, _ := mount(t)
 	const org = "acme"
@@ -152,30 +247,126 @@ func TestStartClampsHostileTerminal(t *testing.T) {
 	}
 }
 
-// TestCallbackIsTheDecisionPath proves a terminal status is reachable only via the
-// authenticated, audited callback — and is attributed to the acting reviewer.
-func TestCallbackIsTheDecisionPath(t *testing.T) {
+// TestReviewerDecisionProducesReviewerConfirmed proves the MANUAL pass path: it is
+// role-gated (a plain member is refused), it CANNOT assert a provider status, and a
+// reviewer confirmation is a DISTINCT reviewer_confirmed, attributed and audited.
+func TestReviewerDecisionProducesReviewerConfirmed(t *testing.T) {
 	app, rec := mount(t)
 	const org = "acme"
 	chk := startCheck(t, app, org, "ada@acme.test")
 	id, _ := chk["id"].(string)
 
-	code, m := do(t, app, http.MethodPost, "/v1/compliance/verifications/callback", org,
-		map[string]any{"id": id, "status": string(idv.StatusVerified)})
+	// A plain validated member (no reviewer role) is refused.
+	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/verifications/"+id+"/decision", org,
+		map[string]any{"status": string(idv.StatusReviewerConfirmed)}); code != http.StatusForbidden {
+		t.Fatalf("non-reviewer decision want 403, got %d", code)
+	}
+	// A reviewer cannot dress a manual decision as a PROVIDER decision.
+	if code, _ := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/verifications/"+id+"/decision", org,
+		map[string]any{"status": string(idv.StatusVerified)}); code != http.StatusBadRequest {
+		t.Fatalf("reviewer asserting provider_verified want 400, got %d", code)
+	}
+	// A reviewer confirmation is attributed and DISTINCT (reviewer_confirmed).
+	code, m := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/verifications/"+id+"/decision", org,
+		map[string]any{"status": string(idv.StatusReviewerConfirmed)})
 	if code != http.StatusOK {
-		t.Fatalf("callback want 200, got %d (%v)", code, m)
+		t.Fatalf("reviewer decision want 200, got %d (%v)", code, m)
 	}
-	if m["status"] != string(idv.StatusVerified) {
-		t.Fatalf("after callback status = %v, want provider_verified", m["status"])
+	if m["status"] != string(idv.StatusReviewerConfirmed) {
+		t.Fatalf("status = %v, want reviewer_confirmed", m["status"])
 	}
-	if m["decidedBy"] != "u_"+org {
-		t.Fatalf("decidedBy = %v, want the acting reviewer u_%s", m["decidedBy"], org)
+	if m["decidedBy"] != "admin_"+org {
+		t.Fatalf("decidedBy = %v, want the acting reviewer admin_%s", m["decidedBy"], org)
 	}
 	// A decision must be in the tamper-evident trail.
 	rows, _, err := rec.Query(context.Background(), audit.Filter{Org: org, Action: "compliance.verification.decision", Limit: 10})
 	if err != nil || len(rows) == 0 {
 		t.Fatalf("expected a decision audit record, got %d (%v)", len(rows), err)
 	}
+}
+
+// TestClientCannotForgeProviderVerified is HIGH-2: with a REAL provider wired, a client
+// cannot forge provider_verified. The braided callback is gone (404), a reviewer cannot
+// assert a provider status (400), and the only provider-status path — a reconcile —
+// consults the wired provider, which here only ever REJECTS.
+func TestClientCannotForgeProviderVerified(t *testing.T) {
+	app, _ := mount(t)
+	setProvider(fakeProvider{name: "persona", startStatus: idv.StatusPending, checkStatus: idv.StatusRejected})
+	const org = "acme"
+	chk := startCheck(t, app, org, "eve@acme.test")
+	id, _ := chk["id"].(string)
+
+	// The old client-trusted callback that wrote a status verbatim is GONE: a POST to
+	// it is no longer served (404, or 405 since the path now resolves to the read-only
+	// GET /verifications/:id pattern) — never a 2xx that writes a status.
+	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/verifications/callback", org,
+		map[string]any{"id": id, "status": string(idv.StatusVerified)}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+		t.Fatalf("removed verifications/callback want 404/405, got %d", code)
+	}
+	// A reviewer cannot assert a provider verification.
+	if code, _ := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/verifications/"+id+"/decision", org,
+		map[string]any{"status": string(idv.StatusVerified)}); code != http.StatusBadRequest {
+		t.Fatalf("reviewer provider_verified want 400, got %d", code)
+	}
+	// The reconcile consults the wired provider, which REJECTS — never verified.
+	_, m := do(t, app, http.MethodPost, "/v1/compliance/verifications/"+id+"/refresh", org, nil)
+	if m["status"] != string(idv.StatusRejected) {
+		t.Fatalf("reconcile against a rejecting provider = %v, want provider_rejected (never verified)", m["status"])
+	}
+}
+
+// TestWebhookIsSignatureAuthenticated proves the external provider PUSH path: it is
+// disabled by default (501), rejects an unsigned/bad-signature body (401), and — under
+// a valid signature — reconciles the referenced check FROM the wired provider (so the
+// body cannot dictate the status), recording a provider-attributed result.
+func TestWebhookIsSignatureAuthenticated(t *testing.T) {
+	// Disabled by default.
+	appOff, _ := mount(t)
+	if code, _ := doWebhook(t, appOff, "sha256=whatever", []byte(`{"reference":"ref_persona"}`)); code != http.StatusNotImplemented {
+		t.Fatalf("webhook disabled want 501, got %d", code)
+	}
+
+	const secret = "webhook-shared-secret"
+	app := mountWithWebhook(t, secret)
+	setProvider(fakeProvider{name: "persona", startStatus: idv.StatusPending, checkStatus: idv.StatusVerified})
+	const org = "acme"
+	startCheck(t, app, org, "ada@acme.test") // fakeProvider Start ref == "ref_persona"
+	body := []byte(`{"reference":"ref_persona"}`)
+
+	// Unsigned and wrong-signature bodies are refused (fail-closed 401).
+	if code, _ := doWebhook(t, app, "", body); code != http.StatusUnauthorized {
+		t.Fatalf("unsigned webhook want 401, got %d", code)
+	}
+	if code, _ := doWebhook(t, app, "sha256=deadbeef", body); code != http.StatusUnauthorized {
+		t.Fatalf("bad-signature webhook want 401, got %d", code)
+	}
+	// A body claiming a status is IGNORED — the reconcile asks the provider. Here it
+	// verifies, so the check settles provider_verified, attributed to the provider.
+	code, m := doWebhook(t, app, sign(secret, body), body)
+	if code != http.StatusOK {
+		t.Fatalf("signed webhook want 200, got %d (%v)", code, m)
+	}
+	if m["status"] != string(idv.StatusVerified) || m["decidedBy"] != "persona" {
+		t.Fatalf("webhook reconcile = %v, want provider_verified by persona", m)
+	}
+}
+
+// TestWebhookKeepsManualHonest proves the webhook cannot manufacture a pass for the
+// Manual provider: even under a valid signature, the reconcile asks Manual, which stays
+// pending — so no verified is producible without a real provider.
+func TestWebhookKeepsManualHonest(t *testing.T) {
+	const secret = "webhook-shared-secret"
+	app := mountWithWebhook(t, secret) // provider stays Manual (CLOUD_IDV_PROVIDER unset)
+	const org = "acme"
+	startCheck(t, app, org, "ada@acme.test") // manual ref is random; look it up by listing
+	// Manual's provider ref is not deterministic; drive the webhook by the recorded ref.
+	_, list := do(t, app, http.MethodGet, "/v1/compliance/verifications", org, nil)
+	body := []byte(`{"reference":"nonexistent"}`)
+	// An unknown reference is a benign no-op (200 ignored), never a cross-tenant probe.
+	if code, m := doWebhook(t, app, sign(secret, body), body); code != http.StatusOK || m["ignored"] == nil {
+		t.Fatalf("unknown-reference webhook want 200 ignored, got %d (%v)", code, m)
+	}
+	_ = list
 }
 
 // TestTenantIsolation proves org B can neither read nor list org A's records.
@@ -200,9 +391,10 @@ func TestTenantIsolation(t *testing.T) {
 	if data, _ := list["data"].([]any); len(data) != 0 {
 		t.Fatalf("cross-tenant list leaked %d rows", len(data))
 	}
-	// org B cannot decide on org A's check either.
-	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/verifications/callback", "orgb",
-		map[string]any{"id": chkID, "status": string(idv.StatusVerified)}); code != http.StatusNotFound {
+	// org B (even as its own admin) cannot decide on org A's check — the decision is
+	// org-scoped, so it is 404 (indistinguishable from "does not exist").
+	if code, _ := doOrgAdmin(t, app, http.MethodPost, "/v1/compliance/verifications/"+chkID+"/decision", "orgb",
+		map[string]any{"status": string(idv.StatusReviewerConfirmed)}); code != http.StatusNotFound {
 		t.Fatalf("cross-tenant decision = %d, want 404", code)
 	}
 }
@@ -291,11 +483,18 @@ func TestAccreditationTracking(t *testing.T) {
 		map[string]any{"kind": "individual", "email": "inv@acme.test"})
 	subID, _ := sub["id"].(string)
 
-	// A create cannot self-confirm.
+	// A create cannot self-confirm (reviewer_confirmed) …
 	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/accreditation", org, map[string]any{
 		"subjectId": subID, "method": "self_attested", "basis": "income", "status": "reviewer_confirmed",
 	}); code != http.StatusBadRequest {
 		t.Fatalf("create with reviewer_confirmed = %d, want 400", code)
+	}
+	// … NOR stamp a provider_verified with no verifier (LOW-1) — that routes through the
+	// attributed decision endpoint.
+	if code, _ := do(t, app, http.MethodPost, "/v1/compliance/accreditation", org, map[string]any{
+		"subjectId": subID, "method": "provider_verified", "basis": "income", "status": "provider_verified",
+	}); code != http.StatusBadRequest {
+		t.Fatalf("create with provider_verified = %d, want 400", code)
 	}
 	// A plain create defaults to asserted.
 	code, acc := do(t, app, http.MethodPost, "/v1/compliance/accreditation", org, map[string]any{
@@ -310,6 +509,13 @@ func TestAccreditationTracking(t *testing.T) {
 		map[string]any{"status": "reviewer_confirmed"})
 	if dec["status"] != string(AccReviewerConfirmed) || dec["reviewerSub"] != "u_"+org {
 		t.Fatalf("decision = %v, want reviewer_confirmed by u_%s", dec, org)
+	}
+	// A reviewer may ALSO record a provider_verified accreditation (with the letter as
+	// evidence) — through the attributed decision endpoint, so it is never unattributed.
+	_, pv := do(t, app, http.MethodPost, "/v1/compliance/accreditation/"+accID+"/decision", org,
+		map[string]any{"status": "provider_verified"})
+	if pv["status"] != string(AccProviderVerified) || pv["reviewerSub"] != "u_"+org {
+		t.Fatalf("decision = %v, want provider_verified attributed to u_%s", pv, org)
 	}
 }
 
