@@ -164,9 +164,10 @@ func newVenue(t *testing.T, f folder, kc *kms.Client) *zip.App {
 	s := &cloud.Service[state]{
 		Base: cloud.NewBase(deps, "venue"),
 		State: state{kms: kc, fleet: f, drivers: map[string]driver{
-			providerDO:  doDriver{},
-			providerAWS: awsDriver{},
-			providerGCP: gcpDriver{},
+			providerDO:    doDriver{},
+			providerAWS:   awsDriver{},
+			providerGCP:   gcpDriver{},
+			providerAzure: azureDriver{},
 		}},
 	}
 	app := zip.New(zip.Config{Logger: luxlog.New("test")})
@@ -580,7 +581,7 @@ func TestProviderCards(t *testing.T) {
 	if r.Code != http.StatusOK {
 		t.Fatalf("cards want 200, got %d", r.Code)
 	}
-	for _, want := range []string{providerDO, providerAWS, providerGCP} {
+	for _, want := range []string{providerDO, providerAWS, providerGCP, providerAzure} {
 		if !strings.Contains(string(r.Body), want) {
 			t.Fatalf("cards missing %s: %s", want, r.Body)
 		}
