@@ -38,6 +38,14 @@ type homeData struct {
 	Repos []repoRow
 }
 
+type exploreData struct {
+	Base      string
+	Query     string
+	Repos     []exploreRow
+	SignedIn  bool
+	ViewerOrg string
+}
+
 type repoData struct {
 	Base                        string
 	Org, Repo, Description, Ref string
@@ -106,6 +114,7 @@ var tmpl = template.Must(template.New("chrome").Parse(chromeHTML))
 var (
 	chromeTmpl  = tmpl
 	homeTmpl    = template.Must(template.New("home").Parse(homeHTML))
+	exploreTmpl = template.Must(template.New("explore").Parse(exploreHTML))
 	repoTmpl    = template.Must(template.New("repo").Parse(repoHTML))
 	treeTmpl    = template.Must(template.New("tree").Parse(treeHTML))
 	blobTmpl    = template.Must(template.New("blob").Parse(blobHTML))
@@ -161,6 +170,21 @@ const homeHTML = `<h1>{{.Org}}</h1>
 <span class="muted">{{.Size}}</span>
 </div>{{end}}
 </div>{{else}}<div class="panel"><div class="empty">No repositories yet.</div></div>{{end}}`
+
+const exploreHTML = `<h1>Explore Hanzo Git</h1>
+<p class="muted">Open-source projects across the Hanzo ecosystem — browse, search, and clone anything public. No sign-in required.</p>
+<form method="get" action="{{.Base}}/explore" class="clone" style="margin:16px 0">
+<input name="q" value="{{.Query}}" placeholder="Search public repositories…" autofocus>
+</form>
+<p class="muted">{{len .Repos}} public repositor{{if eq (len .Repos) 1}}y{{else}}ies{{end}}{{if .Query}} matching “{{.Query}}”{{end}}</p>
+{{if .Repos}}<div class="panel">
+{{range .Repos}}<div class="row">
+<div style="flex:1"><a href="{{$.Base}}/{{.Org}}/{{.Name}}"><span class="muted">{{.Org}}/</span>{{.Name}}</a>
+{{if .Description}}<div class="muted">{{.Description}}</div>{{end}}</div>
+<span class="pill">{{.DefaultBranch}}</span>
+<span class="muted">{{.Size}}</span>
+</div>{{end}}
+</div>{{else}}<div class="panel"><div class="empty">{{if .Query}}No public repositories match “{{.Query}}”.{{else}}No public repositories yet.{{end}}</div></div>{{end}}`
 
 const repoHTML = `<h1>{{.Repo}}</h1>
 {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
