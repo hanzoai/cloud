@@ -3,7 +3,9 @@ package apps
 import (
 	"context"
 
+	"github.com/hanzoai/cloud/clients/ads"
 	"github.com/hanzoai/cloud/clients/automations"
+	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/coding"
 	"github.com/hanzoai/cloud/clients/git"
 	"github.com/hanzoai/cloud/clients/integrations"
@@ -34,4 +36,39 @@ func init() {
 			Source: source, Name: name, DedupeKey: dedupeKey, Depth: depth, Payload: payload,
 		})
 	})
+
+	// GTM PAID channel: the /v1/campaign orchestrator fans out to executors that
+	// satisfy campaign.Channel; the composition root is the ONE place that imports
+	// both campaign and the ad plane, so it adapts ads' connector-consuming
+	// execution funcs (provider.go — each resolves the org's ad token through
+	// integrations.TokenFor and fails closed) onto the primitive-typed channel
+	// seam. campaign never imports ads and ads never imports campaign — the same
+	// injected-function decoupling the coding dispatcher above uses.
+	campaign.RegisterChannel(campaign.NewChannel(campaign.KindPaid,
+		func(ctx context.Context, org string, p campaign.Plan) (campaign.Ref, error) {
+			r, err := ads.LaunchPaid(ctx, org, ads.PaidPlan{
+				Platform: p.Platform, Account: p.Account, Name: p.Name,
+				Objective: p.Objective, BudgetCents: p.BudgetCents, ScheduleAt: p.ScheduleAt,
+			})
+			return campaign.Ref{Platform: r.Platform, Account: r.Account, ExternalID: r.ExternalID, Status: r.Status, Detail: r.Detail}, err
+		},
+		func(ctx context.Context, org string, ref campaign.Ref) (int64, error) {
+			return ads.PaidSpend(ctx, org, ads.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
+		},
+		func(ctx context.Context, org string, ref campaign.Ref) error {
+			return ads.PausePaid(ctx, org, ads.PaidRef{Platform: ref.Platform, Account: ref.Account, ExternalID: ref.ExternalID})
+		},
+	))
+
+	// GTM ORGANIC + EMAIL channels and the creative-A/B experiment seam wire HERE
+	// the same way once their executors land (designed follow-ons):
+	//
+	//   campaign.RegisterChannel(campaign.NewChannel(campaign.KindOrganic,
+	//       publish.Syndicate, publish.NoSpend, publish.Unpublish))     // social connectors
+	//   campaign.RegisterChannel(campaign.NewChannel(campaign.KindEmail,
+	//       marketing.Broadcast, marketing.NoSpend, marketing.Halt))    // email connectors
+	//   campaign.SetExperiment(experiment.Assign, experiment.RecordEvidence) // flags-assignment + analytics evidence
+	//
+	// Until wired, those channels record "unavailable" on a fan-out (honest) and a
+	// campaign runs a single creative — never a fabricated launch or variant.
 }
