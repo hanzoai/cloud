@@ -241,6 +241,8 @@ github.com/alibabacloud-go/tea-xml v1.1.3 h1:7LYnm+JbOq2B+T/B0fHC4Ies4/FofC4zHzY
 github.com/alibabacloud-go/tea-xml v1.1.3/go.mod h1:Rq08vgCcCAjHyRi/M7xlHKUykZCEtyBy9+DPF6GgEu8=
 github.com/alibabacloud-go/vod-20170321/v2 v2.16.10 h1:TqU7TrGbW2aIbhiKohHk6lboLagKZRcqqZroN1FARls=
 github.com/alibabacloud-go/vod-20170321/v2 v2.16.10/go.mod h1:csk7ilFVicqblo61S/UwhQzesaKClXBhpeUOsD06Duk=
+github.com/alicebob/miniredis/v2 v2.38.0 h1:nZAzCR+Lj+Vxk4ZXzm2NuKq2O33RXj1XxJ2e2uP9jiw=
+github.com/alicebob/miniredis/v2 v2.38.0/go.mod h1:TcL7YfarKPGDAthEtl5NBeHZfeUQj6OXMm/+iu5cLMM=
 github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.3.0 h1:wQlqotpyjYPjJz+Noh5bRu7Snmydk8SKC5Z6u1CR20Y=
 github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.3.0/go.mod h1:FTzydeQVmR24FI0D6XWUOMKckjXehM/jgMn1xC+DA9M=
 github.com/aliyun/credentials-go v1.1.2/go.mod h1:ozcZaMR5kLM7pwtCMEpVmQ242suV6qTJya2bDq4X1Tw=
@@ -1059,8 +1061,6 @@ github.com/hanzoai/account v0.2.0 h1:WxIut3YMz8JNdHerlRIqP1a+k3P79BIKM1mjfRFDG0Y
 github.com/hanzoai/account v0.2.0/go.mod h1:8OzIGRphAhlabOI74O4GoL3RM0y8mbUV0pQUKgXLjkw=
 github.com/hanzoai/agent v0.1.3 h1:zzV4t8kN/m/wTLrqzEy0fxxONSZbx3XSVH7TIR9gZNU=
 github.com/hanzoai/agent v0.1.3/go.mod h1:Z3hCBdSeN/nGV4o+3F4psQ2bbFk17+tMP5l+G2ssNNA=
-github.com/hanzoai/ai v1.830.0 h1:l7bZwuEPuql+z3aE+nmn/Ei24+MqXoJXL32Z3W+vueQ=
-github.com/hanzoai/ai v1.830.0/go.mod h1:BeIlJNoqJ38l77meu6pgYfZqnxdebqcDJlZNgvwDJ8w=
 github.com/hanzoai/ai v1.831.0 h1:LSsI7gCooUN4bdrNRZE2dQXVSaDJpKHDZcBBOPMoqXU=
 github.com/hanzoai/ai v1.831.0/go.mod h1:Qj9xhRkEWYgYlEJyjIZDvOX2yGe9Ylg6AvF1Op+aIRU=
 github.com/hanzoai/authz v1.10.7 h1:JrHljH29mbmVi8u6/6EVG7R0NiFhIYYm2WUBBuBmFq0=
@@ -1147,8 +1147,8 @@ github.com/hanzoai/sqlite v0.3.2 h1:B/TRunlIDZECEypmr6rHeNyWf37YZXvPJHBDEFMKn/g=
 github.com/hanzoai/sqlite v0.3.2/go.mod h1:a3llsefKbu2Iq/0rJ1mlWCaU2t2cXh+aze85x+oW72k=
 github.com/hanzoai/stream v1.2.0 h1:AVKg/YBgzZ/x8hGjg+bnpldMR34x1FzSp84GVdAPhfI=
 github.com/hanzoai/stream v1.2.0/go.mod h1:mn5cnMQYzdGh5vlslCnh1fdI79qFvbet4MpvY0ME5YU=
-github.com/hanzoai/tasks v1.51.3 h1:7aPYCKBzGXGkYFEzXw7A2n+lPK2KYVHRud86Hxa7018=
-github.com/hanzoai/tasks v1.51.3/go.mod h1:+Oqq+L3nY4uKeLyPanimlbcym/HoIUDaBezgIs6v4Hk=
+github.com/hanzoai/tasks v1.51.4 h1:qMx80ZfiJPQIDd9lpxxJhDywKYnHOmKxL2IfhZfExgk=
+github.com/hanzoai/tasks v1.51.4/go.mod h1:+Oqq+L3nY4uKeLyPanimlbcym/HoIUDaBezgIs6v4Hk=
 github.com/hanzoai/thinking v0.1.1 h1:JuJ9s3q53NRSHSU+/zEdg089vppuNUKK/9BG7bairLw=
 github.com/hanzoai/thinking v0.1.1/go.mod h1:2lkNDDi+7mAipRhZZ57uqoqrzLKGBdoU5Rb6fGSOoR4=
 github.com/hanzoai/vfs v0.6.4 h1:7T1b/ONc2/3RhYwIAYB8MYAjXbP5fqnqsK2gZ3yQOSU=
@@ -2122,6 +2122,8 @@ github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yuin/goldmark v1.7.16 h1:n+CJdUxaFMiDUNnWC3dMWCIQJSkxH4uz3ZwQBkAlVNE=
 github.com/yuin/goldmark v1.7.16/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
+github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
+github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 github.com/zap-proto/fiber/v3 v3.2.1 h1:k45oKyTwySPtGt8sPz2Ao8OUHc7pDEhai8Np2Ym6Jbg=

@@ -13,6 +13,14 @@
 coverage.txt
 coverage.html
 
+# cek encryption sidecars are key material — never commit one from a source tree.
+# Tests seal their stores under t.TempDir(); a sidecar in a package dir (e.g. from a
+# test that opened ":memory:") is a mistake. The cek testdata fixtures are the one
+# intentional exception.
+*.dek
+*.cek.lock
+!cek/testdata/**
+
 # Environment files
 .env
 .env.*
