@@ -16,19 +16,24 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/fleet"
 	"github.com/hanzoai/cloud/clients/kms"
 	luxlog "github.com/luxfi/log"
+	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/clientcmd"
 )
+
+// fleetAllowPrivateHostsEnv mirrors fleet.allowPrivateHostsEnv — set so the fold
+// gate accepts the loopback fake apiserver in tests.
+const fleetAllowPrivateHostsEnv = "FLEET_ALLOW_PRIVATE_HOSTS"
 
 // ── harness ─────────────────────────────────────────────────────────────────
 
@@ -64,11 +69,12 @@ func newKMS(t *testing.T) *kms.Client {
 	return kc
 }
 
-// recFolder is a faithful fake fold sink: Register REPLICATES fleet.Register's
-// reachability contract — it builds a client from the kubeconfig and lists nodes
-// against the real (fake) apiserver, counting GPUs — so a fold proves the
-// discovered kubeconfig is valid and reaches a live apiserver. It records the
-// resulting clusters keyed (org|project|name), org-scoped exactly like fleet.
+// recFolder is a faithful fake fold sink: Register goes through the REAL
+// fleet.SafeRESTConfig gate (exec-plugin rejection + apiserver SSRF guard) and
+// then replicates fleet.Register's reachability contract — lists nodes against the
+// (fake) apiserver, counting GPUs — so a fold proves the discovered kubeconfig is
+// safe, valid, and reaches a live apiserver. Records clusters keyed
+// (org|project|name), org-scoped exactly like fleet.
 type recFolder struct {
 	mu       sync.Mutex
 	clusters map[string]fleet.Cluster
@@ -90,9 +96,9 @@ func key(org, project, name string) string { return scope(org, project) + "|" + 
 var nodeGVR = schema.GroupVersionResource{Version: "v1", Resource: "nodes"}
 
 func (f *recFolder) Register(ctx context.Context, org, project, name, kubeconfig, provider string, isDefault bool) (fleet.Cluster, error) {
-	restCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfig))
+	restCfg, err := fleet.SafeRESTConfig([]byte(kubeconfig))
 	if err != nil {
-		return fleet.Cluster{}, fmt.Errorf("kubeconfig unusable: %w", err)
+		return fleet.Cluster{}, err
 	}
 	dyn, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
@@ -203,7 +209,10 @@ func call(t *testing.T, app *zip.App, method, path, org, project string, admin b
 	if project != "" {
 		rq.Header.Set("X-Project-Id", project)
 	}
-	resp, err := app.Fiber().Test(rq)
+	// Generous timeout: the fold does a TLS dial + node-list, which can exceed
+	// fiber's tight 1s default under CI-box load. This bounds the harness, not the
+	// handler's behavior.
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("Test %s %s: %v", method, path, err)
 	}
@@ -310,7 +319,7 @@ func linkDO(t *testing.T, app *zip.App, org, project, label, token string) resul
 // token is sealed in KMS and never in the response, and the account lists the
 // folded cluster.
 func TestDigitalOcean_LinkDiscoversAndFolds(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "dop_v1_secret", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -366,7 +375,7 @@ func TestDigitalOcean_LinkDiscoversAndFolds(t *testing.T) {
 // An org may link MANY labeled accounts per provider; each seals independently
 // and folds its own clusters.
 func TestMultiCredentialPerOrg(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	// Two DO "teams", each their own token + cluster, on one stub keyed by token.
 	teamA := doStub(t, "tokA", map[string]string{"ca": api.URL})
@@ -407,7 +416,7 @@ func TestMultiCredentialPerOrg(t *testing.T) {
 // One org can neither see, sync, nor unlink another org's accounts; its folds are
 // isolated in its own fleet shard.
 func TestTenantIsolation(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "tok", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -444,7 +453,7 @@ func TestTenantIsolation(t *testing.T) {
 
 // Without KMS ready, link fails closed (503) and stores nothing — never plaintext.
 func TestFailClosedNoKMS(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "tok", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -462,7 +471,7 @@ func TestFailClosedNoKMS(t *testing.T) {
 
 // A bad credential is refused and NOTHING is stored (verify-before-seal).
 func TestBadCredentialStoresNothing(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "correct-token", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -489,7 +498,7 @@ func TestBadCredentialStoresNothing(t *testing.T) {
 // unlink detaches this account's folded clusters, deletes the sealed credential,
 // and forgets the account. Idempotent.
 func TestUnlinkDetaches(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "tok", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -521,7 +530,7 @@ func TestUnlinkDetaches(t *testing.T) {
 
 // sync reconciles the fold set: new clusters fold, vanished ones detach.
 func TestSyncReconciles(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	clusters := map[string]string{"c1": api.URL}
 	do := doStub(t, "tok", clusters)
@@ -556,7 +565,7 @@ func TestSyncReconciles(t *testing.T) {
 
 // Mutations require org admin; reads do not.
 func TestAdminGate(t *testing.T) {
-	t.Setenv(allowPrivateEndpointsEnv, "1")
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
 	api := fakeAPIServer(t)
 	do := doStub(t, "tok", map[string]string{"c1": api.URL})
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -591,7 +600,7 @@ func TestProviderCards(t *testing.T) {
 // The SSRF guard blocks a DISCOVERED endpoint on a non-routable host when the
 // test bypass is OFF: the cluster is not folded and the error is generic.
 func TestSSRFGuardBlocksPrivateEndpoint(t *testing.T) {
-	// NOTE: allowPrivateEndpointsEnv deliberately UNSET here.
+	// NOTE: fleetAllowPrivateHostsEnv deliberately UNSET here.
 	api := fakeAPIServer(t)
 	do := doStub(t, "tok", map[string]string{"c1": api.URL}) // api.URL is loopback https
 	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
@@ -614,5 +623,111 @@ func TestSSRFGuardBlocksPrivateEndpoint(t *testing.T) {
 	}
 	if f.count() != 0 {
 		t.Fatalf("nothing should fold past the SSRF guard, got %d", f.count())
+	}
+}
+
+// doStubWithKube lets a test control the LIST-reported endpoint and the
+// kubeconfig independently (to prove the fold guards the kubeconfig SERVER, not
+// the discovered endpoint) for a single cluster c1.
+func doStubWithKube(t *testing.T, wantToken, listEndpoint, kube string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/account", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+wantToken {
+			http.Error(w, `{"id":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"account":{"uuid":"acct","email":"a@b.co"}}`))
+	})
+	mux.HandleFunc("/v2/kubernetes/clusters", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"kubernetes_clusters":[{"id":"c1","name":"c1","region":"sfo3","endpoint":%q}],"meta":{"total":1}}`, listEndpoint)))
+	})
+	mux.HandleFunc("/v2/kubernetes/clusters/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(kube))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func execKubeconfig(server string) string {
+	return `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: ` + server + `
+    insecure-skip-tls-verify: true
+  name: c
+contexts:
+- context: {cluster: c, user: u}
+  name: c
+current-context: c
+users:
+- name: u
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: /bin/sh
+      args: ["-c", "id"]`
+}
+
+// HIGH-3: the fold guards the kubeconfig SERVER (the actual dial target), not the
+// discovery-reported endpoint. A cluster whose LIST endpoint looks public but
+// whose kubeconfig server is a private/loopback host is NOT folded — even with the
+// discovered endpoint passing any endpoint-level check.
+func TestFoldGuardsKubeconfigServerNotDiscoveredEndpoint(t *testing.T) {
+	// Bypass deliberately OFF: the loopback SERVER must be rejected.
+	api := fakeAPIServer(t)
+	do := doStubWithKube(t, "tok", "https://public.example.com:6443", doKubeconfig(api.URL))
+	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
+	f := newRecFolder()
+	app := newVenue(t, f, newKMS(t))
+
+	r := linkDO(t, app, "acme", "", "prod", "tok")
+	if r.Code != http.StatusCreated {
+		t.Fatalf("link should still succeed, got %d (%s)", r.Code, r.Body)
+	}
+	var out struct {
+		Clusters []clusterResult `json:"clusters"`
+	}
+	_ = json.Unmarshal(r.Body, &out)
+	if len(out.Clusters) != 1 || out.Clusters[0].Folded {
+		t.Fatalf("private kubeconfig server must NOT fold despite a public endpoint, got %+v", out.Clusters)
+	}
+	if !strings.Contains(out.Clusters[0].Error, "non-routable") {
+		t.Fatalf("want server SSRF-guard error, got %q", out.Clusters[0].Error)
+	}
+	if f.count() != 0 {
+		t.Fatalf("nothing should fold, got %d", f.count())
+	}
+}
+
+// HIGH-2: a kubeconfig using an exec credential plugin is REJECTED at fold — it is
+// never used to build a client (which would run the plugin with the pod's env).
+func TestFoldRejectsExecKubeconfig(t *testing.T) {
+	// Bypass ON to isolate: rejection is for the exec plugin, not the host.
+	t.Setenv(fleetAllowPrivateHostsEnv, "1")
+	api := fakeAPIServer(t)
+	do := doStubWithKube(t, "tok", api.URL, execKubeconfig(api.URL))
+	t.Setenv("DIGITALOCEAN_API_URL", do.URL)
+	f := newRecFolder()
+	app := newVenue(t, f, newKMS(t))
+
+	r := linkDO(t, app, "acme", "", "prod", "tok")
+	if r.Code != http.StatusCreated {
+		t.Fatalf("link should still succeed, got %d (%s)", r.Code, r.Body)
+	}
+	var out struct {
+		Clusters []clusterResult `json:"clusters"`
+	}
+	_ = json.Unmarshal(r.Body, &out)
+	if len(out.Clusters) != 1 || out.Clusters[0].Folded {
+		t.Fatalf("exec kubeconfig must NOT fold, got %+v", out.Clusters)
+	}
+	if !strings.Contains(out.Clusters[0].Error, "exec credential plugin") {
+		t.Fatalf("want exec-plugin rejection, got %q", out.Clusters[0].Error)
+	}
+	if f.count() != 0 {
+		t.Fatalf("an exec kubeconfig must never fold, got %d", f.count())
 	}
 }

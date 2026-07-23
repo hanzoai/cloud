@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -57,11 +58,50 @@ func gcpTokenSource(ctx context.Context, cr cred) (oauth2.TokenSource, string, e
 	if strings.TrimSpace(cr.CredentialJSON) == "" {
 		return nil, "", fmt.Errorf("credentialJson is required")
 	}
+	if err := validateGoogleCredential([]byte(cr.CredentialJSON)); err != nil {
+		return nil, "", err
+	}
 	creds, err := google.CredentialsFromJSON(ctx, []byte(cr.CredentialJSON), cloudPlatformScope)
 	if err != nil {
 		return nil, "", fmt.Errorf("gcp credentials rejected")
 	}
 	return creds.TokenSource, firstNonEmpty(proj, creds.ProjectID), nil
+}
+
+// validateGoogleCredential fail-closes the customer-supplied google credentials
+// JSON to a SAFE shape BEFORE it reaches google.CredentialsFromJSON. An
+// external_account (Workload Identity Federation) config lets its AUTHOR choose
+// where the pod fetches a subject token (credential_source.url → SSRF from the
+// pod, credential_source.file → arbitrary local file read) and where tokens are
+// sent (token_url, which x/oauth2 does not validate) — a full read/exfiltration
+// primitive that fires during verify(), before anything is sealed. So only a
+// service_account key is accepted, and its token_uri is pinned to a google host.
+// Keyless WIF is offered instead via a HANZO-OWNED config keyed by project (a
+// follow-on), never a customer-authored external_account.
+func validateGoogleCredential(raw []byte) error {
+	var probe struct {
+		Type     string `json:"type"`
+		TokenURI string `json:"token_uri"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return fmt.Errorf("credentialJson is not valid JSON")
+	}
+	if probe.Type != "service_account" {
+		return fmt.Errorf("only a service_account key is accepted (external_account/WIF must be Hanzo-configured)")
+	}
+	if t := strings.TrimSpace(probe.TokenURI); t != "" && !isGoogleHost(t) {
+		return fmt.Errorf("service_account token_uri must be a google endpoint")
+	}
+	return nil
+}
+
+func isGoogleHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	h := strings.ToLower(u.Hostname())
+	return h == "googleapis.com" || strings.HasSuffix(h, ".googleapis.com") || h == "accounts.google.com"
 }
 
 func firstProject(cr cred) string {
