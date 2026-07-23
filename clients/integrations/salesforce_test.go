@@ -83,6 +83,11 @@ func TestSalesforceInstanceGuard(t *testing.T) {
 		"ftp://acme.salesforce.com",             // wrong scheme
 		"https://",                              // no host
 		"not a url",
+		"https://attacker.com",                // non-Salesforce host (SSRF target)
+		"https://169.254.169.254",             // cloud IMDS (IP literal)
+		"https://10.0.0.5",                    // RFC1918
+		"https://127.0.0.1",                   // loopback
+		"https://salesforce.com.attacker.com", // suffix-smuggle
 	} {
 		if _, err := salesforceInstance(bad); err == nil {
 			t.Errorf("salesforceInstance(%q): want reject", bad)
@@ -90,6 +95,10 @@ func TestSalesforceInstanceGuard(t *testing.T) {
 	}
 	if got, err := salesforceInstance("https://acme.my.salesforce.com/services"); err != nil || got != "https://acme.my.salesforce.com" {
 		t.Errorf("valid instance normalized wrong: %q %v", got, err)
+	}
+	// A port on a valid Salesforce host is DROPPED (not honored as a dial target).
+	if got, err := salesforceInstance("https://acme.my.salesforce.com:8080"); err != nil || got != "https://acme.my.salesforce.com" {
+		t.Errorf("port not dropped: %q %v", got, err)
 	}
 	// An exchange whose token response omits a usable instance_url FAILS (a Salesforce
 	// connection with no API host is broken; refusing it blocks SSRF injection).
