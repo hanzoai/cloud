@@ -163,7 +163,7 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "get: %v", err)
 	}
-	if !s.State.exec.configured() {
+	if f.Target != "fleet" && !s.State.exec.configured() {
 		return zip.Errorf(http.StatusServiceUnavailable, "code execution runtime not configured on this deployment")
 	}
 	var body struct {
@@ -186,7 +186,13 @@ func invoke(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	start := time.Now()
-	res, runErr := s.State.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
+	var res execResult
+	var runErr error
+	if f.Target == "fleet" {
+		res, runErr = fleetRun(c.Context(), org, f, body.Input)
+	} else {
+		res, runErr = s.State.exec.run(c.Context(), f, body.Input, f.TimeoutSec)
+	}
 	dur := time.Since(start).Milliseconds()
 
 	id, _ := genID("inv")
