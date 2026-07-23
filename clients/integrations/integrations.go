@@ -106,11 +106,6 @@ type ExchangeResult struct {
 	ExpiresAt    int64             // access-token expiry, unix seconds; 0 = non-expiring/unknown. Set by user-plane device/refresh providers; the org plane ignores it.
 }
 
-// apiKeyKind marks a Provider whose credential is supplied by the customer and
-// verified live, rather than acquired via the 3-legged OAuth flow (the default
-// for an empty Kind). See Provider.Kind.
-const apiKeyKind = "apikey"
-
 const (
 	// userScope marks a Provider on the per-user /v1/connectors plane. User-scoped
 	// providers are invisible on /v1/integrations; their rows are keyed
@@ -207,11 +202,18 @@ type Provider struct {
 	RedirectPath string   // OAuth redirect path; MUST equal /v1/integrations/{id}/callback
 	Secrets      []string // KMS secret names this provider custodies (deleted on disconnect)
 
-	// Kind selects credential acquisition. Empty/"oauth" (default) uses the
-	// 3-legged Authorize/Exchange flow. "apikey" (apiKeyKind) takes a
-	// customer-held credential submitted to /connect (from `hanzo connector add`,
-	// read on STDIN — never argv/URL), VERIFIES it live, and seals it to KMS; such
-	// providers use Verify, not Authorize/Exchange, and have no OAuth callback.
+	// Capabilities are what CONNECTING this extension ENABLES downstream — the
+	// capability surfaces (/v1/cloudflare, /v1/clusters, model routing, the chat
+	// bridge, git sync) that CONSUME the connector by id. They are DATA on the
+	// Extension view, never a second connector; the boundary is: connector = the
+	// connection+credential, capability = what it unlocks. Empty for a plain key.
+	Capabilities []string
+
+	// Kind is the archetype (kindOf): "key" (kindKey) — a customer-held credential
+	// submitted to /connect (from `hanzo connector add`, read on STDIN — never
+	// argv/URL), VERIFIED live and sealed to KMS (Verify, no OAuth callback); or ""
+	// (default) — an oauth-family flow (kindOf reads Authorize/Adopt/Device). The
+	// reserved values model/cloud/plugin/skill are for the mapped-in follow-ons.
 	Kind string
 	// AdminOnly gates /connect and /disconnect on the caller being an admin of its
 	// OWN org (principal.IsOrgAdmin — NOT SuperAdmin), parity with the platform
@@ -369,8 +371,8 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 			_ = store.Close()
 			return fmt.Errorf("integrations.Mount: org provider %q must declare Configured and Creds", id)
 		}
-		if p.Kind == apiKeyKind {
-			// apikey providers have no OAuth callback; RedirectPath is unused.
+		if p.Kind == kindKey {
+			// key providers have no OAuth callback; RedirectPath is unused.
 			continue
 		}
 		if want := callbackPath(id); p.RedirectPath != want {
@@ -422,7 +424,10 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 // in-band and survives the commerce /v1 ErrorHandlerJSON (co-mounted ahead of us),
 // which would otherwise flatten a propagated 4xx to 500. Uniform reject codes.
 func routes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/integrations", cloud.Handle(s, list))
+	// /v1/integrations keeps ONLY the capability/event surfaces (chat bridge,
+	// github app webhook, per-provider link legs). The connect+config REGISTRY —
+	// list/get/connect/callback/verify/disconnect for EVERY provider — converged
+	// onto the unified /v1/connectors plane (connectorRoutes, at the bottom).
 	app.Post("/v1/integrations/slack/events", cloud.Terminal(cloud.Handle(s, slackEvents)))
 	app.Post("/v1/integrations/slack/commands", cloud.Terminal(cloud.Handle(s, slackCommands)))
 	app.Get("/v1/integrations/slack/link", cloud.Handle(s, slackLink))
@@ -470,16 +475,11 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/integrations/telegram/link", cloud.Handle(s, telegramLink))
 	app.Get("/v1/integrations/telegram/link/auth", cloud.Handle(s, telegramLinkAuth))
 	app.Get("/v1/integrations/telegram/link/callback", cloud.Handle(s, telegramLinkCallback))
-	app.Get("/v1/integrations/:provider", cloud.Handle(s, get))
-	app.Post("/v1/integrations/:provider/connect", cloud.Handle(s, connect))
-	// PUBLIC, state-authed. RedirectPath == this path for every provider (asserted
-	// in Mount), so this single generic route serves every provider's OAuth callback.
-	app.Get("/v1/integrations/:provider/callback", cloud.Handle(s, callback))
-	app.Post("/v1/integrations/:provider/disconnect", cloud.Handle(s, disconnect))
-	// apikey connectors: re-verify a stored credential live (`hanzo connector verify`).
-	app.Post("/v1/integrations/:provider/verify", cloud.Handle(s, verifyConn))
-	// Per-USER connector plane (/v1/connectors — connectors.go). Own prefix, so no
-	// shadowing interplay with the /:provider wildcards above.
+	// The connect+config REGISTRY for EVERY provider (org + user, oauth + key) is
+	// the ONE unified plane /v1/connectors (extension.go): list/get/connect/
+	// callback/verify/disconnect all converged there. The org providers now answer
+	// as kind=oauth|key, scope=org on that surface; the user providers as
+	// kind=key|oauth, scope=user; both with the enable/disable/config axis.
 	connectorRoutes(app, s)
 }
 
@@ -729,7 +729,7 @@ func verifyConn(s *cloud.Service[state], c *zip.Ctx) error {
 	if !ok {
 		return zip.ErrNotFound("unknown provider")
 	}
-	if p.Kind != apiKeyKind || p.Verify == nil || len(p.Secrets) == 0 {
+	if p.Kind != kindKey || p.Verify == nil || len(p.Secrets) == 0 {
 		return zip.ErrBadRequest("verify is only supported for credential connectors")
 	}
 	_, found, err := s.State.store.Get(c.Context(), org, p.ID)
@@ -1094,6 +1094,18 @@ func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name 
 	if !found {
 		return nil, fmt.Errorf("integrations: %s not connected for org", provider)
 	}
+	// Enablement gate (fail-closed): a disabled org connector yields NO token, so a
+	// capability surface (/v1/cloudflare, /v1/clusters, the bridge) that consumes it
+	// stops acting the moment it is disabled. A store error also denies. A missing
+	// config row is enabled-by-default, so every already-connected connector is
+	// unaffected until explicitly disabled.
+	cfg, cfgFound, cerr := s.State.store.GetExtConfig(ctx, orgScope, org, "", provider, "")
+	if cerr != nil {
+		return nil, fmt.Errorf("integrations: enablement check: %w", cerr)
+	}
+	if cfgFound && !cfg.Enabled {
+		return nil, fmt.Errorf("integrations: %s connector is disabled", provider)
+	}
 	if !kmsReady(s) {
 		return nil, kms.ErrMasterKeyMissing
 	}
@@ -1134,7 +1146,11 @@ func ConnectionFor(org, provider string) (Connection, bool) {
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-func providerParam(c *zip.Ctx) string { return strings.TrimSpace(c.Param("provider")) }
+// providerParam reads the provider slug from the unified /v1/connectors/:id
+// routes (the part before any ':label'). The org lifecycle handlers address a
+// provider by bare slug; the label, when present, is a user-plane concern the
+// user handlers split themselves.
+func providerParam(c *zip.Ctx) string { return providerOf(c.Param("id")) }
 
 // orgProvider / userProvider keep the two custody planes disjoint: the org
 // surface (/v1/integrations) never resolves a user-scoped provider and vice
@@ -1157,7 +1173,11 @@ func userProvider(s *cloud.Service[state], id string) (*Provider, bool) {
 
 // callbackPath is the ONE generic OAuth callback route for a provider — the path
 // the dispatcher serves AND the value every provider's RedirectPath must equal.
-func callbackPath(provider string) string { return "/v1/integrations/" + provider + "/callback" }
+// It lives on the unified connect plane (/v1/connectors/:id/callback): the OAuth
+// return is the second leg of connect, so it converges with connect. NOTE: the
+// external OAuth apps (GitHub/Slack/Google/GitLab) register this exact string as
+// their redirect_uri — a deploy of this convergence MUST re-register them.
+func callbackPath(provider string) string { return "/v1/connectors/" + provider + "/callback" }
 
 // consoleURL resolves the console origin the callback redirects back to.
 func consoleURL() string {

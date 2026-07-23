@@ -1,18 +1,10 @@
-// connectors.go is the per-USER connector plane — /v1/connectors, the sibling
-// of the org-scoped /v1/integrations surface. Same package, same registry, same
-// store file, same KMS client; only the custody key differs (org,user,provider,
-// label → userPath).
-//
-// Surface (registered by connectorRoutes, called last from routes()):
-//
-//	GET    /v1/connectors                                  this user's connectors     -> {connectors:[...]}
-//	GET    /v1/connectors/providers                        user-scoped provider cards -> {providers:[...]}
-//	GET    /v1/connectors/:id/token                        custodied access token     -> {token,...}
-//	POST   /v1/connectors/:provider/device                 begin device sign-in       -> {flow,userCode,...}
-//	POST   /v1/connectors/:provider/device/:flow/poll      poll device sign-in        -> {status,...}
-//	POST   /v1/connectors/:provider/credential             token / oauth-bundle intake-> {connected,connector}
-//	POST   /v1/connectors/:id/refresh                      force a token rotation     -> {refreshed,connector}
-//	DELETE /v1/connectors/:id                              forget + delete secrets    -> {disconnected:true}
+// connectors.go holds the per-USER admission handlers of the unified
+// /v1/connectors plane — device sign-in, credential intake, token custody exit,
+// refresh, drop. They are ROUTED by connectorRoutes in extension.go (the ONE
+// registration for every kind/scope); this file is the user-plane (scope=user)
+// half of the custody logic, sibling to the org-plane (scope=org) handlers in
+// integrations.go. Same registry, same store file, same KMS client; only the
+// custody key differs (org,user,provider,label → userPath).
 //
 // TENANTING. Every read/write is bound org=? AND user=? — the (org,user) pair
 // from caller() IS the row key, so another user's connector id is simply "no
@@ -22,8 +14,8 @@
 // credential live BEFORE anything is stored (saveUser: sanitize → seal-before-
 // row → upsert). No secret ever appears in a row, response, or log line except
 // GET /:id/token's body — the ONE custody exit, readable only by the same
-// validated (org,user). Device pending state lives in the cek-encrypted grants
-// table (see the grants DDL comment in store.go), never in KMS.
+// validated (org,user), and gated on enablement. Device pending state lives in
+// the cek-encrypted grants table (see the grants DDL comment in store.go).
 package integrations
 
 import (
@@ -38,20 +30,6 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
-
-// connectorRoutes registers the user-plane surface. Called last from routes();
-// the literal /providers registers before the wildcard GETs (static-before-
-// wildcard discipline, same as routes()).
-func connectorRoutes(app *zip.App, s *cloud.Service[state]) {
-	app.Get("/v1/connectors", cloud.Handle(s, connectors))
-	app.Get("/v1/connectors/providers", cloud.Handle(s, connectorProviders))
-	app.Get("/v1/connectors/:id/token", cloud.Handle(s, tokenConn))
-	app.Post("/v1/connectors/:provider/device", cloud.Handle(s, startDevice))
-	app.Post("/v1/connectors/:provider/device/:flow/poll", cloud.Handle(s, pollDevice))
-	app.Post("/v1/connectors/:provider/credential", cloud.Handle(s, credential))
-	app.Post("/v1/connectors/:id/refresh", cloud.Handle(s, refreshConn))
-	app.Delete("/v1/connectors/:id", cloud.Handle(s, dropConn))
-}
 
 // ── identity + id helpers ──────────────────────────────────────────────────────
 
@@ -168,65 +146,11 @@ func connViewFor(conn Connector) connView {
 	}
 }
 
-type connectorProviderView struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
-	Scopes      []string `json:"scopes"`
-	Methods     []string `json:"methods"`
-}
-
 // ── handlers ───────────────────────────────────────────────────────────────────
-
-// connectors lists this user's connectors.
-func connectors(s *cloud.Service[state], c *zip.Ctx) error {
-	org, user, err := caller(c)
-	if err != nil {
-		return err
-	}
-	list, err := s.State.store.ListConnectors(c.Context(), org, user)
-	if err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "list: %v", err)
-	}
-	out := make([]connView, 0, len(list))
-	for _, conn := range list {
-		out = append(out, connViewFor(conn))
-	}
-	return c.JSON(http.StatusOK, map[string]any{"connectors": out})
-}
-
-// connectorProviders lists the user-scoped provider cards. Methods derive from
-// capabilities (Device/Adopt/Verify — Mount asserts at least one), never from a
-// parallel kind enum; Configured/Creds are org-plane-only and nil here.
-func connectorProviders(s *cloud.Service[state], c *zip.Ctx) error {
-	if _, _, err := caller(c); err != nil {
-		return err
-	}
-	ids := sortedProviderIDs(s)
-	out := make([]connectorProviderView, 0, len(ids))
-	for _, id := range ids {
-		p := s.State.providers[id]
-		if p.Scope != userScope {
-			continue
-		}
-		methods := make([]string, 0, 3)
-		if p.Device != nil {
-			methods = append(methods, "device")
-		}
-		if p.Adopt != nil {
-			methods = append(methods, "oauth")
-		}
-		if p.Verify != nil {
-			methods = append(methods, "token")
-		}
-		out = append(out, connectorProviderView{
-			ID: p.ID, Name: p.Name, Description: p.Description, Category: p.Category,
-			Scopes: nonNil(p.Scopes), Methods: methods,
-		})
-	}
-	return c.JSON(http.StatusOK, map[string]any{"providers": out})
-}
+//
+// The user list + provider cards folded into the unified listExtensions
+// (extension.go): a user connector is an Extension{scope:user} with its labelled
+// instances; discovery + status is ONE list across both planes.
 
 // startDevice begins a device sign-in. KMS readiness is checked NOW rather than
 // dead-ending the user at poll-done (connect() parity); the cap is checked
@@ -466,6 +390,11 @@ func tokenConn(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 	if !found {
 		return zip.ErrNotFound("connector not connected")
+	}
+	// Enablement gate (fail-closed): a disabled connector yields NO token. The
+	// (org,user,provider,label) row IS the same-user scope; a store error denies.
+	if err := gateEnabled(c.Context(), s, userScope, org, user, p.ID, label); err != nil {
+		return err
 	}
 	if !kmsReady(s) {
 		return kmsUnavailable()
