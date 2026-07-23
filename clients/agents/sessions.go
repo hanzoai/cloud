@@ -190,6 +190,7 @@ func mountSessions(s *cloud.Service[state], app *zip.App) {
 	g.Patch("/sessions/:id", cloud.Handle(s, patchSession))
 	g.Get("/sessions/:id/tree", cloud.Handle(s, sessionTree))
 	g.Post("/sessions/:id/events", cloud.Handle(s, appendSessionEvent))
+	g.Get("/sessions/:id/control", cloud.Handle(s, drainControl))
 	g.Post("/sessions/:id/pause", cloud.Handle(s, pauseSession))
 	g.Post("/sessions/:id/resume", cloud.Handle(s, resumeSession))
 	g.Post("/sessions/:id/stop", cloud.Handle(s, stopSession))
