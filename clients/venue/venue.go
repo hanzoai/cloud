@@ -95,9 +95,10 @@ const (
 
 // providerDO / providerAWS / providerGCP are the :provider slugs.
 const (
-	providerDO  = "digitalocean"
-	providerAWS = "aws"
-	providerGCP = "gcp"
+	providerDO    = "digitalocean"
+	providerAWS   = "aws"
+	providerGCP   = "gcp"
+	providerAzure = "azure"
 )
 
 // cred is the customer's per-provider credential, parsed from the /link body and
@@ -117,6 +118,14 @@ type cred struct {
 	// container.clusters.list sweep.
 	CredentialJSON string   `json:"credentialJson,omitempty"`
 	ProjectIDs     []string `json:"projectIds,omitempty"`
+	// Azure: an AAD app (tenant + client). ClientSecret drives the service-principal
+	// flow; its ABSENCE selects keyless Workload Identity Federation (a federated
+	// OIDC assertion from Hanzo's own identity). SubscriptionIDs bounds the
+	// managedClusters sweep.
+	TenantID        string   `json:"tenantId,omitempty"`
+	ClientID        string   `json:"clientId,omitempty"`
+	ClientSecret    string   `json:"clientSecret,omitempty"`
+	SubscriptionIDs []string `json:"subscriptionIds,omitempty"`
 }
 
 // identity is the non-secret account identity a driver's verify returns.
@@ -190,9 +199,10 @@ func build(b cloud.Base) (state, error) {
 		kms:   kc,
 		fleet: fleet.New(b.Brand, b.Log.New("component", "fleet")),
 		drivers: map[string]driver{
-			providerDO:  doDriver{},
-			providerAWS: awsDriver{},
-			providerGCP: gcpDriver{},
+			providerDO:    doDriver{},
+			providerAWS:   awsDriver{},
+			providerGCP:   gcpDriver{},
+			providerAzure: azureDriver{},
 		},
 	}, nil
 }
@@ -390,6 +400,7 @@ func listProviders(s *cloud.Service[state], c *zip.Ctx) error {
 		{ID: providerDO, Name: "DigitalOcean", Keyless: false, Requires: []string{"token"}},
 		{ID: providerAWS, Name: "AWS", Keyless: true, Requires: []string{"roleArn", "externalId", "regions"}},
 		{ID: providerGCP, Name: "Google Cloud", Keyless: true, Requires: []string{"credentialJson", "projectIds"}},
+		{ID: providerAzure, Name: "Azure", Keyless: true, Requires: []string{"tenantId", "clientId", "subscriptionIds"}},
 	}})
 }
 
@@ -769,7 +780,7 @@ func foldError(err error) string {
 
 // boundsOf caps each credential field so a hostile body can't bloat a sealed blob.
 func boundsOf(cr cred) error {
-	for _, v := range []string{cr.Token, cr.RoleARN, cr.ExternalID, cr.CredentialJSON} {
+	for _, v := range []string{cr.Token, cr.RoleARN, cr.ExternalID, cr.CredentialJSON, cr.ClientSecret} {
 		if len(v) > maxCredentialLen {
 			return zip.ErrBadRequest("credential field too large")
 		}
