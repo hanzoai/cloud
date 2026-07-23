@@ -24,20 +24,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/hanzoai/cloud/clients/principal"
 	kms "github.com/hanzoai/cloud/clients/mpc"
+	"github.com/hanzoai/cloud/clients/principal"
 	luxlog "github.com/luxfi/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// allowPrivateHostsEnv, when set, disables the SSRF guard's non-routable-address
+// rejection on a fold target's apiserver host. Off in production; set ONLY in
+// tests whose apiserver runs on loopback. Mirrors clients/git's private-host env.
+const allowPrivateHostsEnv = "FLEET_ALLOW_PRIVATE_HOSTS"
 
 var nodeListGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
 
@@ -250,7 +258,7 @@ func openKMS(brand string) *kms.Client {
 }
 
 func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
-	restCfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
+	restCfg, err := SafeRESTConfig(kubeconfig)
 	if err != nil {
 		return nil, "", err
 	}
@@ -260,6 +268,79 @@ func dynFromKubeconfig(kubeconfig []byte) (dynamic.Interface, string, error) {
 		return nil, "", err
 	}
 	return dyn, restCfg.Host, nil
+}
+
+// SafeRESTConfig parses a kubeconfig into a REST config and is the ONE fold-safety
+// gate every attach path funnels through (discovery-folded clusters AND hand-pasted
+// BYO kubeconfigs). It REFUSES:
+//   - credential PLUGINS — restCfg.ExecProvider (an exec credential plugin runs a
+//     local binary with the pod's full environment inherited = RCE) and
+//     restCfg.AuthProvider (auth-provider plugins likewise shell out);
+//   - SSRF TARGETS — the apiserver host (restCfg.Host, the ACTUAL dial target the
+//     inventory List hits) must be https and publicly routable, never loopback /
+//     private / link-local / IMDS / unspecified / multicast.
+//
+// This closes the exec-kubeconfig RCE and the "guard the endpoint we don't dial"
+// SSRF for every caller at once — the kubeconfig's server is what gets dialed, so
+// it is what gets guarded.
+func SafeRESTConfig(kubeconfig []byte) (*rest.Config, error) {
+	restCfg, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	if restCfg.ExecProvider != nil {
+		return nil, fmt.Errorf("kubeconfig uses an exec credential plugin, which is not permitted")
+	}
+	if restCfg.AuthProvider != nil {
+		return nil, fmt.Errorf("kubeconfig uses an auth-provider plugin, which is not permitted")
+	}
+	if err := guardHost(restCfg.Host); err != nil {
+		return nil, err
+	}
+	return restCfg, nil
+}
+
+// guardHost rejects an apiserver URL that is not https or resolves to a
+// non-routable address. Bypassable via allowPrivateHostsEnv for loopback test
+// apiservers. (A pure DNS-rebind after this check is the same accepted caveat as
+// the git mirror SSRF guard — client-go re-resolves at dial.)
+func guardHost(rawHost string) error {
+	u, err := url.Parse(strings.TrimSpace(rawHost))
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("cluster apiserver endpoint is not a valid URL")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("cluster apiserver endpoint must be https")
+	}
+	if os.Getenv(allowPrivateHostsEnv) != "" {
+		return nil
+	}
+	host := u.Hostname()
+	if host == "" || strings.EqualFold(host, "localhost") {
+		return fmt.Errorf("cluster apiserver host is not permitted")
+	}
+	var ips []net.IP
+	if ip := net.ParseIP(host); ip != nil {
+		ips = []net.IP{ip}
+	} else {
+		r, rerr := net.LookupIP(host)
+		if rerr != nil || len(r) == 0 {
+			return fmt.Errorf("cluster apiserver host does not resolve")
+		}
+		ips = r
+	}
+	for _, ip := range ips {
+		if blockedIP(ip) {
+			return fmt.Errorf("cluster apiserver resolves to a non-routable address")
+		}
+	}
+	return nil
+}
+
+func blockedIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast()
 }
 
 type inv struct{ nodes, nvidia, amd int }
