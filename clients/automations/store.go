@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	// github.com/hanzoai/sqlite is the ONE Hanzo SQLite driver: it registers the
 	// "sqlite" database/sql name under both build tags (cgo → mattn+SQLCipher,
@@ -54,7 +55,7 @@ func openStore(path string) (*Store, error) {
 	return s, nil
 }
 
-// migrate creates the three tables. Idempotent (IF NOT EXISTS). Every uniqueness
+// migrate creates the four tables. Idempotent (IF NOT EXISTS). Every uniqueness
 // + lookup index leads with `org`, so tenant isolation is a physical property of
 // the index, not just a WHERE clause.
 func (s *Store) migrate() error {
@@ -105,6 +106,22 @@ CREATE TABLE IF NOT EXISTS automations_runs (
 );
 CREATE INDEX IF NOT EXISTS ix_auto_runs_org_created ON automations_runs(org, created);
 CREATE INDEX IF NOT EXISTS ix_auto_runs_org_flow    ON automations_runs(org, flow_id, created);
+
+-- automations_triggers is the WEBHOOK/APP_WEBHOOK routing index: one row per enabled
+-- event-triggered flow, maintained by setEnabled (the inbound analog of the POLLING
+-- cron schedule). An inbound event matches on (org, provider, event); the match index
+-- leads with org so a delivered event can only ever reach its own tenant's flows. One
+-- subscription per flow (PK org, flow_id): a flow has exactly one trigger.
+CREATE TABLE IF NOT EXISTS automations_triggers (
+  org        TEXT NOT NULL,
+  provider   TEXT NOT NULL,
+  event      TEXT NOT NULL,
+  flow_id    TEXT NOT NULL,
+  version_id TEXT NOT NULL,
+  created    INTEGER NOT NULL,
+  PRIMARY KEY (org, flow_id)
+);
+CREATE INDEX IF NOT EXISTS ix_auto_triggers_match ON automations_triggers(org, provider, event);
 `
 	if _, err := s.db.Exec(ddl); err != nil {
 		return fmt.Errorf("automations migrate: %w", err)
@@ -202,6 +219,9 @@ func (s *Store) DeleteFlow(ctx context.Context, org, id string) (bool, error) {
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM automations_runs WHERE org=? AND flow_id=?`, org, id); err != nil {
 		return false, fmt.Errorf("delete runs: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM automations_triggers WHERE org=? AND flow_id=?`, org, id); err != nil {
+		return false, fmt.Errorf("delete triggers: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	if err := tx.Commit(); err != nil {
@@ -426,6 +446,61 @@ func (s *Store) UpdateRunStatus(ctx context.Context, org, id string, status Flow
 		return fmt.Errorf("update run status: %w", err)
 	}
 	return nil
+}
+
+// ── trigger subscriptions (WEBHOOK/APP_WEBHOOK routing index) ────────────────
+
+// triggerSub is one webhook subscription resolved by MatchTriggers: the flow +
+// version an inbound event should run.
+type triggerSub struct {
+	FlowID    string
+	VersionID string
+}
+
+// UpsertTrigger records (or refreshes) a flow's webhook subscription. Idempotent on
+// (org, flow_id): re-enabling or re-publishing a flow overwrites provider/event/version
+// so exactly one subscription per flow ever exists.
+func (s *Store) UpsertTrigger(ctx context.Context, org, provider, event, flowID, versionID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO automations_triggers (org,provider,event,flow_id,version_id,created) VALUES (?,?,?,?,?,?)
+		 ON CONFLICT(org,flow_id) DO UPDATE SET provider=excluded.provider,event=excluded.event,version_id=excluded.version_id`,
+		org, provider, event, flowID, versionID, time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("upsert trigger: %w", err)
+	}
+	return nil
+}
+
+// DeleteFlowTriggers removes a flow's webhook subscription (on disable/delete). It is
+// idempotent — deleting an absent subscription is a no-op — so a disable can always
+// fail-closed by calling it regardless of the flow's current trigger type.
+func (s *Store) DeleteFlowTriggers(ctx context.Context, org, flowID string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM automations_triggers WHERE org=? AND flow_id=?`, org, flowID); err != nil {
+		return fmt.Errorf("delete triggers: %w", err)
+	}
+	return nil
+}
+
+// MatchTriggers returns the subscriptions whose (provider,event) matches an inbound
+// event, scoped to org — the LEADING index column, so tenant isolation is physical: a
+// query for org A can never return org B's rows. Bounded by maxLimit.
+func (s *Store) MatchTriggers(ctx context.Context, org, provider, event string) ([]triggerSub, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT flow_id,version_id FROM automations_triggers WHERE org=? AND provider=? AND event=? ORDER BY flow_id LIMIT ?`,
+		org, provider, event, maxLimit)
+	if err != nil {
+		return nil, fmt.Errorf("match triggers: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]triggerSub, 0, 8)
+	for rows.Next() {
+		var t triggerSub
+		if err := rows.Scan(&t.FlowID, &t.VersionID); err != nil {
+			return nil, fmt.Errorf("scan trigger: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
