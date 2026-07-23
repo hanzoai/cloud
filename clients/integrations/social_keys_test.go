@@ -41,7 +41,7 @@ func TestWarpcastConnectSealsAndIsolates(t *testing.T) {
 	kc := newKMS(t)
 	app := newApp(t, kc)
 
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/warpcast/connect", "acme", true, map[string]any{"token": warpcastKey})
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/warpcast/connect", "acme", true, map[string]any{"token": warpcastKey})
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d (%s)", res.Code, res.Body)
 	}
@@ -65,7 +65,7 @@ func TestWarpcastRejectsInvalidKeyAndStoresNothing(t *testing.T) {
 	newNeynarMock(t, false)
 	kc := newKMS(t)
 	app := newApp(t, kc)
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/warpcast/connect", "acme", true, map[string]any{"token": warpcastKey})
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/warpcast/connect", "acme", true, map[string]any{"token": warpcastKey})
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("invalid key want 400, got %d (%s)", res.Code, res.Body)
 	}
@@ -77,7 +77,7 @@ func TestWarpcastRejectsInvalidKeyAndStoresNothing(t *testing.T) {
 func TestWarpcastRequiresOrgAdmin(t *testing.T) {
 	newNeynarMock(t, true)
 	app := newApp(t, newKMS(t))
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/warpcast/connect", "acme", false, map[string]any{"token": warpcastKey})
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/warpcast/connect", "acme", false, map[string]any{"token": warpcastKey})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("member connect want 403, got %d (%s)", res.Code, res.Body)
 	}
@@ -104,7 +104,7 @@ func TestWhatsappConnectSealsWithPhoneID(t *testing.T) {
 	kc := newKMS(t)
 	app := newApp(t, kc)
 
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/whatsapp/connect", "acme", true,
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/whatsapp/connect", "acme", true,
 		map[string]any{"token": whatsappTok, "accountId": whatsappPhon})
 	if res.Code != http.StatusOK {
 		t.Fatalf("connect want 200, got %d (%s)", res.Code, res.Body)
@@ -127,7 +127,7 @@ func TestWhatsappRejectsWrongToken(t *testing.T) {
 	newWhatsappMock(t)
 	kc := newKMS(t)
 	app := newApp(t, kc)
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/whatsapp/connect", "acme", true,
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/whatsapp/connect", "acme", true,
 		map[string]any{"token": "wrong-token-xxxxxxxxxxxxxxxx", "accountId": whatsappPhon})
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("wrong token want 400, got %d (%s)", res.Code, res.Body)
