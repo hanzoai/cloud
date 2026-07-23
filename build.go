@@ -2,13 +2,18 @@ package cloud
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	aiobject "github.com/hanzoai/ai/object"
+	"github.com/hanzoai/cloud/cek"
 	"github.com/hanzoai/cloud/clients/commerceinproc"
 	"github.com/hanzoai/cloud/clients/metering"
+	"github.com/hanzoai/cloud/internal/org"
+	s3 "github.com/hanzoai/s3-go"
 	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 
@@ -103,6 +108,7 @@ func BuildDeps(cfg *Config) Deps {
 	deps.O11y = pick(cfg, logger, "o11y", "O11y", cfg.O11yZAPAddr, clients.O11yRPCAt, clients.DisabledO11y)
 	deps.VFS = pickVFSClient(cfg, logger)
 	deps.MQ = pick(cfg, logger, "mq", "MQ", cfg.MQZAPAddr, clients.MQRPCAt, clients.DisabledMQ)
+	deps.Durable = buildDurability(cfg, logger)
 
 	// Payments and Vault never co-resident. Disabled stub when no
 	// endpoint, otherwise RPC.
@@ -711,6 +717,137 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 	// No VFS endpoint and no S3 admin creds → fail-closed stub (R-7): Put/Get/Delete
 	// return a non-nil error → files answer 502, never a nil-deref 500.
 	return clients.DisabledVFS()
+}
+
+// durableBucket holds every org's HA-SQLite snapshot (and its writer lease). One
+// bucket, keys laid out orgs/<slug>[/…]/<subsystem>.db per HIP-0302 — the durable
+// twin of the on-disk DataDir layout.
+//
+// OPERATIONAL REQUIREMENTS the fence depends on (enforce in the SeaweedFS deployment,
+// not in code):
+//
+//   - Object versioning + a no-expiry / no-lifecycle-deletion policy on this prefix.
+//     The writer lease (orgs/<slug>/.owner) is the round's system of record; if the
+//     gateway silently drops or rolls back that object, a monotone round can reset and
+//     un-fence a zombie writer (Red M4). A local high-water-round floor per pod is the
+//     future in-process defense; the object lifecycle is the operational one.
+//   - RWO, per-writer PVCs for DataDir — NEVER an RWX shared volume (Red M5). Two pods
+//     on one DataDir corrupt SQLite regardless of this fence; single-writer here is the
+//     durable-copy fence, and per-pod RWO is the local-file guarantee the shard router
+//     already relies on (see shardrouter.go).
+const durableBucket = "org-db"
+
+// buildDurability constructs the deployment's HA-durability factory, or nil when the
+// deployment has no object store to be durable against (dev/single-node — every
+// OrgStore then stays local-only). It composes the SeaweedFS S3 If-Match
+// ConditionalStore (the SAME s3admin identity deps.VFS uses), the writer membership
+// over CLOUD_PEERS (the SAME set the shard router elects on, so the store-layer owner
+// and the routed owner agree), and the per-org envelope Cipher rooted at the KMS
+// master. Any construction failure fails SAFE to nil (local-only) rather than crash
+// the boot; an encryption-capable build with no usable cipher is REFUSED — a build
+// that promises encryption never ships plaintext snapshots to the object store.
+func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
+	// A multi-replica deployment REQUIRES the durable plane: with >1 writer, a per-org
+	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
+	// disabledDurability logs at the severity the replica count warrants, so a
+	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
+	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
+
+	admin := s3admin.New()
+	if !admin.Configured() {
+		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
+		return nil
+	}
+	client, err := admin.Client()
+	if err != nil {
+		disabledDurability(log, multiReplica, fmt.Sprintf("S3 client construction failed: %v", err))
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := ensureDurableBucket(ctx, admin, client); err != nil {
+		// Non-fatal: the bucket likely already exists; a later ship/hydrate retries.
+		log.Warn("durability bucket ensure failed (continuing)", "bucket", durableBucket, "err", err)
+	}
+	cancel()
+
+	// Membership: CLOUD_PEERS (the shard router's set). A single-pod deployment with
+	// no peers is its own sole writer — still hydrate-on-open + fenced ship across a
+	// rolling restart.
+	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
+	peers := parsePeers(cfg.ShardPeers)
+	if len(peers) == 0 {
+		peers = []org.Member{{ID: self, Addr: self}}
+	}
+	members := org.NewMembership(self, org.StaticSource(peers...), 5*time.Second)
+	_ = members.Start(context.Background()) // static source: the initial refresh populates Members()
+
+	cipher := durableCipher(cfg, log)
+	if cipher == nil && cek.Encrypting() {
+		// The master that satisfied cek must decode here too, so this is a genuine
+		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
+		// drop durability — fail closed and log LOUDLY for the replica count.
+		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
+		return nil
+	}
+
+	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "encrypted", cipher != nil)
+	return org.NewDurability(org.NewS3ConditionalStore(client, durableBucket), members, cipher)
+}
+
+// disabledDurability records that the durable plane is OFF, at ERROR when the
+// deployment is multi-replica (per-org stores then survive only via shard routing +
+// per-pod RWO PVC; a lost/rescheduled PVC loses committed data — the operator MUST
+// configure S3) and at INFO when single-replica/dev (local-only is the expected
+// posture). One place, so no disabled path is silent on a deployment that needs HA.
+func disabledDurability(log luxlog.Logger, multiReplica bool, why string) {
+	if multiReplica {
+		log.Error("DURABILITY DISABLED on a MULTI-REPLICA deployment — per-org stores survive only via shard routing + per-pod RWO PVC; a lost/rescheduled PVC loses committed data. Configure S3_ADMIN_* to enable the durable plane.", "reason", why)
+		return
+	}
+	log.Info("durability disabled — single-replica/dev, per-org stores stay local-only", "reason", why)
+}
+
+// ensureDurableBucket creates the durable bucket if absent (idempotent).
+func ensureDurableBucket(ctx context.Context, admin s3admin.Admin, client *s3.Client) error {
+	ok, err := client.BucketExists(ctx, durableBucket)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return nil
+	}
+	return client.MakeBucket(ctx, durableBucket, s3.MakeBucketOptions{Region: admin.Region()})
+}
+
+// durableCipher builds the per-org envelope Cipher from the base64 KMS master
+// (CLOUD_KMS_MASTER_KEY_REF — the SAME key cek derives from). nil when no valid
+// 32-byte master is configured (pure-Go dev → plaintext durable object, matching the
+// plaintext local file).
+func durableCipher(cfg *Config, log luxlog.Logger) *org.Cipher {
+	ref := strings.TrimSpace(cfg.KMSMasterKeyRef)
+	if ref == "" {
+		return nil
+	}
+	master, err := base64.StdEncoding.DecodeString(ref)
+	if err != nil {
+		log.Warn("durable cipher: KMS master key ref is not valid base64", "err", err)
+		return nil
+	}
+	c, err := org.NewCipher(master)
+	if err != nil {
+		log.Warn("durable cipher: invalid KMS master key", "err", err)
+		return nil
+	}
+	return c
+}
+
+// hostnameOr returns the OS hostname, or def when unavailable — a stable self id for
+// a single-pod deployment that sets no CLOUD_POD_NAME.
+func hostnameOr(def string) string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return def
 }
 
 func pickPaymentsClient(cfg *Config, log luxlog.Logger) PaymentsClient {
