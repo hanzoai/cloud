@@ -55,29 +55,45 @@ type Subject struct {
 	Ref string
 }
 
-// Status is the honest, PROVIDER-REPORTED lifecycle of a verification. There is
-// deliberately no "compliant" or platform-approved value: a status is either
-// pending (no decision yet), a settled provider decision (verified/rejected), a
-// provider-flagged human-review state, or an aged-out prior result.
+// Status is the honest lifecycle of a verification. Every value except
+// StatusReviewerConfirmed is PROVIDER-REPORTED: pending (no decision yet), a settled
+// provider decision (verified/rejected), a provider-flagged human-review state, or an
+// aged-out prior result. There is deliberately no "compliant" value.
+//
+// StatusReviewerConfirmed is the ONE value that is NOT provider-reported: it is
+// produced ONLY by a consumer's attributed, role-gated human reviewer (a manual
+// pass), never by an idv Provider. No Provider in this package — Manual, REST, or the
+// classify table — can EVER emit it, so the boundary "the only terminal status a
+// provider produces is one the provider returned" is unchanged. A gate treats it as a
+// pass exactly like StatusVerified (see Pass), but the two are distinct on the wire so
+// a manual confirmation is never dressed up as a provider decision.
 type Status string
 
 const (
-	StatusPending  Status = "pending"           // started; awaiting the subject and the provider
-	StatusVerified Status = "provider_verified" // the provider reported a passing decision
-	StatusRejected Status = "provider_rejected" // the provider reported a failing decision
-	StatusReview   Status = "manual_review"     // the provider flagged the case for human review
-	StatusExpired  Status = "expired"           // a prior provider result has aged out
+	StatusPending           Status = "pending"            // started; awaiting the subject and the provider
+	StatusVerified          Status = "provider_verified"  // the provider reported a passing decision
+	StatusRejected          Status = "provider_rejected"  // the provider reported a failing decision
+	StatusReview            Status = "manual_review"      // the provider flagged the case for human review
+	StatusExpired           Status = "expired"            // a prior provider result has aged out
+	StatusReviewerConfirmed Status = "reviewer_confirmed" // a privileged human reviewer confirmed the subject (NOT provider-reported)
 )
 
-// Terminal reports whether s is a SETTLED provider decision. A pending or review
-// status is not terminal — a gate that requires a passing verification checks
-// exactly StatusVerified, never merely Terminal, so a rejection never satisfies it.
-func (s Status) Terminal() bool { return s == StatusVerified || s == StatusRejected }
+// Terminal reports whether s is a SETTLED decision — a provider verify/reject or an
+// attributed reviewer confirmation. A pending or review status is not terminal.
+func (s Status) Terminal() bool {
+	return s == StatusVerified || s == StatusRejected || s == StatusReviewerConfirmed
+}
+
+// Pass reports whether s is a PASSING terminal decision — the ONE predicate a gate
+// uses. It admits a provider verify OR an attributed reviewer confirmation, and
+// NOTHING else: a rejection, a review flag, or a pending status never satisfies it, so
+// fail-closed holds by construction.
+func (s Status) Pass() bool { return s == StatusVerified || s == StatusReviewerConfirmed }
 
 // Valid reports whether s is a known status value.
 func (s Status) Valid() bool {
 	switch s {
-	case StatusPending, StatusVerified, StatusRejected, StatusReview, StatusExpired:
+	case StatusPending, StatusVerified, StatusRejected, StatusReview, StatusExpired, StatusReviewerConfirmed:
 		return true
 	}
 	return false
