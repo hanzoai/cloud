@@ -737,6 +737,11 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 //     already relies on (see shardrouter.go).
 const durableBucket = "org-db"
 
+// durableProbePrefix namespaces the boot CAS-atomicity probe's throwaway objects
+// (org.ProbeCAS writes one per boot) away from the orgs/ tree. A bucket lifecycle rule
+// may reap ".probe/*"; the objects are tiny and never read after the probe.
+const durableProbePrefix = ".probe/cas-"
+
 // buildDurability constructs the deployment's HA-durability factory, or nil when the
 // deployment has no object store to be durable against (dev/single-node — every
 // OrgStore then stays local-only). It composes the SeaweedFS S3 If-Match
@@ -753,17 +758,12 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
 	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
 
-	// Explicit opt-in: the object-store fence rests on the deployed SeaweedFS enforcing
-	// conditional-PUT (If-Match) atomically, which must be validated against the deployed
-	// version before it fences real tenant data (the takeover-fence staging gate). Until
-	// CLOUD_RESEARCH_DURABLE is set the store runs local-only — the shard router still
-	// pins each org to one writer, so this is not the rolling-deploy outage; only the
-	// cross-restart object-store snapshot waits for the opt-in.
-	if !cfg.ResearchDurable {
-		disabledDurability(log, multiReplica, "CLOUD_RESEARCH_DURABLE not set — HA object-store durability is opt-in pending the SeaweedFS conditional-PUT atomicity gate")
-		return nil
-	}
-
+	// Durability is THE path — there is no operator toggle. It self-detects capability
+	// at boot: no object store reachable (dev / native-Go / no S3 creds) → local-only,
+	// same code path, graceful; a reachable store → PROVE its conditional-PUT atomicity
+	// (org.ProbeCAS) before fencing a single byte of tenant data. A store that cannot be
+	// proven atomic fails SAFE to local-only with a loud alert — never a silent-wrong
+	// fence on a store that could split-brain.
 	admin := s3admin.New()
 	if !admin.Configured() {
 		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
@@ -780,6 +780,20 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 		log.Warn("durability bucket ensure failed (continuing)", "bucket", durableBucket, "err", err)
 	}
 	cancel()
+
+	// Prove the store enforces conditional-PUT atomically BEFORE fencing any tenant data
+	// (the auto-H2 self-check that replaces the old opt-in flag). A store that cannot be
+	// proven atomic fails SAFE to local-only + a loud alert — never a silent fence on a
+	// store that could admit two writers for one round (split-brain). The result is
+	// cached for the process life (deps.Durable is set once), so this probe runs once.
+	cond := org.NewS3ConditionalStore(client, durableBucket)
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	err = org.ProbeCAS(probeCtx, cond, durableProbePrefix)
+	probeCancel()
+	if err != nil {
+		disabledDurability(log, multiReplica, fmt.Sprintf("object-store conditional-PUT atomicity NOT confirmed — %v", err))
+		return nil
+	}
 
 	// Membership: CLOUD_PEERS (the shard router's set). A single-pod deployment with
 	// no peers is its own sole writer — still hydrate-on-open + fenced ship across a
@@ -801,8 +815,8 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 		return nil
 	}
 
-	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "encrypted", cipher != nil)
-	return org.NewDurability(org.NewS3ConditionalStore(client, durableBucket), members, cipher)
+	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "atomic_cas", true, "encrypted", cipher != nil)
+	return org.NewDurability(cond, members, cipher)
 }
 
 // disabledDurability records that the durable plane is OFF, at ERROR when the
