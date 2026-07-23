@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -204,6 +205,57 @@ func TestSupersessionIsSeqNotClientTS(t *testing.T) {
 	c, _ := st.counts(ctx)
 	if c.ExperimentsRetained != 3 || c.AttemptsRetained != 2 {
 		t.Fatalf("retained counts=%+v, want exp=3 att=2 (every version retained)", c)
+	}
+}
+
+// TestConcurrentIngestSeqMonotone stresses the append clock: N concurrent ingests of
+// DISTINCT content must all land (no lost write, no dup) and the server-assigned seq
+// must be strictly unique and gapless in [1,N] — proving the single-writer
+// serialization (OrgDB MaxOpenConns(1) + orm writeMu + the ingest tx) keeps the
+// clock monotone with no torn read-modify-write. This is the seq counter's version
+// of the AUTOINCREMENT the raw-SQL store leaned on. Run under -race.
+func TestConcurrentIngestSeqMonotone(t *testing.T) {
+	st, ctx := newStore(t)
+	const N = 24
+	var wg sync.WaitGroup
+	errs := make([]error, N)
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			e := Experiment{ID: fmt.Sprintf("benchmark:m%d:hle", i), Kind: "benchmark", Subject: fmt.Sprintf("m%d", i), Task: "hle", Metric: "accuracy", Value: float64(i)}
+			_, _, errs[i] = st.ingest(ctx, proj, []Experiment{e}, nil)
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range errs {
+		if e != nil {
+			t.Fatalf("concurrent ingest %d: %v", i, e)
+		}
+	}
+	// Every distinct experiment landed exactly once — no lost write, no duplicate.
+	c, _ := st.counts(ctx)
+	if c.ExperimentsRetained != N || c.ExperimentsCanonical != N {
+		t.Fatalf("after %d concurrent ingests: counts=%+v, want retained=canonical=%d", N, c, N)
+	}
+	// Seqs are unique and gapless in [1,N]: the clock advanced exactly once per new
+	// version with no torn read-modify-write.
+	exps, err := st.allExp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int64]bool{}
+	for _, r := range exps {
+		if r.Seq < 1 || r.Seq > int64(N) {
+			t.Fatalf("seq %d out of [1,%d]", r.Seq, N)
+		}
+		if seen[r.Seq] {
+			t.Fatalf("duplicate seq %d — append clock not monotone under concurrency", r.Seq)
+		}
+		seen[r.Seq] = true
+	}
+	if len(seen) != N {
+		t.Fatalf("distinct seqs=%d, want %d (gapless)", len(seen), N)
 	}
 }
 
