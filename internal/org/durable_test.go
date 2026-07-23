@@ -299,6 +299,44 @@ func TestDurableShipsAndRestoresSidecar(t *testing.T) {
 	}
 }
 
+// TestDurableRestoreIntoFreshNestedDir: a successor's orgs/<slug>/ directory does not
+// exist yet, so restore must create the parent (RestoreFile) BEFORE writing the .dek
+// sidecar into it — otherwise the sidecar write fails and hydrate silently degrades to
+// an empty store. (The flat-tempdir sidecar test above cannot catch this.)
+func TestDurableRestoreIntoFreshNestedDir(t *testing.T) {
+	ctx := context.Background()
+	cs := newFakeCondStore()
+	const orgID = "acme"
+	dbKey := replica.DBPath(orgID, "", "research")
+
+	// Owner ships a db + a (fake) key sidecar.
+	old := newDurablePod(t, cs, "pod-old", []Member{{ID: "pod-old"}}, orgID, dbKey)
+	if err := old.d.Hydrate(ctx); err != nil {
+		t.Fatalf("old hydrate: %v", err)
+	}
+	old.open(t)
+	putKV(t, old.db, "k1", "v1")
+	if err := os.WriteFile(old.d.dbPath+dekSuffix, []byte("fake-dek"), 0o600); err != nil {
+		t.Fatalf("write sidecar: %v", err)
+	}
+	if acked, err := old.d.Sync(ctx); err != nil || !acked {
+		t.Fatalf("old sync: acked=%v err=%v", acked, err)
+	}
+
+	// Successor DB path lives under a NESTED dir that does not exist yet.
+	succPath := filepath.Join(t.TempDir(), "orgs", orgID, "research.db")
+	succ := NewDurability(cs, stubView{id: "pod-new", set: []Member{{ID: "pod-new"}}}, nil).For(orgID, dbKey, succPath)
+	if err := succ.Hydrate(ctx); err != nil {
+		t.Fatalf("hydrate into a fresh nested dir must succeed (restore mkdirs before the sidecar): %v", err)
+	}
+	if _, err := os.Stat(succPath); err != nil {
+		t.Fatalf("database not restored into the fresh dir: %v", err)
+	}
+	if _, err := os.Stat(succPath + dekSuffix); err != nil {
+		t.Fatalf("sidecar not written into the fresh dir: %v", err)
+	}
+}
+
 // TestFrameRoundTrip pins the (sidecar,db) framing: empty and non-empty sidecars both
 // split back exactly, so the encrypting (sidecar) and plaintext (no-sidecar) builds
 // share one wire format.
