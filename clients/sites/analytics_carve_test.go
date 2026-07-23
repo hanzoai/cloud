@@ -50,19 +50,20 @@ func postReq(host, path, body string) *http.Request {
 	return req
 }
 
-// TestIsAnalyticsPath pins the ingest-path predicate: the beacon ingest paths match
-// (the read lenses match the /v1/analytics prefix too, but the Middleware carve
-// gates on POST — they are GET on api.hanzo.ai, never a site host); everything else
-// on a site host falls through to the static serve.
+// TestIsAnalyticsPath pins the ingest-path predicate: the CANONICAL door /v1/event
+// and the deprecated beacon ingest paths match (the read lenses match the
+// /v1/analytics prefix too, but the Middleware carve gates on POST — they are GET on
+// api.hanzo.ai, never a site host); everything else on a site host falls through to
+// the static serve.
 func TestIsAnalyticsPath(t *testing.T) {
-	yes := []string{"/v1/analytics", "/v1/analytics/batch", "/v1/insights/e",
+	yes := []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e",
 		"/v1/analytics/overview", "/v1/analytics/timeseries", "/v1/analytics/top"}
 	for _, p := range yes {
 		if !isAnalyticsPath(p) {
 			t.Errorf("isAnalyticsPath(%q) = false, want true", p)
 		}
 	}
-	no := []string{"/v1/base", "/v1/base/collections", "/v1/event", "/v1/tracker",
+	no := []string{"/v1/base", "/v1/base/collections", "/v1/tracker",
 		"/v1/insights", "/v1/insights/events", "/v1/insights/health", "/", "/index.html"}
 	for _, p := range no {
 		if isAnalyticsPath(p) {
@@ -83,7 +84,7 @@ func TestMiddlewareAnalyticsCarveSlugHost(t *testing.T) {
 	defer SetAnalyticsHostHandler(nil)
 	app := newTestApp(testServer())
 
-	for _, p := range []string{"/v1/analytics", "/v1/analytics/batch", "/v1/insights/e"} {
+	for _, p := range []string{"/v1/event", "/v1/analytics", "/v1/analytics/batch", "/v1/insights/e"} {
 		resp, err := app.Fiber().Test(postReq("yadota.hanzo.app", p, beaconBody))
 		if err != nil {
 			t.Fatalf("POST %s: %v", p, err)
@@ -96,8 +97,8 @@ func TestMiddlewareAnalyticsCarveSlugHost(t *testing.T) {
 		}
 	}
 	orgs, paths := h.seen()
-	if len(orgs) != 3 {
-		t.Fatalf("analytics handler invoked %d times, want 3 (%v)", len(orgs), paths)
+	if len(orgs) != 4 {
+		t.Fatalf("analytics handler invoked %d times, want 4 (%v)", len(orgs), paths)
 	}
 	for i, o := range orgs {
 		if o != "hanzo" {

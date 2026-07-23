@@ -102,11 +102,12 @@ func (e insightsEvent) toCapture() CaptureEvent {
 	}
 }
 
-// insightsIngest answers POST /v1/insights/e — the DEPRECATED PostHog-wire
-// adapter. It normalizes the PostHog single/batch shape onto CaptureEvent and
-// funnels through the ONE write core (ingestEvents, source=posthog); it keeps
-// captureTenant's brand-host path so anonymous PostHog-wire traffic is unbroken.
-// New callers post the canonical Event to /v1/event.
+// insightsIngest answers POST /v1/insights/e — a DEPRECATED foreign-protocol shim
+// for the PostHog wire. External-SDK compat ONLY; no Hanzo surface uses it (Hanzo
+// surfaces POST /v1/event). It normalizes the PostHog single/batch shape onto
+// CaptureEvent and funnels through the ONE write core (ingestEvents, source=posthog);
+// it keeps captureTenant's brand-host path so anonymous external PostHog-wire traffic
+// is unbroken — the path the strict canonical door deliberately refuses.
 func insightsIngest(s *cloud.Service[state], c *zip.Ctx) error {
 	deprecated(s, c, "/v1/event")
 	org, ok := captureTenant(c)
