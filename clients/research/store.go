@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS artifact (
   sha256          TEXT PRIMARY KEY,
   kind            TEXT NOT NULL,
   ref             TEXT NOT NULL,
+  content         BLOB,
   run_id          TEXT NOT NULL DEFAULT '',
   project         TEXT NOT NULL DEFAULT 'default',
   visibility      TEXT NOT NULL DEFAULT 'private',
@@ -384,22 +385,40 @@ func (s *store) setGrant(ctx context.Context, project, id string, visibility *st
 
 // ── artifacts (the research diary — raw-artifact retention class) ─────────────
 
-// putArtifact records one artifact manifest idempotently by its sha256 content hash —
-// hash-addressed, so a re-POST of the same bytes is a no-op (the "hash-addressed" half
-// of the earned durability label). project is the SERVER's value; visibility is FORCED
-// private (a grant is separate). The bytes live at ref (blob store); this stores the
-// verifiable manifest. Returns 1 when a new artifact was recorded, 0 on a dup.
-func (s *store) putArtifact(ctx context.Context, project string, a Artifact) (int, error) {
+// putArtifact records one artifact idempotently by its sha256, storing the BYTES the
+// server hashed. The sha256 is SERVER-DERIVED (see postArtifact) — never client-asserted —
+// so the artifact is genuinely hash-addressed and a poisoned first-write is impossible (a
+// distinct hash would need a preimage). project is the SERVER's value; visibility is
+// FORCED private (a grant is separate). Returns 1 when a new artifact was recorded, 0 on a
+// dup (the same bytes → the same hash → a no-op).
+func (s *store) putArtifact(ctx context.Context, project string, a Artifact, content []byte) (int, error) {
 	res, err := s.db.ExecContext(ctx, `
 INSERT OR IGNORE INTO artifact
-  (sha256, kind, ref, run_id, project, visibility, retention_class, git_sha, git_branch, git_dirty, lib_versions, ts)
-VALUES (?,?,?,?,?, 'private', 'raw-artifact', ?,?,?,?,?)`,
-		a.SHA256, a.Kind, a.Ref, a.RunID, project,
+  (sha256, kind, ref, content, run_id, project, visibility, retention_class, git_sha, git_branch, git_dirty, lib_versions, ts)
+VALUES (?,?,?,?,?,?, 'private', 'raw-artifact', ?,?,?,?,?)`,
+		a.SHA256, a.Kind, a.Ref, content, a.RunID, project,
 		a.GitSHA, a.GitBranch, boolInt(a.GitDirty), jsonObj(a.LibVersions), a.TS)
 	if err != nil {
 		return 0, fmt.Errorf("research artifact insert: %w", err)
 	}
 	return affected(res), nil
+}
+
+// artifactContent returns one artifact's stored bytes + kind, hash-addressed by sha256 and
+// org-scoped (the file IS the org). ok is false for an unknown hash.
+func (s *store) artifactContent(ctx context.Context, project, sha256 string) ([]byte, string, bool) {
+	var content []byte
+	var kind string
+	q := `SELECT content, kind FROM artifact WHERE sha256=?`
+	args := []any{sha256}
+	if project != "" {
+		q += ` AND project=?`
+		args = append(args, project)
+	}
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&content, &kind); err != nil {
+		return nil, "", false
+	}
+	return content, kind, true
 }
 
 // listArtifacts returns the chronological diary feed newest-first, filtered by project,
