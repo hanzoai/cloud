@@ -75,6 +75,7 @@ import (
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
+	"github.com/hanzoai/cloud/clients/destinations"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/domain"
@@ -340,6 +341,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "graph", Mount: graph.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
+		// Marketing destinations /v1/destinations/* — the native fan-out that
+		// TRANSLATES the canonical /v1/event stream to each connected ad/analytics
+		// platform (GA4 Measurement Protocol, Meta Conversions API, X/LinkedIn/TikTok/
+		// Reddit) and forwards it server-side. Mounts AFTER analytics (whose fan-out
+		// sink it installs) and integrations (a destination may reuse an OAuth
+		// connection's token via integrations.TokenFor). Owns a DB handle → Shutdown.
+		{Name: "destinations", Mount: destinations.Mount, Shutdown: ctxShutdown(destinations.Shutdown)},
 		// First-class per-org Cloudflare asset plane /v1/cloudflare/{zones,pages,workers,
 		// ai,r2,kv,d1}/* (sibling of /v1/dns, /v1/domain). Mounts AFTER integrations
 		// because it reads the org's Cloudflare token through the integrations custody
