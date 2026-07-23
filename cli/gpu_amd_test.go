@@ -92,3 +92,30 @@ func TestPickAmdMemUnified(t *testing.T) {
 		t.Errorf("discrete: got (%d, %v), want (24576, false)", miB, unified)
 	}
 }
+
+// TestAmdAPUName — the board renders the APU as the processor the owner bought,
+// normalized from the BIOS shouting; non-Ryzen hosts opt out.
+func TestAmdAPUName(t *testing.T) {
+	if got, want := amdAPUName("AMD RYZEN AI MAX+ 395 w/ Radeon 8060S"), "AMD Ryzen AI Max+ 395 w/ Radeon 8060S"; got != want {
+		t.Errorf("amdAPUName = %q, want %q", got, want)
+	}
+	if got := amdAPUName("Intel(R) Core(TM) i9-14900K"); got != "" {
+		t.Errorf("non-Ryzen host must opt out, got %q", got)
+	}
+}
+
+// TestApuProcessorNames — only unified-memory cards are renamed; a discrete
+// card on the same host keeps its own identity.
+func TestApuProcessorNames(t *testing.T) {
+	gpus := []gpuInfo{
+		{Name: "AMD Strix Halo \u00b7 Radeon 8060S Graphics (gfx1151)", Arch: "gfx1151", Unified: true},
+		{Name: "Radeon RX 7900 XTX (gfx1100)", Arch: "gfx1100"},
+	}
+	out := apuProcessorNames(gpus, "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S")
+	if got, want := out[0].Name, "AMD Ryzen AI Max+ 395 w/ Radeon 8060S (gfx1151)"; got != want {
+		t.Errorf("APU name = %q, want %q", got, want)
+	}
+	if got, want := out[1].Name, "Radeon RX 7900 XTX (gfx1100)"; got != want {
+		t.Errorf("discrete name = %q, want %q", got, want)
+	}
+}
