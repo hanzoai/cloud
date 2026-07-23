@@ -120,6 +120,23 @@ steps:
     done: A referral program is configured for your org.
     dependencies: [landing]
 
+  - id: destinations
+    title: Connect your ad + analytics destinations
+    why: >
+      Forwarding your real conversions to Google, Meta, and TikTok lets their
+      algorithms optimize your spend on the outcomes that matter — signups and
+      orders, not just clicks.
+    how: >
+      Connect a destination in Hanzo Destinations (/v1/destinations): add your GA4
+      measurement id or Meta pixel, plus its API secret. The Business AI can
+      provision the ids (destinations_connect); you add the secret in the console.
+    done: At least one destination is connected and receiving conversions.
+    dependencies: [analytics]
+    draft: >
+      List the ad and analytics destinations this company should connect first given
+      its channels, and for each the exact id it needs (GA4 measurement id, Meta
+      pixel id). Return a short checklist.
+
   - id: launch
     title: Launch
     why: >
