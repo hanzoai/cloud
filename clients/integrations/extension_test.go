@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -320,4 +321,110 @@ func TestUnifiedFailClosed(t *testing.T) {
 func asOK2(t *testing.T, app *zip.App, method, path, org, user string) int {
 	t.Helper()
 	return as(t, app, method, path, org, user, nil).Code
+}
+
+// orgkey is a self-contained org-plane KEY provider (kind=key, scope=org) with a
+// Verify — used to prove the verify exit freezes on disable without an external mock.
+var orgKeyVerify = func(context.Context, VerifyInput) (*ExchangeResult, error) {
+	return &ExchangeResult{Tokens: map[string]string{"api_key": "OK"}, ExternalID: "K", AccountLabel: "KeyAcc"}, nil
+}
+
+func init() {
+	register(&Provider{
+		ID: "orgkey", Name: "Org Key", Description: "org key proof provider",
+		Category:   "Test",
+		Kind:       kindKey,
+		Secrets:    []string{"api_key"},
+		Verify:     func(ctx context.Context, in VerifyInput) (*ExchangeResult, error) { return orgKeyVerify(ctx, in) },
+		Configured: func() bool { return true },
+		Creds:      func() OAuthConfig { return OAuthConfig{} },
+	})
+}
+
+// TestGithubDisableFreezesInstallationToken is the MED-1 proof: github declares
+// Secrets:nil and mints installation tokens through the bespoke InstallationToken
+// path (Pages, repo-import, push-to-deploy mirror). Disable MUST freeze that mint —
+// the single choke point (InstallationToken → gateEnabled) — or `disable` is inert
+// on the highest-privilege connector. github is NOT AdminOnly, so a plain org
+// member's disable is load-bearing.
+func TestGithubDisableFreezesInstallationToken(t *testing.T) {
+	withGithubApp(t, mockGitHub(t, nil))
+	app := newApp(t, newKMS(t))
+	// Seed a connected installation for acme (ExternalID = installation id).
+	if err := mounted.State.store.Upsert(context.Background(), Connection{
+		Org: "acme", Provider: "github", ExternalID: "77", AccountLabel: "acme-gh",
+	}); err != nil {
+		t.Fatalf("seed github connection: %v", err)
+	}
+
+	// ENABLED (no config row): the choke is OPEN — the mint succeeds via the mock,
+	// and the Pages read reaches GitHub (mock 404 "pages not enabled"), NOT 403.
+	if tok, err := githubTokenForOrg(context.Background(), "acme"); err != nil || tok != "ghs_installation_token" {
+		t.Fatalf("enabled github must mint: tok=%q err=%v", tok, err)
+	}
+	if code := asOK2(t, app, http.MethodGet, "/v1/integrations/github/repos/myrepo/pages", "acme", userEmail); code == http.StatusForbidden {
+		t.Fatalf("enabled github Pages must not be 403, got %d", code)
+	}
+
+	// DISABLE via the unified surface — by a NON-admin org member (github is not AdminOnly).
+	de := decode[struct {
+		Enabled bool `json:"enabled"`
+	}](t, asOK(t, app, http.MethodPost, "/v1/connectors/github/disable", "acme", userEmail, nil))
+	if de.Enabled {
+		t.Fatal("disable must report enabled=false")
+	}
+
+	// FROZEN: the shared mint fails CLOSED (Pages/import/mirror all mint through here).
+	if _, err := InstallationToken(context.Background(), "acme"); err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("disabled github InstallationToken must fail closed as disabled, got %v", err)
+	}
+	// githubTokenForOrg surfaces the gate's 403 (not a 502 "mint failed").
+	if _, err := githubTokenForOrg(context.Background(), "acme"); err != nil {
+		if he, ok := httpErr(err); !ok || he.Status != http.StatusForbidden {
+			t.Fatalf("githubTokenForOrg on disabled must be 403, got %v", err)
+		}
+	} else {
+		t.Fatal("githubTokenForOrg on disabled must error")
+	}
+	// The Pages HTTP surface (the exact attack Red named) is now blocked.
+	if code := asOK2(t, app, http.MethodGet, "/v1/integrations/github/repos/myrepo/pages", "acme", userEmail); code != http.StatusForbidden {
+		t.Fatalf("disabled github Pages must be 403, got %d", code)
+	}
+
+	// RE-ENABLE restores the mint.
+	asOK(t, app, http.MethodPost, "/v1/connectors/github/enable", "acme", userEmail, nil)
+	if tok, err := githubTokenForOrg(context.Background(), "acme"); err != nil || tok != "ghs_installation_token" {
+		t.Fatalf("re-enabled github must mint again: tok=%q err=%v", tok, err)
+	}
+}
+
+// TestDisableFreezesRefreshAndVerify proves LOW-2: disable also freezes the
+// credential-USING exits (refresh rotates it, verify re-checks it) for symmetry
+// with the token exits — a disabled connector is fully inert.
+func TestDisableFreezesRefreshAndVerify(t *testing.T) {
+	app := newApp(t, newKMS(t))
+
+	// USER refresh (fake has Refresh): connect → disable → refresh 403.
+	reset(t)
+	fakeVerify = func(context.Context, VerifyInput) (*ExchangeResult, error) {
+		return &ExchangeResult{Tokens: map[string]string{accessSecret: "AT", refreshSecret: "RT"}}, nil
+	}
+	asOK(t, app, http.MethodPost, "/v1/connectors/fake/connect", "acme", userEmail, map[string]any{"token": "t"})
+	asOK(t, app, http.MethodPost, "/v1/connectors/fake:default/disable", "acme", userEmail, nil)
+	if r := as(t, app, http.MethodPost, "/v1/connectors/fake:default/refresh", "acme", userEmail, nil); r.Code != http.StatusForbidden {
+		t.Fatalf("disabled user refresh want 403, got %d (%s)", r.Code, r.Body)
+	}
+
+	// ORG verify (orgkey has Verify): connect → verify OK → disable → verify 403.
+	orgKeyVerify = func(context.Context, VerifyInput) (*ExchangeResult, error) {
+		return &ExchangeResult{Tokens: map[string]string{"api_key": "K"}, AccountLabel: "KeyAcc"}, nil
+	}
+	asOK(t, app, http.MethodPost, "/v1/connectors/orgkey/connect", "acme", userEmail, map[string]any{"token": "k"})
+	if r := as(t, app, http.MethodPost, "/v1/connectors/orgkey/verify", "acme", userEmail, nil); r.Code != http.StatusOK {
+		t.Fatalf("enabled org verify want 200, got %d (%s)", r.Code, r.Body)
+	}
+	asOK(t, app, http.MethodPost, "/v1/connectors/orgkey/disable", "acme", userEmail, nil)
+	if r := as(t, app, http.MethodPost, "/v1/connectors/orgkey/verify", "acme", userEmail, nil); r.Code != http.StatusForbidden {
+		t.Fatalf("disabled org verify want 403, got %d (%s)", r.Code, r.Body)
+	}
 }

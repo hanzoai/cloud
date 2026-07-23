@@ -465,8 +465,13 @@ func setEnablement(s *cloud.Service[state], c *zip.Ctx, enabled bool) error {
 const maxConfigLen = 16 * 1024
 
 // configureExt sets the opaque per-extension config object. The body IS the config
-// object (not wrapped) — it is re-marshalled compact so the stored row is always
-// valid JSON, and bounded so a hostile blob can never bloat the store.
+// object (not wrapped) — re-marshalled compact so the stored row is always valid
+// JSON, bounded so a hostile blob can't bloat the store.
+//
+// NON-SECRET by contract: config is echoed by getExtension, readable by any org
+// member (config is NOT admin-gated on a non-AdminOnly provider), so a credential
+// must NEVER be placed here — credentials go to KMS via connect, custody stays in
+// KMS. This axis is tuning only (routing prefs, region, plugin knobs).
 func configureExt(s *cloud.Service[state], c *zip.Ctx) error {
 	scope, org, user, provider, label, _, err := extIdentity(s, c)
 	if err != nil {
