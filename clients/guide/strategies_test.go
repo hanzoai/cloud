@@ -2,6 +2,7 @@ package guide
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -55,9 +56,10 @@ type corpusResp struct {
 	Stage      string `json:"stage"`
 	Count      int    `json:"count"`
 	Strategies []struct {
-		ID       string `json:"id"`
-		Category string `json:"category"`
-		Workload string `json:"workload"`
+		ID       string   `json:"id"`
+		Category string   `json:"category"`
+		Workload string   `json:"workload"`
+		Tags     []string `json:"tags"`
 	} `json:"strategies"`
 }
 
@@ -80,14 +82,30 @@ func TestHTTPStrategiesCorpus(t *testing.T) {
 		t.Fatalf("corpus without principal want 403, got %d", r.Code)
 	}
 
-	// A fresh org is at the formed stage with no capability signals: only the five
-	// stage:research tactics surface (has:* preconditions are unmet).
+	// A fresh org is at the formed stage with no capability signals: it surfaces ONLY the
+	// tactics whose every tag is formed-satisfiable (no has:* precondition, no stage above
+	// formed). The full genome (888 modern + 114 heritage) makes this MORE than the old
+	// heritage-only handful — modern formed-stage tactics surface too — so assert the
+	// invariant (purity) + a lower bound that proves the modern corpus is folded in, never a
+	// brittle exact count.
 	fresh := decode[corpusResp](t, req(t, app, http.MethodGet, "/v1/guide/strategies", "acme", nil).Body)
 	if fresh.Stage != string(StageFormed) {
 		t.Fatalf("fresh org stage want formed, got %q", fresh.Stage)
 	}
-	if fresh.Count != 5 {
-		t.Fatalf("fresh org surfaces exactly the 5 stage:research tactics, got %d", fresh.Count)
+	if fresh.Count < 15 {
+		t.Fatalf("fresh org must surface the formed-satisfiable corpus (modern + heritage), got only %d", fresh.Count)
+	}
+	// PURITY: nothing surfaced may require a signal (has:*) or a stage above formed.
+	for _, s := range fresh.Strategies {
+		for _, tag := range s.Tags {
+			if strings.HasPrefix(tag, "has:") {
+				t.Fatalf("fresh (no-signal) org surfaced %q with an unmet capability gate %q", s.ID, tag)
+			}
+			switch tag {
+			case "stage:launched", "stage:activated", "stage:scaling":
+				t.Fatalf("fresh (formed) org surfaced %q needing a higher stage %q", s.ID, tag)
+			}
+		}
 	}
 	if !fresh.has("buyer-personas") {
 		t.Fatal("a stage:research tactic (buyer-personas) must surface for a formed org")
