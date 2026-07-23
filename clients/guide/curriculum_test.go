@@ -13,10 +13,11 @@ func TestDefaultBlueprintValid(t *testing.T) {
 	if b.Version != "1" {
 		t.Fatalf("base blueprint version want 1, got %q", b.Version)
 	}
-	// The captured playbook: 12 sections · 67 steps · 114 strategies · 6 templates.
-	if len(b.Sections) != 12 || len(b.Steps) != 67 || len(b.Strategies) != 114 || len(b.Templates) != 6 {
-		t.Fatalf("base counts want 12/67/114/6, got %d/%d/%d/%d",
-			len(b.Sections), len(b.Steps), len(b.Strategies), len(b.Templates))
+	// The full Zen of Hanzo genome: the 64-principle spine · 12 sections · 67 steps · the
+	// 1002-strategy corpus (888 modern + 114 heritage) · 6 templates.
+	if len(b.Principles) != 64 || len(b.Sections) != 12 || len(b.Steps) != 67 || len(b.Strategies) != 1002 || len(b.Templates) != 6 {
+		t.Fatalf("base counts want 64/12/67/1002/6, got %d/%d/%d/%d/%d",
+			len(b.Principles), len(b.Sections), len(b.Steps), len(b.Strategies), len(b.Templates))
 	}
 	if err := b.Validate(); err != nil {
 		t.Fatalf("base blueprint invalid: %v", err)
