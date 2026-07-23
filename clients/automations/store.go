@@ -448,6 +448,29 @@ func (s *Store) UpdateRunStatus(ctx context.Context, org, id string, status Flow
 	return nil
 }
 
+// CountRunsSince counts an org's run rows created at/after `since` (unix millis). It is
+// the DURABLE per-org run-rate signal (it reads persisted rows, so the bound survives a
+// restart), scoped to org and served by ix_auto_runs_org_created.
+func (s *Store) CountRunsSince(ctx context.Context, org string, since int64) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM automations_runs WHERE org=? AND created >= ?`, org, since).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count runs since: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteRun removes a single run row for (org,id). Used to roll back a run whose durable
+// START failed transiently — so the run id (the idempotency key) is NOT burned and a
+// redelivery can retry, rather than being permanently dropped.
+func (s *Store) DeleteRun(ctx context.Context, org, id string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM automations_runs WHERE org=? AND id=?`, org, id); err != nil {
+		return fmt.Errorf("delete run: %w", err)
+	}
+	return nil
+}
+
 // ── trigger subscriptions (WEBHOOK/APP_WEBHOOK routing index) ────────────────
 
 // triggerSub is one webhook subscription resolved by MatchTriggers: the flow +
