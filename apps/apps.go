@@ -64,22 +64,26 @@ import (
 	"github.com/hanzoai/cloud/clients/benchmark"
 	"github.com/hanzoai/cloud/clients/billing"
 	"github.com/hanzoai/cloud/clients/bots"
+	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/captable"
 	"github.com/hanzoai/cloud/clients/catalogsync"
 	"github.com/hanzoai/cloud/clients/channels"
 	"github.com/hanzoai/cloud/clients/cloudflare"
 	"github.com/hanzoai/cloud/clients/code"
 	"github.com/hanzoai/cloud/clients/company"
+	"github.com/hanzoai/cloud/clients/compliance"
 	"github.com/hanzoai/cloud/clients/content"
 	"github.com/hanzoai/cloud/clients/crm"
 	"github.com/hanzoai/cloud/clients/dataroom"
 	"github.com/hanzoai/cloud/clients/deploy"
+	"github.com/hanzoai/cloud/clients/destinations"
 	"github.com/hanzoai/cloud/clients/dns"
 	"github.com/hanzoai/cloud/clients/do"
 	"github.com/hanzoai/cloud/clients/domain"
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
+	"github.com/hanzoai/cloud/clients/experiments"
 	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
@@ -87,6 +91,7 @@ import (
 	"github.com/hanzoai/cloud/clients/git"
 	"github.com/hanzoai/cloud/clients/graph"
 	"github.com/hanzoai/cloud/clients/guide"
+	"github.com/hanzoai/cloud/clients/help"
 	"github.com/hanzoai/cloud/clients/iam"
 	"github.com/hanzoai/cloud/clients/ingress"
 	"github.com/hanzoai/cloud/clients/integrations"
@@ -94,6 +99,7 @@ import (
 	"github.com/hanzoai/cloud/clients/kms"
 	"github.com/hanzoai/cloud/clients/knowledge"
 	"github.com/hanzoai/cloud/clients/leaderboard"
+	"github.com/hanzoai/cloud/clients/legal"
 	"github.com/hanzoai/cloud/clients/link"
 	"github.com/hanzoai/cloud/clients/marketing"
 	"github.com/hanzoai/cloud/clients/marketplace"
@@ -137,19 +143,20 @@ import (
 	"github.com/hanzoai/cloud/clients/x402"
 	"github.com/hanzoai/cloud/clients/zt"
 
-	// Framework CONTENT modules — NOT mount subsystems (they carry no HTTP surface
-	// and are absent from Wire()). Each registers its DocType fixtures and, for erp,
-	// its ledger-posting lifecycle hooks into the clients/framework DocType engine
-	// from a package init() (framework.RegisterModule) — the idiomatic
-	// register-into-a-registry pattern (cf. database/sql drivers). The framework
-	// engine is mounted (always-on, /v1/framework/*) but its module registry is
-	// populated ONLY by these blank imports. Dropping one silently strips that
-	// lane's DocTypes and hooks — for erp, the immutable ledger postings — from the
-	// binary with NO mount change and NO failing mount test. #248 dropped them;
-	// TestFrameworkContentModulesLinked now guards against a recurrence. Keep.
+	// Framework CONTENT modules — pure fixture lanes that carry no HTTP surface and
+	// are absent from Wire(). Each registers its DocType fixtures and, for erp, its
+	// ledger-posting lifecycle hooks into the clients/framework DocType engine from a
+	// package init() (framework.RegisterModule) — the idiomatic register-into-a-
+	// registry pattern (cf. database/sql drivers). The framework engine is mounted
+	// (always-on, /v1/framework/*) but its module registry is populated ONLY by these
+	// blank imports. Dropping one silently strips that lane's DocTypes and hooks — for
+	// erp, the immutable ledger postings — from the binary with NO mount change and NO
+	// failing mount test. #248 dropped them; TestFrameworkContentModulesLinked now
+	// guards against a recurrence. Keep. (help is a framework lane too but ALSO mounts
+	// a thin /v1/help public plane, so it is a real import + a Wire() spec below,
+	// alongside knowledge — the other lane with a companion subsystem.)
 	_ "github.com/hanzoai/cloud/clients/cms"
 	_ "github.com/hanzoai/cloud/clients/erp"
-	_ "github.com/hanzoai/cloud/clients/help"
 )
 
 // init wires the cross-subsystem func seams — the composition root is the one place
@@ -272,6 +279,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "templates", Mount: templates.Mount},
 		{Name: "framework", Mount: framework.Mount, Shutdown: ctxShutdown(framework.Shutdown)},
 		{Name: "knowledge", Mount: knowledge.Mount},
+		// Hanzo Support PUBLIC plane /v1/help/* (help center KB read + customer ticket
+		// intake) — the anonymous face the secure-by-default framework surface can't
+		// serve. A framework lane like knowledge: its DocType fixtures register via
+		// init() (help.Module), and this mounts the thin public subsystem. Owns no store
+		// (delegates to the framework in-process API), so no Shutdown. After framework
+		// (whose in-process API it calls at request time); before the AI /v1/* catch-all.
+		{Name: "help", Mount: help.Mount},
 		// Marketing content loop /v1/content/* (generate → CMS → transition → publish).
 		// After framework (its DocType store the ops read/write) + knowledge (the sibling
 		// framework lane); before the AI /v1/* catch-all so /v1/content/* resolves here.
@@ -299,6 +313,13 @@ func Wire() []cloud.MountSpec {
 		// twin of crm/marketing. Owns a DB handle, so its Shutdown closes it cleanly
 		// on SIGTERM (ctxShutdown adapts func() error).
 		{Name: "ads", Mount: ads.Mount, Shutdown: ctxShutdown(ads.Shutdown)},
+		// Top-level GTM orchestration /v1/campaign/* — the capability layer that fans a
+		// campaign VALUE out to its channels (paid→ads, organic→publish, email→marketing),
+		// each CONSUMING the connector plane via integrations.TokenFor. Metrics read from
+		// the ONE analytics plane (never a second store); creative A/B composes the
+		// experiment seam. The paid channel executor is wired in wire_seams.go. Owns a DB
+		// handle, so its Shutdown closes it cleanly on SIGTERM.
+		{Name: "campaign", Mount: campaign.Mount, Shutdown: ctxShutdown(campaign.Shutdown)},
 		// GDA/SDM validator onboarding /v1/validators/* — wallet-sig + ETH-mainnet
 		// GenesisNFT ownerOf → seal luxd staking identity into KMS → write a NEW-node
 		// LuxNetwork CR (node.lux.cloud, never the live luxd) → enqueue an owner-gated
@@ -331,6 +352,13 @@ func Wire() []cloud.MountSpec {
 		{Name: "graph", Mount: graph.Mount},
 		{Name: "security", Mount: security.Mount, Shutdown: ctxShutdown(security.Shutdown), OwnsHealth: true},
 		{Name: "integrations", Mount: integrations.Mount, Shutdown: integrations.Shutdown},
+		// Marketing destinations /v1/destinations/* — the native fan-out that
+		// TRANSLATES the canonical /v1/event stream to each connected ad/analytics
+		// platform (GA4 Measurement Protocol, Meta Conversions API, X/LinkedIn/TikTok/
+		// Reddit) and forwards it server-side. Mounts AFTER analytics (whose fan-out
+		// sink it installs) and integrations (a destination may reuse an OAuth
+		// connection's token via integrations.TokenFor). Owns a DB handle → Shutdown.
+		{Name: "destinations", Mount: destinations.Mount, Shutdown: ctxShutdown(destinations.Shutdown)},
 		// First-class per-org Cloudflare asset plane /v1/cloudflare/{zones,pages,workers,
 		// ai,r2,kv,d1}/* (sibling of /v1/dns, /v1/domain). Mounts AFTER integrations
 		// because it reads the org's Cloudflare token through the integrations custody
@@ -363,6 +391,12 @@ func Wire() []cloud.MountSpec {
 		// the arena's sibling: benchmark measures, research is the versioned diary
 		// every product's runs accrue into. Non-staged: mounts under the default.
 		{Name: "research", Mount: research.Mount, Shutdown: ctxShutdown(research.Shutdown)},
+		// The unified EXPERIMENT primitive (/v1/experiments): A/B testing as ONE value
+		// whatever the variant kind (feature | ad creative | email | model). It is a
+		// COMPOSITION — assignment via flags, measurement via analytics, evidence via
+		// research — so it mounts AFTER all three. It owns only the experiment registry
+		// store → Shutdown. clients/campaign composes it (experiments.Assign/Analyze).
+		{Name: "experiments", Mount: experiments.Mount, Shutdown: ctxShutdown(experiments.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
@@ -403,6 +437,14 @@ func Wire() []cloud.MountSpec {
 		// google token custody; captable/dataroom facades) and before the /v1/* AI
 		// catch-all so its routes resolve here.
 		{Name: "company", Mount: company.Mount, Shutdown: company.Shutdown},
+		// The corporate back-office surfaces — orthogonal to company/captable/billing:
+		// Hanzo Compliance (/v1/compliance) orchestrates KYC/KYB verification providers
+		// + tracks accreditation state + surfaces the SOC 2 audit posture; Hanzo Legal
+		// (/v1/legal) is the versioned template + generation engine + e-sign/filing seams.
+		// Both are TOOLING with providers/professionals in the loop, never advice or
+		// certification. They mount before the /v1/* AI catch-all so their routes resolve.
+		{Name: "compliance", Mount: compliance.Mount, Shutdown: ctxShutdown(compliance.Shutdown), OwnsHealth: true},
+		{Name: "legal", Mount: legal.Mount, Shutdown: ctxShutdown(legal.Shutdown), OwnsHealth: true},
 		// Chat orchestrator — POST /v1/chat: ONE LLM tool-calling round over the tool
 		// plane. It COMPOSES the ai completion path (in-process, so per-org billing
 		// runs) + the unified tool registry, and splits the model's tool calls into
