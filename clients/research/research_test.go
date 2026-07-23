@@ -98,6 +98,50 @@ func TestCorrectionAppendsVersion(t *testing.T) {
 	}
 }
 
+// TestRetractionWithdraws proves a retraction is HONORED, not a silent no-op (H1): it
+// appends a distinct version (revision is part of content identity), withdraws the id
+// from canonical (the latest version is a retraction ⇒ no canonical), retains both, and a
+// later correction restores canonical.
+func TestRetractionWithdraws(t *testing.T) {
+	st, ctx := newStore(t)
+	id := "benchmark:m:gpqa_diamond"
+	orig := Experiment{ID: id, Kind: "benchmark", Subject: "m", Task: "gpqa_diamond", Metric: "accuracy", Value: 80, N: 10, TS: 100}
+	if _, _, err := st.ingest(ctx, proj, []Experiment{orig}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if exps, _ := st.listExperiments(ctx, "", ""); len(exps) != 1 {
+		t.Fatalf("pre-retraction canonical=%d, want 1", len(exps))
+	}
+	// Retract: same id + content, revision retracted, newer ts. revision is in the hash,
+	// so this is a DISTINCT version (added=1), not an INSERT-OR-IGNORE no-op.
+	retr := orig
+	retr.Revision = "retracted"
+	retr.TS = 200
+	added, _, err := st.ingest(ctx, proj, []Experiment{retr}, nil)
+	if err != nil || added != 1 {
+		t.Fatalf("retraction added=%d err=%v, want 1 (not a silent no-op)", added, err)
+	}
+	if exps, _ := st.listExperiments(ctx, "", ""); len(exps) != 0 {
+		t.Fatalf("post-retraction canonical=%d, want 0 (withdrawn)", len(exps))
+	}
+	c, _ := st.counts(ctx)
+	if c.ExperimentsRetained != 2 || c.ExperimentsCanonical != 0 {
+		t.Fatalf("counts=%+v, want retained=2 canonical=0 (retained keeps it, withdrawn from canonical)", c)
+	}
+	// A later corrected run supersedes the retraction → canonical again.
+	corr := orig
+	corr.Revision = "corrected"
+	corr.Value = 75
+	corr.TS = 300
+	if _, _, err := st.ingest(ctx, proj, []Experiment{corr}, nil); err != nil {
+		t.Fatal(err)
+	}
+	exps, _ := st.listExperiments(ctx, "", "")
+	if len(exps) != 1 || exps[0].Value != 75 {
+		t.Fatalf("post-correction canonical=%v, want value 75 (restored)", exps)
+	}
+}
+
 // TestProvenanceDistinctVersions: the SAME number on a DIFFERENT git sha / lib version is
 // a distinct RETAINED version — the longitudinal "which lib version regressed this"
 // record — and provenance is returned queryable on read.

@@ -154,23 +154,28 @@ func (s *store) Close() error { return s.db.Close() }
 
 // ── content hashes (version identity) ────────────────────────────────────────
 
-// hashExp is an experiment version's content identity: the substantive measurement AND
-// its PROVENANCE (git sha/branch/dirty, lib versions), NOT its version/consent metadata
-// (revision, visibility, ts order). Provenance is part of the identity so the SAME
-// number measured on a different commit or lib version is a distinct RETAINED version —
-// the longitudinal record "which lib version regressed this" depends on it.
+// hashExp is an experiment version's content identity: the REVISION (original /
+// corrected / retracted), the substantive measurement, AND its PROVENANCE (git
+// sha/branch/dirty, lib versions). revision is part of the identity so a RETRACTION of an
+// otherwise-identical run is a DISTINCT version (not an INSERT-OR-IGNORE no-op) — without
+// it a retraction silently vanishes. Provenance is part of the identity so the SAME
+// number on a different commit or lib version is a distinct RETAINED version. Meta and
+// lib_versions are canonicalized (sorted-key, whitespace-free) so a re-serialization does
+// not mint a spurious version. visibility/ts are NOT identity (a grant / a re-observation
+// is not a new version).
 func hashExp(e Experiment) string {
-	return hashJoin(e.Kind, e.Subject, e.Task, e.Metric,
+	return hashJoin(revisionOf(e.Revision), e.Kind, e.Subject, e.Task, e.Metric,
 		strconv.FormatFloat(e.Value, 'g', -1, 64), strconv.Itoa(e.N), strconv.Itoa(e.NTotal),
-		strconv.FormatFloat(e.CostUSD, 'g', -1, 64), runStatus(e.Status), string(e.Meta),
-		e.GitSHA, e.GitBranch, strconv.Itoa(boolInt(e.GitDirty)), string(e.LibVersions))
+		strconv.FormatFloat(e.CostUSD, 'g', -1, 64), runStatus(e.Status), canonJSON(e.Meta),
+		e.GitSHA, e.GitBranch, strconv.Itoa(boolInt(e.GitDirty)), canonJSON(e.LibVersions))
 }
 
-// hashAtt is an attempt version's content identity: the measured artifact (gold, answer,
-// correctness, raw response, source, status). A re-scored/re-run attempt with a different
-// artifact is a new version; a byte-identical re-ingest is idempotent.
+// hashAtt is an attempt version's content identity: the revision + the measured artifact
+// (gold, answer, correctness, raw response, source, status). A re-scored/re-run/retracted
+// attempt is a new version; a byte-identical re-ingest is idempotent.
 func hashAtt(a Attempt) string {
-	return hashJoin(a.Gold, a.Answer, strconv.Itoa(boolInt(a.Correct)), a.Response, sourceOf(a.Source), runStatus(a.Status))
+	return hashJoin(revisionOf(a.Revision), a.Gold, a.Answer, strconv.Itoa(boolInt(a.Correct)),
+		a.Response, sourceOf(a.Source), runStatus(a.Status))
 }
 
 func hashJoin(parts ...string) string {
@@ -241,17 +246,20 @@ func affected(res sql.Result) int {
 
 // ── canonical predicates (the ONE definition of "canonical") ─────────────────
 //
-// A version is canonical iff it is the latest (max ts, tiebreak max seq) non-retracted
-// version of its stable id. Any earlier non-retracted version is superseded; both are
-// retained. Defined once here and reused by every canonical read.
+// A version is canonical iff it is THE single latest version (max ts, tiebreak max seq)
+// of its stable id AND that latest version is not retracted. If the latest version IS a
+// retraction, the id has NO canonical — it is WITHDRAWN (a retraction is honored, not
+// ignored). "latest" is over ALL versions (the NOT EXISTS does not filter revision), so a
+// retraction that is the newest version wins and no earlier version resurfaces. Every
+// version is retained regardless. Defined once here and reused by every canonical read.
 
 const canonicalExpWhere = `e.revision != 'retracted' AND NOT EXISTS (
-  SELECT 1 FROM experiment e2 WHERE e2.project=e.project AND e2.id=e.id AND e2.revision!='retracted'
+  SELECT 1 FROM experiment e2 WHERE e2.project=e.project AND e2.id=e.id
     AND (e2.ts > e.ts OR (e2.ts = e.ts AND e2.seq > e.seq)))`
 
 const canonicalAttWhere = `a.revision != 'retracted' AND NOT EXISTS (
   SELECT 1 FROM attempt a2 WHERE a2.project=a.project AND a2.benchmark=a.benchmark
-    AND a2.item=a.item AND a2.model=a.model AND a2.revision!='retracted'
+    AND a2.item=a.item AND a2.model=a.model
     AND (a2.ts > a.ts OR (a2.ts = a.ts AND a2.seq > a.seq)))`
 
 // A canonical COUNT is the ANSWERED latest-run view: the canonical version whose status
@@ -609,6 +617,25 @@ func jsonObj(raw json.RawMessage) string {
 		return "{}"
 	}
 	return string(raw)
+}
+
+// canonJSON renders a JSON value in a CANONICAL form (sorted keys, no whitespace) for
+// content hashing, so a caller's re-serialization of the same object does not mint a
+// spurious retained version. An unparseable value is hashed as its raw bytes (still
+// deterministic); an absent value is empty.
+func canonJSON(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return string(raw)
+	}
+	b, err := json.Marshal(v) // encoding/json sorts map keys and strips whitespace
+	if err != nil {
+		return string(raw)
+	}
+	return string(b)
 }
 
 // revisionOf normalizes a producer-declared version kind; empty is `original`. superseded
