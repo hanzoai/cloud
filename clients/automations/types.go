@@ -307,6 +307,15 @@ type FlowRunInput struct {
 	FlowVersionID string     `json:"flowVersionId"`
 	RunID         string     `json:"runId"`
 	Steps         []FlowStep `json:"steps"`
+	// Trigger is the inbound event payload that fired the flow — nil for a manual /run
+	// or a bare cron tick, set by Deliver for a WEBHOOK/APP_WEBHOOK event. The workflow
+	// seeds it as outputs["trigger"], so an action can reference the event that fired the
+	// flow with {{trigger.field}}.
+	Trigger map[string]any `json:"trigger,omitempty"`
+	// Depth is the run's causation depth — how many in-platform trigger→action hops led
+	// here (0 = an external origin). It rides in from TriggerEvent.Depth and lets an
+	// in-platform cycle terminate at maxCausationDepth instead of amplifying.
+	Depth int `json:"depth,omitempty"`
 }
 
 // FlowStep is one resolved, executable step in the flattened chain.

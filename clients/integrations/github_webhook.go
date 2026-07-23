@@ -148,7 +148,27 @@ func githubWebhook(s *cloud.Service[state], c *zip.Ctx) error {
 		}
 		return zip.Errorf(http.StatusBadGateway, "sync: %v", err)
 	}
+	// Fire any automation flows subscribed to github/push for THIS org (best-effort — a
+	// dispatch failure never fails the webhook ack). org is the signature-verified
+	// installation owner resolved above, never a client field; ev.After (the head SHA) is
+	// the idempotency key so a redelivered push fires each flow at most once. depth 0 =
+	// external origin. MED-1: a bot/App-authored push (our own outbound mirror pushes AS the
+	// GitHub App bot) does NOT fire automations — else "on push → our action pushes → push"
+	// loops. A human push always fires. (The sync plane has its own cursor loop-guard.)
+	if !isBotActor(actorOf(ev)) {
+		fireTrigger(c.Context(), org, "github", "push", ev.After, 0, map[string]any{
+			"repo": ev.Repository.Name, "ref": ev.Ref, "branch": branch,
+			"before": ev.Before, "after": ev.After, "pusher": actorOf(ev),
+		})
+	}
 	return c.JSON(http.StatusOK, map[string]any{"ran": res.Ran, "skipped": res.Skipped})
+}
+
+// isBotActor reports whether a GitHub login is an App/bot identity (GitHub suffixes
+// App-authored actors with "[bot]"). Our own outbound mirror pushes AS the App bot, so
+// this is the automation-plane loop-guard: a bot-authored push never re-fires automations.
+func isBotActor(login string) bool {
+	return strings.HasSuffix(login, "[bot]")
 }
 
 // actorOf returns the login that pushed on GitHub — the App/bot for a push our own
