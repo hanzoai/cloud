@@ -75,6 +75,7 @@ var frozen = []struct {
 	{"git", false, false},            // was order 132
 	{"sync", false, true},            // /v1/sync engine (owns per-org DB handles → Shutdown)
 	{"visor", false, false},          // was order 133
+	{"venue", false, false},          // new: /v1/cloud connect-a-cloud-account plane (after visor); folds discovered clusters into the fleet
 	{"captable", false, true},        // was order 133
 	{"code", false, true},            // was order 134
 	{"zero-trust", false, false},     // was order 134
