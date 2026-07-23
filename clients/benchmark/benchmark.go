@@ -6,8 +6,8 @@
 //
 // Provenance-first, never blended: a `published_claim` (what a vendor reports) and a
 // `hanzo-measured` attempt (what OUR harness gets) are separate planes — the gap is
-// the signal (provider-reported runs 3-13pp hot; Fugu claims GPQA 95.5, we measure
-// ~92-95 depending on fault accounting). The store is append-only; a re-scored label
+// the signal (some provider-reported claims run 3-13pp hot vs one standardized
+// harness). The store is append-only; a re-scored label
 // is a new score_event, never an overwrite.
 //
 // Mounted into the unified cloud binary via apps.go ({Name:"benchmark", Mount}); the
@@ -39,8 +39,8 @@ type Benchmark struct {
 	Source  string `json:"source"`
 }
 
-// catalog is the top-14: the set every major provider reports and the set needed to
-// replicate-or-disprove Fugu (Sakana) in the arena. Mirrors registry/benchmarks.yaml.
+// catalog is the top-14: the set every major provider reports, run under one
+// standardized harness for apples-to-apples comparison. Mirrors registry/benchmarks.yaml.
 var catalog = []Benchmark{
 	{"gpqa_diamond", "GPQA-Diamond", "science-reasoning", 198, true, "hendrydong/gpqa_diamond_mc"},
 	{"humanitys_last_exam", "Humanity's Last Exam", "frontier-reasoning", 500, true, "macabdul9/hle_text_only"},
@@ -71,10 +71,6 @@ type publishedClaim struct {
 }
 
 var published = []publishedClaim{
-	{"gpqa_diamond", "sakana", "fugu-ultra", 95.5, "agentic-orchestration", "Sakana Fugu Technical Report 2026"},
-	{"swe_bench_pro", "sakana", "fugu-ultra", 73.7, "agentic", "Sakana Fugu Technical Report 2026"},
-	{"terminal_bench_2_1", "sakana", "fugu-ultra", 82.1, "agentic", "Sakana Fugu Technical Report 2026"},
-	{"livecodebench_pro", "sakana", "fugu-ultra", 90.8, "agentic", "Sakana Fugu Technical Report 2026"},
 	{"gpqa_diamond", "xai", "grok-4.5", 94.3, "provider-reported", "provider card"},
 	{"gpqa_diamond", "anthropic", "fable-5", 94.6, "provider-reported", "provider card"},
 	{"gpqa_diamond", "openai", "gpt-5.5", 93.6, "provider-reported", "provider card"},
