@@ -42,8 +42,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 )
@@ -90,6 +92,7 @@ const (
 const (
 	studioCap = "studio.render"
 	engineCap = "engine.serve"
+	fnCap     = "fn.run" // ephemeral script execution (uv-run) on this node
 )
 
 // The node-level command surface — `hanzo link | unlink | status` — is wired in
@@ -152,6 +155,8 @@ type engineAdvertisement struct {
 type gpuInfo struct {
 	Name        string `json:"name"`
 	MemoryTotal string `json:"memoryTotal,omitempty"`
+	Arch        string `json:"arch,omitempty"`    // native target, e.g. "gfx1151" (AMD)
+	Unified     bool   `json:"unified,omitempty"` // memory is a unified CPU/GPU pool (APU / SoC)
 }
 
 // registration is the fleet presence activity's Input — the shape cloud's
@@ -172,6 +177,10 @@ type registration struct {
 	Memory       int64                `json:"memory,omitempty"`
 	Version      string               `json:"version"`
 	JobQueue     string               `json:"jobQueue"`
+	Rocm         string               `json:"rocm,omitempty"`   // host ROCm version (AMD only)
+	Hip          string               `json:"hip,omitempty"`    // host HIP version (AMD only)
+	Cuda         string               `json:"cuda,omitempty"`   // host CUDA toolkit version (NVIDIA only)
+	Driver       string               `json:"driver,omitempty"` // host NVIDIA driver version
 	GPUs         []gpuInfo            `json:"gpus"`
 	Capabilities []string             `json:"capabilities,omitempty"`
 	Engine       *engineAdvertisement `json:"engine,omitempty"`
@@ -276,6 +285,9 @@ func newWorker(env *Env, jobsNS string) (*worker, error) {
 		"echo":          echoHandler,
 		"studio.render": w.studioRenderHandler,
 	}
+	if _, err := exec.LookPath("uv"); err == nil {
+		w.handlers[fnCap] = fnRunHandler // functions-runner: needs uv, nothing else
+	}
 	return w, nil
 }
 
@@ -311,24 +323,73 @@ func detectGPUs() []gpuInfo {
 	return nil
 }
 
-// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi (name + total VRAM).
+// detectNvidiaGPUs reports NVIDIA accelerators via nvidia-smi: name, memory,
+// and the sm arch (compute capability). A unified SoC (GB10 Grace-Blackwell)
+// reports memory.total as "[N/A]" — there is no dedicated VRAM counter — so it
+// reports the MACHINE's RAM snapped to hardware capacity, unified=true, the
+// same convention the AMD APU and Apple paths use.
 func detectNvidiaGPUs() []gpuInfo {
-	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader").Output()
+	out, err := exec.Command("nvidia-smi", "--query-gpu=name,memory.total,compute_cap", "--format=csv,noheader").Output()
 	if err != nil {
 		return nil
 	}
+	return parseNvidiaSmiCSV(out, detectMemTotal()/(1<<20))
+}
+
+// parseNvidiaSmiCSV parses `nvidia-smi --query-gpu=name,memory.total,compute_cap`
+// output ("NVIDIA GB10, [N/A], 12.1"). Pure — hostMiB is injected for the
+// unified-SoC memory figure.
+func parseNvidiaSmiCSV(out []byte, hostMiB int64) []gpuInfo {
 	var gpus []gpuInfo
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
+		fields := strings.Split(sc.Text(), ",")
+		if len(fields) < 2 || strings.TrimSpace(fields[0]) == "" {
 			continue
 		}
-		name, mem, _ := strings.Cut(line, ",")
-		gpus = append(gpus, gpuInfo{Name: strings.TrimSpace(name), MemoryTotal: strings.TrimSpace(mem)})
+		g := gpuInfo{Name: strings.TrimSpace(fields[0]), MemoryTotal: strings.TrimSpace(fields[1])}
+		var memMiB int64
+		if _, err := fmt.Sscanf(g.MemoryTotal, "%d MiB", &memMiB); err != nil || memMiB <= 0 {
+			// No dedicated VRAM counter — a unified SoC. The machine's RAM is
+			// the GPU's RAM.
+			if hostMiB > 0 {
+				g.MemoryTotal = fmt.Sprintf("%d MiB", snapUnified(hostMiB))
+				g.Unified = true
+			} else {
+				g.MemoryTotal = ""
+			}
+		}
+		if len(fields) >= 3 {
+			if cap := strings.TrimSpace(fields[2]); cap != "" && cap != "[N/A]" {
+				g.Arch = "sm_" + strings.ReplaceAll(cap, ".", "")
+			}
+		}
+		gpus = append(gpus, g)
 	}
 	return gpus
 }
+
+// nvidiaSoft is the host CUDA/driver inventory, detected once — the NVIDIA
+// mirror of amdSoftware. Empty on non-NVIDIA hosts.
+type nvidiaSoft struct{ cuda, driver string }
+
+var nvidiaSoftware = sync.OnceValue(func() nvidiaSoft {
+	var v nvidiaSoft
+	if out, err := exec.Command("nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader").Output(); err == nil {
+		v.driver = strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+	}
+	if b, err := os.ReadFile("/usr/local/cuda/version.json"); err == nil {
+		var m struct {
+			Cuda struct {
+				Version string `json:"version"`
+			} `json:"cuda"`
+		}
+		if json.Unmarshal(b, &m) == nil {
+			v.cuda = m.Cuda.Version
+		}
+	}
+	return v
+})
 
 // detectAmdGPUs reports AMD accelerators — discrete Radeon cards and gfx APUs alike
 // (e.g. evo's gfx1151 Radeon 8060S on the RYZEN AI MAX+ 395). Resolution order:
@@ -338,11 +399,11 @@ func detectNvidiaGPUs() []gpuInfo {
 func detectAmdGPUs() []gpuInfo {
 	if out, err := exec.Command("rocm-smi", "--showproductname", "--csv").Output(); err == nil {
 		if gpus := parseRocmSmiCSV(out); len(gpus) > 0 {
-			return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+			return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 		}
 	}
 	if gpus := parseKfdTopology(sysfsKfdNodes); len(gpus) > 0 {
-		return fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM))
+		return apuProcessorNames(fillAmdVRAM(gpus, amdVRAMTotals(sysfsDRM)), detectCPUModel())
 	}
 	if out, err := exec.Command("vulkaninfo", "--summary").Output(); err == nil {
 		if gpus := parseVulkaninfoSummary(out); len(gpus) > 0 {
@@ -388,12 +449,17 @@ func parseRocmSmiCSV(out []byte) []gpuInfo {
 		if name == "" {
 			continue
 		}
+		arch := ""
 		if gfx >= 0 && gfx < len(fields) {
 			if v := strings.TrimSpace(fields[gfx]); v != "" {
+				arch = v
 				name += " (" + v + ")"
 			}
 		}
-		gpus = append(gpus, gpuInfo{Name: name})
+		if fam := amdFamily(arch); fam != "" {
+			name = fam + " \u00b7 " + name
+		}
+		gpus = append(gpus, gpuInfo{Name: name, Arch: arch})
 	}
 	return gpus
 }
@@ -422,7 +488,12 @@ func parseKfdTopology(nodesDir string) []gpuInfo {
 		if simd <= 0 || gfxVer <= 0 {
 			continue // CPU node or non-GPU
 		}
-		gpus = append(gpus, gpuInfo{Name: "AMD GPU (" + gfxName(gfxVer) + ")"})
+		arch := gfxName(gfxVer)
+		name := "AMD GPU (" + arch + ")"
+		if fam := amdFamily(arch); fam != "" {
+			name = fam + " (" + arch + ")"
+		}
+		gpus = append(gpus, gpuInfo{Name: name, Arch: arch})
 	}
 	return gpus
 }
@@ -452,9 +523,119 @@ func gfxName(v int) string {
 	return fmt.Sprintf("gfx%d%d%d", v/10000, (v/100)%100, v%100)
 }
 
-// amdVRAMTotals returns each amdgpu card's total VRAM in MiB, in DRM card order,
-// read from /sys/class/drm/card*/device/mem_info_vram_total (vendor 0x1002).
-func amdVRAMTotals(drmDir string) []int64 {
+// amdFamily maps a gfx target to the APU/SoC family marketing name, so the board
+// says what the silicon IS ("AMD Strix Halo"), not just the iGPU series. Discrete
+// cards return "" and keep their own name.
+func amdFamily(arch string) string {
+	switch arch {
+	case "gfx1151":
+		return "AMD Strix Halo"
+	case "gfx1150":
+		return "AMD Strix Point"
+	case "gfx1103":
+		return "AMD Phoenix"
+	}
+	return ""
+}
+
+// apuProcessorNames renders a unified-memory APU as the PROCESSOR it is — the
+// cpuinfo marketing name ("AMD Ryzen AI Max+ 395 w/ Radeon 8060S") beats the
+// iGPU series, because that is the product the owner bought. Discrete cards and
+// non-Ryzen hosts keep their existing names.
+func apuProcessorNames(gpus []gpuInfo, cpuModel string) []gpuInfo {
+	name := amdAPUName(cpuModel)
+	if name == "" {
+		return gpus
+	}
+	for i, g := range gpus {
+		if !g.Unified {
+			continue
+		}
+		if g.Arch != "" {
+			gpus[i].Name = name + " (" + g.Arch + ")"
+		} else {
+			gpus[i].Name = name
+		}
+	}
+	return gpus
+}
+
+// amdAPUName normalizes an AMD APU cpuinfo model into its marketing name:
+// "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S" -> "AMD Ryzen AI Max+ 395 w/ Radeon
+// 8060S". BIOS strings shout; the board should not. Non-Ryzen models return "".
+func amdAPUName(cpuModel string) string {
+	m := strings.Join(strings.Fields(cpuModel), " ")
+	if !strings.Contains(strings.ToLower(m), "ryzen") {
+		return ""
+	}
+	words := strings.Split(m, " ")
+	for i, w := range words {
+		if w == "AMD" || w == "AI" || w != strings.ToUpper(w) {
+			continue // brand/initialism stays; mixed-case is already right
+		}
+		if strings.ContainsFunc(w, unicode.IsDigit) {
+			continue // model numbers ("8060S", "395") keep their casing
+		}
+		if r := []rune(w); len(r) > 1 && strings.ContainsFunc(w, unicode.IsLetter) {
+			words[i] = string(r[0]) + strings.ToLower(string(r[1:]))
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// amdSoft is the host ROCm/HIP toolchain inventory, detected once: ROCm from
+// /opt/rocm/.info/version, HIP from `hipconfig --version` (which exists even on
+// TheRock-style installs that lack the .info file). Empty on non-AMD hosts.
+type amdSoft struct{ rocm, hip string }
+
+var amdSoftware = sync.OnceValue(func() amdSoft {
+	var v amdSoft
+	if b, err := os.ReadFile("/opt/rocm/.info/version"); err == nil {
+		v.rocm = strings.TrimSpace(string(b))
+	}
+	if out, err := exec.Command("hipconfig", "--version").Output(); err == nil {
+		v.hip = strings.TrimSpace(string(out))
+	}
+	return v
+})
+
+// pickAmdMem chooses the honest memory figure for a card: dedicated VRAM for a
+// discrete GPU; for an APU whose "VRAM" is a token carve-out (Strix Halo: 1 GiB
+// VRAM beside a ~118 GiB GTT pool) the figure is the MACHINE's unified RAM —
+// the same convention Apple silicon reports (an M4 Max says 128 GiB, not the
+// wired-down remainder) — snapped to hardware capacity. Unified when GTT wins.
+func pickAmdMem(vramMiB, gttMiB, hostMiB int64) (miB int64, unified bool) {
+	if gttMiB > vramMiB*4 {
+		m := gttMiB
+		if hostMiB > m {
+			m = hostMiB
+		}
+		return snapUnified(m), true
+	}
+	return vramMiB, false
+}
+
+// snapUnified rounds a kernel-visible unified-memory figure up to the hardware
+// DIMM capacity (the next 16 GiB multiple) when the gap is a plausible firmware
+// reservation (≤ 6 GiB): a 128 GiB Strix Halo shows 124.4 GiB to Linux because
+// BIOS + the VRAM carve-out are invisible to the OS. A larger gap (say a 16 GiB
+// carve-out) is real capacity the pool lost — reported as-is, never invented.
+func snapUnified(miB int64) int64 {
+	const step = 16 << 10 // 16 GiB in MiB
+	next := ((miB + step - 1) / step) * step
+	if next-miB <= 8<<10 {
+		return next
+	}
+	return miB
+}
+
+// amdMem is one card's memory inventory in MiB: dedicated VRAM plus the GTT
+// (system-memory) pool an APU actually computes in.
+type amdMem struct{ vramMiB, gttMiB int64 }
+
+// amdVRAMTotals returns each amdgpu card's memory totals in MiB, in DRM card order,
+// read from /sys/class/drm/card*/device/mem_info_{vram,gtt}_total (vendor 0x1002).
+func amdVRAMTotals(drmDir string) []amdMem {
 	entries, err := os.ReadDir(drmDir)
 	if err != nil {
 		return nil
@@ -469,32 +650,44 @@ func amdVRAMTotals(drmDir string) []int64 {
 	sort.Slice(cards, func(i, j int) bool {
 		return atoiSafe(strings.TrimPrefix(cards[i], "card")) < atoiSafe(strings.TrimPrefix(cards[j], "card"))
 	})
-	var mems []int64
+	readMiB := func(path string) int64 {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return 0
+		}
+		var n int64
+		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &n); err != nil || n <= 0 {
+			return 0
+		}
+		return n / (1024 * 1024)
+	}
+	var mems []amdMem
 	for _, c := range cards {
 		dev := filepath.Join(drmDir, c, "device")
 		if vendor, _ := os.ReadFile(filepath.Join(dev, "vendor")); strings.TrimSpace(string(vendor)) != "0x1002" {
 			continue
 		}
-		b, err := os.ReadFile(filepath.Join(dev, "mem_info_vram_total"))
-		if err != nil {
+		vram := readMiB(filepath.Join(dev, "mem_info_vram_total"))
+		if vram == 0 {
 			continue
 		}
-		var bytesTotal int64
-		if _, err := fmt.Sscan(strings.TrimSpace(string(b)), &bytesTotal); err == nil && bytesTotal > 0 {
-			mems = append(mems, bytesTotal/(1024*1024))
-		}
+		mems = append(mems, amdMem{vramMiB: vram, gttMiB: readMiB(filepath.Join(dev, "mem_info_gtt_total"))})
 	}
 	return mems
 }
 
-// fillAmdVRAM attaches VRAM totals to the GPU list positionally when the counts
+// fillAmdVRAM attaches memory totals to the GPU list positionally when the counts
 // match (the common single-GPU case always does); otherwise the names stand alone.
-func fillAmdVRAM(gpus []gpuInfo, memsMiB []int64) []gpuInfo {
-	if len(memsMiB) != len(gpus) {
+// An APU reports its unified GTT pool, not the token VRAM carve-out.
+func fillAmdVRAM(gpus []gpuInfo, mems []amdMem) []gpuInfo {
+	if len(mems) != len(gpus) {
 		return gpus
 	}
+	hostMiB := detectMemTotal() / (1 << 20)
 	for i := range gpus {
-		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", memsMiB[i])
+		miB, unified := pickAmdMem(mems[i].vramMiB, mems[i].gttMiB, hostMiB)
+		gpus[i].MemoryTotal = fmt.Sprintf("%d MiB", miB)
+		gpus[i].Unified = unified
 	}
 	return gpus
 }
@@ -909,6 +1102,10 @@ func (w *worker) buildRegistration() registration {
 		Memory:       w.memory,
 		Version:      Version,
 		JobQueue:     w.jobsNS,
+		Rocm:         amdSoftware().rocm,
+		Hip:          amdSoftware().hip,
+		Cuda:         nvidiaSoftware().cuda,
+		Driver:       nvidiaSoftware().driver,
 		GPUs:         w.gpus,
 		Capabilities: w.capabilities(),
 		Engine:       w.engine,
@@ -927,7 +1124,21 @@ func (w *worker) capabilities() []string {
 	if w.serveEngine {
 		caps = append(caps, engineCap)
 	}
+	if _, ok := w.handlers[fnCap]; ok {
+		caps = append(caps, fnCap)
+	}
 	return caps
+}
+
+// hasNonRenderLane reports whether this worker serves any lane beyond the render
+// path (echo is a smoke type, not a lane).
+func (w *worker) hasNonRenderLane() bool {
+	for name := range w.handlers {
+		if name != "echo" && name != studioCap {
+			return true
+		}
+	}
+	return false
 }
 
 // studioReachable probes the local studio's /queue (bounded), authenticated. A node
@@ -1024,10 +1235,12 @@ func (w *worker) claimFrom(ctx context.Context, taskQueue string) (claimedActivi
 // queue name, so one worker never steals another GPU's targeted job (an empty
 // taskQueue on claim would match any lane and do exactly that).
 func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
-	// Poison-loop guard: a node that can't serve renders must not claim render lanes —
-	// it would only fail every claimed job on the gated execute seam. It still
-	// heartbeats presence (shows in the fleet), just idle, until it becomes ready.
-	if !w.studioReady {
+	// Poison-loop guard, per-LANE: a node that can't serve renders must not sit on
+	// render jobs — but a node with other lanes (fn.run) still claims. When renders
+	// are this worker's only real lane and the studio isn't ready, stay idle; a
+	// claimed render on a non-ready node is declined below so an eligible worker
+	// takes it.
+	if !w.studioReady && !w.hasNonRenderLane() {
 		return nil
 	}
 	act, claimed, err := w.claimFrom(ctx, w.gpuQueue())
@@ -1053,6 +1266,12 @@ func (w *worker) claimAndRun(ctx context.Context, out io.Writer) error {
 		return nil
 	}
 
+	if act.Type.Name == studioCap && !w.studioReady {
+		cause := "studio not ready on this node — declined so a render-capable worker takes it"
+		_, _ = w.call(ctx, http.MethodPost, w.actPath(wf, run, "fail"), map[string]any{"cause": cause, "identity": w.identity}, nil)
+		fmt.Fprintf(out, "  → declined (%s)\n", cause)
+		return nil
+	}
 	h, ok := w.handlers[act.Type.Name]
 	if !ok {
 		cause := fmt.Sprintf("no handler for job type %q", act.Type.Name)
@@ -1369,6 +1588,117 @@ func echoHandler(_ context.Context, input json.RawMessage) (any, error) {
 		_ = json.Unmarshal(input, &v)
 	}
 	return map[string]any{"echo": v}, nil
+}
+
+// fnRunInput is the fn.run job payload: an inline script executed on this node in
+// an ephemeral `uv run` environment. The queue is org-scoped, so the submitter is
+// running code on their OWN fleet — same trust domain as a CI runner.
+type fnRunInput struct {
+	Name           string            `json:"name,omitempty"`           // label for logs
+	Script         string            `json:"script"`                   // Python source (required)
+	Requirements   []string          `json:"requirements,omitempty"`   // uv --with deps, e.g. ["numpy", "torch==2.5.*"]
+	Env            map[string]string `json:"env,omitempty"`            // extra environment
+	TimeoutSeconds int               `json:"timeoutSeconds,omitempty"` // default 3600, cap 21600
+}
+
+const (
+	fnDefaultTimeout = time.Hour
+	fnMaxTimeout     = 6 * time.Hour
+	fnOutputTail     = 128 << 10 // keep the LAST 128 KiB of combined output
+)
+
+// fnValidate parses and bounds an fn.run payload. Requirements must look like
+// package specs — a leading dash would inject uv flags.
+func fnValidate(input json.RawMessage) (fnRunInput, error) {
+	var in fnRunInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return in, fmt.Errorf("fn.run: bad input: %w", err)
+	}
+	if strings.TrimSpace(in.Script) == "" {
+		return in, fmt.Errorf("fn.run: input needs a `script`")
+	}
+	for _, r := range in.Requirements {
+		if r == "" || strings.HasPrefix(r, "-") {
+			return in, fmt.Errorf("fn.run: bad requirement %q", r)
+		}
+	}
+	if in.TimeoutSeconds <= 0 {
+		in.TimeoutSeconds = int(fnDefaultTimeout / time.Second)
+	}
+	if in.TimeoutSeconds > int(fnMaxTimeout/time.Second) {
+		in.TimeoutSeconds = int(fnMaxTimeout / time.Second)
+	}
+	return in, nil
+}
+
+// tailBuffer keeps the last cap bytes written — a training loop can log gigabytes;
+// the activity result carries the end, where the outcome lives.
+type tailBuffer struct {
+	cap       int
+	buf       []byte
+	truncated bool
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > t.cap {
+		t.buf = t.buf[len(t.buf)-t.cap:]
+		t.truncated = true
+	}
+	return len(p), nil
+}
+
+// fnRunHandler executes an fn.run job: write the script to an ephemeral dir, run
+// it under `uv run` (which resolves requirements into a throwaway env — ROCm/CUDA
+// wheels included), and return the output tail + exit code. Nonzero exit fails
+// the activity with the tail as the cause, so the submitter sees the traceback.
+func fnRunHandler(ctx context.Context, input json.RawMessage) (any, error) {
+	in, err := fnValidate(input)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := os.MkdirTemp("", "fnrun-*")
+	if err != nil {
+		return nil, fmt.Errorf("fn.run: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	script := filepath.Join(dir, "main.py")
+	if err := os.WriteFile(script, []byte(in.Script), 0o600); err != nil {
+		return nil, fmt.Errorf("fn.run: %w", err)
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(in.TimeoutSeconds)*time.Second)
+	defer cancel()
+	args := []string{"run", "--no-project", "--quiet"}
+	for _, r := range in.Requirements {
+		args = append(args, "--with", r)
+	}
+	args = append(args, script)
+	cmd := exec.CommandContext(runCtx, "uv", args...)
+	cmd.Dir = dir
+	cmd.Env = os.Environ()
+	for k, v := range in.Env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	tail := &tailBuffer{cap: fnOutputTail}
+	cmd.Stdout = tail
+	cmd.Stderr = tail
+	start := time.Now()
+	runErr := cmd.Run()
+	dur := time.Since(start)
+	out := string(tail.buf)
+	if runCtx.Err() == context.DeadlineExceeded {
+		return nil, fmt.Errorf("fn.run: timed out after %ds\n%s", in.TimeoutSeconds, out)
+	}
+	if runErr != nil {
+		return nil, fmt.Errorf("fn.run: %v\n%s", runErr, out)
+	}
+	return map[string]any{
+		"name":       in.Name,
+		"exitCode":   0,
+		"durationMs": dur.Milliseconds(),
+		"output":     out,
+		"truncated":  tail.truncated,
+	}, nil
 }
 
 // workerToken is the KMS-sourced STUDIO_WORKER_TOKEN this box holds — the credential

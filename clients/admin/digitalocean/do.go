@@ -142,6 +142,69 @@ func (c *Client) History(ctx context.Context, perPage int) ([]Entry, error) {
 	return out, nil
 }
 
+// Volume is one DO block-storage volume: capacity + attachment + region. DO's API
+// gives capacity and which droplets a volume is attached to, but NOT fill % — the
+// caller enriches fill only where a filesystem source (the datastore's own
+// system.disks) reports it, and renders an honest "—" everywhere else.
+type Volume struct {
+	ID         string
+	Name       string
+	Region     string
+	SizeGiB    int
+	DropletIDs []int
+}
+
+// volumeWire is the raw DO /v2/volumes row.
+type volumeWire struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	SizeGigabytes int    `json:"size_gigabytes"`
+	Region        struct {
+		Slug string `json:"slug"`
+	} `json:"region"`
+	DropletIDs []int `json:"droplet_ids"`
+}
+
+// Volumes lists ALL block-storage volumes across the account, following DO's
+// page-number pagination (200/page, a hard 25-page cap so a runaway can never loop).
+// The fleet inventory (count, capacity, monthly cost) is real; per-volume fill is NOT
+// exposed by DO and stays absent (honest) until a filesystem source reports it.
+func (c *Client) Volumes(ctx context.Context) ([]Volume, error) {
+	if !c.Ready() {
+		return nil, fmt.Errorf("DO_API_TOKEN not configured")
+	}
+	var out []Volume
+	for page := 1; page <= 25; page++ {
+		body, err := c.get(ctx, "/v2/volumes?per_page=200&page="+strconv.Itoa(page))
+		if err != nil {
+			return nil, err
+		}
+		var w struct {
+			Volumes []volumeWire `json:"volumes"`
+			Meta    struct {
+				Total int `json:"total"`
+			} `json:"meta"`
+		}
+		if err := json.Unmarshal(body, &w); err != nil {
+			return nil, fmt.Errorf("do volumes decode: %w", err)
+		}
+		for _, v := range w.Volumes {
+			out = append(out, Volume{
+				ID:         v.ID,
+				Name:       v.Name,
+				Region:     v.Region.Slug,
+				SizeGiB:    v.SizeGigabytes,
+				DropletIDs: v.DropletIDs,
+			})
+		}
+		// Stop on the last (short) page, or once we've collected the reported total.
+		if len(w.Volumes) < 200 || (w.Meta.Total > 0 && len(out) >= w.Meta.Total) {
+			break
+		}
+	}
+	return out, nil
+}
+
 // get performs one token-authenticated DO GET and returns the raw body.
 func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
