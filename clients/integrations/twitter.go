@@ -84,6 +84,14 @@ func twitterConfigured() bool { return twitterCreds().ClientID != "" }
 // twitterVerifier derives the PKCE code_verifier from the app credential (see file
 // header). base64url(sha256(...)) is 43 chars of the RFC-7636 unreserved set — a valid
 // verifier. Deriving from BOTH id and secret binds it to the specific app.
+//
+// SAFE ONLY FOR A CONFIDENTIAL CLIENT: this verifier is per-app-CONSTANT, not
+// per-flow, so PKCE here is pure defense-in-depth — the real interception
+// protection is the client_secret sent (Basic auth) on the token exchange, without
+// which a leaked verifier is useless. If a PUBLIC-client or PKCE-only Twitter/X
+// variant is ever added (no client_secret at exchange), this constant verifier
+// becomes the SOLE protection and MUST become per-flow (thread `state` into
+// Exchange, random verifier per authorize) — do not reuse this as-is there.
 func twitterVerifier(creds OAuthConfig) string {
 	sum := sha256.Sum256([]byte(creds.ClientSecret + "|" + creds.ClientID + "|hanzo-x-pkce-v1"))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
