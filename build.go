@@ -795,16 +795,20 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 		return nil
 	}
 
-	// Membership: CLOUD_PEERS (the shard router's set). A single-pod deployment with
-	// no peers is its own sole writer — still hydrate-on-open + fenced ship across a
-	// rolling restart.
+	// Membership: LIVE when in-cluster + CLOUD_PEER_SELECTOR is set (a rolling upgrade's
+	// changing pod set is tracked, a draining/dead pod is never elected an org's owner),
+	// else the STATIC CLOUD_PEERS/self set — capability-detected, no flag (see
+	// membership_k8s.go). A single-pod deployment with no peers is its own sole writer.
+	// The 2s refresh keeps a drained pod out of every peer's election within a bound the
+	// terminationGracePeriod covers, so a rolling handoff loses no request.
 	self := firstNonEmptyStr(strings.TrimSpace(cfg.ShardSelf), hostnameOr("cloud-0"))
 	peers := parsePeers(cfg.ShardPeers)
 	if len(peers) == 0 {
 		peers = []org.Member{{ID: self, Addr: self}}
 	}
-	members := org.NewMembership(self, org.StaticSource(peers...), 5*time.Second)
-	_ = members.Start(context.Background()) // static source: the initial refresh populates Members()
+	src := membershipSource(peers, cfg.PeerSelector, httpPortOf(cfg.ListenAddr), log)
+	members := org.NewMembership(self, src, 2*time.Second)
+	_ = members.Start(context.Background()) // initial refresh populates Members() before first request
 
 	cipher := durableCipher(cfg, log)
 	if cipher == nil && cek.Encrypting() {
