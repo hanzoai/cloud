@@ -51,10 +51,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -87,10 +84,6 @@ const (
 	// maxCredentialLen bounds a single credential field so a hostile body cannot
 	// bloat a sealed blob.
 	maxCredentialLen = 1 << 16
-	// allowPrivateEndpointsEnv, when set, disables the SSRF guard's non-routable
-	// address rejection. Off in production; set ONLY in tests whose fake apiserver
-	// runs on loopback. Mirrors clients/git GIT_MIRROR_ALLOW_PRIVATE_HOSTS.
-	allowPrivateEndpointsEnv = "VENUE_ALLOW_PRIVATE_ENDPOINTS"
 )
 
 // providerDO / providerAWS / providerGCP are the :provider slugs.
@@ -645,11 +638,10 @@ func discoverAndFold(s *cloud.Service[state], c *zip.Ctx, org string, cr cred, d
 	for _, dc := range discs {
 		name := foldName(d.id(), acct.Label, dc.Name, dc.ID)
 		res := clusterResult{Cluster: name, Source: dc.Name, Region: dc.Region}
-		if gerr := guardEndpoint(dc.Endpoint); gerr != nil {
-			res.Error = gerr.Error()
-			results = append(results, res)
-			continue
-		}
+		// Fold safety (exec-plugin rejection + SSRF guard on the ACTUAL apiserver
+		// dial target) is enforced inside fleet.Register/SafeRESTConfig — the ONE
+		// gate every attach path shares; a rejected kubeconfig surfaces as this
+		// cluster's fold error, not a whole-account failure.
 		// Bill NEW folds fail-closed (an existing fold refreshes free); the fee
 		// keys on the HOME (paying) org, the fold on the operating org.
 		if !prev[name] {
@@ -720,52 +712,6 @@ func sanitize(s string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
-}
-
-// guardEndpoint is SSRF defense-in-depth on a DISCOVERED apiserver URL before the
-// fleet dials it: it must be https and must NOT resolve to a loopback, private,
-// link-local, unspecified, or multicast address (nor the cloud metadata IP). The
-// discovered endpoints are provider-sourced (DO/EKS/GKE describe), so this is a
-// second layer, not the only one. Bypassable via allowPrivateEndpointsEnv for
-// loopback test apiservers only. (A pure DNS-rebind after this check is not fully
-// closed here — the same accepted caveat as the git mirror SSRF guard.)
-func guardEndpoint(raw string) error {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" {
-		return fmt.Errorf("cluster endpoint is not a valid URL")
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("cluster endpoint must be https")
-	}
-	if os.Getenv(allowPrivateEndpointsEnv) != "" {
-		return nil
-	}
-	host := u.Hostname()
-	if host == "" || strings.EqualFold(host, "localhost") {
-		return fmt.Errorf("cluster endpoint host is not permitted")
-	}
-	var ips []net.IP
-	if ip := net.ParseIP(host); ip != nil {
-		ips = []net.IP{ip}
-	} else {
-		r, rerr := net.LookupIP(host)
-		if rerr != nil || len(r) == 0 {
-			return fmt.Errorf("cluster endpoint host does not resolve")
-		}
-		ips = r
-	}
-	for _, ip := range ips {
-		if blockedIP(ip) {
-			return fmt.Errorf("cluster endpoint resolves to a non-routable address")
-		}
-	}
-	return nil
-}
-
-func blockedIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsMulticast()
 }
 
 // foldError keeps fleet.Register's error client-safe: fleet errors already
