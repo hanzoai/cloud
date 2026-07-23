@@ -1,10 +1,13 @@
 # default.yaml — the built-in Business AI Guide curriculum.
 #
-# This is the minimal launch checklist every Hanzo org completes, seeded so
-# /v1/guide works before the marketing repo's authored checklist.yaml lands. It
-# IS the schema contract: an org-custom or platform-updated curriculum (PUT
-# /v1/guide/curriculum) replaces it wholesale and must parse against the same
-# shape (see curriculum.go — Step / Curriculum).
+# This is the minimal journey every Hanzo org completes: launch your company AND
+# build your agentic company — form the entity, nail positioning, publish, instrument,
+# grow, then turn on the daily agentic growth loop that runs it for you. It is seeded
+# so /v1/guide works before the marketing repo's authored checklist.yaml lands. It IS
+# the schema contract: an org-custom or platform-updated curriculum (PUT
+# /v1/guide/curriculum) replaces it wholesale and must parse against the same shape
+# (see curriculum.go — Step / Curriculum). A per-brand journey (brands/<brand>.yaml,
+# e.g. zoo) reframes this on the SAME schema.
 #
 # Field contract per step:
 #   id            stable identifier (unique; referenced by dependencies)
@@ -22,9 +25,23 @@
 #                 tool call; the drafted text fills the `draftInto` arg
 #   draftInto     the tool-arg key the drafted text populates (default "brief")
 #   args          default tool arguments
-version: builtin-1
-title: Launch your business on Hanzo
+version: builtin-2
+title: Launch your company on Hanzo
 steps:
+  - id: company
+    title: Form your company
+    why: >
+      A legal entity is the foundation everything else attaches to — your bank
+      account, your cap table, the contracts you sign, the brand you build on.
+    how: >
+      Run the formation wizard in Hanzo Company (/v1/company): choose a structure and
+      file. The Business AI drafts the founding details; you review and submit.
+    done: Your company is formed (an entity is on file).
+    dependencies: []
+    draft: >
+      Draft the founding basics for a new company launching on Hanzo: a suggested
+      name, entity type, and a one-line mission. Return plain text.
+
   - id: positioning
     title: Nail your positioning
     why: >
@@ -34,7 +51,7 @@ steps:
       Draft a positioning Campaign in Hanzo Content (/v1/content). The Business AI
       can write the first draft for you.
     done: A positioning statement exists as a Content Campaign draft.
-    dependencies: []
+    dependencies: [company]
     signal: acted
     tool: content_generate
     draft: >
@@ -136,6 +153,18 @@ steps:
       List the ad and analytics destinations this company should connect first given
       its channels, and for each the exact id it needs (GA4 measurement id, Meta
       pixel id). Return a short checklist.
+
+  - id: autopilot
+    title: Turn on the daily growth loop
+    why: >
+      This is your agentic company: a scheduled loop that drafts, reviews, and
+      publishes content and outreach every day, so growth compounds without you in
+      the loop for every step.
+    how: >
+      Enable a scheduled flow in Hanzo Automations (/v1/automations) —
+      generate → review → publish — so the Business AI runs your growth loop daily.
+    done: An automation flow is enabled and running on a schedule.
+    dependencies: [analytics, waitlist, email]
 
   - id: launch
     title: Launch

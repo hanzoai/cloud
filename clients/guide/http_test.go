@@ -31,25 +31,25 @@ func TestHTTPOverviewDefault(t *testing.T) {
 		t.Fatalf("overview want 200, got %d (%s)", r.Code, r.Body)
 	}
 	v := decode[overviewView](t, r.Body)
-	if v.Version != "builtin-1" || v.Custom {
+	if v.Version != "builtin-2" || v.Custom {
 		t.Fatalf("fresh org should use builtin default, got version=%q custom=%v", v.Version, v.Custom)
 	}
 	if v.Progress.Total != len(v.Steps) || v.Progress.Done != 0 {
 		t.Fatalf("fresh progress want {done:0,total:%d}, got %+v", len(v.Steps), v.Progress)
 	}
-	if v.Progress.Next != "positioning" {
-		t.Fatalf("next want positioning, got %q", v.Progress.Next)
+	if v.Progress.Next != "company" {
+		t.Fatalf("next want company, got %q", v.Progress.Next)
 	}
-	// positioning available; landing blocked by positioning.
+	// company is the journey root (available); positioning is blocked by company.
 	byID := map[string]stepView{}
 	for _, s := range v.Steps {
 		byID[s.ID] = s
 	}
-	if !byID["positioning"].Available {
-		t.Fatal("positioning must be available")
+	if !byID["company"].Available {
+		t.Fatal("company (the journey root) must be available")
 	}
-	if byID["landing"].Available || len(byID["landing"].BlockedBy) == 0 {
-		t.Fatalf("landing must be blocked by positioning, got %+v", byID["landing"])
+	if byID["positioning"].Available || len(byID["positioning"].BlockedBy) == 0 {
+		t.Fatalf("positioning must be blocked by company, got %+v", byID["positioning"])
 	}
 	if !byID["positioning"].Automatable {
 		t.Fatal("positioning binds content_generate and must be automatable")
@@ -74,7 +74,10 @@ func TestHTTPTransitionsAndGating(t *testing.T) {
 		t.Fatalf("409 must name the blocker, got %v", conflict.BlockedBy)
 	}
 
-	// Complete positioning → landing unlocks.
+	// Walk the chain: company (root) → positioning unlocks → landing unlocks.
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("done company want 200, got %d (%s)", r.Code, r.Body)
+	}
 	if r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/done", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("done positioning want 200, got %d (%s)", r.Code, r.Body)
 	}
@@ -82,10 +85,10 @@ func TestHTTPTransitionsAndGating(t *testing.T) {
 		t.Fatalf("done landing after unlock want 200, got %d (%s)", r.Code, r.Body)
 	}
 
-	// Overview now reflects two done and moved next forward.
+	// Overview now reflects three done and moved next forward.
 	v := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
-	if v.Progress.Done != 2 {
-		t.Fatalf("done want 2, got %d", v.Progress.Done)
+	if v.Progress.Done != 3 {
+		t.Fatalf("done want 3, got %d", v.Progress.Done)
 	}
 
 	// Skip is ungated even on a blocked step; reset returns to todo.
@@ -151,7 +154,7 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 		t.Fatalf("delete curriculum want 200, got %d", r.Code)
 	}
 	v = decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
-	if v.Custom || v.Version != "builtin-1" {
+	if v.Custom || v.Version != "builtin-2" {
 		t.Fatalf("delete should revert to builtin default, got version=%q custom=%v", v.Version, v.Custom)
 	}
 }
@@ -160,7 +163,8 @@ func TestHTTPCustomCurriculumReplaceAndRevert(t *testing.T) {
 // per-org store).
 func TestHTTPPerOrgIsolation(t *testing.T) {
 	app := newApp(t)
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/done", "acme", nil); r.Code != http.StatusOK {
+	// company is the journey root (no dependencies) — a clean single completion.
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
 		t.Fatalf("acme done: %d", r.Code)
 	}
 	acme := decode[overviewView](t, req(t, app, http.MethodGet, "/v1/guide", "acme", nil).Body)
@@ -187,6 +191,11 @@ func TestHTTPDoStepDelegatesToAgent(t *testing.T) {
 		return map[string]any{"doc": "Positioning-1", "tool": tool}, nil
 	}
 	mounted.State.toolOK = func(string) bool { return true }
+
+	// positioning is gated by the journey root (company) — complete it first.
+	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", "acme", nil); r.Code != http.StatusOK {
+		t.Fatalf("done company want 200, got %d (%s)", r.Code, r.Body)
+	}
 
 	r := req(t, app, http.MethodPost, "/v1/guide/steps/positioning/do", "acme", nil)
 	if r.Code != http.StatusOK {
