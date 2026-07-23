@@ -14,8 +14,10 @@
 
 package admin
 
-// storage — GET /v1/admin/storage, the realtime DO block-storage fleet the operator's
-// Block Storage board (admin.hanzo.ai) watches to scale DO storage before it runs out.
+// blockStorage — GET /v1/admin/block-storage, the realtime DO block-storage fleet the
+// operator's Block Storage board (admin.hanzo.ai) watches to scale DO before it runs out.
+// (Named `block-storage`, not `storage`, so the operator's separate S3 object-buckets
+// view keeps /v1/admin/storage — two distinct storage concerns, two endpoints.)
 // Two REAL sources, honest by construction:
 //   - The FLEET inventory (count · total capacity · monthly cost · per-volume region +
 //     attachment) from the DigitalOcean API (the same DO_API_TOKEN client the finance
@@ -97,9 +99,9 @@ type storageSnapshot struct {
 	Alerts    []storageAlert   `json:"alerts"`
 }
 
-// storage answers GET /v1/admin/storage. SuperAdmin only. Each source degrades
-// independently — a DO outage still returns the real datastore fill, and vice versa.
-func storage(s *cloud.Service[core.State], c *zip.Ctx) error {
+// blockStorage answers GET /v1/admin/block-storage. SuperAdmin only. Each source
+// degrades independently — a DO outage still returns the real datastore fill, and v.v.
+func blockStorage(s *cloud.Service[core.State], c *zip.Ctx) error {
 	ctx := c.Context()
 	vols, _ := s.State.DO.Volumes(ctx) // honest empty on not-configured / unreachable
 	fill := datastoreFill(ctx)         // nil unless system.disks answered
