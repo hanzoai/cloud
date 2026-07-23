@@ -469,6 +469,44 @@ func runVersion(s *cloud.Service[state], ctx context.Context, org string, f Flow
 	return s.State.store.LatestVersion(ctx, org, f.ID)
 }
 
+// startRun is the ONE way a firing turns a (rule, run id, event) into a durable run,
+// shared by the manual /run and the event Deliver paths (a cron tick starts through the
+// engine's schedule instead). It persists the run row FIRST as the idempotency gate
+// (CreateRunIfAbsent) and ONLY the caller that created the row dispatches it to the
+// engine — so re-firing the same run id is a no-op. It does NOT meter or audit: the
+// durable run-start activity is the SINGLE owner of run bookkeeping (MED-1), billing a
+// run exactly once no matter which path started it. trigger is the firing event payload
+// (nil for a manual run). Returns the run row and whether THIS call started it.
+func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, runID string, trigger map[string]any) (FlowRun, bool, error) {
+	now := time.Now().UnixMilli()
+	run := FlowRun{
+		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
+		Status: RunRunning, StartTime: now, Created: now, Updated: now,
+	}
+	created, err := s.State.store.CreateRunIfAbsent(ctx, run)
+	if err != nil {
+		return FlowRun{}, false, err
+	}
+	if !created {
+		return run, false, nil
+	}
+	in := FlowRunInput{
+		Owner:         org, // VALIDATED org — the cred scope + isolation boundary; NEVER from the body/event
+		FlowID:        f.ID,
+		FlowVersionID: v.ID,
+		RunID:         runID,
+		Steps:         flattenSteps(&v),
+		Trigger:       trigger,
+	}
+	if _, err := runStarter(ctx, in); err != nil {
+		// The row exists (visible in listRuns); the durable start failed. Mark it FAILED
+		// so a same-id re-fire stays a no-op (at-most-once) and the attempt is visible.
+		_ = s.State.store.UpdateRunStatus(ctx, org, runID, RunFailed, now, now)
+		return FlowRun{}, false, err
+	}
+	return run, true, nil
+}
+
 func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	org, ok := tenant(s, c)
 	if !ok {
@@ -492,27 +530,9 @@ func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	in := FlowRunInput{
-		Owner:         org, // VALIDATED org — the cred scope; NEVER from the body
-		FlowID:        f.ID,
-		FlowVersionID: v.ID,
-		RunID:         runID,
-		Steps:         flattenSteps(&v),
-	}
-	if _, err := executeFlow(c.Context(), in); err != nil {
+	run, _, err := startRun(s, c.Context(), org, f, v, runID, nil) // manual run: no trigger payload
+	if err != nil {
 		return engineErr(err)
-	}
-	now := time.Now().UnixMilli()
-	run := FlowRun{
-		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
-		Status: RunRunning, StartTime: now, Created: now, Updated: now,
-	}
-	// Persist the row for IMMEDIATE visibility (getRun/listRuns), but do NOT meter or
-	// audit here: the durable run-start activity is the SINGLE owner of run
-	// bookkeeping and bills the run exactly once (MED-1), so the manual path never
-	// double-records. CreateRunIfAbsent leaves metered=0 for the activity to claim.
-	if _, err := s.State.store.CreateRunIfAbsent(c.Context(), run); err != nil {
-		return zip.Errorf(http.StatusInternalServerError, "persist run: %v", err)
 	}
 	return c.JSON(http.StatusCreated, run)
 }
@@ -634,17 +654,16 @@ func disableFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	return setEnabled(s, c, org, idParam(c), false)
 }
 
-// setEnabled flips a flow's status and wires its POLLING schedule to the engine
-// (CreateSchedule on enable, DeleteSchedule on disable). Non-POLLING flows are a
-// pure status flip — no engine needed. A POLLING enable requires the engine (503 if
-// not ready). Shared by /enable, /disable, and the CHANGE_STATUS operation.
+// setEnabled flips a rule's status and (dis)arms its trigger — the ONE reconfigure
+// path, shared by /enable, /disable, and the CHANGE_STATUS operation. Status and
+// trigger-arrival are decomplected: this owns the status flip; armTrigger owns the
+// arrival wiring.
 func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable bool) error {
 	f, err := s.State.store.GetFlow(c.Context(), org, flowID)
 	if err != nil {
 		return mapStoreErr(err, "flow not found")
 	}
 	v, verr := runVersion(s, c.Context(), org, f)
-	cron, polling := pollingCron(v, verr)
 
 	if enable {
 		f.Status = FlowEnabled
@@ -657,33 +676,8 @@ func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable 
 		return mapStoreErr(err, "flow not found")
 	}
 
-	scheduleID := "flow-" + flowID
-	if polling {
-		if enable {
-			in := FlowRunInput{Owner: org, FlowID: f.ID, FlowVersionID: v.ID, RunID: "sched-" + flowID, Steps: flattenSteps(&v)}
-			if serr := enableSchedule(c.Context(), org, scheduleID, cron, in); serr != nil {
-				return engineErr(serr)
-			}
-		} else {
-			// Best-effort: local status is authoritative; a schedule-delete failure is logged.
-			if serr := disableSchedule(c.Context(), org, scheduleID); serr != nil {
-				s.Log.Warn("schedule delete failed (continuing)", "flow", flowID, "err", serr)
-			}
-		}
-	}
-
-	// WEBHOOK/APP_WEBHOOK triggers subscribe into the routing index — the inbound analog
-	// of the POLLING schedule above. On enable, upsert the subscription; on disable,
-	// ALWAYS drop it (idempotent), so a disabled flow never stays a live trigger target
-	// even if its version is now unreadable.
-	if enable {
-		if provider, event, ok := webhookKey(v, verr); ok {
-			if serr := s.State.store.UpsertTrigger(c.Context(), org, provider, event, f.ID, v.ID); serr != nil {
-				return zip.Errorf(http.StatusInternalServerError, "subscribe trigger: %v", serr)
-			}
-		}
-	} else if serr := s.State.store.DeleteFlowTriggers(c.Context(), org, flowID); serr != nil {
-		s.Log.Warn("trigger unsubscribe failed (continuing)", "flow", flowID, "err", serr)
+	if err := armTrigger(s, c.Context(), org, f, v, verr, enable); err != nil {
+		return err
 	}
 
 	action := "automations.flow.disable"
@@ -692,6 +686,43 @@ func setEnabled(s *cloud.Service[state], c *zip.Ctx, org, flowID string, enable 
 	}
 	auditEvent(s, c, org, action, f.ID, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, saved)
+}
+
+// armTrigger wires (enable) or removes (disable) a rule's trigger ARRIVAL — the ONE
+// place the trigger-source plane lives, orthogonal to the rule's actions and to its
+// status. Each source arms its own arrival: POLLING → a cron schedule on the shared
+// engine; WEBHOOK/APP_WEBHOOK → a subscription in the routing index; MANUAL → nothing.
+// The action chain is untouched here — any trigger source pairs with any actions.
+// Disable always drops the subscription (idempotent), so a disabled rule is never a
+// live target.
+func armTrigger(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, verr error, enable bool) error {
+	scheduleID := "flow-" + f.ID
+	cron, polling := pollingCron(v, verr)
+	provider, event, webhook := webhookKey(v, verr)
+
+	if !enable {
+		if polling {
+			if serr := disableSchedule(ctx, org, scheduleID); serr != nil {
+				s.Log.Warn("schedule disarm failed (continuing)", "flow", f.ID, "err", serr)
+			}
+		}
+		if serr := s.State.store.DeleteFlowTriggers(ctx, org, f.ID); serr != nil {
+			s.Log.Warn("subscription disarm failed (continuing)", "flow", f.ID, "err", serr)
+		}
+		return nil
+	}
+	if polling {
+		in := FlowRunInput{Owner: org, FlowID: f.ID, FlowVersionID: v.ID, RunID: "sched-" + f.ID, Steps: flattenSteps(&v)}
+		if serr := enableSchedule(ctx, org, scheduleID, cron, in); serr != nil {
+			return engineErr(serr)
+		}
+	}
+	if webhook {
+		if serr := s.State.store.UpsertTrigger(ctx, org, provider, event, f.ID, v.ID); serr != nil {
+			return zip.Errorf(http.StatusInternalServerError, "subscribe trigger: %v", serr)
+		}
+	}
+	return nil
 }
 
 // pollingCron reports whether a flow's trigger is a POLLING schedule and returns its
