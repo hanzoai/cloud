@@ -101,6 +101,7 @@ var frozen = []struct {
 	{"sign", true, true},             // was order 145
 	{"product", false, false},        // was order 145
 	{"evals", false, false},          // was order 145
+	{"benchmark", false, false},      // native /v1/benchmark arena (after evals)
 	{"treasury", false, true},        // was order 146
 	{"admin", false, false},          // was order 146
 	{"admission", false, true},       // launch-control gate: composes flags (registry+seed+mode route+Enforce); Shutdown closes the registry store
