@@ -493,6 +493,13 @@ func decideRoute(s *cloud.Service[*state], c *zip.Ctx) error {
 	if !found {
 		return zip.ErrNotFound("experiment not found")
 	}
+	// Promoting a winner rewrites the assignment flag to serve one variant to 100%
+	// of the org's users — a production behavior change. Gate on own-org admin
+	// (parity with the flags/connector write plane), after the found-check so a
+	// cross-tenant caller gets 404 (no existence leak) rather than 403.
+	if !principal.IsOrgAdmin(c) {
+		return zip.ErrForbidden("promoting an experiment winner requires org admin")
+	}
 	if !exp.hasVariant(winner) {
 		return zip.ErrBadRequest(fmt.Sprintf("winner %q is not a variant of this experiment", winner))
 	}
