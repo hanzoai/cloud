@@ -80,6 +80,7 @@ import (
 	"github.com/hanzoai/cloud/clients/entitlements"
 	"github.com/hanzoai/cloud/clients/eval"
 	"github.com/hanzoai/cloud/clients/exec"
+	"github.com/hanzoai/cloud/clients/experiments"
 	"github.com/hanzoai/cloud/clients/flags"
 	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/functions"
@@ -363,6 +364,12 @@ func Wire() []cloud.MountSpec {
 		// the arena's sibling: benchmark measures, research is the versioned diary
 		// every product's runs accrue into. Non-staged: mounts under the default.
 		{Name: "research", Mount: research.Mount, Shutdown: ctxShutdown(research.Shutdown)},
+		// The unified EXPERIMENT primitive (/v1/experiments): A/B testing as ONE value
+		// whatever the variant kind (feature | ad creative | email | model). It is a
+		// COMPOSITION — assignment via flags, measurement via analytics, evidence via
+		// research — so it mounts AFTER all three. It owns only the experiment registry
+		// store → Shutdown. clients/campaign composes it (experiments.Assign/Analyze).
+		{Name: "experiments", Mount: experiments.Mount, Shutdown: ctxShutdown(experiments.Shutdown)},
 		{Name: "treasury", Mount: treasury.Mount, Shutdown: ctxShutdown(treasury.Shutdown)},
 		{Name: "admin", Mount: admin.Mount},
 		// Launch-control gate (per-service waitlist): the COMPLETE feature — host→service
