@@ -236,7 +236,8 @@ func aiPriceUUSDPer1kTokens() int64 {
 // org's OWN provider token — the provider already billed the org for the compute —
 // so Hanzo charges only this thin fee for gating/metering/observing the call, never
 // the full inference cost (that would double-bill). A clearly-named policy default,
-// overridable per deployment; 0 makes BYO inference free (and thus un-metered).
+// overridable per deployment; 0 disables the token-proportional part — but a call is
+// still floored (BYOFloorMicros), so 0 bps alone does NOT make a call free/un-gated.
 const defaultBYOFeeBps int64 = 100
 
 // BYOFeeBps resolves the BYO inference platform fee (basis points) from
@@ -255,13 +256,48 @@ func BYOFeeBps() int64 {
 	return n
 }
 
-// BYOInferenceFeeMicros is the platform routing fee (micro-USD) for a BYO inference
-// of `tokens` tokens: BYOFeeBps of the EQUIVALENT metered price (aiPriceUUSDPer1kTokens),
-// so a BYO model invoked with the org's own provider token (Cloudflare Workers AI)
-// debits the SAME usage spine and the SAME per-scope caps as a Hanzo-served call,
-// only at the thin BYO fee rather than the full inference cost. This is the ONE BYO
-// fee model — no per-provider variant. Zero rate or zero fee ⟹ 0 (un-metered).
+// defaultBYOFloorMicros is the minimum per-CALL BYO inference fee, in micro-USD
+// ($0.0001). It exists because the token-denominated fee CANNOT price a non-text
+// modality (audio for ASR, image bytes for vision/classification) — those yield no
+// token estimate, so without a floor the pre-call gate would reserve 0, short-circuit
+// BEFORE the balance/freeze/cap check, and proxy an unbilled, ungated inference. The
+// floor forces every /ai/run to reserve ≥ 1 cent (so a frozen / broke / over-cap org
+// is refused) and to leave a debit row ≥ the floor. Overridable; 0 opts out (and
+// re-opens the modality gap — an explicit ops choice, like a 0 price).
+const defaultBYOFloorMicros int64 = 100
+
+// BYOFloorMicros resolves the per-call BYO floor (micro-USD) from CLOUD_AI_BYO_FLOOR_UUSD,
+// else the policy default. A negative/invalid value falls through to the default.
+func BYOFloorMicros() int64 {
+	s := strings.TrimSpace(os.Getenv("CLOUD_AI_BYO_FLOOR_UUSD"))
+	if s == "" {
+		return defaultBYOFloorMicros
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return defaultBYOFloorMicros
+	}
+	return n
+}
+
+// BYOInferenceFeeMicros is the per-CALL platform routing fee (micro-USD) for a BYO
+// inference of `tokens` tokens: BYOFeeBps of the EQUIVALENT metered price
+// (aiPriceUUSDPer1kTokens), FLOORED at BYOFloorMicros. A BYO model invoked with the
+// org's own provider token (Cloudflare Workers AI) debits the SAME usage spine and the
+// SAME per-scope caps as a Hanzo-served call, at the thin BYO fee — but never below the
+// floor, so a call the token estimate CANNOT price (a non-text modality: 0 tokens) is
+// still gated and billed rather than slipping through free and unchecked. This is the
+// ONE BYO fee model — no per-provider variant.
 func BYOInferenceFeeMicros(tokens int) int64 {
+	if fee := byoTokenFeeMicros(tokens); fee > BYOFloorMicros() {
+		return fee
+	}
+	return BYOFloorMicros()
+}
+
+// byoTokenFeeMicros is the token-denominated part of the BYO fee (before the floor):
+// BYOFeeBps of the equivalent metered price. Zero tokens / zero rate / zero fee ⟹ 0.
+func byoTokenFeeMicros(tokens int) int64 {
 	if tokens <= 0 {
 		return 0
 	}
