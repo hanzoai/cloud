@@ -39,6 +39,27 @@ func setScopeAttrs(span trace.Span, org, project string) {
 	}
 }
 
+// StartGenAISpan opens one OTel gen_ai client span on the shared cloud tracer and
+// stamps the request-side semantic-convention attributes every AI call carries:
+// gen_ai.system (the serving provider — "hanzo" for the Hanzo gateway, "cloudflare"
+// for Workers AI, …), gen_ai.operation.name, gen_ai.request.model, plus the
+// per-tenant scope (hanzo.org / hanzo.project). It is the ONE gen_ai span
+// constructor: the HTTP chat/embed clients here AND any other inference path (the
+// per-org Cloudflare Workers AI proxy) emit to the SAME o11y span plane through it,
+// so AI telemetry is one shape with one tenant-isolation contract, never a parallel
+// per-provider span. The caller defers span.End() and adds response attributes
+// (tokens, status) after the call returns.
+func StartGenAISpan(ctx context.Context, system, operation, model, org, project string) (context.Context, trace.Span) {
+	ctx, span := aiTracer.Start(ctx, operation+" "+model, trace.WithSpanKind(trace.SpanKindClient))
+	span.SetAttributes(
+		attribute.String("gen_ai.system", system),
+		attribute.String("gen_ai.operation.name", operation),
+		attribute.String("gen_ai.request.model", model),
+	)
+	setScopeAttrs(span, org, project)
+	return ctx, span
+}
+
 // httpAI is the real, in-process types.AIClient: it runs chat completions
 // against an OpenAI-compatible endpoint — the Hanzo LLM gateway
 // (https://api.hanzo.ai/v1). This is the ONE concrete inference client the
@@ -136,14 +157,8 @@ func (a *httpAI) ChatCompletion(ctx context.Context, req *types.ChatRequest) (*t
 
 	// GenAI client span (OTel semantic conventions) — one span per LLM call,
 	// nested under any active agent-run span carried on ctx.
-	ctx, span := aiTracer.Start(ctx, "chat "+model, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := StartGenAISpan(ctx, "hanzo", "chat", model, req.Org, req.Project)
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("gen_ai.system", "hanzo"),
-		attribute.String("gen_ai.operation.name", "chat"),
-		attribute.String("gen_ai.request.model", model),
-	)
-	setScopeAttrs(span, req.Org, req.Project)
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
 	defer cancel()
@@ -237,15 +252,9 @@ func (a *httpAI) Embed(ctx context.Context, req *types.EmbedRequest) ([][]float3
 		return nil, fmt.Errorf("cloud: embed: empty model")
 	}
 
-	ctx, span := aiTracer.Start(ctx, "embeddings "+model, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := StartGenAISpan(ctx, "hanzo", "embeddings", model, req.Org, req.Project)
 	defer span.End()
-	span.SetAttributes(
-		attribute.String("gen_ai.system", "hanzo"),
-		attribute.String("gen_ai.operation.name", "embeddings"),
-		attribute.String("gen_ai.request.model", model),
-		attribute.Int("gen_ai.request.input_count", len(inputs)),
-	)
-	setScopeAttrs(span, req.Org, req.Project)
+	span.SetAttributes(attribute.Int("gen_ai.request.input_count", len(inputs)))
 
 	ctx, cancel := context.WithTimeout(ctx, aiHTTPTimeout)
 	defer cancel()
