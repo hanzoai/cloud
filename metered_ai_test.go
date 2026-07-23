@@ -47,15 +47,15 @@ func passthroughMetered(inner types.AIClient) *meteredAI {
 func TestEstTokens(t *testing.T) {
 	cases := map[string]int{"": 0, "abcd": 1, "a": 1, "aaaaaaaa": 2}
 	for in, want := range cases {
-		if got := estTokens(in); got != want {
-			t.Fatalf("estTokens(%q) = %d, want %d", in, got, want)
+		if got := EstTokens(in); got != want {
+			t.Fatalf("EstTokens(%q) = %d, want %d", in, got, want)
 		}
 	}
-	if got := estTokens(); got != 0 {
-		t.Fatalf("estTokens() = %d, want 0", got)
+	if got := EstTokens(); got != 0 {
+		t.Fatalf("EstTokens() = %d, want 0", got)
 	}
-	if got := estTokens("aaaa", "aaaa"); got != 2 {
-		t.Fatalf("estTokens(2x4chars) = %d, want 2", got)
+	if got := EstTokens("aaaa", "aaaa"); got != 2 {
+		t.Fatalf("EstTokens(2x4chars) = %d, want 2", got)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestMeteredAI_AdminMasqueradeBillsHomeOrg(t *testing.T) {
 	inner := &recordingAI{resp: &types.ChatResponse{Content: "hi", TotalTokens: 100}}
 	m := &meteredAI{
 		inner: inner,
-		meter: NewResourceMeter(Deps{Metering: mustClient(t, srv.URL, false)}, aiMeterProvider),
+		meter: NewResourceMeter(Deps{Metering: mustClient(t, srv.URL, false)}, AIMeterProvider),
 		rate:  defaultAIPriceUUSDPer1kTokens,
 	}
 
@@ -186,5 +186,49 @@ func TestMeteredAI_ModelListerPreserved(t *testing.T) {
 	plain := meteredAIClient(&recordingAI{}, Deps{})
 	if _, ok := plain.(types.ModelLister); ok {
 		t.Fatalf("metering wrap fabricated a ModelLister on a non-lister transport")
+	}
+}
+
+// BYOInferenceFeeMicros is the shared BYO fee model any BYO inference path (Workers
+// AI) prices with: BYOFeeBps of the equivalent metered price — never the full cost.
+func TestBYOInferenceFee(t *testing.T) {
+	t.Setenv("CLOUD_AI_PRICE_UUSD_PER_1K", "2000") // equiv price = tokens*2 micro-USD
+
+	// Default 100 bps (1%): 1000 tokens → equiv 2000 micros → fee 20 micros.
+	if got := BYOInferenceFeeMicros(1000); got != 20 {
+		t.Fatalf("BYOInferenceFeeMicros(1000) = %d, want 20", got)
+	}
+	if got := BYOInferenceFeeMicros(0); got != 0 {
+		t.Fatalf("zero tokens must be free, got %d", got)
+	}
+
+	// Configurable bps.
+	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "500") // 5%
+	if got := BYOInferenceFeeMicros(1000); got != 100 {
+		t.Fatalf("BYOInferenceFeeMicros(1000) @5%% = %d, want 100", got)
+	}
+
+	// Zero fee ⟹ free/un-metered BYO (mirrors price==0 pass-through).
+	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "0")
+	if got := BYOInferenceFeeMicros(1000); got != 0 {
+		t.Fatalf("zero bps must be free, got %d", got)
+	}
+
+	// A negative/invalid override falls through to the default — never silently zero.
+	t.Setenv("CLOUD_AI_BYO_FEE_BPS", "-3")
+	if got := BYOFeeBps(); got != defaultBYOFeeBps {
+		t.Fatalf("invalid bps = %d, want default %d", got, defaultBYOFeeBps)
+	}
+}
+
+// MicrosToGateCents rounds UP with a 1-cent floor — a pre-call gate must never
+// under-reserve.
+func TestMicrosToGateCents(t *testing.T) {
+	for _, tc := range []struct{ micros, cents int64 }{
+		{0, 0}, {1, 1}, {9999, 1}, {10000, 1}, {10001, 2}, {25000, 3},
+	} {
+		if got := MicrosToGateCents(tc.micros); got != tc.cents {
+			t.Fatalf("MicrosToGateCents(%d) = %d, want %d", tc.micros, got, tc.cents)
+		}
 	}
 }
