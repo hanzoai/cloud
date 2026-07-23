@@ -42,6 +42,10 @@
 package research
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -52,6 +56,10 @@ import (
 	"github.com/hanzoai/cloud/clients/principal"
 	"github.com/zap-proto/zip"
 )
+
+// maxArtifactBytes bounds one diary artifact's content (the server hashes + stores the
+// bytes to content-address it). A board snapshot is well under this.
+const maxArtifactBytes = 16 << 20
 
 // maxBatchItems bounds one ingest so a single request cannot pin the writer with an
 // unbounded batch. The uploader chunks well under this; the global body limit is the
@@ -123,16 +131,18 @@ type IngestRequest struct {
 // canonical board, or a gateway-generated report page.
 var artifactKinds = map[string]bool{"snapshot": true, "report": true}
 
-// Artifact is one research-diary record — a raw-artifact-class manifest tied to a run: a
-// snapshot (a PNG of the canonical board) or a report (a generated page). sha256 is the
-// content-hash IDENTITY (idempotent — a re-POST of the same bytes is a no-op, the
-// hash-addressed half of the earned label); the bytes live at ref (blob store). Private
-// by default; public only via the separate visibility grant. Carries the same provenance
-// as a run.
+// Artifact is one research-diary record — a raw-artifact-class record tied to a run: a
+// snapshot (a PNG of the canonical board) or a report (a generated page). The caller
+// submits the bytes (base64 content); the SERVER hashes them and that sha256 is the
+// identity + ref (sha256:<hash>) — never a client-asserted hash or ref, so it is genuinely
+// content-addressed and un-poisonable. A re-POST of the same bytes is a no-op. Private by
+// default; public only via the separate visibility grant. Carries the same provenance as a
+// run.
 type Artifact struct {
-	SHA256         string          `json:"sha256"`
+	SHA256         string          `json:"sha256"`            // SERVER-derived on write; the identity
+	Content        string          `json:"content,omitempty"` // base64 bytes on write; the server hashes + stores them (never returned)
 	Kind           string          `json:"kind"`
-	Ref            string          `json:"ref"`
+	Ref            string          `json:"ref"` // server-derived content address (sha256:<hash>)
 	RunID          string          `json:"run_id"`
 	Project        string          `json:"project"`
 	Visibility     string          `json:"visibility"`
@@ -203,13 +213,14 @@ func Shutdown() error { return shutdownStores() }
 func routes(app *zip.App, s *cloud.Service[state]) {
 	shutdownStores = s.State.stores.CloseAll
 	g := app.Group("/v1/research")
-	g.Post("/experiments", cloud.Handle(s, postExperiments)) // ingest (idempotent) → SQLite → roll up
-	g.Get("/experiments", cloud.Handle(s, listExperiments))  // list canonical
-	g.Get("/projects", cloud.Handle(s, getProjects))         // every project + real totals
-	g.Get("/totals", cloud.Handle(s, getTotals))             // headline aggregate + per-kind
-	g.Post("/grants", cloud.Handle(s, postGrant))            // visibility/consent (separate auth)
-	g.Post("/artifacts", cloud.Handle(s, postArtifact))      // record a diary artifact (idempotent by sha256)
-	g.Get("/artifacts", cloud.Handle(s, listArtifacts))      // chronological diary feed (newest-first)
+	g.Post("/experiments", cloud.Handle(s, postExperiments))      // ingest (idempotent) → SQLite → roll up
+	g.Get("/experiments", cloud.Handle(s, listExperiments))       // list canonical
+	g.Get("/projects", cloud.Handle(s, getProjects))              // every project + real totals
+	g.Get("/totals", cloud.Handle(s, getTotals))                  // headline aggregate + per-kind
+	g.Post("/grants", cloud.Handle(s, postGrant))                 // visibility/consent (separate auth)
+	g.Post("/artifacts", cloud.Handle(s, postArtifact))           // record a diary artifact (content-addressed)
+	g.Get("/artifacts", cloud.Handle(s, listArtifacts))           // chronological diary feed (newest-first)
+	g.Get("/artifacts/:sha256", cloud.Handle(s, getArtifactBlob)) // retrieve the bytes by content hash
 }
 
 var shutdownStores = func() error { return nil }
@@ -394,8 +405,11 @@ func postGrant(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{"updated": n})
 }
 
-// postArtifact records one diary artifact idempotently by its sha256 content hash, then
-// rolls it up best-effort. project is the SERVER's value; visibility is forced private.
+// postArtifact records one diary artifact, CONTENT-ADDRESSED inside the trust boundary:
+// the caller submits the bytes (base64 content), the SERVER hashes them, and that hash is
+// the identity + ref — never a client-asserted sha256 (which would be poisonable and make
+// "hash-addressed" unearned). A client-provided sha256, if any, must MATCH. project is the
+// SERVER's value; visibility is forced private.
 func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
 	st, org, done := orgStore(s, c)
 	if st == nil {
@@ -406,14 +420,31 @@ func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := c.Bind(&a); err != nil {
 		return errJSON(c, http.StatusBadRequest, "invalid artifact body")
 	}
-	if a.SHA256 == "" || a.Ref == "" {
-		return errJSON(c, http.StatusUnprocessableEntity, "artifact needs a sha256 and a ref")
-	}
 	if !artifactKinds[a.Kind] {
 		return errJSON(c, http.StatusUnprocessableEntity, "kind must be snapshot or report")
 	}
+	if a.Content == "" {
+		return errJSON(c, http.StatusUnprocessableEntity, "artifact needs content bytes (base64) to content-address")
+	}
+	content, err := base64.StdEncoding.DecodeString(a.Content)
+	if err != nil || len(content) == 0 {
+		return errJSON(c, http.StatusUnprocessableEntity, "content must be non-empty base64")
+	}
+	if len(content) > maxArtifactBytes {
+		return errJSON(c, http.StatusRequestEntityTooLarge, "artifact content too large")
+	}
+	// Hash inside the trust boundary — the SERVER derives the identity from the bytes it
+	// stores, so a poisoned first-write is impossible (a distinct hash needs a preimage).
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
+	if a.SHA256 != "" && !strings.EqualFold(a.SHA256, hash) {
+		return errJSON(c, http.StatusUnprocessableEntity, "sha256 does not match the content bytes")
+	}
+	a.SHA256 = hash
+	a.Ref = "sha256:" + hash // server-derived content address — never a client file:// ref
+	a.Content = ""
 	ctx := c.Context()
-	created, err := st.putArtifact(ctx, project, a)
+	created, err := st.putArtifact(ctx, project, a, content)
 	if err != nil {
 		s.Log.Error("research artifact failed", "org", org, "err", err)
 		return errJSON(c, http.StatusInternalServerError, "research artifact failed")
@@ -422,7 +453,33 @@ func postArtifact(s *cloud.Service[state], c *zip.Ctx) error {
 	if err := s.State.wh.rollUpArtifact(ctx, org, project, a, time.Now()); err != nil {
 		rolledUp = false
 	}
-	return c.JSON(http.StatusOK, map[string]any{"sha256": a.SHA256, "created": created == 1, "rolled_up": rolledUp})
+	return c.JSON(http.StatusOK, map[string]any{"sha256": a.SHA256, "ref": a.Ref, "created": created == 1, "rolled_up": rolledUp})
+}
+
+// getArtifactBlob serves one artifact's stored bytes, hash-addressed by :sha256 and
+// org-scoped — the retrieval side of hash-addressing (the board fetches a snapshot by its
+// content hash).
+func getArtifactBlob(s *cloud.Service[state], c *zip.Ctx) error {
+	st, org, done := orgStore(s, c)
+	if st == nil {
+		return done
+	}
+	project := c.Query("project")
+	if project == "" {
+		project = principal.Project(c)
+	}
+	content, kind, ok := st.artifactContent(c.Context(), project, c.Param("sha256"))
+	if !ok {
+		return errJSON(c, http.StatusNotFound, "artifact not found")
+	}
+	_ = org
+	ct := "application/octet-stream"
+	if kind == "snapshot" {
+		ct = "image/png"
+	}
+	c.SetHeader("Content-Type", ct)
+	c.Status(http.StatusOK)
+	return c.SendStream(bytes.NewReader(content))
 }
 
 // listArtifacts returns the chronological diary feed newest-first, filtered by ?run=,
