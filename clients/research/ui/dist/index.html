@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hanzo Research · Ops Board</title>
+<style>
+  :root{
+    --bg:#080b12; --panel:#0f141f; --panel2:#151c2b; --line:#1e2838; --line2:#2a3650;
+    --ink:#eaeef7; --mut:#96a2ba; --faint:#5b6784;
+    --cy:#34d6ef; --cy-dim:#0e2e38; --grn:#37d39a; --grn-dim:#0e2a20; --amb:#f2b23c; --amb-dim:#2c2410; --red:#f2617a; --red-dim:#2c1622; --vi:#9b8cff; --vi-dim:#1c1b38;
+    --mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --sh:0 1px 2px rgba(0,0,0,.4),0 18px 44px -22px rgba(0,0,0,.75);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f6fb; --panel:#fff; --panel2:#eef2f9; --line:#e2e8f2; --line2:#d3dbe8;
+    --ink:#131a2b; --mut:#55627b; --faint:#8a95ac;
+    --cy:#0c93b4; --cy-dim:#daf2f8; --grn:#0f9d63; --grn-dim:#e0f4ea; --amb:#b7791f; --amb-dim:#f6edd8; --red:#d6455a; --red-dim:#fbe3e7; --vi:#6b5bd6; --vi-dim:#ecebfb;
+    --sh:0 1px 2px rgba(20,25,40,.05),0 12px 30px -18px rgba(20,25,40,.16);
+  }
+  @media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    --bg:#f4f6fb; --panel:#fff; --panel2:#eef2f9; --line:#e2e8f2; --line2:#d3dbe8;
+    --ink:#131a2b; --mut:#55627b; --faint:#8a95ac;
+    --cy:#0c93b4; --cy-dim:#daf2f8; --grn:#0f9d63; --grn-dim:#e0f4ea; --amb:#b7791f; --amb-dim:#f6edd8; --red:#d6455a; --red-dim:#fbe3e7; --vi:#6b5bd6; --vi-dim:#ecebfb;
+    --sh:0 1px 2px rgba(20,25,40,.05),0 12px 30px -18px rgba(20,25,40,.16);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:clamp(16px,3vw,36px) clamp(14px,3vw,32px) 80px}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:18px}
+  .eyebrow{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--cy);font-weight:700}
+  h1{font-size:clamp(23px,3.2vw,32px);margin:.25em 0 0;letter-spacing:-.02em;font-weight:680}
+  .src{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;margin-top:8px}
+  .src.live{color:var(--grn)} .src.seed{color:var(--amb)} .src.err{color:var(--red)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:p 2s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(55,211,154,.5)}70%{box-shadow:0 0 0 7px rgba(55,211,154,0)}100%{box-shadow:0 0 0 0 rgba(55,211,154,0)}}
+  @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
+  .stamp{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;line-height:1.8}
+
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:11px;margin:20px 0 8px}
+  @media(max-width:880px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:520px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:13px 14px;box-shadow:var(--sh)}
+  .kpi .k{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .kpi .v{font-family:var(--mono);font-size:23px;font-weight:600;margin-top:5px;line-height:1;letter-spacing:-.02em;transition:color .6s}
+  .kpi .v.cy{color:var(--cy)} .kpi .v.gr{color:var(--grn)}
+  .kpi .v.flash{color:var(--grn)}
+
+  .barwrap{margin:22px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:16px 18px;box-shadow:var(--sh)}
+  .barwrap .lab{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-bottom:9px}
+  .prog{height:10px;border-radius:5px;background:var(--line);overflow:hidden;display:flex}
+  .prog span{height:100%}
+  .seg-ship{background:var(--grn)} .seg-run{background:var(--cy)} .seg-plan{background:var(--faint)}
+  .leg{display:flex;gap:16px;margin-top:9px;font-size:11px;color:var(--mut);flex-wrap:wrap}
+  .lg{display:inline-flex;align-items:center;gap:5px}.sw{width:10px;height:10px;border-radius:3px}
+
+  h2.sec{font-size:13px;margin:30px 0 12px;font-weight:660;color:var(--ink);text-transform:uppercase;letter-spacing:.08em}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .proj{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px;box-shadow:var(--sh);border-top:3px solid var(--line2)}
+  .proj.live{border-top-color:var(--grn)} .proj.running{border-top-color:var(--cy)} .proj.shipped{border-top-color:var(--vi)}
+  .proj .ph{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .proj .pid{font-family:var(--mono);font-weight:640;font-size:14.5px}
+  .proj .prod{font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+  .proj .goal{color:var(--mut);font-size:12.5px;margin:7px 0 3px}
+  .proj .gate{font-size:11px;color:var(--faint);border-left:2px solid var(--line2);padding-left:8px;margin:8px 0 10px}
+  .stats{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 11px}
+  .stat{font-family:var(--mono);font-size:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:3px 7px;color:var(--mut)}
+  .stat b{color:var(--ink);font-weight:640}
+  .pill{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:20px;white-space:nowrap}
+  .p-live{background:var(--grn-dim);color:var(--grn)} .p-running{background:var(--cy-dim);color:var(--cy)} .p-shipped{background:var(--vi-dim);color:var(--vi)}
+  .runs{display:flex;flex-direction:column;gap:6px}
+  .run{display:grid;grid-template-columns:14px 1fr auto;gap:9px;align-items:start;font-size:12.5px;padding:7px 0;border-top:1px solid var(--line)}
+  .run:first-child{border-top:none}
+  .dot{width:8px;height:8px;border-radius:50%;margin-top:4px}
+  .d-ship{background:var(--grn)} .d-run{background:var(--cy)} .d-plan{background:transparent;box-shadow:inset 0 0 0 1.5px var(--faint)}
+  .run .rn{overflow:hidden}
+  .run .rk{font-size:9px;color:var(--faint);font-family:var(--mono)}
+  .metricline{font-size:11px;color:var(--mut);font-family:var(--mono);margin-top:3px;line-height:1.4}
+  .notes{font-size:11.5px;color:var(--mut);margin-top:5px;line-height:1.5}
+  .notes code{font-family:var(--mono);font-size:10.5px;background:var(--panel2);padding:1px 4px;border-radius:4px}
+  .notes a{color:var(--cy)}
+  .links{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .lnk{font-family:var(--mono);font-size:10px;text-decoration:none;color:var(--cy);background:var(--cy-dim);border:1px solid var(--line);border-radius:6px;padding:2px 7px;white-space:nowrap}
+  .lnk:hover{border-color:var(--cy)}
+
+  .whatsleft{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--amb);border-radius:12px;padding:16px 18px;box-shadow:var(--sh);margin-top:14px}
+  .whatsleft h3{margin:0 0 8px;font-size:13px;font-weight:640}
+  .whatsleft ol{margin:0;padding-left:1.2em;color:var(--mut)} .whatsleft li{margin:5px 0}
+  .whatsleft b{color:var(--ink)}
+  .flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;box-shadow:var(--sh);margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--mut);overflow-x:auto}
+  .flow .a{color:var(--cy)} .flow .b{color:var(--grn)}
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);color:var(--faint);font-size:11.5px;line-height:1.7}
+  a{color:var(--cy)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Hanzo Research · /v1/research</div>
+      <h1>R&amp;D Ops Board</h1>
+      <div class="src seed" id="src"><span class="pulse"></span><span id="srclab">connecting…</span></div>
+    </div>
+    <div class="stamp">
+      <div>every completed run = versioned evidence</div>
+      <div>local durable · cloud mirroring rolling out</div>
+      <div id="totline">—</div>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="barwrap">
+    <div class="lab"><span>Program progress — runs by status</span><span id="pctship" class="num"></span></div>
+    <div class="prog" id="prog"></div>
+    <div class="leg">
+      <span class="lg"><span class="sw" style="background:var(--grn)"></span> shipped</span>
+      <span class="lg"><span class="sw" style="background:var(--cy)"></span> running</span>
+      <span class="lg"><span class="sw" style="background:var(--faint)"></span> planned</span>
+    </div>
+  </div>
+
+  <h2 class="sec">Research projects — enso · hanzo-engine · hanzo-ml</h2>
+  <div class="grid" id="projects"></div>
+
+  <h2 class="sec">What's left — the critical path</h2>
+  <div class="whatsleft">
+    <h3>Ordered, evidence-gated — what the team ships next</h3>
+    <ol>
+      <li><b>Native Research SDK</b> (Python first, then Rust · Go · C++) — one fluent call records a run with markdown notes + issue/PR/commit/benchmark links to <span class="num">/v1/research</span>.</li>
+      <li><b>Git-driven runs</b> — <span class="num">.github/workflows</span> sync to <span class="num">.hanzo/workflows</span>; every prod update runs the full benchmark suite as a regression + error gate on Hanzo CI/CD.</li>
+      <li><b>Self-service billing</b> — signup → own org → starter credit → scoped key → enso → metered.</li>
+      <li><b>Enso Critic</b> (candidate selector) → <b>Scout</b> → <b>VOI Controller</b> → typed <b>Conductor</b> — the adaptive-inference program (HIP-0512).</li>
+      <li><b>hanzo MCP query</b> — read historic research + benchmark evidence over the API, always-correct and queryable.</li>
+    </ol>
+  </div>
+
+  <h2 class="sec">Native cloud plane — how a run reaches the board</h2>
+  <div class="flow">
+    Research SDK (py · rust · go · c++) or <span class="num">.hanzo/workflows</span> CI run<br>
+    &nbsp;&nbsp;→ <span class="a">POST /v1/research/experiments</span> (idempotent by content hash · markdown notes + links)<br>
+    &nbsp;&nbsp;→ per-org SQLite (versioned, append-only) <span class="b">→ hanzoai/datastore OLAP (aggregate)</span><br>
+    &nbsp;&nbsp;→ this board (<span class="a">GET /v1/research/projects · /totals · /experiments</span>) + polling analytics<br>
+    &nbsp;&nbsp;→ hanzo MCP query · informs enso config / preset / training via the Genome archive
+  </div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+"use strict";
+// The board renders a program model (project goal + gate + run rows) and OVERLAYS the
+// live measured numbers from /v1/research when the endpoint is reachable and the caller
+// is org-authorized. SEED is the embedded snapshot: the board renders identically with
+// zero backend (published anywhere, offline), then upgrades to live in-place. The source
+// badge states honestly which one is showing. Every run row can carry markdown notes +
+// typed links (issue/pr/commit/benchmark) — authored via the Research SDK, carried on the
+// run's meta, rendered here.
+const SEED = {
+  totals:{ projects:6, runs:17, attempts:9190, attempts_retained:9306, models:17, synth_roots:11196, genome_presets:8 },
+  projects:[
+   {id:"enso-arena",product:"enso",status:"live",goal:"Benchmark arena: measure every model under one harness, reconcile external claims",gate:"/v1/benchmark LIVE in prod (catalog+leaderboard+compare)",runs:[
+     {name:"GPQA / LCB / HLE / CharXiv sweep",kind:"benchmark",status:"shipped",metric:"9,190 attempts · 17 models · 4 benchmarks",
+      notes:"Full **17-model** sweep under one harness. Canonical = latest run per `(model,benchmark)`; all historical attempts retained.",
+      links:[{rel:"benchmark",url:"https://github.com/hanzoai/enso-bench",label:"enso-bench"},{rel:"doc",url:"https://github.com/hanzoai/hips",label:"HIP-0512"}]},
+     {name:"external-claim reconciliation",kind:"benchmark",status:"shipped",metric:"provider-reported vs measured, provenance-first",
+      notes:"Never blends `published_claim` with `hanzo-measured`; paired common-set McNemar on overlap only."}]},
+   {id:"enso-genome",product:"enso",status:"shipped",goal:"Evolutionary pool curation — MAP-Elites archive → auto-curated presets",gate:"held-out ceiling proven; realized gain needs Critic",runs:[
+     {name:"MAP-Elites pool curation",kind:"ablation",status:"shipped",metric:"8 niches · +4.08pp held-out oracle-COVERAGE lift @ $70 (realized gain needs Critic)",
+      notes:"Fitness = held-out `recovery − damage`. Elite pool `[enso, enso-flash, gpt-5.6-terra, grok-4.5]`.",
+      links:[{rel:"commit",url:"https://github.com/hanzoai/enso-bench",label:"enso_genome.py"},{rel:"issue",url:"https://github.com/hanzoai/enso-bench/issues",label:"track"}]},
+     {name:"exact-lexicographic ground truth",kind:"ablation",status:"shipped",metric:"Genome matches exact at K=3; earns keep at scale"}]},
+   {id:"enso-router",product:"enso",status:"running",goal:"Scout → Critic → Controller → Conductor adaptive inference controller",gate:"corpus scale (n=198 → thousands); Critic trains first",runs:[
+     {name:"routing diagnostic (n=198)",kind:"policy-eval",status:"shipped",metric:"no detectable value Δ=−1.06pp p=0.61 — data-starved",
+      notes:"Grouped-CV + 400-permutation null: question-only routing has **no detectable value** at n=198. Data-starved, not algorithm-starved."},
+     {name:"Enso Critic (candidate selector)",kind:"training",status:"planned",metric:"1–2B · mixed correct/incorrect candidate sets"},
+     {name:"Enso Scout (prefill activations)",kind:"training",status:"planned",metric:"frozen 0.5–2B · per-arm P(correct) · distilled from Critic"},
+     {name:"VOI Controller",kind:"training",status:"planned",metric:"stop/resample/reroute/verify · causal regret"}]},
+   {id:"enso-data",product:"enso",status:"running",goal:"Training corpus: unified datastore + synth factory + consented first-party data",gate:"HIP-0513 consent pipeline (hanzoai/guard)",runs:[
+     {name:"unified benchmark datastore",kind:"benchmark",status:"shipped",metric:"9,190 attempts · latest-run canonical · provenance-first"},
+     {name:"synthetic verifiable-task factory",kind:"training",status:"shipped",metric:"11,196 roots · deterministic gold · firewalled"},
+     {name:"consented first-party ingestion",kind:"training",status:"planned",metric:"opt-in · guard-sanitized · EU-strict · HIP-0513"}]},
+   {id:"hanzo-engine",product:"hanzo-engine",status:"running",goal:"Bare-metal kernel/perf: close the gap vs llama.cpp/vLLM across backends",gate:"per-backend parity, measured on real shapes",runs:[
+     {name:"Qwen3.6 prefill parity (GB10)",kind:"kernel-perf",status:"shipped",metric:"1244→1739 T/s · 0.86× llama · fused MoE",
+      notes:"Fused MoE combine + layout GDN closed prefill to `0.86×` llama.cpp on GB10."},
+     {name:"DSL auto-fusion (elementwise)",kind:"kernel-perf",status:"shipped",metric:"bit-exact SwiGLU · hanzo-kernel 0.2.15"},
+     {name:"cross-backend matrix (CUDA/Metal/Vulkan)",kind:"kernel-perf",status:"running",metric:"CUDA ~100% · Metal 85-94% · Vulkan 62%"}]},
+   {id:"hanzo-ml",product:"hanzo-ml",status:"running",goal:"Model training/finetune: zen lineage, MoDE/MUEN experiments",gate:"clean provenance; negatives recorded honestly",runs:[
+     {name:"MoDE alignment premise (GB10)",kind:"training",status:"shipped",metric:"3 negatives — frozen-expert harvest ≯ baselines · PIVOT",
+      notes:"**Negative result, recorded.** Harvesting frozen experts + cheap alignment does *not* beat baselines. Pivot to agentic evolution."},
+     {name:"flock judge juries",kind:"policy-eval",status:"shipped",metric:"juries buy insurance not accuracy"},
+     {name:"zen5 lineage / restoration",kind:"training",status:"running",metric:"OSS base + Hanzo identity-train"}]}]
+};
+
+// Editorial framing per project id (goal + gate + product + status) — not in the
+// datastore, so it lives here; live numbers and run rows come from the API.
+const ENSO_META = {};
+SEED.projects.forEach(p=>{ ENSO_META[p.id]={product:p.product,status:p.status,goal:p.goal,gate:p.gate}; });
+
+const $=id=>document.getElementById(id);
+const int=n=>(n==null?"—":Number(n).toLocaleString());
+const usd=n=>(n==null?"—":"$"+Number(n).toLocaleString(undefined,{maximumFractionDigits:0}));
+const dcls={shipped:"d-ship",running:"d-run",planned:"d-plan"};
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+// Minimal, safe markdown: escape first, then apply a fixed set of inline rules. Links
+// are only emitted for http(s) targets — a data:/javascript: URL never becomes an anchor.
+function md(s){
+  let h=esc(s);
+  h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,(m,t,u)=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`);
+  h=h.replace(/`([^`]+)`/g,"<code>$1</code>");
+  h=h.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");
+  h=h.replace(/\*([^*]+)\*/g,"<i>$1</i>");
+  h=h.replace(/\n/g,"<br>");
+  return h;
+}
+const relIcon={issue:"◇",pr:"⑃",commit:"◆",benchmark:"▤",dataset:"⛁",doc:"¶"};
+function chip(l){
+  if(!l||!l.url||!/^https?:\/\//.test(l.url)) return "";
+  return `<a class="lnk" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${relIcon[l.rel]||"↗"} ${esc(l.label||l.rel||l.url)}</a>`;
+}
+
+let prevKpi={};
+function renderKpis(t){
+  const rows=[
+    ["Projects",int(t.projects),"","projects"],
+    ["Runs tracked",int(t.runs),"","runs"],
+    ["Canonical attempts",int(t.attempts)+` <span style='font-size:10px;color:var(--faint)'>/ ${int(t.attempts_retained)} retained</span>`,"cy","attempts"],
+    ["Models",int(t.models),"","models"],
+    ["Synth roots",int(t.synth_roots),"gr","synth_roots"],
+    ["Genome presets",int(t.genome_presets),"cy","genome_presets"]
+  ];
+  $("kpis").innerHTML=rows.map(([k,v,c,key])=>{
+    const flash=(prevKpi[key]!=null && t[key]!=null && t[key]>prevKpi[key])?" flash":"";
+    return `<div class="kpi"><div class="k">${k}</div><div class="v ${c}${flash}">${v}</div></div>`;
+  }).join("");
+  rows.forEach(([,,,key])=>{ if(t[key]!=null) prevKpi[key]=t[key]; });
+  $("totline").textContent=`${int(t.projects)} projects · ${int(t.runs)} runs`;
+}
+function renderProgress(projects){
+  let ship=0,run=0,plan=0;
+  projects.forEach(p=>p.runs.forEach(r=>{r.status=="shipped"?ship++:r.status=="running"?run++:plan++;}));
+  const tot=ship+run+plan||1;
+  $("prog").innerHTML=`<span class="seg-ship" style="width:${ship/tot*100}%"></span><span class="seg-run" style="width:${run/tot*100}%"></span><span class="seg-plan" style="width:${plan/tot*100}%"></span>`;
+  $("pctship").textContent=`${ship}/${tot} shipped · ${run} running · ${plan} planned`;
+}
+function statChips(live){
+  if(!live) return "";
+  const c=[];
+  const att=live.attempts||live.attempts_retained;
+  if(att) c.push(`<span class="stat"><b>${int(att)}</b> attempts</span>`);
+  if(live.experiments!=null) c.push(`<span class="stat"><b>${int(live.experiments)}</b> runs</span>`);
+  if(live.models) c.push(`<span class="stat"><b>${int(live.models)}</b> models</span>`);
+  if(live.benchmarks) c.push(`<span class="stat"><b>${int(live.benchmarks)}</b> benchmarks</span>`);
+  if(live.cost_usd) c.push(`<span class="stat"><b>${usd(live.cost_usd)}</b> spend</span>`);
+  if(live.kinds&&live.kinds.length) c.push(`<span class="stat">${esc(live.kinds.join(" · "))}</span>`);
+  return c.length?`<div class="stats">${c.join("")}</div>`:"";
+}
+function runRow(r){
+  const pillCls=r.status=="shipped"?"p-shipped":r.status=="running"?"p-running":"";
+  const pillStyle=r.status=="planned"?"background:transparent;color:var(--faint);border:1px solid var(--line2)":"";
+  const notes=r.notes?`<div class="notes">${md(r.notes)}</div>`:"";
+  const links=(r.links&&r.links.length)?`<div class="links">${r.links.map(chip).join("")}</div>`:"";
+  return `<div class="run"><span class="dot ${dcls[r.status]}"></span>
+    <span class="rn">${esc(r.name)} <span class="rk">· ${esc(r.kind)}</span>
+      <div class="metricline">${esc(r.metric)}</div>${notes}${links}</span>
+    <span class="pill ${pillCls}" style="${pillStyle}">${r.status}</span></div>`;
+}
+function renderProjects(projects){
+  $("projects").innerHTML=projects.map(p=>
+    `<div class="proj ${p.status}"><div class="ph"><div><span class="pid">${esc(p.id)}</span> <span class="prod">${esc(p.product)}</span></div>
+      <span class="pill p-${p.status}">${p.status}</span></div>
+      <div class="goal">${esc(p.goal)}</div><div class="gate">gate: ${esc(p.gate)}</div>
+      ${statChips(p.live)}
+      <div class="runs">${p.runs.map(runRow).join("")}</div></div>`).join("");
+}
+function setSource(kind,label){ $("src").className="src "+kind; $("srclab").textContent=label; }
+function render(m){ renderKpis(m.totals); renderProgress(m.projects); renderProjects(m.projects); }
+
+const boardStatus=s=>{s=String(s||"complete").toLowerCase();return s=="complete"?"shipped":["running","planning","scoring","queued"].includes(s)?"running":"planned";};
+function fmtVal(v){ if(v==null) return ""; return Number.isInteger(v)?String(v):Number(v).toFixed(1); }
+function expToRun(e){
+  const name=e.task?`${e.subject} · ${e.task}`:e.subject;
+  const metric=[e.metric,fmtVal(e.value)].filter(Boolean).join(" ")+(e.n?` (n=${e.n})`:"");
+  let notes="",links=[];
+  try{ const m=(typeof e.meta==="string")?JSON.parse(e.meta):e.meta; if(m){ notes=m.notes||""; links=Array.isArray(m.links)?m.links:[]; } }catch(_){}
+  return {name,kind:e.kind||"",status:boardStatus(e.status),metric,notes,links};
+}
+// liveModel overlays measured numbers + real run rows from the API onto the editorial
+// framing. Run rows are the actual versioned experiments; notes/links come off each
+// run's meta. Returns null if the org has no runs yet (board keeps the seed snapshot).
+function liveModel(totals,projects,experiments){
+  const m={totals:{...SEED.totals},projects:[]};
+  if(totals){
+    if(totals.projects!=null) m.totals.projects=totals.projects;
+    if(totals.experiments!=null) m.totals.runs=totals.experiments;
+    if(totals.attempts!=null) m.totals.attempts=totals.attempts;
+    if(totals.attempts_retained!=null) m.totals.attempts_retained=totals.attempts_retained;
+    if(totals.models!=null) m.totals.models=totals.models;
+  }
+  const byProj={}; (experiments||[]).forEach(e=>{(byProj[e.project]=byProj[e.project]||[]).push(e);});
+  (projects||[]).forEach(ps=>{
+    const meta=ENSO_META[ps.project]||{product:"—",status:"running",goal:"(live project — no editorial summary yet)",gate:"—"};
+    m.projects.push({id:ps.project,product:meta.product,status:meta.status,goal:meta.goal,gate:meta.gate,live:ps,runs:(byProj[ps.project]||[]).map(expToRun)});
+  });
+  return m.projects.length?m:null;
+}
+async function getJSON(url){
+  const r=await fetch(url,{credentials:"include",headers:{accept:"application/json"}});
+  if(!r.ok) throw new Error(url+" → "+r.status);
+  return r.json();
+}
+let polling=false;
+async function refresh(){
+  try{
+    const [totals,projRes,expRes]=await Promise.all([
+      getJSON("/v1/research/totals"),
+      getJSON("/v1/research/projects"),
+      getJSON("/v1/research/experiments").catch(()=>({data:[]}))
+    ]);
+    const m=liveModel(totals, projRes&&projRes.data, expRes&&expRes.data);
+    if(!m) throw new Error("no runs yet");
+    render(m);
+    setSource("live",`live · /v1/research · ${new Date().toISOString().replace("T"," ").slice(0,19)} UTC`);
+    return true;
+  }catch(e){
+    render(SEED);
+    setSource("seed","seed snapshot · /v1/research not reachable from here");
+    return false;
+  }
+}
+render(SEED);
+setSource("seed","connecting to /v1/research…");
+refresh().then(live=>{ if(live && !polling && !matchMedia("(prefers-reduced-motion:reduce)").matches){ polling=true; setInterval(refresh,15000); } });
+
+$("foot").innerHTML=`Rendered from the Hanzo Research datastore via <span class="num">GET /v1/research/projects · /totals · /experiments</span> when reachable; otherwise from the embedded snapshot (real evidence, not marketing). Each run carries optional markdown notes + typed links (issue · pr · commit · benchmark · dataset · doc) authored via the Research SDK. Canonical = latest non-retracted version per stable id; retained = full versioned history (nothing lost — canonical is a deduped view over retained). Research spend to date ~$564 est (OpenRouter $400+ cash, DO on grant). Durability today: versioned · append-only; cloud mirroring to hanzoai/datastore is rolling out (states: local-durable → upload-pending → cloud-confirmed → replicated → recovery-tested). HIP-0512 (arena+router), HIP-0513 (consent). Legal: Terms/Privacy/DPA/Research-Supplemental drafts pending counsel.`;
+</script>
+</body>
+</html>

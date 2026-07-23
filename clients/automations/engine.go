@@ -109,7 +109,13 @@ func FlowRunWorkflow(ctx workflow.Context, in FlowRunInput) (FlowRunResult, erro
 		},
 	})
 
-	outputs := make(map[string]any, len(in.Steps))
+	outputs := make(map[string]any, len(in.Steps)+1)
+	// Seed the inbound event so every downstream action can reference it as
+	// {{trigger.field}} — the IFTTT data-flow: the event that fired the flow is the
+	// first "output" the action chain reads. Nil for manual/cron starts.
+	if in.Trigger != nil {
+		outputs["trigger"] = in.Trigger
+	}
 	for _, step := range in.Steps {
 		// wait_for_approval is the manual waitpoint: block on the durable resume
 		// signal rather than executing an activity. The engine persists the signal,
@@ -249,6 +255,13 @@ func executeFlow(ctx context.Context, in FlowRunInput) (tasksclient.WorkflowRun,
 		TaskQueue: automationsTaskQueue,
 	}, FlowRunWorkflow, in)
 }
+
+// runStarter is the ONE door Deliver uses to start a durable run. It defaults to
+// executeFlow (the real engine). It is a package var ONLY so a test can OBSERVE the
+// FlowRunInput a delivered event would start — proving org scope, payload threading,
+// and exactly-once dispatch — without standing up the engine. Production never
+// reassigns it. (Mirrors tokenSource above.)
+var runStarter = executeFlow
 
 // signalResume delivers the resume signal (with an optional approval payload) to a
 // paused run in the org's namespace.
