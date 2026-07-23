@@ -71,6 +71,10 @@ type publishedClaim struct {
 }
 
 var published = []publishedClaim{
+	{"gpqa_diamond", "sakana", "fugu-ultra", 95.5, "agentic-orchestration", "Sakana Fugu Technical Report 2026"},
+	{"swe_bench_pro", "sakana", "fugu-ultra", 73.7, "agentic", "Sakana Fugu Technical Report 2026"},
+	{"terminal_bench_2_1", "sakana", "fugu-ultra", 82.1, "agentic", "Sakana Fugu Technical Report 2026"},
+	{"livecodebench_pro", "sakana", "fugu-ultra", 90.8, "agentic", "Sakana Fugu Technical Report 2026"},
 	{"gpqa_diamond", "xai", "grok-4.5", 94.3, "provider-reported", "provider card"},
 	{"gpqa_diamond", "anthropic", "fable-5", 94.6, "provider-reported", "provider card"},
 	{"gpqa_diamond", "openai", "gpt-5.5", 93.6, "provider-reported", "provider card"},
