@@ -1,39 +1,40 @@
-// Package integrations is the generic, provider-agnostic OAuth connector plane
-// for the unified Hanzo Cloud binary — the /v1/integrations surface that lets an
-// org connect a third-party account (Slack today; GitHub scaffolded; Google /
-// Salesforce plug into the SAME registry later) and hands the resulting per-org
-// tokens to KMS custody.
+// Package integrations is the generic, provider-agnostic connector ENGINE behind
+// the unified /v1/connectors plane (extension.go) — the ONE place an org or a user
+// connects a third-party account and the resulting credential is handed to KMS
+// custody. A connector, a plugin, and a skill are the SAME shape (an Extension)
+// distinguished by VALUES: kind ∈ {key,oauth,model,cloud,plugin,skill}, scope ∈
+// {org,user}. This file holds the ORG-plane (scope=org) admission + lifecycle;
+// connectors.go holds the USER-plane; extension.go routes both under ONE surface.
 //
 // ONE framework, N providers. A provider self-registers (its file's init calls
 // register) into a package registry declaring how to build its authorize URL,
-// exchange the code, and revoke. The five HTTP handlers here are provider-blind:
-// they resolve the provider by :provider, apply the SAME org gate, CSRF/state,
-// KMS custody and console redirect for every one. Adding a provider is a new file,
-// never a new route.
+// exchange the code, verify a key, and revoke. The handlers are provider-blind:
+// they resolve the provider by id, apply the SAME org gate, CSRF/state, KMS
+// custody and console redirect for every one. Adding a provider is a new file.
 //
-// Surface (subsystem name "integrations", prefix /v1/integrations):
+// Surface. The connect+config REGISTRY is /v1/connectors (list/get/connect/
+// callback/verify/enable/disable/config/forget — extension.go). /v1/integrations
+// keeps ONLY the capability/event surfaces (the chat bridge webhooks, the GitHub
+// App webhook, and the per-provider link legs) — those CONSUME a connector, they
+// are not the connect surface. The org OAuth providers now answer as
+// kind=oauth|key, scope=org on /v1/connectors; the OAuth callback converged to
+// /v1/connectors/:id/callback (external redirect_uri re-registration is the one
+// deploy gate).
 //
-//	GET    /v1/integrations                      list providers + this org's status  -> {providers:[...]}
-//	GET    /v1/integrations/:provider            one provider (404 unknown id)        -> Provider
-//	POST   /v1/integrations/:provider/connect    begin OAuth (org-authed)             -> {authorizeUrl} | 503 | 403
-//	GET    /v1/integrations/:provider/callback   PUBLIC, state-authed                  -> 302 to console
-//	POST   /v1/integrations/:provider/disconnect revoke + forget (org-authed)         -> {disconnected:true}
-//
-// TENANT ISOLATION. connect/list/get/disconnect derive the org from
-// principal.Org (a VALIDATED principal — a client-forged X-Org-Id with no
-// bearer is refused 403). The callback is Slack/GitHub-initiated and therefore
-// UNAUTHENTICATED, so its org is taken ONLY from the HMAC-signed, single-use
-// state — never a header (see state.go). Every org that reaches KMS or the store
-// is additionally validOrg-checked so it can never smuggle path structure into a
-// secret key.
+// TENANT ISOLATION. connect/get/disconnect derive the org from principal.Org (a
+// VALIDATED principal — a client-forged X-Org-Id with no bearer is refused 403).
+// The callback is provider-initiated and therefore UNAUTHENTICATED, so its org is
+// taken ONLY from the HMAC-signed, single-use state — never a header (see
+// state.go). Every org that reaches KMS or the store is validOrg-checked so it can
+// never smuggle path structure into a secret key.
 //
 // SECRET CUSTODY. Per-org customer tokens live ONLY in KMS (sealed, AES-256-GCM
-// envelope), keyed /orgs/{org}/integrations/{provider}. The store holds only
-// non-secret connection metadata (external id, account label, granted scopes).
-// Provider APP creds (client id/secret) come from ENV, injected by the operator
-// from KMS via KMSSecret — never plaintext in the store or a manifest. If KMS is
-// not Ready the connect/callback flows fail closed (503 / failure redirect); a
-// token is NEVER written in plaintext and NEVER put in SQLite.
+// envelope), keyed /orgs/{org}/integrations/{provider} (the custody path did NOT
+// move with the URL). The store holds only non-secret connection metadata + the
+// orthogonal enablement/config row (extension_config). Provider APP creds come
+// from ENV, injected by the operator from KMS via KMSSecret — never plaintext in
+// the store or a manifest. If KMS is not Ready the connect/callback flows fail
+// closed (503 / failure redirect); a token is NEVER written in plaintext.
 package integrations
 
 import (
