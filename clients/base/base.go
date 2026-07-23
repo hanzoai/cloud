@@ -118,6 +118,15 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return c.JSON(200, map[string]string{"service": "base", "status": "ok"})
 	})
 
+	// Base data-plane forward /v1/collections[/*] → the managed Base orchestrator
+	// (collections.go). Always on, BEFORE the embed gate: the console's Base product
+	// (Bases manager + Records) reaches its collections/records here regardless of
+	// whether this binary also hosts per-org Bases at /v1/base/*. This is the
+	// in-binary replacement for the go:embed-pruned console BFF (app/v1/superbase).
+	if err := mountCollections(app); err != nil {
+		return err
+	}
+
 	if !embedEnabled() {
 		log.Info("base embed disabled; /v1/base + /v1/waitlist off (set CLOUD_BASE_EMBED=1 to enable)")
 		return nil
