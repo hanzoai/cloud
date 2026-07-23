@@ -129,14 +129,21 @@ func Serve(specs []MountSpec, enable []string) error {
 	// bootstrap via cloud.RegisterTelemetryInstaller (the cycle-free inversion).
 	telemetryShutdown := installTelemetry(context.Background(), "hanzo-cloud")
 
-	// Data-plane encryption posture (cek). On an encryption-capable build a
-	// missing/invalid CLOUD_KMS_MASTER_KEY_REF makes the FIRST store open fail
-	// closed (MountAll aborts) — the same fail-closed stance as the KMS store; we
-	// surface it here so the posture is never silent.
-	if cek.Encrypting() {
+	// Data-plane encryption posture (cek). Every build encrypts a keyed store — the
+	// live libsqlcipher codec in production, the pure-Go codec envelope in dev/CI —
+	// so a store either opens keyed-and-encrypted or fails closed; there is no
+	// plaintext-at-rest mode. EnsureDevKey gives a pure-Go dev/CI build with no
+	// configured key a deterministic dev key so it runs encrypted with zero config;
+	// a production (codec-linked) build with a missing/invalid CLOUD_KMS_MASTER_KEY_REF
+	// makes the FIRST store open fail closed (MountAll aborts). It runs BEFORE the
+	// posture read below, which caches the resolved key. Surfaced so it is never silent.
+	switch {
+	case cek.EnsureDevKey():
+		deps.Logger.Warn("data-plane encryption ACTIVE with a DEV key (pure-Go build, no KMS key configured — dev/CI only)")
+	case cek.Encrypting():
 		deps.Logger.Info("data-plane encryption ACTIVE (SQLCipher at rest, per-db DEK)")
-	} else {
-		deps.Logger.Warn("data-plane encryption OFF (pure-Go dev build, or missing key on a capable build → store opens fail closed)")
+	default:
+		deps.Logger.Warn("data-plane encryption posture: missing/invalid key on a production build → store opens fail closed")
 	}
 
 	// ReadBufferSize raises the fasthttp header ceiling above the 4 KiB fiber
