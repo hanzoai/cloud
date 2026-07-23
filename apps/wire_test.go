@@ -85,6 +85,7 @@ var frozen = []struct {
 	{"graph", false, false},          // was order 135
 	{"security", true, true},         // was order 136
 	{"integrations", false, true},    // was order 137
+	{"destinations", false, true},    // new: /v1/destinations CDP fan-out (after integrations, before cloudflare)
 	{"cloudflare", false, false},     // new: /v1/cloudflare edge plane (after integrations)
 	{"sbom", true, false},            // was order 137
 	{"team", false, true},            // was order 138
