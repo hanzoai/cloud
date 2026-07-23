@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"time"
 )
 
 // trigger.go is the IFTTT inbound plane: it turns an external event (a provider
@@ -63,40 +62,22 @@ func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err
 	for _, sub := range subs {
 		f, ferr := s.State.store.GetFlow(ctx, org, sub.FlowID)
 		if ferr != nil || f.Status != FlowEnabled {
-			continue // disabled/deleted since it subscribed — status is authoritative
+			continue // disabled/deleted since it subscribed — the flow's status is authoritative
 		}
 		v, verr := s.State.store.GetVersion(ctx, org, sub.VersionID)
 		if verr != nil {
 			continue
 		}
-		runID := deliverRunID(org, sub.FlowID, ev)
-		now := time.Now().UnixMilli()
-		created, cerr := s.State.store.CreateRunIfAbsent(ctx, FlowRun{
-			ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
-			Status: RunRunning, StartTime: now, Created: now, Updated: now,
-		})
-		if cerr != nil {
-			return started, cerr
-		}
-		if !created {
-			continue // idempotent: this event already delivered this flow
-		}
-		in := FlowRunInput{
-			Owner:         org, // VALIDATED org — the cred scope + isolation boundary; NEVER from the event
-			FlowID:        f.ID,
-			FlowVersionID: v.ID,
-			RunID:         runID,
-			Steps:         flattenSteps(&v),
-			Trigger:       ev.Payload,
-		}
-		if _, serr := runStarter(ctx, in); serr != nil {
-			// The row exists (visible in listRuns) but the durable start failed. Mark it
-			// FAILED and stop: the row stays, so a re-delivery with the same DedupeKey is a
-			// no-op (at-most-once — a financial trigger must never double-fire on retry).
-			_ = s.State.store.UpdateRunStatus(ctx, org, runID, RunFailed, now, now)
+		// The SAME run-start every firing uses: persist-gate then dispatch, threading the
+		// event as the trigger payload. A re-delivered event (same DedupeKey → same run id)
+		// is a no-op (created==false) — at-most-once per flow per event.
+		_, created, serr := startRun(s, ctx, org, f, v, deliverRunID(org, sub.FlowID, ev), ev.Payload)
+		if serr != nil {
 			return started, serr
 		}
-		started++
+		if created {
+			started++
+		}
 	}
 	return started, nil
 }
