@@ -247,21 +247,26 @@ func affected(res sql.Result) int {
 
 // ── canonical predicates (the ONE definition of "canonical") ─────────────────
 //
-// A version is canonical iff it is THE single latest version (max ts, tiebreak max seq)
-// of its stable id AND that latest version is not retracted. If the latest version IS a
-// retraction, the id has NO canonical — it is WITHDRAWN (a retraction is honored, not
-// ignored). "latest" is over ALL versions (the NOT EXISTS does not filter revision), so a
-// retraction that is the newest version wins and no earlier version resurfaces. Every
-// version is retained regardless. Defined once here and reused by every canonical read.
+// A version is canonical iff it is THE single latest APPENDED version (max seq) of its
+// stable id AND that latest version is not retracted. If the latest is a retraction, the
+// id has NO canonical — WITHDRAWN (a retraction is honored, not ignored).
+//
+// SEQ, NOT CLIENT TS, IS THE SUPERSESSION AUTHORITY (N2). A client ts is untrustworthy as
+// an ordering key: the backfill importer stamps a wall-clock ts (~1.7e9) while an SDK live
+// record sends none (ts=0), so ordering by ts would sort an SDK correction/retraction
+// (ts=0) BEFORE a backfilled experiment (ts=big) and it would NEVER supersede — the stale
+// value would stay canonical while the producer sees added=1 (looks like success). seq is
+// assigned by the store on APPEND, so latest-APPEND-wins is correct across every producer
+// and un-forgeable by a client. ts is retained as display-only (measured-at). "latest" is
+// over ALL versions (the NOT EXISTS does not filter revision), so a retraction that is the
+// newest append wins and no earlier version resurfaces. Every version is retained.
 
 const canonicalExpWhere = `e.revision != 'retracted' AND NOT EXISTS (
-  SELECT 1 FROM experiment e2 WHERE e2.project=e.project AND e2.id=e.id
-    AND (e2.ts > e.ts OR (e2.ts = e.ts AND e2.seq > e.seq)))`
+  SELECT 1 FROM experiment e2 WHERE e2.project=e.project AND e2.id=e.id AND e2.seq > e.seq)`
 
 const canonicalAttWhere = `a.revision != 'retracted' AND NOT EXISTS (
   SELECT 1 FROM attempt a2 WHERE a2.project=a.project AND a2.benchmark=a.benchmark
-    AND a2.item=a.item AND a2.model=a.model
-    AND (a2.ts > a.ts OR (a2.ts = a.ts AND a2.seq > a.seq)))`
+    AND a2.item=a.item AND a2.model=a.model AND a2.seq > a.seq)`
 
 // A canonical COUNT is the ANSWERED latest-run view: the canonical version whose status
 // is a completed result. faulted/failed runs are RETAINED (counted in *_retained) but
