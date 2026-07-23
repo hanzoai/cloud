@@ -3,62 +3,75 @@
 //
 // It is three orthogonal things composed:
 //
-//   - a CHECKLIST ENGINE over a machine-readable curriculum (steps with id, title,
-//     why, how-on-hanzo, done-criteria, dependencies). Per-org progress tracks a
-//     state per step (todo|in_progress|done|skipped); next-step logic honours
-//     dependencies; a step whose done-criterion maps to a real signal auto-marks
-//     done when that signal is present (auto-detect).
+//   - a CHECKLIST ENGINE over a machine-readable curriculum (steps with id, section,
+//     title, detail, tool, dependencies). Per-org progress tracks a state per step
+//     (todo|in_progress|done|skipped); next-step logic honours dependencies; a step
+//     whose done-criterion maps to a real signal auto-marks done when that signal is
+//     present (auto-detect).
 //   - a BUSINESS AI AGENT: for a step bound to an MCP tool, "do it for me" drafts
 //     the content with the embedded AI (deps.AI) and executes the tool through the
 //     per-principal MCP plane (automations.InvokeTool) AS THE CALLER — so the
 //     action can never exceed the caller's own authorization and is metered +
 //     audited like any MCP call.
-//   - a curriculum LOADER: a minimal built-in default (embedded default.yaml) so
-//     /v1/guide works before the marketing repo's authored checklist.yaml lands; a
-//     PUT of an org-custom or platform-updated curriculum replaces it cleanly.
+//   - a BLUEPRINT: the full Guide™ playbook (sections, steps, strategies, templates,
+//     each carrying an admin `enabled` lever). It is seeded from the embedded fixture
+//     into a DB table, then authored LIVE by a SuperAdmin on admin.hanzo.ai; at
+//     runtime the DB is authoritative. See blueprint.go for the schema + projection,
+//     blueprint_store.go for the seeded/versioned store, admin.go for the CRUD plane.
 //
-// This file is the pure engine: the schema contract (Step / Curriculum), parsing,
-// validation, and the dependency/next-step/auto-detect logic — all free functions
-// over plain data, no I/O, so they are exhaustively unit-testable. Storage lives in
-// store.go, detectors in detect.go, the agent in agent.go, and the HTTP surface in
-// guide.go.
+// This file is the pure ENGINE: the checklist schema (Step / Curriculum), validation,
+// and the dependency/next-step/auto-detect logic — all free functions over plain data,
+// no I/O, so they are exhaustively unit-testable. The engine ALWAYS runs on a
+// Curriculum of ENABLED steps (the projection Blueprint.Curriculum() drops disabled
+// sections/steps and filters their edges), so no enable-logic braids into the engine.
+// Parsing/validation of the full blueprint live in blueprint.go; storage in store.go
+// (per-org) + blueprint_store.go (shared); detectors in detect.go; the agent in
+// agent.go; the HTTP surface in guide.go.
 package guide
 
 import (
-	_ "embed"
 	"fmt"
 	"sort"
 	"strings"
-
-	"sigs.k8s.io/yaml"
 )
 
-// Step is one checklist item. The struct tags are JSON, and sigs.k8s.io/yaml
-// decodes YAML through them — so one tag set is the ONE contract for both the
-// embedded YAML default and a JSON PUT body (DRY: no parallel yaml tags).
+// Step is one checklist item. The struct tags are JSON, and sigs.k8s.io/yaml decodes
+// YAML through them — so one tag set is the ONE contract for both the embedded YAML
+// blueprint and a JSON PUT body (DRY: no parallel yaml tags).
 type Step struct {
-	ID           string   `json:"id"`
-	Title        string   `json:"title"`
-	Why          string   `json:"why"`
-	How          string   `json:"how"`  // how-on-hanzo
-	Done         string   `json:"done"` // human done-criteria
-	Dependencies []string `json:"dependencies,omitempty"`
+	ID      string `json:"id"`
+	Section string `json:"section,omitempty"` // the phase (section id) this step groups under
+	Title   string `json:"title"`
+	Detail  string `json:"detail,omitempty"` // the prose/juncture — what the Guide asks/explains here
+
+	// Dependencies are step ids that must be done/skipped before this step is
+	// available. The wire key is `deps` (the blueprint contract); the Go field keeps
+	// its descriptive name.
+	Dependencies []string `json:"deps,omitempty"`
+
+	// Enabled is the admin on/off lever. A NIL pointer reads as ENABLED (absence ==
+	// on): a legacy/org curriculum that omits the field keeps every step, and only an
+	// explicit `enabled: false` (an admin disable) drops a step from the journey. See
+	// on() in blueprint.go and the Blueprint.Curriculum() projection.
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Signal, when set, names a machine detector (detect.go). When the detector
 	// reports the org's real state present, the step auto-marks done.
 	Signal string `json:"signal,omitempty"`
 
-	// Tool, when set, is the "<connector>_<action>" MCP tool the Business AI runs
-	// for "do it for me". Args are its default arguments; Draft is an optional AI
-	// prompt whose output fills the DraftInto arg (default "brief").
+	// Tool, when set, is the MCP tool the Business AI runs for "do it for me". Args
+	// are its default arguments; Draft is an optional AI prompt whose output fills the
+	// DraftInto arg (default "brief").
 	Tool      string         `json:"tool,omitempty"`
 	Args      map[string]any `json:"args,omitempty"`
 	Draft     string         `json:"draft,omitempty"`
 	DraftInto string         `json:"draftInto,omitempty"`
 }
 
-// Curriculum is an ordered set of steps plus metadata. Order is authoring order and
-// is the tiebreak the next-step logic walks.
+// Curriculum is the ENGINE's view: an ordered set of steps plus metadata. It only ever
+// holds ENABLED steps — it is the projection of a Blueprint (Blueprint.Curriculum()),
+// so the next-step/gating logic never has to reason about enablement. Order is
+// authoring order and is the tiebreak the next-step logic walks.
 type Curriculum struct {
 	Version string `json:"version"`
 	Title   string `json:"title,omitempty"`
@@ -75,29 +88,14 @@ const (
 	StateSkipped    State = "skipped"
 )
 
-// Bounds keep an org-custom curriculum from amplifying the store or a response.
+// Bounds keep an org-custom curriculum / blueprint from amplifying the store or a
+// response.
 const (
-	maxSteps       = 128
+	maxSteps       = 256
 	maxDeps        = 32
-	maxCurriculum  = 256 * 1024 // bytes of a PUT body
+	maxCurriculum  = 256 * 1024 // bytes of a per-org curriculum PUT body
 	maxDraftOutput = 8 * 1024   // chars of AI-drafted content folded into a tool arg
 )
-
-//go:embed default.yaml
-var defaultYAML []byte
-
-// defaultCurriculum is the built-in default, parsed once at init. A malformed or
-// invalid embedded default is a BUILD-TIME fault (panic at package init), never a
-// runtime surprise — the same discipline clients/automations uses for its catalog.
-var defaultCurriculum = mustDefault()
-
-func mustDefault() Curriculum {
-	c, err := Parse(defaultYAML)
-	if err != nil {
-		panic("guide: built-in default.yaml invalid: " + err.Error())
-	}
-	return c
-}
 
 // validState reports whether s is a known step state.
 func validState(s State) bool {
@@ -114,24 +112,12 @@ func validState(s State) bool {
 // user who deliberately skips a step is telling the guide to treat it as resolved.
 func terminal(s State) bool { return s == StateDone || s == StateSkipped }
 
-// Parse decodes a curriculum from YAML or JSON (sigs.k8s.io/yaml accepts both) and
-// validates it. A parse or validation failure returns an error; the caller keeps
-// the previous curriculum (fail-closed — a bad PUT never corrupts the active one).
-func Parse(raw []byte) (Curriculum, error) {
-	var c Curriculum
-	if err := yaml.Unmarshal(raw, &c); err != nil {
-		return Curriculum{}, fmt.Errorf("parse curriculum: %w", err)
-	}
-	if err := Validate(c); err != nil {
-		return Curriculum{}, err
-	}
-	return c, nil
-}
-
 // Validate enforces the schema invariants the engine relies on: at least one step;
 // unique non-empty ids; dependencies that reference existing ids (no self-edge); a
 // bounded shape; and — the load-bearing one — an ACYCLIC dependency graph, so
-// next-step selection always terminates and can never deadlock on a cycle.
+// next-step selection always terminates and can never deadlock on a cycle. Blueprint
+// validation (blueprint.go) reuses this over BOTH the authored step graph and the
+// projected ENABLED journey.
 func Validate(c Curriculum) error {
 	if len(c.Steps) == 0 {
 		return fmt.Errorf("curriculum has no steps")

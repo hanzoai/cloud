@@ -1,0 +1,330 @@
+# The Guide™ — global blueprint fixture (seeds into the DB on bootstrap, then
+# admin.hanzo.ai-editable). Every item carries `enabled` (the admin on/off lever).
+# Derived faithfully from playbook-source.md. Ids are kebab-case, from first
+# principles. See README.md for the schema contract.
+version: "1"
+brand: ""            # empty == global default; brand overrides live in brands/<brand>.yaml
+enabled: true
+
+# ---- sections: the ordered journey phases ----
+sections:
+  - id: setup-corporation
+    title: "Setup Corporation"
+    detail: "Before getting started make sure your company is setup and ready to begin marketing."
+    order: 1
+    enabled: true
+  - id: research-plan
+    title: "Research & Plan"
+    detail: "Market research, branding, narrative, and feedback before spend."
+    order: 2
+    enabled: true
+  - id: setup-accounts
+    title: "Setup Accounts"
+    detail: "Gain access to every ad + analytics account needed to market on the client's behalf."
+    order: 3
+    enabled: true
+  - id: account-linking
+    title: "Account Linking"
+    detail: "Link the client's pages, ad accounts, and analytics into our management surfaces."
+    order: 4
+    enabled: true
+  - id: campaign-setup
+    title: "Facebook — Audience + Campaign Setup"
+    detail: "Retargeting, prospecting, lookalike, local, engagement, and like campaigns."
+    order: 5
+    enabled: true
+  - id: analytics
+    title: "Google Analytics"
+    detail: "Goals, enhanced ecommerce, remarketing audiences, and tag embedding."
+    order: 6
+    enabled: true
+  - id: adwords
+    title: "Google Adwords"
+    detail: "YouTube link, conversion import, and the default campaign structure."
+    order: 7
+    enabled: true
+  - id: email
+    title: "Mailchimp / Transactional"
+    detail: "Mandrill, sending domain, DKIM/SPF."
+    order: 8
+    enabled: true
+  - id: creatives
+    title: "Creatives & Documents"
+    detail: "Creative guidelines, messaging, landing pages, ad and content creation."
+    order: 9
+    enabled: true
+  - id: automation
+    title: "Marketing Automation"
+    detail: "Funnels and email sequences that nudge users to the goal and grow LTV."
+    order: 10
+    enabled: true
+  - id: daily-process
+    title: "Daily Process"
+    detail: "Assessment, optimization, and reporting — the recurring operating rhythm."
+    order: 11
+    enabled: true
+  - id: user-studies
+    title: "User Studies"
+    detail: "Always ask for feedback; validated learning over opinion."
+    order: 12
+    enabled: true
+
+# ---- steps: flat, tagged with section + deps so Next() walks the journey in order ----
+steps:
+  # setup-corporation
+  - {id: incorporate, section: setup-corporation, title: "Incorporate + get an EIN", detail: "Get incorporated as a business entity and get an EIN (~15 min).", tool: "company_form", deps: [], enabled: true}
+  - {id: bank-account, section: setup-corporation, title: "Open a company bank account", detail: "Set up the company bank account.", tool: "", deps: [incorporate], enabled: true}
+  - {id: finance-business, section: setup-corporation, title: "Finance the business", detail: "Angel/VC, bootstrap through advance, or friends/family.", tool: "", deps: [incorporate], enabled: true}
+  - {id: build-team, section: setup-corporation, title: "Build the team", detail: "Hire and organize the founding team.", tool: "", deps: [incorporate], enabled: true}
+  - {id: gsuite, section: setup-corporation, title: "Set up G-Suite", detail: "Company email + workspace on Google Workspace.", tool: "", deps: [incorporate], enabled: true}
+  - {id: password-manager, section: setup-corporation, title: "Set up a password manager", detail: "LastPass, 1Password, or Dashlane for shared credentials.", tool: "", deps: [gsuite], enabled: true}
+  - {id: slack, section: setup-corporation, title: "Set up Slack", detail: "Team + client communication channel.", tool: "connect:slack", deps: [gsuite], enabled: true}
+  - {id: analytics-access, section: setup-corporation, title: "Get Google Analytics + AdWords access", detail: "Ensure access to Google Analytics and Google AdWords.", tool: "", deps: [gsuite], enabled: true}
+  - {id: infra-recommendations, section: setup-corporation, title: "Infrastructure recommendations", detail: "Stand up the recommended infra baseline.", tool: "", deps: [incorporate], enabled: true}
+  - {id: thesis, section: setup-corporation, title: "Write the thesis (data-driven org)", detail: "State the business idea, test it — validated learning over big-guess opinion.", tool: "", deps: [incorporate], enabled: true}
+  - {id: facebook-business, section: setup-corporation, title: "Connect Facebook Business account", detail: "Connect the Facebook Business account.", tool: "connect:facebook", deps: [incorporate], enabled: true}
+  - {id: mailchimp-account, section: setup-corporation, title: "Create + share Mailchimp account", detail: "Mailchimp account created and shared.", tool: "connect:mailchimp", deps: [incorporate], enabled: true}
+  - {id: github-org, section: setup-corporation, title: "Create the GitHub organization", detail: "GitHub organization for the company created.", tool: "connect:github", deps: [incorporate], enabled: true}
+  - {id: google-drive, section: setup-corporation, title: "Share Google Drive", detail: "Google Drive shared with the team.", tool: "", deps: [gsuite], enabled: true}
+  - {id: dns-access, section: setup-corporation, title: "Get DNS / hosting / domain access", detail: "Obtain DNS, hosting, and domain access.", tool: "", deps: [incorporate], enabled: true}
+  - {id: cloudflare-dns, section: setup-corporation, title: "Switch DNS to Cloudflare", detail: "Move DNS to Cloudflare.", tool: "connect:cloudflare", deps: [dns-access], enabled: true}
+  # research-plan
+  - {id: market-research, section: research-plan, title: "Market research", detail: "Identify key demographics.", tool: "", deps: [thesis], enabled: true}
+  - {id: branding-messaging, section: research-plan, title: "Branding & messaging", detail: "Finalize visual identity and messaging guidelines.", tool: "", deps: [market-research], enabled: true}
+  - {id: narrative, section: research-plan, title: "Narrative development", detail: "Design the overarching themes / narrative engine.", tool: "", deps: [branding-messaging], enabled: true}
+  - {id: feedback-study, section: research-plan, title: "Feedback + user study", detail: "Get feedback and run a user study.", tool: "", deps: [market-research], enabled: true}
+  # setup-accounts
+  - {id: facebook-account, section: setup-accounts, title: "Facebook account access", detail: "Convert to Facebook Business Manager; gain admin on the Page + ad account (agency #920910517982389).", tool: "connect:facebook", deps: [facebook-business], enabled: true}
+  - {id: ga-account, section: setup-accounts, title: "Google Analytics access", detail: "Add youremail@hanzo.ai with Manage Users, Edit, Collaborate, Read & Analyze.", tool: "connect:google-analytics", deps: [analytics-access], enabled: true}
+  - {id: adwords-account, section: setup-accounts, title: "Google Adwords access", detail: "Gain access to the AdWords account.", tool: "connect:google-ads", deps: [analytics-access], enabled: true}
+  - {id: bing-ads, section: setup-accounts, title: "Bing Ads", detail: "Connect Bing Ads.", tool: "connect:bing-ads", deps: [branding-messaging], enabled: true}
+  - {id: tiktok-ads, section: setup-accounts, title: "TikTok Ads", detail: "Connect TikTok Ads.", tool: "connect:tiktok-ads", deps: [branding-messaging], enabled: true}
+  - {id: reddit-ads, section: setup-accounts, title: "Reddit Ads", detail: "Connect Reddit Ads.", tool: "connect:reddit-ads", deps: [branding-messaging], enabled: true}
+  - {id: warpcast, section: setup-accounts, title: "Warpcast", detail: "Connect Warpcast.", tool: "connect:warpcast", deps: [branding-messaging], enabled: true}
+  - {id: whatsapp, section: setup-accounts, title: "WhatsApp", detail: "Connect WhatsApp.", tool: "connect:whatsapp", deps: [branding-messaging], enabled: true}
+  - {id: telegram, section: setup-accounts, title: "Telegram", detail: "Connect Telegram.", tool: "connect:telegram", deps: [branding-messaging], enabled: true}
+  - {id: sms, section: setup-accounts, title: "SMS", detail: "Connect SMS.", tool: "connect:sms", deps: [branding-messaging], enabled: true}
+  # account-linking
+  - {id: facebook-linking, section: account-linking, title: "Link Facebook Business Manager", detail: "Create a Business Manager if needed; add the client's Page + ad account to ours as admin.", tool: "", deps: [facebook-account], enabled: true}
+  - {id: facebook-page-access, section: account-linking, title: "Request Page access", detail: "Settings -> Pages -> Add New Page. Give access to self + M+Z.", tool: "", deps: [facebook-linking], enabled: true}
+  - {id: facebook-adaccount-access, section: account-linking, title: "Request Ad Account access", detail: "Settings -> Ad Accounts -> Add New Ad Account. Give access to self + M+Z.", tool: "", deps: [facebook-linking], enabled: true}
+  - {id: google-linking, section: account-linking, title: "Link Google Analytics", detail: "Client adds you at the Analytics ACCOUNT level (not property) with full permissions; add zach@hanzo.ai.", tool: "", deps: [ga-account], enabled: true}
+  - {id: ga-enhanced-ecommerce, section: account-linking, title: "Turn on Enhanced Ecommerce", detail: "Admin -> Ecommerce Settings -> turn everything on.", tool: "", deps: [google-linking], enabled: true}
+  - {id: adwords-linking, section: account-linking, title: "Link AdWords via MCC", detail: "Ask for the AdWords account number; add as a client under our MCC; invite them to allow management.", tool: "", deps: [adwords-account], enabled: true}
+  - {id: adespresso, section: account-linking, title: "AdEspresso", detail: "Add the FB advertising account into the adespresso@hanzo.ai AdEspresso account.", tool: "", deps: [facebook-adaccount-access], enabled: true}
+  # campaign-setup (facebook)
+  - {id: retargeting-custom-audiences, section: campaign-setup, title: "Custom audiences (retargeting)", detail: "Customer list, abandoned carts, leads/subscribers, app/offline/website activity.", tool: "", deps: [facebook-adaccount-access], enabled: true}
+  - {id: retargeting-saved-audiences, section: campaign-setup, title: "Saved audiences (retargeting)", detail: "Purchasers, abandoned cart, leads-not-purchased. Optimize for sale; exclude other audiences.", tool: "", deps: [retargeting-custom-audiences], enabled: true}
+  - {id: prospecting-campaigns, section: campaign-setup, title: "Prospecting (interest-based)", detail: "Filter out known users; 3-6 aligned interest audiences to test.", tool: "", deps: [facebook-adaccount-access], enabled: true}
+  - {id: lookalike-campaigns, section: campaign-setup, title: "Lookalike campaigns", detail: "US 1% and 5% of purchasers, abandoned carts, leads/signups, page likes.", tool: "", deps: [retargeting-custom-audiences], enabled: true}
+  - {id: local-campaigns, section: campaign-setup, title: "Local campaigns", detail: "Target home state/city; optimize for sale; broadest audience, widest geo, age 18-65.", tool: "", deps: [facebook-adaccount-access], enabled: true}
+  - {id: engagement-campaign, section: campaign-setup, title: "Engagement campaign", detail: "Test each new ad/audience here first to game engagement; run experiments; watch for messages.", tool: "", deps: [facebook-adaccount-access], enabled: true}
+  - {id: like-campaign, section: campaign-setup, title: "Facebook Like campaign", detail: "Exclude all other users (use lookalike); optimize for Likes.", tool: "", deps: [lookalike-campaigns], enabled: true}
+  # analytics (google analytics)
+  - {id: ga-link-adwords, section: analytics, title: "Link Analytics to AdWords", detail: "Property -> Product Linking -> link the AdWords account.", tool: "", deps: [google-linking, adwords-linking], enabled: true}
+  - {id: ga-signup-goal, section: analytics, title: "Signup goal", detail: "Goals -> Subscription event goal; use event value as goal value; confirm conversion > 0%.", tool: "", deps: [ga-enhanced-ecommerce], enabled: true}
+  - {id: ga-sale-goal, section: analytics, title: "Sale goal", detail: "Category = Revenue, Type = Event, Action = Sale.", tool: "", deps: [ga-signup-goal], enabled: true}
+  - {id: ga-cart-goal, section: analytics, title: "Add-to-cart goal", detail: "Category = Cart, Action = Add to cart.", tool: "", deps: [ga-signup-goal], enabled: true}
+  - {id: ga-remarketing-audiences, section: analytics, title: "Remarketing audiences", detail: "All Users, Smart List (3/7/30/90/365), Signup, Add to cart, Customers.", tool: "", deps: [ga-enhanced-ecommerce], enabled: true}
+  - {id: ga-tag-embed, section: analytics, title: "Embed the GA tag", detail: "Share the tag in Slack; embed on every page; confirm events fire.", tool: "", deps: [ga-account], enabled: true}
+  # adwords
+  - {id: adwords-youtube, section: adwords, title: "Link YouTube channel", detail: "New online video campaign to link the client's YouTube channel; send link request.", tool: "", deps: [adwords-linking], enabled: true}
+  - {id: adwords-import-conversions, section: adwords, title: "Import Analytics conversions", detail: "Tools -> Conversions -> Google Analytics; import Signup as Lead, Checkout as Sale.", tool: "", deps: [ga-signup-goal, adwords-linking], enabled: true}
+  - {id: adwords-default-campaigns, section: adwords, title: "Create default campaigns", detail: "US-only initially; separate brand keywords; split every audience at the campaign level. See the adwords-campaign-structure template.", tool: "", deps: [adwords-import-conversions], enabled: true}
+  # email (mailchimp / mandrill)
+  - {id: mandrill-enable, section: email, title: "Enable Mandrill", detail: "Account -> Transactional -> enable + launch Mandrill.", tool: "", deps: [mailchimp-account], enabled: true}
+  - {id: mandrill-sending-domain, section: email, title: "Verify sending domain (DKIM/SPF)", detail: "Add the sending domain; verify; add DKIM + SPF TXT records in Cloudflare.", tool: "", deps: [mandrill-enable, cloudflare-dns], enabled: true}
+  # creatives
+  - {id: creative-guidelines, section: creatives, title: "Creative guidelines", detail: "Establish creative guidelines and a process for new creatives; gather existing resources.", tool: "", deps: [branding-messaging], enabled: true}
+  - {id: messaging-document, section: creatives, title: "Messaging document", detail: "Landing page URL, headlines, copy, soundbites, AdWords + Facebook ad text examples.", tool: "", deps: [branding-messaging], enabled: true}
+  - {id: analytics-embed, section: creatives, title: "Embed analytics tracking on site", detail: "Embed the tracking code on the site.", tool: "", deps: [ga-tag-embed], enabled: true}
+  - {id: landing-page-review, section: creatives, title: "Landing page review", detail: "Embed Optimizely; identify landing-page problems.", tool: "", deps: [messaging-document], enabled: true}
+  - {id: ad-creation, section: creatives, title: "Ad creation", detail: "Produce the ad set (see ad docs).", tool: "", deps: [creative-guidelines], enabled: true}
+  - {id: content-creation, section: creatives, title: "Content creation", detail: "Produce content (AI-assisted).", tool: "content_generate", deps: [messaging-document], enabled: true}
+  # automation
+  - {id: design-funnels, section: automation, title: "Design funnels", detail: "Map the acquisition-to-retention funnels.", tool: "", deps: [ga-signup-goal], enabled: true}
+  - {id: email-sequences, section: automation, title: "Email sequences", detail: "Follow-up drips per funnel status; post-receipt follow-ups; LTV nudges.", tool: "", deps: [mandrill-enable], enabled: true}
+  # daily-process
+  - {id: daily-assessment, section: daily-process, title: "Daily assessment", detail: "Referral, ad-efficiency, social, keyword, cost, and trending-topic analysis; create new ads; inbound.", tool: "", deps: [adwords-default-campaigns], enabled: true}
+  - {id: daily-optimization, section: daily-process, title: "Daily optimization", detail: "Boost posts; optimize FB + Google ads (budgets, kill losers, scale winners); run experiments in discovery.", tool: "", deps: [daily-assessment], enabled: true}
+  - {id: daily-report, section: daily-process, title: "Daily report", detail: "Update the account report; Slack outlier referral sources, trending topics, and optimization changes.", tool: "", deps: [daily-assessment], enabled: true}
+  # user-studies
+  - {id: ask-feedback, section: user-studies, title: "Always ask for feedback", detail: "Validated learning over opinion — speak with friends, family, experts, and real users.", tool: "", deps: [feedback-study], enabled: true}
+
+# ---- strategies: the ~110-row tactics corpus (filterable/recommendable by category + tags) ----
+strategies:
+  # business-market-insight
+  - {id: buyer-personas, category: business-market-insight, workload: low, action: "Create a set of 2-3 specific buyer personas and detail their customer journeys (top, mid, and bottom of funnel)", tags: [stage:research], enabled: true}
+  - {id: survey-customers, category: business-market-insight, workload: low, action: "Continually survey current customers, churned customers, and warm leads with automation.", tags: [stage:activated], enabled: true}
+  - {id: clv-cac, category: business-market-insight, workload: low, action: "Determine average overall CLV and CAC of customers and monitor metrics on a regular schedule.", tags: [has:analytics], enabled: true}
+  - {id: cac-by-source, category: business-market-insight, workload: low, action: "Determine average CAC segmented by lead source.", tags: [has:analytics], enabled: true}
+  - {id: average-selling-price, category: business-market-insight, workload: low, action: "Determine average selling price of product/service over the past year.", tags: [has:revenue], enabled: true}
+  - {id: churn-audit, category: business-market-insight, workload: low, action: "Audit top churn reasons on a quarterly basis.", tags: [stage:scaling], enabled: true}
+  - {id: competitor-list, category: business-market-insight, workload: low, action: "Make a list of competitors (website, blog strategy, taglines, business model, pricing, social media, employees)", tags: [stage:research], enabled: true}
+  - {id: competitor-channels, category: business-market-insight, workload: low, action: "Make a list of competitors' most common referral and acquisition channels and sources (SimilarWeb, etc)", tags: [stage:research], enabled: true}
+  - {id: competitor-customers, category: business-market-insight, workload: low, action: "Make a list of competitors' customers (Twitter followers, Facebook fans, customer testimonials on website)", tags: [stage:research], enabled: true}
+  - {id: cold-outreach-feedback, category: business-market-insight, workload: medium, action: "Continually send cold emails/cold FB messages to connect with potential customers and get feedback.", tags: [stage:launched], enabled: true}
+  - {id: weekly-analytics-email, category: business-market-insight, workload: low, action: "Set up automatic analytics reports to get sent to email weekly (Quill Engage, etc.)", tags: [has:analytics], enabled: true}
+  - {id: north-star-metric, category: business-market-insight, workload: low, action: "Track and monitor north star metric as well as leading and lagging KPIs.", tags: [has:analytics], enabled: true}
+  - {id: cohort-analysis, category: business-market-insight, workload: low, action: "Perform a recurring cohort analysis to figure out any changes with between-groups differences in demographics and psychographics.", tags: [has:analytics, stage:scaling], enabled: true}
+  - {id: interview-top-ltv, category: business-market-insight, workload: medium, action: "Identify your top 5 highest lifetime value customers, then interview them and correlate similarities in demographics and psychographics.", tags: [stage:activated], enabled: true}
+  - {id: competitor-traffic-analysis, category: business-market-insight, workload: low, action: "Analyze competition's traffic acquisition sources and draw inspiration from their marketing channels (SimilarWeb, etc.)", tags: [stage:research], enabled: true}
+  - {id: broad-keyword-test, category: business-market-insight, workload: high, action: "With Google Ads, use broad modifier keywords to run a test campaign, then look at \"search terms\" to find out what users are searching for.", tags: [has:adwords], enabled: true}
+  - {id: ux-feedback, category: business-market-insight, workload: medium, action: "Get real feedback from actual live users regarding UX of website (userinput.io, userbob.com, etc.)", tags: [has:website], enabled: true}
+  # conversion-optimization
+  - {id: ab-test-landing, category: conversion-optimization, workload: high, action: "Continually A/B test the most highly-trafficked landing pages and payment pages.", tags: [has:website, stage:launched], enabled: true}
+  - {id: ab-test-newsletters, category: conversion-optimization, workload: high, action: "Continually A/B test newsletters and highly-targeted drip nurturing campaigns.", tags: [has:email], enabled: true}
+  - {id: conversion-tracking-baseline, category: conversion-optimization, workload: medium, action: "Set up analytics, cross-funnel conversion tracking, and establish baseline conversion rates.", tags: [has:analytics], enabled: true}
+  - {id: heatmap-analysis, category: conversion-optimization, workload: high, action: "Use a heatmapping tool to analyze where visitors are navigating to, and where they're getting stuck (Mixpanel, etc.)", tags: [has:website], enabled: true}
+  - {id: persona-landing-pages, category: conversion-optimization, workload: medium, action: "Identify sub-sections of your buyer persona, split them, then create hyper-targeted landing pages specifically each sub-persona.", tags: [has:website], enabled: true}
+  - {id: onsite-messaging-capture, category: conversion-optimization, workload: medium, action: "Set up an on-site messaging system to capture leads.", tags: [has:website], enabled: true}
+  # lead-generation
+  - {id: forum-participation, category: lead-generation, workload: medium, action: "Participate and answer questions on relevant industry forums, sprinkling backlinks and CTAs along the way.", tags: [stage:launched], enabled: true}
+  - {id: youtube-sponsored-links, category: lead-generation, workload: medium, action: "Locate relevant YouTube videos that may have buyer-intent, then contact content creators at scale to insert a sponsored link above the fold.", tags: [stage:launched], enabled: true}
+  - {id: calculator-web-app, category: lead-generation, workload: medium, action: "Create a \"calculator\" web app or Google Sheet that solves a common calculation that your target buyer persona has to perform manually.", tags: [stage:launched], enabled: true}
+  - {id: free-web-tool, category: lead-generation, workload: high, action: "Create a web tool that your target buyer persona desires, and/or clone features of a paid tool of your competitors' and offer it for free.", tags: [stage:scaling], enabled: true}
+  - {id: quora-answers, category: lead-generation, workload: medium, action: "Answer relevant questions on Quora in a conversational style, while having a branded handle and bio with a proper CTA.", tags: [stage:launched], enabled: true}
+  - {id: website-copy-audit, category: lead-generation, workload: low, action: "Audit website copy to use customer voice and directly address customer pain points.", tags: [has:website], enabled: true}
+  - {id: website-cta-audit, category: lead-generation, workload: low, action: "Audit website so that every page has an appropriate CTA and goal for site visitor (no dead ends).", tags: [has:website], enabled: true}
+  - {id: chatbot-engage, category: lead-generation, workload: high, action: "Develop a chatbot to engage with potential customers and to announce new launches and feature-sets.", tags: [has:website], enabled: true}
+  - {id: quiz-funnel, category: lead-generation, workload: high, action: "Create a streamlined quiz funnel to pique curiosity to drive traffic and nurture target audience.", tags: [stage:launched], enabled: true}
+  - {id: side-project, category: lead-generation, workload: high, action: "Create a side project to help promote main product (web software that addresses a customer pain point).", tags: [stage:scaling], enabled: true}
+  - {id: video-content, category: lead-generation, workload: high, action: "Continually create video content catered towards target audience on a consistent basis.", tags: [stage:launched], enabled: true}
+  - {id: review-list-inclusion, category: lead-generation, workload: low, action: "Continually find reviews or lists of similar offerings and ask to be added, and/or leave a comment on the page.", tags: [stage:launched], enabled: true}
+  - {id: blog-content-upgrade, category: lead-generation, workload: medium, action: "Identify the best-performing blog posts, then double up on the content as well as add a relevant lead magnet content upgrade.", tags: [has:website], enabled: true}
+  - {id: tangential-social-accounts, category: lead-generation, workload: high, action: "Grow a network of tangential accounts for organic growth on all main social media platforms.", tags: [stage:scaling], enabled: true}
+  - {id: social-proof-popups, category: lead-generation, workload: medium, action: "Implement website social proof popups (Provely, FOMO, etc.)", tags: [has:website], enabled: true}
+  - {id: fb-groups-cold-outbound, category: lead-generation, workload: high, action: "Join relevant Facebook groups and engage in regular cold outbound messaging and nurturing lead gen campaigns.", tags: [has:facebook], enabled: true}
+  - {id: fb-groups-answer, category: lead-generation, workload: low, action: "Join relevant Facebook groups and answer helpful questions while dropping a link to your website or landing page.", tags: [has:facebook], enabled: true}
+  - {id: fb-groups-jv, category: lead-generation, workload: low, action: "Join relevant Facebook groups and propose joint venture partnerships with the group's admins.", tags: [has:facebook], enabled: true}
+  - {id: fb-groups-connect-members, category: lead-generation, workload: medium, action: "Join relevant Facebook groups and connect with the most active and relevant group members, then give them free value.", tags: [has:facebook], enabled: true}
+  - {id: fb-groups-emulate-posts, category: lead-generation, workload: medium, action: "Join relevant Facebook groups and emulate the top-performing posts within the past few months while inserting your brand in the mix.", tags: [has:facebook], enabled: true}
+  - {id: acquisition-outreach, category: lead-generation, workload: low, action: "Reach out to relevant social media profiles who may be interested in getting acquired.", tags: [stage:scaling], enabled: true}
+  - {id: sponsored-posts-partners, category: lead-generation, workload: medium, action: "Partner with Linkedin/Facebook Group/Reddit group owners for sponsored posts.", tags: [stage:launched], enabled: true}
+  - {id: speaking-engagements, category: lead-generation, workload: low, action: "Engage in outbound email outreach to get relevant speaking engagements and get on panels at in-person and digital conferences.", tags: [stage:launched], enabled: true}
+  - {id: blog-partnerships, category: lead-generation, workload: medium, action: "Reach out to highly-trafficked blogs in the space for partnerships and/or potential acquisitions.", tags: [stage:launched], enabled: true}
+  - {id: adwords-ppc, category: lead-generation, workload: high, action: "Run, maintain, and optimize Google AdWords PPC campaigns, targeting keywords with high buyer intent.", tags: [has:adwords], enabled: true}
+  - {id: pdf-lead-magnet-ppc, category: lead-generation, workload: medium, action: "Identify PDFs that your buyer persona would search for, then create a PDF containing the lead magnet and run a Google Ads PPC campaign.", tags: [has:adwords], enabled: true}
+  - {id: amas, category: lead-generation, workload: low, action: "Participate in AMAs on websites such as Reddit, or in Facebook groups.", tags: [stage:launched], enabled: true}
+  - {id: influencer-campaign, category: lead-generation, workload: high, action: "Run an influencer marketing campaign (micro influencers and/or high-profile influencers).", tags: [stage:scaling], enabled: true}
+  - {id: facebook-ppc, category: lead-generation, workload: high, action: "Run, maintain, and optimize Facebook Ads PPC campaigns with dedicated landing pages catering to specific buyer personas.", tags: [has:facebook], enabled: true}
+  - {id: social-content-schedule, category: lead-generation, workload: high, action: "Schedule regular social media content on main platforms (behind the scenes, offers, news, advice, memes, quotes, books, questions, tools)", tags: [stage:launched], enabled: true}
+  - {id: welcome-exit-popups, category: lead-generation, workload: medium, action: "Set up and continually optimize and A/B test welcome and exit-intent popups (create a unique one for desktop & mobile if appropriate)", tags: [has:website], enabled: true}
+  - {id: sponsor-local-meetups, category: lead-generation, workload: medium, action: "Sponsor local meetups or conferences (request access to their attendee email lists)", tags: [stage:scaling], enabled: true}
+  - {id: sponsor-podcasts, category: lead-generation, workload: medium, action: "Sponsor relevant podcasts which cater to target buyer personas.", tags: [stage:scaling], enabled: true}
+  - {id: podcast-guest, category: lead-generation, workload: low, action: "Engage in outbound email outreach to get interviewed as a guest on podcasts with a target buyer persona in the audience.", tags: [stage:launched], enabled: true}
+  - {id: consistent-branding, category: lead-generation, workload: low, action: "Standardize profile image, links, and CTAs across all social channels (keep branding consistent)", tags: [stage:launched], enabled: true}
+  - {id: lead-magnet-ebook, category: lead-generation, workload: medium, action: "Write and distribute an eBook, course, checklist, guide, presentation, or white paper as a lead magnet.", tags: [stage:launched], enabled: true}
+  - {id: guest-posts, category: lead-generation, workload: medium, action: "Write guest posts on relevant industry blogs (pitch blog post ideas with a title and short summary, then try again every month)", tags: [stage:launched], enabled: true}
+  - {id: trending-linkedin-posts, category: lead-generation, workload: medium, action: "Make regular posts of trending content on LinkedIn statuses/pulse, Facebook groups/wall with personal perspective.", tags: [stage:launched], enabled: true}
+  - {id: persona-cold-outreach, category: lead-generation, workload: medium, action: "Tap into networks of target buyer personas and engage in a cold outreach campaign that adds value and piques curiosity.", tags: [stage:launched], enabled: true}
+  - {id: skillset-outreach, category: lead-generation, workload: medium, action: "Reach out to companies who are looking for that particular skillset, service, or product (Angelist, UpWork, etc.)", tags: [stage:launched], enabled: true}
+  - {id: fb-groups-free-value, category: lead-generation, workload: medium, action: "Join targeted Facebook Groups and regularly offer to give relevant value for free while prompting a comment.", tags: [has:facebook], enabled: true}
+  - {id: trending-social-schedule, category: lead-generation, workload: medium, action: "Set up a schedule to share contextually relevant trending news/social issues/holiday posts on all relevant social media channels.", tags: [stage:launched], enabled: true}
+  - {id: daily-persona-adds, category: lead-generation, workload: low, action: "Add a specific number of buyer personas on social media on a daily basis, and get to know them by helping them out and asking questions.", tags: [stage:launched], enabled: true}
+  - {id: slack-discord-groups, category: lead-generation, workload: low, action: "Locate Slack or Discord groups where your core buyer persona resides, then participate in the discussion and continually give value.", tags: [stage:launched], enabled: true}
+  - {id: complementary-pixel, category: lead-generation, workload: medium, action: "Pay a company with a complementary offer to place your Facebook pixel on their website, then run retargeting and/or build a LLA.", tags: [has:facebook], enabled: true}
+  - {id: fb-comment-trigger-bot, category: lead-generation, workload: medium, action: "Create a short value-tease comment-trigger post in a Facebook Group, then have a chatbot monitor the post and reply with a lead magnet.", tags: [has:facebook], enabled: true}
+  # lead-nurturing
+  - {id: youtube-retargeting, category: lead-nurturing, workload: medium, action: "Run a YouTube video ad retargeting campaign to all pixeled website visitors within the past several months via Google Ads.", tags: [has:adwords], enabled: true}
+  - {id: free-value-outreach, category: lead-nurturing, workload: medium, action: "Obtain value that your buyer persona usually has to pay for, then reach out and offer it to them for free with no strings attached.", tags: [has:leads], enabled: true}
+  - {id: fb-retargeting, category: lead-nurturing, workload: low, action: "Run a Facebook Ads retargeting campaign using a pixeled custom audience of all website visitors within the past 90 days.", tags: [has:facebook], enabled: true}
+  - {id: case-study-campaigns, category: lead-nurturing, workload: low, action: "Create case study pages of successful customers and launch social organic and retargeting campaigns with the case studies/reviews/etc.", tags: [stage:activated], enabled: true}
+  - {id: fb-lookalike-conversion, category: lead-nurturing, workload: low, action: "Run a Facebook Ads conversion campaign targeting a lookalike audience of all relevant contacts on LinkedIn or CRM database.", tags: [has:facebook], enabled: true}
+  - {id: transactional-email-ctas, category: lead-nurturing, workload: medium, action: "Optimize all transactional emails and add CTAs for upselling/referrals/cross-selling.", tags: [has:email], enabled: true}
+  - {id: product-bundle-launch, category: lead-nurturing, workload: low, action: "Assemble a bundle of products or services and gear up for a \"new\" product launch.", tags: [has:revenue], enabled: true}
+  - {id: email-mini-courses, category: lead-nurturing, workload: medium, action: "Create mini-courses delivered via email that provides pure value and addresses one of your buyer persona's needs.", tags: [has:email], enabled: true}
+  - {id: thank-you-page-optimize, category: lead-nurturing, workload: low, action: "Optimize all \"Thank You\" pages to add social proof, logos, case studies, share incentives, a feature video, and/or helpful resources.", tags: [has:website], enabled: true}
+  - {id: sms-campaign, category: lead-nurturing, workload: medium, action: "Create an SMS marketing campaign designed to add as another touch point for your potential and current customers.", tags: [has:sms], enabled: true}
+  - {id: live-event, category: lead-nurturing, workload: medium, action: "Create a live event that adds pure value to your core buyer persona (either in-person or on social media).", tags: [stage:activated], enabled: true}
+  - {id: webinar-funnel, category: lead-nurturing, workload: high, action: "Create a webinar funnel, then add pure value relevant to your buyer persona before moving them down the funnel.", tags: [has:leads], enabled: true}
+  - {id: video-sales-letter, category: lead-nurturing, workload: high, action: "Create a landing page or squeeze page with a video sales letter, then run paid traffic to it.", tags: [has:website], enabled: true}
+  - {id: onboarding-audit, category: lead-nurturing, workload: low, action: "Audit new customer journey and optimize onboarding process for maximum retention.", tags: [stage:activated], enabled: true}
+  - {id: win-back-campaign, category: lead-nurturing, workload: low, action: "Create a win-back campaign for previously churned or lapsed customers, and set up an automated system for future churn recovery.", tags: [stage:scaling], enabled: true}
+  - {id: upsell-cross-sell, category: lead-nurturing, workload: medium, action: "Continually create additional upsells and cross-sells for best performing revenue channels.", tags: [has:revenue], enabled: true}
+  - {id: private-fb-group, category: lead-nurturing, workload: high, action: "Create a private Facebook group and grow the audience with target buyer personas.", tags: [has:facebook], enabled: true}
+  - {id: public-fb-group, category: lead-nurturing, workload: high, action: "Create a public Facebook group and grow the audience with warm leads.", tags: [has:facebook], enabled: true}
+  - {id: weekly-newsletter, category: lead-nurturing, workload: medium, action: "Schedule and maintain a regular weekly newsletter (blog posts, use cases, customer stories, etc.)", tags: [has:email], enabled: true}
+  - {id: lifecycle-email-drips, category: lead-nurturing, workload: medium, action: "Create a set of email drips for lifecycle marketing (engage, delight, sell, and retain)", tags: [has:email], enabled: true}
+  - {id: abandoned-cart-drip, category: lead-nurturing, workload: low, action: "Create and optimize abandoned cart recovery email drip sequence.", tags: [has:email, has:revenue], enabled: true}
+  - {id: order-confirmation-drip, category: lead-nurturing, workload: medium, action: "Create an order confirmation email drip sequence (confirmation, tracking, how to use product/service, review/testimonial request).", tags: [has:revenue], enabled: true}
+  - {id: related-posts-upgrades, category: lead-nurturing, workload: medium, action: "Set up \"related posts\" on footer and mid-roll content upgrades/internal linking banners within all blog posts.", tags: [has:website], enabled: true}
+  # search-optimization
+  - {id: youtube-keyword-research, category: search-optimization, workload: medium, action: "Use VidIQ and KeywordsEverywhere to do deep-dive keyword research on trending keywords on YouTube.", tags: [has:website], enabled: true}
+  - {id: onpage-seo, category: search-optimization, workload: medium, action: "Optimize main navigation pages on website with on-page SEO best practices.", tags: [has:website], enabled: true}
+  - {id: pillar-pages, category: search-optimization, workload: medium, action: "Audit existing blog posting strategy and optimize for pillar pages with strong internal and external backlinking.", tags: [has:website], enabled: true}
+  - {id: blog-comment-incentive, category: search-optimization, workload: low, action: "Incentivize regular commenting on blog posts with a CTA at the bottom as well as funneling traffic from other platforms.", tags: [has:website], enabled: true}
+  - {id: public-directories, category: search-optimization, workload: medium, action: "Create a company profile on various public directories and social media platforms (CrunchBase, Company Profiles, etc.)", tags: [stage:launched], enabled: true}
+  - {id: repurpose-blog-content, category: search-optimization, workload: high, action: "Repurposing existing blog posts into regular content (YouTube videos, podcasts, infographics, slide presentations)", tags: [has:website], enabled: true}
+  - {id: link-building, category: search-optimization, workload: high, action: "Continually run link-building campaigns (skyscraper, ego baiting, expert roundups, HARO, private slack channels)", tags: [has:website], enabled: true}
+  - {id: ultimate-guide-post, category: search-optimization, workload: medium, action: "Create an \"Ultimate Guide\" blog post that improves upon all existing guides of that type in the market.", tags: [has:website], enabled: true}
+  - {id: brand-mention-backlinks, category: search-optimization, workload: low, action: "Set up brand mention monitoring and reach out to secure opportunistic backlinks.", tags: [stage:launched], enabled: true}
+  # social-proof-trust
+  - {id: media-outreach-list, category: social-proof-trust, workload: low, action: "Make a list of relevant industry blogs, journalists, and media outlets to reach out to for novel company milestones and beats.", tags: [stage:launched], enabled: true}
+  - {id: trust-icons, category: social-proof-trust, workload: low, action: "Audit trust and add trust icons, testimonials, money-back guarantees, and \"as seen on\" logos where appropriate.", tags: [has:website], enabled: true}
+  - {id: phone-number-trust, category: social-proof-trust, workload: low, action: "Audit website to ensure that there's a phone number to build trust (Line2, etc.) as well as an address.", tags: [has:website], enabled: true}
+  - {id: testimonials-case-studies, category: social-proof-trust, workload: low, action: "Collect and display testimonials and case studies from happy users on website and social (written, video, etc.)", tags: [stage:activated], enabled: true}
+  - {id: press-release, category: social-proof-trust, workload: low, action: "Write and send out a compelling press release to journalists and/or use press release services in your industry to generate backlinks.", tags: [stage:launched], enabled: true}
+  # viral-coefficient
+  - {id: brand-ambassador-program, category: viral-coefficient, workload: low, action: "Create a brand ambassador program for VIP customers (incentivize best customers to be even more loyal)", tags: [stage:activated], enabled: true}
+  - {id: loyalty-program, category: viral-coefficient, workload: high, action: "Create a loyalty program with gamification (reward customers for reaching milestones)", tags: [has:revenue], enabled: true}
+  - {id: ugc-incentive, category: viral-coefficient, workload: medium, action: "Incentivize customers to take pictures or shoot video with the product/offer and post on social media.", tags: [stage:activated], enabled: true}
+  - {id: share-triggers, category: viral-coefficient, workload: medium, action: "Audit existing blog posts and scatter \"share triggers\" throughout content.", tags: [has:website], enabled: true}
+  - {id: share-incentive-lead-magnet, category: viral-coefficient, workload: medium, action: "Incentivize social sharing for bonuses after users opt-in for a lead magnet (GoViral, etc.)", tags: [has:leads], enabled: true}
+  - {id: sharing-contests, category: viral-coefficient, workload: medium, action: "Continually run sharing-incentivized engagement contests with prizes for winners.", tags: [stage:activated], enabled: true}
+  - {id: click-to-tweet, category: viral-coefficient, workload: medium, action: "Scatter \"Click To Tweet\" buttons on tweet-worthy quotes within blog posts.", tags: [has:website], enabled: true}
+  - {id: referral-system, category: viral-coefficient, workload: high, action: "Set up a gamified user referral system with double-sided incentives.", tags: [stage:scaling], enabled: true}
+
+# ---- templates: reusable prompts/snippets referenced by steps ----
+templates:
+  - id: facebook-access-request
+    title: "Facebook access-request email"
+    enabled: true
+    body: |
+      Hi {client_name}!
+
+      To get started we'll need access to your Facebook Page and advertising account,
+      your Google Analytics account and your AdWords account.
+
+      Facebook:
+      If you are not using Facebook Business manager, you'll want to convert to that
+      first. This guide outlines the process: https://www.facebook.com/help/1428785834029669/.
+
+      Once your page and ad account is managed by a Facebook Business account, go to the
+      Ad Account tab in Business manager and click Assign Agency. Use this number to grant
+      us access: 920910517982389. We need admin access to both the page and ad account.
+  - id: facebook-agency-grant
+    title: "Facebook agency grant"
+    enabled: true
+    body: |
+      In Business Manager -> Ad Account tab -> Assign Agency, grant agency number
+      920910517982389 ADMIN access to BOTH the Page and the Ad Account.
+  - id: google-analytics-permissions
+    title: "Google Analytics permission set"
+    enabled: true
+    body: |
+      Add youremail@hanzo.ai (and zach@hanzo.ai) at the Google Analytics ACCOUNT level
+      (not a property) with: Manage Users, Edit, Collaborate, Read & Analyze.
+  - id: adwords-mcc-link
+    title: "AdWords MCC link"
+    enabled: true
+    body: |
+      Ask the client for their Google AdWords account number. In our MCC: Accounts ->
+      + Account -> Link existing account with their number -> invite them to allow us to manage.
+  - id: mailchimp-mandrill-domain
+    title: "Mailchimp / Mandrill sending domain (DKIM + SPF)"
+    enabled: true
+    body: |
+      In Mandrill: Settings > Sending Domains -> add {domain}. Verify by emailing an address
+      ending in {domain} and clicking the link. Add the DKIM TXT record to Cloudflare, and
+      the SPF TXT record Mandrill specifies. DNS can take time but often updates immediately.
+  - id: adwords-campaign-structure
+    title: "AdWords default campaign structure"
+    enabled: true
+    body: |
+      US-only initially. Separate brand keywords into their own campaigns. Split every
+      audience at the campaign level. Example ({product} = the product name):
+        {product} US - Search - Brand (Exact, Phrase, Broad/Modified)
+        {product} US - Search - Generic (Exact, Phrase, Broad/Modified)
+        {product} US - Display - Topic / Keywords / Placements / In-market / Affinity / Similar / Remarketing
+        {product} US - Video - In-market / Affinity / Keyword / Topic / Similar / Remarketing
