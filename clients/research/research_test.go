@@ -186,9 +186,15 @@ func TestSupersessionIsSeqNotClientTS(t *testing.T) {
 	if _, _, err := st.ingest(ctx, proj, nil, []Attempt{mkA("A", "corrected", 0)}); err != nil {
 		t.Fatal(err)
 	}
-	var ans string
-	if err := st.db.QueryRowContext(ctx, `SELECT a.answer FROM attempt a WHERE `+canonicalAttWhere+` AND a.benchmark='livecodebench'`).Scan(&ans); err != nil {
+	atts, err := st.allAtt(ctx)
+	if err != nil {
 		t.Fatal(err)
+	}
+	ans := ""
+	for _, r := range canonicalAtt(atts) {
+		if r.Benchmark == "livecodebench" {
+			ans = r.Answer
+		}
 	}
 	if ans != "A" {
 		t.Fatalf("ts=0 attempt correction of ts=big backfill: canonical answer=%q, want A", ans)
@@ -225,9 +231,18 @@ func TestProvenanceDistinctVersions(t *testing.T) {
 		t.Fatalf("canonical provenance wrong: sha=%q libs=%s", exps[0].GitSHA, exps[0].LibVersions)
 	}
 	// The superseded provenance is retained + queryable by git_sha (the board's query).
-	var n int
-	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM experiment WHERE git_sha=?`, "aaaa111").Scan(&n); err != nil || n != 1 {
-		t.Fatalf("retained provenance query n=%d err=%v, want 1", n, err)
+	all, err := st.allExp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, r := range all {
+		if r.GitSHA == "aaaa111" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("retained provenance n=%d, want 1 (superseded version retained + queryable by git_sha)", n)
 	}
 }
 
@@ -248,9 +263,13 @@ func TestFaultedRetained(t *testing.T) {
 	if c.AttemptsRetained != 2 || c.AttemptsCanonical != 1 {
 		t.Fatalf("counts=%+v, want retained=2 canonical=1 (fault retained, success canonical)", c)
 	}
-	var status, answer string
-	if err := st.db.QueryRowContext(ctx, `SELECT a.status, a.answer FROM attempt a WHERE `+canonicalAttWhere).Scan(&status, &answer); err != nil {
+	atts, err := st.allAtt(ctx)
+	if err != nil {
 		t.Fatal(err)
+	}
+	var status, answer string
+	for _, r := range canonicalAtt(atts) {
+		status, answer = r.Status, r.Answer
 	}
 	if status != "complete" || answer != "A" {
 		t.Fatalf("canonical attempt = (%s,%s), want (complete,A)", status, answer)
