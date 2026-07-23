@@ -31,8 +31,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hanzoai/vfs/replica"
 	s3 "github.com/hanzoai/s3-go"
+	"github.com/hanzoai/vfs/replica"
 )
 
 // S3ConditionalStore is a replica.ConditionalStore over the SeaweedFS S3 gateway's
