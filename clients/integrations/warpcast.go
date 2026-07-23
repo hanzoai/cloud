@@ -18,7 +18,7 @@ func init() {
 		Name:        "Warpcast",
 		Description: "Publish and read Farcaster casts via a Neynar API key.",
 		Category:    "Social",
-		Kind:        apiKeyKind,
+		Kind:        kindKey,
 		AdminOnly:   true,
 		Secrets:     []string{apiKeySecret},
 		// Org apikey providers declare Configured/Creds (Mount asserts it); the apikey

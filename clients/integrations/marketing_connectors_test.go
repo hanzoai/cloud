@@ -53,7 +53,7 @@ func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 		if !p.AdminOnly {
 			t.Fatalf("%s must be AdminOnly (marketing account linking is org-admin)", want.id)
 		}
-		if p.Kind == apiKeyKind {
+		if p.Kind == kindKey {
 			t.Fatalf("%s must be an OAuth provider, got apikey", want.id)
 		}
 		if p.Configured == nil || p.Creds == nil || p.Authorize == nil || p.Exchange == nil {
@@ -82,7 +82,7 @@ func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 		if p.Scope != "" || !p.AdminOnly {
 			t.Fatalf("%s must be org-scoped AdminOnly", id)
 		}
-		if p.Kind != apiKeyKind || p.Verify == nil {
+		if p.Kind != kindKey || p.Verify == nil {
 			t.Fatalf("%s must be an apikey provider with Verify", id)
 		}
 		if p.Configured == nil || p.Creds == nil {
@@ -104,7 +104,7 @@ func TestMarketingConnectorsRegisteredCoherent(t *testing.T) {
 // resolves the org from the signed state alone.
 func oauthCallbackViaState(t *testing.T, app *zip.App, provider, org, code string) httpResult {
 	t.Helper()
-	res := cfReq(t, app, http.MethodPost, "/v1/integrations/"+provider+"/connect", org, true, nil)
+	res := cfReq(t, app, http.MethodPost, "/v1/connectors/"+provider+"/connect", org, true, nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("%s connect want 200, got %d (%s)", provider, res.Code, res.Body)
 	}
@@ -123,7 +123,7 @@ func oauthCallbackViaState(t *testing.T, app *zip.App, provider, org, code strin
 		t.Fatalf("%s authorize url missing state: %s", provider, out.AuthorizeURL)
 	}
 	return req(t, app, http.MethodGet,
-		"/v1/integrations/"+provider+"/callback?state="+url.QueryEscape(state)+"&code="+url.QueryEscape(code), "", nil)
+		"/v1/connectors/"+provider+"/callback?state="+url.QueryEscape(state)+"&code="+url.QueryEscape(code), "", nil)
 }
 
 // kmsSecret reads a custodied secret straight from the org's KMS namespace for a
