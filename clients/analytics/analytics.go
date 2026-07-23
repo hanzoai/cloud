@@ -40,7 +40,8 @@
 //
 //	GET /v1/analytics/overview     per-org KPIs (llm real; web/commerce honest-empty)
 //	GET /v1/analytics/timeseries   requests/tokens/spend over time (hour|day buckets)
-//	GET /v1/analytics/top          top models (real) + top products (honest-empty)
+//	GET /v1/analytics/top          top models (real) + products + behavior lenses
+//	                               (topPages/topReferrers/topSources over the events lens)
 //	GET /v1/analytics/health       subsystem health (datastore connectivity + lens tables)
 //
 // Registered as id "analytics" with cloud.HealthOwner + order 132: it serves its
@@ -94,13 +95,14 @@ func build(b cloud.Base) (state, error) {
 }
 
 // installHostCarve wires the published-site-host beacon ingest (the twin of base's
-// sites.SetBaseHostHandler): a page served on a site host can POST its OWN
-// analytics beacon to /v1/analytics{,/batch} or /v1/insights/e and have it ingested
-// into hanzo.events with the tenant FORCED to the site's resolved Org — the
-// server-supplied, host-derived tenant, never a body/header claim. It decodes the
-// same wires the deprecated aliases do and funnels through the SAME write core
-// (captureWithOrg / insightsWithOrg → ingestEvents); captureTenant is deliberately
-// NOT consulted because the host already authorizes the tenant.
+// sites.SetBaseHostHandler): a page served on a site host can POST its OWN analytics
+// beacon to the canonical /v1/event (or the deprecated /v1/analytics{,/batch} and
+// /v1/insights/e beacons kept working mid-migration) and have it ingested into
+// hanzo.events with the tenant FORCED to the site's resolved Org — the
+// server-supplied, host-derived tenant, never a body/header claim. It funnels
+// through the SAME write core (eventWithOrg / captureWithOrg / insightsWithOrg →
+// ingestBody → ingestEvents); the in-handler tenant resolvers are deliberately NOT
+// consulted because the host already authorizes the tenant.
 //
 // Gated by the SAME already-existing flag the anonymous ingest path uses —
 // CLOUD_ANALYTICS_PUBLIC_CAPTURE (publicCaptureEnabled, default ON) — so a site
@@ -114,10 +116,14 @@ func installHostCarve(b cloud.Base) {
 		return
 	}
 	sites.SetAnalyticsHostHandler(func(org string, c *zip.Ctx) error {
-		if c.Path() == "/v1/insights/e" {
+		switch c.Path() {
+		case "/v1/event": // the canonical door — host-forced org, canonical wire
+			return eventWithOrg(org, c)
+		case "/v1/insights/e": // deprecated PostHog-wire beacon
 			return insightsWithOrg(org, c)
+		default: // deprecated Segment/beacon wire: /v1/analytics{,/batch}
+			return captureWithOrg(org, c)
 		}
-		return captureWithOrg(org, c)
 	})
 	b.Log.Info("analytics public-host ingest carve enabled", "flag", publicCaptureEnv)
 }
@@ -132,29 +138,34 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 	app.Get("/v1/analytics/top", cloud.Handle(s, top))
 
 	// Capture (WRITE) side — the ingest that fills hanzo.events. POST /v1/event
-	// (event.go) is the ONE canonical front door: body Event | [Event], org
-	// resolved IAM-only and fail-closed, into the ONE write core (ingestEvents).
+	// (event.go) is the ONE canonical front door serving EVERY auth context (IAM
+	// bearer | pk_ publishable key | site-host-forced) and EVERY wire shape
+	// (Event | [Event] | {batch}) into the ONE write core (ingestEvents). Every
+	// other route below is a thin alias/shim delegating to it.
 	app.Post("/v1/event", cloud.Handle(s, eventIngest))
 
-	// Publishable-key direct ingest (publishable.go) — the FASTEST path: a
-	// write-only pk_ key (HMAC-signed org, no IAM/DB hop) authenticates
-	// {batch:[WireEvent]} straight into the ONE write core. /v1/ingest/keys mints a
-	// pk_ for the caller's org; /v1/errors is the type:'error' read lens (validated
-	// principal — reads never accept the write-only key).
+	// /v1/ingest — a THIN DEPRECATED ALIAS of /v1/event (delegates to the exact
+	// eventHandle logic: pk_ auth now lives on the canonical door). /v1/ingest/keys
+	// mints a pk_ for the caller's org (minting is a distinct concern, not ingest);
+	// /v1/errors is the type:'error' read lens (validated principal — reads never
+	// accept the write-only key).
 	app.Post("/v1/ingest", cloud.Handle(s, ingest))
 	app.Post("/v1/ingest/keys", cloud.Handle(s, mintKey))
 	app.Get("/v1/errors", cloud.Handle(s, errorsLens))
 
-	// DEPRECATED ingest aliases — thin wire adapters that normalize onto the SAME
-	// write core (log a one-shot deprecation, keep working). /v1/analytics{,/batch}
-	// and /v1/tracker speak the Segment/beacon CaptureBatch wire; /v1/tracker is a
-	// bare route (never collides with the /v1/tracker/projects* issue tracker).
+	// DEPRECATED foreign-protocol ingest shims — external-SDK compat ONLY; no Hanzo
+	// surface uses these (Hanzo surfaces POST /v1/event). They normalize their own
+	// wire onto CaptureEvent and funnel through the SAME write core (log a one-shot
+	// deprecation, keep working so external Segment/beacon callers are unbroken).
+	// /v1/analytics{,/batch} and /v1/tracker speak the Segment/beacon CaptureBatch
+	// wire; /v1/tracker is a bare route (never collides with /v1/tracker/projects*).
 	app.Post("/v1/analytics", cloud.Handle(s, capture))
 	app.Post("/v1/analytics/batch", cloud.Handle(s, capture))
 	app.Post("/v1/tracker", cloud.Handle(s, capture))
 
 	// /v1/insights — console reads over the SAME engine + the DEPRECATED PostHog-
-	// wire ingest adapter (/v1/insights/e → the ONE write core). Flags live at /v1/flags.
+	// wire ingest shim (/v1/insights/e → the ONE write core; external PostHog SDK
+	// compat only). Flags live at /v1/flags.
 	app.Get("/v1/insights/health", cloud.Handle(s, insightsHealth))
 	app.Post("/v1/insights/e", cloud.Handle(s, insightsIngest))
 	app.Get("/v1/insights/events", cloud.Handle(s, insightsEvents))
@@ -392,13 +403,37 @@ func top(s *cloud.Service[state], c *zip.Ctx) error {
 		"GROUP BY product_id ORDER BY revenue DESC LIMIT %d", eventsTable, ewhere, limit)
 	prodRows, perr := aiobject.DatastoreQuery(ctx, prodSQL, eargs...)
 
+	// Behavior lenses over hanzo.events — WHERE people go / WHAT they look at
+	// (topPages) and where they come FROM (topReferrers organic/referral,
+	// topSources campaigns). Each is ONE pageview breakdown that degrades to
+	// honest-empty if the events table is absent or the query errors — never a 500
+	// (mirrors the overview web lens exactly).
+	pageSQL, pageArgs := breakdownSQL(pageKeyExpr, org, start, end, limit)
+	pageRows, pageErr := aiobject.DatastoreQuery(ctx, pageSQL, pageArgs...)
+	if pageErr != nil {
+		s.Log.Debug("topPages lens unavailable (honest-empty)", "err", pageErr)
+	}
+	refSQL, refArgs := breakdownSQL(referrerKeyExpr, org, start, end, limit)
+	refRows, refErr := aiobject.DatastoreQuery(ctx, refSQL, refArgs...)
+	if refErr != nil {
+		s.Log.Debug("topReferrers lens unavailable (honest-empty)", "err", refErr)
+	}
+	srcSQL, srcArgs := breakdownSQL(sourceKeyExpr, org, start, end, limit)
+	srcRows, srcErr := aiobject.DatastoreQuery(ctx, srcSQL, srcArgs...)
+	if srcErr != nil {
+		s.Log.Debug("topSources lens unavailable (honest-empty)", "err", srcErr)
+	}
+
 	return c.JSON(http.StatusOK, Top{
-		Range:    rangeLabel,
-		Start:    start.UTC().Format(time.RFC3339),
-		End:      end.UTC().Format(time.RFC3339),
-		Scope:    Scope{Org: org},
-		Models:   buildTopModels(modelRows),
-		Products: buildTopProducts(prodRows, perr == nil),
+		Range:     rangeLabel,
+		Start:     start.UTC().Format(time.RFC3339),
+		End:       end.UTC().Format(time.RFC3339),
+		Scope:     Scope{Org: org},
+		Models:    buildTopModels(modelRows),
+		Products:  buildTopProducts(prodRows, perr == nil),
+		Pages:     buildBreakdown(pageRows, pageErr == nil),
+		Referrers: buildBreakdown(refRows, refErr == nil),
+		Sources:   buildBreakdown(srcRows, srcErr == nil),
 	})
 }
 

@@ -40,11 +40,7 @@ type WorkerRouteCreate struct {
 // ── scripts ─────────────────────────────────────────────────────────────────────
 
 func workersScriptList(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authClient(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctClient(s, c)
 	if err != nil {
 		return err
 	}
@@ -52,11 +48,7 @@ func workersScriptList(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -83,11 +75,7 @@ func workersScriptPut(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 func workersScriptDelete(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
@@ -158,11 +146,7 @@ func buildWorkerUpload(in WorkerScriptPut) ([]byte, string, error) {
 // ── workers.dev subdomain ───────────────────────────────────────────────────────
 
 func workersSubdomainGet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authClient(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctClient(s, c)
 	if err != nil {
 		return err
 	}
@@ -172,11 +156,7 @@ func workersSubdomainGet(s *cloud.Service[state], c *zip.Ctx) error {
 // workersScriptSubdomainSet enables/disables a script on the account workers.dev
 // subdomain (POST .../scripts/{script}/subdomain {enabled}).
 func workersScriptSubdomainSet(s *cloud.Service[state], c *zip.Ctx) error {
-	cl, org, err := authWrite(s, c)
-	if err != nil {
-		return err
-	}
-	acct, err := cl.resolveAccount(c.Context(), org, c)
+	cl, acct, err := acctWrite(s, c)
 	if err != nil {
 		return err
 	}
