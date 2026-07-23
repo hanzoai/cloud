@@ -62,14 +62,13 @@ func newIAMClient() *iamClient {
 	}
 }
 
-// provisionResult is the /v1/iam/admin/provision response: the converged org, its
-// hashed credential (accessSecret shown ONCE on first mint), and whether THIS call
-// newly granted the identity's one-time trial — the funding signal.
+// provisionResult is the /v1/iam/admin/provision response: the converged org and its
+// hashed credential (accessSecret shown ONCE on first mint). The org starts at a zero
+// balance — usage is pre-paid, no signup grant.
 type provisionResult struct {
 	Org          string `json:"org"`
 	AccessKey    string `json:"accessKey"`
 	AccessSecret string `json:"accessSecret"`
-	TrialGranted bool   `json:"trialGranted"`
 	Error        string `json:"error"`
 }
 
@@ -77,10 +76,10 @@ type provisionResult struct {
 func (c *iamClient) provisionReady() bool { return c != nil && c.serviceToken != "" }
 
 // provision drives the ONE atomic IAM onboarding op: create the org, move the named
-// user in as its admin, mint its hashed credential, and claim its trial — the
-// service-token endpoint that replaces the create-org + move-user pair, so there is
-// no orphan between two writes and a mid-flight retry converges. orgSlug is the
-// caller's already-resolved slug (IAM honors it verbatim).
+// user in as its admin, and mint its hashed org-scoped credential — the service-token
+// endpoint that replaces the create-org + move-user pair, so there is no orphan
+// between two writes and a mid-flight retry converges. orgSlug is the caller's
+// already-resolved slug (IAM honors it verbatim). The org starts at a zero balance.
 func (c *iamClient) provision(ctx context.Context, owner, name, orgSlug string, personal bool) (provisionResult, error) {
 	if !c.provisionReady() {
 		return provisionResult{}, errNotConfigured
@@ -122,15 +121,15 @@ func (c *iamClient) provision(ctx context.Context, owner, name, orgSlug string, 
 }
 
 // userRow is the subset of an IAM user the onboarding path reads to resolve the
-// caller's authoritative identity + verified email (the trial-credit dedup key).
+// caller's authoritative (owner, name) — a zero-org caller's owner is not on its
+// token, so provision needs it from the row.
 type userRow struct {
 	Owner string `json:"owner"`
 	Name  string `json:"name"`
-	Email string `json:"email"`
 }
 
 // getUserRow resolves the user by the caller's id (the same read the move did) into
-// its authoritative (owner, name, email).
+// its authoritative (owner, name).
 func (c *iamClient) getUserRow(ctx context.Context, id string) (userRow, error) {
 	raw, err := c.getUser(ctx, id)
 	if err != nil {
