@@ -13,8 +13,9 @@ import (
 
 // TestRecord_DebitsFinanceInProcess pins the money-critical seam: when a finance ledger is
 // co-resident (finance.Current() != nil), Record posts the usage debit DIRECTLY to the
-// native ledger and NEVER touches HTTP. It also locks the anti-leak fold — a micros-only
-// debit (the AI meter prices sub-cent) is CEILed to whole cents, not dropped to zero — and
+// native ledger and NEVER touches HTTP. It also locks the anti-leak invariant — a micros-only
+// debit (the AI meter prices sub-cent) lands EXACTLY in the 18-decimal ledger (not dropped to
+// zero); the RecordResult reports the ceiled whole cents while the ledger stays exact — and
 // RequestID idempotency.
 func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	ctx := context.Background()
@@ -35,32 +36,37 @@ func TestRecord_DebitsFinanceInProcess(t *testing.T) {
 	defer srv.Close()
 	c := newClient(t, srv, metering.Config{})
 
-	// Micros-only debit: 15_000 micro-USD = 1.5¢ → CEIL to 2¢ (NOT dropped to 0).
+	// Micros-only debit: 15_000 micro-USD = 1.5¢. The RESULT reports the ceiled 2¢
+	// (Cents() rounds sub-cent up for whole-cent contexts); the LEDGER debits the
+	// exact 1.5¢ (NOT dropped to 0, NOT ceiled).
 	res, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountMicros: 15000, RequestID: "m1"})
 	if err != nil {
 		t.Fatalf("record micros: %v", err)
 	}
 	if res == nil || res.Amount != 2 {
-		t.Fatalf("record micros result = %+v; want Amount 2 (ceil of 1.5¢)", res)
+		t.Fatalf("record micros result = %+v; want reported Amount 2 (Cents() ceils 1.5¢)", res)
 	}
-	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 98 {
-		t.Fatalf("balance after micros debit = %s; want 98 (100-2)", bal)
+	// Exact 18-decimal ledger: 100¢ − 1.5¢ = 98.5¢ ($0.985), not a ceiled 98¢.
+	wantBal, _ := money.ParseUSD("0.985")
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cmp(wantBal) != 0 {
+		t.Fatalf("balance after micros debit = %s; want 0.985 (exact 1.5¢ debit, not ceiled)", bal)
 	}
 
-	// Whole-cent debit: 50¢.
+	// Whole-cent debit: 50¢ → 98.5¢ − 50¢ = 48.5¢.
 	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 50, RequestID: "m2"}); err != nil {
 		t.Fatalf("record cents: %v", err)
 	}
-	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
-		t.Fatalf("balance after cents debit = %s; want 48 (98-50)", bal)
+	wantBal, _ = money.ParseUSD("0.485")
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cmp(wantBal) != 0 {
+		t.Fatalf("balance after cents debit = %s; want 0.485 (98.5-50)", bal)
 	}
 
 	// Idempotent replay on RequestID m2 → no second debit.
 	if _, err := c.Record(ctx, metering.Usage{User: "acme", Org: "acme", AmountCents: 50, RequestID: "m2"}); err != nil {
 		t.Fatalf("record replay: %v", err)
 	}
-	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cents() != 48 {
-		t.Fatalf("balance after replay = %s; want 48 (idempotent)", bal)
+	if bal, _ := fin.Balance(ctx, "acme", "acme", "usd", false); bal.Cmp(wantBal) != 0 {
+		t.Fatalf("balance after replay = %s; want 0.485 (idempotent)", bal)
 	}
 
 	// Not one byte of HTTP: the finance seam intercepted every debit.
