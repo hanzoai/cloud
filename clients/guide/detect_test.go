@@ -94,7 +94,7 @@ func TestReconcileUnknownSignalSkipped(t *testing.T) {
 func TestActedDetector(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
-	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil })
+	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil }, Signals{})
 	acted := dets["acted"]
 	step := Step{ID: "positioning", Title: "P", Tool: "content_generate"}
 
@@ -128,7 +128,7 @@ func TestActedDetector(t *testing.T) {
 func TestActedEndToEndThroughReconcile(t *testing.T) {
 	ctx := context.Background()
 	st := testStore(t)
-	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil })
+	dets := newDetectors(func(context.Context, string) (*Store, error) { return st, nil }, Signals{})
 	c := Curriculum{Steps: []Step{{ID: "positioning", Title: "P", Signal: "acted", Tool: "content_generate"}}}
 
 	states := map[string]State{}

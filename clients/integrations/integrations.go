@@ -1080,6 +1080,27 @@ func TokenFor(ctx context.Context, org, provider, name string) ([]byte, error) {
 	return tokenFor(mounted, ctx, org, provider, name)
 }
 
+// Connected reports whether org has CONNECTED provider — a BOOLEAN presence check
+// for the observe/growth plane. It reads ONLY the existence of the org's connection
+// row (store.Get found), scoped to the org; it NEVER touches KMS and NEVER returns
+// the token. Nil-safe and fail-closed: an unmounted subsystem, an invalid org, an
+// unknown provider, or a store error all yield false — never a spurious true and
+// never a secret.
+func Connected(ctx context.Context, org, provider string) bool {
+	s := mounted
+	if s == nil || s.State.store == nil {
+		return false
+	}
+	if !validOrg(org) {
+		return false
+	}
+	if _, ok := s.State.providers[provider]; !ok {
+		return false
+	}
+	_, found, err := s.State.store.Get(ctx, org, provider)
+	return err == nil && found
+}
+
 func tokenFor(s *cloud.Service[state], ctx context.Context, org, provider, name string) ([]byte, error) {
 	if !validOrg(org) {
 		return nil, fmt.Errorf("integrations: invalid org")
