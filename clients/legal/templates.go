@@ -130,23 +130,66 @@ func collectFieldRefs(n parse.Node, refs map[string]bool) {
 }
 
 // collectPipeRefs records field refs from every argument of every command in a
-// pipeline, descending into nested pipelines (e.g. {{.a | printf .b}}).
+// pipeline, descending into nested pipelines (e.g. {{.a | printf .b}}). Besides the
+// bare {{.key}} field access it catches the two indirect shapes that reach a top-level
+// field without a FieldNode: {{$.key}} (a field off the root variable) and
+// {{index . "key"}} / {{index $ "key"}} (a string-literal key indexed on the data
+// root). Both otherwise render blank for an UNDECLARED key with NO error — the index
+// builtin ignores missingkey=error — so ValidateOverride must see them.
 func collectPipeRefs(p *parse.PipeNode, refs map[string]bool) {
 	if p == nil {
 		return
 	}
 	for _, cmd := range p.Cmds {
+		if key, ok := indexRootKey(cmd.Args); ok {
+			refs[key] = true
+		}
 		for _, arg := range cmd.Args {
 			switch a := arg.(type) {
 			case *parse.FieldNode:
 				if len(a.Ident) > 0 {
 					refs[a.Ident[0]] = true
 				}
+			case *parse.VariableNode:
+				// {{$.key}} → Ident ["$", "key"]; the field after the root variable is a
+				// top-level ref. Bare $ (len 1) is the root itself, no ref.
+				if len(a.Ident) > 1 {
+					refs[a.Ident[1]] = true
+				}
 			case *parse.PipeNode:
 				collectPipeRefs(a, refs)
 			}
 		}
 	}
+}
+
+// indexRootKey reports the literal key of an `index <root> "key"` command when the
+// indexed operand is the data root (the dot or a bare $) — the shape that reaches a
+// top-level field by string literal. index on a sub-value (index .foo "k") leaves .foo
+// as the ref (a FieldNode) and "k" a sub-key, so it is deliberately not matched.
+func indexRootKey(args []parse.Node) (string, bool) {
+	if len(args) != 3 {
+		return "", false
+	}
+	id, ok := args[0].(*parse.IdentifierNode)
+	if !ok || id.Ident != "index" {
+		return "", false
+	}
+	switch r := args[1].(type) {
+	case *parse.DotNode:
+		// the data root — a literal key here is a top-level field
+	case *parse.VariableNode:
+		if len(r.Ident) != 1 || r.Ident[0] != "$" {
+			return "", false
+		}
+	default:
+		return "", false
+	}
+	s, ok := args[2].(*parse.StringNode)
+	if !ok {
+		return "", false
+	}
+	return s.Text, true
 }
 
 // field is a terse constructor for the library below.
