@@ -104,41 +104,6 @@ func (c *Client) Deposit(ctx context.Context, org, user string, amountCents int6
 	return out.TransactionID, nil
 }
 
-// GrantCredit posts POST /v1/billing/credit — the ONE IDEMPOTENT money-in for a
-// non-cash grant (the on-signup starter credit). Unlike Deposit, commerce dedups on
-// idempotencyKey: the same key credits AT MOST once, so a retried onboard never
-// double-funds. Granting to the identity's canonical org with a per-identity key
-// makes the per-org dedup a per-identity dedup — the trial-abuse gate. Returns the
-// grant's ledger id.
-func (c *Client) GrantCredit(ctx context.Context, org string, amountCents int64, reason, tag, expiresAt, idempotencyKey string) (string, error) {
-	if !c.Configured() {
-		return "", ErrUnconfigured
-	}
-	body, err := json.Marshal(map[string]any{
-		"org":            org,
-		"currency":       "usd",
-		"amountCents":    amountCents,
-		"reason":         reason,
-		"tag":            tag,
-		"expiresAt":      expiresAt,
-		"idempotencyKey": idempotencyKey,
-	})
-	if err != nil {
-		return "", err
-	}
-	raw, err := c.do(ctx, http.MethodPost, "/v1/billing/credit", nil, org, body)
-	if err != nil {
-		return "", err
-	}
-	var out struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return "", fmt.Errorf("commerce credit decode: %w", err)
-	}
-	return out.ID, nil
-}
-
 // SpendCents reads GET /v1/billing/usage-rollup and returns consumedCents. Zero
 // (not an error) when commerce is unconfigured so a partial deploy degrades to
 // "no spend to accrue yet" rather than a 5xx.

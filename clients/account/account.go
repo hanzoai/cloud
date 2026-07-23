@@ -57,14 +57,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/hanzoai/cloud"
-	"github.com/hanzoai/cloud/clients/commerceinproc"
-	"github.com/hanzoai/cloud/clients/payout"
 	"github.com/hanzoai/cloud/clients/principal"
-	"github.com/hanzoai/commerce/billing/credit"
-	luxlog "github.com/luxfi/log"
 	"github.com/zap-proto/zip"
 )
 
@@ -87,9 +82,8 @@ var errNotFound = errors.New("not found")
 // verifies on the other.
 type state struct {
 	iam      *iamClient
-	commerce *payout.Client // idempotent starter-credit grant on first-run onboarding
-	csrfKey  []byte         // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
-	writesRL *rateLimiter   // per-IP abuse cap on the money-write routes (ratelimit.go)
+	csrfKey  []byte       // keyed-BLAKE3 MAC key for the money-write CSRF token (csrf.go)
+	writesRL *rateLimiter // per-IP abuse cap on the money-write routes (ratelimit.go)
 }
 
 // keysWriteRatePerMin caps money-write frequency per client IP (mint/rotate/revoke
@@ -103,7 +97,6 @@ const keysWriteRatePerMin = 30
 func newService(deps cloud.Deps) *cloud.Service[state] {
 	b := cloud.NewBase(deps, "account")
 	st := state{iam: newIAMClient()}
-	st.commerce = payout.NewClient(commerceinproc.BaseURL(os.Getenv("CLOUD_COMMERCE_HTTP_URL")), os.Getenv("COMMERCE_SERVICE_TOKEN"))
 	st.csrfKey = sharedCSRFKey(b.Log)
 	st.writesRL = newRateLimiter(keysWriteRatePerMin)
 	return &cloud.Service[state]{Base: b, State: st}
@@ -377,7 +370,7 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 
 	// ADDITIONAL org (caller already has a home): create it WITHOUT moving them —
 	// they reach it via the OrgSwitcher (a move would strip their SuperAdmin / orphan
-	// their current org). No new-user trial here.
+	// their current org).
 	if additional {
 		org := buildOrg(s, c, slug, displayName, body.Personal, cr.owner)
 		if err := s.State.iam.createOrganization(c.Context(), org); err != nil {
@@ -387,12 +380,13 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 	}
 
 	// FIRST-RUN: drive the ONE atomic IAM provision (org + admin move + hashed
-	// credential + trial), replacing the create-org + move-user pair — a mid-flight
-	// retry now converges on the founder's own org instead of orphaning it. Prefer it
-	// whenever the service-token path is wired; fall back to the legacy pair only when
-	// it is not, so a partial deploy still onboards.
+	// org-scoped credential), replacing the create-org + move-user pair — a mid-flight
+	// retry now converges on the founder's own org instead of orphaning it. The org
+	// starts at a zero balance (usage is pre-paid). Prefer it whenever the
+	// service-token path is wired; fall back to the legacy pair only when it is not,
+	// so a partial deploy still onboards.
 	if s.State.iam.provisionReady() {
-		resp, err := onboardFirstRun(c.Context(), s.State.iam, s.State.commerce, s.Log, cr.id, slug, displayName, body.Personal)
+		resp, err := onboardFirstRun(c.Context(), s.State.iam, cr.id, slug, displayName, body.Personal)
 		if err != nil {
 			return err
 		}
@@ -411,15 +405,12 @@ func onboard(s *cloud.Service[state], c *zip.Ctx) error {
 }
 
 // onboardFirstRun drives the ONE atomic IAM provision for a zero-org caller (create
-// org + move them in as admin + mint the hashed credential + claim the trial),
-// replacing the create-org + move-user pair so a mid-flight retry converges on the
-// founder's own org instead of orphaning it. On the one-time trial grant it funds
-// the identity's CANONICAL org with a per-identity idempotency key — the anti-farm
-// gate (one trial per verified identity, not per org). Funding is best-effort +
-// idempotent: a hiccup never fails an onboarding that already provisioned, and a
-// later retry converges. Split out so the funding glue is unit-tested against mock
-// IAM + commerce without the CSRF/routing/principal shell.
-func onboardFirstRun(ctx context.Context, iam *iamClient, comm *payout.Client, log luxlog.Logger, callerID, slug, displayName string, personal bool) (onboardResp, error) {
+// org + move them in as admin + mint the hashed org-scoped credential), replacing
+// the create-org + move-user pair so a mid-flight retry converges on the founder's
+// own org instead of orphaning it. The org starts at a ZERO balance — usage is
+// pre-paid, so there is no signup grant. Split out so the provisioning glue is
+// unit-tested against mock IAM without the CSRF/routing/principal shell.
+func onboardFirstRun(ctx context.Context, iam *iamClient, callerID, slug, displayName string, personal bool) (onboardResp, error) {
 	row, err := iam.getUserRow(ctx, callerID)
 	if err != nil {
 		return onboardResp{}, zip.Errorf(http.StatusBadGateway, "could not resolve the user: %v", err)
@@ -427,12 +418,6 @@ func onboardFirstRun(ctx context.Context, iam *iamClient, comm *payout.Client, l
 	res, err := iam.provision(ctx, row.Owner, row.Name, slug, personal)
 	if err != nil {
 		return onboardResp{}, zip.Errorf(http.StatusBadGateway, "could not provision the organization: %v", err)
-	}
-	if res.TrialGranted && comm.Configured() {
-		expiry := time.Now().AddDate(0, 0, credit.StarterCreditDays).UTC().Format(time.RFC3339)
-		if _, gerr := comm.GrantCredit(ctx, res.Org, credit.StarterCreditCents, "welcome credit", credit.StarterCreditTag, expiry, "starter:"+row.Email); gerr != nil {
-			log.Warn("starter credit grant deferred (org provisioned, funding will retry)", "org", res.Org, "err", gerr)
-		}
 	}
 	return onboardResp{Org: res.Org, DisplayName: displayName, Additional: false}, nil
 }
