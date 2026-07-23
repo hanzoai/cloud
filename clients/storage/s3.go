@@ -63,7 +63,7 @@ import (
 	"strings"
 	"time"
 
-	minio "github.com/hanzoai/s3-go"
+	s3 "github.com/hanzoai/s3-go"
 
 	"github.com/hanzoai/cloud"
 	"github.com/hanzoai/cloud/clients/principal"
@@ -358,13 +358,13 @@ func createBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
 	if exists {
 		return zip.ErrConflict("bucket already exists")
 	}
-	if err := cli.MakeBucket(ctx.Context(), physical, minio.MakeBucketOptions{Region: s.State.admin.Region()}); err != nil {
+	if err := cli.MakeBucket(ctx.Context(), physical, s3.MakeBucketOptions{Region: s.State.admin.Region()}); err != nil {
 		return zip.Errorf(http.StatusBadGateway, "create bucket: %v", err)
 	}
 	return ctx.JSON(http.StatusCreated, bucketItem{Name: name, CreatedAt: time.Now().Unix()})
 }
 
-// deleteBucket removes an EMPTY bucket (minio refuses a non-empty one — we do not
+// deleteBucket removes an EMPTY bucket (SeaweedFS refuses a non-empty one — we do not
 // cascade a delete of a tenant's objects behind a single bucket call).
 func deleteBucket(s *cloud.Service[state], ctx *zip.Ctx) error {
 	org := reqOrg(ctx)
@@ -412,7 +412,7 @@ func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
 		return zip.ErrBadRequest("invalid bucket name")
 	}
 	prefix := cleanPrefix(ctx.Query("prefix"))
-	// Folder-style by default (minio applies a "/" delimiter when Recursive is
+	// Folder-style by default (SeaweedFS applies a "/" delimiter when Recursive is
 	// false, returning sub-prefixes as directory entries — the file-manager view).
 	// ?recursive=true lists every key flat under the prefix. The brief's
 	// ?delimiter=/ is the default and needs no param; only recursion is opt-in.
@@ -425,7 +425,7 @@ func listObjects(s *cloud.Service[state], ctx *zip.Ctx) error {
 	physical := physicalBucket(org, bname)
 
 	out := make([]objectItem, 0, 64)
-	opts := minio.ListObjectsOptions{Prefix: prefix, Recursive: recursive, MaxKeys: maxListKeys}
+	opts := s3.ListObjectsOptions{Prefix: prefix, Recursive: recursive, MaxKeys: maxListKeys}
 	for obj := range cli.ListObjects(ctx.Context(), physical, opts) {
 		if obj.Err != nil {
 			if isNoSuchBucket(obj.Err) {
@@ -551,7 +551,7 @@ func deleteObject(s *cloud.Service[state], ctx *zip.Ctx) error {
 		return zip.Errorf(http.StatusServiceUnavailable, "object storage unavailable")
 	}
 	physical := physicalBucket(org, bname)
-	if err := cli.RemoveObject(ctx.Context(), physical, key, minio.RemoveObjectOptions{}); err != nil {
+	if err := cli.RemoveObject(ctx.Context(), physical, key, s3.RemoveObjectOptions{}); err != nil {
 		if isNoSuchBucket(err) {
 			return zip.ErrNotFound("bucket not found")
 		}
@@ -632,10 +632,10 @@ func modTime(t time.Time) int64 {
 	return t.Unix()
 }
 
-// isNoSuchBucket / isBucketNotEmpty classify the minio S3 error codes we map to a
+// isNoSuchBucket / isBucketNotEmpty classify the S3 error codes we map to a
 // clean 404/409 instead of a generic 502.
 func isNoSuchBucket(err error) bool {
-	var resp minio.ErrorResponse
+	var resp s3.ErrorResponse
 	if errors.As(err, &resp) {
 		return resp.Code == "NoSuchBucket"
 	}
@@ -643,7 +643,7 @@ func isNoSuchBucket(err error) bool {
 }
 
 func isBucketNotEmpty(err error) bool {
-	var resp minio.ErrorResponse
+	var resp s3.ErrorResponse
 	if errors.As(err, &resp) {
 		return resp.Code == "BucketNotEmpty"
 	}
