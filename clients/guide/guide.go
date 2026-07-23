@@ -50,9 +50,16 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		return fmt.Errorf("guide.Mount: empty DataDir")
 	}
 	stores := cloud.NewOrgStore(deps.DataDir, "guide", openStore)
+	// The effective default is the WHITE-LABEL tier: a brand that ships
+	// brands/<brand>.yaml (zoo) serves ITS OWN journey; every other brand uses the base
+	// builtin default. Resolved once at Mount from deps.Brand (see brands.go).
+	def := defaultCurriculum
+	if bc, ok := brandCurriculum(deps.Brand); ok {
+		def = bc
+	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "guide"), State: state{
 		stores: stores,
-		def:    defaultCurriculum,
+		def:    def,
 		ai:     deps.AI,
 		model:  strings.TrimSpace(deps.AIDefaultModel),
 		invoke: automations.InvokeTool,
@@ -63,7 +70,7 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 	})
 	mounted = s
 	routes(app, s)
-	s.Log.Info("guide mounted", "steps", len(defaultCurriculum.Steps), "brand", deps.Brand)
+	s.Log.Info("guide mounted", "steps", len(def.Steps), "brand", deps.Brand, "version", def.Version)
 	return nil
 }
 
@@ -74,6 +81,12 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 	g := app.Group("/v1/guide")
 	g.Get("/analytics", cloud.Handle(s, gtmAnalytics))
+	// The Business AI's dynamic "what to do next": the ranked next-best quests + a
+	// grounded narrative (suggest), and a grounded founder chat (chat). Both are
+	// READ-ONLY — they advise, never run an action (the only executing path is
+	// /steps/:id/do). See suggest.go.
+	g.Get("/suggest", cloud.Handle(s, suggest))
+	g.Post("/chat", cloud.Handle(s, chat))
 	g.Get("/curriculum", cloud.Handle(s, getCurriculum))
 	g.Put("/curriculum", cloud.Handle(s, putCurriculum))
 	g.Delete("/curriculum", cloud.Handle(s, deleteCurriculum))
