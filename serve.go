@@ -111,7 +111,7 @@ func Serve(specs []MountSpec, enable []string) error {
 	// This is what lifts the deployment off replicas:1 without any shared RWX volume —
 	// per-pod RWO PVC + org→owner routing = one writer per tenant file. See
 	// shardrouter.go.
-	shardRtr := newShardRouter(cfg, deps.Logger)
+	shardRtr := newShardRouter(cfg, deps.Logger, deps.LiveMembers)
 	if shardRtr != nil {
 		deps.Logger.Info("shard routing ENABLED (horizontal writer scale)",
 			"self", shardRtr.self, "peers", shardRtr.peerIDs(),
@@ -428,6 +428,16 @@ func Serve(specs []MountSpec, enable []string) error {
 	select {
 	case <-ctx.Done():
 		deps.Logger.Info("shutdown requested")
+		// Graceful drain: go NotReady so peers re-elect this pod's orgs to live successors
+		// (each hydrates the latest fenced snapshot, M3) BEFORE we stop serving, then pause
+		// for that to propagate through the membership refresh. Only when sharding is active
+		// — a single-pod deployment has no successor, so it drains immediately and relies on
+		// the final ship (CloseAll) below. In-flight requests drain in app.ShutdownWithContext.
+		SetDraining()
+		if shardRtr != nil {
+			deps.Logger.Info("draining: NotReady, waiting for peers to re-elect owned orgs", "grace", shardDrainGrace)
+			time.Sleep(shardDrainGrace)
+		}
 	case err := <-listenErr:
 		return fmt.Errorf("listen: %w", err)
 	}
@@ -474,8 +484,18 @@ func healthMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}
-	mux.HandleFunc("/healthz", ok)
-	mux.HandleFunc("/readyz", ok)
+	mux.HandleFunc("/healthz", ok) // liveness: stays 200 while draining (finish the drain).
+	// readiness: 503 once draining so K8s marks the pod NotReady — removed from endpoints
+	// AND from every peer's writer election — before it stops serving (graceful handoff).
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if Draining() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"draining"}`))
+			return
+		}
+		ok(w, r)
+	})
 	mux.HandleFunc("/health", ok)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
