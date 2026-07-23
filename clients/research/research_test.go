@@ -7,7 +7,10 @@ package research
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -315,6 +318,12 @@ func TestSSRFGate(t *testing.T) {
 		"https://127.0.0.1/v1", "https://[::1]/v1", "https://10.1.2.3/v1", "https://172.16.0.1/v1",
 		"https://192.168.0.1/v1", "https://169.254.169.254/latest/meta-data", "https://[fd00:ec2::254]/",
 		"https://0.0.0.0/v1", "http://1.1.1.1/v1", "ftp://1.1.1.1/v1", "not-a-url",
+		"https://100.100.100.200/latest/meta-data", // Alibaba IMDS (CGNAT 100.64/10)
+		"https://100.64.0.1/v1",                    // CGNAT
+		"https://192.0.0.192/opc/v1/instance/",     // Oracle IMDS (IANA protocol assignments)
+		"https://0.1.2.3/v1",                       // 0.0.0.0/8 this-network
+		"https://255.255.255.255/v1",               // 240/4 reserved / broadcast
+		"https://198.18.0.1/v1",                    // benchmarking range
 	}
 	for _, u := range blocked {
 		if err := ssrfSafe(u); err == nil {
@@ -481,42 +490,100 @@ func TestHTTPGrantSeparateFromUpload(t *testing.T) {
 	}
 }
 
-// TestHTTPArtifactsDiary: the research-diary surface — idempotent by sha256, newest-first
-// feed, private-by-default, run filter, and the separate visibility grant by sha256.
+// doRaw issues a request and returns status + raw body (for non-JSON responses like the
+// hash-addressed blob).
+func doRaw(t *testing.T, app *zip.App, method, path, org, project string) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u-"+org)
+	}
+	if project != "" {
+		req.Header.Set("X-Project-Id", project)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, b
+}
+
+// TestHTTPArtifactsDiary: the research-diary surface — CONTENT-ADDRESSED (the server
+// hashes the submitted bytes, a client-asserted mismatch is rejected, poisoning needs a
+// preimage), idempotent, newest-first feed, private-by-default, byte retrieval by hash,
+// and the separate visibility grant by sha256.
 func TestHTTPArtifactsDiary(t *testing.T) {
 	app := mountResearch(t)
-	snap := Artifact{SHA256: "abc123", Kind: "snapshot", Ref: "s3://b/snap.png", RunID: "benchmark:m:gpqa_diamond", GitSHA: "deadbeef", TS: 100}
-	code, m := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", snap)
-	if code != http.StatusOK || m["created"] != true {
-		t.Fatalf("POST artifact status=%d body=%v", code, m)
+	png := []byte("fake-png-bytes-of-the-board")
+	b64 := base64.StdEncoding.EncodeToString(png)
+	want := fmt.Sprintf("%x", sha256.Sum256(png))
+
+	// POST the bytes (no client sha256) → server derives the identity + ref.
+	code, m := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
+		Artifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond", GitSHA: "deadbeef"})
+	if code != http.StatusOK || m["created"] != true || m["sha256"] != want || m["ref"] != "sha256:"+want {
+		t.Fatalf("POST artifact: %v (want server sha256 %s)", m, want)
 	}
-	// Re-POST identical sha256 → no-op (hash-addressed idempotency).
-	_, m2 := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", snap)
+	// Re-POST identical bytes → no-op (hash-addressed idempotency).
+	_, m2 := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
+		Artifact{Content: b64, Kind: "snapshot", RunID: "benchmark:m:gpqa_diamond"})
 	if m2["created"] != false {
-		t.Fatalf("re-POST created=%v, want false (idempotent by sha256)", m2["created"])
+		t.Fatalf("re-POST created=%v, want false", m2["created"])
+	}
+	// POISONING: a client-asserted sha256 that does NOT match the bytes is refused.
+	poison, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
+		Artifact{Content: b64, SHA256: fmt.Sprintf("%064d", 0), Kind: "snapshot"})
+	if poison != http.StatusUnprocessableEntity {
+		t.Fatalf("mismatched sha256 status=%d, want 422 (un-poisonable)", poison)
+	}
+	// Content is required — a manifest with no bytes cannot be content-addressed.
+	nc, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{Kind: "snapshot"})
+	if nc != http.StatusUnprocessableEntity {
+		t.Fatalf("no-content status=%d, want 422", nc)
 	}
 	// A newer report.
+	rpt := []byte("# report\nauto-generated")
 	do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench",
-		Artifact{SHA256: "def456", Kind: "report", Ref: "s3://b/report.html", RunID: "benchmark:m:gpqa_diamond", TS: 200})
+		Artifact{Content: base64.StdEncoding.EncodeToString(rpt), Kind: "report", RunID: "benchmark:m:gpqa_diamond", TS: 200})
 
-	// Diary feed newest-first, private by default.
+	// Diary feed newest-first, private, server-derived ref.
 	code, g := do(t, app, http.MethodGet, "/v1/research/artifacts", "acme", "enso-bench", nil)
 	if code != http.StatusOK || g["total"].(float64) != 2 {
 		t.Fatalf("diary total=%v", g["total"])
 	}
-	first := g["data"].([]any)[0].(map[string]any)
-	if first["sha256"] != "def456" || first["visibility"] != "private" || first["retention_class"] != "raw-artifact" {
-		t.Fatalf("diary head wrong: %v", first)
+	head := g["data"].([]any)[0].(map[string]any)
+	if head["visibility"] != "private" || head["retention_class"] != "raw-artifact" || !bytesHasPrefix(head["ref"], "sha256:") {
+		t.Fatalf("diary head wrong: %v", head)
 	}
+
+	// Retrieve the snapshot bytes BY HASH — hash-addressed retrieval round-trips.
+	rc, body := doRaw(t, app, http.MethodGet, "/v1/research/artifacts/"+want, "acme", "enso-bench")
+	if rc != http.StatusOK || !bytes.Equal(body, png) {
+		t.Fatalf("blob retrieval status=%d bytes-match=%v", rc, bytes.Equal(body, png))
+	}
+	// A DIFFERENT org cannot retrieve it — tenant isolation on the blob too.
+	oc, _ := doRaw(t, app, http.MethodGet, "/v1/research/artifacts/"+want, "other", "enso-bench")
+	if oc != http.StatusNotFound {
+		t.Fatalf("cross-org blob status=%d, want 404", oc)
+	}
+
 	// Kind validation.
-	bad, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{SHA256: "z", Kind: "malware", Ref: "r"})
+	bad, _ := do(t, app, http.MethodPost, "/v1/research/artifacts", "acme", "enso-bench", Artifact{Content: b64, Kind: "malware"})
 	if bad != http.StatusUnprocessableEntity {
 		t.Fatalf("bad kind status=%d, want 422", bad)
 	}
 	// Separate visibility grant by sha256.
 	vis := "public"
-	code, gr := do(t, app, http.MethodPost, "/v1/research/grants", "acme", "enso-bench", GrantRequest{Project: "enso-bench", SHA256: "abc123", Visibility: &vis})
+	code, gr := do(t, app, http.MethodPost, "/v1/research/grants", "acme", "enso-bench", GrantRequest{Project: "enso-bench", SHA256: want, Visibility: &vis})
 	if code != http.StatusOK || gr["updated"].(float64) != 1 {
 		t.Fatalf("artifact grant status=%d body=%v", code, gr)
 	}
+}
+
+func bytesHasPrefix(v any, p string) bool {
+	s, _ := v.(string)
+	return len(s) >= len(p) && s[:len(p)] == p
 }
