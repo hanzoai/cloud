@@ -64,12 +64,16 @@ var validJurisdictions = map[Jurisdiction]bool{
 	JurisdictionDE: true, JurisdictionWY: true,
 }
 
-// KYC statuses for a founder. A founder is verified only when the idv seam reports
-// success; the payment step cannot be reached until every founder is verified.
+// KYC statuses for a founder. A founder reaches a PASSING status by exactly two
+// paths, never a client assertion: a real idv provider reports a pass (KYCVerified),
+// or a privileged reviewer confirms the founder out-of-band (KYCReviewerConfirmed).
+// The two are distinct so a manual confirmation is never dressed up as a provider
+// decision. The payment step cannot be reached until every founder passes (kycPass).
 const (
-	KYCPending  = "pending"
-	KYCVerified = "verified"
-	KYCFailed   = "failed"
+	KYCPending           = "pending"
+	KYCVerified          = "verified"            // a real idv provider reported a pass
+	KYCReviewerConfirmed = "reviewer_confirmed"  // a privileged reviewer confirmed the founder (not provider-reported)
+	KYCFailed            = "failed"
 )
 
 // incorporationType maps a Structure to the captable company row's
@@ -93,7 +97,8 @@ type Founder struct {
 	Email     string `json:"email"`
 	EquityBps int    `json:"equityBps"`
 	KYCStatus string `json:"kycStatus"`
-	KYCRef    string `json:"kycRef,omitempty"` // idv session reference
+	KYCRef    string `json:"kycRef,omitempty"`    // idv session reference
+	DecidedBy string `json:"decidedBy,omitempty"` // who settled a terminal KYC status: the provider name, or a reviewer's user id
 }
 
 // Genesis is the cap-table equity genesis: a deterministic root of the founding
@@ -232,14 +237,27 @@ func guardStructureChosen(f *Formation) error {
 	return nil
 }
 
+// kycPass reports whether a founder's KYC is a passing terminal decision the payment
+// gate accepts: a real provider pass (KYCVerified) or an attributed reviewer
+// confirmation (KYCReviewerConfirmed), AND settled by a named decider. A raw,
+// unattributed "verified" — exactly the shape a client forge would leave — never
+// passes, so the gate is fail-closed against a forged status.
+func kycPass(f Founder) bool {
+	if f.DecidedBy == "" {
+		return false
+	}
+	return f.KYCStatus == KYCVerified || f.KYCStatus == KYCReviewerConfirmed
+}
+
 // guardKYCVerified gates the payment step behind identity verification: there must
-// be at least one founder and EVERY founder must be KYC-verified.
+// be at least one founder and EVERY founder must PASS (kycPass) — a provider-reported
+// pass or an attributed reviewer confirmation, never a client-asserted status.
 func guardKYCVerified(f *Formation) error {
 	if len(f.Founders) == 0 {
 		return fmt.Errorf("add at least one founder before KYC")
 	}
 	for _, fo := range f.Founders {
-		if fo.KYCStatus != KYCVerified {
+		if !kycPass(fo) {
 			return fmt.Errorf("founder %q is not KYC-verified (status %q)", fo.Email, fo.KYCStatus)
 		}
 	}

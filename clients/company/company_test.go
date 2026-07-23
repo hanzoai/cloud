@@ -3,18 +3,33 @@ package company
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/hanzoai/cloud"
+	"github.com/hanzoai/cloud/cek"
 	luxlog "github.com/luxfi/log"
 	fiber "github.com/zap-proto/fiber/v3"
 	"github.com/zap-proto/zip"
 )
+
+// TestMain seeds a random cek master key so the encrypted-at-rest store opens on an
+// encryption-capable test build (mirrors clients/compliance and clients/legal). On a
+// pure-Go build cek ignores it and uses the plaintext dev path.
+func TestMain(m *testing.M) {
+	k := make([]byte, 32)
+	if _, err := rand.Read(k); err != nil {
+		panic(err)
+	}
+	cek.SetMasterKey(k)
+	os.Exit(m.Run())
+}
 
 // testTimeout is a generous per-request ceiling for the in-memory fiber test
 // harness. fiber's default (1s) is too tight: under the race detector or an
@@ -28,9 +43,22 @@ type fakeKYC struct{}
 
 func (fakeKYC) Name() string { return "fake" }
 func (fakeKYC) Start(_ context.Context, _ string, f Founder) (string, string, string, error) {
-	return "kyc_" + f.Email, "https://verify.example/" + f.Email, KYCVerified, nil // auto-verify
+	// A provider that would report a pass; startKYC clamps this to pending (a start is
+	// never a decision), so verification lands only when kycRefresh consults Check.
+	return "kyc_" + f.Email, "https://verify.example/" + f.Email, KYCVerified, nil
 }
 func (fakeKYC) Check(context.Context, string) (string, error) { return KYCVerified, nil }
+
+// pendingKYC is the honest, never-auto-approving provider (like the manual default):
+// it stays pending at Start AND Check, so no provider pass is ever producible — the
+// only route to a pass is an attributed reviewer decision.
+type pendingKYC struct{}
+
+func (pendingKYC) Name() string { return "manual" }
+func (pendingKYC) Start(_ context.Context, _ string, f Founder) (string, string, string, error) {
+	return "kyc_" + f.Email, "", KYCPending, nil
+}
+func (pendingKYC) Check(context.Context, string) (string, error) { return KYCPending, nil }
 
 type fakeCharge struct {
 	err     error
@@ -174,6 +202,34 @@ func do(t *testing.T, app *zip.App, method, path, org string, body any) (int, ma
 	return resp.StatusCode, out
 }
 
+// doAdmin issues a request as a Hanzo PLATFORM reviewer (SuperAdmin) — the identity a
+// founder-KYC decision requires. It mirrors do() but sets the unforgeable X-User-IsAdmin
+// header the gateway mints only for the reserved admin org.
+func doAdmin(t *testing.T, app *zip.App, method, path, org string, body any) (int, map[string]any) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	rq := httptest.NewRequest(method, path, r)
+	if body != nil {
+		rq.Header.Set("Content-Type", "application/json")
+	}
+	rq.Header.Set("X-Org-Id", org)
+	rq.Header.Set("X-User-Id", "admin_"+org)
+	rq.Header.Set("X-User-IsAdmin", "true")
+	resp, err := app.Fiber().Test(rq, fiber.TestConfig{Timeout: testTimeout, FailOnTimeout: true})
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return resp.StatusCode, out
+}
+
 func stageOf(m map[string]any) string {
 	f, _ := m["formation"].(map[string]any)
 	if f == nil {
@@ -204,6 +260,10 @@ func TestHTTPFormationFlow(t *testing.T) {
 	}
 	if code, _ := do(t, app, http.MethodPost, "/v1/company/kyc", org, nil); code != http.StatusOK {
 		t.Fatalf("kyc want 200, got %d", code)
+	}
+	// Reconcile with the provider (the fake reports a pass on Check) → founders verified.
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/kyc/refresh", org, nil); code != http.StatusOK {
+		t.Fatalf("kyc refresh want 200, got %d", code)
 	}
 	// KYC done → advance to payment.
 	if code, m := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"}); code != http.StatusOK {
@@ -261,6 +321,7 @@ func TestHTTPPaymentGate(t *testing.T) {
 		"founders": []map[string]any{{"name": "Bo", "email": "bo@gate.com", "equityBps": 10000}},
 	})
 	do(t, app, http.MethodPost, "/v1/company/kyc", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/kyc/refresh", org, nil)
 	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"})
 
 	// Unpaid: the documents transition is refused with 422 (the guard, not a 409).
@@ -273,6 +334,61 @@ func TestHTTPPaymentGate(t *testing.T) {
 		t.Fatalf("paid advance to documents want 200, got %d", code)
 	} else if stageOf(m) != "documents" {
 		t.Fatalf("stage want documents, got %q", stageOf(m))
+	}
+}
+
+// TestFounderKYCForgeIsClosed re-runs RED's founder-KYC forge END TO END and proves
+// the payment gate STAYS closed. With an honest (never-auto-approving) provider: a
+// client cannot forge a founder to "verified" (the callback is GONE, 404), an
+// unprivileged decision is refused (403), a client-driven reconcile only reports the
+// provider's pending status — and the gate opens ONLY after an attributed platform
+// reviewer confirms.
+func TestFounderKYCForgeIsClosed(t *testing.T) {
+	app, _, _ := mountFake(t)
+	mounted.State.prov.kyc = pendingKYC{} // honest provider: never auto-approves
+	const org = "forge"
+
+	do(t, app, http.MethodPost, "/v1/company", org, map[string]any{"structure": "c-corp", "jurisdiction": "DE", "name": "Forge Inc."})
+	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "founders"})
+	do(t, app, http.MethodPost, "/v1/company/founders", org, map[string]any{
+		"founders": []map[string]any{{"name": "Mallory", "email": "m@forge.test", "equityBps": 10000}},
+	})
+	do(t, app, http.MethodPost, "/v1/company/kyc", org, nil) // founder is pending
+
+	// PRE-FORGE: advancing to payment is refused (422) — the KYC gate is closed.
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("pre-forge advance to payment want 422, got %d", code)
+	}
+
+	// FORGE 1: the old client-trusted callback is GONE (404) — a client can no longer
+	// POST a terminal status.
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/kyc/callback", org,
+		map[string]any{"email": "m@forge.test", "status": "verified"}); code != http.StatusNotFound {
+		t.Fatalf("removed kyc/callback want 404, got %d", code)
+	}
+
+	// FORGE 2: a non-reviewer (validated member, no admin) decision is refused (403).
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/kyc/decision", org,
+		map[string]any{"email": "m@forge.test", "status": "reviewer_confirmed"}); code != http.StatusForbidden {
+		t.Fatalf("non-reviewer kyc decision want 403, got %d", code)
+	}
+
+	// FORGE 3: a client-driven reconcile consults the provider, which reports pending —
+	// the founder is NOT verified.
+	do(t, app, http.MethodPost, "/v1/company/kyc/refresh", org, nil)
+
+	// The gate is STILL closed after every forge attempt.
+	if code, _ := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("post-forge advance to payment want 422 (gate stays closed), got %d", code)
+	}
+
+	// LEGITIMATE PATH: an ATTRIBUTED platform reviewer confirms → the gate opens.
+	if code, m := doAdmin(t, app, http.MethodPost, "/v1/company/kyc/decision", org,
+		map[string]any{"email": "m@forge.test", "status": "reviewer_confirmed"}); code != http.StatusOK {
+		t.Fatalf("reviewer decision want 200, got %d (%v)", code, m)
+	}
+	if code, m := do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"}); code != http.StatusOK {
+		t.Fatalf("after attributed reviewer confirmation, advance to payment want 200, got %d (%v)", code, m)
 	}
 }
 
@@ -360,6 +476,7 @@ func TestGenesisIdempotent(t *testing.T) {
 		"founders": []map[string]any{{"name": "Ada", "email": "ada@acme.com", "equityBps": 10000}},
 	})
 	do(t, app, http.MethodPost, "/v1/company/kyc", org, nil)
+	do(t, app, http.MethodPost, "/v1/company/kyc/refresh", org, nil)
 	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "payment"})
 	do(t, app, http.MethodPost, "/v1/company/payment", org, nil)
 	do(t, app, http.MethodPost, "/v1/company/advance", org, map[string]any{"to": "documents"})
