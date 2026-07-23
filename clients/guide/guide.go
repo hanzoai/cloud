@@ -28,6 +28,7 @@ type state struct {
 	stores    *cloud.OrgStore[*Store]
 	def       Curriculum
 	detectors map[string]Detector
+	signals   Signals // cross-subsystem growth-observe seam (bound at the composition root)
 	ai        cloud.AIClient
 	model     string
 	invoke    func(ctx context.Context, org, tool string, args map[string]any) (any, error)
@@ -58,16 +59,17 @@ func Mount(app *zip.App, deps cloud.Deps) error {
 		def = bc
 	}
 	s := &cloud.Service[state]{Base: cloud.NewBase(deps, "guide"), State: state{
-		stores: stores,
-		def:    def,
-		ai:     deps.AI,
-		model:  strings.TrimSpace(deps.AIDefaultModel),
-		invoke: automations.InvokeTool,
-		toolOK: automations.ToolExists,
+		stores:  stores,
+		def:     def,
+		signals: boundSignals, // installed by the composition root before Mount; zero value honest-degrades
+		ai:      deps.AI,
+		model:   strings.TrimSpace(deps.AIDefaultModel),
+		invoke:  automations.InvokeTool,
+		toolOK:  automations.ToolExists,
 	}}
 	s.State.detectors = newDetectors(func(_ context.Context, org string) (*Store, error) {
 		return stores.For(org, "")
-	})
+	}, s.State.signals)
 	mounted = s
 	routes(app, s)
 	s.Log.Info("guide mounted", "steps", len(def.Steps), "brand", deps.Brand, "version", def.Version)
@@ -81,6 +83,9 @@ func routes(app *zip.App, s *cloud.Service[state]) {
 
 	g := app.Group("/v1/guide")
 	g.Get("/analytics", cloud.Handle(s, gtmAnalytics))
+	// The OBSERVE surface: the org's real-time growth profile — observed signals, the
+	// classified growth stage, and the org's own key metrics. READ-ONLY (see profile).
+	g.Get("/profile", cloud.Handle(s, profile))
 	// The Business AI's dynamic "what to do next": the ranked next-best quests + a
 	// grounded narrative (suggest), and a grounded founder chat (chat). Both are
 	// READ-ONLY — they advise, never run an action (the only executing path is
@@ -260,6 +265,45 @@ func gtmAnalytics(s *cloud.Service[state], c *zip.Ctx) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"funnel":          f,
 		"recommendations": f.recommend(),
+	})
+}
+
+// profileResponse is the GET /v1/guide/profile body: the observed growth signals,
+// the classified stage, and the org's own key metrics. Its shape is the contract the
+// Guide and the later recommendation-corpus filter consume.
+type profileResponse struct {
+	Stage      Stage          `json:"stage"`
+	Signals    SignalSet      `json:"signals"`
+	KeyMetrics profileMetrics `json:"keyMetrics"`
+}
+
+// profile answers GET /v1/guide/profile: the org's OBSERVED growth profile — the
+// signal set, the classified growth stage, and the org's own key metrics. It is a
+// pure READ, recomputed from the org's CURRENT state each request (real-time by
+// pull): it reuses the reconcile path (snapshotFor runs the detectors) for launch
+// progress and runs the growth probes (observe) for the signals — it never caches,
+// never runs a billable effect, never targets another org. Org-scoped on the
+// validated principal; fail-closed without one. It PRODUCES the profile and
+// classifies the stage; it decides NO recommendation (that is a later surface).
+func profile(s *cloud.Service[state], c *zip.Ctx) error {
+	org, ok := tenant(c)
+	if !ok {
+		return zip.ErrForbidden("X-Org-Id required")
+	}
+	ctx := c.Context()
+	_, cur, _, rows, err := snapshotFor(s, ctx, org)
+	if err != nil {
+		return zip.Errorf(http.StatusInternalServerError, "guide: %v", err)
+	}
+	funnel := analyticsFunnel(ctx, org)
+	set, metrics := observe(ctx, org, s.State.signals, funnel)
+	states := stateMap(rows)
+	done, total, percent := cur.Counts(states)
+	metrics.LaunchProgress = progressView{Done: done, Total: total, Percent: percent, Next: cur.Next(states)}
+	return c.JSON(http.StatusOK, profileResponse{
+		Stage:      classifyStage(set),
+		Signals:    set,
+		KeyMetrics: metrics,
 	})
 }
 

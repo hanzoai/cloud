@@ -10,7 +10,9 @@ import (
 	"github.com/hanzoai/cloud/clients/campaign"
 	"github.com/hanzoai/cloud/clients/coding"
 	"github.com/hanzoai/cloud/clients/experiments"
+	"github.com/hanzoai/cloud/clients/framework"
 	"github.com/hanzoai/cloud/clients/git"
+	"github.com/hanzoai/cloud/clients/guide"
 	"github.com/hanzoai/cloud/clients/integrations"
 	"github.com/hanzoai/cloud/clients/principal"
 )
@@ -29,6 +31,24 @@ import (
 // failures are non-fatal and dropped).
 func init() {
 	integrations.SetCodingDispatcher(coding.NewDispatcher(git.CloneURL, git.VerifyRef, nil))
+
+	// Guide growth-OBSERVE seam: the /v1/guide/profile observe layer reads the org's
+	// real platform truth through injected, org-scoped, honest-degrading probes.
+	// clients/guide imports NONE of these subsystems (decomplected), so the
+	// composition root — the ONE place that imports them all — binds the reads, the
+	// same injected-function pattern the coding dispatcher above uses. Each probe is
+	// PROVABLY org-scoped: framework.ModuleInstalled keys GetDocType on the org;
+	// integrations.Connected keys store.Get on the org and never surfaces the token.
+	// HasDeployment/RevenueCents/RecordCount are LEFT NIL: deploy is cluster/admin-
+	// scoped (not per-org) and commerce-revenue-of-record + the crm record count have
+	// no clean per-org in-process read yet — binding a read whose org-scoping we
+	// cannot guarantee would be the bug. Until a provably-org-scoped read lands their
+	// signals honest-degrade to not-present (the vocabulary is the contract; a nil
+	// seam can never be a spurious true).
+	guide.BindSignals(guide.Signals{
+		ModuleInstalled:  framework.ModuleInstalled,
+		ConnectorPresent: integrations.Connected,
+	})
 
 	// Inbound-event seam: a verified provider webhook (or chat channel) in
 	// clients/integrations fires the automations engine's Deliver here — the ONE place
