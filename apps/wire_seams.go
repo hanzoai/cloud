@@ -29,9 +29,9 @@ func init() {
 	// that imports both, so integrations never has to import automations (which imports
 	// it, for credential custody). A primitive-typed adapter keeps the seam free of the
 	// automations types.
-	integrations.SetAutomationTrigger(func(ctx context.Context, org, source, name, dedupeKey string, payload map[string]any) (int, error) {
+	integrations.SetAutomationTrigger(func(ctx context.Context, org, source, name, dedupeKey string, depth int, payload map[string]any) (int, error) {
 		return automations.Deliver(ctx, org, automations.TriggerEvent{
-			Source: source, Name: name, DedupeKey: dedupeKey, Payload: payload,
+			Source: source, Name: name, DedupeKey: dedupeKey, Depth: depth, Payload: payload,
 		})
 	})
 }

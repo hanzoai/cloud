@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -56,15 +58,127 @@ func captureStarter(t *testing.T) *[]FlowRunInput {
 		mu  sync.Mutex
 		got []FlowRunInput
 	)
-	orig := runStarter
+	origStarter, origReady := runStarter, engineReady
+	engineReady = func() bool { return true } // the durable engine is "up" for dispatch tests
 	runStarter = func(_ context.Context, in FlowRunInput) (tasksclient.WorkflowRun, error) {
 		mu.Lock()
 		got = append(got, in)
 		mu.Unlock()
 		return nil, nil
 	}
-	t.Cleanup(func() { runStarter = orig })
+	t.Cleanup(func() { runStarter = origStarter; engineReady = origReady })
 	return &got
+}
+
+// TestDeliverLoopBounded is the amplification proof (RED HIGH-1): a flow whose action
+// re-fires the SAME event at the next causation depth forms an in-platform cycle; the
+// depth guard MUST terminate it at maxCausationDepth instead of starting unboundedly.
+func TestDeliverLoopBounded(t *testing.T) {
+	newApp(t)
+	origStarter, origReady := runStarter, engineReady
+	engineReady = func() bool { return true }
+	var starts int32
+	runStarter = func(ctx context.Context, in FlowRunInput) (tasksclient.WorkflowRun, error) {
+		atomic.AddInt32(&starts, 1)
+		// The run's action re-enters Deliver at depth+1 (the loop, propagating causation).
+		_, _ = Deliver(ctx, in.Owner, TriggerEvent{Source: "loop", Name: "tick", DedupeKey: strconv.Itoa(in.Depth + 1), Depth: in.Depth + 1})
+		return nil, nil
+	}
+	t.Cleanup(func() { runStarter = origStarter; engineReady = origReady })
+	seedWebhookFlow(t, mounted.State.store, "acme", "loop", "tick")
+
+	n, err := Deliver(context.Background(), "acme", TriggerEvent{Source: "loop", Name: "tick", DedupeKey: "0", Depth: 0})
+	if err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("first hop want 1 start, got %d", n)
+	}
+	// Starts happen at depths 0..maxCausationDepth-1, then the guard stops the cycle.
+	if got := atomic.LoadInt32(&starts); got == 0 || int(got) > maxCausationDepth {
+		t.Fatalf("in-platform loop not bounded by causation depth: %d starts (max %d)", got, maxCausationDepth)
+	}
+}
+
+// TestDeliverRateCapped is the durable-budget proof (RED HIGH-1, the load-bearing one): a
+// burst of DISTINCT events (distinct DedupeKey, so idempotency does not stop them) is
+// bounded by the per-org run-start budget, counted from persisted rows.
+func TestDeliverRateCapped(t *testing.T) {
+	newApp(t)
+	captureStarter(t)
+	t.Setenv(runBudgetEnv, "3")
+	seedWebhookFlow(t, mounted.State.store, "acme", "stripe", "charge")
+
+	started := 0
+	for i := 0; i < 10; i++ {
+		n, err := Deliver(context.Background(), "acme", TriggerEvent{Source: "stripe", Name: "charge", DedupeKey: strconv.Itoa(i)})
+		if err != nil && err != ErrRateLimited {
+			t.Fatalf("Deliver %d: %v", i, err)
+		}
+		started += n
+	}
+	if started != 3 {
+		t.Fatalf("durable per-org budget: want 3 started (cap 3), got %d", started)
+	}
+}
+
+// TestDeliverEngineNotReadyRetryable is the MED-2 proof: a not-ready engine refuses BEFORE
+// the run-row insert (the DedupeKey is NOT burned), so a redelivery after recovery starts.
+func TestDeliverEngineNotReadyRetryable(t *testing.T) {
+	newApp(t)
+	origStarter, origReady := runStarter, engineReady
+	engineReady = func() bool { return false } // engine down
+	runStarter = func(context.Context, FlowRunInput) (tasksclient.WorkflowRun, error) {
+		t.Fatal("must NOT dispatch while the engine is not ready")
+		return nil, nil
+	}
+	t.Cleanup(func() { runStarter = origStarter; engineReady = origReady })
+	st := mounted.State.store
+	seedWebhookFlow(t, st, "acme", "github", "push")
+
+	if _, err := Deliver(context.Background(), "acme", TriggerEvent{Source: "github", Name: "push", DedupeKey: "k"}); err != ErrEngineNotReady {
+		t.Fatalf("engine down: want ErrEngineNotReady, got %v", err)
+	}
+	if rows, _ := st.ListRuns(context.Background(), "acme", "", 10); len(rows) != 0 {
+		t.Fatalf("a not-ready engine must NOT burn the run id: %d rows persisted", len(rows))
+	}
+	// Engine recovers → the SAME key now starts (it was never burned).
+	engineReady = func() bool { return true }
+	started := 0
+	runStarter = func(context.Context, FlowRunInput) (tasksclient.WorkflowRun, error) { started++; return nil, nil }
+	n, err := Deliver(context.Background(), "acme", TriggerEvent{Source: "github", Name: "push", DedupeKey: "k"})
+	if err != nil || n != 1 || started != 1 {
+		t.Fatalf("redelivery after recovery: want 1 start, got n=%d started=%d err=%v", n, started, err)
+	}
+}
+
+// TestInboundHookContentHashDedupe is the LOW-1 proof: two identical POSTs with NO
+// idempotency key content-hash to the SAME run id, so the hook-hammer collapses to one run.
+func TestInboundHookContentHashDedupe(t *testing.T) {
+	app := newApp(t)
+	captureStarter(t)
+	seedWebhookFlow(t, mounted.State.store, "acme", "github", "push")
+
+	body := map[string]any{"msg": "same"}
+	r1 := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "acme", body)
+	r2 := req(t, app, http.MethodPost, "/v1/automations/hooks/github/push", "acme", body)
+	if r1.Code != http.StatusOK || r2.Code != http.StatusOK {
+		t.Fatalf("hook codes want 200/200, got %d/%d", r1.Code, r2.Code)
+	}
+	var m1, m2 struct {
+		Matched int `json:"matched"`
+	}
+	_ = json.Unmarshal(r1.Body, &m1)
+	_ = json.Unmarshal(r2.Body, &m2)
+	if m1.Matched != 1 {
+		t.Fatalf("first keyless POST want matched 1, got %d", m1.Matched)
+	}
+	if m2.Matched != 0 {
+		t.Fatalf("identical hammer POST want matched 0 (content-hash dedup), got %d", m2.Matched)
+	}
+	if rows, _ := mounted.State.store.ListRuns(context.Background(), "acme", "", 10); len(rows) != 1 {
+		t.Fatalf("identical keyless POSTs must collapse to ONE run, got %d", len(rows))
+	}
 }
 
 // TestDeliverFiresMatchingFlowThreaded is the IFTTT happy path: an inbound event fires
