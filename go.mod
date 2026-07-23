@@ -14,7 +14,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-github/v52 v52.0.0
 	github.com/hanzoai/account v0.2.0
-	github.com/hanzoai/commerce v1.49.13
+	github.com/hanzoai/commerce v1.49.14
 	github.com/hanzoai/decimal v0.1.1
 	github.com/hanzoai/go-openai v1.41.0
 	github.com/hanzoai/goa v1.0.0
@@ -84,11 +84,13 @@ require (
 	github.com/hanzo-ds/mock v0.14.4 // indirect
 	github.com/hanzo-ds/sqlbuilder v1.42.2 // indirect
 	github.com/hanzo-ds/sqlparser v0.4.16 // indirect
+	github.com/hanzoai/builder v0.3.13 // indirect
 	github.com/hanzoai/csqlite v0.1.0 // indirect
 	github.com/hanzoai/go-cosyvoice v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime v1.0.0 // indirect
 	github.com/hanzoai/go-openai-realtime/contrib/ws-gorilla v1.0.0 // indirect
 	github.com/hanzoai/sqlcipher v0.1.0 // indirect
+	github.com/hanzoai/xorm v1.4.4 // indirect
 	github.com/hanzos3/go-sdk v1.0.2 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/linode/linodego v1.67.0 // indirect
@@ -100,6 +102,7 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible // indirect
+	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/vultr/govultr/v3 v3.30.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	k8s.io/apiserver v0.35.3 // indirect
@@ -267,7 +270,6 @@ require (
 	gonum.org/v1/gonum v0.17.0 // indirect
 	gopkg.in/go-playground/validator.v9 v9.31.0 // indirect
 	k8s.io/apiextensions-apiserver v0.35.0 // indirect
-	modernc.org/sqlite v1.51.0 // indirect
 )
 
 require (
@@ -481,12 +483,12 @@ require (
 	github.com/hanzoai/beego/v2 v2.4.2
 	github.com/hanzoai/dashscope-go-sdk v0.0.2 // indirect
 	github.com/hanzoai/dashscopego v0.6.0 // indirect
-	github.com/hanzoai/dbx v1.16.0 // indirect
+	github.com/hanzoai/dbx v1.17.1 // indirect
 	github.com/hanzoai/go-openrouter v1.0.0 // indirect
 	github.com/hanzoai/goauthorizenet v1.0.0 // indirect
 	github.com/hanzoai/gochimp3 v1.0.0 // indirect
 	github.com/hanzoai/kv-go/v9 v9.18.0 // indirect
-	github.com/hanzoai/orm v0.6.1
+	github.com/hanzoai/orm v0.6.7
 	github.com/hanzoai/pdf v1.2.0 // indirect
 	github.com/hanzoai/pubsub-go v1.53.0 // indirect
 	github.com/hanzoai/search-go v0.36.0 // indirect
@@ -737,9 +739,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/metrics v0.35.3 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
-	modernc.org/libc v1.72.3 // indirect
-	modernc.org/mathutil v1.7.1 // indirect
-	modernc.org/memory v1.11.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.20.1 // indirect
@@ -771,7 +770,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.70.0
+	github.com/valyala/fasthttp v1.72.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
