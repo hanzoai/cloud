@@ -53,18 +53,26 @@ func mountFullPlane(t *testing.T, ai cloud.AIClient) *zip.App {
 	return app
 }
 
-// TestDoStepCompletesWithoutModuleInstall: the positioning step (tool
-// content_generate, doctype Campaign) COMPLETES for a fresh org that never installed
-// marketing — the fix for the live "module not installed for org" gap. The real
-// content.Generate runs through the always-on marketing module and writes a Campaign.
+// TestDoStepCompletesWithoutModuleInstall: a content_generate "do it for me" step
+// (doctype Campaign) COMPLETES for a fresh org that never installed marketing — the fix
+// for the live "module not installed for org" gap. The real content.Generate runs
+// through the always-on marketing module and writes a Campaign. The step is supplied as
+// a per-org override curriculum (the tier-1 override path) so the test drives the
+// content_generate agent path directly.
 func TestDoStepCompletesWithoutModuleInstall(t *testing.T) {
 	const org = "freshco" // never runs POST /v1/framework/modules/marketing/install
 	ai := &fakeAI{content: "The one-line positioning that seeds every asset.\n\n- point a\n- point b\n- point c"}
 	app := mountFullPlane(t, ai)
 
-	// positioning is gated by the journey's first quest (company) — complete it.
-	if r := req(t, app, http.MethodPost, "/v1/guide/steps/company/done", org, nil); r.Code != http.StatusOK {
-		t.Fatalf("done company want 200, got %d (%s)", r.Code, r.Body)
+	// Override the curriculum with a single root content_generate step, then do it.
+	override := map[string]any{"version": "org-1", "steps": []map[string]any{{
+		"id": "positioning", "title": "Nail your positioning",
+		"tool": "content_generate", "draftInto": "brief",
+		"draft": "Write a one-line positioning statement plus three bullets. Return plain text.",
+		"args":  map[string]any{"doctype": "Campaign", "title": "Positioning"},
+	}}}
+	if r := req(t, app, http.MethodPut, "/v1/guide/curriculum", org, override); r.Code != http.StatusOK {
+		t.Fatalf("put override curriculum want 200, got %d (%s)", r.Code, r.Body)
 	}
 
 	// "Do it for me" on positioning — the exact path the user hit.
