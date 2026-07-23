@@ -722,6 +722,19 @@ func pickVFSClient(cfg *Config, log luxlog.Logger) VFSClient {
 // durableBucket holds every org's HA-SQLite snapshot (and its writer lease). One
 // bucket, keys laid out orgs/<slug>[/…]/<subsystem>.db per HIP-0302 — the durable
 // twin of the on-disk DataDir layout.
+//
+// OPERATIONAL REQUIREMENTS the fence depends on (enforce in the SeaweedFS deployment,
+// not in code):
+//
+//   - Object versioning + a no-expiry / no-lifecycle-deletion policy on this prefix.
+//     The writer lease (orgs/<slug>/.owner) is the round's system of record; if the
+//     gateway silently drops or rolls back that object, a monotone round can reset and
+//     un-fence a zombie writer (Red M4). A local high-water-round floor per pod is the
+//     future in-process defense; the object lifecycle is the operational one.
+//   - RWO, per-writer PVCs for DataDir — NEVER an RWX shared volume (Red M5). Two pods
+//     on one DataDir corrupt SQLite regardless of this fence; single-writer here is the
+//     durable-copy fence, and per-pod RWO is the local-file guarantee the shard router
+//     already relies on (see shardrouter.go).
 const durableBucket = "org-db"
 
 // buildDurability constructs the deployment's HA-durability factory, or nil when the
@@ -734,14 +747,20 @@ const durableBucket = "org-db"
 // the boot; an encryption-capable build with no usable cipher is REFUSED — a build
 // that promises encryption never ships plaintext snapshots to the object store.
 func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
+	// A multi-replica deployment REQUIRES the durable plane: with >1 writer, a per-org
+	// store that is not hydrate-on-open + fenced is the outage this exists to fix.
+	// disabledDurability logs at the severity the replica count warrants, so a
+	// misconfigured prod deployment is never SILENTLY non-durable (Red L2).
+	multiReplica := len(parsePeers(cfg.ShardPeers)) > 1
+
 	admin := s3admin.New()
 	if !admin.Configured() {
-		log.Info("durability disabled — no S3 admin creds; per-org stores stay local-only")
+		disabledDurability(log, multiReplica, "no S3 admin creds (S3_ADMIN_* unset)")
 		return nil
 	}
 	client, err := admin.Client()
 	if err != nil {
-		log.Warn("durability disabled — S3 client construction failed", "err", err)
+		disabledDurability(log, multiReplica, fmt.Sprintf("S3 client construction failed: %v", err))
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -764,12 +783,28 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 
 	cipher := durableCipher(cfg, log)
 	if cipher == nil && cek.Encrypting() {
-		log.Error("durability disabled — encryption-capable build but no durable cipher (refusing to ship plaintext snapshots)")
+		// The master that satisfied cek must decode here too, so this is a genuine
+		// misconfig, not a dev path: never ship plaintext snapshots AND never silently
+		// drop durability — fail closed and log LOUDLY for the replica count.
+		disabledDurability(log, multiReplica, "encryption-capable build but no durable cipher (would ship plaintext snapshots)")
 		return nil
 	}
 
 	log.Info("durability enabled", "bucket", durableBucket, "self", self, "peers", len(peers), "encrypted", cipher != nil)
 	return org.NewDurability(org.NewS3ConditionalStore(client, durableBucket), members, cipher)
+}
+
+// disabledDurability records that the durable plane is OFF, at ERROR when the
+// deployment is multi-replica (per-org stores then survive only via shard routing +
+// per-pod RWO PVC; a lost/rescheduled PVC loses committed data — the operator MUST
+// configure S3) and at INFO when single-replica/dev (local-only is the expected
+// posture). One place, so no disabled path is silent on a deployment that needs HA.
+func disabledDurability(log luxlog.Logger, multiReplica bool, why string) {
+	if multiReplica {
+		log.Error("DURABILITY DISABLED on a MULTI-REPLICA deployment — per-org stores survive only via shard routing + per-pod RWO PVC; a lost/rescheduled PVC loses committed data. Configure S3_ADMIN_* to enable the durable plane.", "reason", why)
+		return
+	}
+	log.Info("durability disabled — single-replica/dev, per-org stores stay local-only", "reason", why)
 }
 
 // ensureDurableBucket creates the durable bucket if absent (idempotent).
