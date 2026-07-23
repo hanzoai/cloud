@@ -36,6 +36,7 @@ import (
 const (
 	researchExperimentTable = "hanzo.research_experiment"
 	researchAttemptTable    = "hanzo.research_attempt"
+	researchArtifactTable   = "hanzo.research_artifact"
 )
 
 // warehouse holds ONLY the idempotent-DDL latch; the connection is aiobject's package
@@ -98,6 +99,24 @@ ORDER BY (org, project, id, content_hash)`,
 ) ENGINE = ReplacingMergeTree(ts)
 PARTITION BY benchmark
 ORDER BY (org, project, benchmark, item, model, content_hash)`,
+
+	`CREATE TABLE IF NOT EXISTS ` + researchArtifactTable + ` (
+  org             LowCardinality(String),
+  project         LowCardinality(String),
+  sha256          String,
+  kind            LowCardinality(String),
+  ref             String,
+  run_id          String,
+  visibility      LowCardinality(String),
+  retention_class LowCardinality(String),
+  git_sha         String,
+  git_branch      LowCardinality(String),
+  git_dirty       UInt8,
+  lib_versions    String,
+  ts              DateTime64(3, 'UTC')
+) ENGINE = ReplacingMergeTree(ts)
+PARTITION BY kind
+ORDER BY (org, sha256)`,
 }
 
 func (w *warehouse) ensure(ctx context.Context) error {
@@ -168,6 +187,30 @@ func (w *warehouse) rollUp(ctx context.Context, org, project string, exps []Expe
 		}
 	}
 	return nil
+}
+
+const researchArtifactInsert = `INSERT INTO ` + researchArtifactTable + ` (
+  org, project, sha256, kind, ref, run_id, visibility, retention_class,
+  git_sha, git_branch, git_dirty, lib_versions, ts
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+
+// rollUpArtifact mirrors one diary artifact into the warehouse, keyed by its sha256
+// content hash (idempotent). Fail-soft like the run roll-up: the SQLite manifest is the
+// source of truth.
+func (w *warehouse) rollUpArtifact(ctx context.Context, org, project string, a Artifact, now time.Time) error {
+	if org == "" {
+		return fmt.Errorf("research warehouse: blank org")
+	}
+	if err := w.ensure(ctx); err != nil {
+		return err
+	}
+	ts := now.UTC()
+	if a.TS > 0 {
+		ts = time.Unix(a.TS, 0).UTC()
+	}
+	return aiobject.DatastoreExec(ctx, researchArtifactInsert,
+		org, project, a.SHA256, a.Kind, a.Ref, a.RunID, "private", "raw-artifact",
+		a.GitSHA, a.GitBranch, boolBit(a.GitDirty), jsonObj(a.LibVersions), ts)
 }
 
 func boolBit(b bool) uint8 {
