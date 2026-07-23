@@ -15,7 +15,7 @@ reverse).
 
 | Route | Noun | Owner | Tier |
 | --- | --- | --- | --- |
-| `/v1/connectors` | Custody: per-user BYO external accounts | `clients/integrations` (extends; user scope new) | In flight (branch `feat/connectors`) |
+| `/v1/connectors` | The ONE connect+config plane — connect/configure/enable/disable/forget ANY Extension (`kind`∈{key,oauth,model,cloud,plugin,skill}, `scope`∈{org,user} as VALUES; `?kind=&scope=` filters) | `clients/integrations` (org+user folded; `extension.go`) | In flight (branch `feat/connectors-unified`; blue-held for red) |
 | `/v1/channels` | Transport: portable message envelope, DM pairing, send + inbox | `clients/channels` (new) | Planned (branch `feat/channels` reserved; no transport code yet) |
 | `/v1/sync` | Data: bidirectional sync engine | `clients/sync` | Shipped |
 | `/v1/automations` | Workflows: flows/runs, goja piece runtime | `clients/automations` | Shipped |
@@ -26,11 +26,28 @@ reverse).
 | IAM | Identity: users, orgs, roles | IAM | Shipped |
 | KMS | Secret custody: sealed secrets | `clients/kms` | Shipped |
 
+Unified connector model (`extension.go`): an Extension =
+`{id, kind, scope, capabilities[], available, methods[], connected, enabled,
+config, instances[]}`. `kind` = the archetype (`kindOf`: key/oauth today;
+model/cloud/plugin/skill reserved for the mapped-in follow-ons); `scope` = the
+custody plane (`scopeOf`: org="" default / user). ONE surface, ONE store, ONE
+handler set. `/v1/integrations` keeps ONLY the capability/event routes (chat
+bridge, GitHub App webhook, per-provider link legs) — those CONSUME a connector,
+they are not the connect surface. The org OAuth providers fold onto
+`/v1/connectors` as kind=oauth|key, scope=org; the OAuth callback converged to
+`/v1/connectors/:id/callback` (external redirect_uri re-registration = the one
+deploy gate). Capability surfaces (`/v1/cloudflare`, `/v1/clusters`, model
+routing) resolve a connector by id via the in-process `TokenFor` seam and stay
+their own surfaces.
+
 Custody invariants: secrets sealed in KMS at
-`/orgs/{org}/users/{user}/connectors/{provider}/{label}`, never in SQLite rows;
-verify before store. Refresh is single-flight with rotation resealing; the CLI
-does local browser PKCE and posts the bundle to
-`POST /v1/connectors/:provider/credential`; cloud owns device-code flows.
+`/orgs/{org}/users/{user}/connectors/{provider}/{label}` (user) or
+`/orgs/{org}/integrations/{provider}` (org), never in SQLite rows; verify before
+store. Enablement is orthogonal to custody (`extension_config` table; missing row
+= enabled-by-default; disable fails the token exits — `TokenFor` + `/token` —
+CLOSED). Refresh is single-flight with rotation resealing; the CLI does local
+browser PKCE and posts the bundle to `POST /v1/connectors/:id/connect`; cloud
+owns device-code flows.
 
 Transport invariants: typed actions (`command|url|select|approval`), no raw
 string sniffing; pairing codes 8 chars, 1h TTL, max 3 pending per account,
