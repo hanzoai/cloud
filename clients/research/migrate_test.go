@@ -251,6 +251,12 @@ func TestLegacyDataMigration(t *testing.T) {
 		t.Fatalf("migrated artifact wrong: ok=%v kind=%q content=%q", ok, kind, content)
 	}
 
+	// The one-time completion marker is set, so a restart skips the legacy re-scan.
+	var mark metaRecord
+	if err := st.db.Get(ctx, st.db.NewKey(kindMeta, legacyMark, 0, nil), &mark); err != nil {
+		t.Fatalf("legacy-migrated marker not set after migration: %v", err)
+	}
+
 	// A later correction to the MIGRATED lineage must supersede it even with ts=0 —
 	// proving the append clock continued PAST the migrated seqs (seq, not ts, wins
 	// across the migration boundary).
