@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hanzoai/cloud"
@@ -168,21 +169,38 @@ func TestPublicIntake_CreatesTicketAndThread(t *testing.T) {
 		Status string `json:"status"`
 	}
 	_ = json.Unmarshal(raw, &res)
-	if res.Ticket == "" || res.Status != "Open" {
-		t.Fatalf("intake must return the new ticket id + Open status, got %+v", res)
+	if res.Status != "Open" {
+		t.Fatalf("intake must return Open status, got %+v", res)
+	}
+	// The customer-facing ref is opaque + random — NEVER the monotonic internal name,
+	// so an anonymous submitter cannot read the org's ticket volume (German-tank).
+	if !strings.HasPrefix(res.Ticket, "tkt_") {
+		t.Fatalf("intake must return an opaque tkt_ reference, got %q", res.Ticket)
+	}
+	if strings.HasPrefix(res.Ticket, "hd-tkt-") {
+		t.Fatalf("intake must NOT return the monotonic internal name, got %q", res.Ticket)
 	}
 
-	// Verify via the agent (generic) surface: the ticket is Open, portal-sourced, and
-	// carries the customer email + message.
-	_, traw := call(t, app, http.MethodGet, "/v1/framework/"+DTTicket+"/"+res.Ticket, org, nil)
-	var tk map[string]any
-	_ = json.Unmarshal(traw, &tk)
+	// Resolve the ticket on the agent surface by its public_ref: it is Open,
+	// portal-sourced, carries the customer email, and its INTERNAL name is the hidden
+	// monotonic id (never handed to the customer).
+	_, traw := call(t, app, http.MethodGet, `/v1/framework/`+DTTicket+`?filters={"public_ref":"`+res.Ticket+`"}`, org, nil)
+	tickets := dataArray(t, traw)
+	if len(tickets) != 1 {
+		t.Fatalf("exactly one ticket must carry the public_ref, got %+v", tickets)
+	}
+	tk := tickets[0]
 	if tk["status"] != "Open" || tk["source"] != "portal" || tk["customer"] != "bob@example.com" {
 		t.Fatalf("filed ticket must be Open/portal/bob, got %+v", tk)
 	}
+	name, _ := tk["name"].(string)
+	if !strings.HasPrefix(name, "hd-tkt-") {
+		t.Fatalf("internal ticket name must be the monotonic series, got %q", name)
+	}
 
-	// And an opening conversation message linked to that ticket, from the customer.
-	_, craw := call(t, app, http.MethodGet, `/v1/framework/`+DTCommunication+`?filters={"ticket":"`+res.Ticket+`"}`, org, nil)
+	// And an opening conversation message linked to that ticket (by INTERNAL name),
+	// from the customer.
+	_, craw := call(t, app, http.MethodGet, `/v1/framework/`+DTCommunication+`?filters={"ticket":"`+name+`"}`, org, nil)
 	comms := dataArray(t, craw)
 	if len(comms) != 1 || comms[0]["sender_type"] != "customer" || comms[0]["sender"] != "bob@example.com" {
 		t.Fatalf("intake must record ONE opening customer message, got %+v", comms)
@@ -233,31 +251,98 @@ func TestPublicPlane_FailsClosedNoOrg(t *testing.T) {
 	}
 }
 
-// TestPublicIntake_RateLimited proves the unauthenticated intake is per-IP
-// rate-limited: past the limit, submissions are rejected with 429 (spam/DoS guard).
-func TestPublicIntake_RateLimited(t *testing.T) {
+// TestPublicPlane_NoSharedBucketGlobalThrottle proves the public plane does NOT impose
+// an app-level per-IP rate limit. Behind hanzoai/ingress every customer shares ONE
+// socket peer (the ingress), so a per-IP limiter would key them all to one bucket and
+// globally throttle the whole KB + intake (a trivial DoS). Edge limiting is the
+// ingress's job; the app must not re-throttle. Far more requests than the OLD app
+// limits (120 reads / 10 intakes per minute) succeed from a single peer.
+func TestPublicPlane_NoSharedBucketGlobalThrottle(t *testing.T) {
+	const org = "acme"
+	app := mountPublic(t, org)
+	call(t, app, http.MethodPost, "/v1/framework/modules/help/install", org, nil)
+	seedArticle(t, app, org, "kb-1", "KB One", "Published", true)
+
+	// Reads: 200 (> the old 120/min shared cap) must all avoid 429.
+	for i := 0; i < 200; i++ {
+		if code, _ := anon(t, app, http.MethodGet, "/v1/help/articles", nil, nil); code == http.StatusTooManyRequests {
+			t.Fatalf("public read #%d returned 429 — a shared-bucket global throttle is back", i)
+		}
+	}
+	// Intake: 40 (> the old 10/min shared cap) must all succeed (201), never 429.
+	for i := 0; i < 40; i++ {
+		code, raw := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{
+			"subject": "s", "email": "x@y.z", "description": "d",
+		}, nil)
+		if code == http.StatusTooManyRequests {
+			t.Fatalf("intake #%d returned 429 — a shared-bucket global throttle is back", i)
+		}
+		if code != http.StatusCreated {
+			t.Fatalf("intake #%d want 201, got %d (%s)", i, code, raw)
+		}
+	}
+}
+
+// TestPublicKB_CategoriesGatedToPublicArticles proves /categories exposes ONLY sections
+// that front a Published + public article — an internal category (no public article, or
+// only Draft/private ones) never leaks its name or description.
+func TestPublicKB_CategoriesGatedToPublicArticles(t *testing.T) {
 	const org = "acme"
 	app := mountPublic(t, org)
 	call(t, app, http.MethodPost, "/v1/framework/modules/help/install", org, nil)
 
-	saw429 := false
-	first := 0
-	for i := 0; i < intakeRateLimit+5; i++ {
-		code, _ := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{
-			"subject": "spam", "email": "x@y.z", "description": "flood",
-		}, nil)
-		if i == 0 {
-			first = code
-		}
-		if code == http.StatusTooManyRequests {
-			saw429 = true
-			break
-		}
+	mkCategory(t, app, org, "guides", "Public guides")
+	mkCategory(t, app, org, "internal-ops", "Secret internal runbooks")
+
+	// A published+public article fronts "guides"; "internal-ops" holds only a
+	// published-but-PRIVATE article, so it has NO public article.
+	seedArticleIn(t, app, org, "welcome", "Welcome", "Published", true, "guides")
+	seedArticleIn(t, app, org, "oncall", "Oncall", "Published", false, "internal-ops")
+
+	code, raw := anon(t, app, http.MethodGet, "/v1/help/categories", nil, nil)
+	if code != http.StatusOK {
+		t.Fatalf("categories want 200, got %d (%s)", code, raw)
 	}
-	if first != http.StatusCreated {
-		t.Fatalf("first intake want 201, got %d", first)
+	cats := dataArray(t, raw)
+	if len(cats) != 1 || cats[0]["name"] != "guides" {
+		t.Fatalf("only the category fronting a public article may show; got %+v", cats)
 	}
-	if !saw429 {
-		t.Fatalf("intake past the per-IP limit (%d) must 429", intakeRateLimit)
+	// The internal category's name AND description must be absent from the bytes.
+	if bytes.Contains(raw, []byte("internal-ops")) || bytes.Contains(raw, []byte("Secret internal runbooks")) {
+		t.Fatalf("internal category leaked into /categories: %s", raw)
+	}
+}
+
+// TestPublicIntake_RejectsOversizedBody proves the intake caps the whole body far under
+// the 4 MiB server limit, so an anonymous write cannot force a large parse.
+func TestPublicIntake_RejectsOversizedBody(t *testing.T) {
+	const org = "acme"
+	app := mountPublic(t, org)
+	call(t, app, http.MethodPost, "/v1/framework/modules/help/install", org, nil)
+
+	huge := strings.Repeat("A", maxIntakeBytes+1)
+	code, _ := anon(t, app, http.MethodPost, "/v1/help/tickets", map[string]any{
+		"subject": "s", "email": "x@y.z", "description": huge,
+	}, nil)
+	if code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized intake body want 413, got %d", code)
+	}
+}
+
+// mkCategory creates a KB category through the agent (generic) surface.
+func mkCategory(t *testing.T, app *zip.App, org, name, desc string) {
+	t.Helper()
+	body := map[string]any{"category_name": name, "description": desc}
+	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTCategory, org, body); code != http.StatusCreated {
+		t.Fatalf("seed category %q want 201, got %d (%s)", name, code, raw)
+	}
+}
+
+// seedArticleIn creates one article Linked to a category, through the agent surface.
+func seedArticleIn(t *testing.T, app *zip.App, org, slug, title, status string, public bool, category string) {
+	t.Helper()
+	body := map[string]any{"title": title, "slug": slug, "status": status, "is_public": public, "body": "BODY:" + slug, "category": category}
+	if code, raw := call(t, app, http.MethodPost, "/v1/framework/"+DTArticle, org, body); code != http.StatusCreated {
+		t.Fatalf("seed article %q want 201, got %d (%s)", slug, code, raw)
 	}
 }
