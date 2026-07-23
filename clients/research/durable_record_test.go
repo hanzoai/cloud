@@ -120,6 +120,35 @@ func TestRecordShipsSoTakeoverKeepsIt(t *testing.T) {
 	}
 }
 
+// TestDurableForDedupsConcurrentOpens (M1): concurrent For() for the SAME org resolve
+// to ONE opened store — the in-flight dedup runs the object-store hydrate + cek open
+// exactly once and with the store-wide lock released, never double-opening a file cek
+// cannot open twice.
+func TestDurableForDedupsConcurrentOpens(t *testing.T) {
+	cas := newMemCAS()
+	dur := org.NewDurability(cas, soleMembership(t, "pod-a"), nil)
+	stores := cloud.NewOrgStore(t.TempDir(), "research", openStore, cloud.WithDurable(dur))
+	t.Cleanup(func() { _ = stores.CloseAll() })
+
+	const n = 8
+	got := make([]*store, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) { defer wg.Done(); got[i], errs[i] = stores.For("acme", "") }(i)
+	}
+	wg.Wait()
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("concurrent For[%d]: %v", i, errs[i])
+		}
+		if got[i] != got[0] {
+			t.Fatal("concurrent For opened the org store more than once — in-flight dedup failed")
+		}
+	}
+}
+
 // TestRecordOnNonOwnerFailsClosed: on a pod that is NOT the org's elected writer,
 // Record must ERROR (not-acked), never silently persist a stale divergent local copy.
 func TestRecordOnNonOwnerFailsClosed(t *testing.T) {
