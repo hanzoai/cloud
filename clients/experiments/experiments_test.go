@@ -95,6 +95,39 @@ func do(t *testing.T, app *zip.App, method, path, org, project string, body any)
 	return resp.StatusCode, m
 }
 
+// doAdmin is do with the own-org admin bit set — the caller a decide (winner
+// promotion) requires. The gateway mints X-User-IsOrgAdmin only from the verified
+// IAM isAdmin claim.
+func doAdmin(t *testing.T, app *zip.App, method, path, org, project string, body any) (int, map[string]any) {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, path, r)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if org != "" {
+		req.Header.Set("X-Org-Id", org)
+		req.Header.Set("X-User-Id", "u-"+org)
+		req.Header.Set("X-User-IsOrgAdmin", "true")
+	}
+	if project != "" {
+		req.Header.Set("X-Project-Id", project)
+	}
+	resp, err := app.Fiber().Test(req)
+	if err != nil {
+		t.Fatalf("Test %s %s: %v", method, path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	return resp.StatusCode, m
+}
+
 type fakeMetric struct{ outcomes []MetricOutcome }
 
 func (f *fakeMetric) Outcomes(_ context.Context, _, _, _ string, _, _ time.Time) ([]MetricOutcome, error) {
@@ -214,8 +247,13 @@ func TestExperiment_FeatureFlagProof(t *testing.T) {
 		t.Fatalf("research evidence missing per-variant rows: %v", seen)
 	}
 
-	// 6. DECIDE — promote treatment; the assignment flag flips to 100% treatment.
-	code, dec := do(t, app, http.MethodPost, "/v1/experiments/checkout_cta/decide", org, project, map[string]any{"winner": "treatment"})
+	// 6a. A non-admin member of the SAME org cannot promote a winner (a prod flag write).
+	if code, m := do(t, app, http.MethodPost, "/v1/experiments/checkout_cta/decide", org, project, map[string]any{"winner": "treatment"}); code != http.StatusForbidden {
+		t.Fatalf("non-admin decide = %d %v, want 403", code, m)
+	}
+
+	// 6. DECIDE — promote treatment (org-admin only); the assignment flag flips to 100% treatment.
+	code, dec := doAdmin(t, app, http.MethodPost, "/v1/experiments/checkout_cta/decide", org, project, map[string]any{"winner": "treatment"})
 	if code != http.StatusOK || dec["status"] != "decided" || dec["winner"] != "treatment" {
 		t.Fatalf("decide: %d %v", code, dec)
 	}
