@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/hanzoai/cloud"
@@ -61,6 +62,13 @@ const (
 	// metered per flow-run start and per MCP tool call.
 	meterKind    = "automations.run"
 	feeEnvPrefix = "CLOUD_AUTOMATIONS_FEE_CENTS"
+
+	// runBudgetEnv / defaultRunBudgetPerMin bound an org's run-STARTS per rolling minute —
+	// the DURABLE amplification cap (counted from persisted rows, so it survives a restart),
+	// enforced before every run-start. A fan-out or an in-platform loop hits this ceiling and
+	// stops. Ops can retune per deployment; a very high value effectively disables it.
+	runBudgetEnv           = "CLOUD_AUTOMATIONS_RUNS_PER_MIN"
+	defaultRunBudgetPerMin = 300
 
 	// Noisy-neighbor bounds (MED-3 / LOW-2 / LOW-4). A flow tree is capped in step
 	// count AND total serialized size at every write; the resume payload is bounded;
@@ -469,15 +477,40 @@ func runVersion(s *cloud.Service[state], ctx context.Context, org string, f Flow
 	return s.State.store.LatestVersion(ctx, org, f.ID)
 }
 
+// engineReady reports whether the shared durable engine is up. It is a package var so a
+// test can assert readiness without embedding the engine (mirrors runStarter/tokenSource);
+// production never reassigns it.
+var engineReady = func() bool { return cloud.EmbeddedTasks() != nil }
+
 // startRun is the ONE way a firing turns a (rule, run id, event) into a durable run,
 // shared by the manual /run and the event Deliver paths (a cron tick starts through the
-// engine's schedule instead). It persists the run row FIRST as the idempotency gate
-// (CreateRunIfAbsent) and ONLY the caller that created the row dispatches it to the
-// engine — so re-firing the same run id is a no-op. It does NOT meter or audit: the
-// durable run-start activity is the SINGLE owner of run bookkeeping (MED-1), billing a
-// run exactly once no matter which path started it. trigger is the firing event payload
-// (nil for a manual run). Returns the run row and whether THIS call started it.
-func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, runID string, trigger map[string]any) (FlowRun, bool, error) {
+// engine's schedule instead). It applies the THREE per-org bounds — concurrency
+// (orgRunLimiter), durable rate budget (checkRunBudget), and engine readiness — BEFORE
+// the idempotency insert, so a bound trip or a not-ready engine never burns the run id
+// (which would drop the event permanently on redelivery). It then persists the run row as
+// the gate (CreateRunIfAbsent) and ONLY the caller that created the row dispatches it. It
+// does NOT meter or audit: the durable run-start activity is the SINGLE owner of run
+// bookkeeping (MED-1), billing a run exactly once no matter which path started it. trigger
+// is the firing event payload (nil for a manual run); depth is the causation depth threaded
+// onto the run. Returns the run row and whether THIS call started it.
+func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, v FlowVersion, runID string, depth int, trigger map[string]any) (FlowRun, bool, error) {
+	// Front-door concurrency bound, shared by EVERY run-start path so one org's burst never
+	// starves another. Full → refuse (429). Held only across the start (fast).
+	if !orgRunLimiter.acquire(org) {
+		return FlowRun{}, false, ErrBusy
+	}
+	defer orgRunLimiter.release(org)
+
+	// Readiness BEFORE the insert: a not-ready engine must not burn the run id.
+	if !engineReady() {
+		return FlowRun{}, false, ErrEngineNotReady
+	}
+	// Durable per-org rate budget BEFORE the insert: a fan-out or in-platform loop hits the
+	// ceiling and stops rather than storming the engine.
+	if err := checkRunBudget(s, ctx, org); err != nil {
+		return FlowRun{}, false, err
+	}
+
 	now := time.Now().UnixMilli()
 	run := FlowRun{
 		ID: runID, Org: org, FlowID: f.ID, FlowVersionID: v.ID, WorkflowID: runID,
@@ -497,14 +530,41 @@ func startRun(s *cloud.Service[state], ctx context.Context, org string, f Flow, 
 		RunID:         runID,
 		Steps:         flattenSteps(&v),
 		Trigger:       trigger,
+		Depth:         depth,
 	}
 	if _, err := runStarter(ctx, in); err != nil {
-		// The row exists (visible in listRuns); the durable start failed. Mark it FAILED
-		// so a same-id re-fire stays a no-op (at-most-once) and the attempt is visible.
-		_ = s.State.store.UpdateRunStatus(ctx, org, runID, RunFailed, now, now)
+		// The durable start failed transiently (engine went not-ready / dial error between
+		// the readiness check and dispatch). DELETE the row — do NOT burn the id — so a
+		// redelivery retries. (A step failure INSIDE a started run is the engine's own retry
+		// domain, not this path.)
+		_ = s.State.store.DeleteRun(ctx, org, runID)
 		return FlowRun{}, false, err
 	}
 	return run, true, nil
+}
+
+// checkRunBudget enforces the org's durable per-rolling-minute run-start ceiling. It counts
+// persisted run rows, so the bound survives a restart. Over budget → ErrRateLimited.
+func checkRunBudget(s *cloud.Service[state], ctx context.Context, org string) error {
+	since := time.Now().Add(-time.Minute).UnixMilli()
+	n, err := s.State.store.CountRunsSince(ctx, org, since)
+	if err != nil {
+		return err
+	}
+	if n >= runBudgetPerMin() {
+		return ErrRateLimited
+	}
+	return nil
+}
+
+// runBudgetPerMin resolves the per-org run-start ceiling (env override, else the default).
+func runBudgetPerMin() int {
+	if v := os.Getenv(runBudgetEnv); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultRunBudgetPerMin
 }
 
 func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
@@ -520,17 +580,13 @@ func runFlow(s *cloud.Service[state], c *zip.Ctx) error {
 	if err != nil {
 		return mapStoreErr(err, "flow has no runnable version")
 	}
-	// Per-org front-door concurrency bound (LOW-2).
-	if !orgRunLimiter.acquire(org) {
-		return zip.Errorf(http.StatusTooManyRequests, "too many concurrent automation requests for this org")
-	}
-	defer orgRunLimiter.release(org)
-
 	runID, err := genID("run")
 	if err != nil {
 		return zip.Errorf(http.StatusInternalServerError, "rng: %v", err)
 	}
-	run, _, err := startRun(s, c.Context(), org, f, v, runID, nil) // manual run: no trigger payload
+	// startRun applies the per-org bounds (concurrency + durable budget) uniformly for every
+	// run-start path. Manual run: depth 0, no trigger payload.
+	run, _, err := startRun(s, c.Context(), org, f, v, runID, 0, nil)
 	if err != nil {
 		return engineErr(err)
 	}
@@ -617,23 +673,39 @@ func inboundHook(s *cloud.Service[state], c *zip.Ctx) error {
 	if source == "" || event == "" {
 		return zip.ErrBadRequest("source and event are required")
 	}
-	if len(c.Body()) > maxTriggerBytes {
+	body := c.Body()
+	if len(body) > maxTriggerBytes {
 		return zip.Errorf(http.StatusRequestEntityTooLarge, "event payload exceeds the %d-byte limit", maxTriggerBytes)
 	}
 	var payload map[string]any
-	if len(c.Body()) > 0 {
-		if err := json.Unmarshal(c.Body(), &payload); err != nil {
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
 			return zip.ErrBadRequest("event payload must be a JSON object")
 		}
 	}
+	// LOW-1: an absent idempotency key content-hashes the body, so a hammer of identical
+	// POSTs collapses to ONE run instead of minting a fresh run per POST.
+	dedupe := clip(c.Header("X-Idempotency-Key"))
+	if dedupe == "" {
+		dedupe = bodyDedupe(body)
+	}
 	n, err := Deliver(c.Context(), org, TriggerEvent{
-		Source: source, Name: event, DedupeKey: clip(c.Header("X-Idempotency-Key")), Payload: payload,
+		Source: source, Name: event, DedupeKey: dedupe, Depth: causationDepth(c), Payload: payload,
 	})
 	if err != nil {
 		return engineErr(err)
 	}
 	auditEvent(s, c, org, "automations.trigger.deliver", source+"/"+event, "ok", http.StatusOK)
 	return c.JSON(http.StatusOK, map[string]any{"matched": n})
+}
+
+// causationDepth reads the X-Causation-Depth header an in-platform producer sets to
+// propagate a firing's depth. Absent/invalid ⇒ 0 (an external origin).
+func causationDepth(c *zip.Ctx) int {
+	if n, err := strconv.Atoi(clip(c.Header("X-Causation-Depth"))); err == nil && n >= 0 {
+		return n
+	}
+	return 0
 }
 
 // ── enable / disable ──────────────────────────────────────────────────────────
@@ -940,10 +1012,15 @@ func mapOpErr(err error) error {
 	}
 }
 
-// engineErr maps an engine dial/exec error to HTTP: not-ready → 503 (honest), else 500.
+// engineErr maps an engine/run-start error to HTTP: not-ready → 503 (honest); a per-org
+// bound (rate budget / concurrency) → 429; else 500.
 func engineErr(err error) error {
-	if err == ErrEngineNotReady {
+	switch err {
+	case ErrEngineNotReady:
 		return zip.Errorf(http.StatusServiceUnavailable, "automation engine not ready")
+	case ErrRateLimited, ErrBusy:
+		return zip.Errorf(http.StatusTooManyRequests, "%v", err)
+	default:
+		return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 	}
-	return zip.Errorf(http.StatusInternalServerError, "engine: %v", err)
 }

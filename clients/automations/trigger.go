@@ -18,17 +18,38 @@ import (
 // TriggerEvent is the ONE inbound shape every trigger source hands to Deliver.
 // Source/Name select which flows fire (they equal a flow trigger's pieceName /
 // triggerName); Payload is threaded into each run as {{trigger.*}}; DedupeKey makes a
-// re-delivered event idempotent (a flow fires at most once per DedupeKey).
+// re-delivered event idempotent (a flow fires at most once per DedupeKey); Depth is the
+// causation depth (0 = external origin), propagated by in-platform producers so a cycle
+// terminates.
 type TriggerEvent struct {
 	Source    string         // provider slug == the flow trigger's pieceName ("github","stripe","slack",…)
 	Name      string         // event name == the flow trigger's triggerName ("push","charge","message",…)
 	DedupeKey string         // idempotency key; "" ⇒ every delivery is its own run
+	Depth     int            // causation depth (in-platform hops so far); 0 = external origin
 	Payload   map[string]any // the event body, readable by actions as {{trigger.field}}
 }
 
-// ErrNoOrg is returned when Deliver is called without a server-verified org. The org
-// is the sole tenant key, so a missing/invalid one must start NOTHING (fail-closed).
-var ErrNoOrg = errors.New("automations: Deliver requires a server-verified org")
+// maxCausationDepth bounds an in-platform trigger→action→trigger chain: an event already
+// this many hops deep starts nothing, so a cycle terminates instead of amplifying.
+const maxCausationDepth = 8
+
+var (
+	// ErrNoOrg — Deliver called without a server-verified org. The org is the sole tenant
+	// key, so a missing/invalid one must start NOTHING (fail-closed).
+	ErrNoOrg = errors.New("automations: Deliver requires a server-verified org")
+	// ErrRateLimited — the org's durable per-window run-start budget is exhausted.
+	ErrRateLimited = errors.New("automations: per-org run budget exceeded")
+	// ErrBusy — the org's concurrent run-start slots are full (front-door burst bound).
+	ErrBusy = errors.New("automations: too many concurrent run-starts for this org")
+)
+
+// bodyDedupe derives an idempotency key from a raw event body when the caller supplies
+// none — so a hammer of identical POSTs to the raw sink collapses to ONE run instead of
+// minting a fresh run id each time. Distinct bodies stay distinct.
+func bodyDedupe(body []byte) string {
+	sum := sha256.Sum256(body)
+	return "body:" + hex.EncodeToString(sum[:16])
+}
 
 // Deliver fires every ENABLED flow in org whose WEBHOOK/APP_WEBHOOK trigger matches
 // (ev.Source, ev.Name), starting each as a durable run with ev.Payload threaded in,
@@ -51,6 +72,13 @@ func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err
 	if org == "" || !validOrg(org) {
 		return 0, ErrNoOrg
 	}
+	// Causation-depth guard: an event whose chain is already maxCausationDepth hops deep
+	// starts nothing, so an in-platform cycle (an action firing an event that re-enters
+	// here) terminates instead of amplifying. Depth rides TriggerEvent→FlowRunInput and is
+	// propagated by in-platform producers (the /hooks X-Causation-Depth header, the seam).
+	if ev.Depth >= maxCausationDepth {
+		return 0, nil
+	}
 	s := mounted
 	if s == nil {
 		return 0, ErrEngineNotReady
@@ -68,11 +96,13 @@ func Deliver(ctx context.Context, org string, ev TriggerEvent) (started int, err
 		if verr != nil {
 			continue
 		}
-		// The SAME run-start every firing uses: persist-gate then dispatch, threading the
-		// event as the trigger payload. A re-delivered event (same DedupeKey → same run id)
-		// is a no-op (created==false) — at-most-once per flow per event.
-		_, created, serr := startRun(s, ctx, org, f, v, deliverRunID(org, sub.FlowID, ev), ev.Payload)
+		// The SAME run-start every firing uses: bound (concurrency + durable budget) then
+		// persist-gate then dispatch, threading the event payload + causation depth. A
+		// re-delivered event (same DedupeKey → same run id) is a no-op (created==false).
+		_, created, serr := startRun(s, ctx, org, f, v, deliverRunID(org, sub.FlowID, ev), ev.Depth, ev.Payload)
 		if serr != nil {
+			// A per-org bound tripped (budget/concurrency) or the engine went not-ready: stop
+			// the fan-out for this org rather than keep starting runs.
 			return started, serr
 		}
 		if created {
