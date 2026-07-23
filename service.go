@@ -33,6 +33,10 @@ type Base struct {
 	Env     string
 	Domain  string
 	DataDir string
+	// Durable is the deployment's HA-durability factory (nil ⇒ local-only). A
+	// subsystem opening per-org SQLite passes it to NewOrgStore(WithDurable) to make
+	// its stores survive rolling deploys/replicas.
+	Durable *Durability
 }
 
 // NewBase derives the shared deps for a named subsystem: a scoped child logger,
@@ -52,6 +56,7 @@ func NewBase(deps Deps, name string) Base {
 		Env:     deps.Env,
 		Domain:  deps.Domain,
 		DataDir: deps.DataDir,
+		Durable: deps.Durable,
 	}
 }
 
