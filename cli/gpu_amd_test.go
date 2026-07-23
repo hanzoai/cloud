@@ -17,7 +17,7 @@ func TestParseRocmSmiCSV(t *testing.T) {
 	if len(gpus) != 1 {
 		t.Fatalf("want 1 AMD GPU, got %d (%+v)", len(gpus), gpus)
 	}
-	if got, want := gpus[0].Name, "Radeon 8060S Graphics (gfx1151)"; got != want {
+	if got, want := gpus[0].Name, "AMD Strix Halo \u00b7 Radeon 8060S Graphics (gfx1151)"; got != want {
 		t.Errorf("name = %q, want %q", got, want)
 	}
 }
@@ -49,8 +49,11 @@ func TestParseKfdTopology(t *testing.T) {
 	if len(gpus) != 1 {
 		t.Fatalf("want 1 GPU node (CPU node 0 skipped), got %d (%+v)", len(gpus), gpus)
 	}
-	if got, want := gpus[0].Name, "AMD GPU (gfx1151)"; got != want {
+	if got, want := gpus[0].Name, "AMD Strix Halo (gfx1151)"; got != want {
 		t.Errorf("name = %q, want %q", got, want)
+	}
+	if got, want := gpus[0].Arch, "gfx1151"; got != want {
+		t.Errorf("arch = %q, want %q", got, want)
 	}
 }
 
@@ -76,5 +79,16 @@ func writeNode(t *testing.T, root, id, props string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "properties"), []byte(props), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestPickAmdMemUnified — an APU whose VRAM is a token carve-out reports the GTT
+// unified pool (evo: 1 GiB VRAM vs ~118 GiB GTT); a discrete card keeps its VRAM.
+func TestPickAmdMemUnified(t *testing.T) {
+	if miB, unified := pickAmdMem(1024, 120832); !unified || miB != 120832 {
+		t.Errorf("APU: got (%d, %v), want (120832, true)", miB, unified)
+	}
+	if miB, unified := pickAmdMem(24576, 8192); unified || miB != 24576 {
+		t.Errorf("discrete: got (%d, %v), want (24576, false)", miB, unified)
 	}
 }
