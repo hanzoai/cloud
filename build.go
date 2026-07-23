@@ -786,6 +786,14 @@ func buildDurability(cfg *Config, log luxlog.Logger) *Durability {
 	// proven atomic fails SAFE to local-only + a loud alert — never a silent fence on a
 	// store that could admit two writers for one round (split-brain). The result is
 	// cached for the process life (deps.Durable is set once), so this probe runs once.
+	// cond is the linearizable register the fence stands on, constructed HERE (not
+	// hard-wired inside the fence) so a cache tier slots in as a decorator: a
+	// read-through/write-through KV-in-front-of-S3 store (github.com/hanzoai/kv-go) can
+	// wrap this one line to serve low-latency hydrate reads while the authoritative CAS
+	// still lands on S3 — the fence reads and CASes through whatever ConditionalStore it
+	// is handed. (Safety note for that tier: a stale cached lease read only costs a claim
+	// retry, never safety — the S3 CAS is authoritative — so a write-through cache is
+	// sound over the SAME cond that backs both the lease and the data ships.)
 	cond := org.NewS3ConditionalStore(client, durableBucket)
 	probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	err = org.ProbeCAS(probeCtx, cond, durableProbePrefix)
