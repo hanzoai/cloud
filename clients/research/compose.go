@@ -23,9 +23,18 @@ var mountedStores *cloud.OrgStore[*store]
 
 // Record writes experiment evidence rows for (org, project) idempotently into the
 // org's durable research plane (latest-run-canonical, exactly as POST
-// /v1/research/experiments), then returns. It is the in-process seam the experiments
-// primitive composes to persist per-variant A/B samples. No SSRF gate is needed: the
-// caller sets no BYO endpoint (these are in-process samples, not a measured probe).
+// /v1/research/experiments) AND ships them fenced before returning. It is the
+// in-process seam the experiments primitive composes to persist per-variant A/B
+// samples. No SSRF gate is needed: the caller sets no BYO endpoint (these are
+// in-process samples, not a measured probe).
+//
+// Ship-before-return is the SAME durability contract the HTTP ingest path has: an
+// evidence row is "recorded" only once fenced to the durable object, so a takeover
+// hydrates it and no acknowledged write is lost. A ship that is not acknowledged —
+// this pod is not the org's elected writer, or was deposed — is an ERROR, so the
+// caller never treats a stale local write on a non-owner as recorded (it logs and
+// leaves the recomputable evidence unpersisted). On a local-only deployment (no
+// Durability) Sync acks trivially, so this is a no-op there.
 func Record(ctx context.Context, org, project string, exps []Experiment) error {
 	if mountedStores == nil {
 		return fmt.Errorf("research: not mounted")
@@ -37,8 +46,17 @@ func Record(ctx context.Context, org, project string, exps []Experiment) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = st.ingest(ctx, project, exps, nil)
-	return err
+	if _, _, err = st.ingest(ctx, project, exps, nil); err != nil {
+		return err
+	}
+	acked, err := mountedStores.Sync(org, "")
+	if err != nil {
+		return err
+	}
+	if !acked {
+		return fmt.Errorf("research: evidence not shipped for org %q — this pod is not the elected writer", org)
+	}
+	return nil
 }
 
 // List reads (org, project, kind) evidence rows from the durable research plane —
